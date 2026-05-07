@@ -1122,7 +1122,9 @@
 		/>
 		{#if activeCrop}
 			<div
-				class="pointer-events-none absolute border-2 border-primary/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+				class="pointer-events-none absolute {cropMode
+					? 'border-2 border-primary/80'
+					: ''} shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
 				style={cropStyle(pane, activeCrop)}
 			>
 				{#if cropMode}
