@@ -167,7 +167,7 @@
 			</div>
 		</div>
 
-		<div class="grid grid-cols-2 gap-2">
+		<div class="grid grid-cols-3 gap-2">
 			<div class="grid gap-1">
 				<Input
 					id="out-width"
@@ -200,18 +200,17 @@
 				/>
 				<Label for="out-height" class="text-xs text-muted-foreground">Height</Label>
 			</div>
-		</div>
-
-		<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
-			<Label for="resize-mode">Resample</Label>
-			<Select bind:value={resize} type="single">
-				<SelectTrigger id="resize-mode">{resizeLabel}</SelectTrigger>
-				<SelectContent>
-					{#each RESIZE_MODES as r (r.id)}
-						<SelectItem value={r.id}>{r.label}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
+			<div class="grid gap-1">
+				<Select bind:value={resize} type="single">
+					<SelectTrigger id="resize-mode" class="w-full">{resizeLabel}</SelectTrigger>
+					<SelectContent>
+						{#each RESIZE_MODES as r (r.id)}
+							<SelectItem value={r.id}>{r.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+				<Label for="resize-mode" class="text-xs text-muted-foreground">Resample</Label>
+			</div>
 		</div>
 	</div>
 </section>
