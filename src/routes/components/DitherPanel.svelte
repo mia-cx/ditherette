@@ -126,7 +126,7 @@
 		const image = new ImageData(size, size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				writePreviewPixel(image, x, y, gradientValue(x, size));
+				writePreviewPixel(image, x, y, gradientValue(x, y, size));
 			}
 		}
 		return image;
@@ -140,7 +140,7 @@
 		const matrixSize = bayerSize ?? 1;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const gradient = gradientValue(x, size) / 255;
+				const gradient = gradientValue(x, y, size) / 255;
 				const ditherThreshold = matrix
 					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!
 					: random();
@@ -162,7 +162,7 @@
 		const work = new Float32Array(size * size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				work[y * size + x] = gradientValue(x, size);
+				work[y * size + x] = gradientValue(x, y, size);
 			}
 		}
 
@@ -196,9 +196,21 @@
 		return undefined;
 	}
 
-	function gradientValue(x: number, size: number) {
+	function gradientValue(x: number, y: number, size: number) {
 		const extent = Math.max(1, size - 1);
-		return Math.round((x / extent) * 255);
+		const tx = x / extent;
+		const ty = y / extent;
+		const lime = 210;
+		const yellow = 248;
+		const violet = 95;
+		const blue = 36;
+		const top = mix(lime, yellow, tx);
+		const bottom = mix(blue, violet, tx);
+		return Math.round(mix(top, bottom, ty));
+	}
+
+	function mix(start: number, end: number, amount: number) {
+		return start + (end - start) * amount;
 	}
 
 	function clampByte(value: number) {
