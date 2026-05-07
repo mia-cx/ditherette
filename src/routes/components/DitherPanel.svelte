@@ -3,6 +3,7 @@
 	import { Slider } from '$lib/components/ui/slider';
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
+	import { Sheet, SheetContent, SheetHeader, SheetTitle } from '$lib/components/ui/sheet';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -73,6 +74,7 @@
 	let algorithmSearch = $state('');
 	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion']);
 	let fieldFilters = $state<DitherField[]>(['none', 'ordered', 'noise', 'kernel']);
+	let filterSheetOpen = $state(false);
 
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
@@ -506,14 +508,22 @@
 			</SelectTrigger>
 			<SelectContent class="max-h-[min(38rem,var(--bits-select-content-available-height))] p-1">
 				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
-					<input
-						class="h-8 w-full border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
-						placeholder="Search algorithms…"
-						bind:value={algorithmSearch}
-						onkeydown={(event) => event.stopPropagation()}
-					/>
+					<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:block">
+						<input
+							class="h-8 w-full border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+							placeholder="Search algorithms…"
+							bind:value={algorithmSearch}
+							onkeydown={(event) => event.stopPropagation()}
+						/>
+						<Button
+							variant="outline"
+							size="sm"
+							class="md:hidden"
+							onclick={() => (filterSheetOpen = true)}>Filters</Button
+						>
+					</div>
 				</div>
-				<div class="grid grid-cols-[minmax(0,1fr)_10rem] gap-2">
+				<div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_10rem]">
 					<div class="min-w-0">
 						{#each filteredAlgorithms as opt (opt.id)}
 							<SelectItem value={opt.id} label={opt.label} class="items-center py-3 pr-8 pl-3">
@@ -550,7 +560,7 @@
 							<div class="p-4 text-center text-xs text-muted-foreground">No algorithms match.</div>
 						{/each}
 					</div>
-					<div class="grid content-start gap-3 border-l border-border p-2">
+					<div class="hidden content-start gap-3 border-l border-border p-2 md:grid">
 						<div class="grid gap-1.5">
 							<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
 								>Method</span
@@ -628,6 +638,89 @@
 				</div>
 			</SelectContent>
 		</Select>
+
+		<Sheet bind:open={filterSheetOpen}>
+			<SheetContent side="right" class="w-72 p-4">
+				<SheetHeader>
+					<SheetTitle>Algorithm filters</SheetTitle>
+				</SheetHeader>
+				<div class="grid content-start gap-4 pt-4">
+					<div class="grid gap-2">
+						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+							>Method</span
+						>
+						<label class="flex items-center gap-2 text-xs text-muted-foreground">
+							<input
+								type="checkbox"
+								class="size-3.5 border-input bg-background text-primary"
+								checked={methodFilters.includes('threshold')}
+								onchange={() => toggleMethodFilter('threshold')}
+							/>
+							Threshold
+						</label>
+						<label class="flex items-center gap-2 text-xs text-muted-foreground">
+							<input
+								type="checkbox"
+								class="size-3.5 border-input bg-background text-primary"
+								checked={methodFilters.includes('error-diffusion')}
+								onchange={() => toggleMethodFilter('error-diffusion')}
+							/>
+							Error diffusion
+						</label>
+						<label class="flex items-center gap-2 text-xs text-muted-foreground">
+							<input
+								type="checkbox"
+								class="size-3.5 border-input bg-background text-primary"
+								checked={methodFilters.includes('none')}
+								onchange={() => toggleMethodFilter('none')}
+							/>
+							None
+						</label>
+					</div>
+					<div class="grid gap-2">
+						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+							>Field</span
+						>
+						<label class="flex items-center gap-2 text-xs text-muted-foreground">
+							<input
+								type="checkbox"
+								class="size-3.5 border-input bg-background text-primary"
+								checked={fieldFilters.includes('ordered')}
+								onchange={() => toggleFieldFilter('ordered')}
+							/>
+							Ordered
+						</label>
+						<label class="flex items-center gap-2 text-xs text-muted-foreground">
+							<input
+								type="checkbox"
+								class="size-3.5 border-input bg-background text-primary"
+								checked={fieldFilters.includes('noise')}
+								onchange={() => toggleFieldFilter('noise')}
+							/>
+							Noise
+						</label>
+						<label class="flex items-center gap-2 text-xs text-muted-foreground">
+							<input
+								type="checkbox"
+								class="size-3.5 border-input bg-background text-primary"
+								checked={fieldFilters.includes('kernel')}
+								onchange={() => toggleFieldFilter('kernel')}
+							/>
+							Kernel
+						</label>
+						<label class="flex items-center gap-2 text-xs text-muted-foreground">
+							<input
+								type="checkbox"
+								class="size-3.5 border-input bg-background text-primary"
+								checked={fieldFilters.includes('none')}
+								onchange={() => toggleFieldFilter('none')}
+							/>
+							None
+						</label>
+					</div>
+				</div>
+			</SheetContent>
+		</Sheet>
 
 		<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
 			<Label for="dither-strength" class="text-xs text-muted-foreground">Strength</Label>
