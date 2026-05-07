@@ -127,7 +127,7 @@
 		$processedImage ? `${$processedImage.palette.length} colors` : 'Palette'
 	);
 	const activeCrop = $derived(
-		cropDraft ?? $outputSettings.crop ?? (cropMode ? fullImageCrop() : undefined)
+		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
@@ -919,6 +919,7 @@
 		const nextCropMode = !cropMode;
 		if (nextCropMode) cropDraft = normalizeCrop($outputSettings.crop ?? fullImageCrop());
 		else {
+			cropDraft = undefined;
 			cropResize = undefined;
 			cropMove = undefined;
 		}
