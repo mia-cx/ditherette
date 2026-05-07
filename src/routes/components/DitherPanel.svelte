@@ -432,11 +432,13 @@
 			g: mix(low.color.g, high.color.g, amount),
 			b: mix(low.color.b, high.color.b, amount)
 		};
-		const saturation = Math.min(1, Math.hypot(dx, dy) / Math.SQRT1_2);
+		const radius = Math.min(1, Math.hypot(dx, dy) / Math.SQRT1_2);
+		const saturation = Math.min(1, radius * 2);
+		const value = radius <= 0.5 ? 1 : 1 - (radius - 0.5) * 2;
 		return {
-			r: mix(255, hue.r, saturation),
-			g: mix(255, hue.g, saturation),
-			b: mix(255, hue.b, saturation)
+			r: mix(255, hue.r * value, saturation),
+			g: mix(255, hue.g * value, saturation),
+			b: mix(255, hue.b * value, saturation)
 		};
 	}
 
