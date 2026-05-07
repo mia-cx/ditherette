@@ -23,6 +23,7 @@
 		outputSettings,
 		previewSettings,
 		processedImage,
+		uiSettings,
 		updatePreviewSettings
 	} from '$lib/stores/app';
 	import { startAutoProcessing } from '$lib/processing/client';
@@ -31,7 +32,9 @@
 
 	const DEFAULT_DESKTOP_PANE_LAYOUT = [56, 44] as const;
 
-	let openSections = $state<string[]>(['dimensions', 'dither', 'color']);
+	let openSections = $state<string[]>(
+		uiSettings.get().controlAccordionSections ?? ['dimensions', 'dither', 'color']
+	);
 	let fileInput = $state<HTMLInputElement>();
 	let uploadError = $state<string>();
 
@@ -48,6 +51,10 @@
 	const colorBadge = $derived(
 		COLOR_SPACES.find((mode) => mode.id === $colorSpace)?.label ?? 'OKLab'
 	);
+
+	$effect(() => {
+		uiSettings.set({ ...uiSettings.get(), controlAccordionSections: openSections });
+	});
 
 	onMount(() => {
 		const stop = startAutoProcessing();
@@ -122,38 +129,40 @@
 		</p>
 	{/if}
 
-	<main class="flex flex-1 flex-col gap-4 lg:hidden">
-		<ComparisonPreview
-			defaultMode="ab-reveal"
-			hasImage={$hasImage}
-			minHeightClass="min-h-[320px] md:min-h-[420px]"
-			onChooseImage={chooseImage}
-			onSelectFile={(file) => void loadImageFile(file)}
-		/>
-		{@render controls('gap-4')}
-	</main>
+	<main class="flex flex-1 flex-col overflow-hidden">
+		<div class="flex flex-1 flex-col gap-4 lg:hidden">
+			<ComparisonPreview
+				defaultMode="ab-reveal"
+				hasImage={$hasImage}
+				minHeightClass="min-h-[320px] md:min-h-[420px]"
+				onChooseImage={chooseImage}
+				onSelectFile={(file) => void loadImageFile(file)}
+			/>
+			{@render controls('gap-4')}
+		</div>
 
-	<main class="hidden flex-1 overflow-hidden lg:block">
-		<ResizablePaneGroup
-			direction="vertical"
-			class="h-full"
-			onLayoutChange={persistDesktopPaneLayout}
-		>
-			<ResizablePane defaultSize={desktopPaneLayout[0]} minSize={25}>
-				<ComparisonPreview
-					hasImage={$hasImage}
-					minHeightClass="h-full"
-					onChooseImage={chooseImage}
-					onSelectFile={(file) => void loadImageFile(file)}
-				/>
-			</ResizablePane>
-			<ResizableHandle withHandle />
-			<ResizablePane defaultSize={desktopPaneLayout[1]} minSize={25}>
-				<div class="h-full overflow-hidden p-0 pt-3">
-					{@render controls('gap-3 h-full overflow-hidden')}
-				</div>
-			</ResizablePane>
-		</ResizablePaneGroup>
+		<div class="hidden flex-1 overflow-hidden lg:block">
+			<ResizablePaneGroup
+				direction="vertical"
+				class="h-full"
+				onLayoutChange={persistDesktopPaneLayout}
+			>
+				<ResizablePane defaultSize={desktopPaneLayout[0]} minSize={25}>
+					<ComparisonPreview
+						hasImage={$hasImage}
+						minHeightClass="h-full"
+						onChooseImage={chooseImage}
+						onSelectFile={(file) => void loadImageFile(file)}
+					/>
+				</ResizablePane>
+				<ResizableHandle withHandle />
+				<ResizablePane defaultSize={desktopPaneLayout[1]} minSize={25}>
+					<div class="h-full overflow-hidden p-0 pt-3">
+						{@render controls('gap-3 h-full overflow-hidden')}
+					</div>
+				</ResizablePane>
+			</ResizablePaneGroup>
+		</div>
 	</main>
 
 	<div class="sticky bottom-0 z-20 lg:static">

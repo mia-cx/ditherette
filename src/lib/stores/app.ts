@@ -60,10 +60,10 @@ export type PreviewSettings = {
 };
 
 export const previewSettings = persistentJSON<PreviewSettings>('ditherette:preview', {});
-export const uiSettings = persistentJSON<{ desktopDitherFiltersOpen?: boolean }>(
-	'ditherette:ui',
-	{}
-);
+export const uiSettings = persistentJSON<{
+	desktopDitherFiltersOpen?: boolean;
+	controlAccordionSections?: string[];
+}>('ditherette:ui', {});
 export const activePaletteName = persistentJSON<string>(
 	'ditherette:active-palette',
 	WPLACE_PALETTE_NAME
