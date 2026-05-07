@@ -36,7 +36,7 @@
 		{/if}
 		<Button size="sm" variant={hasImage ? 'outline' : 'default'}>
 			<UploadIcon />
-			{hasImage ? 'Replace image' : 'Upload image'}
+			{hasImage ? 'Replace Image' : 'Upload Image'}
 		</Button>
 		<ThemeToggle />
 	</div>
