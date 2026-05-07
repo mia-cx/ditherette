@@ -6,8 +6,15 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
+	import { clampByte, createPaletteMatcher } from '$lib/processing/color';
+	import type { ColorSpaceId, EnabledPaletteColor, Rgb } from '$lib/processing/types';
 	import { DITHER_ALGORITHMS, COVERAGE_MODES, type DitherOption } from './sample-data';
-	import { ditherSettings, updateDitherSettings } from '$lib/stores/app';
+	import {
+		colorSpace,
+		ditherSettings,
+		selectedPalette,
+		updateDitherSettings
+	} from '$lib/stores/app';
 	import DiceIcon from 'phosphor-svelte/lib/DiceFive';
 
 	type Props = { compact?: boolean; hideHeading?: boolean };
@@ -66,7 +73,14 @@
 
 	function ditherPreview(
 		target: HTMLCanvasElement,
-		params: { mode: string; randomSeed: number; previewStrength: number; serpentineScan: boolean }
+		params: {
+			mode: string;
+			randomSeed: number;
+			previewStrength: number;
+			serpentineScan: boolean;
+			palette: readonly EnabledPaletteColor[];
+			colorSpaceMode: ColorSpaceId;
+		}
 	) {
 		const draw = (next: typeof params) => {
 			drawDitherPreview(
@@ -74,7 +88,9 @@
 				next.mode,
 				next.randomSeed,
 				next.previewStrength,
-				next.serpentineScan
+				next.serpentineScan,
+				next.palette,
+				next.colorSpaceMode
 			);
 		};
 		draw(params);
@@ -86,7 +102,9 @@
 		mode: string,
 		randomSeed: number,
 		previewStrength: number,
-		serpentineScan: boolean
+		serpentineScan: boolean,
+		palette: readonly EnabledPaletteColor[],
+		colorSpaceMode: ColorSpaceId
 	) {
 		const scale = window.devicePixelRatio || 1;
 		const displaySize = Math.max(1, Math.round(target.clientWidth * scale));
@@ -97,7 +115,15 @@
 		}
 		const context = target.getContext('2d');
 		if (!context) return;
-		const image = drawPreviewImage(mode, logicalSize, randomSeed, previewStrength, serpentineScan);
+		const image = drawPreviewImage(
+			mode,
+			logicalSize,
+			randomSeed,
+			previewStrength,
+			serpentineScan,
+			palette,
+			colorSpaceMode
+		);
 
 		const source = document.createElement('canvas');
 		source.width = logicalSize;
@@ -113,26 +139,36 @@
 		size: number,
 		randomSeed: number,
 		previewStrength: number,
-		serpentineScan: boolean
+		serpentineScan: boolean,
+		palette: readonly EnabledPaletteColor[],
+		colorSpaceMode: ColorSpaceId
 	) {
+		const matcher = createPaletteMatcher([...palette], colorSpaceMode);
 		const amount = Math.min(1, Math.max(0, previewStrength / 100));
-		if (mode === 'none') return drawGradientPreview(size);
+		if (mode === 'none') return drawGradientPreview(size, matcher.nearestRgb);
 		const kernel = errorKernelFor(mode);
-		if (kernel) return drawErrorDiffusionPreview(kernel, size, amount, serpentineScan);
-		return drawThresholdPreview(mode, size, randomSeed, amount);
+		if (kernel)
+			return drawErrorDiffusionPreview(kernel, size, amount, serpentineScan, matcher.nearestRgb);
+		return drawThresholdPreview(mode, size, randomSeed, amount, matcher.nearestRgb);
 	}
 
-	function drawGradientPreview(size: number) {
+	function drawGradientPreview(size: number, nearestRgb: PaletteNearest) {
 		const image = new ImageData(size, size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				writePreviewPixel(image, x, y, gradientValue(x, y, size));
+				writePreviewRgb(image, x, y, nearestPaletteRgb(gradientRgb(x, y, size), nearestRgb));
 			}
 		}
 		return image;
 	}
 
-	function drawThresholdPreview(mode: string, size: number, randomSeed: number, amount: number) {
+	function drawThresholdPreview(
+		mode: string,
+		size: number,
+		randomSeed: number,
+		amount: number,
+		nearestRgb: PaletteNearest
+	) {
 		const image = new ImageData(size, size);
 		const random = mulberry32(randomSeed);
 		const bayerSize = bayerSizeForAlgorithm(mode);
@@ -140,12 +176,20 @@
 		const matrixSize = bayerSize ?? 1;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const gradient = gradientValue(x, y, size) / 255;
+				const source = gradientRgb(x, y, size);
 				const ditherThreshold = matrix
 					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!
 					: random();
-				const threshold = 0.5 + (ditherThreshold - 0.5) * amount;
-				writePreviewPixel(image, x, y, gradient >= threshold ? 255 : 0);
+				const offset = (ditherThreshold - 0.5) * amount * 96;
+				writePreviewRgb(
+					image,
+					x,
+					y,
+					nearestPaletteRgb(
+						{ r: source.r + offset, g: source.g + offset, b: source.b + offset },
+						nearestRgb
+					)
+				);
 			}
 		}
 		return image;
@@ -155,14 +199,21 @@
 		kernel: [number, number, number][],
 		size: number,
 		amount: number,
-		serpentineScan: boolean
+		serpentineScan: boolean,
+		nearestRgb: PaletteNearest
 	) {
-		if (amount <= 0) return drawGradientPreview(size);
+		if (amount <= 0) return drawGradientPreview(size, nearestRgb);
 		const image = new ImageData(size, size);
-		const work = new Float32Array(size * size);
+		const red = new Float32Array(size * size);
+		const green = new Float32Array(size * size);
+		const blue = new Float32Array(size * size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				work[y * size + x] = gradientValue(x, y, size);
+				const index = y * size + x;
+				const source = gradientRgb(x, y, size);
+				red[index] = source.r;
+				green[index] = source.g;
+				blue[index] = source.b;
 			}
 		}
 
@@ -173,16 +224,24 @@
 			const step = reverse ? -1 : 1;
 			for (let x = start; x !== end; x += step) {
 				const index = y * size + x;
-				const value = clampByte(work[index]!);
-				const chosen = value >= 128 ? 255 : 0;
-				writePreviewPixel(image, x, y, chosen);
-				const error = value - chosen;
+				const source = { r: red[index]!, g: green[index]!, b: blue[index]! };
+				const chosen = nearestPaletteRgb(source, nearestRgb);
+				writePreviewRgb(image, x, y, chosen);
+				const error = {
+					r: source.r - chosen.r,
+					g: source.g - chosen.g,
+					b: source.b - chosen.b
+				};
 				for (const [dxBase, dy, weight] of kernel) {
 					const dx = reverse ? -dxBase : dxBase;
 					const xx = x + dx;
 					const yy = y + dy;
 					if (xx < 0 || xx >= size || yy < 0 || yy >= size) continue;
-					work[yy * size + xx] += error * weight * amount;
+					const next = yy * size + xx;
+					const scaledWeight = weight * amount;
+					red[next] += error.r * scaledWeight;
+					green[next] += error.g * scaledWeight;
+					blue[next] += error.b * scaledWeight;
 				}
 			}
 		}
@@ -196,33 +255,36 @@
 		return undefined;
 	}
 
-	function gradientValue(x: number, y: number, size: number) {
+	type PaletteNearest = ReturnType<typeof createPaletteMatcher>['nearestRgb'];
+
+	function gradientRgb(x: number, y: number, size: number): Rgb {
 		const extent = Math.max(1, size - 1);
 		const tx = x / extent;
 		const ty = y / extent;
-		const lime = 210;
-		const yellow = 248;
-		const violet = 95;
-		const blue = 36;
-		const top = mix(lime, yellow, tx);
-		const bottom = mix(blue, violet, tx);
-		return Math.round(mix(top, bottom, ty));
+		const lime = { r: 135, g: 255, b: 94 };
+		const yellow = { r: 249, g: 221, b: 59 };
+		const violet = { r: 120, g: 12, b: 153 };
+		const blue = { r: 40, g: 80, b: 158 };
+		return {
+			r: mix(mix(lime.r, yellow.r, tx), mix(blue.r, violet.r, tx), ty),
+			g: mix(mix(lime.g, yellow.g, tx), mix(blue.g, violet.g, tx), ty),
+			b: mix(mix(lime.b, yellow.b, tx), mix(blue.b, violet.b, tx), ty)
+		};
+	}
+
+	function nearestPaletteRgb(rgb: Rgb, nearestRgb: PaletteNearest): Rgb {
+		return nearestRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b)).color.rgb!;
 	}
 
 	function mix(start: number, end: number, amount: number) {
 		return start + (end - start) * amount;
 	}
 
-	function clampByte(value: number) {
-		return Math.min(255, Math.max(0, value));
-	}
-
-	function writePreviewPixel(image: ImageData, x: number, y: number, value: number) {
-		const byte = clampByte(Math.round(value));
+	function writePreviewRgb(image: ImageData, x: number, y: number, rgb: Rgb) {
 		const offset = (y * image.width + x) * 4;
-		image.data[offset] = byte;
-		image.data[offset + 1] = byte;
-		image.data[offset + 2] = byte;
+		image.data[offset] = rgb.r;
+		image.data[offset + 1] = rgb.g;
+		image.data[offset + 2] = rgb.b;
 		image.data[offset + 3] = 255;
 	}
 
@@ -265,7 +327,9 @@
 									mode: current.id,
 									randomSeed: seed,
 									previewStrength: strength,
-									serpentineScan: serpentine
+									serpentineScan: serpentine,
+									palette: $selectedPalette,
+									colorSpaceMode: $colorSpace
 								}}
 								class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
 								aria-hidden="true"
@@ -294,7 +358,9 @@
 										mode: opt.id,
 										randomSeed: seed,
 										previewStrength: strength,
-										serpentineScan: serpentine
+										serpentineScan: serpentine,
+										palette: $selectedPalette,
+										colorSpaceMode: $colorSpace
 									}}
 									class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
 									aria-hidden="true"
