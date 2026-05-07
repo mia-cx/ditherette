@@ -133,7 +133,7 @@
 
 	<div class="grid w-full gap-3 text-sm">
 		<div class="grid gap-1.5">
-			<Label for="scale-ratio">Scale</Label>
+			<Label for="scale-ratio">Scale factor</Label>
 			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
 				<div class="relative">
 					<Input
