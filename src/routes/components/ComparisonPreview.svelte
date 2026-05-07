@@ -11,7 +11,7 @@
 		EmptyMedia,
 		EmptyTitle
 	} from '$lib/components/ui/empty';
-	import { drawImageDataToCanvas, processedToImageData } from '$lib/processing/render';
+	import { processedToImageData } from '$lib/processing/render';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputSettings,
@@ -76,7 +76,6 @@
 	let sideOutputCanvas = $state<HTMLCanvasElement>();
 	let revealOutputCanvas = $state<HTMLCanvasElement>();
 	let outputImageData = $state<ImageData>();
-	let outputSourceCanvas = $state<HTMLCanvasElement>();
 	let filteredPreviewCanvas: HTMLCanvasElement | undefined;
 	let layoutVersion = $state(0);
 
@@ -96,29 +95,22 @@
 	$effect(() => {
 		if (!$processedImage) {
 			outputImageData = undefined;
-			outputSourceCanvas = undefined;
 			return;
 		}
-		const imageData = processedToImageData($processedImage);
-		const sourceCanvas = document.createElement('canvas');
-		drawImageDataToCanvas(sourceCanvas, imageData);
-		outputImageData = imageData;
-		outputSourceCanvas = sourceCanvas;
+		outputImageData = processedToImageData($processedImage);
 	});
 
 	$effect(() => {
 		const imageData = outputImageData;
-		const sourceCanvas = outputSourceCanvas;
 		const redrawKey = `${mode}:${zoom}:${layoutVersion}`;
 		const sideCanvas = sideOutputCanvas;
 		const sidePane = sideOutputPane;
 		const revealCanvas = revealOutputCanvas;
 		const pane = revealPane;
-		if (!imageData || !sourceCanvas || !redrawKey) return;
+		if (!imageData || !redrawKey) return;
 		const frame = requestAnimationFrame(() => {
-			if (sideCanvas && sidePane)
-				renderPreviewCanvas(sideCanvas, sidePane, imageData, sourceCanvas);
-			if (revealCanvas && pane) renderPreviewCanvas(revealCanvas, pane, imageData, sourceCanvas);
+			if (sideCanvas && sidePane) renderPreviewCanvas(sideCanvas, sidePane, imageData);
+			if (revealCanvas && pane) renderPreviewCanvas(revealCanvas, pane, imageData);
 		});
 		return () => cancelAnimationFrame(frame);
 	});
@@ -173,15 +165,11 @@
 	) {
 		if (!width || !height) return '';
 		const frame = fitFrame(pane, width, height);
-		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px`;
+		const rendering = frame.width / width >= 1 ? 'pixelated' : 'auto';
+		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering}`;
 	}
 
-	function renderPreviewCanvas(
-		canvas: HTMLCanvasElement,
-		pane: HTMLElement,
-		imageData: ImageData,
-		sourceCanvas: HTMLCanvasElement
-	) {
+	function renderPreviewCanvas(canvas: HTMLCanvasElement, pane: HTMLElement, imageData: ImageData) {
 		const frame = fitFrame(pane, imageData.width, imageData.height);
 		const cssWidth = Math.max(1, frame.width);
 		const cssHeight = Math.max(1, frame.height);
@@ -203,13 +191,11 @@
 		const cssPixelWidth = Math.max(1, Math.round(cssWidth));
 		const cssPixelHeight = Math.max(1, Math.round(cssHeight));
 		const filtered = (filteredPreviewCanvas ??= document.createElement('canvas'));
-		filtered.width = cssPixelWidth;
-		filtered.height = cssPixelHeight;
-		const filteredContext = filtered.getContext('2d');
-		if (!filteredContext) return;
-		filteredContext.imageSmoothingEnabled = true;
-		filteredContext.imageSmoothingQuality = 'high';
-		filteredContext.drawImage(sourceCanvas, 0, 0, cssPixelWidth, cssPixelHeight);
+		if (filtered.width !== cssPixelWidth || filtered.height !== cssPixelHeight) {
+			filtered.width = cssPixelWidth;
+			filtered.height = cssPixelHeight;
+		}
+		drawBoxDownsample(filtered, imageData, cssPixelWidth, cssPixelHeight);
 
 		const scale = window.devicePixelRatio || 1;
 		const width = Math.max(1, Math.round(cssWidth * scale));
@@ -219,10 +205,60 @@
 			canvas.height = height;
 		}
 		canvas.style.imageRendering = 'auto';
-		context.imageSmoothingEnabled = true;
-		context.imageSmoothingQuality = 'high';
+		context.imageSmoothingEnabled = false;
 		context.clearRect(0, 0, width, height);
 		context.drawImage(filtered, 0, 0, width, height);
+	}
+
+	function drawBoxDownsample(
+		canvas: HTMLCanvasElement,
+		image: ImageData,
+		width: number,
+		height: number
+	) {
+		const context = canvas.getContext('2d');
+		if (!context) return;
+		const output = context.createImageData(width, height);
+		const source = image.data;
+		const target = output.data;
+		const xRatio = image.width / width;
+		const yRatio = image.height / height;
+
+		for (let y = 0; y < height; y++) {
+			const startY = Math.floor(y * yRatio);
+			const endY = Math.max(startY + 1, Math.ceil((y + 1) * yRatio));
+			for (let x = 0; x < width; x++) {
+				const startX = Math.floor(x * xRatio);
+				const endX = Math.max(startX + 1, Math.ceil((x + 1) * xRatio));
+				let red = 0;
+				let green = 0;
+				let blue = 0;
+				let alpha = 0;
+				let samples = 0;
+
+				for (let sourceY = startY; sourceY < endY && sourceY < image.height; sourceY++) {
+					let offset = (sourceY * image.width + startX) * 4;
+					for (let sourceX = startX; sourceX < endX && sourceX < image.width; sourceX++) {
+						const sampleAlpha = source[offset + 3]! / 255;
+						red += source[offset]! * sampleAlpha;
+						green += source[offset + 1]! * sampleAlpha;
+						blue += source[offset + 2]! * sampleAlpha;
+						alpha += sampleAlpha;
+						samples++;
+						offset += 4;
+					}
+				}
+
+				const offset = (y * width + x) * 4;
+				const divisor = alpha || samples || 1;
+				target[offset] = red / divisor;
+				target[offset + 1] = green / divisor;
+				target[offset + 2] = blue / divisor;
+				target[offset + 3] = (alpha / Math.max(1, samples)) * 255;
+			}
+		}
+
+		context.putImageData(output, 0, 0);
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {
