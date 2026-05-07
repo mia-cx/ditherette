@@ -118,6 +118,7 @@ export type DitherOption = {
 	label: string;
 	family: 'none' | 'ordered' | 'error-diffusion' | 'noise';
 	short: string;
+	math: string;
 };
 
 export const DITHER_ALGORITHMS: DitherOption[] = [
@@ -125,49 +126,57 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'none',
 		label: 'None',
 		family: 'none',
-		short: 'Direct nearest-color quantization. Fast; can flatten gradients.'
+		short: 'Direct nearest-color quantization. Fast; can flatten gradients.',
+		math: 'index = nearestPaletteColor(pixel)'
 	},
 	{
 		id: 'bayer-4',
 		label: 'Bayer 4×4',
 		family: 'ordered',
-		short: 'Ordered threshold matrix. Crisp, repeating pattern.'
+		short: 'Ordered threshold matrix. Crisp, repeating pattern.',
+		math: 'pixel += (Bayer₄[x mod 4,y mod 4] − 0.5) · strength'
 	},
 	{
 		id: 'bayer-8',
 		label: 'Bayer 8×8',
 		family: 'ordered',
-		short: 'Larger matrix; less obvious repetition than 4×4.'
+		short: 'Larger matrix; less obvious repetition than 4×4.',
+		math: 'pixel += (Bayer₈[x mod 8,y mod 8] − 0.5) · strength'
 	},
 	{
 		id: 'bayer-16',
 		label: 'Bayer 16×16',
 		family: 'ordered',
-		short: 'Largest ordered matrix; smoothest of the Bayer family.'
+		short: 'Largest ordered matrix; smoothest of the Bayer family.',
+		math: 'pixel += (Bayer₁₆[x mod 16,y mod 16] − 0.5) · strength'
 	},
 	{
 		id: 'floyd-steinberg',
 		label: 'Floyd–Steinberg',
 		family: 'error-diffusion',
-		short: 'Distributes quantization error to four future neighbors (7/16, 3/16, 5/16, 1/16).'
+		short: 'Distributes quantization error to four future neighbors (7/16, 3/16, 5/16, 1/16).',
+		math: 'error = pixel − quantized; diffuse {→7, ↙3, ↓5, ↘1}/16'
 	},
 	{
 		id: 'sierra',
 		label: 'Sierra',
 		family: 'error-diffusion',
-		short: 'Wider three-row error diffusion kernel.'
+		short: 'Wider three-row error diffusion kernel.',
+		math: 'error = pixel − quantized; diffuse Sierra weights /32 across three rows'
 	},
 	{
 		id: 'sierra-lite',
 		label: 'Sierra Lite',
 		family: 'error-diffusion',
-		short: 'Cheaper Sierra variant; smaller neighborhood.'
+		short: 'Cheaper Sierra variant; smaller neighborhood.',
+		math: 'error = pixel − quantized; diffuse {→2, ↙1, ↓1}/4'
 	},
 	{
 		id: 'random',
 		label: 'Random',
 		family: 'noise',
-		short: 'Seeded per-pixel noise perturbs the quantization threshold.'
+		short: 'Seeded per-pixel noise perturbs the quantization threshold.',
+		math: 'pixel += (mulberry32(seed,x,y) − 0.5) · strength'
 	}
 ];
 

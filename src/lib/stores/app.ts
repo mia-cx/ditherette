@@ -290,9 +290,20 @@ export function deleteActiveCustomPalette() {
 	activePaletteName.set(WPLACE_PALETTE_NAME);
 }
 
-export function importCustomPaletteData(value: unknown) {
+export function previewCustomPaletteImport(value: unknown) {
 	const records = Array.isArray(value) ? value : [value];
-	const imported = records.map((record) => parseImportedPalette(record));
+	const palettes = records.map((record) => parseImportedPalette(record));
+	const currentNames = new Set(customPalettes.get().map((palette) => palette.name));
+	return {
+		palettes,
+		overwrites: palettes
+			.filter((palette) => currentNames.has(palette.name))
+			.map((palette) => palette.name)
+	};
+}
+
+export function importCustomPaletteData(value: unknown) {
+	const { palettes: imported } = previewCustomPaletteImport(value);
 	const currentPalettes = customPalettes.get();
 	const existing = new Map(currentPalettes.map((palette) => [palette.name, palette]));
 	const currentEnabled = paletteEnabled.get();

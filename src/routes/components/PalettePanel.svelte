@@ -36,6 +36,7 @@
 		editActivePaletteColor,
 		importCustomPaletteData,
 		paletteEnabled,
+		previewCustomPaletteImport,
 		palettes,
 		setPaletteColorEnabled
 	} from '$lib/stores/app';
@@ -63,6 +64,7 @@
 	let selectedColorKeys = $state<Record<string, boolean>>({});
 	let importInput = $state<HTMLInputElement>();
 	let paletteMessage = $state<string>();
+	let paletteMessageTone = $state<'neutral' | 'error'>('neutral');
 	let colorDialogOpen = $state(false);
 	let colorDialogMode = $state<'add' | 'edit' | 'duplicate'>('add');
 	let colorDialogColor = $state<PaletteColor>();
@@ -129,12 +131,17 @@
 		for (const color of colors) setPaletteColorEnabled(color.key, nextEnabled, currentPalette.name);
 	}
 
+	function setPaletteMessage(message: string | undefined, tone: 'neutral' | 'error' = 'neutral') {
+		paletteMessage = message;
+		paletteMessageTone = tone;
+	}
+
 	function withPaletteError(run: () => void) {
 		try {
 			run();
-			paletteMessage = undefined;
+			setPaletteMessage(undefined);
 		} catch (error) {
-			paletteMessage = error instanceof Error ? error.message : 'Palette action failed.';
+			setPaletteMessage(error instanceof Error ? error.message : 'Palette action failed.', 'error');
 		}
 	}
 
@@ -152,7 +159,7 @@
 
 	function openColorDialog(mode: 'add' | 'edit' | 'duplicate', color?: PaletteColor) {
 		if (isBuiltIn || color?.kind === 'transparent') {
-			paletteMessage = 'Built-in and transparent colors cannot be edited.';
+			setPaletteMessage('Built-in and transparent colors cannot be edited.', 'error');
 			return;
 		}
 		colorDialogMode = mode;
@@ -177,7 +184,10 @@
 
 	function addColor() {
 		if (isBuiltIn) {
-			paletteMessage = 'Built-in palettes are immutable. Duplicate Wplace before adding colors.';
+			setPaletteMessage(
+				'Built-in palettes are immutable. Duplicate Wplace before adding colors.',
+				'error'
+			);
 			return;
 		}
 		openColorDialog('add');
@@ -193,7 +203,10 @@
 
 	function deleteSelectedColors() {
 		if (isBuiltIn) {
-			paletteMessage = 'Built-in palettes are immutable. Duplicate Wplace before deleting colors.';
+			setPaletteMessage(
+				'Built-in palettes are immutable. Duplicate Wplace before deleting colors.',
+				'error'
+			);
 			return;
 		}
 		const keys = selectedKeys();
@@ -205,7 +218,7 @@
 
 	function deleteColor(color: PaletteColor) {
 		if (isBuiltIn || color.kind === 'transparent') {
-			paletteMessage = 'Built-in and transparent colors cannot be deleted.';
+			setPaletteMessage('Built-in and transparent colors cannot be deleted.', 'error');
 			return;
 		}
 		deleteColorKey = color.key;
@@ -222,7 +235,7 @@
 
 	function deletePalette() {
 		if (isBuiltIn) {
-			paletteMessage = 'The Wplace palette cannot be deleted.';
+			setPaletteMessage('The Wplace palette cannot be deleted.', 'error');
 			return;
 		}
 		if (!confirm(`Delete custom palette ${currentPalette.name}?`)) return;
@@ -234,7 +247,7 @@
 			? $customPalettes
 			: [currentPalette].filter((palette) => palette.source === 'custom');
 		if (!data.length) {
-			paletteMessage = 'There are no custom palettes to export.';
+			setPaletteMessage('There are no custom palettes to export.', 'error');
 			return;
 		}
 		const blob = new Blob([JSON.stringify(all ? data : data[0], null, 2)], {
@@ -253,10 +266,24 @@
 		const file = input.files?.[0];
 		if (!file) return;
 		try {
-			const count = importCustomPaletteData(JSON.parse(await file.text()));
-			paletteMessage = `Imported ${count} custom palette${count === 1 ? '' : 's'}.`;
+			const data = JSON.parse(await file.text());
+			const preview = previewCustomPaletteImport(data);
+			if (preview.overwrites.length) {
+				const names = preview.overwrites.join(', ');
+				if (
+					!confirm(
+						`Import will replace ${preview.overwrites.length} palette(s): ${names}. Continue?`
+					)
+				)
+					return;
+			}
+			const count = importCustomPaletteData(data);
+			setPaletteMessage(`Imported ${count} custom palette${count === 1 ? '' : 's'}.`);
 		} catch (error) {
-			paletteMessage = error instanceof Error ? error.message : 'Could not import palette JSON.';
+			setPaletteMessage(
+				error instanceof Error ? error.message : 'Could not import palette JSON.',
+				'error'
+			);
 		} finally {
 			input.value = '';
 		}
@@ -393,7 +420,12 @@
 	</div>
 
 	{#if paletteMessage}
-		<p class="border border-border bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+		<p
+			role={paletteMessageTone === 'error' ? 'alert' : undefined}
+			class="border px-2 py-1 text-xs {paletteMessageTone === 'error'
+				? 'border-destructive/30 bg-destructive/10 text-destructive'
+				: 'border-border bg-muted/50 text-muted-foreground'}"
+		>
 			{paletteMessage}
 		</p>
 	{/if}

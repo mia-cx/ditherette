@@ -198,6 +198,11 @@
 				<Badge variant="secondary" class="capitalize">{current?.family.replace('-', ' ')}</Badge>
 			</div>
 			<p class="mt-0.5 text-xs text-muted-foreground">{current?.short}</p>
+			<p
+				class="mt-1 border-l-2 border-border bg-muted/50 px-2 py-1 font-mono text-xs text-muted-foreground"
+			>
+				{current?.math}
+			</p>
 		</div>
 	</div>
 </section>
