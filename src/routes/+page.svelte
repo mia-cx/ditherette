@@ -21,15 +21,23 @@
 		ditherSettings,
 		hasImage,
 		outputSettings,
-		processedImage
+		previewSettings,
+		processedImage,
+		updatePreviewSettings
 	} from '$lib/stores/app';
 	import { startAutoProcessing } from '$lib/processing/client';
 	import { clearAllImageData, restorePersistedImages, setSourceFile } from '$lib/processing/source';
 	import { COLOR_SPACES, DITHER_ALGORITHMS, RESIZE_MODES } from './components/sample-data';
 
+	const DEFAULT_DESKTOP_PANE_LAYOUT = [56, 44] as const;
+
 	let openSections = $state<string[]>(['output', 'dither', 'color']);
 	let fileInput = $state<HTMLInputElement>();
 	let uploadError = $state<string>();
+
+	const desktopPaneLayout = $derived(
+		validDesktopPaneLayout($previewSettings.desktopPaneLayout) ?? DEFAULT_DESKTOP_PANE_LAYOUT
+	);
 
 	const outputBadge = $derived(
 		`${$processedImage?.width ?? $outputSettings.width}×${$processedImage?.height ?? $outputSettings.height} · ${RESIZE_MODES.find((mode) => mode.id === $outputSettings.resize)?.label ?? 'Resize'}`
@@ -73,6 +81,22 @@
 			input.value = '';
 		}
 	}
+
+	function validDesktopPaneLayout(layout: unknown): [number, number] | undefined {
+		if (!Array.isArray(layout) || layout.length !== 2) return undefined;
+		const [preview, controls] = layout;
+		if (typeof preview !== 'number' || typeof controls !== 'number') return undefined;
+		if (!Number.isFinite(preview) || !Number.isFinite(controls)) return undefined;
+		return [preview, controls];
+	}
+
+	function persistDesktopPaneLayout(layout: number[]) {
+		const next = validDesktopPaneLayout(layout.map((size) => Math.round(size * 100) / 100));
+		if (!next) return;
+		const current = validDesktopPaneLayout(previewSettings.get().desktopPaneLayout);
+		if (current?.[0] === next[0] && current[1] === next[1]) return;
+		updatePreviewSettings({ desktopPaneLayout: next });
+	}
 </script>
 
 <svelte:head><title>ditherette</title></svelte:head>
@@ -110,8 +134,12 @@
 	</main>
 
 	<main class="hidden flex-1 overflow-hidden lg:block">
-		<ResizablePaneGroup direction="vertical" class="h-full">
-			<ResizablePane defaultSize={56} minSize={25}>
+		<ResizablePaneGroup
+			direction="vertical"
+			class="h-full"
+			onLayoutChange={persistDesktopPaneLayout}
+		>
+			<ResizablePane defaultSize={desktopPaneLayout[0]} minSize={25}>
 				<ComparisonPreview
 					hasImage={$hasImage}
 					minHeightClass="h-full"
@@ -120,7 +148,7 @@
 				/>
 			</ResizablePane>
 			<ResizableHandle withHandle />
-			<ResizablePane defaultSize={44} minSize={25}>
+			<ResizablePane defaultSize={desktopPaneLayout[1]} minSize={25}>
 				<div class="h-full overflow-hidden p-0 pt-3">
 					{@render controls('gap-3 h-full overflow-hidden')}
 				</div>

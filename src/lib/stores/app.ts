@@ -44,6 +44,7 @@ export type PreviewMode = 'side-by-side' | 'ab-reveal';
 export type PreviewSettings = {
 	mode?: PreviewMode;
 	revealValue?: number;
+	desktopPaneLayout?: [number, number];
 };
 
 export const previewSettings = persistentJSON<PreviewSettings>('ditherette:preview', {});
