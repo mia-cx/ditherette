@@ -606,14 +606,14 @@
 		{#if target === 'side'}
 			<canvas
 				bind:this={sideOutputCanvas}
-				class="pointer-events-none absolute max-w-none select-none [image-rendering:pixelated]"
+				class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
 				{style}
 				aria-label="Processed dithered output"
 			></canvas>
 		{:else}
 			<canvas
 				bind:this={revealOutputCanvas}
-				class="pointer-events-none absolute max-w-none select-none [image-rendering:pixelated]"
+				class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
 				{style}
 				aria-label="Processed dithered output"
 			></canvas>

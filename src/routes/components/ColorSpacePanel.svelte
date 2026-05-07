@@ -31,6 +31,8 @@
 		}
 		const context = target.getContext('2d');
 		if (!context) return;
+		context.imageSmoothingEnabled = true;
+		context.imageSmoothingQuality = 'high';
 		context.clearRect(0, 0, width, height);
 		context.fillStyle = 'hsl(220 15% 9%)';
 		context.fillRect(0, 0, width, height);
@@ -108,7 +110,7 @@
 	<figure class="relative aspect-[4/3] w-full overflow-hidden border border-border bg-background">
 		<canvas
 			bind:this={canvas}
-			class="absolute inset-0 h-full w-full"
+			class="absolute inset-0 h-full w-full [image-rendering:auto]"
 			aria-label="{current.label} 3D canvas visualizer"
 		></canvas>
 		<figcaption class="absolute right-2 bottom-2 bg-background/85 px-2 py-0.5 text-xs">

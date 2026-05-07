@@ -12,6 +12,8 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
+	const DITHER_PREVIEW_PIXEL_SCALE = 3;
+
 	const initial = ditherSettings.get();
 	let canvas = $state<HTMLCanvasElement>();
 	let algorithm = $state(initial.algorithm);
@@ -44,21 +46,22 @@
 
 	function drawDitherPreview(target: HTMLCanvasElement, mode: string, randomSeed: number) {
 		const scale = window.devicePixelRatio || 1;
-		const size = Math.max(1, Math.round(target.clientWidth * scale));
-		if (target.width !== size || target.height !== size) {
-			target.width = size;
-			target.height = size;
+		const displaySize = Math.max(1, Math.round(target.clientWidth * scale));
+		const logicalSize = Math.max(1, Math.round(target.clientWidth / DITHER_PREVIEW_PIXEL_SCALE));
+		if (target.width !== displaySize || target.height !== displaySize) {
+			target.width = displaySize;
+			target.height = displaySize;
 		}
 		const context = target.getContext('2d');
 		if (!context) return;
-		const image = context.createImageData(size, size);
+		const image = new ImageData(logicalSize, logicalSize);
 		const random = mulberry32(randomSeed);
-		for (let y = 0; y < size; y++) {
-			for (let x = 0; x < size; x++) {
-				const gradient = x / Math.max(1, size - 1);
+		for (let y = 0; y < logicalSize; y++) {
+			for (let x = 0; x < logicalSize; x++) {
+				const gradient = x / Math.max(1, logicalSize - 1);
 				const threshold = thresholdFor(mode, x, y, random);
 				const on = gradient + threshold > 0.5;
-				const offset = (y * size + x) * 4;
+				const offset = (y * logicalSize + x) * 4;
 				const value = on ? 245 : 35;
 				image.data[offset] = value;
 				image.data[offset + 1] = value;
@@ -66,7 +69,15 @@
 				image.data[offset + 3] = 255;
 			}
 		}
-		context.putImageData(image, 0, 0);
+
+		const source = document.createElement('canvas');
+		source.width = logicalSize;
+		source.height = logicalSize;
+		source.getContext('2d')?.putImageData(image, 0, 0);
+		context.imageSmoothingEnabled = true;
+		context.imageSmoothingQuality = 'high';
+		context.clearRect(0, 0, displaySize, displaySize);
+		context.drawImage(source, 0, 0, displaySize, displaySize);
 	}
 
 	function thresholdFor(mode: string, x: number, y: number, random: () => number) {
@@ -178,7 +189,7 @@
 	<div class="flex items-center gap-3 border border-border bg-background/50 p-2">
 		<canvas
 			bind:this={canvas}
-			class="size-16 shrink-0 bg-muted [image-rendering:pixelated]"
+			class="size-24 shrink-0 bg-muted [image-rendering:auto]"
 			aria-label="{current?.label} deterministic dither preview"
 		></canvas>
 		<div class="min-w-0 flex-1">
