@@ -35,7 +35,8 @@
 		<SelectScrollUpButton />
 		<SelectPrimitive.Viewport
 			class={cn(
-				'h-full max-h-[inherit] w-full min-w-(--bits-select-anchor-width) scroll-my-1 overflow-hidden'
+				'h-full max-h-[inherit] w-full min-w-(--bits-select-anchor-width) scroll-my-1 overflow-hidden',
+				className?.includes('overflow-hidden') && 'flex flex-col'
 			)}
 		>
 			{@render children?.()}
