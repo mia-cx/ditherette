@@ -1,8 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Switch } from '$lib/components/ui/switch';
-	import { Label } from '$lib/components/ui/label';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 
 	type Props = {
@@ -11,8 +9,6 @@
 	};
 
 	let { variant = 'bar', hasImage = false }: Props = $props();
-
-	let pixelPerfect = $state(false);
 </script>
 
 <section
@@ -28,11 +24,6 @@
 		<span class="text-muted-foreground hidden text-xs sm:inline">
 			Indexed PNG · PLTE + tRNS
 		</span>
-	</div>
-
-	<div class="flex items-center gap-2">
-		<Label for="pixel-perfect" class="text-muted-foreground text-xs">Pixel-perfect</Label>
-		<Switch id="pixel-perfect" bind:checked={pixelPerfect} />
 	</div>
 
 	<Button size="sm" disabled={!hasImage}>
