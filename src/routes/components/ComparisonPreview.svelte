@@ -54,12 +54,15 @@
 		onSelectFile
 	}: Props = $props();
 
+	const MIN_ZOOM = 0.25;
+	const MAX_ZOOM = 256;
+
 	const initialPreviewSettings = previewSettings.get();
 	// svelte-ignore state_referenced_locally
 	let mode = $state<PreviewMode>(initialPreviewSettings.mode ?? defaultMode);
 	let revealValue = $state<number>(initialPreviewSettings.revealValue ?? 50);
 	let revealDrag = $state<number>();
-	let zoom = $state(safeNumber(initialPreviewSettings.zoom, 1));
+	let zoom = $state(clampZoom(safeNumber(initialPreviewSettings.zoom, 1)));
 	let panX = $state(safeNumber(initialPreviewSettings.panX, 0));
 	let panY = $state(safeNumber(initialPreviewSettings.panY, 0));
 	let cropMode = $state(false);
@@ -141,7 +144,7 @@
 		previewSettings.subscribe((settings) => {
 			mode = settings.mode ?? defaultMode;
 			revealValue = settings.revealValue ?? 50;
-			zoom = safeNumber(settings.zoom, 1);
+			zoom = clampZoom(safeNumber(settings.zoom, 1));
 			panX = safeNumber(settings.panX, 0);
 			panY = safeNumber(settings.panY, 0);
 			lockedFrameWidth = safeOptionalNumber(settings.frameWidth);
@@ -194,10 +197,17 @@
 		return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 	}
 
+	function pixelRatio() {
+		return typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+	}
+
+	function clampZoom(value: number) {
+		return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value || 1));
+	}
+
 	function resetView() {
 		const pane = activePreviewPane();
 		const size = pane ? paneMediaSize() : undefined;
-		zoom = 1;
 		panX = 0;
 		panY = 0;
 		if (pane && size) setFittedView(pane, size.width, size.height);
@@ -221,11 +231,12 @@
 	}
 
 	function setFittedView(pane: HTMLElement, width: number, height: number) {
-		const scale = baseScale(pane, width, height);
-		lockedFrameWidth = width * scale;
-		lockedFrameHeight = height * scale;
-		viewOriginX = (pane.clientWidth - lockedFrameWidth) / 2;
-		viewOriginY = (pane.clientHeight - lockedFrameHeight) / 2;
+		zoom = clampZoom(baseScale(pane, width, height) * pixelRatio());
+		const frame = zoomFrameSize(width, height);
+		lockedFrameWidth = frame.width;
+		lockedFrameHeight = frame.height;
+		viewOriginX = (pane.clientWidth - frame.width) / 2;
+		viewOriginY = (pane.clientHeight - frame.height) / 2;
 	}
 
 	function clearLockedFrame() {
@@ -249,24 +260,29 @@
 		return Math.min(pane.clientWidth / width, pane.clientHeight / height);
 	}
 
+	function zoomFrameSize(width: number, height: number) {
+		const reference = $sourceMeta ?? { width, height };
+		const cssScale = clampZoom(zoom) / pixelRatio();
+		const frameHeight = reference.height * cssScale;
+		return { width: frameHeight * (width / height), height: frameHeight };
+	}
+
 	function fitFrame(pane: HTMLElement | undefined, width: number, height: number) {
 		if (!pane) return { left: 0, top: 0, width: 0, height: 0 };
+		const frame = zoomFrameSize(width, height);
 		if (lockedFrameWidth !== undefined && lockedFrameHeight !== undefined) {
 			return {
 				left: viewOriginX + panX,
 				top: viewOriginY + panY,
-				width: lockedFrameHeight * (width / height),
-				height: lockedFrameHeight
+				width: frame.width,
+				height: frame.height
 			};
 		}
-		const scale = baseScale(pane, width, height) * zoom;
-		const scaledWidth = width * scale;
-		const scaledHeight = height * scale;
 		return {
-			left: (pane.clientWidth - scaledWidth) / 2 + panX,
-			top: (pane.clientHeight - scaledHeight) / 2 + panY,
-			width: scaledWidth,
-			height: scaledHeight
+			left: (pane.clientWidth - frame.width) / 2 + panX,
+			top: (pane.clientHeight - frame.height) / 2 + panY,
+			width: frame.width,
+			height: frame.height
 		};
 	}
 
@@ -286,13 +302,11 @@
 		const pane = activePreviewPane();
 		const size = pane ? paneMediaSize() : undefined;
 		if (!anchor || !pane || !size) return;
-		const frameHeight =
-			lockedFrameHeight ?? size.height * baseScale(pane, size.width, size.height) * zoom;
-		const frameWidth = frameHeight * (size.width / size.height);
-		lockedFrameWidth = frameWidth;
-		lockedFrameHeight = frameHeight;
-		viewOriginX = pane.clientWidth / 2 - anchor.centerX * frameWidth;
-		viewOriginY = pane.clientHeight / 2 - anchor.centerY * frameHeight;
+		const frame = zoomFrameSize(size.width, size.height);
+		lockedFrameWidth = frame.width;
+		lockedFrameHeight = frame.height;
+		viewOriginX = pane.clientWidth / 2 - anchor.centerX * frame.width;
+		viewOriginY = pane.clientHeight / 2 - anchor.centerY * frame.height;
 		panX = 0;
 		panY = 0;
 		layoutVersion++;
@@ -533,7 +547,7 @@
 					pane,
 					midpoint.x,
 					midpoint.y,
-					Math.min(16, Math.max(0.25, pinch.zoom * (distance / pinch.distance)))
+					clampZoom(pinch.zoom * (distance / pinch.distance))
 				);
 			}
 			return;
@@ -565,7 +579,7 @@
 			pane,
 			event.clientX,
 			event.clientY,
-			Math.min(16, Math.max(0.25, zoom * Math.exp(-event.deltaY * 0.0015)))
+			clampZoom(zoom * Math.exp(-event.deltaY * 0.0015))
 		);
 	}
 
@@ -578,14 +592,14 @@
 		const currentFrame = fitFrame(pane, size.width, size.height);
 		const relativeX = (cursorX - currentFrame.left) / currentFrame.width;
 		const relativeY = (cursorY - currentFrame.top) / currentFrame.height;
-		const ratio = nextZoom / zoom;
-		lockedFrameWidth = currentFrame.width * ratio;
-		lockedFrameHeight = currentFrame.height * ratio;
-		viewOriginX = cursorX - relativeX * lockedFrameWidth;
-		viewOriginY = cursorY - relativeY * lockedFrameHeight;
+		zoom = clampZoom(nextZoom);
+		const nextFrame = zoomFrameSize(size.width, size.height);
+		lockedFrameWidth = nextFrame.width;
+		lockedFrameHeight = nextFrame.height;
+		viewOriginX = cursorX - relativeX * nextFrame.width;
+		viewOriginY = cursorY - relativeY * nextFrame.height;
 		panX = 0;
 		panY = 0;
-		zoom = nextZoom;
 	}
 
 	function pointerDistance() {
