@@ -273,9 +273,7 @@
 					{triggerLabel}
 				{/if}
 			</SelectTrigger>
-			<SelectContent
-				class="max-h-[min(34rem,var(--bits-select-content-available-height))] w-[32rem] p-1"
-			>
+			<SelectContent class="max-h-[min(34rem,var(--bits-select-content-available-height))] p-1">
 				{#each DITHER_ALGORITHMS as opt (opt.id)}
 					<SelectItem value={opt.id} label={opt.label} class="items-center py-3 pr-8 pl-3">
 						<span class="grid min-w-0 flex-1 gap-1.5">
