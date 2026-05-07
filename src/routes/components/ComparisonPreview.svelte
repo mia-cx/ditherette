@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
@@ -35,6 +35,7 @@
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 
 	type Point = { x: number; y: number };
+	type ViewAnchor = { centerX: number; centerY: number };
 	type PreviewLevel = { canvas: HTMLCanvasElement; width: number; height: number };
 
 	type Props = {
@@ -266,6 +267,34 @@
 			width: scaledWidth,
 			height: scaledHeight
 		};
+	}
+
+	function currentViewAnchor(): ViewAnchor | undefined {
+		const pane = activePreviewPane();
+		const size = pane ? paneMediaSize() : undefined;
+		if (!pane || !size) return undefined;
+		const frame = fitFrame(pane, size.width, size.height);
+		if (!frame.width || !frame.height) return undefined;
+		return {
+			centerX: (pane.clientWidth / 2 - frame.left) / frame.width,
+			centerY: (pane.clientHeight / 2 - frame.top) / frame.height
+		};
+	}
+
+	function applyViewAnchor(anchor: ViewAnchor | undefined) {
+		const pane = activePreviewPane();
+		const size = pane ? paneMediaSize() : undefined;
+		if (!anchor || !pane || !size) return;
+		const frameHeight =
+			lockedFrameHeight ?? size.height * baseScale(pane, size.width, size.height) * zoom;
+		const frameWidth = frameHeight * (size.width / size.height);
+		lockedFrameWidth = frameWidth;
+		lockedFrameHeight = frameHeight;
+		viewOriginX = pane.clientWidth / 2 - anchor.centerX * frameWidth;
+		viewOriginY = pane.clientHeight / 2 - anchor.centerY * frameHeight;
+		panX = 0;
+		panY = 0;
+		layoutVersion++;
 	}
 
 	function mediaStyle(
@@ -657,10 +686,21 @@
 		updatePreviewSettings({ revealValue });
 	}
 
-	function setPreviewMode(value: string) {
+	async function setPreviewMode(value: string) {
 		if (value !== 'side-by-side' && value !== 'ab-reveal') return;
+		if (value === mode) return;
+		const anchor = currentViewAnchor();
 		mode = value;
 		updatePreviewSettings({ mode });
+		await tick();
+		applyViewAnchor(anchor);
+	}
+
+	async function toggleCropMode() {
+		const anchor = currentViewAnchor();
+		cropMode = !cropMode;
+		await tick();
+		applyViewAnchor(anchor);
 	}
 
 	function setRevealFromPointer(event: PointerEvent) {
@@ -749,7 +789,7 @@
 				variant={cropMode ? 'secondary' : 'ghost'}
 				aria-label={cropMode ? 'Crop mode active' : 'Crop'}
 				disabled={!hasImage}
-				onclick={() => (cropMode = !cropMode)}
+				onclick={() => void toggleCropMode()}
 				aria-pressed={cropMode}
 			>
 				<CropIcon />
