@@ -130,7 +130,15 @@
 	onMount(() => {
 		const updateLayout = () => layoutVersion++;
 		window.addEventListener('resize', updateLayout);
-		return () => window.removeEventListener('resize', updateLayout);
+		window.addEventListener('pointerup', cancelPointerInteraction);
+		window.addEventListener('pointercancel', cancelPointerInteraction);
+		window.addEventListener('blur', cancelPointerInteraction);
+		return () => {
+			window.removeEventListener('resize', updateLayout);
+			window.removeEventListener('pointerup', cancelPointerInteraction);
+			window.removeEventListener('pointercancel', cancelPointerInteraction);
+			window.removeEventListener('blur', cancelPointerInteraction);
+		};
 	});
 
 	$effect(() => {
@@ -144,6 +152,14 @@
 		zoom = 1;
 		panX = 0;
 		panY = 0;
+	}
+
+	function cancelPointerInteraction() {
+		if (cropStart && cropDraft) cropDraft = normalizeCrop(cropDraft);
+		pointers = {};
+		pinch = undefined;
+		cropStart = undefined;
+		drag = undefined;
 	}
 
 	function fitFrame(pane: HTMLElement | undefined, width: number, height: number) {
@@ -382,6 +398,10 @@
 	}
 
 	function onPointerMove(event: PointerEvent, pane: HTMLElement | undefined) {
+		if (event.pointerType === 'mouse' && event.buttons === 0) {
+			cancelPointerInteraction();
+			return;
+		}
 		if (pointers[event.pointerId]) {
 			pointers = { ...pointers, [event.pointerId]: { x: event.clientX, y: event.clientY } };
 		}
@@ -409,15 +429,7 @@
 	}
 
 	function onPointerUp(event: PointerEvent) {
-		const remainingPointers = { ...pointers };
-		delete remainingPointers[event.pointerId];
-		pointers = remainingPointers;
-		pinch = undefined;
-		if (cropStart && cropDraft) {
-			cropDraft = normalizeCrop(cropDraft);
-		}
-		cropStart = undefined;
-		drag = undefined;
+		cancelPointerInteraction();
 		if (
 			event.currentTarget instanceof HTMLElement &&
 			event.currentTarget.hasPointerCapture(event.pointerId)
