@@ -78,7 +78,7 @@ function rgbToOklch(r: number, g: number, b: number): Vector {
 	return [l, c, h];
 }
 
-function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId): Vector {
+export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId): Vector {
 	switch (mode) {
 		case 'srgb':
 		case 'weighted-rgb':

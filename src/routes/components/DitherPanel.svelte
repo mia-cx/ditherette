@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
-	import { clampByte, createPaletteMatcher } from '$lib/processing/color';
+	import { clampByte, createPaletteMatcher, vectorForRgb } from '$lib/processing/color';
 	import type { ColorSpaceId, EnabledPaletteColor, Rgb } from '$lib/processing/types';
 	import { DITHER_ALGORITHMS, COVERAGE_MODES, type DitherOption } from './sample-data';
 	import {
@@ -53,18 +53,20 @@
 	let coverage = $state(initial.coverage);
 	let serpentine = $state(initial.serpentine);
 	let seed = $state(initial.seed);
+	let useColorSpace = $state(initial.useColorSpace ?? false);
 
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
 	const isNone = $derived(algorithm === 'none');
 	const isRandom = $derived(algorithm === 'random');
+	const isThresholdDither = $derived(current?.family === 'ordered' || current?.family === 'noise');
 	const triggerLabel = $derived(current?.label ?? 'Select algorithm');
 	const coverageLabel = $derived(
 		COVERAGE_MODES.find((c) => c.id === coverage)?.label ?? 'Coverage'
 	);
 
 	$effect(() => {
-		updateDitherSettings({ algorithm, strength, coverage, serpentine, seed });
+		updateDitherSettings({ algorithm, strength, coverage, serpentine, seed, useColorSpace });
 	});
 
 	function randomizeSeed() {
@@ -80,6 +82,7 @@
 			serpentineScan: boolean;
 			palette: readonly EnabledPaletteColor[];
 			colorSpaceMode: ColorSpaceId;
+			useColorSpace: boolean;
 		}
 	) {
 		const draw = (next: typeof params) => {
@@ -90,7 +93,8 @@
 				next.previewStrength,
 				next.serpentineScan,
 				next.palette,
-				next.colorSpaceMode
+				next.colorSpaceMode,
+				next.useColorSpace
 			);
 		};
 		draw(params);
@@ -104,7 +108,8 @@
 		previewStrength: number,
 		serpentineScan: boolean,
 		palette: readonly EnabledPaletteColor[],
-		colorSpaceMode: ColorSpaceId
+		colorSpaceMode: ColorSpaceId,
+		thresholdInColorSpace: boolean
 	) {
 		const scale = window.devicePixelRatio || 1;
 		const displaySize = Math.max(1, Math.round(target.clientWidth * scale));
@@ -122,7 +127,8 @@
 			previewStrength,
 			serpentineScan,
 			palette,
-			colorSpaceMode
+			colorSpaceMode,
+			thresholdInColorSpace
 		);
 
 		const source = document.createElement('canvas');
@@ -141,7 +147,8 @@
 		previewStrength: number,
 		serpentineScan: boolean,
 		palette: readonly EnabledPaletteColor[],
-		colorSpaceMode: ColorSpaceId
+		colorSpaceMode: ColorSpaceId,
+		thresholdInColorSpace: boolean
 	) {
 		const matcher = createPaletteMatcher([...palette], colorSpaceMode);
 		const amount = Math.min(1, Math.max(0, previewStrength / 100));
@@ -149,7 +156,16 @@
 		const kernel = errorKernelFor(mode);
 		if (kernel)
 			return drawErrorDiffusionPreview(kernel, size, amount, serpentineScan, matcher.nearestRgb);
-		return drawThresholdPreview(mode, size, randomSeed, amount, matcher.nearestRgb);
+		return drawThresholdPreview(
+			mode,
+			size,
+			randomSeed,
+			amount,
+			matcher.nearestRgb,
+			[...palette],
+			colorSpaceMode,
+			thresholdInColorSpace
+		);
 	}
 
 	function drawGradientPreview(size: number, nearestRgb: PaletteNearest) {
@@ -167,7 +183,10 @@
 		size: number,
 		randomSeed: number,
 		amount: number,
-		nearestRgb: PaletteNearest
+		nearestRgb: PaletteNearest,
+		palette: EnabledPaletteColor[],
+		colorSpaceMode: ColorSpaceId,
+		thresholdInColorSpace: boolean
 	) {
 		const image = new ImageData(size, size);
 		const random = mulberry32(randomSeed);
@@ -184,7 +203,15 @@
 					image,
 					x,
 					y,
-					chooseOrderedPreviewRgb(source, ditherThreshold, nearestRgb, amount)
+					chooseOrderedPreviewRgb(
+						source,
+						ditherThreshold,
+						nearestRgb,
+						amount,
+						palette,
+						colorSpaceMode,
+						thresholdInColorSpace
+					)
 				);
 			}
 		}
@@ -252,18 +279,70 @@
 	}
 
 	type PaletteNearest = ReturnType<typeof createPaletteMatcher>['nearestRgb'];
+	type ColorVector = ReturnType<typeof vectorForRgb>;
+
+	function previewVectorSpace(palette: EnabledPaletteColor[], colorSpaceMode: ColorSpaceId) {
+		const colors = palette
+			.filter((color) => color.rgb && color.kind !== 'transparent')
+			.map((color) => ({
+				rgb: color.rgb!,
+				vector: vectorForRgb(color.rgb!.r, color.rgb!.g, color.rgb!.b, colorSpaceMode)
+			}));
+		const channelRange = (channel: 0 | 1 | 2) => {
+			const values = colors.map((color) => color.vector[channel]);
+			return Math.max(Math.max(...values) - Math.min(...values), 1);
+		};
+		return { colors, ranges: [channelRange(0), channelRange(1), channelRange(2)] as ColorVector };
+	}
+
+	function nearestPreviewVectorRgb(
+		vector: ColorVector,
+		space: ReturnType<typeof previewVectorSpace>
+	) {
+		let winner: Rgb | undefined;
+		let best = Infinity;
+		for (const candidate of space.colors) {
+			const dx = vector[0] - candidate.vector[0];
+			const dy = vector[1] - candidate.vector[1];
+			const dz = vector[2] - candidate.vector[2];
+			const distance = dx * dx + dy * dy + dz * dz;
+			if (distance < best) {
+				best = distance;
+				winner = candidate.rgb;
+			}
+		}
+		return winner;
+	}
 
 	function chooseOrderedPreviewRgb(
 		rgb: Rgb,
 		threshold: number,
 		nearestRgb: PaletteNearest,
-		strengthAmount: number
+		strengthAmount: number,
+		palette: EnabledPaletteColor[],
+		colorSpaceMode: ColorSpaceId,
+		thresholdInColorSpace: boolean
 	) {
 		const offset = (threshold - 0.5) * 192 * strengthAmount;
-		return nearestPaletteRgb(
-			{ r: rgb.r + offset, g: rgb.g + offset, b: rgb.b + offset },
-			nearestRgb
+		if (!thresholdInColorSpace) {
+			return nearestPaletteRgb(
+				{ r: rgb.r + offset, g: rgb.g + offset, b: rgb.b + offset },
+				nearestRgb
+			);
+		}
+		const space = previewVectorSpace(palette, colorSpaceMode);
+		const source = vectorForRgb(
+			clampByte(rgb.r),
+			clampByte(rgb.g),
+			clampByte(rgb.b),
+			colorSpaceMode
 		);
+		const target: ColorVector = [
+			source[0] + (offset / 192) * space.ranges[0],
+			source[1] + (offset / 192) * space.ranges[1],
+			source[2] + (offset / 192) * space.ranges[2]
+		];
+		return nearestPreviewVectorRgb(target, space) ?? nearestPaletteRgb(rgb, nearestRgb);
 	}
 
 	function gradientRgb(x: number, y: number, size: number): Rgb {
@@ -338,7 +417,8 @@
 									previewStrength: strength,
 									serpentineScan: serpentine,
 									palette: $selectedPalette,
-									colorSpaceMode: $colorSpace
+									colorSpaceMode: $colorSpace,
+									useColorSpace
 								}}
 								class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
 								aria-hidden="true"
@@ -369,7 +449,8 @@
 										previewStrength: strength,
 										serpentineScan: serpentine,
 										palette: $selectedPalette,
-										colorSpaceMode: $colorSpace
+										colorSpaceMode: $colorSpace,
+										useColorSpace
 									}}
 									class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
 									aria-hidden="true"
@@ -414,6 +495,16 @@
 					{/each}
 				</SelectContent>
 			</Select>
+		</div>
+
+		<div class="flex items-center justify-between gap-2">
+			<Label for="dither-color-space" class="flex flex-col gap-0.5">
+				<span>Use selected color space</span>
+				<span class="text-xs font-normal text-muted-foreground"
+					>Threshold ordered/noise dithers in the selected color-space channels.</span
+				>
+			</Label>
+			<Switch id="dither-color-space" bind:checked={useColorSpace} disabled={!isThresholdDither} />
 		</div>
 
 		<div class="flex items-center justify-between gap-2">

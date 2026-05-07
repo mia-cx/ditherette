@@ -36,7 +36,8 @@ export const ditherSettings = persistentJSON<DitherSettings>('ditherette:dither'
 	strength: 100,
 	coverage: 'full',
 	serpentine: true,
-	seed: 0xc0ffee42
+	seed: 0xc0ffee42,
+	useColorSpace: false
 });
 
 export const colorSpace = persistentJSON<ColorSpaceId>('ditherette:color-space', 'oklab');

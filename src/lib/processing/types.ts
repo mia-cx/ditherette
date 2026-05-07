@@ -69,6 +69,7 @@ export type DitherSettings = {
 	coverage: 'full' | 'transitions' | 'edges';
 	serpentine: boolean;
 	seed: number;
+	useColorSpace: boolean;
 };
 
 export type ProcessingSettings = {
