@@ -71,8 +71,8 @@
 	let seed = $state(initial.seed);
 	let useColorSpace = $state(initial.useColorSpace ?? false);
 	let algorithmSearch = $state('');
-	let methodFilter = $state<DitherMethod | 'all'>('all');
-	let fieldFilter = $state<DitherField | 'all'>('all');
+	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion']);
+	let fieldFilters = $state<DitherField[]>(['none', 'ordered', 'noise', 'kernel']);
 
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
@@ -94,8 +94,8 @@
 					.join(' ')
 					.toLowerCase()
 					.includes(query);
-			const matchesMethod = methodFilter === 'all' || option.method === methodFilter;
-			const matchesField = fieldFilter === 'all' || option.field === fieldFilter;
+			const matchesMethod = methodFilters.includes(option.method);
+			const matchesField = fieldFilters.includes(option.field);
 			return matchesQuery && matchesMethod && matchesField;
 		})
 	);
@@ -435,12 +435,16 @@
 		return 'None';
 	}
 
-	function filterButtonClass(active: boolean) {
-		return `h-7 border px-2 text-xs ${
-			active
-				? 'border-primary bg-primary text-primary-foreground'
-				: 'border-border bg-background text-muted-foreground hover:text-foreground'
-		}`;
+	function toggleMethodFilter(method: DitherMethod) {
+		methodFilters = methodFilters.includes(method)
+			? methodFilters.filter((value) => value !== method)
+			: [...methodFilters, method];
+	}
+
+	function toggleFieldFilter(field: DitherField) {
+		fieldFilters = fieldFilters.includes(field)
+			? fieldFilters.filter((value) => value !== field)
+			: [...fieldFilters, field];
 	}
 
 	function mulberry32(value: number) {
@@ -512,49 +516,77 @@
 						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
 							>Method</span
 						>
-						<div class="flex flex-wrap gap-1">
-							<button
-								type="button"
-								class={filterButtonClass(methodFilter === 'all')}
-								onclick={() => (methodFilter = 'all')}>All</button
-							>
-							<button
-								type="button"
-								class={filterButtonClass(methodFilter === 'threshold')}
-								onclick={() => (methodFilter = 'threshold')}>Threshold</button
-							>
-							<button
-								type="button"
-								class={filterButtonClass(methodFilter === 'error-diffusion')}
-								onclick={() => (methodFilter = 'error-diffusion')}>Error diffusion</button
-							>
+						<div class="flex flex-wrap gap-3">
+							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									class="size-3.5 border-input bg-background text-primary"
+									checked={methodFilters.includes('threshold')}
+									onchange={() => toggleMethodFilter('threshold')}
+								/>
+								Threshold
+							</label>
+							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									class="size-3.5 border-input bg-background text-primary"
+									checked={methodFilters.includes('error-diffusion')}
+									onchange={() => toggleMethodFilter('error-diffusion')}
+								/>
+								Error diffusion
+							</label>
+							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									class="size-3.5 border-input bg-background text-primary"
+									checked={methodFilters.includes('none')}
+									onchange={() => toggleMethodFilter('none')}
+								/>
+								None
+							</label>
 						</div>
 					</div>
 					<div class="grid gap-1.5">
 						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
 							>Field</span
 						>
-						<div class="flex flex-wrap gap-1">
-							<button
-								type="button"
-								class={filterButtonClass(fieldFilter === 'all')}
-								onclick={() => (fieldFilter = 'all')}>All</button
-							>
-							<button
-								type="button"
-								class={filterButtonClass(fieldFilter === 'ordered')}
-								onclick={() => (fieldFilter = 'ordered')}>Ordered</button
-							>
-							<button
-								type="button"
-								class={filterButtonClass(fieldFilter === 'noise')}
-								onclick={() => (fieldFilter = 'noise')}>Noise</button
-							>
-							<button
-								type="button"
-								class={filterButtonClass(fieldFilter === 'kernel')}
-								onclick={() => (fieldFilter = 'kernel')}>Kernel</button
-							>
+						<div class="flex flex-wrap gap-3">
+							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									class="size-3.5 border-input bg-background text-primary"
+									checked={fieldFilters.includes('ordered')}
+									onchange={() => toggleFieldFilter('ordered')}
+								/>
+								Ordered
+							</label>
+							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									class="size-3.5 border-input bg-background text-primary"
+									checked={fieldFilters.includes('noise')}
+									onchange={() => toggleFieldFilter('noise')}
+								/>
+								Noise
+							</label>
+							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									class="size-3.5 border-input bg-background text-primary"
+									checked={fieldFilters.includes('kernel')}
+									onchange={() => toggleFieldFilter('kernel')}
+								/>
+								Kernel
+							</label>
+							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									class="size-3.5 border-input bg-background text-primary"
+									checked={fieldFilters.includes('none')}
+									onchange={() => toggleFieldFilter('none')}
+								/>
+								None
+							</label>
 						</div>
 					</div>
 				</div>
