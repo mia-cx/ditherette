@@ -250,8 +250,16 @@
 		return revealPane;
 	}
 
+	function sourceDisplaySize() {
+		if (!$sourceMeta) return undefined;
+		const crop = $outputSettings.crop;
+		if (!cropMode && crop) return { width: crop.width, height: crop.height };
+		return { width: $sourceMeta.width, height: $sourceMeta.height };
+	}
+
 	function paneMediaSize() {
-		if ($sourceMeta) return { width: $sourceMeta.width, height: $sourceMeta.height };
+		const sourceSize = sourceDisplaySize();
+		if (sourceSize) return sourceSize;
 		if ($processedImage) return { width: $processedImage.width, height: $processedImage.height };
 		return undefined;
 	}
@@ -261,7 +269,7 @@
 	}
 
 	function zoomFrameSize(width: number, height: number) {
-		const reference = $sourceMeta ?? { width, height };
+		const reference = sourceDisplaySize() ?? { width, height };
 		const cssScale = clampZoom(zoom) / pixelRatio();
 		const frameHeight = reference.height * cssScale;
 		return { width: frameHeight * (width / height), height: frameHeight };
@@ -321,6 +329,15 @@
 		const frame = fitFrame(pane, width, height);
 		const rendering = frame.width / width >= 1 ? 'pixelated' : 'auto';
 		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering};--preview-layout:${layoutVersion}`;
+	}
+
+	function croppedSourceImageStyle(pane: HTMLElement | undefined, crop: CropRect) {
+		if (!$sourceMeta) return '';
+		const frame = fitFrame(pane, crop.width, crop.height);
+		const scaleX = frame.width / crop.width;
+		const scaleY = frame.height / crop.height;
+		const rendering = frame.width / crop.width >= 1 ? 'pixelated' : 'auto';
+		return `left:${-crop.x * scaleX}px;top:${-crop.y * scaleY}px;width:${$sourceMeta.width * scaleX}px;height:${$sourceMeta.height * scaleY}px;image-rendering:${rendering}`;
 	}
 
 	function buildPreviewPyramid(imageData: ImageData): PreviewLevel[] {
@@ -1032,14 +1049,30 @@
 		>{label}</span
 	>
 	{#if $sourceObjectUrl && $sourceMeta}
-		<img
-			src={$sourceObjectUrl}
-			alt="Uploaded source"
-			class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
-			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
-			draggable="false"
-		/>
-		{#if activeCrop}
+		{@const appliedCrop = !cropMode ? $outputSettings.crop : undefined}
+		{#if appliedCrop}
+			<div
+				class="pointer-events-none absolute overflow-hidden"
+				style={mediaStyle(pane, appliedCrop.width, appliedCrop.height)}
+			>
+				<img
+					src={$sourceObjectUrl}
+					alt="Uploaded source crop"
+					class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
+					style={croppedSourceImageStyle(pane, appliedCrop)}
+					draggable="false"
+				/>
+			</div>
+		{:else}
+			<img
+				src={$sourceObjectUrl}
+				alt="Uploaded source"
+				class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
+				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
+				draggable="false"
+			/>
+		{/if}
+		{#if cropMode && activeCrop}
 			<div
 				class="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
 				style={cropStyle(pane, activeCrop)}
