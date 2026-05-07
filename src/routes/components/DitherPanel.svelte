@@ -490,11 +490,8 @@
 			</SelectContent>
 		</Select>
 
-		<div class="grid gap-1.5">
-			<div class="flex items-center justify-between">
-				<Label for="dither-strength">Strength</Label>
-				<span class="text-xs text-muted-foreground tabular-nums">{strength}%</span>
-			</div>
+		<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+			<Label for="dither-strength" class="text-xs text-muted-foreground">Strength</Label>
 			<Slider
 				type="single"
 				bind:value={strength}
@@ -503,6 +500,16 @@
 				step={1}
 				disabled={isNone}
 				aria-label="Dither strength"
+			/>
+			<input
+				id="dither-strength"
+				class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
+				type="number"
+				min="0"
+				max="100"
+				step="1"
+				bind:value={strength}
+				disabled={isNone}
 			/>
 		</div>
 

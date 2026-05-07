@@ -132,38 +132,36 @@
 	{/if}
 
 	<div class="grid w-full gap-3 text-sm">
-		<div class="grid gap-1.5">
-			<Label for="scale-ratio">Scale factor</Label>
-			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
-				<div class="relative">
-					<Input
-						id="scale-ratio"
-						class="h-8 pr-5 text-right font-mono tabular-nums"
-						type="number"
-						inputmode="decimal"
-						min={MIN_SCALE}
-						max={MAX_SCALE}
-						step={SCALE_STEP}
-						value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(4)) : 1}
-						disabled={!hasImage}
-						onkeydown={commitOnEnter}
-						onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
-					/>
-					<span
-						class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
-						>×</span
-					>
-				</div>
-				<Slider
-					type="single"
-					bind:value={scaleFactor}
+		<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
+			<Label for="scale-ratio" class="text-xs text-muted-foreground">Scale</Label>
+			<Slider
+				type="single"
+				bind:value={scaleFactor}
+				min={MIN_SCALE}
+				max={MAX_SCALE}
+				step={SCALE_STEP}
+				disabled={!hasImage}
+				aria-label="Output scale factor"
+				onValueChange={setScale}
+			/>
+			<div class="relative">
+				<Input
+					id="scale-ratio"
+					class="h-8 pr-5 text-right font-mono text-xs tabular-nums"
+					type="number"
+					inputmode="decimal"
 					min={MIN_SCALE}
 					max={MAX_SCALE}
 					step={SCALE_STEP}
+					value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(4)) : 1}
 					disabled={!hasImage}
-					aria-label="Output scale factor"
-					onValueChange={setScale}
+					onkeydown={commitOnEnter}
+					onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
+				<span
+					class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+					>×</span
+				>
 			</div>
 		</div>
 
