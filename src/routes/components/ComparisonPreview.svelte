@@ -272,9 +272,15 @@
 		return { width: $sourceMeta.width, height: $sourceMeta.height };
 	}
 
+	function viewFocusSize() {
+		const crop = $outputSettings.crop;
+		if (!cropMode && crop) return { width: crop.width, height: crop.height };
+		return sourceDisplaySize();
+	}
+
 	function paneMediaSize() {
-		const sourceSize = sourceDisplaySize();
-		if (sourceSize) return sourceSize;
+		const focusSize = viewFocusSize();
+		if (focusSize) return focusSize;
 		if ($processedImage) return { width: $processedImage.width, height: $processedImage.height };
 		return undefined;
 	}
@@ -284,7 +290,7 @@
 	}
 
 	function zoomFrameSize(width: number, height: number) {
-		const reference = sourceDisplaySize() ?? { width, height };
+		const reference = viewFocusSize() ?? { width, height };
 		const cssScale = clampZoom(zoom) / pixelRatio();
 		const frameHeight = reference.height * cssScale;
 		return { width: frameHeight * (width / height), height: frameHeight };
@@ -349,6 +355,21 @@
 		height: number | undefined
 	) {
 		if (!width || !height) return '';
+		const crop = appliedCrop();
+		if (crop && $sourceMeta && width === $sourceMeta.width && height === $sourceMeta.height) {
+			const cropFrameRect = fitFrame(pane, crop.width, crop.height);
+			const scaleX = cropFrameRect.width / crop.width;
+			const scaleY = cropFrameRect.height / crop.height;
+			return frameStyle(
+				{
+					left: cropFrameRect.left - crop.x * scaleX,
+					top: cropFrameRect.top - crop.y * scaleY,
+					width: width * scaleX,
+					height: height * scaleY
+				},
+				width
+			);
+		}
 		return frameStyle(fitFrame(pane, width, height), width);
 	}
 
@@ -358,6 +379,7 @@
 
 	function cropFrame(pane: HTMLElement | undefined, crop: CropRect) {
 		if (!pane || !$sourceMeta) return { left: 0, top: 0, width: 0, height: 0 };
+		if (!cropMode && $outputSettings.crop === crop) return fitFrame(pane, crop.width, crop.height);
 		const frame = fitFrame(pane, $sourceMeta.width, $sourceMeta.height);
 		return {
 			left: frame.left + (crop.x / $sourceMeta.width) * frame.width,
