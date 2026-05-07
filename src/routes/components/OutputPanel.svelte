@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { RESIZE_MODES } from './sample-data';
@@ -118,29 +117,9 @@
 		setScale(factorFromDimensions(nextWidth, safeHeight));
 	}
 
-	function resetDimensionsToCrop() {
-		const crop = $outputSettings.crop;
-		if (!crop) return;
-		const dimensions = dimensionsForScale(scaleFactor);
-		width = dimensions.width;
-		height = dimensions.height;
-		updateOutputSettings({
-			width,
-			height,
-			lockAspect: true,
-			fit: 'stretch',
-			scaleFactor,
-			autoSizeOnUpload: false
-		});
-	}
-
 	function commitOnEnter(event: KeyboardEvent) {
 		if (event.key !== 'Enter') return;
 		(event.currentTarget as HTMLInputElement).blur();
-	}
-
-	function clearCrop() {
-		updateOutputSettings({ crop: undefined });
 	}
 </script>
 
@@ -235,13 +214,4 @@
 			</Select>
 		</div>
 	</div>
-
-	{#if $outputSettings.crop}
-		<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-			<Button size="xs" variant="outline" onclick={resetDimensionsToCrop}
-				>Reset dimensions to crop scale</Button
-			>
-			<Button size="xs" variant="ghost" onclick={clearCrop}>Clear crop</Button>
-		</div>
-	{/if}
 </section>
