@@ -81,7 +81,8 @@
 	let outputPreviewLevels = $state<PreviewLevel[]>([]);
 	let outputPreviewGeneration = $state(0);
 	let nextOutputPreviewGeneration = 0;
-	let lockedDisplayScale = $state<number>();
+	let lockedFrameWidth = $state<number>();
+	let lockedFrameHeight = $state<number>();
 	let viewOriginX = $state(0);
 	let viewOriginY = $state(0);
 	let layoutVersion = $state(0);
@@ -161,12 +162,12 @@
 
 	function resetView() {
 		const pane = activePreviewPane();
-		const size = pane ? paneMediaSize(pane) : undefined;
+		const size = pane ? paneMediaSize() : undefined;
 		zoom = 1;
 		panX = 0;
 		panY = 0;
 		if (pane && size) setFittedView(pane, size.width, size.height);
-		else lockedDisplayScale = undefined;
+		else clearLockedFrame();
 	}
 
 	function cancelPointerInteraction() {
@@ -179,18 +180,23 @@
 
 	function updateLayout() {
 		const pane = activePreviewPane();
-		const size = pane ? paneMediaSize(pane) : undefined;
-		if (pane && size && lockedDisplayScale === undefined) {
+		const size = pane ? paneMediaSize() : undefined;
+		if (pane && size && lockedFrameWidth === undefined)
 			setFittedView(pane, size.width, size.height);
-		}
 		layoutVersion++;
 	}
 
 	function setFittedView(pane: HTMLElement, width: number, height: number) {
 		const scale = baseScale(pane, width, height);
-		lockedDisplayScale = scale;
-		viewOriginX = (pane.clientWidth - width * scale) / 2;
-		viewOriginY = (pane.clientHeight - height * scale) / 2;
+		lockedFrameWidth = width * scale;
+		lockedFrameHeight = height * scale;
+		viewOriginX = (pane.clientWidth - lockedFrameWidth) / 2;
+		viewOriginY = (pane.clientHeight - lockedFrameHeight) / 2;
+	}
+
+	function clearLockedFrame() {
+		lockedFrameWidth = undefined;
+		lockedFrameHeight = undefined;
 	}
 
 	function activePreviewPane() {
@@ -199,11 +205,9 @@
 		return revealPane;
 	}
 
-	function paneMediaSize(pane: HTMLElement) {
-		if (pane === sideOutputPane && $processedImage) {
-			return { width: $processedImage.width, height: $processedImage.height };
-		}
+	function paneMediaSize() {
 		if ($sourceMeta) return { width: $sourceMeta.width, height: $sourceMeta.height };
+		if ($processedImage) return { width: $processedImage.width, height: $processedImage.height };
 		return undefined;
 	}
 
@@ -213,17 +217,17 @@
 
 	function fitFrame(pane: HTMLElement | undefined, width: number, height: number) {
 		if (!pane) return { left: 0, top: 0, width: 0, height: 0 };
-		const scale = lockedDisplayScale ?? baseScale(pane, width, height) * zoom;
-		const scaledWidth = width * scale;
-		const scaledHeight = height * scale;
-		if (lockedDisplayScale !== undefined) {
+		if (lockedFrameWidth !== undefined && lockedFrameHeight !== undefined) {
 			return {
 				left: viewOriginX + panX,
 				top: viewOriginY + panY,
-				width: scaledWidth,
-				height: scaledHeight
+				width: lockedFrameWidth,
+				height: lockedFrameHeight
 			};
 		}
+		const scale = baseScale(pane, width, height) * zoom;
+		const scaledWidth = width * scale;
+		const scaledHeight = height * scale;
 		return {
 			left: (pane.clientWidth - scaledWidth) / 2 + panX,
 			top: (pane.clientHeight - scaledHeight) / 2 + panY,
@@ -504,19 +508,19 @@
 	}
 
 	function applyZoomAt(pane: HTMLElement, clientX: number, clientY: number, nextZoom: number) {
-		const size = paneMediaSize(pane);
+		const size = paneMediaSize();
 		if (!size) return;
 		const bounds = pane.getBoundingClientRect();
 		const cursorX = clientX - bounds.left;
 		const cursorY = clientY - bounds.top;
 		const currentFrame = fitFrame(pane, size.width, size.height);
-		const currentScale = currentFrame.width / size.width;
-		const imageX = (cursorX - currentFrame.left) / currentScale;
-		const imageY = (cursorY - currentFrame.top) / currentScale;
-		const nextScale = currentScale * (nextZoom / zoom);
-		lockedDisplayScale = nextScale;
-		viewOriginX = cursorX - imageX * nextScale;
-		viewOriginY = cursorY - imageY * nextScale;
+		const relativeX = (cursorX - currentFrame.left) / currentFrame.width;
+		const relativeY = (cursorY - currentFrame.top) / currentFrame.height;
+		const ratio = nextZoom / zoom;
+		lockedFrameWidth = currentFrame.width * ratio;
+		lockedFrameHeight = currentFrame.height * ratio;
+		viewOriginX = cursorX - relativeX * lockedFrameWidth;
+		viewOriginY = cursorY - relativeY * lockedFrameHeight;
 		panX = 0;
 		panY = 0;
 		zoom = nextZoom;
