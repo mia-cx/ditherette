@@ -2,6 +2,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Slider } from '$lib/components/ui/slider';
 	import { Switch } from '$lib/components/ui/switch';
+	import { Separator } from '$lib/components/ui/separator';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -513,102 +514,98 @@
 			/>
 		</div>
 
-		<div class="grid gap-2 border border-border/70 bg-muted/20 p-2.5">
-			<div class="grid grid-cols-[minmax(0,1fr)_9rem] items-end gap-3">
-				<div class="grid gap-1.5">
-					<Label for="dither-placement">Placement</Label>
-					<p class="text-xs text-muted-foreground">
-						Adaptive placement protects flat color from ordered/noise texture.
-					</p>
-				</div>
-				<Select bind:value={placement} type="single" disabled={!isThresholdDither}>
-					<SelectTrigger id="dither-placement" class="w-full">{placementLabel}</SelectTrigger>
-					<SelectContent>
-						{#each PLACEMENT_MODES as opt (opt.id)}
-							<SelectItem value={opt.id}>{opt.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-			</div>
+		<Separator />
 
-			{#if placement === 'adaptive'}
-				<div class="grid gap-2">
-					<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
-						<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label
-						>
-						<Slider
-							type="single"
-							bind:value={placementRadius}
-							min={PLACEMENT_RADIUS_MIN}
-							max={PLACEMENT_RADIUS_MAX}
-							step={1}
-							disabled={!isThresholdDither}
-							aria-label="Adaptive placement radius"
-						/>
-						<input
-							id="dither-placement-radius"
-							class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-							type="number"
-							min={PLACEMENT_RADIUS_MIN}
-							max={PLACEMENT_RADIUS_MAX}
-							step="1"
-							bind:value={placementRadius}
-							disabled={!isThresholdDither}
-						/>
-					</div>
-					<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
-						<Label for="dither-placement-threshold" class="text-xs text-muted-foreground"
-							>Threshold</Label
-						>
-						<Slider
-							type="single"
-							bind:value={placementThreshold}
-							min={PLACEMENT_PERCENT_MIN}
-							max={PLACEMENT_PERCENT_MAX}
-							step={1}
-							disabled={!isThresholdDither}
-							aria-label="Adaptive placement threshold"
-						/>
-						<input
-							id="dither-placement-threshold"
-							class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-							type="number"
-							min={PLACEMENT_PERCENT_MIN}
-							max={PLACEMENT_PERCENT_MAX}
-							step="1"
-							bind:value={placementThreshold}
-							disabled={!isThresholdDither}
-						/>
-					</div>
-					<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
-						<Label for="dither-placement-softness" class="text-xs text-muted-foreground"
-							>Softness</Label
-						>
-						<Slider
-							type="single"
-							bind:value={placementSoftness}
-							min={PLACEMENT_PERCENT_MIN}
-							max={PLACEMENT_PERCENT_MAX}
-							step={1}
-							disabled={!isThresholdDither}
-							aria-label="Adaptive placement softness"
-						/>
-						<input
-							id="dither-placement-softness"
-							class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-							type="number"
-							min={PLACEMENT_PERCENT_MIN}
-							max={PLACEMENT_PERCENT_MAX}
-							step="1"
-							bind:value={placementSoftness}
-							disabled={!isThresholdDither}
-						/>
-					</div>
-				</div>
-			{/if}
+		<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
+			<Label for="dither-placement" class="text-xs text-muted-foreground">Placement</Label>
+			<Select bind:value={placement} type="single" disabled={!isThresholdDither}>
+				<SelectTrigger id="dither-placement" class="w-full">{placementLabel}</SelectTrigger>
+				<SelectContent>
+					{#each PLACEMENT_MODES as opt (opt.id)}
+						<SelectItem value={opt.id}>{opt.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
 		</div>
 
-		<div class="grid gap-2 border border-border/70 bg-muted/20 p-2.5">
+		{#if placement === 'adaptive'}
+			<div class="grid gap-2">
+				<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+					<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label>
+					<Slider
+						type="single"
+						bind:value={placementRadius}
+						min={PLACEMENT_RADIUS_MIN}
+						max={PLACEMENT_RADIUS_MAX}
+						step={1}
+						disabled={!isThresholdDither}
+						aria-label="Adaptive placement radius"
+					/>
+					<input
+						id="dither-placement-radius"
+						class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
+						type="number"
+						min={PLACEMENT_RADIUS_MIN}
+						max={PLACEMENT_RADIUS_MAX}
+						step="1"
+						bind:value={placementRadius}
+						disabled={!isThresholdDither}
+					/>
+				</div>
+				<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+					<Label for="dither-placement-threshold" class="text-xs text-muted-foreground"
+						>Threshold</Label
+					>
+					<Slider
+						type="single"
+						bind:value={placementThreshold}
+						min={PLACEMENT_PERCENT_MIN}
+						max={PLACEMENT_PERCENT_MAX}
+						step={1}
+						disabled={!isThresholdDither}
+						aria-label="Adaptive placement threshold"
+					/>
+					<input
+						id="dither-placement-threshold"
+						class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
+						type="number"
+						min={PLACEMENT_PERCENT_MIN}
+						max={PLACEMENT_PERCENT_MAX}
+						step="1"
+						bind:value={placementThreshold}
+						disabled={!isThresholdDither}
+					/>
+				</div>
+				<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+					<Label for="dither-placement-softness" class="text-xs text-muted-foreground"
+						>Softness</Label
+					>
+					<Slider
+						type="single"
+						bind:value={placementSoftness}
+						min={PLACEMENT_PERCENT_MIN}
+						max={PLACEMENT_PERCENT_MAX}
+						step={1}
+						disabled={!isThresholdDither}
+						aria-label="Adaptive placement softness"
+					/>
+					<input
+						id="dither-placement-softness"
+						class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
+						type="number"
+						min={PLACEMENT_PERCENT_MIN}
+						max={PLACEMENT_PERCENT_MAX}
+						step="1"
+						bind:value={placementSoftness}
+						disabled={!isThresholdDither}
+					/>
+				</div>
+			</div>
+		{/if}
+
+		<Separator />
+
+		<div class="grid gap-2">
 			<div class="flex items-center justify-between gap-3">
 				<Label for="dither-color-space" class="grid gap-0.5 text-left">
 					<span>Use selected color space</span>
