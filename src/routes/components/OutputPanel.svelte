@@ -17,7 +17,7 @@
 
 	const MIN_SCALE = 0.05;
 	const MAX_SCALE = 1;
-	const SCALE_STEP = 0.01;
+	const SCALE_STEP = 0.0001;
 	const initial = outputSettings.get();
 	let width = $state<number>(initial.width);
 	let height = $state<number>(initial.height);
@@ -86,7 +86,7 @@
 	}
 
 	function formatScale(value: number) {
-		return `${Number.isFinite(value) ? value.toFixed(2) : '1.00'}×`;
+		return `${Number.isFinite(value) ? value.toFixed(4) : '1.0000'}×`;
 	}
 
 	function dimensionsForAspect(nextWidth: number, nextHeight: number, aspect: number) {
@@ -161,7 +161,7 @@
 	<div class="grid w-full gap-3 text-sm">
 		<div class="grid gap-1.5">
 			<Label for="scale-ratio">Scale</Label>
-			<div class="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
+			<div class="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-3">
 				<Slider
 					type="single"
 					bind:value={scaleFactor}
@@ -181,7 +181,7 @@
 						min={MIN_SCALE}
 						max={MAX_SCALE}
 						step={SCALE_STEP}
-						value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(2)) : 1}
+						value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(4)) : 1}
 						disabled={!hasImage}
 						onkeydown={commitOnEnter}
 						onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
