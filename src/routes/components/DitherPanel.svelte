@@ -12,7 +12,7 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	const DITHER_PREVIEW_PIXEL_SCALE = 3;
+	const DITHER_PREVIEW_PIXEL_SCALE = 2;
 	const BAYER_4 = makeBayer(4);
 	const BAYER_8 = makeBayer(8);
 	const BAYER_16 = makeBayer(16);
@@ -128,13 +128,14 @@
 		const random = mulberry32(randomSeed);
 		const matrix = bayerMatrixFor(mode);
 		const matrixSize = matrix ? Math.sqrt(matrix.length) : 1;
-		const noiseScale = 96 * amount;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const noise = matrix
-					? (matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]! - 0.5) * noiseScale
-					: (random() - 0.5) * noiseScale;
-				writePreviewPixel(image, x, y, gradientValue(x, size) + noise >= 128 ? 255 : 0);
+				const gradient = gradientValue(x, size);
+				const threshold = matrix
+					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]! * 255
+					: random() * 255;
+				const dithered = gradient >= threshold ? 255 : 0;
+				writePreviewPixel(image, x, y, mix(gradient, dithered, amount));
 			}
 		}
 		return image;
@@ -146,6 +147,7 @@
 		amount: number,
 		serpentineScan: boolean
 	) {
+		if (amount <= 0) return drawGradientPreview(size);
 		const image = new ImageData(size, size);
 		const work = new Float32Array(size * size);
 		for (let y = 0; y < size; y++) {
@@ -162,8 +164,9 @@
 			for (let x = start; x !== end; x += step) {
 				const index = y * size + x;
 				const value = clampByte(work[index]!);
+				const sourceValue = gradientValue(x, size);
 				const chosen = value >= 128 ? 255 : 0;
-				writePreviewPixel(image, x, y, chosen);
+				writePreviewPixel(image, x, y, mix(sourceValue, chosen, amount));
 				const error = value - chosen;
 				for (const [dxBase, dy, weight] of kernel) {
 					const dx = reverse ? -dxBase : dxBase;
@@ -193,6 +196,10 @@
 
 	function gradientValue(x: number, width: number) {
 		return Math.round((x / Math.max(1, width - 1)) * 255);
+	}
+
+	function mix(left: number, right: number, amount: number) {
+		return left + (right - left) * amount;
 	}
 
 	function clampByte(value: number) {
