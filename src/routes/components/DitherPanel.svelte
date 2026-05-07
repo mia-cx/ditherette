@@ -507,11 +507,13 @@
 					{triggerLabel}
 				{/if}
 			</SelectTrigger>
-			<SelectContent class="max-h-[min(38rem,var(--bits-select-content-available-height))] p-1">
+			<SelectContent
+				class="max-h-[min(38rem,var(--bits-select-content-available-height))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-1 md:w-auto md:max-w-none"
+			>
 				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
-					<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+					<div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
 						<input
-							class="h-8 w-full border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+							class="h-8 min-w-0 border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
 							placeholder="Search algorithms…"
 							bind:value={algorithmSearch}
 							onkeydown={(event) => event.stopPropagation()}
@@ -538,7 +540,11 @@
 				>
 					<div class="min-w-0">
 						{#each filteredAlgorithms as opt (opt.id)}
-							<SelectItem value={opt.id} label={opt.label} class="items-center py-3 pr-8 pl-3">
+							<SelectItem
+								value={opt.id}
+								label={opt.label}
+								class="min-w-0 items-center py-3 pr-8 pl-3"
+							>
 								<span class="grid min-w-0 flex-1 gap-1.5">
 									<span class="flex items-center gap-3">
 										<canvas
@@ -551,7 +557,7 @@
 												colorSpaceMode: $colorSpace,
 												useColorSpace
 											}}
-											class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
+											class="size-14 shrink-0 bg-muted [image-rendering:pixelated] sm:size-20"
 											aria-hidden="true"
 										></canvas>
 										<span class="grid min-w-0 flex-1 gap-1">
