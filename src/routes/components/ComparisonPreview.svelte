@@ -261,8 +261,6 @@
 
 	function sourceDisplaySize() {
 		if (!$sourceMeta) return undefined;
-		const crop = $outputSettings.crop;
-		if (!cropMode && crop) return { width: crop.width, height: crop.height };
 		return { width: $sourceMeta.width, height: $sourceMeta.height };
 	}
 
@@ -329,24 +327,51 @@
 		layoutVersion++;
 	}
 
+	function frameStyle(
+		frame: { left: number; top: number; width: number; height: number },
+		width: number
+	) {
+		const rendering = frame.width / width >= 1 ? 'pixelated' : 'auto';
+		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering};--preview-layout:${layoutVersion}`;
+	}
+
 	function mediaStyle(
 		pane: HTMLElement | undefined,
 		width: number | undefined,
 		height: number | undefined
 	) {
 		if (!width || !height) return '';
-		const frame = fitFrame(pane, width, height);
-		const rendering = frame.width / width >= 1 ? 'pixelated' : 'auto';
-		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering};--preview-layout:${layoutVersion}`;
+		return frameStyle(fitFrame(pane, width, height), width);
 	}
 
-	function croppedSourceImageStyle(pane: HTMLElement | undefined, crop: CropRect) {
-		if (!$sourceMeta) return '';
-		const frame = fitFrame(pane, crop.width, crop.height);
-		const scaleX = frame.width / crop.width;
-		const scaleY = frame.height / crop.height;
-		const rendering = frame.width / crop.width >= 1 ? 'pixelated' : 'auto';
-		return `left:${-crop.x * scaleX}px;top:${-crop.y * scaleY}px;width:${$sourceMeta.width * scaleX}px;height:${$sourceMeta.height * scaleY}px;image-rendering:${rendering}`;
+	function appliedCrop() {
+		return cropMode ? undefined : $outputSettings.crop;
+	}
+
+	function cropFrame(pane: HTMLElement | undefined, crop: CropRect) {
+		if (!pane || !$sourceMeta) return { left: 0, top: 0, width: 0, height: 0 };
+		const frame = fitFrame(pane, $sourceMeta.width, $sourceMeta.height);
+		return {
+			left: frame.left + (crop.x / $sourceMeta.width) * frame.width,
+			top: frame.top + (crop.y / $sourceMeta.height) * frame.height,
+			width: (crop.width / $sourceMeta.width) * frame.width,
+			height: (crop.height / $sourceMeta.height) * frame.height
+		};
+	}
+
+	function outputFrame(pane: HTMLElement | undefined, width: number, height: number) {
+		const crop = appliedCrop();
+		if (crop) return cropFrame(pane, crop);
+		return fitFrame(pane, width, height);
+	}
+
+	function outputMediaStyle(
+		pane: HTMLElement | undefined,
+		width: number | undefined,
+		height: number | undefined
+	) {
+		if (!width || !height) return '';
+		return frameStyle(outputFrame(pane, width, height), width);
 	}
 
 	function buildPreviewPyramid(imageData: ImageData): PreviewLevel[] {
@@ -383,7 +408,7 @@
 		generation: number
 	) {
 		const original = levels[0]!;
-		const frame = fitFrame(pane, original.width, original.height);
+		const frame = outputFrame(pane, original.width, original.height);
 		const cssWidth = Math.max(1, frame.width);
 		const cssHeight = Math.max(1, frame.height);
 		const deviceScale = window.devicePixelRatio || 1;
@@ -495,13 +520,13 @@
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {
-		if (!pane || !crop || !$sourceMeta) return '';
-		const frame = fitFrame(pane, $sourceMeta.width, $sourceMeta.height);
+		if (!crop || !$sourceMeta) return '';
+		const frame = cropFrame(pane, crop);
 		return [
-			`left:${frame.left + (crop.x / $sourceMeta.width) * frame.width}px`,
-			`top:${frame.top + (crop.y / $sourceMeta.height) * frame.height}px`,
-			`width:${(crop.width / $sourceMeta.width) * frame.width}px`,
-			`height:${(crop.height / $sourceMeta.height) * frame.height}px`,
+			`left:${frame.left}px`,
+			`top:${frame.top}px`,
+			`width:${frame.width}px`,
+			`height:${frame.height}px`,
 			`--preview-layout:${layoutVersion}`
 		].join(';');
 	}
@@ -727,9 +752,10 @@
 		return { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
 	}
 
-	function applyCrop() {
+	async function applyCrop() {
 		const crop = normalizeCrop(activeCrop!);
 		if (crop.width <= 2 || crop.height <= 2) return;
+		const anchor = currentViewAnchor();
 		const scaleFactor = $outputSettings.scaleFactor ?? 1;
 		updateOutputSettings({
 			crop,
@@ -739,6 +765,10 @@
 			autoSizeOnUpload: false
 		});
 		cropDraft = undefined;
+		cropResize = undefined;
+		cropMode = false;
+		await tick();
+		applyViewAnchor(anchor);
 	}
 
 	function clearCrop() {
@@ -1094,42 +1124,28 @@
 		>{label}</span
 	>
 	{#if $sourceObjectUrl && $sourceMeta}
-		{@const appliedCrop = !cropMode ? $outputSettings.crop : undefined}
-		{#if appliedCrop}
+		<img
+			src={$sourceObjectUrl}
+			alt="Uploaded source"
+			class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
+			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
+			draggable="false"
+		/>
+		{#if activeCrop}
 			<div
-				class="pointer-events-none absolute overflow-hidden"
-				style={mediaStyle(pane, appliedCrop.width, appliedCrop.height)}
-			>
-				<img
-					src={$sourceObjectUrl}
-					alt="Uploaded source crop"
-					class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
-					style={croppedSourceImageStyle(pane, appliedCrop)}
-					draggable="false"
-				/>
-			</div>
-		{:else}
-			<img
-				src={$sourceObjectUrl}
-				alt="Uploaded source"
-				class="pointer-events-none absolute max-w-none select-none [image-rendering:auto]"
-				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
-				draggable="false"
-			/>
-		{/if}
-		{#if cropMode && activeCrop}
-			<div
-				class="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+				class="pointer-events-none absolute border-2 border-primary/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
 				style={cropStyle(pane, activeCrop)}
 			>
-				{#each CROP_HANDLES as handle (handle)}
-					<button
-						type="button"
-						class={cropHandleClass(handle)}
-						aria-label={`Resize crop ${handle}`}
-						onpointerdown={(event) => onCropHandlePointerDown(event, handle, pane)}
-					></button>
-				{/each}
+				{#if cropMode}
+					{#each CROP_HANDLES as handle (handle)}
+						<button
+							type="button"
+							class={cropHandleClass(handle)}
+							aria-label={`Resize crop ${handle}`}
+							onpointerdown={(event) => onCropHandlePointerDown(event, handle, pane)}
+						></button>
+					{/each}
+				{/if}
 			</div>
 		{/if}
 	{/if}
@@ -1140,7 +1156,7 @@
 		>{label}</span
 	>
 	{#if $processedImage}
-		{@const style = mediaStyle(pane, $processedImage.width, $processedImage.height)}
+		{@const style = outputMediaStyle(pane, $processedImage.width, $processedImage.height)}
 		{#if target === 'side'}
 			<canvas
 				bind:this={sideOutputCanvas}
