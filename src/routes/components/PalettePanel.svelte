@@ -72,6 +72,11 @@
 	let colorHex = $state('#FF00AA');
 	let deleteDialogOpen = $state(false);
 	let deleteColorKey = $state<string>();
+	let importConfirmOpen = $state(false);
+	let pendingImportData = $state<unknown>();
+	let pendingImportSummary = $state<
+		{ name: string; existingCount: number; importedCount: number }[]
+	>([]);
 
 	const currentPalette = $derived($activePalette);
 	const isBuiltIn = $derived(currentPalette.source === 'wplace');
@@ -269,16 +274,20 @@
 			const data = JSON.parse(await file.text());
 			const preview = previewCustomPaletteImport(data);
 			if (preview.overwrites.length) {
-				const names = preview.overwrites.join(', ');
-				if (
-					!confirm(
-						`Import will replace ${preview.overwrites.length} palette(s): ${names}. Continue?`
-					)
-				)
-					return;
+				pendingImportData = data;
+				pendingImportSummary = preview.overwrites.map((name) => {
+					const existing = $customPalettes.find((palette) => palette.name === name)!;
+					const imported = preview.palettes.find((palette) => palette.name === name)!;
+					return {
+						name,
+						existingCount: existing.colors.length,
+						importedCount: imported.colors.length
+					};
+				});
+				importConfirmOpen = true;
+				return;
 			}
-			const count = importCustomPaletteData(data);
-			setPaletteMessage(`Imported ${count} custom palette${count === 1 ? '' : 's'}.`);
+			applyPaletteImport(data);
 		} catch (error) {
 			setPaletteMessage(
 				error instanceof Error ? error.message : 'Could not import palette JSON.',
@@ -286,6 +295,26 @@
 			);
 		} finally {
 			input.value = '';
+		}
+	}
+
+	function applyPaletteImport(data: unknown) {
+		const count = importCustomPaletteData(data);
+		setPaletteMessage(`Imported ${count} custom palette${count === 1 ? '' : 's'}.`);
+	}
+
+	function confirmPaletteImport() {
+		if (pendingImportData === undefined) return;
+		try {
+			applyPaletteImport(pendingImportData);
+			importConfirmOpen = false;
+			pendingImportData = undefined;
+			pendingImportSummary = [];
+		} catch (error) {
+			setPaletteMessage(
+				error instanceof Error ? error.message : 'Could not import palette JSON.',
+				'error'
+			);
 		}
 	}
 </script>
@@ -341,6 +370,32 @@
 		<DialogFooter>
 			<Button variant="outline" onclick={() => (deleteDialogOpen = false)}>Cancel</Button>
 			<Button variant="destructive" onclick={confirmDeleteColor}>Delete</Button>
+		</DialogFooter>
+	</DialogContent>
+</Dialog>
+
+<Dialog bind:open={importConfirmOpen}>
+	<DialogContent>
+		<DialogHeader>
+			<DialogTitle>Replace custom palettes?</DialogTitle>
+			<DialogDescription>
+				Importing this file will replace existing custom palettes with matching names. Enabled state
+				is preserved by matching colors where possible.
+			</DialogDescription>
+		</DialogHeader>
+		<ul class="grid gap-2 py-2 text-sm">
+			{#each pendingImportSummary as item (item.name)}
+				<li class="rounded border border-border bg-muted/40 px-3 py-2">
+					<span class="font-medium">{item.name}</span>
+					<span class="text-muted-foreground">
+						— {item.existingCount} existing colors → {item.importedCount} imported colors
+					</span>
+				</li>
+			{/each}
+		</ul>
+		<DialogFooter>
+			<Button variant="outline" onclick={() => (importConfirmOpen = false)}>Cancel</Button>
+			<Button onclick={confirmPaletteImport}>Replace and import</Button>
 		</DialogFooter>
 	</DialogContent>
 </Dialog>

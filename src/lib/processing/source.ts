@@ -61,10 +61,6 @@ export function setSourceRecord(record: SourceImageRecord, imageData: ImageData)
 	sourceImageData.set(imageData);
 }
 
-export async function hasPersistedSourceImage() {
-	return Boolean(await loadSourceImage());
-}
-
 export async function restorePersistedImages() {
 	const source = await loadSourceImage();
 	if (!source) return;
