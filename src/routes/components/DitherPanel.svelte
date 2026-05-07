@@ -71,6 +71,7 @@
 	const isNone = $derived(algorithm === 'none');
 	const isRandom = $derived(algorithm === 'random');
 	const isThresholdDither = $derived(current?.family === 'ordered' || current?.family === 'noise');
+	const supportsPlacement = $derived(!isNone && (isThresholdDither || isErrorDiffusion));
 	const triggerLabel = $derived(current?.label ?? 'Select algorithm');
 	const placementLabel = $derived(
 		PLACEMENT_MODES.find((option) => option.id === placement)?.label ?? 'Placement'
@@ -524,7 +525,7 @@
 
 		<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
 			<Label for="dither-placement" class="text-xs text-muted-foreground">Placement</Label>
-			<Select bind:value={placement} type="single" disabled={!isThresholdDither}>
+			<Select bind:value={placement} type="single" disabled={!supportsPlacement}>
 				<SelectTrigger id="dither-placement" class="w-full">{placementLabel}</SelectTrigger>
 				<SelectContent>
 					{#each PLACEMENT_MODES as opt (opt.id)}
@@ -544,7 +545,7 @@
 						min={PLACEMENT_RADIUS_MIN}
 						max={PLACEMENT_RADIUS_MAX}
 						step={1}
-						disabled={!isThresholdDither}
+						disabled={!supportsPlacement}
 						aria-label="Adaptive placement radius"
 					/>
 					<div class="relative">
@@ -556,7 +557,7 @@
 							max={PLACEMENT_RADIUS_MAX}
 							step="1"
 							bind:value={placementRadius}
-							disabled={!isThresholdDither}
+							disabled={!supportsPlacement}
 						/>
 						<span
 							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
@@ -574,7 +575,7 @@
 						min={PLACEMENT_PERCENT_MIN}
 						max={PLACEMENT_PERCENT_MAX}
 						step={1}
-						disabled={!isThresholdDither}
+						disabled={!supportsPlacement}
 						aria-label="Adaptive placement threshold"
 					/>
 					<div class="relative">
@@ -586,7 +587,7 @@
 							max={PLACEMENT_PERCENT_MAX}
 							step="1"
 							bind:value={placementThreshold}
-							disabled={!isThresholdDither}
+							disabled={!supportsPlacement}
 						/>
 						<span
 							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
@@ -604,7 +605,7 @@
 						min={PLACEMENT_PERCENT_MIN}
 						max={PLACEMENT_PERCENT_MAX}
 						step={1}
-						disabled={!isThresholdDither}
+						disabled={!supportsPlacement}
 						aria-label="Adaptive placement softness"
 					/>
 					<div class="relative">
@@ -616,7 +617,7 @@
 							max={PLACEMENT_PERCENT_MAX}
 							step="1"
 							bind:value={placementSoftness}
-							disabled={!isThresholdDither}
+							disabled={!supportsPlacement}
 						/>
 						<span
 							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"

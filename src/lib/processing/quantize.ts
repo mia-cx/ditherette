@@ -383,6 +383,7 @@ function quantizeErrorDiffusion(
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
 	const work = new Float32Array(width * height * 3);
+	const vectorSpace = paletteVectorSpace(matcher, settings);
 
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
@@ -430,6 +431,7 @@ function quantizeErrorDiffusion(
 			const match = matcher.nearestRgb(r, g, b);
 			indices[index] = match.index;
 			const chosen = paletteRgb(match.color);
+			const mask = placementMask(source, width, height, x, y, settings, vectorSpace);
 			const errorR = r - chosen.r;
 			const errorG = g - chosen.g;
 			const errorB = b - chosen.b;
@@ -439,7 +441,7 @@ function quantizeErrorDiffusion(
 				const yy = y + dy;
 				if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
 				const target = (yy * width + xx) * 3;
-				const scaledWeight = weight * strength;
+				const scaledWeight = weight * strength * mask;
 				work[target] += errorR * scaledWeight;
 				work[target + 1] += errorG * scaledWeight;
 				work[target + 2] += errorB * scaledWeight;
