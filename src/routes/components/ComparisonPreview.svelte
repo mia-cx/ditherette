@@ -54,7 +54,7 @@
 		onSelectFile
 	}: Props = $props();
 
-	const MIN_ZOOM = 0.25;
+	const MIN_ZOOM = 0.0625;
 	const MAX_ZOOM = 256;
 
 	const initialPreviewSettings = previewSettings.get();
