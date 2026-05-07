@@ -36,7 +36,7 @@
 	import SideBySideIcon from './SideBySideIcon.svelte';
 
 	type Point = { x: number; y: number };
-	type ViewAnchor = { centerX: number; centerY: number };
+	type ViewAnchor = { sourceX: number; sourceY: number };
 	type CropEdge = 'n' | 'e' | 's' | 'w';
 	type CropHandle = CropEdge | 'nw' | 'ne' | 'se' | 'sw';
 	type PreviewLevel = { canvas: HTMLCanvasElement; width: number; height: number };
@@ -272,15 +272,16 @@
 		return revealPane;
 	}
 
-	function sourceDisplaySize() {
+	function viewFocusRect(): CropRect | undefined {
 		if (!$sourceMeta) return undefined;
-		return { width: $sourceMeta.width, height: $sourceMeta.height };
+		const crop = $outputSettings.crop;
+		if (!cropMode && crop) return crop;
+		return fullImageCrop();
 	}
 
 	function viewFocusSize() {
-		const crop = $outputSettings.crop;
-		if (!cropMode && crop) return { width: crop.width, height: crop.height };
-		return sourceDisplaySize();
+		const focus = viewFocusRect();
+		return focus ? { width: focus.width, height: focus.height } : undefined;
 	}
 
 	function paneMediaSize() {
@@ -322,25 +323,26 @@
 
 	function currentViewAnchor(): ViewAnchor | undefined {
 		const pane = activePreviewPane();
-		const size = pane ? paneMediaSize() : undefined;
-		if (!pane || !size) return undefined;
-		const frame = fitFrame(pane, size.width, size.height);
+		const focus = viewFocusRect();
+		if (!pane || !focus) return undefined;
+		const frame = fitFrame(pane, focus.width, focus.height);
 		if (!frame.width || !frame.height) return undefined;
 		return {
-			centerX: (pane.clientWidth / 2 - frame.left) / frame.width,
-			centerY: (pane.clientHeight / 2 - frame.top) / frame.height
+			sourceX: focus.x + ((pane.clientWidth / 2 - frame.left) / frame.width) * focus.width,
+			sourceY: focus.y + ((pane.clientHeight / 2 - frame.top) / frame.height) * focus.height
 		};
 	}
 
 	function applyViewAnchor(anchor: ViewAnchor | undefined) {
 		const pane = activePreviewPane();
-		const size = pane ? paneMediaSize() : undefined;
-		if (!anchor || !pane || !size) return;
-		const frame = zoomFrameSize(size.width, size.height);
+		const focus = viewFocusRect();
+		if (!anchor || !pane || !focus) return;
+		const frame = zoomFrameSize(focus.width, focus.height);
 		lockedFrameWidth = frame.width;
 		lockedFrameHeight = frame.height;
-		viewOriginX = pane.clientWidth / 2 - anchor.centerX * frame.width;
-		viewOriginY = pane.clientHeight / 2 - anchor.centerY * frame.height;
+		viewOriginX = pane.clientWidth / 2 - ((anchor.sourceX - focus.x) / focus.width) * frame.width;
+		viewOriginY =
+			pane.clientHeight / 2 - ((anchor.sourceY - focus.y) / focus.height) * frame.height;
 		panX = 0;
 		panY = 0;
 		layoutVersion++;
