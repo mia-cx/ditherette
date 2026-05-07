@@ -411,15 +411,13 @@
 		const extent = Math.max(1, size - 1);
 		const tx = x / extent;
 		const ty = y / extent;
-		const diagonalPosition = (tx + (1 - ty)) / 2;
-		const arcOffset = Math.sin(diagonalPosition * Math.PI) * 0.18;
-		const arcPosition = Math.min(1, Math.max(0, diagonalPosition + arcOffset * (1 - tx - ty)));
+		const position = (tx + (1 - ty)) / 2;
 		const stops = DEFAULT_DITHER_PREVIEW_GRADIENT.stops;
-		const next = stops.findIndex((stop) => stop.position >= arcPosition);
+		const next = stops.findIndex((stop) => stop.position >= position);
 		const high = stops[Math.max(1, next)]!;
 		const low = stops[Math.max(0, next - 1)]!;
 		const span = Math.max(Number.EPSILON, high.position - low.position);
-		const amount = (arcPosition - low.position) / span;
+		const amount = (position - low.position) / span;
 		return {
 			r: mix(low.color.r, high.color.r, amount),
 			g: mix(low.color.g, high.color.g, amount),
@@ -526,7 +524,8 @@
 				{/if}
 			</SelectTrigger>
 			<SelectContent
-				onInteractOutside={(event) => event.preventDefault()}
+				interactOutsideBehavior="defer-otherwise-ignore"
+				preventScroll={false}
 				class="flex h-[min(38rem,var(--bits-select-content-available-height))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-1 md:w-auto md:max-w-none"
 			>
 				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
