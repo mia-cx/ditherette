@@ -1,11 +1,11 @@
 <script lang="ts">
-	import AppBar from '$lib/components/skeletons/AppBar.svelte';
-	import ComparisonPreview from '$lib/components/skeletons/ComparisonPreview.svelte';
-	import DitherPanel from '$lib/components/skeletons/DitherPanel.svelte';
-	import ColorSpacePanel from '$lib/components/skeletons/ColorSpacePanel.svelte';
-	import PalettePanel from '$lib/components/skeletons/PalettePanel.svelte';
-	import OutputPanel from '$lib/components/skeletons/OutputPanel.svelte';
-	import ExportStrip from '$lib/components/skeletons/ExportStrip.svelte';
+	import AppBar from './components/AppBar.svelte';
+	import ComparisonPreview from './components/ComparisonPreview.svelte';
+	import DitherPanel from './components/DitherPanel.svelte';
+	import ColorSpacePanel from './components/ColorSpacePanel.svelte';
+	import PalettePanel from './components/PalettePanel.svelte';
+	import OutputPanel from './components/OutputPanel.svelte';
+	import ExportStrip from './components/ExportStrip.svelte';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import {
 		Accordion,
@@ -14,6 +14,11 @@
 		AccordionContent,
 	} from '$lib/components/ui/accordion';
 	import { Badge } from '$lib/components/ui/badge';
+	import {
+		ResizablePaneGroup,
+		ResizablePane,
+		ResizableHandle,
+	} from '$lib/components/ui/resizable';
 
 	// Left-column accordion: all sections open by default so nothing is hidden
 	// on first load. Users can collapse sections they're done with.
@@ -25,92 +30,111 @@
 <!--
 	Layout strategy:
 	- Mobile (< lg): natural page scroll. Preview, controls, palette, export stack.
-	- Desktop (lg+): viewport-locked. Hero preview takes a bounded slice at the
-	  top of the main area; the two control columns below split the remaining
-	  height and scroll independently. Export strip sticks to the bottom.
+	  Vertical resizing isn't meaningful when the page already scrolls freely.
+	- Desktop (lg+): viewport-locked. Preview and controls live in a vertical
+	  paneforge group with a draggable handle between them, so users can give
+	  the preview as much (or as little) screen as they want. Each control
+	  column still scrolls independently within the lower pane.
 -->
 <div class="bg-background flex min-h-svh flex-col lg:h-svh">
 	<AppBar hasImage={false} />
 
-	<main class="flex flex-1 flex-col gap-4 lg:min-h-0 lg:gap-3 lg:overflow-hidden">
-		<!-- Hero preview: NOT inside a card, per spec. -->
+	<!-- Mobile main: natural flow. -->
+	<main class="flex flex-1 flex-col gap-4 lg:hidden">
 		<ComparisonPreview
 			hasImage={false}
-			minHeightClass="min-h-[320px] md:min-h-[420px] lg:min-h-[460px] lg:max-h-[60svh]"
+			minHeightClass="min-h-[320px] md:min-h-[420px]"
 		/>
+		{@render controls('gap-4')}
+	</main>
 
-		<!-- Two-column controls on lg+, stacked on mobile.
-		     Mobile order: Output → Dither → Color Space → Palette. -->
-		<div
-			class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-3 lg:overflow-hidden"
-		>
-			<!-- LEFT COLUMN: collapsible Output / Dither / Color sections.
-			     Independently scrollable on desktop. -->
-			<div class="flex min-h-0 flex-col lg:overflow-y-auto">
-				<Accordion
-					type="multiple"
-					bind:value={openSections}
-					class="border-border bg-card border"
-				>
-					<AccordionItem value="output">
-						<AccordionTrigger class="px-4">
-							<span class="flex items-center gap-2 text-sm">
-								Output
-								<Badge variant="outline" class="font-mono">512×512 · Lanczos3</Badge>
-							</span>
-						</AccordionTrigger>
-						<AccordionContent>
-							<div class="px-4 pb-4">
-								<OutputPanel hasImage={false} hideHeading />
-							</div>
-						</AccordionContent>
-					</AccordionItem>
-
-					<AccordionItem value="dither">
-						<AccordionTrigger class="px-4">
-							<span class="flex items-center gap-2 text-sm">
-								Dither
-								<Badge variant="secondary">Off</Badge>
-							</span>
-						</AccordionTrigger>
-						<AccordionContent>
-							<div class="px-4 pb-4">
-								<DitherPanel hideHeading />
-							</div>
-						</AccordionContent>
-					</AccordionItem>
-
-					<AccordionItem value="color">
-						<AccordionTrigger class="px-4">
-							<span class="flex items-center gap-2 text-sm">
-								Color space
-								<Badge variant="outline">OKLab</Badge>
-							</span>
-						</AccordionTrigger>
-						<AccordionContent>
-							<div class="px-4 pb-4">
-								<ColorSpacePanel hideHeading />
-							</div>
-						</AccordionContent>
-					</AccordionItem>
-				</Accordion>
-			</div>
-
-			<!-- RIGHT COLUMN: palette card. Independently scrollable on desktop;
-			     the table inside has its own ScrollArea so the card chrome stays. -->
-			<div class="flex min-h-0 flex-col lg:overflow-y-auto">
-				<!-- Card itself supplies vertical padding (py-3); CardContent only
-				     applies horizontal padding by default. Don't restate either. -->
-				<Card class="flex min-h-0 flex-1 flex-col py-3">
-					<CardContent class="flex min-h-0 flex-1 flex-col">
-						<PalettePanel fillHeight />
-					</CardContent>
-				</Card>
-			</div>
-		</div>
+	<!-- Desktop main: vertical resizable panes. -->
+	<main class="hidden flex-1 overflow-hidden lg:block">
+		<ResizablePaneGroup direction="vertical" class="h-full">
+			<ResizablePane defaultSize={56} minSize={25}>
+				<ComparisonPreview hasImage={false} minHeightClass="h-full" />
+			</ResizablePane>
+			<ResizableHandle withHandle />
+			<ResizablePane defaultSize={44} minSize={25}>
+				<div class="h-full overflow-hidden p-0 pt-3">
+					{@render controls('gap-3 h-full overflow-hidden')}
+				</div>
+			</ResizablePane>
+		</ResizablePaneGroup>
 	</main>
 
 	<div class="sticky bottom-0 z-20 lg:static">
 		<ExportStrip variant="bar" hasImage={false} />
 	</div>
 </div>
+
+<!--
+	Two-column controls grid. Same children on mobile and desktop; only the
+	wrapper sizing differs (mobile: free flow with gap-4; desktop: h-full with
+	independently-scrolling columns inside the lower paneforge pane).
+-->
+{#snippet controls(extra: string)}
+	<div
+		class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] {extra}"
+	>
+		<!-- LEFT: collapsible Output / Dither / Color sections. -->
+		<div class="flex min-h-0 flex-col lg:overflow-y-auto">
+			<Accordion
+				type="multiple"
+				bind:value={openSections}
+				class="border-border bg-card border"
+			>
+				<AccordionItem value="output">
+					<AccordionTrigger class="px-4">
+						<span class="flex items-center gap-2 text-sm">
+							Output
+							<Badge variant="outline" class="font-mono">512×512 · Lanczos3</Badge>
+						</span>
+					</AccordionTrigger>
+					<AccordionContent>
+						<div class="px-4 pb-4">
+							<OutputPanel hasImage={false} hideHeading />
+						</div>
+					</AccordionContent>
+				</AccordionItem>
+
+				<AccordionItem value="dither">
+					<AccordionTrigger class="px-4">
+						<span class="flex items-center gap-2 text-sm">
+							Dither
+							<Badge variant="secondary">Off</Badge>
+						</span>
+					</AccordionTrigger>
+					<AccordionContent>
+						<div class="px-4 pb-4">
+							<DitherPanel hideHeading />
+						</div>
+					</AccordionContent>
+				</AccordionItem>
+
+				<AccordionItem value="color">
+					<AccordionTrigger class="px-4">
+						<span class="flex items-center gap-2 text-sm">
+							Color space
+							<Badge variant="outline">OKLab</Badge>
+						</span>
+					</AccordionTrigger>
+					<AccordionContent>
+						<div class="px-4 pb-4">
+							<ColorSpacePanel hideHeading />
+						</div>
+					</AccordionContent>
+				</AccordionItem>
+			</Accordion>
+		</div>
+
+		<!-- RIGHT: palette card. Independently scrollable on desktop. -->
+		<div class="flex min-h-0 flex-col lg:overflow-y-auto">
+			<Card class="flex min-h-0 flex-1 flex-col py-3">
+				<CardContent class="flex min-h-0 flex-1 flex-col">
+					<PalettePanel fillHeight />
+				</CardContent>
+			</Card>
+		</div>
+	</div>
+{/snippet}
