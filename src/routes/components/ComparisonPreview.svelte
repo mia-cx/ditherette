@@ -542,12 +542,21 @@
 	function cropCardStyle(pane: HTMLElement | undefined, crop: CropRect) {
 		if (!pane) return '';
 		const frame = cropFrame(pane, crop);
-		const halfWidth = 144;
+		const width = 288;
+		const height = 96;
+		const margin = 8;
+		const halfWidth = width / 2;
 		const left = Math.min(
-			pane.clientWidth - halfWidth,
-			Math.max(halfWidth, frame.left + frame.width / 2)
+			pane.clientWidth - halfWidth - margin,
+			Math.max(halfWidth + margin, frame.left + frame.width / 2)
 		);
-		return `left:${left}px;top:${frame.top + frame.height + 8}px;--preview-layout:${layoutVersion}`;
+		const preferredTop = frame.top + frame.height + margin;
+		const fallbackTop = frame.top - height - margin;
+		const top =
+			preferredTop + height + margin <= pane.clientHeight
+				? preferredTop
+				: Math.max(margin, fallbackTop);
+		return `left:${left}px;top:${top}px;--preview-layout:${layoutVersion}`;
 	}
 
 	function cropEdgeClass(edge: CropEdge) {
