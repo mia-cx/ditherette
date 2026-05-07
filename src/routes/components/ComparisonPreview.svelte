@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
+	import { Popover, PopoverContent, PopoverTrigger } from '$lib/components/ui/popover';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -1116,18 +1116,54 @@
 			{/if}
 		</div>
 
-		<Tabs value={mode} onValueChange={setPreviewMode} class="shrink-0">
-			<TabsList>
-				<TabsTrigger value="side-by-side">
+		<div class="inline-flex h-8 items-center bg-muted p-[3px]">
+			<Popover>
+				<PopoverTrigger
+					openOnHover
+					openDelay={150}
+					closeDelay={100}
+					aria-label="Side-by-side preview"
+					class="inline-flex h-[calc(100%-1px)] w-8 items-center justify-center border border-transparent transition-colors hover:text-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:outline-none {mode ===
+					'side-by-side'
+						? 'border-input bg-background text-foreground dark:bg-input/30'
+						: 'text-foreground/60'}"
+					onclick={() => void setPreviewMode('side-by-side')}
+				>
 					<img src={sideBySideIcon} alt="" class="size-4 opacity-80 dark:invert" />
-					Side-by-side
-				</TabsTrigger>
-				<TabsTrigger value="ab-reveal">
+				</PopoverTrigger>
+				<PopoverContent side="top" class="w-56">
+					<div class="grid gap-1">
+						<p class="font-medium text-foreground">Side-by-side</p>
+						<p class="text-muted-foreground">
+							Shows the source and processed output in separate panes with matched pan and zoom.
+						</p>
+					</div>
+				</PopoverContent>
+			</Popover>
+			<Popover>
+				<PopoverTrigger
+					openOnHover
+					openDelay={150}
+					closeDelay={100}
+					aria-label="A/B reveal preview"
+					class="inline-flex h-[calc(100%-1px)] w-8 items-center justify-center border border-transparent transition-colors hover:text-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:outline-none {mode ===
+					'ab-reveal'
+						? 'border-input bg-background text-foreground dark:bg-input/30'
+						: 'text-foreground/60'}"
+					onclick={() => void setPreviewMode('ab-reveal')}
+				>
 					<img src={revealIcon} alt="" class="size-4 opacity-80 dark:invert" />
-					A/B reveal
-				</TabsTrigger>
-			</TabsList>
-		</Tabs>
+				</PopoverTrigger>
+				<PopoverContent side="top" class="w-56">
+					<div class="grid gap-1">
+						<p class="font-medium text-foreground">A/B reveal</p>
+						<p class="text-muted-foreground">
+							Overlays source and output in one pane; drag the divider to reveal either version.
+						</p>
+					</div>
+				</PopoverContent>
+			</Popover>
+		</div>
 
 		<div class="flex min-w-0 items-center justify-end gap-1.5 text-xs text-muted-foreground">
 			<Badge variant="outline" class="hidden md:inline-flex">{colorLabel}</Badge>
