@@ -18,6 +18,7 @@
 		type DitherField,
 		type DitherMethod
 	} from './sample-data';
+	import InlineMath from './InlineMath.svelte';
 	import { DEFAULT_DITHER_PREVIEW_GRADIENT } from './preview-gradients';
 	import {
 		colorSpace,
@@ -584,9 +585,12 @@
 												<Badge variant="secondary">{methodLabel(opt.method)}</Badge>
 												<Badge variant="outline">{fieldLabel(opt.field)}</Badge>
 											</span>
-											<span class="text-xs whitespace-normal text-muted-foreground"
+											<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
 												>{opt.short}</span
 											>
+											<span class="rounded-sm border border-border bg-muted/40 px-2 py-1">
+												<InlineMath expression={opt.latex} />
+											</span>
 										</span>
 									</span>
 								</span>
