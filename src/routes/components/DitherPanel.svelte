@@ -74,7 +74,7 @@
 		source.width = logicalSize;
 		source.height = logicalSize;
 		source.getContext('2d')?.putImageData(image, 0, 0);
-		context.imageSmoothingEnabled = true;
+		context.imageSmoothingEnabled = displaySize < logicalSize;
 		context.imageSmoothingQuality = 'high';
 		context.clearRect(0, 0, displaySize, displaySize);
 		context.drawImage(source, 0, 0, displaySize, displaySize);

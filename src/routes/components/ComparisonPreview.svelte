@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
@@ -74,6 +75,10 @@
 	let revealPane = $state<HTMLElement>();
 	let sideOutputCanvas = $state<HTMLCanvasElement>();
 	let revealOutputCanvas = $state<HTMLCanvasElement>();
+	let outputImageData = $state<ImageData>();
+	let outputSourceCanvas = $state<HTMLCanvasElement>();
+	let filteredPreviewCanvas: HTMLCanvasElement | undefined;
+	let layoutVersion = $state(0);
 
 	const zoomLabel = $derived(`${Math.round(zoom * 100)}%`);
 	const sizeLabel = $derived(
@@ -89,10 +94,33 @@
 	const activeCrop = $derived(cropDraft ?? $outputSettings.crop);
 
 	$effect(() => {
-		if (!$processedImage) return;
+		if (!$processedImage) {
+			outputImageData = undefined;
+			outputSourceCanvas = undefined;
+			return;
+		}
 		const imageData = processedToImageData($processedImage);
-		if (sideOutputCanvas) drawImageDataToCanvas(sideOutputCanvas, imageData);
-		if (revealOutputCanvas) drawImageDataToCanvas(revealOutputCanvas, imageData);
+		const sourceCanvas = document.createElement('canvas');
+		drawImageDataToCanvas(sourceCanvas, imageData);
+		outputImageData = imageData;
+		outputSourceCanvas = sourceCanvas;
+	});
+
+	$effect(() => {
+		const imageData = outputImageData;
+		const sourceCanvas = outputSourceCanvas;
+		const redrawKey = `${mode}:${zoom}:${layoutVersion}`;
+		const sideCanvas = sideOutputCanvas;
+		const sidePane = sideOutputPane;
+		const revealCanvas = revealOutputCanvas;
+		const pane = revealPane;
+		if (!imageData || !sourceCanvas || !redrawKey) return;
+		const frame = requestAnimationFrame(() => {
+			if (sideCanvas && sidePane)
+				renderPreviewCanvas(sideCanvas, sidePane, imageData, sourceCanvas);
+			if (revealCanvas && pane) renderPreviewCanvas(revealCanvas, pane, imageData, sourceCanvas);
+		});
+		return () => cancelAnimationFrame(frame);
 	});
 
 	$effect(() =>
@@ -101,6 +129,19 @@
 			revealValue = settings.revealValue ?? 50;
 		})
 	);
+
+	onMount(() => {
+		const updateLayout = () => layoutVersion++;
+		window.addEventListener('resize', updateLayout);
+		return () => window.removeEventListener('resize', updateLayout);
+	});
+
+	$effect(() => {
+		const observer = new ResizeObserver(() => layoutVersion++);
+		if (sideOutputPane) observer.observe(sideOutputPane);
+		if (revealPane) observer.observe(revealPane);
+		return () => observer.disconnect();
+	});
 
 	function resetView() {
 		zoom = 1;
@@ -133,6 +174,55 @@
 		if (!width || !height) return '';
 		const frame = fitFrame(pane, width, height);
 		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px`;
+	}
+
+	function renderPreviewCanvas(
+		canvas: HTMLCanvasElement,
+		pane: HTMLElement,
+		imageData: ImageData,
+		sourceCanvas: HTMLCanvasElement
+	) {
+		const frame = fitFrame(pane, imageData.width, imageData.height);
+		const cssWidth = Math.max(1, frame.width);
+		const cssHeight = Math.max(1, frame.height);
+		const cssScale = cssWidth / imageData.width;
+		const context = canvas.getContext('2d');
+		if (!context) return;
+
+		if (cssScale >= 1) {
+			if (canvas.width !== imageData.width || canvas.height !== imageData.height) {
+				canvas.width = imageData.width;
+				canvas.height = imageData.height;
+			}
+			canvas.style.imageRendering = 'pixelated';
+			context.imageSmoothingEnabled = false;
+			context.putImageData(imageData, 0, 0);
+			return;
+		}
+
+		const cssPixelWidth = Math.max(1, Math.round(cssWidth));
+		const cssPixelHeight = Math.max(1, Math.round(cssHeight));
+		const filtered = (filteredPreviewCanvas ??= document.createElement('canvas'));
+		filtered.width = cssPixelWidth;
+		filtered.height = cssPixelHeight;
+		const filteredContext = filtered.getContext('2d');
+		if (!filteredContext) return;
+		filteredContext.imageSmoothingEnabled = true;
+		filteredContext.imageSmoothingQuality = 'high';
+		filteredContext.drawImage(sourceCanvas, 0, 0, cssPixelWidth, cssPixelHeight);
+
+		const scale = window.devicePixelRatio || 1;
+		const width = Math.max(1, Math.round(cssWidth * scale));
+		const height = Math.max(1, Math.round(cssHeight * scale));
+		if (canvas.width !== width || canvas.height !== height) {
+			canvas.width = width;
+			canvas.height = height;
+		}
+		canvas.style.imageRendering = 'auto';
+		context.imageSmoothingEnabled = true;
+		context.imageSmoothingQuality = 'high';
+		context.clearRect(0, 0, width, height);
+		context.drawImage(filtered, 0, 0, width, height);
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {
