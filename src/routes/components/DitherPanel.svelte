@@ -5,6 +5,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Sheet, SheetContent, SheetHeader, SheetTitle } from '$lib/components/ui/sheet';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import { Accordion, AccordionContent, AccordionItem } from '$lib/components/ui/accordion';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -77,7 +78,9 @@
 	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion']);
 	let fieldFilters = $state<DitherField[]>(['none', 'ordered', 'noise', 'kernel']);
 	let filterSheetOpen = $state(false);
-	let desktopFiltersOpen = $state(uiSettings.get().desktopDitherFiltersOpen ?? false);
+	let desktopFilterSections = $state<string[]>(
+		uiSettings.get().desktopDitherFiltersOpen ? ['filters'] : []
+	);
 
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
@@ -120,7 +123,10 @@
 	});
 
 	$effect(() => {
-		uiSettings.set({ ...uiSettings.get(), desktopDitherFiltersOpen: desktopFiltersOpen });
+		uiSettings.set({
+			...uiSettings.get(),
+			desktopDitherFiltersOpen: desktopFilterSections.includes('filters')
+		});
 	});
 
 	function randomizeSeed() {
@@ -404,27 +410,25 @@
 		const extent = Math.max(1, size - 1);
 		const tx = x / extent;
 		const ty = y / extent;
-		const points = [
-			{ x: 0, y: 0, color: { r: 135, g: 255, b: 94 } },
-			{ x: 1 / 3, y: 1 / 3, color: { r: 249, g: 221, b: 59 } },
-			{ x: 2 / 3, y: 2 / 3, color: { r: 170, g: 56, b: 185 } },
-			{ x: 1, y: 1, color: { r: 40, g: 80, b: 158 } },
-			{ x: 0, y: 1, color: { r: 0, g: 0, b: 0 } },
-			{ x: 1, y: 0, color: { r: 255, g: 255, b: 255 } }
-		];
-		let total = 0;
-		let r = 0;
-		let g = 0;
-		let b = 0;
-		for (const point of points) {
-			const distance = Math.hypot(tx - point.x, ty - point.y);
-			const weight = 1 / Math.max(distance ** 3, 0.0001);
-			total += weight;
-			r += point.color.r * weight;
-			g += point.color.g * weight;
-			b += point.color.b * weight;
-		}
-		return { r: r / total, g: g / total, b: b / total };
+		const lime = { r: 135, g: 255, b: 94 };
+		const yellow = { r: 249, g: 221, b: 59 };
+		const violet = { r: 120, g: 12, b: 153 };
+		const blue = { r: 40, g: 80, b: 158 };
+		const base = {
+			r: mix(mix(lime.r, yellow.r, tx), mix(blue.r, violet.r, tx), ty),
+			g: mix(mix(lime.g, yellow.g, tx), mix(blue.g, violet.g, tx), ty),
+			b: mix(mix(lime.b, yellow.b, tx), mix(blue.b, violet.b, tx), ty)
+		};
+		const whiteAmount = Math.max(0, 1 - Math.hypot(tx - 0.5, ty - 0.5) / 0.45) ** 2;
+		return {
+			r: mix(base.r, 255, whiteAmount),
+			g: mix(base.g, 255, whiteAmount),
+			b: mix(base.b, 255, whiteAmount)
+		};
+	}
+
+	function mix(start: number, end: number, amount: number) {
+		return start + (end - start) * amount;
 	}
 
 	function nearestPaletteRgb(rgb: Rgb, nearestRgb: PaletteNearest): Rgb {
@@ -542,16 +546,15 @@
 							variant="outline"
 							size="default"
 							class="hidden md:inline-flex"
-							aria-expanded={desktopFiltersOpen}
-							onclick={() => (desktopFiltersOpen = !desktopFiltersOpen)}>Filters</Button
+							aria-expanded={desktopFilterSections.includes('filters')}
+							onclick={() =>
+								(desktopFilterSections = desktopFilterSections.includes('filters')
+									? []
+									: ['filters'])}>Filters</Button
 						>
 					</div>
 				</div>
-				<div
-					class={desktopFiltersOpen
-						? 'grid min-h-0 flex-1 gap-2 overflow-hidden md:grid-cols-[minmax(0,1fr)_10rem]'
-						: 'grid min-h-0 flex-1 gap-2 overflow-hidden'}
-				>
+				<div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-2 overflow-hidden">
 					<div class="min-w-0 overflow-y-auto">
 						{#each filteredAlgorithms as opt (opt.id)}
 							<SelectItem
@@ -592,78 +595,86 @@
 							<div class="p-4 text-center text-xs text-muted-foreground">No algorithms match.</div>
 						{/each}
 					</div>
-					<div
-						class={desktopFiltersOpen
-							? 'hidden content-start gap-3 border-l border-border p-2 md:grid'
-							: 'hidden'}
+					<Accordion
+						type="multiple"
+						bind:value={desktopFilterSections}
+						class="hidden h-full overflow-hidden border-l border-border md:flex"
 					>
-						<div class="grid gap-1.5">
-							<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-								>Method</span
-							>
-							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Checkbox
-									checked={methodFilters.includes('threshold')}
-									onCheckedChange={() => toggleMethodFilter('threshold')}
-									aria-label="Toggle threshold method filter"
-								/>
-								Threshold
-							</label>
-							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Checkbox
-									checked={methodFilters.includes('error-diffusion')}
-									onCheckedChange={() => toggleMethodFilter('error-diffusion')}
-									aria-label="Toggle error-diffusion method filter"
-								/>
-								Error diffusion
-							</label>
-							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Checkbox
-									checked={methodFilters.includes('none')}
-									onCheckedChange={() => toggleMethodFilter('none')}
-									aria-label="Toggle none method filter"
-								/>
-								None
-							</label>
-						</div>
-						<div class="grid gap-1.5">
-							<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-								>Field</span
-							>
-							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Checkbox
-									checked={fieldFilters.includes('ordered')}
-									onCheckedChange={() => toggleFieldFilter('ordered')}
-									aria-label="Toggle ordered field filter"
-								/>
-								Ordered
-							</label>
-							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Checkbox
-									checked={fieldFilters.includes('noise')}
-									onCheckedChange={() => toggleFieldFilter('noise')}
-									aria-label="Toggle noise field filter"
-								/>
-								Noise
-							</label>
-							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Checkbox
-									checked={fieldFilters.includes('kernel')}
-									onCheckedChange={() => toggleFieldFilter('kernel')}
-									aria-label="Toggle kernel field filter"
-								/>
-								Kernel
-							</label>
-							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<Checkbox
-									checked={fieldFilters.includes('none')}
-									onCheckedChange={() => toggleFieldFilter('none')}
-									aria-label="Toggle none field filter"
-								/>
-								None
-							</label>
-						</div>
-					</div>
+						<AccordionItem value="filters" class="border-b-0">
+							<AccordionContent class="w-40 p-2 pb-2.5">
+								<div class="grid gap-3">
+									<div class="grid gap-1.5">
+										<span
+											class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+											>Method</span
+										>
+										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												checked={methodFilters.includes('threshold')}
+												onCheckedChange={() => toggleMethodFilter('threshold')}
+												aria-label="Toggle threshold method filter"
+											/>
+											Threshold
+										</label>
+										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												checked={methodFilters.includes('error-diffusion')}
+												onCheckedChange={() => toggleMethodFilter('error-diffusion')}
+												aria-label="Toggle error-diffusion method filter"
+											/>
+											Error diffusion
+										</label>
+										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												checked={methodFilters.includes('none')}
+												onCheckedChange={() => toggleMethodFilter('none')}
+												aria-label="Toggle none method filter"
+											/>
+											None
+										</label>
+									</div>
+									<div class="grid gap-1.5">
+										<span
+											class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+											>Field</span
+										>
+										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												checked={fieldFilters.includes('ordered')}
+												onCheckedChange={() => toggleFieldFilter('ordered')}
+												aria-label="Toggle ordered field filter"
+											/>
+											Ordered
+										</label>
+										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												checked={fieldFilters.includes('noise')}
+												onCheckedChange={() => toggleFieldFilter('noise')}
+												aria-label="Toggle noise field filter"
+											/>
+											Noise
+										</label>
+										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												checked={fieldFilters.includes('kernel')}
+												onCheckedChange={() => toggleFieldFilter('kernel')}
+												aria-label="Toggle kernel field filter"
+											/>
+											Kernel
+										</label>
+										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Checkbox
+												checked={fieldFilters.includes('none')}
+												onCheckedChange={() => toggleFieldFilter('none')}
+												aria-label="Toggle none field filter"
+											/>
+											None
+										</label>
+									</div>
+								</div>
+							</AccordionContent>
+						</AccordionItem>
+					</Accordion>
 				</div>
 			</SelectContent>
 		</Select>
