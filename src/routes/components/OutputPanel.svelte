@@ -168,35 +168,47 @@
 		<div class="grid gap-2">
 			<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
 				<Label for="out-width" class="text-xs text-muted-foreground">Width</Label>
-				<Input
-					id="out-width"
-					class="text-right font-mono tabular-nums"
-					type="number"
-					inputmode="numeric"
-					min="1"
-					max="16384"
-					step="1"
-					value={width}
-					disabled={!hasImage}
-					onkeydown={commitOnEnter}
-					onchange={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
-				/>
+				<div class="relative">
+					<Input
+						id="out-width"
+						class="pr-7 text-right font-mono tabular-nums"
+						type="number"
+						inputmode="numeric"
+						min="1"
+						max="16384"
+						step="1"
+						value={width}
+						disabled={!hasImage}
+						onkeydown={commitOnEnter}
+						onchange={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
+					/>
+					<span
+						class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+						>px</span
+					>
+				</div>
 			</div>
 			<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
 				<Label for="out-height" class="text-xs text-muted-foreground">Height</Label>
-				<Input
-					id="out-height"
-					class="text-right font-mono tabular-nums"
-					type="number"
-					inputmode="numeric"
-					min="1"
-					max="16384"
-					step="1"
-					value={height}
-					disabled={!hasImage}
-					onkeydown={commitOnEnter}
-					onchange={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
-				/>
+				<div class="relative">
+					<Input
+						id="out-height"
+						class="pr-7 text-right font-mono tabular-nums"
+						type="number"
+						inputmode="numeric"
+						min="1"
+						max="16384"
+						step="1"
+						value={height}
+						disabled={!hasImage}
+						onkeydown={commitOnEnter}
+						onchange={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
+					/>
+					<span
+						class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+						>px</span
+					>
+				</div>
 			</div>
 			<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
 				<Label for="resize-mode" class="text-xs text-muted-foreground">Resample</Label>

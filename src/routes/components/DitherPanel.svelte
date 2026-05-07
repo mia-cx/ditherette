@@ -491,7 +491,7 @@
 			</SelectContent>
 		</Select>
 
-		<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+		<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
 			<Label for="dither-strength" class="text-xs text-muted-foreground">Strength</Label>
 			<Slider
 				type="single"
@@ -502,16 +502,22 @@
 				disabled={isNone}
 				aria-label="Dither strength"
 			/>
-			<input
-				id="dither-strength"
-				class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-				type="number"
-				min="0"
-				max="100"
-				step="1"
-				bind:value={strength}
-				disabled={isNone}
-			/>
+			<div class="relative">
+				<input
+					id="dither-strength"
+					class="h-8 w-full border border-input bg-transparent px-2 pr-5 text-right font-mono text-xs tabular-nums"
+					type="number"
+					min="0"
+					max="100"
+					step="1"
+					bind:value={strength}
+					disabled={isNone}
+				/>
+				<span
+					class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+					>%</span
+				>
+			</div>
 		</div>
 
 		<Separator />
@@ -530,7 +536,7 @@
 
 		{#if placement === 'adaptive'}
 			<div class="grid gap-2">
-				<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+				<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
 					<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label>
 					<Slider
 						type="single"
@@ -541,18 +547,24 @@
 						disabled={!isThresholdDither}
 						aria-label="Adaptive placement radius"
 					/>
-					<input
-						id="dither-placement-radius"
-						class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-						type="number"
-						min={PLACEMENT_RADIUS_MIN}
-						max={PLACEMENT_RADIUS_MAX}
-						step="1"
-						bind:value={placementRadius}
-						disabled={!isThresholdDither}
-					/>
+					<div class="relative">
+						<input
+							id="dither-placement-radius"
+							class="h-8 w-full border border-input bg-transparent px-2 pr-6 text-right font-mono text-xs tabular-nums"
+							type="number"
+							min={PLACEMENT_RADIUS_MIN}
+							max={PLACEMENT_RADIUS_MAX}
+							step="1"
+							bind:value={placementRadius}
+							disabled={!isThresholdDither}
+						/>
+						<span
+							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+							>px</span
+						>
+					</div>
 				</div>
-				<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+				<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
 					<Label for="dither-placement-threshold" class="text-xs text-muted-foreground"
 						>Threshold</Label
 					>
@@ -565,18 +577,24 @@
 						disabled={!isThresholdDither}
 						aria-label="Adaptive placement threshold"
 					/>
-					<input
-						id="dither-placement-threshold"
-						class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-						type="number"
-						min={PLACEMENT_PERCENT_MIN}
-						max={PLACEMENT_PERCENT_MAX}
-						step="1"
-						bind:value={placementThreshold}
-						disabled={!isThresholdDither}
-					/>
+					<div class="relative">
+						<input
+							id="dither-placement-threshold"
+							class="h-8 w-full border border-input bg-transparent px-2 pr-5 text-right font-mono text-xs tabular-nums"
+							type="number"
+							min={PLACEMENT_PERCENT_MIN}
+							max={PLACEMENT_PERCENT_MAX}
+							step="1"
+							bind:value={placementThreshold}
+							disabled={!isThresholdDither}
+						/>
+						<span
+							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+							>%</span
+						>
+					</div>
 				</div>
-				<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+				<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
 					<Label for="dither-placement-softness" class="text-xs text-muted-foreground"
 						>Softness</Label
 					>
@@ -589,16 +607,22 @@
 						disabled={!isThresholdDither}
 						aria-label="Adaptive placement softness"
 					/>
-					<input
-						id="dither-placement-softness"
-						class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-						type="number"
-						min={PLACEMENT_PERCENT_MIN}
-						max={PLACEMENT_PERCENT_MAX}
-						step="1"
-						bind:value={placementSoftness}
-						disabled={!isThresholdDither}
-					/>
+					<div class="relative">
+						<input
+							id="dither-placement-softness"
+							class="h-8 w-full border border-input bg-transparent px-2 pr-5 text-right font-mono text-xs tabular-nums"
+							type="number"
+							min={PLACEMENT_PERCENT_MIN}
+							max={PLACEMENT_PERCENT_MAX}
+							step="1"
+							bind:value={placementSoftness}
+							disabled={!isThresholdDither}
+						/>
+						<span
+							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+							>%</span
+						>
+					</div>
 				</div>
 			</div>
 		{/if}
