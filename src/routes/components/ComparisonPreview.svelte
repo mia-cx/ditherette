@@ -153,6 +153,7 @@
 
 	$effect(() => {
 		updatePreviewSettings({
+			mode,
 			zoom,
 			panX,
 			panY,
