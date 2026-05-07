@@ -505,7 +505,7 @@
 			<div class="relative">
 				<input
 					id="dither-strength"
-					class="h-8 w-full border border-input bg-transparent px-2 pr-5 text-right font-mono text-xs tabular-nums"
+					class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
 					type="number"
 					min="0"
 					max="100"
@@ -550,7 +550,7 @@
 					<div class="relative">
 						<input
 							id="dither-placement-radius"
-							class="h-8 w-full border border-input bg-transparent px-2 pr-6 text-right font-mono text-xs tabular-nums"
+							class="h-8 w-full border border-input bg-background px-2 pr-6 text-right font-mono text-xs tabular-nums"
 							type="number"
 							min={PLACEMENT_RADIUS_MIN}
 							max={PLACEMENT_RADIUS_MAX}
@@ -580,7 +580,7 @@
 					<div class="relative">
 						<input
 							id="dither-placement-threshold"
-							class="h-8 w-full border border-input bg-transparent px-2 pr-5 text-right font-mono text-xs tabular-nums"
+							class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
 							type="number"
 							min={PLACEMENT_PERCENT_MIN}
 							max={PLACEMENT_PERCENT_MAX}
@@ -610,7 +610,7 @@
 					<div class="relative">
 						<input
 							id="dither-placement-softness"
-							class="h-8 w-full border border-input bg-transparent px-2 pr-5 text-right font-mono text-xs tabular-nums"
+							class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
 							type="number"
 							min={PLACEMENT_PERCENT_MIN}
 							max={PLACEMENT_PERCENT_MAX}

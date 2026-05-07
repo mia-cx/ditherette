@@ -147,7 +147,7 @@
 			<div class="relative">
 				<Input
 					id="scale-ratio"
-					class="h-8 pr-5 text-right font-mono text-xs tabular-nums"
+					class="h-8 bg-background pr-5 text-right font-mono text-xs tabular-nums"
 					type="number"
 					inputmode="decimal"
 					min={MIN_SCALE}
@@ -171,7 +171,7 @@
 				<div class="relative">
 					<Input
 						id="out-width"
-						class="pr-7 text-right font-mono tabular-nums"
+						class="bg-background pr-7 text-right font-mono tabular-nums"
 						type="number"
 						inputmode="numeric"
 						min="1"
@@ -193,7 +193,7 @@
 				<div class="relative">
 					<Input
 						id="out-height"
-						class="pr-7 text-right font-mono tabular-nums"
+						class="bg-background pr-7 text-right font-mono tabular-nums"
 						type="number"
 						inputmode="numeric"
 						min="1"
