@@ -550,12 +550,10 @@
 			pane.clientWidth - halfWidth - margin,
 			Math.max(halfWidth + margin, frame.left + frame.width / 2)
 		);
-		const preferredTop = frame.top + frame.height + margin;
-		const fallbackTop = frame.top - height - margin;
-		const top =
-			preferredTop + height + margin <= pane.clientHeight
-				? preferredTop
-				: Math.max(margin, fallbackTop);
+		const top = Math.min(
+			pane.clientHeight - height - margin,
+			Math.max(margin, frame.top + frame.height + margin)
+		);
 		return `left:${left}px;top:${top}px;--preview-layout:${layoutVersion}`;
 	}
 
