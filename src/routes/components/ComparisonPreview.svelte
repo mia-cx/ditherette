@@ -36,7 +36,8 @@
 
 	type Point = { x: number; y: number };
 	type ViewAnchor = { centerX: number; centerY: number };
-	type CropHandle = 'n' | 'e' | 's' | 'w' | 'nw' | 'ne' | 'se' | 'sw';
+	type CropEdge = 'n' | 'e' | 's' | 'w';
+	type CropHandle = CropEdge | 'nw' | 'ne' | 'se' | 'sw';
 	type PreviewLevel = { canvas: HTMLCanvasElement; width: number; height: number };
 
 	type Props = {
@@ -57,6 +58,7 @@
 
 	const MIN_ZOOM = 0.0625;
 	const MAX_ZOOM = 256;
+	const CROP_EDGES: CropEdge[] = ['n', 'e', 's', 'w'];
 	const CROP_HANDLES: CropHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
 	const initialPreviewSettings = previewSettings.get();
@@ -72,6 +74,11 @@
 	let cropResize = $state<{
 		pointerId: number;
 		handle: CropHandle;
+		start: Point;
+		crop: CropRect;
+	}>();
+	let cropMove = $state<{
+		pointerId: number;
 		start: Point;
 		crop: CropRect;
 	}>();
@@ -224,10 +231,11 @@
 	}
 
 	function cancelPointerInteraction() {
-		if (cropResize && cropDraft) cropDraft = normalizeCrop(cropDraft);
+		if ((cropResize || cropMove) && cropDraft) cropDraft = normalizeCrop(cropDraft);
 		pointers = {};
 		pinch = undefined;
 		cropResize = undefined;
+		cropMove = undefined;
 		drag = undefined;
 	}
 
@@ -531,6 +539,16 @@
 		].join(';');
 	}
 
+	function cropEdgeClass(edge: CropEdge) {
+		const positions: Record<CropEdge, string> = {
+			n: 'top-0 right-3 left-3 h-3 -translate-y-1/2 cursor-move',
+			e: 'top-3 right-0 bottom-3 w-3 translate-x-1/2 cursor-move',
+			s: 'right-3 bottom-0 left-3 h-3 translate-y-1/2 cursor-move',
+			w: 'top-3 bottom-3 left-0 w-3 -translate-x-1/2 cursor-move'
+		};
+		return `pointer-events-auto absolute z-10 bg-transparent ${positions[edge]}`;
+	}
+
 	function cropHandleClass(handle: CropHandle) {
 		const positions: Record<CropHandle, string> = {
 			n: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize',
@@ -542,7 +560,7 @@
 			se: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize',
 			sw: 'bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize'
 		};
-		return `pointer-events-auto absolute size-3 border border-background bg-primary shadow ${positions[handle]}`;
+		return `pointer-events-auto absolute z-20 size-3 border border-background bg-primary shadow ${positions[handle]}`;
 	}
 
 	function panePointToImage(
@@ -563,6 +581,16 @@
 
 	function fullImageCrop(): CropRect {
 		return { x: 0, y: 0, width: $sourceMeta?.width ?? 1, height: $sourceMeta?.height ?? 1 };
+	}
+
+	function moveCrop(start: Point, end: Point, crop: CropRect) {
+		if (!$sourceMeta) return normalizeCrop(crop);
+		return normalizeCrop({
+			x: Math.min($sourceMeta.width - crop.width, Math.max(0, crop.x + end.x - start.x)),
+			y: Math.min($sourceMeta.height - crop.height, Math.max(0, crop.y + end.y - start.y)),
+			width: crop.width,
+			height: crop.height
+		});
 	}
 
 	function resizeCropFromHandle(handle: CropHandle, start: Point, end: Point, crop: CropRect) {
@@ -590,6 +618,7 @@
 			pinch = { distance: pointerDistance(), zoom };
 			drag = undefined;
 			cropResize = undefined;
+			cropMove = undefined;
 			return;
 		}
 
@@ -617,6 +646,11 @@
 			}
 			return;
 		}
+		if (cropMove && pane && cropMove.pointerId === event.pointerId) {
+			const end = panePointToImage(pane, event.clientX, event.clientY);
+			if (end) cropDraft = moveCrop(cropMove.start, end, cropMove.crop);
+			return;
+		}
 		if (cropResize && pane && cropResize.pointerId === event.pointerId) {
 			const end = panePointToImage(pane, event.clientX, event.clientY);
 			if (end)
@@ -638,6 +672,20 @@
 		}
 	}
 
+	function onCropEdgePointerDown(event: PointerEvent, pane: HTMLElement | undefined) {
+		if (!hasImage || !pane || event.button !== 0) return;
+		const start = panePointToImage(pane, event.clientX, event.clientY);
+		if (!start) return;
+		event.preventDefault();
+		event.stopPropagation();
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		pointers = { [event.pointerId]: { x: event.clientX, y: event.clientY } };
+		pinch = undefined;
+		drag = undefined;
+		cropResize = undefined;
+		cropMove = { pointerId: event.pointerId, start, crop: editableCrop() };
+	}
+
 	function onCropHandlePointerDown(
 		event: PointerEvent,
 		handle: CropHandle,
@@ -652,6 +700,7 @@
 		pointers = { [event.pointerId]: { x: event.clientX, y: event.clientY } };
 		pinch = undefined;
 		drag = undefined;
+		cropMove = undefined;
 		cropResize = { pointerId: event.pointerId, handle, start, crop: editableCrop() };
 	}
 
@@ -766,6 +815,7 @@
 		});
 		cropDraft = undefined;
 		cropResize = undefined;
+		cropMove = undefined;
 		cropMode = false;
 		await tick();
 		applyViewAnchor(anchor);
@@ -803,7 +853,10 @@
 		const anchor = currentViewAnchor();
 		const nextCropMode = !cropMode;
 		if (nextCropMode) cropDraft = normalizeCrop($outputSettings.crop ?? fullImageCrop());
-		else cropResize = undefined;
+		else {
+			cropResize = undefined;
+			cropMove = undefined;
+		}
 		cropMode = nextCropMode;
 		await tick();
 		applyViewAnchor(anchor);
@@ -1137,6 +1190,14 @@
 				style={cropStyle(pane, activeCrop)}
 			>
 				{#if cropMode}
+					{#each CROP_EDGES as edge (edge)}
+						<button
+							type="button"
+							class={cropEdgeClass(edge)}
+							aria-label={`Move crop from ${edge} edge`}
+							onpointerdown={(event) => onCropEdgePointerDown(event, pane)}
+						></button>
+					{/each}
 					{#each CROP_HANDLES as handle (handle)}
 						<button
 							type="button"
