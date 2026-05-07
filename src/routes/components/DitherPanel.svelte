@@ -409,22 +409,21 @@
 
 	function gradientRgb(x: number, y: number, size: number): Rgb {
 		const extent = Math.max(1, size - 1);
-		const position = (x / extent + (1 - y / extent)) / 2;
-		const stops = DEFAULT_DITHER_PREVIEW_GRADIENT.stops;
-		const next = stops.findIndex((stop) => stop.position >= position);
-		const high = stops[Math.max(1, next)]!;
-		const low = stops[Math.max(0, next - 1)]!;
-		const span = Math.max(Number.EPSILON, high.position - low.position);
-		const amount = (position - low.position) / span;
-		return {
-			r: mix(low.color.r, high.color.r, amount),
-			g: mix(low.color.g, high.color.g, amount),
-			b: mix(low.color.b, high.color.b, amount)
-		};
-	}
-
-	function mix(start: number, end: number, amount: number) {
-		return start + (end - start) * amount;
+		const tx = x / extent;
+		const ty = y / extent;
+		let total = 0;
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		for (const point of DEFAULT_DITHER_PREVIEW_GRADIENT.points) {
+			const distance = Math.hypot(tx - point.x, ty - point.y);
+			const weight = 1 / Math.max(distance ** 2.4, 0.0001);
+			total += weight;
+			r += point.color.r * weight;
+			g += point.color.g * weight;
+			b += point.color.b * weight;
+		}
+		return { r: r / total, g: g / total, b: b / total };
 	}
 
 	function nearestPaletteRgb(rgb: Rgb, nearestRgb: PaletteNearest): Rgb {
