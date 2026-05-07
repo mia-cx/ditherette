@@ -37,6 +37,59 @@
 	const PLACEMENT_RADIUS_MAX = 32;
 	const PLACEMENT_PERCENT_MIN = 0;
 	const PLACEMENT_PERCENT_MAX = 100;
+	const PREVIEW_PALETTE = [
+		{
+			key: 'preview-black',
+			name: 'Black',
+			kind: 'custom',
+			enabled: true,
+			rgb: { r: 0, g: 0, b: 0 }
+		},
+		{
+			key: 'preview-white',
+			name: 'White',
+			kind: 'custom',
+			enabled: true,
+			rgb: { r: 255, g: 255, b: 255 }
+		},
+		{ key: 'preview-red', name: 'Red', kind: 'custom', enabled: true, rgb: { r: 255, g: 0, b: 0 } },
+		{
+			key: 'preview-green',
+			name: 'Green',
+			kind: 'custom',
+			enabled: true,
+			rgb: { r: 0, g: 255, b: 0 }
+		},
+		{
+			key: 'preview-blue',
+			name: 'Blue',
+			kind: 'custom',
+			enabled: true,
+			rgb: { r: 0, g: 0, b: 255 }
+		},
+		{
+			key: 'preview-cyan',
+			name: 'Cyan',
+			kind: 'custom',
+			enabled: true,
+			rgb: { r: 0, g: 255, b: 255 }
+		},
+		{
+			key: 'preview-magenta',
+			name: 'Magenta',
+			kind: 'custom',
+			enabled: true,
+			rgb: { r: 255, g: 0, b: 255 }
+		},
+		{
+			key: 'preview-yellow',
+			name: 'Yellow',
+			kind: 'custom',
+			enabled: true,
+			rgb: { r: 255, g: 255, b: 0 }
+		}
+	] satisfies EnabledPaletteColor[];
+
 	const ERROR_KERNELS = {
 		'floyd-steinberg': [
 			[1, 0, 7 / 16],
@@ -168,7 +221,7 @@
 		randomSeed: number,
 		previewStrength: number,
 		serpentineScan: boolean,
-		palette: readonly EnabledPaletteColor[],
+		_palette: readonly EnabledPaletteColor[],
 		colorSpaceMode: ColorSpaceId,
 		thresholdInColorSpace: boolean
 	) {
@@ -187,7 +240,7 @@
 			randomSeed,
 			previewStrength,
 			serpentineScan,
-			palette,
+			PREVIEW_PALETTE,
 			colorSpaceMode,
 			thresholdInColorSpace
 		);
