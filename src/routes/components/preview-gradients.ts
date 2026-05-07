@@ -14,16 +14,16 @@ export type PreviewGradientPreset = {
 
 export const DITHER_PREVIEW_GRADIENTS = [
 	{
-		id: 'navy-teal-lime-gold-coral-arc',
-		label: 'Navy → Teal → Lime → Gold → Coral arc',
+		id: 'deep-blue-cyan-white-rose-amber-arc',
+		label: 'Deep blue → Cyan → White → Rose → Amber arc',
 		description:
-			'Five-color curved ramp for dither previews: dark-to-light value range plus hue shifts through green/yellow/red to expose ordered matrix scale.',
+			'Five-color curved ramp for dither previews: strong dark-to-light-to-warm luminance changes without adjacent green/yellow or purple/red mush.',
 		stops: [
-			{ position: 0, color: { r: 8, g: 22, b: 88 } },
-			{ position: 0.25, color: { r: 12, g: 129, b: 110 } },
-			{ position: 0.5, color: { r: 135, g: 255, b: 94 } },
-			{ position: 0.75, color: { r: 249, g: 221, b: 59 } },
-			{ position: 1, color: { r: 250, g: 128, b: 114 } }
+			{ position: 0, color: { r: 7, g: 18, b: 84 } },
+			{ position: 0.25, color: { r: 6, g: 182, b: 212 } },
+			{ position: 0.5, color: { r: 245, g: 245, b: 245 } },
+			{ position: 0.75, color: { r: 244, g: 63, b: 94 } },
+			{ position: 1, color: { r: 251, g: 146, b: 60 } }
 		]
 	}
 ] satisfies PreviewGradientPreset[];
