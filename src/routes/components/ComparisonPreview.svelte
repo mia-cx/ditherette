@@ -539,6 +539,17 @@
 		].join(';');
 	}
 
+	function cropCardStyle(pane: HTMLElement | undefined, crop: CropRect) {
+		if (!pane) return '';
+		const frame = cropFrame(pane, crop);
+		const halfWidth = 144;
+		const left = Math.min(
+			pane.clientWidth - halfWidth,
+			Math.max(halfWidth, frame.left + frame.width / 2)
+		);
+		return `left:${left}px;top:${frame.top + frame.height + 8}px;--preview-layout:${layoutVersion}`;
+	}
+
 	function cropEdgeClass(edge: CropEdge) {
 		const positions: Record<CropEdge, string> = {
 			n: 'top-0 right-3 left-3 h-3 -translate-y-1/2 cursor-move',
@@ -1075,89 +1086,7 @@
 		{/if}
 	</div>
 
-	{#if cropMode && hasImage}
-		<figcaption
-			class="grid gap-2 border-t border-border bg-background/90 px-3 py-2 text-xs text-muted-foreground"
-		>
-			<span
-				>Drag crop handles or edit exact crop fields. Drag elsewhere to pan. Output is hidden while
-				cropping.</span
-			>
-			<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-				<div class="grid gap-1">
-					<Label for="crop-x" class="text-xs">X</Label>
-					<Input
-						id="crop-x"
-						type="number"
-						inputmode="numeric"
-						min="0"
-						max={$sourceMeta ? $sourceMeta.width - 1 : undefined}
-						step="1"
-						value={editableCrop().x}
-						oninput={(event) => setCropField('x', Number(event.currentTarget.value))}
-					/>
-				</div>
-				<div class="grid gap-1">
-					<Label for="crop-y" class="text-xs">Y</Label>
-					<Input
-						id="crop-y"
-						type="number"
-						inputmode="numeric"
-						min="0"
-						max={$sourceMeta ? $sourceMeta.height - 1 : undefined}
-						step="1"
-						value={editableCrop().y}
-						oninput={(event) => setCropField('y', Number(event.currentTarget.value))}
-					/>
-				</div>
-				<div class="grid gap-1">
-					<Label for="crop-width" class="text-xs">Width</Label>
-					<Input
-						id="crop-width"
-						type="number"
-						inputmode="numeric"
-						min="1"
-						max={$sourceMeta ? $sourceMeta.width : undefined}
-						step="1"
-						value={editableCrop().width}
-						oninput={(event) => setCropField('width', Number(event.currentTarget.value))}
-					/>
-				</div>
-				<div class="grid gap-1">
-					<Label for="crop-height" class="text-xs">Height</Label>
-					<Input
-						id="crop-height"
-						type="number"
-						inputmode="numeric"
-						min="1"
-						max={$sourceMeta ? $sourceMeta.height : undefined}
-						step="1"
-						value={editableCrop().height}
-						oninput={(event) => setCropField('height', Number(event.currentTarget.value))}
-					/>
-				</div>
-			</div>
-			<div class="flex flex-wrap items-center gap-2">
-				<Button size="xs" variant="outline" onclick={applyCrop} disabled={!activeCrop}
-					>Apply crop</Button
-				>
-				<Button
-					size="xs"
-					variant="ghost"
-					onclick={cropToContent}
-					disabled={!canCropToContent}
-					title={cropToContentHint}>Crop to content</Button
-				>
-				<Button size="xs" variant="ghost" onclick={clearCrop} disabled={!activeCrop}
-					>Reset crop</Button
-				>
-				<Button size="xs" variant="ghost" onclick={cancelCropDraft} disabled={!cropDraft}
-					>Cancel draft</Button
-				>
-				<span>{cropToContentHint}</span>
-			</div>
-		</figcaption>
-	{:else if $processingError}
+	{#if $processingError}
 		<figcaption
 			class="border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
 		>
@@ -1208,8 +1137,95 @@
 					{/each}
 				{/if}
 			</div>
+			{#if cropMode}
+				{@render cropCard(pane, activeCrop)}
+			{/if}
 		{/if}
 	{/if}
+{/snippet}
+
+{#snippet cropCard(pane: HTMLElement | undefined, crop: CropRect)}
+	<div
+		role="group"
+		aria-label="Crop controls"
+		class="absolute z-30 grid w-72 -translate-x-1/2 gap-2 border border-border bg-background/95 p-2 text-xs text-muted-foreground shadow-lg backdrop-blur"
+		style={cropCardStyle(pane, crop)}
+		onpointerdown={(event) => event.stopPropagation()}
+		onwheel={(event) => event.stopPropagation()}
+	>
+		<div class="grid grid-cols-4 gap-1.5">
+			<div class="grid gap-1">
+				<Label for="crop-x" class="text-[0.65rem] leading-none">X</Label>
+				<Input
+					id="crop-x"
+					class="h-7 text-right font-mono tabular-nums"
+					type="number"
+					inputmode="numeric"
+					min="0"
+					max={$sourceMeta ? $sourceMeta.width - 1 : undefined}
+					step="1"
+					value={editableCrop().x}
+					oninput={(event) => setCropField('x', Number(event.currentTarget.value))}
+				/>
+			</div>
+			<div class="grid gap-1">
+				<Label for="crop-y" class="text-[0.65rem] leading-none">Y</Label>
+				<Input
+					id="crop-y"
+					class="h-7 text-right font-mono tabular-nums"
+					type="number"
+					inputmode="numeric"
+					min="0"
+					max={$sourceMeta ? $sourceMeta.height - 1 : undefined}
+					step="1"
+					value={editableCrop().y}
+					oninput={(event) => setCropField('y', Number(event.currentTarget.value))}
+				/>
+			</div>
+			<div class="grid gap-1">
+				<Label for="crop-width" class="text-[0.65rem] leading-none">W</Label>
+				<Input
+					id="crop-width"
+					class="h-7 text-right font-mono tabular-nums"
+					type="number"
+					inputmode="numeric"
+					min="1"
+					max={$sourceMeta ? $sourceMeta.width : undefined}
+					step="1"
+					value={editableCrop().width}
+					oninput={(event) => setCropField('width', Number(event.currentTarget.value))}
+				/>
+			</div>
+			<div class="grid gap-1">
+				<Label for="crop-height" class="text-[0.65rem] leading-none">H</Label>
+				<Input
+					id="crop-height"
+					class="h-7 text-right font-mono tabular-nums"
+					type="number"
+					inputmode="numeric"
+					min="1"
+					max={$sourceMeta ? $sourceMeta.height : undefined}
+					step="1"
+					value={editableCrop().height}
+					oninput={(event) => setCropField('height', Number(event.currentTarget.value))}
+				/>
+			</div>
+		</div>
+		<div class="flex flex-wrap items-center justify-center gap-1.5">
+			<Button size="xs" variant="outline" onclick={applyCrop} disabled={!activeCrop}>Apply</Button>
+			<Button
+				size="xs"
+				variant="ghost"
+				onclick={cropToContent}
+				disabled={!canCropToContent}
+				title={cropToContentHint}>Content</Button
+			>
+			<Button size="xs" variant="ghost" onclick={clearCrop} disabled={!activeCrop}>Reset</Button>
+			<Button size="xs" variant="ghost" onclick={cancelCropDraft} disabled={!cropDraft}
+				>Cancel</Button
+			>
+		</div>
+	</div>
 {/snippet}
 
 {#snippet outputLayer(label: string, pane: HTMLElement | undefined, target: 'side' | 'reveal')}
