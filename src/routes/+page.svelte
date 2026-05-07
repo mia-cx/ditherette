@@ -173,7 +173,7 @@
 						</span>
 					</AccordionTrigger>
 					<AccordionContent>
-						<div class="px-4 pb-4">
+						<div class="p-4">
 							<OutputPanel hasImage={$hasImage} hideHeading />
 						</div>
 					</AccordionContent>
@@ -187,7 +187,7 @@
 						</span>
 					</AccordionTrigger>
 					<AccordionContent>
-						<div class="px-4 pb-4">
+						<div class="p-4">
 							<DitherPanel hideHeading />
 						</div>
 					</AccordionContent>
@@ -201,7 +201,7 @@
 						</span>
 					</AccordionTrigger>
 					<AccordionContent>
-						<div class="px-4 pb-4">
+						<div class="p-4">
 							<ColorSpacePanel hideHeading />
 						</div>
 					</AccordionContent>
