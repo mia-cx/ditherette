@@ -1,3 +1,4 @@
+import { validateSourceBlob } from './image-metadata';
 import { validateSourceImageSize } from './types';
 import type { ProcessedImage, SourceImageRecord } from './types';
 
@@ -66,6 +67,7 @@ export async function clearPersistedImages() {
 export async function decodeBlob(
 	blob: Blob
 ): Promise<{ imageData: ImageData; width: number; height: number }> {
+	await validateSourceBlob(blob);
 	const bitmap = await createImageBitmap(blob);
 	try {
 		validateSourceImageSize(bitmap.width, bitmap.height);

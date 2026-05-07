@@ -5,6 +5,16 @@
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import {
+		Dialog,
+		DialogContent,
+		DialogDescription,
+		DialogFooter,
+		DialogHeader,
+		DialogTitle
+	} from '$lib/components/ui/dialog';
 	import {
 		DropdownMenu,
 		DropdownMenuContent,
@@ -22,6 +32,7 @@
 		deleteActiveCustomPalette,
 		deleteActivePaletteColors,
 		duplicateActivePalette,
+		duplicateActivePaletteColor,
 		editActivePaletteColor,
 		importCustomPaletteData,
 		paletteEnabled,
@@ -52,6 +63,13 @@
 	let selectedColorKeys = $state<Record<string, boolean>>({});
 	let importInput = $state<HTMLInputElement>();
 	let paletteMessage = $state<string>();
+	let colorDialogOpen = $state(false);
+	let colorDialogMode = $state<'add' | 'edit' | 'duplicate'>('add');
+	let colorDialogColor = $state<PaletteColor>();
+	let colorName = $state('');
+	let colorHex = $state('#FF00AA');
+	let deleteDialogOpen = $state(false);
+	let deleteColorKey = $state<string>();
 
 	const currentPalette = $derived($activePalette);
 	const isBuiltIn = $derived(currentPalette.source === 'wplace');
@@ -106,10 +124,9 @@
 	}
 
 	function toggleSelectedVisibility() {
-		for (const color of currentPalette.colors) {
-			if (!selectedColorKeys[color.key]) continue;
-			setPaletteColorEnabled(color.key, !enabled(color), currentPalette.name);
-		}
+		const colors = currentPalette.colors.filter((color) => selectedColorKeys[color.key]);
+		const nextEnabled = colors.some((color) => !enabled(color));
+		for (const color of colors) setPaletteColorEnabled(color.key, nextEnabled, currentPalette.name);
 	}
 
 	function withPaletteError(run: () => void) {
@@ -133,26 +150,45 @@
 		withPaletteError(() => duplicateActivePalette(name));
 	}
 
+	function openColorDialog(mode: 'add' | 'edit' | 'duplicate', color?: PaletteColor) {
+		if (isBuiltIn || color?.kind === 'transparent') {
+			paletteMessage = 'Built-in and transparent colors cannot be edited.';
+			return;
+		}
+		colorDialogMode = mode;
+		colorDialogColor = color;
+		colorName = color ? `${color.name}${mode === 'duplicate' ? ' Copy' : ''}` : '';
+		colorHex = color?.key ?? '#FF00AA';
+		colorDialogOpen = true;
+	}
+
+	function saveColorDialog() {
+		withPaletteError(() => {
+			if (colorDialogMode === 'edit' && colorDialogColor) {
+				editActivePaletteColor(colorDialogColor.key, colorName, colorHex);
+			} else if (colorDialogMode === 'duplicate' && colorDialogColor) {
+				duplicateActivePaletteColor(colorDialogColor.key, colorName, colorHex);
+			} else {
+				addColorToActivePalette(colorName, colorHex);
+			}
+		});
+		if (!paletteMessage) colorDialogOpen = false;
+	}
+
 	function addColor() {
 		if (isBuiltIn) {
 			paletteMessage = 'Built-in palettes are immutable. Duplicate Wplace before adding colors.';
 			return;
 		}
-		const hex = prompt('Color hex (#RGB or #RRGGBB)', '#FF00AA');
-		if (!hex) return;
-		const name = prompt('Color name', hex) ?? hex;
-		withPaletteError(() => addColorToActivePalette(name, hex));
+		openColorDialog('add');
 	}
 
 	function editColor(color: PaletteColor) {
-		if (isBuiltIn || color.kind === 'transparent') {
-			paletteMessage = 'Built-in and transparent colors cannot be edited.';
-			return;
-		}
-		const hex = prompt('Color hex (#RGB or #RRGGBB)', color.key);
-		if (!hex) return;
-		const name = prompt('Color name', color.name) ?? color.name;
-		withPaletteError(() => editActivePaletteColor(color.key, name, hex));
+		openColorDialog('edit', color);
+	}
+
+	function duplicateColor(color: PaletteColor) {
+		openColorDialog('duplicate', color);
 	}
 
 	function deleteSelectedColors() {
@@ -172,8 +208,16 @@
 			paletteMessage = 'Built-in and transparent colors cannot be deleted.';
 			return;
 		}
-		if (!confirm(`Delete ${color.name} from ${currentPalette.name}?`)) return;
-		withPaletteError(() => deleteActivePaletteColors([color.key]));
+		deleteColorKey = color.key;
+		deleteDialogOpen = true;
+	}
+
+	function confirmDeleteColor() {
+		const key = deleteColorKey;
+		if (!key) return;
+		withPaletteError(() => deleteActivePaletteColors([key]));
+		deleteDialogOpen = false;
+		deleteColorKey = undefined;
 	}
 
 	function deletePalette() {
@@ -226,6 +270,53 @@
 	accept="application/json"
 	onchange={importPalette}
 />
+
+<Dialog bind:open={colorDialogOpen}>
+	<DialogContent>
+		<DialogHeader>
+			<DialogTitle>
+				{colorDialogMode === 'edit'
+					? 'Edit color'
+					: colorDialogMode === 'duplicate'
+						? 'Duplicate color'
+						: 'Add color'}
+			</DialogTitle>
+			<DialogDescription>
+				Custom palettes support up to 256 entries. Hex values must be unique within the palette.
+			</DialogDescription>
+		</DialogHeader>
+		<div class="grid gap-3 py-2">
+			<div class="grid gap-1.5">
+				<Label for="palette-color-name">Name</Label>
+				<Input id="palette-color-name" bind:value={colorName} placeholder="Sky blue" />
+			</div>
+			<div class="grid gap-1.5">
+				<Label for="palette-color-hex">Hex</Label>
+				<Input id="palette-color-hex" bind:value={colorHex} placeholder="#66AAFF" />
+			</div>
+		</div>
+		<DialogFooter>
+			<Button variant="outline" onclick={() => (colorDialogOpen = false)}>Cancel</Button>
+			<Button onclick={saveColorDialog}>Save color</Button>
+		</DialogFooter>
+	</DialogContent>
+</Dialog>
+
+<Dialog bind:open={deleteDialogOpen}>
+	<DialogContent>
+		<DialogHeader>
+			<DialogTitle>Delete color?</DialogTitle>
+			<DialogDescription>
+				This removes the custom color from {currentPalette.name}. Built-in Wplace colors remain
+				immutable.
+			</DialogDescription>
+		</DialogHeader>
+		<DialogFooter>
+			<Button variant="outline" onclick={() => (deleteDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" onclick={confirmDeleteColor}>Delete</Button>
+		</DialogFooter>
+	</DialogContent>
+</Dialog>
 
 <section class="flex flex-col gap-2 {fillHeight ? 'h-full' : ''}" aria-label="Palette editor">
 	<div class="flex flex-wrap items-center gap-2">
@@ -424,7 +515,12 @@
 					>
 						Edit…
 					</DropdownMenuItem>
-					<DropdownMenuItem onclick={duplicatePalette}>Duplicate palette</DropdownMenuItem>
+					<DropdownMenuItem
+						disabled={isBuiltIn || color.kind === 'transparent'}
+						onclick={() => duplicateColor(color)}
+					>
+						Duplicate color…
+					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
 						disabled={isBuiltIn || color.kind === 'transparent'}

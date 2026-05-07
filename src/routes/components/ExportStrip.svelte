@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { downloadIndexedPng } from '$lib/processing/png';
-	import { processedImage, processingProgress } from '$lib/stores/app';
+	import { processedImage, processingProgress, sourceMeta } from '$lib/stores/app';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 
 	type Props = { variant?: 'card' | 'bar'; hasImage?: boolean };
@@ -16,7 +16,17 @@
 
 	function download() {
 		if (!$processedImage) return;
-		downloadIndexedPng($processedImage, 'ditherette-indexed.png');
+		downloadIndexedPng($processedImage, exportFilename());
+	}
+
+	function exportFilename() {
+		const original = $sourceMeta?.name.replace(/\.[^.]+$/, '') || 'image';
+		const safeName =
+			original
+				.trim()
+				.replace(/[^a-z0-9._-]+/gi, '-')
+				.replace(/^-+|-+$/g, '') || 'image';
+		return `${safeName}-ditherette-${$processedImage!.width}x${$processedImage!.height}.png`;
 	}
 </script>
 

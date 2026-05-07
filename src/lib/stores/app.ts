@@ -251,6 +251,14 @@ export function addColorToActivePalette(name: string, hex: string) {
 	setPaletteColorEnabled(color.key, true, palette.name);
 }
 
+export function duplicateActivePaletteColor(key: string, name: string, hex: string) {
+	const palette = activeCustomPalette();
+	const current = palette.colors.find((color) => color.key === key);
+	if (!current || current.kind === 'transparent')
+		throw new Error('Only custom visible colors can be duplicated.');
+	addColorToActivePalette(name, hex);
+}
+
 export function editActivePaletteColor(key: string, name: string, hex: string) {
 	const palette = activeCustomPalette();
 	const current = palette.colors.find((color) => color.key === key);

@@ -53,15 +53,22 @@
 		fileInput?.click();
 	}
 
-	async function onFileChange(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		if (!file) return;
+	async function loadImageFile(file: File) {
+		if ($hasImage && !confirm('Replace the current image with this file?')) return;
 		uploadError = undefined;
 		try {
 			await setSourceFile(file);
 		} catch (error) {
 			uploadError = error instanceof Error ? error.message : 'Could not read that image.';
+		}
+	}
+
+	async function onFileChange(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		try {
+			await loadImageFile(file);
 		} finally {
 			input.value = '';
 		}
@@ -97,6 +104,7 @@
 			hasImage={$hasImage}
 			minHeightClass="min-h-[320px] md:min-h-[420px]"
 			onChooseImage={chooseImage}
+			onSelectFile={(file) => void loadImageFile(file)}
 		/>
 		{@render controls('gap-4')}
 	</main>
@@ -108,6 +116,7 @@
 					hasImage={$hasImage}
 					minHeightClass="h-full"
 					onChooseImage={chooseImage}
+					onSelectFile={(file) => void loadImageFile(file)}
 				/>
 			</ResizablePane>
 			<ResizableHandle withHandle />

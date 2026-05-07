@@ -18,6 +18,7 @@
 		processedImage,
 		processingError,
 		processingProgress,
+		sourceImageData,
 		sourceMeta,
 		sourceObjectUrl,
 		updateOutputSettings,
@@ -37,13 +38,15 @@
 		hasImage?: boolean;
 		minHeightClass?: string;
 		onChooseImage?: () => void;
+		onSelectFile?: (file: File) => void;
 	};
 
 	let {
 		defaultMode = 'side-by-side',
 		hasImage = false,
 		minHeightClass = 'min-h-[320px] md:min-h-[420px]',
-		onChooseImage
+		onChooseImage,
+		onSelectFile
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
@@ -56,6 +59,9 @@
 	let cropMode = $state(false);
 	let cropDraft = $state<CropRect>();
 	let cropStart = $state<Point>();
+	let cropPane = $state<HTMLElement>();
+	let pointers = $state<Record<number, Point>>({});
+	let pinch = $state<{ distance: number; zoom: number }>();
 	let drag = $state<{
 		pointerId: number;
 		startX: number;
@@ -81,6 +87,9 @@
 		$processedImage ? `${$processedImage.palette.length} colors` : 'Palette'
 	);
 	const activeCrop = $derived(cropDraft ?? $outputSettings.crop);
+	const outputRenderingClass = $derived(
+		$outputSettings.resize === 'nearest' ? '[image-rendering:pixelated]' : '[image-rendering:auto]'
+	);
 
 	$effect(() => {
 		if (!$processedImage) return;
@@ -171,6 +180,14 @@
 		if (!hasImage || !pane || event.button !== 0) return;
 		event.preventDefault();
 		pane.setPointerCapture(event.pointerId);
+		pointers = { ...pointers, [event.pointerId]: { x: event.clientX, y: event.clientY } };
+
+		if (Object.keys(pointers).length === 2) {
+			pinch = { distance: pointerDistance(), zoom };
+			drag = undefined;
+			cropStart = undefined;
+			return;
+		}
 
 		if (cropMode && allowCrop) {
 			const start = panePointToImage(pane, event.clientX, event.clientY);
@@ -184,6 +201,22 @@
 	}
 
 	function onPointerMove(event: PointerEvent, pane: HTMLElement | undefined) {
+		if (pointers[event.pointerId]) {
+			pointers = { ...pointers, [event.pointerId]: { x: event.clientX, y: event.clientY } };
+		}
+		if (pinch && pane && Object.keys(pointers).length >= 2) {
+			const distance = pointerDistance();
+			const midpoint = pointerMidpoint();
+			if (distance > 0 && midpoint) {
+				applyZoomAt(
+					pane,
+					midpoint.x,
+					midpoint.y,
+					Math.min(16, Math.max(0.25, pinch.zoom * (distance / pinch.distance)))
+				);
+			}
+			return;
+		}
 		if (cropStart && pane) {
 			const end = panePointToImage(pane, event.clientX, event.clientY);
 			if (end) cropDraft = cropFromPoints(cropStart, end);
@@ -195,35 +228,101 @@
 	}
 
 	function onPointerUp(event: PointerEvent) {
+		const remainingPointers = { ...pointers };
+		delete remainingPointers[event.pointerId];
+		pointers = remainingPointers;
+		pinch = undefined;
 		if (cropStart && cropDraft) {
-			const crop = {
-				x: Math.round(cropDraft.x),
-				y: Math.round(cropDraft.y),
-				width: Math.max(1, Math.round(cropDraft.width)),
-				height: Math.max(1, Math.round(cropDraft.height))
-			};
-			if (crop.width > 2 && crop.height > 2) {
-				updateOutputSettings({ crop, width: crop.width, height: crop.height });
-			}
+			cropDraft = normalizeCrop(cropDraft);
 		}
 		cropStart = undefined;
-		cropDraft = undefined;
 		drag = undefined;
-		if (event.currentTarget instanceof HTMLElement)
+		if (
+			event.currentTarget instanceof HTMLElement &&
+			event.currentTarget.hasPointerCapture(event.pointerId)
+		) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
 	}
 
 	function onWheel(event: WheelEvent, pane: HTMLElement | undefined) {
 		if (!hasImage || !pane) return;
 		event.preventDefault();
+		applyZoomAt(
+			pane,
+			event.clientX,
+			event.clientY,
+			Math.min(16, Math.max(0.25, zoom * Math.exp(-event.deltaY * 0.0015)))
+		);
+	}
+
+	function applyZoomAt(pane: HTMLElement, clientX: number, clientY: number, nextZoom: number) {
 		const bounds = pane.getBoundingClientRect();
-		const nextZoom = Math.min(16, Math.max(0.25, zoom * Math.exp(-event.deltaY * 0.0015)));
-		const cursorX = event.clientX - bounds.left - bounds.width / 2;
-		const cursorY = event.clientY - bounds.top - bounds.height / 2;
+		const cursorX = clientX - bounds.left - bounds.width / 2;
+		const cursorY = clientY - bounds.top - bounds.height / 2;
 		const ratio = nextZoom / zoom;
 		panX = cursorX - ratio * (cursorX - panX);
 		panY = cursorY - ratio * (cursorY - panY);
 		zoom = nextZoom;
+	}
+
+	function pointerDistance() {
+		const [first, second] = Object.values(pointers);
+		if (!first || !second) return 0;
+		return Math.hypot(first.x - second.x, first.y - second.y);
+	}
+
+	function pointerMidpoint() {
+		const [first, second] = Object.values(pointers);
+		if (!first || !second) return undefined;
+		return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+	}
+
+	function normalizeCrop(crop: CropRect): CropRect {
+		return {
+			x: Math.round(crop.x),
+			y: Math.round(crop.y),
+			width: Math.max(1, Math.round(crop.width)),
+			height: Math.max(1, Math.round(crop.height))
+		};
+	}
+
+	function applyCrop() {
+		const crop = normalizeCrop(activeCrop!);
+		if (crop.width <= 2 || crop.height <= 2) return;
+		updateOutputSettings({ crop, width: crop.width, height: crop.height, autoSizeOnUpload: false });
+		cropDraft = undefined;
+	}
+
+	function clearCrop() {
+		cropDraft = undefined;
+		updateOutputSettings({ crop: undefined });
+	}
+
+	function cancelCropDraft() {
+		cropDraft = undefined;
+	}
+
+	function cropToContent() {
+		const image = $sourceImageData;
+		if (!image) return;
+		const threshold = $outputSettings.alphaThreshold;
+		let left = image.width;
+		let top = image.height;
+		let right = -1;
+		let bottom = -1;
+		for (let y = 0; y < image.height; y++) {
+			for (let x = 0; x < image.width; x++) {
+				const alpha = image.data[(y * image.width + x) * 4 + 3]!;
+				if (alpha <= threshold) continue;
+				left = Math.min(left, x);
+				top = Math.min(top, y);
+				right = Math.max(right, x);
+				bottom = Math.max(bottom, y);
+			}
+		}
+		if (right < left || bottom < top) return;
+		cropDraft = { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
 	}
 
 	function setRevealValue(value: number) {
@@ -275,11 +374,26 @@
 		else return;
 		event.preventDefault();
 	}
+
+	function onDragOver(event: DragEvent) {
+		if (!event.dataTransfer?.types.includes('Files')) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'copy';
+	}
+
+	function onDrop(event: DragEvent) {
+		if (!event.dataTransfer?.files.length) return;
+		event.preventDefault();
+		const file = [...event.dataTransfer.files].find((item) => item.type.startsWith('image/'));
+		if (file) onSelectFile?.(file);
+	}
 </script>
 
 <figure
 	class="relative flex w-full flex-col overflow-hidden border border-border bg-muted/40 {minHeightClass}"
 	aria-label="Source and processed output comparison preview"
+	ondragover={onDragOver}
+	ondrop={onDrop}
 >
 	<div
 		class="flex items-center gap-2 border-b border-border bg-background/80 px-2 py-1.5 backdrop-blur"
@@ -344,6 +458,20 @@
 					</Button>
 				</EmptyContent>
 			</Empty>
+		{:else if cropMode}
+			<div
+				bind:this={cropPane}
+				role="application"
+				aria-label="Crop preview. Drag to select a crop, pinch or scroll to zoom, and drag outside crop mode to pan."
+				class="relative flex-1 cursor-crosshair touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px]"
+				onpointerdown={(event) => onPointerDown(event, cropPane, true)}
+				onpointermove={(event) => onPointerMove(event, cropPane)}
+				onpointerup={onPointerUp}
+				onpointercancel={onPointerUp}
+				onwheel={(event) => onWheel(event, cropPane)}
+			>
+				{@render sourceLayer('Source', cropPane)}
+			</div>
 		{:else if mode === 'side-by-side'}
 			<div class="grid flex-1 grid-cols-2 divide-x divide-border">
 				<div
@@ -422,9 +550,19 @@
 
 	{#if cropMode && hasImage}
 		<figcaption
-			class="border-t border-border bg-background/90 px-3 py-2 text-xs text-muted-foreground"
+			class="flex flex-wrap items-center gap-2 border-t border-border bg-background/90 px-3 py-2 text-xs text-muted-foreground"
 		>
-			Drag on the source image to crop. Output dimensions reset to the crop size when you release.
+			<span>Drag on the source image to draft a crop. Output is hidden while cropping.</span>
+			<Button size="xs" variant="outline" onclick={applyCrop} disabled={!activeCrop}
+				>Apply crop</Button
+			>
+			<Button size="xs" variant="ghost" onclick={cropToContent}>Crop to content</Button>
+			<Button size="xs" variant="ghost" onclick={clearCrop} disabled={!activeCrop}
+				>Reset crop</Button
+			>
+			<Button size="xs" variant="ghost" onclick={cancelCropDraft} disabled={!cropDraft}
+				>Cancel draft</Button
+			>
 		</figcaption>
 	{:else if $processingError}
 		<figcaption
@@ -471,14 +609,14 @@
 		{#if target === 'side'}
 			<canvas
 				bind:this={sideOutputCanvas}
-				class="pointer-events-none absolute max-w-none select-none [image-rendering:pixelated]"
+				class="pointer-events-none absolute max-w-none select-none {outputRenderingClass}"
 				{style}
 				aria-label="Processed dithered output"
 			></canvas>
 		{:else}
 			<canvas
 				bind:this={revealOutputCanvas}
-				class="pointer-events-none absolute max-w-none select-none [image-rendering:pixelated]"
+				class="pointer-events-none absolute max-w-none select-none {outputRenderingClass}"
 				{style}
 				aria-label="Processed dithered output"
 			></canvas>

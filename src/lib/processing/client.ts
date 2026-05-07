@@ -10,7 +10,8 @@ import {
 	processingError,
 	processingProgress,
 	selectedPalette,
-	sourceImageData
+	sourceImageData,
+	sourceMeta
 } from '$lib/stores/app';
 import { saveProcessedImage, settingsHash } from './db';
 import type { ProcessedImage, WorkerResponse } from './types';
@@ -21,8 +22,25 @@ let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
 
+class ProcessingCanceled extends Error {
+	constructor(message = 'Processing was canceled.') {
+		super(message);
+		this.name = 'ProcessingCanceled';
+	}
+}
+
+export function cancelProcessing() {
+	if (timer) clearTimeout(timer);
+	timer = undefined;
+	activeReject?.(new ProcessingCanceled());
+	activeReject = undefined;
+	worker?.terminate();
+	worker = undefined;
+	processingProgress.set(undefined);
+}
+
 function getWorker() {
-	activeReject?.(new Error('Processing was superseded by newer settings.'));
+	activeReject?.(new ProcessingCanceled('Processing was superseded by newer settings.'));
 	activeReject = undefined;
 	worker?.terminate();
 	worker = new Worker(new URL('../workers/processor.worker.ts', import.meta.url), {
@@ -38,7 +56,8 @@ function snapshotHash() {
 		colorSpace: colorSpace.get(),
 		paletteName: activePaletteName.get(),
 		customPalettes: customPalettes.get(),
-		palette: paletteEnabled.get()
+		palette: paletteEnabled.get(),
+		source: sourceMeta.get()
 	});
 }
 
@@ -106,6 +125,8 @@ export async function processCurrentImage() {
 		processingProgress.set(undefined);
 		await saveProcessedImage(result);
 	} catch (error) {
+		if (error instanceof ProcessingCanceled) return;
+		if (hash !== snapshotHash()) return;
 		const message = error instanceof Error ? error.message : 'Processing failed';
 		processingError.set(message);
 		processedImage.set(undefined);
@@ -133,11 +154,7 @@ export function startAutoProcessing() {
 	];
 	stopAuto = () => {
 		for (const unsubscribe of unsubscribers) unsubscribe();
-		if (timer) clearTimeout(timer);
-		activeReject?.(new Error('Processing was stopped.'));
-		activeReject = undefined;
-		worker?.terminate();
-		worker = undefined;
+		cancelProcessing();
 		stopAuto = undefined;
 	};
 	return stopAuto;

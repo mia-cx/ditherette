@@ -15,23 +15,14 @@ import {
 	saveSourceImage,
 	sourceMetaFromRecord
 } from './db';
-import { scheduleProcessing } from './client';
-import { ACCEPTED_IMAGE_TYPES, MAX_SOURCE_BYTES, fitOutputSizeToBounds } from './types';
+import { cancelProcessing, scheduleProcessing } from './client';
+import { fitOutputSizeToBounds } from './types';
+import { validateSourceBlob } from './image-metadata';
 import type { SourceImageRecord } from './types';
 
-function validateSourceFile(file: File) {
-	if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
-		throw new Error('Choose a PNG, JPEG, WebP, or GIF image.');
-	}
-	if (file.size > MAX_SOURCE_BYTES) {
-		throw new Error(
-			`Image file is too large. Maximum file size is ${Math.round(MAX_SOURCE_BYTES / 1024 / 1024)} MB.`
-		);
-	}
-}
-
 export async function setSourceFile(file: File) {
-	validateSourceFile(file);
+	await validateSourceBlob(file);
+	cancelProcessing();
 	const decoded = await decodeBlob(file);
 	const record: SourceImageRecord = {
 		blob: file,
@@ -79,6 +70,7 @@ export async function restorePersistedImages() {
 }
 
 export async function clearAllImageData() {
+	cancelProcessing();
 	clearInMemoryImageState();
 	await clearPersistedImages();
 }
