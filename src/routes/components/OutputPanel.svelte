@@ -140,6 +140,11 @@
 		});
 	}
 
+	function commitOnEnter(event: KeyboardEvent) {
+		if (event.key !== 'Enter') return;
+		(event.currentTarget as HTMLInputElement).blur();
+	}
+
 	function clearCrop() {
 		updateOutputSettings({ crop: undefined });
 	}
@@ -178,6 +183,7 @@
 						step={SCALE_STEP}
 						value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(2)) : 1}
 						disabled={!hasImage}
+						onkeydown={commitOnEnter}
 						onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
 					/>
 					<span
@@ -200,7 +206,8 @@
 					step="1"
 					value={width}
 					disabled={!hasImage}
-					oninput={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
+					onkeydown={commitOnEnter}
+					onchange={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
 				<Label for="out-width" class="text-xs text-muted-foreground">Width</Label>
 			</div>
@@ -215,7 +222,8 @@
 					step="1"
 					value={height}
 					disabled={!hasImage}
-					oninput={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
+					onkeydown={commitOnEnter}
+					onchange={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
 				<Label for="out-height" class="text-xs text-muted-foreground">Height</Label>
 			</div>
