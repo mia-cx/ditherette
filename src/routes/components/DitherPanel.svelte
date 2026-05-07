@@ -22,6 +22,10 @@
 
 	const DITHER_PREVIEW_PIXEL_SCALE = 2;
 	const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
+	const PLACEMENT_RADIUS_MIN = 1;
+	const PLACEMENT_RADIUS_MAX = 32;
+	const PLACEMENT_PERCENT_MIN = 0;
+	const PLACEMENT_PERCENT_MAX = 100;
 	const ERROR_KERNELS = {
 		'floyd-steinberg': [
 			[1, 0, 7 / 16],
@@ -502,84 +506,125 @@
 			/>
 		</div>
 
-		<div class="grid gap-1.5">
-			<Label for="dither-placement">Placement</Label>
-			<Select bind:value={placement} type="single" disabled={!isThresholdDither}>
-				<SelectTrigger id="dither-placement">{placementLabel}</SelectTrigger>
-				<SelectContent>
-					{#each PLACEMENT_MODES as opt (opt.id)}
-						<SelectItem value={opt.id}>{opt.label}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-		</div>
-
-		{#if placement === 'adaptive'}
-			<div class="grid grid-cols-3 gap-2">
-				<div class="grid gap-1">
-					<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label>
-					<input
-						id="dither-placement-radius"
-						class="h-8 w-full border border-input bg-transparent px-2 text-right font-mono text-xs tabular-nums"
-						type="number"
-						min="1"
-						max="8"
-						step="1"
-						bind:value={placementRadius}
-						disabled={!isThresholdDither}
-					/>
+		<div class="grid gap-2 border border-border/70 bg-muted/20 p-2.5">
+			<div class="grid grid-cols-[minmax(0,1fr)_9rem] items-end gap-3">
+				<div class="grid gap-1.5">
+					<Label for="dither-placement">Placement</Label>
+					<p class="text-xs text-muted-foreground">
+						Adaptive placement protects flat color from ordered/noise texture.
+					</p>
 				</div>
-				<div class="grid gap-1">
-					<Label for="dither-placement-threshold" class="text-xs text-muted-foreground"
-						>Threshold</Label
-					>
-					<input
-						id="dither-placement-threshold"
-						class="h-8 w-full border border-input bg-transparent px-2 text-right font-mono text-xs tabular-nums"
-						type="number"
-						min="0"
-						max="100"
-						step="1"
-						bind:value={placementThreshold}
-						disabled={!isThresholdDither}
-					/>
-				</div>
-				<div class="grid gap-1">
-					<Label for="dither-placement-softness" class="text-xs text-muted-foreground"
-						>Softness</Label
-					>
-					<input
-						id="dither-placement-softness"
-						class="h-8 w-full border border-input bg-transparent px-2 text-right font-mono text-xs tabular-nums"
-						type="number"
-						min="0"
-						max="100"
-						step="1"
-						bind:value={placementSoftness}
-						disabled={!isThresholdDither}
-					/>
-				</div>
+				<Select bind:value={placement} type="single" disabled={!isThresholdDither}>
+					<SelectTrigger id="dither-placement" class="w-full">{placementLabel}</SelectTrigger>
+					<SelectContent>
+						{#each PLACEMENT_MODES as opt (opt.id)}
+							<SelectItem value={opt.id}>{opt.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
 			</div>
-		{/if}
 
-		<div class="flex items-center justify-between gap-2">
-			<Label for="dither-color-space" class="flex flex-col gap-0.5">
-				<span>Use selected color space</span>
-				<span class="text-xs font-normal text-muted-foreground"
-					>Threshold ordered/noise dithers in the selected color-space channels.</span
-				>
-			</Label>
-			<Switch id="dither-color-space" bind:checked={useColorSpace} disabled={!isThresholdDither} />
+			{#if placement === 'adaptive'}
+				<div class="grid gap-2">
+					<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+						<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label
+						>
+						<Slider
+							type="single"
+							bind:value={placementRadius}
+							min={PLACEMENT_RADIUS_MIN}
+							max={PLACEMENT_RADIUS_MAX}
+							step={1}
+							disabled={!isThresholdDither}
+							aria-label="Adaptive placement radius"
+						/>
+						<input
+							id="dither-placement-radius"
+							class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
+							type="number"
+							min={PLACEMENT_RADIUS_MIN}
+							max={PLACEMENT_RADIUS_MAX}
+							step="1"
+							bind:value={placementRadius}
+							disabled={!isThresholdDither}
+						/>
+					</div>
+					<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+						<Label for="dither-placement-threshold" class="text-xs text-muted-foreground"
+							>Threshold</Label
+						>
+						<Slider
+							type="single"
+							bind:value={placementThreshold}
+							min={PLACEMENT_PERCENT_MIN}
+							max={PLACEMENT_PERCENT_MAX}
+							step={1}
+							disabled={!isThresholdDither}
+							aria-label="Adaptive placement threshold"
+						/>
+						<input
+							id="dither-placement-threshold"
+							class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
+							type="number"
+							min={PLACEMENT_PERCENT_MIN}
+							max={PLACEMENT_PERCENT_MAX}
+							step="1"
+							bind:value={placementThreshold}
+							disabled={!isThresholdDither}
+						/>
+					</div>
+					<div class="grid grid-cols-[5rem_minmax(0,1fr)_4.5rem] items-center gap-2">
+						<Label for="dither-placement-softness" class="text-xs text-muted-foreground"
+							>Softness</Label
+						>
+						<Slider
+							type="single"
+							bind:value={placementSoftness}
+							min={PLACEMENT_PERCENT_MIN}
+							max={PLACEMENT_PERCENT_MAX}
+							step={1}
+							disabled={!isThresholdDither}
+							aria-label="Adaptive placement softness"
+						/>
+						<input
+							id="dither-placement-softness"
+							class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
+							type="number"
+							min={PLACEMENT_PERCENT_MIN}
+							max={PLACEMENT_PERCENT_MAX}
+							step="1"
+							bind:value={placementSoftness}
+							disabled={!isThresholdDither}
+						/>
+					</div>
+				</div>
+			{/if}
 		</div>
 
-		<div class="flex items-center justify-between gap-2">
-			<Label for="dither-serpentine" class="flex flex-col gap-0.5">
-				<span>Serpentine scan</span>
-				<span class="text-xs font-normal text-muted-foreground"
-					>Reduces directional bias for error diffusion.</span
-				>
-			</Label>
-			<Switch id="dither-serpentine" bind:checked={serpentine} disabled={!isErrorDiffusion} />
+		<div class="grid gap-2 border border-border/70 bg-muted/20 p-2.5">
+			<div class="flex items-center justify-between gap-3">
+				<Label for="dither-color-space" class="grid gap-0.5 text-left">
+					<span>Use selected color space</span>
+					<span class="text-xs font-normal text-muted-foreground"
+						>Threshold ordered/noise dithers in the selected color-space channels.</span
+					>
+				</Label>
+				<Switch
+					id="dither-color-space"
+					bind:checked={useColorSpace}
+					disabled={!isThresholdDither}
+				/>
+			</div>
+
+			<div class="flex items-center justify-between gap-3">
+				<Label for="dither-serpentine" class="grid gap-0.5 text-left">
+					<span>Serpentine scan</span>
+					<span class="text-xs font-normal text-muted-foreground"
+						>Reduces directional bias for error diffusion.</span
+					>
+				</Label>
+				<Switch id="dither-serpentine" bind:checked={serpentine} disabled={!isErrorDiffusion} />
+			</div>
 		</div>
 
 		{#if isRandom}
