@@ -36,6 +36,7 @@
 
 	type Point = { x: number; y: number };
 	type ViewAnchor = { centerX: number; centerY: number };
+	type CropHandle = 'n' | 'e' | 's' | 'w' | 'nw' | 'ne' | 'se' | 'sw';
 	type PreviewLevel = { canvas: HTMLCanvasElement; width: number; height: number };
 
 	type Props = {
@@ -56,6 +57,7 @@
 
 	const MIN_ZOOM = 0.0625;
 	const MAX_ZOOM = 256;
+	const CROP_HANDLES: CropHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 
 	const initialPreviewSettings = previewSettings.get();
 	// svelte-ignore state_referenced_locally
@@ -67,7 +69,12 @@
 	let panY = $state(safeNumber(initialPreviewSettings.panY, 0));
 	let cropMode = $state(false);
 	let cropDraft = $state<CropRect>();
-	let cropStart = $state<Point>();
+	let cropResize = $state<{
+		pointerId: number;
+		handle: CropHandle;
+		start: Point;
+		crop: CropRect;
+	}>();
 	let cropPane = $state<HTMLElement>();
 	let pointers = $state<Record<number, Point>>({});
 	let pinch = $state<{ distance: number; zoom: number }>();
@@ -107,7 +114,9 @@
 	const colorLabel = $derived(
 		$processedImage ? `${$processedImage.palette.length} colors` : 'Palette'
 	);
-	const activeCrop = $derived(cropDraft ?? $outputSettings.crop);
+	const activeCrop = $derived(
+		cropDraft ?? $outputSettings.crop ?? (cropMode ? fullImageCrop() : undefined)
+	);
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
 	const cropToContentHint = $derived(
@@ -215,10 +224,10 @@
 	}
 
 	function cancelPointerInteraction() {
-		if (cropStart && cropDraft) cropDraft = normalizeCrop(cropDraft);
+		if (cropResize && cropDraft) cropDraft = normalizeCrop(cropDraft);
 		pointers = {};
 		pinch = undefined;
-		cropStart = undefined;
+		cropResize = undefined;
 		drag = undefined;
 	}
 
@@ -497,6 +506,20 @@
 		].join(';');
 	}
 
+	function cropHandleClass(handle: CropHandle) {
+		const positions: Record<CropHandle, string> = {
+			n: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize',
+			e: 'top-1/2 right-0 translate-x-1/2 -translate-y-1/2 cursor-ew-resize',
+			s: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 cursor-ns-resize',
+			w: 'top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize',
+			nw: 'top-0 left-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize',
+			ne: 'top-0 right-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize',
+			se: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize',
+			sw: 'bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize'
+		};
+		return `pointer-events-auto absolute size-3 border border-background bg-primary shadow ${positions[handle]}`;
+	}
+
 	function panePointToImage(
 		pane: HTMLElement,
 		clientX: number,
@@ -513,18 +536,26 @@
 		};
 	}
 
-	function cropFromPoints(start: Point, end: Point): CropRect {
-		const x = Math.min(start.x, end.x);
-		const y = Math.min(start.y, end.y);
-		return {
-			x,
-			y,
-			width: Math.max(1, Math.abs(end.x - start.x)),
-			height: Math.max(1, Math.abs(end.y - start.y))
-		};
+	function fullImageCrop(): CropRect {
+		return { x: 0, y: 0, width: $sourceMeta?.width ?? 1, height: $sourceMeta?.height ?? 1 };
 	}
 
-	function onPointerDown(event: PointerEvent, pane: HTMLElement | undefined, allowCrop: boolean) {
+	function resizeCropFromHandle(handle: CropHandle, start: Point, end: Point, crop: CropRect) {
+		const deltaX = end.x - start.x;
+		const deltaY = end.y - start.y;
+		const left = handle.includes('w') ? crop.x + deltaX : crop.x;
+		const top = handle.includes('n') ? crop.y + deltaY : crop.y;
+		const right = handle.includes('e') ? crop.x + crop.width + deltaX : crop.x + crop.width;
+		const bottom = handle.includes('s') ? crop.y + crop.height + deltaY : crop.y + crop.height;
+		return normalizeCrop({
+			x: Math.min(left, right - 1),
+			y: Math.min(top, bottom - 1),
+			width: Math.max(1, right - left),
+			height: Math.max(1, bottom - top)
+		});
+	}
+
+	function onPointerDown(event: PointerEvent, pane: HTMLElement | undefined) {
 		if (!hasImage || !pane || event.button !== 0) return;
 		event.preventDefault();
 		pane.setPointerCapture(event.pointerId);
@@ -533,15 +564,7 @@
 		if (Object.keys(pointers).length === 2) {
 			pinch = { distance: pointerDistance(), zoom };
 			drag = undefined;
-			cropStart = undefined;
-			return;
-		}
-
-		if (cropMode && allowCrop) {
-			const start = panePointToImage(pane, event.clientX, event.clientY);
-			if (!start) return;
-			cropStart = start;
-			cropDraft = { x: start.x, y: start.y, width: 1, height: 1 };
+			cropResize = undefined;
 			return;
 		}
 
@@ -569,9 +592,10 @@
 			}
 			return;
 		}
-		if (cropStart && pane) {
+		if (cropResize && pane && cropResize.pointerId === event.pointerId) {
 			const end = panePointToImage(pane, event.clientX, event.clientY);
-			if (end) cropDraft = cropFromPoints(cropStart, end);
+			if (end)
+				cropDraft = resizeCropFromHandle(cropResize.handle, cropResize.start, end, cropResize.crop);
 			return;
 		}
 		if (!drag || drag.pointerId !== event.pointerId) return;
@@ -587,6 +611,23 @@
 		) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
+	}
+
+	function onCropHandlePointerDown(
+		event: PointerEvent,
+		handle: CropHandle,
+		pane: HTMLElement | undefined
+	) {
+		if (!hasImage || !pane || event.button !== 0) return;
+		const start = panePointToImage(pane, event.clientX, event.clientY);
+		if (!start) return;
+		event.preventDefault();
+		event.stopPropagation();
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		pointers = { [event.pointerId]: { x: event.clientX, y: event.clientY } };
+		pinch = undefined;
+		drag = undefined;
+		cropResize = { pointerId: event.pointerId, handle, start, crop: editableCrop() };
 	}
 
 	function onWheel(event: WheelEvent, pane: HTMLElement | undefined) {
@@ -652,7 +693,7 @@
 
 	function editableCrop() {
 		if (activeCrop) return normalizeCrop(activeCrop);
-		return { x: 0, y: 0, width: $sourceMeta?.width ?? 1, height: $sourceMeta?.height ?? 1 };
+		return fullImageCrop();
 	}
 
 	function setCropField(field: keyof CropRect, value: number) {
@@ -701,12 +742,12 @@
 	}
 
 	function clearCrop() {
-		cropDraft = undefined;
+		cropDraft = cropMode ? fullImageCrop() : undefined;
 		updateOutputSettings({ crop: undefined });
 	}
 
 	function cancelCropDraft() {
-		cropDraft = undefined;
+		cropDraft = cropMode ? normalizeCrop($outputSettings.crop ?? fullImageCrop()) : undefined;
 	}
 
 	function cropToContent() {
@@ -730,7 +771,10 @@
 
 	async function toggleCropMode() {
 		const anchor = currentViewAnchor();
-		cropMode = !cropMode;
+		const nextCropMode = !cropMode;
+		if (nextCropMode) cropDraft = normalizeCrop($outputSettings.crop ?? fullImageCrop());
+		else cropResize = undefined;
+		cropMode = nextCropMode;
 		await tick();
 		applyViewAnchor(anchor);
 	}
@@ -862,9 +906,9 @@
 			<div
 				bind:this={cropPane}
 				role="application"
-				aria-label="Crop preview. Drag to select a crop, pinch or scroll to zoom, and drag outside crop mode to pan."
-				class="relative flex-1 cursor-crosshair touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px]"
-				onpointerdown={(event) => onPointerDown(event, cropPane, true)}
+				aria-label="Crop preview. Drag handles to resize the crop, drag elsewhere to pan, and pinch or scroll to zoom."
+				class="relative flex-1 cursor-grab touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] active:cursor-grabbing"
+				onpointerdown={(event) => onPointerDown(event, cropPane)}
 				onpointermove={(event) => onPointerMove(event, cropPane)}
 				onpointerup={onPointerUp}
 				onpointercancel={onPointerUp}
@@ -881,7 +925,7 @@
 					class="relative touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] {cropMode
 						? 'cursor-crosshair'
 						: 'cursor-grab active:cursor-grabbing'}"
-					onpointerdown={(event) => onPointerDown(event, sideSourcePane, true)}
+					onpointerdown={(event) => onPointerDown(event, sideSourcePane)}
 					onpointermove={(event) => onPointerMove(event, sideSourcePane)}
 					onpointerup={onPointerUp}
 					onpointercancel={onPointerUp}
@@ -894,7 +938,7 @@
 					role="application"
 					aria-label="Output preview. Drag to pan or scroll to zoom."
 					class="relative cursor-grab touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] active:cursor-grabbing"
-					onpointerdown={(event) => onPointerDown(event, sideOutputPane, false)}
+					onpointerdown={(event) => onPointerDown(event, sideOutputPane)}
 					onpointermove={(event) => onPointerMove(event, sideOutputPane)}
 					onpointerup={onPointerUp}
 					onpointercancel={onPointerUp}
@@ -911,7 +955,7 @@
 				class="relative flex-1 touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] {cropMode
 					? 'cursor-crosshair'
 					: 'cursor-grab active:cursor-grabbing'}"
-				onpointerdown={(event) => onPointerDown(event, revealPane, true)}
+				onpointerdown={(event) => onPointerDown(event, revealPane)}
 				onpointermove={(event) => onPointerMove(event, revealPane)}
 				onpointerup={onPointerUp}
 				onpointercancel={onPointerUp}
@@ -953,7 +997,8 @@
 			class="grid gap-2 border-t border-border bg-background/90 px-3 py-2 text-xs text-muted-foreground"
 		>
 			<span
-				>Drag on the source image or edit exact crop fields. Output is hidden while cropping.</span
+				>Drag crop handles or edit exact crop fields. Drag elsewhere to pan. Output is hidden while
+				cropping.</span
 			>
 			<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 				<div class="grid gap-1">
@@ -1076,7 +1121,16 @@
 			<div
 				class="pointer-events-none absolute border-2 border-primary bg-primary/15 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
 				style={cropStyle(pane, activeCrop)}
-			></div>
+			>
+				{#each CROP_HANDLES as handle (handle)}
+					<button
+						type="button"
+						class={cropHandleClass(handle)}
+						aria-label={`Resize crop ${handle}`}
+						onpointerdown={(event) => onCropHandlePointerDown(event, handle, pane)}
+					></button>
+				{/each}
+			</div>
 		{/if}
 	{/if}
 {/snippet}
