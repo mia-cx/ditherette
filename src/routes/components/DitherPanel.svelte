@@ -16,6 +16,31 @@
 	const BAYER_4 = makeBayer(4);
 	const BAYER_8 = makeBayer(8);
 	const BAYER_16 = makeBayer(16);
+	const ERROR_KERNELS = {
+		'floyd-steinberg': [
+			[1, 0, 7 / 16],
+			[-1, 1, 3 / 16],
+			[0, 1, 5 / 16],
+			[1, 1, 1 / 16]
+		],
+		sierra: [
+			[1, 0, 5 / 32],
+			[2, 0, 3 / 32],
+			[-2, 1, 2 / 32],
+			[-1, 1, 4 / 32],
+			[0, 1, 5 / 32],
+			[1, 1, 4 / 32],
+			[2, 1, 2 / 32],
+			[-1, 2, 2 / 32],
+			[0, 2, 3 / 32],
+			[1, 2, 2 / 32]
+		],
+		'sierra-lite': [
+			[1, 0, 2 / 4],
+			[-1, 1, 1 / 4],
+			[0, 1, 1 / 4]
+		]
+	} satisfies Record<string, [number, number, number][]>;
 
 	const initial = ditherSettings.get();
 	let canvas = $state<HTMLCanvasElement>();
@@ -40,14 +65,20 @@
 
 	$effect(() => {
 		if (!canvas) return;
-		drawDitherPreview(canvas, algorithm, seed);
+		drawDitherPreview(canvas, algorithm, seed, strength, serpentine);
 	});
 
 	function randomizeSeed() {
 		seed = crypto.getRandomValues(new Uint32Array(1))[0];
 	}
 
-	function drawDitherPreview(target: HTMLCanvasElement, mode: string, randomSeed: number) {
+	function drawDitherPreview(
+		target: HTMLCanvasElement,
+		mode: string,
+		randomSeed: number,
+		previewStrength: number,
+		serpentineScan: boolean
+	) {
 		const scale = window.devicePixelRatio || 1;
 		const displaySize = Math.max(1, Math.round(target.clientWidth * scale));
 		const logicalSize = Math.max(1, Math.round(target.clientWidth / DITHER_PREVIEW_PIXEL_SCALE));
@@ -57,7 +88,7 @@
 		}
 		const context = target.getContext('2d');
 		if (!context) return;
-		const image = drawPreviewImage(mode, logicalSize, randomSeed);
+		const image = drawPreviewImage(mode, logicalSize, randomSeed, previewStrength, serpentineScan);
 
 		const source = document.createElement('canvas');
 		source.width = logicalSize;
@@ -68,48 +99,113 @@
 		context.drawImage(source, 0, 0, displaySize, displaySize);
 	}
 
-	function drawPreviewImage(mode: string, size: number, randomSeed: number) {
-		if (mode.startsWith('bayer')) return drawBayerPreview(mode, size);
+	function drawPreviewImage(
+		mode: string,
+		size: number,
+		randomSeed: number,
+		previewStrength: number,
+		serpentineScan: boolean
+	) {
+		const amount = Math.min(1, Math.max(0, previewStrength / 100));
+		if (mode === 'none') return drawGradientPreview(size);
+		const kernel = errorKernelFor(mode);
+		if (kernel) return drawErrorDiffusionPreview(kernel, size, amount, serpentineScan);
+		return drawThresholdPreview(mode, size, randomSeed, amount);
+	}
+
+	function drawGradientPreview(size: number) {
 		const image = new ImageData(size, size);
-		const random = mulberry32(randomSeed);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const gradient = x / Math.max(1, size - 1);
-				const threshold = thresholdFor(mode, x, y, random);
-				writePreviewPixel(image, x, y, gradient + threshold > 0.5 ? 245 : 35);
+				writePreviewPixel(image, x, y, gradientValue(x, size));
 			}
 		}
 		return image;
 	}
 
-	function drawBayerPreview(mode: string, size: number) {
-		const matrix = mode === 'bayer-4' ? BAYER_4 : mode === 'bayer-8' ? BAYER_8 : BAYER_16;
-		const matrixSize = Math.sqrt(matrix.length);
+	function drawThresholdPreview(mode: string, size: number, randomSeed: number, amount: number) {
 		const image = new ImageData(size, size);
+		const random = mulberry32(randomSeed);
+		const matrix = bayerMatrixFor(mode);
+		const matrixSize = matrix ? Math.sqrt(matrix.length) : 1;
+		const noiseScale = 96 * amount;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const cell = matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!;
-				writePreviewPixel(image, x, y, Math.round(cell * 255));
+				const noise = matrix
+					? (matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]! - 0.5) * noiseScale
+					: (random() - 0.5) * noiseScale;
+				writePreviewPixel(image, x, y, gradientValue(x, size) + noise >= 128 ? 255 : 0);
 			}
 		}
 		return image;
+	}
+
+	function drawErrorDiffusionPreview(
+		kernel: [number, number, number][],
+		size: number,
+		amount: number,
+		serpentineScan: boolean
+	) {
+		const image = new ImageData(size, size);
+		const work = new Float32Array(size * size);
+		for (let y = 0; y < size; y++) {
+			for (let x = 0; x < size; x++) {
+				work[y * size + x] = gradientValue(x, size);
+			}
+		}
+
+		for (let y = 0; y < size; y++) {
+			const reverse = serpentineScan && y % 2 === 1;
+			const start = reverse ? size - 1 : 0;
+			const end = reverse ? -1 : size;
+			const step = reverse ? -1 : 1;
+			for (let x = start; x !== end; x += step) {
+				const index = y * size + x;
+				const value = clampByte(work[index]!);
+				const chosen = value >= 128 ? 255 : 0;
+				writePreviewPixel(image, x, y, chosen);
+				const error = value - chosen;
+				for (const [dxBase, dy, weight] of kernel) {
+					const dx = reverse ? -dxBase : dxBase;
+					const xx = x + dx;
+					const yy = y + dy;
+					if (xx < 0 || xx >= size || yy < 0 || yy >= size) continue;
+					work[yy * size + xx] += error * weight * amount;
+				}
+			}
+		}
+		return image;
+	}
+
+	function errorKernelFor(mode: string) {
+		if (mode === 'floyd-steinberg') return ERROR_KERNELS['floyd-steinberg'];
+		if (mode === 'sierra') return ERROR_KERNELS.sierra;
+		if (mode === 'sierra-lite') return ERROR_KERNELS['sierra-lite'];
+		return undefined;
+	}
+
+	function bayerMatrixFor(mode: string) {
+		if (mode === 'bayer-4') return BAYER_4;
+		if (mode === 'bayer-8') return BAYER_8;
+		if (mode === 'bayer-16') return BAYER_16;
+		return undefined;
+	}
+
+	function gradientValue(x: number, width: number) {
+		return Math.round((x / Math.max(1, width - 1)) * 255);
+	}
+
+	function clampByte(value: number) {
+		return Math.min(255, Math.max(0, value));
 	}
 
 	function writePreviewPixel(image: ImageData, x: number, y: number, value: number) {
+		const byte = clampByte(Math.round(value));
 		const offset = (y * image.width + x) * 4;
-		image.data[offset] = value;
-		image.data[offset + 1] = value;
-		image.data[offset + 2] = value;
+		image.data[offset] = byte;
+		image.data[offset + 1] = byte;
+		image.data[offset + 2] = byte;
 		image.data[offset + 3] = 255;
-	}
-
-	function thresholdFor(mode: string, x: number, y: number, random: () => number) {
-		if (mode === 'none') return 0;
-		if (mode === 'random') return (random() - 0.5) * 0.45;
-		if (mode === 'floyd-steinberg') return ((x + y * 2) % 5) / 12 - 0.16;
-		if (mode === 'sierra') return ((x * 3 + y * 5) % 11) / 22 - 0.23;
-		if (mode === 'sierra-lite') return ((x * 2 + y * 3) % 7) / 16 - 0.2;
-		return 0;
 	}
 
 	function makeBayer(size: number): number[] {
