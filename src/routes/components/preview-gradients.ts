@@ -1,8 +1,7 @@
 import type { Rgb } from '$lib/processing/types';
 
-export type PreviewGradientPoint = {
-	x: number;
-	y: number;
+export type PreviewGradientStop = {
+	position: number;
 	color: Rgb;
 };
 
@@ -10,19 +9,19 @@ export type PreviewGradientPreset = {
 	id: string;
 	label: string;
 	description: string;
-	points: PreviewGradientPoint[];
+	stops: PreviewGradientStop[];
 };
 
 export const DITHER_PREVIEW_GRADIENTS = [
 	{
-		id: 'navy-cyan-coral-arc',
-		label: 'Navy → Cyan → Coral arc',
+		id: 'blue-magenta-coral-arc',
+		label: 'Blue → Magenta → Coral arc',
 		description:
-			'High-contrast curved ramp for dither previews: dark navy in the lower-left, bright cyan off-axis, warm coral in the upper-right.',
-		points: [
-			{ x: 0, y: 1, color: { r: 12, g: 24, b: 80 } },
-			{ x: 0.32, y: 0.18, color: { r: 34, g: 211, b: 238 } },
-			{ x: 1, y: 0, color: { r: 251, g: 113, b: 133 } }
+			'Three-color curved ramp for dither previews. Geometry bows up-left from bottom-left to top-right so Bayer matrix sizes are easier to compare.',
+		stops: [
+			{ position: 0, color: { r: 20, g: 40, b: 120 } },
+			{ position: 0.5, color: { r: 255, g: 0, b: 255 } },
+			{ position: 1, color: { r: 250, g: 128, b: 114 } }
 		]
 	}
 ] satisfies PreviewGradientPreset[];
