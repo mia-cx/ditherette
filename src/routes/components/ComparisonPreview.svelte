@@ -872,7 +872,10 @@
 	}
 
 	function cancelCropDraft() {
-		cropDraft = cropMode ? normalizeCrop($outputSettings.crop ?? fullImageCrop()) : undefined;
+		cropDraft = undefined;
+		cropResize = undefined;
+		cropMove = undefined;
+		cropMode = false;
 	}
 
 	function cropToContent() {
