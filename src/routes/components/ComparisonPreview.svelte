@@ -33,6 +33,7 @@
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 
 	type Point = { x: number; y: number };
+	type PreviewLevel = { canvas: HTMLCanvasElement; width: number; height: number };
 
 	type Props = {
 		defaultMode?: PreviewMode;
@@ -75,8 +76,9 @@
 	let revealPane = $state<HTMLElement>();
 	let sideOutputCanvas = $state<HTMLCanvasElement>();
 	let revealOutputCanvas = $state<HTMLCanvasElement>();
-	let outputImageData = $state<ImageData>();
-	let filteredPreviewCanvas: HTMLCanvasElement | undefined;
+	let outputPreviewLevels = $state<PreviewLevel[]>([]);
+	let outputPreviewGeneration = $state(0);
+	let nextOutputPreviewGeneration = 0;
 	let layoutVersion = $state(0);
 
 	const zoomLabel = $derived(`${Math.round(zoom * 100)}%`);
@@ -93,24 +95,27 @@
 	const activeCrop = $derived(cropDraft ?? $outputSettings.crop);
 
 	$effect(() => {
+		outputPreviewGeneration = ++nextOutputPreviewGeneration;
 		if (!$processedImage) {
-			outputImageData = undefined;
+			outputPreviewLevels = [];
 			return;
 		}
-		outputImageData = processedToImageData($processedImage);
+		outputPreviewLevels = buildPreviewPyramid(processedToImageData($processedImage));
 	});
 
 	$effect(() => {
-		const imageData = outputImageData;
-		const redrawKey = `${mode}:${zoom}:${layoutVersion}`;
+		const levels = outputPreviewLevels;
+		const redrawKey = `${mode}:${zoom}:${layoutVersion}:${outputPreviewGeneration}`;
 		const sideCanvas = sideOutputCanvas;
 		const sidePane = sideOutputPane;
 		const revealCanvas = revealOutputCanvas;
 		const pane = revealPane;
-		if (!imageData || !redrawKey) return;
+		if (!levels.length || !redrawKey) return;
 		const frame = requestAnimationFrame(() => {
-			if (sideCanvas && sidePane) renderPreviewCanvas(sideCanvas, sidePane, imageData);
-			if (revealCanvas && pane) renderPreviewCanvas(revealCanvas, pane, imageData);
+			if (sideCanvas && sidePane)
+				renderPreviewCanvas(sideCanvas, sidePane, levels, outputPreviewGeneration);
+			if (revealCanvas && pane)
+				renderPreviewCanvas(revealCanvas, pane, levels, outputPreviewGeneration);
 		});
 		return () => cancelAnimationFrame(frame);
 	});
@@ -169,45 +174,98 @@
 		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering}`;
 	}
 
-	function renderPreviewCanvas(canvas: HTMLCanvasElement, pane: HTMLElement, imageData: ImageData) {
-		const frame = fitFrame(pane, imageData.width, imageData.height);
+	function buildPreviewPyramid(imageData: ImageData): PreviewLevel[] {
+		const levels: PreviewLevel[] = [imageDataToCanvas(imageData)];
+		let current = imageData;
+		while (current.width > 1 || current.height > 1) {
+			const width = Math.max(1, Math.floor(current.width / 2));
+			const height = Math.max(1, Math.floor(current.height / 2));
+			const canvas = document.createElement('canvas');
+			canvas.width = width;
+			canvas.height = height;
+			drawBoxDownsample(canvas, current, width, height);
+			levels.push({ canvas, width, height });
+			const context = canvas.getContext('2d');
+			if (!context) break;
+			current = context.getImageData(0, 0, width, height);
+		}
+		return levels;
+	}
+
+	function imageDataToCanvas(imageData: ImageData): PreviewLevel {
+		const canvas = document.createElement('canvas');
+		canvas.width = imageData.width;
+		canvas.height = imageData.height;
+		const context = canvas.getContext('2d');
+		context?.putImageData(imageData, 0, 0);
+		return { canvas, width: imageData.width, height: imageData.height };
+	}
+
+	function renderPreviewCanvas(
+		canvas: HTMLCanvasElement,
+		pane: HTMLElement,
+		levels: PreviewLevel[],
+		generation: number
+	) {
+		const original = levels[0]!;
+		const frame = fitFrame(pane, original.width, original.height);
 		const cssWidth = Math.max(1, frame.width);
 		const cssHeight = Math.max(1, frame.height);
-		const cssScale = cssWidth / imageData.width;
+		const deviceScale = window.devicePixelRatio || 1;
+		const deviceWidth = Math.max(1, Math.round(cssWidth * deviceScale));
+		const deviceHeight = Math.max(1, Math.round(cssHeight * deviceScale));
+		const outputScale = deviceWidth / original.width;
 		const context = canvas.getContext('2d');
 		if (!context) return;
 
-		if (cssScale >= 1) {
-			if (canvas.width !== imageData.width || canvas.height !== imageData.height) {
-				canvas.width = imageData.width;
-				canvas.height = imageData.height;
-			}
+		if (outputScale >= 1) {
+			drawPreviewLevel(
+				canvas,
+				context,
+				original,
+				original.width,
+				original.height,
+				false,
+				generation
+			);
 			canvas.style.imageRendering = 'pixelated';
-			context.imageSmoothingEnabled = false;
-			context.putImageData(imageData, 0, 0);
 			return;
 		}
 
-		const cssPixelWidth = Math.max(1, Math.round(cssWidth));
-		const cssPixelHeight = Math.max(1, Math.round(cssHeight));
-		const filtered = (filteredPreviewCanvas ??= document.createElement('canvas'));
-		if (filtered.width !== cssPixelWidth || filtered.height !== cssPixelHeight) {
-			filtered.width = cssPixelWidth;
-			filtered.height = cssPixelHeight;
-		}
-		drawBoxDownsample(filtered, imageData, cssPixelWidth, cssPixelHeight);
+		const level = selectPreviewLevel(levels, deviceWidth);
+		const smoothing = level.width > deviceWidth || level.height > deviceHeight;
+		drawPreviewLevel(canvas, context, level, deviceWidth, deviceHeight, smoothing, generation);
+		canvas.style.imageRendering = 'auto';
+	}
 
-		const scale = window.devicePixelRatio || 1;
-		const width = Math.max(1, Math.round(cssWidth * scale));
-		const height = Math.max(1, Math.round(cssHeight * scale));
+	function selectPreviewLevel(levels: PreviewLevel[], targetWidth: number) {
+		for (let index = levels.length - 1; index >= 0; index--) {
+			const level = levels[index]!;
+			if (level.width >= targetWidth) return level;
+		}
+		return levels[levels.length - 1]!;
+	}
+
+	function drawPreviewLevel(
+		canvas: HTMLCanvasElement,
+		context: CanvasRenderingContext2D,
+		level: PreviewLevel,
+		width: number,
+		height: number,
+		smoothing: boolean,
+		generation: number
+	) {
+		const cacheKey = `${generation}:${level.width}x${level.height}:${width}x${height}:${smoothing}`;
+		if (canvas.dataset.previewKey === cacheKey) return;
 		if (canvas.width !== width || canvas.height !== height) {
 			canvas.width = width;
 			canvas.height = height;
 		}
-		canvas.style.imageRendering = 'auto';
-		context.imageSmoothingEnabled = false;
+		context.imageSmoothingEnabled = smoothing;
+		context.imageSmoothingQuality = 'high';
 		context.clearRect(0, 0, width, height);
-		context.drawImage(filtered, 0, 0, width, height);
+		context.drawImage(level.canvas, 0, 0, width, height);
+		canvas.dataset.previewKey = cacheKey;
 	}
 
 	function drawBoxDownsample(
