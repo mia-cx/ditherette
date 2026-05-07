@@ -1,10 +1,11 @@
 import { TRANSPARENT_KEY, darkestVisible } from '$lib/palette/wplace';
 import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
-import { clampByte, colorDistanceRgb, createPaletteMatcher } from './color';
+import { clampByte, createPaletteMatcher, vectorForRgb } from './color';
 import type { EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
 
-const ORDERED_CANDIDATE_COUNT = 4;
-const ORDERED_DISTANCE_EPSILON = 1e-9;
+const ORDERED_RESIDUAL_SCALE = 2;
+
+type ColorVector = ReturnType<typeof vectorForRgb>;
 
 const ERROR_KERNELS = {
 	'floyd-steinberg': [
@@ -59,22 +60,47 @@ function paletteRgb(color: EnabledPaletteColor): Rgb {
 	return color.rgb;
 }
 
-type OrderedCandidate = { index: number; rgb: Rgb; distance: number; weight: number };
+function vectorDistance(
+	left: ColorVector,
+	right: ColorVector,
+	mode: ProcessingSettings['colorSpace']
+) {
+	const dx = left[0] - right[0];
+	const dy = left[1] - right[1];
+	if (mode === 'oklch') {
+		const hue = Math.atan2(Math.sin(left[2] - right[2]), Math.cos(left[2] - right[2]));
+		const dh = Math.min(left[1], right[1]) * hue;
+		return dx * dx + dy * dy + dh * dh;
+	}
+	const dz = left[2] - right[2];
+	return dx * dx + dy * dy + dz * dz;
+}
 
-function orderedCandidates(
-	rgb: Rgb,
+function nearestPaletteVector(
+	vector: ColorVector,
 	matcher: ReturnType<typeof createPaletteMatcher>,
 	settings: ProcessingSettings
 ) {
-	const candidates: OrderedCandidate[] = [];
+	let winner = -1;
+	let winnerVector: ColorVector | undefined;
+	let best = Number.POSITIVE_INFINITY;
 	for (let index = 0; index < matcher.colors.length; index++) {
 		const color = matcher.colors[index]!;
 		if (!color.rgb || color.kind === 'transparent') continue;
-		const distance = colorDistanceRgb(rgb, color.rgb, settings.colorSpace);
-		candidates.push({ index, rgb: color.rgb, distance, weight: 0 });
+		const candidateVector = vectorForRgb(
+			color.rgb.r,
+			color.rgb.g,
+			color.rgb.b,
+			settings.colorSpace
+		);
+		const distance = vectorDistance(vector, candidateVector, settings.colorSpace);
+		if (distance < best) {
+			best = distance;
+			winner = index;
+			winnerVector = candidateVector;
+		}
 	}
-	candidates.sort((left, right) => left.distance - right.distance);
-	return candidates.slice(0, ORDERED_CANDIDATE_COUNT);
+	return { index: winner, vector: winnerVector };
 }
 
 function chooseOrderedPaletteIndex(
@@ -84,28 +110,18 @@ function chooseOrderedPaletteIndex(
 	settings: ProcessingSettings,
 	strength: number
 ) {
-	const candidates = orderedCandidates(rgb, matcher, settings);
-	if (candidates.length === 0) return matcher.nearest(rgb).index;
-	if (candidates.length === 1 || strength <= 0) return candidates[0]!.index;
-
-	let total = 0;
-	for (const candidate of candidates) {
-		candidate.weight = 1 / (candidate.distance + ORDERED_DISTANCE_EPSILON);
-		total += candidate.weight;
-	}
-
-	const nearestShare = 1 - strength;
-	for (let i = 0; i < candidates.length; i++) {
-		const normalized = candidates[i]!.weight / total;
-		candidates[i]!.weight = i === 0 ? nearestShare + strength * normalized : strength * normalized;
-	}
-
-	let cursor = 0;
-	for (const candidate of candidates) {
-		cursor += candidate.weight;
-		if (threshold <= cursor) return candidate.index;
-	}
-	return candidates[candidates.length - 1]!.index;
+	if (strength <= 0) return matcher.nearest(rgb).index;
+	const source = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
+	const nearest = nearestPaletteVector(source, matcher, settings);
+	if (nearest.index === -1 || !nearest.vector) return matcher.nearest(rgb).index;
+	const amount = (threshold - 0.5) * ORDERED_RESIDUAL_SCALE * strength;
+	const target: ColorVector = [
+		source[0] + (source[0] - nearest.vector[0]) * amount,
+		source[1] + (source[1] - nearest.vector[1]) * amount,
+		source[2] + (source[2] - nearest.vector[2]) * amount
+	];
+	const match = nearestPaletteVector(target, matcher, settings);
+	return match.index === -1 ? nearest.index : match.index;
 }
 
 function lumaAt(source: Uint8ClampedArray, width: number, height: number, x: number, y: number) {
