@@ -459,7 +459,7 @@
 			</SelectContent>
 		</Select>
 		<Badge variant="outline" class="gap-1">
-			{#if isBuiltIn}<LockIcon /> Built-in{:else}Custom{/if}
+			{#if isBuiltIn}<LockIcon weight="bold" /> Built-in{:else}Custom{/if}
 		</Badge>
 	</div>
 
@@ -477,16 +477,18 @@
 			Toggle visibility
 		</Button>
 		<Button size="xs" variant="ghost" onclick={newPalette}>New</Button>
-		<Button size="xs" variant="ghost" onclick={duplicatePalette}><CopyIcon /> Duplicate</Button>
+		<Button size="xs" variant="ghost" onclick={duplicatePalette}
+			><CopyIcon weight="bold" /> Duplicate</Button
+		>
 		<Button size="xs" variant="ghost" onclick={() => importInput?.click()}
-			><UploadIcon /> Import</Button
+			><UploadIcon weight="bold" /> Import</Button
 		>
 		<Button size="xs" variant="ghost" onclick={() => exportPalette(false)}
-			><DownloadIcon /> Export</Button
+			><DownloadIcon weight="bold" /> Export</Button
 		>
 		<div class="ml-auto flex items-center gap-1">
 			<Button size="xs" variant="ghost" onclick={addColor} aria-label="Add color">
-				<PlusIcon />
+				<PlusIcon weight="bold" />
 				<span class="hidden sm:inline">Add</span>
 			</Button>
 			<Button
@@ -496,7 +498,7 @@
 				disabled={selectedCount === 0}
 				aria-label="Delete selected colors"
 			>
-				<TrashIcon />
+				<TrashIcon weight="bold" />
 				<span class="hidden sm:inline">Delete</span>
 			</Button>
 			<ToggleGroup
@@ -506,14 +508,16 @@
 				variant="outline"
 				aria-label="Palette view mode"
 			>
-				<ToggleGroupItem value="list" aria-label="List view"><ListIcon /></ToggleGroupItem>
+				<ToggleGroupItem value="list" aria-label="List view"
+					><ListIcon weight="bold" /></ToggleGroupItem
+				>
 				<ToggleGroupItem
 					value="grid"
 					aria-label="Grid view{gridDisabled ? ' (requires a pointer device)' : ''}"
 					disabled={gridDisabled}
 					title={gridDisabled ? 'Grid view requires a pointer device' : undefined}
 				>
-					<GridIcon />
+					<GridIcon weight="bold" />
 				</ToggleGroupItem>
 			</ToggleGroup>
 		</div>
@@ -711,7 +715,9 @@
 		<td class="hidden p-1.5 md:table-cell">{@render kindBadge(color)}</td>
 		<td class="p-1.5">
 			<DropdownMenu>
-				<DropdownMenuTrigger aria-label="Row actions"><DotsIcon /></DropdownMenuTrigger>
+				<DropdownMenuTrigger aria-label="Row actions"
+					><DotsIcon weight="bold" /></DropdownMenuTrigger
+				>
 				<DropdownMenuContent align="end">
 					<DropdownMenuItem
 						disabled={isBuiltIn || color.kind === 'transparent'}
@@ -768,7 +774,7 @@
 			disabled={isBuiltIn || color.kind === 'transparent'}
 			aria-label="Edit {color.name}"
 			title={isBuiltIn ? 'Built-in colors are immutable' : 'Edit color'}
-			onclick={() => editColor(color)}><PencilIcon /></button
+			onclick={() => editColor(color)}><PencilIcon weight="bold" /></button
 		>
 		<button
 			type="button"
@@ -776,7 +782,7 @@
 			disabled={isBuiltIn || color.kind === 'transparent'}
 			aria-label="Delete {color.name}"
 			title={isBuiltIn ? 'Built-in colors are immutable' : 'Delete color'}
-			onclick={() => deleteColor(color)}><TrashIcon /></button
+			onclick={() => deleteColor(color)}><TrashIcon weight="bold" /></button
 		>
 		<Checkbox
 			class="{cornerCheckbox} bottom-1 left-1"

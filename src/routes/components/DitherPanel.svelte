@@ -284,7 +284,7 @@
 					>
 				</div>
 				<Button variant="outline" size="sm" onclick={randomizeSeed}>
-					<DiceIcon />
+					<DiceIcon weight="bold" />
 					Randomize
 				</Button>
 			</div>

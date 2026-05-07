@@ -989,7 +989,7 @@
 			<Empty class="flex-1">
 				<EmptyHeader>
 					<EmptyMedia variant="icon">
-						<ImageIcon weight="duotone" />
+						<ImageIcon weight="bold" />
 					</EmptyMedia>
 					<EmptyTitle>Drop an image to begin</EmptyTitle>
 					<EmptyDescription>
@@ -998,7 +998,7 @@
 				</EmptyHeader>
 				<EmptyContent>
 					<Button variant="outline" size="sm" onclick={onChooseImage}>
-						<UploadIcon />
+						<UploadIcon weight="bold" />
 						Choose file
 					</Button>
 				</EmptyContent>
@@ -1105,7 +1105,7 @@
 				onclick={() => void toggleCropMode()}
 				aria-pressed={cropMode}
 			>
-				<CropIcon />
+				<CropIcon weight="bold" />
 			</Button>
 			{#if $processingProgress}
 				<Badge variant="secondary" class="tabular-nums">
@@ -1132,7 +1132,7 @@
 					disabled={!hasImage}
 					onclick={resetView}
 				>
-					<ArrowsOutIcon />
+					<ArrowsOutIcon weight="bold" />
 					Fit
 				</Button>
 				<Button

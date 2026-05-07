@@ -73,7 +73,7 @@
 	</div>
 
 	<Button size="sm" disabled={!canExport} onclick={download}>
-		<DownloadIcon />
+		<DownloadIcon weight="bold" />
 		Download PNG
 	</Button>
 </section>

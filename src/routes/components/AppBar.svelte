@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import ThemeToggle from './ThemeToggle.svelte';
@@ -23,13 +24,13 @@
 		? 'h-11'
 		: 'h-12'} sm:px-4"
 >
-	<a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
-		<GridIcon weight="fill" class="size-5 text-primary" />
+	<a href={resolve('/')} class="flex items-center gap-2 font-semibold tracking-tight">
+		<GridIcon weight="bold" class="size-5 text-primary" />
 		<span class="text-sm sm:text-base">ditherette</span>
 	</a>
 
 	<Badge variant="outline" class="hidden gap-1.5 sm:inline-flex">
-		<ShieldIcon weight="fill" class="text-primary" />
+		<ShieldIcon weight="bold" class="text-primary" />
 		<span class="font-normal text-muted-foreground">Everything runs in your browser</span>
 	</Badge>
 
@@ -39,12 +40,12 @@
 		{/if}
 		{#if hasImage}
 			<Button size="sm" variant="ghost" onclick={onClear}>
-				<TrashIcon />
+				<TrashIcon weight="bold" />
 				<span class="hidden sm:inline">Clear</span>
 			</Button>
 		{/if}
 		<Button size="sm" variant={hasImage ? 'outline' : 'default'} onclick={onChooseImage}>
-			<UploadIcon />
+			<UploadIcon weight="bold" />
 			{hasImage ? 'Replace Image' : 'Upload Image'}
 		</Button>
 		<ThemeToggle />

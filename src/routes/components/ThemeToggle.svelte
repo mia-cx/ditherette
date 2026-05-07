@@ -37,8 +37,8 @@
 	title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
 >
 	{#if isDark}
-		<SunIcon />
+		<SunIcon weight="bold" />
 	{:else}
-		<MoonIcon />
+		<MoonIcon weight="bold" />
 	{/if}
 </Button>
