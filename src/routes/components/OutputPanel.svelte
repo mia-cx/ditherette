@@ -36,8 +36,6 @@
 			? validRatio(baseDimensions.width, baseDimensions.height)
 			: validRatio(width, height)
 	);
-	const scaleDisplay = $derived(formatScale(scaleFactor));
-
 	$effect(() =>
 		outputSettings.subscribe((settings) => {
 			width = settings.width;
@@ -83,10 +81,6 @@
 				? nextWidth / baseDimensions.width
 				: nextHeight / baseDimensions.height;
 		return clampScale(nextFactor);
-	}
-
-	function formatScale(value: number) {
-		return `${Number.isFinite(value) ? value.toFixed(4) : '1.0000'}×`;
 	}
 
 	function dimensionsForAspect(nextWidth: number, nextHeight: number, aspect: number) {
@@ -244,9 +238,6 @@
 
 	{#if $outputSettings.crop}
 		<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-			<span class="font-mono">
-				Crop {$outputSettings.crop.width.toFixed(0)}×{$outputSettings.crop.height.toFixed(0)} · {scaleDisplay}
-			</span>
 			<Button size="xs" variant="outline" onclick={resetDimensionsToCrop}
 				>Reset dimensions to crop scale</Button
 			>
