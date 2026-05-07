@@ -1,7 +1,10 @@
 import { TRANSPARENT_KEY, darkestVisible } from '$lib/palette/wplace';
 import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
-import { clampByte, createPaletteMatcher } from './color';
+import { clampByte, colorDistanceRgb, createPaletteMatcher } from './color';
 import type { EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
+
+const ORDERED_CANDIDATE_COUNT = 4;
+const ORDERED_DISTANCE_EPSILON = 1e-9;
 
 const ERROR_KERNELS = {
 	'floyd-steinberg': [
@@ -54,6 +57,55 @@ function transparentIndex(palette: EnabledPaletteColor[]) {
 function paletteRgb(color: EnabledPaletteColor): Rgb {
 	if (!color.rgb) return { r: 0, g: 0, b: 0 };
 	return color.rgb;
+}
+
+type OrderedCandidate = { index: number; rgb: Rgb; distance: number; weight: number };
+
+function orderedCandidates(
+	rgb: Rgb,
+	matcher: ReturnType<typeof createPaletteMatcher>,
+	settings: ProcessingSettings
+) {
+	const candidates: OrderedCandidate[] = [];
+	for (let index = 0; index < matcher.colors.length; index++) {
+		const color = matcher.colors[index]!;
+		if (!color.rgb || color.kind === 'transparent') continue;
+		const distance = colorDistanceRgb(rgb, color.rgb, settings.colorSpace);
+		candidates.push({ index, rgb: color.rgb, distance, weight: 0 });
+	}
+	candidates.sort((left, right) => left.distance - right.distance);
+	return candidates.slice(0, ORDERED_CANDIDATE_COUNT);
+}
+
+function chooseOrderedPaletteIndex(
+	rgb: Rgb,
+	threshold: number,
+	matcher: ReturnType<typeof createPaletteMatcher>,
+	settings: ProcessingSettings,
+	strength: number
+) {
+	const candidates = orderedCandidates(rgb, matcher, settings);
+	if (candidates.length === 0) return matcher.nearest(rgb).index;
+	if (candidates.length === 1 || strength <= 0) return candidates[0]!.index;
+
+	let total = 0;
+	for (const candidate of candidates) {
+		candidate.weight = 1 / (candidate.distance + ORDERED_DISTANCE_EPSILON);
+		total += candidate.weight;
+	}
+
+	const nearestShare = 1 - strength;
+	for (let i = 0; i < candidates.length; i++) {
+		const normalized = candidates[i]!.weight / total;
+		candidates[i]!.weight = i === 0 ? nearestShare + strength * normalized : strength * normalized;
+	}
+
+	let cursor = 0;
+	for (const candidate of candidates) {
+		cursor += candidate.weight;
+		if (threshold <= cursor) return candidate.index;
+	}
+	return candidates[candidates.length - 1]!.index;
 }
 
 function lumaAt(source: Uint8ClampedArray, width: number, height: number, x: number, y: number) {
@@ -167,7 +219,6 @@ function quantizeDirect(
 	const alphaThreshold = settings.output.alphaThreshold;
 	const useBayer = Boolean(bayer && bayerSize && strength > 0);
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
-	const noiseScale = 96 * strength;
 	const coverage = settings.dither.coverage;
 
 	for (let y = 0; y < image.height; y++) {
@@ -201,16 +252,25 @@ function quantizeDirect(
 
 			if (useBayer && bayer && bayerSize) {
 				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
-				const threshold = bayer[bayerRow + (x % bayerSize)]! * noiseScale * mask;
-				r = clampByte(r + threshold);
-				g = clampByte(g + threshold);
-				b = clampByte(b + threshold);
+				const threshold = bayer[bayerRow + (x % bayerSize)]!;
+				indices[index] = chooseOrderedPaletteIndex(
+					{ r, g, b },
+					threshold,
+					matcher,
+					settings,
+					strength * mask
+				);
+				continue;
 			} else if (useRandom) {
 				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
-				const noise = (random() - 0.5) * noiseScale * mask;
-				r = clampByte(r + noise);
-				g = clampByte(g + noise);
-				b = clampByte(b + noise);
+				indices[index] = chooseOrderedPaletteIndex(
+					{ r, g, b },
+					random(),
+					matcher,
+					settings,
+					strength * mask
+				);
+				continue;
 			}
 			indices[index] = matcher.nearestRgb(r, g, b).index;
 		}

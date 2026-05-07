@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
-	import { clampByte, createPaletteMatcher } from '$lib/processing/color';
+	import { clampByte, colorDistanceRgb, createPaletteMatcher } from '$lib/processing/color';
 	import type { ColorSpaceId, EnabledPaletteColor, Rgb } from '$lib/processing/types';
 	import { DITHER_ALGORITHMS, COVERAGE_MODES, type DitherOption } from './sample-data';
 	import {
@@ -180,15 +180,11 @@
 				const ditherThreshold = matrix
 					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!
 					: random();
-				const offset = (ditherThreshold - 0.5) * amount * 96;
 				writePreviewRgb(
 					image,
 					x,
 					y,
-					nearestPaletteRgb(
-						{ r: source.r + offset, g: source.g + offset, b: source.b + offset },
-						nearestRgb
-					)
+					chooseOrderedPreviewRgb(source, ditherThreshold, nearestRgb, amount)
 				);
 			}
 		}
@@ -256,6 +252,42 @@
 	}
 
 	type PaletteNearest = ReturnType<typeof createPaletteMatcher>['nearestRgb'];
+
+	function chooseOrderedPreviewRgb(
+		rgb: Rgb,
+		threshold: number,
+		nearestRgb: PaletteNearest,
+		strengthAmount: number
+	) {
+		const nearest = nearestRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b));
+		if (strengthAmount <= 0) return nearest.color.rgb!;
+		const colors = $selectedPalette.filter((color) => color.rgb && color.kind !== 'transparent');
+		const candidates = colors
+			.map((color) => ({
+				rgb: color.rgb!,
+				distance: colorDistanceRgb(rgb, color.rgb!, $colorSpace),
+				weight: 0
+			}))
+			.sort((left, right) => left.distance - right.distance)
+			.slice(0, 4);
+		if (candidates.length === 0) return nearest.color.rgb!;
+		let total = 0;
+		for (const candidate of candidates) {
+			candidate.weight = 1 / (candidate.distance + 1e-9);
+			total += candidate.weight;
+		}
+		let cursor = 0;
+		for (let index = 0; index < candidates.length; index++) {
+			const candidate = candidates[index]!;
+			const normalized = candidate.weight / total;
+			cursor +=
+				index === 0
+					? 1 - strengthAmount + strengthAmount * normalized
+					: strengthAmount * normalized;
+			if (threshold <= cursor) return candidate.rgb;
+		}
+		return candidates[candidates.length - 1]!.rgb;
+	}
 
 	function gradientRgb(x: number, y: number, size: number): Rgb {
 		const extent = Math.max(1, size - 1);
