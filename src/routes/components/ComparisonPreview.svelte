@@ -87,9 +87,6 @@
 		$processedImage ? `${$processedImage.palette.length} colors` : 'Palette'
 	);
 	const activeCrop = $derived(cropDraft ?? $outputSettings.crop);
-	const outputRenderingClass = $derived(
-		$outputSettings.resize === 'nearest' ? '[image-rendering:pixelated]' : '[image-rendering:auto]'
-	);
 
 	$effect(() => {
 		if (!$processedImage) return;
@@ -609,14 +606,14 @@
 		{#if target === 'side'}
 			<canvas
 				bind:this={sideOutputCanvas}
-				class="pointer-events-none absolute max-w-none select-none {outputRenderingClass}"
+				class="pointer-events-none absolute max-w-none select-none [image-rendering:pixelated]"
 				{style}
 				aria-label="Processed dithered output"
 			></canvas>
 		{:else}
 			<canvas
 				bind:this={revealOutputCanvas}
-				class="pointer-events-none absolute max-w-none select-none {outputRenderingClass}"
+				class="pointer-events-none absolute max-w-none select-none [image-rendering:pixelated]"
 				{style}
 				aria-label="Processed dithered output"
 			></canvas>
