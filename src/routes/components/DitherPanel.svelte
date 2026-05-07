@@ -130,12 +130,12 @@
 		const matrixSize = matrix ? Math.sqrt(matrix.length) : 1;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const gradient = gradientValue(x, size);
-				const threshold = matrix
-					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]! * 255
-					: random() * 255;
-				const dithered = gradient >= threshold ? 255 : 0;
-				writePreviewPixel(image, x, y, mix(gradient, dithered, amount));
+				const gradient = x / Math.max(1, size - 1);
+				const ditherThreshold = matrix
+					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!
+					: random();
+				const threshold = 0.5 + (ditherThreshold - 0.5) * amount;
+				writePreviewPixel(image, x, y, gradient >= threshold ? 255 : 0);
 			}
 		}
 		return image;
@@ -164,9 +164,8 @@
 			for (let x = start; x !== end; x += step) {
 				const index = y * size + x;
 				const value = clampByte(work[index]!);
-				const sourceValue = gradientValue(x, size);
 				const chosen = value >= 128 ? 255 : 0;
-				writePreviewPixel(image, x, y, mix(sourceValue, chosen, amount));
+				writePreviewPixel(image, x, y, chosen);
 				const error = value - chosen;
 				for (const [dxBase, dy, weight] of kernel) {
 					const dx = reverse ? -dxBase : dxBase;
@@ -196,10 +195,6 @@
 
 	function gradientValue(x: number, width: number) {
 		return Math.round((x / Math.max(1, width - 1)) * 255);
-	}
-
-	function mix(left: number, right: number, amount: number) {
-		return left + (right - left) * amount;
 	}
 
 	function clampByte(value: number) {
