@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import AppBar from './components/AppBar.svelte';
 	import ComparisonPreview from './components/ComparisonPreview.svelte';
 	import DitherPanel from './components/DitherPanel.svelte';
@@ -11,51 +12,103 @@
 		Accordion,
 		AccordionItem,
 		AccordionTrigger,
-		AccordionContent,
+		AccordionContent
 	} from '$lib/components/ui/accordion';
 	import { Badge } from '$lib/components/ui/badge';
+	import { ResizablePaneGroup, ResizablePane, ResizableHandle } from '$lib/components/ui/resizable';
 	import {
-		ResizablePaneGroup,
-		ResizablePane,
-		ResizableHandle,
-	} from '$lib/components/ui/resizable';
+		colorSpace,
+		ditherSettings,
+		hasImage,
+		outputSettings,
+		processedImage
+	} from '$lib/stores/app';
+	import { startAutoProcessing } from '$lib/processing/client';
+	import { clearAllImageData, restorePersistedImages, setSourceFile } from '$lib/processing/source';
+	import { COLOR_SPACES, DITHER_ALGORITHMS, RESIZE_MODES } from './components/sample-data';
 
-	// Left-column accordion: all sections open by default so nothing is hidden
-	// on first load. Users can collapse sections they're done with.
 	let openSections = $state<string[]>(['output', 'dither', 'color']);
+	let fileInput = $state<HTMLInputElement>();
+	let uploadError = $state<string>();
+
+	const outputBadge = $derived(
+		`${$processedImage?.width ?? $outputSettings.width}×${$processedImage?.height ?? $outputSettings.height} · ${RESIZE_MODES.find((mode) => mode.id === $outputSettings.resize)?.label ?? 'Resize'}`
+	);
+	const ditherBadge = $derived(
+		DITHER_ALGORITHMS.find((mode) => mode.id === $ditherSettings.algorithm)?.label ?? 'Off'
+	);
+	const colorBadge = $derived(
+		COLOR_SPACES.find((mode) => mode.id === $colorSpace)?.label ?? 'OKLab'
+	);
+
+	onMount(() => {
+		const stop = startAutoProcessing();
+		void restorePersistedImages().catch((error) => {
+			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
+		});
+		return stop;
+	});
+
+	function chooseImage() {
+		fileInput?.click();
+	}
+
+	async function onFileChange(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		uploadError = undefined;
+		try {
+			await setSourceFile(file);
+		} catch (error) {
+			uploadError = error instanceof Error ? error.message : 'Could not read that image.';
+		} finally {
+			input.value = '';
+		}
+	}
 </script>
 
 <svelte:head><title>ditherette</title></svelte:head>
 
-<!--
-	Layout strategy:
-	- Mobile (< lg): natural page scroll. Preview, controls, palette, export stack.
-	  Vertical resizing isn't meaningful when the page already scrolls freely.
-	- Desktop (lg+): viewport-locked. Preview and controls live in a vertical
-	  paneforge group with a draggable handle between them, so users can give
-	  the preview as much (or as little) screen as they want. Each control
-	  column still scrolls independently within the lower pane.
--->
-<div class="bg-background flex min-h-svh flex-col lg:h-svh">
-	<AppBar hasImage={false} />
+<input
+	bind:this={fileInput}
+	class="sr-only"
+	type="file"
+	accept="image/png,image/jpeg,image/webp,image/gif"
+	onchange={onFileChange}
+/>
 
-	<!-- Mobile main: natural flow. Defaults to A/B reveal per spec
-	     (mobile/narrow screens prefer the stacked reveal slider over a
-	     squeezed side-by-side comparison). -->
+<div class="flex min-h-svh flex-col bg-background lg:h-svh">
+	<AppBar
+		hasImage={$hasImage}
+		onChooseImage={chooseImage}
+		onClear={() => void clearAllImageData()}
+	/>
+
+	{#if uploadError}
+		<p class="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+			{uploadError}
+		</p>
+	{/if}
+
 	<main class="flex flex-1 flex-col gap-4 lg:hidden">
 		<ComparisonPreview
 			defaultMode="ab-reveal"
-			hasImage={false}
+			hasImage={$hasImage}
 			minHeightClass="min-h-[320px] md:min-h-[420px]"
+			onChooseImage={chooseImage}
 		/>
 		{@render controls('gap-4')}
 	</main>
 
-	<!-- Desktop main: vertical resizable panes. Side-by-side default. -->
 	<main class="hidden flex-1 overflow-hidden lg:block">
 		<ResizablePaneGroup direction="vertical" class="h-full">
 			<ResizablePane defaultSize={56} minSize={25}>
-				<ComparisonPreview hasImage={false} minHeightClass="h-full" />
+				<ComparisonPreview
+					hasImage={$hasImage}
+					minHeightClass="h-full"
+					onChooseImage={chooseImage}
+				/>
 			</ResizablePane>
 			<ResizableHandle withHandle />
 			<ResizablePane defaultSize={44} minSize={25}>
@@ -67,36 +120,24 @@
 	</main>
 
 	<div class="sticky bottom-0 z-20 lg:static">
-		<ExportStrip variant="bar" hasImage={false} />
+		<ExportStrip variant="bar" hasImage={$hasImage} />
 	</div>
 </div>
 
-<!--
-	Two-column controls grid. Same children on mobile and desktop; only the
-	wrapper sizing differs (mobile: free flow with gap-4; desktop: h-full with
-	independently-scrolling columns inside the lower paneforge pane).
--->
 {#snippet controls(extra: string)}
-	<div
-		class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] {extra}"
-	>
-		<!-- LEFT: collapsible Output / Dither / Color sections. -->
+	<div class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] {extra}">
 		<div class="flex min-h-0 flex-col lg:overflow-y-auto">
-			<Accordion
-				type="multiple"
-				bind:value={openSections}
-				class="border-border bg-card border"
-			>
+			<Accordion type="multiple" bind:value={openSections} class="border border-border bg-card">
 				<AccordionItem value="output">
 					<AccordionTrigger class="px-4">
 						<span class="flex items-center gap-2 text-sm">
 							Output
-							<Badge variant="outline" class="font-mono">512×512 · Lanczos3</Badge>
+							<Badge variant="outline" class="font-mono">{outputBadge}</Badge>
 						</span>
 					</AccordionTrigger>
 					<AccordionContent>
 						<div class="px-4 pb-4">
-							<OutputPanel hasImage={false} hideHeading />
+							<OutputPanel hasImage={$hasImage} hideHeading />
 						</div>
 					</AccordionContent>
 				</AccordionItem>
@@ -105,7 +146,7 @@
 					<AccordionTrigger class="px-4">
 						<span class="flex items-center gap-2 text-sm">
 							Dither
-							<Badge variant="secondary">Off</Badge>
+							<Badge variant="secondary">{ditherBadge}</Badge>
 						</span>
 					</AccordionTrigger>
 					<AccordionContent>
@@ -119,7 +160,7 @@
 					<AccordionTrigger class="px-4">
 						<span class="flex items-center gap-2 text-sm">
 							Color space
-							<Badge variant="outline">OKLab</Badge>
+							<Badge variant="outline">{colorBadge}</Badge>
 						</span>
 					</AccordionTrigger>
 					<AccordionContent>
@@ -131,7 +172,6 @@
 			</Accordion>
 		</div>
 
-		<!-- RIGHT: palette card. Independently scrollable on desktop. -->
 		<div class="flex min-h-0 flex-col lg:overflow-y-auto">
 			<Card class="flex min-h-0 flex-1 flex-col py-3">
 				<CardContent class="flex min-h-0 flex-1 flex-col">

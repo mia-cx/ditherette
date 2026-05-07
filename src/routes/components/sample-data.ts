@@ -51,7 +51,7 @@ export const SAMPLE_PALETTE: Swatch[] = [
 	// state — edit/delete enabled, full-opacity icons on hover/focus.
 	{ name: 'Studio Pink', hex: '#FF5C8A', kind: 'custom', enabled: true },
 	{ name: 'Studio Teal', hex: '#1FB6A3', kind: 'custom', enabled: true },
-	{ name: 'Transparent', kind: 'transparent', enabled: true },
+	{ name: 'Transparent', kind: 'transparent', enabled: true }
 ];
 
 export type ColorSpaceOption = {
@@ -65,39 +65,52 @@ export const COLOR_SPACES: ColorSpaceOption[] = [
 	{
 		id: 'oklab',
 		label: 'OKLab',
-		short: 'Modern perceptual space; Euclidean distance over (L, a, b) approximates perceived difference well.',
-		math: 'd² = (L₁−L₂)² + (a₁−a₂)² + (b₁−b₂)²',
+		short:
+			'Modern perceptual space; Euclidean distance over (L, a, b) approximates perceived difference well.',
+		math: 'd² = (L₁−L₂)² + (a₁−a₂)² + (b₁−b₂)²'
 	},
 	{
 		id: 'srgb',
 		label: 'sRGB',
 		short: 'Browser display space. Fast but not perceptually uniform.',
-		math: 'd² = (R₁−R₂)² + (G₁−G₂)² + (B₁−B₂)²',
+		math: 'd² = (R₁−R₂)² + (G₁−G₂)² + (B₁−B₂)²'
 	},
 	{
 		id: 'linear-rgb',
 		label: 'Linear RGB',
 		short: 'Removes sRGB gamma before distance math; better for light mixing.',
-		math: 'd² over linearized channels',
+		math: 'd² over linearized channels'
 	},
 	{
 		id: 'weighted-rgb',
 		label: 'Weighted RGB',
 		short: 'CompuPhase weighted RGB. Cheap channel-weighted approximation of perceived difference.',
-		math: '(2+r̄/256)·ΔR² + 4·ΔG² + (2+(255−r̄)/256)·ΔB²',
+		math: '(2+r̄/256)·ΔR² + 4·ΔG² + (2+(255−r̄)/256)·ΔB²'
+	},
+	{
+		id: 'weighted-rgb-601',
+		label: 'Weighted RGB · Rec.601',
+		short: 'Legacy luma weights emphasize green, then red, then blue.',
+		math: '0.299·ΔR² + 0.587·ΔG² + 0.114·ΔB²'
+	},
+	{
+		id: 'weighted-rgb-709',
+		label: 'Weighted RGB · Rec.709',
+		short: 'HDTV luma weights with stronger green emphasis.',
+		math: '0.2126·ΔR² + 0.7152·ΔG² + 0.0722·ΔB²'
 	},
 	{
 		id: 'cielab',
 		label: 'CIELAB ΔE76',
 		short: 'Approximates human color difference via XYZ → CIELAB conversion.',
-		math: 'ΔE*ab = √((ΔL)² + (Δa)² + (Δb)²)',
+		math: 'ΔE*ab = √((ΔL)² + (Δa)² + (Δb)²)'
 	},
 	{
 		id: 'oklch',
 		label: 'OKLCH',
 		short: 'Cylindrical OKLab. Hue distance wraps around the color wheel.',
-		math: 'd uses ΔL, ΔC, and circular Δh',
-	},
+		math: 'd uses ΔL, ΔC, and circular Δh'
+	}
 ];
 
 export type DitherOption = {
@@ -108,14 +121,54 @@ export type DitherOption = {
 };
 
 export const DITHER_ALGORITHMS: DitherOption[] = [
-	{ id: 'none', label: 'None', family: 'none', short: 'Direct nearest-color quantization. Fast; can flatten gradients.' },
-	{ id: 'bayer-4', label: 'Bayer 4×4', family: 'ordered', short: 'Ordered threshold matrix. Crisp, repeating pattern.' },
-	{ id: 'bayer-8', label: 'Bayer 8×8', family: 'ordered', short: 'Larger matrix; less obvious repetition than 4×4.' },
-	{ id: 'bayer-16', label: 'Bayer 16×16', family: 'ordered', short: 'Largest ordered matrix; smoothest of the Bayer family.' },
-	{ id: 'floyd-steinberg', label: 'Floyd–Steinberg', family: 'error-diffusion', short: 'Distributes quantization error to four future neighbors (7/16, 3/16, 5/16, 1/16).' },
-	{ id: 'sierra', label: 'Sierra', family: 'error-diffusion', short: 'Wider three-row error diffusion kernel.' },
-	{ id: 'sierra-lite', label: 'Sierra Lite', family: 'error-diffusion', short: 'Cheaper Sierra variant; smaller neighborhood.' },
-	{ id: 'random', label: 'Random', family: 'noise', short: 'Seeded per-pixel noise perturbs the quantization threshold.' },
+	{
+		id: 'none',
+		label: 'None',
+		family: 'none',
+		short: 'Direct nearest-color quantization. Fast; can flatten gradients.'
+	},
+	{
+		id: 'bayer-4',
+		label: 'Bayer 4×4',
+		family: 'ordered',
+		short: 'Ordered threshold matrix. Crisp, repeating pattern.'
+	},
+	{
+		id: 'bayer-8',
+		label: 'Bayer 8×8',
+		family: 'ordered',
+		short: 'Larger matrix; less obvious repetition than 4×4.'
+	},
+	{
+		id: 'bayer-16',
+		label: 'Bayer 16×16',
+		family: 'ordered',
+		short: 'Largest ordered matrix; smoothest of the Bayer family.'
+	},
+	{
+		id: 'floyd-steinberg',
+		label: 'Floyd–Steinberg',
+		family: 'error-diffusion',
+		short: 'Distributes quantization error to four future neighbors (7/16, 3/16, 5/16, 1/16).'
+	},
+	{
+		id: 'sierra',
+		label: 'Sierra',
+		family: 'error-diffusion',
+		short: 'Wider three-row error diffusion kernel.'
+	},
+	{
+		id: 'sierra-lite',
+		label: 'Sierra Lite',
+		family: 'error-diffusion',
+		short: 'Cheaper Sierra variant; smaller neighborhood.'
+	},
+	{
+		id: 'random',
+		label: 'Random',
+		family: 'noise',
+		short: 'Seeded per-pixel noise perturbs the quantization threshold.'
+	}
 ];
 
 export type ResizeOption = { id: string; label: string };
@@ -124,17 +177,17 @@ export const RESIZE_MODES: ResizeOption[] = [
 	{ id: 'lanczos3', label: 'Lanczos3' },
 	{ id: 'bilinear', label: 'Bilinear' },
 	{ id: 'nearest', label: 'Nearest' },
-	{ id: 'area', label: 'Area / Box' },
+	{ id: 'area', label: 'Area / Box' }
 ];
 
 export const ALPHA_MODES: ResizeOption[] = [
 	{ id: 'preserve', label: 'Preserve transparency' },
 	{ id: 'premultiplied', label: 'Premultiplied' },
-	{ id: 'matte', label: 'Matte' },
+	{ id: 'matte', label: 'Matte' }
 ];
 
 export const COVERAGE_MODES: ResizeOption[] = [
 	{ id: 'full', label: 'Full image' },
 	{ id: 'transitions', label: 'Transitions' },
-	{ id: 'edges', label: 'Edges only' },
+	{ id: 'edges', label: 'Edges only' }
 ];

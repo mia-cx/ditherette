@@ -5,36 +5,45 @@
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 	import ShieldIcon from 'phosphor-svelte/lib/ShieldCheck';
 	import GridIcon from 'phosphor-svelte/lib/GridFour';
+	import TrashIcon from 'phosphor-svelte/lib/Trash';
 
 	type Props = {
 		hasImage?: boolean;
 		dense?: boolean;
 		extras?: import('svelte').Snippet;
+		onChooseImage?: () => void;
+		onClear?: () => void;
 	};
 
-	let { hasImage = false, dense = false, extras }: Props = $props();
+	let { hasImage = false, dense = false, extras, onChooseImage, onClear }: Props = $props();
 </script>
 
 <header
-	class="bg-background border-border sticky top-0 z-30 flex w-full items-center gap-2 border-b px-3 {dense
+	class="sticky top-0 z-30 flex w-full items-center gap-2 border-b border-border bg-background px-3 {dense
 		? 'h-11'
 		: 'h-12'} sm:px-4"
 >
 	<a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
-		<GridIcon weight="fill" class="text-primary size-5" />
+		<GridIcon weight="fill" class="size-5 text-primary" />
 		<span class="text-sm sm:text-base">ditherette</span>
 	</a>
 
 	<Badge variant="outline" class="hidden gap-1.5 sm:inline-flex">
 		<ShieldIcon weight="fill" class="text-primary" />
-		<span class="text-muted-foreground font-normal">Everything runs in your browser</span>
+		<span class="font-normal text-muted-foreground">Everything runs in your browser</span>
 	</Badge>
 
 	<div class="ml-auto flex items-center gap-1.5">
 		{#if extras}
 			{@render extras()}
 		{/if}
-		<Button size="sm" variant={hasImage ? 'outline' : 'default'}>
+		{#if hasImage}
+			<Button size="sm" variant="ghost" onclick={onClear}>
+				<TrashIcon />
+				<span class="hidden sm:inline">Clear</span>
+			</Button>
+		{/if}
+		<Button size="sm" variant={hasImage ? 'outline' : 'default'} onclick={onChooseImage}>
 			<UploadIcon />
 			{hasImage ? 'Replace Image' : 'Upload Image'}
 		</Button>

@@ -3,14 +3,11 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
-	import {
-		Select,
-		SelectContent,
-		SelectItem,
-		SelectTrigger,
-	} from '$lib/components/ui/select';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
 	import { RESIZE_MODES, ALPHA_MODES } from './sample-data';
+	import { outputSettings, sourceMeta, updateOutputSettings } from '$lib/stores/app';
+	import { clampOutputSize } from '$lib/processing/types';
 	import LinkIcon from 'phosphor-svelte/lib/Link';
 	import LinkBreakIcon from 'phosphor-svelte/lib/LinkBreak';
 
@@ -21,28 +18,78 @@
 
 	let { hasImage = false, hideHeading = false }: Props = $props();
 
-	let width = $state<number>(512);
-	let height = $state<number>(512);
-	let lockAspect = $state(true);
-	let fit = $state('contain');
-	let resize = $state('lanczos3');
-	let alpha = $state('preserve');
-	let alphaThreshold = $state<number>(0);
+	const initial = outputSettings.get();
+	let width = $state<number>(initial.width);
+	let height = $state<number>(initial.height);
+	let lockAspect = $state(initial.lockAspect);
+	let fit = $state(initial.fit);
+	let resize = $state(initial.resize);
+	let alpha = $state(initial.alphaMode);
+	let alphaThreshold = $state<number>(initial.alphaThreshold);
 
 	const resizeLabel = $derived(RESIZE_MODES.find((r) => r.id === resize)?.label ?? 'Resize');
 	const alphaLabel = $derived(ALPHA_MODES.find((a) => a.id === alpha)?.label ?? 'Alpha');
+
+	$effect(() =>
+		outputSettings.subscribe((settings) => {
+			width = settings.width;
+			height = settings.height;
+			lockAspect = settings.lockAspect;
+			fit = settings.fit;
+			resize = settings.resize;
+			alpha = settings.alphaMode;
+			alphaThreshold = settings.alphaThreshold;
+		})
+	);
+
+	$effect(() => {
+		const clamped = clampOutputSize(width, height);
+		updateOutputSettings({
+			width: clamped.width,
+			height: clamped.height,
+			lockAspect,
+			fit,
+			resize,
+			alphaMode: alpha,
+			alphaThreshold
+		});
+	});
+
+	function setWidth(value: number) {
+		width = Math.max(1, Math.round(value || 1));
+		if (lockAspect && $sourceMeta)
+			height = Math.max(1, Math.round((width * $sourceMeta.height) / $sourceMeta.width));
+	}
+
+	function setHeight(value: number) {
+		height = Math.max(1, Math.round(value || 1));
+		if (lockAspect && $sourceMeta)
+			width = Math.max(1, Math.round((height * $sourceMeta.width) / $sourceMeta.height));
+	}
+
+	function resetDimensionsToCrop() {
+		const crop = $outputSettings.crop;
+		if (!crop) return;
+		width = Math.max(1, Math.round(crop.width));
+		height = Math.max(1, Math.round(crop.height));
+		updateOutputSettings({ width, height });
+	}
+
+	function clearCrop() {
+		updateOutputSettings({ crop: undefined });
+	}
 </script>
 
 <section class="flex flex-col gap-4" aria-label="Output controls">
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
 			<h2 class="text-sm font-semibold tracking-tight">Output</h2>
-			<p class="text-muted-foreground text-xs">Size, resize, and alpha.</p>
+			<p class="text-xs text-muted-foreground">Size, resize, and alpha.</p>
 		</div>
 	{/if}
 
 	<div class="grid gap-1.5">
-		<Label class="text-muted-foreground text-xs uppercase tracking-wide">Dimensions</Label>
+		<Label class="text-xs tracking-wide text-muted-foreground uppercase">Dimensions</Label>
 		<div class="flex items-center gap-1.5">
 			<div class="grid flex-1 gap-1">
 				<Label for="out-width" class="text-xs">Width</Label>
@@ -53,8 +100,9 @@
 					min="1"
 					max="16384"
 					step="1"
-					bind:value={width}
+					value={width}
 					disabled={!hasImage}
+					oninput={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
 			</div>
 			<Button
@@ -76,11 +124,23 @@
 					min="1"
 					max="16384"
 					step="1"
-					bind:value={height}
+					value={height}
 					disabled={!hasImage}
+					oninput={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
 			</div>
 		</div>
+		{#if $outputSettings.crop}
+			<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+				<span class="font-mono">
+					Crop {$outputSettings.crop.width.toFixed(0)}×{$outputSettings.crop.height.toFixed(0)}
+				</span>
+				<Button size="xs" variant="outline" onclick={resetDimensionsToCrop}
+					>Reset dimensions to crop</Button
+				>
+				<Button size="xs" variant="ghost" onclick={clearCrop}>Clear crop</Button>
+			</div>
+		{/if}
 	</div>
 
 	<div class="grid gap-1.5">
@@ -119,7 +179,7 @@
 	<div class="grid gap-1.5">
 		<div class="flex items-center justify-between">
 			<Label for="alpha-threshold">Alpha threshold</Label>
-			<span class="text-muted-foreground text-xs tabular-nums">{alphaThreshold}</span>
+			<span class="text-xs text-muted-foreground tabular-nums">{alphaThreshold}</span>
 		</div>
 		<Slider
 			type="single"
