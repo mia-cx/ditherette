@@ -115,7 +115,7 @@
 		const image = new ImageData(size, size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				writePreviewPixel(image, x, y, gradientValue(x, size));
+				writePreviewPixel(image, x, y, radialGradientValue(x, y, size));
 			}
 		}
 		return image;
@@ -129,7 +129,7 @@
 		const matrixSize = bayerSize ?? 1;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const gradient = x / Math.max(1, size - 1);
+				const gradient = radialGradientValue(x, y, size) / 255;
 				const ditherThreshold = matrix
 					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!
 					: random();
@@ -151,7 +151,7 @@
 		const work = new Float32Array(size * size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				work[y * size + x] = gradientValue(x, size);
+				work[y * size + x] = radialGradientValue(x, y, size);
 			}
 		}
 
@@ -185,8 +185,10 @@
 		return undefined;
 	}
 
-	function gradientValue(x: number, width: number) {
-		return Math.round((x / Math.max(1, width - 1)) * 255);
+	function radialGradientValue(x: number, y: number, size: number) {
+		const extent = Math.max(1, size - 1);
+		const distance = Math.sqrt(x * x + y * y) / Math.sqrt(2 * extent * extent);
+		return Math.round((1 - Math.min(1, distance)) * 255);
 	}
 
 	function clampByte(value: number) {
