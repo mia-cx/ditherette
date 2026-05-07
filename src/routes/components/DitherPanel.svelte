@@ -8,7 +8,7 @@
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
 	import { clampByte, createPaletteMatcher, vectorForRgb } from '$lib/processing/color';
 	import type { ColorSpaceId, EnabledPaletteColor, Rgb } from '$lib/processing/types';
-	import { DITHER_ALGORITHMS, COVERAGE_MODES, type DitherOption } from './sample-data';
+	import { DITHER_ALGORITHMS, PLACEMENT_MODES, type DitherOption } from './sample-data';
 	import {
 		colorSpace,
 		ditherSettings,
@@ -51,7 +51,12 @@
 	const initial = ditherSettings.get();
 	let algorithm = $state(initial.algorithm);
 	let strength = $state<number>(initial.strength);
-	let coverage = $state(initial.coverage);
+	let placement = $state(
+		initial.placement ?? (initial.coverage === 'full' ? 'everywhere' : 'adaptive')
+	);
+	let placementRadius = $state(initial.placementRadius ?? 3);
+	let placementThreshold = $state(initial.placementThreshold ?? 12);
+	let placementSoftness = $state(initial.placementSoftness ?? 8);
 	let serpentine = $state(initial.serpentine);
 	let seed = $state(initial.seed);
 	let useColorSpace = $state(initial.useColorSpace ?? false);
@@ -62,12 +67,22 @@
 	const isRandom = $derived(algorithm === 'random');
 	const isThresholdDither = $derived(current?.family === 'ordered' || current?.family === 'noise');
 	const triggerLabel = $derived(current?.label ?? 'Select algorithm');
-	const coverageLabel = $derived(
-		COVERAGE_MODES.find((c) => c.id === coverage)?.label ?? 'Coverage'
+	const placementLabel = $derived(
+		PLACEMENT_MODES.find((option) => option.id === placement)?.label ?? 'Placement'
 	);
 
 	$effect(() => {
-		updateDitherSettings({ algorithm, strength, coverage, serpentine, seed, useColorSpace });
+		updateDitherSettings({
+			algorithm,
+			strength,
+			placement,
+			placementRadius,
+			placementThreshold,
+			placementSoftness,
+			serpentine,
+			seed,
+			useColorSpace
+		});
 	});
 
 	function randomizeSeed() {
@@ -488,16 +503,64 @@
 		</div>
 
 		<div class="grid gap-1.5">
-			<Label for="dither-coverage">Coverage</Label>
-			<Select bind:value={coverage} type="single" disabled={isNone}>
-				<SelectTrigger id="dither-coverage">{coverageLabel}</SelectTrigger>
+			<Label for="dither-placement">Placement</Label>
+			<Select bind:value={placement} type="single" disabled={!isThresholdDither}>
+				<SelectTrigger id="dither-placement">{placementLabel}</SelectTrigger>
 				<SelectContent>
-					{#each COVERAGE_MODES as opt (opt.id)}
+					{#each PLACEMENT_MODES as opt (opt.id)}
 						<SelectItem value={opt.id}>{opt.label}</SelectItem>
 					{/each}
 				</SelectContent>
 			</Select>
 		</div>
+
+		{#if placement === 'adaptive'}
+			<div class="grid grid-cols-3 gap-2">
+				<div class="grid gap-1">
+					<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label>
+					<input
+						id="dither-placement-radius"
+						class="h-8 w-full border border-input bg-transparent px-2 text-right font-mono text-xs tabular-nums"
+						type="number"
+						min="1"
+						max="8"
+						step="1"
+						bind:value={placementRadius}
+						disabled={!isThresholdDither}
+					/>
+				</div>
+				<div class="grid gap-1">
+					<Label for="dither-placement-threshold" class="text-xs text-muted-foreground"
+						>Threshold</Label
+					>
+					<input
+						id="dither-placement-threshold"
+						class="h-8 w-full border border-input bg-transparent px-2 text-right font-mono text-xs tabular-nums"
+						type="number"
+						min="0"
+						max="100"
+						step="1"
+						bind:value={placementThreshold}
+						disabled={!isThresholdDither}
+					/>
+				</div>
+				<div class="grid gap-1">
+					<Label for="dither-placement-softness" class="text-xs text-muted-foreground"
+						>Softness</Label
+					>
+					<input
+						id="dither-placement-softness"
+						class="h-8 w-full border border-input bg-transparent px-2 text-right font-mono text-xs tabular-nums"
+						type="number"
+						min="0"
+						max="100"
+						step="1"
+						bind:value={placementSoftness}
+						disabled={!isThresholdDither}
+					/>
+				</div>
+			</div>
+		{/if}
 
 		<div class="flex items-center justify-between gap-2">
 			<Label for="dither-color-space" class="flex flex-col gap-0.5">

@@ -34,7 +34,10 @@ export const outputSettings = persistentJSON<OutputSettings>('ditherette:output'
 export const ditherSettings = persistentJSON<DitherSettings>('ditherette:dither', {
 	algorithm: 'none',
 	strength: 100,
-	coverage: 'full',
+	placement: 'everywhere',
+	placementRadius: 3,
+	placementThreshold: 12,
+	placementSoftness: 8,
 	serpentine: true,
 	seed: 0xc0ffee42,
 	useColorSpace: false

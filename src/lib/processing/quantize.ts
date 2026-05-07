@@ -139,30 +139,74 @@ function colorSpaceThresholdIndex(
 	return nearestPaletteVectorIndex(target, space, settings);
 }
 
-function lumaAt(source: Uint8ClampedArray, width: number, height: number, x: number, y: number) {
-	const xx = Math.min(width - 1, Math.max(0, x));
-	const yy = Math.min(height - 1, Math.max(0, y));
-	const offset = (yy * width + xx) * 4;
-	return source[offset]! * 0.299 + source[offset + 1]! * 0.587 + source[offset + 2]! * 0.114;
+function smoothstep(edge0: number, edge1: number, value: number) {
+	if (edge0 === edge1) return value >= edge1 ? 1 : 0;
+	const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+	return t * t * (3 - 2 * t);
 }
 
-function coverageMask(
+function sourceVectorAt(
 	source: Uint8ClampedArray,
 	width: number,
 	height: number,
 	x: number,
 	y: number,
-	coverage: ProcessingSettings['dither']['coverage']
+	settings: ProcessingSettings
 ) {
-	if (coverage === 'full') return 1;
-	const dx = Math.abs(
-		lumaAt(source, width, height, x + 1, y) - lumaAt(source, width, height, x - 1, y)
+	const xx = Math.min(width - 1, Math.max(0, x));
+	const yy = Math.min(height - 1, Math.max(0, y));
+	const offset = (yy * width + xx) * 4;
+	return vectorForRgb(
+		source[offset]!,
+		source[offset + 1]!,
+		source[offset + 2]!,
+		settings.colorSpace
 	);
-	const dy = Math.abs(
-		lumaAt(source, width, height, x, y + 1) - lumaAt(source, width, height, x, y - 1)
+}
+
+function placementMask(
+	source: Uint8ClampedArray,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	settings: ProcessingSettings,
+	space: PaletteVectorSpace
+) {
+	const placement =
+		settings.dither.placement ?? (settings.dither.coverage === 'full' ? 'everywhere' : 'adaptive');
+	if (placement === 'everywhere') return 1;
+
+	const radius = Math.max(1, Math.round(settings.dither.placementRadius ?? 3));
+	const center = sourceVectorAt(source, width, height, x, y, settings);
+	const offsets = [
+		[-radius, 0],
+		[radius, 0],
+		[0, -radius],
+		[0, radius],
+		[-radius, -radius],
+		[radius, -radius],
+		[-radius, radius],
+		[radius, radius]
+	] as const;
+	let total = 0;
+	for (const [dx, dy] of offsets) {
+		total += Math.sqrt(
+			vectorDistance(
+				center,
+				sourceVectorAt(source, width, height, x + dx, y + dy, settings),
+				settings
+			)
+		);
+	}
+	const diagonal = Math.max(
+		Math.hypot(space.ranges[0], space.ranges[1], space.ranges[2]),
+		Number.EPSILON
 	);
-	const gradient = Math.sqrt(dx * dx + dy * dy);
-	return coverage === 'edges' ? (gradient >= 48 ? 1 : 0) : Math.min(1, gradient / 64);
+	const variance = (total / offsets.length / diagonal) * 100;
+	const threshold = settings.dither.placementThreshold ?? 12;
+	const softness = settings.dither.placementSoftness ?? 8;
+	return smoothstep(threshold - softness, threshold + softness, variance);
 }
 
 export function quantizeImage(
@@ -251,10 +295,7 @@ function quantizeDirect(
 	const useBayer = Boolean(bayer && bayerSize && strength > 0);
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
 	const noiseScale = 96 * strength;
-	const coverage = settings.dither.coverage;
-	const vectorSpace = settings.dither.useColorSpace
-		? paletteVectorSpace(matcher, settings)
-		: undefined;
+	const vectorSpace = paletteVectorSpace(matcher, settings);
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
@@ -286,9 +327,9 @@ function quantizeDirect(
 			}
 
 			if (useBayer && bayer && bayerSize) {
-				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
+				const mask = placementMask(source, image.width, image.height, x, y, settings, vectorSpace);
 				const threshold = bayer[bayerRow + (x % bayerSize)]!;
-				if (vectorSpace) {
+				if (settings.dither.useColorSpace) {
 					const match = colorSpaceThresholdIndex(
 						{ r, g, b },
 						threshold,
@@ -303,9 +344,9 @@ function quantizeDirect(
 				g = clampByte(g + threshold * noiseScale * mask);
 				b = clampByte(b + threshold * noiseScale * mask);
 			} else if (useRandom) {
-				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
+				const mask = placementMask(source, image.width, image.height, x, y, settings, vectorSpace);
 				const noise = random() - 0.5;
-				if (vectorSpace) {
+				if (settings.dither.useColorSpace) {
 					const match = colorSpaceThresholdIndex(
 						{ r, g, b },
 						noise,
@@ -342,7 +383,6 @@ function quantizeErrorDiffusion(
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
 	const work = new Float32Array(width * height * 3);
-	const coverage = settings.dither.coverage;
 
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
@@ -390,7 +430,6 @@ function quantizeErrorDiffusion(
 			const match = matcher.nearestRgb(r, g, b);
 			indices[index] = match.index;
 			const chosen = paletteRgb(match.color);
-			const mask = coverageMask(source, width, height, x, y, coverage);
 			const errorR = r - chosen.r;
 			const errorG = g - chosen.g;
 			const errorB = b - chosen.b;
@@ -400,7 +439,7 @@ function quantizeErrorDiffusion(
 				const yy = y + dy;
 				if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
 				const target = (yy * width + xx) * 3;
-				const scaledWeight = weight * strength * mask;
+				const scaledWeight = weight * strength;
 				work[target] += errorR * scaledWeight;
 				work[target + 1] += errorG * scaledWeight;
 				work[target + 2] += errorB * scaledWeight;

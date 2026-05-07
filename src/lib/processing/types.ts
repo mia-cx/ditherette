@@ -63,13 +63,19 @@ export type OutputSettings = {
 	crop?: CropRect;
 };
 
+export type DitherPlacement = 'everywhere' | 'adaptive';
+
 export type DitherSettings = {
 	algorithm: DitherId;
 	strength: number;
-	coverage: 'full' | 'transitions' | 'edges';
+	placement: DitherPlacement;
+	placementRadius: number;
+	placementThreshold: number;
+	placementSoftness: number;
 	serpentine: boolean;
 	seed: number;
 	useColorSpace: boolean;
+	coverage?: 'full' | 'transitions' | 'edges';
 };
 
 export type ProcessingSettings = {

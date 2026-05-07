@@ -202,8 +202,7 @@ export const ALPHA_MODES: ResizeOption[] = [
 	{ id: 'matte', label: 'Matte' }
 ];
 
-export const COVERAGE_MODES: ResizeOption[] = [
-	{ id: 'full', label: 'Full image' },
-	{ id: 'transitions', label: 'Transitions' },
-	{ id: 'edges', label: 'Edges only' }
+export const PLACEMENT_MODES: ResizeOption[] = [
+	{ id: 'everywhere', label: 'Everywhere' },
+	{ id: 'adaptive', label: 'Adaptive' }
 ];
