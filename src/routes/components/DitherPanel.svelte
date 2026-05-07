@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
-	import { DITHER_ALGORITHMS, COVERAGE_MODES } from './sample-data';
+	import { DITHER_ALGORITHMS, COVERAGE_MODES, type DitherOption } from './sample-data';
 	import { ditherSettings, updateDitherSettings } from '$lib/stores/app';
 	import DiceIcon from 'phosphor-svelte/lib/DiceFive';
 
@@ -41,7 +41,6 @@
 	} satisfies Record<string, [number, number, number][]>;
 
 	const initial = ditherSettings.get();
-	let canvas = $state<HTMLCanvasElement>();
 	let algorithm = $state(initial.algorithm);
 	let strength = $state<number>(initial.strength);
 	let coverage = $state(initial.coverage);
@@ -61,13 +60,23 @@
 		updateDitherSettings({ algorithm, strength, coverage, serpentine, seed });
 	});
 
-	$effect(() => {
-		if (!canvas) return;
-		drawDitherPreview(canvas, algorithm, seed, strength, serpentine);
-	});
-
 	function randomizeSeed() {
 		seed = crypto.getRandomValues(new Uint32Array(1))[0];
+	}
+
+	function ditherPreview(
+		target: HTMLCanvasElement,
+		params: { mode: string; randomSeed: number; previewStrength: number; serpentineScan: boolean }
+	) {
+		$effect(() => {
+			drawDitherPreview(
+				target,
+				params.mode,
+				params.randomSeed,
+				params.previewStrength,
+				params.serpentineScan
+			);
+		});
 	}
 
 	function drawDitherPreview(
@@ -204,6 +213,10 @@
 		image.data[offset + 3] = 255;
 	}
 
+	function familyLabel(family: DitherOption['family']) {
+		return family.replace('-', ' ');
+	}
+
 	function mulberry32(value: number) {
 		let state = value >>> 0;
 		return () => {
@@ -229,9 +242,27 @@
 			<Label for="dither-algorithm">Algorithm</Label>
 			<Select bind:value={algorithm} type="single">
 				<SelectTrigger id="dither-algorithm">{triggerLabel}</SelectTrigger>
-				<SelectContent>
+				<SelectContent class="w-[26rem] p-1">
 					{#each DITHER_ALGORITHMS as opt (opt.id)}
-						<SelectItem value={opt.id}>{opt.label}</SelectItem>
+						<SelectItem value={opt.id} label={opt.label} class="items-start gap-3 py-2 pr-8 pl-2">
+							<canvas
+								use:ditherPreview={{
+									mode: opt.id,
+									randomSeed: seed,
+									previewStrength: strength,
+									serpentineScan: serpentine
+								}}
+								class="size-14 shrink-0 bg-muted [image-rendering:pixelated]"
+								aria-hidden="true"
+							></canvas>
+							<span class="grid min-w-0 flex-1 gap-1">
+								<span class="flex min-w-0 items-center gap-1.5">
+									<span class="truncate text-sm font-medium text-foreground">{opt.label}</span>
+									<Badge variant="secondary" class="capitalize">{familyLabel(opt.family)}</Badge>
+								</span>
+								<span class="text-xs whitespace-normal text-muted-foreground">{opt.short}</span>
+							</span>
+						</SelectItem>
 					{/each}
 				</SelectContent>
 			</Select>
@@ -291,23 +322,32 @@
 		{/if}
 	</div>
 
-	<div class="flex items-center gap-3 border border-border bg-background/50 p-2">
-		<canvas
-			bind:this={canvas}
-			class="size-24 shrink-0 bg-muted [image-rendering:pixelated]"
-			aria-label="{current?.label} deterministic dither preview"
-		></canvas>
-		<div class="min-w-0 flex-1">
-			<div class="flex flex-wrap items-center gap-1.5">
-				<span class="text-sm font-medium">{current?.label}</span>
-				<Badge variant="secondary" class="capitalize">{current?.family.replace('-', ' ')}</Badge>
+	{#if current}
+		<div class="grid gap-1.5 border border-border bg-background/50 p-2">
+			<div class="flex items-center gap-3">
+				<canvas
+					use:ditherPreview={{
+						mode: current.id,
+						randomSeed: seed,
+						previewStrength: strength,
+						serpentineScan: serpentine
+					}}
+					class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
+					aria-label="{current.label} deterministic dither preview"
+				></canvas>
+				<div class="min-w-0 flex-1">
+					<div class="flex flex-wrap items-center gap-1.5">
+						<span class="text-sm font-medium">{current.label}</span>
+						<Badge variant="secondary" class="capitalize">{familyLabel(current.family)}</Badge>
+					</div>
+					<p class="mt-0.5 text-xs text-muted-foreground">{current.short}</p>
+				</div>
 			</div>
-			<p class="mt-0.5 text-xs text-muted-foreground">{current?.short}</p>
 			<p
-				class="mt-1 border-l-2 border-border bg-muted/50 px-2 py-1 font-mono text-xs text-muted-foreground"
+				class="border-l-2 border-border bg-muted/50 px-2 py-1 font-mono text-xs text-muted-foreground"
 			>
-				{current?.math}
+				{current.math}
 			</p>
 		</div>
-	</div>
+	{/if}
 </section>
