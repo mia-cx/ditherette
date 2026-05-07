@@ -13,7 +13,7 @@ import {
 	sourceImageData,
 	sourceMeta
 } from '$lib/stores/app';
-import { clearPersistedProcessedImage, saveProcessedImage, settingsHash } from './db';
+import { saveProcessedImage, settingsHash } from './db';
 import type { ProcessedImage, WorkerResponse } from './types';
 
 let worker: Worker | undefined;
@@ -129,16 +129,11 @@ export async function processCurrentImage() {
 		if (hash !== currentSettingsHash()) return;
 		const message = error instanceof Error ? error.message : 'Processing failed';
 		processingError.set(message);
-		processedImage.set(undefined);
 	}
 }
 
 export function scheduleProcessing(delay = 180) {
 	if (!sourceImageData.get()) return;
-	if (processedImage.get()?.settingsHash !== currentSettingsHash()) {
-		processedImage.set(undefined);
-		void clearPersistedProcessedImage();
-	}
 	if (timer) clearTimeout(timer);
 	timer = setTimeout(() => {
 		void processCurrentImage();
