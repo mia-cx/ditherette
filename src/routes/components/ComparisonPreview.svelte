@@ -65,6 +65,10 @@
 	const initialPreviewSettings = previewSettings.get();
 	// svelte-ignore state_referenced_locally
 	let mode = $state<PreviewMode>(initialPreviewSettings.mode ?? defaultMode);
+	let sideBySideTipOpen = $state(false);
+	let sideBySideTipHover = $state(false);
+	let revealTipOpen = $state(false);
+	let revealTipHover = $state(false);
 	let revealValue = $state<number>(initialPreviewSettings.revealValue ?? 50);
 	let revealDrag = $state<number>();
 	let zoom = $state(clampZoom(safeNumber(initialPreviewSettings.zoom, 1)));
@@ -882,12 +886,20 @@
 
 	async function setPreviewMode(value: string) {
 		if (value !== 'side-by-side' && value !== 'ab-reveal') return;
+		closeModeTips();
 		if (value === mode) return;
 		const anchor = currentViewAnchor();
 		mode = value;
 		updatePreviewSettings({ mode });
 		await tick();
 		applyViewAnchor(anchor);
+	}
+
+	function closeModeTips() {
+		sideBySideTipHover = false;
+		sideBySideTipOpen = false;
+		revealTipHover = false;
+		revealTipOpen = false;
 	}
 
 	async function toggleCropMode() {
@@ -1117,16 +1129,28 @@
 		</div>
 
 		<div class="inline-flex h-8 items-center bg-muted p-[3px]">
-			<Popover>
+			<Popover
+				bind:open={sideBySideTipOpen}
+				onOpenChange={(open) => (sideBySideTipOpen = open && sideBySideTipHover)}
+			>
 				<PopoverTrigger
-					openOnHover
-					openDelay={150}
-					closeDelay={100}
 					aria-label="Side-by-side preview"
 					class="inline-flex h-[calc(100%-1px)] w-8 items-center justify-center border border-transparent transition-colors hover:text-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:outline-none {mode ===
 					'side-by-side'
 						? 'border-input bg-background text-foreground dark:bg-input/30'
 						: 'text-foreground/60'}"
+					onpointerenter={() => {
+						sideBySideTipHover = true;
+						sideBySideTipOpen = true;
+					}}
+					onpointerleave={() => {
+						sideBySideTipHover = false;
+						sideBySideTipOpen = false;
+					}}
+					onpointerdown={() => {
+						sideBySideTipHover = false;
+						sideBySideTipOpen = false;
+					}}
 					onclick={() => void setPreviewMode('side-by-side')}
 				>
 					<SideBySideIcon class="size-4 opacity-80" />
@@ -1140,16 +1164,28 @@
 					</div>
 				</PopoverContent>
 			</Popover>
-			<Popover>
+			<Popover
+				bind:open={revealTipOpen}
+				onOpenChange={(open) => (revealTipOpen = open && revealTipHover)}
+			>
 				<PopoverTrigger
-					openOnHover
-					openDelay={150}
-					closeDelay={100}
 					aria-label="A/B reveal preview"
 					class="inline-flex h-[calc(100%-1px)] w-8 items-center justify-center border border-transparent transition-colors hover:text-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 focus-visible:outline-none {mode ===
 					'ab-reveal'
 						? 'border-input bg-background text-foreground dark:bg-input/30'
 						: 'text-foreground/60'}"
+					onpointerenter={() => {
+						revealTipHover = true;
+						revealTipOpen = true;
+					}}
+					onpointerleave={() => {
+						revealTipHover = false;
+						revealTipOpen = false;
+					}}
+					onpointerdown={() => {
+						revealTipHover = false;
+						revealTipOpen = false;
+					}}
 					onclick={() => void setPreviewMode('ab-reveal')}
 				>
 					<RevealIcon class="size-4 opacity-80" />
