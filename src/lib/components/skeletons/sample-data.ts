@@ -47,6 +47,10 @@ export const SAMPLE_PALETTE: Swatch[] = [
 	{ name: 'Silver', hex: '#AAAAAA', kind: 'premium', enabled: false },
 	{ name: 'Crimson', hex: '#A50E1E', kind: 'premium', enabled: false },
 	{ name: 'Coral', hex: '#FA8072', kind: 'premium', enabled: false },
+	// Two custom entries so the grid swatches demonstrate the editable
+	// state — edit/delete enabled, full-opacity icons on hover/focus.
+	{ name: 'Studio Pink', hex: '#FF5C8A', kind: 'custom', enabled: true },
+	{ name: 'Studio Teal', hex: '#1FB6A3', kind: 'custom', enabled: true },
 	{ name: 'Transparent', kind: 'transparent', enabled: true },
 ];
 

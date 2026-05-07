@@ -38,13 +38,13 @@
 		<!-- Hero preview: NOT inside a card, per spec. -->
 		<ComparisonPreview
 			hasImage={false}
-			minHeightClass="min-h-[260px] md:min-h-[320px] lg:min-h-[360px] lg:max-h-[52svh]"
+			minHeightClass="min-h-[320px] md:min-h-[420px] lg:min-h-[460px] lg:max-h-[60svh]"
 		/>
 
 		<!-- Two-column controls on lg+, stacked on mobile.
 		     Mobile order: Output → Dither → Color Space → Palette. -->
 		<div
-			class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-3 lg:overflow-hidden"
+			class="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-3 lg:overflow-hidden"
 		>
 			<!-- LEFT COLUMN: collapsible Output / Dither / Color sections.
 			     Independently scrollable on desktop. -->

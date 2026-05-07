@@ -35,8 +35,25 @@
 
 	let viewMode = $state<'list' | 'grid'>('list');
 	let preset = $state('wplace');
+	let isMobile = $state(false);
 
 	const enabledCount = $derived(SAMPLE_PALETTE.filter((s) => s.enabled).length);
+
+	// Grid view is intentionally disabled on mobile: each swatch carries
+	// hover-only action buttons that aren't reachable without a pointer.
+	// Track viewport, force list view at narrow widths, and disable the
+	// grid toggle so users can't strand themselves there.
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const mql = window.matchMedia('(max-width: 767.98px)');
+		const sync = () => {
+			isMobile = mql.matches;
+			if (mql.matches && viewMode === 'grid') viewMode = 'list';
+		};
+		sync();
+		mql.addEventListener('change', sync);
+		return () => mql.removeEventListener('change', sync);
+	});
 </script>
 
 <section
@@ -85,7 +102,14 @@
 				aria-label="Palette view mode"
 			>
 				<ToggleGroupItem value="list" aria-label="List view"><ListIcon /></ToggleGroupItem>
-				<ToggleGroupItem value="grid" aria-label="Grid view"><GridIcon /></ToggleGroupItem>
+				<ToggleGroupItem
+					value="grid"
+					aria-label="Grid view{isMobile ? ' (disabled on mobile)' : ''}"
+					disabled={isMobile}
+					title={isMobile ? 'Grid view requires a pointer device' : undefined}
+				>
+					<GridIcon />
+				</ToggleGroupItem>
 			</ToggleGroup>
 		</div>
 	</div>
@@ -191,11 +215,14 @@
 -->
 {#snippet gridSwatch(color: Swatch, i: number)}
 	{@const builtIn = color.kind !== 'custom'}
+	{@const reveal =
+		'opacity-0 transition-opacity group-hover/swatch:opacity-100 group-focus-within/swatch:opacity-100'}
 	{@const cornerBtn =
-		'absolute z-10 inline-flex size-5 items-center justify-center bg-background/85 backdrop-blur-[1px] hover:bg-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-background/85 [&_svg]:size-3'}
-	{@const cornerCheckbox = 'absolute z-10 size-5 rounded-none bg-background/85 backdrop-blur-[1px]'}
+		`absolute z-10 inline-flex size-5 items-center justify-center bg-background/85 backdrop-blur-[1px] hover:bg-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:hover:bg-background/85 disabled:[&_svg]:opacity-40 [&_svg]:size-3 ${reveal}`}
+	{@const cornerCheckbox =
+		`absolute z-10 size-5 rounded-none bg-background/85 backdrop-blur-[1px] ${reveal}`}
 	<figure
-		class="border-border bg-muted relative aspect-square overflow-hidden border data-disabled:opacity-40"
+		class="border-border bg-muted group/swatch relative aspect-square overflow-hidden border data-disabled:opacity-40"
 		data-disabled={!color.enabled || undefined}
 		aria-label="{color.name}{color.hex ? ` ${color.hex}` : ''}{color.enabled ? '' : ' (hidden)'}"
 		title="{color.name}{color.hex ? ` — ${color.hex}` : ''}"
@@ -215,7 +242,7 @@
 
 		<button
 			type="button"
-			class="{cornerBtn} top-0 left-0"
+			class="{cornerBtn} top-1 left-1"
 			disabled={builtIn}
 			aria-label="Edit {color.name}"
 			title={builtIn ? 'Built-in colors are immutable' : `Edit ${color.name}`}
@@ -225,7 +252,7 @@
 
 		<button
 			type="button"
-			class="{cornerBtn} top-0 right-0 hover:text-destructive"
+			class="{cornerBtn} top-1 right-1 hover:text-destructive"
 			disabled={builtIn}
 			aria-label="Delete {color.name}"
 			title={builtIn ? 'Built-in colors are immutable' : `Delete ${color.name}`}
@@ -234,12 +261,12 @@
 		</button>
 
 		<Checkbox
-			class="{cornerCheckbox} bottom-0 left-0"
+			class="{cornerCheckbox} bottom-1 left-1"
 			aria-label="Select {color.name}"
 		/>
 
 		<VisibilityCheckbox
-			class="{cornerCheckbox} right-0 bottom-0"
+			class="{cornerCheckbox} right-1 bottom-1"
 			checked={color.enabled}
 			aria-label="Visible: {color.name}"
 		/>
