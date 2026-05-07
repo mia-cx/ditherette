@@ -527,7 +527,7 @@
 			</SelectTrigger>
 			<SelectContent
 				onInteractOutside={(event) => event.preventDefault()}
-				class="h-[min(38rem,var(--bits-select-content-available-height))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-hidden p-1 md:w-auto md:max-w-none"
+				class="flex h-[min(38rem,var(--bits-select-content-available-height))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-1 md:w-auto md:max-w-none"
 			>
 				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
 					<div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
