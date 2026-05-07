@@ -905,6 +905,13 @@
 		revealTipOpen = false;
 	}
 
+	function closeModeTipAfterHover(modeTip: 'side-by-side' | 'ab-reveal') {
+		window.setTimeout(() => {
+			if (modeTip === 'side-by-side' && !sideBySideTipHover) sideBySideTipOpen = false;
+			if (modeTip === 'ab-reveal' && !revealTipHover) revealTipOpen = false;
+		}, 120);
+	}
+
 	async function toggleCropMode() {
 		const anchor = currentViewAnchor();
 		const nextCropMode = !cropMode;
@@ -1148,7 +1155,7 @@
 					}}
 					onpointerleave={() => {
 						sideBySideTipHover = false;
-						sideBySideTipOpen = false;
+						closeModeTipAfterHover('side-by-side');
 					}}
 					onpointerdown={() => {
 						sideBySideTipHover = false;
@@ -1158,7 +1165,18 @@
 				>
 					<SideBySideIcon class="size-4 opacity-80" />
 				</PopoverTrigger>
-				<PopoverContent side="top" class="w-56">
+				<PopoverContent
+					side="top"
+					class="z-[100] w-56 bg-background"
+					onpointerenter={() => {
+						sideBySideTipHover = true;
+						sideBySideTipOpen = true;
+					}}
+					onpointerleave={() => {
+						sideBySideTipHover = false;
+						closeModeTipAfterHover('side-by-side');
+					}}
+				>
 					<div class="grid gap-1">
 						<p class="font-medium text-foreground">Side-by-side</p>
 						<p class="text-muted-foreground">
@@ -1183,7 +1201,7 @@
 					}}
 					onpointerleave={() => {
 						revealTipHover = false;
-						revealTipOpen = false;
+						closeModeTipAfterHover('ab-reveal');
 					}}
 					onpointerdown={() => {
 						revealTipHover = false;
@@ -1193,7 +1211,18 @@
 				>
 					<RevealIcon class="size-4 opacity-80" />
 				</PopoverTrigger>
-				<PopoverContent side="top" class="w-56">
+				<PopoverContent
+					side="top"
+					class="z-[100] w-56 bg-background"
+					onpointerenter={() => {
+						revealTipHover = true;
+						revealTipOpen = true;
+					}}
+					onpointerleave={() => {
+						revealTipHover = false;
+						closeModeTipAfterHover('ab-reveal');
+					}}
+				>
 					<div class="grid gap-1">
 						<p class="font-medium text-foreground">A/B reveal</p>
 						<p class="text-muted-foreground">
