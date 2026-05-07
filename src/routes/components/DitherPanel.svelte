@@ -20,7 +20,11 @@
 
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	let algorithm = $state('floyd-steinberg');
+	// Defaults match the spec (algorithm = 'none' off; strength retained
+	// at 100 for when the user enables a real algorithm). The collapsed
+	// accordion trigger badge in `+page.svelte` reads "Off" — keep this
+	// initial state aligned with that summary.
+	let algorithm = $state('none');
 	let strength = $state<number>(100);
 	let coverage = $state('full');
 	let serpentine = $state(true);
