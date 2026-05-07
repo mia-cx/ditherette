@@ -82,6 +82,8 @@
 	let outputPreviewGeneration = $state(0);
 	let nextOutputPreviewGeneration = 0;
 	let lockedDisplayScale = $state<number>();
+	let viewOriginX = $state(0);
+	let viewOriginY = $state(0);
 	let layoutVersion = $state(0);
 
 	const zoomLabel = $derived(`${Math.round(zoom * 100)}%`);
@@ -136,12 +138,12 @@
 	);
 
 	onMount(() => {
-		window.addEventListener('resize', updateLayoutPreservingScale);
+		window.addEventListener('resize', updateLayout);
 		window.addEventListener('pointerup', cancelPointerInteraction);
 		window.addEventListener('pointercancel', cancelPointerInteraction);
 		window.addEventListener('blur', cancelPointerInteraction);
 		return () => {
-			window.removeEventListener('resize', updateLayoutPreservingScale);
+			window.removeEventListener('resize', updateLayout);
 			window.removeEventListener('pointerup', cancelPointerInteraction);
 			window.removeEventListener('pointercancel', cancelPointerInteraction);
 			window.removeEventListener('blur', cancelPointerInteraction);
@@ -149,7 +151,7 @@
 	});
 
 	$effect(() => {
-		const observer = new ResizeObserver(updateLayoutPreservingScale);
+		const observer = new ResizeObserver(updateLayout);
 		if (cropPane) observer.observe(cropPane);
 		if (sideSourcePane) observer.observe(sideSourcePane);
 		if (sideOutputPane) observer.observe(sideOutputPane);
@@ -158,10 +160,13 @@
 	});
 
 	function resetView() {
+		const pane = activePreviewPane();
+		const size = pane ? paneMediaSize(pane) : undefined;
 		zoom = 1;
-		lockedDisplayScale = undefined;
 		panX = 0;
 		panY = 0;
+		if (pane && size) setFittedView(pane, size.width, size.height);
+		else lockedDisplayScale = undefined;
 	}
 
 	function cancelPointerInteraction() {
@@ -172,16 +177,20 @@
 		drag = undefined;
 	}
 
-	function updateLayoutPreservingScale() {
+	function updateLayout() {
 		const pane = activePreviewPane();
 		const size = pane ? paneMediaSize(pane) : undefined;
-		if (pane && size && lockedDisplayScale) {
-			zoom = Math.min(
-				16,
-				Math.max(0.25, lockedDisplayScale / baseScale(pane, size.width, size.height))
-			);
+		if (pane && size && lockedDisplayScale === undefined) {
+			setFittedView(pane, size.width, size.height);
 		}
 		layoutVersion++;
+	}
+
+	function setFittedView(pane: HTMLElement, width: number, height: number) {
+		const scale = baseScale(pane, width, height);
+		lockedDisplayScale = scale;
+		viewOriginX = (pane.clientWidth - width * scale) / 2;
+		viewOriginY = (pane.clientHeight - height * scale) / 2;
 	}
 
 	function activePreviewPane() {
@@ -204,17 +213,20 @@
 
 	function fitFrame(pane: HTMLElement | undefined, width: number, height: number) {
 		if (!pane) return { left: 0, top: 0, width: 0, height: 0 };
-		const paneWidth = pane.clientWidth;
-		const paneHeight = pane.clientHeight;
-		const scale = baseScale(pane, width, height);
-		const baseWidth = width * scale;
-		const baseHeight = height * scale;
-		const effectiveScale = lockedDisplayScale ?? scale * zoom;
-		const scaledWidth = width * effectiveScale;
-		const scaledHeight = height * effectiveScale;
+		const scale = lockedDisplayScale ?? baseScale(pane, width, height) * zoom;
+		const scaledWidth = width * scale;
+		const scaledHeight = height * scale;
+		if (lockedDisplayScale !== undefined) {
+			return {
+				left: viewOriginX + panX,
+				top: viewOriginY + panY,
+				width: scaledWidth,
+				height: scaledHeight
+			};
+		}
 		return {
-			left: (paneWidth - baseWidth) / 2 + panX - (scaledWidth - baseWidth) / 2,
-			top: (paneHeight - baseHeight) / 2 + panY - (scaledHeight - baseHeight) / 2,
+			left: (pane.clientWidth - scaledWidth) / 2 + panX,
+			top: (pane.clientHeight - scaledHeight) / 2 + panY,
 			width: scaledWidth,
 			height: scaledHeight
 		};
@@ -492,15 +504,22 @@
 	}
 
 	function applyZoomAt(pane: HTMLElement, clientX: number, clientY: number, nextZoom: number) {
-		const bounds = pane.getBoundingClientRect();
-		const cursorX = clientX - bounds.left - bounds.width / 2;
-		const cursorY = clientY - bounds.top - bounds.height / 2;
-		const ratio = nextZoom / zoom;
-		panX = cursorX - ratio * (cursorX - panX);
-		panY = cursorY - ratio * (cursorY - panY);
-		zoom = nextZoom;
 		const size = paneMediaSize(pane);
-		if (size) lockedDisplayScale = baseScale(pane, size.width, size.height) * nextZoom;
+		if (!size) return;
+		const bounds = pane.getBoundingClientRect();
+		const cursorX = clientX - bounds.left;
+		const cursorY = clientY - bounds.top;
+		const currentFrame = fitFrame(pane, size.width, size.height);
+		const currentScale = currentFrame.width / size.width;
+		const imageX = (cursorX - currentFrame.left) / currentScale;
+		const imageY = (cursorY - currentFrame.top) / currentScale;
+		const nextScale = currentScale * (nextZoom / zoom);
+		lockedDisplayScale = nextScale;
+		viewOriginX = cursorX - imageX * nextScale;
+		viewOriginY = cursorY - imageY * nextScale;
+		panX = 0;
+		panY = 0;
+		zoom = nextZoom;
 	}
 
 	function pointerDistance() {
