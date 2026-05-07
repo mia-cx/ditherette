@@ -23,9 +23,8 @@
 	import GridIcon from 'phosphor-svelte/lib/GridFour';
 	import ListIcon from 'phosphor-svelte/lib/List';
 	import LockIcon from 'phosphor-svelte/lib/Lock';
-	import EyeIcon from 'phosphor-svelte/lib/Eye';
-	import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlash';
 	import PencilIcon from 'phosphor-svelte/lib/PencilSimple';
+	import VisibilityCheckbox from './VisibilityCheckbox.svelte';
 	import { SAMPLE_PALETTE, type Swatch } from './sample-data';
 
 	type Props = {
@@ -147,27 +146,13 @@
 	{/if}
 {/snippet}
 
-{#snippet eyeToggle(color: Swatch, label: string)}
-	<button
-		type="button"
-		class="hover:bg-muted focus-visible:ring-ring inline-flex size-6 items-center justify-center focus-visible:ring-1 focus-visible:outline-none disabled:opacity-50"
-		aria-pressed={color.enabled}
-		aria-label="{label} {color.name}"
-		title={color.enabled ? 'Visible — click to hide' : 'Hidden — click to show'}
-	>
-		{#if color.enabled}
-			<EyeIcon class="size-4" />
-		{:else}
-			<EyeSlashIcon class="text-muted-foreground size-4" />
-		{/if}
-	</button>
-{/snippet}
-
 {#snippet row(color: Swatch, i: number)}
 	<tr class="border-border border-t hover:bg-muted/40" data-disabled={!color.enabled || undefined}>
 		<td class="text-muted-foreground p-1.5 tabular-nums">{i + 1}</td>
 		<td class="p-1.5"><Checkbox aria-label="Select {color.name}" /></td>
-		<td class="p-1.5">{@render eyeToggle(color, 'Visible:')}</td>
+		<td class="p-1.5">
+			<VisibilityCheckbox checked={color.enabled} aria-label="Visible: {color.name}" />
+		</td>
 		<td class="p-1.5">{@render swatchSquare(color, 'sm')}</td>
 		<td class="truncate p-1.5">{color.name}</td>
 		<td class="text-muted-foreground hidden p-1.5 font-mono sm:table-cell">{color.hex ?? '—'}</td>
@@ -208,6 +193,7 @@
 	{@const builtIn = color.kind !== 'custom'}
 	{@const cornerBtn =
 		'absolute z-10 inline-flex size-5 items-center justify-center bg-background/85 backdrop-blur-[1px] hover:bg-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-background/85 [&_svg]:size-3'}
+	{@const cornerCheckbox = 'absolute z-10 size-5 rounded-none bg-background/85 backdrop-blur-[1px]'}
 	<figure
 		class="border-border bg-muted relative aspect-square overflow-hidden border data-disabled:opacity-40"
 		data-disabled={!color.enabled || undefined}
@@ -248,23 +234,15 @@
 		</button>
 
 		<Checkbox
-			class="absolute bottom-0 left-0 z-10 size-5 rounded-none bg-background/85 backdrop-blur-[1px]"
+			class="{cornerCheckbox} bottom-0 left-0"
 			aria-label="Select {color.name}"
 		/>
 
-		<button
-			type="button"
-			class="{cornerBtn} right-0 bottom-0"
-			aria-pressed={color.enabled}
-			aria-label="{color.enabled ? 'Hide' : 'Show'} {color.name}"
-			title={color.enabled ? 'Visible — click to hide' : 'Hidden — click to show'}
-		>
-			{#if color.enabled}
-				<EyeIcon />
-			{:else}
-				<EyeSlashIcon />
-			{/if}
-		</button>
+		<VisibilityCheckbox
+			class="{cornerCheckbox} right-0 bottom-0"
+			checked={color.enabled}
+			aria-label="Visible: {color.name}"
+		/>
 
 		<figcaption class="sr-only">
 			{color.name}{color.hex ? ` ${color.hex}` : ''} · {color.enabled ? 'visible' : 'hidden'}

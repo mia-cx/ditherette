@@ -101,8 +101,10 @@
 			<!-- RIGHT COLUMN: palette card. Independently scrollable on desktop;
 			     the table inside has its own ScrollArea so the card chrome stays. -->
 			<div class="flex min-h-0 flex-col lg:overflow-y-auto">
-				<Card class="flex min-h-0 flex-1 flex-col">
-					<CardContent class="flex min-h-0 flex-1 flex-col px-4 pt-3 pb-4">
+				<!-- Card itself supplies vertical padding (py-3); CardContent only
+				     applies horizontal padding by default. Don't restate either. -->
+				<Card class="flex min-h-0 flex-1 flex-col py-3">
+					<CardContent class="flex min-h-0 flex-1 flex-col">
 						<PalettePanel fillHeight />
 					</CardContent>
 				</Card>

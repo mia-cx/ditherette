@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
+	import ThemeToggle from './ThemeToggle.svelte';
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 	import ShieldIcon from 'phosphor-svelte/lib/ShieldCheck';
 	import GridIcon from 'phosphor-svelte/lib/GridFour';
@@ -37,5 +38,6 @@
 			<UploadIcon />
 			{hasImage ? 'Replace image' : 'Upload image'}
 		</Button>
+		<ThemeToggle />
 	</div>
 </header>
