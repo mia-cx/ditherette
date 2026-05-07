@@ -5,7 +5,7 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { Sheet, SheetContent, SheetHeader, SheetTitle } from '$lib/components/ui/sheet';
 	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { Accordion, AccordionContent, AccordionItem } from '$lib/components/ui/accordion';
+	import { Accordion, AccordionItem } from '$lib/components/ui/accordion';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -541,7 +541,7 @@
 				{/if}
 			</SelectTrigger>
 			<SelectContent
-				class="h-[min(38rem,var(--bits-select-content-available-height))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] p-1 md:w-auto md:max-w-none"
+				class="h-[min(38rem,var(--bits-select-content-available-height))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-hidden p-1 md:w-auto md:max-w-none"
 			>
 				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
 					<div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
@@ -613,11 +613,15 @@
 					<Accordion
 						type="multiple"
 						bind:value={desktopFilterSections}
-						class="hidden h-full overflow-hidden border-l border-border md:flex"
+						class="hidden h-full shrink-0 overflow-hidden border-l border-border md:flex"
 					>
-						<AccordionItem value="filters" class="border-b-0">
-							<AccordionContent class="w-40 p-2 pb-2.5">
-								<div class="grid gap-3">
+						<AccordionItem value="filters" class="h-full border-b-0">
+							<div
+								class={desktopFilterSections.includes('filters')
+									? 'h-full w-40 overflow-hidden transition-[width] duration-200 ease-in-out'
+									: 'h-full w-0 overflow-hidden transition-[width] duration-200 ease-in-out'}
+							>
+								<div class="grid w-40 gap-3 p-2 pb-2.5">
 									<div class="grid gap-1.5">
 										<span
 											class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
@@ -687,7 +691,7 @@
 										</label>
 									</div>
 								</div>
-							</AccordionContent>
+							</div>
 						</AccordionItem>
 					</Accordion>
 				</div>
