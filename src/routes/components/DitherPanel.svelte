@@ -285,7 +285,7 @@
 										previewStrength: strength,
 										serpentineScan: serpentine
 									}}
-									class="size-16 shrink-0 bg-muted [image-rendering:pixelated]"
+									class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
 									aria-hidden="true"
 								></canvas>
 								<span class="grid min-w-0 flex-1 gap-1">
