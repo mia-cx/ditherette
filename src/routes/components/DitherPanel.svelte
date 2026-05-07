@@ -21,6 +21,7 @@
 		colorSpace,
 		ditherSettings,
 		selectedPalette,
+		uiSettings,
 		updateDitherSettings
 	} from '$lib/stores/app';
 	import DiceIcon from 'phosphor-svelte/lib/DiceFive';
@@ -76,7 +77,7 @@
 	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion']);
 	let fieldFilters = $state<DitherField[]>(['none', 'ordered', 'noise', 'kernel']);
 	let filterSheetOpen = $state(false);
-	let desktopFiltersOpen = $state(false);
+	let desktopFiltersOpen = $state(uiSettings.get().desktopDitherFiltersOpen ?? false);
 
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
@@ -116,6 +117,10 @@
 			seed,
 			useColorSpace
 		});
+	});
+
+	$effect(() => {
+		uiSettings.set({ ...uiSettings.get(), desktopDitherFiltersOpen: desktopFiltersOpen });
 	});
 
 	function randomizeSeed() {
@@ -399,23 +404,31 @@
 		const extent = Math.max(1, size - 1);
 		const tx = x / extent;
 		const ty = y / extent;
-		const lime = { r: 135, g: 255, b: 94 };
-		const yellow = { r: 249, g: 221, b: 59 };
-		const violet = { r: 120, g: 12, b: 153 };
-		const blue = { r: 40, g: 80, b: 158 };
-		return {
-			r: mix(mix(lime.r, yellow.r, tx), mix(blue.r, violet.r, tx), ty),
-			g: mix(mix(lime.g, yellow.g, tx), mix(blue.g, violet.g, tx), ty),
-			b: mix(mix(lime.b, yellow.b, tx), mix(blue.b, violet.b, tx), ty)
-		};
+		const points = [
+			{ x: 0, y: 0, color: { r: 135, g: 255, b: 94 } },
+			{ x: 1 / 3, y: 1 / 3, color: { r: 249, g: 221, b: 59 } },
+			{ x: 2 / 3, y: 2 / 3, color: { r: 170, g: 56, b: 185 } },
+			{ x: 1, y: 1, color: { r: 40, g: 80, b: 158 } },
+			{ x: 0, y: 1, color: { r: 0, g: 0, b: 0 } },
+			{ x: 1, y: 0, color: { r: 255, g: 255, b: 255 } }
+		];
+		let total = 0;
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		for (const point of points) {
+			const distance = Math.hypot(tx - point.x, ty - point.y);
+			const weight = 1 / Math.max(distance ** 3, 0.0001);
+			total += weight;
+			r += point.color.r * weight;
+			g += point.color.g * weight;
+			b += point.color.b * weight;
+		}
+		return { r: r / total, g: g / total, b: b / total };
 	}
 
 	function nearestPaletteRgb(rgb: Rgb, nearestRgb: PaletteNearest): Rgb {
 		return nearestRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b)).color.rgb!;
-	}
-
-	function mix(start: number, end: number, amount: number) {
-		return start + (end - start) * amount;
 	}
 
 	function writePreviewRgb(image: ImageData, x: number, y: number, rgb: Rgb) {
@@ -521,13 +534,13 @@
 						/>
 						<Button
 							variant="outline"
-							size="sm"
+							size="default"
 							class="md:hidden"
 							onclick={() => (filterSheetOpen = true)}>Filters</Button
 						>
 						<Button
 							variant="outline"
-							size="sm"
+							size="default"
 							class="hidden md:inline-flex"
 							aria-expanded={desktopFiltersOpen}
 							onclick={() => (desktopFiltersOpen = !desktopFiltersOpen)}>Filters</Button
