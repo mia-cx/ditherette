@@ -46,6 +46,13 @@ export type PreviewSettings = {
 	mode?: PreviewMode;
 	revealValue?: number;
 	desktopPaneLayout?: [number, number];
+	zoom?: number;
+	panX?: number;
+	panY?: number;
+	frameWidth?: number;
+	frameHeight?: number;
+	originX?: number;
+	originY?: number;
 };
 
 export const previewSettings = persistentJSON<PreviewSettings>('ditherette:preview', {});

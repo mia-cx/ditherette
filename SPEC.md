@@ -202,10 +202,11 @@ Disabled controls must explain why they are disabled where it is not obvious.
 - Maximum output side length: `16_384` pixels in either direction.
 - The source image may be larger than these limits; only the processed output must fit within bounds.
 - Scale factor:
-  - persistent conversion setting, default `1.0×`, editable by slider and numeric input,
+  - persistent conversion setting, default `1.0×`, editable by slider and numeric input, min `0.05×`, max `1.0×`,
   - when a new source image is uploaded, output dimensions are recalculated from the new source dimensions and the existing scale factor,
   - dimensions are not preserved between source images; the scale factor is preserved,
-  - manual width/height edits recompute the scale factor from the current source/crop base dimensions.
+  - manual width/height edits recompute the scale factor from the current source/crop base dimensions,
+  - dimensions cannot scale above the source/crop base dimensions.
 - If a requested output exceeds the max pixel or side-length limit, block processing and explain the limit. The max may become configurable in a future version for users creating very large templates.
 - Output aspect ratio is always locked to the current source/crop aspect ratio so exported pixels remain square:
   - changing width derives height from the source/crop aspect ratio and recomputes scale factor,
@@ -391,7 +392,7 @@ Persistence schema:
   - `customPalettes: Palette[]`,
   - future custom palette color order once reordering exists,
   - all conversion settings,
-  - preview mode and non-image preview state where useful, including the desktop preview-pane size (a number in `0..1` representing the preview pane's share of the resizable split) so a user's chosen layout balance survives reload.
+  - preview mode, reveal position, zoom/pan lens state, and desktop preview-pane size so a user's chosen preview layout survives reload.
 - Persist uploaded image state and processed output state indefinitely until the user explicitly clears it:
   - file metadata in persistent nanostores,
   - source image binary data in IndexedDB or another browser storage layer suitable for blobs/ArrayBuffers,

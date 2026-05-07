@@ -53,13 +53,14 @@
 		onSelectFile
 	}: Props = $props();
 
+	const initialPreviewSettings = previewSettings.get();
 	// svelte-ignore state_referenced_locally
-	let mode = $state<PreviewMode>(previewSettings.get().mode ?? defaultMode);
-	let revealValue = $state<number>(previewSettings.get().revealValue ?? 50);
+	let mode = $state<PreviewMode>(initialPreviewSettings.mode ?? defaultMode);
+	let revealValue = $state<number>(initialPreviewSettings.revealValue ?? 50);
 	let revealDrag = $state<number>();
-	let zoom = $state(1);
-	let panX = $state(0);
-	let panY = $state(0);
+	let zoom = $state(safeNumber(initialPreviewSettings.zoom, 1));
+	let panX = $state(safeNumber(initialPreviewSettings.panX, 0));
+	let panY = $state(safeNumber(initialPreviewSettings.panY, 0));
 	let cropMode = $state(false);
 	let cropDraft = $state<CropRect>();
 	let cropStart = $state<Point>();
@@ -81,10 +82,14 @@
 	let outputPreviewLevels = $state<PreviewLevel[]>([]);
 	let outputPreviewGeneration = $state(0);
 	let nextOutputPreviewGeneration = 0;
-	let lockedFrameWidth = $state<number>();
-	let lockedFrameHeight = $state<number>();
-	let viewOriginX = $state(0);
-	let viewOriginY = $state(0);
+	let lockedFrameWidth = $state<number | undefined>(
+		safeOptionalNumber(initialPreviewSettings.frameWidth)
+	);
+	let lockedFrameHeight = $state<number | undefined>(
+		safeOptionalNumber(initialPreviewSettings.frameHeight)
+	);
+	let viewOriginX = $state(safeNumber(initialPreviewSettings.originX, 0));
+	let viewOriginY = $state(safeNumber(initialPreviewSettings.originY, 0));
 	let layoutVersion = $state(0);
 
 	const zoomLabel = $derived(`${Math.round(zoom * 100)}%`);
@@ -135,8 +140,27 @@
 		previewSettings.subscribe((settings) => {
 			mode = settings.mode ?? defaultMode;
 			revealValue = settings.revealValue ?? 50;
+			zoom = safeNumber(settings.zoom, 1);
+			panX = safeNumber(settings.panX, 0);
+			panY = safeNumber(settings.panY, 0);
+			lockedFrameWidth = safeOptionalNumber(settings.frameWidth);
+			lockedFrameHeight = safeOptionalNumber(settings.frameHeight);
+			viewOriginX = safeNumber(settings.originX, 0);
+			viewOriginY = safeNumber(settings.originY, 0);
 		})
 	);
+
+	$effect(() => {
+		updatePreviewSettings({
+			zoom,
+			panX,
+			panY,
+			frameWidth: lockedFrameWidth,
+			frameHeight: lockedFrameHeight,
+			originX: viewOriginX,
+			originY: viewOriginY
+		});
+	});
 
 	onMount(() => {
 		window.addEventListener('resize', updateLayout);
@@ -159,6 +183,14 @@
 		if (revealPane) observer.observe(revealPane);
 		return () => observer.disconnect();
 	});
+
+	function safeNumber(value: number | undefined, fallback: number) {
+		return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+	}
+
+	function safeOptionalNumber(value: number | undefined) {
+		return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+	}
 
 	function resetView() {
 		const pane = activePreviewPane();

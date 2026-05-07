@@ -16,7 +16,7 @@
 	let { hasImage = false, hideHeading = false }: Props = $props();
 
 	const MIN_SCALE = 0.05;
-	const MAX_SCALE = 4;
+	const MAX_SCALE = 1;
 	const SCALE_STEP = 0.01;
 	const initial = outputSettings.get();
 	let width = $state<number>(initial.width);
@@ -43,7 +43,9 @@
 			width = settings.width;
 			height = settings.height;
 			resize = settings.resize;
-			scaleFactor = settings.scaleFactor ?? factorFromDimensions(settings.width, settings.height);
+			scaleFactor = clampScale(
+				settings.scaleFactor ?? factorFromDimensions(settings.width, settings.height)
+			);
 		})
 	);
 
@@ -76,9 +78,11 @@
 
 	function factorFromDimensions(nextWidth: number, nextHeight: number) {
 		if (!baseDimensions) return scaleFactor;
-		return validRatio(baseDimensions.width, baseDimensions.height) >= 1
-			? nextWidth / baseDimensions.width
-			: nextHeight / baseDimensions.height;
+		const nextFactor =
+			validRatio(baseDimensions.width, baseDimensions.height) >= 1
+				? nextWidth / baseDimensions.width
+				: nextHeight / baseDimensions.height;
+		return clampScale(nextFactor);
 	}
 
 	function formatScale(value: number) {
@@ -90,8 +94,12 @@
 		return { width: safeWidth, height: Math.max(1, Math.round(safeWidth / aspect)) };
 	}
 
+	function clampScale(value: number) {
+		return Math.max(MIN_SCALE, Math.min(MAX_SCALE, value || 1));
+	}
+
 	function dimensionsForScale(value: number) {
-		const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, value || 1));
+		const nextScale = clampScale(value);
 		const base = baseDimensions ?? { width, height };
 		const nextWidth = Math.max(1, Math.round(base.width * nextScale));
 		const nextHeight = Math.max(1, Math.round(base.height * nextScale));
@@ -99,7 +107,7 @@
 	}
 
 	function setScale(value: number) {
-		scaleFactor = Math.max(MIN_SCALE, Math.min(MAX_SCALE, value || 1));
+		scaleFactor = clampScale(value);
 		const dimensions = dimensionsForScale(scaleFactor);
 		width = dimensions.width;
 		height = dimensions.height;
@@ -107,16 +115,13 @@
 
 	function setWidth(value: number) {
 		const dimensions = dimensionsForAspect(value, height, enforcedAspectRatio);
-		width = dimensions.width;
-		height = dimensions.height;
-		scaleFactor = factorFromDimensions(width, height);
+		setScale(factorFromDimensions(dimensions.width, dimensions.height));
 	}
 
 	function setHeight(value: number) {
 		const safeHeight = Math.max(1, Math.round(value || 1));
-		width = Math.max(1, Math.round(safeHeight * enforcedAspectRatio));
-		height = safeHeight;
-		scaleFactor = factorFromDimensions(width, height);
+		const nextWidth = Math.max(1, Math.round(safeHeight * enforcedAspectRatio));
+		setScale(factorFromDimensions(nextWidth, safeHeight));
 	}
 
 	function resetDimensionsToCrop() {
@@ -163,7 +168,7 @@
 						step={SCALE_STEP}
 						value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(2)) : 1}
 						disabled={!hasImage}
-						oninput={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
+						onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
 					/>
 					<span class="text-xs text-muted-foreground">×</span>
 				</div>

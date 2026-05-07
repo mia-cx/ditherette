@@ -37,7 +37,7 @@ export async function setSourceFile(file: File) {
 	await clearPersistedProcessedImage();
 	setSourceRecord(record, decoded.imageData);
 	const settings = outputSettings.get();
-	const scaleFactor = settings.scaleFactor ?? 1;
+	const scaleFactor = Math.min(1, Math.max(0.05, settings.scaleFactor ?? 1));
 	const size = fitOutputSizeToBounds(
 		Math.max(1, Math.round(decoded.width * scaleFactor)),
 		Math.max(1, Math.round(decoded.height * scaleFactor))
