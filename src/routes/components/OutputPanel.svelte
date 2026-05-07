@@ -112,7 +112,7 @@
 	{/if}
 
 	<div class="grid gap-2 text-sm">
-		<div class="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
+		<div class="grid grid-cols-[5.5rem_minmax(8rem,12rem)] items-center justify-start gap-2">
 			<Label for="out-width">Width</Label>
 			<Input
 				id="out-width"
@@ -126,7 +126,7 @@
 				oninput={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
 			/>
 		</div>
-		<div class="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
+		<div class="grid grid-cols-[5.5rem_minmax(8rem,12rem)] items-center justify-start gap-2">
 			<Label for="out-height">Height</Label>
 			<Input
 				id="out-height"
@@ -140,7 +140,7 @@
 				oninput={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
 			/>
 		</div>
-		<div class="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
+		<div class="grid grid-cols-[5.5rem_minmax(8rem,12rem)] items-center justify-start gap-2">
 			<Label for="resize-mode">Resample</Label>
 			<Select bind:value={resize} type="single">
 				<SelectTrigger id="resize-mode">{resizeLabel}</SelectTrigger>
@@ -154,9 +154,6 @@
 	</div>
 
 	<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-		<span>
-			Aspect is locked to the {$outputSettings.crop ? 'crop' : 'source'} so pixels stay square.
-		</span>
 		<span>{autoSizeOnUpload ? 'New uploads auto-size to source.' : 'Dimensions are pinned.'}</span>
 		<Button size="xs" variant="outline" onclick={resetAspectToSourceOrCrop} disabled={!hasImage}>
 			Reset aspect to {$outputSettings.crop ? 'crop' : 'source'}
