@@ -408,22 +408,35 @@
 
 	function gradientRgb(x: number, y: number, size: number): Rgb {
 		const extent = Math.max(1, size - 1);
-		const tx = x / extent;
-		const ty = y / extent;
-		const lime = { r: 135, g: 255, b: 94 };
-		const yellow = { r: 249, g: 221, b: 59 };
-		const violet = { r: 120, g: 12, b: 153 };
-		const blue = { r: 40, g: 80, b: 158 };
-		const base = {
-			r: mix(mix(lime.r, yellow.r, tx), mix(blue.r, violet.r, tx), ty),
-			g: mix(mix(lime.g, yellow.g, tx), mix(blue.g, violet.g, tx), ty),
-			b: mix(mix(lime.b, yellow.b, tx), mix(blue.b, violet.b, tx), ty)
+		const dx = x / extent - 0.5;
+		const dy = y / extent - 0.5;
+		const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
+		const anchors = [
+			{ angle: 0, color: { r: 255, g: 127, b: 39 } },
+			{ angle: Math.PI / 4, color: { r: 237, g: 28, b: 36 } },
+			{ angle: Math.PI / 2, color: { r: 236, g: 31, b: 128 } },
+			{ angle: (Math.PI * 3) / 4, color: { r: 170, g: 56, b: 185 } },
+			{ angle: Math.PI, color: { r: 40, g: 80, b: 158 } },
+			{ angle: (Math.PI * 5) / 4, color: { r: 14, g: 185, b: 104 } },
+			{ angle: (Math.PI * 3) / 2, color: { r: 135, g: 255, b: 94 } },
+			{ angle: (Math.PI * 7) / 4, color: { r: 249, g: 221, b: 59 } },
+			{ angle: Math.PI * 2, color: { r: 255, g: 127, b: 39 } }
+		];
+		const next = anchors.findIndex((anchor) => anchor.angle >= angle);
+		const high = anchors[Math.max(1, next)]!;
+		const low = anchors[Math.max(0, next - 1)]!;
+		const span = Math.max(Number.EPSILON, high.angle - low.angle);
+		const amount = (angle - low.angle) / span;
+		const hue = {
+			r: mix(low.color.r, high.color.r, amount),
+			g: mix(low.color.g, high.color.g, amount),
+			b: mix(low.color.b, high.color.b, amount)
 		};
-		const whiteAmount = Math.max(0, 1 - Math.hypot(tx - 0.5, ty - 0.5) / 0.45) ** 2;
+		const saturation = Math.min(1, Math.hypot(dx, dy) / Math.SQRT1_2);
 		return {
-			r: mix(base.r, 255, whiteAmount),
-			g: mix(base.g, 255, whiteAmount),
-			b: mix(base.b, 255, whiteAmount)
+			r: mix(255, hue.r, saturation),
+			g: mix(255, hue.g, saturation),
+			b: mix(255, hue.b, saturation)
 		};
 	}
 
