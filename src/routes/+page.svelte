@@ -37,7 +37,6 @@
 	);
 	let fileInput = $state<HTMLInputElement>();
 	let uploadError = $state<string>();
-	let restoredImageNotice = $state(false);
 
 	const desktopPaneLayout = $derived(
 		validDesktopPaneLayout($previewSettings.desktopPaneLayout) ?? DEFAULT_DESKTOP_PANE_LAYOUT
@@ -59,13 +58,9 @@
 
 	onMount(() => {
 		const stop = startAutoProcessing();
-		void restorePersistedImages()
-			.then((restored) => {
-				restoredImageNotice = restored;
-			})
-			.catch((error) => {
-				uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
-			});
+		void restorePersistedImages().catch((error) => {
+			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
+		});
 		return stop;
 	});
 
@@ -76,7 +71,6 @@
 	async function loadImageFile(file: File) {
 		if ($hasImage && !confirm('Replace the current image with this file?')) return;
 		uploadError = undefined;
-		restoredImageNotice = false;
 		try {
 			await setSourceFile(file);
 		} catch (error) {
@@ -101,11 +95,6 @@
 		if (typeof preview !== 'number' || typeof controls !== 'number') return undefined;
 		if (!Number.isFinite(preview) || !Number.isFinite(controls)) return undefined;
 		return [preview, controls];
-	}
-
-	async function clearPersistedNoticeImage() {
-		restoredImageNotice = false;
-		await clearAllImageData();
 	}
 
 	function persistDesktopPaneLayout(layout: number[]) {
@@ -138,21 +127,6 @@
 		<p class="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
 			{uploadError}
 		</p>
-	{/if}
-
-	{#if restoredImageNotice}
-		<div
-			class="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
-		>
-			<p>This image was restored from this browser. Clear it on shared devices.</p>
-			<button
-				type="button"
-				class="text-xs font-medium underline"
-				onclick={clearPersistedNoticeImage}
-			>
-				Clear
-			</button>
-		</div>
 	{/if}
 
 	<main class="flex flex-1 flex-col overflow-hidden">
