@@ -13,6 +13,9 @@
 	let { compact = false, hideHeading = false }: Props = $props();
 
 	const DITHER_PREVIEW_PIXEL_SCALE = 3;
+	const BAYER_4 = makeBayer(4);
+	const BAYER_8 = makeBayer(8);
+	const BAYER_16 = makeBayer(16);
 
 	const initial = ditherSettings.get();
 	let canvas = $state<HTMLCanvasElement>();
@@ -54,30 +57,50 @@
 		}
 		const context = target.getContext('2d');
 		if (!context) return;
-		const image = new ImageData(logicalSize, logicalSize);
-		const random = mulberry32(randomSeed);
-		for (let y = 0; y < logicalSize; y++) {
-			for (let x = 0; x < logicalSize; x++) {
-				const gradient = x / Math.max(1, logicalSize - 1);
-				const threshold = thresholdFor(mode, x, y, random);
-				const on = gradient + threshold > 0.5;
-				const offset = (y * logicalSize + x) * 4;
-				const value = on ? 245 : 35;
-				image.data[offset] = value;
-				image.data[offset + 1] = value;
-				image.data[offset + 2] = value;
-				image.data[offset + 3] = 255;
-			}
-		}
+		const image = drawPreviewImage(mode, logicalSize, randomSeed);
 
 		const source = document.createElement('canvas');
 		source.width = logicalSize;
 		source.height = logicalSize;
 		source.getContext('2d')?.putImageData(image, 0, 0);
-		context.imageSmoothingEnabled = displaySize < logicalSize;
-		context.imageSmoothingQuality = 'high';
+		context.imageSmoothingEnabled = false;
 		context.clearRect(0, 0, displaySize, displaySize);
 		context.drawImage(source, 0, 0, displaySize, displaySize);
+	}
+
+	function drawPreviewImage(mode: string, size: number, randomSeed: number) {
+		if (mode.startsWith('bayer')) return drawBayerPreview(mode, size);
+		const image = new ImageData(size, size);
+		const random = mulberry32(randomSeed);
+		for (let y = 0; y < size; y++) {
+			for (let x = 0; x < size; x++) {
+				const gradient = x / Math.max(1, size - 1);
+				const threshold = thresholdFor(mode, x, y, random);
+				writePreviewPixel(image, x, y, gradient + threshold > 0.5 ? 245 : 35);
+			}
+		}
+		return image;
+	}
+
+	function drawBayerPreview(mode: string, size: number) {
+		const matrix = mode === 'bayer-4' ? BAYER_4 : mode === 'bayer-8' ? BAYER_8 : BAYER_16;
+		const matrixSize = Math.sqrt(matrix.length);
+		const image = new ImageData(size, size);
+		for (let y = 0; y < size; y++) {
+			for (let x = 0; x < size; x++) {
+				const cell = matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!;
+				writePreviewPixel(image, x, y, Math.round(cell * 255));
+			}
+		}
+		return image;
+	}
+
+	function writePreviewPixel(image: ImageData, x: number, y: number, value: number) {
+		const offset = (y * image.width + x) * 4;
+		image.data[offset] = value;
+		image.data[offset + 1] = value;
+		image.data[offset + 2] = value;
+		image.data[offset + 3] = 255;
 	}
 
 	function thresholdFor(mode: string, x: number, y: number, random: () => number) {
@@ -86,17 +109,28 @@
 		if (mode === 'floyd-steinberg') return ((x + y * 2) % 5) / 12 - 0.16;
 		if (mode === 'sierra') return ((x * 3 + y * 5) % 11) / 22 - 0.23;
 		if (mode === 'sierra-lite') return ((x * 2 + y * 3) % 7) / 16 - 0.2;
-		const size = mode === 'bayer-4' ? 4 : mode === 'bayer-8' ? 8 : 16;
-		return (bayerValue(size, x % size, y % size) - 0.5) * 0.55;
+		return 0;
 	}
 
-	function bayerValue(size: number, x: number, y: number): number {
-		let value = 0;
-		for (let bit = size >> 1; bit > 0; bit >>= 1) {
-			const quadrant = (x & bit ? 1 : 0) + (y & bit ? 2 : 0);
-			value = value * 4 + [0, 2, 3, 1][quadrant]!;
+	function makeBayer(size: number): number[] {
+		let matrix = [0];
+		let current = 1;
+		while (current < size) {
+			const next = current * 2;
+			const output = new Array(next * next).fill(0);
+			for (let y = 0; y < current; y++) {
+				for (let x = 0; x < current; x++) {
+					const value = matrix[y * current + x] * 4;
+					output[y * next + x] = value;
+					output[y * next + x + current] = value + 2;
+					output[(y + current) * next + x] = value + 3;
+					output[(y + current) * next + x + current] = value + 1;
+				}
+			}
+			matrix = output;
+			current = next;
 		}
-		return (value + 0.5) / (size * size);
+		return matrix.map((value) => (value + 0.5) / (size * size));
 	}
 
 	function mulberry32(value: number) {
