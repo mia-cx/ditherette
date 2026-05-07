@@ -243,7 +243,8 @@
 		<Select bind:value={algorithm} type="single">
 			<SelectTrigger
 				id="dither-algorithm"
-				class="h-auto w-full items-center gap-3 border-border bg-background/50 p-3 text-left whitespace-normal"
+				size="auto"
+				class="w-full items-center gap-3 border-border bg-background/50 p-3 text-left whitespace-normal"
 			>
 				{#if current}
 					<span class="grid min-w-0 flex-1 gap-1.5">

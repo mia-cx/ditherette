@@ -10,7 +10,7 @@
 		size = 'default',
 		...restProps
 	}: WithoutChild<SelectPrimitive.TriggerProps> & {
-		size?: 'sm' | 'default';
+		size?: 'sm' | 'default' | 'auto';
 	} = $props();
 </script>
 
