@@ -6,10 +6,13 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
 	import { RESIZE_MODES, ALPHA_MODES } from './sample-data';
-	import { outputSettings, selectedPalette, updateOutputSettings } from '$lib/stores/app';
-	import { clampOutputSize } from '$lib/processing/types';
-	import LinkIcon from 'phosphor-svelte/lib/Link';
-	import LinkBreakIcon from 'phosphor-svelte/lib/LinkBreak';
+	import {
+		outputSettings,
+		selectedPalette,
+		sourceMeta,
+		updateOutputSettings
+	} from '$lib/stores/app';
+	import { fitOutputSizeToBounds } from '$lib/processing/types';
 
 	type Props = {
 		hasImage?: boolean;
@@ -21,14 +24,13 @@
 	const initial = outputSettings.get();
 	let width = $state<number>(initial.width);
 	let height = $state<number>(initial.height);
-	let lockAspect = $state(initial.lockAspect);
 	let fit = $state(initial.fit);
 	let resize = $state(initial.resize);
 	let alpha = $state(initial.alphaMode);
 	let alphaThreshold = $state<number>(initial.alphaThreshold);
 	let matteKey = $state(initial.matteKey ?? '#FFFFFF');
 	let autoSizeOnUpload = $state(initial.autoSizeOnUpload ?? true);
-	let lockedAspectRatio = $state(validRatio(initial.width, initial.height));
+	let lastEditedDimension = $state<'width' | 'height'>('width');
 
 	const resizeLabel = $derived(RESIZE_MODES.find((r) => r.id === resize)?.label ?? 'Resize');
 	const alphaLabel = $derived(ALPHA_MODES.find((a) => a.id === alpha)?.label ?? 'Alpha');
@@ -36,28 +38,33 @@
 	const matteLabel = $derived(
 		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
 	);
+	const enforcedAspectRatio = $derived.by(() => {
+		const crop = $outputSettings.crop;
+		if (crop) return validRatio(crop.width, crop.height);
+		if ($sourceMeta) return validRatio($sourceMeta.width, $sourceMeta.height);
+		return validRatio(width, height);
+	});
 
 	$effect(() =>
 		outputSettings.subscribe((settings) => {
 			width = settings.width;
 			height = settings.height;
-			lockAspect = settings.lockAspect;
 			fit = settings.fit;
 			resize = settings.resize;
 			alpha = settings.alphaMode;
 			alphaThreshold = settings.alphaThreshold;
 			matteKey = settings.matteKey ?? '#FFFFFF';
 			autoSizeOnUpload = settings.autoSizeOnUpload ?? true;
-			lockedAspectRatio = validRatio(settings.width, settings.height);
 		})
 	);
 
 	$effect(() => {
-		const clamped = clampOutputSize(width, height);
+		const dimensions = dimensionsForAspect(width, height, enforcedAspectRatio);
+		const clamped = fitOutputSizeToBounds(dimensions.width, dimensions.height);
 		updateOutputSettings({
 			width: clamped.width,
 			height: clamped.height,
-			lockAspect,
+			lockAspect: true,
 			fit,
 			resize,
 			alphaMode: alpha,
@@ -71,23 +78,37 @@
 		return nextHeight > 0 ? Math.max(1 / 16_384, nextWidth / nextHeight) : 1;
 	}
 
+	function dimensionsForAspect(nextWidth: number, nextHeight: number, aspect: number) {
+		if (lastEditedDimension === 'height') {
+			const safeHeight = Math.max(1, Math.round(nextHeight || 1));
+			return { width: Math.max(1, Math.round(safeHeight * aspect)), height: safeHeight };
+		}
+		const safeWidth = Math.max(1, Math.round(nextWidth || 1));
+		return { width: safeWidth, height: Math.max(1, Math.round(safeWidth / aspect)) };
+	}
+
 	function setWidth(value: number) {
 		autoSizeOnUpload = false;
-		width = Math.max(1, Math.round(value || 1));
-		if (lockAspect) height = Math.max(1, Math.round(width / lockedAspectRatio));
-		else lockedAspectRatio = validRatio(width, height);
+		lastEditedDimension = 'width';
+		const dimensions = dimensionsForAspect(value, height, enforcedAspectRatio);
+		width = dimensions.width;
+		height = dimensions.height;
 	}
 
 	function setHeight(value: number) {
 		autoSizeOnUpload = false;
-		height = Math.max(1, Math.round(value || 1));
-		if (lockAspect) width = Math.max(1, Math.round(height * lockedAspectRatio));
-		else lockedAspectRatio = validRatio(width, height);
+		lastEditedDimension = 'height';
+		const dimensions = dimensionsForAspect(width, value, enforcedAspectRatio);
+		width = dimensions.width;
+		height = dimensions.height;
 	}
 
-	function toggleAspectLock() {
-		lockAspect = !lockAspect;
-		lockedAspectRatio = validRatio(width, height);
+	function resetAspectToSourceOrCrop() {
+		autoSizeOnUpload = false;
+		const dimensions = dimensionsForAspect(width, height, enforcedAspectRatio);
+		width = dimensions.width;
+		height = dimensions.height;
+		updateOutputSettings({ width, height, lockAspect: true, autoSizeOnUpload });
 	}
 
 	function resetDimensionsToCrop() {
@@ -96,9 +117,8 @@
 		autoSizeOnUpload = false;
 		width = Math.max(1, Math.round(crop.width));
 		height = Math.max(1, Math.round(crop.height));
-		lockedAspectRatio = validRatio(width, height);
-		lockAspect = true;
-		updateOutputSettings({ width, height, lockAspect, autoSizeOnUpload });
+		lastEditedDimension = 'width';
+		updateOutputSettings({ width, height, lockAspect: true, autoSizeOnUpload });
 	}
 
 	function clearCrop() {
@@ -147,16 +167,6 @@
 					oninput={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
 			</div>
-			<Button
-				variant="outline"
-				size="icon-sm"
-				class="mt-5"
-				aria-label={lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'}
-				onclick={toggleAspectLock}
-				aria-pressed={lockAspect}
-			>
-				{#if lockAspect}<LinkIcon />{:else}<LinkBreakIcon />{/if}
-			</Button>
 			<div class="grid flex-1 gap-1">
 				<Label for="out-height" class="text-xs">Height</Label>
 				<Input
@@ -173,8 +183,14 @@
 			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+			<span>
+				Output aspect is locked to the {$outputSettings.crop ? 'crop' : 'source'} so pixels stay square.
+			</span>
 			<span>{autoSizeOnUpload ? 'New uploads auto-size to source.' : 'Dimensions are pinned.'}</span
 			>
+			<Button size="xs" variant="outline" onclick={resetAspectToSourceOrCrop} disabled={!hasImage}>
+				Reset aspect to {$outputSettings.crop ? 'crop' : 'source'}
+			</Button>
 			<Button
 				size="xs"
 				variant="ghost"

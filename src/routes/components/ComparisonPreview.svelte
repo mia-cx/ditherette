@@ -221,7 +221,7 @@
 			return {
 				left: viewOriginX + panX,
 				top: viewOriginY + panY,
-				width: lockedFrameWidth,
+				width: lockedFrameHeight * (width / height),
 				height: lockedFrameHeight
 			};
 		}
