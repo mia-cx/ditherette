@@ -21,6 +21,7 @@
 	let { compact = false, hideHeading = false }: Props = $props();
 
 	const DITHER_PREVIEW_PIXEL_SCALE = 2;
+	const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
 	const ERROR_KERNELS = {
 		'floyd-steinberg': [
 			[1, 0, 7 / 16],
@@ -337,10 +338,11 @@
 			clampByte(rgb.b),
 			colorSpaceMode
 		);
+		const amount = (offset / 192) * COLOR_SPACE_THRESHOLD_SCALE;
 		const target: ColorVector = [
-			source[0] + (offset / 192) * space.ranges[0],
-			source[1] + (offset / 192) * space.ranges[1],
-			source[2] + (offset / 192) * space.ranges[2]
+			source[0] + amount * space.ranges[0],
+			source[1] + amount * space.ranges[1],
+			source[2] + amount * space.ranges[2]
 		];
 		return nearestPreviewVectorRgb(target, space) ?? nearestPaletteRgb(rgb, nearestRgb);
 	}

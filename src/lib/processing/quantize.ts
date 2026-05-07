@@ -3,6 +3,8 @@ import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
 import { clampByte, createPaletteMatcher, vectorForRgb } from './color';
 import type { EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
 
+const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
+
 type ColorVector = ReturnType<typeof vectorForRgb>;
 
 type PaletteVector = { index: number; vector: ColorVector };
@@ -128,10 +130,11 @@ function colorSpaceThresholdIndex(
 ) {
 	if (strength <= 0) return -1;
 	const source = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
+	const amount = threshold * strength * COLOR_SPACE_THRESHOLD_SCALE;
 	const target: ColorVector = [
-		source[0] + threshold * space.ranges[0] * strength,
-		source[1] + threshold * space.ranges[1] * strength,
-		source[2] + threshold * space.ranges[2] * strength
+		source[0] + amount * space.ranges[0],
+		source[1] + amount * space.ranges[1],
+		source[2] + amount * space.ranges[2]
 	];
 	return nearestPaletteVectorIndex(target, space, settings);
 }
