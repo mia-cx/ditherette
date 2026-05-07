@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Label } from '$lib/components/ui/label';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Checkbox } from '$lib/components/ui/checkbox';
@@ -24,14 +23,16 @@
 	import GridIcon from 'phosphor-svelte/lib/GridFour';
 	import ListIcon from 'phosphor-svelte/lib/List';
 	import LockIcon from 'phosphor-svelte/lib/Lock';
+	import EyeIcon from 'phosphor-svelte/lib/Eye';
+	import EyeSlashIcon from 'phosphor-svelte/lib/EyeSlash';
+	import PencilIcon from 'phosphor-svelte/lib/PencilSimple';
 	import { SAMPLE_PALETTE, type Swatch } from './sample-data';
 
 	type Props = {
 		fillHeight?: boolean;
-		hideHeading?: boolean;
 	};
 
-	let { fillHeight = false, hideHeading = false }: Props = $props();
+	let { fillHeight = false }: Props = $props();
 
 	let viewMode = $state<'list' | 'grid'>('list');
 	let preset = $state('wplace');
@@ -40,29 +41,28 @@
 </script>
 
 <section
-	class="flex flex-col gap-3 {fillHeight ? 'h-full' : ''}"
+	class="flex flex-col gap-2 {fillHeight ? 'h-full' : ''}"
 	aria-label="Palette editor"
 >
-	{#if !hideHeading}
-		<div class="flex items-baseline justify-between gap-2">
-			<h2 class="text-sm font-semibold tracking-tight">Palette</h2>
-			<p class="text-muted-foreground text-xs">Preset, enabled colors, and edits.</p>
-		</div>
-	{/if}
-
-	<div class="grid gap-1.5">
-		<Label for="palette-preset">Preset</Label>
-		<div class="flex items-center gap-2">
-			<Select bind:value={preset} type="single">
-				<SelectTrigger id="palette-preset" class="flex-1">Wplace (Default)</SelectTrigger>
-				<SelectContent>
-					<SelectItem value="wplace">Wplace (Default)</SelectItem>
-					<SelectItem value="custom-1">Custom · Sunset</SelectItem>
-					<SelectItem value="custom-2">Custom · Greyscale</SelectItem>
-				</SelectContent>
-			</Select>
-			<Badge variant="outline" class="gap-1"><LockIcon /> Built-in</Badge>
-		</div>
+	<!-- Combined header: panel title + inline preset dropdown + built-in badge.
+	     Replaces the previous separate "Palette" heading and "Preset" label row
+	     to give the actual palette table more vertical room. -->
+	<div class="flex flex-wrap items-center gap-2">
+		<h2 class="text-sm font-semibold tracking-tight">Palette</h2>
+		<Select bind:value={preset} type="single">
+			<SelectTrigger
+				id="palette-preset"
+				class="h-7 w-auto min-w-0 gap-1 px-2 text-sm font-medium"
+			>
+				Wplace (Default)
+			</SelectTrigger>
+			<SelectContent>
+				<SelectItem value="wplace">Wplace (Default)</SelectItem>
+				<SelectItem value="custom-1">Custom · Sunset</SelectItem>
+				<SelectItem value="custom-2">Custom · Greyscale</SelectItem>
+			</SelectContent>
+		</Select>
+		<Badge variant="outline" class="gap-1"><LockIcon /> Built-in</Badge>
 	</div>
 
 	<div class="border-border bg-background flex flex-wrap items-center gap-1 border p-1">
@@ -100,7 +100,7 @@
 					<tr class="text-muted-foreground">
 						<th class="w-8 p-1.5 text-left font-medium">#</th>
 						<th class="w-8 p-1.5"><span class="sr-only">Select</span></th>
-						<th class="w-8 p-1.5"><span class="sr-only">Enabled</span></th>
+						<th class="w-8 p-1.5"><span class="sr-only">Visible</span></th>
 						<th class="w-12 p-1.5 text-left font-medium">Swatch</th>
 						<th class="p-1.5 text-left font-medium">Name</th>
 						<th class="hidden p-1.5 text-left font-medium sm:table-cell">Hex</th>
@@ -115,7 +115,7 @@
 				</tbody>
 			</table>
 		{:else}
-			<div class="grid grid-cols-6 gap-1 p-2 sm:grid-cols-8 md:grid-cols-10">
+			<div class="grid grid-cols-4 gap-1 p-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7">
 				{#each SAMPLE_PALETTE as color, i (i)}
 					{@render gridSwatch(color, i)}
 				{/each}
@@ -147,11 +147,27 @@
 	{/if}
 {/snippet}
 
+{#snippet eyeToggle(color: Swatch, label: string)}
+	<button
+		type="button"
+		class="hover:bg-muted focus-visible:ring-ring inline-flex size-6 items-center justify-center focus-visible:ring-1 focus-visible:outline-none disabled:opacity-50"
+		aria-pressed={color.enabled}
+		aria-label="{label} {color.name}"
+		title={color.enabled ? 'Visible — click to hide' : 'Hidden — click to show'}
+	>
+		{#if color.enabled}
+			<EyeIcon class="size-4" />
+		{:else}
+			<EyeSlashIcon class="text-muted-foreground size-4" />
+		{/if}
+	</button>
+{/snippet}
+
 {#snippet row(color: Swatch, i: number)}
-	<tr class="border-border border-t hover:bg-muted/40" data-disabled={!color.enabled}>
+	<tr class="border-border border-t hover:bg-muted/40" data-disabled={!color.enabled || undefined}>
 		<td class="text-muted-foreground p-1.5 tabular-nums">{i + 1}</td>
 		<td class="p-1.5"><Checkbox aria-label="Select {color.name}" /></td>
-		<td class="p-1.5"><Checkbox checked={color.enabled} aria-label="Enable {color.name}" /></td>
+		<td class="p-1.5">{@render eyeToggle(color, 'Visible:')}</td>
 		<td class="p-1.5">{@render swatchSquare(color, 'sm')}</td>
 		<td class="truncate p-1.5">{color.name}</td>
 		<td class="text-muted-foreground hidden p-1.5 font-mono sm:table-cell">{color.hex ?? '—'}</td>
@@ -182,14 +198,76 @@
 	</tr>
 {/snippet}
 
+<!--
+	Grid swatch with four corner controls:
+	  TL = edit, TR = delete, BL = select (bulk), BR = visible toggle (eye).
+	The colored swatch fills the cell as the background; controls overlay
+	the corners with a translucent backdrop so the colour stays readable.
+-->
 {#snippet gridSwatch(color: Swatch, i: number)}
-	<button
-		type="button"
-		class="border-border focus-visible:ring-ring flex aspect-square items-center justify-center border focus-visible:ring-2 focus-visible:outline-none data-disabled:opacity-30"
+	{@const builtIn = color.kind !== 'custom'}
+	{@const cornerBtn =
+		'absolute z-10 inline-flex size-5 items-center justify-center bg-background/85 backdrop-blur-[1px] hover:bg-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none disabled:opacity-30 disabled:hover:bg-background/85 [&_svg]:size-3'}
+	<figure
+		class="border-border bg-muted relative aspect-square overflow-hidden border data-disabled:opacity-40"
 		data-disabled={!color.enabled || undefined}
-		aria-label="{color.name} {color.hex ?? ''} {color.enabled ? '' : '(disabled)'}"
+		aria-label="{color.name}{color.hex ? ` ${color.hex}` : ''}{color.enabled ? '' : ' (hidden)'}"
 		title="{color.name}{color.hex ? ` — ${color.hex}` : ''}"
 	>
-		{@render swatchSquare(color, 'md')}
-	</button>
+		{#if color.kind === 'transparent'}
+			<div
+				class="absolute inset-0 [background-image:repeating-conic-gradient(rgba(0,0,0,0.3)_0%_25%,transparent_0%_50%)] [background-size:10px_10px]"
+				aria-hidden="true"
+			></div>
+		{:else}
+			<div
+				class="absolute inset-0"
+				style="background-color: {color.hex}"
+				aria-hidden="true"
+			></div>
+		{/if}
+
+		<button
+			type="button"
+			class="{cornerBtn} top-0 left-0"
+			disabled={builtIn}
+			aria-label="Edit {color.name}"
+			title={builtIn ? 'Built-in colors are immutable' : `Edit ${color.name}`}
+		>
+			<PencilIcon />
+		</button>
+
+		<button
+			type="button"
+			class="{cornerBtn} top-0 right-0 hover:text-destructive"
+			disabled={builtIn}
+			aria-label="Delete {color.name}"
+			title={builtIn ? 'Built-in colors are immutable' : `Delete ${color.name}`}
+		>
+			<TrashIcon />
+		</button>
+
+		<Checkbox
+			class="absolute bottom-0 left-0 z-10 size-5 rounded-none bg-background/85 backdrop-blur-[1px]"
+			aria-label="Select {color.name}"
+		/>
+
+		<button
+			type="button"
+			class="{cornerBtn} right-0 bottom-0"
+			aria-pressed={color.enabled}
+			aria-label="{color.enabled ? 'Hide' : 'Show'} {color.name}"
+			title={color.enabled ? 'Visible — click to hide' : 'Hidden — click to show'}
+		>
+			{#if color.enabled}
+				<EyeIcon />
+			{:else}
+				<EyeSlashIcon />
+			{/if}
+		</button>
+
+		<figcaption class="sr-only">
+			{color.name}{color.hex ? ` ${color.hex}` : ''} · {color.enabled ? 'visible' : 'hidden'}
+		</figcaption>
+	</figure>
 {/snippet}
