@@ -26,6 +26,7 @@
 	let resize = $state(initial.resize);
 	let alpha = $state(initial.alphaMode);
 	let alphaThreshold = $state<number>(initial.alphaThreshold);
+	let autoSizeOnUpload = $state(initial.autoSizeOnUpload ?? true);
 
 	const resizeLabel = $derived(RESIZE_MODES.find((r) => r.id === resize)?.label ?? 'Resize');
 	const alphaLabel = $derived(ALPHA_MODES.find((a) => a.id === alpha)?.label ?? 'Alpha');
@@ -39,6 +40,7 @@
 			resize = settings.resize;
 			alpha = settings.alphaMode;
 			alphaThreshold = settings.alphaThreshold;
+			autoSizeOnUpload = settings.autoSizeOnUpload ?? true;
 		})
 	);
 
@@ -51,17 +53,20 @@
 			fit,
 			resize,
 			alphaMode: alpha,
-			alphaThreshold
+			alphaThreshold,
+			autoSizeOnUpload
 		});
 	});
 
 	function setWidth(value: number) {
+		autoSizeOnUpload = false;
 		width = Math.max(1, Math.round(value || 1));
 		if (lockAspect && $sourceMeta)
 			height = Math.max(1, Math.round((width * $sourceMeta.height) / $sourceMeta.width));
 	}
 
 	function setHeight(value: number) {
+		autoSizeOnUpload = false;
 		height = Math.max(1, Math.round(value || 1));
 		if (lockAspect && $sourceMeta)
 			width = Math.max(1, Math.round((height * $sourceMeta.width) / $sourceMeta.height));
@@ -70,9 +75,10 @@
 	function resetDimensionsToCrop() {
 		const crop = $outputSettings.crop;
 		if (!crop) return;
+		autoSizeOnUpload = false;
 		width = Math.max(1, Math.round(crop.width));
 		height = Math.max(1, Math.round(crop.height));
-		updateOutputSettings({ width, height });
+		updateOutputSettings({ width, height, autoSizeOnUpload });
 	}
 
 	function clearCrop() {
@@ -129,6 +135,18 @@
 					oninput={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
 			</div>
+		</div>
+		<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+			<span>{autoSizeOnUpload ? 'New uploads auto-size to source.' : 'Dimensions are pinned.'}</span
+			>
+			<Button
+				size="xs"
+				variant="ghost"
+				onclick={() => (autoSizeOnUpload = !autoSizeOnUpload)}
+				aria-pressed={autoSizeOnUpload}
+			>
+				{autoSizeOnUpload ? 'Pin dimensions' : 'Auto-size new uploads'}
+			</Button>
 		</div>
 		{#if $outputSettings.crop}
 			<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

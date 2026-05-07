@@ -80,13 +80,39 @@ function paletteRgb(color: EnabledPaletteColor): Rgb {
 	return color.rgb;
 }
 
+function lumaAt(source: Uint8ClampedArray, width: number, height: number, x: number, y: number) {
+	const xx = Math.min(width - 1, Math.max(0, x));
+	const yy = Math.min(height - 1, Math.max(0, y));
+	const offset = (yy * width + xx) * 4;
+	return source[offset]! * 0.299 + source[offset + 1]! * 0.587 + source[offset + 2]! * 0.114;
+}
+
+function coverageMask(
+	source: Uint8ClampedArray,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	coverage: ProcessingSettings['dither']['coverage']
+) {
+	if (coverage === 'full') return 1;
+	const dx = Math.abs(
+		lumaAt(source, width, height, x + 1, y) - lumaAt(source, width, height, x - 1, y)
+	);
+	const dy = Math.abs(
+		lumaAt(source, width, height, x, y + 1) - lumaAt(source, width, height, x, y - 1)
+	);
+	const gradient = Math.sqrt(dx * dx + dy * dy);
+	return coverage === 'edges' ? (gradient >= 48 ? 1 : 0) : Math.min(1, gradient / 64);
+}
+
 export function quantizeImage(
 	image: ImageData,
 	palette: EnabledPaletteColor[],
 	settings: ProcessingSettings
 ): QuantizeResult {
 	const warnings: string[] = [];
-	let nextPalette = palette.slice(0, 256);
+	const nextPalette = palette.slice(0, 256);
 	if (palette.length > 256)
 		warnings.push('Palette was truncated to 256 entries for indexed PNG export.');
 
@@ -172,6 +198,7 @@ function quantizeDirect(
 	const useBayer = settings.dither.algorithm.startsWith('bayer') && strength > 0;
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
 	const noiseScale = 96 * strength;
+	const coverage = settings.dither.coverage;
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
@@ -203,12 +230,14 @@ function quantizeDirect(
 			}
 
 			if (useBayer) {
-				const threshold = bayer[bayerRow + (x % bayerSize)]! * noiseScale;
+				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
+				const threshold = bayer[bayerRow + (x % bayerSize)]! * noiseScale * mask;
 				r = clampByte(r + threshold);
 				g = clampByte(g + threshold);
 				b = clampByte(b + threshold);
 			} else if (useRandom) {
-				const noise = (random() - 0.5) * noiseScale;
+				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
+				const noise = (random() - 0.5) * noiseScale * mask;
 				r = clampByte(r + noise);
 				g = clampByte(g + noise);
 				b = clampByte(b + noise);
@@ -235,6 +264,7 @@ function quantizeErrorDiffusion(
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
 	const work = new Float32Array(width * height * 3);
+	const coverage = settings.dither.coverage;
 
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
@@ -282,6 +312,7 @@ function quantizeErrorDiffusion(
 			const match = matcher.nearestRgb(r, g, b);
 			indices[index] = match.index;
 			const chosen = paletteRgb(match.color);
+			const mask = coverageMask(source, width, height, x, y, coverage);
 			const errorR = r - chosen.r;
 			const errorG = g - chosen.g;
 			const errorB = b - chosen.b;
@@ -291,7 +322,7 @@ function quantizeErrorDiffusion(
 				const yy = y + dy;
 				if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
 				const target = (yy * width + xx) * 3;
-				const scaledWeight = weight * strength;
+				const scaledWeight = weight * strength * mask;
 				work[target] += errorR * scaledWeight;
 				work[target + 1] += errorG * scaledWeight;
 				work[target + 2] += errorB * scaledWeight;

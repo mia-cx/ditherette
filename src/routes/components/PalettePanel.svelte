@@ -12,9 +12,23 @@
 		DropdownMenuSeparator,
 		DropdownMenuTrigger
 	} from '$lib/components/ui/dropdown-menu';
-	import { WPLACE_PALETTE, WPLACE_PALETTE_NAME } from '$lib/palette/wplace';
-	import { paletteEnabled, setPaletteColorEnabled } from '$lib/stores/app';
-	import type { PaletteColor } from '$lib/processing/types';
+	import { paletteEnabledKey } from '$lib/palette/wplace';
+	import {
+		activePalette,
+		activePaletteName,
+		addColorToActivePalette,
+		createCustomPalette,
+		customPalettes,
+		deleteActiveCustomPalette,
+		deleteActivePaletteColors,
+		duplicateActivePalette,
+		editActivePaletteColor,
+		importCustomPaletteData,
+		paletteEnabled,
+		palettes,
+		setPaletteColorEnabled
+	} from '$lib/stores/app';
+	import type { Palette, PaletteColor } from '$lib/processing/types';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
 	import TrashIcon from 'phosphor-svelte/lib/Trash';
 	import DotsIcon from 'phosphor-svelte/lib/DotsThreeVertical';
@@ -22,20 +36,40 @@
 	import ListIcon from 'phosphor-svelte/lib/List';
 	import LockIcon from 'phosphor-svelte/lib/Lock';
 	import PencilIcon from 'phosphor-svelte/lib/PencilSimple';
+	import CopyIcon from 'phosphor-svelte/lib/Copy';
+	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
+	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 	import VisibilityCheckbox from './VisibilityCheckbox.svelte';
 
 	type Props = { fillHeight?: boolean };
 	let { fillHeight = false }: Props = $props();
 
 	let viewMode = $state<'list' | 'grid'>('list');
-	let preset = $state('wplace');
+	// Bound select state is intentionally local; effects synchronize it with the persistent nanostore.
+	// eslint-disable-next-line svelte/prefer-writable-derived
+	let preset = $state(activePaletteName.get());
 	let gridDisabled = $state(false);
 	let selectedColorKeys = $state<Record<string, boolean>>({});
+	let importInput = $state<HTMLInputElement>();
+	let paletteMessage = $state<string>();
 
+	const currentPalette = $derived($activePalette);
+	const isBuiltIn = $derived(currentPalette.source === 'wplace');
 	const selectedCount = $derived(Object.values(selectedColorKeys).filter(Boolean).length);
 	const enabledCount = $derived(
-		WPLACE_PALETTE.filter((s) => $paletteEnabled[s.key] !== false).length
+		currentPalette.colors.filter(
+			(color) => $paletteEnabled[paletteEnabledKey(currentPalette.name, color.key)] !== false
+		).length
 	);
+
+	$effect(() => {
+		activePaletteName.set(preset);
+		selectedColorKeys = {};
+	});
+
+	$effect(() => {
+		preset = $activePalette.name;
+	});
 
 	$effect(() => {
 		if (typeof window === 'undefined') return;
@@ -49,62 +83,201 @@
 		return () => mql.removeEventListener('change', sync);
 	});
 
+	function enabled(color: PaletteColor, palette: Palette = currentPalette) {
+		return $paletteEnabled[paletteEnabledKey(palette.name, color.key)] !== false;
+	}
+
 	function setRowSelected(key: string, selected: boolean) {
 		selectedColorKeys = { ...selectedColorKeys, [key]: selected };
 	}
 
 	function selectAllRows() {
-		selectedColorKeys = Object.fromEntries(WPLACE_PALETTE.map((color) => [color.key, true]));
+		selectedColorKeys = Object.fromEntries(currentPalette.colors.map((color) => [color.key, true]));
 	}
 
 	function deselectRows() {
 		selectedColorKeys = {};
 	}
 
+	function selectedKeys() {
+		return Object.entries(selectedColorKeys)
+			.filter(([, selected]) => selected)
+			.map(([key]) => key);
+	}
+
 	function toggleSelectedVisibility() {
-		for (const color of WPLACE_PALETTE) {
+		for (const color of currentPalette.colors) {
 			if (!selectedColorKeys[color.key]) continue;
-			setPaletteColorEnabled(color.key, $paletteEnabled[color.key] === false);
+			setPaletteColorEnabled(color.key, !enabled(color), currentPalette.name);
+		}
+	}
+
+	function withPaletteError(run: () => void) {
+		try {
+			run();
+			paletteMessage = undefined;
+		} catch (error) {
+			paletteMessage = error instanceof Error ? error.message : 'Palette action failed.';
+		}
+	}
+
+	function newPalette() {
+		const name = prompt('Custom palette name', 'My palette');
+		if (!name) return;
+		withPaletteError(() => createCustomPalette(name));
+	}
+
+	function duplicatePalette() {
+		const name = prompt('Duplicate palette as', `${currentPalette.name} Copy`);
+		if (!name) return;
+		withPaletteError(() => duplicateActivePalette(name));
+	}
+
+	function addColor() {
+		if (isBuiltIn) {
+			paletteMessage = 'Built-in palettes are immutable. Duplicate Wplace before adding colors.';
+			return;
+		}
+		const hex = prompt('Color hex (#RGB or #RRGGBB)', '#FF00AA');
+		if (!hex) return;
+		const name = prompt('Color name', hex) ?? hex;
+		withPaletteError(() => addColorToActivePalette(name, hex));
+	}
+
+	function editColor(color: PaletteColor) {
+		if (isBuiltIn || color.kind === 'transparent') {
+			paletteMessage = 'Built-in and transparent colors cannot be edited.';
+			return;
+		}
+		const hex = prompt('Color hex (#RGB or #RRGGBB)', color.key);
+		if (!hex) return;
+		const name = prompt('Color name', color.name) ?? color.name;
+		withPaletteError(() => editActivePaletteColor(color.key, name, hex));
+	}
+
+	function deleteSelectedColors() {
+		if (isBuiltIn) {
+			paletteMessage = 'Built-in palettes are immutable. Duplicate Wplace before deleting colors.';
+			return;
+		}
+		const keys = selectedKeys();
+		if (!keys.length) return;
+		if (!confirm(`Delete ${keys.length} selected color(s) from ${currentPalette.name}?`)) return;
+		withPaletteError(() => deleteActivePaletteColors(keys));
+		deselectRows();
+	}
+
+	function deleteColor(color: PaletteColor) {
+		if (isBuiltIn || color.kind === 'transparent') {
+			paletteMessage = 'Built-in and transparent colors cannot be deleted.';
+			return;
+		}
+		if (!confirm(`Delete ${color.name} from ${currentPalette.name}?`)) return;
+		withPaletteError(() => deleteActivePaletteColors([color.key]));
+	}
+
+	function deletePalette() {
+		if (isBuiltIn) {
+			paletteMessage = 'The Wplace palette cannot be deleted.';
+			return;
+		}
+		if (!confirm(`Delete custom palette ${currentPalette.name}?`)) return;
+		withPaletteError(deleteActiveCustomPalette);
+	}
+
+	function exportPalette(all = false) {
+		const data = all
+			? $customPalettes
+			: [currentPalette].filter((palette) => palette.source === 'custom');
+		if (!data.length) {
+			paletteMessage = 'There are no custom palettes to export.';
+			return;
+		}
+		const blob = new Blob([JSON.stringify(all ? data : data[0], null, 2)], {
+			type: 'application/json'
+		});
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = all ? 'ditherette-palettes.json' : `${data[0].name}.palette.json`;
+		link.click();
+		URL.revokeObjectURL(url);
+	}
+
+	async function importPalette(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		try {
+			const count = importCustomPaletteData(JSON.parse(await file.text()));
+			paletteMessage = `Imported ${count} custom palette${count === 1 ? '' : 's'}.`;
+		} catch (error) {
+			paletteMessage = error instanceof Error ? error.message : 'Could not import palette JSON.';
+		} finally {
+			input.value = '';
 		}
 	}
 </script>
+
+<input
+	bind:this={importInput}
+	class="sr-only"
+	type="file"
+	accept="application/json"
+	onchange={importPalette}
+/>
 
 <section class="flex flex-col gap-2 {fillHeight ? 'h-full' : ''}" aria-label="Palette editor">
 	<div class="flex flex-wrap items-center gap-2">
 		<h2 class="text-sm font-semibold tracking-tight">Palette</h2>
 		<Select bind:value={preset} type="single">
-			<SelectTrigger id="palette-preset" class="h-7 w-auto min-w-0 gap-1 px-2 text-sm font-medium"
-				>{WPLACE_PALETTE_NAME}</SelectTrigger
-			>
+			<SelectTrigger id="palette-preset" class="h-7 w-auto min-w-0 gap-1 px-2 text-sm font-medium">
+				{currentPalette.name}
+			</SelectTrigger>
 			<SelectContent>
-				<SelectItem value="wplace">{WPLACE_PALETTE_NAME}</SelectItem>
+				{#each $palettes as palette (palette.name)}
+					<SelectItem value={palette.name}>{palette.name}</SelectItem>
+				{/each}
 			</SelectContent>
 		</Select>
-		<Badge variant="outline" class="gap-1"><LockIcon /> Built-in</Badge>
+		<Badge variant="outline" class="gap-1">
+			{#if isBuiltIn}<LockIcon /> Built-in{:else}Custom{/if}
+		</Badge>
 	</div>
 
 	<div class="flex flex-wrap items-center gap-1 border border-border bg-background p-1">
 		<Button size="xs" variant="ghost" onclick={selectAllRows}>Select all</Button>
-		<Button size="xs" variant="ghost" onclick={deselectRows} disabled={selectedCount === 0}
-			>Deselect</Button
-		>
+		<Button size="xs" variant="ghost" onclick={deselectRows} disabled={selectedCount === 0}>
+			Deselect
+		</Button>
 		<Button
 			size="xs"
 			variant="ghost"
 			onclick={toggleSelectedVisibility}
-			disabled={selectedCount === 0}>Toggle visibility</Button
+			disabled={selectedCount === 0}
+		>
+			Toggle visibility
+		</Button>
+		<Button size="xs" variant="ghost" onclick={newPalette}>New</Button>
+		<Button size="xs" variant="ghost" onclick={duplicatePalette}><CopyIcon /> Duplicate</Button>
+		<Button size="xs" variant="ghost" onclick={() => importInput?.click()}
+			><UploadIcon /> Import</Button
+		>
+		<Button size="xs" variant="ghost" onclick={() => exportPalette(false)}
+			><DownloadIcon /> Export</Button
 		>
 		<div class="ml-auto flex items-center gap-1">
-			<Button
-				size="xs"
-				variant="ghost"
-				disabled
-				aria-label="Add color (built-in palette is immutable)"
-			>
+			<Button size="xs" variant="ghost" onclick={addColor} aria-label="Add color">
 				<PlusIcon />
 				<span class="hidden sm:inline">Add</span>
 			</Button>
-			<Button size="xs" variant="ghost" disabled aria-label="Delete selected colors">
+			<Button
+				size="xs"
+				variant="ghost"
+				onclick={deleteSelectedColors}
+				disabled={selectedCount === 0}
+				aria-label="Delete selected colors"
+			>
 				<TrashIcon />
 				<span class="hidden sm:inline">Delete</span>
 			</Button>
@@ -128,6 +301,12 @@
 		</div>
 	</div>
 
+	{#if paletteMessage}
+		<p class="border border-border bg-muted/50 px-2 py-1 text-xs text-muted-foreground">
+			{paletteMessage}
+		</p>
+	{/if}
+
 	<ScrollArea
 		class="min-h-0 flex-1 border border-border bg-background {fillHeight ? '' : 'max-h-[420px]'}"
 	>
@@ -146,23 +325,33 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each WPLACE_PALETTE as color, i (color.key)}
+					{#each currentPalette.colors as color, i (color.key)}
 						{@render row(color, i)}
 					{/each}
 				</tbody>
 			</table>
 		{:else}
 			<div class="grid grid-cols-4 gap-1 p-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7">
-				{#each WPLACE_PALETTE as color, i (color.key)}
-					{@render gridSwatch(color, i)}
+				{#each currentPalette.colors as color (color.key)}
+					{@render gridSwatch(color)}
 				{/each}
 			</div>
 		{/if}
 	</ScrollArea>
 
 	<div class="flex items-center justify-between text-xs text-muted-foreground">
-		<span>{enabledCount} / {WPLACE_PALETTE.length} colors active</span>
-		<span>{selectedCount} selected · Enabled state persists locally.</span>
+		<span>{enabledCount} / {currentPalette.colors.length} colors active</span>
+		<span>
+			{selectedCount} selected · Enabled state persists locally.
+			<button type="button" class="underline" onclick={() => exportPalette(true)}
+				>Export all custom</button
+			>
+			{#if !isBuiltIn}
+				· <button type="button" class="text-destructive underline" onclick={deletePalette}
+					>Delete palette</button
+				>
+			{/if}
+		</span>
 	</div>
 </section>
 
@@ -197,11 +386,11 @@
 {/snippet}
 
 {#snippet row(color: PaletteColor, i: number)}
-	{@const enabled = $paletteEnabled[color.key] !== false}
+	{@const isVisible = enabled(color)}
 	{@const selected = selectedColorKeys[color.key] === true}
 	<tr
 		class="border-t border-border hover:bg-muted/40 data-selected:bg-muted/50"
-		data-disabled={!enabled || undefined}
+		data-disabled={!isVisible || undefined}
 		data-selected={selected || undefined}
 	>
 		<td class="p-1.5 text-muted-foreground tabular-nums">{i + 1}</td>
@@ -214,33 +403,43 @@
 		</td>
 		<td class="p-1.5">
 			<VisibilityCheckbox
-				checked={enabled}
+				checked={isVisible}
 				aria-label="Visible: {color.name}"
-				onCheckedChange={(next) => setPaletteColorEnabled(color.key, next)}
+				onCheckedChange={(next) => setPaletteColorEnabled(color.key, next, currentPalette.name)}
 			/>
 		</td>
 		<td class="p-1.5">{@render swatchSquare(color, 'sm')}</td>
 		<td class="truncate p-1.5">{color.name}</td>
-		<td class="hidden p-1.5 font-mono text-muted-foreground sm:table-cell"
-			>{color.kind === 'transparent' ? '—' : color.key}</td
-		>
+		<td class="hidden p-1.5 font-mono text-muted-foreground sm:table-cell">
+			{color.kind === 'transparent' ? '—' : color.key}
+		</td>
 		<td class="hidden p-1.5 md:table-cell">{@render kindBadge(color)}</td>
 		<td class="p-1.5">
 			<DropdownMenu>
 				<DropdownMenuTrigger aria-label="Row actions"><DotsIcon /></DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
-					<DropdownMenuItem disabled>Edit…</DropdownMenuItem>
-					<DropdownMenuItem disabled>Duplicate</DropdownMenuItem>
+					<DropdownMenuItem
+						disabled={isBuiltIn || color.kind === 'transparent'}
+						onclick={() => editColor(color)}
+					>
+						Edit…
+					</DropdownMenuItem>
+					<DropdownMenuItem onclick={duplicatePalette}>Duplicate palette</DropdownMenuItem>
 					<DropdownMenuSeparator />
-					<DropdownMenuItem disabled>Delete</DropdownMenuItem>
+					<DropdownMenuItem
+						disabled={isBuiltIn || color.kind === 'transparent'}
+						onclick={() => deleteColor(color)}
+					>
+						Delete
+					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
 		</td>
 	</tr>
 {/snippet}
 
-{#snippet gridSwatch(color: PaletteColor, i: number)}
-	{@const enabled = $paletteEnabled[color.key] !== false}
+{#snippet gridSwatch(color: PaletteColor)}
+	{@const isVisible = enabled(color)}
 	{@const selected = selectedColorKeys[color.key] === true}
 	{@const reveal =
 		'opacity-0 transition-opacity group-hover/swatch:opacity-100 group-focus-within/swatch:opacity-100'}
@@ -248,9 +447,9 @@
 	{@const cornerCheckbox = `absolute z-10 size-5 rounded-none bg-background/85 backdrop-blur-[1px] ${reveal}`}
 	<figure
 		class="group/swatch relative aspect-square overflow-hidden border border-border bg-muted data-selected:ring-2 data-selected:ring-primary data-disabled:opacity-40"
-		data-disabled={!enabled || undefined}
+		data-disabled={!isVisible || undefined}
 		data-selected={selected || undefined}
-		aria-label="{color.name}{color.kind !== 'transparent' ? ` ${color.key}` : ''}{enabled
+		aria-label="{color.name}{color.kind !== 'transparent' ? ` ${color.key}` : ''}{isVisible
 			? ''
 			: ' (hidden)'}"
 		title="{color.name}{color.kind !== 'transparent' ? ` — ${color.key}` : ''}"
@@ -265,17 +464,19 @@
 		{/if}
 		<button
 			type="button"
-			class="{cornerBtn} top-1 left-1"
-			disabled
+			class={cornerBtn}
+			disabled={isBuiltIn || color.kind === 'transparent'}
 			aria-label="Edit {color.name}"
-			title="Built-in colors are immutable"><PencilIcon /></button
+			title={isBuiltIn ? 'Built-in colors are immutable' : 'Edit color'}
+			onclick={() => editColor(color)}><PencilIcon /></button
 		>
 		<button
 			type="button"
 			class="{cornerBtn} top-1 right-1 hover:text-destructive"
-			disabled
+			disabled={isBuiltIn || color.kind === 'transparent'}
 			aria-label="Delete {color.name}"
-			title="Built-in colors are immutable"><TrashIcon /></button
+			title={isBuiltIn ? 'Built-in colors are immutable' : 'Delete color'}
+			onclick={() => deleteColor(color)}><TrashIcon /></button
 		>
 		<Checkbox
 			class="{cornerCheckbox} bottom-1 left-1"
@@ -285,12 +486,12 @@
 		/>
 		<VisibilityCheckbox
 			class="{cornerCheckbox} right-1 bottom-1"
-			checked={enabled}
+			checked={isVisible}
 			aria-label="Visible: {color.name}"
-			onCheckedChange={(next) => setPaletteColorEnabled(color.key, next)}
+			onCheckedChange={(next) => setPaletteColorEnabled(color.key, next, currentPalette.name)}
 		/>
 		<figcaption class="sr-only">
-			{color.name}{color.kind !== 'transparent' ? ` ${color.key}` : ''} · {enabled
+			{color.name}{color.kind !== 'transparent' ? ` ${color.key}` : ''} · {isVisible
 				? 'visible'
 				: 'hidden'}
 		</figcaption>

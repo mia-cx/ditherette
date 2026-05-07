@@ -13,6 +13,7 @@
 	let { compact = false, hideHeading = false }: Props = $props();
 
 	const initial = ditherSettings.get();
+	let canvas = $state<HTMLCanvasElement>();
 	let algorithm = $state(initial.algorithm);
 	let strength = $state<number>(initial.strength);
 	let coverage = $state(initial.coverage);
@@ -32,8 +33,70 @@
 		updateDitherSettings({ algorithm, strength, coverage, serpentine, seed });
 	});
 
+	$effect(() => {
+		if (!canvas) return;
+		drawDitherPreview(canvas, algorithm, seed);
+	});
+
 	function randomizeSeed() {
 		seed = crypto.getRandomValues(new Uint32Array(1))[0];
+	}
+
+	function drawDitherPreview(target: HTMLCanvasElement, mode: string, randomSeed: number) {
+		const scale = window.devicePixelRatio || 1;
+		const size = Math.max(1, Math.round(target.clientWidth * scale));
+		if (target.width !== size || target.height !== size) {
+			target.width = size;
+			target.height = size;
+		}
+		const context = target.getContext('2d');
+		if (!context) return;
+		const image = context.createImageData(size, size);
+		const random = mulberry32(randomSeed);
+		for (let y = 0; y < size; y++) {
+			for (let x = 0; x < size; x++) {
+				const gradient = x / Math.max(1, size - 1);
+				const threshold = thresholdFor(mode, x, y, random);
+				const on = gradient + threshold > 0.5;
+				const offset = (y * size + x) * 4;
+				const value = on ? 245 : 35;
+				image.data[offset] = value;
+				image.data[offset + 1] = value;
+				image.data[offset + 2] = value;
+				image.data[offset + 3] = 255;
+			}
+		}
+		context.putImageData(image, 0, 0);
+	}
+
+	function thresholdFor(mode: string, x: number, y: number, random: () => number) {
+		if (mode === 'none') return 0;
+		if (mode === 'random') return (random() - 0.5) * 0.45;
+		if (mode === 'floyd-steinberg') return ((x + y * 2) % 5) / 12 - 0.16;
+		if (mode === 'sierra') return ((x * 3 + y * 5) % 11) / 22 - 0.23;
+		if (mode === 'sierra-lite') return ((x * 2 + y * 3) % 7) / 16 - 0.2;
+		const size = mode === 'bayer-4' ? 4 : mode === 'bayer-8' ? 8 : 16;
+		return (bayerValue(size, x % size, y % size) - 0.5) * 0.55;
+	}
+
+	function bayerValue(size: number, x: number, y: number): number {
+		let value = 0;
+		for (let bit = size >> 1; bit > 0; bit >>= 1) {
+			const quadrant = (x & bit ? 1 : 0) + (y & bit ? 2 : 0);
+			value = value * 4 + [0, 2, 3, 1][quadrant]!;
+		}
+		return (value + 0.5) / (size * size);
+	}
+
+	function mulberry32(value: number) {
+		let state = value >>> 0;
+		return () => {
+			state += 0x6d2b79f5;
+			let next = state;
+			next = Math.imul(next ^ (next >>> 15), next | 1);
+			next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
+			return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+		};
 	}
 </script>
 
@@ -113,10 +176,11 @@
 	</div>
 
 	<div class="flex items-center gap-3 border border-border bg-background/50 p-2">
-		<div
-			class="size-16 shrink-0 bg-muted [background-image:repeating-linear-gradient(45deg,transparent_0_3px,rgba(0,0,0,0.18)_3px_4px)]"
-			aria-hidden="true"
-		></div>
+		<canvas
+			bind:this={canvas}
+			class="size-16 shrink-0 bg-muted [image-rendering:pixelated]"
+			aria-label="{current?.label} deterministic dither preview"
+		></canvas>
 		<div class="min-w-0 flex-1">
 			<div class="flex flex-wrap items-center gap-1.5">
 				<span class="text-sm font-medium">{current?.label}</span>

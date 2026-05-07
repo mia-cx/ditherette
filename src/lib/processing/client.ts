@@ -1,6 +1,8 @@
 import { Effect } from 'effect';
 import {
+	activePaletteName,
 	colorSpace,
+	customPalettes,
 	ditherSettings,
 	outputSettings,
 	paletteEnabled,
@@ -34,6 +36,8 @@ function snapshotHash() {
 		output: outputSettings.get(),
 		dither: ditherSettings.get(),
 		colorSpace: colorSpace.get(),
+		paletteName: activePaletteName.get(),
+		customPalettes: customPalettes.get(),
 		palette: paletteEnabled.get()
 	});
 }
@@ -123,7 +127,9 @@ export function startAutoProcessing() {
 		outputSettings.subscribe(() => scheduleProcessing()),
 		ditherSettings.subscribe(() => scheduleProcessing()),
 		colorSpace.subscribe(() => scheduleProcessing()),
-		paletteEnabled.subscribe(() => scheduleProcessing())
+		paletteEnabled.subscribe(() => scheduleProcessing()),
+		activePaletteName.subscribe(() => scheduleProcessing()),
+		customPalettes.subscribe(() => scheduleProcessing())
 	];
 	stopAuto = () => {
 		for (const unsubscribe of unsubscribers) unsubscribe();

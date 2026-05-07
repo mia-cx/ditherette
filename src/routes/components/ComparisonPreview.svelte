@@ -46,7 +46,7 @@
 		onChooseImage
 	}: Props = $props();
 
-	// svelte-ignore state_referenced_locally -- defaultMode intentionally seeds user-controlled local state.
+	// svelte-ignore state_referenced_locally
 	let mode = $state<PreviewMode>(previewSettings.get().mode ?? defaultMode);
 	let revealValue = $state<number>(previewSettings.get().revealValue ?? 50);
 	let revealDrag = $state<number>();
@@ -467,11 +467,7 @@
 		>{label}</span
 	>
 	{#if $processedImage}
-		{@const style = mediaStyle(
-			pane,
-			$sourceMeta?.width ?? $processedImage.width,
-			$sourceMeta?.height ?? $processedImage.height
-		)}
+		{@const style = mediaStyle(pane, $processedImage.width, $processedImage.height)}
 		{#if target === 'side'}
 			<canvas
 				bind:this={sideOutputCanvas}

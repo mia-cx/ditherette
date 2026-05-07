@@ -1,4 +1,4 @@
-import type { EnabledPaletteColor, PaletteColor } from '$lib/processing/types';
+import type { EnabledPaletteColor, Palette, PaletteColor } from '$lib/processing/types';
 
 const free = [
 	['Black', '#000000'],
@@ -93,15 +93,34 @@ export const WPLACE_PALETTE: PaletteColor[] = [
 	{ name: 'Transparent', key: TRANSPARENT_KEY, kind: 'transparent' }
 ];
 
-export function defaultEnabledState(): Record<string, boolean> {
-	return Object.fromEntries(WPLACE_PALETTE.map((color) => [color.key, true]));
+export const WPLACE: Palette = {
+	name: WPLACE_PALETTE_NAME,
+	source: 'wplace',
+	colors: WPLACE_PALETTE
+};
+
+export function paletteEnabledKey(paletteName: string, colorKey: string) {
+	return paletteName === WPLACE_PALETTE_NAME ? colorKey : `${paletteName}\u0000${colorKey}`;
 }
 
-export function enabledPalette(enabled: Record<string, boolean>): EnabledPaletteColor[] {
-	return WPLACE_PALETTE.filter((color) => enabled[color.key] !== false).map((color) => ({
-		...color,
-		enabled: true
-	}));
+export function defaultEnabledState(): Record<string, boolean> {
+	return Object.fromEntries(
+		WPLACE_PALETTE.map((color) => [paletteEnabledKey(WPLACE_PALETTE_NAME, color.key), true])
+	);
+}
+
+export function enabledPalette(
+	paletteOrEnabled: Palette | Record<string, boolean>,
+	enabledMaybe?: Record<string, boolean>
+): EnabledPaletteColor[] {
+	const palette = enabledMaybe ? (paletteOrEnabled as Palette) : WPLACE;
+	const enabled = enabledMaybe ?? (paletteOrEnabled as Record<string, boolean>);
+	return palette.colors
+		.filter((color) => enabled[paletteEnabledKey(palette.name, color.key)] !== false)
+		.map((color) => ({
+			...color,
+			enabled: true
+		}));
 }
 
 export function visibleEnabledColors(enabled: Record<string, boolean>): EnabledPaletteColor[] {

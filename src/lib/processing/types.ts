@@ -1,5 +1,10 @@
 export const MAX_OUTPUT_PIXELS = 67_108_864;
 export const MAX_OUTPUT_SIDE = 16_384;
+export const MAX_SOURCE_PIXELS = MAX_OUTPUT_PIXELS;
+export const MAX_SOURCE_SIDE = 32_768;
+export const MAX_SOURCE_BYTES = 75 * 1024 * 1024;
+
+export const ACCEPTED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 export type ColorSpaceId =
 	| 'oklab'
@@ -35,6 +40,12 @@ export type PaletteColor = {
 	kind: 'free' | 'premium' | 'transparent' | 'custom';
 };
 
+export type Palette = {
+	name: string;
+	source: 'wplace' | 'custom';
+	colors: PaletteColor[];
+};
+
 export type EnabledPaletteColor = PaletteColor & { enabled: true };
 
 export type OutputSettings = {
@@ -46,6 +57,7 @@ export type OutputSettings = {
 	alphaMode: AlphaMode;
 	alphaThreshold: number;
 	matteKey: string;
+	autoSizeOnUpload: boolean;
 	crop?: CropRect;
 };
 
@@ -134,4 +146,29 @@ export function clampOutputSize(
 		height: nextHeight,
 		warning: `Output was clamped to ${nextWidth}×${nextHeight} to stay under ${MAX_OUTPUT_PIXELS.toLocaleString()} pixels.`
 	};
+}
+
+export function fitOutputSizeToBounds(width: number, height: number) {
+	const safeWidth = Math.max(1, width);
+	const safeHeight = Math.max(1, height);
+	const sideScale = Math.min(1, MAX_OUTPUT_SIDE / safeWidth, MAX_OUTPUT_SIDE / safeHeight);
+	const nextWidth = Math.max(1, Math.floor(safeWidth * sideScale));
+	const nextHeight = Math.max(1, Math.floor(safeHeight * sideScale));
+	return clampOutputSize(nextWidth, nextHeight);
+}
+
+export function validateSourceImageSize(width: number, height: number) {
+	if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) {
+		throw new Error('Image dimensions could not be read.');
+	}
+	if (width > MAX_SOURCE_SIDE || height > MAX_SOURCE_SIDE) {
+		throw new Error(
+			`Image is too large to decode safely. Maximum source side is ${MAX_SOURCE_SIDE.toLocaleString()} pixels.`
+		);
+	}
+	if (width * height > MAX_SOURCE_PIXELS) {
+		throw new Error(
+			`Image is too large to decode safely. Maximum source size is ${MAX_SOURCE_PIXELS.toLocaleString()} pixels.`
+		);
+	}
 }

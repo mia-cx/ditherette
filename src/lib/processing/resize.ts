@@ -2,6 +2,7 @@ import type { CropRect, FitMode, ResizeId } from './types';
 import { clampByte } from './color';
 
 type Rect = { x: number; y: number; width: number; height: number };
+type ResizePlan = { source: Rect; target: Rect };
 
 function clampCrop(sourceWidth: number, sourceHeight: number, crop?: CropRect): Rect {
 	if (!crop) return { x: 0, y: 0, width: sourceWidth, height: sourceHeight };
@@ -15,29 +16,49 @@ function clampCrop(sourceWidth: number, sourceHeight: number, crop?: CropRect): 
 	};
 }
 
-function sourceRect(
+function resizePlan(
 	sourceWidth: number,
 	sourceHeight: number,
 	outWidth: number,
 	outHeight: number,
 	fit: FitMode,
 	crop?: CropRect
-): Rect {
+): ResizePlan {
 	const base = clampCrop(sourceWidth, sourceHeight, crop);
-	if (fit === 'stretch') return base;
+	const fullTarget = { x: 0, y: 0, width: outWidth, height: outHeight };
+	if (fit === 'stretch') return { source: base, target: fullTarget };
 
 	const sourceAspect = base.width / base.height;
 	const outputAspect = outWidth / outHeight;
-	if (
-		(fit === 'contain' && sourceAspect > outputAspect) ||
-		(fit === 'cover' && sourceAspect < outputAspect)
-	) {
-		const height = base.width / outputAspect;
-		return { x: base.x, y: base.y + (base.height - height) / 2, width: base.width, height };
+
+	if (fit === 'cover') {
+		if (sourceAspect < outputAspect) {
+			const height = base.width / outputAspect;
+			return {
+				source: { x: base.x, y: base.y + (base.height - height) / 2, width: base.width, height },
+				target: fullTarget
+			};
+		}
+		const width = base.height * outputAspect;
+		return {
+			source: { x: base.x + (base.width - width) / 2, y: base.y, width, height: base.height },
+			target: fullTarget
+		};
 	}
 
-	const width = base.height * outputAspect;
-	return { x: base.x + (base.width - width) / 2, y: base.y, width, height: base.height };
+	if (sourceAspect > outputAspect) {
+		const height = outWidth / sourceAspect;
+		return {
+			source: base,
+			target: { x: 0, y: (outHeight - height) / 2, width: outWidth, height }
+		};
+	}
+
+	const width = outHeight * sourceAspect;
+	return {
+		source: base,
+		target: { x: (outWidth - width) / 2, y: 0, width, height: outHeight }
+	};
 }
 
 function getPixel(data: Uint8ClampedArray, width: number, height: number, x: number, y: number) {
@@ -67,16 +88,22 @@ export function resizeImageData(
 	mode: ResizeId,
 	crop?: CropRect
 ): ImageData {
-	const rect = sourceRect(source.width, source.height, outWidth, outHeight, fit, crop);
+	const plan = resizePlan(source.width, source.height, outWidth, outHeight, fit, crop);
 	const output = new ImageData(outWidth, outHeight);
-	const scaleX = rect.width / outWidth;
-	const scaleY = rect.height / outHeight;
+	const targetLeft = Math.max(0, Math.round(plan.target.x));
+	const targetTop = Math.max(0, Math.round(plan.target.y));
+	const targetRight = Math.min(outWidth, Math.round(plan.target.x + plan.target.width));
+	const targetBottom = Math.min(outHeight, Math.round(plan.target.y + plan.target.height));
+	const targetWidth = Math.max(1, targetRight - targetLeft);
+	const targetHeight = Math.max(1, targetBottom - targetTop);
+	const scaleX = plan.source.width / targetWidth;
+	const scaleY = plan.source.height / targetHeight;
 
-	for (let y = 0; y < outHeight; y++) {
-		for (let x = 0; x < outWidth; x++) {
+	for (let y = targetTop; y < targetBottom; y++) {
+		for (let x = targetLeft; x < targetRight; x++) {
 			const targetOffset = (y * outWidth + x) * 4;
-			const sourceX = rect.x + (x + 0.5) * scaleX - 0.5;
-			const sourceY = rect.y + (y + 0.5) * scaleY - 0.5;
+			const sourceX = plan.source.x + (x - targetLeft + 0.5) * scaleX - 0.5;
+			const sourceY = plan.source.y + (y - targetTop + 0.5) * scaleY - 0.5;
 			const pixel = sample(source, sourceX, sourceY, scaleX, scaleY, mode);
 			output.data[targetOffset] = pixel[0];
 			output.data[targetOffset + 1] = pixel[1];
@@ -134,11 +161,13 @@ function sampleLanczos(source: ImageData, x: number, y: number) {
 	let a = 0;
 	let total = 0;
 	const radius = 3;
-	const startX = Math.floor(x) - radius + 1;
-	const startY = Math.floor(y) - radius + 1;
-	for (let yy = startY; yy <= Math.floor(y) + radius; yy++) {
+	const floorX = Math.floor(x);
+	const floorY = Math.floor(y);
+	const startX = floorX - radius + 1;
+	const startY = floorY - radius + 1;
+	for (let yy = startY; yy <= floorY + radius; yy++) {
 		const wy = lanczos(y - yy, radius);
-		for (let xx = startX; xx <= Math.floor(x) + radius; xx++) {
+		for (let xx = startX; xx <= floorX + radius; xx++) {
 			const weight = lanczos(x - xx, radius) * wy;
 			if (weight === 0) continue;
 			const pixel = getPixel(source.data, source.width, source.height, xx, yy);

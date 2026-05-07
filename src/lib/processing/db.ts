@@ -1,3 +1,4 @@
+import { validateSourceImageSize } from './types';
 import type { ProcessedImage, SourceImageRecord } from './types';
 
 const DB_NAME = 'ditherette';
@@ -5,8 +6,6 @@ const DB_VERSION = 1;
 const STORE = 'records';
 const SOURCE_KEY = 'source';
 const PROCESSED_KEY = 'processed';
-
-type StoredRecord = SourceImageRecord | ProcessedImage;
 
 function openDb(): Promise<IDBDatabase> {
 	return new Promise((resolve, reject) => {
@@ -69,6 +68,7 @@ export async function decodeBlob(
 ): Promise<{ imageData: ImageData; width: number; height: number }> {
 	const bitmap = await createImageBitmap(blob);
 	try {
+		validateSourceImageSize(bitmap.width, bitmap.height);
 		const canvas =
 			typeof OffscreenCanvas !== 'undefined'
 				? new OffscreenCanvas(bitmap.width, bitmap.height)
@@ -90,8 +90,13 @@ export async function decodeBlob(
 }
 
 export function sourceMetaFromRecord(record: SourceImageRecord) {
-	const { blob: _blob, ...meta } = record;
-	return meta;
+	return {
+		name: record.name,
+		width: record.width,
+		height: record.height,
+		type: record.type,
+		updatedAt: record.updatedAt
+	};
 }
 
 export function settingsHash(value: unknown): string {

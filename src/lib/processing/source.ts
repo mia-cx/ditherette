@@ -1,9 +1,11 @@
 import {
 	clearInMemoryImageState,
+	outputSettings,
 	processedImage,
 	sourceImageData,
 	sourceMeta,
-	sourceObjectUrl
+	sourceObjectUrl,
+	updateOutputSettings
 } from '$lib/stores/app';
 import {
 	clearPersistedImages,
@@ -14,10 +16,22 @@ import {
 	sourceMetaFromRecord
 } from './db';
 import { scheduleProcessing } from './client';
+import { ACCEPTED_IMAGE_TYPES, MAX_SOURCE_BYTES, fitOutputSizeToBounds } from './types';
 import type { SourceImageRecord } from './types';
 
+function validateSourceFile(file: File) {
+	if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+		throw new Error('Choose a PNG, JPEG, WebP, or GIF image.');
+	}
+	if (file.size > MAX_SOURCE_BYTES) {
+		throw new Error(
+			`Image file is too large. Maximum file size is ${Math.round(MAX_SOURCE_BYTES / 1024 / 1024)} MB.`
+		);
+	}
+}
+
 export async function setSourceFile(file: File) {
-	if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');
+	validateSourceFile(file);
 	const decoded = await decodeBlob(file);
 	const record: SourceImageRecord = {
 		blob: file,
@@ -29,6 +43,19 @@ export async function setSourceFile(file: File) {
 	};
 	await saveSourceImage(record);
 	setSourceRecord(record, decoded.imageData);
+	const settings = outputSettings.get();
+	if (settings.autoSizeOnUpload !== false) {
+		const size = fitOutputSizeToBounds(decoded.width, decoded.height);
+		updateOutputSettings({
+			...settings,
+			width: size.width,
+			height: size.height,
+			lockAspect: true,
+			crop: undefined
+		});
+	} else {
+		updateOutputSettings({ crop: undefined });
+	}
 	processedImage.set(undefined);
 	scheduleProcessing(0);
 }

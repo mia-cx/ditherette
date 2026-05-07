@@ -6,7 +6,30 @@ function progress(id: number, stage: string, value: number) {
 	postMessage({ id, type: 'progress', stage, progress: value } satisfies WorkerResponse);
 }
 
-self.onmessage = (event: MessageEvent<WorkerRequest>) => {
+function isWorkerRequest(value: unknown): value is WorkerRequest {
+	if (!value || typeof value !== 'object') return false;
+	const request = value as Partial<WorkerRequest>;
+	return (
+		typeof request.id === 'number' &&
+		request.source instanceof ImageData &&
+		Boolean(request.settings?.output) &&
+		Boolean(request.settings?.dither) &&
+		typeof request.settingsHash === 'string' &&
+		Array.isArray(request.palette)
+	);
+}
+
+self.onmessage = (event: MessageEvent<unknown>) => {
+	if (event.origin && event.origin !== self.location.origin) return;
+	if (!isWorkerRequest(event.data)) {
+		postMessage({
+			id: -1,
+			type: 'error',
+			message: 'Worker received an invalid processing request.'
+		} satisfies WorkerResponse);
+		return;
+	}
+
 	const { id, source, settings, palette, settingsHash } = event.data;
 	try {
 		progress(id, 'Sizing output', 0.05);
