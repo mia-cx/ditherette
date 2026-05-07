@@ -3,6 +3,8 @@
 	import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
 	import {
 		Empty,
 		EmptyContent,
@@ -93,6 +95,11 @@
 		$processedImage ? `${$processedImage.palette.length} colors` : 'Palette'
 	);
 	const activeCrop = $derived(cropDraft ?? $outputSettings.crop);
+	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
+	const canCropToContent = $derived(Boolean(cropToContentBounds));
+	const cropToContentHint = $derived(
+		canCropToContent ? 'Crop to non-transparent content.' : 'No transparent bounds found to crop.'
+	);
 
 	$effect(() => {
 		outputPreviewGeneration = ++nextOutputPreviewGeneration;
@@ -472,12 +479,58 @@
 	}
 
 	function normalizeCrop(crop: CropRect): CropRect {
+		if (!$sourceMeta) {
+			return {
+				x: Math.max(0, Math.round(crop.x)),
+				y: Math.max(0, Math.round(crop.y)),
+				width: Math.max(1, Math.round(crop.width)),
+				height: Math.max(1, Math.round(crop.height))
+			};
+		}
+		const width = Math.min($sourceMeta.width, Math.max(1, Math.round(crop.width)));
+		const height = Math.min($sourceMeta.height, Math.max(1, Math.round(crop.height)));
 		return {
-			x: Math.round(crop.x),
-			y: Math.round(crop.y),
-			width: Math.max(1, Math.round(crop.width)),
-			height: Math.max(1, Math.round(crop.height))
+			x: Math.min($sourceMeta.width - width, Math.max(0, Math.round(crop.x))),
+			y: Math.min($sourceMeta.height - height, Math.max(0, Math.round(crop.y))),
+			width,
+			height
 		};
+	}
+
+	function editableCrop() {
+		if (activeCrop) return normalizeCrop(activeCrop);
+		return { x: 0, y: 0, width: $sourceMeta?.width ?? 1, height: $sourceMeta?.height ?? 1 };
+	}
+
+	function setCropField(field: keyof CropRect, value: number) {
+		cropDraft = normalizeCrop({ ...editableCrop(), [field]: value });
+	}
+
+	function findContentCrop(image: ImageData | undefined): CropRect | undefined {
+		if (!image) return undefined;
+		const threshold = $outputSettings.alphaThreshold;
+		let left = image.width;
+		let top = image.height;
+		let right = -1;
+		let bottom = -1;
+		let hasTransparentBounds = false;
+		for (let y = 0; y < image.height; y++) {
+			for (let x = 0; x < image.width; x++) {
+				const alpha = image.data[(y * image.width + x) * 4 + 3]!;
+				if (alpha <= threshold) {
+					hasTransparentBounds = true;
+					continue;
+				}
+				left = Math.min(left, x);
+				top = Math.min(top, y);
+				right = Math.max(right, x);
+				bottom = Math.max(bottom, y);
+			}
+		}
+		if (!hasTransparentBounds || right < left || bottom < top) return undefined;
+		if (left === 0 && top === 0 && right === image.width - 1 && bottom === image.height - 1)
+			return undefined;
+		return { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
 	}
 
 	function applyCrop() {
@@ -497,25 +550,7 @@
 	}
 
 	function cropToContent() {
-		const image = $sourceImageData;
-		if (!image) return;
-		const threshold = $outputSettings.alphaThreshold;
-		let left = image.width;
-		let top = image.height;
-		let right = -1;
-		let bottom = -1;
-		for (let y = 0; y < image.height; y++) {
-			for (let x = 0; x < image.width; x++) {
-				const alpha = image.data[(y * image.width + x) * 4 + 3]!;
-				if (alpha <= threshold) continue;
-				left = Math.min(left, x);
-				top = Math.min(top, y);
-				right = Math.max(right, x);
-				bottom = Math.max(bottom, y);
-			}
-		}
-		if (right < left || bottom < top) return;
-		cropDraft = { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+		if (cropToContentBounds) cropDraft = cropToContentBounds;
 	}
 
 	function setRevealValue(value: number) {
@@ -743,19 +778,84 @@
 
 	{#if cropMode && hasImage}
 		<figcaption
-			class="flex flex-wrap items-center gap-2 border-t border-border bg-background/90 px-3 py-2 text-xs text-muted-foreground"
+			class="grid gap-2 border-t border-border bg-background/90 px-3 py-2 text-xs text-muted-foreground"
 		>
-			<span>Drag on the source image to draft a crop. Output is hidden while cropping.</span>
-			<Button size="xs" variant="outline" onclick={applyCrop} disabled={!activeCrop}
-				>Apply crop</Button
+			<span
+				>Drag on the source image or edit exact crop fields. Output is hidden while cropping.</span
 			>
-			<Button size="xs" variant="ghost" onclick={cropToContent}>Crop to content</Button>
-			<Button size="xs" variant="ghost" onclick={clearCrop} disabled={!activeCrop}
-				>Reset crop</Button
-			>
-			<Button size="xs" variant="ghost" onclick={cancelCropDraft} disabled={!cropDraft}
-				>Cancel draft</Button
-			>
+			<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+				<div class="grid gap-1">
+					<Label for="crop-x" class="text-xs">X</Label>
+					<Input
+						id="crop-x"
+						type="number"
+						inputmode="numeric"
+						min="0"
+						max={$sourceMeta ? $sourceMeta.width - 1 : undefined}
+						step="1"
+						value={editableCrop().x}
+						oninput={(event) => setCropField('x', Number(event.currentTarget.value))}
+					/>
+				</div>
+				<div class="grid gap-1">
+					<Label for="crop-y" class="text-xs">Y</Label>
+					<Input
+						id="crop-y"
+						type="number"
+						inputmode="numeric"
+						min="0"
+						max={$sourceMeta ? $sourceMeta.height - 1 : undefined}
+						step="1"
+						value={editableCrop().y}
+						oninput={(event) => setCropField('y', Number(event.currentTarget.value))}
+					/>
+				</div>
+				<div class="grid gap-1">
+					<Label for="crop-width" class="text-xs">Width</Label>
+					<Input
+						id="crop-width"
+						type="number"
+						inputmode="numeric"
+						min="1"
+						max={$sourceMeta ? $sourceMeta.width : undefined}
+						step="1"
+						value={editableCrop().width}
+						oninput={(event) => setCropField('width', Number(event.currentTarget.value))}
+					/>
+				</div>
+				<div class="grid gap-1">
+					<Label for="crop-height" class="text-xs">Height</Label>
+					<Input
+						id="crop-height"
+						type="number"
+						inputmode="numeric"
+						min="1"
+						max={$sourceMeta ? $sourceMeta.height : undefined}
+						step="1"
+						value={editableCrop().height}
+						oninput={(event) => setCropField('height', Number(event.currentTarget.value))}
+					/>
+				</div>
+			</div>
+			<div class="flex flex-wrap items-center gap-2">
+				<Button size="xs" variant="outline" onclick={applyCrop} disabled={!activeCrop}
+					>Apply crop</Button
+				>
+				<Button
+					size="xs"
+					variant="ghost"
+					onclick={cropToContent}
+					disabled={!canCropToContent}
+					title={cropToContentHint}>Crop to content</Button
+				>
+				<Button size="xs" variant="ghost" onclick={clearCrop} disabled={!activeCrop}
+					>Reset crop</Button
+				>
+				<Button size="xs" variant="ghost" onclick={cancelCropDraft} disabled={!cropDraft}
+					>Cancel draft</Button
+				>
+				<span>{cropToContentHint}</span>
+			</div>
 		</figcaption>
 	{:else if $processingError}
 		<figcaption

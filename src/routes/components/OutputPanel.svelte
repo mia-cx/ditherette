@@ -6,7 +6,7 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
 	import { RESIZE_MODES, ALPHA_MODES } from './sample-data';
-	import { outputSettings, sourceMeta, updateOutputSettings } from '$lib/stores/app';
+	import { outputSettings, selectedPalette, updateOutputSettings } from '$lib/stores/app';
 	import { clampOutputSize } from '$lib/processing/types';
 	import LinkIcon from 'phosphor-svelte/lib/Link';
 	import LinkBreakIcon from 'phosphor-svelte/lib/LinkBreak';
@@ -26,10 +26,16 @@
 	let resize = $state(initial.resize);
 	let alpha = $state(initial.alphaMode);
 	let alphaThreshold = $state<number>(initial.alphaThreshold);
+	let matteKey = $state(initial.matteKey ?? '#FFFFFF');
 	let autoSizeOnUpload = $state(initial.autoSizeOnUpload ?? true);
+	let lockedAspectRatio = $state(validRatio(initial.width, initial.height));
 
 	const resizeLabel = $derived(RESIZE_MODES.find((r) => r.id === resize)?.label ?? 'Resize');
 	const alphaLabel = $derived(ALPHA_MODES.find((a) => a.id === alpha)?.label ?? 'Alpha');
+	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
+	const matteLabel = $derived(
+		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
+	);
 
 	$effect(() =>
 		outputSettings.subscribe((settings) => {
@@ -40,7 +46,9 @@
 			resize = settings.resize;
 			alpha = settings.alphaMode;
 			alphaThreshold = settings.alphaThreshold;
+			matteKey = settings.matteKey ?? '#FFFFFF';
 			autoSizeOnUpload = settings.autoSizeOnUpload ?? true;
+			lockedAspectRatio = validRatio(settings.width, settings.height);
 		})
 	);
 
@@ -54,22 +62,32 @@
 			resize,
 			alphaMode: alpha,
 			alphaThreshold,
+			matteKey,
 			autoSizeOnUpload
 		});
 	});
 
+	function validRatio(nextWidth: number, nextHeight: number) {
+		return nextHeight > 0 ? Math.max(1 / 16_384, nextWidth / nextHeight) : 1;
+	}
+
 	function setWidth(value: number) {
 		autoSizeOnUpload = false;
 		width = Math.max(1, Math.round(value || 1));
-		if (lockAspect && $sourceMeta)
-			height = Math.max(1, Math.round((width * $sourceMeta.height) / $sourceMeta.width));
+		if (lockAspect) height = Math.max(1, Math.round(width / lockedAspectRatio));
+		else lockedAspectRatio = validRatio(width, height);
 	}
 
 	function setHeight(value: number) {
 		autoSizeOnUpload = false;
 		height = Math.max(1, Math.round(value || 1));
-		if (lockAspect && $sourceMeta)
-			width = Math.max(1, Math.round((height * $sourceMeta.width) / $sourceMeta.height));
+		if (lockAspect) width = Math.max(1, Math.round(height * lockedAspectRatio));
+		else lockedAspectRatio = validRatio(width, height);
+	}
+
+	function toggleAspectLock() {
+		lockAspect = !lockAspect;
+		lockedAspectRatio = validRatio(width, height);
 	}
 
 	function resetDimensionsToCrop() {
@@ -78,11 +96,29 @@
 		autoSizeOnUpload = false;
 		width = Math.max(1, Math.round(crop.width));
 		height = Math.max(1, Math.round(crop.height));
-		updateOutputSettings({ width, height, autoSizeOnUpload });
+		lockedAspectRatio = validRatio(width, height);
+		lockAspect = true;
+		updateOutputSettings({ width, height, lockAspect, autoSizeOnUpload });
 	}
 
 	function clearCrop() {
 		updateOutputSettings({ crop: undefined });
+	}
+
+	function useDarkestPaletteColor() {
+		const darkest = visiblePaletteColors.reduce<(typeof visiblePaletteColors)[number] | undefined>(
+			(best, color) => {
+				if (!color.rgb) return best;
+				if (!best?.rgb) return color;
+				return relativeLuminance(color.rgb) < relativeLuminance(best.rgb) ? color : best;
+			},
+			undefined
+		);
+		if (darkest) matteKey = darkest.key;
+	}
+
+	function relativeLuminance(rgb: { r: number; g: number; b: number }) {
+		return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
 	}
 </script>
 
@@ -116,7 +152,7 @@
 				size="icon-sm"
 				class="mt-5"
 				aria-label={lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'}
-				onclick={() => (lockAspect = !lockAspect)}
+				onclick={toggleAspectLock}
 				aria-pressed={lockAspect}
 			>
 				{#if lockAspect}<LinkIcon />{:else}<LinkBreakIcon />{/if}
@@ -193,6 +229,33 @@
 			</SelectContent>
 		</Select>
 	</div>
+
+	{#if alpha === 'matte'}
+		<div class="grid gap-1.5">
+			<Label for="matte-color">Matte color</Label>
+			<div class="flex gap-2">
+				<Select bind:value={matteKey} type="single" disabled={!visiblePaletteColors.length}>
+					<SelectTrigger id="matte-color" class="min-w-0 flex-1">{matteLabel}</SelectTrigger>
+					<SelectContent>
+						{#each visiblePaletteColors as color (color.key)}
+							<SelectItem value={color.key}>{color.name} · {color.key}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+				<Button
+					type="button"
+					variant="outline"
+					onclick={useDarkestPaletteColor}
+					disabled={!visiblePaletteColors.length}
+				>
+					Use darkest
+				</Button>
+			</div>
+			<p class="text-xs text-muted-foreground">
+				Matte is constrained to enabled visible colors in the active palette.
+			</p>
+		</div>
+	{/if}
 
 	<div class="grid gap-1.5">
 		<div class="flex items-center justify-between">
