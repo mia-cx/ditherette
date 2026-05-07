@@ -13,8 +13,6 @@
 		EmptyMedia,
 		EmptyTitle
 	} from '$lib/components/ui/empty';
-	import revealIcon from '$lib/assets/reveal.svg';
-	import sideBySideIcon from '$lib/assets/side-by-side.svg';
 	import { processedToImageData } from '$lib/processing/render';
 	import type { CropRect } from '$lib/processing/types';
 	import {
@@ -34,6 +32,8 @@
 	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOut';
 	import ImageIcon from 'phosphor-svelte/lib/ImageSquare';
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
+	import RevealIcon from './RevealIcon.svelte';
+	import SideBySideIcon from './SideBySideIcon.svelte';
 
 	type Point = { x: number; y: number };
 	type ViewAnchor = { centerX: number; centerY: number };
@@ -1129,7 +1129,7 @@
 						: 'text-foreground/60'}"
 					onclick={() => void setPreviewMode('side-by-side')}
 				>
-					<img src={sideBySideIcon} alt="" class="size-4 opacity-80 dark:invert" />
+					<SideBySideIcon class="size-4 opacity-80" />
 				</PopoverTrigger>
 				<PopoverContent side="top" class="w-56">
 					<div class="grid gap-1">
@@ -1152,7 +1152,7 @@
 						: 'text-foreground/60'}"
 					onclick={() => void setPreviewMode('ab-reveal')}
 				>
-					<img src={revealIcon} alt="" class="size-4 opacity-80 dark:invert" />
+					<RevealIcon class="size-4 opacity-80" />
 				</PopoverTrigger>
 				<PopoverContent side="top" class="w-56">
 					<div class="grid gap-1">
