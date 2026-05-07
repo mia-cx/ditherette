@@ -3,8 +3,6 @@ import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
 import { clampByte, createPaletteMatcher, vectorForRgb } from './color';
 import type { EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
 
-const ORDERED_RESIDUAL_SCALE = 2;
-
 type ColorVector = ReturnType<typeof vectorForRgb>;
 
 const ERROR_KERNELS = {
@@ -76,14 +74,13 @@ function vectorDistance(
 	return dx * dx + dy * dy + dz * dz;
 }
 
-function nearestPaletteVector(
+function nearestPaletteVectors(
 	vector: ColorVector,
 	matcher: ReturnType<typeof createPaletteMatcher>,
 	settings: ProcessingSettings
 ) {
-	let winner = -1;
-	let winnerVector: ColorVector | undefined;
-	let best = Number.POSITIVE_INFINITY;
+	let nearest = { index: -1, vector: undefined as ColorVector | undefined, distance: Infinity };
+	let competitor = { index: -1, vector: undefined as ColorVector | undefined, distance: Infinity };
 	for (let index = 0; index < matcher.colors.length; index++) {
 		const color = matcher.colors[index]!;
 		if (!color.rgb || color.kind === 'transparent') continue;
@@ -94,13 +91,14 @@ function nearestPaletteVector(
 			settings.colorSpace
 		);
 		const distance = vectorDistance(vector, candidateVector, settings.colorSpace);
-		if (distance < best) {
-			best = distance;
-			winner = index;
-			winnerVector = candidateVector;
+		if (distance < nearest.distance) {
+			competitor = nearest;
+			nearest = { index, vector: candidateVector, distance };
+		} else if (distance < competitor.distance) {
+			competitor = { index, vector: candidateVector, distance };
 		}
 	}
-	return { index: winner, vector: winnerVector };
+	return { nearest, competitor };
 }
 
 function chooseOrderedPaletteIndex(
@@ -112,15 +110,21 @@ function chooseOrderedPaletteIndex(
 ) {
 	if (strength <= 0) return matcher.nearest(rgb).index;
 	const source = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
-	const nearest = nearestPaletteVector(source, matcher, settings);
+	const { nearest, competitor } = nearestPaletteVectors(source, matcher, settings);
 	if (nearest.index === -1 || !nearest.vector) return matcher.nearest(rgb).index;
-	const amount = (threshold - 0.5) * ORDERED_RESIDUAL_SCALE * strength;
+	if (competitor.index === -1 || !competitor.vector) return nearest.index;
+	const dx = competitor.vector[0] - nearest.vector[0];
+	const dy = competitor.vector[1] - nearest.vector[1];
+	const dz = competitor.vector[2] - nearest.vector[2];
+	const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+	if (distance === 0) return nearest.index;
+	const amount = (threshold - 0.5) * distance * strength;
 	const target: ColorVector = [
-		source[0] + (source[0] - nearest.vector[0]) * amount,
-		source[1] + (source[1] - nearest.vector[1]) * amount,
-		source[2] + (source[2] - nearest.vector[2]) * amount
+		source[0] + (dx / distance) * amount,
+		source[1] + (dy / distance) * amount,
+		source[2] + (dz / distance) * amount
 	];
-	const match = nearestPaletteVector(target, matcher, settings);
+	const match = nearestPaletteVectors(target, matcher, settings).nearest;
 	return match.index === -1 ? nearest.index : match.index;
 }
 

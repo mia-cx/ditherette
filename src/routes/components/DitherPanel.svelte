@@ -266,21 +266,29 @@
 		return dx * dx + dy * dy + dz * dz;
 	}
 
-	function nearestPreviewVector(vector: ColorVector) {
-		let winner: Rgb | undefined;
-		let winnerVector: ColorVector | undefined;
-		let best = Number.POSITIVE_INFINITY;
+	function nearestPreviewVectors(vector: ColorVector) {
+		let nearest = {
+			rgb: undefined as Rgb | undefined,
+			vector: undefined as ColorVector | undefined,
+			distance: Infinity
+		};
+		let competitor = {
+			rgb: undefined as Rgb | undefined,
+			vector: undefined as ColorVector | undefined,
+			distance: Infinity
+		};
 		for (const color of $selectedPalette) {
 			if (!color.rgb || color.kind === 'transparent') continue;
 			const candidateVector = vectorForRgb(color.rgb.r, color.rgb.g, color.rgb.b, $colorSpace);
 			const distance = vectorDistance(vector, candidateVector);
-			if (distance < best) {
-				best = distance;
-				winner = color.rgb;
-				winnerVector = candidateVector;
+			if (distance < nearest.distance) {
+				competitor = nearest;
+				nearest = { rgb: color.rgb, vector: candidateVector, distance };
+			} else if (distance < competitor.distance) {
+				competitor = { rgb: color.rgb, vector: candidateVector, distance };
 			}
 		}
-		return { rgb: winner, vector: winnerVector };
+		return { nearest, competitor };
 	}
 
 	function chooseOrderedPreviewRgb(
@@ -292,16 +300,22 @@
 		if (strengthAmount <= 0)
 			return nearestRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b)).color.rgb!;
 		const source = vectorForRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b), $colorSpace);
-		const nearest = nearestPreviewVector(source);
+		const { nearest, competitor } = nearestPreviewVectors(source);
 		if (!nearest.rgb || !nearest.vector)
 			return nearestRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b)).color.rgb!;
-		const amount = (threshold - 0.5) * 2 * strengthAmount;
+		if (!competitor.rgb || !competitor.vector) return nearest.rgb;
+		const dx = competitor.vector[0] - nearest.vector[0];
+		const dy = competitor.vector[1] - nearest.vector[1];
+		const dz = competitor.vector[2] - nearest.vector[2];
+		const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+		if (distance === 0) return nearest.rgb;
+		const amount = (threshold - 0.5) * distance * strengthAmount;
 		const target: ColorVector = [
-			source[0] + (source[0] - nearest.vector[0]) * amount,
-			source[1] + (source[1] - nearest.vector[1]) * amount,
-			source[2] + (source[2] - nearest.vector[2]) * amount
+			source[0] + (dx / distance) * amount,
+			source[1] + (dy / distance) * amount,
+			source[2] + (dz / distance) * amount
 		];
-		return nearestPreviewVector(target).rgb ?? nearest.rgb;
+		return nearestPreviewVectors(target).nearest.rgb ?? nearest.rgb;
 	}
 
 	function gradientRgb(x: number, y: number, size: number): Rgb {
