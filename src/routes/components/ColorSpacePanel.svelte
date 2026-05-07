@@ -1,62 +1,75 @@
 <script lang="ts">
 	import { Label } from '$lib/components/ui/label';
-	import {
-		Select,
-		SelectContent,
-		SelectItem,
-		SelectTrigger,
-	} from '$lib/components/ui/select';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import InlineMath from './InlineMath.svelte';
 	import { COLOR_SPACES } from './sample-data';
+	import { colorSpace } from '$lib/stores/app';
 
-	type Props = {
-		compact?: boolean;
-		hideHeading?: boolean;
-	};
-
+	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	let space = $state('oklab');
+	let space = $state(colorSpace.get());
 	const current = $derived(COLOR_SPACES.find((s) => s.id === space) ?? COLOR_SPACES[0]);
 	const triggerLabel = $derived(current.label);
+
+	$effect(() => {
+		colorSpace.set(space);
+	});
 </script>
 
 <section class="flex flex-col gap-{compact ? '3' : '4'}" aria-label="Color space controls">
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
 			<h2 class="text-sm font-semibold tracking-tight">Color space</h2>
-			<p class="text-muted-foreground text-xs">How nearest-color is computed.</p>
+			<p class="text-xs text-muted-foreground">How nearest-color is computed.</p>
 		</div>
 	{/if}
 
 	<div class="grid gap-1.5">
 		<Label for="color-space">Distance mode</Label>
 		<Select bind:value={space} type="single">
-			<SelectTrigger id="color-space">{triggerLabel}</SelectTrigger>
-			<SelectContent>
-				{#each COLOR_SPACES as s (s.id)}
-					<SelectItem value={s.id}>{s.label}</SelectItem>
-				{/each}
+			<SelectTrigger
+				id="color-space"
+				size="auto"
+				class={!compact
+					? '!w-full max-w-full items-center gap-3 p-3 text-left whitespace-normal'
+					: '!w-full'}
+			>
+				{#if !compact}
+					<span class="flex min-w-0 flex-1 items-start gap-3 overflow-hidden text-left">
+						<span class="grid min-w-0 flex-1 content-start gap-1 overflow-hidden">
+							<span class="truncate text-sm font-medium text-foreground">{current.label}</span>
+							<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
+								>{current.short}</span
+							>
+							<InlineMath expression={current.latex} />
+						</span>
+					</span>
+				{:else}
+					{triggerLabel}
+				{/if}
+			</SelectTrigger>
+			<SelectContent
+				class="max-h-[min(32rem,var(--bits-select-content-available-height))] w-(--bits-select-anchor-width) max-w-(--bits-select-anchor-width) overflow-hidden p-0"
+			>
+				<div class="py-1">
+					{#each COLOR_SPACES as s (s.id)}
+						<SelectItem value={s.id} label={s.label} class="min-w-0 items-start py-3 pr-8 pl-3">
+							<span class="flex min-w-0 flex-1 items-start gap-3 overflow-hidden">
+								<span class="grid min-w-0 flex-1 content-start gap-1 overflow-hidden">
+									<span class="truncate text-sm font-medium text-foreground">{s.label}</span>
+									<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
+										>{s.short}</span
+									>
+									<span class="rounded-sm border border-border bg-muted/40 px-2 py-1">
+										<InlineMath expression={s.latex} />
+									</span>
+								</span>
+							</span>
+						</SelectItem>
+					{/each}
+				</div>
 			</SelectContent>
 		</Select>
-	</div>
-
-	<figure
-		class="border-border bg-background relative aspect-[4/3] w-full overflow-hidden border"
-		aria-label="{current.label} 3D visualizer"
-	>
-		<div
-			class="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,oklch(0.78_0.18_75),transparent_55%),radial-gradient(circle_at_70%_70%,oklch(0.55_0.22_280),transparent_55%),radial-gradient(circle_at_60%_30%,oklch(0.72_0.20_140),transparent_50%)]"
-			aria-hidden="true"
-		></div>
-		<figcaption class="bg-background/85 absolute right-2 bottom-2 px-2 py-0.5 text-xs">
-			{current.label} · L / a / b
-		</figcaption>
-	</figure>
-
-	<div class="grid gap-1.5">
-		<p class="text-sm leading-relaxed">{current.short}</p>
-		<p class="text-muted-foreground bg-muted/50 border-border border-l-2 px-3 py-1.5 font-mono text-xs">
-			{current.math}
-		</p>
 	</div>
 </section>

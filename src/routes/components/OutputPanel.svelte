@@ -1,18 +1,11 @@
 <script lang="ts">
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
 	import { Slider } from '$lib/components/ui/slider';
-	import {
-		Select,
-		SelectContent,
-		SelectItem,
-		SelectTrigger,
-	} from '$lib/components/ui/select';
-	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
-	import { RESIZE_MODES, ALPHA_MODES } from './sample-data';
-	import LinkIcon from 'phosphor-svelte/lib/Link';
-	import LinkBreakIcon from 'phosphor-svelte/lib/LinkBreak';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import { RESIZE_MODES } from './sample-data';
+	import { outputSettings, sourceMeta, updateOutputSettings } from '$lib/stores/app';
+	import { fitOutputSizeToBounds } from '$lib/processing/types';
 
 	type Props = {
 		hasImage?: boolean;
@@ -21,114 +14,213 @@
 
 	let { hasImage = false, hideHeading = false }: Props = $props();
 
-	let width = $state<number>(512);
-	let height = $state<number>(512);
-	let lockAspect = $state(true);
-	let fit = $state('contain');
-	let resize = $state('lanczos3');
-	let alpha = $state('preserve');
-	let alphaThreshold = $state<number>(0);
+	const MIN_SCALE = 0.05;
+	const MAX_SCALE = 1;
+	const SCALE_STEP = 0.0001;
+	const initial = outputSettings.get();
+	let width = $state<number>(initial.width);
+	let height = $state<number>(initial.height);
+	let resize = $state(initial.resize);
+	let scaleFactor = $state<number>(initial.scaleFactor ?? 1);
 
 	const resizeLabel = $derived(RESIZE_MODES.find((r) => r.id === resize)?.label ?? 'Resize');
-	const alphaLabel = $derived(ALPHA_MODES.find((a) => a.id === alpha)?.label ?? 'Alpha');
+	const baseDimensions = $derived.by(() => {
+		const crop = $outputSettings.crop;
+		if (crop) return { width: Math.max(1, crop.width), height: Math.max(1, crop.height) };
+		if ($sourceMeta) return { width: $sourceMeta.width, height: $sourceMeta.height };
+		return undefined;
+	});
+	const enforcedAspectRatio = $derived(
+		baseDimensions
+			? validRatio(baseDimensions.width, baseDimensions.height)
+			: validRatio(width, height)
+	);
+	$effect(() =>
+		outputSettings.subscribe((settings) => {
+			width = settings.width;
+			height = settings.height;
+			resize = settings.resize;
+			scaleFactor = clampScale(
+				settings.scaleFactor ?? factorFromDimensions(settings.width, settings.height)
+			);
+		})
+	);
+
+	$effect(() => {
+		if (!baseDimensions) return;
+		const dimensions = dimensionsForScale(scaleFactor);
+		if (width !== dimensions.width || height !== dimensions.height) {
+			width = dimensions.width;
+			height = dimensions.height;
+		}
+	});
+
+	$effect(() => {
+		const dimensions = dimensionsForAspect(width, height, enforcedAspectRatio);
+		const clamped = fitOutputSizeToBounds(dimensions.width, dimensions.height);
+		updateOutputSettings({
+			width: clamped.width,
+			height: clamped.height,
+			lockAspect: true,
+			fit: 'stretch',
+			resize,
+			autoSizeOnUpload: false,
+			scaleFactor
+		});
+	});
+
+	function validRatio(nextWidth: number, nextHeight: number) {
+		return nextHeight > 0 ? Math.max(1 / 16_384, nextWidth / nextHeight) : 1;
+	}
+
+	function factorFromDimensions(nextWidth: number, nextHeight: number) {
+		if (!baseDimensions) return scaleFactor;
+		const nextFactor =
+			validRatio(baseDimensions.width, baseDimensions.height) >= 1
+				? nextWidth / baseDimensions.width
+				: nextHeight / baseDimensions.height;
+		return clampScale(nextFactor);
+	}
+
+	function dimensionsForAspect(nextWidth: number, nextHeight: number, aspect: number) {
+		const safeWidth = Math.max(1, Math.round(nextWidth || 1));
+		return { width: safeWidth, height: Math.max(1, Math.round(safeWidth / aspect)) };
+	}
+
+	function clampScale(value: number) {
+		return Math.max(MIN_SCALE, Math.min(MAX_SCALE, value || 1));
+	}
+
+	function dimensionsForScale(value: number) {
+		const nextScale = clampScale(value);
+		const base = baseDimensions ?? { width, height };
+		const nextWidth = Math.max(1, Math.round(base.width * nextScale));
+		const nextHeight = Math.max(1, Math.round(base.height * nextScale));
+		return fitOutputSizeToBounds(nextWidth, nextHeight);
+	}
+
+	function setScale(value: number) {
+		scaleFactor = clampScale(value);
+		const dimensions = dimensionsForScale(scaleFactor);
+		width = dimensions.width;
+		height = dimensions.height;
+	}
+
+	function setWidth(value: number) {
+		const dimensions = dimensionsForAspect(value, height, enforcedAspectRatio);
+		setScale(factorFromDimensions(dimensions.width, dimensions.height));
+	}
+
+	function setHeight(value: number) {
+		const safeHeight = Math.max(1, Math.round(value || 1));
+		const nextWidth = Math.max(1, Math.round(safeHeight * enforcedAspectRatio));
+		setScale(factorFromDimensions(nextWidth, safeHeight));
+	}
+
+	function commitOnEnter(event: KeyboardEvent) {
+		if (event.key !== 'Enter') return;
+		(event.currentTarget as HTMLInputElement).blur();
+	}
 </script>
 
-<section class="flex flex-col gap-4" aria-label="Output controls">
+<section class="flex flex-col gap-3" aria-label="Dimension controls">
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
-			<h2 class="text-sm font-semibold tracking-tight">Output</h2>
-			<p class="text-muted-foreground text-xs">Size, resize, and alpha.</p>
+			<h2 class="text-sm font-semibold tracking-tight">Dimensions</h2>
+			<p class="text-xs text-muted-foreground">Output size and resampling.</p>
 		</div>
 	{/if}
 
-	<div class="grid gap-1.5">
-		<Label class="text-muted-foreground text-xs uppercase tracking-wide">Dimensions</Label>
-		<div class="flex items-center gap-1.5">
-			<div class="grid flex-1 gap-1">
-				<Label for="out-width" class="text-xs">Width</Label>
+	<div class="grid w-full gap-3 text-sm">
+		<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
+			<Label for="scale-ratio" class="text-xs text-muted-foreground">Scale</Label>
+			<Slider
+				type="single"
+				bind:value={scaleFactor}
+				min={MIN_SCALE}
+				max={MAX_SCALE}
+				step={SCALE_STEP}
+				disabled={!hasImage}
+				aria-label="Output scale factor"
+				onValueChange={setScale}
+			/>
+			<div class="relative">
 				<Input
-					id="out-width"
+					id="scale-ratio"
+					class="h-8 bg-background pr-5 text-right font-mono text-xs tabular-nums"
 					type="number"
-					inputmode="numeric"
-					min="1"
-					max="16384"
-					step="1"
-					bind:value={width}
+					inputmode="decimal"
+					min={MIN_SCALE}
+					max={MAX_SCALE}
+					step={SCALE_STEP}
+					value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(4)) : 1}
 					disabled={!hasImage}
+					onkeydown={commitOnEnter}
+					onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
-			</div>
-			<Button
-				variant="outline"
-				size="icon-sm"
-				class="mt-5"
-				aria-label={lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'}
-				onclick={() => (lockAspect = !lockAspect)}
-				aria-pressed={lockAspect}
-			>
-				{#if lockAspect}<LinkIcon />{:else}<LinkBreakIcon />{/if}
-			</Button>
-			<div class="grid flex-1 gap-1">
-				<Label for="out-height" class="text-xs">Height</Label>
-				<Input
-					id="out-height"
-					type="number"
-					inputmode="numeric"
-					min="1"
-					max="16384"
-					step="1"
-					bind:value={height}
-					disabled={!hasImage}
-				/>
+				<span
+					class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+					>×</span
+				>
 			</div>
 		</div>
-	</div>
 
-	<div class="grid gap-1.5">
-		<Label for="fit-mode">Fit mode</Label>
-		<ToggleGroup type="single" bind:value={fit} variant="outline" class="w-full">
-			<ToggleGroupItem value="stretch" class="flex-1">Stretch</ToggleGroupItem>
-			<ToggleGroupItem value="contain" class="flex-1">Contain</ToggleGroupItem>
-			<ToggleGroupItem value="cover" class="flex-1">Cover</ToggleGroupItem>
-		</ToggleGroup>
-	</div>
-
-	<div class="grid gap-1.5">
-		<Label for="resize-mode">Resize algorithm</Label>
-		<Select bind:value={resize} type="single">
-			<SelectTrigger id="resize-mode">{resizeLabel}</SelectTrigger>
-			<SelectContent>
-				{#each RESIZE_MODES as r (r.id)}
-					<SelectItem value={r.id}>{r.label}</SelectItem>
-				{/each}
-			</SelectContent>
-		</Select>
-	</div>
-
-	<div class="grid gap-1.5">
-		<Label for="alpha-mode">Alpha mode</Label>
-		<Select bind:value={alpha} type="single">
-			<SelectTrigger id="alpha-mode">{alphaLabel}</SelectTrigger>
-			<SelectContent>
-				{#each ALPHA_MODES as a (a.id)}
-					<SelectItem value={a.id}>{a.label}</SelectItem>
-				{/each}
-			</SelectContent>
-		</Select>
-	</div>
-
-	<div class="grid gap-1.5">
-		<div class="flex items-center justify-between">
-			<Label for="alpha-threshold">Alpha threshold</Label>
-			<span class="text-muted-foreground text-xs tabular-nums">{alphaThreshold}</span>
+		<div class="grid gap-2">
+			<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="out-width" class="text-xs text-muted-foreground">Width</Label>
+				<div class="relative">
+					<Input
+						id="out-width"
+						class="bg-background pr-7 text-right font-mono tabular-nums"
+						type="number"
+						inputmode="numeric"
+						min="1"
+						max="16384"
+						step="1"
+						value={width}
+						disabled={!hasImage}
+						onkeydown={commitOnEnter}
+						onchange={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
+					/>
+					<span
+						class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+						>px</span
+					>
+				</div>
+			</div>
+			<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="out-height" class="text-xs text-muted-foreground">Height</Label>
+				<div class="relative">
+					<Input
+						id="out-height"
+						class="bg-background pr-7 text-right font-mono tabular-nums"
+						type="number"
+						inputmode="numeric"
+						min="1"
+						max="16384"
+						step="1"
+						value={height}
+						disabled={!hasImage}
+						onkeydown={commitOnEnter}
+						onchange={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
+					/>
+					<span
+						class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+						>px</span
+					>
+				</div>
+			</div>
+			<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="resize-mode" class="text-xs text-muted-foreground">Resample</Label>
+				<Select bind:value={resize} type="single">
+					<SelectTrigger id="resize-mode" class="w-full">{resizeLabel}</SelectTrigger>
+					<SelectContent>
+						{#each RESIZE_MODES as r (r.id)}
+							<SelectItem value={r.id}>{r.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+			</div>
 		</div>
-		<Slider
-			type="single"
-			bind:value={alphaThreshold}
-			min={0}
-			max={255}
-			step={1}
-			disabled={alpha !== 'preserve'}
-			aria-label="Alpha threshold"
-		/>
 	</div>
 </section>

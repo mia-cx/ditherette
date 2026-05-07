@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Select as SelectPrimitive } from "bits-ui";
-	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+	import { Select as SelectPrimitive } from 'bits-ui';
+	import { cn, type WithoutChildrenOrChild } from '$lib/utils.js';
 	import CaretUpIcon from 'phosphor-svelte/lib/CaretUp';
 
 	let {
@@ -13,8 +13,11 @@
 <SelectPrimitive.ScrollUpButton
 	bind:ref
 	data-slot="select-scroll-up-button"
-	class={cn("bg-popover z-10 flex cursor-default items-center justify-center py-1 [&_svg:not([class*='size-'])]:size-4 top-0 w-full", className)}
+	class={cn(
+		"absolute top-0 z-10 flex h-6 w-full cursor-default items-center justify-center bg-popover/95 [&_svg:not([class*='size-'])]:size-4",
+		className
+	)}
 	{...restProps}
 >
-	<CaretUpIcon  />
+	<CaretUpIcon weight="bold" />
 </SelectPrimitive.ScrollUpButton>

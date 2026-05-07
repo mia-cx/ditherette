@@ -1,2 +1,7 @@
 onlyBuiltDependencies:
   - esbuild
+  - msgpackr-extract
+  - sharp
+  - workerd
+overrides:
+  cookie@<0.7.0: '>=0.7.0'

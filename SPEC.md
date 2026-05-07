@@ -34,13 +34,13 @@ MVP includes:
 - Upload/replace image, drag/drop, local-only processing, and indefinite local restore until user clears data.
 - Side-by-side and A/B reveal preview modes; mobile defaults to A/B reveal.
 - Shared zoom/pan, pointer scroll-to-zoom, touch pinch zoom, drag-to-pan, and crop mode from the preview toolbar.
-- Manual crop, crop-to-content using current alpha threshold, fit modes, output bounds, and resize algorithms: nearest, bilinear, Lanczos3, and area/box.
+- Manual crop, crop-to-content using current alpha threshold, locked-aspect output bounds, and resize algorithms: nearest, bilinear, Lanczos3, and area/box.
 - Wplace default palette with 63 visible colors plus Transparent, immutable except enabled/disabled state.
 - Custom palettes, palette grid/list modes, JSON import/export, duplicate prevention, and max 256 entries.
 - Color matching modes: OKLab default, sRGB, linear RGB, CompuPhase weighted RGB, Rec.601 weighted RGB, Rec.709 weighted RGB, CIELAB/Lab76, and OKLCH.
-- Dithering modes: none default, Bayer 4×4/8×8/16×16, Floyd–Steinberg, Sierra, Sierra Lite, and seeded random.
+- Dithering modes: none default, Bayer 2×2/4×4/8×8/16×16, Floyd–Steinberg, Sierra, Sierra Lite, and seeded random.
 - Dither strength, simple MVP coverage modes, serpentine for error diffusion, and deterministic random seed with randomize action.
-- Alpha modes: Preserve transparency default, Premultiplied, Matte; alpha threshold only in Preserve mode.
+- Alpha modes live with the Transparent palette swatch: Preserve transparency default, Premultiplied, Matte; alpha threshold only in Preserve mode.
 - Static educational canvas/explainer for each MVP color space and dithering algorithm.
 - Worker-backed async processing orchestrated with Effect v4 beta, cancellation, progress, retry policy, and stale-output handling.
 - Typed-array hot loops, exact deterministic output tests, and 8-bit indexed PNG export with `PLTE`/`tRNS`.
@@ -201,21 +201,18 @@ Disabled controls must explain why they are disabled where it is not obvious.
 - Maximum output pixel count: `67_108_864` pixels (`8192 × 8192`).
 - Maximum output side length: `16_384` pixels in either direction.
 - The source image may be larger than these limits; only the processed output must fit within bounds.
-- On upload, initialize output dimensions to the source aspect ratio scaled down only if needed to fit within max output pixels and max side length. This allows wide/tall outputs larger than `8192` on one axis as long as the other axis is small enough and the total pixel count fits.
+- Scale factor:
+  - persistent conversion setting, default `1.0×`, editable by slider and numeric input, min `0.05×`, max `1.0×`,
+  - when a new source image is uploaded, output dimensions are recalculated from the new source dimensions and the existing scale factor,
+  - dimensions are not preserved between source images; the scale factor is preserved,
+  - manual width/height edits recompute the scale factor from the current source/crop base dimensions,
+  - dimensions cannot scale above the source/crop base dimensions.
 - If a requested output exceeds the max pixel or side-length limit, block processing and explain the limit. The max may become configurable in a future version for users creating very large templates.
-- Aspect-ratio lock:
-  - toggleable and enabled by default,
-  - uses the current locked aspect ratio derived from the entered output dimensions,
-  - changing width derives height from the locked aspect ratio,
-  - changing height derives width from the locked aspect ratio,
-  - unlocked mode allows arbitrary dimensions and updates the candidate aspect ratio from entered dimensions,
-  - after crop is applied, provide a **Reset aspect to crop** button that sets the locked aspect ratio to the crop rectangle aspect ratio and recalculates dimensions,
-  - before any crop, the equivalent reset action uses the source natural aspect ratio,
-  - reset preserves the last edited dimension and recalculates the other dimension; default to preserving width if neither has been edited.
-- Fit mode is user-configurable:
-  - `stretch` — map source/crop region to exact output dimensions; may distort,
-  - `contain` — preserve aspect ratio and pad with matte/transparent background,
-  - `cover` — preserve aspect ratio and crop overflow.
+- Output aspect ratio is always locked to the current source/crop aspect ratio so exported pixels remain square:
+  - changing width derives height from the source/crop aspect ratio and recomputes scale factor,
+  - changing height derives width from the source/crop aspect ratio and recomputes scale factor,
+  - after crop is applied, output dimensions are recalculated from the crop rectangle and current scale factor.
+- Fit mode is not exposed in the MVP UI; processing maps the source/crop region to the locked-aspect output dimensions without distortion.
 - Manual crop is an MVP requirement:
   - user enters crop mode from the preview toolbar,
   - while cropping, the output preview is hidden and the source/crop overlay is shown,
@@ -395,7 +392,7 @@ Persistence schema:
   - `customPalettes: Palette[]`,
   - future custom palette color order once reordering exists,
   - all conversion settings,
-  - preview mode and non-image preview state where useful, including the desktop preview-pane size (a number in `0..1` representing the preview pane's share of the resizable split) so a user's chosen layout balance survives reload.
+  - preview mode, reveal position, zoom/pan lens state, and desktop preview-pane size so a user's chosen preview layout survives reload.
 - Persist uploaded image state and processed output state indefinitely until the user explicitly clears it:
   - file metadata in persistent nanostores,
   - source image binary data in IndexedDB or another browser storage layer suitable for blobs/ArrayBuffers,
@@ -521,7 +518,7 @@ Required alpha modes:
 2. `premultiplied` — premultiply RGB by alpha before color matching. This is mutually exclusive with alpha-threshold masking.
 3. `matte` — composite pixels over a user-selected matte color before palette matching and output opaque pixels.
 
-Alpha controls:
+Alpha controls live in the palette panel attached to the mandatory `Transparent` swatch, not in the Dimensions panel.
 
 - Alpha mode select labels: `Preserve transparency`, `Premultiplied`, `Matte`.
 - `Preserve transparency` uses source RGB for color matching, then applies the alpha threshold. Pixels above threshold become opaque; pixels at/below threshold become Transparent if enabled.
@@ -535,7 +532,9 @@ Alpha controls:
 - If the selected matte color becomes disabled or removed, fall back to the next closest enabled visible palette color using sRGB squared Euclidean distance, update `matteColorKey` to that fallback, and notify the user subtly. If no visible palette color is enabled, show a validation warning.
 - Provide a **Use darkest palette color** action to restore automatic darkest-palette matte behavior.
 - Transparent palette color behavior:
-  - If the active palette includes a transparent color, pixels with alpha at or below the threshold may map to that transparent palette entry.
+  - Every palette includes exactly one `Transparent` swatch; imports/create/duplicate flows enforce it.
+  - Users can enable/disable Transparent like any other palette entry, but cannot edit/delete it.
+  - If Transparent is enabled, pixels with alpha at or below the threshold may map to that transparent palette entry.
   - Transparent palette entries must be shown distinctly in the palette UI with a checkerboard swatch and accessible label.
   - The default Wplace palette includes `Transparent` as its 64th entry.
   - Transparent is enabled by default.
@@ -622,13 +621,14 @@ Dithering is optional and defaults to off (`none`).
 Prioritized first implementation algorithms, in UI order:
 
 1. None / direct nearest-color quantization. This is the default.
-2. Ordered Bayer 4×4.
-3. Ordered Bayer 8×8.
-4. Ordered Bayer 16×16.
-5. Floyd–Steinberg error diffusion.
-6. Sierra error diffusion, using the most common standard Sierra kernel.
-7. Sierra Lite error diffusion, using the most common standard Sierra Lite kernel.
-8. Seeded random/noise threshold dithering.
+2. Ordered Bayer 2×2.
+3. Ordered Bayer 4×4.
+4. Ordered Bayer 8×8.
+5. Ordered Bayer 16×16.
+6. Floyd–Steinberg error diffusion.
+7. Sierra error diffusion, using the most common standard Sierra kernel.
+8. Sierra Lite error diffusion, using the most common standard Sierra Lite kernel.
+9. Seeded random/noise threshold dithering.
 
 Future planned algorithms:
 
@@ -639,7 +639,6 @@ Future planned algorithms:
 - Burkes error diffusion.
 - Full Sierra-family options beyond MVP, including Two-row Sierra and any other well-documented Sierra variants.
 - Stevenson–Arce error diffusion.
-- Ordered Bayer 2×2.
 - Clustered-dot ordered dithering.
 - Blue-noise threshold dithering, using a deterministic bundled threshold tile.
 - Void-and-cluster threshold dithering, if a deterministic threshold tile is bundled.
@@ -987,10 +986,8 @@ type AlphaMode = 'preserve' | 'premultiplied' | 'matte';
 type ConversionSettings = {
   width: number;
   height: number;
-  lockAspectRatio: boolean;
-  lockedAspectRatio: number;
-  lastEditedDimension: 'width' | 'height';
-  fitMode: FitMode;
+  /** Persistent factor applied to the current source/crop dimensions. */
+  scaleFactor: number;
   cropRect: CropRect | null;
   /** Defaults to 'lanczos3'. */
   resizeMode: ResizeMode;

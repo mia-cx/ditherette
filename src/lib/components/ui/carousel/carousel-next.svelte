@@ -1,19 +1,19 @@
 <script lang="ts">
-	import type { WithoutChildren } from "bits-ui";
-	import { getEmblaContext } from "./context.js";
-	import { cn } from "$lib/utils.js";
-	import { Button, type Props } from "$lib/components/ui/button/index.js";
+	import type { WithoutChildren } from 'bits-ui';
+	import { getEmblaContext } from './context.js';
+	import { cn } from '$lib/utils.js';
+	import { Button, type Props } from '$lib/components/ui/button/index.js';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
 
 	let {
 		ref = $bindable(null),
 		class: className,
-		variant = "outline",
-		size = "icon-sm",
+		variant = 'outline',
+		size = 'icon-sm',
 		...restProps
 	}: WithoutChildren<Props> = $props();
 
-	const emblaCtx = getEmblaContext("<Carousel.Next/>");
+	const emblaCtx = getEmblaContext('<Carousel.Next/>');
 </script>
 
 <Button
@@ -23,10 +23,10 @@
 	aria-disabled={!emblaCtx.canScrollNext}
 	disabled={!emblaCtx.canScrollNext}
 	class={cn(
-		"cn-carousel-next absolute touch-manipulation",
-		emblaCtx.orientation === "horizontal"
-			? "-end-12 top-1/2 -translate-y-1/2"
-			: "start-1/2 -bottom-12 -translate-x-1/2 rotate-90",
+		'cn-carousel-next absolute touch-manipulation',
+		emblaCtx.orientation === 'horizontal'
+			? '-end-12 top-1/2 -translate-y-1/2'
+			: 'start-1/2 -bottom-12 -translate-x-1/2 rotate-90',
 		className
 	)}
 	onclick={emblaCtx.scrollNext}
@@ -34,6 +34,6 @@
 	bind:ref
 	{...restProps}
 >
-	<CaretRightIcon  />
+	<CaretRightIcon weight="bold" />
 	<span class="sr-only">Next slide</span>
 </Button>

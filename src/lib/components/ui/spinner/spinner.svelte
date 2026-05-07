@@ -1,18 +1,27 @@
 <script lang="ts">
-	import { cn } from "$lib/utils.js";
+	import { cn } from '$lib/utils.js';
 	import SpinnerIcon from 'phosphor-svelte/lib/Spinner';
-	import type { SVGAttributes } from "svelte/elements";
+	import type { SVGAttributes } from 'svelte/elements';
 
 	let {
 		class: className,
-		role = "status",
+		role = 'status',
 		// we add name, color, and stroke for compatibility with different icon libraries props
 		name,
 		color,
 		stroke,
-		"aria-label": ariaLabel = "Loading",
+		'aria-label': ariaLabel = 'Loading',
 		...restProps
 	}: SVGAttributes<SVGSVGElement> = $props();
 </script>
 
-<SpinnerIcon {role} name={name === null ? undefined : name} color={color === null ? undefined : color} stroke={stroke === null ? undefined : stroke} aria-label={ariaLabel} class={cn("size-4 animate-spin", className)} {...restProps} />
+<SpinnerIcon
+	weight="bold"
+	{role}
+	name={name === null ? undefined : name}
+	color={color === null ? undefined : color}
+	stroke={stroke === null ? undefined : stroke}
+	aria-label={ariaLabel}
+	class={cn('size-4 animate-spin', className)}
+	{...restProps}
+/>

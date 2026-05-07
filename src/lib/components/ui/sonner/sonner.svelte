@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
-	import { mode } from "mode-watcher";
+	import { Toaster as Sonner, type ToasterProps as SonnerProps } from 'svelte-sonner';
+	import { mode } from 'mode-watcher';
 	import SpinnerIcon from 'phosphor-svelte/lib/Spinner';
 	import CheckCircleIcon from 'phosphor-svelte/lib/CheckCircle';
 	import XCircleIcon from 'phosphor-svelte/lib/XCircle';
@@ -17,18 +17,18 @@
 	{...restProps}
 >
 	{#snippet loadingIcon()}
-		<SpinnerIcon class="size-4 animate-spin" />
+		<SpinnerIcon weight="bold" class="size-4 animate-spin" />
 	{/snippet}
 	{#snippet successIcon()}
-		<CheckCircleIcon class="size-4" />
+		<CheckCircleIcon weight="bold" class="size-4" />
 	{/snippet}
 	{#snippet errorIcon()}
-		<XCircleIcon class="size-4" />
+		<XCircleIcon weight="bold" class="size-4" />
 	{/snippet}
 	{#snippet infoIcon()}
-		<InfoIcon class="size-4" />
+		<InfoIcon weight="bold" class="size-4" />
 	{/snippet}
 	{#snippet warningIcon()}
-		<WarningIcon class="size-4" />
+		<WarningIcon weight="bold" class="size-4" />
 	{/snippet}
 </Sonner>

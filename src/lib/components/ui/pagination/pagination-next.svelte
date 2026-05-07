@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { ComponentProps } from "svelte";
-	import { cn } from "$lib/utils.js";
-	import { PaginationLink } from "./index.js";
+	import type { ComponentProps } from 'svelte';
+	import { cn } from '$lib/utils.js';
+	import { PaginationLink } from './index.js';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
 
 	type PaginationNextProps = ComponentProps<typeof PaginationLink>;
@@ -12,9 +12,9 @@
 <PaginationLink
 	aria-label="Go to next page"
 	size="default"
-	class={cn("pr-1.5!", className)}
+	class={cn('pr-1.5!', className)}
 	{...restProps}
 >
 	<span class="cn-pagination-next-text hidden sm:block">Next</span>
-	<CaretRightIcon data-icon="inline-end" />
+	<CaretRightIcon weight="bold" data-icon="inline-end" />
 </PaginationLink>
