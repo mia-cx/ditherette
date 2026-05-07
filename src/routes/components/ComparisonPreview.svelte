@@ -13,6 +13,8 @@
 		EmptyMedia,
 		EmptyTitle
 	} from '$lib/components/ui/empty';
+	import revealIcon from '$lib/assets/reveal.svg';
+	import sideBySideIcon from '$lib/assets/side-by-side.svg';
 	import { processedToImageData } from '$lib/processing/render';
 	import type { CropRect } from '$lib/processing/types';
 	import {
@@ -1116,8 +1118,14 @@
 
 		<Tabs value={mode} onValueChange={setPreviewMode} class="shrink-0">
 			<TabsList>
-				<TabsTrigger value="side-by-side">Side-by-side</TabsTrigger>
-				<TabsTrigger value="ab-reveal">A/B reveal</TabsTrigger>
+				<TabsTrigger value="side-by-side">
+					<img src={sideBySideIcon} alt="" class="size-4 opacity-80 dark:invert" />
+					Side-by-side
+				</TabsTrigger>
+				<TabsTrigger value="ab-reveal">
+					<img src={revealIcon} alt="" class="size-4 opacity-80 dark:invert" />
+					A/B reveal
+				</TabsTrigger>
 			</TabsList>
 		</Tabs>
 
