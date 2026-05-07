@@ -505,18 +505,56 @@
 				{/if}
 			</SelectTrigger>
 			<SelectContent class="max-h-[min(38rem,var(--bits-select-content-available-height))] p-1">
-				<div class="sticky top-0 z-10 grid gap-2 border-b border-border bg-popover p-2">
+				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
 					<input
 						class="h-8 w-full border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
 						placeholder="Search algorithms…"
 						bind:value={algorithmSearch}
 						onkeydown={(event) => event.stopPropagation()}
 					/>
-					<div class="grid gap-1.5">
-						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-							>Method</span
-						>
-						<div class="flex flex-wrap gap-3">
+				</div>
+				<div class="grid grid-cols-[minmax(0,1fr)_10rem] gap-2">
+					<div class="min-w-0">
+						{#each filteredAlgorithms as opt (opt.id)}
+							<SelectItem value={opt.id} label={opt.label} class="items-center py-3 pr-8 pl-3">
+								<span class="grid min-w-0 flex-1 gap-1.5">
+									<span class="flex items-center gap-3">
+										<canvas
+											use:ditherPreview={{
+												mode: opt.id,
+												randomSeed: seed,
+												previewStrength: strength,
+												serpentineScan: serpentine,
+												palette: $selectedPalette,
+												colorSpaceMode: $colorSpace,
+												useColorSpace
+											}}
+											class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
+											aria-hidden="true"
+										></canvas>
+										<span class="grid min-w-0 flex-1 gap-1">
+											<span class="flex min-w-0 items-center gap-1.5">
+												<span class="truncate text-sm font-medium text-foreground">{opt.label}</span
+												>
+												<Badge variant="secondary">{methodLabel(opt.method)}</Badge>
+												<Badge variant="outline">{fieldLabel(opt.field)}</Badge>
+											</span>
+											<span class="text-xs whitespace-normal text-muted-foreground"
+												>{opt.short}</span
+											>
+										</span>
+									</span>
+								</span>
+							</SelectItem>
+						{:else}
+							<div class="p-4 text-center text-xs text-muted-foreground">No algorithms match.</div>
+						{/each}
+					</div>
+					<div class="grid content-start gap-3 border-l border-border p-2">
+						<div class="grid gap-1.5">
+							<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+								>Method</span
+							>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
 								<input
 									type="checkbox"
@@ -545,12 +583,10 @@
 								None
 							</label>
 						</div>
-					</div>
-					<div class="grid gap-1.5">
-						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-							>Field</span
-						>
-						<div class="flex flex-wrap gap-3">
+						<div class="grid gap-1.5">
+							<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+								>Field</span
+							>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
 								<input
 									type="checkbox"
@@ -590,37 +626,6 @@
 						</div>
 					</div>
 				</div>
-				{#each filteredAlgorithms as opt (opt.id)}
-					<SelectItem value={opt.id} label={opt.label} class="items-center py-3 pr-8 pl-3">
-						<span class="grid min-w-0 flex-1 gap-1.5">
-							<span class="flex items-center gap-3">
-								<canvas
-									use:ditherPreview={{
-										mode: opt.id,
-										randomSeed: seed,
-										previewStrength: strength,
-										serpentineScan: serpentine,
-										palette: $selectedPalette,
-										colorSpaceMode: $colorSpace,
-										useColorSpace
-									}}
-									class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
-									aria-hidden="true"
-								></canvas>
-								<span class="grid min-w-0 flex-1 gap-1">
-									<span class="flex min-w-0 items-center gap-1.5">
-										<span class="truncate text-sm font-medium text-foreground">{opt.label}</span>
-										<Badge variant="secondary">{methodLabel(opt.method)}</Badge>
-										<Badge variant="outline">{fieldLabel(opt.field)}</Badge>
-									</span>
-									<span class="text-xs whitespace-normal text-muted-foreground">{opt.short}</span>
-								</span>
-							</span>
-						</span>
-					</SelectItem>
-				{:else}
-					<div class="p-4 text-center text-xs text-muted-foreground">No algorithms match.</div>
-				{/each}
 			</SelectContent>
 		</Select>
 
