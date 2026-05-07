@@ -38,7 +38,7 @@ MVP includes:
 - Wplace default palette with 63 visible colors plus Transparent, immutable except enabled/disabled state.
 - Custom palettes, palette grid/list modes, JSON import/export, duplicate prevention, and max 256 entries.
 - Color matching modes: OKLab default, sRGB, linear RGB, CompuPhase weighted RGB, Rec.601 weighted RGB, Rec.709 weighted RGB, CIELAB/Lab76, and OKLCH.
-- Dithering modes: none default, Bayer 4×4/8×8/16×16, Floyd–Steinberg, Sierra, Sierra Lite, and seeded random.
+- Dithering modes: none default, Bayer 2×2/4×4/8×8/16×16, Floyd–Steinberg, Sierra, Sierra Lite, and seeded random.
 - Dither strength, simple MVP coverage modes, serpentine for error diffusion, and deterministic random seed with randomize action.
 - Alpha modes: Preserve transparency default, Premultiplied, Matte; alpha threshold only in Preserve mode.
 - Static educational canvas/explainer for each MVP color space and dithering algorithm.
@@ -622,13 +622,14 @@ Dithering is optional and defaults to off (`none`).
 Prioritized first implementation algorithms, in UI order:
 
 1. None / direct nearest-color quantization. This is the default.
-2. Ordered Bayer 4×4.
-3. Ordered Bayer 8×8.
-4. Ordered Bayer 16×16.
-5. Floyd–Steinberg error diffusion.
-6. Sierra error diffusion, using the most common standard Sierra kernel.
-7. Sierra Lite error diffusion, using the most common standard Sierra Lite kernel.
-8. Seeded random/noise threshold dithering.
+2. Ordered Bayer 2×2.
+3. Ordered Bayer 4×4.
+4. Ordered Bayer 8×8.
+5. Ordered Bayer 16×16.
+6. Floyd–Steinberg error diffusion.
+7. Sierra error diffusion, using the most common standard Sierra kernel.
+8. Sierra Lite error diffusion, using the most common standard Sierra Lite kernel.
+9. Seeded random/noise threshold dithering.
 
 Future planned algorithms:
 
@@ -639,7 +640,6 @@ Future planned algorithms:
 - Burkes error diffusion.
 - Full Sierra-family options beyond MVP, including Two-row Sierra and any other well-documented Sierra variants.
 - Stevenson–Arce error diffusion.
-- Ordered Bayer 2×2.
 - Clustered-dot ordered dithering.
 - Blue-noise threshold dithering, using a deterministic bundled threshold tile.
 - Void-and-cluster threshold dithering, if a deterministic threshold tile is bundled.

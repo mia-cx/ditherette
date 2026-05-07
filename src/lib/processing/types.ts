@@ -18,6 +18,7 @@ export type ColorSpaceId =
 
 export type DitherId =
 	| 'none'
+	| 'bayer-2'
 	| 'bayer-4'
 	| 'bayer-8'
 	| 'bayer-16'

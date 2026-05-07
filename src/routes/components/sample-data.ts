@@ -130,6 +130,13 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		math: 'index = nearestPaletteColor(pixel)'
 	},
 	{
+		id: 'bayer-2',
+		label: 'Bayer 2×2',
+		family: 'ordered',
+		short: 'Smallest ordered threshold matrix; strongest visible repetition.',
+		math: 'pixel += (Bayer₂[x mod 2,y mod 2] − 0.5) · strength'
+	},
+	{
 		id: 'bayer-4',
 		label: 'Bayer 4×4',
 		family: 'ordered',

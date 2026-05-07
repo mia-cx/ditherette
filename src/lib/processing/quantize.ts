@@ -1,10 +1,7 @@
 import { TRANSPARENT_KEY, darkestVisible } from '$lib/palette/wplace';
+import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
 import { clampByte, createPaletteMatcher } from './color';
 import type { EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
-
-const BAYER_4 = makeBayer(4);
-const BAYER_8 = makeBayer(8);
-const BAYER_16 = makeBayer(16);
 
 const ERROR_KERNELS = {
 	'floyd-steinberg': [
@@ -38,27 +35,6 @@ type QuantizeResult = {
 	transparentIndex: number;
 	warnings: string[];
 };
-
-function makeBayer(size: number): number[] {
-	let matrix = [0];
-	let current = 1;
-	while (current < size) {
-		const next = current * 2;
-		const output = new Array(next * next).fill(0);
-		for (let y = 0; y < current; y++) {
-			for (let x = 0; x < current; x++) {
-				const value = matrix[y * current + x] * 4;
-				output[y * next + x] = value;
-				output[y * next + x + current] = value + 2;
-				output[(y + current) * next + x] = value + 3;
-				output[(y + current) * next + x + current] = value + 1;
-			}
-		}
-		matrix = output;
-		current = next;
-	}
-	return matrix.map((value) => (value + 0.5) / (size * size) - 0.5);
-}
 
 function mulberry32(seed: number) {
 	let state = seed >>> 0;
@@ -184,25 +160,19 @@ function quantizeDirect(
 	strength: number
 ) {
 	const random = mulberry32(settings.dither.seed);
-	const bayer =
-		settings.dither.algorithm === 'bayer-4'
-			? BAYER_4
-			: settings.dither.algorithm === 'bayer-8'
-				? BAYER_8
-				: BAYER_16;
-	const bayerSize =
-		settings.dither.algorithm === 'bayer-4' ? 4 : settings.dither.algorithm === 'bayer-8' ? 8 : 16;
+	const bayerSize = bayerSizeForAlgorithm(settings.dither.algorithm);
+	const bayer = bayerSize ? normalizedBayerMatrix(bayerSize) : undefined;
 	const source = image.data;
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
-	const useBayer = settings.dither.algorithm.startsWith('bayer') && strength > 0;
+	const useBayer = Boolean(bayer && bayerSize && strength > 0);
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
 	const noiseScale = 96 * strength;
 	const coverage = settings.dither.coverage;
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
-		const bayerRow = (y % bayerSize) * bayerSize;
+		const bayerRow = bayerSize ? (y % bayerSize) * bayerSize : 0;
 		for (let x = 0; x < image.width; x++) {
 			const index = rowOffset + x;
 			const offset = index * 4;
@@ -229,7 +199,7 @@ function quantizeDirect(
 				b = clampByte(b * opacity);
 			}
 
-			if (useBayer) {
+			if (useBayer && bayer && bayerSize) {
 				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
 				const threshold = bayer[bayerRow + (x % bayerSize)]! * noiseScale * mask;
 				r = clampByte(r + threshold);

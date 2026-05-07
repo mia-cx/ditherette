@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
 	import { DITHER_ALGORITHMS, COVERAGE_MODES } from './sample-data';
 	import { ditherSettings, updateDitherSettings } from '$lib/stores/app';
 	import DiceIcon from 'phosphor-svelte/lib/DiceFive';
@@ -13,9 +14,6 @@
 	let { compact = false, hideHeading = false }: Props = $props();
 
 	const DITHER_PREVIEW_PIXEL_SCALE = 6;
-	const BAYER_4 = makeBayer(4);
-	const BAYER_8 = makeBayer(8);
-	const BAYER_16 = makeBayer(16);
 	const ERROR_KERNELS = {
 		'floyd-steinberg': [
 			[1, 0, 7 / 16],
@@ -107,8 +105,8 @@
 		serpentineScan: boolean
 	) {
 		const amount = Math.min(1, Math.max(0, previewStrength / 100));
-		const matrix = bayerMatrixFor(mode);
-		if (matrix) return drawBayerMatrixPreview(matrix, size);
+		const bayerSize = bayerSizeForAlgorithm(mode);
+		if (bayerSize) return drawBayerMatrixPreview(normalizedBayerThresholdMatrix(bayerSize), size);
 		if (mode === 'none') return drawGradientPreview(size);
 		const kernel = errorKernelFor(mode);
 		if (kernel) return drawErrorDiffusionPreview(kernel, size, amount, serpentineScan);
@@ -196,13 +194,6 @@
 		return undefined;
 	}
 
-	function bayerMatrixFor(mode: string) {
-		if (mode === 'bayer-4') return BAYER_4;
-		if (mode === 'bayer-8') return BAYER_8;
-		if (mode === 'bayer-16') return BAYER_16;
-		return undefined;
-	}
-
 	function gradientValue(x: number, width: number) {
 		return Math.round((x / Math.max(1, width - 1)) * 255);
 	}
@@ -218,27 +209,6 @@
 		image.data[offset + 1] = byte;
 		image.data[offset + 2] = byte;
 		image.data[offset + 3] = 255;
-	}
-
-	function makeBayer(size: number): number[] {
-		let matrix = [0];
-		let current = 1;
-		while (current < size) {
-			const next = current * 2;
-			const output = new Array(next * next).fill(0);
-			for (let y = 0; y < current; y++) {
-				for (let x = 0; x < current; x++) {
-					const value = matrix[y * current + x] * 4;
-					output[y * next + x] = value;
-					output[y * next + x + current] = value + 2;
-					output[(y + current) * next + x] = value + 3;
-					output[(y + current) * next + x + current] = value + 1;
-				}
-			}
-			matrix = output;
-			current = next;
-		}
-		return matrix.map((value) => (value + 0.5) / (size * size));
 	}
 
 	function mulberry32(value: number) {
