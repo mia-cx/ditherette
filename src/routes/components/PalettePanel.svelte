@@ -35,19 +35,21 @@
 
 	let viewMode = $state<'list' | 'grid'>('list');
 	let preset = $state('wplace');
-	let isMobile = $state(false);
+	let gridDisabled = $state(false);
 
 	const enabledCount = $derived(SAMPLE_PALETTE.filter((s) => s.enabled).length);
 
-	// Grid view is intentionally disabled on mobile: each swatch carries
-	// hover-only action buttons that aren't reachable without a pointer.
-	// Track viewport, force list view at narrow widths, and disable the
-	// grid toggle so users can't strand themselves there.
+	// Grid view is disabled when its hover-reveal corner controls (edit,
+	// delete, select, visibility) can't be reached. The real constraint is
+	// "no hover capability" — not viewport width — so we key off
+	// `(any-hover: none)`, which captures touch devices regardless of size,
+	// and OR it with the layout breakpoint (`lg` = 1024px) so the toggle
+	// stays disabled while the page is in its single-column mobile main.
 	$effect(() => {
 		if (typeof window === 'undefined') return;
-		const mql = window.matchMedia('(max-width: 767.98px)');
+		const mql = window.matchMedia('(any-hover: none), (max-width: 1023.98px)');
 		const sync = () => {
-			isMobile = mql.matches;
+			gridDisabled = mql.matches;
 			if (mql.matches && viewMode === 'grid') viewMode = 'list';
 		};
 		sync();
@@ -104,9 +106,9 @@
 				<ToggleGroupItem value="list" aria-label="List view"><ListIcon /></ToggleGroupItem>
 				<ToggleGroupItem
 					value="grid"
-					aria-label="Grid view{isMobile ? ' (disabled on mobile)' : ''}"
-					disabled={isMobile}
-					title={isMobile ? 'Grid view requires a pointer device' : undefined}
+					aria-label="Grid view{gridDisabled ? ' (requires a pointer device)' : ''}"
+					disabled={gridDisabled}
+					title={gridDisabled ? 'Grid view requires a pointer device' : undefined}
 				>
 					<GridIcon />
 				</ToggleGroupItem>
