@@ -169,6 +169,7 @@
 
 		<div class="grid grid-cols-3 gap-2">
 			<div class="grid gap-1">
+				<Label for="out-width" class="text-xs text-muted-foreground">Width</Label>
 				<Input
 					id="out-width"
 					class="text-right font-mono tabular-nums"
@@ -182,9 +183,9 @@
 					onkeydown={commitOnEnter}
 					onchange={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
-				<Label for="out-width" class="text-xs text-muted-foreground">Width</Label>
 			</div>
 			<div class="grid gap-1">
+				<Label for="out-height" class="text-xs text-muted-foreground">Height</Label>
 				<Input
 					id="out-height"
 					class="text-right font-mono tabular-nums"
@@ -198,9 +199,9 @@
 					onkeydown={commitOnEnter}
 					onchange={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
 				/>
-				<Label for="out-height" class="text-xs text-muted-foreground">Height</Label>
 			</div>
 			<div class="grid gap-1">
+				<Label for="resize-mode" class="text-xs text-muted-foreground">Resample</Label>
 				<Select bind:value={resize} type="single">
 					<SelectTrigger id="resize-mode" class="w-full">{resizeLabel}</SelectTrigger>
 					<SelectContent>
@@ -209,7 +210,6 @@
 						{/each}
 					</SelectContent>
 				</Select>
-				<Label for="resize-mode" class="text-xs text-muted-foreground">Resample</Label>
 			</div>
 		</div>
 	</div>
