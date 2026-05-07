@@ -241,7 +241,7 @@
 		<Select bind:value={algorithm} type="single">
 			<SelectTrigger
 				id="dither-algorithm"
-				class="h-auto w-full items-start gap-3 border-border bg-background/50 p-2 text-left whitespace-normal"
+				class="h-auto min-h-24 w-full items-center gap-3 border-border bg-background/50 p-3 text-left whitespace-normal"
 			>
 				{#if current}
 					<span class="grid min-w-0 flex-1 gap-1.5">
@@ -265,19 +265,16 @@
 								<span class="text-xs text-muted-foreground">{current.short}</span>
 							</span>
 						</span>
-						<span
-							class="border-l-2 border-border bg-muted/50 px-2 py-1 font-mono text-xs text-muted-foreground"
-						>
-							{current.math}
-						</span>
 					</span>
 				{:else}
 					{triggerLabel}
 				{/if}
 			</SelectTrigger>
-			<SelectContent class="w-[32rem] p-1">
+			<SelectContent
+				class="max-h-[min(34rem,var(--bits-select-content-available-height))] w-[32rem] p-1"
+			>
 				{#each DITHER_ALGORITHMS as opt (opt.id)}
-					<SelectItem value={opt.id} label={opt.label} class="items-start py-2 pr-8 pl-2">
+					<SelectItem value={opt.id} label={opt.label} class="min-h-20 items-center py-2 pr-8 pl-2">
 						<span class="grid min-w-0 flex-1 gap-1.5">
 							<span class="flex items-center gap-3">
 								<canvas
@@ -297,11 +294,6 @@
 									</span>
 									<span class="text-xs whitespace-normal text-muted-foreground">{opt.short}</span>
 								</span>
-							</span>
-							<span
-								class="border-l-2 border-border bg-muted/50 px-2 py-1 font-mono text-xs whitespace-normal text-muted-foreground"
-							>
-								{opt.math}
 							</span>
 						</span>
 					</SelectItem>
