@@ -10,18 +10,28 @@
 	import ImageIcon from 'phosphor-svelte/lib/ImageSquare';
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 
+	type PreviewMode = 'side-by-side' | 'ab-reveal';
+
 	type Props = {
-		mode?: 'side-by-side' | 'ab-reveal';
+		// Initial preview mode. Per spec, mobile/narrow screens default to A/B
+		// reveal and desktop/wide screens default to side-by-side. Each layout
+		// passes the appropriate default since they render separate instances.
+		defaultMode?: PreviewMode;
 		hasImage?: boolean;
 		minHeightClass?: string;
 	};
 
 	let {
-		mode = $bindable('side-by-side'),
+		defaultMode = 'side-by-side',
 		hasImage = false,
 		minHeightClass = 'min-h-[320px] md:min-h-[420px]',
 	}: Props = $props();
 
+	// `defaultMode` seeds the initial state; subsequent updates are driven
+	// by the user via the segmented Tabs control. Prop changes after mount
+	// don't override user choice on purpose.
+	// svelte-ignore state_referenced_locally
+	let mode = $state<PreviewMode>(defaultMode);
 	let revealValue = $state<number>(50);
 </script>
 

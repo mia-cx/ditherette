@@ -39,16 +39,19 @@
 <div class="bg-background flex min-h-svh flex-col lg:h-svh">
 	<AppBar hasImage={false} />
 
-	<!-- Mobile main: natural flow. -->
+	<!-- Mobile main: natural flow. Defaults to A/B reveal per spec
+	     (mobile/narrow screens prefer the stacked reveal slider over a
+	     squeezed side-by-side comparison). -->
 	<main class="flex flex-1 flex-col gap-4 lg:hidden">
 		<ComparisonPreview
+			defaultMode="ab-reveal"
 			hasImage={false}
 			minHeightClass="min-h-[320px] md:min-h-[420px]"
 		/>
 		{@render controls('gap-4')}
 	</main>
 
-	<!-- Desktop main: vertical resizable panes. -->
+	<!-- Desktop main: vertical resizable panes. Side-by-side default. -->
 	<main class="hidden flex-1 overflow-hidden lg:block">
 		<ResizablePaneGroup direction="vertical" class="h-full">
 			<ResizablePane defaultSize={56} minSize={25}>
