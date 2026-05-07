@@ -78,6 +78,15 @@
 		}
 	}
 
+	async function clearImageData() {
+		uploadError = undefined;
+		try {
+			await clearAllImageData();
+		} catch (error) {
+			uploadError = error instanceof Error ? error.message : 'Could not clear saved image data.';
+		}
+	}
+
 	async function onFileChange(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
@@ -117,11 +126,7 @@
 />
 
 <div class="flex min-h-svh flex-col bg-background lg:h-svh">
-	<AppBar
-		hasImage={$hasImage}
-		onChooseImage={chooseImage}
-		onClear={() => void clearAllImageData()}
-	/>
+	<AppBar hasImage={$hasImage} onChooseImage={chooseImage} onClear={clearImageData} />
 
 	{#if uploadError}
 		<p class="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

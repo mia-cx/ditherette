@@ -110,9 +110,9 @@ export const processingError = atom<string | undefined>();
 export const hasImage = computed(sourceMeta, (source) => Boolean(source));
 export const activeColorCount = computed(selectedPalette, (palette) => palette.length);
 
-function shallowEqual<T extends Record<string, unknown>>(left: T, right: T) {
-	const leftKeys = Object.keys(left);
-	const rightKeys = Object.keys(right);
+function shallowEqual<T extends object>(left: T, right: T) {
+	const leftKeys = Object.keys(left) as Array<keyof T>;
+	const rightKeys = Object.keys(right) as Array<keyof T>;
 	return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
 }
 
@@ -164,32 +164,17 @@ function visibleCustomColor(name: string, hex: string): PaletteColor {
 
 export function updateOutputSettings(patch: Partial<OutputSettings>) {
 	const next = { ...outputSettings.get(), ...patch };
-	if (
-		!shallowEqual(
-			outputSettings.get() as unknown as Record<string, unknown>,
-			next as unknown as Record<string, unknown>
-		)
-	)
-		outputSettings.set(next);
+	if (!shallowEqual(outputSettings.get(), next)) outputSettings.set(next);
 }
 
 export function updateDitherSettings(patch: Partial<DitherSettings>) {
 	const next = { ...ditherSettings.get(), ...patch };
-	if (
-		!shallowEqual(
-			ditherSettings.get() as unknown as Record<string, unknown>,
-			next as unknown as Record<string, unknown>
-		)
-	)
-		ditherSettings.set(next);
+	if (!shallowEqual(ditherSettings.get(), next)) ditherSettings.set(next);
 }
 
 export function updatePreviewSettings(patch: Partial<PreviewSettings>) {
 	const next = { ...previewSettings.get(), ...patch };
-	if (
-		!shallowEqual(previewSettings.get() as Record<string, unknown>, next as Record<string, unknown>)
-	)
-		previewSettings.set(next);
+	if (!shallowEqual(previewSettings.get(), next)) previewSettings.set(next);
 }
 
 export function setPaletteColorEnabled(

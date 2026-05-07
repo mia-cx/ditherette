@@ -13,7 +13,7 @@
 		dense?: boolean;
 		extras?: import('svelte').Snippet;
 		onChooseImage?: () => void;
-		onClear?: () => void;
+		onClear?: () => void | Promise<void>;
 	};
 
 	let { hasImage = false, dense = false, extras, onChooseImage, onClear }: Props = $props();
