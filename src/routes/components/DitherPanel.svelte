@@ -13,7 +13,7 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	const DITHER_PREVIEW_PIXEL_SCALE = 6;
+	const DITHER_PREVIEW_PIXEL_SCALE = 2;
 	const ERROR_KERNELS = {
 		'floyd-steinberg': [
 			[1, 0, 7 / 16],
@@ -126,7 +126,7 @@
 		const image = new ImageData(size, size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				writePreviewPixel(image, x, y, radialGradientValue(x, y, size));
+				writePreviewPixel(image, x, y, gradientValue(x, size));
 			}
 		}
 		return image;
@@ -140,7 +140,7 @@
 		const matrixSize = bayerSize ?? 1;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				const gradient = radialGradientValue(x, y, size) / 255;
+				const gradient = gradientValue(x, size) / 255;
 				const ditherThreshold = matrix
 					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!
 					: random();
@@ -162,7 +162,7 @@
 		const work = new Float32Array(size * size);
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
-				work[y * size + x] = radialGradientValue(x, y, size);
+				work[y * size + x] = gradientValue(x, size);
 			}
 		}
 
@@ -196,10 +196,9 @@
 		return undefined;
 	}
 
-	function radialGradientValue(x: number, y: number, size: number) {
+	function gradientValue(x: number, size: number) {
 		const extent = Math.max(1, size - 1);
-		const distance = Math.sqrt(x * x + y * y) / Math.sqrt(2 * extent * extent);
-		return Math.round((1 - Math.min(1, distance)) * 255);
+		return Math.round((x / extent) * 255);
 	}
 
 	function clampByte(value: number) {
