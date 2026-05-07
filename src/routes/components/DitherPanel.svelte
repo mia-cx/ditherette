@@ -9,7 +9,12 @@
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
 	import { clampByte, createPaletteMatcher, vectorForRgb } from '$lib/processing/color';
 	import type { ColorSpaceId, EnabledPaletteColor, Rgb } from '$lib/processing/types';
-	import { DITHER_ALGORITHMS, PLACEMENT_MODES, type DitherOption } from './sample-data';
+	import {
+		DITHER_ALGORITHMS,
+		PLACEMENT_MODES,
+		type DitherField,
+		type DitherMethod
+	} from './sample-data';
 	import {
 		colorSpace,
 		ditherSettings,
@@ -65,6 +70,9 @@
 	let serpentine = $state(initial.serpentine);
 	let seed = $state(initial.seed);
 	let useColorSpace = $state(initial.useColorSpace ?? false);
+	let algorithmSearch = $state('');
+	let methodFilter = $state<DitherMethod | 'all'>('all');
+	let fieldFilter = $state<DitherField | 'all'>('all');
 
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
@@ -76,6 +84,20 @@
 	const triggerLabel = $derived(current?.label ?? 'Select algorithm');
 	const placementLabel = $derived(
 		PLACEMENT_MODES.find((option) => option.id === placement)?.label ?? 'Placement'
+	);
+	const filteredAlgorithms = $derived(
+		DITHER_ALGORITHMS.filter((option) => {
+			const query = algorithmSearch.trim().toLowerCase();
+			const matchesQuery =
+				query.length === 0 ||
+				[option.label, option.short, option.sku, option.method, option.field]
+					.join(' ')
+					.toLowerCase()
+					.includes(query);
+			const matchesMethod = methodFilter === 'all' || option.method === methodFilter;
+			const matchesField = fieldFilter === 'all' || option.field === fieldFilter;
+			return matchesQuery && matchesMethod && matchesField;
+		})
 	);
 
 	$effect(() => {
@@ -400,8 +422,25 @@
 		image.data[offset + 3] = 255;
 	}
 
-	function familyLabel(family: DitherOption['family']) {
-		return family.replace('-', ' ');
+	function methodLabel(method: DitherMethod) {
+		if (method === 'error-diffusion') return 'Error diffusion';
+		if (method === 'threshold') return 'Threshold';
+		return 'None';
+	}
+
+	function fieldLabel(field: DitherField) {
+		if (field === 'ordered') return 'Ordered';
+		if (field === 'noise') return 'Noise';
+		if (field === 'kernel') return 'Kernel';
+		return 'None';
+	}
+
+	function filterButtonClass(active: boolean) {
+		return `h-7 border px-2 text-xs ${
+			active
+				? 'border-primary bg-primary text-primary-foreground'
+				: 'border-border bg-background text-muted-foreground hover:text-foreground'
+		}`;
 	}
 
 	function mulberry32(value: number) {
@@ -450,8 +489,8 @@
 							<span class="grid min-w-0 flex-1 gap-1">
 								<span class="flex min-w-0 items-center gap-1.5">
 									<span class="truncate text-sm font-medium text-foreground">{current.label}</span>
-									<Badge variant="secondary" class="capitalize">{familyLabel(current.family)}</Badge
-									>
+									<Badge variant="secondary">{methodLabel(current.method)}</Badge>
+									<Badge variant="outline">{fieldLabel(current.field)}</Badge>
 								</span>
 								<span class="text-xs text-muted-foreground">{current.short}</span>
 							</span>
@@ -461,8 +500,65 @@
 					{triggerLabel}
 				{/if}
 			</SelectTrigger>
-			<SelectContent class="max-h-[min(34rem,var(--bits-select-content-available-height))] p-1">
-				{#each DITHER_ALGORITHMS as opt (opt.id)}
+			<SelectContent class="max-h-[min(38rem,var(--bits-select-content-available-height))] p-1">
+				<div class="sticky top-0 z-10 grid gap-2 border-b border-border bg-popover p-2">
+					<input
+						class="h-8 w-full border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+						placeholder="Search algorithms…"
+						bind:value={algorithmSearch}
+						onkeydown={(event) => event.stopPropagation()}
+					/>
+					<div class="grid gap-1.5">
+						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+							>Method</span
+						>
+						<div class="flex flex-wrap gap-1">
+							<button
+								type="button"
+								class={filterButtonClass(methodFilter === 'all')}
+								onclick={() => (methodFilter = 'all')}>All</button
+							>
+							<button
+								type="button"
+								class={filterButtonClass(methodFilter === 'threshold')}
+								onclick={() => (methodFilter = 'threshold')}>Threshold</button
+							>
+							<button
+								type="button"
+								class={filterButtonClass(methodFilter === 'error-diffusion')}
+								onclick={() => (methodFilter = 'error-diffusion')}>Error diffusion</button
+							>
+						</div>
+					</div>
+					<div class="grid gap-1.5">
+						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
+							>Field</span
+						>
+						<div class="flex flex-wrap gap-1">
+							<button
+								type="button"
+								class={filterButtonClass(fieldFilter === 'all')}
+								onclick={() => (fieldFilter = 'all')}>All</button
+							>
+							<button
+								type="button"
+								class={filterButtonClass(fieldFilter === 'ordered')}
+								onclick={() => (fieldFilter = 'ordered')}>Ordered</button
+							>
+							<button
+								type="button"
+								class={filterButtonClass(fieldFilter === 'noise')}
+								onclick={() => (fieldFilter = 'noise')}>Noise</button
+							>
+							<button
+								type="button"
+								class={filterButtonClass(fieldFilter === 'kernel')}
+								onclick={() => (fieldFilter = 'kernel')}>Kernel</button
+							>
+						</div>
+					</div>
+				</div>
+				{#each filteredAlgorithms as opt (opt.id)}
 					<SelectItem value={opt.id} label={opt.label} class="items-center py-3 pr-8 pl-3">
 						<span class="grid min-w-0 flex-1 gap-1.5">
 							<span class="flex items-center gap-3">
@@ -482,13 +578,16 @@
 								<span class="grid min-w-0 flex-1 gap-1">
 									<span class="flex min-w-0 items-center gap-1.5">
 										<span class="truncate text-sm font-medium text-foreground">{opt.label}</span>
-										<Badge variant="secondary" class="capitalize">{familyLabel(opt.family)}</Badge>
+										<Badge variant="secondary">{methodLabel(opt.method)}</Badge>
+										<Badge variant="outline">{fieldLabel(opt.field)}</Badge>
 									</span>
 									<span class="text-xs whitespace-normal text-muted-foreground">{opt.short}</span>
 								</span>
 							</span>
 						</span>
 					</SelectItem>
+				{:else}
+					<div class="p-4 text-center text-xs text-muted-foreground">No algorithms match.</div>
 				{/each}
 			</SelectContent>
 		</Select>

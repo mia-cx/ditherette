@@ -113,10 +113,16 @@ export const COLOR_SPACES: ColorSpaceOption[] = [
 	}
 ];
 
+export type DitherMethod = 'none' | 'threshold' | 'error-diffusion';
+export type DitherField = 'none' | 'ordered' | 'noise' | 'kernel';
+
 export type DitherOption = {
 	id: string;
 	label: string;
 	family: 'none' | 'ordered' | 'error-diffusion' | 'noise';
+	method: DitherMethod;
+	field: DitherField;
+	sku: string;
 	short: string;
 	math: string;
 };
@@ -126,6 +132,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'none',
 		label: 'None',
 		family: 'none',
+		method: 'none',
+		field: 'none',
+		sku: 'direct.none',
 		short: 'Direct nearest-color quantization. Fast; can flatten gradients.',
 		math: 'index = nearestPaletteColor(pixel)'
 	},
@@ -133,6 +142,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'bayer-2',
 		label: 'Bayer 2×2',
 		family: 'ordered',
+		method: 'threshold',
+		field: 'ordered',
+		sku: 'threshold.ordered.bayer-2',
 		short: 'Smallest ordered threshold matrix; strongest visible repetition.',
 		math: 'pixel += (Bayer₂[x mod 2,y mod 2] − 0.5) · strength'
 	},
@@ -140,6 +152,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'bayer-4',
 		label: 'Bayer 4×4',
 		family: 'ordered',
+		method: 'threshold',
+		field: 'ordered',
+		sku: 'threshold.ordered.bayer-4',
 		short: 'Ordered threshold matrix. Crisp, repeating pattern.',
 		math: 'pixel += (Bayer₄[x mod 4,y mod 4] − 0.5) · strength'
 	},
@@ -147,6 +162,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'bayer-8',
 		label: 'Bayer 8×8',
 		family: 'ordered',
+		method: 'threshold',
+		field: 'ordered',
+		sku: 'threshold.ordered.bayer-8',
 		short: 'Larger matrix; less obvious repetition than 4×4.',
 		math: 'pixel += (Bayer₈[x mod 8,y mod 8] − 0.5) · strength'
 	},
@@ -154,6 +172,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'bayer-16',
 		label: 'Bayer 16×16',
 		family: 'ordered',
+		method: 'threshold',
+		field: 'ordered',
+		sku: 'threshold.ordered.bayer-16',
 		short: 'Largest ordered matrix; smoothest of the Bayer family.',
 		math: 'pixel += (Bayer₁₆[x mod 16,y mod 16] − 0.5) · strength'
 	},
@@ -161,6 +182,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'floyd-steinberg',
 		label: 'Floyd–Steinberg',
 		family: 'error-diffusion',
+		method: 'error-diffusion',
+		field: 'kernel',
+		sku: 'error-diffusion.kernel.floyd-steinberg',
 		short: 'Distributes quantization error to four future neighbors (7/16, 3/16, 5/16, 1/16).',
 		math: 'error = pixel − quantized; diffuse {→7, ↙3, ↓5, ↘1}/16'
 	},
@@ -168,6 +192,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'sierra',
 		label: 'Sierra',
 		family: 'error-diffusion',
+		method: 'error-diffusion',
+		field: 'kernel',
+		sku: 'error-diffusion.kernel.sierra',
 		short: 'Wider three-row error diffusion kernel.',
 		math: 'error = pixel − quantized; diffuse Sierra weights /32 across three rows'
 	},
@@ -175,6 +202,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'sierra-lite',
 		label: 'Sierra Lite',
 		family: 'error-diffusion',
+		method: 'error-diffusion',
+		field: 'kernel',
+		sku: 'error-diffusion.kernel.sierra-lite',
 		short: 'Cheaper Sierra variant; smaller neighborhood.',
 		math: 'error = pixel − quantized; diffuse {→2, ↙1, ↓1}/4'
 	},
@@ -182,6 +212,9 @@ export const DITHER_ALGORITHMS: DitherOption[] = [
 		id: 'random',
 		label: 'Random',
 		family: 'noise',
+		method: 'threshold',
+		field: 'noise',
+		sku: 'threshold.noise.white',
 		short: 'Seeded per-pixel noise perturbs the quantization threshold.',
 		math: 'pixel += (mulberry32(seed,x,y) − 0.5) · strength'
 	}
