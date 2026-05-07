@@ -27,7 +27,8 @@ export const outputSettings = persistentJSON<OutputSettings>('ditherette:output'
 	alphaMode: 'preserve',
 	alphaThreshold: 0,
 	matteKey: '#FFFFFF',
-	autoSizeOnUpload: true
+	autoSizeOnUpload: false,
+	scaleFactor: 1
 });
 
 export const ditherSettings = persistentJSON<DitherSettings>('ditherette:dither', {

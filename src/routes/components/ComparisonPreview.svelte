@@ -596,7 +596,14 @@
 	function applyCrop() {
 		const crop = normalizeCrop(activeCrop!);
 		if (crop.width <= 2 || crop.height <= 2) return;
-		updateOutputSettings({ crop, width: crop.width, height: crop.height, autoSizeOnUpload: false });
+		const scaleFactor = $outputSettings.scaleFactor ?? 1;
+		updateOutputSettings({
+			crop,
+			width: Math.max(1, Math.round(crop.width * scaleFactor)),
+			height: Math.max(1, Math.round(crop.height * scaleFactor)),
+			scaleFactor,
+			autoSizeOnUpload: false
+		});
 		cropDraft = undefined;
 	}
 

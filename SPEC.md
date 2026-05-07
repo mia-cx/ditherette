@@ -201,14 +201,16 @@ Disabled controls must explain why they are disabled where it is not obvious.
 - Maximum output pixel count: `67_108_864` pixels (`8192 × 8192`).
 - Maximum output side length: `16_384` pixels in either direction.
 - The source image may be larger than these limits; only the processed output must fit within bounds.
-- On upload, initialize output dimensions to the source aspect ratio scaled down only if needed to fit within max output pixels and max side length. This allows wide/tall outputs larger than `8192` on one axis as long as the other axis is small enough and the total pixel count fits.
+- Scale factor:
+  - persistent conversion setting, default `1.0×`, editable by slider and numeric input,
+  - when a new source image is uploaded, output dimensions are recalculated from the new source dimensions and the existing scale factor,
+  - dimensions are not preserved between source images; the scale factor is preserved,
+  - manual width/height edits recompute the scale factor from the current source/crop base dimensions.
 - If a requested output exceeds the max pixel or side-length limit, block processing and explain the limit. The max may become configurable in a future version for users creating very large templates.
 - Output aspect ratio is always locked to the current source/crop aspect ratio so exported pixels remain square:
-  - changing width derives height from the source/crop aspect ratio,
-  - changing height derives width from the source/crop aspect ratio,
-  - after crop is applied, provide a **Reset aspect to crop** button that restores the crop rectangle aspect ratio and recalculates dimensions,
-  - before any crop, the equivalent reset action uses the source natural aspect ratio,
-  - reset preserves the last edited dimension and recalculates the other dimension; default to preserving width if neither has been edited.
+  - changing width derives height from the source/crop aspect ratio and recomputes scale factor,
+  - changing height derives width from the source/crop aspect ratio and recomputes scale factor,
+  - after crop is applied, output dimensions are recalculated from the crop rectangle and current scale factor.
 - Fit mode is not exposed in the MVP UI; processing maps the source/crop region to the locked-aspect output dimensions without distortion.
 - Manual crop is an MVP requirement:
   - user enters crop mode from the preview toolbar,
@@ -983,10 +985,8 @@ type AlphaMode = 'preserve' | 'premultiplied' | 'matte';
 type ConversionSettings = {
   width: number;
   height: number;
-  lockAspectRatio: boolean;
-  lockedAspectRatio: number;
-  lastEditedDimension: 'width' | 'height';
-  fitMode: FitMode;
+  /** Persistent factor applied to the current source/crop dimensions. */
+  scaleFactor: number;
   cropRect: CropRect | null;
   /** Defaults to 'lanczos3'. */
   resizeMode: ResizeMode;

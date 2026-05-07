@@ -22,31 +22,39 @@
 	let width = $state<number>(initial.width);
 	let height = $state<number>(initial.height);
 	let resize = $state(initial.resize);
-	let scaleValue = $state(1);
-	let lastEditedDimension = $state<'width' | 'height'>('width');
+	let scaleFactor = $state<number>(initial.scaleFactor ?? 1);
 
 	const resizeLabel = $derived(RESIZE_MODES.find((r) => r.id === resize)?.label ?? 'Resize');
 	const baseDimensions = $derived.by(() => {
 		const crop = $outputSettings.crop;
 		if (crop) return { width: Math.max(1, crop.width), height: Math.max(1, crop.height) };
 		if ($sourceMeta) return { width: $sourceMeta.width, height: $sourceMeta.height };
-		return { width, height };
+		return undefined;
 	});
-	const enforcedAspectRatio = $derived(validRatio(baseDimensions.width, baseDimensions.height));
-	const scaleRatio = $derived.by(() => {
-		if (lastEditedDimension === 'height') return height / baseDimensions.height;
-		return width / baseDimensions.width;
-	});
-	const scaleDisplay = $derived(formatScale(scaleRatio));
+	const enforcedAspectRatio = $derived(
+		baseDimensions
+			? validRatio(baseDimensions.width, baseDimensions.height)
+			: validRatio(width, height)
+	);
+	const scaleDisplay = $derived(formatScale(scaleFactor));
 
 	$effect(() =>
 		outputSettings.subscribe((settings) => {
 			width = settings.width;
 			height = settings.height;
 			resize = settings.resize;
-			scaleValue = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scaleRatio));
+			scaleFactor = settings.scaleFactor ?? factorFromDimensions(settings.width, settings.height);
 		})
 	);
+
+	$effect(() => {
+		if (!baseDimensions) return;
+		const dimensions = dimensionsForScale(scaleFactor);
+		if (width !== dimensions.width || height !== dimensions.height) {
+			width = dimensions.width;
+			height = dimensions.height;
+		}
+	});
 
 	$effect(() => {
 		const dimensions = dimensionsForAspect(width, height, enforcedAspectRatio);
@@ -57,7 +65,8 @@
 			lockAspect: true,
 			fit: 'stretch',
 			resize,
-			autoSizeOnUpload: false
+			autoSizeOnUpload: false,
+			scaleFactor
 		});
 	});
 
@@ -65,58 +74,63 @@
 		return nextHeight > 0 ? Math.max(1 / 16_384, nextWidth / nextHeight) : 1;
 	}
 
+	function factorFromDimensions(nextWidth: number, nextHeight: number) {
+		if (!baseDimensions) return scaleFactor;
+		return validRatio(baseDimensions.width, baseDimensions.height) >= 1
+			? nextWidth / baseDimensions.width
+			: nextHeight / baseDimensions.height;
+	}
+
 	function formatScale(value: number) {
 		return `${Number.isFinite(value) ? value.toFixed(2) : '1.00'}×`;
 	}
 
 	function dimensionsForAspect(nextWidth: number, nextHeight: number, aspect: number) {
-		if (lastEditedDimension === 'height') {
-			const safeHeight = Math.max(1, Math.round(nextHeight || 1));
-			return { width: Math.max(1, Math.round(safeHeight * aspect)), height: safeHeight };
-		}
 		const safeWidth = Math.max(1, Math.round(nextWidth || 1));
 		return { width: safeWidth, height: Math.max(1, Math.round(safeWidth / aspect)) };
 	}
 
 	function dimensionsForScale(value: number) {
 		const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, value || 1));
-		const nextWidth = Math.max(1, Math.round(baseDimensions.width * nextScale));
-		const nextHeight = Math.max(1, Math.round(baseDimensions.height * nextScale));
+		const base = baseDimensions ?? { width, height };
+		const nextWidth = Math.max(1, Math.round(base.width * nextScale));
+		const nextHeight = Math.max(1, Math.round(base.height * nextScale));
 		return fitOutputSizeToBounds(nextWidth, nextHeight);
 	}
 
 	function setScale(value: number) {
-		scaleValue = value;
-		const dimensions = dimensionsForScale(value);
+		scaleFactor = Math.max(MIN_SCALE, Math.min(MAX_SCALE, value || 1));
+		const dimensions = dimensionsForScale(scaleFactor);
 		width = dimensions.width;
 		height = dimensions.height;
 	}
 
 	function setWidth(value: number) {
-		lastEditedDimension = 'width';
 		const dimensions = dimensionsForAspect(value, height, enforcedAspectRatio);
 		width = dimensions.width;
 		height = dimensions.height;
+		scaleFactor = factorFromDimensions(width, height);
 	}
 
 	function setHeight(value: number) {
-		lastEditedDimension = 'height';
-		const dimensions = dimensionsForAspect(width, value, enforcedAspectRatio);
-		width = dimensions.width;
-		height = dimensions.height;
+		const safeHeight = Math.max(1, Math.round(value || 1));
+		width = Math.max(1, Math.round(safeHeight * enforcedAspectRatio));
+		height = safeHeight;
+		scaleFactor = factorFromDimensions(width, height);
 	}
 
 	function resetDimensionsToCrop() {
 		const crop = $outputSettings.crop;
 		if (!crop) return;
-		lastEditedDimension = 'width';
-		width = Math.max(1, Math.round(crop.width));
-		height = Math.max(1, Math.round(crop.height));
+		const dimensions = dimensionsForScale(scaleFactor);
+		width = dimensions.width;
+		height = dimensions.height;
 		updateOutputSettings({
 			width,
 			height,
 			lockAspect: true,
 			fit: 'stretch',
+			scaleFactor,
 			autoSizeOnUpload: false
 		});
 	}
@@ -138,16 +152,30 @@
 		<div class="grid gap-1.5">
 			<div class="flex items-center justify-between gap-3">
 				<Label for="scale-ratio">Scale</Label>
-				<span class="font-mono text-xs text-muted-foreground tabular-nums">{scaleDisplay}</span>
+				<div class="flex items-center gap-1">
+					<Input
+						id="scale-ratio"
+						class="h-8 w-20 font-mono tabular-nums"
+						type="number"
+						inputmode="decimal"
+						min={MIN_SCALE}
+						max={MAX_SCALE}
+						step={SCALE_STEP}
+						value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(2)) : 1}
+						disabled={!hasImage}
+						oninput={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
+					/>
+					<span class="text-xs text-muted-foreground">×</span>
+				</div>
 			</div>
 			<Slider
 				type="single"
-				bind:value={scaleValue}
+				bind:value={scaleFactor}
 				min={MIN_SCALE}
 				max={MAX_SCALE}
 				step={SCALE_STEP}
 				disabled={!hasImage}
-				aria-label="Output scale ratio"
+				aria-label="Output scale factor"
 				onValueChange={setScale}
 			/>
 		</div>
@@ -199,10 +227,10 @@
 	{#if $outputSettings.crop}
 		<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
 			<span class="font-mono">
-				Crop {$outputSettings.crop.width.toFixed(0)}×{$outputSettings.crop.height.toFixed(0)}
+				Crop {$outputSettings.crop.width.toFixed(0)}×{$outputSettings.crop.height.toFixed(0)} · {scaleDisplay}
 			</span>
 			<Button size="xs" variant="outline" onclick={resetDimensionsToCrop}
-				>Reset dimensions to crop</Button
+				>Reset dimensions to crop scale</Button
 			>
 			<Button size="xs" variant="ghost" onclick={clearCrop}>Clear crop</Button>
 		</div>

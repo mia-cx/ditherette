@@ -59,6 +59,7 @@ export type OutputSettings = {
 	alphaThreshold: number;
 	matteKey: string;
 	autoSizeOnUpload: boolean;
+	scaleFactor: number;
 	crop?: CropRect;
 };
 

@@ -37,18 +37,19 @@ export async function setSourceFile(file: File) {
 	await clearPersistedProcessedImage();
 	setSourceRecord(record, decoded.imageData);
 	const settings = outputSettings.get();
-	if (settings.autoSizeOnUpload !== false) {
-		const size = fitOutputSizeToBounds(decoded.width, decoded.height);
-		updateOutputSettings({
-			...settings,
-			width: size.width,
-			height: size.height,
-			lockAspect: true,
-			crop: undefined
-		});
-	} else {
-		updateOutputSettings({ crop: undefined });
-	}
+	const scaleFactor = settings.scaleFactor ?? 1;
+	const size = fitOutputSizeToBounds(
+		Math.max(1, Math.round(decoded.width * scaleFactor)),
+		Math.max(1, Math.round(decoded.height * scaleFactor))
+	);
+	updateOutputSettings({
+		...settings,
+		width: size.width,
+		height: size.height,
+		lockAspect: true,
+		scaleFactor,
+		crop: undefined
+	});
 	processedImage.set(undefined);
 	scheduleProcessing(0);
 }
