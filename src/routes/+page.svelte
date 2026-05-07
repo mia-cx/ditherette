@@ -32,9 +32,7 @@
 <div class="bg-background flex min-h-svh flex-col lg:h-svh">
 	<AppBar hasImage={false} />
 
-	<main
-		class="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:min-h-0 lg:gap-3 lg:overflow-hidden"
-	>
+	<main class="flex flex-1 flex-col gap-4 lg:min-h-0 lg:gap-3 lg:overflow-hidden">
 		<!-- Hero preview: NOT inside a card, per spec. -->
 		<ComparisonPreview
 			hasImage={false}
