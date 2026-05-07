@@ -2,16 +2,9 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import { Slider } from '$lib/components/ui/slider';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
-	import { RESIZE_MODES, ALPHA_MODES } from './sample-data';
-	import {
-		outputSettings,
-		selectedPalette,
-		sourceMeta,
-		updateOutputSettings
-	} from '$lib/stores/app';
+	import { RESIZE_MODES } from './sample-data';
+	import { outputSettings, sourceMeta, updateOutputSettings } from '$lib/stores/app';
 	import { fitOutputSizeToBounds } from '$lib/processing/types';
 
 	type Props = {
@@ -24,20 +17,11 @@
 	const initial = outputSettings.get();
 	let width = $state<number>(initial.width);
 	let height = $state<number>(initial.height);
-	let fit = $state(initial.fit);
 	let resize = $state(initial.resize);
-	let alpha = $state(initial.alphaMode);
-	let alphaThreshold = $state<number>(initial.alphaThreshold);
-	let matteKey = $state(initial.matteKey ?? '#FFFFFF');
 	let autoSizeOnUpload = $state(initial.autoSizeOnUpload ?? true);
 	let lastEditedDimension = $state<'width' | 'height'>('width');
 
 	const resizeLabel = $derived(RESIZE_MODES.find((r) => r.id === resize)?.label ?? 'Resize');
-	const alphaLabel = $derived(ALPHA_MODES.find((a) => a.id === alpha)?.label ?? 'Alpha');
-	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
-	const matteLabel = $derived(
-		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
-	);
 	const enforcedAspectRatio = $derived.by(() => {
 		const crop = $outputSettings.crop;
 		if (crop) return validRatio(crop.width, crop.height);
@@ -49,11 +33,7 @@
 		outputSettings.subscribe((settings) => {
 			width = settings.width;
 			height = settings.height;
-			fit = settings.fit;
 			resize = settings.resize;
-			alpha = settings.alphaMode;
-			alphaThreshold = settings.alphaThreshold;
-			matteKey = settings.matteKey ?? '#FFFFFF';
 			autoSizeOnUpload = settings.autoSizeOnUpload ?? true;
 		})
 	);
@@ -65,11 +45,8 @@
 			width: clamped.width,
 			height: clamped.height,
 			lockAspect: true,
-			fit,
+			fit: 'stretch',
 			resize,
-			alphaMode: alpha,
-			alphaThreshold,
-			matteKey,
 			autoSizeOnUpload
 		});
 	});
@@ -108,7 +85,7 @@
 		const dimensions = dimensionsForAspect(width, height, enforcedAspectRatio);
 		width = dimensions.width;
 		height = dimensions.height;
-		updateOutputSettings({ width, height, lockAspect: true, autoSizeOnUpload });
+		updateOutputSettings({ width, height, lockAspect: true, fit: 'stretch', autoSizeOnUpload });
 	}
 
 	function resetDimensionsToCrop() {
@@ -118,174 +95,91 @@
 		width = Math.max(1, Math.round(crop.width));
 		height = Math.max(1, Math.round(crop.height));
 		lastEditedDimension = 'width';
-		updateOutputSettings({ width, height, lockAspect: true, autoSizeOnUpload });
+		updateOutputSettings({ width, height, lockAspect: true, fit: 'stretch', autoSizeOnUpload });
 	}
 
 	function clearCrop() {
 		updateOutputSettings({ crop: undefined });
 	}
-
-	function useDarkestPaletteColor() {
-		const darkest = visiblePaletteColors.reduce<(typeof visiblePaletteColors)[number] | undefined>(
-			(best, color) => {
-				if (!color.rgb) return best;
-				if (!best?.rgb) return color;
-				return relativeLuminance(color.rgb) < relativeLuminance(best.rgb) ? color : best;
-			},
-			undefined
-		);
-		if (darkest) matteKey = darkest.key;
-	}
-
-	function relativeLuminance(rgb: { r: number; g: number; b: number }) {
-		return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
-	}
 </script>
 
-<section class="flex flex-col gap-4" aria-label="Output controls">
+<section class="flex flex-col gap-3" aria-label="Dimension controls">
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
-			<h2 class="text-sm font-semibold tracking-tight">Output</h2>
-			<p class="text-xs text-muted-foreground">Size, resize, and alpha.</p>
+			<h2 class="text-sm font-semibold tracking-tight">Dimensions</h2>
+			<p class="text-xs text-muted-foreground">Output size and resampling.</p>
 		</div>
 	{/if}
 
-	<div class="grid gap-1.5">
-		<Label class="text-xs tracking-wide text-muted-foreground uppercase">Dimensions</Label>
-		<div class="flex items-center gap-1.5">
-			<div class="grid flex-1 gap-1">
-				<Label for="out-width" class="text-xs">Width</Label>
-				<Input
-					id="out-width"
-					type="number"
-					inputmode="numeric"
-					min="1"
-					max="16384"
-					step="1"
-					value={width}
-					disabled={!hasImage}
-					oninput={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
-				/>
-			</div>
-			<div class="grid flex-1 gap-1">
-				<Label for="out-height" class="text-xs">Height</Label>
-				<Input
-					id="out-height"
-					type="number"
-					inputmode="numeric"
-					min="1"
-					max="16384"
-					step="1"
-					value={height}
-					disabled={!hasImage}
-					oninput={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
-				/>
-			</div>
+	<div class="grid gap-2 text-sm">
+		<div class="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
+			<Label for="out-width">Width</Label>
+			<Input
+				id="out-width"
+				type="number"
+				inputmode="numeric"
+				min="1"
+				max="16384"
+				step="1"
+				value={width}
+				disabled={!hasImage}
+				oninput={(event) => setWidth(Number((event.currentTarget as HTMLInputElement).value))}
+			/>
 		</div>
+		<div class="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
+			<Label for="out-height">Height</Label>
+			<Input
+				id="out-height"
+				type="number"
+				inputmode="numeric"
+				min="1"
+				max="16384"
+				step="1"
+				value={height}
+				disabled={!hasImage}
+				oninput={(event) => setHeight(Number((event.currentTarget as HTMLInputElement).value))}
+			/>
+		</div>
+		<div class="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
+			<Label for="resize-mode">Resample</Label>
+			<Select bind:value={resize} type="single">
+				<SelectTrigger id="resize-mode">{resizeLabel}</SelectTrigger>
+				<SelectContent>
+					{#each RESIZE_MODES as r (r.id)}
+						<SelectItem value={r.id}>{r.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
+		</div>
+	</div>
+
+	<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+		<span>
+			Aspect is locked to the {$outputSettings.crop ? 'crop' : 'source'} so pixels stay square.
+		</span>
+		<span>{autoSizeOnUpload ? 'New uploads auto-size to source.' : 'Dimensions are pinned.'}</span>
+		<Button size="xs" variant="outline" onclick={resetAspectToSourceOrCrop} disabled={!hasImage}>
+			Reset aspect to {$outputSettings.crop ? 'crop' : 'source'}
+		</Button>
+		<Button
+			size="xs"
+			variant="ghost"
+			onclick={() => (autoSizeOnUpload = !autoSizeOnUpload)}
+			aria-pressed={autoSizeOnUpload}
+		>
+			{autoSizeOnUpload ? 'Pin dimensions' : 'Auto-size new uploads'}
+		</Button>
+	</div>
+
+	{#if $outputSettings.crop}
 		<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-			<span>
-				Output aspect is locked to the {$outputSettings.crop ? 'crop' : 'source'} so pixels stay square.
+			<span class="font-mono">
+				Crop {$outputSettings.crop.width.toFixed(0)}×{$outputSettings.crop.height.toFixed(0)}
 			</span>
-			<span>{autoSizeOnUpload ? 'New uploads auto-size to source.' : 'Dimensions are pinned.'}</span
+			<Button size="xs" variant="outline" onclick={resetDimensionsToCrop}
+				>Reset dimensions to crop</Button
 			>
-			<Button size="xs" variant="outline" onclick={resetAspectToSourceOrCrop} disabled={!hasImage}>
-				Reset aspect to {$outputSettings.crop ? 'crop' : 'source'}
-			</Button>
-			<Button
-				size="xs"
-				variant="ghost"
-				onclick={() => (autoSizeOnUpload = !autoSizeOnUpload)}
-				aria-pressed={autoSizeOnUpload}
-			>
-				{autoSizeOnUpload ? 'Pin dimensions' : 'Auto-size new uploads'}
-			</Button>
-		</div>
-		{#if $outputSettings.crop}
-			<div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-				<span class="font-mono">
-					Crop {$outputSettings.crop.width.toFixed(0)}×{$outputSettings.crop.height.toFixed(0)}
-				</span>
-				<Button size="xs" variant="outline" onclick={resetDimensionsToCrop}
-					>Reset dimensions to crop</Button
-				>
-				<Button size="xs" variant="ghost" onclick={clearCrop}>Clear crop</Button>
-			</div>
-		{/if}
-	</div>
-
-	<div class="grid gap-1.5">
-		<Label for="fit-mode">Fit mode</Label>
-		<ToggleGroup type="single" bind:value={fit} variant="outline" class="w-full">
-			<ToggleGroupItem value="stretch" class="flex-1">Stretch</ToggleGroupItem>
-			<ToggleGroupItem value="contain" class="flex-1">Contain</ToggleGroupItem>
-			<ToggleGroupItem value="cover" class="flex-1">Cover</ToggleGroupItem>
-		</ToggleGroup>
-	</div>
-
-	<div class="grid gap-1.5">
-		<Label for="resize-mode">Resize algorithm</Label>
-		<Select bind:value={resize} type="single">
-			<SelectTrigger id="resize-mode">{resizeLabel}</SelectTrigger>
-			<SelectContent>
-				{#each RESIZE_MODES as r (r.id)}
-					<SelectItem value={r.id}>{r.label}</SelectItem>
-				{/each}
-			</SelectContent>
-		</Select>
-	</div>
-
-	<div class="grid gap-1.5">
-		<Label for="alpha-mode">Alpha mode</Label>
-		<Select bind:value={alpha} type="single">
-			<SelectTrigger id="alpha-mode">{alphaLabel}</SelectTrigger>
-			<SelectContent>
-				{#each ALPHA_MODES as a (a.id)}
-					<SelectItem value={a.id}>{a.label}</SelectItem>
-				{/each}
-			</SelectContent>
-		</Select>
-	</div>
-
-	{#if alpha === 'matte'}
-		<div class="grid gap-1.5">
-			<Label for="matte-color">Matte color</Label>
-			<div class="flex gap-2">
-				<Select bind:value={matteKey} type="single" disabled={!visiblePaletteColors.length}>
-					<SelectTrigger id="matte-color" class="min-w-0 flex-1">{matteLabel}</SelectTrigger>
-					<SelectContent>
-						{#each visiblePaletteColors as color (color.key)}
-							<SelectItem value={color.key}>{color.name} · {color.key}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-				<Button
-					type="button"
-					variant="outline"
-					onclick={useDarkestPaletteColor}
-					disabled={!visiblePaletteColors.length}
-				>
-					Use darkest
-				</Button>
-			</div>
-			<p class="text-xs text-muted-foreground">
-				Matte is constrained to enabled visible colors in the active palette.
-			</p>
+			<Button size="xs" variant="ghost" onclick={clearCrop}>Clear crop</Button>
 		</div>
 	{/if}
-
-	<div class="grid gap-1.5">
-		<div class="flex items-center justify-between">
-			<Label for="alpha-threshold">Alpha threshold</Label>
-			<span class="text-xs text-muted-foreground tabular-nums">{alphaThreshold}</span>
-		</div>
-		<Slider
-			type="single"
-			bind:value={alphaThreshold}
-			min={0}
-			max={255}
-			step={1}
-			disabled={alpha !== 'preserve'}
-			aria-label="Alpha threshold"
-		/>
-	</div>
 </section>

@@ -4,6 +4,7 @@
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import { Slider } from '$lib/components/ui/slider';
 	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -22,7 +23,7 @@
 		DropdownMenuSeparator,
 		DropdownMenuTrigger
 	} from '$lib/components/ui/dropdown-menu';
-	import { paletteEnabledKey } from '$lib/palette/wplace';
+	import { TRANSPARENT_KEY, paletteEnabledKey } from '$lib/palette/wplace';
 	import {
 		activePalette,
 		activePaletteName,
@@ -37,10 +38,14 @@
 		importCustomPaletteData,
 		paletteEnabled,
 		previewCustomPaletteImport,
+		outputSettings,
 		palettes,
-		setPaletteColorEnabled
+		selectedPalette,
+		setPaletteColorEnabled,
+		updateOutputSettings
 	} from '$lib/stores/app';
 	import type { Palette, PaletteColor } from '$lib/processing/types';
+	import { ALPHA_MODES } from './sample-data';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
 	import TrashIcon from 'phosphor-svelte/lib/Trash';
 	import DotsIcon from 'phosphor-svelte/lib/DotsThreeVertical';
@@ -77,6 +82,10 @@
 	let pendingImportSummary = $state<
 		{ name: string; existingCount: number; importedCount: number }[]
 	>([]);
+	const initialOutputSettings = outputSettings.get();
+	let alpha = $state(initialOutputSettings.alphaMode);
+	let alphaThreshold = $state<number>(initialOutputSettings.alphaThreshold);
+	let matteKey = $state(initialOutputSettings.matteKey ?? '#FFFFFF');
 
 	const currentPalette = $derived($activePalette);
 	const isBuiltIn = $derived(currentPalette.source === 'wplace');
@@ -86,6 +95,14 @@
 			(color) => $paletteEnabled[paletteEnabledKey(currentPalette.name, color.key)] !== false
 		).length
 	);
+	const transparentEnabled = $derived(
+		$paletteEnabled[paletteEnabledKey(currentPalette.name, TRANSPARENT_KEY)] !== false
+	);
+	const alphaLabel = $derived(ALPHA_MODES.find((mode) => mode.id === alpha)?.label ?? 'Alpha');
+	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
+	const matteLabel = $derived(
+		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
+	);
 
 	$effect(() => {
 		activePaletteName.set(preset);
@@ -94,6 +111,18 @@
 
 	$effect(() => {
 		preset = $activePalette.name;
+	});
+
+	$effect(() =>
+		outputSettings.subscribe((settings) => {
+			alpha = settings.alphaMode;
+			alphaThreshold = settings.alphaThreshold;
+			matteKey = settings.matteKey ?? '#FFFFFF';
+		})
+	);
+
+	$effect(() => {
+		updateOutputSettings({ alphaMode: alpha, alphaThreshold, matteKey });
 	});
 
 	$effect(() => {
@@ -134,6 +163,22 @@
 		const colors = currentPalette.colors.filter((color) => selectedColorKeys[color.key]);
 		const nextEnabled = colors.some((color) => !enabled(color));
 		for (const color of colors) setPaletteColorEnabled(color.key, nextEnabled, currentPalette.name);
+	}
+
+	function useDarkestPaletteColor() {
+		const darkest = visiblePaletteColors.reduce<(typeof visiblePaletteColors)[number] | undefined>(
+			(best, color) => {
+				if (!color.rgb) return best;
+				if (!best?.rgb) return color;
+				return relativeLuminance(color.rgb) < relativeLuminance(best.rgb) ? color : best;
+			},
+			undefined
+		);
+		if (darkest) matteKey = darkest.key;
+	}
+
+	function relativeLuminance(rgb: { r: number; g: number; b: number }) {
+		return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
 	}
 
 	function setPaletteMessage(message: string | undefined, tone: 'neutral' | 'error' = 'neutral') {
@@ -249,7 +294,7 @@
 
 	function exportPalette(all = false) {
 		const data = all
-			? $customPalettes
+			? $palettes.filter((palette) => palette.source === 'custom')
 			: [currentPalette].filter((palette) => palette.source === 'custom');
 		if (!data.length) {
 			setPaletteMessage('There are no custom palettes to export.', 'error');
@@ -484,6 +529,78 @@
 			{paletteMessage}
 		</p>
 	{/if}
+
+	<div class="grid gap-3 border border-border bg-background p-3 text-sm">
+		<div class="flex items-center gap-3">
+			{@render swatchSquare({ name: 'Transparent', key: TRANSPARENT_KEY, kind: 'transparent' })}
+			<div class="min-w-0 flex-1">
+				<div class="font-medium">Transparent</div>
+				<p class="text-xs text-muted-foreground">
+					Every palette includes this swatch. Turn it off to map transparent pixels to visible
+					colors.
+				</p>
+			</div>
+			<VisibilityCheckbox
+				checked={transparentEnabled}
+				aria-label="Transparent swatch enabled"
+				onCheckedChange={(next) =>
+					setPaletteColorEnabled(TRANSPARENT_KEY, next, currentPalette.name)}
+			/>
+		</div>
+		<div class="grid gap-2">
+			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="alpha-mode">Alpha</Label>
+				<Select bind:value={alpha} type="single">
+					<SelectTrigger id="alpha-mode">{alphaLabel}</SelectTrigger>
+					<SelectContent>
+						{#each ALPHA_MODES as mode (mode.id)}
+							<SelectItem value={mode.id}>{mode.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+			</div>
+			{#if alpha === 'matte'}
+				<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+					<Label for="matte-color">Matte</Label>
+					<div class="flex gap-2">
+						<Select bind:value={matteKey} type="single" disabled={!visiblePaletteColors.length}>
+							<SelectTrigger id="matte-color" class="min-w-0 flex-1">{matteLabel}</SelectTrigger>
+							<SelectContent>
+								{#each visiblePaletteColors as color (color.key)}
+									<SelectItem value={color.key}>{color.name} · {color.key}</SelectItem>
+								{/each}
+							</SelectContent>
+						</Select>
+						<Button
+							type="button"
+							variant="outline"
+							onclick={useDarkestPaletteColor}
+							disabled={!visiblePaletteColors.length}
+						>
+							Darkest
+						</Button>
+					</div>
+				</div>
+			{/if}
+			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="alpha-threshold">Threshold</Label>
+				<div class="flex items-center gap-2">
+					<Slider
+						type="single"
+						bind:value={alphaThreshold}
+						min={0}
+						max={255}
+						step={1}
+						disabled={alpha !== 'preserve'}
+						aria-label="Alpha threshold"
+					/>
+					<span class="w-8 text-right text-xs text-muted-foreground tabular-nums"
+						>{alphaThreshold}</span
+					>
+				</div>
+			</div>
+		</div>
+	</div>
 
 	<ScrollArea
 		class="min-h-0 flex-1 border border-border bg-background {fillHeight ? '' : 'max-h-[420px]'}"

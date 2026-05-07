@@ -31,7 +31,7 @@
 
 	const DEFAULT_DESKTOP_PANE_LAYOUT = [56, 44] as const;
 
-	let openSections = $state<string[]>(['output', 'dither', 'color']);
+	let openSections = $state<string[]>(['dimensions', 'dither', 'color']);
 	let fileInput = $state<HTMLInputElement>();
 	let uploadError = $state<string>();
 
@@ -165,10 +165,10 @@
 	<div class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] {extra}">
 		<div class="flex min-h-0 flex-col lg:overflow-y-auto">
 			<Accordion type="multiple" bind:value={openSections} class="border border-border bg-card">
-				<AccordionItem value="output">
+				<AccordionItem value="dimensions">
 					<AccordionTrigger class="px-4">
 						<span class="flex items-center gap-2 text-sm">
-							Output
+							Dimensions
 							<Badge variant="outline" class="font-mono">{outputBadge}</Badge>
 						</span>
 					</AccordionTrigger>

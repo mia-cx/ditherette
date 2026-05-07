@@ -59,11 +59,25 @@ export const paletteEnabled = persistentJSON<Record<string, boolean>>(
 	defaultEnabledState()
 );
 
-export const palettes = computed(customPalettes, (custom) => [WPLACE, ...custom]);
-export const activePalette = computed(
-	[activePaletteName, customPalettes],
-	(name, custom) => custom.find((palette) => palette.name === name) ?? WPLACE
-);
+const TRANSPARENT_COLOR: PaletteColor = {
+	name: 'Transparent',
+	key: TRANSPARENT_KEY,
+	kind: 'transparent'
+};
+
+function withTransparentSwatch(palette: Palette): Palette {
+	const visible = palette.colors.filter((color) => color.key !== TRANSPARENT_KEY);
+	return { ...palette, colors: [...visible, TRANSPARENT_COLOR] };
+}
+
+export const palettes = computed(customPalettes, (custom) => [
+	WPLACE,
+	...custom.map(withTransparentSwatch)
+]);
+export const activePalette = computed([activePaletteName, customPalettes], (name, custom) => {
+	const palette = custom.find((item) => item.name === name);
+	return palette ? withTransparentSwatch(palette) : WPLACE;
+});
 export const selectedPalette = computed([activePalette, paletteEnabled], (palette, enabled) =>
 	enabledPalette(palette, enabled)
 );
@@ -368,10 +382,12 @@ function parseImportedPalette(value: unknown): Palette {
 	if (record.name === WPLACE_PALETTE_NAME)
 		throw new Error('Imported palette cannot replace Wplace.');
 	if (!Array.isArray(record.colors)) throw new Error('Imported palette needs a colors array.');
-	const colors = record.colors.map((color, index) => parseImportedColor(color, index));
-	if (!colors.some((color) => color.key === TRANSPARENT_KEY)) {
-		colors.push({ name: 'Transparent', key: TRANSPARENT_KEY, kind: 'transparent' });
-	}
+	const importedColors = record.colors.map((color, index) => parseImportedColor(color, index));
+	const colors = withTransparentSwatch({
+		name: record.name.trim(),
+		source: 'custom',
+		colors: importedColors
+	}).colors;
 	if (colors.length > 256) throw new Error('Imported palettes can contain at most 256 colors.');
 	const visibleKeys = colors
 		.filter((color) => color.key !== TRANSPARENT_KEY)
