@@ -144,6 +144,13 @@ Required preview controls:
   - active palette color count,
   - crop tool button,
   - optional fit/fullscreen button.
+- Resizable preview height on desktop:
+  - on wider screens (`lg+`), a draggable horizontal handle sits between the preview and the controls so users can rebalance vertical space between the hero preview and the control panels,
+  - the handle is keyboard-operable: `ArrowUp`/`ArrowDown` resize in small steps, `Home`/`End` snap to min/max,
+  - the handle is implemented with the existing shadcn-svelte resizable primitive (`paneforge`); do not roll a custom drag implementation,
+  - sensible bounds: minimum 25% and maximum 80% of the available main height for either pane so neither pane can fully collapse,
+  - mobile (< `lg`) keeps natural page scroll and does not expose the resize handle, because vertical resizing is meaningless when the page already scrolls freely,
+  - resize state must not affect image processing — only the visible preview canvas size changes.
 - Crop mode:
   - entered from the preview toolbar,
   - hides the processed output preview so the user can crop the source accurately,
@@ -388,7 +395,7 @@ Persistence schema:
   - `customPalettes: Palette[]`,
   - future custom palette color order once reordering exists,
   - all conversion settings,
-  - preview mode and non-image preview state where useful.
+  - preview mode and non-image preview state where useful, including the desktop preview-pane size (a number in `0..1` representing the preview pane's share of the resizable split) so a user's chosen layout balance survives reload.
 - Persist uploaded image state and processed output state indefinitely until the user explicitly clears it:
   - file metadata in persistent nanostores,
   - source image binary data in IndexedDB or another browser storage layer suitable for blobs/ArrayBuffers,
@@ -773,6 +780,7 @@ Layout direction:
 - Below preview: stacked single-column layout by default; switch to a two-column grid only when width comfortably supports it.
   - Left column on desktop: Dithering panel, then Color Space panel.
   - Right column on desktop: Palette panel, taller than left panels if needed.
+- On `lg+`, the preview and the control area are split by a draggable vertical-resize handle so users can claim more space for either side. Mobile keeps natural scroll and no handle.
 - Bottom export strip spans the page; on mobile, keep the primary export action easy to reach.
 - Palette editor should be dense and scannable in both grid and list modes: swatches with enabled state, hex, name, metadata, and quick actions.
 - Prioritize spatial layout, readable controls, touch targets, and the educational canvases/explainers over decorative styling.
@@ -1032,7 +1040,13 @@ type PreviewState = {
   zoom: number;
   panX: number;
   panY: number;
-  pixelPerfect: boolean;
+  /**
+   * Desktop-only preview pane size as a fraction in `0.25..0.80`,
+   * representing the preview pane's share of the resizable
+   * preview/controls split. Ignored on mobile, which uses natural
+   * page scroll without a resize handle.
+   */
+  previewPaneSize: number;
 };
 ```
 
