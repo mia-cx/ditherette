@@ -24,7 +24,12 @@
 		processedImage
 	} from '$lib/stores/app';
 	import { startAutoProcessing } from '$lib/processing/client';
-	import { clearAllImageData, restorePersistedImages, setSourceFile } from '$lib/processing/source';
+	import {
+		clearAllImageData,
+		hasPersistedSourceImage,
+		restorePersistedImages,
+		setSourceFile
+	} from '$lib/processing/source';
 	import { COLOR_SPACES, DITHER_ALGORITHMS, RESIZE_MODES } from './components/sample-data';
 
 	let openSections = $state<string[]>(['output', 'dither', 'color']);
@@ -43,11 +48,25 @@
 
 	onMount(() => {
 		const stop = startAutoProcessing();
-		void restorePersistedImages().catch((error) => {
-			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
-		});
+		void restorePreviousSession();
 		return stop;
 	});
+
+	async function restorePreviousSession() {
+		try {
+			if (!(await hasPersistedSourceImage())) return;
+			const restore = confirm(
+				'Ditherette has a locally saved image from a previous session. Restore it? Choose Cancel to delete the saved image from this browser.'
+			);
+			if (!restore) {
+				await clearAllImageData();
+				return;
+			}
+			await restorePersistedImages();
+		} catch (error) {
+			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
+		}
+	}
 
 	function chooseImage() {
 		fileInput?.click();

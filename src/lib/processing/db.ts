@@ -51,6 +51,10 @@ export async function saveProcessedImage(record: ProcessedImage) {
 	await withStore('readwrite', (store) => store.put(record, PROCESSED_KEY));
 }
 
+export async function clearPersistedProcessedImage() {
+	await withStore('readwrite', (store) => store.delete(PROCESSED_KEY));
+}
+
 export async function loadProcessedImage(): Promise<ProcessedImage | undefined> {
 	return (await withStore('readonly', (store) => store.get(PROCESSED_KEY))) as
 		| ProcessedImage

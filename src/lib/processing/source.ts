@@ -9,13 +9,14 @@ import {
 } from '$lib/stores/app';
 import {
 	clearPersistedImages,
+	clearPersistedProcessedImage,
 	decodeBlob,
 	loadProcessedImage,
 	loadSourceImage,
 	saveSourceImage,
 	sourceMetaFromRecord
 } from './db';
-import { cancelProcessing, scheduleProcessing } from './client';
+import { cancelProcessing, currentSettingsHash, scheduleProcessing } from './client';
 import { fitOutputSizeToBounds } from './types';
 import { validateSourceBlob } from './image-metadata';
 import type { SourceImageRecord } from './types';
@@ -33,6 +34,7 @@ export async function setSourceFile(file: File) {
 		updatedAt: Date.now()
 	};
 	await saveSourceImage(record);
+	await clearPersistedProcessedImage();
 	setSourceRecord(record, decoded.imageData);
 	const settings = outputSettings.get();
 	if (settings.autoSizeOnUpload !== false) {
@@ -59,13 +61,18 @@ export function setSourceRecord(record: SourceImageRecord, imageData: ImageData)
 	sourceImageData.set(imageData);
 }
 
+export async function hasPersistedSourceImage() {
+	return Boolean(await loadSourceImage());
+}
+
 export async function restorePersistedImages() {
 	const source = await loadSourceImage();
 	if (!source) return;
 	const decoded = await decodeBlob(source.blob);
 	setSourceRecord(source, decoded.imageData);
 	const processed = await loadProcessedImage();
-	if (processed) processedImage.set(processed);
+	if (processed?.settingsHash === currentSettingsHash()) processedImage.set(processed);
+	else if (processed) await clearPersistedProcessedImage();
 	scheduleProcessing(0);
 }
 

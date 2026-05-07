@@ -2,13 +2,42 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { downloadIndexedPng } from '$lib/processing/png';
-	import { processedImage, processingProgress, sourceMeta } from '$lib/stores/app';
+	import {
+		activePaletteName,
+		colorSpace,
+		customPalettes,
+		ditherSettings,
+		outputSettings,
+		paletteEnabled,
+		processedImage,
+		processingProgress,
+		sourceMeta
+	} from '$lib/stores/app';
+	import { settingsHash } from '$lib/processing/db';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 
 	type Props = { variant?: 'card' | 'bar'; hasImage?: boolean };
 	let { variant = 'bar', hasImage = false }: Props = $props();
 
-	const canExport = $derived(Boolean(hasImage && $processedImage && !$processingProgress));
+	const currentHash = $derived(
+		settingsHash({
+			output: $outputSettings,
+			dither: $ditherSettings,
+			colorSpace: $colorSpace,
+			paletteName: $activePaletteName,
+			customPalettes: $customPalettes,
+			palette: $paletteEnabled,
+			source: $sourceMeta
+		})
+	);
+	const canExport = $derived(
+		Boolean(
+			hasImage &&
+			$processedImage &&
+			!$processingProgress &&
+			$processedImage.settingsHash === currentHash
+		)
+	);
 	const sizeLabel = $derived(
 		$processedImage ? `${$processedImage.width} × ${$processedImage.height}` : 'No output'
 	);

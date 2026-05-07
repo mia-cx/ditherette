@@ -13,7 +13,7 @@ import {
 	sourceImageData,
 	sourceMeta
 } from '$lib/stores/app';
-import { saveProcessedImage, settingsHash } from './db';
+import { clearPersistedProcessedImage, saveProcessedImage, settingsHash } from './db';
 import type { ProcessedImage, WorkerResponse } from './types';
 
 let worker: Worker | undefined;
@@ -49,7 +49,7 @@ function getWorker() {
 	return worker;
 }
 
-function snapshotHash() {
+export function currentSettingsHash() {
 	return settingsHash({
 		output: outputSettings.get(),
 		dither: ditherSettings.get(),
@@ -67,7 +67,7 @@ function processInWorker(): Promise<ProcessedImage> {
 
 	const id = ++requestId;
 	const activeWorker = getWorker();
-	const hash = snapshotHash();
+	const hash = currentSettingsHash();
 	processingProgress.set({ stage: 'Queued', progress: 0 });
 	processingError.set(undefined);
 
@@ -112,7 +112,7 @@ function processInWorker(): Promise<ProcessedImage> {
 }
 
 export async function processCurrentImage() {
-	const hash = snapshotHash();
+	const hash = currentSettingsHash();
 	const program = Effect.tryPromise({
 		try: processInWorker,
 		catch: (error) => (error instanceof Error ? error : new Error('Processing failed'))
@@ -120,13 +120,13 @@ export async function processCurrentImage() {
 
 	try {
 		const result = await Effect.runPromise(program);
-		if (result.settingsHash !== hash || result.settingsHash !== snapshotHash()) return;
+		if (result.settingsHash !== hash || result.settingsHash !== currentSettingsHash()) return;
 		processedImage.set(result);
 		processingProgress.set(undefined);
 		await saveProcessedImage(result);
 	} catch (error) {
 		if (error instanceof ProcessingCanceled) return;
-		if (hash !== snapshotHash()) return;
+		if (hash !== currentSettingsHash()) return;
 		const message = error instanceof Error ? error.message : 'Processing failed';
 		processingError.set(message);
 		processedImage.set(undefined);
@@ -135,6 +135,10 @@ export async function processCurrentImage() {
 
 export function scheduleProcessing(delay = 180) {
 	if (!sourceImageData.get()) return;
+	if (processedImage.get()?.settingsHash !== currentSettingsHash()) {
+		processedImage.set(undefined);
+		void clearPersistedProcessedImage();
+	}
 	if (timer) clearTimeout(timer);
 	timer = setTimeout(() => {
 		void processCurrentImage();
