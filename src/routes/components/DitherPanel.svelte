@@ -634,9 +634,9 @@
 		<div class="grid gap-2">
 			<div class="flex items-center justify-between gap-3">
 				<Label for="dither-color-space" class="grid gap-0.5 text-left">
-					<span>Use selected color space</span>
+					<span>Dither in selected space</span>
 					<span class="text-xs font-normal text-muted-foreground"
-						>Use the selected color-space channels for dither perturbation and error behavior.</span
+						>Perturb and diffuse error in the selected color space. Color matching always uses it.</span
 					>
 				</Label>
 				<Switch

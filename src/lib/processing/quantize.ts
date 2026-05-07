@@ -104,21 +104,29 @@ function vectorDistance(left: ColorVector, right: ColorVector, settings: Process
 	return dx * dx + dy * dy + dz * dz;
 }
 
-function nearestPaletteVectorIndex(
+function nearestPaletteVector(
 	vector: ColorVector,
 	space: PaletteVectorSpace,
 	settings: ProcessingSettings
 ) {
-	let winner = -1;
+	let winner: PaletteVector | undefined;
 	let best = Infinity;
 	for (const candidate of space.colors) {
 		const distance = vectorDistance(vector, candidate.vector, settings);
 		if (distance < best) {
 			best = distance;
-			winner = candidate.index;
+			winner = candidate;
 		}
 	}
 	return winner;
+}
+
+function nearestPaletteVectorIndex(
+	vector: ColorVector,
+	space: PaletteVectorSpace,
+	settings: ProcessingSettings
+) {
+	return nearestPaletteVector(vector, space, settings)?.index ?? -1;
 }
 
 function colorSpaceThresholdIndex(
@@ -242,10 +250,6 @@ export function quantizeImage(
 	const matte =
 		nextPalette.find((color) => color.key === settings.output.matteKey)?.rgb ?? visible[0].rgb!;
 	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
-	const ditherMatcher =
-		settings.dither.algorithm === 'none' || settings.dither.useColorSpace
-			? matcher
-			: createPaletteMatcher(nextPalette, 'srgb');
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
 	const strength = settings.dither.strength / 100;
@@ -257,7 +261,7 @@ export function quantizeImage(
 		quantizeErrorDiffusion(
 			image,
 			indices,
-			ditherMatcher,
+			matcher,
 			settings,
 			matte,
 			tIndex,
@@ -268,7 +272,7 @@ export function quantizeImage(
 		quantizeDirect(
 			image,
 			indices,
-			ditherMatcher,
+			matcher,
 			settings,
 			matte,
 			tIndex,
@@ -370,6 +374,93 @@ function quantizeDirect(
 	}
 }
 
+function quantizeVectorErrorDiffusion(
+	image: ImageData,
+	indices: Uint8Array,
+	matcher: ReturnType<typeof createPaletteMatcher>,
+	settings: ProcessingSettings,
+	matte: Rgb,
+	transparentIndexValue: number,
+	fallbackTransparentIndex: number,
+	strength: number
+) {
+	const kernel = ERROR_KERNELS[settings.dither.algorithm as keyof typeof ERROR_KERNELS];
+	const width = image.width;
+	const height = image.height;
+	const source = image.data;
+	const alphaMode = settings.output.alphaMode;
+	const alphaThreshold = settings.output.alphaThreshold;
+	const work = new Float32Array(width * height * 3);
+	const vectorSpace = paletteVectorSpace(matcher, settings);
+
+	for (let index = 0; index < width * height; index++) {
+		const sourceOffset = index * 4;
+		const workOffset = index * 3;
+		let r = source[sourceOffset]!;
+		let g = source[sourceOffset + 1]!;
+		let b = source[sourceOffset + 2]!;
+		const alpha = source[sourceOffset + 3]!;
+		if (alphaMode === 'matte') {
+			const opacity = alpha / 255;
+			const background = 1 - opacity;
+			r = r * opacity + matte.r * background;
+			g = g * opacity + matte.g * background;
+			b = b * opacity + matte.b * background;
+		} else if (alphaMode === 'premultiplied') {
+			const opacity = alpha / 255;
+			r *= opacity;
+			g *= opacity;
+			b *= opacity;
+		}
+		const vector = vectorForRgb(r, g, b, settings.colorSpace);
+		work[workOffset] = vector[0];
+		work[workOffset + 1] = vector[1];
+		work[workOffset + 2] = vector[2];
+	}
+
+	for (let y = 0; y < height; y++) {
+		const reverse = settings.dither.serpentine && y % 2 === 1;
+		const start = reverse ? width - 1 : 0;
+		const end = reverse ? -1 : width;
+		const step = reverse ? -1 : 1;
+		for (let x = start; x !== end; x += step) {
+			const index = y * width + x;
+			const sourceOffset = index * 4;
+			const alpha = source[sourceOffset + 3]!;
+			if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
+				indices[index] =
+					transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
+				continue;
+			}
+
+			const workOffset = index * 3;
+			const current: ColorVector = [
+				work[workOffset]!,
+				work[workOffset + 1]!,
+				work[workOffset + 2]!
+			];
+			const match = nearestPaletteVector(current, vectorSpace, settings);
+			if (!match) throw new Error('No visible palette colors are enabled');
+			indices[index] = match.index;
+			const mask = placementMask(source, width, height, x, y, settings, vectorSpace);
+			const error0 = current[0] - match.vector[0];
+			const error1 = current[1] - match.vector[1];
+			const error2 = current[2] - match.vector[2];
+			for (const [dxBase, dy, weight] of kernel) {
+				const dx = reverse ? -dxBase : dxBase;
+				const xx = x + dx;
+				const yy = y + dy;
+				if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+				const target = (yy * width + xx) * 3;
+				const scaledWeight = weight * strength * mask;
+				work[target] += error0 * scaledWeight;
+				work[target + 1] += error1 * scaledWeight;
+				work[target + 2] += error2 * scaledWeight;
+			}
+		}
+	}
+}
+
 function quantizeErrorDiffusion(
 	image: ImageData,
 	indices: Uint8Array,
@@ -380,6 +471,20 @@ function quantizeErrorDiffusion(
 	fallbackTransparentIndex: number,
 	strength: number
 ) {
+	if (settings.dither.useColorSpace) {
+		quantizeVectorErrorDiffusion(
+			image,
+			indices,
+			matcher,
+			settings,
+			matte,
+			transparentIndexValue,
+			fallbackTransparentIndex,
+			strength
+		);
+		return;
+	}
+
 	const kernel = ERROR_KERNELS[settings.dither.algorithm as keyof typeof ERROR_KERNELS];
 	const width = image.width;
 	const height = image.height;
