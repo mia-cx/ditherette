@@ -81,6 +81,7 @@
 	let outputPreviewLevels = $state<PreviewLevel[]>([]);
 	let outputPreviewGeneration = $state(0);
 	let nextOutputPreviewGeneration = 0;
+	let lockedDisplayScale = $state<number>();
 	let layoutVersion = $state(0);
 
 	const zoomLabel = $derived(`${Math.round(zoom * 100)}%`);
@@ -135,13 +136,12 @@
 	);
 
 	onMount(() => {
-		const updateLayout = () => layoutVersion++;
-		window.addEventListener('resize', updateLayout);
+		window.addEventListener('resize', updateLayoutPreservingScale);
 		window.addEventListener('pointerup', cancelPointerInteraction);
 		window.addEventListener('pointercancel', cancelPointerInteraction);
 		window.addEventListener('blur', cancelPointerInteraction);
 		return () => {
-			window.removeEventListener('resize', updateLayout);
+			window.removeEventListener('resize', updateLayoutPreservingScale);
 			window.removeEventListener('pointerup', cancelPointerInteraction);
 			window.removeEventListener('pointercancel', cancelPointerInteraction);
 			window.removeEventListener('blur', cancelPointerInteraction);
@@ -149,7 +149,9 @@
 	});
 
 	$effect(() => {
-		const observer = new ResizeObserver(() => layoutVersion++);
+		const observer = new ResizeObserver(updateLayoutPreservingScale);
+		if (cropPane) observer.observe(cropPane);
+		if (sideSourcePane) observer.observe(sideSourcePane);
 		if (sideOutputPane) observer.observe(sideOutputPane);
 		if (revealPane) observer.observe(revealPane);
 		return () => observer.disconnect();
@@ -157,6 +159,7 @@
 
 	function resetView() {
 		zoom = 1;
+		lockedDisplayScale = undefined;
 		panX = 0;
 		panY = 0;
 	}
@@ -169,15 +172,46 @@
 		drag = undefined;
 	}
 
+	function updateLayoutPreservingScale() {
+		const pane = activePreviewPane();
+		const size = pane ? paneMediaSize(pane) : undefined;
+		if (pane && size && lockedDisplayScale) {
+			zoom = Math.min(
+				16,
+				Math.max(0.25, lockedDisplayScale / baseScale(pane, size.width, size.height))
+			);
+		}
+		layoutVersion++;
+	}
+
+	function activePreviewPane() {
+		if (cropMode) return cropPane;
+		if (mode === 'side-by-side') return sideOutputPane ?? sideSourcePane;
+		return revealPane;
+	}
+
+	function paneMediaSize(pane: HTMLElement) {
+		if (pane === sideOutputPane && $processedImage) {
+			return { width: $processedImage.width, height: $processedImage.height };
+		}
+		if ($sourceMeta) return { width: $sourceMeta.width, height: $sourceMeta.height };
+		return undefined;
+	}
+
+	function baseScale(pane: HTMLElement, width: number, height: number) {
+		return Math.min(pane.clientWidth / width, pane.clientHeight / height);
+	}
+
 	function fitFrame(pane: HTMLElement | undefined, width: number, height: number) {
 		if (!pane) return { left: 0, top: 0, width: 0, height: 0 };
 		const paneWidth = pane.clientWidth;
 		const paneHeight = pane.clientHeight;
-		const scale = Math.min(paneWidth / width, paneHeight / height);
+		const scale = baseScale(pane, width, height);
 		const baseWidth = width * scale;
 		const baseHeight = height * scale;
-		const scaledWidth = baseWidth * zoom;
-		const scaledHeight = baseHeight * zoom;
+		const effectiveScale = lockedDisplayScale ?? scale * zoom;
+		const scaledWidth = width * effectiveScale;
+		const scaledHeight = height * effectiveScale;
 		return {
 			left: (paneWidth - baseWidth) / 2 + panX - (scaledWidth - baseWidth) / 2,
 			top: (paneHeight - baseHeight) / 2 + panY - (scaledHeight - baseHeight) / 2,
@@ -194,7 +228,7 @@
 		if (!width || !height) return '';
 		const frame = fitFrame(pane, width, height);
 		const rendering = frame.width / width >= 1 ? 'pixelated' : 'auto';
-		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering}`;
+		return `left:${frame.left}px;top:${frame.top}px;width:${frame.width}px;height:${frame.height}px;image-rendering:${rendering};--preview-layout:${layoutVersion}`;
 	}
 
 	function buildPreviewPyramid(imageData: ImageData): PreviewLevel[] {
@@ -349,7 +383,8 @@
 			`left:${frame.left + (crop.x / $sourceMeta.width) * frame.width}px`,
 			`top:${frame.top + (crop.y / $sourceMeta.height) * frame.height}px`,
 			`width:${(crop.width / $sourceMeta.width) * frame.width}px`,
-			`height:${(crop.height / $sourceMeta.height) * frame.height}px`
+			`height:${(crop.height / $sourceMeta.height) * frame.height}px`,
+			`--preview-layout:${layoutVersion}`
 		].join(';');
 	}
 
@@ -464,6 +499,8 @@
 		panX = cursorX - ratio * (cursorX - panX);
 		panY = cursorY - ratio * (cursorY - panY);
 		zoom = nextZoom;
+		const size = paneMediaSize(pane);
+		if (size) lockedDisplayScale = baseScale(pane, size.width, size.height) * nextZoom;
 	}
 
 	function pointerDistance() {
