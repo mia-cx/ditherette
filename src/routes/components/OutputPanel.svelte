@@ -134,17 +134,7 @@
 	<div class="grid w-full gap-3 text-sm">
 		<div class="grid gap-1.5">
 			<Label for="scale-ratio">Scale</Label>
-			<div class="grid grid-cols-[minmax(0,1fr)_6rem] items-center gap-3">
-				<Slider
-					type="single"
-					bind:value={scaleFactor}
-					min={MIN_SCALE}
-					max={MAX_SCALE}
-					step={SCALE_STEP}
-					disabled={!hasImage}
-					aria-label="Output scale factor"
-					onValueChange={setScale}
-				/>
+			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
 				<div class="relative">
 					<Input
 						id="scale-ratio"
@@ -164,6 +154,16 @@
 						>×</span
 					>
 				</div>
+				<Slider
+					type="single"
+					bind:value={scaleFactor}
+					min={MIN_SCALE}
+					max={MAX_SCALE}
+					step={SCALE_STEP}
+					disabled={!hasImage}
+					aria-label="Output scale factor"
+					onValueChange={setScale}
+				/>
 			</div>
 		</div>
 
