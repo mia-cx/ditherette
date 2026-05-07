@@ -83,9 +83,9 @@ function paletteVectorSpace(
 	return {
 		colors,
 		ranges: [
-			Math.max(max[0] - min[0], 1),
-			Math.max(max[1] - min[1], 1),
-			Math.max(max[2] - min[2], 1)
+			Math.max(max[0] - min[0], Number.EPSILON),
+			Math.max(max[1] - min[1], Number.EPSILON),
+			Math.max(max[2] - min[2], Number.EPSILON)
 		]
 	};
 }

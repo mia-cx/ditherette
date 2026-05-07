@@ -290,7 +290,7 @@
 			}));
 		const channelRange = (channel: 0 | 1 | 2) => {
 			const values = colors.map((color) => color.vector[channel]);
-			return Math.max(Math.max(...values) - Math.min(...values), 1);
+			return Math.max(Math.max(...values) - Math.min(...values), Number.EPSILON);
 		};
 		return { colors, ranges: [channelRange(0), channelRange(1), channelRange(2)] as ColorVector };
 	}
