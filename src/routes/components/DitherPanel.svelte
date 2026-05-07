@@ -30,7 +30,7 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	const DITHER_PREVIEW_PIXEL_SCALE = 2;
+	const DITHER_PREVIEW_PIXEL_SCALE = 4;
 	const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
 	const PLACEMENT_RADIUS_MIN = 1;
 	const PLACEMENT_RADIUS_MAX = 32;
@@ -512,7 +512,7 @@
 			>
 				{#if current}
 					<span class="grid min-w-0 flex-1 gap-1.5">
-						<span class="flex items-center gap-3">
+						<span class="flex items-start gap-3">
 							<canvas
 								use:ditherPreview={{
 									mode: current.id,
@@ -523,11 +523,11 @@
 									colorSpaceMode: $colorSpace,
 									useColorSpace
 								}}
-								class="size-20 shrink-0 bg-muted [image-rendering:pixelated]"
+								class="size-24 shrink-0 bg-muted [image-rendering:pixelated]"
 								aria-hidden="true"
 							></canvas>
-							<span class="grid min-w-0 flex-1 gap-1">
-								<span class="flex min-w-0 items-center gap-1.5">
+							<span class="grid min-w-0 flex-1 content-start gap-1">
+								<span class="flex min-w-0 flex-wrap items-start gap-1.5">
 									<span class="truncate text-sm font-medium text-foreground">{current.label}</span>
 									<Badge variant="secondary">{methodLabel(current.method)}</Badge>
 									<Badge variant="outline">{fieldLabel(current.field)}</Badge>
@@ -578,7 +578,7 @@
 								class="min-w-0 items-center py-3 pr-8 pl-3"
 							>
 								<span class="grid min-w-0 flex-1 gap-1.5">
-									<span class="flex items-center gap-3">
+									<span class="flex items-start gap-3">
 										<canvas
 											use:ditherPreview={{
 												mode: opt.id,
@@ -589,11 +589,11 @@
 												colorSpaceMode: $colorSpace,
 												useColorSpace
 											}}
-											class="size-14 shrink-0 bg-muted [image-rendering:pixelated] sm:size-20"
+											class="size-20 shrink-0 bg-muted [image-rendering:pixelated] sm:size-24"
 											aria-hidden="true"
 										></canvas>
-										<span class="grid min-w-0 flex-1 gap-1">
-											<span class="flex min-w-0 items-center gap-1.5">
+										<span class="grid min-w-0 flex-1 content-start gap-1">
+											<span class="flex min-w-0 flex-wrap items-start gap-1.5">
 												<span class="truncate text-sm font-medium text-foreground">{opt.label}</span
 												>
 												<Badge variant="secondary">{methodLabel(opt.method)}</Badge>
