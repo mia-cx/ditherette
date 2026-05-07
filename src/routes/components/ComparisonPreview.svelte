@@ -30,7 +30,6 @@
 	} from '$lib/stores/app';
 	import CropIcon from 'phosphor-svelte/lib/Crop';
 	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOut';
-	import MagnifyingGlassIcon from 'phosphor-svelte/lib/MagnifyingGlass';
 	import ImageIcon from 'phosphor-svelte/lib/ImageSquare';
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 
@@ -941,6 +940,30 @@
 		event.preventDefault();
 	}
 
+	function zoomAtCenter(nextZoom: number) {
+		const pane = activePreviewPane();
+		if (!pane) return;
+		const bounds = pane.getBoundingClientRect();
+		applyZoomAt(
+			pane,
+			bounds.left + pane.clientWidth / 2,
+			bounds.top + pane.clientHeight / 2,
+			nextZoom
+		);
+	}
+
+	function zoomOut() {
+		zoomAtCenter(zoom / 1.25);
+	}
+
+	function zoomIn() {
+		zoomAtCenter(zoom * 1.25);
+	}
+
+	function zoomActualSize() {
+		zoomAtCenter(1);
+	}
+
 	function onDragOver(event: DragEvent) {
 		if (!event.dataTransfer?.types.includes('Files')) return;
 		event.preventDefault();
@@ -961,51 +984,6 @@
 	ondragover={onDragOver}
 	ondrop={onDrop}
 >
-	<div
-		class="flex items-center gap-2 border-b border-border bg-background/80 px-2 py-1.5 backdrop-blur"
-	>
-		<Tabs value={mode} onValueChange={setPreviewMode} class="shrink-0">
-			<TabsList>
-				<TabsTrigger value="side-by-side">Side-by-side</TabsTrigger>
-				<TabsTrigger value="ab-reveal">A/B reveal</TabsTrigger>
-			</TabsList>
-		</Tabs>
-
-		<div class="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-			{#if $processingProgress}
-				<Badge variant="secondary" class="tabular-nums">
-					{$processingProgress.stage} · {Math.round($processingProgress.progress * 100)}%
-				</Badge>
-			{/if}
-			<Badge variant="outline" class="gap-1"><MagnifyingGlassIcon /> {zoomLabel}</Badge>
-			<Badge variant="outline" class="hidden sm:inline-flex">{sizeLabel}</Badge>
-			<Badge variant="outline" class="hidden md:inline-flex">{colorLabel}</Badge>
-		</div>
-
-		<div class="flex shrink-0 items-center gap-1">
-			<Button
-				size="icon-sm"
-				variant={cropMode ? 'secondary' : 'ghost'}
-				aria-label={cropMode ? 'Crop mode active' : 'Crop'}
-				disabled={!hasImage}
-				onclick={() => void toggleCropMode()}
-				aria-pressed={cropMode}
-			>
-				<CropIcon />
-			</Button>
-			<Button
-				size="sm"
-				variant="ghost"
-				aria-label="Fit to window"
-				disabled={!hasImage}
-				onclick={resetView}
-			>
-				<ArrowsOutIcon />
-				<span class="hidden sm:inline">Fit to window</span>
-			</Button>
-		</div>
-	</div>
-
 	<div class="relative flex flex-1 items-stretch">
 		{#if !hasImage}
 			<Empty class="flex-1">
@@ -1113,6 +1091,74 @@
 				</div>
 			</div>
 		{/if}
+	</div>
+
+	<div
+		class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border bg-background/80 px-2 py-1.5 backdrop-blur"
+	>
+		<div class="flex items-center gap-1">
+			<Button
+				size="icon-sm"
+				variant={cropMode ? 'secondary' : 'ghost'}
+				aria-label={cropMode ? 'Crop mode active' : 'Crop'}
+				disabled={!hasImage}
+				onclick={() => void toggleCropMode()}
+				aria-pressed={cropMode}
+			>
+				<CropIcon />
+			</Button>
+			{#if $processingProgress}
+				<Badge variant="secondary" class="tabular-nums">
+					{$processingProgress.stage} · {Math.round($processingProgress.progress * 100)}%
+				</Badge>
+			{/if}
+		</div>
+
+		<Tabs value={mode} onValueChange={setPreviewMode} class="shrink-0">
+			<TabsList>
+				<TabsTrigger value="side-by-side">Side-by-side</TabsTrigger>
+				<TabsTrigger value="ab-reveal">A/B reveal</TabsTrigger>
+			</TabsList>
+		</Tabs>
+
+		<div class="flex min-w-0 items-center justify-end gap-1.5 text-xs text-muted-foreground">
+			<Badge variant="outline" class="hidden md:inline-flex">{colorLabel}</Badge>
+			<Badge variant="outline" class="hidden sm:inline-flex">{sizeLabel}</Badge>
+			<div class="flex items-center border border-border bg-background">
+				<Button
+					size="xs"
+					variant="ghost"
+					aria-label="Fit to window"
+					disabled={!hasImage}
+					onclick={resetView}
+				>
+					<ArrowsOutIcon />
+					Fit
+				</Button>
+				<Button
+					size="icon-xs"
+					variant="ghost"
+					aria-label="Zoom out"
+					disabled={!hasImage || zoom <= MIN_ZOOM}
+					onclick={zoomOut}>-</Button
+				>
+				<Button
+					size="xs"
+					variant="ghost"
+					class="min-w-14 font-mono tabular-nums"
+					aria-label="Set zoom to 100 percent"
+					disabled={!hasImage}
+					onclick={zoomActualSize}>{zoomLabel}</Button
+				>
+				<Button
+					size="icon-xs"
+					variant="ghost"
+					aria-label="Zoom in"
+					disabled={!hasImage || zoom >= MAX_ZOOM}
+					onclick={zoomIn}>+</Button
+				>
+			</div>
+		</div>
 	</div>
 
 	{#if $processingError}
