@@ -1,9 +1,7 @@
 import { TRANSPARENT_KEY, darkestVisible } from '$lib/palette/wplace';
 import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
-import { clampByte, createPaletteMatcher, vectorForRgb } from './color';
+import { clampByte, createPaletteMatcher } from './color';
 import type { EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
-
-type ColorVector = ReturnType<typeof vectorForRgb>;
 
 const ERROR_KERNELS = {
 	'floyd-steinberg': [
@@ -56,76 +54,6 @@ function transparentIndex(palette: EnabledPaletteColor[]) {
 function paletteRgb(color: EnabledPaletteColor): Rgb {
 	if (!color.rgb) return { r: 0, g: 0, b: 0 };
 	return color.rgb;
-}
-
-function vectorDistance(
-	left: ColorVector,
-	right: ColorVector,
-	mode: ProcessingSettings['colorSpace']
-) {
-	const dx = left[0] - right[0];
-	const dy = left[1] - right[1];
-	if (mode === 'oklch') {
-		const hue = Math.atan2(Math.sin(left[2] - right[2]), Math.cos(left[2] - right[2]));
-		const dh = Math.min(left[1], right[1]) * hue;
-		return dx * dx + dy * dy + dh * dh;
-	}
-	const dz = left[2] - right[2];
-	return dx * dx + dy * dy + dz * dz;
-}
-
-function nearestPaletteVectors(
-	vector: ColorVector,
-	matcher: ReturnType<typeof createPaletteMatcher>,
-	settings: ProcessingSettings
-) {
-	let nearest = { index: -1, vector: undefined as ColorVector | undefined, distance: Infinity };
-	let competitor = { index: -1, vector: undefined as ColorVector | undefined, distance: Infinity };
-	for (let index = 0; index < matcher.colors.length; index++) {
-		const color = matcher.colors[index]!;
-		if (!color.rgb || color.kind === 'transparent') continue;
-		const candidateVector = vectorForRgb(
-			color.rgb.r,
-			color.rgb.g,
-			color.rgb.b,
-			settings.colorSpace
-		);
-		const distance = vectorDistance(vector, candidateVector, settings.colorSpace);
-		if (distance < nearest.distance) {
-			competitor = nearest;
-			nearest = { index, vector: candidateVector, distance };
-		} else if (distance < competitor.distance) {
-			competitor = { index, vector: candidateVector, distance };
-		}
-	}
-	return { nearest, competitor };
-}
-
-function chooseOrderedPaletteIndex(
-	rgb: Rgb,
-	threshold: number,
-	matcher: ReturnType<typeof createPaletteMatcher>,
-	settings: ProcessingSettings,
-	strength: number
-) {
-	if (strength <= 0) return matcher.nearest(rgb).index;
-	const source = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
-	const { nearest, competitor } = nearestPaletteVectors(source, matcher, settings);
-	if (nearest.index === -1 || !nearest.vector) return matcher.nearest(rgb).index;
-	if (competitor.index === -1 || !competitor.vector) return nearest.index;
-	const dx = competitor.vector[0] - nearest.vector[0];
-	const dy = competitor.vector[1] - nearest.vector[1];
-	const dz = competitor.vector[2] - nearest.vector[2];
-	const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-	if (distance === 0) return nearest.index;
-	const amount = (threshold - 0.5) * distance * strength;
-	const target: ColorVector = [
-		source[0] + (dx / distance) * amount,
-		source[1] + (dy / distance) * amount,
-		source[2] + (dz / distance) * amount
-	];
-	const match = nearestPaletteVectors(target, matcher, settings).nearest;
-	return match.index === -1 ? nearest.index : match.index;
 }
 
 function lumaAt(source: Uint8ClampedArray, width: number, height: number, x: number, y: number) {
@@ -239,6 +167,7 @@ function quantizeDirect(
 	const alphaThreshold = settings.output.alphaThreshold;
 	const useBayer = Boolean(bayer && bayerSize && strength > 0);
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
+	const noiseScale = 96 * strength;
 	const coverage = settings.dither.coverage;
 
 	for (let y = 0; y < image.height; y++) {
@@ -272,25 +201,16 @@ function quantizeDirect(
 
 			if (useBayer && bayer && bayerSize) {
 				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
-				const threshold = bayer[bayerRow + (x % bayerSize)]!;
-				indices[index] = chooseOrderedPaletteIndex(
-					{ r, g, b },
-					threshold,
-					matcher,
-					settings,
-					strength * mask
-				);
-				continue;
+				const threshold = bayer[bayerRow + (x % bayerSize)]! * noiseScale * mask;
+				r = clampByte(r + threshold);
+				g = clampByte(g + threshold);
+				b = clampByte(b + threshold);
 			} else if (useRandom) {
 				const mask = coverageMask(source, image.width, image.height, x, y, coverage);
-				indices[index] = chooseOrderedPaletteIndex(
-					{ r, g, b },
-					random(),
-					matcher,
-					settings,
-					strength * mask
-				);
-				continue;
+				const noise = (random() - 0.5) * noiseScale * mask;
+				r = clampByte(r + noise);
+				g = clampByte(g + noise);
+				b = clampByte(b + noise);
 			}
 			indices[index] = matcher.nearestRgb(r, g, b).index;
 		}

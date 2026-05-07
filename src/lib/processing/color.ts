@@ -78,7 +78,7 @@ function rgbToOklch(r: number, g: number, b: number): Vector {
 	return [l, c, h];
 }
 
-export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId): Vector {
+function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId): Vector {
 	switch (mode) {
 		case 'srgb':
 		case 'weighted-rgb':
@@ -95,36 +95,6 @@ export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId
 		default:
 			return rgbToOklab(r, g, b);
 	}
-}
-
-export function colorDistanceRgb(left: Rgb, right: Rgb, mode: ColorSpaceId) {
-	if (mode === 'weighted-rgb') {
-		const dr = left.r - right.r;
-		const dg = left.g - right.g;
-		const db = left.b - right.b;
-		const meanRed = (left.r + right.r) / 2;
-		return (2 + meanRed / 256) * dr * dr + 4 * dg * dg + (2 + (255 - meanRed) / 256) * db * db;
-	}
-	if (mode === 'weighted-rgb-601' || mode === 'weighted-rgb-709') {
-		const rw = mode === 'weighted-rgb-601' ? 0.299 : 0.2126;
-		const gw = mode === 'weighted-rgb-601' ? 0.587 : 0.7152;
-		const bw = mode === 'weighted-rgb-601' ? 0.114 : 0.0722;
-		const dr = left.r - right.r;
-		const dg = left.g - right.g;
-		const db = left.b - right.b;
-		return rw * dr * dr + gw * dg * dg + bw * db * db;
-	}
-	const a = vectorForRgb(left.r, left.g, left.b, mode);
-	const b = vectorForRgb(right.r, right.g, right.b, mode);
-	const dx = a[0] - b[0];
-	const dy = a[1] - b[1];
-	if (mode === 'oklch') {
-		const hue = Math.atan2(Math.sin(a[2] - b[2]), Math.cos(a[2] - b[2]));
-		const dh = Math.min(a[1], b[1]) * hue;
-		return dx * dx + dy * dy + dh * dh;
-	}
-	const dz = a[2] - b[2];
-	return dx * dx + dy * dy + dz * dz;
 }
 
 export function createPaletteMatcher(

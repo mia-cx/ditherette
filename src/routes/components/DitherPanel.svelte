@@ -6,7 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
-	import { clampByte, createPaletteMatcher, vectorForRgb } from '$lib/processing/color';
+	import { clampByte, createPaletteMatcher } from '$lib/processing/color';
 	import type { ColorSpaceId, EnabledPaletteColor, Rgb } from '$lib/processing/types';
 	import { DITHER_ALGORITHMS, COVERAGE_MODES, type DitherOption } from './sample-data';
 	import {
@@ -252,44 +252,6 @@
 	}
 
 	type PaletteNearest = ReturnType<typeof createPaletteMatcher>['nearestRgb'];
-	type ColorVector = ReturnType<typeof vectorForRgb>;
-
-	function vectorDistance(left: ColorVector, right: ColorVector) {
-		const dx = left[0] - right[0];
-		const dy = left[1] - right[1];
-		if ($colorSpace === 'oklch') {
-			const hue = Math.atan2(Math.sin(left[2] - right[2]), Math.cos(left[2] - right[2]));
-			const dh = Math.min(left[1], right[1]) * hue;
-			return dx * dx + dy * dy + dh * dh;
-		}
-		const dz = left[2] - right[2];
-		return dx * dx + dy * dy + dz * dz;
-	}
-
-	function nearestPreviewVectors(vector: ColorVector) {
-		let nearest = {
-			rgb: undefined as Rgb | undefined,
-			vector: undefined as ColorVector | undefined,
-			distance: Infinity
-		};
-		let competitor = {
-			rgb: undefined as Rgb | undefined,
-			vector: undefined as ColorVector | undefined,
-			distance: Infinity
-		};
-		for (const color of $selectedPalette) {
-			if (!color.rgb || color.kind === 'transparent') continue;
-			const candidateVector = vectorForRgb(color.rgb.r, color.rgb.g, color.rgb.b, $colorSpace);
-			const distance = vectorDistance(vector, candidateVector);
-			if (distance < nearest.distance) {
-				competitor = nearest;
-				nearest = { rgb: color.rgb, vector: candidateVector, distance };
-			} else if (distance < competitor.distance) {
-				competitor = { rgb: color.rgb, vector: candidateVector, distance };
-			}
-		}
-		return { nearest, competitor };
-	}
 
 	function chooseOrderedPreviewRgb(
 		rgb: Rgb,
@@ -297,25 +259,11 @@
 		nearestRgb: PaletteNearest,
 		strengthAmount: number
 	) {
-		if (strengthAmount <= 0)
-			return nearestRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b)).color.rgb!;
-		const source = vectorForRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b), $colorSpace);
-		const { nearest, competitor } = nearestPreviewVectors(source);
-		if (!nearest.rgb || !nearest.vector)
-			return nearestRgb(clampByte(rgb.r), clampByte(rgb.g), clampByte(rgb.b)).color.rgb!;
-		if (!competitor.rgb || !competitor.vector) return nearest.rgb;
-		const dx = competitor.vector[0] - nearest.vector[0];
-		const dy = competitor.vector[1] - nearest.vector[1];
-		const dz = competitor.vector[2] - nearest.vector[2];
-		const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-		if (distance === 0) return nearest.rgb;
-		const amount = (threshold - 0.5) * distance * strengthAmount;
-		const target: ColorVector = [
-			source[0] + (dx / distance) * amount,
-			source[1] + (dy / distance) * amount,
-			source[2] + (dz / distance) * amount
-		];
-		return nearestPreviewVectors(target).nearest.rgb ?? nearest.rgb;
+		const offset = (threshold - 0.5) * 192 * strengthAmount;
+		return nearestPaletteRgb(
+			{ r: rgb.r + offset, g: rgb.g + offset, b: rgb.b + offset },
+			nearestRgb
+		);
 	}
 
 	function gradientRgb(x: number, y: number, size: number): Rgb {
