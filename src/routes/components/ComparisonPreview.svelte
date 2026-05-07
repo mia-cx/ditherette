@@ -850,7 +850,6 @@
 
 	async function applyCrop() {
 		const crop = normalizeCrop(activeCrop!);
-		if (crop.width <= 2 || crop.height <= 2) return;
 		const anchor = currentViewAnchor();
 		const scaleFactor = $outputSettings.scaleFactor ?? 1;
 		updateOutputSettings({

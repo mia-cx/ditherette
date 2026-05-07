@@ -247,8 +247,7 @@ export function quantizeImage(
 		);
 	}
 
-	const matte =
-		nextPalette.find((color) => color.key === settings.output.matteKey)?.rgb ?? visible[0].rgb!;
+	const matte = resolveMatteRgb(nextPalette, visible, settings.output.matteKey, warnings);
 	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
@@ -282,6 +281,52 @@ export function quantizeImage(
 	}
 
 	return { indices, palette: nextPalette, transparentIndex: tIndex, warnings };
+}
+
+function resolveMatteRgb(
+	palette: EnabledPaletteColor[],
+	visible: EnabledPaletteColor[],
+	matteKey: string,
+	warnings: string[]
+) {
+	const selected = palette.find((color) => color.key === matteKey)?.rgb;
+	if (selected) return selected;
+	const matteRgb = rgbFromHexKey(matteKey);
+	if (matteRgb) {
+		const fallback = nearestVisibleColor(matteRgb, visible).rgb!;
+		warnings.push(
+			'Matte color is disabled; using the nearest enabled visible color for alpha matte.'
+		);
+		return fallback;
+	}
+	warnings.push(
+		'Matte color is unavailable; using the first enabled visible color for alpha matte.'
+	);
+	return visible[0]!.rgb!;
+}
+
+function rgbFromHexKey(key: string): Rgb | undefined {
+	if (!/^#[0-9a-fA-F]{6}$/.test(key)) return undefined;
+	return {
+		r: Number.parseInt(key.slice(1, 3), 16),
+		g: Number.parseInt(key.slice(3, 5), 16),
+		b: Number.parseInt(key.slice(5, 7), 16)
+	};
+}
+
+function nearestVisibleColor(rgb: Rgb, visible: EnabledPaletteColor[]) {
+	let best = visible[0]!;
+	let bestDistance = Number.POSITIVE_INFINITY;
+	for (const color of visible) {
+		const candidate = color.rgb!;
+		const distance =
+			(candidate.r - rgb.r) ** 2 + (candidate.g - rgb.g) ** 2 + (candidate.b - rgb.b) ** 2;
+		if (distance < bestDistance) {
+			best = color;
+			bestDistance = distance;
+		}
+	}
+	return best;
 }
 
 function quantizeDirect(

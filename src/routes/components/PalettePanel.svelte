@@ -122,6 +122,12 @@
 	);
 
 	$effect(() => {
+		if (!visiblePaletteColors.length) return;
+		if (visiblePaletteColors.some((color) => color.key === matteKey)) return;
+		matteKey = fallbackMatteKey(matteKey);
+	});
+
+	$effect(() => {
 		updateOutputSettings({ alphaMode: alpha, alphaThreshold, matteKey });
 	});
 
@@ -163,6 +169,23 @@
 		const colors = currentPalette.colors.filter((color) => selectedColorKeys[color.key]);
 		const nextEnabled = colors.some((color) => !enabled(color));
 		for (const color of colors) setPaletteColorEnabled(color.key, nextEnabled, currentPalette.name);
+	}
+
+	function fallbackMatteKey(previousKey: string) {
+		const previous = currentPalette.colors.find((color) => color.key === previousKey)?.rgb;
+		if (!previous) return visiblePaletteColors[0]!.key;
+		let best = visiblePaletteColors[0]!;
+		let bestDistance = Number.POSITIVE_INFINITY;
+		for (const color of visiblePaletteColors) {
+			const rgb = color.rgb!;
+			const distance =
+				(rgb.r - previous.r) ** 2 + (rgb.g - previous.g) ** 2 + (rgb.b - previous.b) ** 2;
+			if (distance < bestDistance) {
+				best = color;
+				bestDistance = distance;
+			}
+		}
+		return best.key;
 	}
 
 	function useDarkestPaletteColor() {

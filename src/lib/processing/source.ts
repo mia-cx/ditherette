@@ -64,13 +64,14 @@ export function setSourceRecord(record: SourceImageRecord, imageData: ImageData)
 
 export async function restorePersistedImages() {
 	const source = await loadSourceImage();
-	if (!source) return;
+	if (!source) return false;
 	const decoded = await decodeBlob(source.blob);
 	setSourceRecord(source, decoded.imageData);
 	const processed = await loadProcessedImage();
 	if (processed?.settingsHash === currentSettingsHash()) processedImage.set(processed);
 	else if (processed) await clearPersistedProcessedImage();
 	scheduleProcessing(0);
+	return true;
 }
 
 export async function clearAllImageData() {
