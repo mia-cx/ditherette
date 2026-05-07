@@ -242,6 +242,10 @@ export function quantizeImage(
 	const matte =
 		nextPalette.find((color) => color.key === settings.output.matteKey)?.rgb ?? visible[0].rgb!;
 	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
+	const ditherMatcher =
+		settings.dither.algorithm === 'none' || settings.dither.useColorSpace
+			? matcher
+			: createPaletteMatcher(nextPalette, 'srgb');
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
 	const strength = settings.dither.strength / 100;
@@ -253,7 +257,7 @@ export function quantizeImage(
 		quantizeErrorDiffusion(
 			image,
 			indices,
-			matcher,
+			ditherMatcher,
 			settings,
 			matte,
 			tIndex,
@@ -264,7 +268,7 @@ export function quantizeImage(
 		quantizeDirect(
 			image,
 			indices,
-			matcher,
+			ditherMatcher,
 			settings,
 			matte,
 			tIndex,

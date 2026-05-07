@@ -72,6 +72,7 @@
 	const isRandom = $derived(algorithm === 'random');
 	const isThresholdDither = $derived(current?.family === 'ordered' || current?.family === 'noise');
 	const supportsPlacement = $derived(!isNone && (isThresholdDither || isErrorDiffusion));
+	const supportsColorSpaceDither = $derived(!isNone);
 	const triggerLabel = $derived(current?.label ?? 'Select algorithm');
 	const placementLabel = $derived(
 		PLACEMENT_MODES.find((option) => option.id === placement)?.label ?? 'Placement'
@@ -635,13 +636,13 @@
 				<Label for="dither-color-space" class="grid gap-0.5 text-left">
 					<span>Use selected color space</span>
 					<span class="text-xs font-normal text-muted-foreground"
-						>Threshold ordered/noise dithers in the selected color-space channels.</span
+						>Use the selected color-space channels for dither perturbation and error behavior.</span
 					>
 				</Label>
 				<Switch
 					id="dither-color-space"
 					bind:checked={useColorSpace}
-					disabled={!isThresholdDither}
+					disabled={!supportsColorSpaceDither}
 				/>
 			</div>
 
