@@ -766,7 +766,7 @@
 	<div
 		class="flex items-center gap-2 border-b border-border bg-background/80 px-2 py-1.5 backdrop-blur"
 	>
-		<Tabs bind:value={mode} onValueChange={setPreviewMode} class="shrink-0">
+		<Tabs value={mode} onValueChange={setPreviewMode} class="shrink-0">
 			<TabsList>
 				<TabsTrigger value="side-by-side">Side-by-side</TabsTrigger>
 				<TabsTrigger value="ab-reveal">A/B reveal</TabsTrigger>
