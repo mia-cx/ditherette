@@ -164,7 +164,7 @@ Required preview controls:
   - concise drag/drop instructions,
   - concise privacy/local-processing copy,
   - supported format hint.
-- Output preview uses crisp rendering when nearest-neighbor resize or pixel-perfect preview is active.
+- Output preview uses crisp rendering when the resize algorithm is `nearest`; otherwise it uses the browser's default interpolation. Display scaling is dictated by the chosen resize algorithm — there is no separate user-facing pixel-perfect toggle.
 
 ### Control availability before image upload
 
@@ -239,7 +239,7 @@ Disabled controls must explain why they are disabled where it is not obvious.
   - `gaussian` — blurrier but useful as an anti-aliasing prefilter.
   - `multi-step` — repeated downscale passes using a simpler filter for quality/performance tradeoffs.
 - Browser canvas `imageSmoothingQuality` may be used only as an implementation fallback. The app should expose named algorithms with documented behavior, not vague browser-dependent “high quality”.
-- Export strip exposes output format `PNG`, dimensions, scale, active color count, and pixel-perfect preview toggle.
+- Export strip exposes output format `PNG`, dimensions, scale, and active color count.
 - PNG is the only image export format in the MVP.
 - Exported PNG must be an indexed palette PNG when the output uses ≤256 palette entries: PNG color type 3 with `PLTE` chunk and `tRNS` chunk when Transparent is present/enabled.
 - PNG `PLTE` includes all enabled palette entries in stable palette order, not disabled entries and not only colors used in the output.
@@ -722,7 +722,7 @@ Per-algorithm explanation expectations:
 - Show source and output preview side by side on desktop by default.
 - Default to A/B Reveal on mobile/narrow screens.
 - Pinch zoom and drag-to-pan should work naturally inside the preview area on touch devices.
-- Output preview uses crisp rendering when nearest-neighbor resize or pixel-art zoom is active.
+- Output preview uses crisp rendering when the resize algorithm is `nearest`; otherwise it uses default interpolation. The preview always renders the actual processed pixels — there is no separate pixel-perfect toggle.
 - Show output dimensions and active color count. Transparent counts as an active color when enabled.
 - Bottom export strip/card:
   - output metadata: dimensions, palette color count, format,
