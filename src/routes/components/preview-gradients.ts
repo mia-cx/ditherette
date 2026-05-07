@@ -14,13 +14,15 @@ export type PreviewGradientPreset = {
 
 export const DITHER_PREVIEW_GRADIENTS = [
 	{
-		id: 'teal-lime-coral-arc',
-		label: 'Teal → Lime → Coral arc',
+		id: 'navy-teal-lime-gold-coral-arc',
+		label: 'Navy → Teal → Lime → Gold → Coral arc',
 		description:
-			'Three-color curved ramp for dither previews. Geometry bows up-left from bottom-left to top-right so Bayer matrix sizes are easier to compare.',
+			'Five-color curved ramp for dither previews: dark-to-light value range plus hue shifts through green/yellow/red to expose ordered matrix scale.',
 		stops: [
-			{ position: 0, color: { r: 12, g: 129, b: 110 } },
+			{ position: 0, color: { r: 8, g: 22, b: 88 } },
+			{ position: 0.25, color: { r: 12, g: 129, b: 110 } },
 			{ position: 0.5, color: { r: 135, g: 255, b: 94 } },
+			{ position: 0.75, color: { r: 249, g: 221, b: 59 } },
 			{ position: 1, color: { r: 250, g: 128, b: 114 } }
 		]
 	}
