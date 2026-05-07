@@ -68,15 +68,17 @@
 		target: HTMLCanvasElement,
 		params: { mode: string; randomSeed: number; previewStrength: number; serpentineScan: boolean }
 	) {
-		$effect(() => {
+		const draw = (next: typeof params) => {
 			drawDitherPreview(
 				target,
-				params.mode,
-				params.randomSeed,
-				params.previewStrength,
-				params.serpentineScan
+				next.mode,
+				next.randomSeed,
+				next.previewStrength,
+				next.serpentineScan
 			);
-		});
+		};
+		draw(params);
+		return { update: draw };
 	}
 
 	function drawDitherPreview(
