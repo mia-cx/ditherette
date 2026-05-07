@@ -153,14 +153,24 @@
 		</div>
 	{/if}
 
-	<div class="grid max-w-sm gap-3 text-sm">
+	<div class="grid w-full gap-3 text-sm">
 		<div class="grid gap-1.5">
-			<div class="flex items-center justify-between gap-3">
-				<Label for="scale-ratio">Scale</Label>
-				<div class="flex items-center gap-1">
+			<Label for="scale-ratio">Scale</Label>
+			<div class="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
+				<Slider
+					type="single"
+					bind:value={scaleFactor}
+					min={MIN_SCALE}
+					max={MAX_SCALE}
+					step={SCALE_STEP}
+					disabled={!hasImage}
+					aria-label="Output scale factor"
+					onValueChange={setScale}
+				/>
+				<div class="relative">
 					<Input
 						id="scale-ratio"
-						class="h-8 w-20 font-mono tabular-nums"
+						class="h-8 pr-5 text-right font-mono tabular-nums"
 						type="number"
 						inputmode="decimal"
 						min={MIN_SCALE}
@@ -170,25 +180,19 @@
 						disabled={!hasImage}
 						onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
 					/>
-					<span class="text-xs text-muted-foreground">×</span>
+					<span
+						class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
+						>×</span
+					>
 				</div>
 			</div>
-			<Slider
-				type="single"
-				bind:value={scaleFactor}
-				min={MIN_SCALE}
-				max={MAX_SCALE}
-				step={SCALE_STEP}
-				disabled={!hasImage}
-				aria-label="Output scale factor"
-				onValueChange={setScale}
-			/>
 		</div>
 
 		<div class="grid grid-cols-2 gap-2">
 			<div class="grid gap-1">
 				<Input
 					id="out-width"
+					class="text-right font-mono tabular-nums"
 					type="number"
 					inputmode="numeric"
 					min="1"
@@ -203,6 +207,7 @@
 			<div class="grid gap-1">
 				<Input
 					id="out-height"
+					class="text-right font-mono tabular-nums"
 					type="number"
 					inputmode="numeric"
 					min="1"
@@ -216,7 +221,7 @@
 			</div>
 		</div>
 
-		<div class="grid grid-cols-[6rem_minmax(8rem,12rem)] items-center justify-start gap-2">
+		<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
 			<Label for="resize-mode">Resample</Label>
 			<Select bind:value={resize} type="single">
 				<SelectTrigger id="resize-mode">{resizeLabel}</SelectTrigger>

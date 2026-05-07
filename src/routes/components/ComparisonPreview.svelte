@@ -755,13 +755,14 @@
 				<CropIcon />
 			</Button>
 			<Button
-				size="icon-sm"
+				size="sm"
 				variant="ghost"
-				aria-label="Fit to view"
+				aria-label="Fit to window"
 				disabled={!hasImage}
 				onclick={resetView}
 			>
 				<ArrowsOutIcon />
+				<span class="hidden sm:inline">Fit to window</span>
 			</Button>
 		</div>
 	</div>
