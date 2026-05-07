@@ -18,6 +18,7 @@
 		type DitherField,
 		type DitherMethod
 	} from './sample-data';
+	import { DEFAULT_DITHER_PREVIEW_GRADIENT } from './preview-gradients';
 	import {
 		colorSpace,
 		ditherSettings,
@@ -408,37 +409,17 @@
 
 	function gradientRgb(x: number, y: number, size: number): Rgb {
 		const extent = Math.max(1, size - 1);
-		const dx = x / extent - 0.5;
-		const dy = y / extent - 0.5;
-		const angle = (Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2);
-		const anchors = [
-			{ angle: 0, color: { r: 255, g: 127, b: 39 } },
-			{ angle: Math.PI / 4, color: { r: 237, g: 28, b: 36 } },
-			{ angle: Math.PI / 2, color: { r: 236, g: 31, b: 128 } },
-			{ angle: (Math.PI * 3) / 4, color: { r: 170, g: 56, b: 185 } },
-			{ angle: Math.PI, color: { r: 40, g: 80, b: 158 } },
-			{ angle: (Math.PI * 5) / 4, color: { r: 14, g: 185, b: 104 } },
-			{ angle: (Math.PI * 3) / 2, color: { r: 135, g: 255, b: 94 } },
-			{ angle: (Math.PI * 7) / 4, color: { r: 249, g: 221, b: 59 } },
-			{ angle: Math.PI * 2, color: { r: 255, g: 127, b: 39 } }
-		];
-		const next = anchors.findIndex((anchor) => anchor.angle >= angle);
-		const high = anchors[Math.max(1, next)]!;
-		const low = anchors[Math.max(0, next - 1)]!;
-		const span = Math.max(Number.EPSILON, high.angle - low.angle);
-		const amount = (angle - low.angle) / span;
-		const hue = {
+		const position = (x / extent + (1 - y / extent)) / 2;
+		const stops = DEFAULT_DITHER_PREVIEW_GRADIENT.stops;
+		const next = stops.findIndex((stop) => stop.position >= position);
+		const high = stops[Math.max(1, next)]!;
+		const low = stops[Math.max(0, next - 1)]!;
+		const span = Math.max(Number.EPSILON, high.position - low.position);
+		const amount = (position - low.position) / span;
+		return {
 			r: mix(low.color.r, high.color.r, amount),
 			g: mix(low.color.g, high.color.g, amount),
 			b: mix(low.color.b, high.color.b, amount)
-		};
-		const radius = Math.min(1, Math.hypot(dx, dy) / Math.SQRT1_2);
-		const saturation = Math.min(1, radius * 2);
-		const value = radius <= 0.5 ? 1 : 1 - (radius - 0.5) * 2;
-		return {
-			r: mix(255, hue.r * value, saturation),
-			g: mix(255, hue.g * value, saturation),
-			b: mix(255, hue.b * value, saturation)
 		};
 	}
 
