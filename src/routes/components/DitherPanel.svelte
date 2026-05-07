@@ -4,6 +4,7 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Sheet, SheetContent, SheetHeader, SheetTitle } from '$lib/components/ui/sheet';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -588,29 +589,26 @@
 								>Method</span
 							>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									class="size-3.5 border-input bg-background text-primary"
+								<Checkbox
 									checked={methodFilters.includes('threshold')}
-									onchange={() => toggleMethodFilter('threshold')}
+									onCheckedChange={() => toggleMethodFilter('threshold')}
+									aria-label="Toggle threshold method filter"
 								/>
 								Threshold
 							</label>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									class="size-3.5 border-input bg-background text-primary"
+								<Checkbox
 									checked={methodFilters.includes('error-diffusion')}
-									onchange={() => toggleMethodFilter('error-diffusion')}
+									onCheckedChange={() => toggleMethodFilter('error-diffusion')}
+									aria-label="Toggle error-diffusion method filter"
 								/>
 								Error diffusion
 							</label>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									class="size-3.5 border-input bg-background text-primary"
+								<Checkbox
 									checked={methodFilters.includes('none')}
-									onchange={() => toggleMethodFilter('none')}
+									onCheckedChange={() => toggleMethodFilter('none')}
+									aria-label="Toggle none method filter"
 								/>
 								None
 							</label>
@@ -620,38 +618,34 @@
 								>Field</span
 							>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									class="size-3.5 border-input bg-background text-primary"
+								<Checkbox
 									checked={fieldFilters.includes('ordered')}
-									onchange={() => toggleFieldFilter('ordered')}
+									onCheckedChange={() => toggleFieldFilter('ordered')}
+									aria-label="Toggle ordered field filter"
 								/>
 								Ordered
 							</label>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									class="size-3.5 border-input bg-background text-primary"
+								<Checkbox
 									checked={fieldFilters.includes('noise')}
-									onchange={() => toggleFieldFilter('noise')}
+									onCheckedChange={() => toggleFieldFilter('noise')}
+									aria-label="Toggle noise field filter"
 								/>
 								Noise
 							</label>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									class="size-3.5 border-input bg-background text-primary"
+								<Checkbox
 									checked={fieldFilters.includes('kernel')}
-									onchange={() => toggleFieldFilter('kernel')}
+									onCheckedChange={() => toggleFieldFilter('kernel')}
+									aria-label="Toggle kernel field filter"
 								/>
 								Kernel
 							</label>
 							<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-								<input
-									type="checkbox"
-									class="size-3.5 border-input bg-background text-primary"
+								<Checkbox
 									checked={fieldFilters.includes('none')}
-									onchange={() => toggleFieldFilter('none')}
+									onCheckedChange={() => toggleFieldFilter('none')}
+									aria-label="Toggle none field filter"
 								/>
 								None
 							</label>
@@ -672,29 +666,26 @@
 							>Method</span
 						>
 						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<input
-								type="checkbox"
-								class="size-3.5 border-input bg-background text-primary"
+							<Checkbox
 								checked={methodFilters.includes('threshold')}
-								onchange={() => toggleMethodFilter('threshold')}
+								onCheckedChange={() => toggleMethodFilter('threshold')}
+								aria-label="Toggle threshold method filter"
 							/>
 							Threshold
 						</label>
 						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<input
-								type="checkbox"
-								class="size-3.5 border-input bg-background text-primary"
+							<Checkbox
 								checked={methodFilters.includes('error-diffusion')}
-								onchange={() => toggleMethodFilter('error-diffusion')}
+								onCheckedChange={() => toggleMethodFilter('error-diffusion')}
+								aria-label="Toggle error-diffusion method filter"
 							/>
 							Error diffusion
 						</label>
 						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<input
-								type="checkbox"
-								class="size-3.5 border-input bg-background text-primary"
+							<Checkbox
 								checked={methodFilters.includes('none')}
-								onchange={() => toggleMethodFilter('none')}
+								onCheckedChange={() => toggleMethodFilter('none')}
+								aria-label="Toggle none method filter"
 							/>
 							None
 						</label>
@@ -704,38 +695,34 @@
 							>Field</span
 						>
 						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<input
-								type="checkbox"
-								class="size-3.5 border-input bg-background text-primary"
+							<Checkbox
 								checked={fieldFilters.includes('ordered')}
-								onchange={() => toggleFieldFilter('ordered')}
+								onCheckedChange={() => toggleFieldFilter('ordered')}
+								aria-label="Toggle ordered field filter"
 							/>
 							Ordered
 						</label>
 						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<input
-								type="checkbox"
-								class="size-3.5 border-input bg-background text-primary"
+							<Checkbox
 								checked={fieldFilters.includes('noise')}
-								onchange={() => toggleFieldFilter('noise')}
+								onCheckedChange={() => toggleFieldFilter('noise')}
+								aria-label="Toggle noise field filter"
 							/>
 							Noise
 						</label>
 						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<input
-								type="checkbox"
-								class="size-3.5 border-input bg-background text-primary"
+							<Checkbox
 								checked={fieldFilters.includes('kernel')}
-								onchange={() => toggleFieldFilter('kernel')}
+								onCheckedChange={() => toggleFieldFilter('kernel')}
+								aria-label="Toggle kernel field filter"
 							/>
 							Kernel
 						</label>
 						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<input
-								type="checkbox"
-								class="size-3.5 border-input bg-background text-primary"
+							<Checkbox
 								checked={fieldFilters.includes('none')}
-								onchange={() => toggleFieldFilter('none')}
+								onCheckedChange={() => toggleFieldFilter('none')}
+								aria-label="Toggle none field filter"
 							/>
 							None
 						</label>
