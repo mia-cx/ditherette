@@ -4,6 +4,17 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			// Apply persisted/preferred theme before paint to avoid FOUC.
+			(function () {
+				try {
+					var stored = localStorage.getItem('ditherette:theme');
+					var prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+					var dark = stored ? stored === 'dark' : prefers;
+					if (dark) document.documentElement.classList.add('dark');
+				} catch (_) {}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

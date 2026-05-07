@@ -144,6 +144,13 @@ Required preview controls:
   - active palette color count,
   - crop tool button,
   - optional fit/fullscreen button.
+- Resizable preview height on desktop:
+  - on wider screens (`lg+`), a draggable horizontal handle sits between the preview and the controls so users can rebalance vertical space between the hero preview and the control panels,
+  - the handle is keyboard-operable: `ArrowUp`/`ArrowDown` resize in small steps, `Home`/`End` snap to min/max,
+  - the handle is implemented with the existing shadcn-svelte resizable primitive (`paneforge`); do not roll a custom drag implementation,
+  - sensible bounds: minimum 25% and maximum 80% of the available main height for either pane so neither pane can fully collapse,
+  - mobile (< `lg`) keeps natural page scroll and does not expose the resize handle, because vertical resizing is meaningless when the page already scrolls freely,
+  - resize state must not affect image processing — only the visible preview canvas size changes.
 - Crop mode:
   - entered from the preview toolbar,
   - hides the processed output preview so the user can crop the source accurately,
@@ -164,7 +171,7 @@ Required preview controls:
   - concise drag/drop instructions,
   - concise privacy/local-processing copy,
   - supported format hint.
-- Output preview uses crisp rendering when nearest-neighbor resize or pixel-perfect preview is active.
+- Output preview uses crisp rendering when the resize algorithm is `nearest`; otherwise it uses the browser's default interpolation. Display scaling is dictated by the chosen resize algorithm — there is no separate user-facing pixel-perfect toggle.
 
 ### Control availability before image upload
 
@@ -239,7 +246,7 @@ Disabled controls must explain why they are disabled where it is not obvious.
   - `gaussian` — blurrier but useful as an anti-aliasing prefilter.
   - `multi-step` — repeated downscale passes using a simpler filter for quality/performance tradeoffs.
 - Browser canvas `imageSmoothingQuality` may be used only as an implementation fallback. The app should expose named algorithms with documented behavior, not vague browser-dependent “high quality”.
-- Export strip exposes output format `PNG`, dimensions, scale, active color count, and pixel-perfect preview toggle.
+- Export strip exposes output format `PNG`, dimensions, scale, and active color count.
 - PNG is the only image export format in the MVP.
 - Exported PNG must be an indexed palette PNG when the output uses ≤256 palette entries: PNG color type 3 with `PLTE` chunk and `tRNS` chunk when Transparent is present/enabled.
 - PNG `PLTE` includes all enabled palette entries in stable palette order, not disabled entries and not only colors used in the output.
@@ -388,7 +395,7 @@ Persistence schema:
   - `customPalettes: Palette[]`,
   - future custom palette color order once reordering exists,
   - all conversion settings,
-  - preview mode and non-image preview state where useful.
+  - preview mode and non-image preview state where useful, including the desktop preview-pane size (a number in `0..1` representing the preview pane's share of the resizable split) so a user's chosen layout balance survives reload.
 - Persist uploaded image state and processed output state indefinitely until the user explicitly clears it:
   - file metadata in persistent nanostores,
   - source image binary data in IndexedDB or another browser storage layer suitable for blobs/ArrayBuffers,
@@ -722,7 +729,7 @@ Per-algorithm explanation expectations:
 - Show source and output preview side by side on desktop by default.
 - Default to A/B Reveal on mobile/narrow screens.
 - Pinch zoom and drag-to-pan should work naturally inside the preview area on touch devices.
-- Output preview uses crisp rendering when nearest-neighbor resize or pixel-art zoom is active.
+- Output preview uses crisp rendering when the resize algorithm is `nearest`; otherwise it uses default interpolation. The preview always renders the actual processed pixels — there is no separate pixel-perfect toggle.
 - Show output dimensions and active color count. Transparent counts as an active color when enabled.
 - Bottom export strip/card:
   - output metadata: dimensions, palette color count, format,
@@ -773,6 +780,7 @@ Layout direction:
 - Below preview: stacked single-column layout by default; switch to a two-column grid only when width comfortably supports it.
   - Left column on desktop: Dithering panel, then Color Space panel.
   - Right column on desktop: Palette panel, taller than left panels if needed.
+- On `lg+`, the preview and the control area are split by a draggable vertical-resize handle so users can claim more space for either side. Mobile keeps natural scroll and no handle.
 - Bottom export strip spans the page; on mobile, keep the primary export action easy to reach.
 - Palette editor should be dense and scannable in both grid and list modes: swatches with enabled state, hex, name, metadata, and quick actions.
 - Prioritize spatial layout, readable controls, touch targets, and the educational canvases/explainers over decorative styling.
@@ -1032,7 +1040,13 @@ type PreviewState = {
   zoom: number;
   panX: number;
   panY: number;
-  pixelPerfect: boolean;
+  /**
+   * Desktop-only preview pane size as a fraction in `0.25..0.80`,
+   * representing the preview pane's share of the resizable
+   * preview/controls split. Ignored on mobile, which uses natural
+   * page scroll without a resize handle.
+   */
+  previewPaneSize: number;
 };
 ```
 
