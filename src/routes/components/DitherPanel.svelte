@@ -75,6 +75,7 @@
 	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion']);
 	let fieldFilters = $state<DitherField[]>(['none', 'ordered', 'noise', 'kernel']);
 	let filterSheetOpen = $state(false);
+	let desktopFiltersOpen = $state(false);
 
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
@@ -508,7 +509,7 @@
 			</SelectTrigger>
 			<SelectContent class="max-h-[min(38rem,var(--bits-select-content-available-height))] p-1">
 				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
-					<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 md:block">
+					<div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
 						<input
 							class="h-8 w-full border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
 							placeholder="Search algorithms…"
@@ -521,9 +522,20 @@
 							class="md:hidden"
 							onclick={() => (filterSheetOpen = true)}>Filters</Button
 						>
+						<Button
+							variant="outline"
+							size="sm"
+							class="hidden md:inline-flex"
+							aria-expanded={desktopFiltersOpen}
+							onclick={() => (desktopFiltersOpen = !desktopFiltersOpen)}>Filters</Button
+						>
 					</div>
 				</div>
-				<div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_10rem]">
+				<div
+					class={desktopFiltersOpen
+						? 'grid gap-2 md:grid-cols-[minmax(0,1fr)_10rem]'
+						: 'grid gap-2'}
+				>
 					<div class="min-w-0">
 						{#each filteredAlgorithms as opt (opt.id)}
 							<SelectItem value={opt.id} label={opt.label} class="items-center py-3 pr-8 pl-3">
@@ -560,7 +572,11 @@
 							<div class="p-4 text-center text-xs text-muted-foreground">No algorithms match.</div>
 						{/each}
 					</div>
-					<div class="hidden content-start gap-3 border-l border-border p-2 md:grid">
+					<div
+						class={desktopFiltersOpen
+							? 'hidden content-start gap-3 border-l border-border p-2 md:grid'
+							: 'hidden'}
+					>
 						<div class="grid gap-1.5">
 							<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
 								>Method</span
