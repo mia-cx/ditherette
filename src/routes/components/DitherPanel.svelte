@@ -12,7 +12,7 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	const DITHER_PREVIEW_PIXEL_SCALE = 2;
+	const DITHER_PREVIEW_PIXEL_SCALE = 6;
 	const BAYER_4 = makeBayer(4);
 	const BAYER_8 = makeBayer(8);
 	const BAYER_16 = makeBayer(16);
@@ -321,7 +321,7 @@
 	<div class="flex items-center gap-3 border border-border bg-background/50 p-2">
 		<canvas
 			bind:this={canvas}
-			class="size-24 shrink-0 bg-muted [image-rendering:auto]"
+			class="size-24 shrink-0 bg-muted [image-rendering:pixelated]"
 			aria-label="{current?.label} deterministic dither preview"
 		></canvas>
 		<div class="min-w-0 flex-1">
