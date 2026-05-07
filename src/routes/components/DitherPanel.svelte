@@ -105,8 +105,6 @@
 		serpentineScan: boolean
 	) {
 		const amount = Math.min(1, Math.max(0, previewStrength / 100));
-		const bayerSize = bayerSizeForAlgorithm(mode);
-		if (bayerSize) return drawBayerMatrixPreview(normalizedBayerThresholdMatrix(bayerSize), size);
 		if (mode === 'none') return drawGradientPreview(size);
 		const kernel = errorKernelFor(mode);
 		if (kernel) return drawErrorDiffusionPreview(kernel, size, amount, serpentineScan);
@@ -126,24 +124,17 @@
 	function drawThresholdPreview(mode: string, size: number, randomSeed: number, amount: number) {
 		const image = new ImageData(size, size);
 		const random = mulberry32(randomSeed);
+		const bayerSize = bayerSizeForAlgorithm(mode);
+		const matrix = bayerSize ? normalizedBayerThresholdMatrix(bayerSize) : undefined;
+		const matrixSize = bayerSize ?? 1;
 		for (let y = 0; y < size; y++) {
 			for (let x = 0; x < size; x++) {
 				const gradient = x / Math.max(1, size - 1);
-				const threshold = 0.5 + (random() - 0.5) * amount;
+				const ditherThreshold = matrix
+					? matrix[(y % matrixSize) * matrixSize + (x % matrixSize)]!
+					: random();
+				const threshold = 0.5 + (ditherThreshold - 0.5) * amount;
 				writePreviewPixel(image, x, y, gradient >= threshold ? 255 : 0);
-			}
-		}
-		return image;
-	}
-
-	function drawBayerMatrixPreview(matrix: number[], size: number) {
-		const image = new ImageData(size, size);
-		const matrixSize = Math.sqrt(matrix.length);
-		for (let y = 0; y < size; y++) {
-			for (let x = 0; x < size; x++) {
-				const matrixX = Math.min(matrixSize - 1, Math.floor((x / size) * matrixSize));
-				const matrixY = Math.min(matrixSize - 1, Math.floor((y / size) * matrixSize));
-				writePreviewPixel(image, x, y, matrix[matrixY * matrixSize + matrixX]! * 255);
 			}
 		}
 		return image;
