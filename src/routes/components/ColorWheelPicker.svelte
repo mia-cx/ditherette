@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
+
 	type Point = { x: number; y: number };
 	type TriangleCommit = { point: Point; width: number };
 	type Props = {
@@ -23,6 +25,14 @@
 	let commitFrame: number | null = null;
 
 	const triangleRadiusRatio = 0.25;
+
+	onDestroy(() => {
+		if (commitFrame === null) return;
+		cancelAnimationFrame(commitFrame);
+		commitFrame = null;
+		pendingHue = null;
+		pendingTriangle = null;
+	});
 
 	function pickWheel(event: PointerEvent) {
 		const target = event.currentTarget as HTMLElement;
@@ -51,11 +61,32 @@
 			triangleHandle?.style.setProperty('top', `${percent.y}%`);
 			scheduleTriangleCommit({ point: clamped, width: rect.width });
 		};
-		target.setPointerCapture(event.pointerId);
+		const pointerId = event.pointerId;
+		let cleanedUp = false;
+		const cleanup = (next?: PointerEvent) => {
+			if (next && next.pointerId !== pointerId) return;
+			if (cleanedUp) return;
+			cleanedUp = true;
+			window.removeEventListener('pointerup', cleanup);
+			window.removeEventListener('pointercancel', cleanup);
+			cleanupPointer(target, pointerId);
+		};
+		target.setPointerCapture(pointerId);
 		update(event);
 		target.onpointermove = update;
-		target.onpointerup = () => (target.onpointermove = null);
-		target.onpointercancel = () => (target.onpointermove = null);
+		target.onpointerup = cleanup;
+		target.onpointercancel = cleanup;
+		target.onlostpointercapture = cleanup;
+		window.addEventListener('pointerup', cleanup);
+		window.addEventListener('pointercancel', cleanup);
+	}
+
+	function cleanupPointer(target: HTMLElement, pointerId: number) {
+		if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
+		target.onpointermove = null;
+		target.onpointerup = null;
+		target.onpointercancel = null;
+		target.onlostpointercapture = null;
 	}
 
 	function scheduleHueCommit(hue: number) {

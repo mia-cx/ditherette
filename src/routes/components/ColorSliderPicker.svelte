@@ -35,11 +35,24 @@
 			setHandlePercent(handle, ratio * 100);
 			scheduleCommit({ channel, value: valueFromRatio(channel, ratio) });
 		};
-		target.setPointerCapture(event.pointerId);
+		const pointerId = event.pointerId;
+		let cleanedUp = false;
+		const cleanup = (next?: PointerEvent) => {
+			if (next && next.pointerId !== pointerId) return;
+			if (cleanedUp) return;
+			cleanedUp = true;
+			window.removeEventListener('pointerup', cleanup);
+			window.removeEventListener('pointercancel', cleanup);
+			cleanupPointer(target, pointerId);
+		};
+		target.setPointerCapture(pointerId);
 		update(event);
 		target.onpointermove = update;
-		target.onpointerup = (next) => cleanupPointer(target, next.pointerId);
-		target.onpointercancel = (next) => cleanupPointer(target, next.pointerId);
+		target.onpointerup = cleanup;
+		target.onpointercancel = cleanup;
+		target.onlostpointercapture = cleanup;
+		window.addEventListener('pointerup', cleanup);
+		window.addEventListener('pointercancel', cleanup);
 	}
 
 	function handleSliderKeydown(event: KeyboardEvent, channel: Channel) {
@@ -86,6 +99,7 @@
 		target.onpointermove = null;
 		target.onpointerup = null;
 		target.onpointercancel = null;
+		target.onlostpointercapture = null;
 	}
 
 	function ratioFromPointer(event: PointerEvent, target: HTMLElement) {

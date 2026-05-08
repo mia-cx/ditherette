@@ -32,11 +32,32 @@
 			handle?.style.setProperty('top', `${point.y * 100}%`);
 			scheduleCommit(point);
 		};
-		target.setPointerCapture(event.pointerId);
+		const pointerId = event.pointerId;
+		let cleanedUp = false;
+		const cleanup = (next?: PointerEvent) => {
+			if (next && next.pointerId !== pointerId) return;
+			if (cleanedUp) return;
+			cleanedUp = true;
+			window.removeEventListener('pointerup', cleanup);
+			window.removeEventListener('pointercancel', cleanup);
+			cleanupPointer(target, pointerId);
+		};
+		target.setPointerCapture(pointerId);
 		update(event);
 		target.onpointermove = update;
-		target.onpointerup = () => (target.onpointermove = null);
-		target.onpointercancel = () => (target.onpointermove = null);
+		target.onpointerup = cleanup;
+		target.onpointercancel = cleanup;
+		target.onlostpointercapture = cleanup;
+		window.addEventListener('pointerup', cleanup);
+		window.addEventListener('pointercancel', cleanup);
+	}
+
+	function cleanupPointer(target: HTMLElement, pointerId: number) {
+		if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
+		target.onpointermove = null;
+		target.onpointerup = null;
+		target.onpointercancel = null;
+		target.onlostpointercapture = null;
 	}
 
 	function scheduleCommit(point: PlanePoint) {
