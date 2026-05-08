@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import type { Palette } from '$lib/processing/types';
+	import { cn } from '$lib/utils';
 	import PaletteSwatchStrip from './PaletteSwatchStrip.svelte';
 	import CopyIcon from 'phosphor-svelte/lib/Copy';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
@@ -32,6 +33,7 @@
 	}: Props = $props();
 
 	let open = $state(false);
+	let hoveredPaletteName = $state<string | null>(null);
 
 	function keepPaletteActionSeparate(event: Event) {
 		event.stopPropagation();
@@ -58,12 +60,26 @@
 			<div class="min-h-0 overflow-y-auto py-1">
 				{#each palettes as palette (palette.name)}
 					<div
-						class="grid grid-cols-[minmax(0,1fr)_auto] items-stretch hover:bg-accent hover:text-accent-foreground [&:has([data-highlighted])]:bg-accent [&:has([data-highlighted])]:text-accent-foreground [&:hover_[data-slot=select-item]]:bg-accent [&:hover_[data-slot=select-item]]:text-accent-foreground"
+						role="presentation"
+						onpointerenter={() => (hoveredPaletteName = palette.name)}
+						onpointerleave={() => (hoveredPaletteName = null)}
+						class={cn(
+							'grid grid-cols-[minmax(0,1fr)_auto] items-stretch hover:bg-accent hover:text-accent-foreground [&:hover_[data-slot=select-item]]:bg-accent [&:hover_[data-slot=select-item]]:text-accent-foreground',
+							hoveredPaletteName === null &&
+								'[&:has([data-highlighted])]:bg-accent [&:has([data-highlighted])]:text-accent-foreground',
+							hoveredPaletteName === palette.name && 'bg-accent text-accent-foreground'
+						)}
 					>
 						<SelectItem
 							value={palette.name}
 							label={palette.name}
-							class="min-w-0 items-start py-3 pr-8 pl-3"
+							class={cn(
+								'min-w-0 items-start py-3 pr-8 pl-3',
+								hoveredPaletteName === palette.name && 'bg-accent text-accent-foreground',
+								hoveredPaletteName !== null &&
+									hoveredPaletteName !== palette.name &&
+									'data-highlighted:bg-transparent data-highlighted:text-foreground'
+							)}
 						>
 							<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden">
 								<span class="truncate text-sm font-medium text-inherit">{palette.name}</span>
