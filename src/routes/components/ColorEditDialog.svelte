@@ -338,6 +338,10 @@
 	}
 
 	function pickFromPlane(point: { x: number; y: number }) {
+		if (picker === 'rgb-sliders') {
+			updateHsl({ h: point.x * 360, s: 100, l: (1 - point.y) * 100 });
+			return;
+		}
 		if (usesHueLightnessPlane(picker)) {
 			updateHsl({ h: point.x * 360, l: (1 - point.y) * 100 });
 			return;
