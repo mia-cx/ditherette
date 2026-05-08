@@ -157,6 +157,7 @@
 				<input
 					class="h-8 min-w-0 border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
 					placeholder="Search algorithms…"
+					aria-label="Search algorithms"
 					bind:value={algorithmSearch}
 					onkeydown={(event) => event.stopPropagation()}
 				/>
