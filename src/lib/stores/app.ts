@@ -157,9 +157,14 @@ function uniquePaletteName(baseName: string) {
 	return `${name} ${suffix}`;
 }
 
-function visibleCustomColor(name: string, hex: string): PaletteColor {
+function cleanTags(tags: readonly string[] = []) {
+	return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+}
+
+function visibleCustomColor(name: string, hex: string, tags: readonly string[] = []): PaletteColor {
 	const key = normalizeHex(hex);
-	return { name: name.trim() || key, key, rgb: hexToRgb(key), kind: 'custom' };
+	const clean = cleanTags(tags);
+	return { name: name.trim() || key, key, rgb: hexToRgb(key), kind: 'custom', tags: clean };
 }
 
 export function updateOutputSettings(patch: Partial<OutputSettings>) {
@@ -250,10 +255,10 @@ export function createCustomPalette(name: string) {
 	return nextPalette;
 }
 
-export function addColorToActivePalette(name: string, hex: string) {
+export function addColorToActivePalette(name: string, hex: string, tags: readonly string[] = []) {
 	const palette = activeCustomPalette();
 	if (palette.colors.length >= 256) throw new Error('Palettes can contain at most 256 colors.');
-	const color = visibleCustomColor(name, hex);
+	const color = visibleCustomColor(name, hex, tags);
 	if (palette.colors.some((existing) => existing.key === color.key))
 		throw new Error(`${color.key} already exists in this palette.`);
 	setCustomPalette({
@@ -267,20 +272,30 @@ export function addColorToActivePalette(name: string, hex: string) {
 	setPaletteColorEnabled(color.key, true, palette.name);
 }
 
-export function duplicateActivePaletteColor(key: string, name: string, hex: string) {
+export function duplicateActivePaletteColor(
+	key: string,
+	name: string,
+	hex: string,
+	tags: readonly string[] = []
+) {
 	const palette = activeCustomPalette();
 	const current = palette.colors.find((color) => color.key === key);
 	if (!current || current.kind === 'transparent')
 		throw new Error('Only custom visible colors can be duplicated.');
-	addColorToActivePalette(name, hex);
+	addColorToActivePalette(name, hex, tags);
 }
 
-export function editActivePaletteColor(key: string, name: string, hex: string) {
+export function editActivePaletteColor(
+	key: string,
+	name: string,
+	hex: string,
+	tags: readonly string[] = []
+) {
 	const palette = activeCustomPalette();
 	const current = palette.colors.find((color) => color.key === key);
 	if (!current || current.kind === 'transparent')
 		throw new Error('Only custom visible colors can be edited.');
-	const nextColor = visibleCustomColor(name, hex);
+	const nextColor = visibleCustomColor(name, hex, tags);
 	if (nextColor.key !== key && palette.colors.some((color) => color.key === nextColor.key))
 		throw new Error(`${nextColor.key} already exists in this palette.`);
 	setCustomPalette({
@@ -400,13 +415,22 @@ function parseImportedPalette(value: unknown): Palette {
 
 function parseImportedColor(value: unknown, index: number): PaletteColor {
 	if (!value || typeof value !== 'object') throw new Error(`Color ${index + 1} must be an object.`);
-	const record = value as { name?: unknown; key?: unknown; hex?: unknown; kind?: unknown };
+	const record = value as {
+		name?: unknown;
+		key?: unknown;
+		hex?: unknown;
+		kind?: unknown;
+		tags?: unknown;
+	};
 	if (record.key === TRANSPARENT_KEY || record.kind === 'transparent') {
 		return { name: 'Transparent', key: TRANSPARENT_KEY, kind: 'transparent' };
 	}
 	const hex = typeof record.key === 'string' ? record.key : record.hex;
 	if (typeof hex !== 'string') throw new Error(`Color ${index + 1} needs a hex key.`);
-	return visibleCustomColor(typeof record.name === 'string' ? record.name : '', hex);
+	const tags = Array.isArray(record.tags)
+		? record.tags.filter((tag): tag is string => typeof tag === 'string')
+		: [];
+	return visibleCustomColor(typeof record.name === 'string' ? record.name : '', hex, tags);
 }
 
 export function clearInMemoryImageState() {

@@ -3,7 +3,8 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
-	import { Input } from '$lib/components/ui/input';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
+	import { Slider } from '$lib/components/ui/slider';
 	import { Label } from '$lib/components/ui/label';
 	import {
 		Dialog,
@@ -26,17 +27,22 @@
 		duplicateActivePaletteColor,
 		editActivePaletteColor,
 		importCustomPaletteData,
+		outputSettings,
 		paletteEnabled,
 		previewCustomPaletteImport,
 		palettes,
-		setPaletteColorEnabled
+		selectedPalette,
+		setPaletteColorEnabled,
+		updateOutputSettings
 	} from '$lib/stores/app';
 	import type { Palette, PaletteColor } from '$lib/processing/types';
+	import { ALPHA_MODES } from './output-options';
 	import CopyIcon from 'phosphor-svelte/lib/Copy';
 	import PencilIcon from 'phosphor-svelte/lib/PencilSimple';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
 	import TrashIcon from 'phosphor-svelte/lib/Trash';
 	import VisibilityCheckbox from './VisibilityCheckbox.svelte';
+	import ColorEditDialog from './ColorEditDialog.svelte';
 	import PaletteToolbar from './PaletteToolbar.svelte';
 
 	type Props = { fillHeight?: boolean };
@@ -54,6 +60,8 @@
 	let colorDialogColor = $state<PaletteColor>();
 	let colorName = $state('');
 	let colorHex = $state('#FF00AA');
+	let colorTags = $state<string[]>([]);
+	let transparentDialogOpen = $state(false);
 	let deleteDialogOpen = $state(false);
 	let deleteColorKey = $state<string>();
 	let importConfirmOpen = $state(false);
@@ -61,6 +69,10 @@
 	let pendingImportSummary = $state<
 		{ name: string; existingCount: number; importedCount: number }[]
 	>([]);
+	const initialOutputSettings = outputSettings.get();
+	let alpha = $state(initialOutputSettings.alphaMode);
+	let alphaThreshold = $state<number>(initialOutputSettings.alphaThreshold);
+	let matteKey = $state(initialOutputSettings.matteKey ?? '#FFFFFF');
 
 	const currentPalette = $derived($activePalette);
 	const isBuiltIn = $derived(currentPalette.source === 'wplace');
@@ -74,6 +86,11 @@
 		currentPalette.colors.length > 0 && selectedCount === currentPalette.colors.length
 	);
 	const someRowsSelected = $derived(selectedCount > 0 && !allRowsSelected);
+	const alphaLabel = $derived(ALPHA_MODES.find((mode) => mode.id === alpha)?.label ?? 'Alpha');
+	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
+	const matteLabel = $derived(
+		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
+	);
 
 	$effect(() => {
 		activePaletteName.set(preset);
@@ -82,6 +99,24 @@
 
 	$effect(() => {
 		preset = $activePalette.name;
+	});
+
+	$effect(() =>
+		outputSettings.subscribe((settings) => {
+			alpha = settings.alphaMode;
+			alphaThreshold = settings.alphaThreshold;
+			matteKey = settings.matteKey ?? '#FFFFFF';
+		})
+	);
+
+	$effect(() => {
+		if (!visiblePaletteColors.length) return;
+		if (visiblePaletteColors.some((color) => color.key === matteKey)) return;
+		matteKey = fallbackMatteKey(matteKey);
+	});
+
+	$effect(() => {
+		updateOutputSettings({ alphaMode: alpha, alphaThreshold, matteKey });
 	});
 
 	function enabled(color: PaletteColor, palette: Palette = currentPalette) {
@@ -120,6 +155,39 @@
 		for (const color of colors) setPaletteColorEnabled(color.key, nextEnabled, currentPalette.name);
 	}
 
+	function fallbackMatteKey(previousKey: string) {
+		const previous = currentPalette.colors.find((color) => color.key === previousKey)?.rgb;
+		if (!previous) return visiblePaletteColors[0]!.key;
+		let best = visiblePaletteColors[0]!;
+		let bestDistance = Number.POSITIVE_INFINITY;
+		for (const color of visiblePaletteColors) {
+			const rgb = color.rgb!;
+			const distance =
+				(rgb.r - previous.r) ** 2 + (rgb.g - previous.g) ** 2 + (rgb.b - previous.b) ** 2;
+			if (distance < bestDistance) {
+				best = color;
+				bestDistance = distance;
+			}
+		}
+		return best.key;
+	}
+
+	function useDarkestPaletteColor() {
+		const darkest = visiblePaletteColors.reduce<(typeof visiblePaletteColors)[number] | undefined>(
+			(best, color) => {
+				if (!color.rgb) return best;
+				if (!best?.rgb) return color;
+				return relativeLuminance(color.rgb) < relativeLuminance(best.rgb) ? color : best;
+			},
+			undefined
+		);
+		if (darkest) matteKey = darkest.key;
+	}
+
+	function relativeLuminance(rgb: { r: number; g: number; b: number }) {
+		return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
+	}
+
 	function setPaletteMessage(message: string | undefined, tone: 'neutral' | 'error' = 'neutral') {
 		paletteMessage = message;
 		paletteMessageTone = tone;
@@ -156,17 +224,18 @@
 		colorDialogColor = color;
 		colorName = color ? `${color.name}${mode === 'duplicate' ? ' Copy' : ''}` : '';
 		colorHex = color?.key ?? '#FF00AA';
+		colorTags = color?.tags ? [...color.tags] : [];
 		colorDialogOpen = true;
 	}
 
 	function saveColorDialog() {
 		withPaletteError(() => {
 			if (colorDialogMode === 'edit' && colorDialogColor) {
-				editActivePaletteColor(colorDialogColor.key, colorName, colorHex);
+				editActivePaletteColor(colorDialogColor.key, colorName, colorHex, colorTags);
 			} else if (colorDialogMode === 'duplicate' && colorDialogColor) {
-				duplicateActivePaletteColor(colorDialogColor.key, colorName, colorHex);
+				duplicateActivePaletteColor(colorDialogColor.key, colorName, colorHex, colorTags);
 			} else {
-				addColorToActivePalette(colorName, colorHex);
+				addColorToActivePalette(colorName, colorHex, colorTags);
 			}
 		});
 		if (!paletteMessage) colorDialogOpen = false;
@@ -184,7 +253,11 @@
 	}
 
 	function editColor(color: PaletteColor) {
-		setPaletteMessage(`Edit flow for ${color.name} is coming next.`);
+		if (color.kind === 'transparent') {
+			transparentDialogOpen = true;
+			return;
+		}
+		openColorDialog('edit', color);
 	}
 
 	function duplicateColor(color: PaletteColor) {
@@ -338,33 +411,79 @@
 	onchange={importPalette}
 />
 
-<Dialog bind:open={colorDialogOpen}>
+<ColorEditDialog
+	bind:open={colorDialogOpen}
+	bind:name={colorName}
+	bind:hex={colorHex}
+	bind:tags={colorTags}
+	mode={colorDialogMode}
+	onSave={saveColorDialog}
+/>
+
+<Dialog bind:open={transparentDialogOpen}>
 	<DialogContent>
 		<DialogHeader>
-			<DialogTitle>
-				{colorDialogMode === 'edit'
-					? 'Edit color'
-					: colorDialogMode === 'duplicate'
-						? 'Duplicate color'
-						: 'Add color'}
-			</DialogTitle>
+			<DialogTitle>Transparent swatch settings</DialogTitle>
 			<DialogDescription>
-				Custom palettes support up to 256 entries. Hex values must be unique within the palette.
+				Transparent is fixed in every palette. Use these controls to decide how source alpha is
+				handled during processing.
 			</DialogDescription>
 		</DialogHeader>
-		<div class="grid gap-3 py-2">
-			<div class="grid gap-1.5">
-				<Label for="palette-color-name">Name</Label>
-				<Input id="palette-color-name" bind:value={colorName} placeholder="Sky blue" />
+		<div class="grid gap-3 py-2 text-sm">
+			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="alpha-mode">Alpha</Label>
+				<Select bind:value={alpha} type="single">
+					<SelectTrigger id="alpha-mode">{alphaLabel}</SelectTrigger>
+					<SelectContent>
+						{#each ALPHA_MODES as mode (mode.id)}
+							<SelectItem value={mode.id}>{mode.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
 			</div>
-			<div class="grid gap-1.5">
-				<Label for="palette-color-hex">Hex</Label>
-				<Input id="palette-color-hex" bind:value={colorHex} placeholder="#66AAFF" />
+			{#if alpha === 'matte'}
+				<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+					<Label for="matte-color">Matte</Label>
+					<div class="flex gap-2">
+						<Select bind:value={matteKey} type="single" disabled={!visiblePaletteColors.length}>
+							<SelectTrigger id="matte-color" class="min-w-0 flex-1">{matteLabel}</SelectTrigger>
+							<SelectContent>
+								{#each visiblePaletteColors as color (color.key)}
+									<SelectItem value={color.key}>{color.name} · {color.key}</SelectItem>
+								{/each}
+							</SelectContent>
+						</Select>
+						<Button
+							type="button"
+							variant="outline"
+							onclick={useDarkestPaletteColor}
+							disabled={!visiblePaletteColors.length}
+						>
+							Darkest
+						</Button>
+					</div>
+				</div>
+			{/if}
+			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="alpha-threshold">Threshold</Label>
+				<div class="flex items-center gap-2">
+					<Slider
+						type="single"
+						bind:value={alphaThreshold}
+						min={0}
+						max={255}
+						step={1}
+						disabled={alpha !== 'preserve'}
+						aria-label="Alpha threshold"
+					/>
+					<span class="w-8 text-right text-xs text-muted-foreground tabular-nums"
+						>{alphaThreshold}</span
+					>
+				</div>
 			</div>
 		</div>
 		<DialogFooter>
-			<Button variant="outline" onclick={() => (colorDialogOpen = false)}>Cancel</Button>
-			<Button onclick={saveColorDialog}>Save color</Button>
+			<Button onclick={() => (transparentDialogOpen = false)}>Done</Button>
 		</DialogFooter>
 	</DialogContent>
 </Dialog>
@@ -532,20 +651,26 @@
 {/snippet}
 
 {#snippet kindBadge(color: PaletteColor)}
-	{#if color.kind === 'transparent'}
-		<Badge variant="outline">Transparent</Badge>
-	{:else if color.kind === 'premium'}
-		<Badge variant="secondary">Premium</Badge>
-	{:else if color.kind === 'custom'}
-		<Badge>Custom</Badge>
-	{:else}
-		<Badge variant="outline">Free</Badge>
-	{/if}
+	<div class="flex flex-wrap gap-1">
+		{#if color.kind === 'transparent'}
+			<Badge variant="outline">Transparent</Badge>
+		{:else if color.kind === 'premium'}
+			<Badge variant="secondary">Premium</Badge>
+		{:else if color.kind === 'custom'}
+			<Badge>Custom</Badge>
+		{:else}
+			<Badge variant="outline">Free</Badge>
+		{/if}
+		{#each color.tags ?? [] as tag (tag)}
+			<Badge variant="outline">{tag}</Badge>
+		{/each}
+	</div>
 {/snippet}
 
 {#snippet row(color: PaletteColor)}
 	{@const isVisible = enabled(color)}
 	{@const selected = selectedColorKeys[color.key] === true}
+	{@const editable = color.kind === 'transparent' || !isBuiltIn}
 	{@const mutable = !isBuiltIn && color.kind !== 'transparent'}
 	<tr
 		class="border-t border-border hover:bg-muted/40 data-selected:bg-muted/50 data-disabled:opacity-55"
@@ -574,7 +699,7 @@
 		<td class="p-1.5 align-middle">{@render kindBadge(color)}</td>
 		<td class="p-1.5 align-middle">
 			<div class="flex justify-end gap-1">
-				<Button size="xs" variant="ghost" disabled={!mutable} onclick={() => editColor(color)}>
+				<Button size="xs" variant="ghost" disabled={!editable} onclick={() => editColor(color)}>
 					<PencilIcon weight="bold" />
 					Edit
 				</Button>

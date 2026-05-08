@@ -31,6 +31,8 @@
 		onExportPalette
 	}: Props = $props();
 
+	let open = $state(false);
+
 	function stopSelect(event: Event) {
 		event.stopPropagation();
 	}
@@ -38,7 +40,7 @@
 
 <div class="grid gap-1.5">
 	<h2 class="text-sm font-semibold tracking-tight">Palette</h2>
-	<Select bind:value={preset} type="single">
+	<Select bind:open bind:value={preset} type="single">
 		<SelectTrigger
 			id="palette-preset"
 			size="auto"
@@ -74,6 +76,7 @@
 								onclick={(event) => {
 									stopSelect(event);
 									onDuplicatePalette(palette);
+									open = false;
 								}}
 							>
 								<CopyIcon weight="bold" />
@@ -89,6 +92,7 @@
 								onclick={(event) => {
 									stopSelect(event);
 									onDeletePalette(palette);
+									open = false;
 								}}
 							>
 								<TrashIcon weight="bold" />
@@ -98,16 +102,35 @@
 				{/each}
 			</div>
 			<div class="border-t border-border p-2">
-				<Button variant="ghost" class="w-full justify-start" onclick={onNewPalette}>
+				<Button
+					variant="ghost"
+					class="w-full justify-start"
+					onclick={() => {
+						onNewPalette();
+						open = false;
+					}}
+				>
 					<PlusIcon weight="bold" />
 					New palette
 				</Button>
 				<div class="mt-2 grid grid-cols-2 gap-2">
-					<Button variant="outline" onclick={onImportPalette}>
+					<Button
+						variant="outline"
+						onclick={() => {
+							onImportPalette();
+							open = false;
+						}}
+					>
 						<UploadIcon weight="bold" />
 						Import
 					</Button>
-					<Button variant="outline" onclick={onExportPalette}>
+					<Button
+						variant="outline"
+						onclick={() => {
+							onExportPalette();
+							open = false;
+						}}
+					>
 						<DownloadIcon weight="bold" />
 						Export
 					</Button>
