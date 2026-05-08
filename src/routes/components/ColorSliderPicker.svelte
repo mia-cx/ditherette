@@ -9,35 +9,45 @@
 		onChange: (value: number) => void;
 	};
 
-	type DragHandle = { label: string; percent: number };
+	type PendingCommit = { channel: Channel; value: number };
 	type Props = {
 		channels: Channel[];
 	};
 
 	let { channels }: Props = $props();
-	let dragHandle = $state<DragHandle | null>(null);
+	let pendingCommit: PendingCommit | null = null;
+	let commitFrame: number | null = null;
 
 	function pickChannel(event: PointerEvent, channel: Channel) {
 		const target = event.currentTarget as HTMLElement;
+		const handle = target.querySelector<HTMLElement>('[data-slider-handle]');
 		const step = channel.step ?? 1;
 		const update = (next: PointerEvent) => {
 			const rect = target.getBoundingClientRect();
 			const ratio = Math.min(1, Math.max(0, (next.clientX - rect.left) / rect.width));
 			const raw = channel.min + ratio * (channel.max - channel.min);
-			dragHandle = { label: channel.label, percent: ratio * 100 };
-			channel.onChange(Math.round(raw / step) * step);
+			handle?.style.setProperty('left', `${ratio * 100}%`);
+			scheduleCommit({ channel, value: Math.round(raw / step) * step });
 		};
 		target.setPointerCapture(event.pointerId);
 		update(event);
 		target.onpointermove = update;
-		target.onpointerup = () => {
-			target.onpointermove = null;
-			queueMicrotask(() => (dragHandle = null));
-		};
+		target.onpointerup = () => (target.onpointermove = null);
+		target.onpointercancel = () => (target.onpointermove = null);
+	}
+
+	function scheduleCommit(next: PendingCommit) {
+		pendingCommit = next;
+		if (commitFrame !== null) return;
+		commitFrame = requestAnimationFrame(() => {
+			commitFrame = null;
+			const commit = pendingCommit;
+			pendingCommit = null;
+			commit?.channel.onChange(commit.value);
+		});
 	}
 
 	function percent(channel: Channel) {
-		if (dragHandle?.label === channel.label) return dragHandle.percent;
 		return ((channel.value - channel.min) / (channel.max - channel.min)) * 100;
 	}
 </script>
@@ -54,6 +64,7 @@
 			>
 				<span class="absolute -inset-px" style="background: {channel.background};"></span>
 				<span
+					data-slider-handle
 					class="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.75)]"
 					style="left: {percent(channel)}%;"
 				></span>
