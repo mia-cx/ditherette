@@ -56,6 +56,10 @@
 		const point = trianglePointForHsv(hsv);
 		return `left: ${point.x}%; top: ${point.y}%;`;
 	});
+	const hueWheelHandleStyle = $derived.by(() => {
+		const point = wheelPointForHue(hsv.h);
+		return `left: ${point.x}%; top: ${point.y}%;`;
+	});
 
 	$effect(() => {
 		if (syncingFromPicker) return;
@@ -72,9 +76,11 @@
 	}
 
 	function updateHsv(patch: Partial<Hsv>) {
-		hsv = { ...hsv, ...patch };
-		setHexFromPicker(hexFromRgb(hsvToRgb(hsv)));
-		oklab = rgbToOklab(hsvToRgb(hsv));
+		const next = { ...hsv, ...patch };
+		hsv = next;
+		const rgb = hsvToRgb(next);
+		setHexFromPicker(hexFromRgb(rgb));
+		oklab = rgbToOklab(rgb);
 	}
 
 	function pickFromSquare(event: PointerEvent) {
@@ -110,7 +116,7 @@
 		const update = (next: PointerEvent) => {
 			const point = wheelPoint(next, target);
 			if (dragMode === 'hue') {
-				updateHsv({ h: (Math.atan2(point.y, point.x) * 180) / Math.PI + 180 });
+				updateHsv({ h: hueFromWheelPoint(point.x, point.y) });
 				return;
 			}
 			updateHsv(hsvFromTrianglePoint(point.x, point.y, target.getBoundingClientRect().width));
@@ -133,6 +139,15 @@
 			x: event.clientX - (rect.left + rect.width / 2),
 			y: event.clientY - (rect.top + rect.height / 2)
 		};
+	}
+
+	function hueFromWheelPoint(x: number, y: number) {
+		return ((Math.atan2(y, x) * 180) / Math.PI - 90 + 360) % 360;
+	}
+
+	function wheelPointForHue(hue: number) {
+		const angle = ((hue + 90) * Math.PI) / 180;
+		return { x: 50 + Math.cos(angle) * 43, y: 50 + Math.sin(angle) * 43 };
 	}
 
 	function triangleVertices(width: number) {
@@ -405,8 +420,7 @@
 						</span>
 						<span
 							class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
-							style="left: {50 + Math.cos(((hsv.h - 180) * Math.PI) / 180) * 43}%; top: {50 +
-								Math.sin(((hsv.h - 180) * Math.PI) / 180) * 43}%;"
+							style={hueWheelHandleStyle}
 						></span>
 						<span
 							class="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
