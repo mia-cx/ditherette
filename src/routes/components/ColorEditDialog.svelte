@@ -642,9 +642,12 @@
 				<ColorWheelPicker
 					{hueWheelBackground}
 					hue={hsv.h}
+					saturation={hsv.s}
+					value={hsv.v}
 					hueHandleStyle={hueWheelHandleStyle}
 					{triangleHandleStyle}
 					onPickHue={(hue) => updateHsv({ h: hue })}
+					onPickSaturationValue={(saturation, value) => updateHsv({ s: saturation, v: value })}
 					onPickTriangle={pickFromWheelTriangle}
 				/>
 			{:else if picker === 'oklab'}

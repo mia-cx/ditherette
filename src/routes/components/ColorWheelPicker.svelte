@@ -1,3 +1,13 @@
+<script lang="ts" module>
+	let nextGradientId = 0;
+
+	function allocateGradientId() {
+		const id = nextGradientId;
+		nextGradientId += 1;
+		return id;
+	}
+</script>
+
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 
@@ -6,18 +16,24 @@
 	type Props = {
 		hueWheelBackground: string;
 		hue: number;
+		saturation: number;
+		value: number;
 		hueHandleStyle: string;
 		triangleHandleStyle: string;
 		onPickHue: (hue: number) => void;
+		onPickSaturationValue: (saturation: number, value: number) => void;
 		onPickTriangle: (point: Point, width: number) => void;
 	};
 
 	let {
 		hueWheelBackground,
 		hue,
+		saturation,
+		value,
 		hueHandleStyle,
 		triangleHandleStyle,
 		onPickHue,
+		onPickSaturationValue,
 		onPickTriangle
 	}: Props = $props();
 	let pendingHue: number | null = null;
@@ -25,6 +41,9 @@
 	let commitFrame: number | null = null;
 
 	const triangleRadiusRatio = 0.25;
+	const gradientId = `wheel-triangle-${allocateGradientId()}`;
+	const whiteGradientId = `${gradientId}-white`;
+	const blackGradientId = `${gradientId}-black`;
 
 	onDestroy(() => {
 		if (commitFrame === null) return;
@@ -79,6 +98,39 @@
 		target.onlostpointercapture = cleanup;
 		window.addEventListener('pointerup', cleanup);
 		window.addEventListener('pointercancel', cleanup);
+	}
+
+	function handleWheelKeydown(event: KeyboardEvent) {
+		if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+			event.preventDefault();
+			const direction = event.key === 'ArrowRight' ? 1 : -1;
+			onPickHue(wrapHue(hue + direction * (event.shiftKey ? 10 : 1)));
+			return;
+		}
+		if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+			event.preventDefault();
+			const direction = event.key === 'ArrowUp' ? 1 : -1;
+			onPickSaturationValue(
+				saturation,
+				clamp(value + direction * (event.shiftKey ? 10 : 1), 0, 100)
+			);
+			return;
+		}
+		if (event.key === 'PageUp' || event.key === 'PageDown') {
+			event.preventDefault();
+			const direction = event.key === 'PageUp' ? 1 : -1;
+			onPickSaturationValue(clamp(saturation + direction * 10, 0, 100), value);
+			return;
+		}
+		if (event.key === 'Home') {
+			event.preventDefault();
+			onPickSaturationValue(0, value);
+			return;
+		}
+		if (event.key === 'End') {
+			event.preventDefault();
+			onPickSaturationValue(100, value);
+		}
 	}
 
 	function cleanupPointer(target: HTMLElement, pointerId: number) {
@@ -178,10 +230,7 @@
 		const t =
 			lengthSquared === 0
 				? 0
-				: Math.min(
-						1,
-						Math.max(0, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
-					);
+				: clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
 		return { x: start.x + t * dx, y: start.y + t * dy };
 	}
 
@@ -195,14 +244,23 @@
 	function distanceSquared(left: Point, right: Point) {
 		return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 	}
+
+	function clamp(value: number, min: number, max: number) {
+		return Math.min(max, Math.max(min, value));
+	}
+
+	function wrapHue(value: number) {
+		return (value + 360) % 360;
+	}
 </script>
 
 <div class="grid place-items-center p-2">
 	<button
 		type="button"
 		class="relative size-72 touch-none overflow-hidden rounded-full border-0 bg-transparent p-0"
-		aria-label="Hue wheel with saturation and lightness triangle"
+		aria-label="Hue wheel. Arrow left and right adjust hue, arrow up and down adjust value, PageUp and PageDown adjust saturation."
 		onpointerdown={pickWheel}
+		onkeydown={handleWheelKeydown}
 	>
 		<span class="absolute -inset-px rounded-full" style="background: {hueWheelBackground};"></span>
 		<span class="absolute inset-[13%] rounded-full bg-background"></span>
@@ -214,7 +272,7 @@
 			<svg class="absolute inset-0 size-full" viewBox="0 0 100 100" aria-hidden="true">
 				<defs>
 					<linearGradient
-						id="wheel-triangle-white"
+						id={whiteGradientId}
 						gradientUnits="userSpaceOnUse"
 						x1="25"
 						y1="6.699"
@@ -225,7 +283,7 @@
 						<stop offset="1" stop-color="#fff" stop-opacity="0" />
 					</linearGradient>
 					<linearGradient
-						id="wheel-triangle-black"
+						id={blackGradientId}
 						gradientUnits="userSpaceOnUse"
 						x1="25"
 						y1="93.301"
@@ -241,8 +299,8 @@
 					points="100,50 25,6.699 25,93.301"
 					fill="hsl({hue} 100% 50%)"
 				/>
-				<polygon points="100,50 25,6.699 25,93.301" fill="url(#wheel-triangle-white)" />
-				<polygon points="100,50 25,6.699 25,93.301" fill="url(#wheel-triangle-black)" />
+				<polygon points="100,50 25,6.699 25,93.301" fill="url(#{whiteGradientId})" />
+				<polygon points="100,50 25,6.699 25,93.301" fill="url(#{blackGradientId})" />
 			</svg>
 		</span>
 		<span
