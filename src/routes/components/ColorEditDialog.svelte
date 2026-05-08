@@ -11,10 +11,21 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 
-	type PickerMode = 'spectrum' | 'wheel' | 'oklab';
+	type PickerMode =
+		| 'hsl-wheel'
+		| 'hue'
+		| 'saturation'
+		| 'lightness'
+		| 'rgb-sliders'
+		| 'hsl-sliders'
+		| 'oklab'
+		| 'oklch';
 	type Rgb = { r: number; g: number; b: number };
+	type Hsl = { h: number; s: number; l: number };
 	type Hsv = { h: number; s: number; v: number };
 	type Oklab = { l: number; a: number; b: number };
+	type Oklch = { l: number; c: number; h: number };
+	type Point = { x: number; y: number };
 	type Props = {
 		open: boolean;
 		mode: 'add' | 'edit' | 'duplicate';
@@ -23,6 +34,17 @@
 		tags: string[];
 		onSave: () => void;
 	};
+
+	const pickerOptions: { id: PickerMode; label: string }[] = [
+		{ id: 'hsl-wheel', label: 'HSL Colour Wheel' },
+		{ id: 'hue', label: 'Hue' },
+		{ id: 'saturation', label: 'Saturation' },
+		{ id: 'lightness', label: 'Lightness' },
+		{ id: 'rgb-sliders', label: 'RGB Sliders' },
+		{ id: 'hsl-sliders', label: 'HSL Sliders' },
+		{ id: 'oklab', label: 'OKLab' },
+		{ id: 'oklch', label: 'OKLCH' }
+	];
 
 	let {
 		open = $bindable(),
@@ -33,24 +55,39 @@
 		onSave
 	}: Props = $props();
 
-	let picker = $state<PickerMode>('spectrum');
+	let picker = $state<PickerMode>('hsl-wheel');
 	let tagDraft = $state('');
 	let hsv = $state<Hsv>({ h: 0, s: 100, v: 100 });
 	let oklab = $state<Oklab>({ l: 0.7, a: 0, b: 0 });
 	let syncingFromPicker = false;
 
 	const triangleRadiusRatio = 0.25;
-
-	const selectorBackground = $derived(
+	const rgb = $derived(rgbFromHex(hex) ?? hsvToRgb(hsv));
+	const hsl = $derived(rgbToHsl(rgb));
+	const oklch = $derived(oklabToOklch(oklab));
+	const hueRailBackground =
+		'linear-gradient(to right, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
+	const verticalHueRailBackground =
+		'linear-gradient(to bottom, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
+	const hueWheelBackground =
+		'conic-gradient(from 90deg, #ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)';
+	const huePlaneBackground = $derived(
 		`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`
+	);
+	const saturationPlaneBackground = $derived(
+		`linear-gradient(to top, #000, transparent), linear-gradient(to right, hsl(0 ${hsv.s}% 50%), hsl(60 ${hsv.s}% 50%), hsl(120 ${hsv.s}% 50%), hsl(180 ${hsv.s}% 50%), hsl(240 ${hsv.s}% 50%), hsl(300 ${hsv.s}% 50%), hsl(360 ${hsv.s}% 50%))`
+	);
+	const lightnessPlaneBackground = $derived(
+		`linear-gradient(to top, hsl(0 0% ${hsl.l}%), transparent), linear-gradient(to right, hsl(0 0% ${hsl.l}%), hsl(0 100% ${hsl.l}%), hsl(60 100% ${hsl.l}%), hsl(120 100% ${hsl.l}%), hsl(180 100% ${hsl.l}%), hsl(240 100% ${hsl.l}%), hsl(300 100% ${hsl.l}%), hsl(360 100% ${hsl.l}%))`
 	);
 	const wheelTriangleBackground = $derived(
 		`linear-gradient(to right, transparent, hsl(${hsv.h} 100% 50%)), linear-gradient(to bottom, #fff, #000)`
 	);
-	const hueRailBackground =
-		'linear-gradient(to bottom, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
-	const hueWheelBackground =
-		'conic-gradient(from 90deg, #ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)';
+	const planeHandleStyle = $derived.by(() => {
+		if (picker === 'saturation') return `left: ${(hsv.h / 360) * 100}%; top: ${100 - hsv.v}%;`;
+		if (picker === 'lightness') return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.s}%;`;
+		return `left: ${hsv.s}%; top: ${100 - hsv.v}%;`;
+	});
 	const triangleHandleStyle = $derived.by(() => {
 		const point = trianglePointForHsv(hsv);
 		return `left: ${point.x}%; top: ${point.y}%;`;
@@ -62,51 +99,69 @@
 
 	$effect(() => {
 		if (syncingFromPicker) return;
-		const rgb = rgbFromHex(hex);
-		if (!rgb) return;
-		hsv = rgbToHsv(rgb);
-		oklab = rgbToOklab(rgb);
+		const nextRgb = rgbFromHex(hex);
+		if (!nextRgb) return;
+		hsv = rgbToHsv(nextRgb);
+		oklab = rgbToOklab(nextRgb);
 	});
 
-	function setHexFromPicker(next: string) {
+	function setColorFromRgb(next: Rgb) {
+		const clamped = {
+			r: clamp(next.r, 0, 255),
+			g: clamp(next.g, 0, 255),
+			b: clamp(next.b, 0, 255)
+		};
 		syncingFromPicker = true;
-		hex = next;
+		hex = hexFromRgb(clamped);
+		hsv = rgbToHsv(clamped);
+		oklab = rgbToOklab(clamped);
 		queueMicrotask(() => (syncingFromPicker = false));
 	}
 
 	function updateHsv(patch: Partial<Hsv>) {
 		const next = { ...hsv, ...patch };
-		hsv = next;
-		const rgb = hsvToRgb(next);
-		setHexFromPicker(hexFromRgb(rgb));
-		oklab = rgbToOklab(rgb);
+		setColorFromRgb(hsvToRgb(next));
 	}
 
-	function pickFromSquare(event: PointerEvent) {
+	function updateHsl(patch: Partial<Hsl>) {
+		setColorFromRgb(hslToRgb({ ...hsl, ...patch }));
+	}
+
+	function updateOklab(patch: Partial<Oklab>) {
+		const next = { ...oklab, ...patch };
+		setColorFromRgb(oklabToRgb(next));
+	}
+
+	function updateOklch(patch: Partial<Oklch>) {
+		setColorFromRgb(oklabToRgb(oklchToOklab({ ...oklch, ...patch })));
+	}
+
+	function pickFromPlane(event: PointerEvent) {
 		const target = event.currentTarget as HTMLElement;
 		const update = (next: PointerEvent) => {
 			const rect = target.getBoundingClientRect();
 			const x = clamp((next.clientX - rect.left) / rect.width, 0, 1);
 			const y = clamp((next.clientY - rect.top) / rect.height, 0, 1);
+			if (picker === 'saturation') {
+				updateHsv({ h: x * 360, v: (1 - y) * 100 });
+				return;
+			}
+			if (picker === 'lightness') {
+				updateHsl({ h: x * 360, s: (1 - y) * 100 });
+				return;
+			}
 			updateHsv({ s: x * 100, v: (1 - y) * 100 });
 		};
-		target.setPointerCapture(event.pointerId);
-		update(event);
-		target.onpointermove = update;
-		target.onpointerup = () => (target.onpointermove = null);
+		captureDrag(event, target, update);
 	}
 
-	function pickFromHueRail(event: PointerEvent) {
+	function pickFromVerticalHueRail(event: PointerEvent) {
 		const target = event.currentTarget as HTMLElement;
 		const update = (next: PointerEvent) => {
 			const rect = target.getBoundingClientRect();
-			const y = clamp((next.clientY - rect.top) / rect.height, 0, 1);
-			updateHsv({ h: y * 360 });
+			updateHsv({ h: clamp((next.clientY - rect.top) / rect.height, 0, 1) * 360 });
 		};
-		target.setPointerCapture(event.pointerId);
-		update(event);
-		target.onpointermove = update;
-		target.onpointerup = () => (target.onpointermove = null);
+		captureDrag(event, target, update);
 	}
 
 	function pickFromWheel(event: PointerEvent) {
@@ -120,6 +175,14 @@
 			}
 			updateHsv(hsvFromTrianglePoint(point.x, point.y, target.getBoundingClientRect().width));
 		};
+		captureDrag(event, target, update);
+	}
+
+	function captureDrag(
+		event: PointerEvent,
+		target: HTMLElement,
+		update: (event: PointerEvent) => void
+	) {
 		target.setPointerCapture(event.pointerId);
 		update(event);
 		target.onpointermove = update;
@@ -184,30 +247,16 @@
 		return { x: 50 + point.x, y: 50 + point.y };
 	}
 
-	function barycentric(
-		point: { x: number; y: number },
-		white: { x: number; y: number },
-		black: { x: number; y: number },
-		hue: { x: number; y: number }
-	) {
+	function barycentric(point: Point, white: Point, black: Point, hue: Point) {
 		const denom = (black.y - hue.y) * (white.x - hue.x) + (hue.x - black.x) * (white.y - hue.y);
 		const whiteWeight =
 			((black.y - hue.y) * (point.x - hue.x) + (hue.x - black.x) * (point.y - hue.y)) / denom;
 		const blackWeight =
 			((hue.y - white.y) * (point.x - hue.x) + (white.x - hue.x) * (point.y - hue.y)) / denom;
-		return {
-			white: whiteWeight,
-			black: blackWeight,
-			hue: 1 - whiteWeight - blackWeight
-		};
+		return { white: whiteWeight, black: blackWeight, hue: 1 - whiteWeight - blackWeight };
 	}
 
-	function closestPointInTriangle(
-		point: { x: number; y: number },
-		white: { x: number; y: number },
-		black: { x: number; y: number },
-		hue: { x: number; y: number }
-	) {
+	function closestPointInTriangle(point: Point, white: Point, black: Point, hue: Point) {
 		const weights = barycentric(point, white, black, hue);
 		if (weights.white >= 0 && weights.black >= 0 && weights.hue >= 0) return point;
 		return [
@@ -219,11 +268,7 @@
 		);
 	}
 
-	function closestPointOnSegment(
-		point: { x: number; y: number },
-		start: { x: number; y: number },
-		end: { x: number; y: number }
-	) {
+	function closestPointOnSegment(point: Point, start: Point, end: Point) {
 		const dx = end.x - start.x;
 		const dy = end.y - start.y;
 		const lengthSquared = dx * dx + dy * dy;
@@ -234,14 +279,14 @@
 		return { x: start.x + t * dx, y: start.y + t * dy };
 	}
 
-	function rotatePoint(point: { x: number; y: number }, degrees: number) {
+	function rotatePoint(point: Point, degrees: number) {
 		const radians = (degrees * Math.PI) / 180;
 		const cos = Math.cos(radians);
 		const sin = Math.sin(radians);
 		return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos };
 	}
 
-	function distanceSquared(left: { x: number; y: number }, right: { x: number; y: number }) {
+	function distanceSquared(left: Point, right: Point) {
 		return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 	}
 
@@ -273,8 +318,8 @@
 			.toUpperCase();
 	}
 
-	function hexFromRgb(rgb: Rgb) {
-		return `#${componentToHex(rgb.r)}${componentToHex(rgb.g)}${componentToHex(rgb.b)}`;
+	function hexFromRgb(color: Rgb) {
+		return `#${componentToHex(color.r)}${componentToHex(color.g)}${componentToHex(color.b)}`;
 	}
 
 	function rgbFromHex(value: string): Rgb | undefined {
@@ -289,10 +334,10 @@
 		};
 	}
 
-	function rgbToHsv(rgb: Rgb): Hsv {
-		const r = rgb.r / 255;
-		const g = rgb.g / 255;
-		const b = rgb.b / 255;
+	function rgbToHsv(color: Rgb): Hsv {
+		const r = color.r / 255;
+		const g = color.g / 255;
+		const b = color.b / 255;
 		const max = Math.max(r, g, b);
 		const min = Math.min(r, g, b);
 		const d = max - min;
@@ -311,19 +356,49 @@
 		const c = v * s;
 		const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
 		const m = v - c;
-		const [rp, gp, bp] =
-			h < 60
-				? [c, x, 0]
-				: h < 120
-					? [x, c, 0]
-					: h < 180
-						? [0, c, x]
-						: h < 240
-							? [0, x, c]
-							: h < 300
-								? [x, 0, c]
-								: [c, 0, x];
+		const [rp, gp, bp] = hueSegment(h, c, x);
 		return { r: (rp + m) * 255, g: (gp + m) * 255, b: (bp + m) * 255 };
+	}
+
+	function rgbToHsl(color: Rgb): Hsl {
+		const r = color.r / 255;
+		const g = color.g / 255;
+		const b = color.b / 255;
+		const max = Math.max(r, g, b);
+		const min = Math.min(r, g, b);
+		const l = (max + min) / 2;
+		const d = max - min;
+		if (d === 0) return { h: 0, s: 0, l: l * 100 };
+		const s = d / (1 - Math.abs(2 * l - 1));
+		let h: number;
+		if (max === r) h = ((g - b) / d) % 6;
+		else if (max === g) h = (b - r) / d + 2;
+		else h = (r - g) / d + 4;
+		return { h: (h * 60 + 360) % 360, s: s * 100, l: l * 100 };
+	}
+
+	function hslToRgb({ h, s, l }: Hsl): Rgb {
+		s /= 100;
+		l /= 100;
+		const c = (1 - Math.abs(2 * l - 1)) * s;
+		const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+		const m = l - c / 2;
+		const [rp, gp, bp] = hueSegment(h, c, x);
+		return { r: (rp + m) * 255, g: (gp + m) * 255, b: (bp + m) * 255 };
+	}
+
+	function hueSegment(h: number, c: number, x: number) {
+		return h < 60
+			? [c, x, 0]
+			: h < 120
+				? [x, c, 0]
+				: h < 180
+					? [0, c, x]
+					: h < 240
+						? [0, x, c]
+						: h < 300
+							? [x, 0, c]
+							: [c, 0, x];
 	}
 
 	function srgbToLinear(value: number) {
@@ -331,10 +406,15 @@
 		return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 	}
 
-	function rgbToOklab(rgb: Rgb): Oklab {
-		const r = srgbToLinear(rgb.r);
-		const g = srgbToLinear(rgb.g);
-		const b = srgbToLinear(rgb.b);
+	function linearToSrgb(value: number) {
+		const channel = value <= 0.0031308 ? 12.92 * value : 1.055 * value ** (1 / 2.4) - 0.055;
+		return clamp(channel * 255, 0, 255);
+	}
+
+	function rgbToOklab(color: Rgb): Oklab {
+		const r = srgbToLinear(color.r);
+		const g = srgbToLinear(color.g);
+		const b = srgbToLinear(color.b);
 		const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
 		const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
 		const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -344,14 +424,38 @@
 			b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
 		};
 	}
+
+	function oklabToRgb(lab: Oklab): Rgb {
+		const l = (lab.l + 0.3963377774 * lab.a + 0.2158037573 * lab.b) ** 3;
+		const m = (lab.l - 0.1055613458 * lab.a - 0.0638541728 * lab.b) ** 3;
+		const s = (lab.l - 0.0894841775 * lab.a - 1.291485548 * lab.b) ** 3;
+		return {
+			r: linearToSrgb(+4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+			g: linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+			b: linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)
+		};
+	}
+
+	function oklabToOklch(lab: Oklab): Oklch {
+		return {
+			l: lab.l,
+			c: Math.hypot(lab.a, lab.b),
+			h: ((Math.atan2(lab.b, lab.a) * 180) / Math.PI + 360) % 360
+		};
+	}
+
+	function oklchToOklab(lch: Oklch): Oklab {
+		const radians = (lch.h * Math.PI) / 180;
+		return { l: lch.l, a: Math.cos(radians) * lch.c, b: Math.sin(radians) * lch.c };
+	}
 </script>
 
 <Dialog bind:open>
-	<DialogContent class="max-w-xl">
+	<DialogContent class="max-w-2xl">
 		<DialogHeader>
 			<DialogTitle>{title()}</DialogTitle>
 			<DialogDescription>
-				Pick visually, type a hex value directly, and attach searchable tags.
+				Pick visually, type exact values, and attach searchable tags.
 			</DialogDescription>
 		</DialogHeader>
 
@@ -368,89 +472,233 @@
 				</div>
 			</div>
 
-			<div class="flex flex-wrap gap-1">
-				{#each [['spectrum', 'Gradient'], ['wheel', 'Hue wheel'], ['oklab', 'OKLab later']] as [id, label] (id)}
-					<Button
-						variant={picker === id ? 'secondary' : 'outline'}
-						size="sm"
-						onclick={() => (picker = id as PickerMode)}>{label}</Button
-					>
-				{/each}
+			<div class="grid grid-cols-[minmax(0,1fr)_13rem] items-center gap-3">
+				<div class="grid gap-2">
+					{#if picker === 'rgb-sliders'}
+						{@render channelSlider(
+							'R',
+							rgb.r,
+							0,
+							255,
+							(value) => setColorFromRgb({ ...rgb, r: value }),
+							`linear-gradient(to right, rgb(0 ${rgb.g} ${rgb.b}), rgb(255 ${rgb.g} ${rgb.b}))`
+						)}
+						{@render channelSlider(
+							'G',
+							rgb.g,
+							0,
+							255,
+							(value) => setColorFromRgb({ ...rgb, g: value }),
+							`linear-gradient(to right, rgb(${rgb.r} 0 ${rgb.b}), rgb(${rgb.r} 255 ${rgb.b}))`
+						)}
+						{@render channelSlider(
+							'B',
+							rgb.b,
+							0,
+							255,
+							(value) => setColorFromRgb({ ...rgb, b: value }),
+							`linear-gradient(to right, rgb(${rgb.r} ${rgb.g} 0), rgb(${rgb.r} ${rgb.g} 255))`
+						)}
+					{:else if picker === 'hsl-sliders'}
+						{@render channelSlider(
+							'H',
+							hsl.h,
+							0,
+							360,
+							(value) => updateHsl({ h: value }),
+							hueRailBackground
+						)}
+						{@render channelSlider(
+							'S',
+							hsl.s,
+							0,
+							100,
+							(value) => updateHsl({ s: value }),
+							`linear-gradient(to right, hsl(${hsl.h} 0% ${hsl.l}%), hsl(${hsl.h} 100% ${hsl.l}%))`
+						)}
+						{@render channelSlider(
+							'L',
+							hsl.l,
+							0,
+							100,
+							(value) => updateHsl({ l: value }),
+							`linear-gradient(to right, #000, hsl(${hsl.h} ${hsl.s}% 50%), #fff)`
+						)}
+					{:else if picker === 'oklab'}
+						{@render channelSlider(
+							'L',
+							oklab.l,
+							0,
+							1,
+							(value) => updateOklab({ l: value }),
+							'linear-gradient(to right, #000, #fff)',
+							0.001,
+							3
+						)}
+						{@render channelSlider(
+							'a',
+							oklab.a,
+							-0.4,
+							0.4,
+							(value) => updateOklab({ a: value }),
+							'linear-gradient(to right, #00a676, #777, #ff4b8b)',
+							0.001,
+							3
+						)}
+						{@render channelSlider(
+							'b',
+							oklab.b,
+							-0.4,
+							0.4,
+							(value) => updateOklab({ b: value }),
+							'linear-gradient(to right, #4f80ff, #777, #ffe45c)',
+							0.001,
+							3
+						)}
+					{:else if picker === 'oklch'}
+						{@render channelSlider(
+							'L',
+							oklch.l,
+							0,
+							1,
+							(value) => updateOklch({ l: value }),
+							'linear-gradient(to right, #000, #fff)',
+							0.001,
+							3
+						)}
+						{@render channelSlider(
+							'C',
+							oklch.c,
+							0,
+							0.4,
+							(value) => updateOklch({ c: value }),
+							`linear-gradient(to right, oklch(${oklch.l} 0 ${oklch.h}), oklch(${oklch.l} 0.4 ${oklch.h}))`,
+							0.001,
+							3
+						)}
+						{@render channelSlider(
+							'h',
+							oklch.h,
+							0,
+							360,
+							(value) => updateOklch({ h: value }),
+							hueRailBackground
+						)}
+					{:else if picker === 'hue'}
+						{@render channelSlider(
+							'H',
+							hsv.h,
+							0,
+							360,
+							(value) => updateHsv({ h: value }),
+							hueRailBackground
+						)}
+					{:else if picker === 'saturation'}
+						{@render channelSlider(
+							'S',
+							hsv.s,
+							0,
+							100,
+							(value) => updateHsv({ s: value }),
+							`linear-gradient(to right, hsl(${hsv.h} 0% 50%), hsl(${hsv.h} 100% 50%))`
+						)}
+					{:else if picker === 'lightness'}
+						{@render channelSlider(
+							'L',
+							hsl.l,
+							0,
+							100,
+							(value) => updateHsl({ l: value }),
+							`linear-gradient(to right, #000, hsl(${hsl.h} ${hsl.s}% 50%), #fff)`
+						)}
+					{/if}
+				</div>
+				<select
+					class="h-8 border border-input bg-background px-2 text-xs"
+					bind:value={picker}
+					aria-label="Color picker mode"
+				>
+					{#each pickerOptions as option (option.id)}
+						<option value={option.id}>{option.label}</option>
+					{/each}
+				</select>
 			</div>
 
-			{#if picker === 'spectrum'}
-				<div
-					class="grid grid-cols-[minmax(0,1fr)_1.75rem] gap-3 border border-border bg-muted/30 p-3"
-				>
-					<button
-						type="button"
-						class="relative aspect-square min-h-52 touch-none overflow-hidden border border-border bg-transparent p-0"
-						aria-label="Saturation and value color field"
-						onpointerdown={pickFromSquare}
-					>
-						<span class="absolute -inset-px" style="background: {selectorBackground};"></span>
-						<span
-							class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
-							style="left: {hsv.s}%; top: {100 - hsv.v}%;"
-						></span>
-					</button>
-					<button
-						type="button"
-						class="relative touch-none overflow-hidden border border-border bg-transparent p-0"
-						aria-label="Hue rail"
-						onpointerdown={pickFromHueRail}
-					>
-						<span class="absolute -inset-px" style="background: {hueRailBackground};"></span>
-						<span
-							class="absolute left-1/2 h-1.5 w-8 -translate-x-1/2 -translate-y-1/2 border border-background bg-foreground shadow-sm"
-							style="top: {(hsv.h / 360) * 100}%;"
-						></span>
-					</button>
-				</div>
-			{:else if picker === 'wheel'}
-				<div class="grid place-items-center border border-border bg-muted/30 p-4">
-					<button
-						type="button"
-						class="relative size-72 touch-none overflow-hidden rounded-full border-0 bg-transparent p-0"
-						aria-label="Hue wheel with saturation and value triangle"
-						onpointerdown={pickFromWheel}
-					>
-						<span class="absolute -inset-px rounded-full" style="background: {hueWheelBackground};"
-						></span>
-						<span class="absolute inset-[13%] rounded-full bg-background"></span>
-						<span
-							class="absolute top-1/2 left-1/2 size-36 overflow-hidden [clip-path:polygon(100%_50%,25%_6.699%,25%_93.301%)]"
-							style="transform: translate(-50%, -50%) rotate({hsv.h}deg);"
-						>
-							<span class="absolute -inset-px" style="background: {wheelTriangleBackground};"
-							></span>
-						</span>
-						<span
-							class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
-							style={hueWheelHandleStyle}
-						></span>
-						<span
-							class="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
-							style={triangleHandleStyle}
-						></span>
-					</button>
-				</div>
+			{#if picker === 'hsl-wheel'}
+				{@render wheelPicker()}
+			{:else if picker === 'oklab'}
+				{@render oklabPreview()}
+			{:else if picker === 'oklch'}
+				{@render oklchPreview()}
 			{:else}
-				<div class="grid gap-3 border border-border bg-muted/30 p-4 text-sm">
-					<p class="text-muted-foreground">
-						OKLab needs its own purpose-built picker, not another pile of sliders. Current color:
-					</p>
-					<div class="grid grid-cols-3 gap-2 font-mono text-xs tabular-nums">
-						<span>L {oklab.l.toFixed(3)}</span>
-						<span>a {oklab.a.toFixed(3)}</span>
-						<span>b {oklab.b.toFixed(3)}</span>
-					</div>
-				</div>
+				{@render planePicker()}
 			{/if}
 
-			<div class="grid gap-1.5">
-				<Label for="palette-color-hex">Hex</Label>
-				<Input id="palette-color-hex" bind:value={hex} placeholder="#66AAFF" />
+			<div class="grid gap-2 border border-border bg-muted/30 p-3 text-xs">
+				<div class="grid grid-cols-3 gap-2">
+					{@render numberInput('R', rgb.r, 0, 255, (value) =>
+						setColorFromRgb({ ...rgb, r: value })
+					)}
+					{@render numberInput('G', rgb.g, 0, 255, (value) =>
+						setColorFromRgb({ ...rgb, g: value })
+					)}
+					{@render numberInput('B', rgb.b, 0, 255, (value) =>
+						setColorFromRgb({ ...rgb, b: value })
+					)}
+					{@render numberInput('H', hsl.h, 0, 360, (value) => updateHsl({ h: value }))}
+					{@render numberInput('S', hsl.s, 0, 100, (value) => updateHsl({ s: value }))}
+					{@render numberInput('L', hsl.l, 0, 100, (value) => updateHsl({ l: value }))}
+					{@render numberInput(
+						'OK L',
+						oklab.l,
+						0,
+						1,
+						(value) => updateOklab({ l: value }),
+						0.001,
+						3
+					)}
+					{@render numberInput(
+						'OK a',
+						oklab.a,
+						-0.4,
+						0.4,
+						(value) => updateOklab({ a: value }),
+						0.001,
+						3
+					)}
+					{@render numberInput(
+						'OK b',
+						oklab.b,
+						-0.4,
+						0.4,
+						(value) => updateOklab({ b: value }),
+						0.001,
+						3
+					)}
+					{@render numberInput(
+						'LCH L',
+						oklch.l,
+						0,
+						1,
+						(value) => updateOklch({ l: value }),
+						0.001,
+						3
+					)}
+					{@render numberInput(
+						'LCH C',
+						oklch.c,
+						0,
+						0.4,
+						(value) => updateOklch({ c: value }),
+						0.001,
+						3
+					)}
+					{@render numberInput('LCH h', oklch.h, 0, 360, (value) => updateOklch({ h: value }))}
+				</div>
+				<div class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
+					<Label for="palette-color-hex" class="text-xs text-muted-foreground">Hex</Label>
+					<Input id="palette-color-hex" bind:value={hex} placeholder="#66AAFF" />
+				</div>
 			</div>
 
 			<div class="grid gap-2">
@@ -489,3 +737,148 @@
 		</DialogFooter>
 	</DialogContent>
 </Dialog>
+
+{#snippet planePicker()}
+	<div class="grid grid-cols-[minmax(0,1fr)_1.75rem] gap-3 border border-border bg-muted/30 p-3">
+		<button
+			type="button"
+			class="relative aspect-square min-h-52 touch-none overflow-hidden border border-border bg-transparent p-0"
+			aria-label="Color field"
+			onpointerdown={pickFromPlane}
+		>
+			<span
+				class="absolute -inset-px"
+				style="background: {picker === 'saturation'
+					? saturationPlaneBackground
+					: picker === 'lightness'
+						? lightnessPlaneBackground
+						: huePlaneBackground};"
+			></span>
+			<span
+				class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
+				style={planeHandleStyle}
+			></span>
+		</button>
+		<button
+			type="button"
+			class="relative touch-none overflow-hidden border border-border bg-transparent p-0"
+			aria-label="Hue rail"
+			onpointerdown={pickFromVerticalHueRail}
+		>
+			<span class="absolute -inset-px" style="background: {verticalHueRailBackground};"></span>
+			<span
+				class="absolute left-1/2 h-1.5 w-8 -translate-x-1/2 -translate-y-1/2 border border-background bg-foreground shadow-sm"
+				style="top: {(hsv.h / 360) * 100}%;"
+			></span>
+		</button>
+	</div>
+{/snippet}
+
+{#snippet wheelPicker()}
+	<div class="grid place-items-center border border-border bg-muted/30 p-4">
+		<button
+			type="button"
+			class="relative size-72 touch-none overflow-hidden rounded-full border-0 bg-transparent p-0"
+			aria-label="Hue wheel with saturation and lightness triangle"
+			onpointerdown={pickFromWheel}
+		>
+			<span class="absolute -inset-px rounded-full" style="background: {hueWheelBackground};"
+			></span>
+			<span class="absolute inset-[13%] rounded-full bg-background"></span>
+			<span
+				class="absolute top-1/2 left-1/2 size-36 overflow-hidden [clip-path:polygon(100%_50%,25%_6.699%,25%_93.301%)]"
+				style="transform: translate(-50%, -50%) rotate({hsv.h}deg);"
+			>
+				<span class="absolute -inset-px" style="background: {wheelTriangleBackground};"></span>
+			</span>
+			<span
+				class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
+				style={hueWheelHandleStyle}
+			></span>
+			<span
+				class="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
+				style={triangleHandleStyle}
+			></span>
+		</button>
+	</div>
+{/snippet}
+
+{#snippet oklabPreview()}
+	<div class="grid gap-3 border border-border bg-muted/30 p-4 text-sm">
+		<p class="text-muted-foreground">
+			OKLab replaces the RGB hex-byte fields for perceptual editing.
+		</p>
+		<div class="grid grid-cols-3 gap-2 font-mono text-xs tabular-nums">
+			<span>L {oklab.l.toFixed(3)}</span>
+			<span>a {oklab.a.toFixed(3)}</span>
+			<span>b {oklab.b.toFixed(3)}</span>
+		</div>
+	</div>
+{/snippet}
+
+{#snippet oklchPreview()}
+	<div class="grid gap-3 border border-border bg-muted/30 p-4 text-sm">
+		<p class="text-muted-foreground">OKLCH replaces CMYK for lightness/chroma/hue adjustments.</p>
+		<div class="grid grid-cols-3 gap-2 font-mono text-xs tabular-nums">
+			<span>L {oklch.l.toFixed(3)}</span>
+			<span>C {oklch.c.toFixed(3)}</span>
+			<span>h {oklch.h.toFixed(0)}°</span>
+		</div>
+	</div>
+{/snippet}
+
+{#snippet channelSlider(
+	label: string,
+	value: number,
+	min: number,
+	max: number,
+	onChange: (value: number) => void,
+	background: string,
+	step = 1,
+	digits = 0
+)}
+	<label class="grid grid-cols-[1.5rem_minmax(0,1fr)_3.25rem] items-center gap-2 text-xs">
+		<span class="text-muted-foreground">{label}</span>
+		<input
+			type="range"
+			{min}
+			{max}
+			{step}
+			{value}
+			style="accent-color: {hex}; background: {background};"
+			oninput={(event) => onChange(event.currentTarget.valueAsNumber)}
+		/>
+		<input
+			class="h-6 border border-input bg-background px-1 text-right font-mono text-xs tabular-nums"
+			type="number"
+			{min}
+			{max}
+			{step}
+			value={value.toFixed(digits)}
+			onchange={(event) => onChange(event.currentTarget.valueAsNumber)}
+		/>
+	</label>
+{/snippet}
+
+{#snippet numberInput(
+	label: string,
+	value: number,
+	min: number,
+	max: number,
+	onChange: (value: number) => void,
+	step = 1,
+	digits = 0
+)}
+	<label class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-1">
+		<span class="text-muted-foreground">{label}</span>
+		<input
+			class="h-7 border border-input bg-background px-1 text-right font-mono text-xs tabular-nums"
+			type="number"
+			{min}
+			{max}
+			{step}
+			value={value.toFixed(digits)}
+			onchange={(event) => onChange(event.currentTarget.valueAsNumber)}
+		/>
+	</label>
+{/snippet}
