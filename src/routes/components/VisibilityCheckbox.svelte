@@ -15,7 +15,7 @@
 		'checked' | 'onCheckedChange'
 	> & {
 		checked: boolean;
-		onCheckedChange: (checked: boolean | 'indeterminate') => void;
+		onCheckedChange: (checked: boolean) => void;
 	};
 
 	let {
@@ -43,7 +43,7 @@
 			data-slot="checkbox-indicator"
 			class="grid place-content-center text-current transition-none [&>svg]:size-3"
 		>
-			{#if checked}
+			{#if checked === true}
 				<EyeIcon weight="bold" />
 			{:else}
 				<EyeSlashIcon weight="bold" class="text-muted-foreground" />
