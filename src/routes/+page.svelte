@@ -82,6 +82,7 @@
 		try {
 			await setSourceFile(file);
 		} catch (error) {
+			if (isSourceSuperseded(error)) return;
 			uploadError = error instanceof Error ? error.message : 'Could not read that image.';
 		}
 	}

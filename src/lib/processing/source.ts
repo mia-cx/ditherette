@@ -10,10 +10,11 @@ import {
 } from '$lib/stores/app';
 import {
 	clearPersistedImages,
+	clearPersistedImagesIfSourceMatches,
 	clearPersistedProcessedImage,
 	loadProcessedImage,
 	loadSourceImage,
-	saveSourceImage,
+	saveSourceImageAndClearProcessed,
 	sourceMetaFromRecord
 } from './db';
 import { decodeBlob } from './image-decode';
@@ -24,6 +25,7 @@ import type { SourceImageRecord } from './types';
 
 export const MIN_SCALE_FACTOR = 0.05;
 let sourceGeneration = 0;
+let lastSourceTimestamp = 0;
 
 class SourceSuperseded extends Error {
 	constructor() {
@@ -40,6 +42,17 @@ function errorMessage(error: unknown, fallback: string) {
 	return error instanceof Error ? error.message : fallback;
 }
 
+function nextSourceTimestamp() {
+	lastSourceTimestamp = Math.max(Date.now(), lastSourceTimestamp + 1);
+	return lastSourceTimestamp;
+}
+
+async function throwIfSourceSuperseded(generation: number, record?: SourceImageRecord) {
+	if (generation === sourceGeneration) return;
+	if (record) await clearPersistedImagesIfSourceMatches(record);
+	throw new SourceSuperseded();
+}
+
 export async function setSourceFile(file: File) {
 	const generation = ++sourceGeneration;
 	cancelProcessing();
@@ -53,12 +66,10 @@ export async function setSourceFile(file: File) {
 		width: decoded.width,
 		height: decoded.height,
 		type: file.type,
-		updatedAt: Date.now()
+		updatedAt: nextSourceTimestamp()
 	};
-	await saveSourceImage(record);
-	if (generation !== sourceGeneration) throw new SourceSuperseded();
-	await clearPersistedProcessedImage();
-	if (generation !== sourceGeneration) throw new SourceSuperseded();
+	await saveSourceImageAndClearProcessed(record);
+	await throwIfSourceSuperseded(generation, record);
 	setSourceMetadata(record);
 	const settings = outputSettings.get();
 	const scaleFactor = Math.min(1, Math.max(MIN_SCALE_FACTOR, settings.scaleFactor ?? 1));
