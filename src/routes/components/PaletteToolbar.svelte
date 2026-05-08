@@ -57,7 +57,9 @@
 		>
 			<div class="min-h-0 overflow-y-auto py-1">
 				{#each palettes as palette (palette.name)}
-					<div class="grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
+					<div
+						class="grid grid-cols-[minmax(0,1fr)_auto] items-stretch [&:has([data-highlighted])]:bg-accent [&:has([data-highlighted])]:text-accent-foreground"
+					>
 						<SelectItem
 							value={palette.name}
 							label={palette.name}
