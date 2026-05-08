@@ -48,6 +48,10 @@
 	const wheelTriangleBackground = $derived(
 		`linear-gradient(to right, transparent, hsl(${hsv.h} 100% 50%)), linear-gradient(to bottom, #fff, #000)`
 	);
+	const hueRailBackground =
+		'linear-gradient(to bottom, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
+	const hueWheelBackground =
+		'conic-gradient(from 180deg, #ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)';
 	const triangleHandleStyle = $derived.by(() => {
 		const point = trianglePointForHsv(hsv);
 		return `left: ${point.x}%; top: ${point.y}%;`;
@@ -358,11 +362,11 @@
 				>
 					<button
 						type="button"
-						class="relative aspect-square min-h-52 touch-none border border-border"
-						style="background: {selectorBackground};"
+						class="relative aspect-square min-h-52 touch-none overflow-hidden border border-border bg-transparent p-0"
 						aria-label="Saturation and value color field"
 						onpointerdown={pickFromSquare}
 					>
+						<span class="absolute -inset-px" style="background: {selectorBackground};"></span>
 						<span
 							class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
 							style="left: {hsv.s}%; top: {100 - hsv.v}%;"
@@ -370,10 +374,11 @@
 					</button>
 					<button
 						type="button"
-						class="relative touch-none border border-border bg-[linear-gradient(to_bottom,red,yellow,lime,cyan,blue,magenta,red)]"
+						class="relative touch-none overflow-hidden border border-border bg-transparent p-0"
 						aria-label="Hue rail"
 						onpointerdown={pickFromHueRail}
 					>
+						<span class="absolute -inset-px" style="background: {hueRailBackground};"></span>
 						<span
 							class="absolute left-1/2 h-1.5 w-8 -translate-x-1/2 -translate-y-1/2 border border-background bg-foreground shadow-sm"
 							style="top: {(hsv.h / 360) * 100}%;"
@@ -384,16 +389,20 @@
 				<div class="grid place-items-center border border-border bg-muted/30 p-4">
 					<button
 						type="button"
-						class="relative size-72 touch-none rounded-full border border-border bg-[conic-gradient(red,yellow,lime,cyan,blue,magenta,red)]"
+						class="relative size-72 touch-none overflow-hidden rounded-full border-0 bg-transparent p-0"
 						aria-label="Hue wheel with saturation and value triangle"
 						onpointerdown={pickFromWheel}
 					>
+						<span class="absolute -inset-px rounded-full" style="background: {hueWheelBackground};"
+						></span>
 						<span class="absolute inset-[13%] rounded-full bg-background"></span>
 						<span
-							class="absolute top-1/2 size-32 -translate-x-1/2 -translate-y-1/2 [clip-path:polygon(0_0,0_100%,100%_50%)]"
-							style="left: {50 +
-								triangleOffsetRatio * 100}%; background: {wheelTriangleBackground};"
-						></span>
+							class="absolute top-1/2 size-32 -translate-x-1/2 -translate-y-1/2 overflow-hidden [clip-path:polygon(0_0,0_100%,100%_50%)]"
+							style="left: {50 + triangleOffsetRatio * 100}%;"
+						>
+							<span class="absolute -inset-px" style="background: {wheelTriangleBackground};"
+							></span>
+						</span>
 						<span
 							class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
 							style="left: {50 + Math.cos(((hsv.h - 180) * Math.PI) / 180) * 43}%; top: {50 +
