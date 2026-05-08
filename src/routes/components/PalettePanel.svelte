@@ -437,82 +437,84 @@
 		</p>
 	{/if}
 
-	<ScrollArea
-		class="min-h-0 flex-1 border border-border bg-background {fillHeight ? '' : 'max-h-[520px]'}"
-	>
-		<div
-			class="sticky top-0 z-20 flex min-h-9 flex-wrap items-center gap-2 border-b border-border bg-background/95 px-2 py-1.5 backdrop-blur"
-		>
-			<div class="flex min-w-0 items-center gap-2">
-				<Checkbox
-					checked={allRowsSelected}
-					indeterminate={someRowsSelected}
-					aria-label="Select all palette colors"
-					onCheckedChange={(next) => setAllRowsSelected(next)}
-				/>
-				{#if selectedCount > 0}
-					<span class="text-xs text-muted-foreground">{selectedCount} selected</span>
-				{/if}
+	<ScrollArea class="min-h-0 flex-1 border border-border bg-background">
+		<div class="flex min-h-full flex-col">
+			<div
+				class="sticky top-0 z-20 flex min-h-9 flex-wrap items-center gap-2 border-b border-border bg-background/95 px-2 py-1.5 backdrop-blur"
+			>
+				<div class="flex min-w-0 items-center gap-2">
+					<Checkbox
+						checked={allRowsSelected}
+						indeterminate={someRowsSelected}
+						aria-label="Select all palette colors"
+						onCheckedChange={(next) => setAllRowsSelected(next)}
+					/>
+					{#if selectedCount > 0}
+						<span class="text-xs text-muted-foreground">{selectedCount} selected</span>
+					{/if}
+				</div>
+				<div class="ml-auto flex items-center gap-1">
+					<Button
+						size="xs"
+						variant="ghost"
+						onclick={toggleSelectedVisibility}
+						disabled={selectedCount === 0}
+					>
+						Toggle visibility
+					</Button>
+					<Button
+						size="icon-xs"
+						variant="ghost"
+						onclick={duplicateSelectedColors}
+						disabled={selectedCount === 0 || isBuiltIn}
+						aria-label="Duplicate selected colors"
+					>
+						<CopyIcon weight="bold" />
+					</Button>
+					<Button
+						size="icon-xs"
+						variant="ghost"
+						class="hover:text-destructive"
+						onclick={deleteSelectedColors}
+						disabled={selectedCount === 0 || isBuiltIn}
+						aria-label="Delete selected colors"
+					>
+						<TrashIcon weight="bold" />
+					</Button>
+				</div>
 			</div>
-			<div class="ml-auto flex items-center gap-1">
-				<Button
-					size="xs"
-					variant="ghost"
-					onclick={toggleSelectedVisibility}
-					disabled={selectedCount === 0}
-				>
-					Toggle visibility
+			<table class="w-full border-collapse text-xs">
+				<thead class="sticky top-9 z-10 border-b border-border bg-muted/80 backdrop-blur">
+					<tr class="text-muted-foreground">
+						<th class="w-8 p-1.5"><span class="sr-only">Selected</span></th>
+						<th class="w-8 p-1.5"><span class="sr-only">Swatch</span></th>
+						<th class="w-8 p-1.5"><span class="sr-only">Visibility</span></th>
+						<th class="p-1.5 text-left font-medium">Name</th>
+						<th class="p-1.5 text-left font-medium">Hex</th>
+						<th class="p-1.5 text-left font-medium">Tags</th>
+						<th class="p-1.5 text-right font-medium">Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each currentPalette.colors as color (color.key)}
+						{@render row(color)}
+					{/each}
+				</tbody>
+			</table>
+
+			<div
+				class="sticky bottom-0 z-20 mt-auto flex items-center gap-3 border-t border-border bg-background/95 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur"
+			>
+				<Button size="xs" variant="outline" onclick={addColor}>
+					<PlusIcon weight="bold" />
+					New
 				</Button>
-				<Button
-					size="icon-xs"
-					variant="ghost"
-					onclick={duplicateSelectedColors}
-					disabled={selectedCount === 0 || isBuiltIn}
-					aria-label="Duplicate selected colors"
+				<span class="ml-auto tabular-nums"
+					>{enabledCount}/{currentPalette.colors.length} active</span
 				>
-					<CopyIcon weight="bold" />
-				</Button>
-				<Button
-					size="icon-xs"
-					variant="ghost"
-					class="hover:text-destructive"
-					onclick={deleteSelectedColors}
-					disabled={selectedCount === 0 || isBuiltIn}
-					aria-label="Delete selected colors"
-				>
-					<TrashIcon weight="bold" />
-				</Button>
 			</div>
 		</div>
-		<table class="w-full border-collapse text-xs">
-			<thead class="sticky top-9 z-10 border-b border-border bg-muted/80 backdrop-blur">
-				<tr class="text-muted-foreground">
-					<th class="w-8 p-1.5"><span class="sr-only">Selected</span></th>
-					<th class="w-8 p-1.5"><span class="sr-only">Swatch</span></th>
-					<th class="w-8 p-1.5"><span class="sr-only">Visibility</span></th>
-					<th class="p-1.5 text-left font-medium">Name</th>
-					<th class="p-1.5 text-left font-medium">Hex</th>
-					<th class="p-1.5 text-left font-medium">Tags</th>
-					<th class="p-1.5 text-right font-medium">Actions</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each currentPalette.colors as color (color.key)}
-					{@render row(color)}
-				{/each}
-			</tbody>
-		</table>
 	</ScrollArea>
-
-	<div
-		class="sticky bottom-0 z-20 flex items-center gap-3 border border-border bg-background/95 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur"
-	>
-		<Button size="xs" variant="outline" onclick={addColor}>
-			<PlusIcon weight="bold" />
-			New
-		</Button>
-		<span class="ml-auto tabular-nums">{enabledCount}/{currentPalette.colors.length} active</span>
-	</div>
 </section>
 
 {#snippet swatchSquare(color: PaletteColor)}
