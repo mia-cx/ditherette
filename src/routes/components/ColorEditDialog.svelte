@@ -98,12 +98,13 @@
 		`linear-gradient(to bottom, transparent, hsl(0 0% ${hsl.l}%)), linear-gradient(to right, hsl(0 100% ${hsl.l}%), hsl(60 100% ${hsl.l}%), hsl(120 100% ${hsl.l}%), hsl(180 100% ${hsl.l}%), hsl(240 100% ${hsl.l}%), hsl(300 100% ${hsl.l}%), hsl(360 100% ${hsl.l}%))`
 	);
 	const planeBackground = $derived.by(() => {
-		if (picker === 'saturation') return saturationPlaneBackground;
+		if (usesHueLightnessPlane(picker)) return saturationPlaneBackground;
 		if (picker === 'lightness') return lightnessPlaneBackground;
 		return huePlaneBackground;
 	});
 	const planeHandleStyle = $derived.by(() => {
-		if (picker === 'saturation') return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.l}%;`;
+		if (usesHueLightnessPlane(picker))
+			return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.l}%;`;
 		if (picker === 'lightness') return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.s}%;`;
 		return `left: ${hsv.s}%; top: ${100 - hsv.v}%;`;
 	});
@@ -172,6 +173,10 @@
 	function updateOklch(patch: Partial<Oklch>) {
 		const next = { ...oklch, ...patch };
 		setColorFromRgb(oklabToRgb(oklchToOklab(next)), { preserveOklch: next });
+	}
+
+	function usesHueLightnessPlane(mode: PickerMode) {
+		return mode === 'saturation' || mode === 'rgb-sliders' || mode === 'hsl-sliders';
 	}
 
 	function sliderChannelsForMode(): SliderChannel[] {
@@ -329,7 +334,7 @@
 	}
 
 	function pickFromPlane(point: { x: number; y: number }) {
-		if (picker === 'saturation') {
+		if (usesHueLightnessPlane(picker)) {
 			updateHsl({ h: point.x * 360, l: (1 - point.y) * 100 });
 			return;
 		}
