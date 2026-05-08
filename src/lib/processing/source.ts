@@ -2,6 +2,7 @@ import {
 	clearInMemoryImageState,
 	outputSettings,
 	processedImage,
+	processingError,
 	sourceImageData,
 	sourceMeta,
 	sourceObjectUrl,
@@ -21,6 +22,12 @@ import { fitOutputSizeToBounds } from './types';
 import { validateSourceBlob } from './image-metadata';
 import type { SourceImageRecord } from './types';
 
+const MIN_SCALE_FACTOR = 0.05;
+
+function errorMessage(error: unknown, fallback: string) {
+	return error instanceof Error ? error.message : fallback;
+}
+
 export async function setSourceFile(file: File) {
 	await validateSourceBlob(file);
 	cancelProcessing();
@@ -37,7 +44,7 @@ export async function setSourceFile(file: File) {
 	await clearPersistedProcessedImage();
 	setSourceRecord(record, decoded.imageData);
 	const settings = outputSettings.get();
-	const scaleFactor = Math.min(1, Math.max(0.05, settings.scaleFactor ?? 1));
+	const scaleFactor = Math.min(1, Math.max(MIN_SCALE_FACTOR, settings.scaleFactor ?? 1));
 	const size = fitOutputSizeToBounds(
 		Math.max(1, Math.round(decoded.width * scaleFactor)),
 		Math.max(1, Math.round(decoded.height * scaleFactor))
@@ -65,11 +72,43 @@ export function setSourceRecord(record: SourceImageRecord, imageData: ImageData)
 export async function restorePersistedImages() {
 	const source = await loadSourceImage();
 	if (!source) return;
-	const decoded = await decodeBlob(source.blob);
+
+	let decoded: Awaited<ReturnType<typeof decodeBlob>>;
+	try {
+		decoded = await decodeBlob(source.blob);
+	} catch (error) {
+		const restoreError = new Error(
+			`Could not restore saved source image: ${errorMessage(error, 'decode failed')}`,
+			{ cause: error }
+		);
+		cancelProcessing();
+		clearInMemoryImageState();
+		try {
+			await clearPersistedImages();
+		} catch {
+			// Best effort: do not mask the original decode failure.
+		}
+		throw restoreError;
+	}
+
 	setSourceRecord(source, decoded.imageData);
-	const processed = await loadProcessedImage();
-	if (processed?.settingsHash === currentSettingsHash()) processedImage.set(processed);
-	else if (processed) await clearPersistedProcessedImage();
+
+	try {
+		const processed = await loadProcessedImage();
+		if (processed?.settingsHash === currentSettingsHash()) processedImage.set(processed);
+		else if (processed) await clearPersistedProcessedImage();
+	} catch (error) {
+		processedImage.set(undefined);
+		try {
+			await clearPersistedProcessedImage();
+		} catch {
+			// Best effort: recovery should still schedule fresh processing.
+		}
+		processingError.set(
+			`Could not restore saved output; it will be regenerated. ${errorMessage(error, '')}`.trim()
+		);
+	}
+
 	scheduleProcessing(0);
 }
 

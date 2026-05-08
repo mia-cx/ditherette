@@ -8,12 +8,11 @@
 	type Props = { compact?: boolean; hideHeading?: boolean };
 	let { compact = false, hideHeading = false }: Props = $props();
 
-	let space = $state(colorSpace.get());
-	const current = $derived(COLOR_SPACES.find((s) => s.id === space) ?? COLOR_SPACES[0]);
+	const current = $derived(COLOR_SPACES.find((s) => s.id === $colorSpace) ?? COLOR_SPACES[0]);
 	const triggerLabel = $derived(current.label);
 
 	$effect(() => {
-		colorSpace.set(space);
+		if (current.id !== $colorSpace) colorSpace.set(current.id);
 	});
 </script>
 
@@ -27,7 +26,7 @@
 
 	<div class="grid gap-1.5">
 		<Label for="color-space">Distance mode</Label>
-		<Select bind:value={space} type="single">
+		<Select bind:value={$colorSpace} type="single">
 			<SelectTrigger
 				id="color-space"
 				size="auto"
