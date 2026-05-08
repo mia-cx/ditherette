@@ -133,7 +133,8 @@ function processInWorker(): Promise<ProcessedImage> {
 export async function processCurrentImage() {
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
-	if (previous && previous.settingsHash !== hash) processedImage.set(undefined);
+	if (previous?.settingsHash === hash) return;
+	if (previous) processedImage.set(undefined);
 	const program = Effect.tryPromise({
 		try: processInWorker,
 		catch: (error) => (error instanceof Error ? error : new Error('Processing failed'))
@@ -155,8 +156,10 @@ export async function processCurrentImage() {
 
 export function scheduleProcessing(delay = 180) {
 	if (!sourceImageData.get()) return;
+	const hash = currentSettingsHash();
 	const previous = processedImage.get();
-	if (previous && previous.settingsHash !== currentSettingsHash()) processedImage.set(undefined);
+	if (previous?.settingsHash === hash) return;
+	if (previous) processedImage.set(undefined);
 	if (timer) clearTimeout(timer);
 	timer = setTimeout(() => {
 		timer = undefined;

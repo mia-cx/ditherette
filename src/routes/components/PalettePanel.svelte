@@ -13,7 +13,7 @@
 		DialogHeader,
 		DialogTitle
 	} from '$lib/components/ui/dialog';
-	import { paletteEnabledKey } from '$lib/palette/wplace';
+	import { paletteColorEnabled } from '$lib/palette/wplace';
 	import { cn } from '$lib/utils';
 	import {
 		activePalette,
@@ -81,8 +81,8 @@
 	const isBuiltIn = $derived(currentPalette.source === 'wplace');
 	const selectedCount = $derived(Object.values(selectedColorKeys).filter(Boolean).length);
 	const enabledCount = $derived(
-		currentPalette.colors.filter(
-			(color) => $paletteEnabled[paletteEnabledKey(currentPalette.name, color.key)] !== false
+		currentPalette.colors.filter((color) =>
+			paletteColorEnabled($paletteEnabled, currentPalette.name, color.key)
 		).length
 	);
 	const allRowsSelected = $derived(
@@ -216,7 +216,7 @@
 	});
 
 	function enabled(color: PaletteColor, palette: Palette = currentPalette) {
-		return $paletteEnabled[paletteEnabledKey(palette.name, color.key)] !== false;
+		return paletteColorEnabled($paletteEnabled, palette.name, color.key);
 	}
 
 	function setRowSelected(key: string, selected: boolean) {

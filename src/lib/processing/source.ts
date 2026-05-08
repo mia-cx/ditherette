@@ -59,7 +59,7 @@ export async function setSourceFile(file: File) {
 	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	await clearPersistedProcessedImage();
 	if (generation !== sourceGeneration) throw new SourceSuperseded();
-	setSourceRecord(record, decoded.imageData);
+	setSourceMetadata(record);
 	const settings = outputSettings.get();
 	const scaleFactor = Math.min(1, Math.max(MIN_SCALE_FACTOR, settings.scaleFactor ?? 1));
 	const size = fitOutputSizeToBounds(
@@ -75,14 +75,18 @@ export async function setSourceFile(file: File) {
 		crop: undefined
 	});
 	processedImage.set(undefined);
+	publishSourceImageData(decoded.imageData);
 	scheduleProcessing(0);
 }
 
-function setSourceRecord(record: SourceImageRecord, imageData: ImageData) {
+function setSourceMetadata(record: SourceImageRecord) {
 	const oldUrl = sourceObjectUrl.get();
 	if (oldUrl) URL.revokeObjectURL(oldUrl);
 	sourceMeta.set(sourceMetaFromRecord(record));
 	sourceObjectUrl.set(URL.createObjectURL(record.blob));
+}
+
+function publishSourceImageData(imageData: ImageData) {
 	sourceImageData.set(imageData);
 }
 
@@ -126,13 +130,14 @@ export async function restorePersistedImages() {
 	}
 
 	if (generation !== sourceGeneration) throw new SourceSuperseded();
-	setSourceRecord(source, decoded.imageData);
+	setSourceMetadata(source);
 
 	try {
 		const processed = await loadProcessedImage();
 		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		if (processed?.settingsHash === currentSettingsHash()) {
 			processedImage.set(processed);
+			publishSourceImageData(decoded.imageData);
 			return;
 		} else if (processed) await clearPersistedProcessedImage();
 	} catch (error) {
@@ -147,6 +152,7 @@ export async function restorePersistedImages() {
 		);
 	}
 
+	publishSourceImageData(decoded.imageData);
 	scheduleProcessing(0);
 }
 

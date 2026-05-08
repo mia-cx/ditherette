@@ -103,6 +103,20 @@ export function paletteEnabledKey(paletteName: string, colorKey: string) {
 	return paletteName === WPLACE_PALETTE_NAME ? colorKey : JSON.stringify([paletteName, colorKey]);
 }
 
+function legacyPaletteEnabledKey(paletteName: string, colorKey: string) {
+	return paletteName === WPLACE_PALETTE_NAME ? colorKey : `${paletteName}\u0000${colorKey}`;
+}
+
+export function paletteColorEnabled(
+	enabled: Record<string, boolean>,
+	paletteName: string,
+	colorKey: string
+) {
+	const key = paletteEnabledKey(paletteName, colorKey);
+	const legacyKey = legacyPaletteEnabledKey(paletteName, colorKey);
+	return enabled[key] ?? enabled[legacyKey] ?? true;
+}
+
 export function defaultEnabledState(): Record<string, boolean> {
 	return Object.fromEntries(
 		WPLACE_PALETTE.map((color) => [paletteEnabledKey(WPLACE_PALETTE_NAME, color.key), true])
@@ -118,7 +132,7 @@ export function enabledPalette(
 	enabled: Record<string, boolean>
 ): EnabledPaletteColor[] {
 	return palette.colors
-		.filter((color) => enabled[paletteEnabledKey(palette.name, color.key)] !== false)
+		.filter((color) => paletteColorEnabled(enabled, palette.name, color.key))
 		.map((color) => ({
 			...color,
 			enabled: true

@@ -14,13 +14,19 @@ function progress(id: number, stage: string, value: number) {
 	postMessage({ id, type: 'progress', stage, progress: value } satisfies WorkerResponse);
 }
 
+function requestIdFromMessage(value: unknown) {
+	if (!value || typeof value !== 'object') return -1;
+	const id = (value as { id?: unknown }).id;
+	return Number.isInteger(id) ? (id as number) : -1;
+}
+
 self.onmessage = (event: MessageEvent<unknown>) => {
 	let request;
 	try {
 		request = validateWorkerRequest(event.data);
 	} catch (error) {
 		postMessage({
-			id: -1,
+			id: requestIdFromMessage(event.data),
 			type: 'error',
 			message:
 				error instanceof Error ? error.message : 'Worker received an invalid processing request.'
