@@ -14,13 +14,13 @@
 		WithoutChildrenOrChild<CheckboxPrimitive.RootProps>,
 		'checked' | 'onCheckedChange'
 	> & {
-		checked?: boolean;
-		onCheckedChange?: (checked: boolean) => void;
+		checked: boolean;
+		onCheckedChange: (checked: boolean) => void;
 	};
 
 	let {
 		ref = $bindable(null),
-		checked = false,
+		checked,
 		class: className,
 		onCheckedChange,
 		...restProps

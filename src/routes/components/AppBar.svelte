@@ -38,8 +38,8 @@
 		{#if extras}
 			{@render extras()}
 		{/if}
-		{#if hasImage}
-			<Button size="sm" variant="ghost" onclick={onClear}>
+		{#if hasImage && onClear}
+			<Button size="sm" variant="ghost" aria-label="Clear image" onclick={onClear}>
 				<TrashIcon weight="bold" />
 				<span class="hidden sm:inline">Clear</span>
 			</Button>

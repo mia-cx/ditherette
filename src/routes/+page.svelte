@@ -28,7 +28,9 @@
 	} from '$lib/stores/app';
 	import { startAutoProcessing } from '$lib/processing/client';
 	import { clearAllImageData, restorePersistedImages, setSourceFile } from '$lib/processing/source';
-	import { COLOR_SPACES, DITHER_ALGORITHMS, RESIZE_MODES } from './components/sample-data';
+	import { COLOR_SPACES } from './components/color-space-options';
+	import { DITHER_ALGORITHMS } from './components/dither-options';
+	import { RESIZE_MODES } from './components/output-options';
 
 	const DEFAULT_DESKTOP_PANE_LAYOUT = [56, 44] as const;
 

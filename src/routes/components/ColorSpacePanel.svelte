@@ -2,7 +2,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import InlineMath from './InlineMath.svelte';
-	import { COLOR_SPACES } from './sample-data';
+	import { COLOR_SPACES } from './color-space-options';
 	import { colorSpace } from '$lib/stores/app';
 
 	type Props = { compact?: boolean; hideHeading?: boolean };
@@ -16,7 +16,10 @@
 	});
 </script>
 
-<section class="flex flex-col gap-{compact ? '3' : '4'}" aria-label="Color space controls">
+<section
+	class={compact ? 'flex flex-col gap-3' : 'flex flex-col gap-4'}
+	aria-label="Color space controls"
+>
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
 			<h2 class="text-sm font-semibold tracking-tight">Color space</h2>
@@ -49,6 +52,7 @@
 				{/if}
 			</SelectTrigger>
 			<SelectContent
+				viewportFlex
 				class="max-h-[min(32rem,var(--bits-select-content-available-height))] w-(--bits-select-anchor-width) max-w-(--bits-select-anchor-width) overflow-hidden p-0"
 			>
 				<div class="py-1">
