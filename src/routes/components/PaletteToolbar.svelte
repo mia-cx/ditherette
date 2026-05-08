@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import type { Palette, PaletteColor } from '$lib/processing/types';
+	import type { Palette } from '$lib/processing/types';
+	import PaletteSwatchStrip from './PaletteSwatchStrip.svelte';
 	import CopyIcon from 'phosphor-svelte/lib/Copy';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
@@ -45,7 +46,7 @@
 		>
 			<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden text-left">
 				<span class="truncate text-sm font-medium text-foreground">{currentPalette.name}</span>
-				{@render swatchStrip(currentPalette.colors)}
+				<PaletteSwatchStrip colors={currentPalette.colors} />
 			</span>
 		</SelectTrigger>
 		<SelectContent
@@ -61,7 +62,7 @@
 					>
 						<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden pr-16">
 							<span class="truncate text-sm font-medium text-foreground">{palette.name}</span>
-							{@render swatchStrip(palette.colors)}
+							<PaletteSwatchStrip colors={palette.colors} />
 						</span>
 						<span class="ml-auto flex shrink-0 items-center gap-1 pr-5">
 							<Button
@@ -115,19 +116,3 @@
 		</SelectContent>
 	</Select>
 </div>
-
-{#snippet swatchStrip(colors: readonly PaletteColor[])}
-	<span class="flex max-w-full min-w-0 flex-nowrap gap-1 overflow-hidden" aria-hidden="true">
-		{#each colors as color (color.key)}
-			<span class="size-4 shrink-0 border border-border" title={color.name}>
-				{#if color.kind === 'transparent'}
-					<span
-						class="block size-full [background-image:repeating-conic-gradient(rgba(0,0,0,0.3)_0%_25%,transparent_0%_50%)] [background-size:6px_6px]"
-					></span>
-				{:else}
-					<span class="block size-full" style="background-color: {color.key}"></span>
-				{/if}
-			</span>
-		{/each}
-	</span>
-{/snippet}
