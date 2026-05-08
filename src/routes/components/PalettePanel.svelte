@@ -75,6 +75,8 @@
 	let alphaThreshold = $state<number>(initialOutputSettings.alphaThreshold);
 	let matteKey = $state(initialOutputSettings.matteKey ?? '#FFFFFF');
 
+	const MAX_PALETTE_IMPORT_BYTES = 512 * 1024;
+
 	const currentPalette = $derived($activePalette);
 	const isBuiltIn = $derived(currentPalette.source === 'wplace');
 	const selectedCount = $derived(Object.values(selectedColorKeys).filter(Boolean).length);
@@ -228,6 +230,16 @@
 		pruneSelectedTags(nextSelectedColorKeys);
 	}
 
+	function reconcileEditedColorSelection(previousKey: string, editedColor: PaletteColor) {
+		const nextSelectedColorKeys = { ...selectedColorKeys };
+		if (previousKey !== editedColor.key && nextSelectedColorKeys[previousKey]) {
+			delete nextSelectedColorKeys[previousKey];
+			nextSelectedColorKeys[editedColor.key] = true;
+		}
+		selectedColorKeys = nextSelectedColorKeys;
+		pruneSelectedTags(nextSelectedColorKeys);
+	}
+
 	function selectAllRows() {
 		selectedColorKeys = Object.fromEntries(currentPalette.colors.map((color) => [color.key, true]));
 		selectedTagKeys = {};
@@ -300,8 +312,10 @@
 		try {
 			run();
 			setPaletteMessage(undefined);
+			return true;
 		} catch (error) {
 			setPaletteMessage(error instanceof Error ? error.message : 'Palette action failed.', 'error');
+			return false;
 		}
 	}
 
@@ -332,16 +346,22 @@
 	}
 
 	function saveColorDialog() {
-		withPaletteError(() => {
+		let editedColor: PaletteColor | undefined;
+		const previousKey = colorDialogColor?.key;
+		const saved = withPaletteError(() => {
 			if (colorDialogMode === 'edit' && colorDialogColor) {
-				editActivePaletteColor(colorDialogColor.key, colorName, colorHex, colorTags);
+				editedColor = editActivePaletteColor(colorDialogColor.key, colorName, colorHex, colorTags);
 			} else if (colorDialogMode === 'duplicate' && colorDialogColor) {
 				duplicateActivePaletteColor(colorDialogColor.key, colorName, colorHex, colorTags);
 			} else {
 				addColorToActivePalette(colorName, colorHex, colorTags);
 			}
 		});
-		if (!paletteMessage) colorDialogOpen = false;
+		if (!saved) return;
+		if (colorDialogMode === 'edit' && previousKey && editedColor) {
+			reconcileEditedColorSelection(previousKey, editedColor);
+		}
+		colorDialogOpen = false;
 	}
 
 	function addColor() {
@@ -414,7 +434,12 @@
 	function confirmDeleteColor() {
 		const key = deleteColorKey;
 		if (!key) return;
-		withPaletteError(() => deleteActivePaletteColors([key]));
+		const deleted = withPaletteError(() => deleteActivePaletteColors([key]));
+		if (!deleted) return;
+		const nextSelectedColorKeys = { ...selectedColorKeys };
+		delete nextSelectedColorKeys[key];
+		selectedColorKeys = nextSelectedColorKeys;
+		pruneSelectedTags(nextSelectedColorKeys);
 		deleteDialogOpen = false;
 		deleteColorKey = undefined;
 	}
@@ -457,6 +482,11 @@
 		const file = input.files?.[0];
 		if (!file) return;
 		try {
+			if (file.size > MAX_PALETTE_IMPORT_BYTES) {
+				throw new Error(
+					`Palette imports must be ${Math.floor(MAX_PALETTE_IMPORT_BYTES / 1024)} KB or smaller.`
+				);
+			}
 			const data = JSON.parse(await file.text());
 			const preview = previewCustomPaletteImport(data);
 			if (preview.overwrites.length) {

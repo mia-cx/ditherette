@@ -72,6 +72,8 @@ export const customPalettes = persistentJSON<Palette[]>('ditherette:custom-palet
 
 export const MAX_TAGS_PER_COLOR = 16;
 export const MAX_TAG_LENGTH = 32;
+export const MAX_PALETTE_NAME_LENGTH = 64;
+export const MAX_COLOR_NAME_LENGTH = 64;
 
 export const paletteEnabled = persistentJSON<Record<string, boolean>>(
 	'ditherette:palette-enabled',
@@ -151,9 +153,17 @@ function setCustomPalette(nextPalette: Palette) {
 	);
 }
 
+function cleanPaletteName(name: string) {
+	return name.trim().slice(0, MAX_PALETTE_NAME_LENGTH) || 'Custom palette';
+}
+
+function cleanColorName(name: string, fallback: string) {
+	return name.trim().slice(0, MAX_COLOR_NAME_LENGTH) || fallback;
+}
+
 function uniquePaletteName(baseName: string) {
 	const names = new Set(palettes.get().map((palette) => palette.name));
-	const name = baseName.trim() || 'Custom palette';
+	const name = cleanPaletteName(baseName);
 	if (!names.has(name)) return name;
 	let suffix = 2;
 	while (names.has(`${name} ${suffix}`)) suffix++;
@@ -170,7 +180,7 @@ export function cleanPaletteTags(tags: readonly string[] = []) {
 function visibleCustomColor(name: string, hex: string, tags: readonly string[] = []): PaletteColor {
 	const key = normalizeHex(hex);
 	const clean = cleanPaletteTags(tags);
-	return { name: name.trim() || key, key, rgb: hexToRgb(key), kind: 'custom', tags: clean };
+	return { name: cleanColorName(name, key), key, rgb: hexToRgb(key), kind: 'custom', tags: clean };
 }
 
 export function updateOutputSettings(patch: Partial<OutputSettings>) {
@@ -276,6 +286,7 @@ export function addColorToActivePalette(name: string, hex: string, tags: readonl
 		]
 	});
 	setPaletteColorEnabled(color.key, true, palette.name);
+	return color;
 }
 
 export function duplicateActivePaletteColor(
@@ -288,7 +299,7 @@ export function duplicateActivePaletteColor(
 	const current = palette.colors.find((color) => color.key === key);
 	if (!current || current.kind === 'transparent')
 		throw new Error('Only custom visible colors can be duplicated.');
-	addColorToActivePalette(name, hex, tags);
+	return addColorToActivePalette(name, hex, tags);
 }
 
 export function editActivePaletteColor(
@@ -310,6 +321,7 @@ export function editActivePaletteColor(
 	});
 	const enabled = paletteEnabled.get()[paletteEnabledKey(palette.name, key)] !== false;
 	setPaletteColorEnabled(nextColor.key, enabled, palette.name);
+	return nextColor;
 }
 
 export function deleteActivePaletteColors(keys: string[]) {
@@ -407,12 +419,12 @@ function parseImportedPalette(value: unknown): Palette {
 	const record = value as { name?: unknown; colors?: unknown };
 	if (typeof record.name !== 'string' || !record.name.trim())
 		throw new Error('Imported palette needs a name.');
-	if (record.name === WPLACE_PALETTE_NAME)
-		throw new Error('Imported palette cannot replace Wplace.');
+	const name = cleanPaletteName(record.name);
+	if (name === WPLACE_PALETTE_NAME) throw new Error('Imported palette cannot replace Wplace.');
 	if (!Array.isArray(record.colors)) throw new Error('Imported palette needs a colors array.');
 	const importedColors = record.colors.map((color, index) => parseImportedColor(color, index));
 	const colors = withTransparentSwatch({
-		name: record.name.trim(),
+		name,
 		source: 'custom',
 		colors: importedColors
 	}).colors;
@@ -422,7 +434,7 @@ function parseImportedPalette(value: unknown): Palette {
 		.map((color) => color.key);
 	if (new Set(visibleKeys).size !== visibleKeys.length)
 		throw new Error('Imported palette has duplicate colors.');
-	return { name: record.name.trim(), source: 'custom', colors };
+	return { name, source: 'custom', colors };
 }
 
 function parseImportedColor(value: unknown, index: number): PaletteColor {
