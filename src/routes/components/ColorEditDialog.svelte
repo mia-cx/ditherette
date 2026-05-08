@@ -91,13 +91,13 @@
 	const huePlaneBackground = $derived(
 		`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`
 	);
-	const saturationPlaneBackground = $derived(
-		`linear-gradient(to bottom, #fff, transparent 50%, #000), linear-gradient(to right, hsl(0 ${hsl.s}% 50%), hsl(60 ${hsl.s}% 50%), hsl(120 ${hsl.s}% 50%), hsl(180 ${hsl.s}% 50%), hsl(240 ${hsl.s}% 50%), hsl(300 ${hsl.s}% 50%), hsl(360 ${hsl.s}% 50%))`
-	);
+	const saturationPlaneBackground = $derived(hueLightnessPlaneBackground(hsl.s));
+	const rgbSliderPlaneBackground = $derived(hueLightnessPlaneBackground(100));
 	const lightnessPlaneBackground = $derived(
 		`linear-gradient(to bottom, transparent, hsl(0 0% ${hsl.l}%)), linear-gradient(to right, hsl(0 100% ${hsl.l}%), hsl(60 100% ${hsl.l}%), hsl(120 100% ${hsl.l}%), hsl(180 100% ${hsl.l}%), hsl(240 100% ${hsl.l}%), hsl(300 100% ${hsl.l}%), hsl(360 100% ${hsl.l}%))`
 	);
 	const planeBackground = $derived.by(() => {
+		if (picker === 'rgb-sliders') return rgbSliderPlaneBackground;
 		if (usesHueLightnessPlane(picker)) return saturationPlaneBackground;
 		if (picker === 'lightness') return lightnessPlaneBackground;
 		return huePlaneBackground;
@@ -173,6 +173,10 @@
 	function updateOklch(patch: Partial<Oklch>) {
 		const next = { ...oklch, ...patch };
 		setColorFromRgb(oklabToRgb(oklchToOklab(next)), { preserveOklch: next });
+	}
+
+	function hueLightnessPlaneBackground(saturation: number) {
+		return `linear-gradient(to bottom, #fff, transparent 50%, #000), linear-gradient(to right, hsl(0 ${saturation}% 50%), hsl(60 ${saturation}% 50%), hsl(120 ${saturation}% 50%), hsl(180 ${saturation}% 50%), hsl(240 ${saturation}% 50%), hsl(300 ${saturation}% 50%), hsl(360 ${saturation}% 50%))`;
 	}
 
 	function usesHueLightnessPlane(mode: PickerMode) {
