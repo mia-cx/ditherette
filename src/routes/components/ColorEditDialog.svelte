@@ -40,6 +40,7 @@
 	let syncingFromPicker = false;
 
 	const triangleHalfRatio = 2 / 9;
+	const triangleOffsetRatio = triangleHalfRatio / 3;
 
 	const selectorBackground = $derived(
 		`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`
@@ -132,10 +133,11 @@
 
 	function triangleVertices(width: number) {
 		const half = width * triangleHalfRatio;
+		const offset = width * triangleOffsetRatio;
 		return {
-			white: { x: -half, y: -half },
-			black: { x: -half, y: half },
-			hue: { x: half, y: 0 }
+			white: { x: -half + offset, y: -half },
+			black: { x: -half + offset, y: half },
+			hue: { x: half + offset, y: 0 }
 		};
 	}
 
@@ -156,7 +158,9 @@
 		const blackWeight = 1 - value;
 		const hueWeight = value * saturation;
 		const half = triangleHalfRatio * 100;
-		const x = whiteWeight * -half + blackWeight * -half + hueWeight * half;
+		const offset = triangleOffsetRatio * 100;
+		const x =
+			whiteWeight * (-half + offset) + blackWeight * (-half + offset) + hueWeight * (half + offset);
 		const y = whiteWeight * -half + blackWeight * half;
 		return { x: 50 + x, y: 50 + y };
 	}
@@ -386,8 +390,9 @@
 					>
 						<span class="absolute inset-[13%] rounded-full bg-background"></span>
 						<span
-							class="absolute top-1/2 left-1/2 size-32 -translate-x-1/2 -translate-y-1/2 border border-background/70 shadow-sm [clip-path:polygon(0_0,0_100%,100%_50%)]"
-							style="background: {wheelTriangleBackground};"
+							class="absolute top-1/2 size-32 -translate-x-1/2 -translate-y-1/2 [clip-path:polygon(0_0,0_100%,100%_50%)]"
+							style="left: {50 +
+								triangleOffsetRatio * 100}%; background: {wheelTriangleBackground};"
 						></span>
 						<span
 							class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
