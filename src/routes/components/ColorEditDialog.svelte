@@ -656,19 +656,20 @@
 				</div>
 			</div>
 
-			<div class="grid grid-cols-[minmax(0,1fr)_13rem] items-center gap-3">
+			<Select bind:value={picker} type="single">
+				<SelectTrigger size="sm" class="w-full" aria-label="Color picker mode">
+					{pickerOptions.find((option) => option.id === picker)?.label ?? 'Picker'}
+				</SelectTrigger>
+				<SelectContent>
+					{#each pickerOptions as option (option.id)}
+						<SelectItem value={option.id}>{option.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
+
+			{#if sliderChannels.length > 0}
 				<ColorSliderPicker channels={sliderChannels} />
-				<Select bind:value={picker} type="single">
-					<SelectTrigger size="sm" aria-label="Color picker mode">
-						{pickerOptions.find((option) => option.id === picker)?.label ?? 'Picker'}
-					</SelectTrigger>
-					<SelectContent>
-						{#each pickerOptions as option (option.id)}
-							<SelectItem value={option.id}>{option.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-			</div>
+			{/if}
 
 			{#if picker === 'hsl-wheel'}
 				<ColorWheelPicker
