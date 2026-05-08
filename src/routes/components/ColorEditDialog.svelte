@@ -39,8 +39,7 @@
 	let oklab = $state<Oklab>({ l: 0.7, a: 0, b: 0 });
 	let syncingFromPicker = false;
 
-	const triangleHalfRatio = 2 / 9;
-	const triangleOffsetRatio = triangleHalfRatio / 3;
+	const triangleRadiusRatio = 0.25;
 
 	const selectorBackground = $derived(
 		`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`
@@ -51,7 +50,7 @@
 	const hueRailBackground =
 		'linear-gradient(to bottom, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
 	const hueWheelBackground =
-		'conic-gradient(from 180deg, #ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)';
+		'conic-gradient(from 90deg, #ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)';
 	const triangleHandleStyle = $derived.by(() => {
 		const point = trianglePointForHsv(hsv);
 		return `left: ${point.x}%; top: ${point.y}%;`;
@@ -151,18 +150,18 @@
 	}
 
 	function triangleVertices(width: number) {
-		const half = width * triangleHalfRatio;
-		const offset = width * triangleOffsetRatio;
+		const radius = width * triangleRadiusRatio;
 		return {
-			white: { x: -half + offset, y: -half },
-			black: { x: -half + offset, y: half },
-			hue: { x: half + offset, y: 0 }
+			white: { x: -radius / 2, y: -(Math.sqrt(3) / 2) * radius },
+			black: { x: -radius / 2, y: (Math.sqrt(3) / 2) * radius },
+			hue: { x: radius, y: 0 }
 		};
 	}
 
 	function hsvFromTrianglePoint(x: number, y: number, width: number): Partial<Hsv> {
 		const vertices = triangleVertices(width);
-		const point = closestPointInTriangle({ x, y }, vertices.white, vertices.black, vertices.hue);
+		const local = rotatePoint({ x, y }, -hsv.h);
+		const point = closestPointInTriangle(local, vertices.white, vertices.black, vertices.hue);
 		const weights = barycentric(point, vertices.white, vertices.black, vertices.hue);
 		const value = clamp((1 - weights.black) * 100, 0, 100);
 		const saturation =
@@ -176,12 +175,13 @@
 		const whiteWeight = value * (1 - saturation);
 		const blackWeight = 1 - value;
 		const hueWeight = value * saturation;
-		const half = triangleHalfRatio * 100;
-		const offset = triangleOffsetRatio * 100;
-		const x =
-			whiteWeight * (-half + offset) + blackWeight * (-half + offset) + hueWeight * (half + offset);
-		const y = whiteWeight * -half + blackWeight * half;
-		return { x: 50 + x, y: 50 + y };
+		const radius = triangleRadiusRatio * 100;
+		const local = {
+			x: whiteWeight * (-radius / 2) + blackWeight * (-radius / 2) + hueWeight * radius,
+			y: whiteWeight * (-(Math.sqrt(3) / 2) * radius) + blackWeight * ((Math.sqrt(3) / 2) * radius)
+		};
+		const point = rotatePoint(local, color.h);
+		return { x: 50 + point.x, y: 50 + point.y };
 	}
 
 	function barycentric(
@@ -232,6 +232,13 @@
 				? 0
 				: clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
 		return { x: start.x + t * dx, y: start.y + t * dy };
+	}
+
+	function rotatePoint(point: { x: number; y: number }, degrees: number) {
+		const radians = (degrees * Math.PI) / 180;
+		const cos = Math.cos(radians);
+		const sin = Math.sin(radians);
+		return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos };
 	}
 
 	function distanceSquared(left: { x: number; y: number }, right: { x: number; y: number }) {
@@ -412,8 +419,8 @@
 						></span>
 						<span class="absolute inset-[13%] rounded-full bg-background"></span>
 						<span
-							class="absolute top-1/2 size-32 -translate-x-1/2 -translate-y-1/2 overflow-hidden [clip-path:polygon(0_0,0_100%,100%_50%)]"
-							style="left: {50 + triangleOffsetRatio * 100}%;"
+							class="absolute top-1/2 left-1/2 size-36 overflow-hidden [clip-path:polygon(100%_50%,25%_6.699%,25%_93.301%)]"
+							style="transform: translate(-50%, -50%) rotate({hsv.h}deg);"
 						>
 							<span class="absolute -inset-px" style="background: {wheelTriangleBackground};"
 							></span>
