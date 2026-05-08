@@ -24,6 +24,24 @@ Address the UI-domain review findings from #4 as an informed refactor, not a pil
 - **Full workspace/dockable editor UI** → planned but not filed as a dedicated implementation issue yet. This slice should make panels easier to move later, but it should not add docking, floating windows, or a Photoshop/Photopea-style shell.
 - **Deep PalettePanel behavior hardening** → only low-risk structure/accessibility fixes belong here. Destructive/import correctness fixes that require state-flow changes should be split into a follow-up issue if they grow beyond safe extraction.
 
+## Raw #4 findings and disposition
+
+| #4 finding | Disposition in this slice |
+| --- | --- |
+| 1. Dither preview logic drifted from production quantization | **Partial / defer core fix to #6.** This slice may isolate preview code into `DitherPreviewCanvas` or a helper, but production/preview behavior unification belongs to #6. |
+| 2. Panel state ownership is inconsistent and can go stale | **Mostly already addressed by state ownership prep (#9).** Avoid reintroducing local mirror/write-back patterns while splitting components. |
+| 3. Async clear/restore flows can silently fail or update after unmount | **Already addressed by state ownership prep (#9) unless validation proves otherwise.** Not a target of this slice. |
+| 4. Numeric parsing and clamping are inconsistent | **Partial / opportunistic.** Fix low-risk UI-side parsing while touching components; broader numeric helper consolidation can follow if it crosses pipeline/state boundaries. |
+| 5. Option/sample data is dead, mutable, and weakly typed | **In scope.** Split `sample-data.ts`, delete dead sample palette exports, and type readonly option registries with existing ID unions. |
+| 6. Icon/controlled controls can be rendered inaccessible or inert | **In scope.** Add missing accessible names and tighten controlled/icon component APIs where low-risk. |
+| 7. Export readiness hash duplicates processing cache logic | **Deferred to #7.** This crosses processing/cache/persistence boundaries and should not be solved in the UI structure slice. |
+| 8. Input wrapper has unsafe file-input typing/binding | **In scope if still present after #9.** Fix wrapper typing/binding and class duplication as part of UI wrapper cleanup. |
+| 9. Select wrapper internals contain fragile class-driven behavior/noise | **In scope.** Replace class-string inspection with explicit props and remove duplicate utilities. |
+| 10. Tailwind dynamic class interpolation may be missed by static extraction | **In scope.** Replace dynamic class fragments with explicit conditional class strings. |
+| 11. Comparison preview pointer/fit cleanup has edge cases | **Partial / opportunistic.** Fix small cleanup if isolated; deeper preview numeric/view behavior should be grouped with numeric helper work if it grows. |
+| 12. Palette panel destructive/import flows have state-consistency bugs | **Partial.** Only address when naturally covered by a safe extraction; otherwise split follow-up under #4 or a child issue. |
+| 13. Export filename hides nullable processed-image dependency | **In scope if low-risk.** This is a local UI cleanup unless it touches export/cache semantics, in which case defer to #7. |
+
 ## Work order
 
 ### 1. Option registry cleanup
