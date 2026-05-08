@@ -95,7 +95,7 @@
 		`linear-gradient(to bottom, #fff, transparent 50%, #000), linear-gradient(to right, hsl(0 ${hsl.s}% 50%), hsl(60 ${hsl.s}% 50%), hsl(120 ${hsl.s}% 50%), hsl(180 ${hsl.s}% 50%), hsl(240 ${hsl.s}% 50%), hsl(300 ${hsl.s}% 50%), hsl(360 ${hsl.s}% 50%))`
 	);
 	const lightnessPlaneBackground = $derived(
-		`linear-gradient(to top, hsl(0 0% ${hsl.l}%), transparent), linear-gradient(to right, hsl(0 0% ${hsl.l}%), hsl(0 100% ${hsl.l}%), hsl(60 100% ${hsl.l}%), hsl(120 100% ${hsl.l}%), hsl(180 100% ${hsl.l}%), hsl(240 100% ${hsl.l}%), hsl(300 100% ${hsl.l}%), hsl(360 100% ${hsl.l}%))`
+		`linear-gradient(to bottom, transparent, hsl(0 0% ${hsl.l}%)), linear-gradient(to right, hsl(0 100% ${hsl.l}%), hsl(60 100% ${hsl.l}%), hsl(120 100% ${hsl.l}%), hsl(180 100% ${hsl.l}%), hsl(240 100% ${hsl.l}%), hsl(300 100% ${hsl.l}%), hsl(360 100% ${hsl.l}%))`
 	);
 	const wheelTriangleBackground = $derived(
 		`linear-gradient(to right, transparent, hsl(${hsv.h} 100% 50%)), linear-gradient(to bottom, #fff, #000)`
