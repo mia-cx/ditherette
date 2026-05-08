@@ -3,8 +3,6 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
-	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import { Slider } from '$lib/components/ui/slider';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import {
@@ -15,14 +13,7 @@
 		DialogHeader,
 		DialogTitle
 	} from '$lib/components/ui/dialog';
-	import {
-		DropdownMenu,
-		DropdownMenuContent,
-		DropdownMenuItem,
-		DropdownMenuSeparator,
-		DropdownMenuTrigger
-	} from '$lib/components/ui/dropdown-menu';
-	import { TRANSPARENT_KEY, paletteEnabledKey } from '$lib/palette/wplace';
+	import { paletteEnabledKey } from '$lib/palette/wplace';
 	import {
 		activePalette,
 		activePaletteName,
@@ -37,28 +28,23 @@
 		importCustomPaletteData,
 		paletteEnabled,
 		previewCustomPaletteImport,
-		outputSettings,
 		palettes,
-		selectedPalette,
-		setPaletteColorEnabled,
-		updateOutputSettings
+		setPaletteColorEnabled
 	} from '$lib/stores/app';
 	import type { Palette, PaletteColor } from '$lib/processing/types';
-	import { ALPHA_MODES } from './output-options';
-	import TrashIcon from 'phosphor-svelte/lib/Trash';
-	import DotsIcon from 'phosphor-svelte/lib/DotsThreeVertical';
+	import CopyIcon from 'phosphor-svelte/lib/Copy';
 	import PencilIcon from 'phosphor-svelte/lib/PencilSimple';
+	import PlusIcon from 'phosphor-svelte/lib/Plus';
+	import TrashIcon from 'phosphor-svelte/lib/Trash';
 	import VisibilityCheckbox from './VisibilityCheckbox.svelte';
 	import PaletteToolbar from './PaletteToolbar.svelte';
 
 	type Props = { fillHeight?: boolean };
 	let { fillHeight = false }: Props = $props();
 
-	let viewMode = $state<'list' | 'grid'>('list');
 	// Bound select state is intentionally local; effects synchronize it with the persistent nanostore.
 	// eslint-disable-next-line svelte/prefer-writable-derived
 	let preset = $state(activePaletteName.get());
-	let gridDisabled = $state(false);
 	let selectedColorKeys = $state<Record<string, boolean>>({});
 	let importInput = $state<HTMLInputElement>();
 	let paletteMessage = $state<string>();
@@ -75,10 +61,6 @@
 	let pendingImportSummary = $state<
 		{ name: string; existingCount: number; importedCount: number }[]
 	>([]);
-	const initialOutputSettings = outputSettings.get();
-	let alpha = $state(initialOutputSettings.alphaMode);
-	let alphaThreshold = $state<number>(initialOutputSettings.alphaThreshold);
-	let matteKey = $state(initialOutputSettings.matteKey ?? '#FFFFFF');
 
 	const currentPalette = $derived($activePalette);
 	const isBuiltIn = $derived(currentPalette.source === 'wplace');
@@ -88,14 +70,10 @@
 			(color) => $paletteEnabled[paletteEnabledKey(currentPalette.name, color.key)] !== false
 		).length
 	);
-	const transparentEnabled = $derived(
-		$paletteEnabled[paletteEnabledKey(currentPalette.name, TRANSPARENT_KEY)] !== false
+	const allRowsSelected = $derived(
+		currentPalette.colors.length > 0 && selectedCount === currentPalette.colors.length
 	);
-	const alphaLabel = $derived(ALPHA_MODES.find((mode) => mode.id === alpha)?.label ?? 'Alpha');
-	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
-	const matteLabel = $derived(
-		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
-	);
+	const someRowsSelected = $derived(selectedCount > 0 && !allRowsSelected);
 
 	$effect(() => {
 		activePaletteName.set(preset);
@@ -104,36 +82,6 @@
 
 	$effect(() => {
 		preset = $activePalette.name;
-	});
-
-	$effect(() =>
-		outputSettings.subscribe((settings) => {
-			alpha = settings.alphaMode;
-			alphaThreshold = settings.alphaThreshold;
-			matteKey = settings.matteKey ?? '#FFFFFF';
-		})
-	);
-
-	$effect(() => {
-		if (!visiblePaletteColors.length) return;
-		if (visiblePaletteColors.some((color) => color.key === matteKey)) return;
-		matteKey = fallbackMatteKey(matteKey);
-	});
-
-	$effect(() => {
-		updateOutputSettings({ alphaMode: alpha, alphaThreshold, matteKey });
-	});
-
-	$effect(() => {
-		if (typeof window === 'undefined') return;
-		const mql = window.matchMedia('(any-hover: none), (max-width: 1023.98px)');
-		const sync = () => {
-			gridDisabled = mql.matches;
-			if (mql.matches && viewMode === 'grid') viewMode = 'list';
-		};
-		sync();
-		mql.addEventListener('change', sync);
-		return () => mql.removeEventListener('change', sync);
 	});
 
 	function enabled(color: PaletteColor, palette: Palette = currentPalette) {
@@ -146,6 +94,14 @@
 
 	function selectAllRows() {
 		selectedColorKeys = Object.fromEntries(currentPalette.colors.map((color) => [color.key, true]));
+	}
+
+	function setAllRowsSelected(selected: boolean) {
+		if (selected) {
+			selectAllRows();
+			return;
+		}
+		deselectRows();
 	}
 
 	function deselectRows() {
@@ -162,39 +118,6 @@
 		const colors = currentPalette.colors.filter((color) => selectedColorKeys[color.key]);
 		const nextEnabled = colors.some((color) => !enabled(color));
 		for (const color of colors) setPaletteColorEnabled(color.key, nextEnabled, currentPalette.name);
-	}
-
-	function fallbackMatteKey(previousKey: string) {
-		const previous = currentPalette.colors.find((color) => color.key === previousKey)?.rgb;
-		if (!previous) return visiblePaletteColors[0]!.key;
-		let best = visiblePaletteColors[0]!;
-		let bestDistance = Number.POSITIVE_INFINITY;
-		for (const color of visiblePaletteColors) {
-			const rgb = color.rgb!;
-			const distance =
-				(rgb.r - previous.r) ** 2 + (rgb.g - previous.g) ** 2 + (rgb.b - previous.b) ** 2;
-			if (distance < bestDistance) {
-				best = color;
-				bestDistance = distance;
-			}
-		}
-		return best.key;
-	}
-
-	function useDarkestPaletteColor() {
-		const darkest = visiblePaletteColors.reduce<(typeof visiblePaletteColors)[number] | undefined>(
-			(best, color) => {
-				if (!color.rgb) return best;
-				if (!best?.rgb) return color;
-				return relativeLuminance(color.rgb) < relativeLuminance(best.rgb) ? color : best;
-			},
-			undefined
-		);
-		if (darkest) matteKey = darkest.key;
-	}
-
-	function relativeLuminance(rgb: { r: number; g: number; b: number }) {
-		return 0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b;
 	}
 
 	function setPaletteMessage(message: string | undefined, tone: 'neutral' | 'error' = 'neutral') {
@@ -217,9 +140,10 @@
 		withPaletteError(() => createCustomPalette(name));
 	}
 
-	function duplicatePalette() {
-		const name = prompt('Duplicate palette as', `${currentPalette.name} Copy`);
+	function duplicatePalette(palette = currentPalette) {
+		const name = prompt('Duplicate palette as', `${palette.name} Copy`);
 		if (!name) return;
+		activePaletteName.set(palette.name);
 		withPaletteError(() => duplicateActivePalette(name));
 	}
 
@@ -260,11 +184,31 @@
 	}
 
 	function editColor(color: PaletteColor) {
-		openColorDialog('edit', color);
+		setPaletteMessage(`Edit flow for ${color.name} is coming next.`);
 	}
 
 	function duplicateColor(color: PaletteColor) {
 		openColorDialog('duplicate', color);
+	}
+
+	function duplicateSelectedColors() {
+		if (isBuiltIn) {
+			setPaletteMessage(
+				'Built-in palettes are immutable. Duplicate Wplace before duplicating colors.',
+				'error'
+			);
+			return;
+		}
+		const colors = currentPalette.colors.filter(
+			(color) => selectedColorKeys[color.key] && color.kind !== 'transparent'
+		);
+		if (colors.length !== 1) {
+			setPaletteMessage(
+				'Select one custom color to duplicate. Bulk duplicate needs the edit flow.'
+			);
+			return;
+		}
+		duplicateColor(colors[0]);
 	}
 
 	function deleteSelectedColors() {
@@ -299,21 +243,18 @@
 		deleteColorKey = undefined;
 	}
 
-	function deletePalette() {
-		if (isBuiltIn) {
+	function deletePalette(palette = currentPalette) {
+		if (palette.source === 'wplace') {
 			setPaletteMessage('The Wplace palette cannot be deleted.', 'error');
 			return;
 		}
-		if (!confirm(`Delete custom palette ${currentPalette.name}?`)) return;
+		if (!confirm(`Delete custom palette ${palette.name}?`)) return;
+		activePaletteName.set(palette.name);
 		withPaletteError(deleteActiveCustomPalette);
 	}
 
 	function exportActivePalette() {
 		exportPalette({ scope: 'active' });
-	}
-
-	function exportAllPalettes() {
-		exportPalette({ scope: 'all' });
 	}
 
 	function exportPalette({ scope }: { scope: 'active' | 'all' }) {
@@ -470,24 +411,19 @@
 	</DialogContent>
 </Dialog>
 
-<section class="flex flex-col gap-2 {fillHeight ? 'h-full' : ''}" aria-label="Palette editor">
+<section
+	class={fillHeight ? 'flex h-full flex-col gap-2' : 'flex flex-col gap-2'}
+	aria-label="Palette editor"
+>
 	<PaletteToolbar
 		bind:preset
-		bind:viewMode
 		palettes={$palettes}
 		{currentPalette}
-		{isBuiltIn}
-		{selectedCount}
-		{gridDisabled}
-		onSelectAll={selectAllRows}
-		onDeselect={deselectRows}
-		onToggleSelectedVisibility={toggleSelectedVisibility}
 		onNewPalette={newPalette}
 		onDuplicatePalette={duplicatePalette}
+		onDeletePalette={deletePalette}
 		onImportPalette={() => importInput?.click()}
 		onExportPalette={exportActivePalette}
-		onAddColor={addColor}
-		onDeleteSelectedColors={deleteSelectedColors}
 	/>
 
 	{#if paletteMessage}
@@ -501,136 +437,93 @@
 		</p>
 	{/if}
 
-	<div class="grid gap-3 border border-border bg-background p-3 text-sm">
-		<div class="flex items-center gap-3">
-			{@render swatchSquare({ name: 'Transparent', key: TRANSPARENT_KEY, kind: 'transparent' })}
-			<div class="min-w-0 flex-1">
-				<div class="font-medium">Transparent</div>
-				<p class="text-xs text-muted-foreground">
-					Every palette includes this swatch. Turn it off to map transparent pixels to visible
-					colors.
-				</p>
-			</div>
-			<VisibilityCheckbox
-				checked={transparentEnabled}
-				aria-label="Transparent swatch enabled"
-				onCheckedChange={(next) =>
-					setPaletteColorEnabled(TRANSPARENT_KEY, next, currentPalette.name)}
-			/>
-		</div>
-		<div class="grid gap-2">
-			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
-				<Label for="alpha-mode">Alpha</Label>
-				<Select bind:value={alpha} type="single">
-					<SelectTrigger id="alpha-mode">{alphaLabel}</SelectTrigger>
-					<SelectContent>
-						{#each ALPHA_MODES as mode (mode.id)}
-							<SelectItem value={mode.id}>{mode.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-			</div>
-			{#if alpha === 'matte'}
-				<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
-					<Label for="matte-color">Matte</Label>
-					<div class="flex gap-2">
-						<Select bind:value={matteKey} type="single" disabled={!visiblePaletteColors.length}>
-							<SelectTrigger id="matte-color" class="min-w-0 flex-1">{matteLabel}</SelectTrigger>
-							<SelectContent>
-								{#each visiblePaletteColors as color (color.key)}
-									<SelectItem value={color.key}>{color.name} · {color.key}</SelectItem>
-								{/each}
-							</SelectContent>
-						</Select>
-						<Button
-							type="button"
-							variant="outline"
-							onclick={useDarkestPaletteColor}
-							disabled={!visiblePaletteColors.length}
-						>
-							Darkest
-						</Button>
-					</div>
-				</div>
-			{/if}
-			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
-				<Label for="alpha-threshold">Threshold</Label>
-				<div class="flex items-center gap-2">
-					<Slider
-						type="single"
-						bind:value={alphaThreshold}
-						min={0}
-						max={255}
-						step={1}
-						disabled={alpha !== 'preserve'}
-						aria-label="Alpha threshold"
-					/>
-					<span class="w-8 text-right text-xs text-muted-foreground tabular-nums"
-						>{alphaThreshold}</span
-					>
-				</div>
-			</div>
-		</div>
-	</div>
-
 	<ScrollArea
-		class="min-h-0 flex-1 border border-border bg-background {fillHeight ? '' : 'max-h-[420px]'}"
+		class="min-h-0 flex-1 border border-border bg-background {fillHeight ? '' : 'max-h-[520px]'}"
 	>
-		{#if viewMode === 'list'}
-			<table class="w-full border-collapse text-xs">
-				<thead class="sticky top-0 z-10 bg-muted/50">
-					<tr class="text-muted-foreground">
-						<th class="w-8 p-1.5 text-left font-medium">#</th>
-						<th class="w-8 p-1.5"><span class="sr-only">Select</span></th>
-						<th class="w-8 p-1.5"><span class="sr-only">Visible</span></th>
-						<th class="w-12 p-1.5 text-left font-medium">Swatch</th>
-						<th class="p-1.5 text-left font-medium">Name</th>
-						<th class="hidden p-1.5 text-left font-medium sm:table-cell">Hex</th>
-						<th class="hidden p-1.5 text-left font-medium md:table-cell">Status</th>
-						<th class="w-8 p-1.5"><span class="sr-only">Actions</span></th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each currentPalette.colors as color, i (color.key)}
-						{@render row(color, i)}
-					{/each}
-				</tbody>
-			</table>
-		{:else}
-			<div class="grid grid-cols-4 gap-1 p-2 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7">
-				{#each currentPalette.colors as color (color.key)}
-					{@render gridSwatch(color)}
-				{/each}
+		<div
+			class="sticky top-0 z-20 flex min-h-9 flex-wrap items-center gap-2 border-b border-border bg-background/95 px-2 py-1.5 backdrop-blur"
+		>
+			<div class="flex min-w-0 items-center gap-2">
+				<Checkbox
+					checked={allRowsSelected}
+					indeterminate={someRowsSelected}
+					aria-label="Select all palette colors"
+					onCheckedChange={(next) => setAllRowsSelected(next)}
+				/>
+				{#if selectedCount > 0}
+					<span class="text-xs text-muted-foreground">{selectedCount} selected</span>
+				{/if}
 			</div>
-		{/if}
+			<div class="ml-auto flex items-center gap-1">
+				<Button
+					size="xs"
+					variant="ghost"
+					onclick={toggleSelectedVisibility}
+					disabled={selectedCount === 0}
+				>
+					Toggle visibility
+				</Button>
+				<Button
+					size="icon-xs"
+					variant="ghost"
+					onclick={duplicateSelectedColors}
+					disabled={selectedCount === 0 || isBuiltIn}
+					aria-label="Duplicate selected colors"
+				>
+					<CopyIcon weight="bold" />
+				</Button>
+				<Button
+					size="icon-xs"
+					variant="ghost"
+					class="hover:text-destructive"
+					onclick={deleteSelectedColors}
+					disabled={selectedCount === 0 || isBuiltIn}
+					aria-label="Delete selected colors"
+				>
+					<TrashIcon weight="bold" />
+				</Button>
+			</div>
+		</div>
+		<table class="w-full border-collapse text-xs">
+			<thead class="sticky top-9 z-10 border-b border-border bg-muted/80 backdrop-blur">
+				<tr class="text-muted-foreground">
+					<th class="w-8 p-1.5"><span class="sr-only">Selected</span></th>
+					<th class="w-10 p-1.5 text-left font-medium">Swatch</th>
+					<th class="w-8 p-1.5"><span class="sr-only">Visibility</span></th>
+					<th class="p-1.5 text-left font-medium">Name</th>
+					<th class="p-1.5 text-left font-medium">Hex</th>
+					<th class="p-1.5 text-left font-medium">Tags</th>
+					<th class="p-1.5 text-right font-medium">Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each currentPalette.colors as color (color.key)}
+					{@render row(color)}
+				{/each}
+			</tbody>
+		</table>
 	</ScrollArea>
 
-	<div class="flex items-center justify-between text-xs text-muted-foreground">
-		<span>{enabledCount} / {currentPalette.colors.length} colors active</span>
-		<span>
-			{selectedCount} selected · Enabled state persists locally.
-			<button type="button" class="underline" onclick={exportAllPalettes}>Export all custom</button>
-			{#if !isBuiltIn}
-				· <button type="button" class="text-destructive underline" onclick={deletePalette}
-					>Delete palette</button
-				>
-			{/if}
-		</span>
+	<div
+		class="sticky bottom-0 z-20 flex items-center gap-3 border border-border bg-background/95 px-2 py-1.5 text-xs text-muted-foreground backdrop-blur"
+	>
+		<Button size="xs" variant="outline" onclick={addColor}>
+			<PlusIcon weight="bold" />
+			New
+		</Button>
+		<span class="ml-auto tabular-nums">{enabledCount}/{currentPalette.colors.length} active</span>
 	</div>
 </section>
 
-{#snippet swatchSquare(color: PaletteColor, size: 'sm' | 'md' = 'md')}
+{#snippet swatchSquare(color: PaletteColor)}
 	{#if color.kind === 'transparent'}
 		<span
-			class="block border border-border [background-image:repeating-conic-gradient(rgba(0,0,0,0.3)_0%_25%,transparent_0%_50%)] [background-size:8px_8px] {size ===
-			'sm'
-				? 'size-5'
-				: 'size-7'}"
+			class="block size-5 border border-border [background-image:repeating-conic-gradient(rgba(0,0,0,0.3)_0%_25%,transparent_0%_50%)] [background-size:8px_8px]"
 			aria-label="Transparent"
 		></span>
 	{:else}
 		<span
-			class="block border border-border {size === 'sm' ? 'size-5' : 'size-7'}"
+			class="block size-5 border border-border"
 			style="background-color: {color.key}"
 			aria-hidden="true"
 		></span>
@@ -649,122 +542,61 @@
 	{/if}
 {/snippet}
 
-{#snippet row(color: PaletteColor, i: number)}
+{#snippet row(color: PaletteColor)}
 	{@const isVisible = enabled(color)}
 	{@const selected = selectedColorKeys[color.key] === true}
+	{@const mutable = !isBuiltIn && color.kind !== 'transparent'}
 	<tr
-		class="border-t border-border hover:bg-muted/40 data-selected:bg-muted/50"
+		class="border-t border-border hover:bg-muted/40 data-selected:bg-muted/50 data-disabled:opacity-55"
 		data-disabled={!isVisible || undefined}
 		data-selected={selected || undefined}
 	>
-		<td class="p-1.5 text-muted-foreground tabular-nums">{i + 1}</td>
-		<td class="p-1.5">
+		<td class="p-1.5 align-middle">
 			<Checkbox
 				checked={selected}
 				aria-label="Select {color.name}"
 				onCheckedChange={(next) => setRowSelected(color.key, next)}
 			/>
 		</td>
-		<td class="p-1.5">
+		<td class="p-1.5 align-middle">{@render swatchSquare(color)}</td>
+		<td class="p-1.5 align-middle">
 			<VisibilityCheckbox
 				checked={isVisible}
 				aria-label="Visible: {color.name}"
 				onCheckedChange={(next) => setPaletteColorEnabled(color.key, next, currentPalette.name)}
 			/>
 		</td>
-		<td class="p-1.5">{@render swatchSquare(color, 'sm')}</td>
-		<td class="truncate p-1.5">{color.name}</td>
-		<td class="hidden p-1.5 font-mono text-muted-foreground sm:table-cell">
+		<td class="max-w-32 truncate p-1.5 align-middle font-medium">{color.name}</td>
+		<td class="p-1.5 align-middle font-mono text-muted-foreground">
 			{color.kind === 'transparent' ? '—' : color.key}
 		</td>
-		<td class="hidden p-1.5 md:table-cell">{@render kindBadge(color)}</td>
-		<td class="p-1.5">
-			<DropdownMenu>
-				<DropdownMenuTrigger aria-label="Row actions"
-					><DotsIcon weight="bold" /></DropdownMenuTrigger
+		<td class="p-1.5 align-middle">{@render kindBadge(color)}</td>
+		<td class="p-1.5 align-middle">
+			<div class="flex justify-end gap-1">
+				<Button size="xs" variant="ghost" disabled={!mutable} onclick={() => editColor(color)}>
+					<PencilIcon weight="bold" />
+					Edit
+				</Button>
+				<Button
+					size="icon-xs"
+					variant="ghost"
+					disabled={!mutable}
+					aria-label="Duplicate {color.name}"
+					onclick={() => duplicateColor(color)}
 				>
-				<DropdownMenuContent align="end">
-					<DropdownMenuItem
-						disabled={isBuiltIn || color.kind === 'transparent'}
-						onclick={() => editColor(color)}
-					>
-						Edit…
-					</DropdownMenuItem>
-					<DropdownMenuItem
-						disabled={isBuiltIn || color.kind === 'transparent'}
-						onclick={() => duplicateColor(color)}
-					>
-						Duplicate color…
-					</DropdownMenuItem>
-					<DropdownMenuSeparator />
-					<DropdownMenuItem
-						disabled={isBuiltIn || color.kind === 'transparent'}
-						onclick={() => deleteColor(color)}
-					>
-						Delete
-					</DropdownMenuItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
+					<CopyIcon weight="bold" />
+				</Button>
+				<Button
+					size="icon-xs"
+					variant="ghost"
+					class="hover:text-destructive"
+					disabled={!mutable}
+					aria-label="Delete {color.name}"
+					onclick={() => deleteColor(color)}
+				>
+					<TrashIcon weight="bold" />
+				</Button>
+			</div>
 		</td>
 	</tr>
-{/snippet}
-
-{#snippet gridSwatch(color: PaletteColor)}
-	{@const isVisible = enabled(color)}
-	{@const selected = selectedColorKeys[color.key] === true}
-	{@const reveal =
-		'opacity-0 transition-opacity group-hover/swatch:opacity-100 group-focus-within/swatch:opacity-100'}
-	{@const cornerBtn = `absolute z-10 inline-flex size-5 items-center justify-center bg-background/85 backdrop-blur-[1px] hover:bg-background focus-visible:ring-ring focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:hover:bg-background/85 disabled:[&_svg]:opacity-40 [&_svg]:size-3 ${reveal}`}
-	{@const cornerCheckbox = `absolute z-10 size-5 rounded-none bg-background/85 backdrop-blur-[1px] ${reveal}`}
-	<figure
-		class="group/swatch relative aspect-square overflow-hidden border border-border bg-muted data-selected:ring-2 data-selected:ring-primary data-disabled:opacity-40"
-		data-disabled={!isVisible || undefined}
-		data-selected={selected || undefined}
-		aria-label="{color.name}{color.kind !== 'transparent' ? ` ${color.key}` : ''}{isVisible
-			? ''
-			: ' (hidden)'}"
-		title="{color.name}{color.kind !== 'transparent' ? ` — ${color.key}` : ''}"
-	>
-		{#if color.kind === 'transparent'}
-			<div
-				class="absolute inset-0 [background-image:repeating-conic-gradient(rgba(0,0,0,0.3)_0%_25%,transparent_0%_50%)] [background-size:10px_10px]"
-				aria-hidden="true"
-			></div>
-		{:else}
-			<div class="absolute inset-0" style="background-color: {color.key}" aria-hidden="true"></div>
-		{/if}
-		<button
-			type="button"
-			class={cornerBtn}
-			disabled={isBuiltIn || color.kind === 'transparent'}
-			aria-label="Edit {color.name}"
-			title={isBuiltIn ? 'Built-in colors are immutable' : 'Edit color'}
-			onclick={() => editColor(color)}><PencilIcon weight="bold" /></button
-		>
-		<button
-			type="button"
-			class="{cornerBtn} top-1 right-1 hover:text-destructive"
-			disabled={isBuiltIn || color.kind === 'transparent'}
-			aria-label="Delete {color.name}"
-			title={isBuiltIn ? 'Built-in colors are immutable' : 'Delete color'}
-			onclick={() => deleteColor(color)}><TrashIcon weight="bold" /></button
-		>
-		<Checkbox
-			class="{cornerCheckbox} bottom-1 left-1"
-			checked={selected}
-			aria-label="Select {color.name}"
-			onCheckedChange={(next) => setRowSelected(color.key, next)}
-		/>
-		<VisibilityCheckbox
-			class="{cornerCheckbox} right-1 bottom-1"
-			checked={isVisible}
-			aria-label="Visible: {color.name}"
-			onCheckedChange={(next) => setPaletteColorEnabled(color.key, next, currentPalette.name)}
-		/>
-		<figcaption class="sr-only">
-			{color.name}{color.kind !== 'transparent' ? ` ${color.key}` : ''} · {isVisible
-				? 'visible'
-				: 'hidden'}
-		</figcaption>
-	</figure>
 {/snippet}

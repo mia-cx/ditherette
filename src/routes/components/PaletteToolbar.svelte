@@ -1,130 +1,133 @@
 <script lang="ts">
-	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group';
-	import type { Palette } from '$lib/processing/types';
+	import type { Palette, PaletteColor } from '$lib/processing/types';
 	import CopyIcon from 'phosphor-svelte/lib/Copy';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
-	import GridIcon from 'phosphor-svelte/lib/GridFour';
-	import ListIcon from 'phosphor-svelte/lib/List';
-	import LockIcon from 'phosphor-svelte/lib/Lock';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
 	import TrashIcon from 'phosphor-svelte/lib/Trash';
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 
 	type Props = {
 		preset: string;
-		viewMode: 'list' | 'grid';
 		palettes: readonly Palette[];
 		currentPalette: Palette;
-		isBuiltIn: boolean;
-		selectedCount: number;
-		gridDisabled: boolean;
-		onSelectAll: () => void;
-		onDeselect: () => void;
-		onToggleSelectedVisibility: () => void;
 		onNewPalette: () => void;
-		onDuplicatePalette: () => void;
+		onDuplicatePalette: (palette: Palette) => void;
+		onDeletePalette: (palette: Palette) => void;
 		onImportPalette: () => void;
 		onExportPalette: () => void;
-		onAddColor: () => void;
-		onDeleteSelectedColors: () => void;
 	};
 
 	let {
 		preset = $bindable(),
-		viewMode = $bindable(),
 		palettes,
 		currentPalette,
-		isBuiltIn,
-		selectedCount,
-		gridDisabled,
-		onSelectAll,
-		onDeselect,
-		onToggleSelectedVisibility,
 		onNewPalette,
 		onDuplicatePalette,
+		onDeletePalette,
 		onImportPalette,
-		onExportPalette,
-		onAddColor,
-		onDeleteSelectedColors
+		onExportPalette
 	}: Props = $props();
+
+	function stopSelect(event: Event) {
+		event.stopPropagation();
+	}
 </script>
 
-<div class="flex flex-wrap items-center gap-2">
+<div class="grid gap-1.5">
 	<h2 class="text-sm font-semibold tracking-tight">Palette</h2>
 	<Select bind:value={preset} type="single">
-		<SelectTrigger id="palette-preset" class="h-7 w-auto min-w-0 gap-1 px-2 text-sm font-medium">
-			{currentPalette.name}
+		<SelectTrigger
+			id="palette-preset"
+			size="auto"
+			class="!w-full max-w-full items-center gap-3 p-3 text-left whitespace-normal"
+		>
+			<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden text-left">
+				<span class="truncate text-sm font-medium text-foreground">{currentPalette.name}</span>
+				{@render swatchStrip(currentPalette.colors)}
+			</span>
 		</SelectTrigger>
-		<SelectContent>
-			{#each palettes as palette (palette.name)}
-				<SelectItem value={palette.name}>{palette.name}</SelectItem>
-			{/each}
+		<SelectContent
+			viewportFlex
+			class="max-h-[min(32rem,var(--bits-select-content-available-height))] w-(--bits-select-anchor-width) max-w-(--bits-select-anchor-width) overflow-hidden p-0"
+		>
+			<div class="min-h-0 overflow-y-auto py-1">
+				{#each palettes as palette (palette.name)}
+					<SelectItem
+						value={palette.name}
+						label={palette.name}
+						class="min-w-0 items-start py-3 pr-8 pl-3"
+					>
+						<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden pr-16">
+							<span class="truncate text-sm font-medium text-foreground">{palette.name}</span>
+							{@render swatchStrip(palette.colors)}
+						</span>
+						<span class="ml-auto flex shrink-0 items-center gap-1 pr-5">
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								aria-label="Duplicate {palette.name}"
+								onpointerdown={stopSelect}
+								onclick={(event) => {
+									stopSelect(event);
+									onDuplicatePalette(palette);
+								}}
+							>
+								<CopyIcon weight="bold" />
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								class="hover:text-destructive"
+								aria-label="Delete {palette.name}"
+								disabled={palette.source === 'wplace'}
+								onpointerdown={stopSelect}
+								onclick={(event) => {
+									stopSelect(event);
+									onDeletePalette(palette);
+								}}
+							>
+								<TrashIcon weight="bold" />
+							</Button>
+						</span>
+					</SelectItem>
+				{/each}
+			</div>
+			<div class="border-t border-border p-2">
+				<Button variant="ghost" class="w-full justify-start" onclick={onNewPalette}>
+					<PlusIcon weight="bold" />
+					New palette
+				</Button>
+				<div class="mt-2 grid grid-cols-2 gap-2">
+					<Button variant="outline" onclick={onImportPalette}>
+						<UploadIcon weight="bold" />
+						Import
+					</Button>
+					<Button variant="outline" onclick={onExportPalette}>
+						<DownloadIcon weight="bold" />
+						Export
+					</Button>
+				</div>
+			</div>
 		</SelectContent>
 	</Select>
-	<Badge variant="outline" class="gap-1">
-		{#if isBuiltIn}<LockIcon weight="bold" /> Built-in{:else}Custom{/if}
-	</Badge>
 </div>
 
-<div class="flex flex-wrap items-center gap-1 border border-border bg-background p-1">
-	<Button size="xs" variant="ghost" onclick={onSelectAll}>Select all</Button>
-	<Button size="xs" variant="ghost" onclick={onDeselect} disabled={selectedCount === 0}
-		>Deselect</Button
-	>
-	<Button
-		size="xs"
-		variant="ghost"
-		onclick={onToggleSelectedVisibility}
-		disabled={selectedCount === 0}
-	>
-		Toggle visibility
-	</Button>
-	<Button size="xs" variant="ghost" onclick={onNewPalette}>New</Button>
-	<Button size="xs" variant="ghost" onclick={onDuplicatePalette}
-		><CopyIcon weight="bold" /> Duplicate</Button
-	>
-	<Button size="xs" variant="ghost" onclick={onImportPalette}
-		><UploadIcon weight="bold" /> Import</Button
-	>
-	<Button size="xs" variant="ghost" onclick={onExportPalette}
-		><DownloadIcon weight="bold" /> Export</Button
-	>
-	<div class="ml-auto flex items-center gap-1">
-		<Button size="xs" variant="ghost" onclick={onAddColor} aria-label="Add color">
-			<PlusIcon weight="bold" />
-			<span class="hidden sm:inline">Add</span>
-		</Button>
-		<Button
-			size="xs"
-			variant="ghost"
-			onclick={onDeleteSelectedColors}
-			disabled={selectedCount === 0}
-			aria-label="Delete selected colors"
-		>
-			<TrashIcon weight="bold" />
-			<span class="hidden sm:inline">Delete</span>
-		</Button>
-		<ToggleGroup
-			type="single"
-			bind:value={viewMode}
-			size="sm"
-			variant="outline"
-			aria-label="Palette view mode"
-		>
-			<ToggleGroupItem value="list" aria-label="List view"
-				><ListIcon weight="bold" /></ToggleGroupItem
-			>
-			<ToggleGroupItem
-				value="grid"
-				aria-label="Grid view{gridDisabled ? ' (requires a pointer device)' : ''}"
-				disabled={gridDisabled}
-				title={gridDisabled ? 'Grid view requires a pointer device' : undefined}
-			>
-				<GridIcon weight="bold" />
-			</ToggleGroupItem>
-		</ToggleGroup>
-	</div>
-</div>
+{#snippet swatchStrip(colors: readonly PaletteColor[])}
+	<span class="flex max-w-full min-w-0 flex-nowrap gap-1 overflow-hidden" aria-hidden="true">
+		{#each colors as color (color.key)}
+			<span class="size-4 shrink-0 border border-border" title={color.name}>
+				{#if color.kind === 'transparent'}
+					<span
+						class="block size-full [background-image:repeating-conic-gradient(rgba(0,0,0,0.3)_0%_25%,transparent_0%_50%)] [background-size:6px_6px]"
+					></span>
+				{:else}
+					<span class="block size-full" style="background-color: {color.key}"></span>
+				{/if}
+			</span>
+		{/each}
+	</span>
+{/snippet}
