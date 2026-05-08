@@ -1,11 +1,21 @@
 import type { CropRect, FitMode, ResizeId } from './types';
-import { clampByte } from './color';
+import { unpremultiplySample } from './compositing';
+import { assertOutputDimensions } from './schemas';
 
 type Rect = { x: number; y: number; width: number; height: number };
 type ResizePlan = { source: Rect; target: Rect };
 
+function finiteRectValue(value: number, label: string) {
+	if (!Number.isFinite(value)) throw new Error(`${label} must be finite.`);
+	return value;
+}
+
 function clampCrop(sourceWidth: number, sourceHeight: number, crop?: CropRect): Rect {
 	if (!crop) return { x: 0, y: 0, width: sourceWidth, height: sourceHeight };
+	finiteRectValue(crop.x, 'Crop x');
+	finiteRectValue(crop.y, 'Crop y');
+	finiteRectValue(crop.width, 'Crop width');
+	finiteRectValue(crop.height, 'Crop height');
 	const x = Math.min(sourceWidth - 1, Math.max(0, crop.x));
 	const y = Math.min(sourceHeight - 1, Math.max(0, crop.y));
 	return {
@@ -24,6 +34,8 @@ function resizePlan(
 	fit: FitMode,
 	crop?: CropRect
 ): ResizePlan {
+	assertOutputDimensions(outWidth, outHeight, 'Resize output');
+	assertOutputDimensions(sourceWidth, sourceHeight, 'Resize source');
 	const base = clampCrop(sourceWidth, sourceHeight, crop);
 	const fullTarget = { x: 0, y: 0, width: outWidth, height: outHeight };
 	if (fit === 'stretch') return { source: base, target: fullTarget };
@@ -88,12 +100,16 @@ export function resizeImageData(
 	mode: ResizeId,
 	crop?: CropRect
 ): ImageData {
-	const plan = resizePlan(source.width, source.height, outWidth, outHeight, fit, crop);
-	const output = new ImageData(outWidth, outHeight);
+	const { width, height } = assertOutputDimensions(outWidth, outHeight, 'Resize output');
+	if (fit !== 'stretch' && fit !== 'contain' && fit !== 'cover') {
+		throw new Error(`Unsupported fit mode: ${fit satisfies never}`);
+	}
+	const plan = resizePlan(source.width, source.height, width, height, fit, crop);
+	const output = new ImageData(width, height);
 	const targetLeft = Math.max(0, Math.round(plan.target.x));
 	const targetTop = Math.max(0, Math.round(plan.target.y));
-	const targetRight = Math.min(outWidth, Math.round(plan.target.x + plan.target.width));
-	const targetBottom = Math.min(outHeight, Math.round(plan.target.y + plan.target.height));
+	const targetRight = Math.min(width, Math.round(plan.target.x + plan.target.width));
+	const targetBottom = Math.min(height, Math.round(plan.target.y + plan.target.height));
 	const targetWidth = Math.max(1, targetRight - targetLeft);
 	const targetHeight = Math.max(1, targetBottom - targetTop);
 	const scaleX = plan.source.width / targetWidth;
@@ -101,7 +117,7 @@ export function resizeImageData(
 
 	for (let y = targetTop; y < targetBottom; y++) {
 		for (let x = targetLeft; x < targetRight; x++) {
-			const targetOffset = (y * outWidth + x) * 4;
+			const targetOffset = (y * width + x) * 4;
 			const sourceX = plan.source.x + (x - targetLeft + 0.5) * scaleX - 0.5;
 			const sourceY = plan.source.y + (y - targetTop + 0.5) * scaleY - 0.5;
 			const pixel = sample(source, sourceX, sourceY, scaleX, scaleY, mode);
@@ -131,9 +147,39 @@ function sample(
 		case 'area':
 			return sampleArea(source, x, y, scaleX, scaleY);
 		case 'lanczos3':
-		default:
 			return sampleLanczos(source, x, y);
+		default:
+			throw new Error(`Unsupported resize mode: ${mode satisfies never}`);
 	}
+}
+
+function addWeightedSample(
+	accumulator: { r: number; g: number; b: number; a: number; total: number },
+	pixel: readonly [number, number, number, number],
+	weight: number
+) {
+	const alpha = pixel[3] / 255;
+	accumulator.r += pixel[0] * alpha * weight;
+	accumulator.g += pixel[1] * alpha * weight;
+	accumulator.b += pixel[2] * alpha * weight;
+	accumulator.a += pixel[3] * weight;
+	accumulator.total += weight;
+}
+
+function finishWeightedSample(accumulator: {
+	r: number;
+	g: number;
+	b: number;
+	a: number;
+	total: number;
+}) {
+	if (accumulator.total === 0) return [0, 0, 0, 0] as const;
+	return unpremultiplySample(
+		accumulator.r / accumulator.total,
+		accumulator.g / accumulator.total,
+		accumulator.b / accumulator.total,
+		accumulator.a / accumulator.total
+	);
 }
 
 function sampleBilinear(source: ImageData, x: number, y: number) {
@@ -141,25 +187,32 @@ function sampleBilinear(source: ImageData, x: number, y: number) {
 	const y0 = Math.floor(y);
 	const tx = x - x0;
 	const ty = y - y0;
-	const p00 = getPixel(source.data, source.width, source.height, x0, y0);
-	const p10 = getPixel(source.data, source.width, source.height, x0 + 1, y0);
-	const p01 = getPixel(source.data, source.width, source.height, x0, y0 + 1);
-	const p11 = getPixel(source.data, source.width, source.height, x0 + 1, y0 + 1);
-	const out: [number, number, number, number] = [0, 0, 0, 0];
-	for (let channel = 0; channel < 4; channel++) {
-		const top = p00[channel] * (1 - tx) + p10[channel] * tx;
-		const bottom = p01[channel] * (1 - tx) + p11[channel] * tx;
-		out[channel] = clampByte(top * (1 - ty) + bottom * ty);
-	}
-	return out;
+	const accumulator = { r: 0, g: 0, b: 0, a: 0, total: 0 };
+	addWeightedSample(
+		accumulator,
+		getPixel(source.data, source.width, source.height, x0, y0),
+		(1 - tx) * (1 - ty)
+	);
+	addWeightedSample(
+		accumulator,
+		getPixel(source.data, source.width, source.height, x0 + 1, y0),
+		tx * (1 - ty)
+	);
+	addWeightedSample(
+		accumulator,
+		getPixel(source.data, source.width, source.height, x0, y0 + 1),
+		(1 - tx) * ty
+	);
+	addWeightedSample(
+		accumulator,
+		getPixel(source.data, source.width, source.height, x0 + 1, y0 + 1),
+		tx * ty
+	);
+	return finishWeightedSample(accumulator);
 }
 
 function sampleLanczos(source: ImageData, x: number, y: number) {
-	let r = 0;
-	let g = 0;
-	let b = 0;
-	let a = 0;
-	let total = 0;
+	const accumulator = { r: 0, g: 0, b: 0, a: 0, total: 0 };
 	const radius = 3;
 	const floorX = Math.floor(x);
 	const floorY = Math.floor(y);
@@ -170,20 +223,14 @@ function sampleLanczos(source: ImageData, x: number, y: number) {
 		for (let xx = startX; xx <= floorX + radius; xx++) {
 			const weight = lanczos(x - xx, radius) * wy;
 			if (weight === 0) continue;
-			const pixel = getPixel(source.data, source.width, source.height, xx, yy);
-			r += pixel[0] * weight;
-			g += pixel[1] * weight;
-			b += pixel[2] * weight;
-			a += pixel[3] * weight;
-			total += weight;
+			addWeightedSample(
+				accumulator,
+				getPixel(source.data, source.width, source.height, xx, yy),
+				weight
+			);
 		}
 	}
-	return [
-		clampByte(r / total),
-		clampByte(g / total),
-		clampByte(b / total),
-		clampByte(a / total)
-	] as const;
+	return finishWeightedSample(accumulator);
 }
 
 function sampleArea(source: ImageData, x: number, y: number, scaleX: number, scaleY: number) {
@@ -192,25 +239,11 @@ function sampleArea(source: ImageData, x: number, y: number, scaleX: number, sca
 	const right = Math.ceil(x + scaleX / 2);
 	const top = Math.floor(y - scaleY / 2);
 	const bottom = Math.ceil(y + scaleY / 2);
-	let r = 0;
-	let g = 0;
-	let b = 0;
-	let a = 0;
-	let count = 0;
+	const accumulator = { r: 0, g: 0, b: 0, a: 0, total: 0 };
 	for (let yy = top; yy <= bottom; yy++) {
 		for (let xx = left; xx <= right; xx++) {
-			const pixel = getPixel(source.data, source.width, source.height, xx, yy);
-			r += pixel[0];
-			g += pixel[1];
-			b += pixel[2];
-			a += pixel[3];
-			count++;
+			addWeightedSample(accumulator, getPixel(source.data, source.width, source.height, xx, yy), 1);
 		}
 	}
-	return [
-		clampByte(r / count),
-		clampByte(g / count),
-		clampByte(b / count),
-		clampByte(a / count)
-	] as const;
+	return finishWeightedSample(accumulator);
 }

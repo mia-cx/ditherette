@@ -1,5 +1,4 @@
-import { validateSourceBlob } from './image-metadata';
-import { validateSourceImageSize } from './types';
+import { validateProcessedImage, validateSourceImageRecord } from './schemas';
 import type { ProcessedImage, SourceImageRecord } from './types';
 
 const DB_NAME = 'ditherette';
@@ -27,10 +26,30 @@ async function withStore<T>(
 	try {
 		return await new Promise<T>((resolve, reject) => {
 			const tx = db.transaction(STORE, mode);
+			let result: T;
 			const request = run(tx.objectStore(STORE));
 			request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-			request.onsuccess = () => resolve(request.result);
+			request.onsuccess = () => {
+				result = request.result;
+			};
 			tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+			tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+			tx.oncomplete = () => resolve(result);
+		});
+	} finally {
+		db.close();
+	}
+}
+
+async function withWriteTransaction(run: (store: IDBObjectStore) => void): Promise<void> {
+	const db = await openDb();
+	try {
+		await new Promise<void>((resolve, reject) => {
+			const tx = db.transaction(STORE, 'readwrite');
+			run(tx.objectStore(STORE));
+			tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'));
+			tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+			tx.oncomplete = () => resolve();
 		});
 	} finally {
 		db.close();
@@ -38,17 +57,16 @@ async function withStore<T>(
 }
 
 export async function saveSourceImage(record: SourceImageRecord) {
-	await withStore('readwrite', (store) => store.put(record, SOURCE_KEY));
+	await withStore('readwrite', (store) => store.put(validateSourceImageRecord(record), SOURCE_KEY));
 }
 
 export async function loadSourceImage(): Promise<SourceImageRecord | undefined> {
-	return (await withStore('readonly', (store) => store.get(SOURCE_KEY))) as
-		| SourceImageRecord
-		| undefined;
+	const record = await withStore('readonly', (store) => store.get(SOURCE_KEY));
+	return record === undefined ? undefined : validateSourceImageRecord(record);
 }
 
 export async function saveProcessedImage(record: ProcessedImage) {
-	await withStore('readwrite', (store) => store.put(record, PROCESSED_KEY));
+	await withStore('readwrite', (store) => store.put(validateProcessedImage(record), PROCESSED_KEY));
 }
 
 export async function clearPersistedProcessedImage() {
@@ -56,43 +74,15 @@ export async function clearPersistedProcessedImage() {
 }
 
 export async function loadProcessedImage(): Promise<ProcessedImage | undefined> {
-	return (await withStore('readonly', (store) => store.get(PROCESSED_KEY))) as
-		| ProcessedImage
-		| undefined;
+	const record = await withStore('readonly', (store) => store.get(PROCESSED_KEY));
+	return record === undefined ? undefined : validateProcessedImage(record);
 }
 
 export async function clearPersistedImages() {
-	await Promise.all([
-		withStore('readwrite', (store) => store.delete(SOURCE_KEY)),
-		withStore('readwrite', (store) => store.delete(PROCESSED_KEY))
-	]);
-}
-
-export async function decodeBlob(
-	blob: Blob
-): Promise<{ imageData: ImageData; width: number; height: number }> {
-	await validateSourceBlob(blob);
-	const bitmap = await createImageBitmap(blob);
-	try {
-		validateSourceImageSize(bitmap.width, bitmap.height);
-		const canvas =
-			typeof OffscreenCanvas !== 'undefined'
-				? new OffscreenCanvas(bitmap.width, bitmap.height)
-				: Object.assign(document.createElement('canvas'), {
-						width: bitmap.width,
-						height: bitmap.height
-					});
-		const context = canvas.getContext('2d', { willReadFrequently: true });
-		if (!context) throw new Error('Canvas 2D is not available');
-		context.drawImage(bitmap, 0, 0);
-		return {
-			imageData: context.getImageData(0, 0, bitmap.width, bitmap.height),
-			width: bitmap.width,
-			height: bitmap.height
-		};
-	} finally {
-		bitmap.close();
-	}
+	await withWriteTransaction((store) => {
+		store.delete(SOURCE_KEY);
+		store.delete(PROCESSED_KEY);
+	});
 }
 
 export function sourceMetaFromRecord(record: SourceImageRecord) {
@@ -103,12 +93,4 @@ export function sourceMetaFromRecord(record: SourceImageRecord) {
 		type: record.type,
 		updatedAt: record.updatedAt
 	};
-}
-
-export function settingsHash(value: unknown): string {
-	return JSON.stringify(value);
-}
-
-export function browserCanProcessImages() {
-	return typeof indexedDB !== 'undefined' && typeof createImageBitmap !== 'undefined';
 }

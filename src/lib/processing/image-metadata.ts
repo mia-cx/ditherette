@@ -1,4 +1,4 @@
-import { ACCEPTED_IMAGE_TYPES, MAX_SOURCE_BYTES, validateSourceImageSize } from './types';
+import { MAX_SOURCE_BYTES, isAcceptedImageType, validateSourceImageSize } from './types';
 
 export type ImageDimensions = { width: number; height: number };
 
@@ -9,7 +9,7 @@ const SOF_MARKERS = new Set([
 ]);
 
 export async function validateSourceBlob(blob: Blob) {
-	if (!ACCEPTED_IMAGE_TYPES.has(blob.type)) {
+	if (!isAcceptedImageType(blob.type)) {
 		throw new Error('Choose a PNG, JPEG, WebP, or GIF image.');
 	}
 	if (blob.size > MAX_SOURCE_BYTES) {
@@ -39,8 +39,11 @@ export async function readImageDimensions(blob: Blob): Promise<ImageDimensions> 
 }
 
 function readPngDimensions(header: Uint8Array): ImageDimensions {
-	if (header.length < 24 || !PNG_SIGNATURE.every((byte, index) => header[index] === byte)) {
+	if (header.length < 33 || !PNG_SIGNATURE.every((byte, index) => header[index] === byte)) {
 		throw new Error('PNG header could not be read safely.');
+	}
+	if (readU32BE(header, 8) !== 13 || text(header, 12, 4) !== 'IHDR') {
+		throw new Error('PNG IHDR chunk could not be read safely.');
 	}
 	return { width: readU32BE(header, 16), height: readU32BE(header, 20) };
 }
@@ -65,6 +68,7 @@ function readJpegDimensions(header: Uint8Array): ImageDimensions {
 		if (marker === 0xd9 || marker === 0xda) break;
 		const length = readU16BE(header, offset);
 		if (length < 2 || offset + length > header.length) break;
+		if (SOF_MARKERS.has(marker) && (length < 8 || offset + 8 > header.length)) break;
 		if (SOF_MARKERS.has(marker)) {
 			return { width: readU16BE(header, offset + 6), height: readU16BE(header, offset + 4) };
 		}

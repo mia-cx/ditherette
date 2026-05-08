@@ -82,9 +82,11 @@ export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId
 	switch (mode) {
 		case 'srgb':
 		case 'weighted-rgb':
-		case 'weighted-rgb-601':
-		case 'weighted-rgb-709':
 			return [r, g, b];
+		case 'weighted-rgb-601':
+			return [r * Math.sqrt(0.299), g * Math.sqrt(0.587), b * Math.sqrt(0.114)];
+		case 'weighted-rgb-709':
+			return [r * Math.sqrt(0.2126), g * Math.sqrt(0.7152), b * Math.sqrt(0.0722)];
 		case 'linear-rgb':
 			return [srgbToLinearByte(r), srgbToLinearByte(g), srgbToLinearByte(b)];
 		case 'cielab':
@@ -113,6 +115,8 @@ export function createPaletteMatcher(
 			}
 		};
 	}
+
+	if (colors.length > 256) throw new Error('Palette matching supports at most 256 colors.');
 
 	const count = visible.length;
 	const paletteIndex = new Uint8Array(count);
@@ -225,14 +229,5 @@ export function createPaletteMatcher(
 			return nearestRgb(rgb.r, rgb.g, rgb.b);
 		},
 		nearestRgb
-	};
-}
-
-export function blendOverMatte(rgb: Rgb, alpha: number, matte: Rgb): Rgb {
-	const opacity = alpha / 255;
-	return {
-		r: clampByte(rgb.r * opacity + matte.r * (1 - opacity)),
-		g: clampByte(rgb.g * opacity + matte.g * (1 - opacity)),
-		b: clampByte(rgb.b * opacity + matte.b * (1 - opacity))
 	};
 }

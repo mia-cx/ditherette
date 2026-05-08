@@ -1,3 +1,4 @@
+import { validatePngExportImage } from './schemas';
 import type { ProcessedImage } from './types';
 
 const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -48,10 +49,7 @@ function chunk(type: string, data: Uint8Array) {
 	writeU32(output, 0, data.length);
 	output.set(typeBytes, 4);
 	output.set(data, 8);
-	const crcInput = new Uint8Array(typeBytes.length + data.length);
-	crcInput.set(typeBytes);
-	crcInput.set(data, typeBytes.length);
-	writeU32(output, output.length - 4, crc32(crcInput));
+	writeU32(output, output.length - 4, crc32(output.subarray(4, output.length - 4)));
 	return output;
 }
 
@@ -79,34 +77,22 @@ function zlibStore(bytes: Uint8Array) {
 	return output;
 }
 
-function concat(chunks: Uint8Array[]) {
-	const length = chunks.reduce((sum, bytes) => sum + bytes.length, 0);
-	const output = new Uint8Array(length);
-	let offset = 0;
-	for (const bytes of chunks) {
-		output.set(bytes, offset);
-		offset += bytes.length;
-	}
-	return output;
-}
-
 export function encodeIndexedPng(image: ProcessedImage): Blob {
-	if (image.palette.length > 256)
-		throw new Error('Indexed PNG palettes cannot exceed 256 entries.');
+	const safeImage = validatePngExportImage(image);
 
 	const ihdr = new Uint8Array(13);
-	writeU32(ihdr, 0, image.width);
-	writeU32(ihdr, 4, image.height);
+	writeU32(ihdr, 0, safeImage.width);
+	writeU32(ihdr, 4, safeImage.height);
 	ihdr[8] = 8; // bit depth
 	ihdr[9] = 3; // indexed color
 	ihdr[10] = 0; // deflate
 	ihdr[11] = 0; // adaptive filters
 	ihdr[12] = 0; // no interlace
 
-	const plte = new Uint8Array(image.palette.length * 3);
-	const trns = new Uint8Array(image.palette.length);
-	for (let i = 0; i < image.palette.length; i++) {
-		const color = image.palette[i];
+	const plte = new Uint8Array(safeImage.palette.length * 3);
+	const trns = new Uint8Array(safeImage.palette.length);
+	for (let i = 0; i < safeImage.palette.length; i++) {
+		const color = safeImage.palette[i];
 		const base = i * 3;
 		plte[base] = color.rgb?.r ?? 0;
 		plte[base + 1] = color.rgb?.g ?? 0;
@@ -114,23 +100,24 @@ export function encodeIndexedPng(image: ProcessedImage): Blob {
 		trns[i] = color.kind === 'transparent' ? 0 : 255;
 	}
 
-	const rows = new Uint8Array((image.width + 1) * image.height);
-	for (let y = 0; y < image.height; y++) {
-		const rowOffset = y * (image.width + 1);
+	const rows = new Uint8Array((safeImage.width + 1) * safeImage.height);
+	for (let y = 0; y < safeImage.height; y++) {
+		const rowOffset = y * (safeImage.width + 1);
 		rows[rowOffset] = 0;
-		rows.set(image.indices.subarray(y * image.width, (y + 1) * image.width), rowOffset + 1);
+		rows.set(
+			safeImage.indices.subarray(y * safeImage.width, (y + 1) * safeImage.width),
+			rowOffset + 1
+		);
 	}
 
 	return new Blob(
 		[
-			concat([
-				PNG_SIGNATURE,
-				chunk('IHDR', ihdr),
-				chunk('PLTE', plte),
-				chunk('tRNS', trns),
-				chunk('IDAT', zlibStore(rows)),
-				chunk('IEND', new Uint8Array())
-			])
+			PNG_SIGNATURE,
+			chunk('IHDR', ihdr),
+			chunk('PLTE', plte),
+			chunk('tRNS', trns),
+			chunk('IDAT', zlibStore(rows)),
+			chunk('IEND', new Uint8Array())
 		],
 		{ type: 'image/png' }
 	);

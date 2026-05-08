@@ -11,27 +11,38 @@ import {
 import {
 	clearPersistedImages,
 	clearPersistedProcessedImage,
-	decodeBlob,
 	loadProcessedImage,
 	loadSourceImage,
 	saveSourceImage,
 	sourceMetaFromRecord
 } from './db';
+import { decodeBlob } from './image-decode';
 import { cancelProcessing, currentSettingsHash, scheduleProcessing } from './client';
 import { fitOutputSizeToBounds } from './types';
 import { validateSourceBlob } from './image-metadata';
 import type { SourceImageRecord } from './types';
 
-const MIN_SCALE_FACTOR = 0.05;
+export const MIN_SCALE_FACTOR = 0.05;
+let sourceGeneration = 0;
+
+class SourceSuperseded extends Error {
+	constructor() {
+		super('Source image was superseded by a newer upload.');
+		this.name = 'SourceSuperseded';
+	}
+}
 
 function errorMessage(error: unknown, fallback: string) {
 	return error instanceof Error ? error.message : fallback;
 }
 
 export async function setSourceFile(file: File) {
-	await validateSourceBlob(file);
+	const generation = ++sourceGeneration;
 	cancelProcessing();
-	const decoded = await decodeBlob(file);
+	await validateSourceBlob(file);
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
+	const decoded = await decodeBlob(file, { validate: false });
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	const record: SourceImageRecord = {
 		blob: file,
 		name: file.name,
@@ -41,7 +52,9 @@ export async function setSourceFile(file: File) {
 		updatedAt: Date.now()
 	};
 	await saveSourceImage(record);
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	await clearPersistedProcessedImage();
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	setSourceRecord(record, decoded.imageData);
 	const settings = outputSettings.get();
 	const scaleFactor = Math.min(1, Math.max(MIN_SCALE_FACTOR, settings.scaleFactor ?? 1));
@@ -61,7 +74,7 @@ export async function setSourceFile(file: File) {
 	scheduleProcessing(0);
 }
 
-export function setSourceRecord(record: SourceImageRecord, imageData: ImageData) {
+function setSourceRecord(record: SourceImageRecord, imageData: ImageData) {
 	const oldUrl = sourceObjectUrl.get();
 	if (oldUrl) URL.revokeObjectURL(oldUrl);
 	sourceMeta.set(sourceMetaFromRecord(record));
@@ -70,7 +83,24 @@ export function setSourceRecord(record: SourceImageRecord, imageData: ImageData)
 }
 
 export async function restorePersistedImages() {
-	const source = await loadSourceImage();
+	const generation = ++sourceGeneration;
+	let source: SourceImageRecord | undefined;
+	try {
+		source = await loadSourceImage();
+	} catch (error) {
+		const restoreError = new Error(
+			`Could not restore saved source image: ${errorMessage(error, 'record validation failed')}`,
+			{ cause: error }
+		);
+		cancelProcessing();
+		clearInMemoryImageState();
+		try {
+			await clearPersistedImages();
+		} catch {
+			// Best effort: do not mask the original restore failure.
+		}
+		throw restoreError;
+	}
 	if (!source) return;
 
 	let decoded: Awaited<ReturnType<typeof decodeBlob>>;
@@ -91,12 +121,16 @@ export async function restorePersistedImages() {
 		throw restoreError;
 	}
 
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	setSourceRecord(source, decoded.imageData);
 
 	try {
 		const processed = await loadProcessedImage();
-		if (processed?.settingsHash === currentSettingsHash()) processedImage.set(processed);
-		else if (processed) await clearPersistedProcessedImage();
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
+		if (processed?.settingsHash === currentSettingsHash()) {
+			processedImage.set(processed);
+			return;
+		} else if (processed) await clearPersistedProcessedImage();
 	} catch (error) {
 		processedImage.set(undefined);
 		try {
@@ -113,6 +147,7 @@ export async function restorePersistedImages() {
 }
 
 export async function clearAllImageData() {
+	sourceGeneration++;
 	cancelProcessing();
 	clearInMemoryImageState();
 	await clearPersistedImages();
