@@ -10,6 +10,10 @@
 
 	const current = $derived(COLOR_SPACES.find((s) => s.id === $colorSpace) ?? COLOR_SPACES[0]);
 	const triggerLabel = $derived(current.label);
+
+	$effect(() => {
+		if (current.id !== $colorSpace) colorSpace.set(current.id);
+	});
 </script>
 
 <section class="flex flex-col gap-{compact ? '3' : '4'}" aria-label="Color space controls">
