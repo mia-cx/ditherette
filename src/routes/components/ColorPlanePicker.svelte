@@ -118,7 +118,7 @@
 		<span
 			data-plane-handle
 			class="absolute size-4 -translate-x-1/2 -translate-y-1/2 border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
-			style={handleStyle}
+			style="left: {handlePoint.x * 100}%; top: {handlePoint.y * 100}%; {handleStyle}"
 		></span>
 	</button>
 </div>

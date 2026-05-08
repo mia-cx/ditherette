@@ -33,9 +33,9 @@
 
 	let open = $state(false);
 
-	function stopSelect(event: Event) {
-		event.stopPropagation();
-	}
+	const actionPalette = $derived(
+		palettes.find((palette) => palette.name === preset) ?? currentPalette
+	);
 </script>
 
 <div class="grid gap-1.5">
@@ -62,49 +62,43 @@
 						label={palette.name}
 						class="min-w-0 items-start py-3 pr-8 pl-3"
 					>
-						<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden pr-16">
+						<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden">
 							<span class="truncate text-sm font-medium text-foreground">{palette.name}</span>
 							<PaletteSwatchStrip colors={palette.colors} />
-						</span>
-						<span class="ml-auto flex shrink-0 items-center gap-1 pr-5">
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								aria-label="Duplicate {palette.name}"
-								onpointerdown={stopSelect}
-								onclick={(event) => {
-									stopSelect(event);
-									onDuplicatePalette(palette);
-									open = false;
-								}}
-							>
-								<CopyIcon weight="bold" />
-							</Button>
-							<Button
-								type="button"
-								variant="ghost"
-								size="icon-xs"
-								class="hover:text-destructive"
-								aria-label="Delete {palette.name}"
-								disabled={palette.source === 'wplace'}
-								onpointerdown={stopSelect}
-								onclick={(event) => {
-									stopSelect(event);
-									onDeletePalette(palette);
-									open = false;
-								}}
-							>
-								<TrashIcon weight="bold" />
-							</Button>
 						</span>
 					</SelectItem>
 				{/each}
 			</div>
 			<div class="border-t border-border p-2">
+				<div class="grid grid-cols-2 gap-2">
+					<Button
+						variant="outline"
+						aria-label="Duplicate {actionPalette.name}"
+						onclick={() => {
+							onDuplicatePalette(actionPalette);
+							open = false;
+						}}
+					>
+						<CopyIcon weight="bold" />
+						Duplicate
+					</Button>
+					<Button
+						variant="outline"
+						class="hover:text-destructive"
+						aria-label="Delete {actionPalette.name}"
+						disabled={actionPalette.source === 'wplace'}
+						onclick={() => {
+							onDeletePalette(actionPalette);
+							open = false;
+						}}
+					>
+						<TrashIcon weight="bold" />
+						Delete
+					</Button>
+				</div>
 				<Button
 					variant="ghost"
-					class="w-full justify-start"
+					class="mt-2 w-full justify-start"
 					onclick={() => {
 						onNewPalette();
 						open = false;

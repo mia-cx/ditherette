@@ -32,6 +32,17 @@
 	const placementLabel = $derived(
 		PLACEMENT_MODES.find((option) => option.id === placement)?.label ?? 'Placement'
 	);
+
+	function clampNumber(value: number, min: number, max: number) {
+		if (!Number.isFinite(value)) return min;
+		return Math.min(max, Math.max(min, value));
+	}
+
+	function clampPlacementControls() {
+		placementRadius = clampNumber(placementRadius, placementRadiusMin, placementRadiusMax);
+		placementThreshold = clampNumber(placementThreshold, placementPercentMin, placementPercentMax);
+		placementSoftness = clampNumber(placementSoftness, placementPercentMin, placementPercentMax);
+	}
 </script>
 
 <div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
@@ -67,6 +78,8 @@
 			step="1"
 			bind:value={placementRadius}
 			disabled={!supportsPlacement || placement !== 'adaptive'}
+			onblur={clampPlacementControls}
+			onchange={clampPlacementControls}
 		/>
 		<span
 			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
@@ -96,6 +109,8 @@
 			step="1"
 			bind:value={placementThreshold}
 			disabled={!supportsPlacement || placement !== 'adaptive'}
+			onblur={clampPlacementControls}
+			onchange={clampPlacementControls}
 		/>
 		<span
 			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
@@ -125,6 +140,8 @@
 			step="1"
 			bind:value={placementSoftness}
 			disabled={!supportsPlacement || placement !== 'adaptive'}
+			onblur={clampPlacementControls}
+			onchange={clampPlacementControls}
 		/>
 		<span
 			class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
