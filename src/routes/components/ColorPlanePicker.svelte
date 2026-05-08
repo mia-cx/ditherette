@@ -5,10 +5,11 @@
 	type Props = {
 		fieldBackground: string;
 		handleStyle: string;
+		handlePoint: PlanePoint;
 		onPickPlane: (point: PlanePoint) => void;
 	};
 
-	let { fieldBackground, handleStyle, onPickPlane }: Props = $props();
+	let { fieldBackground, handleStyle, handlePoint, onPickPlane }: Props = $props();
 	let pendingPoint: PlanePoint | null = null;
 	let commitFrame: number | null = null;
 
@@ -22,16 +23,7 @@
 	function pickPlane(event: PointerEvent) {
 		const target = event.currentTarget as HTMLElement;
 		const handle = target.querySelector<HTMLElement>('[data-plane-handle]');
-		const update = (next: PointerEvent) => {
-			const rect = target.getBoundingClientRect();
-			const point = {
-				x: Math.min(1, Math.max(0, (next.clientX - rect.left) / rect.width)),
-				y: Math.min(1, Math.max(0, (next.clientY - rect.top) / rect.height))
-			};
-			handle?.style.setProperty('left', `${point.x * 100}%`);
-			handle?.style.setProperty('top', `${point.y * 100}%`);
-			scheduleCommit(point);
-		};
+		const update = (next: PointerEvent) => updateHandle(handle, pointFromPointer(next, target));
 		const pointerId = event.pointerId;
 		let cleanedUp = false;
 		const cleanup = (next?: PointerEvent) => {
@@ -52,6 +44,39 @@
 		window.addEventListener('pointercancel', cleanup);
 	}
 
+	function handlePlaneKeydown(event: KeyboardEvent) {
+		const deltas: Record<string, PlanePoint> = {
+			ArrowLeft: { x: -1, y: 0 },
+			ArrowRight: { x: 1, y: 0 },
+			ArrowUp: { x: 0, y: -1 },
+			ArrowDown: { x: 0, y: 1 }
+		};
+		const delta = deltas[event.key];
+		if (!delta) return;
+		event.preventDefault();
+		const step = event.shiftKey ? 0.1 : 0.01;
+		const target = event.currentTarget as HTMLElement;
+		const handle = target.querySelector<HTMLElement>('[data-plane-handle]');
+		updateHandle(handle, {
+			x: clamp(handlePoint.x + delta.x * step, 0, 1),
+			y: clamp(handlePoint.y + delta.y * step, 0, 1)
+		});
+	}
+
+	function updateHandle(handle: HTMLElement | null, point: PlanePoint) {
+		handle?.style.setProperty('left', `${point.x * 100}%`);
+		handle?.style.setProperty('top', `${point.y * 100}%`);
+		scheduleCommit(point);
+	}
+
+	function pointFromPointer(event: PointerEvent, target: HTMLElement) {
+		const rect = target.getBoundingClientRect();
+		return {
+			x: rect.width === 0 ? 0 : clamp((event.clientX - rect.left) / rect.width, 0, 1),
+			y: rect.height === 0 ? 0 : clamp((event.clientY - rect.top) / rect.height, 0, 1)
+		};
+	}
+
 	function cleanupPointer(target: HTMLElement, pointerId: number) {
 		if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
 		target.onpointermove = null;
@@ -70,14 +95,19 @@
 			if (point) onPickPlane(point);
 		});
 	}
+
+	function clamp(value: number, min: number, max: number) {
+		return Math.min(max, Math.max(min, value));
+	}
 </script>
 
 <div class="grid">
 	<button
 		type="button"
 		class="relative aspect-square min-h-52 touch-none overflow-hidden border border-border bg-transparent p-0"
-		aria-label="Color field"
+		aria-label="Color field. Arrow keys move the color stop."
 		onpointerdown={pickPlane}
+		onkeydown={handlePlaneKeydown}
 	>
 		<span class="absolute -inset-px" style="background: {fieldBackground};"></span>
 		<span

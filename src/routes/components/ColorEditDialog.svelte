@@ -103,12 +103,14 @@
 		if (picker === 'lightness') return lightnessPlaneBackground;
 		return huePlaneBackground;
 	});
-	const planeHandleStyle = $derived.by(() => {
-		if (usesHueLightnessPlane(picker))
-			return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.l}%;`;
-		if (picker === 'lightness') return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.s}%;`;
-		return `left: ${hsv.s}%; top: ${100 - hsv.v}%;`;
+	const planeHandlePoint = $derived.by(() => {
+		if (usesHueLightnessPlane(picker)) return { x: hsl.h / 360, y: 1 - hsl.l / 100 };
+		if (picker === 'lightness') return { x: hsl.h / 360, y: 1 - hsl.s / 100 };
+		return { x: hsv.s / 100, y: 1 - hsv.v / 100 };
 	});
+	const planeHandleStyle = $derived(
+		`left: ${planeHandlePoint.x * 100}%; top: ${planeHandlePoint.y * 100}%;`
+	);
 	const triangleHandleStyle = $derived.by(() => {
 		const point = trianglePointForHsv(hsv);
 		return `left: ${point.x}%; top: ${point.y}%;`;
@@ -664,6 +666,7 @@
 				<ColorPlanePicker
 					fieldBackground={planeBackground}
 					handleStyle={planeHandleStyle}
+					handlePoint={planeHandlePoint}
 					onPickPlane={pickFromPlane}
 				/>
 			{/if}
