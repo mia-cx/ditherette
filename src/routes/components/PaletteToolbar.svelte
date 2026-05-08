@@ -33,9 +33,9 @@
 
 	let open = $state(false);
 
-	const actionPalette = $derived(
-		palettes.find((palette) => palette.name === preset) ?? currentPalette
-	);
+	function keepPaletteActionSeparate(event: Event) {
+		event.stopPropagation();
+	}
 </script>
 
 <div class="grid gap-1.5">
@@ -57,48 +57,56 @@
 		>
 			<div class="min-h-0 overflow-y-auto py-1">
 				{#each palettes as palette (palette.name)}
-					<SelectItem
-						value={palette.name}
-						label={palette.name}
-						class="min-w-0 items-start py-3 pr-8 pl-3"
-					>
-						<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden">
-							<span class="truncate text-sm font-medium text-foreground">{palette.name}</span>
-							<PaletteSwatchStrip colors={palette.colors} />
+					<div class="grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
+						<SelectItem
+							value={palette.name}
+							label={palette.name}
+							class="min-w-0 items-start py-3 pr-8 pl-3"
+						>
+							<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden">
+								<span class="truncate text-sm font-medium text-foreground">{palette.name}</span>
+								<PaletteSwatchStrip colors={palette.colors} />
+							</span>
+						</SelectItem>
+						<span class="flex items-center gap-1 pr-2">
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								aria-label="Duplicate {palette.name}"
+								onpointerdown={keepPaletteActionSeparate}
+								onclick={(event) => {
+									keepPaletteActionSeparate(event);
+									onDuplicatePalette(palette);
+									open = false;
+								}}
+							>
+								<CopyIcon weight="bold" />
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon-xs"
+								class="hover:text-destructive"
+								aria-label="Delete {palette.name}"
+								disabled={palette.source === 'wplace'}
+								onpointerdown={keepPaletteActionSeparate}
+								onclick={(event) => {
+									keepPaletteActionSeparate(event);
+									onDeletePalette(palette);
+									open = false;
+								}}
+							>
+								<TrashIcon weight="bold" />
+							</Button>
 						</span>
-					</SelectItem>
+					</div>
 				{/each}
 			</div>
 			<div class="border-t border-border p-2">
-				<div class="grid grid-cols-2 gap-2">
-					<Button
-						variant="outline"
-						aria-label="Duplicate {actionPalette.name}"
-						onclick={() => {
-							onDuplicatePalette(actionPalette);
-							open = false;
-						}}
-					>
-						<CopyIcon weight="bold" />
-						Duplicate
-					</Button>
-					<Button
-						variant="outline"
-						class="hover:text-destructive"
-						aria-label="Delete {actionPalette.name}"
-						disabled={actionPalette.source === 'wplace'}
-						onclick={() => {
-							onDeletePalette(actionPalette);
-							open = false;
-						}}
-					>
-						<TrashIcon weight="bold" />
-						Delete
-					</Button>
-				</div>
 				<Button
 					variant="ghost"
-					class="mt-2 w-full justify-start"
+					class="w-full justify-start"
 					onclick={() => {
 						onNewPalette();
 						open = false;
