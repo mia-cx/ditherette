@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -15,6 +14,7 @@
 		DialogTitle
 	} from '$lib/components/ui/dialog';
 	import { paletteEnabledKey } from '$lib/palette/wplace';
+	import { cn } from '$lib/utils';
 	import {
 		activePalette,
 		activePaletteName,
@@ -91,6 +91,49 @@
 	const matteLabel = $derived(
 		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
 	);
+
+	type TagSelectionSource = 'kind' | 'tag';
+
+	function colorHasPaletteTag(color: PaletteColor, source: TagSelectionSource, tag: string) {
+		return source === 'kind' ? color.kind === tag : color.tags?.includes(tag) === true;
+	}
+
+	function tagColorKeys(source: TagSelectionSource, tag: string) {
+		return currentPalette.colors
+			.filter((color) => colorHasPaletteTag(color, source, tag))
+			.map((color) => color.key);
+	}
+
+	function tagIsFullySelected(source: TagSelectionSource, tag: string) {
+		const keys = tagColorKeys(source, tag);
+		return keys.length > 0 && keys.every((key) => selectedColorKeys[key] === true);
+	}
+
+	function toggleTagSelection(source: TagSelectionSource, tag: string) {
+		const keys = tagColorKeys(source, tag);
+		if (!keys.length) return;
+		const nextSelected = { ...selectedColorKeys };
+		if (keys.every((key) => selectedColorKeys[key] === true)) {
+			for (const key of keys) delete nextSelected[key];
+		} else {
+			for (const key of keys) nextSelected[key] = true;
+		}
+		selectedColorKeys = nextSelected;
+	}
+
+	function tagButtonClass(selected: boolean, variant: 'default' | 'outline' | 'secondary') {
+		return cn(
+			'inline-flex h-5 w-fit shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-none border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
+			selected && 'border-primary bg-primary text-primary-foreground hover:bg-primary/90',
+			!selected &&
+				variant === 'default' &&
+				'border-primary bg-primary text-primary-foreground hover:bg-primary/80',
+			!selected &&
+				variant === 'secondary' &&
+				'border-border bg-secondary text-secondary-foreground hover:bg-secondary/80',
+			!selected && variant === 'outline' && 'border-border text-foreground hover:bg-muted'
+		);
+	}
 
 	$effect(() => {
 		activePaletteName.set(preset);
@@ -649,19 +692,37 @@
 	{/if}
 {/snippet}
 
+{#snippet tagButton(
+	source: TagSelectionSource,
+	tag: string,
+	label: string,
+	variant: 'default' | 'outline' | 'secondary' = 'outline'
+)}
+	{@const selected = tagIsFullySelected(source, tag)}
+	<button
+		type="button"
+		class={tagButtonClass(selected, variant)}
+		aria-pressed={selected}
+		aria-label="{selected ? 'Deselect' : 'Select'} all {label} colors"
+		onclick={() => toggleTagSelection(source, tag)}
+	>
+		{label}
+	</button>
+{/snippet}
+
 {#snippet kindBadge(color: PaletteColor)}
 	<div class="flex flex-wrap gap-1">
 		{#if color.kind === 'transparent'}
-			<Badge variant="outline">Transparent</Badge>
+			{@render tagButton('kind', color.kind, 'Transparent')}
 		{:else if color.kind === 'premium'}
-			<Badge variant="secondary">Premium</Badge>
+			{@render tagButton('kind', color.kind, 'Premium', 'secondary')}
 		{:else if color.kind === 'custom'}
-			<Badge>Custom</Badge>
+			{@render tagButton('kind', color.kind, 'Custom', 'default')}
 		{:else}
-			<Badge variant="outline">Free</Badge>
+			{@render tagButton('kind', color.kind, 'Free')}
 		{/if}
 		{#each color.tags ?? [] as tag (tag)}
-			<Badge variant="outline">{tag}</Badge>
+			{@render tagButton('tag', tag, tag)}
 		{/each}
 	</div>
 {/snippet}
