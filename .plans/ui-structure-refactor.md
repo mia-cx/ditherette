@@ -16,13 +16,13 @@ Address the UI-domain review findings from #4 as an informed refactor, not a pil
 - Extract UI/domain helper code when the component is currently carrying unrelated responsibilities.
 - Keep current visual behavior unless a review finding requires otherwise.
 
-### Out of scope
+### Out of scope / deferred work
 
-- Reunifying dither preview with the production quantizer.
-- Processing-cache/export hash redesign.
-- Large color grading/scopes work (#5).
-- Full workspace/dockable editor UI.
-- Palette domain behavior fixes that require store/pipeline changes beyond component structure.
+- **Reunifying dither preview with the production quantizer** → deferred to #6. This slice may isolate the preview behind cleaner component/helper boundaries, but it should not change production quantization behavior or make previews call the production pipeline yet.
+- **Processing-cache/export hash redesign** → deferred to #7, after #6. Export freshness spans processing cache and persistence semantics, so it should be fixed after the pipeline layer is cleaned up.
+- **Large color grading/scopes work** → deferred to #5. Histograms, waveforms, vectorscopes, curves, wheels, levels, and Lumetri-style grading are product-expansion work, not part of this structural cleanup.
+- **Full workspace/dockable editor UI** → planned but not filed as a dedicated implementation issue yet. This slice should make panels easier to move later, but it should not add docking, floating windows, or a Photoshop/Photopea-style shell.
+- **Deep PalettePanel behavior hardening** → only low-risk structure/accessibility fixes belong here. Destructive/import correctness fixes that require state-flow changes should be split into a follow-up issue if they grow beyond safe extraction.
 
 ## Work order
 
