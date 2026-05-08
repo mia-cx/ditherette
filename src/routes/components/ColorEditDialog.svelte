@@ -86,15 +86,13 @@
 	const rgb = $derived(rgbFromHex(hex) ?? hsvToRgb(hsv));
 	const hueRailBackground =
 		'linear-gradient(to right, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
-	const verticalHueRailBackground =
-		'linear-gradient(to bottom, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
 	const hueWheelBackground =
 		'conic-gradient(from 90deg, #ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)';
 	const huePlaneBackground = $derived(
 		`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`
 	);
 	const saturationPlaneBackground = $derived(
-		`linear-gradient(to top, #000, transparent), linear-gradient(to right, hsl(0 ${hsv.s}% 50%), hsl(60 ${hsv.s}% 50%), hsl(120 ${hsv.s}% 50%), hsl(180 ${hsv.s}% 50%), hsl(240 ${hsv.s}% 50%), hsl(300 ${hsv.s}% 50%), hsl(360 ${hsv.s}% 50%))`
+		`linear-gradient(to bottom, #fff, transparent 50%, #000), linear-gradient(to right, hsl(0 ${hsl.s}% 50%), hsl(60 ${hsl.s}% 50%), hsl(120 ${hsl.s}% 50%), hsl(180 ${hsl.s}% 50%), hsl(240 ${hsl.s}% 50%), hsl(300 ${hsl.s}% 50%), hsl(360 ${hsl.s}% 50%))`
 	);
 	const lightnessPlaneBackground = $derived(
 		`linear-gradient(to top, hsl(0 0% ${hsl.l}%), transparent), linear-gradient(to right, hsl(0 0% ${hsl.l}%), hsl(0 100% ${hsl.l}%), hsl(60 100% ${hsl.l}%), hsl(120 100% ${hsl.l}%), hsl(180 100% ${hsl.l}%), hsl(240 100% ${hsl.l}%), hsl(300 100% ${hsl.l}%), hsl(360 100% ${hsl.l}%))`
@@ -108,7 +106,7 @@
 		return huePlaneBackground;
 	});
 	const planeHandleStyle = $derived.by(() => {
-		if (picker === 'saturation') return `left: ${(hsv.h / 360) * 100}%; top: ${100 - hsv.v}%;`;
+		if (picker === 'saturation') return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.l}%;`;
 		if (picker === 'lightness') return `left: ${(hsl.h / 360) * 100}%; top: ${100 - hsl.s}%;`;
 		return `left: ${hsv.s}%; top: ${100 - hsv.v}%;`;
 	});
@@ -312,11 +310,11 @@
 			return [
 				{
 					label: 'S',
-					value: hsv.s,
+					value: hsl.s,
 					min: 0,
 					max: 100,
-					background: `linear-gradient(to right, hsl(${hsv.h} 0% 50%), hsl(${hsv.h} 100% 50%))`,
-					onChange: (value) => updateHsv({ s: value })
+					background: `linear-gradient(to right, hsl(${hsl.h} 0% ${hsl.l}%), hsl(${hsl.h} 100% ${hsl.l}%))`,
+					onChange: (value) => updateHsl({ s: value })
 				}
 			];
 		if (picker === 'lightness')
@@ -340,7 +338,7 @@
 			const x = clamp((next.clientX - rect.left) / rect.width, 0, 1);
 			const y = clamp((next.clientY - rect.top) / rect.height, 0, 1);
 			if (picker === 'saturation') {
-				updateHsv({ h: x * 360, v: (1 - y) * 100 });
+				updateHsl({ h: x * 360, l: (1 - y) * 100 });
 				return;
 			}
 			if (picker === 'lightness') {
@@ -348,15 +346,6 @@
 				return;
 			}
 			updateHsv({ s: x * 100, v: (1 - y) * 100 });
-		};
-		captureDrag(event, target, update);
-	}
-
-	function pickFromVerticalHueRail(event: PointerEvent) {
-		const target = event.currentTarget as HTMLElement;
-		const update = (next: PointerEvent) => {
-			const rect = target.getBoundingClientRect();
-			updateHsv({ h: clamp((next.clientY - rect.top) / rect.height, 0, 1) * 360 });
 		};
 		captureDrag(event, target, update);
 	}
@@ -707,10 +696,7 @@
 				<ColorPlanePicker
 					fieldBackground={planeBackground}
 					handleStyle={planeHandleStyle}
-					hueRailBackground={verticalHueRailBackground}
-					hue={hsv.h}
 					onPickPlane={pickFromPlane}
-					onPickHueRail={pickFromVerticalHueRail}
 				/>
 			{/if}
 
