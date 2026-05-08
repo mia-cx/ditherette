@@ -128,7 +128,7 @@
 		{ label: 'h', value: `${oklch.h.toFixed(0)}°` }
 	]);
 
-	$effect(() => {
+	$effect.pre(() => {
 		if (syncingFromPicker) return;
 		const nextRgb = rgbFromHex(hex);
 		if (!nextRgb) return;
