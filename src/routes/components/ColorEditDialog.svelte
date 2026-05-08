@@ -328,66 +328,20 @@
 		return [];
 	}
 
-	function pickFromPlane(event: PointerEvent) {
-		const target = event.currentTarget as HTMLElement;
-		const update = (next: PointerEvent) => {
-			const rect = target.getBoundingClientRect();
-			const x = clamp((next.clientX - rect.left) / rect.width, 0, 1);
-			const y = clamp((next.clientY - rect.top) / rect.height, 0, 1);
-			if (picker === 'saturation') {
-				updateHsl({ h: x * 360, l: (1 - y) * 100 });
-				return;
-			}
-			if (picker === 'lightness') {
-				updateHsl({ h: x * 360, s: (1 - y) * 100 });
-				return;
-			}
-			updateHsv({ s: x * 100, v: (1 - y) * 100 });
-		};
-		captureDrag(event, target, update);
+	function pickFromPlane(point: { x: number; y: number }) {
+		if (picker === 'saturation') {
+			updateHsl({ h: point.x * 360, l: (1 - point.y) * 100 });
+			return;
+		}
+		if (picker === 'lightness') {
+			updateHsl({ h: point.x * 360, s: (1 - point.y) * 100 });
+			return;
+		}
+		updateHsv({ s: point.x * 100, v: (1 - point.y) * 100 });
 	}
 
-	function pickFromWheel(event: PointerEvent) {
-		const target = event.currentTarget as HTMLElement;
-		const dragMode = wheelDragMode(event, target);
-		const update = (next: PointerEvent) => {
-			const point = wheelPoint(next, target);
-			if (dragMode === 'hue') {
-				updateHsv({ h: hueFromWheelPoint(point.x, point.y) });
-				return;
-			}
-			updateHsv(hsvFromTrianglePoint(point.x, point.y, target.getBoundingClientRect().width));
-		};
-		captureDrag(event, target, update);
-	}
-
-	function captureDrag(
-		event: PointerEvent,
-		target: HTMLElement,
-		update: (event: PointerEvent) => void
-	) {
-		target.setPointerCapture(event.pointerId);
-		update(event);
-		target.onpointermove = update;
-		target.onpointerup = () => (target.onpointermove = null);
-	}
-
-	function wheelDragMode(event: PointerEvent, target: HTMLElement): 'hue' | 'triangle' {
-		const point = wheelPoint(event, target);
-		const outer = target.getBoundingClientRect().width / 2;
-		return Math.hypot(point.x, point.y) >= outer * 0.74 ? 'hue' : 'triangle';
-	}
-
-	function wheelPoint(event: PointerEvent, target: HTMLElement) {
-		const rect = target.getBoundingClientRect();
-		return {
-			x: event.clientX - (rect.left + rect.width / 2),
-			y: event.clientY - (rect.top + rect.height / 2)
-		};
-	}
-
-	function hueFromWheelPoint(x: number, y: number) {
-		return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+	function pickFromWheelTriangle(point: Point, width: number) {
+		updateHsv(hsvFromTrianglePoint(point.x, point.y, width));
 	}
 
 	function wheelPointForHue(hue: number) {
@@ -676,7 +630,8 @@
 					hue={hsv.h}
 					hueHandleStyle={hueWheelHandleStyle}
 					{triangleHandleStyle}
-					onPick={pickFromWheel}
+					onPickHue={(hue) => updateHsv({ h: hue })}
+					onPickTriangle={pickFromWheelTriangle}
 				/>
 			{:else if picker === 'oklab'}
 				<ColorSpacePreviewPicker

@@ -9,11 +9,13 @@
 		onChange: (value: number) => void;
 	};
 
+	type DragHandle = { label: string; percent: number };
 	type Props = {
 		channels: Channel[];
 	};
 
 	let { channels }: Props = $props();
+	let dragHandle = $state<DragHandle | null>(null);
 
 	function pickChannel(event: PointerEvent, channel: Channel) {
 		const target = event.currentTarget as HTMLElement;
@@ -22,15 +24,20 @@
 			const rect = target.getBoundingClientRect();
 			const ratio = Math.min(1, Math.max(0, (next.clientX - rect.left) / rect.width));
 			const raw = channel.min + ratio * (channel.max - channel.min);
+			dragHandle = { label: channel.label, percent: ratio * 100 };
 			channel.onChange(Math.round(raw / step) * step);
 		};
 		target.setPointerCapture(event.pointerId);
 		update(event);
 		target.onpointermove = update;
-		target.onpointerup = () => (target.onpointermove = null);
+		target.onpointerup = () => {
+			target.onpointermove = null;
+			queueMicrotask(() => (dragHandle = null));
+		};
 	}
 
 	function percent(channel: Channel) {
+		if (dragHandle?.label === channel.label) return dragHandle.percent;
 		return ((channel.value - channel.min) / (channel.max - channel.min)) * 100;
 	}
 </script>
