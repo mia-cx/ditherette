@@ -1,6 +1,6 @@
 import type { CropRect, FitMode, ResizeId } from './types';
 import { unpremultiplySample } from './compositing';
-import { assertOutputDimensions } from './schemas';
+import { assertOutputDimensions, assertSourceDimensions } from './schemas';
 
 type Rect = { x: number; y: number; width: number; height: number };
 type ResizePlan = { source: Rect; target: Rect };
@@ -35,7 +35,7 @@ function resizePlan(
 	crop?: CropRect
 ): ResizePlan {
 	assertOutputDimensions(outWidth, outHeight, 'Resize output');
-	assertOutputDimensions(sourceWidth, sourceHeight, 'Resize source');
+	assertSourceDimensions(sourceWidth, sourceHeight, 'Resize source');
 	const base = clampCrop(sourceWidth, sourceHeight, crop);
 	const fullTarget = { x: 0, y: 0, width: outWidth, height: outHeight };
 	if (fit === 'stretch') return { source: base, target: fullTarget };

@@ -3,12 +3,53 @@ import {
 	MAX_OUTPUT_SIDE,
 	MAX_SOURCE_PIXELS,
 	MAX_SOURCE_SIDE,
+	type AlphaMode,
+	type ColorSpaceId,
+	type DitherId,
+	type DitherPlacement,
+	type DitherSettings,
 	type EnabledPaletteColor,
+	type FitMode,
+	type OutputSettings,
 	type ProcessedImage,
+	type ProcessingSettings,
+	type ResizeId,
 	type SourceImageRecord,
 	type WorkerRequest,
 	type WorkerResponse
 } from './types';
+
+const FIT_MODES = ['stretch', 'contain', 'cover'] as const satisfies readonly FitMode[];
+const RESIZE_MODES = [
+	'nearest',
+	'bilinear',
+	'lanczos3',
+	'area'
+] as const satisfies readonly ResizeId[];
+const ALPHA_MODES = ['preserve', 'premultiplied', 'matte'] as const satisfies readonly AlphaMode[];
+const DITHER_IDS = [
+	'none',
+	'bayer-2',
+	'bayer-4',
+	'bayer-8',
+	'bayer-16',
+	'floyd-steinberg',
+	'sierra',
+	'sierra-lite',
+	'random'
+] as const satisfies readonly DitherId[];
+const PLACEMENT_MODES = ['everywhere', 'adaptive'] as const satisfies readonly DitherPlacement[];
+const COLOR_SPACES = [
+	'oklab',
+	'srgb',
+	'linear-rgb',
+	'weighted-rgb',
+	'weighted-rgb-601',
+	'weighted-rgb-709',
+	'cielab',
+	'oklch'
+] as const satisfies readonly ColorSpaceId[];
+const COVERAGE_MODES = ['full', 'transitions', 'edges'] as const;
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === 'object';
@@ -21,6 +62,17 @@ function assertFinitePositiveInteger(value: unknown, label: string, max = Number
 	return value as number;
 }
 
+function assertFiniteNumber(value: unknown, label: string) {
+	if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${label} is invalid.`);
+	return value;
+}
+
+function assertFiniteNonNegativeNumber(value: unknown, label: string) {
+	const number = assertFiniteNumber(value, label);
+	if (number < 0) throw new Error(`${label} cannot be negative.`);
+	return number;
+}
+
 function assertFiniteTimestamp(value: unknown, label: string) {
 	if (!Number.isFinite(value) || (value as number) < 0) throw new Error(`${label} is invalid.`);
 	return value as number;
@@ -28,6 +80,22 @@ function assertFiniteTimestamp(value: unknown, label: string) {
 
 function assertString(value: unknown, label: string) {
 	if (typeof value !== 'string') throw new Error(`${label} must be a string.`);
+	return value;
+}
+
+function assertBoolean(value: unknown, label: string) {
+	if (typeof value !== 'boolean') throw new Error(`${label} must be a boolean.`);
+	return value;
+}
+
+function assertOneOf<const T extends readonly string[]>(
+	value: unknown,
+	allowed: T,
+	label: string
+): T[number] {
+	if (typeof value !== 'string' || !allowed.includes(value)) {
+		throw new Error(`${label} is invalid.`);
+	}
 	return value;
 }
 
@@ -47,6 +115,77 @@ export function assertSourceDimensions(width: unknown, height: unknown, label = 
 		throw new Error(`${label} exceeds the maximum source pixel count.`);
 	}
 	return { width: safeWidth, height: safeHeight };
+}
+
+function assertCropRect(value: unknown): OutputSettings['crop'] {
+	if (value === undefined) return undefined;
+	if (!isObject(value)) throw new Error('Worker output crop is invalid.');
+	return {
+		x: assertFiniteNumber(value.x, 'Worker output crop x'),
+		y: assertFiniteNumber(value.y, 'Worker output crop y'),
+		width: assertFinitePositiveInteger(value.width, 'Worker output crop width', MAX_SOURCE_SIDE),
+		height: assertFinitePositiveInteger(value.height, 'Worker output crop height', MAX_SOURCE_SIDE)
+	};
+}
+
+function validateOutputSettings(value: unknown): OutputSettings {
+	if (!isObject(value)) throw new Error('Worker output settings are invalid.');
+	const { width, height } = assertOutputDimensions(value.width, value.height, 'Worker output');
+	const alphaThreshold = assertFiniteNumber(value.alphaThreshold, 'Worker output alpha threshold');
+	if (alphaThreshold < 0 || alphaThreshold > 255) {
+		throw new Error('Worker output alpha threshold must be between 0 and 255.');
+	}
+	return {
+		width,
+		height,
+		lockAspect: assertBoolean(value.lockAspect, 'Worker output aspect lock'),
+		fit: assertOneOf(value.fit, FIT_MODES, 'Worker output fit mode'),
+		resize: assertOneOf(value.resize, RESIZE_MODES, 'Worker output resize mode'),
+		alphaMode: assertOneOf(value.alphaMode, ALPHA_MODES, 'Worker output alpha mode'),
+		alphaThreshold,
+		matteKey: assertString(value.matteKey, 'Worker output matte key'),
+		autoSizeOnUpload: assertBoolean(value.autoSizeOnUpload, 'Worker output auto size flag'),
+		scaleFactor: assertFiniteNonNegativeNumber(value.scaleFactor, 'Worker output scale factor'),
+		crop: assertCropRect(value.crop)
+	};
+}
+
+function validateDitherSettings(value: unknown): DitherSettings {
+	if (!isObject(value)) throw new Error('Worker dither settings are invalid.');
+	const coverage = value.coverage;
+	return {
+		algorithm: assertOneOf(value.algorithm, DITHER_IDS, 'Worker dither algorithm'),
+		strength: assertFiniteNonNegativeNumber(value.strength, 'Worker dither strength'),
+		placement: assertOneOf(value.placement, PLACEMENT_MODES, 'Worker dither placement'),
+		placementRadius: assertFiniteNonNegativeNumber(
+			value.placementRadius,
+			'Worker dither placement radius'
+		),
+		placementThreshold: assertFiniteNonNegativeNumber(
+			value.placementThreshold,
+			'Worker dither placement threshold'
+		),
+		placementSoftness: assertFiniteNonNegativeNumber(
+			value.placementSoftness,
+			'Worker dither placement softness'
+		),
+		serpentine: assertBoolean(value.serpentine, 'Worker dither serpentine flag'),
+		seed: assertFiniteNumber(value.seed, 'Worker dither seed'),
+		useColorSpace: assertBoolean(value.useColorSpace, 'Worker dither color-space flag'),
+		coverage:
+			coverage === undefined
+				? undefined
+				: assertOneOf(coverage, COVERAGE_MODES, 'Worker dither coverage')
+	};
+}
+
+function validateProcessingSettings(value: unknown): ProcessingSettings {
+	if (!isObject(value)) throw new Error('Worker request settings are invalid.');
+	return {
+		output: validateOutputSettings(value.output),
+		dither: validateDitherSettings(value.dither),
+		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker color space')
+	};
 }
 
 export function assertPaletteForIndexedOutput(palette: unknown): EnabledPaletteColor[] {
@@ -136,14 +275,11 @@ export function validateWorkerRequest(value: unknown): WorkerRequest {
 	const id = value.id as number;
 	if (!(value.source instanceof ImageData))
 		throw new Error('Worker request source image is invalid.');
-	if (!isObject(value.settings)) throw new Error('Worker request settings are invalid.');
-	if (!isObject(value.settings.output)) throw new Error('Worker output settings are invalid.');
-	if (!isObject(value.settings.dither)) throw new Error('Worker dither settings are invalid.');
 	const palette = assertPaletteForIndexedOutput(value.palette);
 	return {
 		id,
 		source: value.source,
-		settings: value.settings as WorkerRequest['settings'],
+		settings: validateProcessingSettings(value.settings),
 		palette,
 		settingsHash: assertString(value.settingsHash, 'Worker settings hash')
 	};
