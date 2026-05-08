@@ -702,22 +702,78 @@
 
 			<div class="grid gap-3 text-xs">
 				<div class="grid grid-cols-2 gap-x-5 gap-y-1">
-					{@render numberInput('R', rgb.r, 0, 255, (value) =>
-						setColorFromRgb({ ...rgb, r: value })
+					{@render numberInput(
+						'R',
+						rgb.r,
+						0,
+						255,
+						(value) => setColorFromRgb({ ...rgb, r: value }),
+						1,
+						0,
+						'col-start-1 row-start-1'
 					)}
-					{@render numberInput('H', hsl.h, 0, 360, (value) => updateHsl({ h: value }))}
-					{@render numberInput('G', rgb.g, 0, 255, (value) =>
-						setColorFromRgb({ ...rgb, g: value })
+					{@render numberInput(
+						'G',
+						rgb.g,
+						0,
+						255,
+						(value) => setColorFromRgb({ ...rgb, g: value }),
+						1,
+						0,
+						'col-start-1 row-start-2'
 					)}
-					{@render numberInput('S', hsl.s, 0, 100, (value) => updateHsl({ s: value }))}
-					{@render numberInput('B', rgb.b, 0, 255, (value) =>
-						setColorFromRgb({ ...rgb, b: value })
+					{@render numberInput(
+						'B',
+						rgb.b,
+						0,
+						255,
+						(value) => setColorFromRgb({ ...rgb, b: value }),
+						1,
+						0,
+						'col-start-1 row-start-3'
 					)}
-					{@render numberInput('L', hsl.l, 0, 100, (value) => updateHsl({ l: value }))}
+					{@render numberInput(
+						'H',
+						hsl.h,
+						0,
+						360,
+						(value) => updateHsl({ h: value }),
+						1,
+						0,
+						'col-start-2 row-start-1'
+					)}
+					{@render numberInput(
+						'S',
+						hsl.s,
+						0,
+						100,
+						(value) => updateHsl({ s: value }),
+						1,
+						0,
+						'col-start-2 row-start-2'
+					)}
+					{@render numberInput(
+						'L',
+						hsl.l,
+						0,
+						100,
+						(value) => updateHsl({ l: value }),
+						1,
+						0,
+						'col-start-2 row-start-3'
+					)}
 				</div>
 				<div class="grid grid-cols-2 gap-x-5 gap-y-1">
-					{@render numberInput('L', oklab.l, 0, 1, (value) => updateOklab({ l: value }), 0.001, 3)}
-					{@render numberInput('L', oklch.l, 0, 1, (value) => updateOklch({ l: value }), 0.001, 3)}
+					{@render numberInput(
+						'L',
+						oklab.l,
+						0,
+						1,
+						(value) => updateOklab({ l: value }),
+						0.001,
+						3,
+						'col-start-1 row-start-1'
+					)}
 					{@render numberInput(
 						'a',
 						oklab.a,
@@ -725,16 +781,8 @@
 						0.4,
 						(value) => updateOklab({ a: value }),
 						0.001,
-						3
-					)}
-					{@render numberInput(
-						'C',
-						oklch.c,
-						0,
-						0.4,
-						(value) => updateOklch({ c: value }),
-						0.001,
-						3
+						3,
+						'col-start-1 row-start-2'
 					)}
 					{@render numberInput(
 						'b',
@@ -743,9 +791,39 @@
 						0.4,
 						(value) => updateOklab({ b: value }),
 						0.001,
-						3
+						3,
+						'col-start-1 row-start-3'
 					)}
-					{@render numberInput('H', oklch.h, 0, 360, (value) => updateOklch({ h: value }))}
+					{@render numberInput(
+						'L',
+						oklch.l,
+						0,
+						1,
+						(value) => updateOklch({ l: value }),
+						0.001,
+						3,
+						'col-start-2 row-start-1'
+					)}
+					{@render numberInput(
+						'C',
+						oklch.c,
+						0,
+						0.4,
+						(value) => updateOklch({ c: value }),
+						0.001,
+						3,
+						'col-start-2 row-start-2'
+					)}
+					{@render numberInput(
+						'H',
+						oklch.h,
+						0,
+						360,
+						(value) => updateOklch({ h: value }),
+						1,
+						0,
+						'col-start-2 row-start-3'
+					)}
 				</div>
 				<div class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
 					<Label for="palette-color-hex" class="text-xs text-muted-foreground">Hex</Label>
@@ -797,9 +875,10 @@
 	max: number,
 	onChange: (value: number) => void,
 	step = 1,
-	digits = 0
+	digits = 0,
+	wrapperClass = ''
 )}
-	<label class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-1">
+	<label class="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-1 {wrapperClass}">
 		<span class="text-muted-foreground">{label}</span>
 		<input
 			class="h-7 border border-input bg-background px-1 text-right font-mono text-xs tabular-nums"
