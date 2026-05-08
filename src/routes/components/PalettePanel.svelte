@@ -488,7 +488,7 @@
 			<thead class="sticky top-9 z-10 border-b border-border bg-muted/80 backdrop-blur">
 				<tr class="text-muted-foreground">
 					<th class="w-8 p-1.5"><span class="sr-only">Selected</span></th>
-					<th class="w-10 p-1.5 text-left font-medium">Swatch</th>
+					<th class="w-8 p-1.5"><span class="sr-only">Swatch</span></th>
 					<th class="w-8 p-1.5"><span class="sr-only">Visibility</span></th>
 					<th class="p-1.5 text-left font-medium">Name</th>
 					<th class="p-1.5 text-left font-medium">Hex</th>
