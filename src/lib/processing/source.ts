@@ -77,12 +77,18 @@ export async function restorePersistedImages() {
 	try {
 		decoded = await decodeBlob(source.blob);
 	} catch (error) {
+		const restoreError = new Error(
+			`Could not restore saved source image: ${errorMessage(error, 'decode failed')}`,
+			{ cause: error }
+		);
 		cancelProcessing();
 		clearInMemoryImageState();
-		await clearPersistedImages();
-		throw new Error(
-			`Could not restore saved source image: ${errorMessage(error, 'decode failed')}`
-		);
+		try {
+			await clearPersistedImages();
+		} catch {
+			// Best effort: do not mask the original decode failure.
+		}
+		throw restoreError;
 	}
 
 	setSourceRecord(source, decoded.imageData);
@@ -93,7 +99,11 @@ export async function restorePersistedImages() {
 		else if (processed) await clearPersistedProcessedImage();
 	} catch (error) {
 		processedImage.set(undefined);
-		await clearPersistedProcessedImage();
+		try {
+			await clearPersistedProcessedImage();
+		} catch {
+			// Best effort: recovery should still schedule fresh processing.
+		}
 		processingError.set(
 			`Could not restore saved output; it will be regenerated. ${errorMessage(error, '')}`.trim()
 		);
@@ -104,6 +114,6 @@ export async function restorePersistedImages() {
 
 export async function clearAllImageData() {
 	cancelProcessing();
-	await clearPersistedImages();
 	clearInMemoryImageState();
+	await clearPersistedImages();
 }
