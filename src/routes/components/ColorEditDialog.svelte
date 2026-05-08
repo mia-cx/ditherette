@@ -10,6 +10,7 @@
 	} from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { cleanPaletteTags } from '$lib/stores/app';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import ColorPlanePicker from './ColorPlanePicker.svelte';
 	import ColorSliderPicker from './ColorSliderPicker.svelte';
@@ -441,9 +442,9 @@
 	}
 
 	function addTag() {
-		const next = tagDraft.trim();
-		if (!next || tags.includes(next)) return;
-		tags = [...tags, next];
+		const next = cleanPaletteTags([...tags, tagDraft]);
+		if (next.length === tags.length) return;
+		tags = next;
 		tagDraft = '';
 	}
 
@@ -851,7 +852,10 @@
 			{max}
 			{step}
 			value={value.toFixed(digits)}
-			onchange={(event) => onChange(event.currentTarget.valueAsNumber)}
+			onchange={(event) => {
+				const next = event.currentTarget.valueAsNumber;
+				if (Number.isFinite(next)) onChange(next);
+			}}
 		/>
 	</label>
 {/snippet}

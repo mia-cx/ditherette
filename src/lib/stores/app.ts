@@ -70,6 +70,9 @@ export const activePaletteName = persistentJSON<string>(
 );
 export const customPalettes = persistentJSON<Palette[]>('ditherette:custom-palettes', []);
 
+export const MAX_TAGS_PER_COLOR = 16;
+export const MAX_TAG_LENGTH = 32;
+
 export const paletteEnabled = persistentJSON<Record<string, boolean>>(
 	'ditherette:palette-enabled',
 	defaultEnabledState()
@@ -157,13 +160,16 @@ function uniquePaletteName(baseName: string) {
 	return `${name} ${suffix}`;
 }
 
-function cleanTags(tags: readonly string[] = []) {
-	return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+export function cleanPaletteTags(tags: readonly string[] = []) {
+	return [...new Set(tags.map((tag) => tag.trim().slice(0, MAX_TAG_LENGTH)).filter(Boolean))].slice(
+		0,
+		MAX_TAGS_PER_COLOR
+	);
 }
 
 function visibleCustomColor(name: string, hex: string, tags: readonly string[] = []): PaletteColor {
 	const key = normalizeHex(hex);
-	const clean = cleanTags(tags);
+	const clean = cleanPaletteTags(tags);
 	return { name: name.trim() || key, key, rgb: hexToRgb(key), kind: 'custom', tags: clean };
 }
 
@@ -315,10 +321,16 @@ export function deleteActivePaletteColors(keys: string[]) {
 	});
 }
 
+export function deleteCustomPalette(name: string) {
+	const custom = customPalettes.get();
+	if (!custom.some((palette) => palette.name === name))
+		throw new Error(`${name} is not a custom palette.`);
+	customPalettes.set(custom.filter((palette) => palette.name !== name));
+	if (activePaletteName.get() === name) activePaletteName.set(WPLACE_PALETTE_NAME);
+}
+
 export function deleteActiveCustomPalette() {
-	const palette = activeCustomPalette();
-	customPalettes.set(customPalettes.get().filter((item) => item.name !== palette.name));
-	activePaletteName.set(WPLACE_PALETTE_NAME);
+	deleteCustomPalette(activeCustomPalette().name);
 }
 
 export function previewCustomPaletteImport(value: unknown) {
@@ -428,7 +440,9 @@ function parseImportedColor(value: unknown, index: number): PaletteColor {
 	const hex = typeof record.key === 'string' ? record.key : record.hex;
 	if (typeof hex !== 'string') throw new Error(`Color ${index + 1} needs a hex key.`);
 	const tags = Array.isArray(record.tags)
-		? record.tags.filter((tag): tag is string => typeof tag === 'string')
+		? record.tags
+				.slice(0, MAX_TAGS_PER_COLOR)
+				.filter((tag): tag is string => typeof tag === 'string')
 		: [];
 	return visibleCustomColor(typeof record.name === 'string' ? record.name : '', hex, tags);
 }

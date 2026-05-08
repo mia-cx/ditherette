@@ -21,7 +21,7 @@
 		addColorToActivePalette,
 		createCustomPalette,
 		customPalettes,
-		deleteActiveCustomPalette,
+		deleteCustomPalette,
 		deleteActivePaletteColors,
 		duplicateActivePalette,
 		duplicateActivePaletteColor,
@@ -322,8 +322,7 @@
 			return;
 		}
 		if (!confirm(`Delete custom palette ${palette.name}?`)) return;
-		activePaletteName.set(palette.name);
-		withPaletteError(deleteActiveCustomPalette);
+		withPaletteError(() => deleteCustomPalette(palette.name));
 	}
 
 	function exportActivePalette() {

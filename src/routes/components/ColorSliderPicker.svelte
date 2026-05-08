@@ -79,7 +79,7 @@
 		event.preventDefault();
 		scheduleCommit({
 			channel,
-			value: clamp(channel.value + direction * (channel.step ?? 1), channel.min, channel.max)
+			value: snapValue(channel, channel.value + direction * (channel.step ?? 1))
 		});
 	}
 
@@ -109,9 +109,16 @@
 	}
 
 	function valueFromRatio(channel: Channel, ratio: number) {
+		return snapValue(channel, channel.min + ratio * (channel.max - channel.min));
+	}
+
+	function snapValue(channel: Channel, value: number) {
 		const step = channel.step ?? 1;
-		const raw = channel.min + ratio * (channel.max - channel.min);
-		return clamp(Math.round(raw / step) * step, channel.min, channel.max);
+		return clamp(
+			Math.round((value - channel.min) / step) * step + channel.min,
+			channel.min,
+			channel.max
+		);
 	}
 
 	function setHandlePercent(handle: HTMLElement | null, nextPercent: number) {
