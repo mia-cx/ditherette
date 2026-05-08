@@ -52,6 +52,7 @@
 	// eslint-disable-next-line svelte/prefer-writable-derived
 	let preset = $state(activePaletteName.get());
 	let selectedColorKeys = $state<Record<string, boolean>>({});
+	let selectedTagKeys = $state<Record<string, boolean>>({});
 	let importInput = $state<HTMLInputElement>();
 	let paletteMessage = $state<string>();
 	let paletteMessageTone = $state<'neutral' | 'error'>('neutral');
@@ -93,6 +94,20 @@
 	);
 
 	type TagSelectionSource = 'kind' | 'tag';
+	type TagSelection = { source: TagSelectionSource; tag: string };
+	const tagKeySeparator = '\u0000';
+
+	function tagSelectionKey(source: TagSelectionSource, tag: string) {
+		return `${source}${tagKeySeparator}${tag}`;
+	}
+
+	function parseTagSelectionKey(key: string): TagSelection {
+		const separatorIndex = key.indexOf(tagKeySeparator);
+		return {
+			source: key.slice(0, separatorIndex) as TagSelectionSource,
+			tag: key.slice(separatorIndex + tagKeySeparator.length)
+		};
+	}
 
 	function colorHasPaletteTag(color: PaletteColor, source: TagSelectionSource, tag: string) {
 		return source === 'kind' ? color.kind === tag : color.tags?.includes(tag) === true;
@@ -104,21 +119,56 @@
 			.map((color) => color.key);
 	}
 
-	function tagIsFullySelected(source: TagSelectionSource, tag: string) {
-		const keys = tagColorKeys(source, tag);
-		return keys.length > 0 && keys.every((key) => selectedColorKeys[key] === true);
+	function selectedTagSelections(tagKeys = selectedTagKeys) {
+		return Object.entries(tagKeys)
+			.filter(([, selected]) => selected)
+			.map(([key]) => parseTagSelectionKey(key));
+	}
+
+	function colorMatchesSelectedTag(color: PaletteColor, tagKeys = selectedTagKeys) {
+		return selectedTagSelections(tagKeys).some(({ source, tag }) =>
+			colorHasPaletteTag(color, source, tag)
+		);
+	}
+
+	function tagIsSelected(source: TagSelectionSource, tag: string) {
+		return selectedTagKeys[tagSelectionKey(source, tag)] === true;
+	}
+
+	function pruneSelectedTags(nextSelectedColorKeys: Record<string, boolean>) {
+		selectedTagKeys = Object.fromEntries(
+			Object.entries(selectedTagKeys).filter(([key, selected]) => {
+				if (!selected) return false;
+				const { source, tag } = parseTagSelectionKey(key);
+				const keys = tagColorKeys(source, tag);
+				return (
+					keys.length > 0 && keys.every((colorKey) => nextSelectedColorKeys[colorKey] === true)
+				);
+			})
+		);
 	}
 
 	function toggleTagSelection(source: TagSelectionSource, tag: string) {
 		const keys = tagColorKeys(source, tag);
 		if (!keys.length) return;
-		const nextSelected = { ...selectedColorKeys };
-		if (keys.every((key) => selectedColorKeys[key] === true)) {
-			for (const key of keys) delete nextSelected[key];
+		const key = tagSelectionKey(source, tag);
+		const nextTagKeys = { ...selectedTagKeys };
+		const nextSelectedColorKeys = { ...selectedColorKeys };
+
+		if (nextTagKeys[key]) {
+			delete nextTagKeys[key];
+			for (const color of currentPalette.colors) {
+				if (!colorHasPaletteTag(color, source, tag)) continue;
+				if (colorMatchesSelectedTag(color, nextTagKeys)) continue;
+				delete nextSelectedColorKeys[color.key];
+			}
 		} else {
-			for (const key of keys) nextSelected[key] = true;
+			nextTagKeys[key] = true;
+			for (const colorKey of keys) nextSelectedColorKeys[colorKey] = true;
 		}
-		selectedColorKeys = nextSelected;
+
+		selectedTagKeys = nextTagKeys;
+		selectedColorKeys = nextSelectedColorKeys;
 	}
 
 	function tagButtonClass(selected: boolean, variant: 'default' | 'outline' | 'secondary') {
@@ -138,6 +188,7 @@
 	$effect(() => {
 		activePaletteName.set(preset);
 		selectedColorKeys = {};
+		selectedTagKeys = {};
 	});
 
 	$effect(() => {
@@ -167,11 +218,19 @@
 	}
 
 	function setRowSelected(key: string, selected: boolean) {
-		selectedColorKeys = { ...selectedColorKeys, [key]: selected };
+		const nextSelectedColorKeys = { ...selectedColorKeys };
+		if (selected) {
+			nextSelectedColorKeys[key] = true;
+		} else {
+			delete nextSelectedColorKeys[key];
+		}
+		selectedColorKeys = nextSelectedColorKeys;
+		pruneSelectedTags(nextSelectedColorKeys);
 	}
 
 	function selectAllRows() {
 		selectedColorKeys = Object.fromEntries(currentPalette.colors.map((color) => [color.key, true]));
+		selectedTagKeys = {};
 	}
 
 	function setAllRowsSelected(selected: boolean) {
@@ -184,6 +243,7 @@
 
 	function deselectRows() {
 		selectedColorKeys = {};
+		selectedTagKeys = {};
 	}
 
 	function selectedKeys() {
@@ -698,7 +758,7 @@
 	label: string,
 	variant: 'default' | 'outline' | 'secondary' = 'outline'
 )}
-	{@const selected = tagIsFullySelected(source, tag)}
+	{@const selected = tagIsSelected(source, tag)}
 	<button
 		type="button"
 		class={tagButtonClass(selected, variant)}
