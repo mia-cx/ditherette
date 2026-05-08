@@ -22,6 +22,8 @@
 	let pendingTriangle: TriangleCommit | null = null;
 	let commitFrame: number | null = null;
 
+	const triangleRadiusRatio = 0.25;
+
 	function pickWheel(event: PointerEvent) {
 		const target = event.currentTarget as HTMLElement;
 		const hueHandle = target.querySelector<HTMLElement>('[data-wheel-hue-handle]');
@@ -40,13 +42,14 @@
 				scheduleHueCommit(nextHue);
 				return;
 			}
+			const clamped = closestWheelTrianglePoint(point, rect.width, hue);
 			const percent = {
-				x: Math.min(100, Math.max(0, ((point.x + rect.width / 2) / rect.width) * 100)),
-				y: Math.min(100, Math.max(0, ((point.y + rect.height / 2) / rect.height) * 100))
+				x: ((clamped.x + rect.width / 2) / rect.width) * 100,
+				y: ((clamped.y + rect.height / 2) / rect.height) * 100
 			};
 			triangleHandle?.style.setProperty('left', `${percent.x}%`);
 			triangleHandle?.style.setProperty('top', `${percent.y}%`);
-			scheduleTriangleCommit({ point, width: rect.width });
+			scheduleTriangleCommit({ point: clamped, width: rect.width });
 		};
 		target.setPointerCapture(event.pointerId);
 		update(event);
@@ -98,6 +101,68 @@
 	function wheelHandleStyle(nextHue: number) {
 		const angle = (nextHue * Math.PI) / 180;
 		return `left: ${50 + Math.cos(angle) * 43}%; top: ${50 + Math.sin(angle) * 43}%;`;
+	}
+
+	function closestWheelTrianglePoint(point: Point, width: number, nextHue: number) {
+		const vertices = triangleVertices(width);
+		const local = rotatePoint(point, -nextHue);
+		const clamped = closestPointInTriangle(local, vertices.white, vertices.black, vertices.hue);
+		return rotatePoint(clamped, nextHue);
+	}
+
+	function triangleVertices(width: number) {
+		const radius = width * triangleRadiusRatio;
+		return {
+			white: { x: -radius / 2, y: -(Math.sqrt(3) / 2) * radius },
+			black: { x: -radius / 2, y: (Math.sqrt(3) / 2) * radius },
+			hue: { x: radius, y: 0 }
+		};
+	}
+
+	function closestPointInTriangle(point: Point, white: Point, black: Point, hue: Point) {
+		const weights = barycentric(point, white, black, hue);
+		if (weights.white >= 0 && weights.black >= 0 && weights.hue >= 0) return point;
+		return [
+			closestPointOnSegment(point, white, black),
+			closestPointOnSegment(point, black, hue),
+			closestPointOnSegment(point, hue, white)
+		].reduce((best, candidate) =>
+			distanceSquared(point, candidate) < distanceSquared(point, best) ? candidate : best
+		);
+	}
+
+	function barycentric(point: Point, white: Point, black: Point, hue: Point) {
+		const denom = (black.y - hue.y) * (white.x - hue.x) + (hue.x - black.x) * (white.y - hue.y);
+		const whiteWeight =
+			((black.y - hue.y) * (point.x - hue.x) + (hue.x - black.x) * (point.y - hue.y)) / denom;
+		const blackWeight =
+			((hue.y - white.y) * (point.x - hue.x) + (white.x - hue.x) * (point.y - hue.y)) / denom;
+		return { white: whiteWeight, black: blackWeight, hue: 1 - whiteWeight - blackWeight };
+	}
+
+	function closestPointOnSegment(point: Point, start: Point, end: Point) {
+		const dx = end.x - start.x;
+		const dy = end.y - start.y;
+		const lengthSquared = dx * dx + dy * dy;
+		const t =
+			lengthSquared === 0
+				? 0
+				: Math.min(
+						1,
+						Math.max(0, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+					);
+		return { x: start.x + t * dx, y: start.y + t * dy };
+	}
+
+	function rotatePoint(point: Point, degrees: number) {
+		const radians = (degrees * Math.PI) / 180;
+		const cos = Math.cos(radians);
+		const sin = Math.sin(radians);
+		return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos };
+	}
+
+	function distanceSquared(left: Point, right: Point) {
+		return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 	}
 </script>
 
