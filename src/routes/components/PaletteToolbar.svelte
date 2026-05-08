@@ -58,7 +58,7 @@
 			<div class="min-h-0 overflow-y-auto py-1">
 				{#each palettes as palette (palette.name)}
 					<div
-						class="grid grid-cols-[minmax(0,1fr)_auto] items-stretch [&:has([data-highlighted])]:bg-accent [&:has([data-highlighted])]:text-accent-foreground"
+						class="grid grid-cols-[minmax(0,1fr)_auto] items-stretch hover:bg-accent hover:text-accent-foreground [&:has([data-highlighted])]:bg-accent [&:has([data-highlighted])]:text-accent-foreground [&:hover_[data-slot=select-item]]:bg-accent [&:hover_[data-slot=select-item]]:text-accent-foreground"
 					>
 						<SelectItem
 							value={palette.name}
@@ -66,7 +66,7 @@
 							class="min-w-0 items-start py-3 pr-8 pl-3"
 						>
 							<span class="grid min-w-0 flex-1 content-start gap-2 overflow-hidden">
-								<span class="truncate text-sm font-medium text-foreground">{palette.name}</span>
+								<span class="truncate text-sm font-medium text-inherit">{palette.name}</span>
 								<PaletteSwatchStrip colors={palette.colors} />
 							</span>
 						</SelectItem>
