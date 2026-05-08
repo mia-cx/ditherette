@@ -3,7 +3,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Slider } from '$lib/components/ui/slider';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import { RESIZE_MODES } from './sample-data';
+	import { RESIZE_MODES } from './output-options';
 	import { outputSettings, sourceMeta, updateOutputSettings } from '$lib/stores/app';
 	import { fitOutputSizeToBounds } from '$lib/processing/types';
 

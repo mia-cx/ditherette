@@ -1,32 +1,17 @@
 <script lang="ts">
 	import { Label } from '$lib/components/ui/label';
 	import { Slider } from '$lib/components/ui/slider';
-	import { Switch } from '$lib/components/ui/switch';
 	import { Separator } from '$lib/components/ui/separator';
-	import { Sheet, SheetContent, SheetHeader, SheetTitle } from '$lib/components/ui/sheet';
-	import { Checkbox } from '$lib/components/ui/checkbox';
-	import { Accordion, AccordionItem } from '$lib/components/ui/accordion';
 	import { Button } from '$lib/components/ui/button';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { bayerSizeForAlgorithm, normalizedBayerThresholdMatrix } from '$lib/processing/bayer';
 	import { clampByte, createPaletteMatcher, vectorForRgb } from '$lib/processing/color';
 	import type { ColorSpaceId, EnabledPaletteColor, Rgb } from '$lib/processing/types';
-	import {
-		DITHER_ALGORITHMS,
-		PLACEMENT_MODES,
-		type DitherField,
-		type DitherMethod
-	} from './sample-data';
-	import InlineMath from './InlineMath.svelte';
+	import { DITHER_ALGORITHMS } from './dither-options';
+	import AdaptivePlacementControls from './AdaptivePlacementControls.svelte';
+	import DitherAlgorithmSelect from './DitherAlgorithmSelect.svelte';
+	import DitherToggleControls from './DitherToggleControls.svelte';
 	import { DEFAULT_DITHER_PREVIEW_GRADIENT } from './preview-gradients';
-	import {
-		colorSpace,
-		ditherSettings,
-		selectedPalette,
-		uiSettings,
-		updateDitherSettings
-	} from '$lib/stores/app';
+	import { ditherSettings, updateDitherSettings } from '$lib/stores/app';
 	import DiceIcon from 'phosphor-svelte/lib/DiceFive';
 
 	type Props = { compact?: boolean; hideHeading?: boolean };
@@ -76,14 +61,6 @@
 	let serpentine = $state(initial.serpentine);
 	let seed = $state(initial.seed);
 	let useColorSpace = $state(initial.useColorSpace ?? false);
-	let algorithmSearch = $state('');
-	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion']);
-	let fieldFilters = $state<DitherField[]>(['none', 'ordered', 'noise', 'kernel']);
-	let filterSheetOpen = $state(false);
-	let desktopFilterSections = $state<string[]>(
-		uiSettings.get().desktopDitherFiltersOpen ? ['filters'] : []
-	);
-
 	const current = $derived(DITHER_ALGORITHMS.find((a) => a.id === algorithm));
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
 	const isNone = $derived(algorithm === 'none');
@@ -91,24 +68,6 @@
 	const isThresholdDither = $derived(current?.family === 'ordered' || current?.family === 'noise');
 	const supportsPlacement = $derived(!isNone && (isThresholdDither || isErrorDiffusion));
 	const supportsColorSpaceDither = $derived(!isNone);
-	const triggerLabel = $derived(current?.label ?? 'Select algorithm');
-	const placementLabel = $derived(
-		PLACEMENT_MODES.find((option) => option.id === placement)?.label ?? 'Placement'
-	);
-	const filteredAlgorithms = $derived(
-		DITHER_ALGORITHMS.filter((option) => {
-			const query = algorithmSearch.trim().toLowerCase();
-			const matchesQuery =
-				query.length === 0 ||
-				[option.label, option.short, option.sku, option.method, option.field]
-					.join(' ')
-					.toLowerCase()
-					.includes(query);
-			const matchesMethod = methodFilters.includes(option.method);
-			const matchesField = fieldFilters.includes(option.field);
-			return matchesQuery && matchesMethod && matchesField;
-		})
-	);
 
 	$effect(() => {
 		updateDitherSettings({
@@ -121,13 +80,6 @@
 			serpentine,
 			seed,
 			useColorSpace
-		});
-	});
-
-	$effect(() => {
-		uiSettings.set({
-			...uiSettings.get(),
-			desktopDitherFiltersOpen: desktopFilterSections.includes('filters')
 		});
 	});
 
@@ -442,31 +394,6 @@
 		image.data[offset + 3] = 255;
 	}
 
-	function methodLabel(method: DitherMethod) {
-		if (method === 'error-diffusion') return 'Error diffusion';
-		if (method === 'threshold') return 'Threshold';
-		return 'None';
-	}
-
-	function fieldLabel(field: DitherField) {
-		if (field === 'ordered') return 'Ordered';
-		if (field === 'noise') return 'Noise';
-		if (field === 'kernel') return 'Kernel';
-		return 'None';
-	}
-
-	function toggleMethodFilter(method: DitherMethod) {
-		methodFilters = methodFilters.includes(method)
-			? methodFilters.filter((value) => value !== method)
-			: [...methodFilters, method];
-	}
-
-	function toggleFieldFilter(field: DitherField) {
-		fieldFilters = fieldFilters.includes(field)
-			? fieldFilters.filter((value) => value !== field)
-			: [...fieldFilters, field];
-	}
-
 	function mulberry32(value: number) {
 		let state = value >>> 0;
 		return () => {
@@ -479,7 +406,10 @@
 	}
 </script>
 
-<section class="flex flex-col gap-{compact ? '3' : '4'}" aria-label="Dithering controls">
+<section
+	class={compact ? 'flex flex-col gap-3' : 'flex flex-col gap-4'}
+	aria-label="Dithering controls"
+>
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
 			<h2 class="text-sm font-semibold tracking-tight">Dithering</h2>
@@ -488,280 +418,14 @@
 	{/if}
 
 	<div class="grid gap-3">
-		<Select bind:value={algorithm} type="single">
-			<SelectTrigger
-				id="dither-algorithm"
-				size="auto"
-				class="w-full items-center gap-3 border-border bg-background/50 p-3 text-left whitespace-normal"
-			>
-				{#if current}
-					<span class="grid min-w-0 flex-1 gap-1.5">
-						<span class="flex items-start gap-3">
-							<canvas
-								use:ditherPreview={{
-									mode: current.id,
-									randomSeed: seed,
-									previewStrength: strength,
-									serpentineScan: serpentine,
-									palette: $selectedPalette,
-									colorSpaceMode: $colorSpace,
-									useColorSpace
-								}}
-								class="size-24 shrink-0 bg-muted [image-rendering:pixelated]"
-								aria-hidden="true"
-							></canvas>
-							<span class="grid min-w-0 flex-1 content-start gap-1">
-								<span class="flex min-w-0 flex-wrap items-start gap-1.5">
-									<span class="truncate text-sm font-medium text-foreground">{current.label}</span>
-									<Badge variant="secondary">{methodLabel(current.method)}</Badge>
-									<Badge variant="outline">{fieldLabel(current.field)}</Badge>
-								</span>
-								<span class="text-xs text-muted-foreground">{current.short}</span>
-							</span>
-						</span>
-					</span>
-				{:else}
-					{triggerLabel}
-				{/if}
-			</SelectTrigger>
-			<SelectContent
-				interactOutsideBehavior="defer-otherwise-ignore"
-				preventScroll={false}
-				class="flex h-[min(38rem,var(--bits-select-content-available-height))] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col overflow-hidden p-1 md:w-auto md:max-w-none"
-			>
-				<div class="sticky top-0 z-10 border-b border-border bg-popover p-2">
-					<div class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
-						<input
-							class="h-8 min-w-0 border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
-							placeholder="Search algorithms…"
-							bind:value={algorithmSearch}
-							onkeydown={(event) => event.stopPropagation()}
-						/>
-						<Button
-							variant="outline"
-							size="default"
-							class="md:hidden"
-							onclick={() => (filterSheetOpen = true)}>Filters</Button
-						>
-						<Button
-							variant="outline"
-							size="default"
-							class="hidden md:inline-flex"
-							aria-expanded={desktopFilterSections.includes('filters')}
-							onclick={() =>
-								(desktopFilterSections = desktopFilterSections.includes('filters')
-									? []
-									: ['filters'])}>Filters</Button
-						>
-					</div>
-				</div>
-				<div class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-2 overflow-hidden">
-					<div class="min-w-0 overflow-y-auto">
-						{#each filteredAlgorithms as opt (opt.id)}
-							<SelectItem
-								value={opt.id}
-								label={opt.label}
-								class="min-w-0 items-center py-3 pr-8 pl-3"
-							>
-								<span class="grid min-w-0 flex-1 gap-1.5">
-									<span class="flex items-start gap-3">
-										<canvas
-											use:ditherPreview={{
-												mode: opt.id,
-												randomSeed: seed,
-												previewStrength: strength,
-												serpentineScan: serpentine,
-												palette: $selectedPalette,
-												colorSpaceMode: $colorSpace,
-												useColorSpace
-											}}
-											class="size-20 shrink-0 bg-muted [image-rendering:pixelated] sm:size-24"
-											aria-hidden="true"
-										></canvas>
-										<span class="grid min-w-0 flex-1 content-start gap-1">
-											<span class="flex min-w-0 flex-wrap items-start gap-1.5">
-												<span class="truncate text-sm font-medium text-foreground">{opt.label}</span
-												>
-												<Badge variant="secondary">{methodLabel(opt.method)}</Badge>
-												<Badge variant="outline">{fieldLabel(opt.field)}</Badge>
-											</span>
-											<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
-												>{opt.short}</span
-											>
-											<span class="rounded-sm border border-border bg-muted/40 px-2 py-1">
-												<InlineMath expression={opt.latex} />
-											</span>
-										</span>
-									</span>
-								</span>
-							</SelectItem>
-						{:else}
-							<div class="p-4 text-center text-xs text-muted-foreground">No algorithms match.</div>
-						{/each}
-					</div>
-					<Accordion
-						type="multiple"
-						bind:value={desktopFilterSections}
-						class="hidden h-full shrink-0 overflow-hidden border-l border-border md:flex"
-					>
-						<AccordionItem value="filters" class="h-full border-b-0">
-							<div
-								class={desktopFilterSections.includes('filters')
-									? 'h-full w-40 overflow-hidden transition-[width] duration-200 ease-in-out'
-									: 'h-full w-0 overflow-hidden transition-[width] duration-200 ease-in-out'}
-							>
-								<div class="grid w-40 gap-3 p-2 pb-2.5">
-									<div class="grid gap-1.5">
-										<span
-											class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-											>Method</span
-										>
-										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												checked={methodFilters.includes('threshold')}
-												onCheckedChange={() => toggleMethodFilter('threshold')}
-												aria-label="Toggle threshold method filter"
-											/>
-											Threshold
-										</label>
-										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												checked={methodFilters.includes('error-diffusion')}
-												onCheckedChange={() => toggleMethodFilter('error-diffusion')}
-												aria-label="Toggle error-diffusion method filter"
-											/>
-											Error diffusion
-										</label>
-										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												checked={methodFilters.includes('none')}
-												onCheckedChange={() => toggleMethodFilter('none')}
-												aria-label="Toggle none method filter"
-											/>
-											None
-										</label>
-									</div>
-									<div class="grid gap-1.5">
-										<span
-											class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-											>Field</span
-										>
-										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												checked={fieldFilters.includes('ordered')}
-												onCheckedChange={() => toggleFieldFilter('ordered')}
-												aria-label="Toggle ordered field filter"
-											/>
-											Ordered
-										</label>
-										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												checked={fieldFilters.includes('noise')}
-												onCheckedChange={() => toggleFieldFilter('noise')}
-												aria-label="Toggle noise field filter"
-											/>
-											Noise
-										</label>
-										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												checked={fieldFilters.includes('kernel')}
-												onCheckedChange={() => toggleFieldFilter('kernel')}
-												aria-label="Toggle kernel field filter"
-											/>
-											Kernel
-										</label>
-										<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Checkbox
-												checked={fieldFilters.includes('none')}
-												onCheckedChange={() => toggleFieldFilter('none')}
-												aria-label="Toggle none field filter"
-											/>
-											None
-										</label>
-									</div>
-								</div>
-							</div>
-						</AccordionItem>
-					</Accordion>
-				</div>
-			</SelectContent>
-		</Select>
-
-		<Sheet bind:open={filterSheetOpen}>
-			<SheetContent side="right" class="w-72 p-4">
-				<SheetHeader>
-					<SheetTitle>Algorithm filters</SheetTitle>
-				</SheetHeader>
-				<div class="grid content-start gap-4 pt-4">
-					<div class="grid gap-2">
-						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-							>Method</span
-						>
-						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<Checkbox
-								checked={methodFilters.includes('threshold')}
-								onCheckedChange={() => toggleMethodFilter('threshold')}
-								aria-label="Toggle threshold method filter"
-							/>
-							Threshold
-						</label>
-						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<Checkbox
-								checked={methodFilters.includes('error-diffusion')}
-								onCheckedChange={() => toggleMethodFilter('error-diffusion')}
-								aria-label="Toggle error-diffusion method filter"
-							/>
-							Error diffusion
-						</label>
-						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<Checkbox
-								checked={methodFilters.includes('none')}
-								onCheckedChange={() => toggleMethodFilter('none')}
-								aria-label="Toggle none method filter"
-							/>
-							None
-						</label>
-					</div>
-					<div class="grid gap-2">
-						<span class="text-[0.65rem] font-medium tracking-wide text-muted-foreground uppercase"
-							>Field</span
-						>
-						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<Checkbox
-								checked={fieldFilters.includes('ordered')}
-								onCheckedChange={() => toggleFieldFilter('ordered')}
-								aria-label="Toggle ordered field filter"
-							/>
-							Ordered
-						</label>
-						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<Checkbox
-								checked={fieldFilters.includes('noise')}
-								onCheckedChange={() => toggleFieldFilter('noise')}
-								aria-label="Toggle noise field filter"
-							/>
-							Noise
-						</label>
-						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<Checkbox
-								checked={fieldFilters.includes('kernel')}
-								onCheckedChange={() => toggleFieldFilter('kernel')}
-								aria-label="Toggle kernel field filter"
-							/>
-							Kernel
-						</label>
-						<label class="flex items-center gap-2 text-xs text-muted-foreground">
-							<Checkbox
-								checked={fieldFilters.includes('none')}
-								onCheckedChange={() => toggleFieldFilter('none')}
-								aria-label="Toggle none field filter"
-							/>
-							None
-						</label>
-					</div>
-				</div>
-			</SheetContent>
-		</Sheet>
+		<DitherAlgorithmSelect
+			bind:algorithm
+			{seed}
+			{strength}
+			{serpentine}
+			{useColorSpace}
+			{ditherPreview}
+		/>
 
 		<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
 			<Label for="dither-strength" class="text-xs text-muted-foreground">Strength</Label>
@@ -794,138 +458,26 @@
 
 		<Separator />
 
-		<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
-			<Label for="dither-placement" class="text-xs text-muted-foreground">Placement</Label>
-			<Select bind:value={placement} type="single" disabled={!supportsPlacement}>
-				<SelectTrigger id="dither-placement" class="w-full">{placementLabel}</SelectTrigger>
-				<SelectContent>
-					{#each PLACEMENT_MODES as opt (opt.id)}
-						<SelectItem value={opt.id}>{opt.label}</SelectItem>
-					{/each}
-				</SelectContent>
-			</Select>
-		</div>
-
-		{#if placement === 'adaptive'}
-			<div class="grid gap-2">
-				<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-					<Label for="dither-placement-radius" class="text-xs text-muted-foreground">Radius</Label>
-					<Slider
-						type="single"
-						bind:value={placementRadius}
-						min={PLACEMENT_RADIUS_MIN}
-						max={PLACEMENT_RADIUS_MAX}
-						step={1}
-						disabled={!supportsPlacement}
-						aria-label="Adaptive placement radius"
-					/>
-					<div class="relative">
-						<input
-							id="dither-placement-radius"
-							class="h-8 w-full border border-input bg-background px-2 pr-6 text-right font-mono text-xs tabular-nums"
-							type="number"
-							min={PLACEMENT_RADIUS_MIN}
-							max={PLACEMENT_RADIUS_MAX}
-							step="1"
-							bind:value={placementRadius}
-							disabled={!supportsPlacement}
-						/>
-						<span
-							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
-							>px</span
-						>
-					</div>
-				</div>
-				<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-					<Label for="dither-placement-threshold" class="text-xs text-muted-foreground"
-						>Threshold</Label
-					>
-					<Slider
-						type="single"
-						bind:value={placementThreshold}
-						min={PLACEMENT_PERCENT_MIN}
-						max={PLACEMENT_PERCENT_MAX}
-						step={1}
-						disabled={!supportsPlacement}
-						aria-label="Adaptive placement threshold"
-					/>
-					<div class="relative">
-						<input
-							id="dither-placement-threshold"
-							class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
-							type="number"
-							min={PLACEMENT_PERCENT_MIN}
-							max={PLACEMENT_PERCENT_MAX}
-							step="1"
-							bind:value={placementThreshold}
-							disabled={!supportsPlacement}
-						/>
-						<span
-							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
-							>%</span
-						>
-					</div>
-				</div>
-				<div class="grid grid-cols-[5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-					<Label for="dither-placement-softness" class="text-xs text-muted-foreground"
-						>Softness</Label
-					>
-					<Slider
-						type="single"
-						bind:value={placementSoftness}
-						min={PLACEMENT_PERCENT_MIN}
-						max={PLACEMENT_PERCENT_MAX}
-						step={1}
-						disabled={!supportsPlacement}
-						aria-label="Adaptive placement softness"
-					/>
-					<div class="relative">
-						<input
-							id="dither-placement-softness"
-							class="h-8 w-full border border-input bg-background px-2 pr-5 text-right font-mono text-xs tabular-nums"
-							type="number"
-							min={PLACEMENT_PERCENT_MIN}
-							max={PLACEMENT_PERCENT_MAX}
-							step="1"
-							bind:value={placementSoftness}
-							disabled={!supportsPlacement}
-						/>
-						<span
-							class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
-							>%</span
-						>
-					</div>
-				</div>
-			</div>
-		{/if}
+		<AdaptivePlacementControls
+			bind:placement
+			bind:placementRadius
+			bind:placementThreshold
+			bind:placementSoftness
+			{supportsPlacement}
+			placementRadiusMin={PLACEMENT_RADIUS_MIN}
+			placementRadiusMax={PLACEMENT_RADIUS_MAX}
+			placementPercentMin={PLACEMENT_PERCENT_MIN}
+			placementPercentMax={PLACEMENT_PERCENT_MAX}
+		/>
 
 		<Separator />
 
-		<div class="grid gap-2">
-			<div class="flex items-center justify-between gap-3">
-				<Label for="dither-color-space" class="grid gap-0.5 text-left">
-					<span>Dither in selected space</span>
-					<span class="text-xs font-normal text-muted-foreground"
-						>Perturb and diffuse error in the selected color space. Color matching always uses it.</span
-					>
-				</Label>
-				<Switch
-					id="dither-color-space"
-					bind:checked={useColorSpace}
-					disabled={!supportsColorSpaceDither}
-				/>
-			</div>
-
-			<div class="flex items-center justify-between gap-3">
-				<Label for="dither-serpentine" class="grid gap-0.5 text-left">
-					<span>Serpentine scan</span>
-					<span class="text-xs font-normal text-muted-foreground"
-						>Reduces directional bias for error diffusion.</span
-					>
-				</Label>
-				<Switch id="dither-serpentine" bind:checked={serpentine} disabled={!isErrorDiffusion} />
-			</div>
-		</div>
+		<DitherToggleControls
+			bind:useColorSpace
+			bind:serpentine
+			{supportsColorSpaceDither}
+			{isErrorDiffusion}
+		/>
 
 		{#if isRandom}
 			<div class="flex items-center justify-between gap-2">

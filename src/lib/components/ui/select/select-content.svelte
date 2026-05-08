@@ -14,9 +14,11 @@
 		portalProps,
 		children,
 		preventScroll = true,
+		viewportFlex = false,
 		...restProps
 	}: WithoutChild<SelectPrimitive.ContentProps> & {
 		portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
+		viewportFlex?: boolean;
 	} = $props();
 </script>
 
@@ -36,7 +38,7 @@
 		<SelectPrimitive.Viewport
 			class={cn(
 				'h-full max-h-[inherit] w-full min-w-(--bits-select-anchor-width) scroll-my-1 overflow-hidden',
-				className?.includes('overflow-hidden') && 'flex flex-col'
+				viewportFlex && 'flex flex-col'
 			)}
 		>
 			{@render children?.()}

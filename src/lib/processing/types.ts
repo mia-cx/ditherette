@@ -39,6 +39,7 @@ export type PaletteColor = {
 	key: string;
 	rgb?: Rgb;
 	kind: 'free' | 'premium' | 'transparent' | 'custom';
+	tags?: string[];
 };
 
 export type Palette = {
