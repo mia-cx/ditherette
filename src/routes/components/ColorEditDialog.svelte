@@ -39,9 +39,18 @@
 	let oklab = $state<Oklab>({ l: 0.7, a: 0, b: 0 });
 	let syncingFromPicker = false;
 
+	const triangleHalfRatio = 2 / 9;
+
 	const selectorBackground = $derived(
 		`linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h} 100% 50%))`
 	);
+	const wheelTriangleBackground = $derived(
+		`linear-gradient(to right, transparent, hsl(${hsv.h} 100% 50%)), linear-gradient(to bottom, #fff, #000)`
+	);
+	const triangleHandleStyle = $derived.by(() => {
+		const point = trianglePointForHsv(hsv);
+		return `left: ${point.x}%; top: ${point.y}%;`;
+	});
 
 	$effect(() => {
 		if (syncingFromPicker) return;
@@ -92,28 +101,118 @@
 
 	function pickFromWheel(event: PointerEvent) {
 		const target = event.currentTarget as HTMLElement;
+		const dragMode = wheelDragMode(event, target);
 		const update = (next: PointerEvent) => {
-			const rect = target.getBoundingClientRect();
-			const cx = rect.left + rect.width / 2;
-			const cy = rect.top + rect.height / 2;
-			const dx = next.clientX - cx;
-			const dy = next.clientY - cy;
-			const distance = Math.hypot(dx, dy);
-			const outer = rect.width / 2;
-			const ringInner = outer * 0.74;
-			if (distance >= ringInner) {
-				updateHsv({ h: (Math.atan2(dy, dx) * 180) / Math.PI + 180 });
+			const point = wheelPoint(next, target);
+			if (dragMode === 'hue') {
+				updateHsv({ h: (Math.atan2(point.y, point.x) * 180) / Math.PI + 180 });
 				return;
 			}
-			const triangleRadius = outer * 0.52;
-			const x = clamp((dx + triangleRadius) / (triangleRadius * 2), 0, 1);
-			const y = clamp((dy + triangleRadius) / (triangleRadius * 2), 0, 1);
-			updateHsv({ s: x * 100, v: (1 - y) * 100 });
+			updateHsv(hsvFromTrianglePoint(point.x, point.y, target.getBoundingClientRect().width));
 		};
 		target.setPointerCapture(event.pointerId);
 		update(event);
 		target.onpointermove = update;
 		target.onpointerup = () => (target.onpointermove = null);
+	}
+
+	function wheelDragMode(event: PointerEvent, target: HTMLElement): 'hue' | 'triangle' {
+		const point = wheelPoint(event, target);
+		const outer = target.getBoundingClientRect().width / 2;
+		return Math.hypot(point.x, point.y) >= outer * 0.74 ? 'hue' : 'triangle';
+	}
+
+	function wheelPoint(event: PointerEvent, target: HTMLElement) {
+		const rect = target.getBoundingClientRect();
+		return {
+			x: event.clientX - (rect.left + rect.width / 2),
+			y: event.clientY - (rect.top + rect.height / 2)
+		};
+	}
+
+	function triangleVertices(width: number) {
+		const half = width * triangleHalfRatio;
+		return {
+			white: { x: -half, y: -half },
+			black: { x: -half, y: half },
+			hue: { x: half, y: 0 }
+		};
+	}
+
+	function hsvFromTrianglePoint(x: number, y: number, width: number): Partial<Hsv> {
+		const vertices = triangleVertices(width);
+		const point = closestPointInTriangle({ x, y }, vertices.white, vertices.black, vertices.hue);
+		const weights = barycentric(point, vertices.white, vertices.black, vertices.hue);
+		const value = clamp((1 - weights.black) * 100, 0, 100);
+		const saturation =
+			value === 0 ? 0 : clamp((weights.hue / (weights.white + weights.hue)) * 100, 0, 100);
+		return { s: saturation, v: value };
+	}
+
+	function trianglePointForHsv(color: Hsv) {
+		const value = color.v / 100;
+		const saturation = color.s / 100;
+		const whiteWeight = value * (1 - saturation);
+		const blackWeight = 1 - value;
+		const hueWeight = value * saturation;
+		const half = triangleHalfRatio * 100;
+		const x = whiteWeight * -half + blackWeight * -half + hueWeight * half;
+		const y = whiteWeight * -half + blackWeight * half;
+		return { x: 50 + x, y: 50 + y };
+	}
+
+	function barycentric(
+		point: { x: number; y: number },
+		white: { x: number; y: number },
+		black: { x: number; y: number },
+		hue: { x: number; y: number }
+	) {
+		const denom = (black.y - hue.y) * (white.x - hue.x) + (hue.x - black.x) * (white.y - hue.y);
+		const whiteWeight =
+			((black.y - hue.y) * (point.x - hue.x) + (hue.x - black.x) * (point.y - hue.y)) / denom;
+		const blackWeight =
+			((hue.y - white.y) * (point.x - hue.x) + (white.x - hue.x) * (point.y - hue.y)) / denom;
+		return {
+			white: whiteWeight,
+			black: blackWeight,
+			hue: 1 - whiteWeight - blackWeight
+		};
+	}
+
+	function closestPointInTriangle(
+		point: { x: number; y: number },
+		white: { x: number; y: number },
+		black: { x: number; y: number },
+		hue: { x: number; y: number }
+	) {
+		const weights = barycentric(point, white, black, hue);
+		if (weights.white >= 0 && weights.black >= 0 && weights.hue >= 0) return point;
+		return [
+			closestPointOnSegment(point, white, black),
+			closestPointOnSegment(point, black, hue),
+			closestPointOnSegment(point, hue, white)
+		].reduce((best, candidate) =>
+			distanceSquared(point, candidate) < distanceSquared(point, best) ? candidate : best
+		);
+	}
+
+	function closestPointOnSegment(
+		point: { x: number; y: number },
+		start: { x: number; y: number },
+		end: { x: number; y: number }
+	) {
+		const dx = end.x - start.x;
+		const dy = end.y - start.y;
+		const lengthSquared = dx * dx + dy * dy;
+		const t =
+			lengthSquared === 0
+				? 0
+				: clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
+		return { x: start.x + t * dx, y: start.y + t * dy };
+	}
+
+	function distanceSquared(left: { x: number; y: number }, right: { x: number; y: number }) {
+		return (left.x - right.x) ** 2 + (left.y - right.y) ** 2;
 	}
 
 	function addTag() {
@@ -287,8 +386,8 @@
 					>
 						<span class="absolute inset-[13%] rounded-full bg-background"></span>
 						<span
-							class="absolute top-1/2 left-1/2 size-32 -translate-x-1/2 -translate-y-1/2 border border-background/70 shadow-sm [clip-path:polygon(50%_0,0_100%,100%_100%)]"
-							style="background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl({hsv.h} 100% 50%));"
+							class="absolute top-1/2 left-1/2 size-32 -translate-x-1/2 -translate-y-1/2 border border-background/70 shadow-sm [clip-path:polygon(0_0,0_100%,100%_50%)]"
+							style="background: {wheelTriangleBackground};"
 						></span>
 						<span
 							class="absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
@@ -297,7 +396,7 @@
 						></span>
 						<span
 							class="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.7)]"
-							style="left: {50 + (hsv.s - 50) * 0.32}%; top: {50 + (50 - hsv.v) * 0.32}%;"
+							style={triangleHandleStyle}
 						></span>
 					</button>
 				</div>
