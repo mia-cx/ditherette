@@ -40,6 +40,11 @@
 		background: string;
 		onChange: (value: number) => void;
 	};
+	type ColorSyncOptions = {
+		preserveHsv?: Hsv;
+		preserveHsl?: Hsl;
+		preserveOklch?: Oklch;
+	};
 	type Props = {
 		open: boolean;
 		mode: 'add' | 'edit' | 'duplicate';
@@ -72,13 +77,13 @@
 	let picker = $state<PickerMode>('hsl-wheel');
 	let tagDraft = $state('');
 	let hsv = $state<Hsv>({ h: 0, s: 100, v: 100 });
+	let hsl = $state<Hsl>({ h: 0, s: 100, l: 50 });
 	let oklab = $state<Oklab>({ l: 0.7, a: 0, b: 0 });
+	let oklch = $state<Oklch>({ l: 0.7, c: 0, h: 0 });
 	let syncingFromPicker = false;
 
 	const triangleRadiusRatio = 0.25;
 	const rgb = $derived(rgbFromHex(hex) ?? hsvToRgb(hsv));
-	const hsl = $derived(rgbToHsl(rgb));
-	const oklch = $derived(oklabToOklch(oklab));
 	const hueRailBackground =
 		'linear-gradient(to right, #ff0000 0%, #ffff00 16.666%, #00ff00 33.333%, #00ffff 50%, #0000ff 66.666%, #ff00ff 83.333%, #ff0000 100%)';
 	const verticalHueRailBackground =
@@ -131,11 +136,10 @@
 		if (syncingFromPicker) return;
 		const nextRgb = rgbFromHex(hex);
 		if (!nextRgb) return;
-		hsv = rgbToHsv(nextRgb);
-		oklab = rgbToOklab(nextRgb);
+		syncColorModels(nextRgb);
 	});
 
-	function setColorFromRgb(next: Rgb) {
+	function setColorFromRgb(next: Rgb, options: ColorSyncOptions = {}) {
 		const clamped = {
 			r: clamp(next.r, 0, 255),
 			g: clamp(next.g, 0, 255),
@@ -143,18 +147,26 @@
 		};
 		syncingFromPicker = true;
 		hex = hexFromRgb(clamped);
-		hsv = rgbToHsv(clamped);
-		oklab = rgbToOklab(clamped);
+		syncColorModels(clamped, options);
 		queueMicrotask(() => (syncingFromPicker = false));
+	}
+
+	function syncColorModels(color: Rgb, options: ColorSyncOptions = {}) {
+		const nextOklab = rgbToOklab(color);
+		hsv = options.preserveHsv ?? rgbToHsv(color);
+		hsl = options.preserveHsl ?? rgbToHsl(color);
+		oklab = nextOklab;
+		oklch = options.preserveOklch ?? oklabToOklch(nextOklab);
 	}
 
 	function updateHsv(patch: Partial<Hsv>) {
 		const next = { ...hsv, ...patch };
-		setColorFromRgb(hsvToRgb(next));
+		setColorFromRgb(hsvToRgb(next), { preserveHsv: next });
 	}
 
 	function updateHsl(patch: Partial<Hsl>) {
-		setColorFromRgb(hslToRgb({ ...hsl, ...patch }));
+		const next = { ...hsl, ...patch };
+		setColorFromRgb(hslToRgb(next), { preserveHsl: next });
 	}
 
 	function updateOklab(patch: Partial<Oklab>) {
@@ -163,7 +175,8 @@
 	}
 
 	function updateOklch(patch: Partial<Oklch>) {
-		setColorFromRgb(oklabToRgb(oklchToOklab({ ...oklch, ...patch })));
+		const next = { ...oklch, ...patch };
+		setColorFromRgb(oklabToRgb(oklchToOklab(next)), { preserveOklch: next });
 	}
 
 	function sliderChannelsForMode(): SliderChannel[] {
