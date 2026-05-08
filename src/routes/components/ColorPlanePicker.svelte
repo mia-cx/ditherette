@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
+
 	type PlanePoint = { x: number; y: number };
 	type Props = {
 		fieldBackground: string;
@@ -9,6 +11,13 @@
 	let { fieldBackground, handleStyle, onPickPlane }: Props = $props();
 	let pendingPoint: PlanePoint | null = null;
 	let commitFrame: number | null = null;
+
+	onDestroy(() => {
+		if (commitFrame === null) return;
+		cancelAnimationFrame(commitFrame);
+		commitFrame = null;
+		pendingPoint = null;
+	});
 
 	function pickPlane(event: PointerEvent) {
 		const target = event.currentTarget as HTMLElement;
