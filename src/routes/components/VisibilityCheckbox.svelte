@@ -15,7 +15,7 @@
 		'checked' | 'onCheckedChange'
 	> & {
 		checked: boolean;
-		onCheckedChange: (checked: boolean) => void;
+		onCheckedChange: (checked: boolean | 'indeterminate') => void;
 	};
 
 	let {

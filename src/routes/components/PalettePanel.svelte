@@ -688,7 +688,8 @@
 			<VisibilityCheckbox
 				checked={isVisible}
 				aria-label="Visible: {color.name}"
-				onCheckedChange={(next) => setPaletteColorEnabled(color.key, next, currentPalette.name)}
+				onCheckedChange={(next) =>
+					setPaletteColorEnabled(color.key, next === true, currentPalette.name)}
 			/>
 		</td>
 		<td class="max-w-32 truncate p-1.5 align-middle font-medium">{color.name}</td>

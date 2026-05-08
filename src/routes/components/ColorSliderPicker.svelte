@@ -19,8 +19,10 @@
 	let { channels }: Props = $props();
 	let pendingCommit: PendingCommit | null = null;
 	let commitFrame: number | null = null;
+	let activeDragCleanup: (() => void) | null = null;
 
 	onDestroy(() => {
+		activeDragCleanup?.();
 		if (commitFrame === null) return;
 		cancelAnimationFrame(commitFrame);
 		commitFrame = null;
@@ -28,6 +30,7 @@
 	});
 
 	function pickChannel(event: PointerEvent, channel: Channel) {
+		activeDragCleanup?.();
 		const target = event.currentTarget as HTMLElement;
 		const handle = target.querySelector<HTMLElement>('[data-slider-handle]');
 		const update = (next: PointerEvent) => {
@@ -44,7 +47,9 @@
 			window.removeEventListener('pointerup', cleanup);
 			window.removeEventListener('pointercancel', cleanup);
 			cleanupPointer(target, pointerId);
+			activeDragCleanup = null;
 		};
+		activeDragCleanup = () => cleanup();
 		target.setPointerCapture(pointerId);
 		update(event);
 		target.onpointermove = update;

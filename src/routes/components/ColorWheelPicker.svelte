@@ -39,6 +39,7 @@
 	let pendingHue: number | null = null;
 	let pendingTriangle: TriangleCommit | null = null;
 	let commitFrame: number | null = null;
+	let activeDragCleanup: (() => void) | null = null;
 
 	const triangleRadiusRatio = 0.25;
 	const gradientId = `wheel-triangle-${allocateGradientId()}`;
@@ -46,6 +47,7 @@
 	const blackGradientId = `${gradientId}-black`;
 
 	onDestroy(() => {
+		activeDragCleanup?.();
 		if (commitFrame === null) return;
 		cancelAnimationFrame(commitFrame);
 		commitFrame = null;
@@ -54,6 +56,7 @@
 	});
 
 	function pickWheel(event: PointerEvent) {
+		activeDragCleanup?.();
 		const target = event.currentTarget as HTMLElement;
 		const hueHandle = target.querySelector<HTMLElement>('[data-wheel-hue-handle]');
 		const triangleHandle = target.querySelector<HTMLElement>('[data-wheel-triangle-handle]');
@@ -89,7 +92,9 @@
 			window.removeEventListener('pointerup', cleanup);
 			window.removeEventListener('pointercancel', cleanup);
 			cleanupPointer(target, pointerId);
+			activeDragCleanup = null;
 		};
+		activeDragCleanup = () => cleanup();
 		target.setPointerCapture(pointerId);
 		update(event);
 		target.onpointermove = update;

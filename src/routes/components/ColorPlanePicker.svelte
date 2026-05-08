@@ -12,8 +12,10 @@
 	let { fieldBackground, handleStyle, handlePoint, onPickPlane }: Props = $props();
 	let pendingPoint: PlanePoint | null = null;
 	let commitFrame: number | null = null;
+	let activeDragCleanup: (() => void) | null = null;
 
 	onDestroy(() => {
+		activeDragCleanup?.();
 		if (commitFrame === null) return;
 		cancelAnimationFrame(commitFrame);
 		commitFrame = null;
@@ -21,6 +23,7 @@
 	});
 
 	function pickPlane(event: PointerEvent) {
+		activeDragCleanup?.();
 		const target = event.currentTarget as HTMLElement;
 		const handle = target.querySelector<HTMLElement>('[data-plane-handle]');
 		const update = (next: PointerEvent) => updateHandle(handle, pointFromPointer(next, target));
@@ -33,7 +36,9 @@
 			window.removeEventListener('pointerup', cleanup);
 			window.removeEventListener('pointercancel', cleanup);
 			cleanupPointer(target, pointerId);
+			activeDragCleanup = null;
 		};
+		activeDragCleanup = () => cleanup();
 		target.setPointerCapture(pointerId);
 		update(event);
 		target.onpointermove = update;
