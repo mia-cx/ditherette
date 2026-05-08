@@ -97,9 +97,6 @@
 	const lightnessPlaneBackground = $derived(
 		`linear-gradient(to bottom, transparent, hsl(0 0% ${hsl.l}%)), linear-gradient(to right, hsl(0 100% ${hsl.l}%), hsl(60 100% ${hsl.l}%), hsl(120 100% ${hsl.l}%), hsl(180 100% ${hsl.l}%), hsl(240 100% ${hsl.l}%), hsl(300 100% ${hsl.l}%), hsl(360 100% ${hsl.l}%))`
 	);
-	const wheelTriangleBackground = $derived(
-		`linear-gradient(to right, transparent, hsl(${hsv.h} 100% 50%)), linear-gradient(to bottom, #fff, #000)`
-	);
 	const planeBackground = $derived.by(() => {
 		if (picker === 'saturation') return saturationPlaneBackground;
 		if (picker === 'lightness') return lightnessPlaneBackground;
@@ -676,7 +673,6 @@
 			{#if picker === 'hsl-wheel'}
 				<ColorWheelPicker
 					{hueWheelBackground}
-					triangleBackground={wheelTriangleBackground}
 					hue={hsv.h}
 					hueHandleStyle={hueWheelHandleStyle}
 					{triangleHandleStyle}
