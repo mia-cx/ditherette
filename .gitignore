@@ -49,3 +49,7 @@ vite.config.ts.timestamp-*
 # Local agent/worktree scratch
 .pi/tmp/
 .worktrees/
+
+# Benchmark artifacts
+benchmark-results/
+benchmark-fixtures/

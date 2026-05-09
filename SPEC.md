@@ -226,11 +226,13 @@ Disabled controls must explain why they are disabled where it is not obvious.
   - if no alpha channel is present, disable the button or explain that no transparent bounds were found,
   - after auto-crop, output dimensions keep the current entered-dimensions aspect ratio unless the user clicks **Reset aspect to crop**.
 - Resize algorithm is user-configurable.
-- Default resize algorithm: `lanczos3`, because this app is primarily converting natural/generated images into palette-constrained output and should preserve detail when downscaling.
+- Default resize algorithm: `bilinear`, because it is the fastest smoothing default and avoids surprising long-running work on fresh conversions while preserving better visual continuity than nearest-neighbor sampling.
 - MVP resize algorithms:
   - `nearest` — nearest neighbor; hard pixel edges, best for already-pixel-art sources.
-  - `bilinear` — fast 2×2 interpolation; good baseline smoothing.
-  - `lanczos3` — high-quality windowed sinc with detail preservation; default.
+  - `bilinear` — fast 2×2 interpolation; good baseline smoothing; default.
+  - `lanczos2` — high-quality windowed sinc with a smaller radius than Lanczos3.
+  - `lanczos3` — high-quality windowed sinc with detail preservation.
+  - `lanczos2-scale-aware` / `lanczos3-scale-aware` — slower anti-aliased Lanczos downscale quality modes with bounded filter windows.
   - `area` / `box` — area averaging for strong downscales where preserving overall color energy matters.
 - Anti-aliasing beyond resize filtering is not MVP. Future planned: optional prefilter/anti-alias controls if they solve real artifacts not handled by resize filters or tone controls.
 - Future planned resize algorithms:
@@ -989,7 +991,7 @@ type ConversionSettings = {
   /** Persistent factor applied to the current source/crop dimensions. */
   scaleFactor: number;
   cropRect: CropRect | null;
-  /** Defaults to 'lanczos3'. */
+  /** Defaults to 'bilinear'. */
   resizeMode: ResizeMode;
   paletteName: string;
   /** Defaults to 'oklab'. */

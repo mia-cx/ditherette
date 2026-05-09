@@ -63,9 +63,31 @@ function colorIdentity(color: EnabledPaletteColor): JsonValue {
 	};
 }
 
+function outputIdentity(output: OutputSettings): JsonValue {
+	return {
+		width: output.width,
+		height: output.height,
+		lockAspect: output.lockAspect,
+		resize: output.resize,
+		alphaMode: output.alphaMode,
+		alphaThreshold: output.alphaThreshold,
+		matteKey: output.matteKey,
+		autoSizeOnUpload: output.autoSizeOnUpload,
+		scaleFactor: output.scaleFactor,
+		crop: output.crop
+			? {
+					x: output.crop.x,
+					y: output.crop.y,
+					width: output.crop.width,
+					height: output.crop.height
+				}
+			: undefined
+	};
+}
+
 export function processingIdentity(input: ProcessingIdentityInput): JsonValue {
 	return {
-		output: input.output,
+		output: outputIdentity(input.output),
 		dither: input.dither,
 		colorSpace: input.colorSpace,
 		palette: {

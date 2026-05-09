@@ -43,7 +43,6 @@ self.onmessage = (event: MessageEvent<unknown>) => {
 			source,
 			size.width,
 			size.height,
-			settings.output.fit,
 			settings.output.resize,
 			settings.output.crop
 		);

@@ -9,7 +9,6 @@ import {
 	type DitherPlacement,
 	type DitherSettings,
 	type EnabledPaletteColor,
-	type FitMode,
 	type OutputSettings,
 	type ProcessedImage,
 	type ProcessingSettings,
@@ -19,11 +18,13 @@ import {
 	type WorkerResponse
 } from './types';
 
-const FIT_MODES = ['stretch', 'contain', 'cover'] as const satisfies readonly FitMode[];
 const RESIZE_MODES = [
 	'nearest',
 	'bilinear',
+	'lanczos2',
+	'lanczos2-scale-aware',
 	'lanczos3',
+	'lanczos3-scale-aware',
 	'area'
 ] as const satisfies readonly ResizeId[];
 const ALPHA_MODES = ['preserve', 'premultiplied', 'matte'] as const satisfies readonly AlphaMode[];
@@ -139,7 +140,6 @@ function validateOutputSettings(value: unknown): OutputSettings {
 		width,
 		height,
 		lockAspect: assertBoolean(value.lockAspect, 'Worker output aspect lock'),
-		fit: assertOneOf(value.fit, FIT_MODES, 'Worker output fit mode'),
 		resize: assertOneOf(value.resize, RESIZE_MODES, 'Worker output resize mode'),
 		alphaMode: assertOneOf(value.alphaMode, ALPHA_MODES, 'Worker output alpha mode'),
 		alphaThreshold,

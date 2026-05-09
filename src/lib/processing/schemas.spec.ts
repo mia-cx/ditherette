@@ -50,7 +50,6 @@ const output: OutputSettings = {
 	width: 2,
 	height: 1,
 	lockAspect: true,
-	fit: 'contain',
 	resize: 'lanczos3',
 	alphaMode: 'preserve',
 	alphaThreshold: 0,

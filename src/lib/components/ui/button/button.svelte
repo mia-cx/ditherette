@@ -47,6 +47,8 @@
 </script>
 
 <script lang="ts">
+	import { resolveButtonHref } from './href';
+
 	let {
 		class: className,
 		variant = 'default',
@@ -61,11 +63,12 @@
 </script>
 
 {#if href}
+	<!-- eslint-disable svelte/no-navigation-without-resolve -- hrefs are resolved by resolveButtonHref; non-app anchors must keep browser semantics. -->
 	<a
 		bind:this={ref}
 		data-slot="button"
 		class={cn(buttonVariants({ variant, size }), className)}
-		href={disabled ? undefined : href}
+		href={disabled ? undefined : resolveButtonHref(href)}
 		aria-disabled={disabled}
 		role={disabled ? 'link' : undefined}
 		tabindex={disabled ? -1 : undefined}
@@ -73,6 +76,7 @@
 	>
 		{@render children?.()}
 	</a>
+	<!-- eslint-enable svelte/no-navigation-without-resolve -->
 {:else}
 	<button
 		bind:this={ref}

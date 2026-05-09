@@ -23,8 +23,7 @@ export const outputSettings = persistentJSON<OutputSettings>('ditherette:output'
 	width: 512,
 	height: 512,
 	lockAspect: true,
-	fit: 'contain',
-	resize: 'lanczos3',
+	resize: 'bilinear',
 	alphaMode: 'preserve',
 	alphaThreshold: 0,
 	matteKey: '#FFFFFF',
@@ -122,6 +121,20 @@ function shallowEqual<T extends object>(left: T, right: T) {
 	return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
 }
 
+function cropRectEqual(left: OutputSettings['crop'], right: OutputSettings['crop']) {
+	if (!left || !right) return left === right;
+	return (
+		left.x === right.x &&
+		left.y === right.y &&
+		left.width === right.width &&
+		left.height === right.height
+	);
+}
+
+function outputSettingsEqual(left: OutputSettings, right: OutputSettings) {
+	return shallowEqual({ ...left, crop: undefined }, { ...right, crop: undefined }) && cropRectEqual(left.crop, right.crop);
+}
+
 function normalizeHex(hex: string) {
 	const trimmed = hex.trim();
 	const expanded = /^#[0-9a-fA-F]{3}$/.test(trimmed)
@@ -207,9 +220,19 @@ function visibleCustomColor(name: string, hex: string, tags: readonly string[] =
 	return { name: cleanColorName(name, key), key, rgb: hexToRgb(key), kind: 'custom', tags: clean };
 }
 
+function currentOutputSettings() {
+	const settings = { ...outputSettings.get() } as OutputSettings & { fit?: unknown };
+	delete settings.fit;
+	return settings;
+}
+
 export function updateOutputSettings(patch: Partial<OutputSettings>) {
-	const next = { ...outputSettings.get(), ...patch };
-	if (!shallowEqual(outputSettings.get(), next)) outputSettings.set(next);
+	const current = currentOutputSettings();
+	const next = { ...current, ...patch };
+	if (outputSettingsEqual(current, next)) return;
+	// Crop changes alter the source frame itself, so the previous output should not be displayed.
+	if ('crop' in patch && !cropRectEqual(current.crop, next.crop)) processedImage.set(undefined);
+	outputSettings.set(next);
 }
 
 export function updateDitherSettings(patch: Partial<DitherSettings>) {

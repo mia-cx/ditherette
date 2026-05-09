@@ -136,7 +136,8 @@ export async function processCurrentImage() {
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
 	if (previous?.settingsHash === hash) return;
-	if (previous) processedImage.set(undefined);
+	// Keep the last valid output on screen while non-crop edits reprocess.
+	// Source and crop changes clear it at their boundaries because the old frame shape is misleading there.
 	const program = Effect.tryPromise({
 		try: processInWorker,
 		catch: (error) => (error instanceof Error ? error : new Error('Processing failed'))
@@ -161,7 +162,6 @@ export function scheduleProcessing(delay = 180) {
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
 	if (previous?.settingsHash === hash) return;
-	if (previous) processedImage.set(undefined);
 	if (timer) clearTimeout(timer);
 	timer = setTimeout(() => {
 		timer = undefined;

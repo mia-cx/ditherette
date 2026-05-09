@@ -29,6 +29,8 @@ class TestImageData implements ImageData {
 
 Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configurable: true });
 
+const MAX_REFERENCE_SCALE_AWARE_LANCZOS_TAPS = 64;
+
 function solidImage(
 	width: number,
 	height: number,
@@ -44,33 +46,368 @@ function solidImage(
 	return new ImageData(data, width, height);
 }
 
+function patternedImage(width: number, height: number) {
+	const data = new Uint8ClampedArray(width * height * 4);
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const offset = (y * width + x) * 4;
+			data[offset] = (x * 47 + y * 11) & 255;
+			data[offset + 1] = (x * 7 + y * 53) & 255;
+			data[offset + 2] = (x * y * 19 + 31) & 255;
+			data[offset + 3] = (x + y) % 5 === 0 ? 96 : 255;
+		}
+	}
+	return new ImageData(data, width, height);
+}
+
+type ReferenceRect = { x: number; y: number; width: number; height: number };
+
+function referenceResize(
+	source: ImageData,
+	width: number,
+	height: number,
+	mode:
+		| 'nearest'
+		| 'bilinear'
+		| 'area'
+		| 'lanczos2'
+		| 'lanczos2-scale-aware'
+		| 'lanczos3'
+		| 'lanczos3-scale-aware',
+	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
+	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
+) {
+	const output = new ImageData(width, height);
+	const targetLeft = Math.max(0, Math.round(targetRect.x));
+	const targetTop = Math.max(0, Math.round(targetRect.y));
+	const targetRight = Math.min(width, Math.round(targetRect.x + targetRect.width));
+	const targetBottom = Math.min(height, Math.round(targetRect.y + targetRect.height));
+	const targetWidth = Math.max(1, targetRight - targetLeft);
+	const targetHeight = Math.max(1, targetBottom - targetTop);
+	const scaleX = sourceRect.width / targetWidth;
+	const scaleY = sourceRect.height / targetHeight;
+	for (let y = targetTop; y < targetBottom; y++) {
+		for (let x = targetLeft; x < targetRight; x++) {
+			const sourceX = sourceRect.x + (x - targetLeft + 0.5) * scaleX - 0.5;
+			const sourceY = sourceRect.y + (y - targetTop + 0.5) * scaleY - 0.5;
+			const pixel = referenceSample(source, sourceX, sourceY, scaleX, scaleY, mode);
+			const offset = (y * width + x) * 4;
+			output.data[offset] = pixel[0];
+			output.data[offset + 1] = pixel[1];
+			output.data[offset + 2] = pixel[2];
+			output.data[offset + 3] = pixel[3];
+		}
+	}
+	return output;
+}
+
+function referenceLanczosResize(
+	source: ImageData,
+	width: number,
+	height: number,
+	mode: 'lanczos2' | 'lanczos2-scale-aware' | 'lanczos3' | 'lanczos3-scale-aware' = 'lanczos3',
+	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
+	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
+) {
+	return referenceResize(source, width, height, mode, sourceRect, targetRect);
+}
+
+function referenceSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	scaleX: number,
+	scaleY: number,
+	mode:
+		| 'nearest'
+		| 'bilinear'
+		| 'area'
+		| 'lanczos2'
+		| 'lanczos2-scale-aware'
+		| 'lanczos3'
+		| 'lanczos3-scale-aware'
+) {
+	if (mode === 'nearest') return referencePixel(source, Math.round(x), Math.round(y));
+	if (mode === 'bilinear') return referenceBilinearSample(source, x, y);
+	if (mode === 'area') return referenceAreaSample(source, x, y, scaleX, scaleY);
+	if (mode === 'lanczos2') return referenceLanczosSample(source, x, y, 2);
+	if (mode === 'lanczos2-scale-aware') {
+		return referenceScaleAwareLanczosSample(source, x, y, scaleX, scaleY, 2);
+	}
+	if (mode === 'lanczos3-scale-aware') {
+		return referenceScaleAwareLanczosSample(source, x, y, scaleX, scaleY, 3);
+	}
+	return referenceLanczosSample(source, x, y, 3);
+}
+
+function referenceBilinearSample(source: ImageData, x: number, y: number) {
+	const x0 = Math.floor(x);
+	const y0 = Math.floor(y);
+	const tx = x - x0;
+	const ty = y - y0;
+	const accumulator = referenceAccumulator();
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0, y0), (1 - tx) * (1 - ty));
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0 + 1, y0), tx * (1 - ty));
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0, y0 + 1), (1 - tx) * ty);
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0 + 1, y0 + 1), tx * ty);
+	return referenceFinishWeightedSample(accumulator);
+}
+
+function referenceAreaSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	scaleX: number,
+	scaleY: number
+) {
+	if (scaleX < 1 && scaleY < 1) return referenceBilinearSample(source, x, y);
+	const left = Math.floor(x - scaleX / 2);
+	const right = Math.ceil(x + scaleX / 2);
+	const top = Math.floor(y - scaleY / 2);
+	const bottom = Math.ceil(y + scaleY / 2);
+	const accumulator = referenceAccumulator();
+	for (let yy = top; yy <= bottom; yy++) {
+		for (let xx = left; xx <= right; xx++) {
+			referenceAddWeightedSample(accumulator, referencePixel(source, xx, yy), 1);
+		}
+	}
+	return referenceFinishWeightedSample(accumulator);
+}
+
+function referenceLanczosSample(source: ImageData, x: number, y: number, radius: number) {
+	return referenceLanczosWindowSample(source, x, y, radius, radius * 2, radius * 2, 1, 1);
+}
+
+function referenceScaleAwareLanczosSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	scaleX: number,
+	scaleY: number,
+	radius: number
+) {
+	return referenceLanczosWindowSample(
+		source,
+		x,
+		y,
+		radius,
+		referenceScaleAwareTaps(radius, scaleX),
+		referenceScaleAwareTaps(radius, scaleY),
+		Math.max(1, scaleX),
+		Math.max(1, scaleY)
+	);
+}
+
+function referenceScaleAwareTaps(radius: number, scale: number) {
+	return Math.min(
+		MAX_REFERENCE_SCALE_AWARE_LANCZOS_TAPS,
+		Math.ceil(radius * Math.max(1, scale)) * 2
+	);
+}
+
+function referenceLanczosWindowSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	radius: number,
+	tapsX: number,
+	tapsY: number,
+	filterScaleX: number,
+	filterScaleY: number
+) {
+	const floorX = Math.floor(x);
+	const floorY = Math.floor(y);
+	const startX = floorX - tapsX / 2 + 1;
+	const startY = floorY - tapsY / 2 + 1;
+	let r = 0;
+	let g = 0;
+	let b = 0;
+	let a = 0;
+	let total = 0;
+	for (let yTap = 0; yTap < tapsY; yTap++) {
+		const yy = startY + yTap;
+		const wy = referenceLanczos((y - yy) / filterScaleY, radius);
+		for (let xTap = 0; xTap < tapsX; xTap++) {
+			const xx = startX + xTap;
+			const weight = referenceLanczos((x - xx) / filterScaleX, radius) * wy;
+			if (weight === 0) continue;
+			const pixel = referencePixel(source, xx, yy);
+			const alpha = pixel[3] / 255;
+			r += pixel[0] * alpha * weight;
+			g += pixel[1] * alpha * weight;
+			b += pixel[2] * alpha * weight;
+			a += pixel[3] * weight;
+			total += weight;
+		}
+	}
+	if (total === 0) return [0, 0, 0, 0] as const;
+	return referenceUnpremultiply(r / total, g / total, b / total, a / total);
+}
+
+function referenceAccumulator() {
+	return { r: 0, g: 0, b: 0, a: 0, total: 0 };
+}
+
+function referenceAddWeightedSample(
+	accumulator: { r: number; g: number; b: number; a: number; total: number },
+	pixel: readonly [number, number, number, number],
+	weight: number
+) {
+	const alpha = pixel[3] / 255;
+	accumulator.r += pixel[0] * alpha * weight;
+	accumulator.g += pixel[1] * alpha * weight;
+	accumulator.b += pixel[2] * alpha * weight;
+	accumulator.a += pixel[3] * weight;
+	accumulator.total += weight;
+}
+
+function referenceFinishWeightedSample(accumulator: {
+	r: number;
+	g: number;
+	b: number;
+	a: number;
+	total: number;
+}) {
+	if (accumulator.total === 0) return [0, 0, 0, 0] as const;
+	return referenceUnpremultiply(
+		accumulator.r / accumulator.total,
+		accumulator.g / accumulator.total,
+		accumulator.b / accumulator.total,
+		accumulator.a / accumulator.total
+	);
+}
+
+function referencePixel(source: ImageData, x: number, y: number) {
+	const xx = Math.min(source.width - 1, Math.max(0, x));
+	const yy = Math.min(source.height - 1, Math.max(0, y));
+	const offset = (yy * source.width + xx) * 4;
+	return [
+		source.data[offset]!,
+		source.data[offset + 1]!,
+		source.data[offset + 2]!,
+		source.data[offset + 3]!
+	] as const;
+}
+
+function referenceLanczos(value: number, radius: number) {
+	const absolute = Math.abs(value);
+	if (absolute >= radius) return 0;
+	return referenceSinc(absolute) * referenceSinc(absolute / radius);
+}
+
+function referenceSinc(value: number) {
+	if (value === 0) return 1;
+	const x = Math.PI * value;
+	return Math.sin(x) / x;
+}
+
+function referenceUnpremultiply(r: number, g: number, b: number, a: number) {
+	if (a <= 0) return [0, 0, 0, 0] as const;
+	const alpha = a / 255;
+	return [
+		Math.round(Math.max(0, Math.min(255, r / alpha))),
+		Math.round(Math.max(0, Math.min(255, g / alpha))),
+		Math.round(Math.max(0, Math.min(255, b / alpha))),
+		Math.round(Math.max(0, Math.min(255, a)))
+	] as const;
+}
+
+function expectMaxChannelDelta(output: ImageData, reference: ImageData, maxDelta: number) {
+	expect(output.width).toBe(reference.width);
+	expect(output.height).toBe(reference.height);
+	for (let index = 0; index < output.data.length; index++) {
+		expect(Math.abs(output.data[index]! - reference.data[index]!)).toBeLessThanOrEqual(maxDelta);
+	}
+}
+
 describe('resizeImageData', () => {
-	it('letterboxes contain output instead of smearing clamped edge pixels', () => {
-		const output = resizeImageData(solidImage(4, 2, [255, 0, 0, 255]), 4, 4, 'contain', 'nearest');
-
-		expect([...output.data.slice(0, 16)]).toEqual(new Array(16).fill(0));
-		expect([...output.data.slice(16, 32)]).toEqual([
-			255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255
-		]);
-		expect([...output.data.slice(48, 64)]).toEqual(new Array(16).fill(0));
-	});
-
 	it('does not bleed RGB from transparent pixels during bilinear resize', () => {
 		const source = new ImageData(new Uint8ClampedArray([255, 0, 0, 0, 0, 0, 255, 255]), 2, 1);
 
-		const output = resizeImageData(source, 1, 1, 'stretch', 'bilinear');
+		const output = resizeImageData(source, 1, 1, 'bilinear');
 
 		expect([...output.data]).toEqual([0, 0, 255, 128]);
 	});
 
+	it('matches independent references for nearest, bilinear, and area before optimizing sampler paths', () => {
+		const source = patternedImage(8, 5);
+		const modes = ['nearest', 'bilinear', 'area'] as const;
+
+		for (const mode of modes) {
+			const cases = [
+				{
+					output: resizeImageData(source, 11, 8, mode),
+					reference: referenceResize(source, 11, 8, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 3, mode),
+					reference: referenceResize(source, 5, 3, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 5, mode, { x: 1.5, y: 0, width: 5, height: 5 }),
+					reference: referenceResize(source, 5, 5, mode, { x: 1.5, y: 0, width: 5, height: 5 })
+				}
+			];
+
+			for (const { output, reference } of cases) {
+				expect([...output.data]).toEqual([...reference.data]);
+			}
+		}
+
+		const opaqueSource = solidImage(7, 4, [21, 89, 233, 255]);
+		for (const mode of modes) {
+			const output = resizeImageData(opaqueSource, 10, 6, mode);
+			const reference = referenceResize(opaqueSource, 10, 6, mode);
+			expect([...output.data]).toEqual([...reference.data]);
+		}
+	});
+
+	it('matches the reference Lanczos sampler before optimizing the hot path', () => {
+		const source = patternedImage(8, 5);
+		for (const mode of [
+			'lanczos2',
+			'lanczos2-scale-aware',
+			'lanczos3',
+			'lanczos3-scale-aware'
+		] as const) {
+			const cases = [
+				{
+					output: resizeImageData(source, 11, 8, mode),
+					reference: referenceLanczosResize(source, 11, 8, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 3, mode),
+					reference: referenceLanczosResize(source, 5, 3, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 5, mode, { x: 1.5, y: 0, width: 5, height: 5 }),
+					reference: referenceLanczosResize(source, 5, 5, mode, {
+						x: 1.5,
+						y: 0,
+						width: 5,
+						height: 5
+					})
+				}
+			];
+
+			for (const { output, reference } of cases) {
+				if (mode === 'lanczos3') expect([...output.data]).toEqual([...reference.data]);
+				else if (mode.endsWith('scale-aware')) expectMaxChannelDelta(output, reference, 8);
+				else expectMaxChannelDelta(output, reference, 1);
+			}
+		}
+	});
+
+	it('caps scale-aware Lanczos work for extreme downscales', () => {
+		const source = patternedImage(130, 130);
+		const output = resizeImageData(source, 1, 1, 'lanczos3-scale-aware');
+		const reference = referenceLanczosResize(source, 1, 1, 'lanczos3-scale-aware');
+
+		expectMaxChannelDelta(output, reference, 8);
+	});
+
 	it('allows source dimensions up to the source limit when resizing down', () => {
-		const output = resizeImageData(
-			solidImage(20_000, 1, [0, 0, 0, 255]),
-			1,
-			1,
-			'stretch',
-			'nearest'
-		);
+		const output = resizeImageData(solidImage(20_000, 1, [0, 0, 0, 255]), 1, 1, 'nearest');
 
 		expect(output.width).toBe(1);
 		expect(output.height).toBe(1);
