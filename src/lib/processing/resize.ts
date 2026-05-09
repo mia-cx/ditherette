@@ -263,6 +263,7 @@ type TargetBounds = {
 
 type ContributionTable = {
 	indices: Int32Array;
+	byteOffsets: Int32Array;
 	weights: Float64Array;
 	totals: Float64Array;
 };
@@ -341,17 +342,57 @@ function resizeOpaqueLanczos3(
 				continue;
 			}
 
+			const rowOffset = targetX * 3;
 			let r = 0;
 			let g = 0;
 			let b = 0;
-			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
-				const weight = yTable.weights[yBase + yTap]!;
-				const row = rows[yTap];
-				if (weight === 0 || !row) continue;
-				const rowOffset = targetX * 3;
-				r += row[rowOffset]! * weight;
-				g += row[rowOffset + 1]! * weight;
-				b += row[rowOffset + 2]! * weight;
+
+			const row0 = rows[0];
+			const weight0 = yTable.weights[yBase]!;
+			if (weight0 !== 0 && row0) {
+				r += row0[rowOffset]! * weight0;
+				g += row0[rowOffset + 1]! * weight0;
+				b += row0[rowOffset + 2]! * weight0;
+			}
+
+			const row1 = rows[1];
+			const weight1 = yTable.weights[yBase + 1]!;
+			if (weight1 !== 0 && row1) {
+				r += row1[rowOffset]! * weight1;
+				g += row1[rowOffset + 1]! * weight1;
+				b += row1[rowOffset + 2]! * weight1;
+			}
+
+			const row2 = rows[2];
+			const weight2 = yTable.weights[yBase + 2]!;
+			if (weight2 !== 0 && row2) {
+				r += row2[rowOffset]! * weight2;
+				g += row2[rowOffset + 1]! * weight2;
+				b += row2[rowOffset + 2]! * weight2;
+			}
+
+			const row3 = rows[3];
+			const weight3 = yTable.weights[yBase + 3]!;
+			if (weight3 !== 0 && row3) {
+				r += row3[rowOffset]! * weight3;
+				g += row3[rowOffset + 1]! * weight3;
+				b += row3[rowOffset + 2]! * weight3;
+			}
+
+			const row4 = rows[4];
+			const weight4 = yTable.weights[yBase + 4]!;
+			if (weight4 !== 0 && row4) {
+				r += row4[rowOffset]! * weight4;
+				g += row4[rowOffset + 1]! * weight4;
+				b += row4[rowOffset + 2]! * weight4;
+			}
+
+			const row5 = rows[5];
+			const weight5 = yTable.weights[yBase + 5]!;
+			if (weight5 !== 0 && row5) {
+				r += row5[rowOffset]! * weight5;
+				g += row5[rowOffset + 1]! * weight5;
+				b += row5[rowOffset + 2]! * weight5;
 			}
 
 			outputData[targetOffset] = clampByte(r / total);
@@ -393,19 +434,64 @@ function resizeLanczos3WithAlpha(
 				continue;
 			}
 
+			const rowOffset = targetX * 4;
 			let r = 0;
 			let g = 0;
 			let b = 0;
 			let a = 0;
-			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
-				const weight = yTable.weights[yBase + yTap]!;
-				const row = rows[yTap];
-				if (weight === 0 || !row) continue;
-				const rowOffset = targetX * 4;
-				r += row[rowOffset]! * weight;
-				g += row[rowOffset + 1]! * weight;
-				b += row[rowOffset + 2]! * weight;
-				a += row[rowOffset + 3]! * weight;
+
+			const row0 = rows[0];
+			const weight0 = yTable.weights[yBase]!;
+			if (weight0 !== 0 && row0) {
+				r += row0[rowOffset]! * weight0;
+				g += row0[rowOffset + 1]! * weight0;
+				b += row0[rowOffset + 2]! * weight0;
+				a += row0[rowOffset + 3]! * weight0;
+			}
+
+			const row1 = rows[1];
+			const weight1 = yTable.weights[yBase + 1]!;
+			if (weight1 !== 0 && row1) {
+				r += row1[rowOffset]! * weight1;
+				g += row1[rowOffset + 1]! * weight1;
+				b += row1[rowOffset + 2]! * weight1;
+				a += row1[rowOffset + 3]! * weight1;
+			}
+
+			const row2 = rows[2];
+			const weight2 = yTable.weights[yBase + 2]!;
+			if (weight2 !== 0 && row2) {
+				r += row2[rowOffset]! * weight2;
+				g += row2[rowOffset + 1]! * weight2;
+				b += row2[rowOffset + 2]! * weight2;
+				a += row2[rowOffset + 3]! * weight2;
+			}
+
+			const row3 = rows[3];
+			const weight3 = yTable.weights[yBase + 3]!;
+			if (weight3 !== 0 && row3) {
+				r += row3[rowOffset]! * weight3;
+				g += row3[rowOffset + 1]! * weight3;
+				b += row3[rowOffset + 2]! * weight3;
+				a += row3[rowOffset + 3]! * weight3;
+			}
+
+			const row4 = rows[4];
+			const weight4 = yTable.weights[yBase + 4]!;
+			if (weight4 !== 0 && row4) {
+				r += row4[rowOffset]! * weight4;
+				g += row4[rowOffset + 1]! * weight4;
+				b += row4[rowOffset + 2]! * weight4;
+				a += row4[rowOffset + 3]! * weight4;
+			}
+
+			const row5 = rows[5];
+			const weight5 = yTable.weights[yBase + 5]!;
+			if (weight5 !== 0 && row5) {
+				r += row5[rowOffset]! * weight5;
+				g += row5[rowOffset + 1]! * weight5;
+				b += row5[rowOffset + 2]! * weight5;
+				a += row5[rowOffset + 3]! * weight5;
 			}
 
 			const [outR, outG, outB, outA] = unpremultiplySample(
@@ -490,37 +576,37 @@ function lanczosOpaqueRow(
 	const sourceRowOffset = sourceY * source.width * 4;
 	for (let targetX = 0; targetX < targetWidth; targetX++) {
 		const xBase = targetX * LANCZOS_TAPS;
-		let offset = sourceRowOffset + xTable.indices[xBase]! * 4;
+		let offset = sourceRowOffset + xTable.byteOffsets[xBase]!;
 		const weight0 = xTable.weights[xBase]!;
 		let r = sourceData[offset]! * weight0;
 		let g = sourceData[offset + 1]! * weight0;
 		let b = sourceData[offset + 2]! * weight0;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 1]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 1]!;
 		const weight1 = xTable.weights[xBase + 1]!;
 		r += sourceData[offset]! * weight1;
 		g += sourceData[offset + 1]! * weight1;
 		b += sourceData[offset + 2]! * weight1;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 2]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 2]!;
 		const weight2 = xTable.weights[xBase + 2]!;
 		r += sourceData[offset]! * weight2;
 		g += sourceData[offset + 1]! * weight2;
 		b += sourceData[offset + 2]! * weight2;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 3]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 3]!;
 		const weight3 = xTable.weights[xBase + 3]!;
 		r += sourceData[offset]! * weight3;
 		g += sourceData[offset + 1]! * weight3;
 		b += sourceData[offset + 2]! * weight3;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 4]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 4]!;
 		const weight4 = xTable.weights[xBase + 4]!;
 		r += sourceData[offset]! * weight4;
 		g += sourceData[offset + 1]! * weight4;
 		b += sourceData[offset + 2]! * weight4;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 5]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 5]!;
 		const weight5 = xTable.weights[xBase + 5]!;
 		r += sourceData[offset]! * weight5;
 		g += sourceData[offset + 1]! * weight5;
@@ -545,7 +631,7 @@ function lanczosAlphaRow(
 	const sourceRowOffset = sourceY * source.width * 4;
 	for (let targetX = 0; targetX < targetWidth; targetX++) {
 		const xBase = targetX * LANCZOS_TAPS;
-		let offset = sourceRowOffset + xTable.indices[xBase]! * 4;
+		let offset = sourceRowOffset + xTable.byteOffsets[xBase]!;
 		let alpha = sourceData[offset + 3]! / 255;
 		const weight0 = xTable.weights[xBase]!;
 		let r = sourceData[offset]! * alpha * weight0;
@@ -553,7 +639,7 @@ function lanczosAlphaRow(
 		let b = sourceData[offset + 2]! * alpha * weight0;
 		let a = sourceData[offset + 3]! * weight0;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 1]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 1]!;
 		alpha = sourceData[offset + 3]! / 255;
 		const weight1 = xTable.weights[xBase + 1]!;
 		r += sourceData[offset]! * alpha * weight1;
@@ -561,7 +647,7 @@ function lanczosAlphaRow(
 		b += sourceData[offset + 2]! * alpha * weight1;
 		a += sourceData[offset + 3]! * weight1;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 2]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 2]!;
 		alpha = sourceData[offset + 3]! / 255;
 		const weight2 = xTable.weights[xBase + 2]!;
 		r += sourceData[offset]! * alpha * weight2;
@@ -569,7 +655,7 @@ function lanczosAlphaRow(
 		b += sourceData[offset + 2]! * alpha * weight2;
 		a += sourceData[offset + 3]! * weight2;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 3]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 3]!;
 		alpha = sourceData[offset + 3]! / 255;
 		const weight3 = xTable.weights[xBase + 3]!;
 		r += sourceData[offset]! * alpha * weight3;
@@ -577,7 +663,7 @@ function lanczosAlphaRow(
 		b += sourceData[offset + 2]! * alpha * weight3;
 		a += sourceData[offset + 3]! * weight3;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 4]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 4]!;
 		alpha = sourceData[offset + 3]! / 255;
 		const weight4 = xTable.weights[xBase + 4]!;
 		r += sourceData[offset]! * alpha * weight4;
@@ -585,7 +671,7 @@ function lanczosAlphaRow(
 		b += sourceData[offset + 2]! * alpha * weight4;
 		a += sourceData[offset + 3]! * weight4;
 
-		offset = sourceRowOffset + xTable.indices[xBase + 5]! * 4;
+		offset = sourceRowOffset + xTable.byteOffsets[xBase + 5]!;
 		alpha = sourceData[offset + 3]! / 255;
 		const weight5 = xTable.weights[xBase + 5]!;
 		r += sourceData[offset]! * alpha * weight5;
@@ -604,6 +690,7 @@ function lanczosAlphaRow(
 
 function contributionTable(count: number, sourceStart: number, scale: number, sourceLimit: number) {
 	const indices = new Int32Array(count * LANCZOS_TAPS);
+	const byteOffsets = new Int32Array(count * LANCZOS_TAPS);
 	const weights = new Float64Array(count * LANCZOS_TAPS);
 	const totals = new Float64Array(count);
 	for (let target = 0; target < count; target++) {
@@ -615,13 +702,15 @@ function contributionTable(count: number, sourceStart: number, scale: number, so
 		for (let tap = 0; tap < LANCZOS_TAPS; tap++) {
 			const sourceIndex = first + tap;
 			const weight = lanczos(sourcePosition - sourceIndex, LANCZOS_RADIUS);
-			indices[base + tap] = Math.min(sourceLimit - 1, Math.max(0, sourceIndex));
+			const clampedSourceIndex = Math.min(sourceLimit - 1, Math.max(0, sourceIndex));
+			indices[base + tap] = clampedSourceIndex;
+			byteOffsets[base + tap] = clampedSourceIndex * 4;
 			weights[base + tap] = weight;
 			total += weight;
 		}
 		totals[target] = total;
 	}
-	return { indices, weights, totals } satisfies ContributionTable;
+	return { indices, byteOffsets, weights, totals } satisfies ContributionTable;
 }
 
 function sampleArea(source: ImageData, x: number, y: number, scaleX: number, scaleY: number) {
