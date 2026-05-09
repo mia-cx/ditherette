@@ -24,19 +24,24 @@ const VARIANTS = [
 		apply: (source) => source
 	},
 	{
-		id: 'array-row-cache',
-		description: 'Use sourceY-indexed arrays instead of Map for Lanczos row caches',
-		apply: applyArrayRowCache
-	},
-	{
 		id: 'x-byte-offsets',
 		description: 'Precompute source byte offsets for horizontal Lanczos taps',
 		apply: applyXByteOffsets
 	},
 	{
-		id: 'array-row-cache-x-byte-offsets',
-		description: 'Combine array row cache with precomputed horizontal byte offsets',
-		apply: (source) => applyXByteOffsets(applyArrayRowCache(source))
+		id: 'vertical-row-offset-hoist',
+		description: 'Hoist vertical pass row offsets out of the tap loop',
+		apply: applyVerticalRowOffsetHoist
+	},
+	{
+		id: 'vertical-six-tap-unroll',
+		description: 'Unroll the vertical Lanczos tap accumulation',
+		apply: applyVerticalTapUnroll
+	},
+	{
+		id: 'x-byte-offsets-vertical-six-tap-unroll',
+		description: 'Combine horizontal byte offsets with vertical tap unrolling',
+		apply: (source) => applyVerticalTapUnroll(applyXByteOffsets(source))
 	}
 ];
 
@@ -537,21 +542,6 @@ function runCorrectnessCheck(directory, variantId) {
 	return correctness;
 }
 
-function applyArrayRowCache(source) {
-	return source
-		.replaceAll(
-			'const rowCache = new Map<number, Float64Array>();',
-			'const rowCache: Array<Float64Array | undefined> = [];'
-		)
-		.replaceAll('rowCache: Map<number, Float64Array>', 'rowCache: Array<Float64Array | undefined>')
-		.replace('let row = rowCache.get(sourceY);', 'let row = rowCache[sourceY];')
-		.replace('rowCache.set(sourceY, row);', 'rowCache[sourceY] = row;')
-		.replace(
-			'if (lastUse[sourceY] === targetY) rowCache.delete(sourceY);',
-			'if (lastUse[sourceY] === targetY) rowCache[sourceY] = undefined;'
-		);
-}
-
 function applyXByteOffsets(source) {
 	return source
 		.replace(
@@ -593,6 +583,211 @@ function applyXByteOffsets(source) {
 		.replaceAll(
 			'sourceRowOffset + xTable.indices[xBase + 5]! * 4',
 			'sourceRowOffset + xTable.byteOffsets[xBase + 5]!'
+		);
+}
+
+function applyVerticalRowOffsetHoist(source) {
+	return source
+		.replace(
+			`let r = 0;
+			let g = 0;
+			let b = 0;
+			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				const rowOffset = targetX * 3;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+			}`,
+			`const rowOffset = targetX * 3;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+			}`
+		)
+		.replace(
+			`let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				const rowOffset = targetX * 4;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+				a += row[rowOffset + 3]! * weight;
+			}`,
+			`const rowOffset = targetX * 4;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+				a += row[rowOffset + 3]! * weight;
+			}`
+		);
+}
+
+function applyVerticalTapUnroll(source) {
+	return source
+		.replace(
+			`let r = 0;
+			let g = 0;
+			let b = 0;
+			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				const rowOffset = targetX * 3;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+			}`,
+			`const rowOffset = targetX * 3;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+
+			const row0 = rows[0];
+			const weight0 = yTable.weights[yBase]!;
+			if (weight0 !== 0 && row0) {
+				r += row0[rowOffset]! * weight0;
+				g += row0[rowOffset + 1]! * weight0;
+				b += row0[rowOffset + 2]! * weight0;
+			}
+
+			const row1 = rows[1];
+			const weight1 = yTable.weights[yBase + 1]!;
+			if (weight1 !== 0 && row1) {
+				r += row1[rowOffset]! * weight1;
+				g += row1[rowOffset + 1]! * weight1;
+				b += row1[rowOffset + 2]! * weight1;
+			}
+
+			const row2 = rows[2];
+			const weight2 = yTable.weights[yBase + 2]!;
+			if (weight2 !== 0 && row2) {
+				r += row2[rowOffset]! * weight2;
+				g += row2[rowOffset + 1]! * weight2;
+				b += row2[rowOffset + 2]! * weight2;
+			}
+
+			const row3 = rows[3];
+			const weight3 = yTable.weights[yBase + 3]!;
+			if (weight3 !== 0 && row3) {
+				r += row3[rowOffset]! * weight3;
+				g += row3[rowOffset + 1]! * weight3;
+				b += row3[rowOffset + 2]! * weight3;
+			}
+
+			const row4 = rows[4];
+			const weight4 = yTable.weights[yBase + 4]!;
+			if (weight4 !== 0 && row4) {
+				r += row4[rowOffset]! * weight4;
+				g += row4[rowOffset + 1]! * weight4;
+				b += row4[rowOffset + 2]! * weight4;
+			}
+
+			const row5 = rows[5];
+			const weight5 = yTable.weights[yBase + 5]!;
+			if (weight5 !== 0 && row5) {
+				r += row5[rowOffset]! * weight5;
+				g += row5[rowOffset + 1]! * weight5;
+				b += row5[rowOffset + 2]! * weight5;
+			}`
+		)
+		.replace(
+			`let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				const rowOffset = targetX * 4;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+				a += row[rowOffset + 3]! * weight;
+			}`,
+			`const rowOffset = targetX * 4;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+
+			const row0 = rows[0];
+			const weight0 = yTable.weights[yBase]!;
+			if (weight0 !== 0 && row0) {
+				r += row0[rowOffset]! * weight0;
+				g += row0[rowOffset + 1]! * weight0;
+				b += row0[rowOffset + 2]! * weight0;
+				a += row0[rowOffset + 3]! * weight0;
+			}
+
+			const row1 = rows[1];
+			const weight1 = yTable.weights[yBase + 1]!;
+			if (weight1 !== 0 && row1) {
+				r += row1[rowOffset]! * weight1;
+				g += row1[rowOffset + 1]! * weight1;
+				b += row1[rowOffset + 2]! * weight1;
+				a += row1[rowOffset + 3]! * weight1;
+			}
+
+			const row2 = rows[2];
+			const weight2 = yTable.weights[yBase + 2]!;
+			if (weight2 !== 0 && row2) {
+				r += row2[rowOffset]! * weight2;
+				g += row2[rowOffset + 1]! * weight2;
+				b += row2[rowOffset + 2]! * weight2;
+				a += row2[rowOffset + 3]! * weight2;
+			}
+
+			const row3 = rows[3];
+			const weight3 = yTable.weights[yBase + 3]!;
+			if (weight3 !== 0 && row3) {
+				r += row3[rowOffset]! * weight3;
+				g += row3[rowOffset + 1]! * weight3;
+				b += row3[rowOffset + 2]! * weight3;
+				a += row3[rowOffset + 3]! * weight3;
+			}
+
+			const row4 = rows[4];
+			const weight4 = yTable.weights[yBase + 4]!;
+			if (weight4 !== 0 && row4) {
+				r += row4[rowOffset]! * weight4;
+				g += row4[rowOffset + 1]! * weight4;
+				b += row4[rowOffset + 2]! * weight4;
+				a += row4[rowOffset + 3]! * weight4;
+			}
+
+			const row5 = rows[5];
+			const weight5 = yTable.weights[yBase + 5]!;
+			if (weight5 !== 0 && row5) {
+				r += row5[rowOffset]! * weight5;
+				g += row5[rowOffset + 1]! * weight5;
+				b += row5[rowOffset + 2]! * weight5;
+				a += row5[rowOffset + 3]! * weight5;
+			}`
 		);
 }
 
