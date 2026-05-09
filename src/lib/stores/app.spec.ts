@@ -129,6 +129,19 @@ describe('processed output lifecycle', () => {
 		cancelProcessing();
 	});
 
+	it('does not flush the current output when crop values are unchanged', () => {
+		const current = processedFixture();
+		processedImage.set(current);
+		outputSettings.set({
+			...outputSettings.get(),
+			crop: { x: 0, y: 0, width: 256, height: 256 }
+		});
+
+		updateOutputSettings({ crop: { x: 0, y: 0, width: 256, height: 256 } });
+
+		expect(processedImage.get()).toBe(current);
+	});
+
 	it('flushes the current output when crop changes', () => {
 		processedImage.set(processedFixture());
 
