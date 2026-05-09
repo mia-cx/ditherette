@@ -63,6 +63,7 @@ try {
 }
 
 function parseArgs(argv) {
+	argv = argv.filter((arg) => arg !== '--');
 	const options = {
 		iterations: DEFAULT_ITERATIONS,
 		warmups: DEFAULT_WARMUPS,
