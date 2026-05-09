@@ -17,6 +17,7 @@
 		"test:unit": "vitest",
 		"gen": "wrangler types",
 		"bench:processing": "node scripts/benchmark-processing.mjs",
+		"bench:bilinear-speed-study": "node scripts/bilinear-speed-study.mjs",
 		"bench:lanczos-study": "node scripts/lanczos-optimization-study.mjs",
 		"bench:lanczos-deferred-study": "node scripts/lanczos-deferred-study.mjs",
 		"bench:lanczos-quality-study": "node scripts/lanczos-quality-study.mjs",
