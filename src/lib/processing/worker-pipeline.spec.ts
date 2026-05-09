@@ -194,6 +194,43 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(pipeline.branchCacheSize).toBe(0);
 	});
 
+	it('includes processing metrics on complete responses', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+
+		const response = pipeline.handle(processRequest(), () => undefined);
+
+		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
+		expect(response.metrics).toMatchObject({
+			id: 2,
+			sourceId: 'source-1',
+			settingsHash: 'hash',
+			outputPixels: 2,
+			resize: 'nearest'
+		});
+		expect(response.metrics?.timings.length).toBeGreaterThan(0);
+		expect(response.metrics?.cache.delta.resizedMisses).toBe(1);
+		expect(response.metrics?.memory.resizedBytes).toBe(8);
+	});
+
+	it('records resize and quantize cache hits in metrics', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		pipeline.handle(processRequest(), () => undefined);
+
+		const response = pipeline.handle(processRequest({ id: 3 }), () => undefined);
+
+		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
+		expect(response.metrics?.cache.delta.resizedHits).toBe(1);
+		expect(response.metrics?.cache.delta.derivedHits).toBeGreaterThan(0);
+	});
+
 	it('returns transferred index buffers for complete responses', () => {
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(

@@ -9,6 +9,11 @@ import {
 	paletteColorEnabled,
 	paletteEnabledKey
 } from '$lib/palette/wplace';
+import {
+	appendMetricsSample,
+	summarizeTimingHistory,
+	type ProcessingMetricsSample
+} from '$lib/processing/metrics';
 import type {
 	ColorSpaceId,
 	DitherSettings,
@@ -111,6 +116,19 @@ export const sourceImageData = atom<ImageData | undefined>();
 export const processedImage = atom<ProcessedImage | undefined>();
 export const processingProgress = atom<{ stage: string; progress: number } | undefined>();
 export const processingError = atom<string | undefined>();
+export const currentProcessingMetrics = atom<ProcessingMetricsSample | undefined>();
+export const processingMetricsHistory = atom<ProcessingMetricsSample[]>([]);
+export const processingTimingSummary = computed(processingMetricsHistory, summarizeTimingHistory);
+
+export function recordProcessingMetrics(sample: ProcessingMetricsSample) {
+	currentProcessingMetrics.set(sample);
+	processingMetricsHistory.set(appendMetricsSample(processingMetricsHistory.get(), sample));
+}
+
+export function clearProcessingMetrics() {
+	currentProcessingMetrics.set(undefined);
+	processingMetricsHistory.set([]);
+}
 
 export const hasImage = computed(sourceMeta, (source) => Boolean(source));
 export const activeColorCount = computed(selectedPalette, (palette) => palette.length);
@@ -132,7 +150,10 @@ function cropRectEqual(left: OutputSettings['crop'], right: OutputSettings['crop
 }
 
 function outputSettingsEqual(left: OutputSettings, right: OutputSettings) {
-	return shallowEqual({ ...left, crop: undefined }, { ...right, crop: undefined }) && cropRectEqual(left.crop, right.crop);
+	return (
+		shallowEqual({ ...left, crop: undefined }, { ...right, crop: undefined }) &&
+		cropRectEqual(left.crop, right.crop)
+	);
 }
 
 function normalizeHex(hex: string) {
@@ -519,4 +540,5 @@ export function clearInMemoryImageState() {
 	processedImage.set(undefined);
 	processingProgress.set(undefined);
 	processingError.set(undefined);
+	clearProcessingMetrics();
 }
