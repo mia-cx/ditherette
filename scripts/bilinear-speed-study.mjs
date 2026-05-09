@@ -20,25 +20,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VARIANTS = [
 	{
 		id: 'baseline',
-		description: 'Committed bilinear path through generic resize loop',
+		description: 'Committed direct-output bilinear implementation',
 		apply: (source) => source
 	},
 	{
-		id: 'direct-loop',
-		description: 'Mode-specific bilinear loop that writes output directly',
-		apply: (source) => addBilinearBranch(source, DIRECT_BILINEAR_HELPERS, 'resizeBilinearDirect')
+		id: 'offset-hoist',
+		description: 'Hoist row bases and target row offsets in the direct bilinear loop',
+		apply: (source) => addBilinearBranch(source, OFFSET_HOIST_HELPER, 'resizeBilinearOffsetHoist')
 	},
 	{
-		id: 'direct-loop-global-opaque',
-		description: 'Direct bilinear loop with whole-source opaque fast path',
-		apply: (source) =>
-			addBilinearBranch(source, GLOBAL_OPAQUE_BILINEAR_HELPERS, 'resizeBilinearGlobalOpaque')
-	},
-	{
-		id: 'axis-tables-global-opaque',
-		description: 'Precompute bilinear axis tables plus whole-source opaque fast path',
-		apply: (source) =>
-			addBilinearBranch(source, AXIS_TABLE_BILINEAR_HELPERS, 'resizeBilinearAxisTables')
+		id: 'x-axis-table',
+		description: 'Precompute horizontal bilinear offsets and weights',
+		apply: (source) => addBilinearBranch(source, X_AXIS_TABLE_HELPERS, 'resizeBilinearXTable')
 	}
 ];
 
@@ -547,11 +540,8 @@ function runCorrectnessCheck(directory, variantId) {
 
 function addBilinearBranch(source, helpers, helperName) {
 	const branch = `\n\tif (mode === 'bilinear') {\n\t\t${helperName}(source, output, sourceRect);\n\t\treturn output;\n\t}\n`;
-	return insertBefore(
-		insertBefore(source, '\n\tfor (let y = targetTop;', branch),
-		'\nfunction sample(',
-		`\n${helpers}\n`
-	);
+	const marker = "\n\tif (mode === 'bilinear') {";
+	return insertBefore(insertBefore(source, marker, branch), '\nfunction sample(', `\n${helpers}\n`);
 }
 
 function insertBefore(source, marker, insertion) {
@@ -615,35 +605,41 @@ function installImageDataPolyfill() {
 	};
 }
 
-const DIRECT_BILINEAR_HELPERS = `function resizeBilinearDirect(source: ImageData, output: ImageData, sourceRect: Rect) {
+const OFFSET_HOIST_HELPER = `function resizeBilinearOffsetHoist(source: ImageData, output: ImageData, sourceRect: Rect) {
 	const outputData = output.data;
 	const data = source.data;
-	const scaleX = sourceRect.width / output.width;
-	const scaleY = sourceRect.height / output.height;
-	for (let y = 0; y < output.height; y++) {
+	const outputWidth = output.width;
+	const outputHeight = output.height;
+	const sourceWidth = source.width;
+	const sourceHeight = source.height;
+	const scaleX = sourceRect.width / outputWidth;
+	const scaleY = sourceRect.height / outputHeight;
+	for (let y = 0; y < outputHeight; y++) {
 		const sourceY = sourceRect.y + (y + 0.5) * scaleY - 0.5;
 		const y0 = Math.floor(sourceY);
 		const y1 = y0 + 1;
-		const clampedY0 = Math.min(source.height - 1, Math.max(0, y0));
-		const clampedY1 = Math.min(source.height - 1, Math.max(0, y1));
+		const clampedY0 = Math.min(sourceHeight - 1, Math.max(0, y0));
+		const clampedY1 = Math.min(sourceHeight - 1, Math.max(0, y1));
 		const ty = sourceY - y0;
-		for (let x = 0; x < output.width; x++) {
+		const rowOffset0 = clampedY0 * sourceWidth * 4;
+		const rowOffset1 = clampedY1 * sourceWidth * 4;
+		let targetOffset = y * outputWidth * 4;
+		for (let x = 0; x < outputWidth; x++) {
 			const sourceX = sourceRect.x + (x + 0.5) * scaleX - 0.5;
 			const x0 = Math.floor(sourceX);
 			const x1 = x0 + 1;
-			const clampedX0 = Math.min(source.width - 1, Math.max(0, x0));
-			const clampedX1 = Math.min(source.width - 1, Math.max(0, x1));
+			const clampedX0 = Math.min(sourceWidth - 1, Math.max(0, x0));
+			const clampedX1 = Math.min(sourceWidth - 1, Math.max(0, x1));
 			const tx = sourceX - x0;
 			const weight00 = (1 - tx) * (1 - ty);
 			const weight10 = tx * (1 - ty);
 			const weight01 = (1 - tx) * ty;
 			const weight11 = tx * ty;
-			const offset00 = (clampedY0 * source.width + clampedX0) * 4;
-			const offset10 = (clampedY0 * source.width + clampedX1) * 4;
-			const offset01 = (clampedY1 * source.width + clampedX0) * 4;
-			const offset11 = (clampedY1 * source.width + clampedX1) * 4;
+			const offset00 = rowOffset0 + clampedX0 * 4;
+			const offset10 = rowOffset0 + clampedX1 * 4;
+			const offset01 = rowOffset1 + clampedX0 * 4;
+			const offset11 = rowOffset1 + clampedX1 * 4;
 			const total = weight00 + weight10 + weight01 + weight11;
-			const targetOffset = (y * output.width + x) * 4;
 
 			if (
 				data[offset00 + 3] === 255 &&
@@ -673,6 +669,7 @@ const DIRECT_BILINEAR_HELPERS = `function resizeBilinearDirect(source: ImageData
 						total
 				);
 				outputData[targetOffset + 3] = 255;
+				targetOffset += 4;
 				continue;
 			}
 
@@ -709,6 +706,7 @@ const DIRECT_BILINEAR_HELPERS = `function resizeBilinearDirect(source: ImageData
 				outputData[targetOffset + 1] = 0;
 				outputData[targetOffset + 2] = 0;
 				outputData[targetOffset + 3] = 0;
+				targetOffset += 4;
 				continue;
 			}
 			const [outR, outG, outB, outA] = unpremultiplySample(
@@ -721,235 +719,150 @@ const DIRECT_BILINEAR_HELPERS = `function resizeBilinearDirect(source: ImageData
 			outputData[targetOffset + 1] = outG;
 			outputData[targetOffset + 2] = outB;
 			outputData[targetOffset + 3] = outA;
+			targetOffset += 4;
 		}
 	}
 }
 `;
 
-const GLOBAL_OPAQUE_BILINEAR_HELPERS = `${DIRECT_BILINEAR_HELPERS}
-function resizeBilinearGlobalOpaque(source: ImageData, output: ImageData, sourceRect: Rect) {
-	if (hasTransparentPixels(source.data)) {
-		resizeBilinearDirect(source, output, sourceRect);
-		return;
-	}
-	resizeOpaqueBilinearDirect(source, output, sourceRect);
-}
+const X_AXIS_TABLE_HELPERS = `type BilinearXTable = {
+	offset0: Int32Array;
+	offset1: Int32Array;
+	weight0: Float64Array;
+	weight1: Float64Array;
+};
 
-function resizeOpaqueBilinearDirect(source: ImageData, output: ImageData, sourceRect: Rect) {
+function resizeBilinearXTable(source: ImageData, output: ImageData, sourceRect: Rect) {
 	const outputData = output.data;
 	const data = source.data;
-	const scaleX = sourceRect.width / output.width;
-	const scaleY = sourceRect.height / output.height;
-	for (let y = 0; y < output.height; y++) {
+	const outputWidth = output.width;
+	const outputHeight = output.height;
+	const sourceWidth = source.width;
+	const sourceHeight = source.height;
+	const scaleX = sourceRect.width / outputWidth;
+	const scaleY = sourceRect.height / outputHeight;
+	const xTable = bilinearXTable(outputWidth, sourceRect.x, scaleX, sourceWidth);
+	for (let y = 0; y < outputHeight; y++) {
 		const sourceY = sourceRect.y + (y + 0.5) * scaleY - 0.5;
 		const y0 = Math.floor(sourceY);
 		const y1 = y0 + 1;
-		const clampedY0 = Math.min(source.height - 1, Math.max(0, y0));
-		const clampedY1 = Math.min(source.height - 1, Math.max(0, y1));
+		const clampedY0 = Math.min(sourceHeight - 1, Math.max(0, y0));
+		const clampedY1 = Math.min(sourceHeight - 1, Math.max(0, y1));
 		const ty = sourceY - y0;
 		const weightY0 = 1 - ty;
-		for (let x = 0; x < output.width; x++) {
-			const sourceX = sourceRect.x + (x + 0.5) * scaleX - 0.5;
-			const x0 = Math.floor(sourceX);
-			const x1 = x0 + 1;
-			const clampedX0 = Math.min(source.width - 1, Math.max(0, x0));
-			const clampedX1 = Math.min(source.width - 1, Math.max(0, x1));
-			const tx = sourceX - x0;
-			const weight00 = (1 - tx) * weightY0;
-			const weight10 = tx * weightY0;
-			const weight01 = (1 - tx) * ty;
-			const weight11 = tx * ty;
-			const offset00 = (clampedY0 * source.width + clampedX0) * 4;
-			const offset10 = (clampedY0 * source.width + clampedX1) * 4;
-			const offset01 = (clampedY1 * source.width + clampedX0) * 4;
-			const offset11 = (clampedY1 * source.width + clampedX1) * 4;
+		const rowOffset0 = clampedY0 * sourceWidth * 4;
+		const rowOffset1 = clampedY1 * sourceWidth * 4;
+		let targetOffset = y * outputWidth * 4;
+		for (let x = 0; x < outputWidth; x++) {
+			const weight00 = xTable.weight0[x]! * weightY0;
+			const weight10 = xTable.weight1[x]! * weightY0;
+			const weight01 = xTable.weight0[x]! * ty;
+			const weight11 = xTable.weight1[x]! * ty;
+			const offset00 = rowOffset0 + xTable.offset0[x]!;
+			const offset10 = rowOffset0 + xTable.offset1[x]!;
+			const offset01 = rowOffset1 + xTable.offset0[x]!;
+			const offset11 = rowOffset1 + xTable.offset1[x]!;
 			const total = weight00 + weight10 + weight01 + weight11;
-			const targetOffset = (y * output.width + x) * 4;
-			outputData[targetOffset] = clampByte(
-				(data[offset00]! * weight00 +
-					data[offset10]! * weight10 +
-					data[offset01]! * weight01 +
-					data[offset11]! * weight11) /
-					total
+
+			if (
+				data[offset00 + 3] === 255 &&
+				data[offset10 + 3] === 255 &&
+				data[offset01 + 3] === 255 &&
+				data[offset11 + 3] === 255
+			) {
+				outputData[targetOffset] = clampByte(
+					(data[offset00]! * weight00 +
+						data[offset10]! * weight10 +
+						data[offset01]! * weight01 +
+						data[offset11]! * weight11) /
+						total
+				);
+				outputData[targetOffset + 1] = clampByte(
+					(data[offset00 + 1]! * weight00 +
+						data[offset10 + 1]! * weight10 +
+						data[offset01 + 1]! * weight01 +
+						data[offset11 + 1]! * weight11) /
+						total
+				);
+				outputData[targetOffset + 2] = clampByte(
+					(data[offset00 + 2]! * weight00 +
+						data[offset10 + 2]! * weight10 +
+						data[offset01 + 2]! * weight01 +
+						data[offset11 + 2]! * weight11) /
+						total
+				);
+				outputData[targetOffset + 3] = 255;
+				targetOffset += 4;
+				continue;
+			}
+
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+			let alpha = data[offset00 + 3]! / 255;
+			r += data[offset00]! * alpha * weight00;
+			g += data[offset00 + 1]! * alpha * weight00;
+			b += data[offset00 + 2]! * alpha * weight00;
+			a += data[offset00 + 3]! * weight00;
+
+			alpha = data[offset10 + 3]! / 255;
+			r += data[offset10]! * alpha * weight10;
+			g += data[offset10 + 1]! * alpha * weight10;
+			b += data[offset10 + 2]! * alpha * weight10;
+			a += data[offset10 + 3]! * weight10;
+
+			alpha = data[offset01 + 3]! / 255;
+			r += data[offset01]! * alpha * weight01;
+			g += data[offset01 + 1]! * alpha * weight01;
+			b += data[offset01 + 2]! * alpha * weight01;
+			a += data[offset01 + 3]! * weight01;
+
+			alpha = data[offset11 + 3]! / 255;
+			r += data[offset11]! * alpha * weight11;
+			g += data[offset11 + 1]! * alpha * weight11;
+			b += data[offset11 + 2]! * alpha * weight11;
+			a += data[offset11 + 3]! * weight11;
+
+			if (total === 0) {
+				outputData[targetOffset] = 0;
+				outputData[targetOffset + 1] = 0;
+				outputData[targetOffset + 2] = 0;
+				outputData[targetOffset + 3] = 0;
+				targetOffset += 4;
+				continue;
+			}
+			const [outR, outG, outB, outA] = unpremultiplySample(
+				r / total,
+				g / total,
+				b / total,
+				a / total
 			);
-			outputData[targetOffset + 1] = clampByte(
-				(data[offset00 + 1]! * weight00 +
-					data[offset10 + 1]! * weight10 +
-					data[offset01 + 1]! * weight01 +
-					data[offset11 + 1]! * weight11) /
-					total
-			);
-			outputData[targetOffset + 2] = clampByte(
-				(data[offset00 + 2]! * weight00 +
-					data[offset10 + 2]! * weight10 +
-					data[offset01 + 2]! * weight01 +
-					data[offset11 + 2]! * weight11) /
-					total
-			);
-			outputData[targetOffset + 3] = 255;
+			outputData[targetOffset] = outR;
+			outputData[targetOffset + 1] = outG;
+			outputData[targetOffset + 2] = outB;
+			outputData[targetOffset + 3] = outA;
+			targetOffset += 4;
 		}
 	}
 }
-`;
 
-const AXIS_TABLE_BILINEAR_HELPERS = `${GLOBAL_OPAQUE_BILINEAR_HELPERS}
-type BilinearAxisTable = {
-	first: Int32Array;
-	second: Int32Array;
-	firstWeight: Float64Array;
-	secondWeight: Float64Array;
-};
-
-function resizeBilinearAxisTables(source: ImageData, output: ImageData, sourceRect: Rect) {
-	if (hasTransparentPixels(source.data)) {
-		resizeBilinearAxisTablesWithAlpha(source, output, sourceRect);
-		return;
-	}
-	resizeOpaqueBilinearAxisTables(source, output, sourceRect);
-}
-
-function bilinearAxisTable(count: number, sourceStart: number, scale: number, sourceLimit: number) {
-	const first = new Int32Array(count);
-	const second = new Int32Array(count);
-	const firstWeight = new Float64Array(count);
-	const secondWeight = new Float64Array(count);
+function bilinearXTable(count: number, sourceStart: number, scale: number, sourceLimit: number) {
+	const offset0 = new Int32Array(count);
+	const offset1 = new Int32Array(count);
+	const weight0 = new Float64Array(count);
+	const weight1 = new Float64Array(count);
 	for (let target = 0; target < count; target++) {
 		const sourcePosition = sourceStart + (target + 0.5) * scale - 0.5;
 		const source0 = Math.floor(sourcePosition);
 		const source1 = source0 + 1;
 		const t = sourcePosition - source0;
-		first[target] = Math.min(sourceLimit - 1, Math.max(0, source0)) * 4;
-		second[target] = Math.min(sourceLimit - 1, Math.max(0, source1)) * 4;
-		firstWeight[target] = 1 - t;
-		secondWeight[target] = t;
+		offset0[target] = Math.min(sourceLimit - 1, Math.max(0, source0)) * 4;
+		offset1[target] = Math.min(sourceLimit - 1, Math.max(0, source1)) * 4;
+		weight0[target] = 1 - t;
+		weight1[target] = t;
 	}
-	return { first, second, firstWeight, secondWeight } satisfies BilinearAxisTable;
-}
-
-function resizeOpaqueBilinearAxisTables(source: ImageData, output: ImageData, sourceRect: Rect) {
-	const outputData = output.data;
-	const data = source.data;
-	const scaleX = sourceRect.width / output.width;
-	const scaleY = sourceRect.height / output.height;
-	const xTable = bilinearAxisTable(output.width, sourceRect.x, scaleX, source.width);
-	const yTable = bilinearAxisTable(output.height, sourceRect.y, scaleY, source.height);
-	for (let y = 0; y < output.height; y++) {
-		const row0 = (yTable.first[y]! / 4) * source.width * 4;
-		const row1 = (yTable.second[y]! / 4) * source.width * 4;
-		const wy0 = yTable.firstWeight[y]!;
-		const wy1 = yTable.secondWeight[y]!;
-		for (let x = 0; x < output.width; x++) {
-			const wx0 = xTable.firstWeight[x]!;
-			const wx1 = xTable.secondWeight[x]!;
-			const weight00 = wx0 * wy0;
-			const weight10 = wx1 * wy0;
-			const weight01 = wx0 * wy1;
-			const weight11 = wx1 * wy1;
-			const offset00 = row0 + xTable.first[x]!;
-			const offset10 = row0 + xTable.second[x]!;
-			const offset01 = row1 + xTable.first[x]!;
-			const offset11 = row1 + xTable.second[x]!;
-			const total = weight00 + weight10 + weight01 + weight11;
-			const targetOffset = (y * output.width + x) * 4;
-			outputData[targetOffset] = clampByte(
-				(data[offset00]! * weight00 +
-					data[offset10]! * weight10 +
-					data[offset01]! * weight01 +
-					data[offset11]! * weight11) /
-					total
-			);
-			outputData[targetOffset + 1] = clampByte(
-				(data[offset00 + 1]! * weight00 +
-					data[offset10 + 1]! * weight10 +
-					data[offset01 + 1]! * weight01 +
-					data[offset11 + 1]! * weight11) /
-					total
-			);
-			outputData[targetOffset + 2] = clampByte(
-				(data[offset00 + 2]! * weight00 +
-					data[offset10 + 2]! * weight10 +
-					data[offset01 + 2]! * weight01 +
-					data[offset11 + 2]! * weight11) /
-					total
-			);
-			outputData[targetOffset + 3] = 255;
-		}
-	}
-}
-
-function resizeBilinearAxisTablesWithAlpha(source: ImageData, output: ImageData, sourceRect: Rect) {
-	const outputData = output.data;
-	const data = source.data;
-	const scaleX = sourceRect.width / output.width;
-	const scaleY = sourceRect.height / output.height;
-	const xTable = bilinearAxisTable(output.width, sourceRect.x, scaleX, source.width);
-	const yTable = bilinearAxisTable(output.height, sourceRect.y, scaleY, source.height);
-	for (let y = 0; y < output.height; y++) {
-		const row0 = (yTable.first[y]! / 4) * source.width * 4;
-		const row1 = (yTable.second[y]! / 4) * source.width * 4;
-		const wy0 = yTable.firstWeight[y]!;
-		const wy1 = yTable.secondWeight[y]!;
-		for (let x = 0; x < output.width; x++) {
-			const wx0 = xTable.firstWeight[x]!;
-			const wx1 = xTable.secondWeight[x]!;
-			const weight00 = wx0 * wy0;
-			const weight10 = wx1 * wy0;
-			const weight01 = wx0 * wy1;
-			const weight11 = wx1 * wy1;
-			const offset00 = row0 + xTable.first[x]!;
-			const offset10 = row0 + xTable.second[x]!;
-			const offset01 = row1 + xTable.first[x]!;
-			const offset11 = row1 + xTable.second[x]!;
-			const total = weight00 + weight10 + weight01 + weight11;
-			const targetOffset = (y * output.width + x) * 4;
-
-			let r = 0;
-			let g = 0;
-			let b = 0;
-			let a = 0;
-			let alpha = data[offset00 + 3]! / 255;
-			r += data[offset00]! * alpha * weight00;
-			g += data[offset00 + 1]! * alpha * weight00;
-			b += data[offset00 + 2]! * alpha * weight00;
-			a += data[offset00 + 3]! * weight00;
-
-			alpha = data[offset10 + 3]! / 255;
-			r += data[offset10]! * alpha * weight10;
-			g += data[offset10 + 1]! * alpha * weight10;
-			b += data[offset10 + 2]! * alpha * weight10;
-			a += data[offset10 + 3]! * weight10;
-
-			alpha = data[offset01 + 3]! / 255;
-			r += data[offset01]! * alpha * weight01;
-			g += data[offset01 + 1]! * alpha * weight01;
-			b += data[offset01 + 2]! * alpha * weight01;
-			a += data[offset01 + 3]! * weight01;
-
-			alpha = data[offset11 + 3]! / 255;
-			r += data[offset11]! * alpha * weight11;
-			g += data[offset11 + 1]! * alpha * weight11;
-			b += data[offset11 + 2]! * alpha * weight11;
-			a += data[offset11 + 3]! * weight11;
-
-			if (total === 0) {
-				outputData[targetOffset] = 0;
-				outputData[targetOffset + 1] = 0;
-				outputData[targetOffset + 2] = 0;
-				outputData[targetOffset + 3] = 0;
-				continue;
-			}
-			const [outR, outG, outB, outA] = unpremultiplySample(
-				r / total,
-				g / total,
-				b / total,
-				a / total
-			);
-			outputData[targetOffset] = outR;
-			outputData[targetOffset + 1] = outG;
-			outputData[targetOffset + 2] = outB;
-			outputData[targetOffset + 3] = outA;
-		}
-	}
+	return { offset0, offset1, weight0, weight1 } satisfies BilinearXTable;
 }
 `;
 
