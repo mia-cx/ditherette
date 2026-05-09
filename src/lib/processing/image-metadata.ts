@@ -7,6 +7,7 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const SOF_MARKERS = new Set([
 	0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf
 ]);
+const SOF_DIMENSION_BYTES = 7;
 
 export async function validateSourceBlob(blob: Blob) {
 	if (!isAcceptedImageType(blob.type)) {
@@ -68,9 +69,9 @@ function readJpegDimensions(header: Uint8Array): ImageDimensions {
 		if (marker === 0xd9 || marker === 0xda) break;
 		const length = readU16BE(header, offset);
 		if (length < 2 || offset + length > header.length) break;
-		if (SOF_MARKERS.has(marker) && (length < 8 || offset + 8 > header.length)) break;
 		if (SOF_MARKERS.has(marker)) {
-			return { width: readU16BE(header, offset + 6), height: readU16BE(header, offset + 4) };
+			if (length < SOF_DIMENSION_BYTES || offset + SOF_DIMENSION_BYTES > header.length) break;
+			return { width: readU16BE(header, offset + 5), height: readU16BE(header, offset + 3) };
 		}
 		offset += length;
 	}

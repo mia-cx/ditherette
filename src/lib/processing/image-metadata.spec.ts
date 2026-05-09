@@ -30,6 +30,20 @@ function gifHeader(width: number, height: number) {
 	return new Blob([bytes], { type: 'image/gif' });
 }
 
+function jpegHeader(width: number, height: number) {
+	const segmentLength = 17;
+	const bytes = new Uint8Array(2 + 2 + segmentLength);
+	bytes.set([0xff, 0xd8, 0xff, 0xc0]);
+	bytes[4] = (segmentLength >> 8) & 0xff;
+	bytes[5] = segmentLength & 0xff;
+	bytes[6] = 8;
+	bytes[7] = (height >> 8) & 0xff;
+	bytes[8] = height & 0xff;
+	bytes[9] = (width >> 8) & 0xff;
+	bytes[10] = width & 0xff;
+	return new Blob([bytes], { type: 'image/jpeg' });
+}
+
 describe('readImageDimensions', () => {
 	it('reads PNG dimensions without raster decode', async () => {
 		await expect(readImageDimensions(pngHeader(320, 200))).resolves.toEqual({
@@ -43,6 +57,24 @@ describe('readImageDimensions', () => {
 			width: 64,
 			height: 48
 		});
+	});
+
+	it('reads JPEG dimensions from the SOF segment without raster decode', async () => {
+		await expect(readImageDimensions(jpegHeader(320, 200))).resolves.toEqual({
+			width: 320,
+			height: 200
+		});
+	});
+
+	it('accepts valid JPEG dimensions under the source bounds', async () => {
+		await expect(validateSourceBlob(jpegHeader(320, 200))).resolves.toEqual({
+			width: 320,
+			height: 200
+		});
+	});
+
+	it('rejects oversized JPEG dimensions before decode', async () => {
+		await expect(validateSourceBlob(jpegHeader(32_769, 100))).rejects.toThrow(/too large/i);
 	});
 
 	it('rejects oversized image headers before decode', async () => {
