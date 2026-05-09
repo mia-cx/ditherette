@@ -33,7 +33,14 @@ export type DitherId =
 	| 'sierra-lite'
 	| 'random';
 
-export type ResizeId = 'nearest' | 'bilinear' | 'lanczos2' | 'lanczos3' | 'area';
+export type ResizeId =
+	| 'nearest'
+	| 'bilinear'
+	| 'lanczos2'
+	| 'lanczos2-scale-aware'
+	| 'lanczos3'
+	| 'lanczos3-scale-aware'
+	| 'area';
 export type AlphaMode = 'preserve' | 'premultiplied' | 'matte';
 
 export type Rgb = { r: number; g: number; b: number };

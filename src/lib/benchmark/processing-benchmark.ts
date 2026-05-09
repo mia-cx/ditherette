@@ -155,7 +155,9 @@ const EXHAUSTIVE_RESIZE_MODES: readonly ResizeId[] = [
 	'nearest',
 	'bilinear',
 	'lanczos2',
+	'lanczos2-scale-aware',
 	'lanczos3',
+	'lanczos3-scale-aware',
 	'area'
 ];
 const DEFAULT_MATRIX_SCALE = 0.5;

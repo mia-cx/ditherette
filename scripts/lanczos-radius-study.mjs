@@ -14,7 +14,7 @@ installImageDataPolyfill();
 const DEFAULT_SCALES = [0.125, 0.25, 0.5, 0.75];
 const DEFAULT_ITERATIONS = 5;
 const DEFAULT_WARMUPS = 2;
-const DEFAULT_MODES = ['lanczos3', 'lanczos2'];
+const DEFAULT_MODES = ['lanczos3', 'lanczos2', 'lanczos3-scale-aware', 'lanczos2-scale-aware'];
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const args = parseArgs(process.argv.slice(2));
@@ -148,7 +148,7 @@ function optionalBoolean(argv, index, defaultValue) {
 function printHelp() {
 	console.log(`Usage: pnpm bench:lanczos-radius-study -- [options]
 
-Compares Lanczos radius modes, usually lanczos3 vs lanczos2, on the same resize-only matrix.
+Compares Lanczos radius and scale-aware modes on the same resize-only matrix.
 This intentionally compares output-changing filter choices, not exact implementation variants.
 
 Options:

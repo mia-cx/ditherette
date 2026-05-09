@@ -64,7 +64,14 @@ function referenceResize(
 	source: ImageData,
 	width: number,
 	height: number,
-	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos2' | 'lanczos3',
+	mode:
+		| 'nearest'
+		| 'bilinear'
+		| 'area'
+		| 'lanczos2'
+		| 'lanczos2-scale-aware'
+		| 'lanczos3'
+		| 'lanczos3-scale-aware',
 	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
 	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
 ) {
@@ -96,7 +103,7 @@ function referenceLanczosResize(
 	source: ImageData,
 	width: number,
 	height: number,
-	mode: 'lanczos2' | 'lanczos3' = 'lanczos3',
+	mode: 'lanczos2' | 'lanczos2-scale-aware' | 'lanczos3' | 'lanczos3-scale-aware' = 'lanczos3',
 	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
 	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
 ) {
@@ -109,12 +116,26 @@ function referenceSample(
 	y: number,
 	scaleX: number,
 	scaleY: number,
-	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos2' | 'lanczos3'
+	mode:
+		| 'nearest'
+		| 'bilinear'
+		| 'area'
+		| 'lanczos2'
+		| 'lanczos2-scale-aware'
+		| 'lanczos3'
+		| 'lanczos3-scale-aware'
 ) {
 	if (mode === 'nearest') return referencePixel(source, Math.round(x), Math.round(y));
 	if (mode === 'bilinear') return referenceBilinearSample(source, x, y);
 	if (mode === 'area') return referenceAreaSample(source, x, y, scaleX, scaleY);
-	return referenceLanczosSample(source, x, y, mode === 'lanczos2' ? 2 : 3);
+	if (mode === 'lanczos2') return referenceLanczosSample(source, x, y, 2);
+	if (mode === 'lanczos2-scale-aware') {
+		return referenceScaleAwareLanczosSample(source, x, y, scaleX, scaleY, 2);
+	}
+	if (mode === 'lanczos3-scale-aware') {
+		return referenceScaleAwareLanczosSample(source, x, y, scaleX, scaleY, 3);
+	}
+	return referenceLanczosSample(source, x, y, 3);
 }
 
 function referenceBilinearSample(source: ImageData, x: number, y: number) {
@@ -152,17 +173,58 @@ function referenceAreaSample(
 }
 
 function referenceLanczosSample(source: ImageData, x: number, y: number, radius: number) {
+	return referenceLanczosWindowSample(source, x, y, radius, radius * 2, radius * 2, 1, 1);
+}
+
+function referenceScaleAwareLanczosSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	scaleX: number,
+	scaleY: number,
+	radius: number
+) {
+	return referenceLanczosWindowSample(
+		source,
+		x,
+		y,
+		radius,
+		referenceScaleAwareTaps(radius, scaleX),
+		referenceScaleAwareTaps(radius, scaleY),
+		Math.max(1, scaleX),
+		Math.max(1, scaleY)
+	);
+}
+
+function referenceScaleAwareTaps(radius: number, scale: number) {
+	return Math.ceil(radius * Math.max(1, scale)) * 2;
+}
+
+function referenceLanczosWindowSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	radius: number,
+	tapsX: number,
+	tapsY: number,
+	filterScaleX: number,
+	filterScaleY: number
+) {
 	const floorX = Math.floor(x);
 	const floorY = Math.floor(y);
+	const startX = floorX - tapsX / 2 + 1;
+	const startY = floorY - tapsY / 2 + 1;
 	let r = 0;
 	let g = 0;
 	let b = 0;
 	let a = 0;
 	let total = 0;
-	for (let yy = floorY - radius + 1; yy <= floorY + radius; yy++) {
-		const wy = referenceLanczos(y - yy, radius);
-		for (let xx = floorX - radius + 1; xx <= floorX + radius; xx++) {
-			const weight = referenceLanczos(x - xx, radius) * wy;
+	for (let yTap = 0; yTap < tapsY; yTap++) {
+		const yy = startY + yTap;
+		const wy = referenceLanczos((y - yy) / filterScaleY, radius);
+		for (let xTap = 0; xTap < tapsX; xTap++) {
+			const xx = startX + xTap;
+			const weight = referenceLanczos((x - xx) / filterScaleX, radius) * wy;
 			if (weight === 0) continue;
 			const pixel = referencePixel(source, xx, yy);
 			const alpha = pixel[3] / 255;
@@ -297,7 +359,12 @@ describe('resizeImageData', () => {
 
 	it('matches the reference Lanczos sampler before optimizing the hot path', () => {
 		const source = patternedImage(8, 5);
-		for (const mode of ['lanczos2', 'lanczos3'] as const) {
+		for (const mode of [
+			'lanczos2',
+			'lanczos2-scale-aware',
+			'lanczos3',
+			'lanczos3-scale-aware'
+		] as const) {
 			const cases = [
 				{
 					output: resizeImageData(source, 11, 8, mode),
@@ -319,8 +386,9 @@ describe('resizeImageData', () => {
 			];
 
 			for (const { output, reference } of cases) {
-				if (mode === 'lanczos2') expectMaxChannelDelta(output, reference, 1);
-				else expect([...output.data]).toEqual([...reference.data]);
+				if (mode === 'lanczos3') expect([...output.data]).toEqual([...reference.data]);
+				else if (mode.endsWith('scale-aware')) expectMaxChannelDelta(output, reference, 8);
+				else expectMaxChannelDelta(output, reference, 1);
 			}
 		}
 	});

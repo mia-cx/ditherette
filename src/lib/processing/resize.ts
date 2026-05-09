@@ -77,6 +77,42 @@ export function resizeImageData(
 		return output;
 	}
 
+	if (mode === 'lanczos2-scale-aware') {
+		resizeScaleAwareLanczos(
+			source,
+			output,
+			sourceRect,
+			{
+				left: targetLeft,
+				top: targetTop,
+				right: targetRight,
+				bottom: targetBottom,
+				width: targetWidth,
+				height: targetHeight
+			},
+			LANCZOS2_RADIUS
+		);
+		return output;
+	}
+
+	if (mode === 'lanczos3-scale-aware') {
+		resizeScaleAwareLanczos(
+			source,
+			output,
+			sourceRect,
+			{
+				left: targetLeft,
+				top: targetTop,
+				right: targetRight,
+				bottom: targetBottom,
+				width: targetWidth,
+				height: targetHeight
+			},
+			LANCZOS_RADIUS
+		);
+		return output;
+	}
+
 	if (mode === 'lanczos3') {
 		resizeLanczos3(source, output, sourceRect, {
 			left: targetLeft,
@@ -122,8 +158,12 @@ function sample(
 			return sampleArea(source, x, y, scaleX, scaleY);
 		case 'lanczos2':
 			return sampleLanczos(source, x, y, 2);
+		case 'lanczos2-scale-aware':
+			return sampleScaleAwareLanczos(source, x, y, scaleX, scaleY, 2);
 		case 'lanczos3':
 			return sampleLanczos(source, x, y, 3);
+		case 'lanczos3-scale-aware':
+			return sampleScaleAwareLanczos(source, x, y, scaleX, scaleY, 3);
 		default:
 			throw new Error(`Unsupported resize mode: ${mode satisfies never}`);
 	}
@@ -254,6 +294,40 @@ function sampleLanczos(source: ImageData, x: number, y: number, radius: number) 
 		const wy = lanczos(y - yy, radius);
 		for (let xx = startX; xx <= floorX + radius; xx++) {
 			const weight = lanczos(x - xx, radius) * wy;
+			if (weight === 0) continue;
+			addWeightedSample(
+				accumulator,
+				getPixel(source.data, source.width, source.height, xx, yy),
+				weight
+			);
+		}
+	}
+	return finishWeightedSample(accumulator);
+}
+
+function sampleScaleAwareLanczos(
+	source: ImageData,
+	x: number,
+	y: number,
+	scaleX: number,
+	scaleY: number,
+	radius: number
+) {
+	const accumulator = { r: 0, g: 0, b: 0, a: 0, total: 0 };
+	const filterScaleX = Math.max(1, scaleX);
+	const filterScaleY = Math.max(1, scaleY);
+	const tapsX = scaleAwareTaps(radius, scaleX);
+	const tapsY = scaleAwareTaps(radius, scaleY);
+	const floorX = Math.floor(x);
+	const floorY = Math.floor(y);
+	const startX = floorX - tapsX / 2 + 1;
+	const startY = floorY - tapsY / 2 + 1;
+	for (let yTap = 0; yTap < tapsY; yTap++) {
+		const yy = startY + yTap;
+		const wy = lanczos((y - yy) / filterScaleY, radius);
+		for (let xTap = 0; xTap < tapsX; xTap++) {
+			const xx = startX + xTap;
+			const weight = lanczos((x - xx) / filterScaleX, radius) * wy;
 			if (weight === 0) continue;
 			addWeightedSample(
 				accumulator,
@@ -609,6 +683,280 @@ function lanczosAlphaRow2(
 		g += sourceData[offset + 1]! * alpha * weight3;
 		b += sourceData[offset + 2]! * alpha * weight3;
 		a += sourceData[offset + 3]! * weight3;
+
+		const rowOffset = targetX * 4;
+		row[rowOffset] = r;
+		row[rowOffset + 1] = g;
+		row[rowOffset + 2] = b;
+		row[rowOffset + 3] = a;
+	}
+	return row;
+}
+
+function resizeScaleAwareLanczos(
+	source: ImageData,
+	output: ImageData,
+	sourceRect: Rect,
+	target: TargetBounds,
+	radius: number
+) {
+	const scaleX = sourceRect.width / target.width;
+	const scaleY = sourceRect.height / target.height;
+	const xTaps = scaleAwareTaps(radius, scaleX);
+	const yTaps = scaleAwareTaps(radius, scaleY);
+	const xTable = contributionTable(
+		target.width,
+		sourceRect.x,
+		scaleX,
+		source.width,
+		radius,
+		xTaps,
+		Math.max(1, scaleX)
+	);
+	const yTable = contributionTable(
+		target.height,
+		sourceRect.y,
+		scaleY,
+		source.height,
+		radius,
+		yTaps,
+		Math.max(1, scaleY)
+	);
+
+	if (hasTransparentPixels(source.data)) {
+		resizeLanczosWithAlphaDynamic(source, output, target, xTable, yTable, xTaps, yTaps);
+		return;
+	}
+
+	resizeOpaqueLanczosDynamic(source, output, target, xTable, yTable, xTaps, yTaps);
+}
+
+function scaleAwareTaps(radius: number, scale: number) {
+	return Math.ceil(radius * Math.max(1, scale)) * 2;
+}
+
+function resizeOpaqueLanczosDynamic(
+	source: ImageData,
+	output: ImageData,
+	target: TargetBounds,
+	xTable: ContributionTable,
+	yTable: ContributionTable,
+	xTaps: number,
+	yTaps: number
+) {
+	const outputData = output.data;
+	const rowCache = new Map<number, Float64Array>();
+	const lastUse = lastUseTable(source.height, target.height, yTable, yTaps);
+
+	for (let y = target.top; y < target.bottom; y++) {
+		const targetY = y - target.top;
+		const yBase = targetY * yTaps;
+		const yTotal = yTable.totals[targetY]!;
+		const rows = lanczosRowsForTargetYDynamic(
+			source,
+			target.width,
+			xTable,
+			yTable,
+			yBase,
+			rowCache,
+			false,
+			xTaps,
+			yTaps
+		);
+
+		for (let x = target.left; x < target.right; x++) {
+			const targetX = x - target.left;
+			const total = xTable.totals[targetX]! * yTotal;
+			const targetOffset = (y * output.width + x) * 4;
+			if (total === 0) {
+				outputData[targetOffset] = 0;
+				outputData[targetOffset + 1] = 0;
+				outputData[targetOffset + 2] = 0;
+				outputData[targetOffset + 3] = 0;
+				continue;
+			}
+
+			const rowOffset = targetX * 3;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			for (let yTap = 0; yTap < yTaps; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+			}
+
+			outputData[targetOffset] = clampByte(r / total);
+			outputData[targetOffset + 1] = clampByte(g / total);
+			outputData[targetOffset + 2] = clampByte(b / total);
+			outputData[targetOffset + 3] = 255;
+		}
+
+		evictLanczosRows(rowCache, lastUse, targetY, yTable, yBase, yTaps);
+	}
+}
+
+function resizeLanczosWithAlphaDynamic(
+	source: ImageData,
+	output: ImageData,
+	target: TargetBounds,
+	xTable: ContributionTable,
+	yTable: ContributionTable,
+	xTaps: number,
+	yTaps: number
+) {
+	const outputData = output.data;
+	const rowCache = new Map<number, Float64Array>();
+	const lastUse = lastUseTable(source.height, target.height, yTable, yTaps);
+
+	for (let y = target.top; y < target.bottom; y++) {
+		const targetY = y - target.top;
+		const yBase = targetY * yTaps;
+		const yTotal = yTable.totals[targetY]!;
+		const rows = lanczosRowsForTargetYDynamic(
+			source,
+			target.width,
+			xTable,
+			yTable,
+			yBase,
+			rowCache,
+			true,
+			xTaps,
+			yTaps
+		);
+
+		for (let x = target.left; x < target.right; x++) {
+			const targetX = x - target.left;
+			const total = xTable.totals[targetX]! * yTotal;
+			const targetOffset = (y * output.width + x) * 4;
+			if (total === 0) {
+				outputData[targetOffset] = 0;
+				outputData[targetOffset + 1] = 0;
+				outputData[targetOffset + 2] = 0;
+				outputData[targetOffset + 3] = 0;
+				continue;
+			}
+
+			const rowOffset = targetX * 4;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+			for (let yTap = 0; yTap < yTaps; yTap++) {
+				const weight = yTable.weights[yBase + yTap]!;
+				const row = rows[yTap];
+				if (weight === 0 || !row) continue;
+				r += row[rowOffset]! * weight;
+				g += row[rowOffset + 1]! * weight;
+				b += row[rowOffset + 2]! * weight;
+				a += row[rowOffset + 3]! * weight;
+			}
+
+			const [outR, outG, outB, outA] = unpremultiplySample(
+				r / total,
+				g / total,
+				b / total,
+				a / total
+			);
+			outputData[targetOffset] = outR;
+			outputData[targetOffset + 1] = outG;
+			outputData[targetOffset + 2] = outB;
+			outputData[targetOffset + 3] = outA;
+		}
+
+		evictLanczosRows(rowCache, lastUse, targetY, yTable, yBase, yTaps);
+	}
+}
+
+function lanczosRowsForTargetYDynamic(
+	source: ImageData,
+	targetWidth: number,
+	xTable: ContributionTable,
+	yTable: ContributionTable,
+	yBase: number,
+	rowCache: Map<number, Float64Array>,
+	withAlpha: boolean,
+	xTaps: number,
+	yTaps: number
+) {
+	const rows: Array<Float64Array | undefined> = [];
+	for (let yTap = 0; yTap < yTaps; yTap++) {
+		if (yTable.weights[yBase + yTap] === 0) {
+			rows[yTap] = undefined;
+			continue;
+		}
+		const sourceY = yTable.indices[yBase + yTap]!;
+		let row = rowCache.get(sourceY);
+		if (!row) {
+			row = withAlpha
+				? lanczosAlphaRowDynamic(source, sourceY, targetWidth, xTable, xTaps)
+				: lanczosOpaqueRowDynamic(source, sourceY, targetWidth, xTable, xTaps);
+			rowCache.set(sourceY, row);
+		}
+		rows[yTap] = row;
+	}
+	return rows;
+}
+
+function lanczosOpaqueRowDynamic(
+	source: ImageData,
+	sourceY: number,
+	targetWidth: number,
+	xTable: ContributionTable,
+	xTaps: number
+) {
+	const sourceData = source.data;
+	const row = new Float64Array(targetWidth * 3);
+	const sourceRowOffset = sourceY * source.width * 4;
+	for (let targetX = 0; targetX < targetWidth; targetX++) {
+		const xBase = targetX * xTaps;
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		for (let xTap = 0; xTap < xTaps; xTap++) {
+			const offset = sourceRowOffset + xTable.byteOffsets[xBase + xTap]!;
+			const weight = xTable.weights[xBase + xTap]!;
+			r += sourceData[offset]! * weight;
+			g += sourceData[offset + 1]! * weight;
+			b += sourceData[offset + 2]! * weight;
+		}
+
+		const rowOffset = targetX * 3;
+		row[rowOffset] = r;
+		row[rowOffset + 1] = g;
+		row[rowOffset + 2] = b;
+	}
+	return row;
+}
+
+function lanczosAlphaRowDynamic(
+	source: ImageData,
+	sourceY: number,
+	targetWidth: number,
+	xTable: ContributionTable,
+	xTaps: number
+) {
+	const sourceData = source.data;
+	const row = new Float64Array(targetWidth * 4);
+	const sourceRowOffset = sourceY * source.width * 4;
+	for (let targetX = 0; targetX < targetWidth; targetX++) {
+		const xBase = targetX * xTaps;
+		let r = 0;
+		let g = 0;
+		let b = 0;
+		let a = 0;
+		for (let xTap = 0; xTap < xTaps; xTap++) {
+			const offset = sourceRowOffset + xTable.byteOffsets[xBase + xTap]!;
+			const weight = xTable.weights[xBase + xTap]!;
+			const alpha = sourceData[offset + 3]! / 255;
+			r += sourceData[offset]! * alpha * weight;
+			g += sourceData[offset + 1]! * alpha * weight;
+			b += sourceData[offset + 2]! * alpha * weight;
+			a += sourceData[offset + 3]! * weight;
+		}
 
 		const rowOffset = targetX * 4;
 		row[rowOffset] = r;
@@ -1048,7 +1396,8 @@ function contributionTable(
 	scale: number,
 	sourceLimit: number,
 	radius = LANCZOS_RADIUS,
-	taps = LANCZOS_TAPS
+	taps = LANCZOS_TAPS,
+	filterScale = 1
 ) {
 	const indices = new Int32Array(count * taps);
 	const byteOffsets = new Int32Array(count * taps);
@@ -1057,12 +1406,12 @@ function contributionTable(
 	for (let target = 0; target < count; target++) {
 		const sourcePosition = sourceStart + (target + 0.5) * scale - 0.5;
 		const floor = Math.floor(sourcePosition);
-		const first = floor - radius + 1;
+		const first = floor - taps / 2 + 1;
 		const base = target * taps;
 		let total = 0;
 		for (let tap = 0; tap < taps; tap++) {
 			const sourceIndex = first + tap;
-			const weight = lanczos(sourcePosition - sourceIndex, radius);
+			const weight = lanczos((sourcePosition - sourceIndex) / filterScale, radius);
 			const clampedSourceIndex = Math.min(sourceLimit - 1, Math.max(0, sourceIndex));
 			indices[base + tap] = clampedSourceIndex;
 			byteOffsets[base + tap] = clampedSourceIndex * 4;

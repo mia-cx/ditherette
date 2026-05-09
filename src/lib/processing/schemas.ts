@@ -22,7 +22,9 @@ const RESIZE_MODES = [
 	'nearest',
 	'bilinear',
 	'lanczos2',
+	'lanczos2-scale-aware',
 	'lanczos3',
+	'lanczos3-scale-aware',
 	'area'
 ] as const satisfies readonly ResizeId[];
 const ALPHA_MODES = ['preserve', 'premultiplied', 'matte'] as const satisfies readonly AlphaMode[];
