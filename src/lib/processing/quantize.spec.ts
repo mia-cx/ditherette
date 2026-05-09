@@ -114,6 +114,16 @@ describe('quantizeImage caches', () => {
 		expect(firstImages).toBeGreaterThan(0);
 	});
 
+	it('stores cached color-vector images as 32-bit floats', () => {
+		const caches = cacheMaps('image-1');
+
+		quantizeImage(image(), palette, baseSettings, caches);
+
+		expect([...caches.images.values()].every((vectors) => vectors.v0 instanceof Float32Array)).toBe(
+			true
+		);
+	});
+
 	it('ignores stale color-vector images with different dimensions', () => {
 		const caches = cacheMaps('image-1');
 		quantizeImage(

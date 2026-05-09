@@ -26,9 +26,9 @@ export type ColorVectorImage = {
 	width: number;
 	height: number;
 	colorSpace: ColorSpaceId;
-	v0: Float64Array;
-	v1: Float64Array;
-	v2: Float64Array;
+	v0: Float32Array;
+	v1: Float32Array;
+	v2: Float32Array;
 };
 
 export type QuantizeCaches = {
@@ -130,7 +130,7 @@ function paletteVectorCacheKey(palette: EnabledPaletteColor[], colorSpace: Color
 }
 
 function colorVectorImageBytes(width: number, height: number) {
-	return width * height * 3 * Float64Array.BYTES_PER_ELEMENT;
+	return width * height * 3 * Float32Array.BYTES_PER_ELEMENT;
 }
 
 function compositedVectorCacheKey(colorSpace: ColorSpaceId, alphaMode: AlphaMode, matte: Rgb) {
@@ -246,9 +246,9 @@ function buildColorVectorImage(
 	kind: 'composited' | 'source'
 ): ColorVectorImage {
 	const pixels = image.width * image.height;
-	const v0 = new Float64Array(pixels);
-	const v1 = new Float64Array(pixels);
-	const v2 = new Float64Array(pixels);
+	const v0 = new Float32Array(pixels);
+	const v1 = new Float32Array(pixels);
+	const v2 = new Float32Array(pixels);
 	const source = image.data;
 	for (let index = 0; index < pixels; index++) {
 		const offset = index * 4;
