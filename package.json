@@ -17,7 +17,8 @@
 		"test:unit": "vitest",
 		"gen": "wrangler types",
 		"bench:processing": "node scripts/benchmark-processing.mjs",
-		"bench:lanczos-study": "node scripts/lanczos-optimization-study.mjs"
+		"bench:lanczos-study": "node scripts/lanczos-optimization-study.mjs",
+		"bench:sampler-study": "node scripts/sampler-optimization-study.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",

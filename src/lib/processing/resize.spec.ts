@@ -60,10 +60,11 @@ function patternedImage(width: number, height: number) {
 
 type ReferenceRect = { x: number; y: number; width: number; height: number };
 
-function referenceLanczosResize(
+function referenceResize(
 	source: ImageData,
 	width: number,
 	height: number,
+	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos3',
 	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
 	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
 ) {
@@ -80,7 +81,7 @@ function referenceLanczosResize(
 		for (let x = targetLeft; x < targetRight; x++) {
 			const sourceX = sourceRect.x + (x - targetLeft + 0.5) * scaleX - 0.5;
 			const sourceY = sourceRect.y + (y - targetTop + 0.5) * scaleY - 0.5;
-			const pixel = referenceLanczosSample(source, sourceX, sourceY);
+			const pixel = referenceSample(source, sourceX, sourceY, scaleX, scaleY, mode);
 			const offset = (y * width + x) * 4;
 			output.data[offset] = pixel[0];
 			output.data[offset + 1] = pixel[1];
@@ -89,6 +90,64 @@ function referenceLanczosResize(
 		}
 	}
 	return output;
+}
+
+function referenceLanczosResize(
+	source: ImageData,
+	width: number,
+	height: number,
+	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
+	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
+) {
+	return referenceResize(source, width, height, 'lanczos3', sourceRect, targetRect);
+}
+
+function referenceSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	scaleX: number,
+	scaleY: number,
+	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos3'
+) {
+	if (mode === 'nearest') return referencePixel(source, Math.round(x), Math.round(y));
+	if (mode === 'bilinear') return referenceBilinearSample(source, x, y);
+	if (mode === 'area') return referenceAreaSample(source, x, y, scaleX, scaleY);
+	return referenceLanczosSample(source, x, y);
+}
+
+function referenceBilinearSample(source: ImageData, x: number, y: number) {
+	const x0 = Math.floor(x);
+	const y0 = Math.floor(y);
+	const tx = x - x0;
+	const ty = y - y0;
+	const accumulator = referenceAccumulator();
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0, y0), (1 - tx) * (1 - ty));
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0 + 1, y0), tx * (1 - ty));
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0, y0 + 1), (1 - tx) * ty);
+	referenceAddWeightedSample(accumulator, referencePixel(source, x0 + 1, y0 + 1), tx * ty);
+	return referenceFinishWeightedSample(accumulator);
+}
+
+function referenceAreaSample(
+	source: ImageData,
+	x: number,
+	y: number,
+	scaleX: number,
+	scaleY: number
+) {
+	if (scaleX < 1 && scaleY < 1) return referenceBilinearSample(source, x, y);
+	const left = Math.floor(x - scaleX / 2);
+	const right = Math.ceil(x + scaleX / 2);
+	const top = Math.floor(y - scaleY / 2);
+	const bottom = Math.ceil(y + scaleY / 2);
+	const accumulator = referenceAccumulator();
+	for (let yy = top; yy <= bottom; yy++) {
+		for (let xx = left; xx <= right; xx++) {
+			referenceAddWeightedSample(accumulator, referencePixel(source, xx, yy), 1);
+		}
+	}
+	return referenceFinishWeightedSample(accumulator);
 }
 
 function referenceLanczosSample(source: ImageData, x: number, y: number) {
@@ -116,6 +175,39 @@ function referenceLanczosSample(source: ImageData, x: number, y: number) {
 	}
 	if (total === 0) return [0, 0, 0, 0] as const;
 	return referenceUnpremultiply(r / total, g / total, b / total, a / total);
+}
+
+function referenceAccumulator() {
+	return { r: 0, g: 0, b: 0, a: 0, total: 0 };
+}
+
+function referenceAddWeightedSample(
+	accumulator: { r: number; g: number; b: number; a: number; total: number },
+	pixel: readonly [number, number, number, number],
+	weight: number
+) {
+	const alpha = pixel[3] / 255;
+	accumulator.r += pixel[0] * alpha * weight;
+	accumulator.g += pixel[1] * alpha * weight;
+	accumulator.b += pixel[2] * alpha * weight;
+	accumulator.a += pixel[3] * weight;
+	accumulator.total += weight;
+}
+
+function referenceFinishWeightedSample(accumulator: {
+	r: number;
+	g: number;
+	b: number;
+	a: number;
+	total: number;
+}) {
+	if (accumulator.total === 0) return [0, 0, 0, 0] as const;
+	return referenceUnpremultiply(
+		accumulator.r / accumulator.total,
+		accumulator.g / accumulator.total,
+		accumulator.b / accumulator.total,
+		accumulator.a / accumulator.total
+	);
 }
 
 function referencePixel(source: ImageData, x: number, y: number) {
@@ -170,6 +262,57 @@ describe('resizeImageData', () => {
 		const output = resizeImageData(source, 1, 1, 'stretch', 'bilinear');
 
 		expect([...output.data]).toEqual([0, 0, 255, 128]);
+	});
+
+	it('matches independent references for nearest, bilinear, and area before optimizing sampler paths', () => {
+		const source = patternedImage(8, 5);
+		const modes = ['nearest', 'bilinear', 'area'] as const;
+
+		for (const mode of modes) {
+			const cases = [
+				{
+					output: resizeImageData(source, 11, 8, 'stretch', mode),
+					reference: referenceResize(source, 11, 8, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 3, 'stretch', mode),
+					reference: referenceResize(source, 5, 3, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 5, 'contain', mode),
+					reference: referenceResize(
+						source,
+						5,
+						5,
+						mode,
+						{ x: 0, y: 0, width: 8, height: 5 },
+						{ x: 0, y: 0.9375, width: 5, height: 3.125 }
+					)
+				},
+				{
+					output: resizeImageData(source, 5, 5, 'cover', mode),
+					reference: referenceResize(
+						source,
+						5,
+						5,
+						mode,
+						{ x: 1.5, y: 0, width: 5, height: 5 },
+						{ x: 0, y: 0, width: 5, height: 5 }
+					)
+				}
+			];
+
+			for (const { output, reference } of cases) {
+				expect([...output.data]).toEqual([...reference.data]);
+			}
+		}
+
+		const opaqueSource = solidImage(7, 4, [21, 89, 233, 255]);
+		for (const mode of modes) {
+			const output = resizeImageData(opaqueSource, 10, 6, 'stretch', mode);
+			const reference = referenceResize(opaqueSource, 10, 6, mode);
+			expect([...output.data]).toEqual([...reference.data]);
+		}
 	});
 
 	it('matches the reference Lanczos sampler before optimizing the hot path', () => {

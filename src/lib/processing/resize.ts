@@ -196,32 +196,89 @@ function finishWeightedSample(accumulator: {
 }
 
 function sampleBilinear(source: ImageData, x: number, y: number) {
+	const data = source.data;
 	const x0 = Math.floor(x);
 	const y0 = Math.floor(y);
+	const x1 = x0 + 1;
+	const y1 = y0 + 1;
+	const clampedX0 = Math.min(source.width - 1, Math.max(0, x0));
+	const clampedX1 = Math.min(source.width - 1, Math.max(0, x1));
+	const clampedY0 = Math.min(source.height - 1, Math.max(0, y0));
+	const clampedY1 = Math.min(source.height - 1, Math.max(0, y1));
 	const tx = x - x0;
 	const ty = y - y0;
-	const accumulator = { r: 0, g: 0, b: 0, a: 0, total: 0 };
-	addWeightedSample(
-		accumulator,
-		getPixel(source.data, source.width, source.height, x0, y0),
-		(1 - tx) * (1 - ty)
-	);
-	addWeightedSample(
-		accumulator,
-		getPixel(source.data, source.width, source.height, x0 + 1, y0),
-		tx * (1 - ty)
-	);
-	addWeightedSample(
-		accumulator,
-		getPixel(source.data, source.width, source.height, x0, y0 + 1),
-		(1 - tx) * ty
-	);
-	addWeightedSample(
-		accumulator,
-		getPixel(source.data, source.width, source.height, x0 + 1, y0 + 1),
-		tx * ty
-	);
-	return finishWeightedSample(accumulator);
+	const weight00 = (1 - tx) * (1 - ty);
+	const weight10 = tx * (1 - ty);
+	const weight01 = (1 - tx) * ty;
+	const weight11 = tx * ty;
+	const offset00 = (clampedY0 * source.width + clampedX0) * 4;
+	const offset10 = (clampedY0 * source.width + clampedX1) * 4;
+	const offset01 = (clampedY1 * source.width + clampedX0) * 4;
+	const offset11 = (clampedY1 * source.width + clampedX1) * 4;
+	const total = weight00 + weight10 + weight01 + weight11;
+
+	if (
+		data[offset00 + 3] === 255 &&
+		data[offset10 + 3] === 255 &&
+		data[offset01 + 3] === 255 &&
+		data[offset11 + 3] === 255
+	) {
+		return [
+			clampByte(
+				(data[offset00]! * weight00 +
+					data[offset10]! * weight10 +
+					data[offset01]! * weight01 +
+					data[offset11]! * weight11) /
+					total
+			),
+			clampByte(
+				(data[offset00 + 1]! * weight00 +
+					data[offset10 + 1]! * weight10 +
+					data[offset01 + 1]! * weight01 +
+					data[offset11 + 1]! * weight11) /
+					total
+			),
+			clampByte(
+				(data[offset00 + 2]! * weight00 +
+					data[offset10 + 2]! * weight10 +
+					data[offset01 + 2]! * weight01 +
+					data[offset11 + 2]! * weight11) /
+					total
+			),
+			255
+		] as const;
+	}
+
+	let r = 0;
+	let g = 0;
+	let b = 0;
+	let a = 0;
+	let alpha = data[offset00 + 3]! / 255;
+	r += data[offset00]! * alpha * weight00;
+	g += data[offset00 + 1]! * alpha * weight00;
+	b += data[offset00 + 2]! * alpha * weight00;
+	a += data[offset00 + 3]! * weight00;
+
+	alpha = data[offset10 + 3]! / 255;
+	r += data[offset10]! * alpha * weight10;
+	g += data[offset10 + 1]! * alpha * weight10;
+	b += data[offset10 + 2]! * alpha * weight10;
+	a += data[offset10 + 3]! * weight10;
+
+	alpha = data[offset01 + 3]! / 255;
+	r += data[offset01]! * alpha * weight01;
+	g += data[offset01 + 1]! * alpha * weight01;
+	b += data[offset01 + 2]! * alpha * weight01;
+	a += data[offset01 + 3]! * weight01;
+
+	alpha = data[offset11 + 3]! / 255;
+	r += data[offset11]! * alpha * weight11;
+	g += data[offset11 + 1]! * alpha * weight11;
+	b += data[offset11 + 2]! * alpha * weight11;
+	a += data[offset11 + 3]! * weight11;
+
+	if (total === 0) return [0, 0, 0, 0] as const;
+	return unpremultiplySample(r / total, g / total, b / total, a / total);
 }
 
 function sampleLanczos(source: ImageData, x: number, y: number) {
@@ -620,15 +677,29 @@ function contributionTable(count: number, sourceStart: number, scale: number, so
 
 function sampleArea(source: ImageData, x: number, y: number, scaleX: number, scaleY: number) {
 	if (scaleX < 1 && scaleY < 1) return sampleBilinear(source, x, y);
+	const data = source.data;
 	const left = Math.floor(x - scaleX / 2);
 	const right = Math.ceil(x + scaleX / 2);
 	const top = Math.floor(y - scaleY / 2);
 	const bottom = Math.ceil(y + scaleY / 2);
-	const accumulator = { r: 0, g: 0, b: 0, a: 0, total: 0 };
+	let r = 0;
+	let g = 0;
+	let b = 0;
+	let a = 0;
+	let total = 0;
 	for (let yy = top; yy <= bottom; yy++) {
+		const clampedY = Math.min(source.height - 1, Math.max(0, yy));
 		for (let xx = left; xx <= right; xx++) {
-			addWeightedSample(accumulator, getPixel(source.data, source.width, source.height, xx, yy), 1);
+			const clampedX = Math.min(source.width - 1, Math.max(0, xx));
+			const offset = (clampedY * source.width + clampedX) * 4;
+			const alpha = data[offset + 3]! / 255;
+			r += data[offset]! * alpha;
+			g += data[offset + 1]! * alpha;
+			b += data[offset + 2]! * alpha;
+			a += data[offset + 3]!;
+			total += 1;
 		}
 	}
-	return finishWeightedSample(accumulator);
+	if (total === 0) return [0, 0, 0, 0] as const;
+	return unpremultiplySample(r / total, g / total, b / total, a / total);
 }
