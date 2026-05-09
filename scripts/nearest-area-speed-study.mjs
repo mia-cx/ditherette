@@ -34,12 +34,12 @@ const VARIANTS = [
 		id: 'nearest-axis-table',
 		description: 'Precompute nearest x/y source offsets before copying pixels',
 		apply: (source) =>
-			addModeBranch(source, 'nearest', NEAREST_AXIS_TABLE_HELPER, 'resizeNearestAxisTable')
+			addModeBranch(source, 'nearest', NEAREST_AXIS_TABLE_HELPER, 'resizeNearestAxisTableCandidate')
 	},
 	{
 		id: 'area-direct',
 		description: 'Mode-specific area loop that writes output directly',
-		apply: (source) => addAreaBranch(source, AREA_DIRECT_HELPER, 'resizeAreaDirect')
+		apply: (source) => addAreaBranch(source, AREA_DIRECT_HELPER, 'resizeAreaDirectCandidate')
 	},
 	{
 		id: 'nearest-direct-area-direct',
@@ -599,7 +599,9 @@ function addModeBranch(source, mode, helpers, helperName) {
 		return output;
 	}
 `;
-	const marker = "\n\tif (mode === 'bilinear') {";
+	const marker = source.includes(`\n\tif (mode === '${mode}') {`)
+		? `\n\tif (mode === '${mode}') {`
+		: "\n\tif (mode === 'bilinear') {";
 	return insertBefore(insertBefore(source, marker, branch), '\nfunction sample(', `\n${helpers}\n`);
 }
 
@@ -610,11 +612,10 @@ function addAreaBranch(source, helpers, helperName) {
 		return output;
 	}
 `;
-	return insertBefore(
-		insertBefore(source, '\n\tfor (let y = targetTop;', branch),
-		'\nfunction sample(',
-		`\n${helpers}\n`
-	);
+	const marker = source.includes("\n\tif (mode === 'area') {")
+		? "\n\tif (mode === 'area') {"
+		: '\n\tfor (let y = targetTop;';
+	return insertBefore(insertBefore(source, marker, branch), '\nfunction sample(', `\n${helpers}\n`);
 }
 
 function insertBefore(source, marker, insertion) {
@@ -706,7 +707,7 @@ const NEAREST_DIRECT_HELPER = `function resizeNearestDirect(source: ImageData, o
 }
 `;
 
-const NEAREST_AXIS_TABLE_HELPER = `function resizeNearestAxisTable(source: ImageData, output: ImageData, sourceRect: Rect) {
+const NEAREST_AXIS_TABLE_HELPER = `function resizeNearestAxisTableCandidate(source: ImageData, output: ImageData, sourceRect: Rect) {
 	const outputData = output.data;
 	const data = source.data;
 	const outputWidth = output.width;
@@ -740,7 +741,7 @@ const NEAREST_AXIS_TABLE_HELPER = `function resizeNearestAxisTable(source: Image
 }
 `;
 
-const AREA_DIRECT_HELPER = `function resizeAreaDirect(source: ImageData, output: ImageData, sourceRect: Rect) {
+const AREA_DIRECT_HELPER = `function resizeAreaDirectCandidate(source: ImageData, output: ImageData, sourceRect: Rect) {
 	const outputData = output.data;
 	const data = source.data;
 	const outputWidth = output.width;

@@ -125,8 +125,18 @@ export function resizeImageData(
 		return output;
 	}
 
+	if (mode === 'nearest') {
+		resizeNearestAxisTable(source, output, sourceRect);
+		return output;
+	}
+
 	if (mode === 'bilinear') {
 		resizeBilinearDirect(source, output, sourceRect);
+		return output;
+	}
+
+	if (mode === 'area') {
+		resizeAreaDirect(source, output, sourceRect);
 		return output;
 	}
 
@@ -144,6 +154,39 @@ export function resizeImageData(
 	}
 
 	return output;
+}
+
+function resizeNearestAxisTable(source: ImageData, output: ImageData, sourceRect: Rect) {
+	const outputData = output.data;
+	const data = source.data;
+	const outputWidth = output.width;
+	const outputHeight = output.height;
+	const sourceWidth = source.width;
+	const sourceHeight = source.height;
+	const scaleX = sourceRect.width / outputWidth;
+	const scaleY = sourceRect.height / outputHeight;
+	const xOffsets = new Int32Array(outputWidth);
+	const yOffsets = new Int32Array(outputHeight);
+	for (let x = 0; x < outputWidth; x++) {
+		const sourceX = sourceRect.x + (x + 0.5) * scaleX - 0.5;
+		xOffsets[x] = Math.min(sourceWidth - 1, Math.max(0, Math.round(sourceX))) * 4;
+	}
+	for (let y = 0; y < outputHeight; y++) {
+		const sourceY = sourceRect.y + (y + 0.5) * scaleY - 0.5;
+		yOffsets[y] = Math.min(sourceHeight - 1, Math.max(0, Math.round(sourceY))) * sourceWidth * 4;
+	}
+	for (let y = 0; y < outputHeight; y++) {
+		const rowOffset = yOffsets[y]!;
+		let targetOffset = y * outputWidth * 4;
+		for (let x = 0; x < outputWidth; x++) {
+			const sourceOffset = rowOffset + xOffsets[x]!;
+			outputData[targetOffset] = data[sourceOffset]!;
+			outputData[targetOffset + 1] = data[sourceOffset + 1]!;
+			outputData[targetOffset + 2] = data[sourceOffset + 2]!;
+			outputData[targetOffset + 3] = data[sourceOffset + 3]!;
+			targetOffset += 4;
+		}
+	}
 }
 
 function resizeBilinearDirect(source: ImageData, output: ImageData, sourceRect: Rect) {
@@ -242,6 +285,70 @@ function resizeBilinearDirect(source: ImageData, output: ImageData, sourceRect: 
 			b += data[offset11 + 2]! * alpha * weight11;
 			a += data[offset11 + 3]! * weight11;
 
+			if (total === 0) {
+				outputData[targetOffset] = 0;
+				outputData[targetOffset + 1] = 0;
+				outputData[targetOffset + 2] = 0;
+				outputData[targetOffset + 3] = 0;
+				targetOffset += 4;
+				continue;
+			}
+			const [outR, outG, outB, outA] = unpremultiplySample(
+				r / total,
+				g / total,
+				b / total,
+				a / total
+			);
+			outputData[targetOffset] = outR;
+			outputData[targetOffset + 1] = outG;
+			outputData[targetOffset + 2] = outB;
+			outputData[targetOffset + 3] = outA;
+			targetOffset += 4;
+		}
+	}
+}
+
+function resizeAreaDirect(source: ImageData, output: ImageData, sourceRect: Rect) {
+	const outputData = output.data;
+	const data = source.data;
+	const outputWidth = output.width;
+	const outputHeight = output.height;
+	const sourceWidth = source.width;
+	const sourceHeight = source.height;
+	const scaleX = sourceRect.width / outputWidth;
+	const scaleY = sourceRect.height / outputHeight;
+	if (scaleX < 1 && scaleY < 1) {
+		resizeBilinearDirect(source, output, sourceRect);
+		return;
+	}
+	for (let y = 0; y < outputHeight; y++) {
+		const sourceY = sourceRect.y + (y + 0.5) * scaleY - 0.5;
+		const top = Math.floor(sourceY - scaleY / 2);
+		const bottom = Math.ceil(sourceY + scaleY / 2);
+		let targetOffset = y * outputWidth * 4;
+		for (let x = 0; x < outputWidth; x++) {
+			const sourceX = sourceRect.x + (x + 0.5) * scaleX - 0.5;
+			const left = Math.floor(sourceX - scaleX / 2);
+			const right = Math.ceil(sourceX + scaleX / 2);
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+			let total = 0;
+			for (let yy = top; yy <= bottom; yy++) {
+				const clampedY = Math.min(sourceHeight - 1, Math.max(0, yy));
+				const rowOffset = clampedY * sourceWidth * 4;
+				for (let xx = left; xx <= right; xx++) {
+					const clampedX = Math.min(sourceWidth - 1, Math.max(0, xx));
+					const offset = rowOffset + clampedX * 4;
+					const alpha = data[offset + 3]! / 255;
+					r += data[offset]! * alpha;
+					g += data[offset + 1]! * alpha;
+					b += data[offset + 2]! * alpha;
+					a += data[offset + 3]!;
+					total += 1;
+				}
+			}
 			if (total === 0) {
 				outputData[targetOffset] = 0;
 				outputData[targetOffset + 1] = 0;
