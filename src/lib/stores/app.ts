@@ -215,7 +215,10 @@ function currentOutputSettings() {
 export function updateOutputSettings(patch: Partial<OutputSettings>) {
 	const current = currentOutputSettings();
 	const next = { ...current, ...patch };
-	if (!shallowEqual(current, next)) outputSettings.set(next);
+	if (shallowEqual(current, next)) return;
+	// Crop changes alter the source frame itself, so the previous output should not be displayed.
+	if ('crop' in patch && current.crop !== next.crop) processedImage.set(undefined);
+	outputSettings.set(next);
 }
 
 export function updateDitherSettings(patch: Partial<DitherSettings>) {

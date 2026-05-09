@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { paletteEnabledKey } from '$lib/palette/wplace';
-import type { Palette } from '$lib/processing/types';
+import type { Palette, ProcessedImage } from '$lib/processing/types';
+import { cancelProcessing, scheduleProcessing } from '$lib/processing/client';
 import {
 	activePaletteName,
 	customPalettes,
 	deleteActivePaletteColors,
 	deleteCustomPalette,
 	importCustomPaletteData,
+	outputSettings,
 	paletteEnabled,
-	previewCustomPaletteImport
+	previewCustomPaletteImport,
+	processedImage,
+	sourceImageData,
+	updateOutputSettings
 } from './app';
 
 const customPalette: Palette = {
@@ -23,6 +28,19 @@ const customPalette: Palette = {
 
 function importRecord(name: string, colors = [{ name: 'Red', key: '#FF0000' }]) {
 	return { name, colors };
+}
+
+function processedFixture(settingsHash = 'stale'): ProcessedImage {
+	return {
+		width: 1,
+		height: 1,
+		indices: new Uint8Array([0]),
+		palette: [],
+		transparentIndex: -1,
+		warnings: [],
+		settingsHash,
+		updatedAt: 1
+	};
 }
 
 describe('custom palette state persistence', () => {
@@ -79,5 +97,43 @@ describe('custom palette state persistence', () => {
 		expect(paletteEnabled.get()).not.toHaveProperty(paletteEnabledKey('Custom', '#FF0000'));
 		expect(paletteEnabled.get()).not.toHaveProperty(paletteEnabledKey('Custom', '#0000FF'));
 		expect(paletteEnabled.get()).toHaveProperty(paletteEnabledKey('Custom', '#00FF00'));
+	});
+});
+
+describe('processed output lifecycle', () => {
+	beforeEach(() => {
+		cancelProcessing();
+		processedImage.set(undefined);
+		sourceImageData.set(undefined);
+		outputSettings.set({
+			width: 512,
+			height: 512,
+			lockAspect: true,
+			resize: 'bilinear',
+			alphaMode: 'preserve',
+			alphaThreshold: 0,
+			matteKey: '#FFFFFF',
+			autoSizeOnUpload: false,
+			scaleFactor: 1
+		});
+	});
+
+	it('keeps the current output visible while non-crop settings are reprocessed', () => {
+		const current = processedFixture();
+		processedImage.set(current);
+		sourceImageData.set({ width: 1, height: 1, data: new Uint8ClampedArray(4) } as ImageData);
+
+		scheduleProcessing(1_000_000);
+
+		expect(processedImage.get()).toBe(current);
+		cancelProcessing();
+	});
+
+	it('flushes the current output when crop changes', () => {
+		processedImage.set(processedFixture());
+
+		updateOutputSettings({ crop: { x: 0, y: 0, width: 256, height: 256 } });
+
+		expect(processedImage.get()).toBeUndefined();
 	});
 });
