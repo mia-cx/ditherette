@@ -3,30 +3,30 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { downloadIndexedPng } from '$lib/processing/png';
 	import {
-		activePaletteName,
+		activePalette,
 		colorSpace,
-		customPalettes,
 		ditherSettings,
 		outputSettings,
-		paletteEnabled,
 		processedImage,
 		processingProgress,
+		selectedPalette,
 		sourceMeta
 	} from '$lib/stores/app';
-	import { settingsHash } from '$lib/processing/hash';
+	import { processingIdentityHash } from '$lib/processing/hash';
+	import type { ProcessedImage } from '$lib/processing/types';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 
 	type Props = { variant?: 'card' | 'bar'; hasImage?: boolean };
 	let { variant = 'bar', hasImage = false }: Props = $props();
 
 	const currentHash = $derived(
-		settingsHash({
+		processingIdentityHash({
 			output: $outputSettings,
 			dither: $ditherSettings,
 			colorSpace: $colorSpace,
-			paletteName: $activePaletteName,
-			customPalettes: $customPalettes,
-			palette: $paletteEnabled,
+			paletteName: $activePalette.name,
+			paletteSource: $activePalette.source,
+			palette: $selectedPalette,
 			source: $sourceMeta
 		})
 	);
@@ -44,18 +44,19 @@
 	const colorLabel = $derived($processedImage ? `${$processedImage.palette.length} colors` : '—');
 
 	function download() {
-		if (!$processedImage) return;
-		downloadIndexedPng($processedImage, exportFilename());
+		const image = $processedImage;
+		if (!image) return;
+		downloadIndexedPng(image, exportFilename(image));
 	}
 
-	function exportFilename() {
+	function exportFilename(image: ProcessedImage) {
 		const original = $sourceMeta?.name.replace(/\.[^.]+$/, '') || 'image';
 		const safeName =
 			original
 				.trim()
 				.replace(/[^a-z0-9._-]+/gi, '-')
 				.replace(/^-+|-+$/g, '') || 'image';
-		return `${safeName}-ditherette-${$processedImage!.width}x${$processedImage!.height}.png`;
+		return `${safeName}-ditherette-${image.width}x${image.height}.png`;
 	}
 </script>
 

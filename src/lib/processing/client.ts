@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
 import {
+	activePalette,
 	activePaletteName,
 	colorSpace,
 	customPalettes,
@@ -14,7 +15,7 @@ import {
 	sourceMeta
 } from '$lib/stores/app';
 import { saveProcessedImage } from './db';
-import { settingsHash } from './hash';
+import { processingIdentityHash } from './hash';
 import { validateWorkerResponse } from './schemas';
 import type { ProcessedImage } from './types';
 
@@ -59,13 +60,14 @@ function closeProcessingWorker(activeWorker: Worker) {
 }
 
 export function currentSettingsHash() {
-	return settingsHash({
+	const palette = activePalette.get();
+	return processingIdentityHash({
 		output: outputSettings.get(),
 		dither: ditherSettings.get(),
 		colorSpace: colorSpace.get(),
-		paletteName: activePaletteName.get(),
-		customPalettes: customPalettes.get(),
-		palette: paletteEnabled.get(),
+		paletteName: palette.name,
+		paletteSource: palette.source,
+		palette: selectedPalette.get(),
 		source: sourceMeta.get()
 	});
 }
