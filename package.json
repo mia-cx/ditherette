@@ -16,15 +16,7 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:unit": "vitest",
 		"gen": "wrangler types",
-		"bench:processing": "node scripts/benchmark-processing.mjs",
-		"bench:bilinear-speed-study": "node scripts/bilinear-speed-study.mjs",
-		"bench:lanczos-study": "node scripts/lanczos-optimization-study.mjs",
-		"bench:lanczos-deferred-study": "node scripts/lanczos-deferred-study.mjs",
-		"bench:lanczos-quality-study": "node scripts/lanczos-quality-study.mjs",
-		"bench:lanczos-radius-study": "node scripts/lanczos-radius-study.mjs",
-		"bench:lanczos-speed-study": "node scripts/lanczos-speed-study.mjs",
-		"bench:sampler-study": "node scripts/sampler-optimization-study.mjs",
-		"bench:nearest-area-speed-study": "node scripts/nearest-area-speed-study.mjs"
+		"bench:processing": "node scripts/benchmark-processing.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
