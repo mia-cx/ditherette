@@ -115,6 +115,18 @@ export function resizeImageData(
 	const scaleX = plan.source.width / targetWidth;
 	const scaleY = plan.source.height / targetHeight;
 
+	if (mode === 'lanczos3') {
+		resizeLanczos3(source, output, plan.source, {
+			left: targetLeft,
+			top: targetTop,
+			right: targetRight,
+			bottom: targetBottom,
+			width: targetWidth,
+			height: targetHeight
+		});
+		return output;
+	}
+
 	for (let y = targetTop; y < targetBottom; y++) {
 		for (let x = targetLeft; x < targetRight; x++) {
 			const targetOffset = (y * width + x) * 4;
@@ -231,6 +243,112 @@ function sampleLanczos(source: ImageData, x: number, y: number) {
 		}
 	}
 	return finishWeightedSample(accumulator);
+}
+
+type TargetBounds = {
+	left: number;
+	top: number;
+	right: number;
+	bottom: number;
+	width: number;
+	height: number;
+};
+
+type ContributionTable = {
+	indices: Int32Array;
+	weights: Float64Array;
+};
+
+const LANCZOS_RADIUS = 3;
+const LANCZOS_TAPS = LANCZOS_RADIUS * 2;
+
+function resizeLanczos3(
+	source: ImageData,
+	output: ImageData,
+	sourceRect: Rect,
+	target: TargetBounds
+) {
+	const xTable = contributionTable(
+		target.width,
+		sourceRect.x,
+		sourceRect.width / target.width,
+		source.width
+	);
+	const yTable = contributionTable(
+		target.height,
+		sourceRect.y,
+		sourceRect.height / target.height,
+		source.height
+	);
+	const sourceData = source.data;
+	const outputData = output.data;
+
+	for (let y = target.top; y < target.bottom; y++) {
+		const targetY = y - target.top;
+		const yBase = targetY * LANCZOS_TAPS;
+		for (let x = target.left; x < target.right; x++) {
+			const targetX = x - target.left;
+			const xBase = targetX * LANCZOS_TAPS;
+			let r = 0;
+			let g = 0;
+			let b = 0;
+			let a = 0;
+			let total = 0;
+
+			for (let yTap = 0; yTap < LANCZOS_TAPS; yTap++) {
+				const wy = yTable.weights[yBase + yTap]!;
+				if (wy === 0) continue;
+				const rowOffset = yTable.indices[yBase + yTap]! * source.width * 4;
+				for (let xTap = 0; xTap < LANCZOS_TAPS; xTap++) {
+					const weight = wy * xTable.weights[xBase + xTap]!;
+					if (weight === 0) continue;
+					const offset = rowOffset + xTable.indices[xBase + xTap]! * 4;
+					const alpha = sourceData[offset + 3]! / 255;
+					r += sourceData[offset]! * alpha * weight;
+					g += sourceData[offset + 1]! * alpha * weight;
+					b += sourceData[offset + 2]! * alpha * weight;
+					a += sourceData[offset + 3]! * weight;
+					total += weight;
+				}
+			}
+
+			const targetOffset = (y * output.width + x) * 4;
+			if (total === 0) {
+				outputData[targetOffset] = 0;
+				outputData[targetOffset + 1] = 0;
+				outputData[targetOffset + 2] = 0;
+				outputData[targetOffset + 3] = 0;
+				continue;
+			}
+			const [outR, outG, outB, outA] = unpremultiplySample(
+				r / total,
+				g / total,
+				b / total,
+				a / total
+			);
+			outputData[targetOffset] = outR;
+			outputData[targetOffset + 1] = outG;
+			outputData[targetOffset + 2] = outB;
+			outputData[targetOffset + 3] = outA;
+		}
+	}
+}
+
+function contributionTable(count: number, sourceStart: number, scale: number, sourceLimit: number) {
+	const indices = new Int32Array(count * LANCZOS_TAPS);
+	const weights = new Float64Array(count * LANCZOS_TAPS);
+	for (let target = 0; target < count; target++) {
+		const sourcePosition = sourceStart + (target + 0.5) * scale - 0.5;
+		const floor = Math.floor(sourcePosition);
+		const first = floor - LANCZOS_RADIUS + 1;
+		const base = target * LANCZOS_TAPS;
+		for (let tap = 0; tap < LANCZOS_TAPS; tap++) {
+			const sourceIndex = first + tap;
+			indices[base + tap] = Math.min(sourceLimit - 1, Math.max(0, sourceIndex));
+			weights[base + tap] = lanczos(sourcePosition - sourceIndex, LANCZOS_RADIUS);
+		}
+	}
+	return { indices, weights } satisfies ContributionTable;
 }
 
 function sampleArea(source: ImageData, x: number, y: number, scaleX: number, scaleY: number) {
