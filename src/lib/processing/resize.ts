@@ -1,10 +1,9 @@
-import type { CropRect, FitMode, ResizeId } from './types';
+import type { CropRect, ResizeId } from './types';
 import { unpremultiplySample } from './compositing';
 import { clampByte } from './color';
 import { assertOutputDimensions, assertSourceDimensions } from './schemas';
 
 type Rect = { x: number; y: number; width: number; height: number };
-type ResizePlan = { source: Rect; target: Rect };
 
 function finiteRectValue(value: number, label: string) {
 	if (!Number.isFinite(value)) throw new Error(`${label} must be finite.`);
@@ -24,53 +23,6 @@ function clampCrop(sourceWidth: number, sourceHeight: number, crop?: CropRect): 
 		y,
 		width: Math.max(1, Math.min(sourceWidth - x, crop.width)),
 		height: Math.max(1, Math.min(sourceHeight - y, crop.height))
-	};
-}
-
-function resizePlan(
-	sourceWidth: number,
-	sourceHeight: number,
-	outWidth: number,
-	outHeight: number,
-	fit: FitMode,
-	crop?: CropRect
-): ResizePlan {
-	assertOutputDimensions(outWidth, outHeight, 'Resize output');
-	assertSourceDimensions(sourceWidth, sourceHeight, 'Resize source');
-	const base = clampCrop(sourceWidth, sourceHeight, crop);
-	const fullTarget = { x: 0, y: 0, width: outWidth, height: outHeight };
-	if (fit === 'stretch') return { source: base, target: fullTarget };
-
-	const sourceAspect = base.width / base.height;
-	const outputAspect = outWidth / outHeight;
-
-	if (fit === 'cover') {
-		if (sourceAspect < outputAspect) {
-			const height = base.width / outputAspect;
-			return {
-				source: { x: base.x, y: base.y + (base.height - height) / 2, width: base.width, height },
-				target: fullTarget
-			};
-		}
-		const width = base.height * outputAspect;
-		return {
-			source: { x: base.x + (base.width - width) / 2, y: base.y, width, height: base.height },
-			target: fullTarget
-		};
-	}
-
-	if (sourceAspect > outputAspect) {
-		const height = outWidth / sourceAspect;
-		return {
-			source: base,
-			target: { x: 0, y: (outHeight - height) / 2, width: outWidth, height }
-		};
-	}
-
-	const width = outHeight * sourceAspect;
-	return {
-		source: base,
-		target: { x: (outWidth - width) / 2, y: 0, width, height: outHeight }
 	};
 }
 
@@ -97,27 +49,24 @@ export function resizeImageData(
 	source: ImageData,
 	outWidth: number,
 	outHeight: number,
-	fit: FitMode,
 	mode: ResizeId,
 	crop?: CropRect
 ): ImageData {
 	const { width, height } = assertOutputDimensions(outWidth, outHeight, 'Resize output');
-	if (fit !== 'stretch' && fit !== 'contain' && fit !== 'cover') {
-		throw new Error(`Unsupported fit mode: ${fit satisfies never}`);
-	}
-	const plan = resizePlan(source.width, source.height, width, height, fit, crop);
+	assertSourceDimensions(source.width, source.height, 'Resize source');
+	const sourceRect = clampCrop(source.width, source.height, crop);
 	const output = new ImageData(width, height);
-	const targetLeft = Math.max(0, Math.round(plan.target.x));
-	const targetTop = Math.max(0, Math.round(plan.target.y));
-	const targetRight = Math.min(width, Math.round(plan.target.x + plan.target.width));
-	const targetBottom = Math.min(height, Math.round(plan.target.y + plan.target.height));
-	const targetWidth = Math.max(1, targetRight - targetLeft);
-	const targetHeight = Math.max(1, targetBottom - targetTop);
-	const scaleX = plan.source.width / targetWidth;
-	const scaleY = plan.source.height / targetHeight;
+	const targetLeft = 0;
+	const targetTop = 0;
+	const targetRight = width;
+	const targetBottom = height;
+	const targetWidth = width;
+	const targetHeight = height;
+	const scaleX = sourceRect.width / targetWidth;
+	const scaleY = sourceRect.height / targetHeight;
 
 	if (mode === 'lanczos3') {
-		resizeLanczos3(source, output, plan.source, {
+		resizeLanczos3(source, output, sourceRect, {
 			left: targetLeft,
 			top: targetTop,
 			right: targetRight,
@@ -131,8 +80,8 @@ export function resizeImageData(
 	for (let y = targetTop; y < targetBottom; y++) {
 		for (let x = targetLeft; x < targetRight; x++) {
 			const targetOffset = (y * width + x) * 4;
-			const sourceX = plan.source.x + (x - targetLeft + 0.5) * scaleX - 0.5;
-			const sourceY = plan.source.y + (y - targetTop + 0.5) * scaleY - 0.5;
+			const sourceX = sourceRect.x + (x - targetLeft + 0.5) * scaleX - 0.5;
+			const sourceY = sourceRect.y + (y - targetTop + 0.5) * scaleY - 0.5;
 			const pixel = sample(source, sourceX, sourceY, scaleX, scaleY, mode);
 			output.data[targetOffset] = pixel[0];
 			output.data[targetOffset + 1] = pixel[1];

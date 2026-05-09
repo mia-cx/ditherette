@@ -23,7 +23,6 @@ export const outputSettings = persistentJSON<OutputSettings>('ditherette:output'
 	width: 512,
 	height: 512,
 	lockAspect: true,
-	fit: 'contain',
 	resize: 'lanczos3',
 	alphaMode: 'preserve',
 	alphaThreshold: 0,
@@ -207,9 +206,16 @@ function visibleCustomColor(name: string, hex: string, tags: readonly string[] =
 	return { name: cleanColorName(name, key), key, rgb: hexToRgb(key), kind: 'custom', tags: clean };
 }
 
+function currentOutputSettings() {
+	const settings = { ...outputSettings.get() } as OutputSettings & { fit?: unknown };
+	delete settings.fit;
+	return settings;
+}
+
 export function updateOutputSettings(patch: Partial<OutputSettings>) {
-	const next = { ...outputSettings.get(), ...patch };
-	if (!shallowEqual(outputSettings.get(), next)) outputSettings.set(next);
+	const current = currentOutputSettings();
+	const next = { ...current, ...patch };
+	if (!shallowEqual(current, next)) outputSettings.set(next);
 }
 
 export function updateDitherSettings(patch: Partial<DitherSettings>) {

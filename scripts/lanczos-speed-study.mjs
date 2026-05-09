@@ -356,13 +356,7 @@ function runVariant(variant, resizeImageData, cases, options) {
 }
 
 function runResize(resizeImageData, testCase) {
-	return resizeImageData(
-		testCase.source.imageData,
-		testCase.width,
-		testCase.height,
-		'stretch',
-		'lanczos3'
-	);
+	return resizeImageData(testCase.source.imageData, testCase.width, testCase.height, 'lanczos3');
 }
 
 function stats(values) {

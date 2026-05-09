@@ -34,7 +34,6 @@ export type DitherId =
 	| 'random';
 
 export type ResizeId = 'nearest' | 'bilinear' | 'lanczos3' | 'area';
-export type FitMode = 'stretch' | 'contain' | 'cover';
 export type AlphaMode = 'preserve' | 'premultiplied' | 'matte';
 
 export type Rgb = { r: number; g: number; b: number };
@@ -60,7 +59,6 @@ export type OutputSettings = {
 	width: number;
 	height: number;
 	lockAspect: boolean;
-	fit: FitMode;
 	resize: ResizeId;
 	alphaMode: AlphaMode;
 	alphaThreshold: number;

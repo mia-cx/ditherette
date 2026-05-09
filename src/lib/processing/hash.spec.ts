@@ -6,7 +6,6 @@ const output: OutputSettings = {
 	width: 10,
 	height: 10,
 	lockAspect: true,
-	fit: 'contain',
 	resize: 'nearest',
 	alphaMode: 'preserve',
 	alphaThreshold: 0,

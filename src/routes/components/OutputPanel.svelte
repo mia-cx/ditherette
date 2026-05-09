@@ -62,7 +62,6 @@
 			width: clamped.width,
 			height: clamped.height,
 			lockAspect: true,
-			fit: 'stretch',
 			resize,
 			autoSizeOnUpload: false,
 			scaleFactor

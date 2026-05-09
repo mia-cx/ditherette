@@ -7,7 +7,6 @@ import type {
 	ColorSpaceId,
 	DitherId,
 	EnabledPaletteColor,
-	FitMode,
 	OutputSettings,
 	ProcessedImage,
 	ProcessingSettings,
@@ -27,7 +26,6 @@ export type BenchmarkCase = {
 	outputWidth?: number;
 	outputHeight?: number;
 	outputScale?: number;
-	fit: FitMode;
 	resize: ResizeId;
 	dither: DitherId;
 	colorSpace: ColorSpaceId;
@@ -184,7 +182,6 @@ const BASE_OUTPUT: OutputSettings = {
 	width: 1,
 	height: 1,
 	lockAspect: true,
-	fit: 'contain',
 	resize: 'lanczos3',
 	alphaMode: 'preserve',
 	alphaThreshold: 0,
@@ -201,7 +198,6 @@ const CASES: BenchmarkCase[] = [
 		sourceHeight: 192,
 		outputWidth: 160,
 		outputHeight: 120,
-		fit: 'contain',
 		resize: 'bilinear',
 		dither: 'none',
 		colorSpace: 'srgb',
@@ -215,7 +211,6 @@ const CASES: BenchmarkCase[] = [
 		sourceHeight: 192,
 		outputWidth: 160,
 		outputHeight: 120,
-		fit: 'contain',
 		resize: 'bilinear',
 		dither: 'bayer-8',
 		colorSpace: 'oklab',
@@ -229,7 +224,6 @@ const CASES: BenchmarkCase[] = [
 		sourceHeight: 540,
 		outputWidth: 512,
 		outputHeight: 288,
-		fit: 'contain',
 		resize: 'bilinear',
 		dither: 'none',
 		colorSpace: 'srgb',
@@ -243,7 +237,6 @@ const CASES: BenchmarkCase[] = [
 		sourceHeight: 1080,
 		outputWidth: 1024,
 		outputHeight: 576,
-		fit: 'contain',
 		resize: 'lanczos3',
 		dither: 'bayer-8',
 		colorSpace: 'oklab',
@@ -257,7 +250,6 @@ const CASES: BenchmarkCase[] = [
 		sourceHeight: 1080,
 		outputWidth: 1024,
 		outputHeight: 576,
-		fit: 'contain',
 		resize: 'lanczos3',
 		dither: 'floyd-steinberg',
 		colorSpace: 'srgb',
@@ -271,7 +263,6 @@ const CASES: BenchmarkCase[] = [
 		sourceHeight: 2160,
 		outputWidth: 2048,
 		outputHeight: 1152,
-		fit: 'contain',
 		resize: 'lanczos3',
 		dither: 'sierra',
 		colorSpace: 'oklab',
@@ -285,7 +276,6 @@ const CASES: BenchmarkCase[] = [
 		sourceHeight: 2160,
 		outputWidth: 2048,
 		outputHeight: 1152,
-		fit: 'contain',
 		resize: 'area',
 		dither: 'none',
 		colorSpace: 'srgb',
@@ -340,7 +330,6 @@ function matrixCases(
 					id: `scale-${scaleLabel(scale)}-${resize}-${dither}-${colorSpace}`,
 					label: `${formatScale(scale)} scale · ${resize} · ${dither} · ${colorSpace}`,
 					outputScale: scale,
-					fit: 'stretch' as const,
 					resize,
 					dither,
 					colorSpace,
@@ -490,8 +479,7 @@ function runOnce(
 		testCase.id,
 		iteration,
 		warmup,
-		() =>
-			resizeImageData(source, dimensions.width, dimensions.height, testCase.fit, testCase.resize)
+		() => resizeImageData(source, dimensions.width, dimensions.height, testCase.resize)
 	);
 	if (shouldStopAfter('resize', options.stopAfterStage)) {
 		return finishRun({
@@ -653,7 +641,6 @@ function processingSettingsForCase(
 			...BASE_OUTPUT,
 			width: dimensions.width,
 			height: dimensions.height,
-			fit: testCase.fit,
 			resize: testCase.resize
 		},
 		dither: {

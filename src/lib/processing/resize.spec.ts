@@ -246,20 +246,10 @@ function referenceUnpremultiply(r: number, g: number, b: number, a: number) {
 }
 
 describe('resizeImageData', () => {
-	it('letterboxes contain output instead of smearing clamped edge pixels', () => {
-		const output = resizeImageData(solidImage(4, 2, [255, 0, 0, 255]), 4, 4, 'contain', 'nearest');
-
-		expect([...output.data.slice(0, 16)]).toEqual(new Array(16).fill(0));
-		expect([...output.data.slice(16, 32)]).toEqual([
-			255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255
-		]);
-		expect([...output.data.slice(48, 64)]).toEqual(new Array(16).fill(0));
-	});
-
 	it('does not bleed RGB from transparent pixels during bilinear resize', () => {
 		const source = new ImageData(new Uint8ClampedArray([255, 0, 0, 0, 0, 0, 255, 255]), 2, 1);
 
-		const output = resizeImageData(source, 1, 1, 'stretch', 'bilinear');
+		const output = resizeImageData(source, 1, 1, 'bilinear');
 
 		expect([...output.data]).toEqual([0, 0, 255, 128]);
 	});
@@ -271,34 +261,16 @@ describe('resizeImageData', () => {
 		for (const mode of modes) {
 			const cases = [
 				{
-					output: resizeImageData(source, 11, 8, 'stretch', mode),
+					output: resizeImageData(source, 11, 8, mode),
 					reference: referenceResize(source, 11, 8, mode)
 				},
 				{
-					output: resizeImageData(source, 5, 3, 'stretch', mode),
+					output: resizeImageData(source, 5, 3, mode),
 					reference: referenceResize(source, 5, 3, mode)
 				},
 				{
-					output: resizeImageData(source, 5, 5, 'contain', mode),
-					reference: referenceResize(
-						source,
-						5,
-						5,
-						mode,
-						{ x: 0, y: 0, width: 8, height: 5 },
-						{ x: 0, y: 0.9375, width: 5, height: 3.125 }
-					)
-				},
-				{
-					output: resizeImageData(source, 5, 5, 'cover', mode),
-					reference: referenceResize(
-						source,
-						5,
-						5,
-						mode,
-						{ x: 1.5, y: 0, width: 5, height: 5 },
-						{ x: 0, y: 0, width: 5, height: 5 }
-					)
+					output: resizeImageData(source, 5, 5, mode, { x: 1.5, y: 0, width: 5, height: 5 }),
+					reference: referenceResize(source, 5, 5, mode, { x: 1.5, y: 0, width: 5, height: 5 })
 				}
 			];
 
@@ -309,7 +281,7 @@ describe('resizeImageData', () => {
 
 		const opaqueSource = solidImage(7, 4, [21, 89, 233, 255]);
 		for (const mode of modes) {
-			const output = resizeImageData(opaqueSource, 10, 6, 'stretch', mode);
+			const output = resizeImageData(opaqueSource, 10, 6, mode);
 			const reference = referenceResize(opaqueSource, 10, 6, mode);
 			expect([...output.data]).toEqual([...reference.data]);
 		}
@@ -319,32 +291,16 @@ describe('resizeImageData', () => {
 		const source = patternedImage(8, 5);
 		const cases = [
 			{
-				output: resizeImageData(source, 11, 8, 'stretch', 'lanczos3'),
+				output: resizeImageData(source, 11, 8, 'lanczos3'),
 				reference: referenceLanczosResize(source, 11, 8)
 			},
 			{
-				output: resizeImageData(source, 5, 3, 'stretch', 'lanczos3'),
+				output: resizeImageData(source, 5, 3, 'lanczos3'),
 				reference: referenceLanczosResize(source, 5, 3)
 			},
 			{
-				output: resizeImageData(source, 5, 5, 'contain', 'lanczos3'),
-				reference: referenceLanczosResize(
-					source,
-					5,
-					5,
-					{ x: 0, y: 0, width: 8, height: 5 },
-					{ x: 0, y: 0.9375, width: 5, height: 3.125 }
-				)
-			},
-			{
-				output: resizeImageData(source, 5, 5, 'cover', 'lanczos3'),
-				reference: referenceLanczosResize(
-					source,
-					5,
-					5,
-					{ x: 1.5, y: 0, width: 5, height: 5 },
-					{ x: 0, y: 0, width: 5, height: 5 }
-				)
+				output: resizeImageData(source, 5, 5, 'lanczos3', { x: 1.5, y: 0, width: 5, height: 5 }),
+				reference: referenceLanczosResize(source, 5, 5, { x: 1.5, y: 0, width: 5, height: 5 })
 			}
 		];
 
@@ -354,13 +310,7 @@ describe('resizeImageData', () => {
 	});
 
 	it('allows source dimensions up to the source limit when resizing down', () => {
-		const output = resizeImageData(
-			solidImage(20_000, 1, [0, 0, 0, 255]),
-			1,
-			1,
-			'stretch',
-			'nearest'
-		);
+		const output = resizeImageData(solidImage(20_000, 1, [0, 0, 0, 255]), 1, 1, 'nearest');
 
 		expect(output.width).toBe(1);
 		expect(output.height).toBe(1);

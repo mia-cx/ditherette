@@ -68,7 +68,6 @@ try {
 						source.imageData,
 						Math.max(1, Math.round(source.imageData.width * scale)),
 						Math.max(1, Math.round(source.imageData.height * scale)),
-						'stretch',
 						'lanczos3'
 					);
 					const key = `${source.id}/${scaleLabel(scale)}`;
