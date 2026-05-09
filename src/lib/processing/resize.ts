@@ -149,32 +149,38 @@ export function resizeImageData(
 function resizeBilinearDirect(source: ImageData, output: ImageData, sourceRect: Rect) {
 	const outputData = output.data;
 	const data = source.data;
-	const scaleX = sourceRect.width / output.width;
-	const scaleY = sourceRect.height / output.height;
-	for (let y = 0; y < output.height; y++) {
+	const outputWidth = output.width;
+	const outputHeight = output.height;
+	const sourceWidth = source.width;
+	const sourceHeight = source.height;
+	const scaleX = sourceRect.width / outputWidth;
+	const scaleY = sourceRect.height / outputHeight;
+	for (let y = 0; y < outputHeight; y++) {
 		const sourceY = sourceRect.y + (y + 0.5) * scaleY - 0.5;
 		const y0 = Math.floor(sourceY);
 		const y1 = y0 + 1;
-		const clampedY0 = Math.min(source.height - 1, Math.max(0, y0));
-		const clampedY1 = Math.min(source.height - 1, Math.max(0, y1));
+		const clampedY0 = Math.min(sourceHeight - 1, Math.max(0, y0));
+		const clampedY1 = Math.min(sourceHeight - 1, Math.max(0, y1));
 		const ty = sourceY - y0;
-		for (let x = 0; x < output.width; x++) {
+		const rowOffset0 = clampedY0 * sourceWidth * 4;
+		const rowOffset1 = clampedY1 * sourceWidth * 4;
+		let targetOffset = y * outputWidth * 4;
+		for (let x = 0; x < outputWidth; x++) {
 			const sourceX = sourceRect.x + (x + 0.5) * scaleX - 0.5;
 			const x0 = Math.floor(sourceX);
 			const x1 = x0 + 1;
-			const clampedX0 = Math.min(source.width - 1, Math.max(0, x0));
-			const clampedX1 = Math.min(source.width - 1, Math.max(0, x1));
+			const clampedX0 = Math.min(sourceWidth - 1, Math.max(0, x0));
+			const clampedX1 = Math.min(sourceWidth - 1, Math.max(0, x1));
 			const tx = sourceX - x0;
 			const weight00 = (1 - tx) * (1 - ty);
 			const weight10 = tx * (1 - ty);
 			const weight01 = (1 - tx) * ty;
 			const weight11 = tx * ty;
-			const offset00 = (clampedY0 * source.width + clampedX0) * 4;
-			const offset10 = (clampedY0 * source.width + clampedX1) * 4;
-			const offset01 = (clampedY1 * source.width + clampedX0) * 4;
-			const offset11 = (clampedY1 * source.width + clampedX1) * 4;
+			const offset00 = rowOffset0 + clampedX0 * 4;
+			const offset10 = rowOffset0 + clampedX1 * 4;
+			const offset01 = rowOffset1 + clampedX0 * 4;
+			const offset11 = rowOffset1 + clampedX1 * 4;
 			const total = weight00 + weight10 + weight01 + weight11;
-			const targetOffset = (y * output.width + x) * 4;
 
 			if (
 				data[offset00 + 3] === 255 &&
@@ -204,6 +210,7 @@ function resizeBilinearDirect(source: ImageData, output: ImageData, sourceRect: 
 						total
 				);
 				outputData[targetOffset + 3] = 255;
+				targetOffset += 4;
 				continue;
 			}
 
@@ -240,6 +247,7 @@ function resizeBilinearDirect(source: ImageData, output: ImageData, sourceRect: 
 				outputData[targetOffset + 1] = 0;
 				outputData[targetOffset + 2] = 0;
 				outputData[targetOffset + 3] = 0;
+				targetOffset += 4;
 				continue;
 			}
 			const [outR, outG, outB, outA] = unpremultiplySample(
@@ -252,6 +260,7 @@ function resizeBilinearDirect(source: ImageData, output: ImageData, sourceRect: 
 			outputData[targetOffset + 1] = outG;
 			outputData[targetOffset + 2] = outB;
 			outputData[targetOffset + 3] = outA;
+			targetOffset += 4;
 		}
 	}
 }
