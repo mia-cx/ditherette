@@ -93,7 +93,7 @@ function usesAdaptivePlacement(settings: ProcessingSettings) {
 	return placement !== 'everywhere';
 }
 
-type QuantizeResult = {
+export type QuantizeResult = {
 	indices: Uint8Array;
 	palette: EnabledPaletteColor[];
 	transparentIndex: number;

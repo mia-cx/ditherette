@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ProcessorWorkerPipeline, transferablesForWorkerResponse } from './worker-pipeline';
-import type { DitherSettings, EnabledPaletteColor, OutputSettings, WorkerRequest } from './types';
+import type {
+	DitherSettings,
+	EnabledPaletteColor,
+	OutputSettings,
+	ProcessingSettings,
+	WorkerRequest
+} from './types';
 
 class TestImageData implements ImageData {
 	readonly data: Uint8ClampedArray<ArrayBuffer>;
@@ -111,6 +117,44 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(progressStages).toContain('Using cached resize');
 		expect(response).toMatchObject({ type: 'complete' });
 		expect(pipeline.resizeCacheSize).toBe(1);
+	});
+
+	it('reuses quantized output when toggling back to a previous dither branch', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const adaptiveSettings: ProcessingSettings = {
+			output,
+			dither: { ...dither, algorithm: 'bayer-2', placement: 'adaptive' },
+			colorSpace: 'oklab'
+		};
+		const everywhereSettings: ProcessingSettings = {
+			...adaptiveSettings,
+			dither: { ...adaptiveSettings.dither, placement: 'everywhere' as const }
+		};
+		const first = pipeline.handle(
+			processRequest({ settings: adaptiveSettings, settingsHash: 'adaptive' }),
+			() => undefined
+		);
+		pipeline.handle(
+			processRequest({ id: 3, settings: everywhereSettings, settingsHash: 'everywhere' }),
+			() => undefined
+		);
+		const progressStages: string[] = [];
+
+		const second = pipeline.handle(
+			processRequest({ id: 4, settings: adaptiveSettings, settingsHash: 'adaptive' }),
+			(stage) => progressStages.push(stage)
+		);
+
+		expect(progressStages).toContain('Using cached quantization');
+		if (!first || first.type !== 'complete' || !second || second.type !== 'complete') {
+			throw new Error('Expected complete responses.');
+		}
+		expect([...second.image.indices]).toEqual([...first.image.indices]);
+		expect(second.image.indices).not.toBe(first.image.indices);
 	});
 
 	it('creates prior branches for resize-affecting changes', () => {

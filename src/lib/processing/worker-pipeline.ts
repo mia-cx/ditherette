@@ -2,7 +2,8 @@ import { resizeImageData } from '$lib/processing/resize';
 import {
 	quantizeImage,
 	type PaletteVectorSpace,
-	type QuantizeCaches
+	type QuantizeCaches,
+	type QuantizeResult
 } from '$lib/processing/quantize';
 import { clampOutputSize, type WorkerRequest, type WorkerResponse } from './types';
 import {
@@ -17,6 +18,7 @@ const PROGRESS = {
 	resizing: 0.18,
 	cacheHit: 0.22,
 	quantizing: 0.62,
+	quantizeCacheHit: 0.82,
 	finalizing: 0.95
 } as const;
 
@@ -81,8 +83,14 @@ export class ProcessorWorkerPipeline {
 			);
 			this.#branchCache.setResized(branchKey, resized);
 		}
-		progress('Quantizing palette', PROGRESS.quantizing);
-		const result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey));
+		let result = this.cachedQuantizeResult(branchKey, settingsHash);
+		if (result) {
+			progress('Using cached quantization', PROGRESS.quantizeCacheHit);
+		} else {
+			progress('Quantizing palette', PROGRESS.quantizing);
+			result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey));
+			this.cacheQuantizeResult(branchKey, settingsHash, result);
+		}
 		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
 		progress('Finalizing indexed output', PROGRESS.finalizing);
 		return {
@@ -97,6 +105,27 @@ export class ProcessorWorkerPipeline {
 				updatedAt: Date.now()
 			}
 		};
+	}
+
+	private cachedQuantizeResult(
+		branchKey: string,
+		settingsHash: string
+	): QuantizeResult | undefined {
+		const cached = this.#branchCache.getColorMapping<QuantizeResult>(
+			branchKey,
+			quantizeResultCacheKey(settingsHash)
+		);
+		if (!cached) return undefined;
+		return cloneQuantizeResult(cached);
+	}
+
+	private cacheQuantizeResult(branchKey: string, settingsHash: string, result: QuantizeResult) {
+		this.#branchCache.setColorMapping(
+			branchKey,
+			quantizeResultCacheKey(settingsHash),
+			cloneQuantizeResult(result),
+			result.indices.byteLength
+		);
 	}
 
 	private quantizeCaches(branchKey: string): QuantizeCaches {
@@ -118,6 +147,19 @@ export class ProcessorWorkerPipeline {
 		}
 		return this.#sourceCache.source;
 	}
+}
+
+function quantizeResultCacheKey(settingsHash: string) {
+	return `quantized|${settingsHash}`;
+}
+
+function cloneQuantizeResult(result: QuantizeResult): QuantizeResult {
+	return {
+		indices: new Uint8Array(result.indices),
+		palette: result.palette.slice(),
+		transparentIndex: result.transparentIndex,
+		warnings: result.warnings.slice()
+	};
 }
 
 export function transferablesForWorkerResponse(response: WorkerResponse): Transferable[] {
