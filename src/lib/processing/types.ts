@@ -4,7 +4,13 @@ export const MAX_SOURCE_PIXELS = MAX_OUTPUT_PIXELS;
 export const MAX_SOURCE_SIDE = 32_768;
 export const MAX_SOURCE_BYTES = 75 * 1024 * 1024;
 
-export const ACCEPTED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+export const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+const ACCEPTED_IMAGE_TYPE_SET = new Set<string>(ACCEPTED_IMAGE_TYPES);
+export type AcceptedImageType = (typeof ACCEPTED_IMAGE_TYPES)[number];
+
+export function isAcceptedImageType(type: string): type is AcceptedImageType {
+	return ACCEPTED_IMAGE_TYPE_SET.has(type);
+}
 
 export type ColorSpaceId =
 	| 'oklab'

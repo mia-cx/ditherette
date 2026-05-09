@@ -100,7 +100,21 @@ export const WPLACE: Palette = {
 };
 
 export function paletteEnabledKey(paletteName: string, colorKey: string) {
+	return paletteName === WPLACE_PALETTE_NAME ? colorKey : JSON.stringify([paletteName, colorKey]);
+}
+
+function legacyPaletteEnabledKey(paletteName: string, colorKey: string) {
 	return paletteName === WPLACE_PALETTE_NAME ? colorKey : `${paletteName}\u0000${colorKey}`;
+}
+
+export function paletteColorEnabled(
+	enabled: Record<string, boolean>,
+	paletteName: string,
+	colorKey: string
+) {
+	const key = paletteEnabledKey(paletteName, colorKey);
+	const legacyKey = legacyPaletteEnabledKey(paletteName, colorKey);
+	return enabled[key] ?? enabled[legacyKey] ?? true;
 }
 
 export function defaultEnabledState(): Record<string, boolean> {
@@ -109,14 +123,16 @@ export function defaultEnabledState(): Record<string, boolean> {
 	);
 }
 
+export function enabledWplacePalette(enabled: Record<string, boolean>): EnabledPaletteColor[] {
+	return enabledPalette(WPLACE, enabled);
+}
+
 export function enabledPalette(
-	paletteOrEnabled: Palette | Record<string, boolean>,
-	enabledMaybe?: Record<string, boolean>
+	palette: Palette,
+	enabled: Record<string, boolean>
 ): EnabledPaletteColor[] {
-	const palette = enabledMaybe ? (paletteOrEnabled as Palette) : WPLACE;
-	const enabled = enabledMaybe ?? (paletteOrEnabled as Record<string, boolean>);
 	return palette.colors
-		.filter((color) => enabled[paletteEnabledKey(palette.name, color.key)] !== false)
+		.filter((color) => paletteColorEnabled(enabled, palette.name, color.key))
 		.map((color) => ({
 			...color,
 			enabled: true
@@ -124,7 +140,7 @@ export function enabledPalette(
 }
 
 export function visibleEnabledColors(enabled: Record<string, boolean>): EnabledPaletteColor[] {
-	return enabledPalette(enabled).filter((color) => color.kind !== 'transparent' && color.rgb);
+	return enabledWplacePalette(enabled).filter((color) => color.kind !== 'transparent' && color.rgb);
 }
 
 export function darkestVisible(colors: EnabledPaletteColor[]): EnabledPaletteColor | undefined {
@@ -138,6 +154,6 @@ export function darkestVisible(colors: EnabledPaletteColor[]): EnabledPaletteCol
 }
 
 export function paletteSummary(enabled: Record<string, boolean>): string {
-	const active = enabledPalette(enabled).length;
+	const active = enabledWplacePalette(enabled).length;
 	return `${active} / ${WPLACE_PALETTE.length} colors active`;
 }

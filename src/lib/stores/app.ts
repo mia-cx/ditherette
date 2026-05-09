@@ -6,6 +6,7 @@ import {
 	WPLACE_PALETTE_NAME,
 	defaultEnabledState,
 	enabledPalette,
+	paletteColorEnabled,
 	paletteEnabledKey
 } from '$lib/palette/wplace';
 import type {
@@ -204,7 +205,7 @@ export function setPaletteColorEnabled(
 	paletteName = activePalette.get().name
 ) {
 	const stateKey = paletteEnabledKey(paletteName, key);
-	if (paletteEnabled.get()[stateKey] === enabled) return;
+	if (paletteColorEnabled(paletteEnabled.get(), paletteName, key) === enabled) return;
 	paletteEnabled.set({ ...paletteEnabled.get(), [stateKey]: enabled });
 }
 
@@ -226,7 +227,7 @@ export function togglePaletteColors() {
 		...Object.fromEntries(
 			palette.colors.map((color) => {
 				const key = paletteEnabledKey(palette.name, color.key);
-				return [key, current[key] === false];
+				return [key, !paletteColorEnabled(current, palette.name, color.key)];
 			})
 		)
 	});
@@ -251,7 +252,7 @@ export function duplicateActivePalette(name = `${activePalette.get().name} Copy`
 		...Object.fromEntries(
 			nextPalette.colors.map((color) => [
 				paletteEnabledKey(nextName, color.key),
-				currentEnabled[paletteEnabledKey(source.name, color.key)] !== false
+				paletteColorEnabled(currentEnabled, source.name, color.key)
 			])
 		)
 	});
@@ -319,7 +320,7 @@ export function editActivePaletteColor(
 		...palette,
 		colors: palette.colors.map((color) => (color.key === key ? nextColor : color))
 	});
-	const enabled = paletteEnabled.get()[paletteEnabledKey(palette.name, key)] !== false;
+	const enabled = paletteColorEnabled(paletteEnabled.get(), palette.name, key);
 	setPaletteColorEnabled(nextColor.key, enabled, palette.name);
 	return nextColor;
 }
@@ -401,7 +402,7 @@ function importedEnabledState(
 				? candidate
 				: best;
 		}, undefined);
-	return nearest ? enabled[paletteEnabledKey(paletteName, nearest.key)] !== false : true;
+	return nearest ? paletteColorEnabled(enabled, paletteName, nearest.key) : true;
 }
 
 function rgbDistanceSquared(

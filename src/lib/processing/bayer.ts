@@ -1,3 +1,5 @@
+import type { DitherId } from './types';
+
 export type BayerSize = 2 | 4 | 8 | 16;
 
 export const BAYER_MATRICES = {
@@ -41,12 +43,17 @@ export const BAYER_MATRICES = {
 	]
 } as const satisfies Record<BayerSize, readonly (readonly number[])[]>;
 
-export function bayerSizeForAlgorithm(algorithm: string): BayerSize | undefined {
-	if (algorithm === 'bayer-2') return 2;
-	if (algorithm === 'bayer-4') return 4;
-	if (algorithm === 'bayer-8') return 8;
-	if (algorithm === 'bayer-16') return 16;
-	return undefined;
+const BAYER_SIZES = {
+	'bayer-2': 2,
+	'bayer-4': 4,
+	'bayer-8': 8,
+	'bayer-16': 16
+} as const satisfies Partial<Record<DitherId, BayerSize>>;
+
+export function bayerSizeForAlgorithm(algorithm: DitherId | string): BayerSize | undefined {
+	return Object.hasOwn(BAYER_SIZES, algorithm)
+		? BAYER_SIZES[algorithm as keyof typeof BAYER_SIZES]
+		: undefined;
 }
 
 export function flattenedBayerMatrix(size: BayerSize) {

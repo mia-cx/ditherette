@@ -10,39 +10,67 @@ import {
 } from '$lib/stores/app';
 import {
 	clearPersistedImages,
+	clearPersistedImagesIfSourceMatches,
 	clearPersistedProcessedImage,
-	decodeBlob,
 	loadProcessedImage,
 	loadSourceImage,
-	saveSourceImage,
+	saveSourceImageAndClearProcessed,
 	sourceMetaFromRecord
 } from './db';
+import { decodeBlob } from './image-decode';
 import { cancelProcessing, currentSettingsHash, scheduleProcessing } from './client';
 import { fitOutputSizeToBounds } from './types';
 import { validateSourceBlob } from './image-metadata';
 import type { SourceImageRecord } from './types';
 
-const MIN_SCALE_FACTOR = 0.05;
+export const MIN_SCALE_FACTOR = 0.05;
+let sourceGeneration = 0;
+let lastSourceTimestamp = 0;
+
+class SourceSuperseded extends Error {
+	constructor() {
+		super('Source image was superseded by a newer upload.');
+		this.name = 'SourceSuperseded';
+	}
+}
+
+export function isSourceSuperseded(error: unknown) {
+	return error instanceof SourceSuperseded;
+}
 
 function errorMessage(error: unknown, fallback: string) {
 	return error instanceof Error ? error.message : fallback;
 }
 
+function nextSourceTimestamp() {
+	lastSourceTimestamp = Math.max(Date.now(), lastSourceTimestamp + 1);
+	return lastSourceTimestamp;
+}
+
+async function throwIfSourceSuperseded(generation: number, record?: SourceImageRecord) {
+	if (generation === sourceGeneration) return;
+	if (record) await clearPersistedImagesIfSourceMatches(record);
+	throw new SourceSuperseded();
+}
+
 export async function setSourceFile(file: File) {
-	await validateSourceBlob(file);
+	const generation = ++sourceGeneration;
 	cancelProcessing();
-	const decoded = await decodeBlob(file);
+	await validateSourceBlob(file);
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
+	const decoded = await decodeBlob(file, { validate: false });
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
 	const record: SourceImageRecord = {
 		blob: file,
 		name: file.name,
 		width: decoded.width,
 		height: decoded.height,
 		type: file.type,
-		updatedAt: Date.now()
+		updatedAt: nextSourceTimestamp()
 	};
-	await saveSourceImage(record);
-	await clearPersistedProcessedImage();
-	setSourceRecord(record, decoded.imageData);
+	await saveSourceImageAndClearProcessed(record);
+	await throwIfSourceSuperseded(generation, record);
+	setSourceMetadata(record);
 	const settings = outputSettings.get();
 	const scaleFactor = Math.min(1, Math.max(MIN_SCALE_FACTOR, settings.scaleFactor ?? 1));
 	const size = fitOutputSizeToBounds(
@@ -58,19 +86,40 @@ export async function setSourceFile(file: File) {
 		crop: undefined
 	});
 	processedImage.set(undefined);
+	publishSourceImageData(decoded.imageData);
 	scheduleProcessing(0);
 }
 
-export function setSourceRecord(record: SourceImageRecord, imageData: ImageData) {
+function setSourceMetadata(record: SourceImageRecord) {
 	const oldUrl = sourceObjectUrl.get();
 	if (oldUrl) URL.revokeObjectURL(oldUrl);
 	sourceMeta.set(sourceMetaFromRecord(record));
 	sourceObjectUrl.set(URL.createObjectURL(record.blob));
+}
+
+function publishSourceImageData(imageData: ImageData) {
 	sourceImageData.set(imageData);
 }
 
 export async function restorePersistedImages() {
-	const source = await loadSourceImage();
+	const generation = ++sourceGeneration;
+	let source: SourceImageRecord | undefined;
+	try {
+		source = await loadSourceImage();
+	} catch (error) {
+		const restoreError = new Error(
+			`Could not restore saved source image: ${errorMessage(error, 'record validation failed')}`,
+			{ cause: error }
+		);
+		cancelProcessing();
+		clearInMemoryImageState();
+		try {
+			await clearPersistedImages();
+		} catch {
+			// Best effort: do not mask the original restore failure.
+		}
+		throw restoreError;
+	}
 	if (!source) return;
 
 	let decoded: Awaited<ReturnType<typeof decodeBlob>>;
@@ -91,12 +140,17 @@ export async function restorePersistedImages() {
 		throw restoreError;
 	}
 
-	setSourceRecord(source, decoded.imageData);
+	if (generation !== sourceGeneration) throw new SourceSuperseded();
+	setSourceMetadata(source);
 
 	try {
 		const processed = await loadProcessedImage();
-		if (processed?.settingsHash === currentSettingsHash()) processedImage.set(processed);
-		else if (processed) await clearPersistedProcessedImage();
+		if (generation !== sourceGeneration) throw new SourceSuperseded();
+		if (processed?.settingsHash === currentSettingsHash()) {
+			processedImage.set(processed);
+			publishSourceImageData(decoded.imageData);
+			return;
+		} else if (processed) await clearPersistedProcessedImage();
 	} catch (error) {
 		processedImage.set(undefined);
 		try {
@@ -109,10 +163,12 @@ export async function restorePersistedImages() {
 		);
 	}
 
+	publishSourceImageData(decoded.imageData);
 	scheduleProcessing(0);
 }
 
 export async function clearAllImageData() {
+	sourceGeneration++;
 	cancelProcessing();
 	clearInMemoryImageState();
 	await clearPersistedImages();

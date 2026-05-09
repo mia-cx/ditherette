@@ -1,9 +1,10 @@
-import { TRANSPARENT_KEY, darkestVisible } from '$lib/palette/wplace';
 import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
 import { clampByte, createPaletteMatcher, vectorForRgb } from './color';
-import type { EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
+import { compositedRgb } from './compositing';
+import type { DitherId, EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
 
 const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
+const RGB_DITHER_NOISE_SCALE = 96;
 
 type ColorVector = ReturnType<typeof vectorForRgb>;
 
@@ -38,7 +39,19 @@ const ERROR_KERNELS = {
 		[-1, 1, 1 / 4],
 		[0, 1, 1 / 4]
 	]
-} satisfies Record<string, number[][]>;
+} as const satisfies Partial<Record<DitherId, readonly (readonly [number, number, number])[]>>;
+
+type ErrorDiffusionAlgorithm = keyof typeof ERROR_KERNELS;
+
+function errorKernelForAlgorithm(algorithm: DitherId) {
+	return Object.hasOwn(ERROR_KERNELS, algorithm)
+		? ERROR_KERNELS[algorithm as ErrorDiffusionAlgorithm]
+		: undefined;
+}
+
+function supportsVectorDither(settings: ProcessingSettings) {
+	return settings.dither.useColorSpace && settings.colorSpace !== 'weighted-rgb';
+}
 
 type QuantizeResult = {
 	indices: Uint8Array;
@@ -59,12 +72,22 @@ function mulberry32(seed: number) {
 }
 
 function transparentIndex(palette: EnabledPaletteColor[]) {
-	return palette.findIndex((color) => color.key === TRANSPARENT_KEY);
+	return palette.findIndex((color) => color.kind === 'transparent');
 }
 
 function paletteRgb(color: EnabledPaletteColor): Rgb {
 	if (!color.rgb) return { r: 0, g: 0, b: 0 };
 	return color.rgb;
+}
+
+function darkestVisible(colors: EnabledPaletteColor[]): EnabledPaletteColor | undefined {
+	return colors.reduce<EnabledPaletteColor | undefined>((darkest, color) => {
+		if (!color.rgb) return darkest;
+		if (!darkest?.rgb) return color;
+		const sum = color.rgb.r + color.rgb.g + color.rgb.b;
+		const darkestSum = darkest.rgb.r + darkest.rgb.g + darkest.rgb.b;
+		return sum < darkestSum ? color : darkest;
+	}, undefined);
 }
 
 function paletteVectorSpace(
@@ -247,7 +270,8 @@ export function quantizeImage(
 		);
 	}
 
-	const matte = resolveMatteRgb(nextPalette, visible, settings.output.matteKey, warnings);
+	const { matte, warning } = resolveMatteRgb(nextPalette, visible, settings.output.matteKey);
+	if (warning) warnings.push(warning);
 	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
@@ -256,7 +280,7 @@ export function quantizeImage(
 		? nextPalette.indexOf(fallbackTransparent)
 		: -1;
 
-	if (settings.dither.algorithm in ERROR_KERNELS && strength > 0) {
+	if (errorKernelForAlgorithm(settings.dither.algorithm) && strength > 0) {
 		quantizeErrorDiffusion(
 			image,
 			indices,
@@ -286,23 +310,21 @@ export function quantizeImage(
 function resolveMatteRgb(
 	palette: EnabledPaletteColor[],
 	visible: EnabledPaletteColor[],
-	matteKey: string,
-	warnings: string[]
-) {
+	matteKey: string
+): { matte: Rgb; warning?: string } {
 	const selected = palette.find((color) => color.key === matteKey)?.rgb;
-	if (selected) return selected;
+	if (selected) return { matte: selected };
 	const matteRgb = rgbFromHexKey(matteKey);
 	if (matteRgb) {
-		const fallback = nearestVisibleColor(matteRgb, visible).rgb!;
-		warnings.push(
-			'Matte color is disabled; using the nearest enabled visible color for alpha matte.'
-		);
-		return fallback;
+		return {
+			matte: nearestVisibleColor(matteRgb, visible).rgb!,
+			warning: 'Matte color is disabled; using the nearest enabled visible color for alpha matte.'
+		};
 	}
-	warnings.push(
-		'Matte color is unavailable; using the first enabled visible color for alpha matte.'
-	);
-	return visible[0]!.rgb!;
+	return {
+		matte: visible[0]!.rgb!,
+		warning: 'Matte color is unavailable; using the first enabled visible color for alpha matte.'
+	};
 }
 
 function rgbFromHexKey(key: string): Rgb | undefined {
@@ -347,7 +369,8 @@ function quantizeDirect(
 	const alphaThreshold = settings.output.alphaThreshold;
 	const useBayer = Boolean(bayer && bayerSize && strength > 0);
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
-	const noiseScale = 96 * strength;
+	const useVectorDither = supportsVectorDither(settings);
+	const noiseScale = RGB_DITHER_NOISE_SCALE * strength;
 	const vectorSpace = paletteVectorSpace(matcher, settings);
 
 	for (let y = 0; y < image.height; y++) {
@@ -363,26 +386,17 @@ function quantizeDirect(
 				continue;
 			}
 
-			let r = source[offset]!;
-			let g = source[offset + 1]!;
-			let b = source[offset + 2]!;
-			if (alphaMode === 'matte') {
-				const opacity = alpha / 255;
-				const background = 1 - opacity;
-				r = clampByte(r * opacity + matte.r * background);
-				g = clampByte(g * opacity + matte.g * background);
-				b = clampByte(b * opacity + matte.b * background);
-			} else if (alphaMode === 'premultiplied') {
-				const opacity = alpha / 255;
-				r = clampByte(r * opacity);
-				g = clampByte(g * opacity);
-				b = clampByte(b * opacity);
-			}
+			let { r, g, b } = compositedRgb(
+				{ r: source[offset]!, g: source[offset + 1]!, b: source[offset + 2]! },
+				alpha,
+				alphaMode,
+				matte
+			);
 
 			if (useBayer && bayer && bayerSize) {
 				const mask = placementMask(source, image.width, image.height, x, y, settings, vectorSpace);
 				const threshold = bayer[bayerRow + (x % bayerSize)]!;
-				if (settings.dither.useColorSpace) {
+				if (useVectorDither) {
 					const match = colorSpaceThresholdIndex(
 						{ r, g, b },
 						threshold,
@@ -399,7 +413,7 @@ function quantizeDirect(
 			} else if (useRandom) {
 				const mask = placementMask(source, image.width, image.height, x, y, settings, vectorSpace);
 				const noise = random() - 0.5;
-				if (settings.dither.useColorSpace) {
+				if (useVectorDither) {
 					const match = colorSpaceThresholdIndex(
 						{ r, g, b },
 						noise,
@@ -429,7 +443,9 @@ function quantizeVectorErrorDiffusion(
 	fallbackTransparentIndex: number,
 	strength: number
 ) {
-	const kernel = ERROR_KERNELS[settings.dither.algorithm as keyof typeof ERROR_KERNELS];
+	const kernel = errorKernelForAlgorithm(settings.dither.algorithm);
+	if (!kernel)
+		throw new Error(`Unsupported error diffusion algorithm: ${settings.dither.algorithm}`);
 	const width = image.width;
 	const height = image.height;
 	const source = image.data;
@@ -441,22 +457,13 @@ function quantizeVectorErrorDiffusion(
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
 		const workOffset = index * 3;
-		let r = source[sourceOffset]!;
-		let g = source[sourceOffset + 1]!;
-		let b = source[sourceOffset + 2]!;
 		const alpha = source[sourceOffset + 3]!;
-		if (alphaMode === 'matte') {
-			const opacity = alpha / 255;
-			const background = 1 - opacity;
-			r = r * opacity + matte.r * background;
-			g = g * opacity + matte.g * background;
-			b = b * opacity + matte.b * background;
-		} else if (alphaMode === 'premultiplied') {
-			const opacity = alpha / 255;
-			r *= opacity;
-			g *= opacity;
-			b *= opacity;
-		}
+		const { r, g, b } = compositedRgb(
+			{ r: source[sourceOffset]!, g: source[sourceOffset + 1]!, b: source[sourceOffset + 2]! },
+			alpha,
+			alphaMode,
+			matte
+		);
 		const vector = vectorForRgb(r, g, b, settings.colorSpace);
 		work[workOffset] = vector[0];
 		work[workOffset + 1] = vector[1];
@@ -516,7 +523,7 @@ function quantizeErrorDiffusion(
 	fallbackTransparentIndex: number,
 	strength: number
 ) {
-	if (settings.dither.useColorSpace) {
+	if (supportsVectorDither(settings)) {
 		quantizeVectorErrorDiffusion(
 			image,
 			indices,
@@ -530,7 +537,9 @@ function quantizeErrorDiffusion(
 		return;
 	}
 
-	const kernel = ERROR_KERNELS[settings.dither.algorithm as keyof typeof ERROR_KERNELS];
+	const kernel = errorKernelForAlgorithm(settings.dither.algorithm);
+	if (!kernel)
+		throw new Error(`Unsupported error diffusion algorithm: ${settings.dither.algorithm}`);
 	const width = image.width;
 	const height = image.height;
 	const source = image.data;
@@ -542,22 +551,13 @@ function quantizeErrorDiffusion(
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
 		const workOffset = index * 3;
-		let r = source[sourceOffset]!;
-		let g = source[sourceOffset + 1]!;
-		let b = source[sourceOffset + 2]!;
 		const alpha = source[sourceOffset + 3]!;
-		if (alphaMode === 'matte') {
-			const opacity = alpha / 255;
-			const background = 1 - opacity;
-			r = r * opacity + matte.r * background;
-			g = g * opacity + matte.g * background;
-			b = b * opacity + matte.b * background;
-		} else if (alphaMode === 'premultiplied') {
-			const opacity = alpha / 255;
-			r *= opacity;
-			g *= opacity;
-			b *= opacity;
-		}
+		const { r, g, b } = compositedRgb(
+			{ r: source[sourceOffset]!, g: source[sourceOffset + 1]!, b: source[sourceOffset + 2]! },
+			alpha,
+			alphaMode,
+			matte
+		);
 		work[workOffset] = r;
 		work[workOffset + 1] = g;
 		work[workOffset + 2] = b;

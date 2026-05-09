@@ -54,6 +54,27 @@ describe('resizeImageData', () => {
 		]);
 		expect([...output.data.slice(48, 64)]).toEqual(new Array(16).fill(0));
 	});
+
+	it('does not bleed RGB from transparent pixels during bilinear resize', () => {
+		const source = new ImageData(new Uint8ClampedArray([255, 0, 0, 0, 0, 0, 255, 255]), 2, 1);
+
+		const output = resizeImageData(source, 1, 1, 'stretch', 'bilinear');
+
+		expect([...output.data]).toEqual([0, 0, 255, 128]);
+	});
+
+	it('allows source dimensions up to the source limit when resizing down', () => {
+		const output = resizeImageData(
+			solidImage(20_000, 1, [0, 0, 0, 255]),
+			1,
+			1,
+			'stretch',
+			'nearest'
+		);
+
+		expect(output.width).toBe(1);
+		expect(output.height).toBe(1);
+	});
 });
 
 describe('source and output bounds', () => {

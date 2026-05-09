@@ -13,11 +13,14 @@ import {
 	sourceImageData,
 	sourceMeta
 } from '$lib/stores/app';
-import { saveProcessedImage, settingsHash } from './db';
-import type { ProcessedImage, WorkerResponse } from './types';
+import { saveProcessedImage } from './db';
+import { settingsHash } from './hash';
+import { validateWorkerResponse } from './schemas';
+import type { ProcessedImage } from './types';
 
 let worker: Worker | undefined;
 let activeReject: ((error: Error) => void) | undefined;
+let activeRequestId = 0;
 let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
@@ -32,6 +35,7 @@ class ProcessingCanceled extends Error {
 export function cancelProcessing() {
 	if (timer) clearTimeout(timer);
 	timer = undefined;
+	activeRequestId = ++requestId;
 	activeReject?.(new ProcessingCanceled());
 	activeReject = undefined;
 	worker?.terminate();
@@ -39,7 +43,7 @@ export function cancelProcessing() {
 	processingProgress.set(undefined);
 }
 
-function getWorker() {
+function openProcessingWorker() {
 	activeReject?.(new ProcessingCanceled('Processing was superseded by newer settings.'));
 	activeReject = undefined;
 	worker?.terminate();
@@ -47,6 +51,11 @@ function getWorker() {
 		type: 'module'
 	});
 	return worker;
+}
+
+function closeProcessingWorker(activeWorker: Worker) {
+	if (worker === activeWorker) worker = undefined;
+	activeWorker.terminate();
 }
 
 export function currentSettingsHash() {
@@ -66,7 +75,8 @@ function processInWorker(): Promise<ProcessedImage> {
 	if (!source) return Promise.reject(new Error('Upload an image before processing.'));
 
 	const id = ++requestId;
-	const activeWorker = getWorker();
+	activeRequestId = id;
+	const activeWorker = openProcessingWorker();
 	const hash = currentSettingsHash();
 	processingProgress.set({ stage: 'Queued', progress: 0 });
 	processingError.set(undefined);
@@ -74,13 +84,22 @@ function processInWorker(): Promise<ProcessedImage> {
 	return new Promise((resolve, reject) => {
 		activeReject = reject;
 		const settle = <T>(callback: (value: T) => void, value: T) => {
+			if (activeRequestId !== id) return;
 			if (activeReject === reject) activeReject = undefined;
+			closeProcessingWorker(activeWorker);
 			callback(value);
 		};
 
-		activeWorker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-			const message = event.data;
-			if (message.id !== id) return;
+		activeWorker.onmessage = (event: MessageEvent<unknown>) => {
+			let message;
+			try {
+				message = validateWorkerResponse(event.data);
+			} catch (error) {
+				processingProgress.set(undefined);
+				settle(reject, error instanceof Error ? error : new Error('Worker response was invalid.'));
+				return;
+			}
+			if (message.id !== id || activeRequestId !== id) return;
 			if (message.type === 'progress') {
 				processingProgress.set({ stage: message.stage, progress: message.progress });
 				return;
@@ -113,6 +132,9 @@ function processInWorker(): Promise<ProcessedImage> {
 
 export async function processCurrentImage() {
 	const hash = currentSettingsHash();
+	const previous = processedImage.get();
+	if (previous?.settingsHash === hash) return;
+	if (previous) processedImage.set(undefined);
 	const program = Effect.tryPromise({
 		try: processInWorker,
 		catch: (error) => (error instanceof Error ? error : new Error('Processing failed'))
@@ -134,8 +156,13 @@ export async function processCurrentImage() {
 
 export function scheduleProcessing(delay = 180) {
 	if (!sourceImageData.get()) return;
+	const hash = currentSettingsHash();
+	const previous = processedImage.get();
+	if (previous?.settingsHash === hash) return;
+	if (previous) processedImage.set(undefined);
 	if (timer) clearTimeout(timer);
 	timer = setTimeout(() => {
+		timer = undefined;
 		void processCurrentImage();
 	}, delay);
 }

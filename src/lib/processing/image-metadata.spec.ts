@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { readImageDimensions, validateSourceBlob } from './image-metadata';
 
 function pngHeader(width: number, height: number) {
-	const bytes = new Uint8Array(24);
+	const bytes = new Uint8Array(33);
 	bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+	bytes[11] = 13;
 	bytes[12] = 0x49;
 	bytes[13] = 0x48;
 	bytes[14] = 0x44;
@@ -46,5 +47,13 @@ describe('readImageDimensions', () => {
 
 	it('rejects oversized image headers before decode', async () => {
 		await expect(validateSourceBlob(pngHeader(50_000, 50_000))).rejects.toThrow(/too large/i);
+	});
+
+	it('rejects PNGs without an IHDR chunk', async () => {
+		const bytes = new Uint8Array(await pngHeader(320, 200).arrayBuffer());
+		bytes[12] = 0x74;
+		await expect(readImageDimensions(new Blob([bytes], { type: 'image/png' }))).rejects.toThrow(
+			/IHDR/i
+		);
 	});
 });

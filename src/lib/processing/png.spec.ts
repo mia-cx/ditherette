@@ -52,4 +52,16 @@ describe('encodeIndexedPng', () => {
 
 		expect([...first]).toEqual([...second]);
 	});
+
+	it('rejects index buffers that do not match dimensions', () => {
+		expect(() => encodeIndexedPng({ ...sampleImage(), indices: new Uint8Array([0]) })).toThrow(
+			/dimensions/i
+		);
+	});
+
+	it('rejects indices outside the palette', () => {
+		expect(() => encodeIndexedPng({ ...sampleImage(), indices: new Uint8Array([0, 2]) })).toThrow(
+			/palette/i
+		);
+	});
 });

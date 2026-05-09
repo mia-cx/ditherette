@@ -13,7 +13,7 @@
 		processingProgress,
 		sourceMeta
 	} from '$lib/stores/app';
-	import { settingsHash } from '$lib/processing/db';
+	import { settingsHash } from '$lib/processing/hash';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 
 	type Props = { variant?: 'card' | 'bar'; hasImage?: boolean };

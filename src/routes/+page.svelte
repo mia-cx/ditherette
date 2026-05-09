@@ -27,7 +27,12 @@
 		updatePreviewSettings
 	} from '$lib/stores/app';
 	import { startAutoProcessing } from '$lib/processing/client';
-	import { clearAllImageData, restorePersistedImages, setSourceFile } from '$lib/processing/source';
+	import {
+		clearAllImageData,
+		isSourceSuperseded,
+		restorePersistedImages,
+		setSourceFile
+	} from '$lib/processing/source';
 	import { COLOR_SPACES } from './components/color-space-options';
 	import { DITHER_ALGORITHMS } from './components/dither-options';
 	import { RESIZE_MODES } from './components/output-options';
@@ -61,6 +66,7 @@
 	onMount(() => {
 		const stop = startAutoProcessing();
 		void restorePersistedImages().catch((error) => {
+			if (isSourceSuperseded(error)) return;
 			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
 		});
 		return stop;
@@ -76,6 +82,7 @@
 		try {
 			await setSourceFile(file);
 		} catch (error) {
+			if (isSourceSuperseded(error)) return;
 			uploadError = error instanceof Error ? error.message : 'Could not read that image.';
 		}
 	}
