@@ -146,8 +146,31 @@ function activeCustomPalette() {
 	return palette;
 }
 
+function paletteWithTransparent(palette: Palette) {
+	return palette.source === 'custom' ? withTransparentSwatch(palette) : palette;
+}
+
+function normalizedPaletteEnabledState(
+	custom: readonly Palette[],
+	enabled: Record<string, boolean>
+): Record<string, boolean> {
+	return Object.fromEntries(
+		[WPLACE, ...custom.map(paletteWithTransparent)].flatMap((palette) =>
+			palette.colors.map((color) => [
+				paletteEnabledKey(palette.name, color.key),
+				paletteColorEnabled(enabled, palette.name, color.key)
+			])
+		)
+	);
+}
+
+function setCustomPalettes(nextPalettes: Palette[], enabled = paletteEnabled.get()) {
+	customPalettes.set(nextPalettes);
+	paletteEnabled.set(normalizedPaletteEnabledState(nextPalettes, enabled));
+}
+
 function setCustomPalette(nextPalette: Palette) {
-	customPalettes.set(
+	setCustomPalettes(
 		customPalettes
 			.get()
 			.map((palette) => (palette.name === nextPalette.name ? nextPalette : palette))
@@ -245,9 +268,7 @@ export function duplicateActivePalette(name = `${activePalette.get().name} Copy`
 			kind: color.kind === 'transparent' ? 'transparent' : 'custom'
 		}))
 	};
-	customPalettes.set([...customPalettes.get(), nextPalette]);
-	activePaletteName.set(nextName);
-	paletteEnabled.set({
+	setCustomPalettes([...customPalettes.get(), nextPalette], {
 		...currentEnabled,
 		...Object.fromEntries(
 			nextPalette.colors.map((color) => [
@@ -256,6 +277,7 @@ export function duplicateActivePalette(name = `${activePalette.get().name} Copy`
 			])
 		)
 	});
+	activePaletteName.set(nextName);
 	return nextPalette;
 }
 
@@ -266,7 +288,7 @@ export function createCustomPalette(name: string) {
 		source: 'custom',
 		colors: [{ name: 'Transparent', key: TRANSPARENT_KEY, kind: 'transparent' }]
 	};
-	customPalettes.set([...customPalettes.get(), nextPalette]);
+	setCustomPalettes([...customPalettes.get(), nextPalette]);
 	activePaletteName.set(nextName);
 	setPaletteColorEnabled(TRANSPARENT_KEY, true, nextName);
 	return nextPalette;
@@ -316,11 +338,11 @@ export function editActivePaletteColor(
 	const nextColor = visibleCustomColor(name, hex, tags);
 	if (nextColor.key !== key && palette.colors.some((color) => color.key === nextColor.key))
 		throw new Error(`${nextColor.key} already exists in this palette.`);
+	const enabled = paletteColorEnabled(paletteEnabled.get(), palette.name, key);
 	setCustomPalette({
 		...palette,
 		colors: palette.colors.map((color) => (color.key === key ? nextColor : color))
 	});
-	const enabled = paletteColorEnabled(paletteEnabled.get(), palette.name, key);
 	setPaletteColorEnabled(nextColor.key, enabled, palette.name);
 	return nextColor;
 }
@@ -338,7 +360,7 @@ export function deleteCustomPalette(name: string) {
 	const custom = customPalettes.get();
 	if (!custom.some((palette) => palette.name === name))
 		throw new Error(`${name} is not a custom palette.`);
-	customPalettes.set(custom.filter((palette) => palette.name !== name));
+	setCustomPalettes(custom.filter((palette) => palette.name !== name));
 	if (activePaletteName.get() === name) activePaletteName.set(WPLACE_PALETTE_NAME);
 }
 
@@ -349,6 +371,12 @@ export function deleteActiveCustomPalette() {
 export function previewCustomPaletteImport(value: unknown) {
 	const records = Array.isArray(value) ? value : [value];
 	const palettes = records.map((record) => parseImportedPalette(record));
+	const importedNames = new Set<string>();
+	for (const palette of palettes) {
+		if (importedNames.has(palette.name))
+			throw new Error(`Palette import contains duplicate palette name: ${palette.name}.`);
+		importedNames.add(palette.name);
+	}
 	const currentNames = new Set(customPalettes.get().map((palette) => palette.name));
 	return {
 		palettes,
@@ -376,9 +404,8 @@ export function importCustomPaletteData(value: unknown) {
 			);
 		}
 	}
-	customPalettes.set([...existing.values()]);
+	setCustomPalettes([...existing.values()], nextEnabled);
 	if (imported[0]) activePaletteName.set(imported[0].name);
-	paletteEnabled.set(nextEnabled);
 	return imported.length;
 }
 
