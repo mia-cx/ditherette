@@ -20,6 +20,7 @@
 		"bench:lanczos-study": "node scripts/lanczos-optimization-study.mjs",
 		"bench:lanczos-deferred-study": "node scripts/lanczos-deferred-study.mjs",
 		"bench:lanczos-quality-study": "node scripts/lanczos-quality-study.mjs",
+		"bench:lanczos-radius-study": "node scripts/lanczos-radius-study.mjs",
 		"bench:lanczos-speed-study": "node scripts/lanczos-speed-study.mjs",
 		"bench:sampler-study": "node scripts/sampler-optimization-study.mjs"
 	},

@@ -21,6 +21,7 @@ import {
 const RESIZE_MODES = [
 	'nearest',
 	'bilinear',
+	'lanczos2',
 	'lanczos3',
 	'area'
 ] as const satisfies readonly ResizeId[];

@@ -151,7 +151,13 @@ const DEFAULT_ITERATIONS = 3;
 const DEFAULT_WARMUPS = 1;
 const ERROR_DIFFUSION_ALGORITHMS = new Set<DitherId>(['floyd-steinberg', 'sierra', 'sierra-lite']);
 const EXHAUSTIVE_SCALES = [0.125, 0.25, 0.5, 0.75] as const;
-const EXHAUSTIVE_RESIZE_MODES: readonly ResizeId[] = ['nearest', 'bilinear', 'lanczos3', 'area'];
+const EXHAUSTIVE_RESIZE_MODES: readonly ResizeId[] = [
+	'nearest',
+	'bilinear',
+	'lanczos2',
+	'lanczos3',
+	'area'
+];
 const DEFAULT_MATRIX_SCALE = 0.5;
 const DEFAULT_MATRIX_RESIZE: ResizeId = 'lanczos3';
 const DEFAULT_MATRIX_DITHER: DitherId = 'none';

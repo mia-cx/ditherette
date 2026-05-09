@@ -64,7 +64,7 @@ function referenceResize(
 	source: ImageData,
 	width: number,
 	height: number,
-	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos3',
+	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos2' | 'lanczos3',
 	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
 	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
 ) {
@@ -96,10 +96,11 @@ function referenceLanczosResize(
 	source: ImageData,
 	width: number,
 	height: number,
+	mode: 'lanczos2' | 'lanczos3' = 'lanczos3',
 	sourceRect: ReferenceRect = { x: 0, y: 0, width: source.width, height: source.height },
 	targetRect: ReferenceRect = { x: 0, y: 0, width, height }
 ) {
-	return referenceResize(source, width, height, 'lanczos3', sourceRect, targetRect);
+	return referenceResize(source, width, height, mode, sourceRect, targetRect);
 }
 
 function referenceSample(
@@ -108,12 +109,12 @@ function referenceSample(
 	y: number,
 	scaleX: number,
 	scaleY: number,
-	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos3'
+	mode: 'nearest' | 'bilinear' | 'area' | 'lanczos2' | 'lanczos3'
 ) {
 	if (mode === 'nearest') return referencePixel(source, Math.round(x), Math.round(y));
 	if (mode === 'bilinear') return referenceBilinearSample(source, x, y);
 	if (mode === 'area') return referenceAreaSample(source, x, y, scaleX, scaleY);
-	return referenceLanczosSample(source, x, y);
+	return referenceLanczosSample(source, x, y, mode === 'lanczos2' ? 2 : 3);
 }
 
 function referenceBilinearSample(source: ImageData, x: number, y: number) {
@@ -150,8 +151,7 @@ function referenceAreaSample(
 	return referenceFinishWeightedSample(accumulator);
 }
 
-function referenceLanczosSample(source: ImageData, x: number, y: number) {
-	const radius = 3;
+function referenceLanczosSample(source: ImageData, x: number, y: number, radius: number) {
 	const floorX = Math.floor(x);
 	const floorY = Math.floor(y);
 	let r = 0;
@@ -245,6 +245,14 @@ function referenceUnpremultiply(r: number, g: number, b: number, a: number) {
 	] as const;
 }
 
+function expectMaxChannelDelta(output: ImageData, reference: ImageData, maxDelta: number) {
+	expect(output.width).toBe(reference.width);
+	expect(output.height).toBe(reference.height);
+	for (let index = 0; index < output.data.length; index++) {
+		expect(Math.abs(output.data[index]! - reference.data[index]!)).toBeLessThanOrEqual(maxDelta);
+	}
+}
+
 describe('resizeImageData', () => {
 	it('does not bleed RGB from transparent pixels during bilinear resize', () => {
 		const source = new ImageData(new Uint8ClampedArray([255, 0, 0, 0, 0, 0, 255, 255]), 2, 1);
@@ -289,23 +297,31 @@ describe('resizeImageData', () => {
 
 	it('matches the reference Lanczos sampler before optimizing the hot path', () => {
 		const source = patternedImage(8, 5);
-		const cases = [
-			{
-				output: resizeImageData(source, 11, 8, 'lanczos3'),
-				reference: referenceLanczosResize(source, 11, 8)
-			},
-			{
-				output: resizeImageData(source, 5, 3, 'lanczos3'),
-				reference: referenceLanczosResize(source, 5, 3)
-			},
-			{
-				output: resizeImageData(source, 5, 5, 'lanczos3', { x: 1.5, y: 0, width: 5, height: 5 }),
-				reference: referenceLanczosResize(source, 5, 5, { x: 1.5, y: 0, width: 5, height: 5 })
-			}
-		];
+		for (const mode of ['lanczos2', 'lanczos3'] as const) {
+			const cases = [
+				{
+					output: resizeImageData(source, 11, 8, mode),
+					reference: referenceLanczosResize(source, 11, 8, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 3, mode),
+					reference: referenceLanczosResize(source, 5, 3, mode)
+				},
+				{
+					output: resizeImageData(source, 5, 5, mode, { x: 1.5, y: 0, width: 5, height: 5 }),
+					reference: referenceLanczosResize(source, 5, 5, mode, {
+						x: 1.5,
+						y: 0,
+						width: 5,
+						height: 5
+					})
+				}
+			];
 
-		for (const { output, reference } of cases) {
-			expect([...output.data]).toEqual([...reference.data]);
+			for (const { output, reference } of cases) {
+				if (mode === 'lanczos2') expectMaxChannelDelta(output, reference, 1);
+				else expect([...output.data]).toEqual([...reference.data]);
+			}
 		}
 	});
 

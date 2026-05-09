@@ -3,6 +3,7 @@ import type { LabeledOption } from './option-types';
 
 export const RESIZE_MODES = [
 	{ id: 'lanczos3', label: 'Lanczos3' },
+	{ id: 'lanczos2', label: 'Lanczos2' },
 	{ id: 'bilinear', label: 'Bilinear' },
 	{ id: 'nearest', label: 'Nearest' },
 	{ id: 'area', label: 'Area / Box' }

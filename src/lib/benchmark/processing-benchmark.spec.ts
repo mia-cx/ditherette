@@ -31,7 +31,7 @@ describe('processing benchmark harness', () => {
 	it('generates exhaustive scale/color-space/dither permutations', () => {
 		const cases = benchmarkCases('exhaustive');
 
-		expect(cases).toHaveLength(4 * 4 * 8 * 9);
+		expect(cases).toHaveLength(4 * 5 * 8 * 9);
 		expect(cases).toContainEqual(
 			expect.objectContaining({
 				outputScale: 0.125,
@@ -68,7 +68,7 @@ describe('processing benchmark harness', () => {
 		});
 		const entry = result.results[0]!;
 
-		expect(result.results).toHaveLength(4 * 4);
+		expect(result.results).toHaveLength(4 * 5);
 		expect(entry.stages.resize.meanMs).toBeGreaterThanOrEqual(0);
 		expect(entry.stages.quantize.meanMs).toBe(0);
 		expect(entry.stages.previewRender.meanMs).toBe(0);
