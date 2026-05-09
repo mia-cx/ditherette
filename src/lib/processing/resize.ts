@@ -484,17 +484,42 @@ function lanczosOpaqueRow(
 	const sourceRowOffset = sourceY * source.width * 4;
 	for (let targetX = 0; targetX < targetWidth; targetX++) {
 		const xBase = targetX * LANCZOS_TAPS;
-		let r = 0;
-		let g = 0;
-		let b = 0;
-		for (let xTap = 0; xTap < LANCZOS_TAPS; xTap++) {
-			const weight = xTable.weights[xBase + xTap]!;
-			if (weight === 0) continue;
-			const offset = sourceRowOffset + xTable.indices[xBase + xTap]! * 4;
-			r += sourceData[offset]! * weight;
-			g += sourceData[offset + 1]! * weight;
-			b += sourceData[offset + 2]! * weight;
-		}
+		let offset = sourceRowOffset + xTable.indices[xBase]! * 4;
+		const weight0 = xTable.weights[xBase]!;
+		let r = sourceData[offset]! * weight0;
+		let g = sourceData[offset + 1]! * weight0;
+		let b = sourceData[offset + 2]! * weight0;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 1]! * 4;
+		const weight1 = xTable.weights[xBase + 1]!;
+		r += sourceData[offset]! * weight1;
+		g += sourceData[offset + 1]! * weight1;
+		b += sourceData[offset + 2]! * weight1;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 2]! * 4;
+		const weight2 = xTable.weights[xBase + 2]!;
+		r += sourceData[offset]! * weight2;
+		g += sourceData[offset + 1]! * weight2;
+		b += sourceData[offset + 2]! * weight2;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 3]! * 4;
+		const weight3 = xTable.weights[xBase + 3]!;
+		r += sourceData[offset]! * weight3;
+		g += sourceData[offset + 1]! * weight3;
+		b += sourceData[offset + 2]! * weight3;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 4]! * 4;
+		const weight4 = xTable.weights[xBase + 4]!;
+		r += sourceData[offset]! * weight4;
+		g += sourceData[offset + 1]! * weight4;
+		b += sourceData[offset + 2]! * weight4;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 5]! * 4;
+		const weight5 = xTable.weights[xBase + 5]!;
+		r += sourceData[offset]! * weight5;
+		g += sourceData[offset + 1]! * weight5;
+		b += sourceData[offset + 2]! * weight5;
+
 		const rowOffset = targetX * 3;
 		row[rowOffset] = r;
 		row[rowOffset + 1] = g;
@@ -514,20 +539,54 @@ function lanczosAlphaRow(
 	const sourceRowOffset = sourceY * source.width * 4;
 	for (let targetX = 0; targetX < targetWidth; targetX++) {
 		const xBase = targetX * LANCZOS_TAPS;
-		let r = 0;
-		let g = 0;
-		let b = 0;
-		let a = 0;
-		for (let xTap = 0; xTap < LANCZOS_TAPS; xTap++) {
-			const weight = xTable.weights[xBase + xTap]!;
-			if (weight === 0) continue;
-			const offset = sourceRowOffset + xTable.indices[xBase + xTap]! * 4;
-			const alpha = sourceData[offset + 3]! / 255;
-			r += sourceData[offset]! * alpha * weight;
-			g += sourceData[offset + 1]! * alpha * weight;
-			b += sourceData[offset + 2]! * alpha * weight;
-			a += sourceData[offset + 3]! * weight;
-		}
+		let offset = sourceRowOffset + xTable.indices[xBase]! * 4;
+		let alpha = sourceData[offset + 3]! / 255;
+		const weight0 = xTable.weights[xBase]!;
+		let r = sourceData[offset]! * alpha * weight0;
+		let g = sourceData[offset + 1]! * alpha * weight0;
+		let b = sourceData[offset + 2]! * alpha * weight0;
+		let a = sourceData[offset + 3]! * weight0;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 1]! * 4;
+		alpha = sourceData[offset + 3]! / 255;
+		const weight1 = xTable.weights[xBase + 1]!;
+		r += sourceData[offset]! * alpha * weight1;
+		g += sourceData[offset + 1]! * alpha * weight1;
+		b += sourceData[offset + 2]! * alpha * weight1;
+		a += sourceData[offset + 3]! * weight1;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 2]! * 4;
+		alpha = sourceData[offset + 3]! / 255;
+		const weight2 = xTable.weights[xBase + 2]!;
+		r += sourceData[offset]! * alpha * weight2;
+		g += sourceData[offset + 1]! * alpha * weight2;
+		b += sourceData[offset + 2]! * alpha * weight2;
+		a += sourceData[offset + 3]! * weight2;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 3]! * 4;
+		alpha = sourceData[offset + 3]! / 255;
+		const weight3 = xTable.weights[xBase + 3]!;
+		r += sourceData[offset]! * alpha * weight3;
+		g += sourceData[offset + 1]! * alpha * weight3;
+		b += sourceData[offset + 2]! * alpha * weight3;
+		a += sourceData[offset + 3]! * weight3;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 4]! * 4;
+		alpha = sourceData[offset + 3]! / 255;
+		const weight4 = xTable.weights[xBase + 4]!;
+		r += sourceData[offset]! * alpha * weight4;
+		g += sourceData[offset + 1]! * alpha * weight4;
+		b += sourceData[offset + 2]! * alpha * weight4;
+		a += sourceData[offset + 3]! * weight4;
+
+		offset = sourceRowOffset + xTable.indices[xBase + 5]! * 4;
+		alpha = sourceData[offset + 3]! / 255;
+		const weight5 = xTable.weights[xBase + 5]!;
+		r += sourceData[offset]! * alpha * weight5;
+		g += sourceData[offset + 1]! * alpha * weight5;
+		b += sourceData[offset + 2]! * alpha * weight5;
+		a += sourceData[offset + 3]! * weight5;
+
 		const rowOffset = targetX * 4;
 		row[rowOffset] = r;
 		row[rowOffset + 1] = g;
