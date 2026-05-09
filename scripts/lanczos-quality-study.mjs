@@ -280,13 +280,15 @@ async function decodeImage(page, rootDir, imagePath) {
 		if (!context) throw new Error('Unable to create a 2D canvas context.');
 		context.drawImage(image, 0, 0);
 		const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-		return { width: imageData.width, height: imageData.height, data: [...imageData.data] };
+		return { width: imageData.width, height: imageData.height, data: imageData.data };
 	}, dataUrl);
+	const data =
+		decoded.data instanceof Uint8ClampedArray ? decoded.data : new Uint8ClampedArray(decoded.data);
 	return {
 		id: safePathSegment(path.basename(imagePath, path.extname(imagePath))),
 		label: path.relative(rootDir, imagePath),
 		path: path.relative(rootDir, imagePath),
-		imageData: new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height)
+		imageData: new ImageData(data, decoded.width, decoded.height)
 	};
 }
 
@@ -301,9 +303,9 @@ async function encodePng(page, imageData) {
 			context.putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0);
 			const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 			if (!blob) throw new Error('Unable to encode PNG.');
-			return [...new Uint8Array(await blob.arrayBuffer())];
+			return new Uint8Array(await blob.arrayBuffer());
 		},
-		{ width: imageData.width, height: imageData.height, data: [...imageData.data] }
+		{ width: imageData.width, height: imageData.height, data: imageData.data }
 	);
 	return Buffer.from(bytes);
 }
