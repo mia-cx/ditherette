@@ -17,7 +17,7 @@ import {
 import { saveProcessedImage } from './db';
 import { processingIdentityHash } from './hash';
 import { validateWorkerResponse } from './schemas';
-import type { ProcessedImage, WorkerRequest } from './types';
+import type { DitherSettings, OutputSettings, ProcessedImage, WorkerRequest } from './types';
 
 let worker: Worker | undefined;
 let loadedSourceId: string | undefined;
@@ -26,6 +26,20 @@ let activeRequestId = 0;
 let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
+
+const SLIDER_DEBOUNCE_MS = 180;
+const OUTPUT_SLIDER_FIELDS = new Set<keyof OutputSettings>([
+	'width',
+	'height',
+	'scaleFactor',
+	'alphaThreshold'
+]);
+const DITHER_SLIDER_FIELDS = new Set<keyof DitherSettings>([
+	'strength',
+	'placementRadius',
+	'placementThreshold',
+	'placementSoftness'
+]);
 
 class ProcessingCanceled extends Error {
 	constructor(message = 'Processing was canceled.') {
@@ -197,7 +211,7 @@ export async function processCurrentImage() {
 	}
 }
 
-export function scheduleProcessing(delay = 180) {
+export function scheduleProcessing(delay = 0) {
 	if (!sourceImageData.get()) return;
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
@@ -209,16 +223,47 @@ export function scheduleProcessing(delay = 180) {
 	}, delay);
 }
 
+function changedKeys<T extends object>(previous: T, next: T) {
+	return (Object.keys(next) as Array<keyof T>).filter((key) => previous[key] !== next[key]);
+}
+
+function onlySliderFieldsChanged<T extends object>(
+	previous: T,
+	next: T,
+	sliderFields: ReadonlySet<keyof T>
+) {
+	const keys = changedKeys(previous, next);
+	return keys.length > 0 && keys.every((key) => sliderFields.has(key));
+}
+
+export function outputProcessingDelay(previous: OutputSettings, next: OutputSettings) {
+	return onlySliderFieldsChanged(previous, next, OUTPUT_SLIDER_FIELDS) ? SLIDER_DEBOUNCE_MS : 0;
+}
+
+export function ditherProcessingDelay(previous: DitherSettings, next: DitherSettings) {
+	return onlySliderFieldsChanged(previous, next, DITHER_SLIDER_FIELDS) ? SLIDER_DEBOUNCE_MS : 0;
+}
+
 export function startAutoProcessing() {
 	if (stopAuto) return stopAuto;
+	let previousOutputSettings = outputSettings.get();
+	let previousDitherSettings = ditherSettings.get();
 	const unsubscribers = [
 		sourceImageData.subscribe(() => scheduleProcessing(0)),
-		outputSettings.subscribe(() => scheduleProcessing()),
-		ditherSettings.subscribe(() => scheduleProcessing()),
-		colorSpace.subscribe(() => scheduleProcessing()),
-		paletteEnabled.subscribe(() => scheduleProcessing()),
-		activePaletteName.subscribe(() => scheduleProcessing()),
-		customPalettes.subscribe(() => scheduleProcessing())
+		outputSettings.subscribe((settings) => {
+			const delay = outputProcessingDelay(previousOutputSettings, settings);
+			previousOutputSettings = settings;
+			scheduleProcessing(delay);
+		}),
+		ditherSettings.subscribe((settings) => {
+			const delay = ditherProcessingDelay(previousDitherSettings, settings);
+			previousDitherSettings = settings;
+			scheduleProcessing(delay);
+		}),
+		colorSpace.subscribe(() => scheduleProcessing(0)),
+		paletteEnabled.subscribe(() => scheduleProcessing(0)),
+		activePaletteName.subscribe(() => scheduleProcessing(0)),
+		customPalettes.subscribe(() => scheduleProcessing(0))
 	];
 	stopAuto = () => {
 		for (const unsubscribe of unsubscribers) unsubscribe();
