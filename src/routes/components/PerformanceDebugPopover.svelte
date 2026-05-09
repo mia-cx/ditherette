@@ -13,6 +13,7 @@
 	} from '$lib/stores/app';
 
 	let open = $state(false);
+	let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
 	const latest = $derived($currentProcessingMetrics);
 	const status = $derived(
@@ -47,19 +48,34 @@
 		if (status === 'ready') return 'bg-emerald-500';
 		return 'bg-muted-foreground';
 	}
+
+	function openPopover() {
+		if (closeTimer) clearTimeout(closeTimer);
+		open = true;
+	}
+
+	function closePopoverSoon() {
+		if (closeTimer) clearTimeout(closeTimer);
+		closeTimer = setTimeout(() => (open = false), 120);
+	}
 </script>
 
-<div role="presentation" onpointerenter={() => (open = true)} onpointerleave={() => (open = false)}>
+<div role="presentation" onpointerenter={openPopover} onpointerleave={closePopoverSoon}>
 	<Popover bind:open>
 		<PopoverTrigger
 			class={buttonVariants({ variant: 'ghost', size: 'sm' })}
 			aria-label="Show performance metrics"
-			onfocus={() => (open = true)}
+			onfocus={openPopover}
 		>
 			<span class="size-2 rounded-full {statusClass()}"></span>
 			Perf
 		</PopoverTrigger>
-		<PopoverContent align="end" class="w-[min(34rem,calc(100vw-1rem))] p-0 text-xs">
+		<PopoverContent
+			align="end"
+			class="w-[min(34rem,calc(100vw-1rem))] p-0 text-xs"
+			onpointerenter={openPopover}
+			onpointerleave={closePopoverSoon}
+		>
 			<div class="grid gap-3 p-3">
 				<div class="flex items-start justify-between gap-3">
 					<div>
