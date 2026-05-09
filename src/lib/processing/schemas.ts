@@ -306,9 +306,12 @@ export function validateWorkerRequest(value: unknown): WorkerRequest {
 
 function validateTiming(value: unknown) {
 	if (!isObject(value)) throw new Error('Worker metrics timing is invalid.');
+	const replayed = value.replayed;
 	return {
 		name: assertString(value.name, 'Worker metrics timing name'),
-		ms: assertFiniteNonNegativeNumber(value.ms, 'Worker metrics timing duration')
+		ms: assertFiniteNonNegativeNumber(value.ms, 'Worker metrics timing duration'),
+		replayed:
+			replayed === undefined ? undefined : assertBoolean(replayed, 'Worker metrics replay flag')
 	};
 }
 

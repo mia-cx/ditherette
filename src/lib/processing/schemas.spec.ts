@@ -119,7 +119,7 @@ function metricsSample() {
 		startedAt: 0,
 		completedAt: 12,
 		totalMs: 12,
-		timings: [{ name: 'worker total', ms: 12 }],
+		timings: [{ name: 'worker total', ms: 12, replayed: true }],
 		cache: { delta: cacheSnapshot(), lifetime: cacheSnapshot() },
 		memory: {
 			sourceBytes: 8,
@@ -273,7 +273,12 @@ describe('processing schemas', () => {
 
 		expect(response.type).toBe('complete');
 		if (response.type !== 'complete') throw new Error('Expected complete response.');
-		expect(response.metrics).toMatchObject({ id: 1, totalMs: 12, outputPixels: 2 });
+		expect(response.metrics).toMatchObject({
+			id: 1,
+			totalMs: 12,
+			outputPixels: 2,
+			timings: [{ name: 'worker total', ms: 12, replayed: true }]
+		});
 	});
 
 	it('drops invalid optional worker metrics without rejecting a complete response', () => {

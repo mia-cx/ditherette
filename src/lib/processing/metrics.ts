@@ -5,6 +5,7 @@ export const METRICS_HISTORY_LIMIT = 100;
 export type ProcessingStageTiming = {
 	name: string;
 	ms: number;
+	replayed?: boolean;
 };
 
 export type PipelineCacheSnapshot = {

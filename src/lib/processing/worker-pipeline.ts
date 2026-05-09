@@ -38,7 +38,9 @@ type ProgressSink = (stage: string, progress: number) => void;
 
 type TimingSink = {
 	values: ProcessingStageTiming[];
-	mark(name: string, start: number): void;
+	add(name: string, ms: number, replayed?: boolean): void;
+	mark(name: string, start: number): number;
+	replay(name: string, ms: number | undefined): void;
 };
 
 export class ProcessorWorkerPipeline {
@@ -91,6 +93,7 @@ export class ProcessorWorkerPipeline {
 		timings.mark('resize cache lookup', resizeLookupStart);
 		if (resized) {
 			progress('Using cached resize', PROGRESS.cacheHit);
+			timings.replay('resize compute', this.#branchCache.getResizedTiming(branchKey));
 		} else {
 			progress('Resizing', PROGRESS.resizing);
 			const resizeStart = performance.now();
@@ -101,23 +104,25 @@ export class ProcessorWorkerPipeline {
 				settings.output.resize,
 				settings.output.crop
 			);
-			timings.mark('resize compute', resizeStart);
+			const resizeMs = timings.mark('resize compute', resizeStart);
 			const resizeCacheWriteStart = performance.now();
-			this.#branchCache.setResized(branchKey, resized);
+			this.#branchCache.setResized(branchKey, resized, resizeMs);
 			timings.mark('resize cache write', resizeCacheWriteStart);
 		}
 		const quantizeCacheLookupStart = performance.now();
-		let result = this.cachedQuantizeResult(branchKey, settingsHash);
+		const cachedResult = this.cachedQuantizeResult(branchKey, settingsHash);
 		timings.mark('quantize cache lookup', quantizeCacheLookupStart);
+		let result = cachedResult?.result;
 		if (result) {
 			progress('Using cached quantization', PROGRESS.quantizeCacheHit);
+			timings.replay('quantize compute', cachedResult?.timingMs);
 		} else {
 			progress('Quantizing palette', PROGRESS.quantizing);
 			const quantizeStart = performance.now();
 			result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey));
-			timings.mark('quantize compute', quantizeStart);
+			const quantizeMs = timings.mark('quantize compute', quantizeStart);
 			const quantizeCacheWriteStart = performance.now();
-			this.cacheQuantizeResult(branchKey, settingsHash, result);
+			this.cacheQuantizeResult(branchKey, settingsHash, result, quantizeMs);
 			timings.mark('quantize cache write', quantizeCacheWriteStart);
 		}
 		const finalizingStart = performance.now();
@@ -172,21 +177,28 @@ export class ProcessorWorkerPipeline {
 	private cachedQuantizeResult(
 		branchKey: string,
 		settingsHash: string
-	): QuantizeResult | undefined {
-		const cached = this.#branchCache.getColorMapping<QuantizeResult>(
-			branchKey,
-			quantizeResultCacheKey(settingsHash)
-		);
+	): { result: QuantizeResult; timingMs?: number } | undefined {
+		const key = quantizeResultCacheKey(settingsHash);
+		const cached = this.#branchCache.getColorMapping<QuantizeResult>(branchKey, key);
 		if (!cached) return undefined;
-		return cloneQuantizeResult(cached);
+		return {
+			result: cloneQuantizeResult(cached),
+			timingMs: this.#branchCache.getColorMappingTiming(branchKey, key)
+		};
 	}
 
-	private cacheQuantizeResult(branchKey: string, settingsHash: string, result: QuantizeResult) {
+	private cacheQuantizeResult(
+		branchKey: string,
+		settingsHash: string,
+		result: QuantizeResult,
+		timingMs?: number
+	) {
 		this.#branchCache.setColorMapping(
 			branchKey,
 			quantizeResultCacheKey(settingsHash),
 			cloneQuantizeResult(result),
-			result.indices.byteLength
+			result.indices.byteLength,
+			timingMs
 		);
 	}
 
@@ -224,8 +236,18 @@ export class ProcessorWorkerPipeline {
 function timingSink(): TimingSink {
 	return {
 		values: [],
+		add(name, ms, replayed = false) {
+			if (!Number.isFinite(ms)) return;
+			this.values.push({ name, ms: Math.max(0, ms), replayed: replayed || undefined });
+		},
 		mark(name, start) {
-			this.values.push({ name, ms: performance.now() - start });
+			const ms = performance.now() - start;
+			this.add(name, ms);
+			return ms;
+		},
+		replay(name, ms) {
+			if (ms === undefined) return;
+			this.add(name, ms, true);
 		}
 	};
 }

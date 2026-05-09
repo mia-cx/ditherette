@@ -104,7 +104,10 @@ describe('processing metrics helpers', () => {
 	it('summarizes total and named stage timings', () => {
 		const summary = summarizeTimingHistory([
 			sample({ totalMs: 10, timings: [{ name: 'resize compute', ms: 4 }] }),
-			sample({ totalMs: 30, timings: [{ name: 'resize compute', ms: 8 }] })
+			sample({
+				totalMs: 30,
+				timings: [{ name: 'resize compute', ms: 8, replayed: true }]
+			})
 		]);
 
 		expect(summary[0]).toMatchObject({ name: 'total', average: 20, p95: 30 });

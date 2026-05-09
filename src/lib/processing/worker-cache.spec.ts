@@ -88,11 +88,12 @@ describe('PipelineBranchCache', () => {
 
 	it('tracks resize cache hit and miss counters', () => {
 		const cache = new PipelineBranchCache(3, 1024);
-		cache.setResized('a', new ImageData(1, 1));
+		cache.setResized('a', new ImageData(1, 1), 12);
 
 		cache.getResized('a');
 		cache.getResized('b');
 
+		expect(cache.getResizedTiming('a')).toBe(12);
 		expect(cache.snapshotMetrics()).toMatchObject({
 			resizedHits: 1,
 			resizedMisses: 1,
@@ -104,10 +105,11 @@ describe('PipelineBranchCache', () => {
 		const cache = new PipelineBranchCache(2, 64);
 		cache.setResized('a', new ImageData(1, 1));
 
-		expect(cache.setColorMapping('a', 'oklab', { cached: true }, 24)).toBe(true);
+		expect(cache.setColorMapping('a', 'oklab', { cached: true }, 24, 34)).toBe(true);
 		expect(cache.getColorMapping('a', 'oklab')).toEqual({ cached: true });
 		expect(cache.getColorMapping('a', 'missing')).toBeUndefined();
 		expect(cache.bytes).toBe(28);
+		expect(cache.getColorMappingTiming('a', 'oklab')).toBe(34);
 		expect(cache.snapshotMetrics()).toMatchObject({
 			derivedHits: 1,
 			derivedMisses: 1,

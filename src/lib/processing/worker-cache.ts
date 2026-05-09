@@ -15,10 +15,17 @@ type PipelineBranchKeyParts = {
 	gradeKey?: string;
 };
 
+type TimedValue<T> = {
+	value: T;
+	bytes: number;
+	timingMs?: number;
+};
+
 type PipelineBranch = {
 	resized: ImageData;
 	bytes: number;
-	colorMappings: Map<string, { value: unknown; bytes: number }>;
+	resizedTimingMs?: number;
+	colorMappings: Map<string, TimedValue<unknown>>;
 };
 
 export function pipelineBranchKey({
@@ -79,14 +86,23 @@ export class PipelineBranchCache {
 		return branch.resized;
 	}
 
-	setResized(key: string, resized: ImageData) {
+	getResizedTiming(key: string) {
+		return this.#branches.get(key)?.resizedTimingMs;
+	}
+
+	setResized(key: string, resized: ImageData, timingMs?: number) {
 		const bytes = resized.width * resized.height * 4;
 		this.delete(key);
 		if (bytes > this.maxBytes || this.maxBranches < 1) {
 			this.#counters.resizedSkips++;
 			return;
 		}
-		this.#branches.set(key, { resized, bytes, colorMappings: new Map() });
+		this.#branches.set(key, {
+			resized,
+			bytes,
+			resizedTimingMs: timingMs,
+			colorMappings: new Map()
+		});
 		this.#bytes += bytes;
 		this.#counters.resizedSets++;
 		this.evictOverflow();
@@ -114,7 +130,17 @@ export class PipelineBranchCache {
 		return bytes <= this.maxBytes && branch.bytes + bytes <= this.maxBytes;
 	}
 
-	setColorMapping(branchKey: string, mappingKey: string, value: unknown, bytes: number) {
+	getColorMappingTiming(branchKey: string, mappingKey: string) {
+		return this.#branches.get(branchKey)?.colorMappings.get(mappingKey)?.timingMs;
+	}
+
+	setColorMapping(
+		branchKey: string,
+		mappingKey: string,
+		value: unknown,
+		bytes: number,
+		timingMs?: number
+	) {
 		const branch = this.#branches.get(branchKey);
 		if (!branch || bytes > this.maxBytes) {
 			this.#counters.derivedSkips++;
@@ -130,7 +156,7 @@ export class PipelineBranchCache {
 			branch.bytes -= previous.bytes;
 			this.#bytes -= previous.bytes;
 		}
-		branch.colorMappings.set(mappingKey, { value, bytes });
+		branch.colorMappings.set(mappingKey, { value, bytes, timingMs });
 		branch.bytes += bytes;
 		this.#bytes += bytes;
 		this.#counters.derivedSets++;

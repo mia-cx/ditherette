@@ -49,6 +49,24 @@
 		return 'bg-muted-foreground';
 	}
 
+	function replayedComputeMs() {
+		return latest?.timings.reduce((sum, timing) => sum + (timing.replayed ? timing.ms : 0), 0) ?? 0;
+	}
+
+	function stageTimingLabel(computeName: string, lookupName: string) {
+		const replayed = latest?.timings.find(
+			(timing) => timing.name === computeName && timing.replayed
+		);
+		if (replayed) {
+			const actual = latest?.timings.find((timing) => timing.name === lookupName)?.ms;
+			return `${formatMs(actual)} hit / ${formatMs(replayed.ms)} cold`;
+		}
+		const computed = latest?.timings.find(
+			(timing) => timing.name === computeName && !timing.replayed
+		);
+		return `${formatMs(computed?.ms)} cold`;
+	}
+
 	function openPopover() {
 		if (closeTimer) clearTimeout(closeTimer);
 		open = true;
@@ -80,7 +98,10 @@
 				<div class="flex items-start justify-between gap-3">
 					<div>
 						<h2 class="text-sm font-semibold">Processing metrics</h2>
-						<p class="text-muted-foreground">Rolling stats reset per source + output branch.</p>
+						<p class="text-muted-foreground">
+							Rolling stats reset per source + output branch; cached compute timings replay cold
+							cost.
+						</p>
 					</div>
 					<Button size="sm" variant="outline" onclick={clearProcessingMetrics}>Reset</Button>
 				</div>
@@ -101,18 +122,12 @@
 					<section class="grid gap-2">
 						<h3 class="font-medium">Latest</h3>
 						<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-							{@render Metric('Total', formatMs(latest.totalMs))}
-							{@render Metric(
-								'Worker',
-								formatMs(latest.timings.find((item) => item.name === 'main worker round trip')?.ms)
-							)}
-							{@render Metric(
-								'Resize',
-								formatMs(latest.timings.find((item) => item.name === 'resize compute')?.ms)
-							)}
+							{@render Metric('Actual total', formatMs(latest.totalMs))}
+							{@render Metric('Cold est.', formatMs(latest.totalMs + replayedComputeMs()))}
+							{@render Metric('Resize', stageTimingLabel('resize compute', 'resize cache lookup'))}
 							{@render Metric(
 								'Quantize',
-								formatMs(latest.timings.find((item) => item.name === 'quantize compute')?.ms)
+								stageTimingLabel('quantize compute', 'quantize cache lookup')
 							)}
 						</div>
 					</section>
