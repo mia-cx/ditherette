@@ -116,19 +116,40 @@ export type ProcessedImage = {
 	updatedAt: number;
 };
 
-export type WorkerRequest = {
+export type WorkerLoadSourceRequest = {
 	id: number;
+	type: 'load-source';
+	sourceId: string;
 	source: ImageData;
+};
+
+export type WorkerProcessRequest = {
+	id: number;
+	type: 'process';
+	sourceId: string;
 	settings: ProcessingSettings;
 	palette: EnabledPaletteColor[];
 	settingsHash: string;
 };
+
+export type WorkerCancelRequest = {
+	id: number;
+	type: 'cancel';
+};
+
+export type WorkerRequest = WorkerLoadSourceRequest | WorkerProcessRequest | WorkerCancelRequest;
 
 export type WorkerProgress = {
 	id: number;
 	type: 'progress';
 	stage: string;
 	progress: number;
+};
+
+export type WorkerSourceLoaded = {
+	id: number;
+	type: 'source-loaded';
+	sourceId: string;
 };
 
 export type WorkerComplete = {
@@ -143,7 +164,7 @@ export type WorkerFailure = {
 	message: string;
 };
 
-export type WorkerResponse = WorkerProgress | WorkerComplete | WorkerFailure;
+export type WorkerResponse = WorkerProgress | WorkerSourceLoaded | WorkerComplete | WorkerFailure;
 
 export function clampOutputDimension(value: number): number {
 	if (!Number.isFinite(value)) return 1;

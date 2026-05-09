@@ -273,16 +273,29 @@ export function validateWorkerRequest(value: unknown): WorkerRequest {
 	if (!isObject(value)) throw new Error('Worker received an invalid processing request.');
 	if (!Number.isInteger(value.id)) throw new Error('Worker request id is invalid.');
 	const id = value.id as number;
-	if (!(value.source instanceof ImageData))
-		throw new Error('Worker request source image is invalid.');
-	const palette = assertPaletteForIndexedOutput(value.palette);
-	return {
-		id,
-		source: value.source,
-		settings: validateProcessingSettings(value.settings),
-		palette,
-		settingsHash: assertString(value.settingsHash, 'Worker settings hash')
-	};
+	if (value.type === 'cancel') return { id, type: 'cancel' };
+	if (value.type === 'load-source') {
+		if (!(value.source instanceof ImageData))
+			throw new Error('Worker request source image is invalid.');
+		return {
+			id,
+			type: 'load-source',
+			sourceId: assertString(value.sourceId, 'Worker source id'),
+			source: value.source
+		};
+	}
+	if (value.type === 'process') {
+		const palette = assertPaletteForIndexedOutput(value.palette);
+		return {
+			id,
+			type: 'process',
+			sourceId: assertString(value.sourceId, 'Worker source id'),
+			settings: validateProcessingSettings(value.settings),
+			palette,
+			settingsHash: assertString(value.settingsHash, 'Worker settings hash')
+		};
+	}
+	throw new Error('Worker request type is invalid.');
 }
 
 export function validateWorkerResponse(value: unknown): WorkerResponse {
@@ -298,6 +311,9 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 	if (value.type === 'error') {
 		if (typeof value.message !== 'string') throw new Error('Worker error response is invalid.');
 		return value as WorkerResponse;
+	}
+	if (value.type === 'source-loaded') {
+		return { id, type: 'source-loaded', sourceId: assertString(value.sourceId, 'Worker source id') };
 	}
 	if (value.type === 'complete') {
 		return { id, type: 'complete', image: validateProcessedImage(value.image) };

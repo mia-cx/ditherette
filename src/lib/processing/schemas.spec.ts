@@ -141,11 +141,23 @@ describe('processing schemas', () => {
 		);
 	});
 
-	it('deep-validates worker request settings', () => {
+	it('accepts valid source-load worker requests', () => {
+		const request = validateWorkerRequest({
+			id: 1,
+			type: 'load-source',
+			sourceId: 'source-1',
+			source: new ImageData(2, 1)
+		});
+
+		expect(request).toMatchObject({ type: 'load-source', sourceId: 'source-1' });
+	});
+
+	it('deep-validates worker process request settings', () => {
 		expect(() =>
 			validateWorkerRequest({
 				id: 1,
-				source: new ImageData(2, 1),
+				type: 'process',
+				sourceId: 'source-1',
 				settings: { output: { ...output, width: '2' }, dither, colorSpace: 'oklab' },
 				palette,
 				settingsHash: 'hash'
@@ -153,23 +165,36 @@ describe('processing schemas', () => {
 		).toThrow(/width/i);
 	});
 
-	it('accepts valid worker requests after shaping settings', () => {
+	it('accepts valid worker process requests after shaping settings', () => {
 		const request = validateWorkerRequest({
 			id: 1,
-			source: new ImageData(2, 1),
+			type: 'process',
+			sourceId: 'source-1',
 			settings: { output, dither, colorSpace: 'oklab' },
 			palette,
 			settingsHash: 'hash'
 		});
 
+		expect(request.type).toBe('process');
+		if (request.type !== 'process') throw new Error('Expected process request.');
 		expect(request.settings.output.width).toBe(2);
 		expect(request.settings.colorSpace).toBe('oklab');
+	});
+
+	it('accepts worker cancel requests', () => {
+		expect(validateWorkerRequest({ id: 1, type: 'cancel' })).toEqual({ id: 1, type: 'cancel' });
 	});
 
 	it('rejects malformed worker progress responses', () => {
 		expect(() =>
 			validateWorkerResponse({ id: 1, type: 'progress', stage: null, progress: NaN })
 		).toThrow(/progress/i);
+	});
+
+	it('accepts worker source-loaded responses', () => {
+		expect(validateWorkerResponse({ id: 1, type: 'source-loaded', sourceId: 'source-1' })).toEqual(
+			{ id: 1, type: 'source-loaded', sourceId: 'source-1' }
+		);
 	});
 
 	it('validates worker complete responses through the processed-image schema', () => {
