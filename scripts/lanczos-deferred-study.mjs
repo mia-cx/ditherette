@@ -88,9 +88,15 @@ const VARIANTS = [
 ];
 
 function main() {
-	const { outRoot, benchArgs, checkCorrectness } = parseArgs(process.argv.slice(2));
+	const { outRoot, benchArgs, checkCorrectness, emitSource } = parseArgs(process.argv.slice(2));
 	const originalWorkingTree = readFileSync(RESIZE_PATH, 'utf8');
 	const baseline = gitShow(`HEAD:${RESIZE_PATH}`);
+	if (emitSource) {
+		const variant = VARIANTS.find((candidate) => candidate.id === emitSource);
+		if (!variant) throw new Error(`Unknown Lanczos variant: ${emitSource}`);
+		process.stdout.write(variant.apply(baseline));
+		return;
+	}
 	const startedAt = new Date().toISOString();
 	const root =
 		outRoot ?? join('benchmark-results', `lanczos-deferred-study-${safeTimestamp(startedAt)}`);
@@ -133,6 +139,7 @@ function parseArgs(argv) {
 	const explicitBenchArgs = separator === -1 ? [] : argv.slice(separator + 1);
 	let outRoot;
 	let checkCorrectness = false;
+	let emitSource;
 	const inferredBenchArgs = [];
 
 	for (let index = 0; index < scriptArgs.length; index++) {
@@ -143,6 +150,10 @@ function parseArgs(argv) {
 		}
 		if (arg === '--check-correctness') {
 			checkCorrectness = true;
+			continue;
+		}
+		if (arg === '--emit-source') {
+			emitSource = scriptArgs[++index];
 			continue;
 		}
 		if (arg === '--help' || arg === '-h') {
@@ -159,7 +170,8 @@ function parseArgs(argv) {
 	return {
 		outRoot,
 		benchArgs: studyBenchArgs(benchArgs),
-		checkCorrectness
+		checkCorrectness,
+		emitSource
 	};
 }
 
@@ -192,6 +204,7 @@ Runs deferred Lanczos variants from committed resize.ts:
 
 Study options:
   --out DIR              Root output directory (default: benchmark-results/lanczos-deferred-study-<timestamp>)
+  --emit-source ID       Print the transformed resize.ts source for one variant, then exit
   --check-correctness    Run resize.spec.ts for each variant before benchmarking.
                          Output-changing variants are expected to fail exact Lanczos guards;
                          failures are logged but do not stop the study.
