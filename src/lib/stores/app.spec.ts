@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { paletteEnabledKey } from '$lib/palette/wplace';
-import type { Palette, ProcessedImage } from '$lib/processing/types';
-import { cancelProcessing, scheduleProcessing } from '$lib/processing/client';
+import type {
+	DitherSettings,
+	OutputSettings,
+	Palette,
+	ProcessedImage
+} from '$lib/processing/types';
+import {
+	cancelProcessing,
+	ditherProcessingDelay,
+	outputProcessingDelay,
+	scheduleProcessing
+} from '$lib/processing/client';
 import {
 	activePaletteName,
 	customPalettes,
@@ -42,6 +52,65 @@ function processedFixture(settingsHash = 'stale'): ProcessedImage {
 		updatedAt: 1
 	};
 }
+
+const outputFixture: OutputSettings = {
+	width: 512,
+	height: 512,
+	lockAspect: true,
+	resize: 'bilinear',
+	alphaMode: 'preserve',
+	alphaThreshold: 0,
+	matteKey: '#FFFFFF',
+	autoSizeOnUpload: false,
+	scaleFactor: 1
+};
+
+const ditherFixture: DitherSettings = {
+	algorithm: 'none',
+	strength: 100,
+	placement: 'everywhere',
+	placementRadius: 3,
+	placementThreshold: 12,
+	placementSoftness: 8,
+	serpentine: true,
+	seed: 0xc0ffee42,
+	useColorSpace: false
+};
+
+describe('processing scheduler delays', () => {
+	it('debounces slider-only output changes', () => {
+		expect(outputProcessingDelay(outputFixture, { ...outputFixture, scaleFactor: 0.5 })).toBe(180);
+		expect(outputProcessingDelay(outputFixture, { ...outputFixture, alphaThreshold: 12 })).toBe(
+			180
+		);
+	});
+
+	it('runs non-slider output changes immediately', () => {
+		expect(outputProcessingDelay(outputFixture, { ...outputFixture, resize: 'nearest' })).toBe(0);
+		expect(
+			outputProcessingDelay(outputFixture, {
+				...outputFixture,
+				crop: { x: 0, y: 0, width: 1, height: 1 }
+			})
+		).toBe(0);
+	});
+
+	it('debounces slider-only dither changes', () => {
+		expect(ditherProcessingDelay(ditherFixture, { ...ditherFixture, strength: 80 })).toBe(180);
+		expect(ditherProcessingDelay(ditherFixture, { ...ditherFixture, placementThreshold: 20 })).toBe(
+			180
+		);
+	});
+
+	it('runs A/B dither toggles immediately', () => {
+		expect(ditherProcessingDelay(ditherFixture, { ...ditherFixture, placement: 'adaptive' })).toBe(
+			0
+		);
+		expect(ditherProcessingDelay(ditherFixture, { ...ditherFixture, algorithm: 'bayer-2' })).toBe(
+			0
+		);
+	});
+});
 
 describe('custom palette state persistence', () => {
 	beforeEach(() => {
