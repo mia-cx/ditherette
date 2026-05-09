@@ -29,6 +29,8 @@ class TestImageData implements ImageData {
 
 Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configurable: true });
 
+const MAX_REFERENCE_SCALE_AWARE_LANCZOS_TAPS = 64;
+
 function solidImage(
 	width: number,
 	height: number,
@@ -197,7 +199,10 @@ function referenceScaleAwareLanczosSample(
 }
 
 function referenceScaleAwareTaps(radius: number, scale: number) {
-	return Math.ceil(radius * Math.max(1, scale)) * 2;
+	return Math.min(
+		MAX_REFERENCE_SCALE_AWARE_LANCZOS_TAPS,
+		Math.ceil(radius * Math.max(1, scale)) * 2
+	);
 }
 
 function referenceLanczosWindowSample(
@@ -391,6 +396,14 @@ describe('resizeImageData', () => {
 				else expectMaxChannelDelta(output, reference, 1);
 			}
 		}
+	});
+
+	it('caps scale-aware Lanczos work for extreme downscales', () => {
+		const source = patternedImage(130, 130);
+		const output = resizeImageData(source, 1, 1, 'lanczos3-scale-aware');
+		const reference = referenceLanczosResize(source, 1, 1, 'lanczos3-scale-aware');
+
+		expectMaxChannelDelta(output, reference, 8);
 	});
 
 	it('allows source dimensions up to the source limit when resizing down', () => {

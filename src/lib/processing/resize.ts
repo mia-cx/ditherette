@@ -590,6 +590,7 @@ const LANCZOS_RADIUS = 3;
 const LANCZOS_TAPS = LANCZOS_RADIUS * 2;
 const LANCZOS2_RADIUS = 2;
 const LANCZOS2_TAPS = LANCZOS2_RADIUS * 2;
+const MAX_SCALE_AWARE_LANCZOS_TAPS = 64;
 
 function resizeLanczos2(
 	source: ImageData,
@@ -963,7 +964,7 @@ function resizeScaleAwareLanczos(
 }
 
 function scaleAwareTaps(radius: number, scale: number) {
-	return Math.ceil(radius * Math.max(1, scale)) * 2;
+	return Math.min(MAX_SCALE_AWARE_LANCZOS_TAPS, Math.ceil(radius * Math.max(1, scale)) * 2);
 }
 
 function resizeOpaqueLanczosDynamic(
