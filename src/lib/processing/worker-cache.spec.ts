@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resizeCacheKey, WorkerResizeCache } from './worker-cache';
+import { PaletteVectorCache, pipelineBranchKey, PipelineBranchCache } from './worker-cache';
 
 class TestImageData implements ImageData {
 	readonly data: Uint8ClampedArray<ArrayBuffer>;
@@ -16,27 +16,32 @@ class TestImageData implements ImageData {
 
 Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configurable: true });
 
-describe('resizeCacheKey', () => {
-	it('ignores palette, color-space, and dither settings by only using resize-affecting inputs', () => {
-		const key = resizeCacheKey({ sourceId: 'source', width: 32, height: 16, resize: 'bilinear' });
+describe('pipelineBranchKey', () => {
+	it('ignores palette, color-space, and dither settings by only using image-derived inputs', () => {
+		const key = pipelineBranchKey({
+			sourceId: 'source',
+			width: 32,
+			height: 16,
+			resize: 'bilinear'
+		});
 
-		expect(key).toBe('source|32x16|bilinear|0,0,full,full');
+		expect(key).toBe('source|32x16|bilinear|0,0,full,full|grade:identity');
 	});
 
-	it('changes when source, output size, resize mode, or crop changes', () => {
-		const base = resizeCacheKey({ sourceId: 'a', width: 32, height: 16, resize: 'bilinear' });
+	it('changes when source, output size, resize mode, crop, or grade changes', () => {
+		const base = pipelineBranchKey({ sourceId: 'a', width: 32, height: 16, resize: 'bilinear' });
 
-		expect(resizeCacheKey({ sourceId: 'b', width: 32, height: 16, resize: 'bilinear' })).not.toBe(
-			base
-		);
-		expect(resizeCacheKey({ sourceId: 'a', width: 33, height: 16, resize: 'bilinear' })).not.toBe(
-			base
-		);
-		expect(resizeCacheKey({ sourceId: 'a', width: 32, height: 16, resize: 'nearest' })).not.toBe(
+		expect(
+			pipelineBranchKey({ sourceId: 'b', width: 32, height: 16, resize: 'bilinear' })
+		).not.toBe(base);
+		expect(
+			pipelineBranchKey({ sourceId: 'a', width: 33, height: 16, resize: 'bilinear' })
+		).not.toBe(base);
+		expect(pipelineBranchKey({ sourceId: 'a', width: 32, height: 16, resize: 'nearest' })).not.toBe(
 			base
 		);
 		expect(
-			resizeCacheKey({
+			pipelineBranchKey({
 				sourceId: 'a',
 				width: 32,
 				height: 16,
@@ -44,29 +49,94 @@ describe('resizeCacheKey', () => {
 				crop: { x: 1, y: 2, width: 30, height: 14 }
 			})
 		).not.toBe(base);
+		expect(
+			pipelineBranchKey({
+				sourceId: 'a',
+				width: 32,
+				height: 16,
+				resize: 'bilinear',
+				gradeKey: 'curves-v1'
+			})
+		).not.toBe(base);
 	});
 });
 
-describe('WorkerResizeCache', () => {
+describe('PipelineBranchCache', () => {
+	it('keeps the active branch plus immediate prior branches by recency', () => {
+		const cache = new PipelineBranchCache(3, 1024);
+		cache.setResized('a', new ImageData(1, 1));
+		cache.setResized('b', new ImageData(1, 1));
+		cache.setResized('c', new ImageData(1, 1));
+		expect(cache.getResized('a')).toBeDefined();
+
+		cache.setResized('d', new ImageData(1, 1));
+
+		expect(cache.getResized('a')).toBeDefined();
+		expect(cache.getResized('b')).toBeUndefined();
+		expect(cache.getResized('c')).toBeDefined();
+		expect(cache.getResized('d')).toBeDefined();
+	});
+
+	it('does not store branches that exceed the byte budget', () => {
+		const cache = new PipelineBranchCache(3, 8);
+
+		cache.setResized('too-large', new ImageData(2, 2));
+
+		expect(cache.getResized('too-large')).toBeUndefined();
+		expect(cache.size).toBe(0);
+	});
+
+	it('stores color mappings under their branch byte budget', () => {
+		const cache = new PipelineBranchCache(2, 64);
+		cache.setResized('a', new ImageData(1, 1));
+
+		expect(cache.setColorMapping('a', 'oklab', { cached: true }, 24)).toBe(true);
+		expect(cache.getColorMapping('a', 'oklab')).toEqual({ cached: true });
+		expect(cache.bytes).toBe(28);
+	});
+
+	it('skips color mappings that would evict their resized branch', () => {
+		const cache = new PipelineBranchCache(2, 16);
+		cache.setResized('a', new ImageData(1, 1));
+
+		expect(cache.setColorMapping('a', 'too-large', {}, 16)).toBe(false);
+		expect(cache.getResized('a')).toBeDefined();
+		expect(cache.getColorMapping('a', 'too-large')).toBeUndefined();
+	});
+
+	it('clears all active and prior branches together', () => {
+		const cache = new PipelineBranchCache(3, 1024);
+		cache.setResized('a', new ImageData(1, 1));
+		cache.setResized('b', new ImageData(1, 1));
+
+		cache.clear();
+
+		expect(cache.size).toBe(0);
+		expect(cache.bytes).toBe(0);
+	});
+});
+
+describe('PaletteVectorCache', () => {
+	it('keeps palette-derived data separate from image branches', () => {
+		const cache = new PaletteVectorCache<object>(2);
+		const value = { cached: true };
+
+		cache.set('palette|oklab', value);
+
+		expect(cache.get('palette|oklab')).toBe(value);
+		expect(cache.size).toBe(1);
+	});
+
 	it('evicts least-recently-used entries by entry count', () => {
-		const cache = new WorkerResizeCache(2, 1024);
-		cache.set('a', new ImageData(1, 1));
-		cache.set('b', new ImageData(1, 1));
+		const cache = new PaletteVectorCache<object>(2);
+		cache.set('a', {});
+		cache.set('b', {});
 		expect(cache.get('a')).toBeDefined();
 
-		cache.set('c', new ImageData(1, 1));
+		cache.set('c', {});
 
 		expect(cache.get('a')).toBeDefined();
 		expect(cache.get('b')).toBeUndefined();
 		expect(cache.get('c')).toBeDefined();
-	});
-
-	it('does not store entries that exceed the byte budget', () => {
-		const cache = new WorkerResizeCache(2, 8);
-
-		cache.set('too-large', new ImageData(2, 2));
-
-		expect(cache.get('too-large')).toBeUndefined();
-		expect(cache.size).toBe(0);
 	});
 });

@@ -113,6 +113,43 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(pipeline.resizeCacheSize).toBe(1);
 	});
 
+	it('creates prior branches for resize-affecting changes', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+
+		pipeline.handle(processRequest(), () => undefined);
+		pipeline.handle(
+			processRequest({
+				id: 3,
+				settings: { output: { ...output, width: 1 }, dither, colorSpace: 'srgb' },
+				settingsHash: 'hash-2'
+			}),
+			() => undefined
+		);
+
+		expect(pipeline.branchCacheSize).toBe(2);
+	});
+
+	it('clears active and prior branches when a new source loads', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		pipeline.handle(processRequest(), () => undefined);
+		expect(pipeline.branchCacheSize).toBe(1);
+
+		pipeline.handle(
+			{ id: 3, type: 'load-source', sourceId: 'source-2', source: sourceImage() },
+			() => undefined
+		);
+
+		expect(pipeline.branchCacheSize).toBe(0);
+	});
+
 	it('returns transferred index buffers for complete responses', () => {
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(

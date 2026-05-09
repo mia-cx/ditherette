@@ -1,7 +1,16 @@
 import { resizeImageData } from '$lib/processing/resize';
-import { quantizeImage } from '$lib/processing/quantize';
+import {
+	quantizeImage,
+	type PaletteVectorSpace,
+	type QuantizeCaches
+} from '$lib/processing/quantize';
 import { clampOutputSize, type WorkerRequest, type WorkerResponse } from './types';
-import { resizeCacheKey, WorkerResizeCache } from './worker-cache';
+import {
+	IDENTITY_GRADE_KEY,
+	PaletteVectorCache,
+	pipelineBranchKey,
+	PipelineBranchCache
+} from './worker-cache';
 
 const PROGRESS = {
 	queued: 0.05,
@@ -20,11 +29,16 @@ type ProgressSink = (stage: string, progress: number) => void;
 
 export class ProcessorWorkerPipeline {
 	#sourceCache: SourceCache | undefined;
-	#resizeCache = new WorkerResizeCache();
+	#branchCache = new PipelineBranchCache();
+	#paletteVectorCache = new PaletteVectorCache<PaletteVectorSpace>();
 	#canceledIds = new Set<number>();
 
+	get branchCacheSize() {
+		return this.#branchCache.size;
+	}
+
 	get resizeCacheSize() {
-		return this.#resizeCache.size;
+		return this.branchCacheSize;
 	}
 
 	handle(request: WorkerRequest, progress: ProgressSink): WorkerResponse | undefined {
@@ -37,7 +51,7 @@ export class ProcessorWorkerPipeline {
 
 		if (request.type === 'load-source') {
 			this.#sourceCache = { sourceId: request.sourceId, source: request.source };
-			this.#resizeCache.clear();
+			this.#branchCache.clear();
 			return { id: request.id, type: 'source-loaded', sourceId: request.sourceId };
 		}
 
@@ -45,14 +59,15 @@ export class ProcessorWorkerPipeline {
 		const source = this.sourceFor(sourceId);
 		progress('Sizing output', PROGRESS.queued);
 		const size = clampOutputSize(settings.output.width, settings.output.height);
-		const cacheKey = resizeCacheKey({
+		const branchKey = pipelineBranchKey({
 			sourceId,
 			width: size.width,
 			height: size.height,
 			resize: settings.output.resize,
-			crop: settings.output.crop
+			crop: settings.output.crop,
+			gradeKey: IDENTITY_GRADE_KEY
 		});
-		let resized = this.#resizeCache.get(cacheKey);
+		let resized = this.#branchCache.getResized(branchKey);
 		if (resized) {
 			progress('Using cached resize', PROGRESS.cacheHit);
 		} else {
@@ -64,10 +79,10 @@ export class ProcessorWorkerPipeline {
 				settings.output.resize,
 				settings.output.crop
 			);
-			this.#resizeCache.set(cacheKey, resized);
+			this.#branchCache.setResized(branchKey, resized);
 		}
 		progress('Quantizing palette', PROGRESS.quantizing);
-		const result = quantizeImage(resized, palette, settings);
+		const result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey));
 		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
 		progress('Finalizing indexed output', PROGRESS.finalizing);
 		return {
@@ -81,6 +96,19 @@ export class ProcessorWorkerPipeline {
 				settingsHash,
 				updatedAt: Date.now()
 			}
+		};
+	}
+
+	private quantizeCaches(branchKey: string): QuantizeCaches {
+		return {
+			getPaletteVectorSpace: (key) => this.#paletteVectorCache.get(key),
+			setPaletteVectorSpace: (key, value) => this.#paletteVectorCache.set(key, value),
+			colorVectorImageScope: branchKey,
+			getColorVectorImage: (key) => this.#branchCache.getColorMapping(branchKey, key),
+			canStoreColorVectorImage: (_key, bytes) =>
+				this.#branchCache.canStoreColorMapping(branchKey, bytes),
+			setColorVectorImage: (key, value, bytes) =>
+				this.#branchCache.setColorMapping(branchKey, key, value, bytes)
 		};
 	}
 

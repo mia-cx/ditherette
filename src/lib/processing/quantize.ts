@@ -1,7 +1,14 @@
 import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
 import { clampByte, createPaletteMatcher, vectorForRgb } from './color';
 import { compositedRgb } from './compositing';
-import type { DitherId, EnabledPaletteColor, ProcessingSettings, Rgb } from './types';
+import type {
+	AlphaMode,
+	ColorSpaceId,
+	DitherId,
+	EnabledPaletteColor,
+	ProcessingSettings,
+	Rgb
+} from './types';
 
 const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
 const RGB_DITHER_NOISE_SCALE = 96;
@@ -10,9 +17,27 @@ type ColorVector = ReturnType<typeof vectorForRgb>;
 
 type PaletteVector = { index: number; vector: ColorVector };
 
-type PaletteVectorSpace = {
+export type PaletteVectorSpace = {
 	colors: PaletteVector[];
 	ranges: ColorVector;
+};
+
+export type ColorVectorImage = {
+	width: number;
+	height: number;
+	colorSpace: ColorSpaceId;
+	v0: Float64Array;
+	v1: Float64Array;
+	v2: Float64Array;
+};
+
+export type QuantizeCaches = {
+	getPaletteVectorSpace?(key: string): PaletteVectorSpace | undefined;
+	setPaletteVectorSpace?(key: string, value: PaletteVectorSpace): void;
+	colorVectorImageScope?: string;
+	getColorVectorImage?(key: string): ColorVectorImage | undefined;
+	canStoreColorVectorImage?(key: string, bytes: number): boolean;
+	setColorVectorImage?(key: string, value: ColorVectorImage, bytes: number): void;
 };
 
 const ERROR_KERNELS = {
@@ -53,6 +78,21 @@ function supportsVectorDither(settings: ProcessingSettings) {
 	return settings.dither.useColorSpace && settings.colorSpace !== 'weighted-rgb';
 }
 
+function supportsCachedVectorMatching(colorSpace: ColorSpaceId) {
+	return (
+		colorSpace === 'linear-rgb' ||
+		colorSpace === 'oklab' ||
+		colorSpace === 'cielab' ||
+		colorSpace === 'oklch'
+	);
+}
+
+function usesAdaptivePlacement(settings: ProcessingSettings) {
+	const placement =
+		settings.dither.placement ?? (settings.dither.coverage === 'full' ? 'everywhere' : 'adaptive');
+	return placement !== 'everywhere';
+}
+
 type QuantizeResult = {
 	indices: Uint8Array;
 	palette: EnabledPaletteColor[];
@@ -80,6 +120,27 @@ function paletteRgb(color: EnabledPaletteColor): Rgb {
 	return color.rgb;
 }
 
+function paletteColorKey(color: EnabledPaletteColor) {
+	const rgb = color.rgb ? `${color.rgb.r},${color.rgb.g},${color.rgb.b}` : 'transparent';
+	return `${color.key}:${color.kind}:${rgb}`;
+}
+
+function paletteVectorCacheKey(palette: EnabledPaletteColor[], colorSpace: ColorSpaceId) {
+	return `${colorSpace}|${palette.map(paletteColorKey).join(';')}`;
+}
+
+function colorVectorImageBytes(width: number, height: number) {
+	return width * height * 3 * Float64Array.BYTES_PER_ELEMENT;
+}
+
+function compositedVectorCacheKey(colorSpace: ColorSpaceId, alphaMode: AlphaMode, matte: Rgb) {
+	return `composited|${colorSpace}|alpha:${alphaMode}|matte:${matte.r},${matte.g},${matte.b}`;
+}
+
+function sourceVectorCacheKey(colorSpace: ColorSpaceId) {
+	return `source|${colorSpace}`;
+}
+
 function darkestVisible(colors: EnabledPaletteColor[]): EnabledPaletteColor | undefined {
 	return colors.reduce<EnabledPaletteColor | undefined>((darkest, color) => {
 		if (!color.rgb) return darkest;
@@ -92,8 +153,13 @@ function darkestVisible(colors: EnabledPaletteColor[]): EnabledPaletteColor | un
 
 function paletteVectorSpace(
 	matcher: ReturnType<typeof createPaletteMatcher>,
-	settings: ProcessingSettings
+	settings: ProcessingSettings,
+	cacheKey?: string,
+	caches?: QuantizeCaches
 ): PaletteVectorSpace {
+	const cached = cacheKey ? caches?.getPaletteVectorSpace?.(cacheKey) : undefined;
+	if (cached) return cached;
+
 	const colors: PaletteVector[] = [];
 	let min: ColorVector = [Infinity, Infinity, Infinity];
 	let max: ColorVector = [-Infinity, -Infinity, -Infinity];
@@ -105,14 +171,16 @@ function paletteVectorSpace(
 		min = [Math.min(min[0], vector[0]), Math.min(min[1], vector[1]), Math.min(min[2], vector[2])];
 		max = [Math.max(max[0], vector[0]), Math.max(max[1], vector[1]), Math.max(max[2], vector[2])];
 	}
-	return {
+	const space = {
 		colors,
 		ranges: [
 			Math.max(max[0] - min[0], Number.EPSILON),
 			Math.max(max[1] - min[1], Number.EPSILON),
 			Math.max(max[2] - min[2], Number.EPSILON)
 		]
-	};
+	} satisfies PaletteVectorSpace;
+	if (cacheKey) caches?.setPaletteVectorSpace?.(cacheKey, space);
+	return space;
 }
 
 function vectorDistance(left: ColorVector, right: ColorVector, settings: ProcessingSettings) {
@@ -152,15 +220,97 @@ function nearestPaletteVectorIndex(
 	return nearestPaletteVector(vector, space, settings)?.index ?? -1;
 }
 
+function cachedVectorAt(vectors: ColorVectorImage, index: number): ColorVector {
+	return [vectors.v0[index]!, vectors.v1[index]!, vectors.v2[index]!];
+}
+
+function vectorForCompositedPixel(
+	source: Uint8ClampedArray,
+	offset: number,
+	settings: ProcessingSettings,
+	matte: Rgb
+) {
+	const rgb = compositedRgb(
+		{ r: source[offset]!, g: source[offset + 1]!, b: source[offset + 2]! },
+		source[offset + 3]!,
+		settings.output.alphaMode,
+		matte
+	);
+	return vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
+}
+
+function buildColorVectorImage(
+	image: ImageData,
+	settings: ProcessingSettings,
+	matte: Rgb,
+	kind: 'composited' | 'source'
+): ColorVectorImage {
+	const pixels = image.width * image.height;
+	const v0 = new Float64Array(pixels);
+	const v1 = new Float64Array(pixels);
+	const v2 = new Float64Array(pixels);
+	const source = image.data;
+	for (let index = 0; index < pixels; index++) {
+		const offset = index * 4;
+		const rgb =
+			kind === 'composited'
+				? compositedRgb(
+						{ r: source[offset]!, g: source[offset + 1]!, b: source[offset + 2]! },
+						source[offset + 3]!,
+						settings.output.alphaMode,
+						matte
+					)
+				: { r: source[offset]!, g: source[offset + 1]!, b: source[offset + 2]! };
+		const vector = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
+		v0[index] = vector[0];
+		v1[index] = vector[1];
+		v2[index] = vector[2];
+	}
+	return { width: image.width, height: image.height, colorSpace: settings.colorSpace, v0, v1, v2 };
+}
+
+function cachedColorVectorImage(
+	image: ImageData,
+	settings: ProcessingSettings,
+	matte: Rgb,
+	kind: 'composited' | 'source',
+	caches?: QuantizeCaches
+) {
+	if (!supportsCachedVectorMatching(settings.colorSpace)) return undefined;
+	const scope = caches?.colorVectorImageScope;
+	if (!scope) return undefined;
+	const key = `${scope}|${
+		kind === 'composited'
+			? compositedVectorCacheKey(settings.colorSpace, settings.output.alphaMode, matte)
+			: sourceVectorCacheKey(settings.colorSpace)
+	}`;
+	const cached = caches?.getColorVectorImage?.(key);
+	if (
+		cached?.width === image.width &&
+		cached.height === image.height &&
+		cached.colorSpace === settings.colorSpace
+	) {
+		return cached;
+	}
+	const bytes = colorVectorImageBytes(image.width, image.height);
+	if (!caches?.setColorVectorImage || caches.canStoreColorVectorImage?.(key, bytes) === false) {
+		return undefined;
+	}
+	const vectors = buildColorVectorImage(image, settings, matte, kind);
+	caches.setColorVectorImage(key, vectors, bytes);
+	return caches.getColorVectorImage?.(key) ?? vectors;
+}
+
 function colorSpaceThresholdIndex(
 	rgb: Rgb,
 	threshold: number,
 	space: PaletteVectorSpace,
 	settings: ProcessingSettings,
-	strength: number
+	strength: number,
+	sourceVector?: ColorVector
 ) {
 	if (strength <= 0) return -1;
-	const source = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
+	const source = sourceVector ?? vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
 	const amount = threshold * strength * COLOR_SPACE_THRESHOLD_SCALE;
 	const target: ColorVector = [
 		source[0] + amount * space.ranges[0],
@@ -182,11 +332,14 @@ function sourceVectorAt(
 	height: number,
 	x: number,
 	y: number,
-	settings: ProcessingSettings
+	settings: ProcessingSettings,
+	vectors?: ColorVectorImage
 ) {
 	const xx = Math.min(width - 1, Math.max(0, x));
 	const yy = Math.min(height - 1, Math.max(0, y));
-	const offset = (yy * width + xx) * 4;
+	const index = yy * width + xx;
+	if (vectors) return cachedVectorAt(vectors, index);
+	const offset = index * 4;
 	return vectorForRgb(
 		source[offset]!,
 		source[offset + 1]!,
@@ -202,14 +355,13 @@ function placementMask(
 	x: number,
 	y: number,
 	settings: ProcessingSettings,
-	space: PaletteVectorSpace
+	space: PaletteVectorSpace,
+	vectors?: ColorVectorImage
 ) {
-	const placement =
-		settings.dither.placement ?? (settings.dither.coverage === 'full' ? 'everywhere' : 'adaptive');
-	if (placement === 'everywhere') return 1;
+	if (!usesAdaptivePlacement(settings)) return 1;
 
 	const radius = Math.max(1, Math.round(settings.dither.placementRadius ?? 3));
-	const center = sourceVectorAt(source, width, height, x, y, settings);
+	const center = sourceVectorAt(source, width, height, x, y, settings, vectors);
 	const offsets = [
 		[-radius, 0],
 		[radius, 0],
@@ -225,7 +377,7 @@ function placementMask(
 		total += Math.sqrt(
 			vectorDistance(
 				center,
-				sourceVectorAt(source, width, height, x + dx, y + dy, settings),
+				sourceVectorAt(source, width, height, x + dx, y + dy, settings, vectors),
 				settings
 			)
 		);
@@ -243,7 +395,8 @@ function placementMask(
 export function quantizeImage(
 	image: ImageData,
 	palette: EnabledPaletteColor[],
-	settings: ProcessingSettings
+	settings: ProcessingSettings,
+	caches?: QuantizeCaches
 ): QuantizeResult {
 	const warnings: string[] = [];
 	const nextPalette = palette.slice(0, 256);
@@ -273,6 +426,7 @@ export function quantizeImage(
 	const { matte, warning } = resolveMatteRgb(nextPalette, visible, settings.output.matteKey);
 	if (warning) warnings.push(warning);
 	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
+	const paletteCacheKey = paletteVectorCacheKey(nextPalette, settings.colorSpace);
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
 	const strength = settings.dither.strength / 100;
@@ -289,7 +443,9 @@ export function quantizeImage(
 			matte,
 			tIndex,
 			fallbackTransparentIndex,
-			strength
+			strength,
+			paletteCacheKey,
+			caches
 		);
 	} else {
 		quantizeDirect(
@@ -300,7 +456,9 @@ export function quantizeImage(
 			matte,
 			tIndex,
 			fallbackTransparentIndex,
-			strength
+			strength,
+			paletteCacheKey,
+			caches
 		);
 	}
 
@@ -359,7 +517,9 @@ function quantizeDirect(
 	matte: Rgb,
 	transparentIndexValue: number,
 	fallbackTransparentIndex: number,
-	strength: number
+	strength: number,
+	paletteCacheKey: string,
+	caches?: QuantizeCaches
 ) {
 	const random = mulberry32(settings.dither.seed);
 	const bayerSize = bayerSizeForAlgorithm(settings.dither.algorithm);
@@ -371,7 +531,18 @@ function quantizeDirect(
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
 	const useVectorDither = supportsVectorDither(settings);
 	const noiseScale = RGB_DITHER_NOISE_SCALE * strength;
-	const vectorSpace = paletteVectorSpace(matcher, settings);
+	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
+	const needsCompositedVectors =
+		supportsCachedVectorMatching(settings.colorSpace) &&
+		((!useBayer && !useRandom) || useVectorDither);
+	const compositedVectors = needsCompositedVectors
+		? cachedColorVectorImage(image, settings, matte, 'composited', caches)
+		: undefined;
+	const sourceVectors =
+		(useBayer || useRandom) && usesAdaptivePlacement(settings)
+			? cachedColorVectorImage(image, settings, matte, 'source', caches)
+			: undefined;
+	const useDirectVectorMatch = Boolean(compositedVectors && !useBayer && !useRandom);
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
@@ -393,8 +564,26 @@ function quantizeDirect(
 				matte
 			);
 
+			if (useDirectVectorMatch && compositedVectors) {
+				indices[index] = nearestPaletteVectorIndex(
+					cachedVectorAt(compositedVectors, index),
+					vectorSpace,
+					settings
+				);
+				continue;
+			}
+
 			if (useBayer && bayer && bayerSize) {
-				const mask = placementMask(source, image.width, image.height, x, y, settings, vectorSpace);
+				const mask = placementMask(
+					source,
+					image.width,
+					image.height,
+					x,
+					y,
+					settings,
+					vectorSpace,
+					sourceVectors
+				);
 				const threshold = bayer[bayerRow + (x % bayerSize)]!;
 				if (useVectorDither) {
 					const match = colorSpaceThresholdIndex(
@@ -402,7 +591,8 @@ function quantizeDirect(
 						threshold,
 						vectorSpace,
 						settings,
-						strength * mask
+						strength * mask,
+						compositedVectors ? cachedVectorAt(compositedVectors, index) : undefined
 					);
 					indices[index] = match === -1 ? matcher.nearestRgb(r, g, b).index : match;
 					continue;
@@ -411,7 +601,16 @@ function quantizeDirect(
 				g = clampByte(g + threshold * noiseScale * mask);
 				b = clampByte(b + threshold * noiseScale * mask);
 			} else if (useRandom) {
-				const mask = placementMask(source, image.width, image.height, x, y, settings, vectorSpace);
+				const mask = placementMask(
+					source,
+					image.width,
+					image.height,
+					x,
+					y,
+					settings,
+					vectorSpace,
+					sourceVectors
+				);
 				const noise = random() - 0.5;
 				if (useVectorDither) {
 					const match = colorSpaceThresholdIndex(
@@ -419,7 +618,8 @@ function quantizeDirect(
 						noise,
 						vectorSpace,
 						settings,
-						strength * mask
+						strength * mask,
+						compositedVectors ? cachedVectorAt(compositedVectors, index) : undefined
 					);
 					indices[index] = match === -1 ? matcher.nearestRgb(r, g, b).index : match;
 					continue;
@@ -441,7 +641,9 @@ function quantizeVectorErrorDiffusion(
 	matte: Rgb,
 	transparentIndexValue: number,
 	fallbackTransparentIndex: number,
-	strength: number
+	strength: number,
+	paletteCacheKey: string,
+	caches?: QuantizeCaches
 ) {
 	const kernel = errorKernelForAlgorithm(settings.dither.algorithm);
 	if (!kernel)
@@ -452,19 +654,18 @@ function quantizeVectorErrorDiffusion(
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
 	const work = new Float32Array(width * height * 3);
-	const vectorSpace = paletteVectorSpace(matcher, settings);
+	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
+	const compositedVectors = cachedColorVectorImage(image, settings, matte, 'composited', caches);
+	const sourceVectors = usesAdaptivePlacement(settings)
+		? cachedColorVectorImage(image, settings, matte, 'source', caches)
+		: undefined;
 
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
 		const workOffset = index * 3;
-		const alpha = source[sourceOffset + 3]!;
-		const { r, g, b } = compositedRgb(
-			{ r: source[sourceOffset]!, g: source[sourceOffset + 1]!, b: source[sourceOffset + 2]! },
-			alpha,
-			alphaMode,
-			matte
-		);
-		const vector = vectorForRgb(r, g, b, settings.colorSpace);
+		const vector = compositedVectors
+			? cachedVectorAt(compositedVectors, index)
+			: vectorForCompositedPixel(source, sourceOffset, settings, matte);
 		work[workOffset] = vector[0];
 		work[workOffset + 1] = vector[1];
 		work[workOffset + 2] = vector[2];
@@ -494,7 +695,7 @@ function quantizeVectorErrorDiffusion(
 			const match = nearestPaletteVector(current, vectorSpace, settings);
 			if (!match) throw new Error('No visible palette colors are enabled');
 			indices[index] = match.index;
-			const mask = placementMask(source, width, height, x, y, settings, vectorSpace);
+			const mask = placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors);
 			const error0 = current[0] - match.vector[0];
 			const error1 = current[1] - match.vector[1];
 			const error2 = current[2] - match.vector[2];
@@ -521,7 +722,9 @@ function quantizeErrorDiffusion(
 	matte: Rgb,
 	transparentIndexValue: number,
 	fallbackTransparentIndex: number,
-	strength: number
+	strength: number,
+	paletteCacheKey: string,
+	caches?: QuantizeCaches
 ) {
 	if (supportsVectorDither(settings)) {
 		quantizeVectorErrorDiffusion(
@@ -532,7 +735,9 @@ function quantizeErrorDiffusion(
 			matte,
 			transparentIndexValue,
 			fallbackTransparentIndex,
-			strength
+			strength,
+			paletteCacheKey,
+			caches
 		);
 		return;
 	}
@@ -546,7 +751,10 @@ function quantizeErrorDiffusion(
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
 	const work = new Float32Array(width * height * 3);
-	const vectorSpace = paletteVectorSpace(matcher, settings);
+	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
+	const sourceVectors = usesAdaptivePlacement(settings)
+		? cachedColorVectorImage(image, settings, matte, 'source', caches)
+		: undefined;
 
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
@@ -585,7 +793,7 @@ function quantizeErrorDiffusion(
 			const match = matcher.nearestRgb(r, g, b);
 			indices[index] = match.index;
 			const chosen = paletteRgb(match.color);
-			const mask = placementMask(source, width, height, x, y, settings, vectorSpace);
+			const mask = placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors);
 			const errorR = r - chosen.r;
 			const errorG = g - chosen.g;
 			const errorB = b - chosen.b;
