@@ -989,7 +989,7 @@ type ConversionSettings = {
   /** Persistent factor applied to the current source/crop dimensions. */
   scaleFactor: number;
   cropRect: CropRect | null;
-  /** Defaults to 'lanczos3'. */
+  /** Defaults to 'bilinear'. */
   resizeMode: ResizeMode;
   paletteName: string;
   /** Defaults to 'oklab'. */

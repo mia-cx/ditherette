@@ -23,7 +23,7 @@ export const outputSettings = persistentJSON<OutputSettings>('ditherette:output'
 	width: 512,
 	height: 512,
 	lockAspect: true,
-	resize: 'lanczos3',
+	resize: 'bilinear',
 	alphaMode: 'preserve',
 	alphaThreshold: 0,
 	matteKey: '#FFFFFF',
