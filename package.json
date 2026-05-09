@@ -23,7 +23,8 @@
 		"bench:lanczos-quality-study": "node scripts/lanczos-quality-study.mjs",
 		"bench:lanczos-radius-study": "node scripts/lanczos-radius-study.mjs",
 		"bench:lanczos-speed-study": "node scripts/lanczos-speed-study.mjs",
-		"bench:sampler-study": "node scripts/sampler-optimization-study.mjs"
+		"bench:sampler-study": "node scripts/sampler-optimization-study.mjs",
+		"bench:nearest-area-speed-study": "node scripts/nearest-area-speed-study.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
