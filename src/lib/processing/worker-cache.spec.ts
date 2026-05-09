@@ -104,6 +104,23 @@ describe('PipelineBranchCache', () => {
 		expect(cache.getColorMapping('a', 'too-large')).toBeUndefined();
 	});
 
+	it('evicts derived mappings before evicting resized branches', () => {
+		const cache = new PipelineBranchCache(2, 36);
+		cache.setResized('area', new ImageData(2, 2));
+		expect(cache.setColorMapping('area', 'quantized', { cached: 'area' }, 4)).toBe(true);
+		cache.setResized('lanczos3-aa', new ImageData(2, 2));
+
+		expect(cache.setColorMapping('lanczos3-aa', 'quantized', { cached: 'lanczos3-aa' }, 4)).toBe(
+			true
+		);
+
+		expect(cache.getResized('area')).toBeDefined();
+		expect(cache.getResized('lanczos3-aa')).toBeDefined();
+		expect(cache.getColorMapping('area', 'quantized')).toBeUndefined();
+		expect(cache.getColorMapping('lanczos3-aa', 'quantized')).toEqual({ cached: 'lanczos3-aa' });
+		expect(cache.bytes).toBe(36);
+	});
+
 	it('clears all active and prior branches together', () => {
 		const cache = new PipelineBranchCache(3, 1024);
 		cache.setResized('a', new ImageData(1, 1));

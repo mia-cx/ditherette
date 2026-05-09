@@ -1,7 +1,7 @@
 import type { CropRect, ResizeId } from './types';
 
 export const MAX_PIPELINE_CACHE_BRANCHES = 3;
-export const MAX_PIPELINE_CACHE_BYTES = 128 * 1024 * 1024;
+export const MAX_PIPELINE_CACHE_BYTES = 256 * 1024 * 1024;
 export const MAX_PALETTE_VECTOR_CACHE_ENTRIES = 16;
 export const IDENTITY_GRADE_KEY = 'identity';
 
@@ -130,11 +130,35 @@ export class PipelineBranchCache {
 	}
 
 	private evictOverflow() {
-		while (this.#branches.size > this.maxBranches || this.#bytes > this.maxBytes) {
+		while (this.#branches.size > this.maxBranches) {
 			const oldestKey = this.#branches.keys().next().value as string | undefined;
 			if (!oldestKey) return;
 			this.delete(oldestKey);
 		}
+
+		while (this.#bytes > this.maxBytes && this.deleteOldestColorMapping()) {
+			// Prefer dropping derived data before dropping resized branches.
+		}
+
+		while (this.#bytes > this.maxBytes) {
+			const oldestKey = this.#branches.keys().next().value as string | undefined;
+			if (!oldestKey) return;
+			this.delete(oldestKey);
+		}
+	}
+
+	private deleteOldestColorMapping() {
+		for (const branch of this.#branches.values()) {
+			const oldestMappingKey = branch.colorMappings.keys().next().value as string | undefined;
+			if (!oldestMappingKey) continue;
+			const mapping = branch.colorMappings.get(oldestMappingKey);
+			if (!mapping) continue;
+			branch.colorMappings.delete(oldestMappingKey);
+			branch.bytes -= mapping.bytes;
+			this.#bytes -= mapping.bytes;
+			return true;
+		}
+		return false;
 	}
 }
 
