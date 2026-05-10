@@ -271,41 +271,76 @@ function createPaletteVectorMatcher(
 	settings: ProcessingSettings,
 	caches?: QuantizeCaches
 ): PaletteVectorMatcher {
+	const count = space.colors.length;
+	const paletteIndices = new Int16Array(count);
+	const paletteV0 = new Float64Array(count);
+	const paletteV1 = new Float64Array(count);
+	const paletteV2 = new Float64Array(count);
+	for (let ordinal = 0; ordinal < count; ordinal++) {
+		const color = space.colors[ordinal]!;
+		paletteIndices[ordinal] = color.index;
+		paletteV0[ordinal] = color.vector[0];
+		paletteV1[ordinal] = color.vector[1];
+		paletteV2[ordinal] = color.vector[2];
+	}
+
 	let lastV0 = Number.NaN;
 	let lastV1 = Number.NaN;
 	let lastV2 = Number.NaN;
-	let lastMatch: PaletteVector | undefined;
+	let lastOrdinal = -1;
 
-	function nearest(v0: number, v1: number, v2: number) {
+	function nearestOrdinal(v0: number, v1: number, v2: number) {
 		if (v0 === lastV0 && v1 === lastV1 && v2 === lastV2) {
 			caches?.recordCount?.('vector memo hit');
-			return lastMatch;
+			return lastOrdinal;
 		}
 		caches?.recordCount?.('vector memo miss');
 		caches?.recordCount?.('nearest vector');
 
-		let winner: PaletteVector | undefined;
+		let winner = -1;
 		let best = Infinity;
-		for (const candidate of space.colors) {
-			const distance = vectorDistanceValues(v0, v1, v2, candidate.vector, settings);
-			if (distance < best) {
-				best = distance;
-				winner = candidate;
+		if (settings.colorSpace === 'oklch') {
+			for (let ordinal = 0; ordinal < count; ordinal++) {
+				const dl = v0 - paletteV0[ordinal]!;
+				const dc = v1 - paletteV1[ordinal]!;
+				let hue = Math.abs(v2 - paletteV2[ordinal]!);
+				if (hue > Math.PI) hue = Math.PI * 2 - hue;
+				const dh = Math.min(v1, paletteV1[ordinal]!) * hue;
+				const distance = dl * dl + dc * dc + dh * dh;
+				if (distance < best) {
+					best = distance;
+					winner = ordinal;
+				}
+			}
+		} else {
+			for (let ordinal = 0; ordinal < count; ordinal++) {
+				const dx = v0 - paletteV0[ordinal]!;
+				const dy = v1 - paletteV1[ordinal]!;
+				const dz = v2 - paletteV2[ordinal]!;
+				const distance = dx * dx + dy * dy + dz * dz;
+				if (distance < best) {
+					best = distance;
+					winner = ordinal;
+				}
 			}
 		}
 
 		lastV0 = v0;
 		lastV1 = v1;
 		lastV2 = v2;
-		lastMatch = winner;
+		lastOrdinal = winner;
 		caches?.recordCount?.('vector memo set');
 		return winner;
 	}
 
 	return {
-		nearest,
+		nearest(v0, v1, v2) {
+			const ordinal = nearestOrdinal(v0, v1, v2);
+			return ordinal === -1 ? undefined : space.colors[ordinal];
+		},
 		nearestIndex(v0, v1, v2) {
-			return nearest(v0, v1, v2)?.index ?? -1;
+			const ordinal = nearestOrdinal(v0, v1, v2);
+			return ordinal === -1 ? -1 : paletteIndices[ordinal]!;
 		}
 	};
 }
@@ -792,16 +827,35 @@ function colorSpaceThresholdIndex(
 	space: PaletteVectorSpace,
 	matcher: PaletteVectorMatcher,
 	settings: ProcessingSettings,
-	strength: number,
-	sourceVector?: ColorVector
+	strength: number
+) {
+	const source = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
+	return colorSpaceThresholdIndexValues(
+		source[0],
+		source[1],
+		source[2],
+		threshold,
+		space,
+		matcher,
+		strength
+	);
+}
+
+function colorSpaceThresholdIndexValues(
+	source0: number,
+	source1: number,
+	source2: number,
+	threshold: number,
+	space: PaletteVectorSpace,
+	matcher: PaletteVectorMatcher,
+	strength: number
 ) {
 	if (strength <= 0) return -1;
-	const source = sourceVector ?? vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
 	const amount = threshold * strength * COLOR_SPACE_THRESHOLD_SCALE;
 	return matcher.nearestIndex(
-		source[0] + amount * space.ranges[0],
-		source[1] + amount * space.ranges[1],
-		source[2] + amount * space.ranges[2]
+		source0 + amount * space.ranges[0],
+		source1 + amount * space.ranges[1],
+		source2 + amount * space.ranges[2]
 	);
 }
 
@@ -1097,6 +1151,7 @@ function quantizeDirect(
 	const bayerSize = bayerSizeForAlgorithm(settings.dither.algorithm);
 	const bayer = bayerSize ? normalizedBayerMatrix(bayerSize) : undefined;
 	const source = image.data;
+	const pixels = image.width * image.height;
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
 	const useBayer = Boolean(bayer && bayerSize && strength > 0);
@@ -1117,6 +1172,56 @@ function quantizeDirect(
 			: undefined;
 	const useDirectVectorMatch = Boolean(compositedVectors && !useBayer && !useRandom);
 	const loopStart = performance.now();
+
+	if (!useBayer && !useRandom) {
+		if (useDirectVectorMatch && compositedVectors) {
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				const alpha = source[offset + 3]!;
+				if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
+					indices[index] =
+						transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
+					continue;
+				}
+				indices[index] = vectorMatcher.nearestIndex(
+					compositedVectors.v0[index]!,
+					compositedVectors.v1[index]!,
+					compositedVectors.v2[index]!
+				);
+			}
+			recordTiming(caches, 'quantize direct dither+match loop', loopStart);
+			return;
+		}
+
+		for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+			const alpha = source[offset + 3]!;
+			if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
+				indices[index] =
+					transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
+				continue;
+			}
+
+			let r = source[offset]!;
+			let g = source[offset + 1]!;
+			let b = source[offset + 2]!;
+			if (alphaMode !== 'preserve' && alpha !== 255) {
+				const opacity = alpha / 255;
+				if (alphaMode === 'premultiplied') {
+					r = Math.round(r * opacity);
+					g = Math.round(g * opacity);
+					b = Math.round(b * opacity);
+				} else {
+					const background = 1 - opacity;
+					r = Math.round(r * opacity + matte.r * background);
+					g = Math.round(g * opacity + matte.g * background);
+					b = Math.round(b * opacity + matte.b * background);
+				}
+			}
+			caches?.recordCount?.('nearest rgb');
+			indices[index] = matcher.nearestIndexByteRgb(r, g, b);
+		}
+		recordTiming(caches, 'quantize direct dither+match loop', loopStart);
+		return;
+	}
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
@@ -1160,16 +1265,26 @@ function quantizeDirect(
 				);
 				const threshold = bayer[bayerRow + (x % bayerSize)]!;
 				if (useVectorDither) {
-					const match = colorSpaceThresholdIndex(
-						{ r, g, b },
-						threshold,
-						vectorSpace,
-						vectorMatcher,
-						settings,
-						strength * mask,
-						compositedVectors ? cachedVectorAt(compositedVectors, index) : undefined
-					);
-					indices[index] = match === -1 ? matcher.nearestIndexRgb(r, g, b) : match;
+					const ditherStrength = strength * mask;
+					const match = compositedVectors
+						? colorSpaceThresholdIndexValues(
+								compositedVectors.v0[index]!,
+								compositedVectors.v1[index]!,
+								compositedVectors.v2[index]!,
+								threshold,
+								vectorSpace,
+								vectorMatcher,
+								ditherStrength
+							)
+						: colorSpaceThresholdIndex(
+								{ r, g, b },
+								threshold,
+								vectorSpace,
+								vectorMatcher,
+								settings,
+								ditherStrength
+							);
+					indices[index] = match === -1 ? matcher.nearestIndexByteRgb(r, g, b) : match;
 					continue;
 				}
 				r = clampByte(r + threshold * noiseScale * mask);
@@ -1188,16 +1303,26 @@ function quantizeDirect(
 				);
 				const noise = random() - 0.5;
 				if (useVectorDither) {
-					const match = colorSpaceThresholdIndex(
-						{ r, g, b },
-						noise,
-						vectorSpace,
-						vectorMatcher,
-						settings,
-						strength * mask,
-						compositedVectors ? cachedVectorAt(compositedVectors, index) : undefined
-					);
-					indices[index] = match === -1 ? matcher.nearestIndexRgb(r, g, b) : match;
+					const ditherStrength = strength * mask;
+					const match = compositedVectors
+						? colorSpaceThresholdIndexValues(
+								compositedVectors.v0[index]!,
+								compositedVectors.v1[index]!,
+								compositedVectors.v2[index]!,
+								noise,
+								vectorSpace,
+								vectorMatcher,
+								ditherStrength
+							)
+						: colorSpaceThresholdIndex(
+								{ r, g, b },
+								noise,
+								vectorSpace,
+								vectorMatcher,
+								settings,
+								ditherStrength
+							);
+					indices[index] = match === -1 ? matcher.nearestIndexByteRgb(r, g, b) : match;
 					continue;
 				}
 				r = clampByte(r + noise * noiseScale * mask);
@@ -1205,7 +1330,7 @@ function quantizeDirect(
 				b = clampByte(b + noise * noiseScale * mask);
 			}
 			caches?.recordCount?.('nearest rgb');
-			indices[index] = matcher.nearestIndexRgb(r, g, b);
+			indices[index] = matcher.nearestIndexByteRgb(r, g, b);
 		}
 	}
 	recordTiming(caches, 'quantize direct dither+match loop', loopStart);
@@ -1338,16 +1463,28 @@ function quantizeErrorDiffusion(
 		? cachedColorVectorImage(image, settings, matte, 'source', caches)
 		: undefined;
 
-	for (let index = 0; index < width * height; index++) {
-		const sourceOffset = index * 4;
-		const workOffset = index * 3;
+	for (
+		let index = 0, sourceOffset = 0, workOffset = 0;
+		index < width * height;
+		index++, sourceOffset += 4, workOffset += 3
+	) {
 		const alpha = source[sourceOffset + 3]!;
-		const { r, g, b } = compositedRgb(
-			{ r: source[sourceOffset]!, g: source[sourceOffset + 1]!, b: source[sourceOffset + 2]! },
-			alpha,
-			alphaMode,
-			matte
-		);
+		let r = source[sourceOffset]!;
+		let g = source[sourceOffset + 1]!;
+		let b = source[sourceOffset + 2]!;
+		if (alphaMode !== 'preserve' && alpha !== 255) {
+			const opacity = alpha / 255;
+			if (alphaMode === 'premultiplied') {
+				r = Math.round(r * opacity);
+				g = Math.round(g * opacity);
+				b = Math.round(b * opacity);
+			} else {
+				const background = 1 - opacity;
+				r = Math.round(r * opacity + matte.r * background);
+				g = Math.round(g * opacity + matte.g * background);
+				b = Math.round(b * opacity + matte.b * background);
+			}
+		}
 		work[workOffset] = r;
 		work[workOffset + 1] = g;
 		work[workOffset + 2] = b;
@@ -1375,7 +1512,7 @@ function quantizeErrorDiffusion(
 			const g = clampByte(work[workOffset + 1]!);
 			const b = clampByte(work[workOffset + 2]!);
 			caches?.recordCount?.('nearest rgb');
-			const match = matcher.nearestIndexRgb(r, g, b);
+			const match = matcher.nearestIndexByteRgb(r, g, b);
 			indices[index] = match;
 			const chosen = matcher.paletteRgbAt(match);
 			const mask = placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors);

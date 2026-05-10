@@ -18,6 +18,7 @@ export type PaletteMatcher = {
 	nearest(rgb: Rgb): PaletteMatch;
 	nearestRgb(r: number, g: number, b: number): PaletteMatch;
 	nearestIndexRgb(r: number, g: number, b: number): number;
+	nearestIndexByteRgb(r: number, g: number, b: number): number;
 	paletteRgbAt(index: number): Rgb;
 	memoStats(): PaletteMatcherMemoStats;
 };
@@ -143,6 +144,9 @@ export function createPaletteMatcher(
 			nearestIndexRgb() {
 				throw new Error('No visible palette colors are enabled');
 			},
+			nearestIndexByteRgb() {
+				throw new Error('No visible palette colors are enabled');
+			},
 			paletteRgbAt() {
 				throw new Error('No visible palette colors are enabled');
 			},
@@ -190,113 +194,138 @@ export function createPaletteMatcher(
 		return { color: colors[index]!, index };
 	}
 
-	function nearestOrdinal(r: number, g: number, b: number) {
-		let winner = 0;
-		let best = Number.POSITIVE_INFINITY;
-
+	const nearestOrdinal = (() => {
 		if (mode === 'srgb') {
-			for (let i = 0; i < count; i++) {
-				const dr = r - red[i]!;
-				const dg = g - green[i]!;
-				const db = b - blue[i]!;
-				const distance = dr * dr + dg * dg + db * db;
-				if (distance < best) {
-					best = distance;
-					winner = i;
+			return (r: number, g: number, b: number) => {
+				let winner = 0;
+				let best = Number.POSITIVE_INFINITY;
+				for (let i = 0; i < count; i++) {
+					const dr = r - red[i]!;
+					const dg = g - green[i]!;
+					const db = b - blue[i]!;
+					const distance = dr * dr + dg * dg + db * db;
+					if (distance < best) {
+						best = distance;
+						winner = i;
+					}
 				}
-			}
-			return winner;
+				return winner;
+			};
 		}
 
 		if (mode === 'weighted-rgb') {
-			for (let i = 0; i < count; i++) {
-				const pr = red[i]!;
-				const dr = r - pr;
-				const dg = g - green[i]!;
-				const db = b - blue[i]!;
-				const meanRed = (r + pr) / 2;
-				const distance =
-					(2 + meanRed / 256) * dr * dr + 4 * dg * dg + (2 + (255 - meanRed) / 256) * db * db;
-				if (distance < best) {
-					best = distance;
-					winner = i;
+			return (r: number, g: number, b: number) => {
+				let winner = 0;
+				let best = Number.POSITIVE_INFINITY;
+				for (let i = 0; i < count; i++) {
+					const pr = red[i]!;
+					const dr = r - pr;
+					const dg = g - green[i]!;
+					const db = b - blue[i]!;
+					const meanRed = (r + pr) / 2;
+					const distance =
+						(2 + meanRed / 256) * dr * dr + 4 * dg * dg + (2 + (255 - meanRed) / 256) * db * db;
+					if (distance < best) {
+						best = distance;
+						winner = i;
+					}
 				}
-			}
-			return winner;
+				return winner;
+			};
 		}
 
 		if (mode === 'weighted-rgb-601' || mode === 'weighted-rgb-709') {
 			const rw = mode === 'weighted-rgb-601' ? 0.299 : 0.2126;
 			const gw = mode === 'weighted-rgb-601' ? 0.587 : 0.7152;
 			const bw = mode === 'weighted-rgb-601' ? 0.114 : 0.0722;
+			return (r: number, g: number, b: number) => {
+				let winner = 0;
+				let best = Number.POSITIVE_INFINITY;
+				for (let i = 0; i < count; i++) {
+					const dr = r - red[i]!;
+					const dg = g - green[i]!;
+					const db = b - blue[i]!;
+					const distance = rw * dr * dr + gw * dg * dg + bw * db * db;
+					if (distance < best) {
+						best = distance;
+						winner = i;
+					}
+				}
+				return winner;
+			};
+		}
+
+		if (mode === 'oklch') {
+			return (r: number, g: number, b: number) => {
+				let winner = 0;
+				let best = Number.POSITIVE_INFINITY;
+				const [x, y, z] = vectorForRgb(r, g, b, mode);
+				for (let i = 0; i < count; i++) {
+					const dl = x - v0[i]!;
+					const dc = y - v1[i]!;
+					let hue = Math.abs(z - v2[i]!);
+					if (hue > Math.PI) hue = Math.PI * 2 - hue;
+					const dh = Math.min(y, v1[i]!) * hue;
+					const distance = dl * dl + dc * dc + dh * dh;
+					if (distance < best) {
+						best = distance;
+						winner = i;
+					}
+				}
+				return winner;
+			};
+		}
+
+		return (r: number, g: number, b: number) => {
+			let winner = 0;
+			let best = Number.POSITIVE_INFINITY;
+			const [x, y, z] = vectorForRgb(r, g, b, mode);
 			for (let i = 0; i < count; i++) {
-				const dr = r - red[i]!;
-				const dg = g - green[i]!;
-				const db = b - blue[i]!;
-				const distance = rw * dr * dr + gw * dg * dg + bw * db * db;
+				const dx = x - v0[i]!;
+				const dy = y - v1[i]!;
+				const dz = z - v2[i]!;
+				const distance = dx * dx + dy * dy + dz * dz;
 				if (distance < best) {
 					best = distance;
 					winner = i;
 				}
 			}
 			return winner;
-		}
+		};
+	})();
 
-		const [x, y, z] = vectorForRgb(r, g, b, mode);
-		for (let i = 0; i < count; i++) {
-			let distance: number;
-			if (mode === 'oklch') {
-				const dl = x - v0[i]!;
-				const dc = y - v1[i]!;
-				let hue = Math.abs(z - v2[i]!);
-				if (hue > Math.PI) hue = Math.PI * 2 - hue;
-				const dh = Math.min(y, v1[i]!) * hue;
-				distance = dl * dl + dc * dc + dh * dh;
-			} else {
-				const dx = x - v0[i]!;
-				const dy = y - v1[i]!;
-				const dz = z - v2[i]!;
-				distance = dx * dx + dy * dy + dz * dz;
-			}
-			if (distance < best) {
-				best = distance;
-				winner = i;
-			}
+	function nearestIndexByteRgb(r: number, g: number, b: number): number {
+		const key = (r << 16) | (g << 8) | b;
+		if (key === lastRgbKey) {
+			stats.rgbHits++;
+			return lastRgbIndex;
 		}
-		return winner;
+		const cached = rgbMemo.get(key);
+		if (cached !== undefined) {
+			lastRgbKey = key;
+			lastRgbIndex = cached;
+			stats.rgbHits++;
+			return cached;
+		}
+		stats.rgbMisses++;
+
+		const index = paletteIndex[nearestOrdinal(r, g, b)]!;
+		lastRgbKey = key;
+		lastRgbIndex = index;
+		stats.rgbSets++;
+		if (rgbMemoMaxEntries > 0) {
+			if (rgbMemo.size >= rgbMemoMaxEntries) {
+				stats.rgbEvictions += rgbMemo.size;
+				rgbMemo.clear();
+			}
+			rgbMemo.set(key, index);
+		}
+		return index;
 	}
 
 	function nearestIndexRgb(r: number, g: number, b: number): number {
-		const key = rgbMemoKey(r, g, b);
-		if (key !== undefined) {
-			if (key === lastRgbKey) {
-				stats.rgbHits++;
-				return lastRgbIndex;
-			}
-			const cached = rgbMemo.get(key);
-			if (cached !== undefined) {
-				lastRgbKey = key;
-				lastRgbIndex = cached;
-				stats.rgbHits++;
-				return cached;
-			}
-			stats.rgbMisses++;
-		}
-
-		const index = paletteIndex[nearestOrdinal(r, g, b)]!;
-		if (key !== undefined) {
-			lastRgbKey = key;
-			lastRgbIndex = index;
-			stats.rgbSets++;
-			if (rgbMemoMaxEntries > 0) {
-				if (rgbMemo.size >= rgbMemoMaxEntries) {
-					stats.rgbEvictions += rgbMemo.size;
-					rgbMemo.clear();
-				}
-				rgbMemo.set(key, index);
-			}
-		}
-		return index;
+		if (isByte(r) && isByte(g) && isByte(b)) return nearestIndexByteRgb(r, g, b);
+		return paletteIndex[nearestOrdinal(r, g, b)]!;
 	}
 
 	return {
@@ -308,6 +337,7 @@ export function createPaletteMatcher(
 			return matchIndex(nearestIndexRgb(r, g, b));
 		},
 		nearestIndexRgb,
+		nearestIndexByteRgb,
 		paletteRgbAt(index) {
 			return colors[index]?.rgb ?? FALLBACK_RGB;
 		},
