@@ -29,6 +29,12 @@ const REF_Y = 1;
 const REF_Z = 1.08883;
 const DEFAULT_RGB_MEMO_ENTRIES = 0;
 const FALLBACK_RGB = { r: 0, g: 0, b: 0 } satisfies Rgb;
+const WEIGHTED_RGB_601_R = Math.sqrt(0.299);
+const WEIGHTED_RGB_601_G = Math.sqrt(0.587);
+const WEIGHTED_RGB_601_B = Math.sqrt(0.114);
+const WEIGHTED_RGB_709_R = Math.sqrt(0.2126);
+const WEIGHTED_RGB_709_G = Math.sqrt(0.7152);
+const WEIGHTED_RGB_709_B = Math.sqrt(0.0722);
 const SRGB_TO_LINEAR = Float64Array.from({ length: 256 }, (_, value) => {
 	const channel = value / 255;
 	return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
@@ -38,8 +44,12 @@ export function clampByte(value: number) {
 	return Math.min(255, Math.max(0, Math.round(value)));
 }
 
+export function srgbByteToLinear(value: number) {
+	return SRGB_TO_LINEAR[value]!;
+}
+
 export function srgbToLinearByte(value: number) {
-	if (value >= 0 && value <= 255 && Number.isInteger(value)) return SRGB_TO_LINEAR[value]!;
+	if (value >= 0 && value <= 255 && Number.isInteger(value)) return srgbByteToLinear(value);
 	const channel = value / 255;
 	return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 }
@@ -100,9 +110,9 @@ export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId
 		case 'weighted-rgb':
 			return [r, g, b];
 		case 'weighted-rgb-601':
-			return [r * Math.sqrt(0.299), g * Math.sqrt(0.587), b * Math.sqrt(0.114)];
+			return [r * WEIGHTED_RGB_601_R, g * WEIGHTED_RGB_601_G, b * WEIGHTED_RGB_601_B];
 		case 'weighted-rgb-709':
-			return [r * Math.sqrt(0.2126), g * Math.sqrt(0.7152), b * Math.sqrt(0.0722)];
+			return [r * WEIGHTED_RGB_709_R, g * WEIGHTED_RGB_709_G, b * WEIGHTED_RGB_709_B];
 		case 'linear-rgb':
 			return [srgbToLinearByte(r), srgbToLinearByte(g), srgbToLinearByte(b)];
 		case 'cielab':
@@ -238,7 +248,8 @@ export function createPaletteMatcher(
 			if (mode === 'oklch') {
 				const dl = x - v0[i]!;
 				const dc = y - v1[i]!;
-				const hue = Math.atan2(Math.sin(z - v2[i]!), Math.cos(z - v2[i]!));
+				let hue = Math.abs(z - v2[i]!);
+				if (hue > Math.PI) hue = Math.PI * 2 - hue;
 				const dh = Math.min(y, v1[i]!) * hue;
 				distance = dl * dl + dc * dc + dh * dh;
 			} else {

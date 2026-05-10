@@ -204,7 +204,7 @@ export class ProcessorWorkerPipeline {
 
 	private quantizeCaches(branchKey: string, timings?: TimingSink): QuantizeCaches {
 		return {
-			recordTiming: (name, ms) => timings?.add(`quantize ${name}`, ms),
+			recordTiming: (name, ms) => timings?.add(quantizeTimingName(name), ms),
 			getPaletteVectorSpace: (key) => this.#paletteVectorCache.get(key),
 			setPaletteVectorSpace: (key, value) => this.#paletteVectorCache.set(key, value),
 			colorVectorImageScope: branchKey,
@@ -232,6 +232,12 @@ export class ProcessorWorkerPipeline {
 			this.#paletteVectorCache.snapshotMetrics()
 		);
 	}
+}
+
+function quantizeTimingName(name: string) {
+	return name.startsWith('quantize ') || name.startsWith('color space ')
+		? name
+		: `quantize ${name}`;
 }
 
 function timingSink(): TimingSink {

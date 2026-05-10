@@ -1,5 +1,5 @@
 import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
-import { clampByte, createPaletteMatcher, vectorForRgb } from './color';
+import { clampByte, createPaletteMatcher, srgbByteToLinear, vectorForRgb } from './color';
 import { compositedRgb } from './compositing';
 import type {
 	AlphaMode,
@@ -12,6 +12,15 @@ import type {
 
 const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
 const RGB_DITHER_NOISE_SCALE = 96;
+const REF_X = 0.95047;
+const REF_Y = 1;
+const REF_Z = 1.08883;
+const WEIGHTED_RGB_601_R = Math.sqrt(0.299);
+const WEIGHTED_RGB_601_G = Math.sqrt(0.587);
+const WEIGHTED_RGB_601_B = Math.sqrt(0.114);
+const WEIGHTED_RGB_709_R = Math.sqrt(0.2126);
+const WEIGHTED_RGB_709_G = Math.sqrt(0.7152);
+const WEIGHTED_RGB_709_B = Math.sqrt(0.0722);
 
 type ColorVector = ReturnType<typeof vectorForRgb>;
 
@@ -37,12 +46,20 @@ export type QuantizeCounterName =
 export type QuantizeTimingName =
 	| 'palette prepare'
 	| 'matcher build'
-	| 'palette vector space'
-	| 'color vector image lookup'
-	| 'color vector image build'
-	| 'direct loop'
-	| 'error diffusion init'
-	| 'error diffusion loop';
+	| 'color space convert palette cache lookup'
+	| 'color space convert palette'
+	| 'color space convert palette cache write'
+	| 'color space convert composited image cache lookup'
+	| 'color space convert composited image'
+	| 'color space convert composited image cache write'
+	| 'color space convert source image cache lookup'
+	| 'color space convert source image'
+	| 'color space convert source image cache write'
+	| 'quantize direct dither+match loop'
+	| 'quantize vector diffusion work init'
+	| 'quantize vector diffusion dither+match loop'
+	| 'quantize rgb diffusion work init'
+	| 'quantize rgb diffusion dither+match loop';
 
 export type QuantizeDiagnosticsSink = {
 	recordTiming?(name: QuantizeTimingName, ms: number): void;
@@ -160,6 +177,10 @@ function colorVectorImageBytes(width: number, height: number) {
 	return width * height * 3 * Float32Array.BYTES_PER_ELEMENT;
 }
 
+function labPivot(value: number) {
+	return value > 0.008856 ? Math.cbrt(value) : 7.787 * value + 16 / 116;
+}
+
 function compositedVectorCacheKey(colorSpace: ColorSpaceId, alphaMode: AlphaMode, matte: Rgb) {
 	return `composited|${colorSpace}|alpha:${alphaMode}|matte:${matte.r},${matte.g},${matte.b}`;
 }
@@ -184,13 +205,12 @@ function paletteVectorSpace(
 	cacheKey?: string,
 	caches?: QuantizeCaches
 ): PaletteVectorSpace {
-	const timingStart = performance.now();
+	const cacheLookupStart = performance.now();
 	const cached = cacheKey ? caches?.getPaletteVectorSpace?.(cacheKey) : undefined;
-	if (cached) {
-		recordTiming(caches, 'palette vector space', timingStart);
-		return cached;
-	}
+	recordTiming(caches, 'color space convert palette cache lookup', cacheLookupStart);
+	if (cached) return cached;
 
+	const convertStart = performance.now();
 	const colors: PaletteVector[] = [];
 	let min: ColorVector = [Infinity, Infinity, Infinity];
 	let max: ColorVector = [-Infinity, -Infinity, -Infinity];
@@ -210,8 +230,12 @@ function paletteVectorSpace(
 			Math.max(max[2] - min[2], Number.EPSILON)
 		]
 	} satisfies PaletteVectorSpace;
-	if (cacheKey) caches?.setPaletteVectorSpace?.(cacheKey, space);
-	recordTiming(caches, 'palette vector space', timingStart);
+	recordTiming(caches, 'color space convert palette', convertStart);
+	if (cacheKey) {
+		const cacheWriteStart = performance.now();
+		caches?.setPaletteVectorSpace?.(cacheKey, space);
+		recordTiming(caches, 'color space convert palette cache write', cacheWriteStart);
+	}
 	return space;
 }
 
@@ -233,7 +257,8 @@ function vectorDistanceValues(
 	const dx = left0 - right[0];
 	const dy = left1 - right[1];
 	if (settings.colorSpace === 'oklch') {
-		const hue = Math.atan2(Math.sin(left2 - right[2]), Math.cos(left2 - right[2]));
+		let hue = Math.abs(left2 - right[2]);
+		if (hue > Math.PI) hue = Math.PI * 2 - hue;
 		const dh = Math.min(left1, right[1]) * hue;
 		return dx * dx + dy * dy + dh * dh;
 	}
@@ -315,21 +340,409 @@ function buildColorVectorImage(
 	const v1 = new Float32Array(pixels);
 	const v2 = new Float32Array(pixels);
 	const source = image.data;
-	for (let index = 0; index < pixels; index++) {
-		const offset = index * 4;
-		const rgb =
-			kind === 'composited'
-				? compositedRgb(
-						{ r: source[offset]!, g: source[offset + 1]!, b: source[offset + 2]! },
-						source[offset + 3]!,
-						settings.output.alphaMode,
-						matte
-					)
-				: { r: source[offset]!, g: source[offset + 1]!, b: source[offset + 2]! };
-		const vector = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
-		v0[index] = vector[0];
-		v1[index] = vector[1];
-		v2[index] = vector[2];
+	const alphaMode = kind === 'source' ? 'preserve' : settings.output.alphaMode;
+
+	if (alphaMode === 'preserve') {
+		switch (settings.colorSpace) {
+			case 'srgb':
+			case 'weighted-rgb':
+				for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+					v0[index] = source[offset]!;
+					v1[index] = source[offset + 1]!;
+					v2[index] = source[offset + 2]!;
+				}
+				break;
+			case 'weighted-rgb-601':
+				for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+					v0[index] = source[offset]! * WEIGHTED_RGB_601_R;
+					v1[index] = source[offset + 1]! * WEIGHTED_RGB_601_G;
+					v2[index] = source[offset + 2]! * WEIGHTED_RGB_601_B;
+				}
+				break;
+			case 'weighted-rgb-709':
+				for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+					v0[index] = source[offset]! * WEIGHTED_RGB_709_R;
+					v1[index] = source[offset + 1]! * WEIGHTED_RGB_709_G;
+					v2[index] = source[offset + 2]! * WEIGHTED_RGB_709_B;
+				}
+				break;
+			case 'linear-rgb': {
+				let lastKey = -1;
+				let last0 = 0;
+				let last1 = 0;
+				let last2 = 0;
+				for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+					const r = source[offset]!;
+					const g = source[offset + 1]!;
+					const b = source[offset + 2]!;
+					const key = (r << 16) | (g << 8) | b;
+					if (key !== lastKey) {
+						last0 = srgbByteToLinear(r);
+						last1 = srgbByteToLinear(g);
+						last2 = srgbByteToLinear(b);
+						lastKey = key;
+					}
+					v0[index] = last0;
+					v1[index] = last1;
+					v2[index] = last2;
+				}
+				break;
+			}
+			case 'cielab': {
+				let lastKey = -1;
+				let last0 = 0;
+				let last1 = 0;
+				let last2 = 0;
+				for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+					const r = source[offset]!;
+					const g = source[offset + 1]!;
+					const b = source[offset + 2]!;
+					const key = (r << 16) | (g << 8) | b;
+					if (key !== lastKey) {
+						const rr = srgbByteToLinear(r);
+						const gg = srgbByteToLinear(g);
+						const bb = srgbByteToLinear(b);
+						const x = rr * 0.4124564 + gg * 0.3575761 + bb * 0.1804375;
+						const y = rr * 0.2126729 + gg * 0.7151522 + bb * 0.072175;
+						const z = rr * 0.0193339 + gg * 0.119192 + bb * 0.9503041;
+						const fx = labPivot(x / REF_X);
+						const fy = labPivot(y / REF_Y);
+						const fz = labPivot(z / REF_Z);
+						last0 = 116 * fy - 16;
+						last1 = 500 * (fx - fy);
+						last2 = 200 * (fy - fz);
+						lastKey = key;
+					}
+					v0[index] = last0;
+					v1[index] = last1;
+					v2[index] = last2;
+				}
+				break;
+			}
+			case 'oklch': {
+				let lastKey = -1;
+				let last0 = 0;
+				let last1 = 0;
+				let last2 = 0;
+				for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+					const r = source[offset]!;
+					const g = source[offset + 1]!;
+					const b = source[offset + 2]!;
+					const key = (r << 16) | (g << 8) | b;
+					if (key !== lastKey) {
+						const rr = srgbByteToLinear(r);
+						const gg = srgbByteToLinear(g);
+						const bb = srgbByteToLinear(b);
+						const l = 0.4122214708 * rr + 0.5363325363 * gg + 0.0514459929 * bb;
+						const m = 0.2119034982 * rr + 0.6806995451 * gg + 0.1073969566 * bb;
+						const s = 0.0883024619 * rr + 0.2817188376 * gg + 0.6299787005 * bb;
+						const lRoot = Math.cbrt(l);
+						const mRoot = Math.cbrt(m);
+						const sRoot = Math.cbrt(s);
+						const labA = 1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot;
+						const labB = 0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot;
+						last0 = 0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot;
+						last1 = Math.hypot(labA, labB);
+						last2 = Math.atan2(labB, labA);
+						lastKey = key;
+					}
+					v0[index] = last0;
+					v1[index] = last1;
+					v2[index] = last2;
+				}
+				break;
+			}
+			case 'oklab':
+			default: {
+				let lastKey = -1;
+				let last0 = 0;
+				let last1 = 0;
+				let last2 = 0;
+				for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+					const r = source[offset]!;
+					const g = source[offset + 1]!;
+					const b = source[offset + 2]!;
+					const key = (r << 16) | (g << 8) | b;
+					if (key !== lastKey) {
+						const rr = srgbByteToLinear(r);
+						const gg = srgbByteToLinear(g);
+						const bb = srgbByteToLinear(b);
+						const l = 0.4122214708 * rr + 0.5363325363 * gg + 0.0514459929 * bb;
+						const m = 0.2119034982 * rr + 0.6806995451 * gg + 0.1073969566 * bb;
+						const s = 0.0883024619 * rr + 0.2817188376 * gg + 0.6299787005 * bb;
+						const lRoot = Math.cbrt(l);
+						const mRoot = Math.cbrt(m);
+						const sRoot = Math.cbrt(s);
+						last0 = 0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot;
+						last1 = 1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot;
+						last2 = 0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot;
+						lastKey = key;
+					}
+					v0[index] = last0;
+					v1[index] = last1;
+					v2[index] = last2;
+				}
+				break;
+			}
+		}
+		return {
+			width: image.width,
+			height: image.height,
+			colorSpace: settings.colorSpace,
+			v0,
+			v1,
+			v2
+		};
+	}
+
+	switch (settings.colorSpace) {
+		case 'srgb':
+		case 'weighted-rgb':
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				const alpha = source[offset + 3]!;
+				if (alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				v0[index] = r;
+				v1[index] = g;
+				v2[index] = b;
+			}
+			break;
+		case 'weighted-rgb-601':
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				const alpha = source[offset + 3]!;
+				if (alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				v0[index] = r * WEIGHTED_RGB_601_R;
+				v1[index] = g * WEIGHTED_RGB_601_G;
+				v2[index] = b * WEIGHTED_RGB_601_B;
+			}
+			break;
+		case 'weighted-rgb-709':
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				const alpha = source[offset + 3]!;
+				if (alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				v0[index] = r * WEIGHTED_RGB_709_R;
+				v1[index] = g * WEIGHTED_RGB_709_G;
+				v2[index] = b * WEIGHTED_RGB_709_B;
+			}
+			break;
+		case 'linear-rgb': {
+			let lastKey = -1;
+			let last0 = 0;
+			let last1 = 0;
+			let last2 = 0;
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				const alpha = source[offset + 3]!;
+				if (alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				const key = (r << 16) | (g << 8) | b;
+				if (key !== lastKey) {
+					last0 = srgbByteToLinear(r);
+					last1 = srgbByteToLinear(g);
+					last2 = srgbByteToLinear(b);
+					lastKey = key;
+				}
+				v0[index] = last0;
+				v1[index] = last1;
+				v2[index] = last2;
+			}
+			break;
+		}
+		case 'cielab': {
+			let lastKey = -1;
+			let last0 = 0;
+			let last1 = 0;
+			let last2 = 0;
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				const alpha = source[offset + 3]!;
+				if (alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				const key = (r << 16) | (g << 8) | b;
+				if (key !== lastKey) {
+					const rr = srgbByteToLinear(r);
+					const gg = srgbByteToLinear(g);
+					const bb = srgbByteToLinear(b);
+					const x = rr * 0.4124564 + gg * 0.3575761 + bb * 0.1804375;
+					const y = rr * 0.2126729 + gg * 0.7151522 + bb * 0.072175;
+					const z = rr * 0.0193339 + gg * 0.119192 + bb * 0.9503041;
+					const fx = labPivot(x / REF_X);
+					const fy = labPivot(y / REF_Y);
+					const fz = labPivot(z / REF_Z);
+					last0 = 116 * fy - 16;
+					last1 = 500 * (fx - fy);
+					last2 = 200 * (fy - fz);
+					lastKey = key;
+				}
+				v0[index] = last0;
+				v1[index] = last1;
+				v2[index] = last2;
+			}
+			break;
+		}
+		case 'oklch': {
+			let lastKey = -1;
+			let last0 = 0;
+			let last1 = 0;
+			let last2 = 0;
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				const alpha = source[offset + 3]!;
+				if (alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				const key = (r << 16) | (g << 8) | b;
+				if (key !== lastKey) {
+					const rr = srgbByteToLinear(r);
+					const gg = srgbByteToLinear(g);
+					const bb = srgbByteToLinear(b);
+					const l = 0.4122214708 * rr + 0.5363325363 * gg + 0.0514459929 * bb;
+					const m = 0.2119034982 * rr + 0.6806995451 * gg + 0.1073969566 * bb;
+					const s = 0.0883024619 * rr + 0.2817188376 * gg + 0.6299787005 * bb;
+					const lRoot = Math.cbrt(l);
+					const mRoot = Math.cbrt(m);
+					const sRoot = Math.cbrt(s);
+					const labA = 1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot;
+					const labB = 0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot;
+					last0 = 0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot;
+					last1 = Math.hypot(labA, labB);
+					last2 = Math.atan2(labB, labA);
+					lastKey = key;
+				}
+				v0[index] = last0;
+				v1[index] = last1;
+				v2[index] = last2;
+			}
+			break;
+		}
+		case 'oklab':
+		default: {
+			let lastKey = -1;
+			let last0 = 0;
+			let last1 = 0;
+			let last2 = 0;
+			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				const alpha = source[offset + 3]!;
+				if (alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				const key = (r << 16) | (g << 8) | b;
+				if (key !== lastKey) {
+					const rr = srgbByteToLinear(r);
+					const gg = srgbByteToLinear(g);
+					const bb = srgbByteToLinear(b);
+					const l = 0.4122214708 * rr + 0.5363325363 * gg + 0.0514459929 * bb;
+					const m = 0.2119034982 * rr + 0.6806995451 * gg + 0.1073969566 * bb;
+					const s = 0.0883024619 * rr + 0.2817188376 * gg + 0.6299787005 * bb;
+					const lRoot = Math.cbrt(l);
+					const mRoot = Math.cbrt(m);
+					const sRoot = Math.cbrt(s);
+					last0 = 0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot;
+					last1 = 1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot;
+					last2 = 0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot;
+					lastKey = key;
+				}
+				v0[index] = last0;
+				v1[index] = last1;
+				v2[index] = last2;
+			}
+			break;
+		}
 	}
 	return { width: image.width, height: image.height, colorSpace: settings.colorSpace, v0, v1, v2 };
 }
@@ -349,9 +762,10 @@ function cachedColorVectorImage(
 			? compositedVectorCacheKey(settings.colorSpace, settings.output.alphaMode, matte)
 			: sourceVectorCacheKey(settings.colorSpace)
 	}`;
+	const label = `color space convert ${kind} image` as const;
 	const lookupStart = performance.now();
 	const cached = caches?.getColorVectorImage?.(key);
-	recordTiming(caches, 'color vector image lookup', lookupStart);
+	recordTiming(caches, `${label} cache lookup`, lookupStart);
 	if (
 		cached?.width === image.width &&
 		cached.height === image.height &&
@@ -365,8 +779,10 @@ function cachedColorVectorImage(
 	}
 	const buildStart = performance.now();
 	const vectors = buildColorVectorImage(image, settings, matte, kind);
-	recordTiming(caches, 'color vector image build', buildStart);
+	recordTiming(caches, label, buildStart);
+	const cacheWriteStart = performance.now();
 	caches.setColorVectorImage(key, vectors, bytes);
+	recordTiming(caches, `${label} cache write`, cacheWriteStart);
 	return caches.getColorVectorImage?.(key) ?? vectors;
 }
 
@@ -461,12 +877,22 @@ function placementMask(
 	return smoothstep(threshold - softness, threshold + softness, variance);
 }
 
-export function quantizeImage(
-	image: ImageData,
+type PreparedQuantize = {
+	warnings: string[];
+	nextPalette: EnabledPaletteColor[];
+	transparentIndexValue: number;
+	matcher: ReturnType<typeof createPaletteMatcher>;
+	matte: Rgb;
+	paletteCacheKey: string;
+	fallbackTransparentIndex: number;
+	strength: number;
+};
+
+function prepareQuantize(
 	palette: EnabledPaletteColor[],
 	settings: ProcessingSettings,
 	caches?: QuantizeCaches
-): QuantizeResult {
+): PreparedQuantize | QuantizeResult {
 	const prepareStart = performance.now();
 	const warnings: string[] = [];
 	const nextPalette = palette.slice(0, 256);
@@ -479,7 +905,7 @@ export function quantizeImage(
 		if (tIndex === -1) throw new Error('Enable at least one visible color or Transparent.');
 		warnings.push('Only Transparent is enabled; every output pixel is transparent.');
 		return {
-			indices: new Uint8Array(image.width * image.height).fill(tIndex),
+			indices: new Uint8Array(0),
 			palette: nextPalette,
 			transparentIndex: tIndex,
 			warnings
@@ -499,13 +925,74 @@ export function quantizeImage(
 	const matcherStart = performance.now();
 	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
 	recordTiming(caches, 'matcher build', matcherStart);
-	const paletteCacheKey = paletteVectorCacheKey(nextPalette, settings.colorSpace);
+	return {
+		warnings,
+		nextPalette,
+		transparentIndexValue: tIndex,
+		matcher,
+		matte,
+		paletteCacheKey: paletteVectorCacheKey(nextPalette, settings.colorSpace),
+		fallbackTransparentIndex: fallbackTransparent ? nextPalette.indexOf(fallbackTransparent) : -1,
+		strength: settings.dither.strength / 100
+	};
+}
+
+export function prepareQuantizeColorSpace(
+	image: ImageData,
+	palette: EnabledPaletteColor[],
+	settings: ProcessingSettings,
+	caches?: QuantizeCaches
+) {
+	const prepared = prepareQuantize(palette, settings, caches);
+	if ('indices' in prepared) return;
+	const { matcher, matte, paletteCacheKey, strength } = prepared;
+	const bayerSize = bayerSizeForAlgorithm(settings.dither.algorithm);
+	const useBayer = Boolean(bayerSize && strength > 0);
+	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
+	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
+	if (errorKernelForAlgorithm(settings.dither.algorithm) && strength > 0) {
+		cachedColorVectorImage(image, settings, matte, 'composited', caches);
+		if (usesAdaptivePlacement(settings))
+			cachedColorVectorImage(image, settings, matte, 'source', caches);
+		return;
+	}
+	if (
+		supportsCachedVectorMatching(settings.colorSpace) &&
+		((!useBayer && !useRandom) || supportsVectorDither(settings))
+	) {
+		cachedColorVectorImage(image, settings, matte, 'composited', caches);
+	}
+	if ((useBayer || useRandom) && usesAdaptivePlacement(settings)) {
+		cachedColorVectorImage(image, settings, matte, 'source', caches);
+	}
+	void vectorSpace;
+}
+
+export function quantizeImage(
+	image: ImageData,
+	palette: EnabledPaletteColor[],
+	settings: ProcessingSettings,
+	caches?: QuantizeCaches
+): QuantizeResult {
+	const prepared = prepareQuantize(palette, settings, caches);
+	if ('indices' in prepared) {
+		return {
+			...prepared,
+			indices: new Uint8Array(image.width * image.height).fill(prepared.transparentIndex)
+		};
+	}
+	const {
+		warnings,
+		nextPalette,
+		transparentIndexValue: tIndex,
+		matcher,
+		matte,
+		paletteCacheKey,
+		fallbackTransparentIndex,
+		strength
+	} = prepared;
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
-	const strength = settings.dither.strength / 100;
-	const fallbackTransparentIndex = fallbackTransparent
-		? nextPalette.indexOf(fallbackTransparent)
-		: -1;
 
 	if (errorKernelForAlgorithm(settings.dither.algorithm) && strength > 0) {
 		quantizeErrorDiffusion(
@@ -721,7 +1208,7 @@ function quantizeDirect(
 			indices[index] = matcher.nearestIndexRgb(r, g, b);
 		}
 	}
-	recordTiming(caches, 'direct loop', loopStart);
+	recordTiming(caches, 'quantize direct dither+match loop', loopStart);
 }
 
 function quantizeVectorErrorDiffusion(
@@ -763,7 +1250,7 @@ function quantizeVectorErrorDiffusion(
 		work[workOffset + 1] = vector[1];
 		work[workOffset + 2] = vector[2];
 	}
-	recordTiming(caches, 'error diffusion init', initStart);
+	recordTiming(caches, 'quantize vector diffusion work init', initStart);
 	const loopStart = performance.now();
 
 	for (let y = 0; y < height; y++) {
@@ -805,7 +1292,7 @@ function quantizeVectorErrorDiffusion(
 			}
 		}
 	}
-	recordTiming(caches, 'error diffusion loop', loopStart);
+	recordTiming(caches, 'quantize vector diffusion dither+match loop', loopStart);
 }
 
 function quantizeErrorDiffusion(
@@ -865,7 +1352,7 @@ function quantizeErrorDiffusion(
 		work[workOffset + 1] = g;
 		work[workOffset + 2] = b;
 	}
-	recordTiming(caches, 'error diffusion init', initStart);
+	recordTiming(caches, 'quantize rgb diffusion work init', initStart);
 	const loopStart = performance.now();
 
 	for (let y = 0; y < height; y++) {
@@ -908,5 +1395,5 @@ function quantizeErrorDiffusion(
 			}
 		}
 	}
-	recordTiming(caches, 'error diffusion loop', loopStart);
+	recordTiming(caches, 'quantize rgb diffusion dither+match loop', loopStart);
 }

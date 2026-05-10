@@ -216,6 +216,32 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(response.metrics?.memory.resizedBytes).toBe(8);
 	});
 
+	it('splits quantize metrics into color conversion and dither matching stages', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+
+		const response = pipeline.handle(
+			processRequest({
+				settings: { output, dither: { ...dither, useColorSpace: true }, colorSpace: 'oklab' }
+			}),
+			() => undefined
+		);
+
+		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
+		const timingNames = response.metrics?.timings.map((timing) => timing.name);
+		expect(timingNames).toEqual(
+			expect.arrayContaining([
+				'color space convert palette cache lookup',
+				'color space convert palette',
+				'color space convert composited image cache lookup',
+				'quantize direct dither+match loop'
+			])
+		);
+	});
+
 	it('records cache hits and replays cached compute timings in metrics', () => {
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(

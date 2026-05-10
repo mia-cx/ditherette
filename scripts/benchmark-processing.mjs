@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +11,13 @@ import { createServer } from 'vite';
 installImageDataPolyfill();
 
 const args = parseArgs(process.argv.slice(2));
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const scriptPath = fileURLToPath(import.meta.url);
+const root = path.resolve(path.dirname(scriptPath), '..');
+
+if (process.env.DITHERETTE_BENCH_CHILD !== '1') {
+	process.exit(await runBenchmarkChild(scriptPath, root));
+}
+
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const outDir = path.resolve(root, args.out ?? `benchmark-results/processing-${timestamp}`);
 
@@ -23,9 +30,6 @@ const server = await createServer({
 });
 
 let browser;
-let shuttingDown = false;
-process.on('SIGINT', () => void shutdown('SIGINT'));
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
 try {
 	const benchmark = await server.ssrLoadModule('/src/lib/benchmark/processing-benchmark.ts');
@@ -72,20 +76,111 @@ try {
 	await closeResources();
 }
 
-async function shutdown(signal) {
-	const code = signal === 'SIGINT' ? 130 : 143;
-	if (shuttingDown) {
-		console.error(`\nReceived ${signal} again; forcing exit.`);
-		process.exit(code);
-	}
-	shuttingDown = true;
-	console.error(`\nReceived ${signal}; closing benchmark resources...`);
+async function runBenchmarkChild(scriptPath, root) {
+	const child = spawn(process.execPath, [scriptPath, ...process.argv.slice(2)], {
+		cwd: root,
+		detached: process.platform !== 'win32',
+		env: { ...process.env, DITHERETTE_BENCH_CHILD: '1' },
+		stdio: 'inherit'
+	});
+	let childExited = false;
+	let stopping = false;
+	let forceKillTimer;
+
+	const killChild = (signal) => {
+		if (childExited) return;
+		killProcessTree(child.pid, signal);
+	};
+
+	const stop = (signal) => {
+		if (stopping) {
+			console.error(`\nReceived ${signal} again; killing benchmark process group now.`);
+			killChild('SIGKILL');
+			return;
+		}
+		stopping = true;
+		console.error(`\nReceived ${signal}; killing benchmark process tree...`);
+		killChild('SIGKILL');
+		forceKillTimer = setTimeout(() => process.exit(signal === 'SIGINT' ? 130 : 143), 50);
+	};
+
+	process.once('SIGINT', () => stop('SIGINT'));
+	process.once('SIGTERM', () => stop('SIGTERM'));
+	process.once('exit', () => {
+		if (!childExited) killChild('SIGKILL');
+	});
+
+	return await new Promise((resolve) => {
+		child.once('exit', (code, signal) => {
+			childExited = true;
+			if (forceKillTimer) clearTimeout(forceKillTimer);
+			if (code !== null) {
+				resolve(code);
+				return;
+			}
+			resolve(signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1);
+		});
+		child.once('error', (error) => {
+			childExited = true;
+			if (forceKillTimer) clearTimeout(forceKillTimer);
+			console.error(error instanceof Error ? error.message : error);
+			resolve(1);
+		});
+	});
+}
+
+function killProcessTree(rootPid, signal) {
+	if (!rootPid) return;
+	const descendants = processTree(rootPid);
+	for (const processInfo of descendants) killPid(processInfo.pid, signal);
+	const processGroups = new Set(descendants.map((processInfo) => processInfo.pgid).filter(Boolean));
+	for (const pgid of processGroups) killPid(-pgid, signal);
+	killPid(rootPid, signal);
+}
+
+function killPid(pid, signal) {
 	try {
-		await closeResources();
+		process.kill(pid, signal);
 	} catch (error) {
-		console.error(error instanceof Error ? error.message : error);
+		if (error?.code !== 'ESRCH' && error?.code !== 'EPERM') {
+			console.error(error instanceof Error ? error.message : error);
+		}
 	}
-	process.exit(code);
+}
+
+function processTree(rootPid) {
+	if (process.platform === 'win32') return [{ pid: rootPid, pgid: rootPid }];
+	let rows;
+	try {
+		rows = execFileSync('ps', ['-axo', 'pid=,ppid=,pgid='], { encoding: 'utf8' });
+	} catch {
+		return [{ pid: rootPid, pgid: rootPid }];
+	}
+	const childrenByParent = new Map();
+	const processes = new Map();
+	for (const row of rows.trim().split('\n')) {
+		const [pidText, ppidText, pgidText] = row.trim().split(/\s+/);
+		const pid = Number(pidText);
+		const ppid = Number(ppidText);
+		const pgid = Number(pgidText);
+		if (!pid || !ppid || !pgid) continue;
+		processes.set(pid, { pid, ppid, pgid });
+		const children = childrenByParent.get(ppid) ?? [];
+		children.push(pid);
+		childrenByParent.set(ppid, children);
+	}
+	const result = [];
+	const queue = [rootPid];
+	const seen = new Set();
+	while (queue.length) {
+		const pid = queue.shift();
+		if (!pid || seen.has(pid)) continue;
+		seen.add(pid);
+		const processInfo = processes.get(pid) ?? { pid, ppid: 0, pgid: pid };
+		result.push(processInfo);
+		queue.push(...(childrenByParent.get(pid) ?? []));
+	}
+	return result.sort((left, right) => right.pid - left.pid);
 }
 
 async function closeResources() {
@@ -199,24 +294,120 @@ function logProgress(event) {
 				`\n[${event.caseIndex}/${event.totalCases}] ${event.sourceId} › ${event.caseId} (${formatPixels(event.outputPixels)})`
 			);
 			break;
+		case 'iteration-end':
+			console.log(formatIterationProgress(event));
+			break;
 		case 'case-end':
-			console.log(`  case done ${formatMs(event.durationMs)}`);
-			break;
-		case 'stage-start':
-			console.log(`  ${iterationLabel(event)} ${event.stage} start`);
-			break;
-		case 'stage-end':
-			console.log(`  ${iterationLabel(event)} ${event.stage} done ${formatMs(event.durationMs)}`);
+			console.log(formatCaseSummary(event));
 			break;
 	}
+}
+
+function formatIterationProgress(event) {
+	const convertMs = quantizeConvertMs(event.quantizeTimings);
+	const loopMs = quantizeLoopMs(event.quantizeTimings);
+	const pieces = [
+		`  ${iterationLabel(event)}`,
+		`total ${formatMs(event.durationMs)}`,
+		`${event.resizeCacheHit ? 'resize hit' : 'resize'} ${formatMs(event.stages.resize)}`,
+		`quantize ${formatMs(loopMs)}`
+	];
+	if (convertMs > 0 || loopMs > 0) {
+		pieces.push(`q convert ${formatMs(convertMs)}`);
+		pieces.push(`q loop ${formatMs(loopMs)}`);
+	}
+	const matchCount = quantizeMatchCount(event.quantizeCounts);
+	const memoHits = quantizeMemoHits(event.quantizeCounts);
+	if (matchCount > 0 || memoHits > 0) {
+		pieces.push(`matches ${formatCount(matchCount)}`);
+		pieces.push(`memo hits ${formatCount(memoHits)}`);
+	}
+	return pieces.join(' · ');
+}
+
+function formatCaseSummary(event) {
+	const result = event.result;
+	const resizeHits = result.runs.filter((run) => run.resizeCacheHit).length;
+	const details = [
+		`  mean total ${formatMs(result.stages.total.meanMs)}`,
+		`resize ${formatMs(result.stages.resize.meanMs)} (${resizeHits}/${result.runs.length} hits)`,
+		`quantize ${formatMs(quantizeLoopMean(result))}`,
+		`q convert ${formatMs(quantizeConvertMean(result))}`,
+		`q image ${formatMs(quantizeMean(result, 'color space convert composited image') + quantizeMean(result, 'color space convert source image'))}`,
+		`q palette ${formatMs(quantizeMean(result, 'color space convert palette'))}`,
+		`q loop ${formatMs(quantizeLoopMean(result))}`
+	];
+	const matchCount =
+		quantizeCounterMean(result, 'nearest rgb') + quantizeCounterMean(result, 'nearest vector');
+	const memoHits =
+		quantizeCounterMean(result, 'rgb memo hit') + quantizeCounterMean(result, 'vector memo hit');
+	if (matchCount > 0 || memoHits > 0) {
+		details.push(`matches/run ${formatCount(matchCount)}`);
+		details.push(`memo hits/run ${formatCount(memoHits)}`);
+	}
+	return `${details.join(' · ')}\n  hotspots ${result.hotspot} / ${result.quantizeHotspot ?? '—'} · case wall ${formatMs(event.durationMs)}`;
 }
 
 function iterationLabel(event) {
 	return event.warmup ? `warmup ${event.iteration}` : `run ${event.iteration}`;
 }
 
+function quantizeConvertMs(timings) {
+	return (
+		(timings['color space convert palette'] ?? 0) +
+		(timings['color space convert composited image'] ?? 0) +
+		(timings['color space convert source image'] ?? 0)
+	);
+}
+
+function quantizeLoopMs(timings) {
+	return (
+		(timings['quantize direct dither+match loop'] ?? 0) +
+		(timings['quantize vector diffusion dither+match loop'] ?? 0) +
+		(timings['quantize rgb diffusion dither+match loop'] ?? 0)
+	);
+}
+
+function quantizeMatchCount(counts) {
+	return (counts['nearest rgb'] ?? 0) + (counts['nearest vector'] ?? 0);
+}
+
+function quantizeMemoHits(counts) {
+	return (counts['rgb memo hit'] ?? 0) + (counts['vector memo hit'] ?? 0);
+}
+
+function quantizeConvertMean(result) {
+	return (
+		quantizeMean(result, 'color space convert palette') +
+		quantizeMean(result, 'color space convert composited image') +
+		quantizeMean(result, 'color space convert source image')
+	);
+}
+
+function quantizeLoopMean(result) {
+	return (
+		quantizeMean(result, 'quantize direct dither+match loop') +
+		quantizeMean(result, 'quantize vector diffusion dither+match loop') +
+		quantizeMean(result, 'quantize rgb diffusion dither+match loop')
+	);
+}
+
+function quantizeMean(result, name) {
+	return result.quantizeSubstages[name]?.meanMs ?? 0;
+}
+
+function quantizeCounterMean(result, name) {
+	return result.quantizeCounters[name]?.meanMs ?? 0;
+}
+
 function formatMs(value) {
 	return `${value.toFixed(value >= 100 ? 0 : 1)}ms`;
+}
+
+function formatCount(value) {
+	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+	if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+	return String(Math.round(value));
 }
 
 function formatPixels(value) {
@@ -226,20 +417,9 @@ function formatPixels(value) {
 }
 
 function stopStageForDimensions(dimensions) {
-	const stages = dimensions.map((dimension) => {
-		switch (dimension) {
-			case 'scale':
-			case 'resize':
-				return 'resize';
-			case 'dither':
-			case 'colorSpace':
-				return 'quantize';
-			default:
-				return undefined;
-		}
-	});
-	if (stages.includes('quantize')) return 'quantize';
-	if (stages.includes('resize')) return 'resize';
+	if (dimensions.includes('dither')) return 'quantize';
+	if (dimensions.includes('colorSpace')) return 'colorSpaceConvert';
+	if (dimensions.includes('scale') || dimensions.includes('resize')) return 'resize';
 	return undefined;
 }
 
@@ -328,7 +508,7 @@ function parseBoolean(value) {
 
 function printHelp() {
 	console.log(
-		`Usage: pnpm bench:processing -- [options]\n\nOptions:\n  --profile smoke|baseline|large|exhaustive\n                                  Fixture profile to run (default: smoke). exhaustive runs\n                                  0.125×/0.25×/0.5×/0.75× × every resize mode × every color space × every dither mode.\n  --iterations N                  Recorded iterations per case (default: 3)\n  --warmups N                     Warmup iterations per case (default: 1)\n  --cases id,id                   Comma-separated case IDs\n  --scale                         Vary 0.125×, 0.25×, 0.5×, 0.75×; stops after resize unless later flags are set\n  --resize                        Vary nearest, bilinear, lanczos3, area; stops after resize unless later flags are set\n  --dither                        Vary every dither mode; stops after quantize\n  --color-space                   Vary every color space; stops after quantize\n  --preview                       Stop after preview render\n  --png                           Stop after PNG encode\n  --image FILE                    Decode and benchmark a real image; repeatable\n  --fixtures-dir DIR              Decode all images in a fixture directory\n                                  Defaults to benchmark-fixtures/ when it exists\n  --synthetic true|false          Ignore benchmark-fixtures/ and use synthetic sources unless --image is set\n  --include-png true|false        Override per-case PNG encode stage\n  --quiet true|false              Disable per-case/stage progress logs\n  --out DIR                       Artifact directory (default: benchmark-results/processing-<timestamp>)\n\nExamples:\n  pnpm bench:processing -- --image ~/Pictures/photo.jpg --profile exhaustive\n  pnpm bench:processing -- --scale --resize\n  pnpm bench:processing -- --dither --color-space\n  mkdir -p benchmark-fixtures && cp ~/Pictures/*.png benchmark-fixtures/\n  pnpm bench:processing -- --fixtures-dir benchmark-fixtures --profile smoke\n`
+		`Usage: pnpm bench:processing -- [options]\n\nOptions:\n  --profile smoke|baseline|large|exhaustive\n                                  Fixture profile to run (default: smoke). exhaustive runs\n                                  0.125×/0.25×/0.5×/0.75× × every resize mode × every color space × every dither mode.\n  --iterations N                  Recorded iterations per case (default: 3)\n  --warmups N                     Warmup iterations per case (default: 1)\n  --cases id,id                   Comma-separated case IDs\n  --scale                         Vary 0.125×, 0.25×, 0.5×, 0.75×; stops after resize unless later flags are set\n  --resize                        Vary nearest, bilinear, lanczos3, area; stops after resize unless later flags are set\n  --dither                        Vary every dither mode; stops after quantize\n  --color-space                   Vary every color space; stops after color conversion unless --dither is set\n  --preview                       Stop after preview render\n  --png                           Stop after PNG encode\n  --image FILE                    Decode and benchmark a real image; repeatable\n  --fixtures-dir DIR              Decode all images in a fixture directory\n                                  Defaults to benchmark-fixtures/ when it exists\n  --synthetic true|false          Ignore benchmark-fixtures/ and use synthetic sources unless --image is set\n  --include-png true|false        Override per-case PNG encode stage\n  --quiet true|false              Disable per-case/stage progress logs\n  --out DIR                       Artifact directory (default: benchmark-results/processing-<timestamp>)\n\nExamples:\n  pnpm bench:processing -- --image ~/Pictures/photo.jpg --profile exhaustive\n  pnpm bench:processing -- --scale --resize\n  pnpm bench:processing -- --dither --color-space\n  mkdir -p benchmark-fixtures && cp ~/Pictures/*.png benchmark-fixtures/\n  pnpm bench:processing -- --fixtures-dir benchmark-fixtures --profile smoke\n`
 	);
 }
 

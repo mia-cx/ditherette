@@ -222,6 +222,14 @@ describe('quantizeImage caches', () => {
 
 		expect(caches.timings.get('palette prepare')).toBeGreaterThanOrEqual(0);
 		expect(caches.timings.get('matcher build')).toBeGreaterThanOrEqual(0);
-		expect(caches.timings.get('direct loop')).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('color space convert palette cache lookup')).toBeGreaterThanOrEqual(
+			0
+		);
+		expect(caches.timings.get('color space convert palette')).toBeGreaterThanOrEqual(0);
+		expect(
+			caches.timings.get('color space convert composited image cache lookup')
+		).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('color space convert composited image')).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('quantize direct dither+match loop')).toBeGreaterThanOrEqual(0);
 	});
 });
