@@ -10,6 +10,7 @@ import {
 	processedImage,
 	processingError,
 	processingProgress,
+	recordProcessingMetrics,
 	selectedPalette,
 	sourceImageData,
 	sourceMeta
@@ -17,6 +18,7 @@ import {
 import { saveProcessedImage } from './db';
 import { processingIdentityHash } from './hash';
 import { validateWorkerResponse } from './schemas';
+import type { ProcessingMetricsSample, ProcessingStageTiming } from './metrics';
 import type { DitherSettings, OutputSettings, ProcessedImage, WorkerRequest } from './types';
 
 let worker: Worker | undefined;
@@ -103,7 +105,17 @@ export function currentSettingsHash() {
 	});
 }
 
-function processInWorker(): Promise<ProcessedImage> {
+type ProcessInWorkerResult = {
+	image: ProcessedImage;
+	metrics?: ProcessingMetricsSample;
+};
+
+type ProcessingSchedule = {
+	scheduledAt: number;
+	scheduledDelay: number;
+};
+
+function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorkerResult> {
 	const source = sourceImageData.get();
 	if (!source) return Promise.reject(new Error('Upload an image before processing.'));
 
@@ -113,6 +125,13 @@ function processInWorker(): Promise<ProcessedImage> {
 	const activeWorker = getProcessingWorker();
 	const sourceId = currentSourceId(source);
 	const hash = currentSettingsHash();
+	const processStartedAt = performance.now();
+	const mainTimings: ProcessingStageTiming[] = [];
+	const scheduledAt = schedule?.scheduledAt;
+	const metricsStartedAt = scheduledAt ?? processStartedAt;
+	const debounceMs = scheduledAt === undefined ? 0 : Math.max(0, processStartedAt - scheduledAt);
+	mainTimings.push({ name: 'main debounce wait', ms: debounceMs });
+	mainTimings.push({ name: 'main scheduled delay', ms: schedule?.scheduledDelay ?? 0 });
 	processingProgress.set({ stage: 'Queued', progress: 0 });
 	processingError.set(undefined);
 
@@ -123,7 +142,11 @@ function processInWorker(): Promise<ProcessedImage> {
 			if (activeReject === reject) activeReject = undefined;
 			callback(value);
 		};
+		let sourceLoadPostedAt = 0;
+		let processPostedAt = 0;
+		let responseValidationMs = 0;
 		const postProcessRequest = () => {
+			processPostedAt = performance.now();
 			activeWorker.postMessage({
 				id,
 				type: 'process',
@@ -140,9 +163,12 @@ function processInWorker(): Promise<ProcessedImage> {
 
 		activeWorker.onmessage = (event: MessageEvent<unknown>) => {
 			let message;
+			const validationStart = performance.now();
 			try {
 				message = validateWorkerResponse(event.data);
+				responseValidationMs += performance.now() - validationStart;
 			} catch (error) {
+				responseValidationMs += performance.now() - validationStart;
 				processingProgress.set(undefined);
 				settle(reject, error instanceof Error ? error : new Error('Worker response was invalid.'));
 				return;
@@ -153,6 +179,12 @@ function processInWorker(): Promise<ProcessedImage> {
 				return;
 			}
 			if (message.type === 'source-loaded') {
+				if (sourceLoadPostedAt) {
+					mainTimings.push({
+						name: 'main source load round trip',
+						ms: performance.now() - sourceLoadPostedAt
+					});
+				}
 				if (message.sourceId !== sourceId) {
 					processingProgress.set(undefined);
 					settle(reject, new Error('Worker loaded the wrong source image.'));
@@ -167,8 +199,27 @@ function processInWorker(): Promise<ProcessedImage> {
 				settle(reject, new Error(message.message));
 				return;
 			}
+			const completedAt = performance.now();
+			if (processPostedAt) {
+				mainTimings.push({
+					name: 'main worker round trip',
+					ms: completedAt - processPostedAt
+				});
+			}
+			mainTimings.push({ name: 'main response validation', ms: responseValidationMs });
 			processingProgress.set({ stage: 'Done', progress: 1 });
-			settle(resolve, message.image);
+			settle(resolve, {
+				image: message.image,
+				metrics: message.metrics
+					? {
+							...message.metrics,
+							startedAt: metricsStartedAt,
+							completedAt,
+							totalMs: completedAt - metricsStartedAt,
+							timings: [...mainTimings, ...message.metrics.timings]
+						}
+					: undefined
+			});
 		};
 		activeWorker.onerror = () => {
 			processingProgress.set(undefined);
@@ -182,27 +233,42 @@ function processInWorker(): Promise<ProcessedImage> {
 		}
 
 		processingProgress.set({ stage: 'Loading source', progress: 0.02 });
+		sourceLoadPostedAt = performance.now();
 		activeWorker.postMessage({ id, type: 'load-source', sourceId, source } satisfies WorkerRequest);
 	});
 }
 
-export async function processCurrentImage() {
+export async function processCurrentImage(schedule?: ProcessingSchedule) {
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
 	if (previous?.settingsHash === hash) return;
 	// Keep the last valid output on screen while non-crop edits reprocess.
 	// Source and crop changes clear it at their boundaries because the old frame shape is misleading there.
 	const program = Effect.tryPromise({
-		try: processInWorker,
+		try: () => processInWorker(schedule),
 		catch: (error) => (error instanceof Error ? error : new Error('Processing failed'))
 	});
 
 	try {
 		const result = await Effect.runPromise(program);
-		if (result.settingsHash !== hash || result.settingsHash !== currentSettingsHash()) return;
-		processedImage.set(result);
+		if (result.image.settingsHash !== hash || result.image.settingsHash !== currentSettingsHash())
+			return;
+		processedImage.set(result.image);
 		processingProgress.set(undefined);
-		await saveProcessedImage(result);
+		const persistStart = performance.now();
+		await saveProcessedImage(result.image);
+		if (result.metrics) {
+			const completedAt = performance.now();
+			recordProcessingMetrics({
+				...result.metrics,
+				completedAt,
+				totalMs: completedAt - result.metrics.startedAt,
+				timings: [
+					...result.metrics.timings,
+					{ name: 'main persist processed image', ms: completedAt - persistStart }
+				]
+			});
+		}
 	} catch (error) {
 		if (error instanceof ProcessingCanceled) return;
 		if (hash !== currentSettingsHash()) return;
@@ -217,9 +283,13 @@ export function scheduleProcessing(delay = 0) {
 	const previous = processedImage.get();
 	if (previous?.settingsHash === hash) return;
 	if (timer) clearTimeout(timer);
+	const schedule: ProcessingSchedule = {
+		scheduledAt: performance.now(),
+		scheduledDelay: delay
+	};
 	timer = setTimeout(() => {
 		timer = undefined;
-		void processCurrentImage();
+		void processCurrentImage(schedule);
 	}, delay);
 }
 

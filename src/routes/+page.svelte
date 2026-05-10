@@ -7,6 +7,7 @@
 	import PalettePanel from './components/PalettePanel.svelte';
 	import OutputPanel from './components/OutputPanel.svelte';
 	import ExportStrip from './components/ExportStrip.svelte';
+	import PerformanceDebugPopover from './components/PerformanceDebugPopover.svelte';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import {
 		Accordion,
@@ -135,7 +136,12 @@
 />
 
 <div class="flex min-h-svh flex-col bg-background lg:h-svh">
-	<AppBar hasImage={$hasImage} onChooseImage={chooseImage} onClear={clearImageData} />
+	<AppBar
+		hasImage={$hasImage}
+		onChooseImage={chooseImage}
+		onClear={clearImageData}
+		extras={appBarExtras}
+	/>
 
 	{#if uploadError}
 		<p class="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -183,6 +189,10 @@
 		<ExportStrip variant="bar" hasImage={$hasImage} />
 	</div>
 </div>
+
+{#snippet appBarExtras()}
+	<PerformanceDebugPopover />
+{/snippet}
 
 {#snippet controls(extra: string)}
 	<div class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] {extra}">

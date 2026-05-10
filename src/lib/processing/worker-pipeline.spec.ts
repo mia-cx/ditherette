@@ -194,6 +194,56 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(pipeline.branchCacheSize).toBe(0);
 	});
 
+	it('includes processing metrics on complete responses', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+
+		const response = pipeline.handle(processRequest(), () => undefined);
+
+		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
+		expect(response.metrics).toMatchObject({
+			id: 2,
+			sourceId: 'source-1',
+			settingsHash: 'hash',
+			outputPixels: 2,
+			resize: 'nearest'
+		});
+		expect(response.metrics?.timings.length).toBeGreaterThan(0);
+		expect(response.metrics?.cache.delta.resizedMisses).toBe(1);
+		expect(response.metrics?.memory.resizedBytes).toBe(8);
+	});
+
+	it('records cache hits and replays cached compute timings in metrics', () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const first = pipeline.handle(processRequest(), () => undefined);
+		if (!first || first.type !== 'complete') throw new Error('Expected complete response.');
+		const firstResizeMs = first.metrics?.timings.find(
+			(timing) => timing.name === 'resize compute'
+		)?.ms;
+		const firstQuantizeMs = first.metrics?.timings.find(
+			(timing) => timing.name === 'quantize compute'
+		)?.ms;
+
+		const response = pipeline.handle(processRequest({ id: 3 }), () => undefined);
+
+		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
+		expect(response.metrics?.cache.delta.resizedHits).toBe(1);
+		expect(response.metrics?.cache.delta.derivedHits).toBeGreaterThan(0);
+		expect(response.metrics?.timings).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ name: 'resize compute', ms: firstResizeMs, replayed: true }),
+				expect.objectContaining({ name: 'quantize compute', ms: firstQuantizeMs, replayed: true })
+			])
+		);
+	});
+
 	it('returns transferred index buffers for complete responses', () => {
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(

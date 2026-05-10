@@ -84,6 +84,60 @@ function processedImage(overrides: Partial<ProcessedImage> = {}): ProcessedImage
 	};
 }
 
+function cacheSnapshot() {
+	return {
+		sourceLoaded: true,
+		sourceBytes: 8,
+		branchCount: 1,
+		branchBytes: 8,
+		branchMaxBytes: 1024,
+		resizedHits: 1,
+		resizedMisses: 0,
+		resizedSets: 1,
+		resizedSkips: 0,
+		resizedEvictions: 0,
+		derivedHits: 1,
+		derivedMisses: 0,
+		derivedSets: 1,
+		derivedSkips: 0,
+		derivedEvictions: 0,
+		paletteVectorEntries: 1,
+		paletteVectorMaxEntries: 16,
+		paletteVectorHits: 1,
+		paletteVectorMisses: 0,
+		paletteVectorSets: 1,
+		paletteVectorEvictions: 0
+	};
+}
+
+function metricsSample() {
+	return {
+		id: 1,
+		settingsHash: 'hash',
+		sourceId: 'source',
+		scopeKey: 'source|2x1|lanczos3',
+		startedAt: 0,
+		completedAt: 12,
+		totalMs: 12,
+		timings: [{ name: 'worker total', ms: 12, replayed: true }],
+		cache: { delta: cacheSnapshot(), lifetime: cacheSnapshot() },
+		memory: {
+			sourceBytes: 8,
+			resizedBytes: 8,
+			indexBytes: 2,
+			vectorBytes: 24,
+			ditherWorkBytes: 0,
+			branchCacheBytes: 8,
+			branchCacheMaxBytes: 1024
+		},
+		outputPixels: 2,
+		colorSpace: 'oklab',
+		dither: 'none',
+		resize: 'lanczos3',
+		warnings: []
+	};
+}
+
 describe('processing schemas', () => {
 	it('accepts valid source image records', () => {
 		const record = {
@@ -192,9 +246,11 @@ describe('processing schemas', () => {
 	});
 
 	it('accepts worker source-loaded responses', () => {
-		expect(validateWorkerResponse({ id: 1, type: 'source-loaded', sourceId: 'source-1' })).toEqual(
-			{ id: 1, type: 'source-loaded', sourceId: 'source-1' }
-		);
+		expect(validateWorkerResponse({ id: 1, type: 'source-loaded', sourceId: 'source-1' })).toEqual({
+			id: 1,
+			type: 'source-loaded',
+			sourceId: 'source-1'
+		});
 	});
 
 	it('validates worker complete responses through the processed-image schema', () => {
@@ -205,5 +261,36 @@ describe('processing schemas', () => {
 				image: processedImage({ indices: new Uint8Array([3, 0]) })
 			})
 		).toThrow(/palette/i);
+	});
+
+	it('accepts optional worker metrics on complete responses', () => {
+		const response = validateWorkerResponse({
+			type: 'complete',
+			id: 1,
+			image: processedImage(),
+			metrics: metricsSample()
+		});
+
+		expect(response.type).toBe('complete');
+		if (response.type !== 'complete') throw new Error('Expected complete response.');
+		expect(response.metrics).toMatchObject({
+			id: 1,
+			totalMs: 12,
+			outputPixels: 2,
+			timings: [{ name: 'worker total', ms: 12, replayed: true }]
+		});
+	});
+
+	it('drops invalid optional worker metrics without rejecting a complete response', () => {
+		const response = validateWorkerResponse({
+			type: 'complete',
+			id: 1,
+			image: processedImage(),
+			metrics: { totalMs: Number.NaN }
+		});
+
+		expect(response.type).toBe('complete');
+		if (response.type !== 'complete') throw new Error('Expected complete response.');
+		expect(response.metrics).toBeUndefined();
 	});
 });

@@ -5,6 +5,13 @@ import {
 	type QuantizeCaches,
 	type QuantizeResult
 } from '$lib/processing/quantize';
+import {
+	deltaCacheSnapshot,
+	estimateProcessingMemory,
+	mergeCacheSnapshots,
+	type ProcessingCacheSnapshot,
+	type ProcessingStageTiming
+} from './metrics';
 import { clampOutputSize, type WorkerRequest, type WorkerResponse } from './types';
 import {
 	IDENTITY_GRADE_KEY,
@@ -28,6 +35,13 @@ type SourceCache = {
 };
 
 type ProgressSink = (stage: string, progress: number) => void;
+
+type TimingSink = {
+	values: ProcessingStageTiming[];
+	add(name: string, ms: number, replayed?: boolean): void;
+	mark(name: string, start: number): number;
+	replay(name: string, ms: number | undefined): void;
+};
 
 export class ProcessorWorkerPipeline {
 	#sourceCache: SourceCache | undefined;
@@ -57,9 +71,13 @@ export class ProcessorWorkerPipeline {
 			return { id: request.id, type: 'source-loaded', sourceId: request.sourceId };
 		}
 
+		const startedAt = performance.now();
+		const timings = timingSink();
+		const cacheBefore = this.cacheSnapshot();
 		const { id, sourceId, settings, palette, settingsHash } = request;
 		const source = this.sourceFor(sourceId);
 		progress('Sizing output', PROGRESS.queued);
+		const sizingStart = performance.now();
 		const size = clampOutputSize(settings.output.width, settings.output.height);
 		const branchKey = pipelineBranchKey({
 			sourceId,
@@ -69,11 +87,16 @@ export class ProcessorWorkerPipeline {
 			crop: settings.output.crop,
 			gradeKey: IDENTITY_GRADE_KEY
 		});
+		timings.mark('worker sizing', sizingStart);
+		const resizeLookupStart = performance.now();
 		let resized = this.#branchCache.getResized(branchKey);
+		timings.mark('resize cache lookup', resizeLookupStart);
 		if (resized) {
 			progress('Using cached resize', PROGRESS.cacheHit);
+			timings.replay('resize compute', this.#branchCache.getResizedTiming(branchKey));
 		} else {
 			progress('Resizing', PROGRESS.resizing);
+			const resizeStart = performance.now();
 			resized = resizeImageData(
 				source,
 				size.width,
@@ -81,18 +104,42 @@ export class ProcessorWorkerPipeline {
 				settings.output.resize,
 				settings.output.crop
 			);
-			this.#branchCache.setResized(branchKey, resized);
+			const resizeMs = timings.mark('resize compute', resizeStart);
+			const resizeCacheWriteStart = performance.now();
+			this.#branchCache.setResized(branchKey, resized, resizeMs);
+			timings.mark('resize cache write', resizeCacheWriteStart);
 		}
-		let result = this.cachedQuantizeResult(branchKey, settingsHash);
+		const quantizeCacheLookupStart = performance.now();
+		const cachedResult = this.cachedQuantizeResult(branchKey, settingsHash);
+		timings.mark('quantize cache lookup', quantizeCacheLookupStart);
+		let result = cachedResult?.result;
 		if (result) {
 			progress('Using cached quantization', PROGRESS.quantizeCacheHit);
+			timings.replay('quantize compute', cachedResult?.timingMs);
 		} else {
 			progress('Quantizing palette', PROGRESS.quantizing);
+			const quantizeStart = performance.now();
 			result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey));
-			this.cacheQuantizeResult(branchKey, settingsHash, result);
+			const quantizeMs = timings.mark('quantize compute', quantizeStart);
+			const quantizeCacheWriteStart = performance.now();
+			this.cacheQuantizeResult(branchKey, settingsHash, result, quantizeMs);
+			timings.mark('quantize cache write', quantizeCacheWriteStart);
 		}
+		const finalizingStart = performance.now();
 		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
 		progress('Finalizing indexed output', PROGRESS.finalizing);
+		const cacheAfter = this.cacheSnapshot();
+		const memory = estimateProcessingMemory({
+			sourceWidth: source.width,
+			sourceHeight: source.height,
+			outputWidth: size.width,
+			outputHeight: size.height,
+			settings,
+			branchCacheBytes: cacheAfter.branchBytes,
+			branchCacheMaxBytes: cacheAfter.branchMaxBytes
+		});
+		timings.mark('worker finalizing', finalizingStart);
+		const completedAt = performance.now();
 		return {
 			id,
 			type: 'complete',
@@ -103,6 +150,26 @@ export class ProcessorWorkerPipeline {
 				warnings,
 				settingsHash,
 				updatedAt: Date.now()
+			},
+			metrics: {
+				id,
+				settingsHash,
+				sourceId,
+				scopeKey: branchKey,
+				startedAt,
+				completedAt,
+				totalMs: completedAt - startedAt,
+				timings: timings.values,
+				cache: {
+					delta: deltaCacheSnapshot(cacheBefore, cacheAfter),
+					lifetime: cacheAfter
+				},
+				memory,
+				outputPixels: size.width * size.height,
+				colorSpace: settings.colorSpace,
+				dither: settings.dither.algorithm,
+				resize: settings.output.resize,
+				warnings
 			}
 		};
 	}
@@ -110,21 +177,28 @@ export class ProcessorWorkerPipeline {
 	private cachedQuantizeResult(
 		branchKey: string,
 		settingsHash: string
-	): QuantizeResult | undefined {
-		const cached = this.#branchCache.getColorMapping<QuantizeResult>(
-			branchKey,
-			quantizeResultCacheKey(settingsHash)
-		);
+	): { result: QuantizeResult; timingMs?: number } | undefined {
+		const key = quantizeResultCacheKey(settingsHash);
+		const cached = this.#branchCache.getColorMapping<QuantizeResult>(branchKey, key);
 		if (!cached) return undefined;
-		return cloneQuantizeResult(cached);
+		return {
+			result: cloneQuantizeResult(cached),
+			timingMs: this.#branchCache.getColorMappingTiming(branchKey, key)
+		};
 	}
 
-	private cacheQuantizeResult(branchKey: string, settingsHash: string, result: QuantizeResult) {
+	private cacheQuantizeResult(
+		branchKey: string,
+		settingsHash: string,
+		result: QuantizeResult,
+		timingMs?: number
+	) {
 		this.#branchCache.setColorMapping(
 			branchKey,
 			quantizeResultCacheKey(settingsHash),
 			cloneQuantizeResult(result),
-			result.indices.byteLength
+			result.indices.byteLength,
+			timingMs
 		);
 	}
 
@@ -147,6 +221,35 @@ export class ProcessorWorkerPipeline {
 		}
 		return this.#sourceCache.source;
 	}
+
+	private cacheSnapshot(): ProcessingCacheSnapshot {
+		const source = this.#sourceCache?.source;
+		return mergeCacheSnapshots(
+			Boolean(source),
+			source ? source.width * source.height * 4 : 0,
+			this.#branchCache.snapshotMetrics(),
+			this.#paletteVectorCache.snapshotMetrics()
+		);
+	}
+}
+
+function timingSink(): TimingSink {
+	return {
+		values: [],
+		add(name, ms, replayed = false) {
+			if (!Number.isFinite(ms)) return;
+			this.values.push({ name, ms: Math.max(0, ms), replayed: replayed || undefined });
+		},
+		mark(name, start) {
+			const ms = performance.now() - start;
+			this.add(name, ms);
+			return ms;
+		},
+		replay(name, ms) {
+			if (ms === undefined) return;
+			this.add(name, ms, true);
+		}
+	};
 }
 
 function quantizeResultCacheKey(settingsHash: string) {

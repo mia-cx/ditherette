@@ -17,6 +17,7 @@ import {
 	type WorkerRequest,
 	type WorkerResponse
 } from './types';
+import type { ProcessingMetricsSample } from './metrics';
 
 const RESIZE_MODES = [
 	'nearest',
@@ -76,6 +77,11 @@ function assertFiniteNonNegativeNumber(value: unknown, label: string) {
 
 function assertFiniteTimestamp(value: unknown, label: string) {
 	if (!Number.isFinite(value) || (value as number) < 0) throw new Error(`${label} is invalid.`);
+	return value as number;
+}
+
+function assertInteger(value: unknown, label: string) {
+	if (!Number.isInteger(value)) throw new Error(`${label} is invalid.`);
 	return value as number;
 }
 
@@ -298,6 +304,141 @@ export function validateWorkerRequest(value: unknown): WorkerRequest {
 	throw new Error('Worker request type is invalid.');
 }
 
+function validateTiming(value: unknown) {
+	if (!isObject(value)) throw new Error('Worker metrics timing is invalid.');
+	const replayed = value.replayed;
+	return {
+		name: assertString(value.name, 'Worker metrics timing name'),
+		ms: assertFiniteNonNegativeNumber(value.ms, 'Worker metrics timing duration'),
+		replayed:
+			replayed === undefined ? undefined : assertBoolean(replayed, 'Worker metrics replay flag')
+	};
+}
+
+function validateCacheSnapshot(value: unknown) {
+	if (!isObject(value)) throw new Error('Worker metrics cache snapshot is invalid.');
+	return {
+		sourceLoaded: assertBoolean(value.sourceLoaded, 'Worker metrics source loaded'),
+		sourceBytes: assertFiniteNonNegativeNumber(value.sourceBytes, 'Worker metrics source bytes'),
+		branchCount: assertFiniteNonNegativeNumber(value.branchCount, 'Worker metrics branch count'),
+		branchBytes: assertFiniteNonNegativeNumber(value.branchBytes, 'Worker metrics branch bytes'),
+		branchMaxBytes: assertFiniteNonNegativeNumber(
+			value.branchMaxBytes,
+			'Worker metrics branch max bytes'
+		),
+		resizedHits: assertFiniteNonNegativeNumber(value.resizedHits, 'Worker metrics resized hits'),
+		resizedMisses: assertFiniteNonNegativeNumber(
+			value.resizedMisses,
+			'Worker metrics resized misses'
+		),
+		resizedSets: assertFiniteNonNegativeNumber(value.resizedSets, 'Worker metrics resized sets'),
+		resizedSkips: assertFiniteNonNegativeNumber(value.resizedSkips, 'Worker metrics resized skips'),
+		resizedEvictions: assertFiniteNonNegativeNumber(
+			value.resizedEvictions,
+			'Worker metrics resized evictions'
+		),
+		derivedHits: assertFiniteNonNegativeNumber(value.derivedHits, 'Worker metrics derived hits'),
+		derivedMisses: assertFiniteNonNegativeNumber(
+			value.derivedMisses,
+			'Worker metrics derived misses'
+		),
+		derivedSets: assertFiniteNonNegativeNumber(value.derivedSets, 'Worker metrics derived sets'),
+		derivedSkips: assertFiniteNonNegativeNumber(value.derivedSkips, 'Worker metrics derived skips'),
+		derivedEvictions: assertFiniteNonNegativeNumber(
+			value.derivedEvictions,
+			'Worker metrics derived evictions'
+		),
+		paletteVectorEntries: assertFiniteNonNegativeNumber(
+			value.paletteVectorEntries,
+			'Worker metrics palette entries'
+		),
+		paletteVectorMaxEntries: assertFiniteNonNegativeNumber(
+			value.paletteVectorMaxEntries,
+			'Worker metrics palette max entries'
+		),
+		paletteVectorHits: assertFiniteNonNegativeNumber(
+			value.paletteVectorHits,
+			'Worker metrics palette hits'
+		),
+		paletteVectorMisses: assertFiniteNonNegativeNumber(
+			value.paletteVectorMisses,
+			'Worker metrics palette misses'
+		),
+		paletteVectorSets: assertFiniteNonNegativeNumber(
+			value.paletteVectorSets,
+			'Worker metrics palette sets'
+		),
+		paletteVectorEvictions: assertFiniteNonNegativeNumber(
+			value.paletteVectorEvictions,
+			'Worker metrics palette evictions'
+		)
+	};
+}
+
+function validateMemoryShape(value: unknown) {
+	if (!isObject(value)) throw new Error('Worker metrics memory shape is invalid.');
+	return {
+		sourceBytes: assertFiniteNonNegativeNumber(value.sourceBytes, 'Worker metrics source memory'),
+		resizedBytes: assertFiniteNonNegativeNumber(
+			value.resizedBytes,
+			'Worker metrics resized memory'
+		),
+		indexBytes: assertFiniteNonNegativeNumber(value.indexBytes, 'Worker metrics index memory'),
+		vectorBytes: assertFiniteNonNegativeNumber(value.vectorBytes, 'Worker metrics vector memory'),
+		ditherWorkBytes: assertFiniteNonNegativeNumber(
+			value.ditherWorkBytes,
+			'Worker metrics dither memory'
+		),
+		branchCacheBytes: assertFiniteNonNegativeNumber(
+			value.branchCacheBytes,
+			'Worker metrics branch memory'
+		),
+		branchCacheMaxBytes: assertFiniteNonNegativeNumber(
+			value.branchCacheMaxBytes,
+			'Worker metrics branch max memory'
+		)
+	};
+}
+
+function validateProcessingMetrics(value: unknown): ProcessingMetricsSample | undefined {
+	if (value === undefined) return undefined;
+	if (!isObject(value)) throw new Error('Worker metrics are invalid.');
+	const cache = isObject(value.cache) ? value.cache : undefined;
+	if (!cache) throw new Error('Worker metrics cache is invalid.');
+	const timings = Array.isArray(value.timings) ? value.timings.map(validateTiming) : [];
+	const warnings = Array.isArray(value.warnings)
+		? value.warnings.filter((warning): warning is string => typeof warning === 'string')
+		: [];
+	return {
+		id: assertInteger(value.id, 'Worker metrics id'),
+		settingsHash: assertString(value.settingsHash, 'Worker metrics settings hash'),
+		sourceId: assertString(value.sourceId, 'Worker metrics source id'),
+		scopeKey: assertString(value.scopeKey, 'Worker metrics scope key'),
+		startedAt: assertFiniteTimestamp(value.startedAt, 'Worker metrics start'),
+		completedAt: assertFiniteTimestamp(value.completedAt, 'Worker metrics completion'),
+		totalMs: assertFiniteNonNegativeNumber(value.totalMs, 'Worker metrics total'),
+		timings,
+		cache: {
+			delta: validateCacheSnapshot(cache.delta),
+			lifetime: validateCacheSnapshot(cache.lifetime)
+		},
+		memory: validateMemoryShape(value.memory),
+		outputPixels: assertFiniteNonNegativeNumber(value.outputPixels, 'Worker metrics output pixels'),
+		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker metrics color space'),
+		dither: assertOneOf(value.dither, DITHER_IDS, 'Worker metrics dither'),
+		resize: assertOneOf(value.resize, RESIZE_MODES, 'Worker metrics resize'),
+		warnings
+	};
+}
+
+function safeProcessingMetrics(value: unknown) {
+	try {
+		return validateProcessingMetrics(value);
+	} catch {
+		return undefined;
+	}
+}
+
 export function validateWorkerResponse(value: unknown): WorkerResponse {
 	if (!isObject(value)) throw new Error('Worker response is invalid.');
 	if (!Number.isInteger(value.id)) throw new Error('Worker response id is invalid.');
@@ -313,10 +454,19 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 		return value as WorkerResponse;
 	}
 	if (value.type === 'source-loaded') {
-		return { id, type: 'source-loaded', sourceId: assertString(value.sourceId, 'Worker source id') };
+		return {
+			id,
+			type: 'source-loaded',
+			sourceId: assertString(value.sourceId, 'Worker source id')
+		};
 	}
 	if (value.type === 'complete') {
-		return { id, type: 'complete', image: validateProcessedImage(value.image) };
+		return {
+			id,
+			type: 'complete',
+			image: validateProcessedImage(value.image),
+			metrics: safeProcessingMetrics(value.metrics)
+		};
 	}
 	throw new Error('Worker response type is invalid.');
 }

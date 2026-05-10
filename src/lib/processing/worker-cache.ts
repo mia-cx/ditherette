@@ -1,3 +1,4 @@
+import type { PaletteVectorCacheSnapshot, PipelineCacheSnapshot } from './metrics';
 import type { CropRect, ResizeId } from './types';
 
 export const MAX_PIPELINE_CACHE_BRANCHES = 3;
@@ -14,10 +15,17 @@ type PipelineBranchKeyParts = {
 	gradeKey?: string;
 };
 
+type TimedValue<T> = {
+	value: T;
+	bytes: number;
+	timingMs?: number;
+};
+
 type PipelineBranch = {
 	resized: ImageData;
 	bytes: number;
-	colorMappings: Map<string, { value: unknown; bytes: number }>;
+	resizedTimingMs?: number;
+	colorMappings: Map<string, TimedValue<unknown>>;
 };
 
 export function pipelineBranchKey({
@@ -41,6 +49,18 @@ export class PipelineBranchCache {
 	readonly maxBytes: number;
 	#branches = new Map<string, PipelineBranch>();
 	#bytes = 0;
+	#counters = {
+		resizedHits: 0,
+		resizedMisses: 0,
+		resizedSets: 0,
+		resizedSkips: 0,
+		resizedEvictions: 0,
+		derivedHits: 0,
+		derivedMisses: 0,
+		derivedSets: 0,
+		derivedSkips: 0,
+		derivedEvictions: 0
+	};
 
 	constructor(maxBranches = MAX_PIPELINE_CACHE_BRANCHES, maxBytes = MAX_PIPELINE_CACHE_BYTES) {
 		this.maxBranches = maxBranches;
@@ -57,25 +77,49 @@ export class PipelineBranchCache {
 
 	getResized(key: string) {
 		const branch = this.#branches.get(key);
-		if (!branch) return undefined;
+		if (!branch) {
+			this.#counters.resizedMisses++;
+			return undefined;
+		}
+		this.#counters.resizedHits++;
 		this.touch(key, branch);
 		return branch.resized;
 	}
 
-	setResized(key: string, resized: ImageData) {
+	getResizedTiming(key: string) {
+		return this.#branches.get(key)?.resizedTimingMs;
+	}
+
+	setResized(key: string, resized: ImageData, timingMs?: number) {
 		const bytes = resized.width * resized.height * 4;
 		this.delete(key);
-		if (bytes > this.maxBytes || this.maxBranches < 1) return;
-		this.#branches.set(key, { resized, bytes, colorMappings: new Map() });
+		if (bytes > this.maxBytes || this.maxBranches < 1) {
+			this.#counters.resizedSkips++;
+			return;
+		}
+		this.#branches.set(key, {
+			resized,
+			bytes,
+			resizedTimingMs: timingMs,
+			colorMappings: new Map()
+		});
 		this.#bytes += bytes;
+		this.#counters.resizedSets++;
 		this.evictOverflow();
 	}
 
 	getColorMapping<T>(branchKey: string, mappingKey: string): T | undefined {
 		const branch = this.#branches.get(branchKey);
-		if (!branch) return undefined;
+		if (!branch) {
+			this.#counters.derivedMisses++;
+			return undefined;
+		}
 		const mapping = branch.colorMappings.get(mappingKey);
-		if (!mapping) return undefined;
+		if (!mapping) {
+			this.#counters.derivedMisses++;
+			return undefined;
+		}
+		this.#counters.derivedHits++;
 		this.touch(branchKey, branch);
 		return mapping.value as T;
 	}
@@ -86,19 +130,36 @@ export class PipelineBranchCache {
 		return bytes <= this.maxBytes && branch.bytes + bytes <= this.maxBytes;
 	}
 
-	setColorMapping(branchKey: string, mappingKey: string, value: unknown, bytes: number) {
+	getColorMappingTiming(branchKey: string, mappingKey: string) {
+		return this.#branches.get(branchKey)?.colorMappings.get(mappingKey)?.timingMs;
+	}
+
+	setColorMapping(
+		branchKey: string,
+		mappingKey: string,
+		value: unknown,
+		bytes: number,
+		timingMs?: number
+	) {
 		const branch = this.#branches.get(branchKey);
-		if (!branch || bytes > this.maxBytes) return false;
+		if (!branch || bytes > this.maxBytes) {
+			this.#counters.derivedSkips++;
+			return false;
+		}
 		const previous = branch.colorMappings.get(mappingKey);
 		const nextBranchBytes = branch.bytes - (previous?.bytes ?? 0) + bytes;
-		if (nextBranchBytes > this.maxBytes) return false;
+		if (nextBranchBytes > this.maxBytes) {
+			this.#counters.derivedSkips++;
+			return false;
+		}
 		if (previous) {
 			branch.bytes -= previous.bytes;
 			this.#bytes -= previous.bytes;
 		}
-		branch.colorMappings.set(mappingKey, { value, bytes });
+		branch.colorMappings.set(mappingKey, { value, bytes, timingMs });
 		branch.bytes += bytes;
 		this.#bytes += bytes;
+		this.#counters.derivedSets++;
 		this.touch(branchKey, branch);
 		this.evictOverflow();
 		return this.#branches.get(branchKey)?.colorMappings.has(mappingKey) ?? false;
@@ -124,6 +185,15 @@ export class PipelineBranchCache {
 		return [...this.#branches.keys()];
 	}
 
+	snapshotMetrics(): PipelineCacheSnapshot {
+		return {
+			branchCount: this.#branches.size,
+			branchBytes: this.#bytes,
+			branchMaxBytes: this.maxBytes,
+			...this.#counters
+		};
+	}
+
 	private touch(key: string, branch: PipelineBranch) {
 		this.#branches.delete(key);
 		this.#branches.set(key, branch);
@@ -133,6 +203,7 @@ export class PipelineBranchCache {
 		while (this.#branches.size > this.maxBranches) {
 			const oldestKey = this.#branches.keys().next().value as string | undefined;
 			if (!oldestKey) return;
+			this.#counters.resizedEvictions++;
 			this.delete(oldestKey);
 		}
 
@@ -143,6 +214,7 @@ export class PipelineBranchCache {
 		while (this.#bytes > this.maxBytes) {
 			const oldestKey = this.#branches.keys().next().value as string | undefined;
 			if (!oldestKey) return;
+			this.#counters.resizedEvictions++;
 			this.delete(oldestKey);
 		}
 	}
@@ -156,6 +228,7 @@ export class PipelineBranchCache {
 			branch.colorMappings.delete(oldestMappingKey);
 			branch.bytes -= mapping.bytes;
 			this.#bytes -= mapping.bytes;
+			this.#counters.derivedEvictions++;
 			return true;
 		}
 		return false;
@@ -165,6 +238,7 @@ export class PipelineBranchCache {
 export class PaletteVectorCache<T> {
 	readonly maxEntries: number;
 	#entries = new Map<string, T>();
+	#counters = { hits: 0, misses: 0, sets: 0, evictions: 0 };
 
 	constructor(maxEntries = MAX_PALETTE_VECTOR_CACHE_ENTRIES) {
 		this.maxEntries = maxEntries;
@@ -176,7 +250,11 @@ export class PaletteVectorCache<T> {
 
 	get(key: string) {
 		const value = this.#entries.get(key);
-		if (!value) return undefined;
+		if (!value) {
+			this.#counters.misses++;
+			return undefined;
+		}
+		this.#counters.hits++;
 		this.#entries.delete(key);
 		this.#entries.set(key, value);
 		return value;
@@ -186,14 +264,24 @@ export class PaletteVectorCache<T> {
 		if (this.maxEntries < 1) return;
 		this.#entries.delete(key);
 		this.#entries.set(key, value);
+		this.#counters.sets++;
 		while (this.#entries.size > this.maxEntries) {
 			const oldestKey = this.#entries.keys().next().value as string | undefined;
 			if (!oldestKey) return;
 			this.#entries.delete(oldestKey);
+			this.#counters.evictions++;
 		}
 	}
 
 	clear() {
 		this.#entries.clear();
+	}
+
+	snapshotMetrics(): PaletteVectorCacheSnapshot {
+		return {
+			entries: this.#entries.size,
+			maxEntries: this.maxEntries,
+			...this.#counters
+		};
 	}
 }

@@ -1,3 +1,5 @@
+import type { ProcessingMetricsSample } from './metrics';
+
 export const MAX_OUTPUT_PIXELS = 67_108_864;
 export const MAX_OUTPUT_SIDE = 16_384;
 export const MAX_SOURCE_PIXELS = MAX_OUTPUT_PIXELS;
@@ -156,6 +158,7 @@ export type WorkerComplete = {
 	id: number;
 	type: 'complete';
 	image: ProcessedImage;
+	metrics?: ProcessingMetricsSample;
 };
 
 export type WorkerFailure = {

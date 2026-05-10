@@ -86,13 +86,35 @@ describe('PipelineBranchCache', () => {
 		expect(cache.size).toBe(0);
 	});
 
+	it('tracks resize cache hit and miss counters', () => {
+		const cache = new PipelineBranchCache(3, 1024);
+		cache.setResized('a', new ImageData(1, 1), 12);
+
+		cache.getResized('a');
+		cache.getResized('b');
+
+		expect(cache.getResizedTiming('a')).toBe(12);
+		expect(cache.snapshotMetrics()).toMatchObject({
+			resizedHits: 1,
+			resizedMisses: 1,
+			resizedSets: 1
+		});
+	});
+
 	it('stores color mappings under their branch byte budget', () => {
 		const cache = new PipelineBranchCache(2, 64);
 		cache.setResized('a', new ImageData(1, 1));
 
-		expect(cache.setColorMapping('a', 'oklab', { cached: true }, 24)).toBe(true);
+		expect(cache.setColorMapping('a', 'oklab', { cached: true }, 24, 34)).toBe(true);
 		expect(cache.getColorMapping('a', 'oklab')).toEqual({ cached: true });
+		expect(cache.getColorMapping('a', 'missing')).toBeUndefined();
 		expect(cache.bytes).toBe(28);
+		expect(cache.getColorMappingTiming('a', 'oklab')).toBe(34);
+		expect(cache.snapshotMetrics()).toMatchObject({
+			derivedHits: 1,
+			derivedMisses: 1,
+			derivedSets: 1
+		});
 	});
 
 	it('skips color mappings that would evict their resized branch', () => {
@@ -155,5 +177,6 @@ describe('PaletteVectorCache', () => {
 		expect(cache.get('a')).toBeDefined();
 		expect(cache.get('b')).toBeUndefined();
 		expect(cache.get('c')).toBeDefined();
+		expect(cache.snapshotMetrics()).toMatchObject({ hits: 3, misses: 1, sets: 3, evictions: 1 });
 	});
 });
