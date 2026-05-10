@@ -28,8 +28,6 @@ let activeRequestId = 0;
 let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
-let scheduledAt = 0;
-let scheduledDelay = 0;
 
 const SLIDER_DEBOUNCE_MS = 180;
 const OUTPUT_SLIDER_FIELDS = new Set<keyof OutputSettings>([
@@ -112,7 +110,12 @@ type ProcessInWorkerResult = {
 	metrics?: ProcessingMetricsSample;
 };
 
-function processInWorker(): Promise<ProcessInWorkerResult> {
+type ProcessingSchedule = {
+	scheduledAt: number;
+	scheduledDelay: number;
+};
+
+function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorkerResult> {
 	const source = sourceImageData.get();
 	if (!source) return Promise.reject(new Error('Upload an image before processing.'));
 
@@ -124,9 +127,11 @@ function processInWorker(): Promise<ProcessInWorkerResult> {
 	const hash = currentSettingsHash();
 	const processStartedAt = performance.now();
 	const mainTimings: ProcessingStageTiming[] = [];
-	const debounceMs = scheduledAt ? Math.max(0, processStartedAt - scheduledAt) : 0;
+	const scheduledAt = schedule?.scheduledAt;
+	const metricsStartedAt = scheduledAt ?? processStartedAt;
+	const debounceMs = scheduledAt === undefined ? 0 : Math.max(0, processStartedAt - scheduledAt);
 	mainTimings.push({ name: 'main debounce wait', ms: debounceMs });
-	mainTimings.push({ name: 'main scheduled delay', ms: scheduledDelay });
+	mainTimings.push({ name: 'main scheduled delay', ms: schedule?.scheduledDelay ?? 0 });
 	processingProgress.set({ stage: 'Queued', progress: 0 });
 	processingError.set(undefined);
 
@@ -208,9 +213,9 @@ function processInWorker(): Promise<ProcessInWorkerResult> {
 				metrics: message.metrics
 					? {
 							...message.metrics,
-							startedAt: scheduledAt || processStartedAt,
+							startedAt: metricsStartedAt,
 							completedAt,
-							totalMs: completedAt - (scheduledAt || processStartedAt),
+							totalMs: completedAt - metricsStartedAt,
 							timings: [...mainTimings, ...message.metrics.timings]
 						}
 					: undefined
@@ -233,14 +238,14 @@ function processInWorker(): Promise<ProcessInWorkerResult> {
 	});
 }
 
-export async function processCurrentImage() {
+export async function processCurrentImage(schedule?: ProcessingSchedule) {
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
 	if (previous?.settingsHash === hash) return;
 	// Keep the last valid output on screen while non-crop edits reprocess.
 	// Source and crop changes clear it at their boundaries because the old frame shape is misleading there.
 	const program = Effect.tryPromise({
-		try: processInWorker,
+		try: () => processInWorker(schedule),
 		catch: (error) => (error instanceof Error ? error : new Error('Processing failed'))
 	});
 
@@ -278,11 +283,13 @@ export function scheduleProcessing(delay = 0) {
 	const previous = processedImage.get();
 	if (previous?.settingsHash === hash) return;
 	if (timer) clearTimeout(timer);
-	scheduledAt = performance.now();
-	scheduledDelay = delay;
+	const schedule: ProcessingSchedule = {
+		scheduledAt: performance.now(),
+		scheduledDelay: delay
+	};
 	timer = setTimeout(() => {
 		timer = undefined;
-		void processCurrentImage();
+		void processCurrentImage(schedule);
 	}, delay);
 }
 

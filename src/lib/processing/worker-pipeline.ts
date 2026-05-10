@@ -128,7 +128,6 @@ export class ProcessorWorkerPipeline {
 		const finalizingStart = performance.now();
 		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
 		progress('Finalizing indexed output', PROGRESS.finalizing);
-		const completedAt = performance.now();
 		const cacheAfter = this.cacheSnapshot();
 		const memory = estimateProcessingMemory({
 			sourceWidth: source.width,
@@ -140,6 +139,7 @@ export class ProcessorWorkerPipeline {
 			branchCacheMaxBytes: cacheAfter.branchMaxBytes
 		});
 		timings.mark('worker finalizing', finalizingStart);
+		const completedAt = performance.now();
 		return {
 			id,
 			type: 'complete',
