@@ -22,6 +22,38 @@ export type PaletteVectorSpace = {
 	ranges: ColorVector;
 };
 
+export type QuantizeCounterName =
+	| 'nearest rgb'
+	| 'nearest vector'
+	| 'rgb memo hit'
+	| 'rgb memo miss'
+	| 'rgb memo set'
+	| 'rgb memo eviction'
+	| 'vector memo hit'
+	| 'vector memo miss'
+	| 'vector memo set'
+	| 'vector memo eviction';
+
+export type QuantizeTimingName =
+	| 'palette prepare'
+	| 'matcher build'
+	| 'palette vector space'
+	| 'color vector image lookup'
+	| 'color vector image build'
+	| 'direct loop'
+	| 'error diffusion init'
+	| 'error diffusion loop';
+
+export type QuantizeDiagnosticsSink = {
+	recordTiming?(name: QuantizeTimingName, ms: number): void;
+	recordCount?(name: QuantizeCounterName, amount?: number): void;
+};
+
+type PaletteVectorMatcher = {
+	nearest(v0: number, v1: number, v2: number): PaletteVector | undefined;
+	nearestIndex(v0: number, v1: number, v2: number): number;
+};
+
 export type ColorVectorImage = {
 	width: number;
 	height: number;
@@ -31,7 +63,7 @@ export type ColorVectorImage = {
 	v2: Float32Array;
 };
 
-export type QuantizeCaches = {
+export type QuantizeCaches = QuantizeDiagnosticsSink & {
 	getPaletteVectorSpace?(key: string): PaletteVectorSpace | undefined;
 	setPaletteVectorSpace?(key: string, value: PaletteVectorSpace): void;
 	colorVectorImageScope?: string;
@@ -115,11 +147,6 @@ function transparentIndex(palette: EnabledPaletteColor[]) {
 	return palette.findIndex((color) => color.kind === 'transparent');
 }
 
-function paletteRgb(color: EnabledPaletteColor): Rgb {
-	if (!color.rgb) return { r: 0, g: 0, b: 0 };
-	return color.rgb;
-}
-
 function paletteColorKey(color: EnabledPaletteColor) {
 	const rgb = color.rgb ? `${color.rgb.r},${color.rgb.g},${color.rgb.b}` : 'transparent';
 	return `${color.key}:${color.kind}:${rgb}`;
@@ -157,8 +184,12 @@ function paletteVectorSpace(
 	cacheKey?: string,
 	caches?: QuantizeCaches
 ): PaletteVectorSpace {
+	const timingStart = performance.now();
 	const cached = cacheKey ? caches?.getPaletteVectorSpace?.(cacheKey) : undefined;
-	if (cached) return cached;
+	if (cached) {
+		recordTiming(caches, 'palette vector space', timingStart);
+		return cached;
+	}
 
 	const colors: PaletteVector[] = [];
 	let min: ColorVector = [Infinity, Infinity, Infinity];
@@ -180,44 +211,78 @@ function paletteVectorSpace(
 		]
 	} satisfies PaletteVectorSpace;
 	if (cacheKey) caches?.setPaletteVectorSpace?.(cacheKey, space);
+	recordTiming(caches, 'palette vector space', timingStart);
 	return space;
 }
 
+function recordTiming(caches: QuantizeCaches | undefined, name: QuantizeTimingName, start: number) {
+	caches?.recordTiming?.(name, performance.now() - start);
+}
+
 function vectorDistance(left: ColorVector, right: ColorVector, settings: ProcessingSettings) {
-	const dx = left[0] - right[0];
-	const dy = left[1] - right[1];
+	return vectorDistanceValues(left[0], left[1], left[2], right, settings);
+}
+
+function vectorDistanceValues(
+	left0: number,
+	left1: number,
+	left2: number,
+	right: ColorVector,
+	settings: ProcessingSettings
+) {
+	const dx = left0 - right[0];
+	const dy = left1 - right[1];
 	if (settings.colorSpace === 'oklch') {
-		const hue = Math.atan2(Math.sin(left[2] - right[2]), Math.cos(left[2] - right[2]));
-		const dh = Math.min(left[1], right[1]) * hue;
+		const hue = Math.atan2(Math.sin(left2 - right[2]), Math.cos(left2 - right[2]));
+		const dh = Math.min(left1, right[1]) * hue;
 		return dx * dx + dy * dy + dh * dh;
 	}
-	const dz = left[2] - right[2];
+	const dz = left2 - right[2];
 	return dx * dx + dy * dy + dz * dz;
 }
 
-function nearestPaletteVector(
-	vector: ColorVector,
+function createPaletteVectorMatcher(
 	space: PaletteVectorSpace,
-	settings: ProcessingSettings
-) {
-	let winner: PaletteVector | undefined;
-	let best = Infinity;
-	for (const candidate of space.colors) {
-		const distance = vectorDistance(vector, candidate.vector, settings);
-		if (distance < best) {
-			best = distance;
-			winner = candidate;
-		}
-	}
-	return winner;
-}
+	settings: ProcessingSettings,
+	caches?: QuantizeCaches
+): PaletteVectorMatcher {
+	let lastV0 = Number.NaN;
+	let lastV1 = Number.NaN;
+	let lastV2 = Number.NaN;
+	let lastMatch: PaletteVector | undefined;
 
-function nearestPaletteVectorIndex(
-	vector: ColorVector,
-	space: PaletteVectorSpace,
-	settings: ProcessingSettings
-) {
-	return nearestPaletteVector(vector, space, settings)?.index ?? -1;
+	function nearest(v0: number, v1: number, v2: number) {
+		if (v0 === lastV0 && v1 === lastV1 && v2 === lastV2) {
+			caches?.recordCount?.('vector memo hit');
+			return lastMatch;
+		}
+		caches?.recordCount?.('vector memo miss');
+		caches?.recordCount?.('nearest vector');
+
+		let winner: PaletteVector | undefined;
+		let best = Infinity;
+		for (const candidate of space.colors) {
+			const distance = vectorDistanceValues(v0, v1, v2, candidate.vector, settings);
+			if (distance < best) {
+				best = distance;
+				winner = candidate;
+			}
+		}
+
+		lastV0 = v0;
+		lastV1 = v1;
+		lastV2 = v2;
+		lastMatch = winner;
+		caches?.recordCount?.('vector memo set');
+		return winner;
+	}
+
+	return {
+		nearest,
+		nearestIndex(v0, v1, v2) {
+			return nearest(v0, v1, v2)?.index ?? -1;
+		}
+	};
 }
 
 function cachedVectorAt(vectors: ColorVectorImage, index: number): ColorVector {
@@ -284,7 +349,9 @@ function cachedColorVectorImage(
 			? compositedVectorCacheKey(settings.colorSpace, settings.output.alphaMode, matte)
 			: sourceVectorCacheKey(settings.colorSpace)
 	}`;
+	const lookupStart = performance.now();
 	const cached = caches?.getColorVectorImage?.(key);
+	recordTiming(caches, 'color vector image lookup', lookupStart);
 	if (
 		cached?.width === image.width &&
 		cached.height === image.height &&
@@ -296,7 +363,9 @@ function cachedColorVectorImage(
 	if (!caches?.setColorVectorImage || caches.canStoreColorVectorImage?.(key, bytes) === false) {
 		return undefined;
 	}
+	const buildStart = performance.now();
 	const vectors = buildColorVectorImage(image, settings, matte, kind);
+	recordTiming(caches, 'color vector image build', buildStart);
 	caches.setColorVectorImage(key, vectors, bytes);
 	return caches.getColorVectorImage?.(key) ?? vectors;
 }
@@ -305,6 +374,7 @@ function colorSpaceThresholdIndex(
 	rgb: Rgb,
 	threshold: number,
 	space: PaletteVectorSpace,
+	matcher: PaletteVectorMatcher,
 	settings: ProcessingSettings,
 	strength: number,
 	sourceVector?: ColorVector
@@ -312,12 +382,11 @@ function colorSpaceThresholdIndex(
 	if (strength <= 0) return -1;
 	const source = sourceVector ?? vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
 	const amount = threshold * strength * COLOR_SPACE_THRESHOLD_SCALE;
-	const target: ColorVector = [
+	return matcher.nearestIndex(
 		source[0] + amount * space.ranges[0],
 		source[1] + amount * space.ranges[1],
 		source[2] + amount * space.ranges[2]
-	];
-	return nearestPaletteVectorIndex(target, space, settings);
+	);
 }
 
 function smoothstep(edge0: number, edge1: number, value: number) {
@@ -398,6 +467,7 @@ export function quantizeImage(
 	settings: ProcessingSettings,
 	caches?: QuantizeCaches
 ): QuantizeResult {
+	const prepareStart = performance.now();
 	const warnings: string[] = [];
 	const nextPalette = palette.slice(0, 256);
 	if (palette.length > 256)
@@ -425,7 +495,10 @@ export function quantizeImage(
 
 	const { matte, warning } = resolveMatteRgb(nextPalette, visible, settings.output.matteKey);
 	if (warning) warnings.push(warning);
+	recordTiming(caches, 'palette prepare', prepareStart);
+	const matcherStart = performance.now();
 	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
+	recordTiming(caches, 'matcher build', matcherStart);
 	const paletteCacheKey = paletteVectorCacheKey(nextPalette, settings.colorSpace);
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
@@ -461,8 +534,20 @@ export function quantizeImage(
 			caches
 		);
 	}
+	recordMatcherMemoStats(matcher, caches);
 
 	return { indices, palette: nextPalette, transparentIndex: tIndex, warnings };
+}
+
+function recordMatcherMemoStats(
+	matcher: ReturnType<typeof createPaletteMatcher>,
+	caches: QuantizeCaches | undefined
+) {
+	const stats = matcher.memoStats();
+	caches?.recordCount?.('rgb memo hit', stats.rgbHits);
+	caches?.recordCount?.('rgb memo miss', stats.rgbMisses);
+	caches?.recordCount?.('rgb memo set', stats.rgbSets);
+	caches?.recordCount?.('rgb memo eviction', stats.rgbEvictions);
 }
 
 function resolveMatteRgb(
@@ -532,6 +617,7 @@ function quantizeDirect(
 	const useVectorDither = supportsVectorDither(settings);
 	const noiseScale = RGB_DITHER_NOISE_SCALE * strength;
 	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
+	const vectorMatcher = createPaletteVectorMatcher(vectorSpace, settings, caches);
 	const needsCompositedVectors =
 		supportsCachedVectorMatching(settings.colorSpace) &&
 		((!useBayer && !useRandom) || useVectorDither);
@@ -543,6 +629,7 @@ function quantizeDirect(
 			? cachedColorVectorImage(image, settings, matte, 'source', caches)
 			: undefined;
 	const useDirectVectorMatch = Boolean(compositedVectors && !useBayer && !useRandom);
+	const loopStart = performance.now();
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
@@ -565,10 +652,10 @@ function quantizeDirect(
 			);
 
 			if (useDirectVectorMatch && compositedVectors) {
-				indices[index] = nearestPaletteVectorIndex(
-					cachedVectorAt(compositedVectors, index),
-					vectorSpace,
-					settings
+				indices[index] = vectorMatcher.nearestIndex(
+					compositedVectors.v0[index]!,
+					compositedVectors.v1[index]!,
+					compositedVectors.v2[index]!
 				);
 				continue;
 			}
@@ -590,11 +677,12 @@ function quantizeDirect(
 						{ r, g, b },
 						threshold,
 						vectorSpace,
+						vectorMatcher,
 						settings,
 						strength * mask,
 						compositedVectors ? cachedVectorAt(compositedVectors, index) : undefined
 					);
-					indices[index] = match === -1 ? matcher.nearestRgb(r, g, b).index : match;
+					indices[index] = match === -1 ? matcher.nearestIndexRgb(r, g, b) : match;
 					continue;
 				}
 				r = clampByte(r + threshold * noiseScale * mask);
@@ -617,20 +705,23 @@ function quantizeDirect(
 						{ r, g, b },
 						noise,
 						vectorSpace,
+						vectorMatcher,
 						settings,
 						strength * mask,
 						compositedVectors ? cachedVectorAt(compositedVectors, index) : undefined
 					);
-					indices[index] = match === -1 ? matcher.nearestRgb(r, g, b).index : match;
+					indices[index] = match === -1 ? matcher.nearestIndexRgb(r, g, b) : match;
 					continue;
 				}
 				r = clampByte(r + noise * noiseScale * mask);
 				g = clampByte(g + noise * noiseScale * mask);
 				b = clampByte(b + noise * noiseScale * mask);
 			}
-			indices[index] = matcher.nearestRgb(r, g, b).index;
+			caches?.recordCount?.('nearest rgb');
+			indices[index] = matcher.nearestIndexRgb(r, g, b);
 		}
 	}
+	recordTiming(caches, 'direct loop', loopStart);
 }
 
 function quantizeVectorErrorDiffusion(
@@ -653,8 +744,10 @@ function quantizeVectorErrorDiffusion(
 	const source = image.data;
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
+	const initStart = performance.now();
 	const work = new Float32Array(width * height * 3);
 	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
+	const vectorMatcher = createPaletteVectorMatcher(vectorSpace, settings, caches);
 	const compositedVectors = cachedColorVectorImage(image, settings, matte, 'composited', caches);
 	const sourceVectors = usesAdaptivePlacement(settings)
 		? cachedColorVectorImage(image, settings, matte, 'source', caches)
@@ -670,6 +763,8 @@ function quantizeVectorErrorDiffusion(
 		work[workOffset + 1] = vector[1];
 		work[workOffset + 2] = vector[2];
 	}
+	recordTiming(caches, 'error diffusion init', initStart);
+	const loopStart = performance.now();
 
 	for (let y = 0; y < height; y++) {
 		const reverse = settings.dither.serpentine && y % 2 === 1;
@@ -687,18 +782,16 @@ function quantizeVectorErrorDiffusion(
 			}
 
 			const workOffset = index * 3;
-			const current: ColorVector = [
-				work[workOffset]!,
-				work[workOffset + 1]!,
-				work[workOffset + 2]!
-			];
-			const match = nearestPaletteVector(current, vectorSpace, settings);
+			const current0 = work[workOffset]!;
+			const current1 = work[workOffset + 1]!;
+			const current2 = work[workOffset + 2]!;
+			const match = vectorMatcher.nearest(current0, current1, current2);
 			if (!match) throw new Error('No visible palette colors are enabled');
 			indices[index] = match.index;
 			const mask = placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors);
-			const error0 = current[0] - match.vector[0];
-			const error1 = current[1] - match.vector[1];
-			const error2 = current[2] - match.vector[2];
+			const error0 = current0 - match.vector[0];
+			const error1 = current1 - match.vector[1];
+			const error2 = current2 - match.vector[2];
 			for (const [dxBase, dy, weight] of kernel) {
 				const dx = reverse ? -dxBase : dxBase;
 				const xx = x + dx;
@@ -712,6 +805,7 @@ function quantizeVectorErrorDiffusion(
 			}
 		}
 	}
+	recordTiming(caches, 'error diffusion loop', loopStart);
 }
 
 function quantizeErrorDiffusion(
@@ -750,6 +844,7 @@ function quantizeErrorDiffusion(
 	const source = image.data;
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
+	const initStart = performance.now();
 	const work = new Float32Array(width * height * 3);
 	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
 	const sourceVectors = usesAdaptivePlacement(settings)
@@ -770,6 +865,8 @@ function quantizeErrorDiffusion(
 		work[workOffset + 1] = g;
 		work[workOffset + 2] = b;
 	}
+	recordTiming(caches, 'error diffusion init', initStart);
+	const loopStart = performance.now();
 
 	for (let y = 0; y < height; y++) {
 		const reverse = settings.dither.serpentine && y % 2 === 1;
@@ -790,9 +887,10 @@ function quantizeErrorDiffusion(
 			const r = clampByte(work[workOffset]!);
 			const g = clampByte(work[workOffset + 1]!);
 			const b = clampByte(work[workOffset + 2]!);
-			const match = matcher.nearestRgb(r, g, b);
-			indices[index] = match.index;
-			const chosen = paletteRgb(match.color);
+			caches?.recordCount?.('nearest rgb');
+			const match = matcher.nearestIndexRgb(r, g, b);
+			indices[index] = match;
+			const chosen = matcher.paletteRgbAt(match);
 			const mask = placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors);
 			const errorR = r - chosen.r;
 			const errorG = g - chosen.g;
@@ -810,4 +908,5 @@ function quantizeErrorDiffusion(
 			}
 		}
 	}
+	recordTiming(caches, 'error diffusion loop', loopStart);
 }

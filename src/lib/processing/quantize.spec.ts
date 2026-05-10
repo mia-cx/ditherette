@@ -69,13 +69,21 @@ function image() {
 function cacheMaps(colorVectorImageScope?: string): QuantizeCaches & {
 	paletteVectors: Map<string, PaletteVectorSpace>;
 	images: Map<string, ColorVectorImage>;
+	counts: Map<string, number>;
+	timings: Map<string, number>;
 } {
 	const paletteVectors = new Map<string, PaletteVectorSpace>();
 	const images = new Map<string, ColorVectorImage>();
+	const counts = new Map<string, number>();
+	const timings = new Map<string, number>();
 	return {
 		paletteVectors,
 		images,
+		counts,
+		timings,
 		colorVectorImageScope,
+		recordCount: (key, amount = 1) => counts.set(key, (counts.get(key) ?? 0) + amount),
+		recordTiming: (key, ms) => timings.set(key, (timings.get(key) ?? 0) + ms),
 		getPaletteVectorSpace: (key) => paletteVectors.get(key),
 		setPaletteVectorSpace: (key, value) => paletteVectors.set(key, value),
 		getColorVectorImage: (key) => images.get(key),
@@ -172,5 +180,48 @@ describe('quantizeImage caches', () => {
 
 		expect(caches.images.size).toBe(0);
 		expect(caches.paletteVectors.size).toBeGreaterThan(0);
+	});
+
+	it('records RGB matcher memo hits for repeated byte colors', () => {
+		const caches = cacheMaps('rgb-repeats');
+		const repeated = new ImageData(
+			new Uint8ClampedArray([10, 20, 30, 255, 10, 20, 30, 255, 10, 20, 30, 255]),
+			3,
+			1
+		);
+		const settings: ProcessingSettings = {
+			...baseSettings,
+			colorSpace: 'srgb',
+			dither: { ...baseSettings.dither, useColorSpace: false, algorithm: 'none' }
+		};
+
+		quantizeImage(repeated, palette, settings, caches);
+
+		expect(caches.counts.get('rgb memo hit')).toBeGreaterThan(0);
+		expect(caches.counts.get('rgb memo miss')).toBe(1);
+	});
+
+	it('records vector matcher memo hits for repeated vector colors', () => {
+		const caches = cacheMaps('vector-repeats');
+		const repeated = new ImageData(
+			new Uint8ClampedArray([10, 20, 30, 255, 10, 20, 30, 255, 10, 20, 30, 255]),
+			3,
+			1
+		);
+
+		quantizeImage(repeated, palette, settingsForAlgorithm('none'), caches);
+
+		expect(caches.counts.get('vector memo hit')).toBeGreaterThan(0);
+		expect(caches.counts.get('vector memo miss')).toBe(1);
+	});
+
+	it('records quantize sub-stage timings', () => {
+		const caches = cacheMaps('timings');
+
+		quantizeImage(image(), palette, baseSettings, caches);
+
+		expect(caches.timings.get('palette prepare')).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('matcher build')).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('direct loop')).toBeGreaterThanOrEqual(0);
 	});
 });

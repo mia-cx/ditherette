@@ -119,7 +119,7 @@ export class ProcessorWorkerPipeline {
 		} else {
 			progress('Quantizing palette', PROGRESS.quantizing);
 			const quantizeStart = performance.now();
-			result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey));
+			result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey, timings));
 			const quantizeMs = timings.mark('quantize compute', quantizeStart);
 			const quantizeCacheWriteStart = performance.now();
 			this.cacheQuantizeResult(branchKey, settingsHash, result, quantizeMs);
@@ -202,8 +202,9 @@ export class ProcessorWorkerPipeline {
 		);
 	}
 
-	private quantizeCaches(branchKey: string): QuantizeCaches {
+	private quantizeCaches(branchKey: string, timings?: TimingSink): QuantizeCaches {
 		return {
+			recordTiming: (name, ms) => timings?.add(`quantize ${name}`, ms),
 			getPaletteVectorSpace: (key) => this.#paletteVectorCache.get(key),
 			setPaletteVectorSpace: (key, value) => this.#paletteVectorCache.set(key, value),
 			colorVectorImageScope: branchKey,

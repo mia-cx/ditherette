@@ -2,10 +2,24 @@ import type { ColorSpaceId, EnabledPaletteColor, Rgb } from './types';
 
 export type PaletteMatch = { color: EnabledPaletteColor; index: number };
 
+export type PaletteMatcherMemoStats = {
+	rgbHits: number;
+	rgbMisses: number;
+	rgbSets: number;
+	rgbEvictions: number;
+};
+
+export type PaletteMatcherOptions = {
+	rgbMemoEntries?: number;
+};
+
 export type PaletteMatcher = {
 	colors: EnabledPaletteColor[];
 	nearest(rgb: Rgb): PaletteMatch;
 	nearestRgb(r: number, g: number, b: number): PaletteMatch;
+	nearestIndexRgb(r: number, g: number, b: number): number;
+	paletteRgbAt(index: number): Rgb;
+	memoStats(): PaletteMatcherMemoStats;
 };
 
 type Vector = readonly [number, number, number];
@@ -13,6 +27,8 @@ type Vector = readonly [number, number, number];
 const REF_X = 0.95047;
 const REF_Y = 1;
 const REF_Z = 1.08883;
+const DEFAULT_RGB_MEMO_ENTRIES = 0;
+const FALLBACK_RGB = { r: 0, g: 0, b: 0 } satisfies Rgb;
 const SRGB_TO_LINEAR = Float64Array.from({ length: 256 }, (_, value) => {
 	const channel = value / 255;
 	return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
@@ -101,7 +117,8 @@ export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId
 
 export function createPaletteMatcher(
 	colors: EnabledPaletteColor[],
-	mode: ColorSpaceId
+	mode: ColorSpaceId,
+	options: PaletteMatcherOptions = {}
 ): PaletteMatcher {
 	const visible = colors.filter((color) => color.rgb && color.kind !== 'transparent');
 	if (visible.length === 0) {
@@ -112,6 +129,15 @@ export function createPaletteMatcher(
 			},
 			nearestRgb() {
 				throw new Error('No visible palette colors are enabled');
+			},
+			nearestIndexRgb() {
+				throw new Error('No visible palette colors are enabled');
+			},
+			paletteRgbAt() {
+				throw new Error('No visible palette colors are enabled');
+			},
+			memoStats() {
+				return { rgbHits: 0, rgbMisses: 0, rgbSets: 0, rgbEvictions: 0 };
 			}
 		};
 	}
@@ -140,12 +166,21 @@ export function createPaletteMatcher(
 		v2[ordinal] = vector[2];
 	}
 
-	function matchOrdinal(ordinal: number): PaletteMatch {
-		const index = paletteIndex[ordinal]!;
+	const rgbMemoMaxEntries = Math.max(0, options.rgbMemoEntries ?? DEFAULT_RGB_MEMO_ENTRIES);
+	const rgbMemo = new Map<number, number>();
+	let lastRgbKey = -1;
+	let lastRgbIndex = -1;
+	const stats: PaletteMatcherMemoStats = {
+		rgbHits: 0,
+		rgbMisses: 0,
+		rgbSets: 0,
+		rgbEvictions: 0
+	};
+	function matchIndex(index: number): PaletteMatch {
 		return { color: colors[index]!, index };
 	}
 
-	function nearestRgb(r: number, g: number, b: number): PaletteMatch {
+	function nearestOrdinal(r: number, g: number, b: number) {
 		let winner = 0;
 		let best = Number.POSITIVE_INFINITY;
 
@@ -160,7 +195,7 @@ export function createPaletteMatcher(
 					winner = i;
 				}
 			}
-			return matchOrdinal(winner);
+			return winner;
 		}
 
 		if (mode === 'weighted-rgb') {
@@ -177,7 +212,7 @@ export function createPaletteMatcher(
 					winner = i;
 				}
 			}
-			return matchOrdinal(winner);
+			return winner;
 		}
 
 		if (mode === 'weighted-rgb-601' || mode === 'weighted-rgb-709') {
@@ -194,13 +229,10 @@ export function createPaletteMatcher(
 					winner = i;
 				}
 			}
-			return matchOrdinal(winner);
+			return winner;
 		}
 
-		const vector = vectorForRgb(r, g, b, mode);
-		const x = vector[0];
-		const y = vector[1];
-		const z = vector[2];
+		const [x, y, z] = vectorForRgb(r, g, b, mode);
 		for (let i = 0; i < count; i++) {
 			let distance: number;
 			if (mode === 'oklch') {
@@ -220,14 +252,65 @@ export function createPaletteMatcher(
 				winner = i;
 			}
 		}
-		return matchOrdinal(winner);
+		return winner;
+	}
+
+	function nearestIndexRgb(r: number, g: number, b: number): number {
+		const key = rgbMemoKey(r, g, b);
+		if (key !== undefined) {
+			if (key === lastRgbKey) {
+				stats.rgbHits++;
+				return lastRgbIndex;
+			}
+			const cached = rgbMemo.get(key);
+			if (cached !== undefined) {
+				lastRgbKey = key;
+				lastRgbIndex = cached;
+				stats.rgbHits++;
+				return cached;
+			}
+			stats.rgbMisses++;
+		}
+
+		const index = paletteIndex[nearestOrdinal(r, g, b)]!;
+		if (key !== undefined) {
+			lastRgbKey = key;
+			lastRgbIndex = index;
+			stats.rgbSets++;
+			if (rgbMemoMaxEntries > 0) {
+				if (rgbMemo.size >= rgbMemoMaxEntries) {
+					stats.rgbEvictions += rgbMemo.size;
+					rgbMemo.clear();
+				}
+				rgbMemo.set(key, index);
+			}
+		}
+		return index;
 	}
 
 	return {
 		colors,
 		nearest(rgb) {
-			return nearestRgb(rgb.r, rgb.g, rgb.b);
+			return matchIndex(nearestIndexRgb(rgb.r, rgb.g, rgb.b));
 		},
-		nearestRgb
+		nearestRgb(r, g, b) {
+			return matchIndex(nearestIndexRgb(r, g, b));
+		},
+		nearestIndexRgb,
+		paletteRgbAt(index) {
+			return colors[index]?.rgb ?? FALLBACK_RGB;
+		},
+		memoStats() {
+			return { ...stats };
+		}
 	};
+}
+
+function rgbMemoKey(r: number, g: number, b: number) {
+	if (!isByte(r) || !isByte(g) || !isByte(b)) return undefined;
+	return (r << 16) | (g << 8) | b;
+}
+
+function isByte(value: number) {
+	return Number.isInteger(value) && value >= 0 && value <= 255;
 }
