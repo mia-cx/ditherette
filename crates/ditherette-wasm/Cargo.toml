@@ -15,5 +15,16 @@ wasm-bindgen = "0.2"
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[[bench]]
+name = "resize_nearest"
+harness = false
+
 [profile.release]
 opt-level = "s"
+
+[profile.bench]
+opt-level = 3

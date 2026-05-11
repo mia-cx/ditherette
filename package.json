@@ -19,6 +19,7 @@
 		"wasm:build": "pnpm dlx wasm-pack build crates/ditherette-wasm --target web",
 		"wasm:test": "pnpm dlx wasm-pack test --node crates/ditherette-wasm",
 		"wasm:test:browser": "pnpm dlx wasm-pack test --headless --chrome crates/ditherette-wasm",
+		"bench:rust-resize": "node scripts/benchmark-rust-resize.mjs",
 		"bench:wasm-resize": "pnpm wasm:build && node scripts/benchmark-wasm-resize.mjs"
 	},
 	"devDependencies": {
