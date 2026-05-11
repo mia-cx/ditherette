@@ -1,10 +1,48 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { readdir, readFile, rm } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const resizeFilterNames = [
+	'nearest',
+	'nearest_aa',
+	'bilinear',
+	'trilinear',
+	'bicubic',
+	'lanczos2',
+	'lanczos2_scale_aware',
+	'lanczos3',
+	'lanczos3_scale_aware',
+	'area',
+	'box',
+	'antialias'
+];
+
+const benchmarkConfigs = {
+	nearest: {
+		bench: 'resize_nearest',
+		groupPrefix: 'resize_nearest/celeste_rgba/',
+		variants: ['baseline'],
+		referenceMode: 'none'
+	},
+	bilinear: {
+		bench: 'resize_bilinear',
+		groupPrefix: 'resize_bilinear/celeste_rgba/',
+		variants: ['baseline'],
+		referenceMode: 'none'
+	},
+	filters: {
+		bench: 'resize_filters',
+		groupPrefix: 'resize_filters/celeste_rgba/',
+		variants: resizeFilterNames,
+		referenceMode: 'none'
+	}
+};
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const args = parseArgs(process.argv.slice(2));
+const benchmarkConfig = benchmarkConfigs[args.kernel];
 const criterionDir = path.join(root, 'crates/ditherette-wasm/target/criterion');
 const significantNumberFormatter = new Intl.NumberFormat('en-US', {
 	maximumSignificantDigits: 4,
@@ -12,21 +50,10 @@ const significantNumberFormatter = new Intl.NumberFormat('en-US', {
 	useGrouping: false
 });
 const scaleOrder = new Map(
-	['0.95x', '0.75x', '0.5x', '0.25x', '0.125x'].map((scale, index) => [scale, index])
+	['2x', '0.95x', '0.75x', '0.5x', '0.25x', '0.125x'].map((scale, index) => [scale, index])
 );
-const variantOrder = new Map(
-	[
-		'baseline',
-		'precomputed-offsets',
-		'fast-paths',
-		'word-copy',
-		'into-reused-output',
-		'production',
-		'production-into'
-	].map((variant, index) => [variant, index])
-);
-
-await rm(criterionDir, { recursive: true, force: true });
+const variantOrder = new Map(benchmarkConfig.variants.map((variant, index) => [variant, index]));
+const activeVariants = new Set(activeVariantNames());
 
 const cargo = spawnSync(
 	'cargo',
@@ -35,12 +62,19 @@ const cargo = spawnSync(
 		'--manifest-path',
 		'crates/ditherette-wasm/Cargo.toml',
 		'--bench',
-		'resize_nearest',
+		benchmarkConfig.bench,
 		'--',
 		'--noplot',
-		...process.argv.slice(2)
+		...args.criterionArgs
 	],
-	{ cwd: root, stdio: 'inherit' }
+	{
+		cwd: root,
+		stdio: 'inherit',
+		env: {
+			...process.env,
+			...(args.filter ? { RESIZE_FILTER: args.filter } : {})
+		}
+	}
 );
 
 if (cargo.status !== 0) {
@@ -68,6 +102,14 @@ async function criterionSummaries() {
 		]);
 		const timings = sample.times.map((time, index) => time / sample.iters[index]);
 		const stats = summarizeNanoseconds(timings);
+
+		if (!benchmark.group_id.startsWith(benchmarkConfig.groupPrefix)) {
+			continue;
+		}
+
+		if (!activeVariants.has(benchmark.function_id)) {
+			continue;
+		}
 
 		summaries.push({
 			caseId: benchmark.group_id,
@@ -132,14 +174,18 @@ function percentile(sortedTimings, percentileValue) {
 }
 
 function summaryRows(summaries) {
-	const baselineByCase = new Map(
-		summaries
-			.filter((summary) => summary.variant === 'baseline')
-			.map((summary) => [summary.caseId, summary.stats.mean])
+	const meanByCaseAndVariant = new Map(
+		summaries.map((summary) => [
+			caseVariantKey(summary.caseId, summary.variant),
+			summary.stats.mean
+		])
 	);
 
 	return summaries.map((summary) => {
-		const baselineMean = baselineByCase.get(summary.caseId);
+		const referenceVariant = referenceVariantFor(summary.variant);
+		const baselineMean = referenceVariant
+			? meanByCaseAndVariant.get(caseVariantKey(summary.caseId, referenceVariant))
+			: undefined;
 		return {
 			case: shortCaseId(summary.caseId),
 			variant: summary.variant,
@@ -156,7 +202,36 @@ function summaryRows(summaries) {
 }
 
 function shortCaseId(caseId) {
-	return caseId.replace('resize_nearest/celeste_rgba/', '');
+	return caseId.replace(benchmarkConfig.groupPrefix, '');
+}
+
+function caseVariantKey(caseId, variant) {
+	return `${caseId}\u0000${variant}`;
+}
+
+function activeVariantNames() {
+	let variants = benchmarkConfig.variants;
+	if (args.kernel === 'filters' && args.filter) {
+		variants = variants.filter((variant) => baseVariantName(variant) === args.filter);
+	}
+
+	return variants;
+}
+
+function referenceVariantFor(variant) {
+	if (benchmarkConfig.referenceMode === 'suffix') {
+		return `${baseVariantName(variant)}_reference`;
+	}
+
+	if (benchmarkConfig.referenceMode === 'baseline') {
+		return 'baseline';
+	}
+
+	return undefined;
+}
+
+function baseVariantName(variant) {
+	return variant.replace(/_(reference|image)$/, '');
 }
 
 function formatDuration(nanoseconds) {
@@ -193,6 +268,72 @@ function scaleIndex(caseId) {
 
 function variantIndex(variant) {
 	return variantOrder.get(variant) ?? Number.MAX_SAFE_INTEGER;
+}
+
+function parseArgs(argv) {
+	const criterionArgs = [];
+	let kernel = 'nearest';
+	let filter;
+	let baseline;
+
+	for (let index = 0; index < argv.length; index += 1) {
+		const arg = argv[index];
+
+		if (arg === '--kernel') {
+			kernel = argv[index + 1];
+			index += 1;
+			continue;
+		}
+
+		if (arg.startsWith('--kernel=')) {
+			kernel = arg.slice('--kernel='.length);
+			continue;
+		}
+
+		if (arg === '--filter') {
+			filter = argv[index + 1];
+			index += 1;
+			continue;
+		}
+
+		if (arg.startsWith('--filter=')) {
+			filter = arg.slice('--filter='.length);
+			continue;
+		}
+
+		if (arg === '--baseline') {
+			baseline = argv[index + 1];
+			criterionArgs.push(arg, baseline);
+			index += 1;
+			continue;
+		}
+
+		if (arg.startsWith('--baseline=')) {
+			baseline = arg.slice('--baseline='.length);
+			criterionArgs.push(arg);
+			continue;
+		}
+
+		criterionArgs.push(arg);
+	}
+
+	if (!Object.hasOwn(benchmarkConfigs, kernel)) {
+		throw new Error(
+			`Unknown resize benchmark kernel "${kernel}". Expected one of: ${Object.keys(benchmarkConfigs).join(', ')}`
+		);
+	}
+
+	if (filter && kernel !== 'filters') {
+		throw new Error('Resize filter selection is only available with --kernel filters.');
+	}
+
+	if (filter && !resizeFilterNames.includes(filter)) {
+		throw new Error(
+			`Unknown resize filter "${filter}". Expected one of: ${resizeFilterNames.join(', ')}`
+		);
+	}
+
+	return { kernel, filter, baseline, criterionArgs };
 }
 
 function table(rows) {
