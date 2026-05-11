@@ -34,8 +34,6 @@ pub fn resize_rgba_bilinear_into(
 ) -> Result<(), ProcessingError> {
     // TODO(perf): Add an exact-2x fast path that reuses the same x weights for
     // every pair of output columns.
-    // TODO(perf): Precompute paired source byte offsets and fixed-point weights
-    // once we have baseline bilinear timings for the Celeste fixture.
     // TODO(perf): Split edge pixels from interior pixels. Interior pixels can
     // skip clamped-sample branches/data shapes and use a tighter hot loop.
     // TODO(perf): Interpolate RGB and alpha as packed lanes or unrolled scalar
@@ -51,7 +49,7 @@ pub fn resize_rgba_bilinear_into(
         );
     }
 
-    resize_rgba_bilinear_reference_into(
+    resize_precomputed_bilinear_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
@@ -96,6 +94,57 @@ fn resize_same_width_bilinear_into(
 
         for ((output, top), bottom) in output_row.iter_mut().zip(top_row).zip(bottom_row) {
             *output = interpolate_vertical_byte(*top, *bottom, y_sample);
+        }
+    }
+
+    Ok(())
+}
+
+fn resize_precomputed_bilinear_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    validate_resize_buffers(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )?;
+
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let x_samples = prepare_x_byte_samples(source_dimensions.width(), output_dimensions.width())?;
+    let y_samples = prepare_y_row_samples(
+        source_dimensions.height(),
+        output_dimensions.height(),
+        source_width,
+    )?;
+
+    for (output_y, y_sample) in y_samples.iter().take(output_height).enumerate() {
+        let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
+
+        for (output_x, x_sample) in x_samples.iter().take(output_width).enumerate() {
+            let top_left_offset = y_sample.lower_byte_offset + x_sample.lower_byte_offset;
+            let top_right_offset = y_sample.lower_byte_offset + x_sample.upper_byte_offset;
+            let bottom_left_offset = y_sample.upper_byte_offset + x_sample.lower_byte_offset;
+            let bottom_right_offset = y_sample.upper_byte_offset + x_sample.upper_byte_offset;
+            let output_offset = output_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT;
+
+            for channel in 0..rgba::RGBA_CHANNEL_COUNT {
+                output_rgba[output_offset + channel] = interpolate_channel_by_weight(
+                    source_rgba[top_left_offset + channel],
+                    source_rgba[top_right_offset + channel],
+                    source_rgba[bottom_left_offset + channel],
+                    source_rgba[bottom_right_offset + channel],
+                    x_sample.weight_numerator,
+                    x_sample.denominator,
+                    y_sample.weight_numerator,
+                    y_sample.denominator,
+                );
+            }
         }
     }
 
@@ -174,11 +223,56 @@ pub fn resize_rgba_bilinear_reference_into(
 }
 
 #[derive(Debug, Clone, Copy)]
+struct ByteAxisSample {
+    lower_byte_offset: usize,
+    upper_byte_offset: usize,
+    weight_numerator: u64,
+    denominator: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct AxisSample {
     lower: usize,
     upper: usize,
     weight_numerator: u64,
     denominator: u64,
+}
+
+fn prepare_x_byte_samples(
+    source_width: u32,
+    output_width: u32,
+) -> Result<Vec<ByteAxisSample>, ProcessingError> {
+    prepare_axis_samples(source_width, output_width).map(|samples| {
+        samples
+            .into_iter()
+            .map(|sample| ByteAxisSample {
+                lower_byte_offset: sample.lower * rgba::RGBA_CHANNEL_COUNT,
+                upper_byte_offset: sample.upper * rgba::RGBA_CHANNEL_COUNT,
+                weight_numerator: sample.weight_numerator,
+                denominator: sample.denominator,
+            })
+            .collect()
+    })
+}
+
+fn prepare_y_row_samples(
+    source_height: u32,
+    output_height: u32,
+    source_width: usize,
+) -> Result<Vec<ByteAxisSample>, ProcessingError> {
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+
+    prepare_axis_samples(source_height, output_height).map(|samples| {
+        samples
+            .into_iter()
+            .map(|sample| ByteAxisSample {
+                lower_byte_offset: sample.lower * source_row_byte_len,
+                upper_byte_offset: sample.upper * source_row_byte_len,
+                weight_numerator: sample.weight_numerator,
+                denominator: sample.denominator,
+            })
+            .collect()
+    })
 }
 
 fn prepare_axis_samples(
@@ -261,16 +355,38 @@ fn interpolate_channel(
     x_sample: &AxisSample,
     y_sample: &AxisSample,
 ) -> u8 {
-    let x_weight = u128::from(x_sample.weight_numerator);
-    let y_weight = u128::from(y_sample.weight_numerator);
-    let x_inverse = u128::from(x_sample.denominator) - x_weight;
-    let y_inverse = u128::from(y_sample.denominator) - y_weight;
+    interpolate_channel_by_weight(
+        top_left,
+        top_right,
+        bottom_left,
+        bottom_right,
+        x_sample.weight_numerator,
+        x_sample.denominator,
+        y_sample.weight_numerator,
+        y_sample.denominator,
+    )
+}
+
+fn interpolate_channel_by_weight(
+    top_left: u8,
+    top_right: u8,
+    bottom_left: u8,
+    bottom_right: u8,
+    x_weight_numerator: u64,
+    x_denominator: u64,
+    y_weight_numerator: u64,
+    y_denominator: u64,
+) -> u8 {
+    let x_weight = u128::from(x_weight_numerator);
+    let y_weight = u128::from(y_weight_numerator);
+    let x_inverse = u128::from(x_denominator) - x_weight;
+    let y_inverse = u128::from(y_denominator) - y_weight;
 
     let weighted_sum = u128::from(top_left) * x_inverse * y_inverse
         + u128::from(top_right) * x_weight * y_inverse
         + u128::from(bottom_left) * x_inverse * y_weight
         + u128::from(bottom_right) * x_weight * y_weight;
-    let denominator = u128::from(x_sample.denominator) * u128::from(y_sample.denominator);
+    let denominator = u128::from(x_denominator) * u128::from(y_denominator);
 
     ((weighted_sum + denominator / 2) / denominator) as u8
 }
@@ -291,6 +407,21 @@ mod tests {
         assert_eq!(samples[1].weight_numerator, samples[1].denominator / 2);
         assert_eq!(samples[2].lower, 1);
         assert_eq!(samples[2].upper, 1);
+    }
+
+    #[test]
+    fn non_uniform_resize_matches_reference() {
+        let source_rgba: Vec<u8> = (0..5 * 4 * 4)
+            .map(|value| (value * 29 % 253) as u8)
+            .collect();
+
+        let output_rgba =
+            resize_rgba_bilinear(&source_rgba, dimensions(5, 4), dimensions(3, 7)).unwrap();
+        let reference_rgba =
+            resize_rgba_bilinear_reference(&source_rgba, dimensions(5, 4), dimensions(3, 7))
+                .unwrap();
+
+        assert_eq!(output_rgba, reference_rgba);
     }
 
     #[test]
