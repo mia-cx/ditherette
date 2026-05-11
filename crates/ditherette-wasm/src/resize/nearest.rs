@@ -298,19 +298,18 @@ fn resize_precomputed_offsets_word_into(
         })
         .collect();
 
-    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
-
     for (output_y, source_row_offset) in source_row_byte_offsets.into_iter().enumerate() {
-        let mut output_offset = output_y * output_row_byte_len;
+        let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
 
-        for source_x_offset in source_x_byte_offsets.iter().copied() {
+        // TODO(perf): Write output offsets incrementally instead of recomputing
+        // pixel_byte_offset for every pixel in the fallback path.
+        for (output_x, source_x_offset) in source_x_byte_offsets.iter().copied().enumerate() {
             copy_pixel_word(
                 source_rgba,
                 source_row_offset + source_x_offset,
                 output_rgba,
-                output_offset,
+                output_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT,
             );
-            output_offset += rgba::RGBA_CHANNEL_COUNT;
         }
     }
 
