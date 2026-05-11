@@ -521,11 +521,6 @@ export function createPaletteMatcher(
 	};
 }
 
-function rgbMemoKey(r: number, g: number, b: number) {
-	if (!isByte(r) || !isByte(g) || !isByte(b)) return undefined;
-	return (r << 16) | (g << 8) | b;
-}
-
 function isByte(value: number) {
 	return Number.isInteger(value) && value >= 0 && value <= 255;
 }
