@@ -11,6 +11,11 @@ const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const outDir = path.resolve(root, args.out ?? `benchmark-results/wasm-resize-${timestamp}`);
 const pkgDir = path.join(root, 'crates/ditherette-wasm/pkg');
 const resizeScales = [0.95, 0.75, 0.5, 0.25, 0.125];
+const significantNumberFormatter = new Intl.NumberFormat('en-US', {
+	maximumSignificantDigits: 4,
+	minimumSignificantDigits: 4,
+	useGrouping: false
+});
 
 await assertFile(
 	path.join(pkgDir, 'ditherette_wasm.js'),
@@ -24,9 +29,16 @@ await assertFile(
 const fixtureFile = await benchmarkFixtureFile(args);
 const server = await startBenchmarkServer({ pkgDir, fixtureFile });
 const browser = await chromium.launch({ headless: true });
+let statusLineActive = false;
 
 try {
 	const page = await browser.newPage();
+	page.on('console', (message) => {
+		if (message.type() !== 'debug') return;
+		const text = message.text();
+		if (!text.startsWith('bench-progress ')) return;
+		writeStatusLine(text.slice('bench-progress '.length));
+	});
 	await page.goto(server.url, { waitUntil: 'load' });
 
 	const result = await page.evaluate(async (config) => globalThis.runResizeBench(config), {
@@ -43,13 +55,32 @@ try {
 	const jsonPath = path.join(outDir, 'wasm-resize-nearest.json');
 	await writeFile(jsonPath, `${JSON.stringify(result, null, 2)}\n`);
 
+	clearStatusLine();
 	console.log(formatResultTable(result));
 	console.log(`\nWrote ${path.relative(root, jsonPath)}`);
 } finally {
+	clearStatusLine();
 	await browser.close();
 	await new Promise((resolve, reject) => {
 		server.instance.close((error) => (error ? reject(error) : resolve()));
 	});
+}
+
+function writeStatusLine(message) {
+	const status = `Benchmark ${message}`;
+	if (!process.stdout.isTTY) {
+		console.error(status);
+		return;
+	}
+
+	process.stderr.write(`\r${status}\x1b[K`);
+	statusLineActive = true;
+}
+
+function clearStatusLine() {
+	if (!statusLineActive || !process.stderr.isTTY) return;
+	process.stderr.write('\r\x1b[K');
+	statusLineActive = false;
 }
 
 async function benchmarkFixtureFile(options) {
@@ -67,13 +98,13 @@ async function startBenchmarkServer({ pkgDir, fixtureFile }) {
 			const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
 
 			if (requestUrl.pathname === '/') {
-				response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+				writeBenchmarkHeaders(response, 'text/html; charset=utf-8');
 				response.end(benchmarkHtml());
 				return;
 			}
 
 			if (requestUrl.pathname === '/bench/resize.js') {
-				response.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' });
+				writeBenchmarkHeaders(response, 'text/javascript; charset=utf-8');
 				response.end(benchmarkBrowserModule());
 				return;
 			}
@@ -110,8 +141,17 @@ async function startBenchmarkServer({ pkgDir, fixtureFile }) {
 
 async function serveFile(response, filePath) {
 	const contents = await readFile(filePath);
-	response.writeHead(200, { 'content-type': contentType(filePath) });
+	writeBenchmarkHeaders(response, contentType(filePath));
 	response.end(contents);
+}
+
+function writeBenchmarkHeaders(response, contentType) {
+	response.writeHead(200, {
+		'content-type': contentType,
+		'cross-origin-opener-policy': 'same-origin',
+		'cross-origin-embedder-policy': 'require-corp',
+		'cross-origin-resource-policy': 'same-origin'
+	});
 }
 
 function benchmarkHtml() {
@@ -123,9 +163,27 @@ function benchmarkHtml() {
 }
 
 function benchmarkBrowserModule() {
-	return String.raw`import init, { resize_rgba_nearest } from '/pkg/ditherette_wasm.js';
+	return String.raw`import init, {
+	resize_rgba_nearest,
+	resize_rgba_nearest_fast_paths,
+	resize_rgba_nearest_into,
+	resize_rgba_nearest_precomputed_offsets,
+	resize_rgba_nearest_reference,
+	resize_rgba_nearest_reference_into,
+	resize_rgba_nearest_word_copy
+} from '/pkg/ditherette_wasm.js';
 
 const RGBA_CHANNEL_COUNT = 4;
+
+const resizeVariants = [
+	{ id: 'baseline', kind: 'allocating', resize: resize_rgba_nearest_reference },
+	{ id: 'precomputed-offsets', kind: 'allocating', resize: resize_rgba_nearest_precomputed_offsets },
+	{ id: 'fast-paths', kind: 'allocating', resize: resize_rgba_nearest_fast_paths },
+	{ id: 'word-copy', kind: 'allocating', resize: resize_rgba_nearest_word_copy },
+	{ id: 'into-reused-output', kind: 'reused-output', resizeInto: resize_rgba_nearest_reference_into },
+	{ id: 'production', kind: 'allocating', resize: resize_rgba_nearest },
+	{ id: 'production-into', kind: 'reused-output', resizeInto: resize_rgba_nearest_into }
+];
 
 globalThis.runResizeBench = async function runResizeBench(config) {
 	await init('/pkg/ditherette_wasm_bg.wasm');
@@ -133,25 +191,38 @@ globalThis.runResizeBench = async function runResizeBench(config) {
 	const decodedFixture = await decodeFixture(config.fixture);
 	const cases = makeScaleCases(decodedFixture, config.scales);
 
+	const totalRuns = cases.length * resizeVariants.length;
+	let completedRuns = 0;
 	const results = [];
+	reportProgress(completedRuns, totalRuns, 'starting');
+
 	for (const benchmarkCase of cases) {
-		results.push(await measureResizeCase(benchmarkCase, config));
+		for (const variant of resizeVariants) {
+			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + variant.id);
+			results.push(await measureResizeVariant(benchmarkCase, variant, config));
+			completedRuns += 1;
+			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + variant.id);
+		}
 	}
+
+	assertMatchingVariantChecksums(results);
 
 	return {
 		benchmark: 'wasm-resize-nearest',
+		crossOriginIsolated: globalThis.crossOriginIsolated,
 		fixture: {
 			name: config.fixture.name,
 			width: decodedFixture.sourceWidth,
 			height: decodedFixture.sourceHeight,
-			decodeMs: roundMs(decodedFixture.decodeMs),
-			normalizeMs: roundMs(decodedFixture.normalizeMs)
+			decodeNs: millisecondsToNanoseconds(decodedFixture.decodeMs),
+			normalizeNs: millisecondsToNanoseconds(decodedFixture.normalizeMs)
 		},
 		timestamp: new Date().toISOString(),
 		userAgent: navigator.userAgent,
 		iterations: config.iterations,
 		warmups: config.warmups,
 		scales: config.scales,
+		variants: resizeVariants.map((variant) => variant.id),
 		results
 	};
 };
@@ -222,9 +293,19 @@ function makeScaleCases(decodedFixture, scales) {
 	return cases;
 }
 
-async function measureResizeCase(benchmarkCase, config) {
+async function measureResizeVariant(benchmarkCase, variant, config) {
+	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT;
+
+	if (variant.kind === 'reused-output') {
+		return measureIntoVariant(benchmarkCase, variant, config, expectedByteLength);
+	}
+
+	return measureAllocatingVariant(benchmarkCase, variant, config, expectedByteLength);
+}
+
+async function measureAllocatingVariant(benchmarkCase, variant, config, expectedByteLength) {
 	for (let index = 0; index < config.warmups; index += 1) {
-		resize_rgba_nearest(
+		variant.resize(
 			benchmarkCase.sourceRgba,
 			benchmarkCase.sourceWidth,
 			benchmarkCase.sourceHeight,
@@ -239,7 +320,7 @@ async function measureResizeCase(benchmarkCase, config) {
 
 	for (let index = 0; index < config.iterations; index += 1) {
 		const started = performance.now();
-		const outputRgba = resize_rgba_nearest(
+		const outputRgba = variant.resize(
 			benchmarkCase.sourceRgba,
 			benchmarkCase.sourceWidth,
 			benchmarkCase.sourceHeight,
@@ -253,26 +334,94 @@ async function measureResizeCase(benchmarkCase, config) {
 		checksums.push(checksumBytes(outputRgba));
 	}
 
-	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT;
+	return resizeResult(benchmarkCase, variant, timingsMs, checksums, outputByteLength, expectedByteLength);
+}
+
+async function measureIntoVariant(benchmarkCase, variant, config, expectedByteLength) {
+	const outputRgba = new Uint8Array(expectedByteLength);
+
+	for (let index = 0; index < config.warmups; index += 1) {
+		variant.resizeInto(
+			benchmarkCase.sourceRgba,
+			benchmarkCase.sourceWidth,
+			benchmarkCase.sourceHeight,
+			benchmarkCase.outputWidth,
+			benchmarkCase.outputHeight,
+			outputRgba
+		);
+	}
+
+	const timingsMs = [];
+	const checksums = [];
+
+	for (let index = 0; index < config.iterations; index += 1) {
+		const started = performance.now();
+		variant.resizeInto(
+			benchmarkCase.sourceRgba,
+			benchmarkCase.sourceWidth,
+			benchmarkCase.sourceHeight,
+			benchmarkCase.outputWidth,
+			benchmarkCase.outputHeight,
+			outputRgba
+		);
+		const wasmMs = performance.now() - started;
+
+		timingsMs.push(wasmMs);
+		checksums.push(checksumBytes(outputRgba));
+	}
+
+	return resizeResult(benchmarkCase, variant, timingsMs, checksums, outputRgba.byteLength, expectedByteLength);
+}
+
+function resizeResult(benchmarkCase, variant, timingsMs, checksums, outputByteLength, expectedByteLength) {
+	const resultId = benchmarkCase.id + '-' + variant.id;
+
 	if (outputByteLength !== expectedByteLength) {
-		throw new Error(benchmarkCase.id + ' produced ' + outputByteLength + ' bytes; expected ' + expectedByteLength);
+		throw new Error(resultId + ' produced ' + outputByteLength + ' bytes; expected ' + expectedByteLength);
 	}
 
 	if (new Set(checksums).size !== 1) {
-		throw new Error(benchmarkCase.id + ' produced unstable checksums: ' + checksums.join(', '));
+		throw new Error(resultId + ' produced unstable checksums: ' + checksums.join(', '));
 	}
 
 	return {
 		id: benchmarkCase.id,
+		variant: variant.id,
 		lane: benchmarkCase.lane,
 		scale: benchmarkCase.scale,
 		source: { width: benchmarkCase.sourceWidth, height: benchmarkCase.sourceHeight },
 		output: { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight, byteLength: outputByteLength },
-		decodeMs: roundMs(benchmarkCase.decodeMs),
-		normalizeMs: roundMs(benchmarkCase.normalizeMs),
-		wasmMs: summarizeTimings(timingsMs),
+		decodeNs: millisecondsToNanoseconds(benchmarkCase.decodeMs),
+		normalizeNs: millisecondsToNanoseconds(benchmarkCase.normalizeMs),
+		wasmNs: summarizeTimings(timingsMs),
 		checksum: checksums[0]
 	};
+}
+
+function assertMatchingVariantChecksums(results) {
+	const baselineChecksums = new Map();
+
+	for (const result of results) {
+		const key = result.lane + ':' + result.scale;
+		if (result.variant === 'baseline') {
+			baselineChecksums.set(key, result.checksum);
+		}
+	}
+
+	for (const result of results) {
+		const key = result.lane + ':' + result.scale;
+		const baselineChecksum = baselineChecksums.get(key);
+		if (baselineChecksum !== result.checksum) {
+			throw new Error(
+				result.id + ' ' + result.variant + ' checksum ' + result.checksum + ' did not match baseline ' + baselineChecksum
+			);
+		}
+	}
+}
+
+function reportProgress(completedRuns, totalRuns, label) {
+	const remainingRuns = totalRuns - completedRuns;
+	console.debug('bench-progress ' + completedRuns + '/' + totalRuns + ' complete · ' + remainingRuns + ' remaining · ' + label);
 }
 
 function scaledDimension(sourceDimension, scale) {
@@ -288,21 +437,21 @@ function summarizeTimings(timingsMs) {
 	const total = sorted.reduce((sum, value) => sum + value, 0);
 
 	return {
-		mean: roundMs(total / sorted.length),
-		median: roundMs(percentile(sorted, 50)),
-		mode: modeMs(timingsMs),
-		min: roundMs(sorted[0]),
-		p1: roundMs(percentile(sorted, 1)),
-		p2: roundMs(percentile(sorted, 2)),
-		p5: roundMs(percentile(sorted, 5)),
-		p25: roundMs(percentile(sorted, 25)),
-		p50: roundMs(percentile(sorted, 50)),
-		p75: roundMs(percentile(sorted, 75)),
-		p95: roundMs(percentile(sorted, 95)),
-		p98: roundMs(percentile(sorted, 98)),
-		p99: roundMs(percentile(sorted, 99)),
-		max: roundMs(sorted[sorted.length - 1]),
-		samples: timingsMs.map(roundMs)
+		mean: millisecondsToNanoseconds(total / sorted.length),
+		median: millisecondsToNanoseconds(percentile(sorted, 50)),
+		mode: modeNs(timingsMs),
+		min: millisecondsToNanoseconds(sorted[0]),
+		p1: millisecondsToNanoseconds(percentile(sorted, 1)),
+		p2: millisecondsToNanoseconds(percentile(sorted, 2)),
+		p5: millisecondsToNanoseconds(percentile(sorted, 5)),
+		p25: millisecondsToNanoseconds(percentile(sorted, 25)),
+		p50: millisecondsToNanoseconds(percentile(sorted, 50)),
+		p75: millisecondsToNanoseconds(percentile(sorted, 75)),
+		p95: millisecondsToNanoseconds(percentile(sorted, 95)),
+		p98: millisecondsToNanoseconds(percentile(sorted, 98)),
+		p99: millisecondsToNanoseconds(percentile(sorted, 99)),
+		max: millisecondsToNanoseconds(sorted[sorted.length - 1]),
+		samples: timingsMs.map(millisecondsToNanoseconds)
 	};
 }
 
@@ -317,15 +466,15 @@ function percentile(sortedTimingsMs, percentileValue) {
 	return sortedTimingsMs[lowerIndex] * (1 - weight) + sortedTimingsMs[upperIndex] * weight;
 }
 
-function modeMs(timingsMs) {
+function modeNs(timingsMs) {
 	const counts = new Map();
 
 	for (const timing of timingsMs) {
-		const rounded = roundMs(timing);
-		counts.set(rounded, (counts.get(rounded) ?? 0) + 1);
+		const nanoseconds = millisecondsToNanoseconds(timing);
+		counts.set(nanoseconds, (counts.get(nanoseconds) ?? 0) + 1);
 	}
 
-	let mode = roundMs(timingsMs[0]);
+	let mode = millisecondsToNanoseconds(timingsMs[0]);
 	let modeCount = 0;
 
 	for (const [timing, count] of counts) {
@@ -347,43 +496,78 @@ function checksumBytes(bytes) {
 	return hash >>> 0;
 }
 
-function roundMs(value) {
-	return Math.round(value * 1000) / 1000;
-}`;
+function millisecondsToNanoseconds(milliseconds) {
+	return Math.round(milliseconds * 1_000_000);
 }
-
+`;
+}
 function formatResultTable(result) {
-	const rows = result.results.map((entry) => ({
-		case: entry.id,
-		lane: entry.lane,
-		'scale (×)': entry.scale,
-		'source (px)': `${entry.source.width}×${entry.source.height}`,
-		'output (px)': `${entry.output.width}×${entry.output.height}`,
-		'decode (ms)': entry.decodeMs,
-		'normalize (ms)': entry.normalizeMs,
-		'mean (ms)': entry.wasmMs.mean,
-		'median (ms)': entry.wasmMs.median,
-		'mode (ms)': entry.wasmMs.mode,
-		'min (ms)': entry.wasmMs.min,
-		'p1 (ms)': entry.wasmMs.p1,
-		'p2 (ms)': entry.wasmMs.p2,
-		'p5 (ms)': entry.wasmMs.p5,
-		'p25 (ms)': entry.wasmMs.p25,
-		'p50 (ms)': entry.wasmMs.p50,
-		'p75 (ms)': entry.wasmMs.p75,
-		'p95 (ms)': entry.wasmMs.p95,
-		'p98 (ms)': entry.wasmMs.p98,
-		'p99 (ms)': entry.wasmMs.p99,
-		'max (ms)': entry.wasmMs.max,
-		checksum: entry.checksum
-	}));
+	const baselines = baselineResultsByCase(result.results);
+	const rows = result.results.map((entry) => {
+		const baseline = baselines.get(entry.id);
+
+		return {
+			case: entry.id,
+			variant: entry.variant,
+			lane: entry.lane,
+			scale: `${entry.scale}×`,
+			source: `${entry.source.width}×${entry.source.height}px`,
+			output: `${entry.output.width}×${entry.output.height}px`,
+			decode: formatDuration(entry.decodeNs),
+			normalize: formatDuration(entry.normalizeNs),
+			mean: formatDurationDelta(entry.wasmNs.mean, baseline?.wasmNs.mean),
+			median: formatDurationDelta(entry.wasmNs.median, baseline?.wasmNs.median),
+			mode: formatDurationDelta(entry.wasmNs.mode, baseline?.wasmNs.mode),
+			min: formatDurationDelta(entry.wasmNs.min, baseline?.wasmNs.min),
+			p1: formatDurationDelta(entry.wasmNs.p1, baseline?.wasmNs.p1),
+			p2: formatDurationDelta(entry.wasmNs.p2, baseline?.wasmNs.p2),
+			p5: formatDurationDelta(entry.wasmNs.p5, baseline?.wasmNs.p5),
+			p25: formatDurationDelta(entry.wasmNs.p25, baseline?.wasmNs.p25),
+			p50: formatDurationDelta(entry.wasmNs.p50, baseline?.wasmNs.p50),
+			p75: formatDurationDelta(entry.wasmNs.p75, baseline?.wasmNs.p75),
+			p95: formatDurationDelta(entry.wasmNs.p95, baseline?.wasmNs.p95),
+			p98: formatDurationDelta(entry.wasmNs.p98, baseline?.wasmNs.p98),
+			p99: formatDurationDelta(entry.wasmNs.p99, baseline?.wasmNs.p99),
+			max: formatDurationDelta(entry.wasmNs.max, baseline?.wasmNs.max),
+			checksum: entry.checksum
+		};
+	});
 
 	return [
 		`Fixture: ${result.fixture.name} (${result.fixture.width}×${result.fixture.height})`,
 		`Browser: ${result.userAgent}`,
+		`Cross-origin isolated: ${result.crossOriginIsolated}`,
 		`Iterations: ${result.iterations}, warmups: ${result.warmups}`,
 		table(rows)
 	].join('\n');
+}
+
+function baselineResultsByCase(results) {
+	return new Map(
+		results.filter((result) => result.variant === 'baseline').map((result) => [result.id, result])
+	);
+}
+
+function formatDurationDelta(nanoseconds, baselineNanoseconds) {
+	const duration = formatDuration(nanoseconds);
+	if (!baselineNanoseconds) return duration;
+
+	const speedFactor = baselineNanoseconds / nanoseconds;
+	return `${duration} (${formatSignificant(speedFactor)}×)`;
+}
+
+function formatDuration(nanoseconds) {
+	if (nanoseconds === 0) return '0ns';
+	if (!Number.isFinite(nanoseconds)) return String(nanoseconds);
+
+	const absolute = Math.abs(nanoseconds);
+	if (absolute >= 1_000_000) return `${formatSignificant(nanoseconds / 1_000_000)}ms`;
+	if (absolute >= 1_000) return `${formatSignificant(nanoseconds / 1_000)}µs`;
+	return `${formatSignificant(nanoseconds)}ns`;
+}
+
+function formatSignificant(value) {
+	return significantNumberFormatter.format(value);
 }
 
 function table(rows) {
