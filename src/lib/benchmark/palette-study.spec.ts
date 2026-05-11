@@ -24,9 +24,7 @@ beforeAll(() => {
 
 describe('palette study harness', () => {
 	it('runs native direct byte-rgb studies and validates checksums', () => {
-		const data = new Uint8ClampedArray([
-			0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 255, 0, 0, 0, 255
-		]);
+		const data = tinyImageData();
 		const result = runPaletteStudy({
 			iterations: 1,
 			warmups: 0,
@@ -49,4 +47,30 @@ describe('palette study harness', () => {
 		expect(result.rows[1]!.cacheHits).toBeGreaterThan(0);
 		expect(paletteStudyResultsToCsv(result)).toContain('candidateEvaluations');
 	});
+
+	it('runs kernel-only diffusion studies', () => {
+		const result = runPaletteStudy({
+			iterations: 1,
+			warmups: 0,
+			studies: ['diffusion-kernel-only'],
+			variants: ['generic-kernel', 'unrolled-kernel'],
+			dithers: ['sierra'],
+			sources: [
+				{
+					id: 'tiny',
+					label: 'Tiny',
+					imageData: new ImageData(tinyImageData(), 2, 2)
+				}
+			]
+		});
+
+		expect(result.rows).toHaveLength(2);
+		expect(result.rows.every((row) => row.study === 'diffusion-kernel-only')).toBe(true);
+		expect(result.rows.every((row) => row.dither === 'sierra')).toBe(true);
+		expect(result.rows.every((row) => row.queries === 4)).toBe(true);
+	});
 });
+
+function tinyImageData() {
+	return new Uint8ClampedArray([0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 255, 0, 0, 0, 255]);
+}

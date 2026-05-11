@@ -12,7 +12,12 @@ export type PaletteStudyId =
 	| 'cache-study'
 	| 'matcher';
 
-export type PaletteStudyVariant = 'scan' | 'distance-tables' | 'dense-rgb-distance-tables';
+export type PaletteStudyVariant =
+	| 'scan'
+	| 'distance-tables'
+	| 'dense-rgb-distance-tables'
+	| 'generic-kernel'
+	| 'unrolled-kernel';
 
 export type PaletteStudySource = {
 	id: string;
@@ -83,6 +88,11 @@ const DEFAULT_VARIANTS: readonly PaletteStudyVariant[] = [
 	'distance-tables',
 	'dense-rgb-distance-tables'
 ];
+const DEFAULT_DIFFUSION_DITHERS: readonly DitherId[] = ['floyd-steinberg', 'sierra', 'sierra-lite'];
+const DIFFUSION_KERNEL_VARIANTS: readonly PaletteStudyVariant[] = [
+	'generic-kernel',
+	'unrolled-kernel'
+];
 const RGB24_SIZE = 256 * 256 * 256;
 
 export function runPaletteStudy(options: PaletteStudyOptions): PaletteStudyResult {
@@ -95,6 +105,26 @@ export function runPaletteStudy(options: PaletteStudyOptions): PaletteStudyResul
 
 	for (const source of options.sources) {
 		for (const study of studies) {
+			if (study === 'diffusion-kernel-only') {
+				const dithers = options.dithers?.length ? options.dithers : DEFAULT_DIFFUSION_DITHERS;
+				const kernelVariants = options.variants?.length
+					? options.variants
+					: DIFFUSION_KERNEL_VARIANTS;
+				for (const dither of dithers) {
+					if (!DEFAULT_DIFFUSION_DITHERS.includes(dither)) continue;
+					for (const variant of kernelVariants) {
+						if (variant !== 'generic-kernel' && variant !== 'unrolled-kernel') continue;
+						for (let warmup = 0; warmup < warmups; warmup++) {
+							runDiffusionKernelStudy(source, dither, variant);
+						}
+						const runs = Array.from({ length: iterations }, () =>
+							runDiffusionKernelStudy(source, dither, variant)
+						);
+						rows.push(meanDirectRows(runs));
+					}
+				}
+				continue;
+			}
 			if (study !== 'direct-byte-rgb' && study !== 'cache-study' && study !== 'matcher') {
 				rows.push(...unsupportedRows(source, study, variants, colorSpaces));
 				continue;
@@ -201,14 +231,346 @@ function runDirectByteRgbStudy(
 	};
 }
 
+function runDiffusionKernelStudy(
+	source: PaletteStudySource,
+	dither: DitherId,
+	variant: PaletteStudyVariant
+): PaletteStudyRow {
+	const image = source.imageData;
+	const pixels = image.width * image.height;
+	const totalStart = performance.now();
+	const buildStart = performance.now();
+	const work = new Float32Array(pixels * 3);
+	for (
+		let index = 0, sourceOffset = 0, workOffset = 0;
+		index < pixels;
+		index++, sourceOffset += 4, workOffset += 3
+	) {
+		work[workOffset] = image.data[sourceOffset]!;
+		work[workOffset + 1] = image.data[sourceOffset + 1]!;
+		work[workOffset + 2] = image.data[sourceOffset + 2]!;
+	}
+	const buildMs = performance.now() - buildStart;
+	let checksum = 0x811c9dc5;
+	const loopStart = performance.now();
+	for (let y = 0; y < image.height; y++) {
+		const reverse = y % 2 === 1;
+		const start = reverse ? image.width - 1 : 0;
+		const end = reverse ? -1 : image.width;
+		const step = reverse ? -1 : 1;
+		for (let x = start; x !== end; x += step) {
+			const workOffset = (y * image.width + x) * 3;
+			const current0 = work[workOffset]!;
+			const current1 = work[workOffset + 1]!;
+			const current2 = work[workOffset + 2]!;
+			const error0 = current0 - 96;
+			const error1 = current1 - 96;
+			const error2 = current2 - 96;
+			checksum ^= ((current0 + current1 + current2) | 0) & 255;
+			checksum = Math.imul(checksum, 0x01000193) >>> 0;
+			if (variant === 'unrolled-kernel') {
+				scatterKernelUnrolled(
+					work,
+					image.width,
+					image.height,
+					x,
+					y,
+					workOffset,
+					reverse,
+					dither,
+					error0,
+					error1,
+					error2
+				);
+			} else {
+				scatterKernelGeneric(
+					work,
+					image.width,
+					image.height,
+					x,
+					y,
+					reverse,
+					dither,
+					error0,
+					error1,
+					error2
+				);
+			}
+		}
+	}
+	const loopMs = performance.now() - loopStart;
+	return {
+		study: 'diffusion-kernel-only',
+		source: source.id,
+		pixels,
+		paletteColors: 0,
+		dither,
+		colorSpace: 'srgb',
+		variant,
+		buildMs,
+		loopMs,
+		totalMs: performance.now() - totalStart,
+		candidateEvaluations: 0,
+		queries: pixels,
+		uniqueKeys: 0,
+		cacheHits: 0,
+		cacheMisses: 0,
+		cacheCollisions: 0,
+		cacheSets: 0,
+		cacheBytes: 0,
+		tableBytes: 0,
+		workBytes: work.byteLength,
+		checksum: checksum.toString(16).padStart(8, '0'),
+		matchesBaseline: true,
+		notes: 'fake nearest-color diffusion scatter/update only'
+	};
+}
+
+function scatterKernelGeneric(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	reverse: boolean,
+	dither: DitherId,
+	error0: number,
+	error1: number,
+	error2: number
+) {
+	for (const [dxBase, dy, weight] of diffusionKernel(dither)) {
+		const dx = reverse ? -dxBase : dxBase;
+		const xx = x + dx;
+		const yy = y + dy;
+		if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+		addKernelError(work, (yy * width + xx) * 3, error0, error1, error2, weight);
+	}
+}
+
+function scatterKernelUnrolled(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	dither: DitherId,
+	error0: number,
+	error1: number,
+	error2: number
+) {
+	switch (dither) {
+		case 'floyd-steinberg':
+			scatterKernelFloydUnrolled(
+				work,
+				width,
+				height,
+				x,
+				y,
+				workOffset,
+				reverse,
+				error0,
+				error1,
+				error2
+			);
+			return;
+		case 'sierra':
+			scatterKernelSierraUnrolled(
+				work,
+				width,
+				height,
+				x,
+				y,
+				workOffset,
+				reverse,
+				error0,
+				error1,
+				error2
+			);
+			return;
+		case 'sierra-lite':
+			scatterKernelSierraLiteUnrolled(
+				work,
+				width,
+				height,
+				x,
+				y,
+				workOffset,
+				reverse,
+				error0,
+				error1,
+				error2
+			);
+			return;
+	}
+}
+
+function scatterKernelFloydUnrolled(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number
+) {
+	if (reverse) {
+		if (x > 0) addKernelError(work, workOffset - 3, error0, error1, error2, 7 / 16);
+		if (y + 1 < height) {
+			const nextRow = workOffset + width * 3;
+			if (x + 1 < width) addKernelError(work, nextRow + 3, error0, error1, error2, 3 / 16);
+			addKernelError(work, nextRow, error0, error1, error2, 5 / 16);
+			if (x > 0) addKernelError(work, nextRow - 3, error0, error1, error2, 1 / 16);
+		}
+		return;
+	}
+	if (x + 1 < width) addKernelError(work, workOffset + 3, error0, error1, error2, 7 / 16);
+	if (y + 1 < height) {
+		const nextRow = workOffset + width * 3;
+		if (x > 0) addKernelError(work, nextRow - 3, error0, error1, error2, 3 / 16);
+		addKernelError(work, nextRow, error0, error1, error2, 5 / 16);
+		if (x + 1 < width) addKernelError(work, nextRow + 3, error0, error1, error2, 1 / 16);
+	}
+}
+
+function scatterKernelSierraUnrolled(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number
+) {
+	if (reverse) {
+		if (x > 0) addKernelError(work, workOffset - 3, error0, error1, error2, 5 / 32);
+		if (x > 1) addKernelError(work, workOffset - 6, error0, error1, error2, 3 / 32);
+		if (y + 1 < height) {
+			const nextRow = workOffset + width * 3;
+			if (x + 2 < width) addKernelError(work, nextRow + 6, error0, error1, error2, 2 / 32);
+			if (x + 1 < width) addKernelError(work, nextRow + 3, error0, error1, error2, 4 / 32);
+			addKernelError(work, nextRow, error0, error1, error2, 5 / 32);
+			if (x > 0) addKernelError(work, nextRow - 3, error0, error1, error2, 4 / 32);
+			if (x > 1) addKernelError(work, nextRow - 6, error0, error1, error2, 2 / 32);
+		}
+		if (y + 2 < height) {
+			const next2Row = workOffset + width * 6;
+			if (x + 1 < width) addKernelError(work, next2Row + 3, error0, error1, error2, 2 / 32);
+			addKernelError(work, next2Row, error0, error1, error2, 3 / 32);
+			if (x > 0) addKernelError(work, next2Row - 3, error0, error1, error2, 2 / 32);
+		}
+		return;
+	}
+	if (x + 1 < width) addKernelError(work, workOffset + 3, error0, error1, error2, 5 / 32);
+	if (x + 2 < width) addKernelError(work, workOffset + 6, error0, error1, error2, 3 / 32);
+	if (y + 1 < height) {
+		const nextRow = workOffset + width * 3;
+		if (x > 1) addKernelError(work, nextRow - 6, error0, error1, error2, 2 / 32);
+		if (x > 0) addKernelError(work, nextRow - 3, error0, error1, error2, 4 / 32);
+		addKernelError(work, nextRow, error0, error1, error2, 5 / 32);
+		if (x + 1 < width) addKernelError(work, nextRow + 3, error0, error1, error2, 4 / 32);
+		if (x + 2 < width) addKernelError(work, nextRow + 6, error0, error1, error2, 2 / 32);
+	}
+	if (y + 2 < height) {
+		const next2Row = workOffset + width * 6;
+		if (x > 0) addKernelError(work, next2Row - 3, error0, error1, error2, 2 / 32);
+		addKernelError(work, next2Row, error0, error1, error2, 3 / 32);
+		if (x + 1 < width) addKernelError(work, next2Row + 3, error0, error1, error2, 2 / 32);
+	}
+}
+
+function scatterKernelSierraLiteUnrolled(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number
+) {
+	if (reverse) {
+		if (x > 0) addKernelError(work, workOffset - 3, error0, error1, error2, 2 / 4);
+		if (y + 1 < height) {
+			const nextRow = workOffset + width * 3;
+			if (x + 1 < width) addKernelError(work, nextRow + 3, error0, error1, error2, 1 / 4);
+			addKernelError(work, nextRow, error0, error1, error2, 1 / 4);
+		}
+		return;
+	}
+	if (x + 1 < width) addKernelError(work, workOffset + 3, error0, error1, error2, 2 / 4);
+	if (y + 1 < height) {
+		const nextRow = workOffset + width * 3;
+		if (x > 0) addKernelError(work, nextRow - 3, error0, error1, error2, 1 / 4);
+		addKernelError(work, nextRow, error0, error1, error2, 1 / 4);
+	}
+}
+
+function diffusionKernel(dither: DitherId): readonly (readonly [number, number, number])[] {
+	switch (dither) {
+		case 'floyd-steinberg':
+			return [
+				[1, 0, 7 / 16],
+				[-1, 1, 3 / 16],
+				[0, 1, 5 / 16],
+				[1, 1, 1 / 16]
+			];
+		case 'sierra':
+			return [
+				[1, 0, 5 / 32],
+				[2, 0, 3 / 32],
+				[-2, 1, 2 / 32],
+				[-1, 1, 4 / 32],
+				[0, 1, 5 / 32],
+				[1, 1, 4 / 32],
+				[2, 1, 2 / 32],
+				[-1, 2, 2 / 32],
+				[0, 2, 3 / 32],
+				[1, 2, 2 / 32]
+			];
+		case 'sierra-lite':
+			return [
+				[1, 0, 2 / 4],
+				[-1, 1, 1 / 4],
+				[0, 1, 1 / 4]
+			];
+		default:
+			return [];
+	}
+}
+
+function addKernelError(
+	work: Float32Array,
+	target: number,
+	error0: number,
+	error1: number,
+	error2: number,
+	weight: number
+) {
+	work[target] += error0 * weight;
+	work[target + 1] += error1 * weight;
+	work[target + 2] += error2 * weight;
+}
+
 function matcherOptionsForVariant(variant: PaletteStudyVariant): PaletteMatcherOptions {
 	switch (variant) {
-		case 'scan':
-			return { denseRgbMemo: false, distanceTables: false };
 		case 'distance-tables':
 			return { denseRgbMemo: false, distanceTables: true };
 		case 'dense-rgb-distance-tables':
 			return { denseRgbMemo: true, distanceTables: true };
+		case 'scan':
+		case 'generic-kernel':
+		case 'unrolled-kernel':
+			return { denseRgbMemo: false, distanceTables: false };
 	}
 }
 
@@ -329,6 +691,7 @@ function csvCell(value: unknown) {
 export function formatPaletteStudyTable(result: PaletteStudyResult): string {
 	const headers = [
 		'study',
+		'dither',
 		'color',
 		'variant',
 		'build',
@@ -342,6 +705,7 @@ export function formatPaletteStudyTable(result: PaletteStudyResult): string {
 	];
 	const rows = result.rows.map((row) => [
 		row.study,
+		row.dither,
 		row.colorSpace,
 		row.variant,
 		formatMs(row.buildMs),
