@@ -355,18 +355,31 @@ fn prepare_source_row_byte_offsets(
     let output_height = output_dimensions.height_usize()?;
 
     scratch.source_row_byte_offsets.clear();
-    scratch
-        .source_row_byte_offsets
-        // TODO(perf): Generate row offsets incrementally with an error
-        // accumulator instead of mapping each row with a multiply/divide.
-        .extend((0..output_height).map(|output_y| {
-            let source_y = map_output_coordinate(
-                output_y,
-                source_dimensions.height(),
-                output_dimensions.height(),
-            );
-            source_y * source_width * rgba::RGBA_CHANNEL_COUNT
-        }));
+    scratch.source_row_byte_offsets.reserve(output_height);
+
+    let source_height = u64::from(source_dimensions.height());
+    let output_height_u64 = u64::from(output_dimensions.height());
+    let denominator = 2 * output_height_u64;
+    let step = 2 * source_height;
+    let base_step = step / denominator;
+    let step_remainder = step % denominator;
+    let mut source_y = source_height / denominator;
+    let mut remainder = source_height % denominator;
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for _ in 0..output_height {
+        let clamped_source_y = source_y.min(source_height - 1) as usize;
+        scratch
+            .source_row_byte_offsets
+            .push(clamped_source_y * source_row_byte_len);
+
+        source_y += base_step;
+        remainder += step_remainder;
+        if remainder >= denominator {
+            source_y += 1;
+            remainder -= denominator;
+        }
+    }
 
     Ok(())
 }
