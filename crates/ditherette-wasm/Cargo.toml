@@ -23,6 +23,14 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 name = "resize_nearest"
 harness = false
 
+[[bench]]
+name = "resize_bilinear"
+harness = false
+
+[[bench]]
+name = "resize_filters"
+harness = false
+
 [profile.release]
 opt-level = "s"
 
