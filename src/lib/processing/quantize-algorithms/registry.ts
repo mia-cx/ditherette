@@ -4,8 +4,10 @@ import { bayer2Algorithm } from './bayer-2';
 import { bayer4Algorithm } from './bayer-4';
 import { bayer8Algorithm } from './bayer-8';
 import { noneAlgorithm } from './direct';
-import { floydSteinbergAlgorithm, sierraAlgorithm, sierraLiteAlgorithm } from './error-diffusion';
+import { floydSteinbergAlgorithm } from './floyd-steinberg';
 import { randomAlgorithm } from './random';
+import { sierraAlgorithm } from './sierra';
+import { sierraLiteAlgorithm } from './sierra-lite';
 import type { QuantizeAlgorithm } from './types';
 
 export const QUANTIZE_ALGORITHMS = [

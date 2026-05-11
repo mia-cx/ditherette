@@ -20,33 +20,12 @@ describe('quantize algorithm registry', () => {
 		for (const id of DITHER_IDS) expect(quantizeAlgorithmFor(id).id).toBe(id);
 	});
 
-	it('routes direct algorithms through the direct runner', () => {
-		let directRuns = 0;
-		let diffusionRuns = 0;
-
-		quantizeAlgorithmFor('bayer-8').quantize({
-			settings: undefined as never,
-			strength: 1,
-			runDirect: () => directRuns++,
-			runErrorDiffusion: () => diffusionRuns++
-		});
-
-		expect(directRuns).toBe(1);
-		expect(diffusionRuns).toBe(0);
-	});
-
-	it('falls back to direct quantization when diffusion strength is zero', () => {
-		let directRuns = 0;
-		let diffusionRuns = 0;
-
-		quantizeAlgorithmFor('floyd-steinberg').quantize({
-			settings: undefined as never,
-			strength: 0,
-			runDirect: () => directRuns++,
-			runErrorDiffusion: () => diffusionRuns++
-		});
-
-		expect(directRuns).toBe(1);
-		expect(diffusionRuns).toBe(0);
+	it('classifies algorithms by implementation family', () => {
+		expect(quantizeAlgorithmFor('none').family).toBe('direct');
+		expect(quantizeAlgorithmFor('bayer-8').family).toBe('ordered');
+		expect(quantizeAlgorithmFor('random').family).toBe('random');
+		expect(quantizeAlgorithmFor('floyd-steinberg').family).toBe('error-diffusion');
+		expect(quantizeAlgorithmFor('sierra').family).toBe('error-diffusion');
+		expect(quantizeAlgorithmFor('sierra-lite').family).toBe('error-diffusion');
 	});
 });
