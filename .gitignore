@@ -53,5 +53,7 @@ vite.config.ts.timestamp-*
 
 # Benchmark artifacts
 benchmark-results/
-benchmark-fixtures/
 .ant-colony/
+benchmark-fixtures/*
+!benchmark-fixtures/
+!benchmark-fixtures/Celeste_box_art_full.png
