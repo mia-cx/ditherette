@@ -32,9 +32,8 @@ pub fn resize_rgba_bilinear_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Add same-width and exact-2x fast paths. Same-width resize can
-    // interpolate vertically with two row pointers; exact 2x can reuse the same
-    // x weights for every pair of output columns.
+    // TODO(perf): Add an exact-2x fast path that reuses the same x weights for
+    // every pair of output columns.
     // TODO(perf): Precompute paired source byte offsets and fixed-point weights
     // once we have baseline bilinear timings for the Celeste fixture.
     // TODO(perf): Split edge pixels from interior pixels. Interior pixels can
@@ -43,12 +42,64 @@ pub fn resize_rgba_bilinear_into(
     // channels to remove the tiny per-pixel channel loop.
     // TODO(perf): Replace per-channel u128 math with a fixed-point two-pass
     // blend: horizontal interpolation into u16/u32 intermediates, then vertical.
+    if source_dimensions.width() == output_dimensions.width() {
+        return resize_same_width_bilinear_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        );
+    }
+
     resize_rgba_bilinear_reference_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
     )
+}
+
+fn resize_same_width_bilinear_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    validate_resize_buffers(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )?;
+
+    if source_dimensions.height() == output_dimensions.height() {
+        output_rgba.copy_from_slice(source_rgba);
+        return Ok(());
+    }
+
+    let row_byte_len = source_dimensions.width_usize()? * rgba::RGBA_CHANNEL_COUNT;
+    let y_samples = prepare_axis_samples(source_dimensions.height(), output_dimensions.height())?;
+
+    for (output_y, y_sample) in y_samples.iter().enumerate() {
+        let output_row_offset = output_y * row_byte_len;
+        let output_row = &mut output_rgba[output_row_offset..output_row_offset + row_byte_len];
+        let top_row_offset = y_sample.lower * row_byte_len;
+        let top_row = &source_rgba[top_row_offset..top_row_offset + row_byte_len];
+
+        if y_sample.lower == y_sample.upper {
+            output_row.copy_from_slice(top_row);
+            continue;
+        }
+
+        let bottom_row_offset = y_sample.upper * row_byte_len;
+        let bottom_row = &source_rgba[bottom_row_offset..bottom_row_offset + row_byte_len];
+
+        for ((output, top), bottom) in output_row.iter_mut().zip(top_row).zip(bottom_row) {
+            *output = interpolate_vertical_byte(*top, *bottom, y_sample);
+        }
+    }
+
+    Ok(())
 }
 
 /// Straightforward reference implementation for bilinear resize.
@@ -193,6 +244,15 @@ fn prepare_axis_samples(
     Ok(samples)
 }
 
+fn interpolate_vertical_byte(top: u8, bottom: u8, y_sample: &AxisSample) -> u8 {
+    let weight = u128::from(y_sample.weight_numerator);
+    let denominator = u128::from(y_sample.denominator);
+    let inverse = denominator - weight;
+    let weighted_sum = u128::from(top) * inverse + u128::from(bottom) * weight;
+
+    ((weighted_sum + denominator / 2) / denominator) as u8
+}
+
 fn interpolate_channel(
     top_left: u8,
     top_right: u8,
@@ -231,6 +291,21 @@ mod tests {
         assert_eq!(samples[1].weight_numerator, samples[1].denominator / 2);
         assert_eq!(samples[2].lower, 1);
         assert_eq!(samples[2].upper, 1);
+    }
+
+    #[test]
+    fn same_width_resize_matches_reference() {
+        let source_rgba: Vec<u8> = (0..4 * 5 * 4)
+            .map(|value| (value * 17 % 251) as u8)
+            .collect();
+
+        let output_rgba =
+            resize_rgba_bilinear(&source_rgba, dimensions(4, 5), dimensions(4, 3)).unwrap();
+        let reference_rgba =
+            resize_rgba_bilinear_reference(&source_rgba, dimensions(4, 5), dimensions(4, 3))
+                .unwrap();
+
+        assert_eq!(output_rgba, reference_rgba);
     }
 
     #[test]
