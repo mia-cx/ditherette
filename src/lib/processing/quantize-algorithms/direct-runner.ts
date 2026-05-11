@@ -204,15 +204,6 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 				}
 			}
 
-			if (useDirectVectorMatch && compositedVectors) {
-				indices[index] = vectorMatcher.nearestIndex(
-					compositedVectors.v0[index]!,
-					compositedVectors.v1[index]!,
-					compositedVectors.v2[index]!
-				);
-				continue;
-			}
-
 			if (useBayer && bayer && bayerSize) {
 				const thresholdIndex = bayerRow + (x & bayerMask);
 				if (useVectorDither && thresholdVectorMatcher) {

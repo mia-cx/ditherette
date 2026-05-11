@@ -101,9 +101,13 @@ async function runBenchmarkChild(scriptPath, root) {
 			return;
 		}
 		stopping = true;
-		console.error(`\nReceived ${signal}; killing benchmark process tree...`);
-		killChild('SIGKILL');
-		forceKillTimer = setTimeout(() => process.exit(signal === 'SIGINT' ? 130 : 143), 50);
+		console.error(`\nReceived ${signal}; sending SIGTERM to benchmark process tree...`);
+		killChild('SIGTERM');
+		forceKillTimer = setTimeout(() => {
+			console.error('Grace period expired; sending SIGKILL...');
+			killChild('SIGKILL');
+			setTimeout(() => process.exit(signal === 'SIGINT' ? 130 : 143), 50);
+		}, 2000);
 	};
 
 	process.once('SIGINT', () => stop('SIGINT'));

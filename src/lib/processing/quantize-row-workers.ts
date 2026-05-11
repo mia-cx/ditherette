@@ -52,9 +52,6 @@ const DEFAULT_MIN_PIXELS = 1_000_000;
 const MAX_WORKERS = 8;
 const ROW_WORKER_URL = new URL('./quantize-row.worker.ts', import.meta.url);
 
-let pool: RowWorker[] = [];
-let nextJobId = 1;
-
 export function canUseRowWorkerQuantize(
 	settings: ProcessingSettings,
 	pixels: number,
@@ -101,7 +98,8 @@ export async function quantizeImageWithRowWorkers(
 		: undefined;
 	if (sourceBuffer) new Uint8ClampedArray(sourceBuffer).set(image.data);
 	const cancelFlag = cancelBuffer ? new Int32Array(cancelBuffer) : undefined;
-	const workers = ensurePool(workerCount);
+	const workers = createPool(workerCount);
+	let nextJobId = 1;
 	const startRows = Array.from({ length: workerCount }, (_, ordinal) => ordinal * rowsPerWorker);
 	const randomStepStarts = randomStepStartsForRows(image, startRows, settings, prepared.strength);
 	const counts: Record<string, number> = {};
@@ -112,7 +110,7 @@ export async function quantizeImageWithRowWorkers(
 			if (!options.shouldCancel?.() || canceled) return;
 			canceled = true;
 			if (cancelFlag) Atomics.store(cancelFlag, 0, 1);
-			resetPool();
+			terminatePool(workers);
 			reject(new Error('Processing was canceled.'));
 		}, 8);
 	});
@@ -153,23 +151,19 @@ export async function quantizeImageWithRowWorkers(
 		};
 	} finally {
 		if (cancelTimer) clearInterval(cancelTimer);
-		if (canceled) resetPool();
+		terminatePool(workers);
 	}
 }
 
-function ensurePool(count: number): RowWorker[] {
-	if (pool.length > count) {
-		for (const worker of pool.splice(count)) worker.terminate();
-	}
-	while (pool.length < count) {
-		pool.push(new Worker(ROW_WORKER_URL, { type: 'module' }) as RowWorker);
-	}
-	return pool;
+function createPool(count: number): RowWorker[] {
+	return Array.from(
+		{ length: count },
+		() => new Worker(ROW_WORKER_URL, { type: 'module' }) as RowWorker
+	);
 }
 
-function resetPool() {
-	for (const worker of pool) worker.terminate();
-	pool = [];
+function terminatePool(workers: RowWorker[]) {
+	for (const worker of workers) worker.terminate();
 }
 
 function runWorkerJob(worker: RowWorker, job: RowQuantizeJob): Promise<RowQuantizeDone> {

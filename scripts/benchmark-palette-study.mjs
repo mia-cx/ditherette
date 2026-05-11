@@ -86,16 +86,16 @@ async function decodeBenchmarkImage(browser, root, imagePath) {
 			window.__paletteStudyImageBytes = data.data;
 			return { width: data.width, height: data.height, length: data.data.length };
 		}, dataUrl);
-		const bytes = new Uint8ClampedArray(decoded.length);
+		const pixelData = new Uint8ClampedArray(decoded.length);
 		const chunkSize = 1 << 20;
 		for (let startOffset = 0; startOffset < decoded.length; startOffset += chunkSize) {
 			const chunk = await page.evaluate(
 				({ start, end }) => Array.from(window.__paletteStudyImageBytes.slice(start, end)),
 				{ start: startOffset, end: Math.min(decoded.length, startOffset + chunkSize) }
 			);
-			bytes.set(chunk, startOffset);
+			pixelData.set(chunk, startOffset);
 		}
-		const imageData = new ImageData(bytes, decoded.width, decoded.height);
+		const imageData = new ImageData(pixelData, decoded.width, decoded.height);
 		return {
 			id: path.basename(imagePath, path.extname(imagePath)),
 			label: path.basename(imagePath),

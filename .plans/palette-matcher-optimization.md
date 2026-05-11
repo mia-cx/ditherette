@@ -52,8 +52,8 @@ Proposed shape:
 
 ```ts
 export type QuantizeTimingSink = {
-  mark(name: QuantizeStageName, start: number): void;
-  count?(name: QuantizeCounterName, amount?: number): void;
+	mark(name: QuantizeStageName, start: number): void;
+	count?(name: QuantizeCounterName, amount?: number): void;
 };
 ```
 
@@ -117,11 +117,11 @@ Proposed additions:
 
 ```ts
 export type PaletteMatcher = {
-  colors: EnabledPaletteColor[];
-  nearest(rgb: Rgb): PaletteMatch;
-  nearestRgb(r: number, g: number, b: number): PaletteMatch;
-  nearestIndexRgb(r: number, g: number, b: number): number;
-  paletteRgbAt(index: number): Rgb;
+	colors: EnabledPaletteColor[];
+	nearest(rgb: Rgb): PaletteMatch;
+	nearestRgb(r: number, g: number, b: number): PaletteMatch;
+	nearestIndexRgb(r: number, g: number, b: number): number;
+	paletteRgbAt(index: number): Rgb;
 };
 ```
 
@@ -170,8 +170,8 @@ Design constraints:
 
 ```ts
 type PaletteVectorMatcher = {
-  nearestIndex(v0: number, v1: number, v2: number): number;
-  nearest(v0: number, v1: number, v2: number): PaletteVector | undefined;
+	nearestIndex(v0: number, v1: number, v2: number): number;
+	nearest(v0: number, v1: number, v2: number): PaletteVector | undefined;
 };
 ```
 
@@ -239,7 +239,7 @@ Constraints:
 8. Add bounded lazy vector memoization behind palette-vector matching internals.
 9. Benchmark memoization hit rates and cache overhead across repeated-color and photographic-like cases; tune caps/policy rather than falling back to unbounded caches.
 10. Specialize distance functions by color mode if branch overhead is still visible.
-10. Run full validation and update PR body with evidence.
+11. Run full validation and update PR body with evidence.
 
 ## Tests To Add/Update
 
@@ -272,12 +272,12 @@ When implementation is ready, add this to the PR body/comment:
 ```md
 ### Benchmark evidence
 
-| Case | Before quantize mean | After quantize mean | Delta | Output guard |
-|---|---:|---:|---:|---|
-| direct sRGB | ... | ... | ... | byte-identical |
-| Bayer OKLab | ... | ... | ... | byte-identical |
-| Floyd sRGB | ... | ... | ... | byte-identical |
-| Sierra OKLab | ... | ... | ... | byte-identical |
+| Case         | Before quantize mean | After quantize mean | Delta | Output guard   |
+| ------------ | -------------------: | ------------------: | ----: | -------------- |
+| direct sRGB  |                  ... |                 ... |   ... | byte-identical |
+| Bayer OKLab  |                  ... |                 ... |   ... | byte-identical |
+| Floyd sRGB   |                  ... |                 ... |   ... | byte-identical |
+| Sierra OKLab |                  ... |                 ... |   ... | byte-identical |
 
 Artifacts: `benchmark-results/...` local only.
 ```
@@ -299,4 +299,4 @@ Artifacts: `benchmark-results/...` local only.
 - Optimized paths are byte-for-byte identical to baseline for covered cases.
 - The durable benchmark command still works.
 - Full checks pass.
-- PR does not commit `.plans/`, `benchmark-results/`, `benchmark-fixtures/`, or one-off study scripts.
+- PR may commit durable planning docs and reusable benchmark/study scripts; it must not commit generated `benchmark-results/`, ad-hoc fixture dumps, or scratch-only scripts.
