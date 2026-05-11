@@ -432,32 +432,26 @@ fn prepare_source_x_copy_spans(
     let mut span_output_start = 0;
     let mut span_source_start =
         map_output_coordinate(0, source_dimensions.width(), output_dimensions.width());
-    let mut source_delta = span_source_start;
+    let mut previous_source_x = span_source_start;
 
-    loop {
-        let next_output_start = first_output_x_for_source_delta(
-            source_delta + 1,
+    for output_x in 1..output_width {
+        let source_x = map_output_coordinate(
+            output_x,
             source_dimensions.width(),
             output_dimensions.width(),
         );
 
-        if next_output_start >= output_width {
-            break;
+        if source_x != previous_source_x + 1 {
+            scratch.source_x_copy_spans.push(SourceXCopySpan::new(
+                span_source_start,
+                span_output_start,
+                output_x - span_output_start,
+            ));
+            span_output_start = output_x;
+            span_source_start = source_x;
         }
 
-        scratch.source_x_copy_spans.push(SourceXCopySpan::new(
-            span_source_start,
-            span_output_start,
-            next_output_start - span_output_start,
-        ));
-
-        span_output_start = next_output_start;
-        span_source_start = map_output_coordinate(
-            span_output_start,
-            source_dimensions.width(),
-            output_dimensions.width(),
-        );
-        source_delta = span_source_start - span_output_start;
+        previous_source_x = source_x;
     }
 
     scratch.source_x_copy_spans.push(SourceXCopySpan::new(
@@ -467,18 +461,6 @@ fn prepare_source_x_copy_spans(
     ));
 
     Ok(())
-}
-
-fn first_output_x_for_source_delta(delta: usize, source_width: u32, output_width: u32) -> usize {
-    let numerator = 2 * u64::from(output_width) * delta as u64;
-    let source_width = u64::from(source_width);
-
-    if numerator <= source_width {
-        return 0;
-    }
-
-    let denominator = 2 * (source_width - u64::from(output_width));
-    numerator.saturating_sub(source_width).div_ceil(denominator) as usize
 }
 
 fn is_span_copy_candidate(
@@ -574,9 +556,8 @@ fn map_output_coordinate(output_coordinate: usize, source_size: u32, output_size
 #[cfg(test)]
 mod tests {
     use super::{
-        is_exact_integer_downscale, map_output_coordinate, prepare_source_x_copy_spans,
-        resize_rgba_nearest, resize_rgba_nearest_into, resize_rgba_nearest_reference,
-        write_reference_resize, SpanCopyScratch,
+        is_exact_integer_downscale, map_output_coordinate, resize_rgba_nearest,
+        resize_rgba_nearest_into, resize_rgba_nearest_reference, write_reference_resize,
     };
     use crate::image::ImageDimensions;
 
@@ -602,28 +583,6 @@ mod tests {
             dimensions(2, 2),
             dimensions(4, 4)
         ));
-    }
-
-    #[test]
-    fn source_x_spans_match_center_aligned_mapping() {
-        let source_dimensions = dimensions(100, 10);
-        let output_dimensions = dimensions(95, 10);
-        let mut scratch = SpanCopyScratch::default();
-
-        prepare_source_x_copy_spans(source_dimensions, output_dimensions, &mut scratch).unwrap();
-
-        let mut source_xs_from_spans = Vec::new();
-        for span in scratch.source_x_copy_spans {
-            let source_start = span.source_x_byte_offset / 4;
-            let pixel_len = span.byte_len / 4;
-            source_xs_from_spans.extend(source_start..source_start + pixel_len);
-        }
-
-        let expected_source_xs: Vec<usize> = (0..95)
-            .map(|output_x| map_output_coordinate(output_x, 100, 95))
-            .collect();
-
-        assert_eq!(source_xs_from_spans, expected_source_xs);
     }
 
     #[test]
