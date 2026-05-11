@@ -19,6 +19,119 @@ function hasPreservedTransparentPixels(source: Uint8ClampedArray, alphaThreshold
 	return false;
 }
 
+type ErrorScatter = (
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number,
+	strengthMask: number
+) => void;
+
+function scatterForAlgorithm(
+	algorithm: string,
+	kernel: readonly (readonly [number, number, number])[]
+): ErrorScatter {
+	switch (algorithm) {
+		case 'floyd-steinberg':
+			return scatterFloyd;
+		case 'sierra':
+			return scatterSierra;
+		case 'sierra-lite':
+			return scatterSierraLite;
+		default:
+			return (
+				work,
+				width,
+				height,
+				x,
+				y,
+				workOffset,
+				reverse,
+				error0,
+				error1,
+				error2,
+				strengthMask
+			) =>
+				scatterGeneric(
+					work,
+					width,
+					height,
+					x,
+					y,
+					workOffset,
+					reverse,
+					error0,
+					error1,
+					error2,
+					strengthMask,
+					kernel
+				);
+	}
+}
+
+function scatterFloyd(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number,
+	strengthMask: number
+) {
+	if (reverse) {
+		if (x > 0) addError(work, workOffset - 3, error0, error1, error2, (7 / 16) * strengthMask);
+		if (y + 1 < height) {
+			const nextRow = workOffset + width * 3;
+			if (x + 1 < width)
+				addError(work, nextRow + 3, error0, error1, error2, (3 / 16) * strengthMask);
+			addError(work, nextRow, error0, error1, error2, (5 / 16) * strengthMask);
+			if (x > 0) addError(work, nextRow - 3, error0, error1, error2, (1 / 16) * strengthMask);
+		}
+		return;
+	}
+	if (x + 1 < width)
+		addError(work, workOffset + 3, error0, error1, error2, (7 / 16) * strengthMask);
+	if (y + 1 < height) {
+		const nextRow = workOffset + width * 3;
+		if (x > 0) addError(work, nextRow - 3, error0, error1, error2, (3 / 16) * strengthMask);
+		addError(work, nextRow, error0, error1, error2, (5 / 16) * strengthMask);
+		if (x + 1 < width) addError(work, nextRow + 3, error0, error1, error2, (1 / 16) * strengthMask);
+	}
+}
+
+function scatterGeneric(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	_workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number,
+	strengthMask: number,
+	kernel: readonly (readonly [number, number, number])[]
+) {
+	for (const [dxBase, dy, weight] of kernel) {
+		const dx = reverse ? -dxBase : dxBase;
+		const xx = x + dx;
+		const yy = y + dy;
+		if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+		addError(work, (yy * width + xx) * 3, error0, error1, error2, weight * strengthMask);
+	}
+}
+
 function scatterSierra(
 	work: Float32Array,
 	width: number,
@@ -136,6 +249,7 @@ function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 	const kernel = errorKernelForAlgorithm(settings.dither.algorithm);
 	if (!kernel)
 		throw new Error(`Unsupported error diffusion algorithm: ${settings.dither.algorithm}`);
+	const scatter = scatterForAlgorithm(settings.dither.algorithm, kernel);
 	const width = image.width;
 	const height = image.height;
 	const source = image.data;
@@ -193,120 +307,14 @@ function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 			const ordinal = vectorMatcher.nearestOrdinal(current0, current1, current2);
 			if (ordinal === -1) throw new Error('No visible palette colors are enabled');
 			indices[index] = vectorMatcher.indexForOrdinal(ordinal);
-			const mask = useAdaptivePlacement
-				? placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors)
-				: 1;
+			const strengthMask = useAdaptivePlacement
+				? strength *
+					placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors)
+				: strength;
 			const error0 = current0 - vectorMatcher.vector0ForOrdinal(ordinal);
 			const error1 = current1 - vectorMatcher.vector1ForOrdinal(ordinal);
 			const error2 = current2 - vectorMatcher.vector2ForOrdinal(ordinal);
-			if (settings.dither.algorithm === 'floyd-steinberg') {
-				const strengthMask = strength * mask;
-				if (reverse) {
-					if (x > 0) {
-						const target = workOffset - 3;
-						const scaledWeight = (7 / 16) * strengthMask;
-						work[target] += error0 * scaledWeight;
-						work[target + 1] += error1 * scaledWeight;
-						work[target + 2] += error2 * scaledWeight;
-					}
-					if (y + 1 < height) {
-						const nextRow = workOffset + width * 3;
-						if (x + 1 < width) {
-							const target = nextRow + 3;
-							const scaledWeight = (3 / 16) * strengthMask;
-							work[target] += error0 * scaledWeight;
-							work[target + 1] += error1 * scaledWeight;
-							work[target + 2] += error2 * scaledWeight;
-						}
-						{
-							const target = nextRow;
-							const scaledWeight = (5 / 16) * strengthMask;
-							work[target] += error0 * scaledWeight;
-							work[target + 1] += error1 * scaledWeight;
-							work[target + 2] += error2 * scaledWeight;
-						}
-						if (x > 0) {
-							const target = nextRow - 3;
-							const scaledWeight = (1 / 16) * strengthMask;
-							work[target] += error0 * scaledWeight;
-							work[target + 1] += error1 * scaledWeight;
-							work[target + 2] += error2 * scaledWeight;
-						}
-					}
-				} else {
-					if (x + 1 < width) {
-						const target = workOffset + 3;
-						const scaledWeight = (7 / 16) * strengthMask;
-						work[target] += error0 * scaledWeight;
-						work[target + 1] += error1 * scaledWeight;
-						work[target + 2] += error2 * scaledWeight;
-					}
-					if (y + 1 < height) {
-						const nextRow = workOffset + width * 3;
-						if (x > 0) {
-							const target = nextRow - 3;
-							const scaledWeight = (3 / 16) * strengthMask;
-							work[target] += error0 * scaledWeight;
-							work[target + 1] += error1 * scaledWeight;
-							work[target + 2] += error2 * scaledWeight;
-						}
-						{
-							const target = nextRow;
-							const scaledWeight = (5 / 16) * strengthMask;
-							work[target] += error0 * scaledWeight;
-							work[target + 1] += error1 * scaledWeight;
-							work[target + 2] += error2 * scaledWeight;
-						}
-						if (x + 1 < width) {
-							const target = nextRow + 3;
-							const scaledWeight = (1 / 16) * strengthMask;
-							work[target] += error0 * scaledWeight;
-							work[target + 1] += error1 * scaledWeight;
-							work[target + 2] += error2 * scaledWeight;
-						}
-					}
-				}
-			} else if (settings.dither.algorithm === 'sierra') {
-				scatterSierra(
-					work,
-					width,
-					height,
-					x,
-					y,
-					workOffset,
-					reverse,
-					error0,
-					error1,
-					error2,
-					strength * mask
-				);
-			} else if (settings.dither.algorithm === 'sierra-lite') {
-				scatterSierraLite(
-					work,
-					width,
-					height,
-					x,
-					y,
-					workOffset,
-					reverse,
-					error0,
-					error1,
-					error2,
-					strength * mask
-				);
-			} else {
-				for (const [dxBase, dy, weight] of kernel) {
-					const dx = reverse ? -dxBase : dxBase;
-					const xx = x + dx;
-					const yy = y + dy;
-					if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
-					const target = (yy * width + xx) * 3;
-					const scaledWeight = weight * strength * mask;
-					work[target] += error0 * scaledWeight;
-					work[target + 1] += error1 * scaledWeight;
-					work[target + 2] += error2 * scaledWeight;
-				}
-			}
+			scatter(work, width, height, x, y, workOffset, reverse, error0, error1, error2, strengthMask);
 		}
 	}
 	vectorMatcher.flushCounts();
@@ -335,6 +343,7 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 	const kernel = errorKernelForAlgorithm(settings.dither.algorithm);
 	if (!kernel)
 		throw new Error(`Unsupported error diffusion algorithm: ${settings.dither.algorithm}`);
+	const scatter = scatterForAlgorithm(settings.dither.algorithm, kernel);
 	const width = image.width;
 	const height = image.height;
 	const source = image.data;
@@ -415,14 +424,14 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 			nearestRgbCount++;
 			const match = matcher.nearestIndexByteRgb(r, g, b);
 			indices[index] = match;
-			const mask = useAdaptivePlacement
-				? placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors)
-				: 1;
+			const strengthMask = useAdaptivePlacement
+				? strength *
+					placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors)
+				: strength;
 			const errorR = r - matcher.paletteRedAt(match);
 			const errorG = g - matcher.paletteGreenAt(match);
 			const errorB = b - matcher.paletteBlueAt(match);
 			if (settings.dither.algorithm === 'floyd-steinberg') {
-				const strengthMask = strength * mask;
 				if (reverse) {
 					if (x > 0) {
 						const target = workOffset - 3;
@@ -488,46 +497,20 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 						}
 					}
 				}
-			} else if (settings.dither.algorithm === 'sierra') {
-				scatterSierra(
-					work,
-					width,
-					height,
-					x,
-					y,
-					workOffset,
-					reverse,
-					errorR,
-					errorG,
-					errorB,
-					strength * mask
-				);
-			} else if (settings.dither.algorithm === 'sierra-lite') {
-				scatterSierraLite(
-					work,
-					width,
-					height,
-					x,
-					y,
-					workOffset,
-					reverse,
-					errorR,
-					errorG,
-					errorB,
-					strength * mask
-				);
 			} else {
-				for (const [dxBase, dy, weight] of kernel) {
-					const dx = reverse ? -dxBase : dxBase;
-					const xx = x + dx;
-					const yy = y + dy;
-					if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
-					const target = (yy * width + xx) * 3;
-					const scaledWeight = weight * strength * mask;
-					work[target] += errorR * scaledWeight;
-					work[target + 1] += errorG * scaledWeight;
-					work[target + 2] += errorB * scaledWeight;
-				}
+				scatter(
+					work,
+					width,
+					height,
+					x,
+					y,
+					workOffset,
+					reverse,
+					errorR,
+					errorG,
+					errorB,
+					strengthMask
+				);
 			}
 		}
 	}
