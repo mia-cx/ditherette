@@ -287,48 +287,23 @@ fn resize_precomputed_offsets_word_into(
 
     prepare_precomputed_offsets(source_dimensions, output_dimensions, scratch)?;
 
-    let output_row_byte_len = output_dimensions.width_usize()? * rgba::RGBA_CHANNEL_COUNT;
-    copy_precomputed_offsets_word_unchecked(
-        source_rgba,
-        output_rgba,
-        &scratch.source_row_byte_offsets,
-        &scratch.source_x_byte_offsets,
-        output_row_byte_len,
-    );
+    let output_width = output_dimensions.width_usize()?;
+    for (output_y, source_row_offset) in scratch.source_row_byte_offsets.iter().copied().enumerate()
+    {
+        let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
 
-    Ok(())
-}
-
-fn copy_precomputed_offsets_word_unchecked(
-    source_rgba: &[u8],
-    output_rgba: &mut [u8],
-    source_row_byte_offsets: &[usize],
-    source_x_byte_offsets: &[usize],
-    output_row_byte_len: usize,
-) {
-    let source_base = source_rgba.as_ptr();
-    let output_base = output_rgba.as_mut_ptr();
-
-    for (output_y, source_row_offset) in source_row_byte_offsets.iter().copied().enumerate() {
-        let output_row_offset = output_y * output_row_byte_len;
-
-        for (output_x, source_x_offset) in source_x_byte_offsets.iter().copied().enumerate() {
-            let source_offset = source_row_offset + source_x_offset;
-            let output_offset = output_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT;
-
-            // SAFETY: `resize_precomputed_offsets_word_into` validates both RGBA
-            // buffers against the requested dimensions before preparing offsets.
-            // Every offset here is derived from those dimensions, so the 4-byte
-            // pixel read/write stays inside the corresponding tightly packed
-            // image buffer. Unaligned access is required because Wasm memory is
-            // byte-backed and callers do not promise 4-byte alignment.
-            unsafe {
-                let source_ptr = source_base.add(source_offset).cast::<u32>();
-                let output_ptr = output_base.add(output_offset).cast::<u32>();
-                output_ptr.write_unaligned(source_ptr.read_unaligned());
-            }
+        for (output_x, source_x_offset) in scratch.source_x_byte_offsets.iter().copied().enumerate()
+        {
+            copy_pixel_word(
+                source_rgba,
+                source_row_offset + source_x_offset,
+                output_rgba,
+                output_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT,
+            );
         }
     }
+
+    Ok(())
 }
 
 fn prepare_precomputed_offsets(
