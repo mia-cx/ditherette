@@ -256,11 +256,11 @@ fn resize_exact_integer_downscale_word(
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
     let first_source_x_byte_offset = x_step / 2 * rgba::RGBA_CHANNEL_COUNT;
     let source_x_byte_step = x_step * rgba::RGBA_CHANNEL_COUNT;
+    let mut source_row_offset = y_step / 2 * source_row_byte_len;
+    let source_row_byte_step = y_step * source_row_byte_len;
+    let mut output_row_offset = 0;
 
-    for output_y in 0..output_height {
-        let source_y = output_y * y_step + y_step / 2;
-        let source_row_offset = source_y * source_row_byte_len;
-        let output_row_offset = output_y * output_row_byte_len;
+    for _ in 0..output_height {
         let mut source_x_offset = first_source_x_byte_offset;
         let mut output_offset = output_row_offset;
 
@@ -274,6 +274,9 @@ fn resize_exact_integer_downscale_word(
             source_x_offset += source_x_byte_step;
             output_offset += rgba::RGBA_CHANNEL_COUNT;
         }
+
+        source_row_offset += source_row_byte_step;
+        output_row_offset += output_row_byte_len;
     }
 
     Ok(())
