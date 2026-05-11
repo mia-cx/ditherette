@@ -52,18 +52,11 @@ pub fn resize_rgba_nearest_into(
         return Ok(());
     }
 
+    // TODO(perf): Benchmark axis-specific fast paths for same-height resize and
+    // pure horizontal downscale/upscale. The same-width row copy is valuable,
+    // but common UI previews may hit one-axis changes too.
     if source_dimensions.width() == output_dimensions.width() {
         copy_same_width_rows(
-            source_rgba,
-            source_dimensions,
-            output_dimensions,
-            output_rgba,
-        )?;
-        return Ok(());
-    }
-
-    if source_dimensions.height() == output_dimensions.height() {
-        resize_same_height_rows(
             source_rgba,
             source_dimensions,
             output_dimensions,
@@ -219,53 +212,6 @@ fn copy_same_width_rows(
 
         output_rgba[output_offset..output_offset + row_byte_len]
             .copy_from_slice(&source_rgba[source_offset..source_offset + row_byte_len]);
-    }
-
-    Ok(())
-}
-
-fn resize_same_height_rows(
-    source_rgba: &[u8],
-    source_dimensions: ImageDimensions,
-    output_dimensions: ImageDimensions,
-    output_rgba: &mut [u8],
-) -> Result<(), ProcessingError> {
-    validate_resize_buffers(
-        source_rgba,
-        source_dimensions,
-        output_dimensions,
-        output_rgba,
-    )?;
-
-    let source_width = source_dimensions.width_usize()?;
-    let output_width = output_dimensions.width_usize()?;
-    let height = source_dimensions.height_usize()?;
-    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
-    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
-
-    let source_x_byte_offsets: Vec<usize> = (0..output_width)
-        .map(|output_x| {
-            let source_x = map_output_coordinate(
-                output_x,
-                source_dimensions.width(),
-                output_dimensions.width(),
-            );
-            source_x * rgba::RGBA_CHANNEL_COUNT
-        })
-        .collect();
-
-    for row in 0..height {
-        let source_row_offset = row * source_row_byte_len;
-        let output_row_offset = row * output_row_byte_len;
-
-        for (output_x, source_x_offset) in source_x_byte_offsets.iter().copied().enumerate() {
-            copy_pixel_word(
-                source_rgba,
-                source_row_offset + source_x_offset,
-                output_rgba,
-                output_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT,
-            );
-        }
     }
 
     Ok(())
@@ -600,8 +546,6 @@ mod tests {
         for (source_dimensions, output_dimensions) in [
             (dimensions(6, 4), dimensions(3, 2)),
             (dimensions(7, 5), dimensions(5, 3)),
-            (dimensions(6, 4), dimensions(3, 4)),
-            (dimensions(3, 4), dimensions(6, 4)),
             (dimensions(3, 2), dimensions(7, 5)),
             (dimensions(4, 5), dimensions(4, 3)),
             (dimensions(4, 3), dimensions(4, 3)),
