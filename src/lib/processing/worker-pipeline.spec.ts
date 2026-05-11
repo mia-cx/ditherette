@@ -225,7 +225,11 @@ describe('ProcessorWorkerPipeline', () => {
 
 		const response = pipeline.handle(
 			processRequest({
-				settings: { output, dither: { ...dither, useColorSpace: true }, colorSpace: 'oklab' }
+				settings: {
+					output,
+					dither: { ...dither, algorithm: 'bayer-2', useColorSpace: true },
+					colorSpace: 'oklab'
+				}
 			}),
 			() => undefined
 		);

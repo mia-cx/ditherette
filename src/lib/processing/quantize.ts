@@ -69,6 +69,17 @@ export type QuantizeDiagnosticsSink = {
 type PaletteVectorMatcher = {
 	nearest(v0: number, v1: number, v2: number): PaletteVector | undefined;
 	nearestIndex(v0: number, v1: number, v2: number): number;
+	nearestOrdinal(v0: number, v1: number, v2: number): number;
+	indexForOrdinal(ordinal: number): number;
+	vector0ForOrdinal(ordinal: number): number;
+	vector1ForOrdinal(ordinal: number): number;
+	vector2ForOrdinal(ordinal: number): number;
+	flushCounts(): void;
+};
+
+type ThresholdByteVectorMatcher = {
+	nearestIndexRgb(r: number, g: number, b: number, thresholdIndex: number): number;
+	flushCounts(): void;
 };
 
 export type ColorVectorImage = {
@@ -88,6 +99,9 @@ export type QuantizeCaches = QuantizeDiagnosticsSink & {
 	canStoreColorVectorImage?(key: string, bytes: number): boolean;
 	setColorVectorImage?(key: string, value: ColorVectorImage, bytes: number): void;
 };
+
+const MIN_THRESHOLD_VECTOR_CACHE_BITS = 18;
+const MAX_THRESHOLD_VECTOR_CACHE_BITS = 22;
 
 const ERROR_KERNELS = {
 	'floyd-steinberg': [
@@ -142,23 +156,18 @@ function usesAdaptivePlacement(settings: ProcessingSettings) {
 	return placement !== 'everywhere';
 }
 
+function usesByteRgbMatcher(settings: ProcessingSettings) {
+	const hasDither = settings.dither.algorithm !== 'none' && settings.dither.strength > 0;
+	if (!hasDither) return true;
+	return !supportsVectorDither(settings);
+}
+
 export type QuantizeResult = {
 	indices: Uint8Array;
 	palette: EnabledPaletteColor[];
 	transparentIndex: number;
 	warnings: string[];
 };
-
-function mulberry32(seed: number) {
-	let state = seed >>> 0;
-	return () => {
-		state += 0x6d2b79f5;
-		let value = state;
-		value = Math.imul(value ^ (value >>> 15), value | 1);
-		value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-		return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-	};
-}
 
 function transparentIndex(palette: EnabledPaletteColor[]) {
 	return palette.findIndex((color) => color.kind === 'transparent');
@@ -288,18 +297,24 @@ function createPaletteVectorMatcher(
 	let lastV1 = Number.NaN;
 	let lastV2 = Number.NaN;
 	let lastOrdinal = -1;
+	let memoHits = 0;
+	let memoMisses = 0;
+	let memoSets = 0;
+	let nearestCount = 0;
+	let candidateEvaluations = 0;
 
-	function nearestOrdinal(v0: number, v1: number, v2: number) {
+	function findNearestOrdinal(v0: number, v1: number, v2: number) {
 		if (v0 === lastV0 && v1 === lastV1 && v2 === lastV2) {
-			caches?.recordCount?.('vector memo hit');
+			memoHits++;
 			return lastOrdinal;
 		}
-		caches?.recordCount?.('vector memo miss');
-		caches?.recordCount?.('nearest vector');
+		memoMisses++;
+		nearestCount++;
 
 		let winner = -1;
 		let best = Infinity;
 		if (settings.colorSpace === 'oklch') {
+			candidateEvaluations += count;
 			for (let ordinal = 0; ordinal < count; ordinal++) {
 				const dl = v0 - paletteV0[ordinal]!;
 				const dc = v1 - paletteV1[ordinal]!;
@@ -313,6 +328,7 @@ function createPaletteVectorMatcher(
 				}
 			}
 		} else {
+			candidateEvaluations += count;
 			for (let ordinal = 0; ordinal < count; ordinal++) {
 				const dx = v0 - paletteV0[ordinal]!;
 				const dy = v1 - paletteV1[ordinal]!;
@@ -329,18 +345,175 @@ function createPaletteVectorMatcher(
 		lastV1 = v1;
 		lastV2 = v2;
 		lastOrdinal = winner;
-		caches?.recordCount?.('vector memo set');
+		memoSets++;
 		return winner;
 	}
 
 	return {
 		nearest(v0, v1, v2) {
-			const ordinal = nearestOrdinal(v0, v1, v2);
+			const ordinal = findNearestOrdinal(v0, v1, v2);
 			return ordinal === -1 ? undefined : space.colors[ordinal];
 		},
 		nearestIndex(v0, v1, v2) {
-			const ordinal = nearestOrdinal(v0, v1, v2);
+			const ordinal = findNearestOrdinal(v0, v1, v2);
 			return ordinal === -1 ? -1 : paletteIndices[ordinal]!;
+		},
+		nearestOrdinal: findNearestOrdinal,
+		indexForOrdinal(ordinal) {
+			return ordinal === -1 ? -1 : paletteIndices[ordinal]!;
+		},
+		vector0ForOrdinal(ordinal) {
+			return paletteV0[ordinal] ?? 0;
+		},
+		vector1ForOrdinal(ordinal) {
+			return paletteV1[ordinal] ?? 0;
+		},
+		vector2ForOrdinal(ordinal) {
+			return paletteV2[ordinal] ?? 0;
+		},
+		flushCounts() {
+			caches?.recordCount?.('vector memo hit', memoHits);
+			caches?.recordCount?.('vector memo miss', memoMisses);
+			caches?.recordCount?.('vector memo set', memoSets);
+			caches?.recordCount?.('nearest vector', nearestCount);
+			caches?.recordCount?.('candidate evaluations', candidateEvaluations);
+		}
+	};
+}
+
+function supportsThresholdByteVectorMatching(colorSpace: ColorSpaceId) {
+	return colorSpace === 'weighted-rgb-601' || colorSpace === 'weighted-rgb-709';
+}
+
+function byteVectorComponent(value: number, colorSpace: ColorSpaceId, channel: 0 | 1 | 2) {
+	switch (colorSpace) {
+		case 'linear-rgb':
+			return srgbByteToLinear(value);
+		case 'weighted-rgb-601':
+			if (channel === 0) return value * WEIGHTED_RGB_601_R;
+			if (channel === 1) return value * WEIGHTED_RGB_601_G;
+			return value * WEIGHTED_RGB_601_B;
+		case 'weighted-rgb-709':
+			if (channel === 0) return value * WEIGHTED_RGB_709_R;
+			if (channel === 1) return value * WEIGHTED_RGB_709_G;
+			return value * WEIGHTED_RGB_709_B;
+		case 'srgb':
+		default:
+			return value;
+	}
+}
+
+function createThresholdByteVectorMatcher(
+	space: PaletteVectorSpace,
+	colorSpace: ColorSpaceId,
+	thresholds: readonly number[],
+	strength: number,
+	pixels: number,
+	caches?: QuantizeCaches
+): ThresholdByteVectorMatcher | undefined {
+	if (!supportsThresholdByteVectorMatching(colorSpace)) return undefined;
+	const count = space.colors.length;
+	const paletteIndices = new Int16Array(count);
+	const termsPerThreshold = count * 256;
+	const term0 = new Float64Array(thresholds.length * termsPerThreshold);
+	const term1 = new Float64Array(thresholds.length * termsPerThreshold);
+	const term2 = new Float64Array(thresholds.length * termsPerThreshold);
+	const thresholdKeyBases = new Uint32Array(thresholds.length);
+	const thresholdTermBases = new Uint32Array(thresholds.length);
+	const tableBytes =
+		term0.byteLength +
+		term1.byteLength +
+		term2.byteLength +
+		thresholdKeyBases.byteLength +
+		thresholdTermBases.byteLength;
+	for (let thresholdIndex = 0; thresholdIndex < thresholds.length; thresholdIndex++) {
+		const amount = thresholds[thresholdIndex]! * strength * COLOR_SPACE_THRESHOLD_SCALE;
+		const offset0 = amount * space.ranges[0];
+		const offset1 = amount * space.ranges[1];
+		const offset2 = amount * space.ranges[2];
+		const thresholdBase = thresholdIndex * termsPerThreshold;
+		thresholdKeyBases[thresholdIndex] = (thresholdIndex * 0x1000000) >>> 0;
+		thresholdTermBases[thresholdIndex] = thresholdBase;
+		for (let ordinal = 0; ordinal < count; ordinal++) {
+			paletteIndices[ordinal] = space.colors[ordinal]!.index;
+		}
+		for (let value = 0; value < 256; value++) {
+			const base = thresholdBase + value * count;
+			const v0 = byteVectorComponent(value, colorSpace, 0) + offset0;
+			const v1 = byteVectorComponent(value, colorSpace, 1) + offset1;
+			const v2 = byteVectorComponent(value, colorSpace, 2) + offset2;
+			for (let ordinal = 0; ordinal < count; ordinal++) {
+				const color = space.colors[ordinal]!;
+				const d0 = v0 - color.vector[0];
+				const d1 = v1 - color.vector[1];
+				const d2 = v2 - color.vector[2];
+				term0[base + ordinal] = d0 * d0;
+				term1[base + ordinal] = d1 * d1;
+				term2[base + ordinal] = d2 * d2;
+			}
+		}
+	}
+	const cacheBits = Math.min(
+		MAX_THRESHOLD_VECTOR_CACHE_BITS,
+		Math.max(MIN_THRESHOLD_VECTOR_CACHE_BITS, Math.ceil(Math.log2(pixels * 2)))
+	);
+	const cacheSize = 1 << cacheBits;
+	const cacheMask = cacheSize - 1;
+	const cacheKeys = new Uint32Array(cacheSize);
+	const cacheValues = new Uint16Array(cacheSize);
+	const cacheValid = new Uint8Array(cacheSize);
+	const cacheBytes = cacheKeys.byteLength + cacheValues.byteLength + cacheValid.byteLength;
+	let nearestCount = 0;
+	let memoHits = 0;
+	let memoMisses = 0;
+	let memoSets = 0;
+	let memoCollisions = 0;
+	let candidateEvaluations = 0;
+	return {
+		nearestIndexRgb(r, g, b, thresholdIndex) {
+			const rgbKey = ((r << 16) | (g << 8) | b) >>> 0;
+			const key = (thresholdKeyBases[thresholdIndex]! | rgbKey) >>> 0;
+			const slot = (Math.imul(key ^ (key >>> 16), 0x45d9f3b) >>> 0) & cacheMask;
+			if (cacheValid[slot]) {
+				if (cacheKeys[slot] === key) {
+					memoHits++;
+					return cacheValues[slot]!;
+				}
+				memoCollisions++;
+			}
+			memoMisses++;
+			nearestCount++;
+			candidateEvaluations += count;
+			let winner = -1;
+			let best = Infinity;
+			const thresholdBase = thresholdTermBases[thresholdIndex]!;
+			const base0 = thresholdBase + r * count;
+			const base1 = thresholdBase + g * count;
+			const base2 = thresholdBase + b * count;
+			for (let ordinal = 0; ordinal < count; ordinal++) {
+				const distance =
+					term0[base0 + ordinal]! + term1[base1 + ordinal]! + term2[base2 + ordinal]!;
+				if (distance < best) {
+					best = distance;
+					winner = ordinal;
+				}
+			}
+			const index = winner === -1 ? -1 : paletteIndices[winner]!;
+			cacheKeys[slot] = key;
+			cacheValues[slot] = index;
+			cacheValid[slot] = 1;
+			memoSets++;
+			return index;
+		},
+		flushCounts() {
+			caches?.recordCount?.('nearest vector', nearestCount);
+			caches?.recordCount?.('vector memo hit', memoHits);
+			caches?.recordCount?.('vector memo miss', memoMisses);
+			caches?.recordCount?.('vector memo set', memoSets);
+			caches?.recordCount?.('threshold cache collision', memoCollisions);
+			caches?.recordCount?.('candidate evaluations', candidateEvaluations);
+			caches?.recordCount?.('threshold table bytes', tableBytes);
+			caches?.recordCount?.('threshold cache bytes', cacheBytes);
 		}
 	};
 }
@@ -821,24 +994,63 @@ function cachedColorVectorImage(
 	return caches.getColorVectorImage?.(key) ?? vectors;
 }
 
-function colorSpaceThresholdIndex(
-	rgb: Rgb,
+function colorSpaceThresholdIndexRgb(
+	r: number,
+	g: number,
+	b: number,
 	threshold: number,
 	space: PaletteVectorSpace,
 	matcher: PaletteVectorMatcher,
 	settings: ProcessingSettings,
 	strength: number
 ) {
-	const source = vectorForRgb(rgb.r, rgb.g, rgb.b, settings.colorSpace);
-	return colorSpaceThresholdIndexValues(
-		source[0],
-		source[1],
-		source[2],
-		threshold,
-		space,
-		matcher,
-		strength
-	);
+	switch (settings.colorSpace) {
+		case 'srgb':
+		case 'weighted-rgb':
+			return colorSpaceThresholdIndexValues(r, g, b, threshold, space, matcher, strength);
+		case 'weighted-rgb-601':
+			return colorSpaceThresholdIndexValues(
+				r * WEIGHTED_RGB_601_R,
+				g * WEIGHTED_RGB_601_G,
+				b * WEIGHTED_RGB_601_B,
+				threshold,
+				space,
+				matcher,
+				strength
+			);
+		case 'weighted-rgb-709':
+			return colorSpaceThresholdIndexValues(
+				r * WEIGHTED_RGB_709_R,
+				g * WEIGHTED_RGB_709_G,
+				b * WEIGHTED_RGB_709_B,
+				threshold,
+				space,
+				matcher,
+				strength
+			);
+		case 'linear-rgb':
+			return colorSpaceThresholdIndexValues(
+				srgbByteToLinear(r),
+				srgbByteToLinear(g),
+				srgbByteToLinear(b),
+				threshold,
+				space,
+				matcher,
+				strength
+			);
+		default: {
+			const source = vectorForRgb(r, g, b, settings.colorSpace);
+			return colorSpaceThresholdIndexValues(
+				source[0],
+				source[1],
+				source[2],
+				threshold,
+				space,
+				matcher,
+				strength
+			);
+		}
+	}
 }
 
 function colorSpaceThresholdIndexValues(
@@ -977,7 +1189,10 @@ function prepareQuantize(
 	if (warning) warnings.push(warning);
 	recordTiming(caches, 'palette prepare', prepareStart);
 	const matcherStart = performance.now();
-	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace);
+	const matcher = createPaletteMatcher(nextPalette, settings.colorSpace, {
+		denseRgbMemo: usesByteRgbMatcher(settings),
+		distanceTables: true
+	});
 	recordTiming(caches, 'matcher build', matcherStart);
 	return {
 		warnings,
@@ -1089,6 +1304,9 @@ function recordMatcherMemoStats(
 	caches?.recordCount?.('rgb memo miss', stats.rgbMisses);
 	caches?.recordCount?.('rgb memo set', stats.rgbSets);
 	caches?.recordCount?.('rgb memo eviction', stats.rgbEvictions);
+	caches?.recordCount?.('candidate evaluations', stats.candidateEvaluations);
+	caches?.recordCount?.('dense cache bytes', stats.denseRgbMemoBytes);
+	caches?.recordCount?.('distance table bytes', stats.distanceTableBytes);
 }
 
 function resolveMatteRgb(
@@ -1147,30 +1365,43 @@ function quantizeDirect(
 	paletteCacheKey: string,
 	caches?: QuantizeCaches
 ) {
-	const random = mulberry32(settings.dither.seed);
+	let randomState = settings.dither.seed >>> 0;
 	const bayerSize = bayerSizeForAlgorithm(settings.dither.algorithm);
 	const bayer = bayerSize ? normalizedBayerMatrix(bayerSize) : undefined;
+	const bayerMask = bayerSize ? bayerSize - 1 : 0;
 	const source = image.data;
 	const pixels = image.width * image.height;
 	const alphaMode = settings.output.alphaMode;
 	const alphaThreshold = settings.output.alphaThreshold;
 	const useBayer = Boolean(bayer && bayerSize && strength > 0);
 	const useRandom = settings.dither.algorithm === 'random' && strength > 0;
-	const useVectorDither = supportsVectorDither(settings);
+	const useVectorDither = (useBayer || useRandom) && supportsVectorDither(settings);
 	const noiseScale = RGB_DITHER_NOISE_SCALE * strength;
 	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
 	const vectorMatcher = createPaletteVectorMatcher(vectorSpace, settings, caches);
+	const useAdaptivePlacement = usesAdaptivePlacement(settings);
+	const thresholdVectorMatcher =
+		useBayer && bayer && useVectorDither && !useAdaptivePlacement
+			? createThresholdByteVectorMatcher(
+					vectorSpace,
+					settings.colorSpace,
+					bayer,
+					strength,
+					pixels,
+					caches
+				)
+			: undefined;
 	const needsCompositedVectors =
-		supportsCachedVectorMatching(settings.colorSpace) &&
-		((!useBayer && !useRandom) || useVectorDither);
+		supportsCachedVectorMatching(settings.colorSpace) && useVectorDither && !thresholdVectorMatcher;
 	const compositedVectors = needsCompositedVectors
 		? cachedColorVectorImage(image, settings, matte, 'composited', caches)
 		: undefined;
 	const sourceVectors =
-		(useBayer || useRandom) && usesAdaptivePlacement(settings)
+		(useBayer || useRandom) && useAdaptivePlacement
 			? cachedColorVectorImage(image, settings, matte, 'source', caches)
 			: undefined;
 	const useDirectVectorMatch = Boolean(compositedVectors && !useBayer && !useRandom);
+	let nearestRgbCount = 0;
 	const loopStart = performance.now();
 
 	if (!useBayer && !useRandom) {
@@ -1188,6 +1419,7 @@ function quantizeDirect(
 					compositedVectors.v2[index]!
 				);
 			}
+			vectorMatcher.flushCounts();
 			recordTiming(caches, 'quantize direct dither+match loop', loopStart);
 			return;
 		}
@@ -1216,16 +1448,17 @@ function quantizeDirect(
 					b = Math.round(b * opacity + matte.b * background);
 				}
 			}
-			caches?.recordCount?.('nearest rgb');
+			nearestRgbCount++;
 			indices[index] = matcher.nearestIndexByteRgb(r, g, b);
 		}
+		caches?.recordCount?.('nearest rgb', nearestRgbCount);
 		recordTiming(caches, 'quantize direct dither+match loop', loopStart);
 		return;
 	}
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
-		const bayerRow = bayerSize ? (y % bayerSize) * bayerSize : 0;
+		const bayerRow = bayerSize ? (y & bayerMask) * bayerSize : 0;
 		for (let x = 0; x < image.width; x++) {
 			const index = rowOffset + x;
 			const offset = index * 4;
@@ -1236,12 +1469,22 @@ function quantizeDirect(
 				continue;
 			}
 
-			let { r, g, b } = compositedRgb(
-				{ r: source[offset]!, g: source[offset + 1]!, b: source[offset + 2]! },
-				alpha,
-				alphaMode,
-				matte
-			);
+			let r = source[offset]!;
+			let g = source[offset + 1]!;
+			let b = source[offset + 2]!;
+			if (alphaMode !== 'preserve' && alpha !== 255) {
+				const opacity = alpha / 255;
+				if (alphaMode === 'premultiplied') {
+					r = Math.round(r * opacity);
+					g = Math.round(g * opacity);
+					b = Math.round(b * opacity);
+				} else {
+					const background = 1 - opacity;
+					r = Math.round(r * opacity + matte.r * background);
+					g = Math.round(g * opacity + matte.g * background);
+					b = Math.round(b * opacity + matte.b * background);
+				}
+			}
 
 			if (useDirectVectorMatch && compositedVectors) {
 				indices[index] = vectorMatcher.nearestIndex(
@@ -1253,17 +1496,24 @@ function quantizeDirect(
 			}
 
 			if (useBayer && bayer && bayerSize) {
-				const mask = placementMask(
-					source,
-					image.width,
-					image.height,
-					x,
-					y,
-					settings,
-					vectorSpace,
-					sourceVectors
-				);
-				const threshold = bayer[bayerRow + (x % bayerSize)]!;
+				const thresholdIndex = bayerRow + (x & bayerMask);
+				if (useVectorDither && thresholdVectorMatcher) {
+					indices[index] = thresholdVectorMatcher.nearestIndexRgb(r, g, b, thresholdIndex);
+					continue;
+				}
+				const threshold = bayer[thresholdIndex]!;
+				const mask = useAdaptivePlacement
+					? placementMask(
+							source,
+							image.width,
+							image.height,
+							x,
+							y,
+							settings,
+							vectorSpace,
+							sourceVectors
+						)
+					: 1;
 				if (useVectorDither) {
 					const ditherStrength = strength * mask;
 					const match = compositedVectors
@@ -1276,8 +1526,10 @@ function quantizeDirect(
 								vectorMatcher,
 								ditherStrength
 							)
-						: colorSpaceThresholdIndex(
-								{ r, g, b },
+						: colorSpaceThresholdIndexRgb(
+								r,
+								g,
+								b,
 								threshold,
 								vectorSpace,
 								vectorMatcher,
@@ -1291,17 +1543,23 @@ function quantizeDirect(
 				g = clampByte(g + threshold * noiseScale * mask);
 				b = clampByte(b + threshold * noiseScale * mask);
 			} else if (useRandom) {
-				const mask = placementMask(
-					source,
-					image.width,
-					image.height,
-					x,
-					y,
-					settings,
-					vectorSpace,
-					sourceVectors
-				);
-				const noise = random() - 0.5;
+				const mask = useAdaptivePlacement
+					? placementMask(
+							source,
+							image.width,
+							image.height,
+							x,
+							y,
+							settings,
+							vectorSpace,
+							sourceVectors
+						)
+					: 1;
+				randomState = (randomState + 0x6d2b79f5) >>> 0;
+				let randomValue = randomState;
+				randomValue = Math.imul(randomValue ^ (randomValue >>> 15), randomValue | 1);
+				randomValue ^= randomValue + Math.imul(randomValue ^ (randomValue >>> 7), randomValue | 61);
+				const noise = ((randomValue ^ (randomValue >>> 14)) >>> 0) / 4294967296 - 0.5;
 				if (useVectorDither) {
 					const ditherStrength = strength * mask;
 					const match = compositedVectors
@@ -1314,8 +1572,10 @@ function quantizeDirect(
 								vectorMatcher,
 								ditherStrength
 							)
-						: colorSpaceThresholdIndex(
-								{ r, g, b },
+						: colorSpaceThresholdIndexRgb(
+								r,
+								g,
+								b,
 								noise,
 								vectorSpace,
 								vectorMatcher,
@@ -1329,10 +1589,13 @@ function quantizeDirect(
 				g = clampByte(g + noise * noiseScale * mask);
 				b = clampByte(b + noise * noiseScale * mask);
 			}
-			caches?.recordCount?.('nearest rgb');
+			nearestRgbCount++;
 			indices[index] = matcher.nearestIndexByteRgb(r, g, b);
 		}
 	}
+	caches?.recordCount?.('nearest rgb', nearestRgbCount);
+	vectorMatcher.flushCounts();
+	thresholdVectorMatcher?.flushCounts();
 	recordTiming(caches, 'quantize direct dither+match loop', loopStart);
 }
 
@@ -1361,19 +1624,24 @@ function quantizeVectorErrorDiffusion(
 	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
 	const vectorMatcher = createPaletteVectorMatcher(vectorSpace, settings, caches);
 	const compositedVectors = cachedColorVectorImage(image, settings, matte, 'composited', caches);
-	const sourceVectors = usesAdaptivePlacement(settings)
+	const useAdaptivePlacement = usesAdaptivePlacement(settings);
+	const sourceVectors = useAdaptivePlacement
 		? cachedColorVectorImage(image, settings, matte, 'source', caches)
 		: undefined;
 
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
 		const workOffset = index * 3;
-		const vector = compositedVectors
-			? cachedVectorAt(compositedVectors, index)
-			: vectorForCompositedPixel(source, sourceOffset, settings, matte);
-		work[workOffset] = vector[0];
-		work[workOffset + 1] = vector[1];
-		work[workOffset + 2] = vector[2];
+		if (compositedVectors) {
+			work[workOffset] = compositedVectors.v0[index]!;
+			work[workOffset + 1] = compositedVectors.v1[index]!;
+			work[workOffset + 2] = compositedVectors.v2[index]!;
+		} else {
+			const vector = vectorForCompositedPixel(source, sourceOffset, settings, matte);
+			work[workOffset] = vector[0];
+			work[workOffset + 1] = vector[1];
+			work[workOffset + 2] = vector[2];
+		}
 	}
 	recordTiming(caches, 'quantize vector diffusion work init', initStart);
 	const loopStart = performance.now();
@@ -1397,26 +1665,98 @@ function quantizeVectorErrorDiffusion(
 			const current0 = work[workOffset]!;
 			const current1 = work[workOffset + 1]!;
 			const current2 = work[workOffset + 2]!;
-			const match = vectorMatcher.nearest(current0, current1, current2);
-			if (!match) throw new Error('No visible palette colors are enabled');
-			indices[index] = match.index;
-			const mask = placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors);
-			const error0 = current0 - match.vector[0];
-			const error1 = current1 - match.vector[1];
-			const error2 = current2 - match.vector[2];
-			for (const [dxBase, dy, weight] of kernel) {
-				const dx = reverse ? -dxBase : dxBase;
-				const xx = x + dx;
-				const yy = y + dy;
-				if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
-				const target = (yy * width + xx) * 3;
-				const scaledWeight = weight * strength * mask;
-				work[target] += error0 * scaledWeight;
-				work[target + 1] += error1 * scaledWeight;
-				work[target + 2] += error2 * scaledWeight;
+			const ordinal = vectorMatcher.nearestOrdinal(current0, current1, current2);
+			if (ordinal === -1) throw new Error('No visible palette colors are enabled');
+			indices[index] = vectorMatcher.indexForOrdinal(ordinal);
+			const mask = useAdaptivePlacement
+				? placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors)
+				: 1;
+			const error0 = current0 - vectorMatcher.vector0ForOrdinal(ordinal);
+			const error1 = current1 - vectorMatcher.vector1ForOrdinal(ordinal);
+			const error2 = current2 - vectorMatcher.vector2ForOrdinal(ordinal);
+			if (settings.dither.algorithm === 'floyd-steinberg') {
+				const strengthMask = strength * mask;
+				if (reverse) {
+					if (x > 0) {
+						const target = workOffset - 3;
+						const scaledWeight = (7 / 16) * strengthMask;
+						work[target] += error0 * scaledWeight;
+						work[target + 1] += error1 * scaledWeight;
+						work[target + 2] += error2 * scaledWeight;
+					}
+					if (y + 1 < height) {
+						const nextRow = workOffset + width * 3;
+						if (x + 1 < width) {
+							const target = nextRow + 3;
+							const scaledWeight = (3 / 16) * strengthMask;
+							work[target] += error0 * scaledWeight;
+							work[target + 1] += error1 * scaledWeight;
+							work[target + 2] += error2 * scaledWeight;
+						}
+						{
+							const target = nextRow;
+							const scaledWeight = (5 / 16) * strengthMask;
+							work[target] += error0 * scaledWeight;
+							work[target + 1] += error1 * scaledWeight;
+							work[target + 2] += error2 * scaledWeight;
+						}
+						if (x > 0) {
+							const target = nextRow - 3;
+							const scaledWeight = (1 / 16) * strengthMask;
+							work[target] += error0 * scaledWeight;
+							work[target + 1] += error1 * scaledWeight;
+							work[target + 2] += error2 * scaledWeight;
+						}
+					}
+				} else {
+					if (x + 1 < width) {
+						const target = workOffset + 3;
+						const scaledWeight = (7 / 16) * strengthMask;
+						work[target] += error0 * scaledWeight;
+						work[target + 1] += error1 * scaledWeight;
+						work[target + 2] += error2 * scaledWeight;
+					}
+					if (y + 1 < height) {
+						const nextRow = workOffset + width * 3;
+						if (x > 0) {
+							const target = nextRow - 3;
+							const scaledWeight = (3 / 16) * strengthMask;
+							work[target] += error0 * scaledWeight;
+							work[target + 1] += error1 * scaledWeight;
+							work[target + 2] += error2 * scaledWeight;
+						}
+						{
+							const target = nextRow;
+							const scaledWeight = (5 / 16) * strengthMask;
+							work[target] += error0 * scaledWeight;
+							work[target + 1] += error1 * scaledWeight;
+							work[target + 2] += error2 * scaledWeight;
+						}
+						if (x + 1 < width) {
+							const target = nextRow + 3;
+							const scaledWeight = (1 / 16) * strengthMask;
+							work[target] += error0 * scaledWeight;
+							work[target + 1] += error1 * scaledWeight;
+							work[target + 2] += error2 * scaledWeight;
+						}
+					}
+				}
+			} else {
+				for (const [dxBase, dy, weight] of kernel) {
+					const dx = reverse ? -dxBase : dxBase;
+					const xx = x + dx;
+					const yy = y + dy;
+					if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+					const target = (yy * width + xx) * 3;
+					const scaledWeight = weight * strength * mask;
+					work[target] += error0 * scaledWeight;
+					work[target + 1] += error1 * scaledWeight;
+					work[target + 2] += error2 * scaledWeight;
+				}
 			}
 		}
 	}
+	vectorMatcher.flushCounts();
 	recordTiming(caches, 'quantize vector diffusion dither+match loop', loopStart);
 }
 
@@ -1459,7 +1799,8 @@ function quantizeErrorDiffusion(
 	const initStart = performance.now();
 	const work = new Float32Array(width * height * 3);
 	const vectorSpace = paletteVectorSpace(matcher, settings, paletteCacheKey, caches);
-	const sourceVectors = usesAdaptivePlacement(settings)
+	const useAdaptivePlacement = usesAdaptivePlacement(settings);
+	const sourceVectors = useAdaptivePlacement
 		? cachedColorVectorImage(image, settings, matte, 'source', caches)
 		: undefined;
 
@@ -1490,6 +1831,7 @@ function quantizeErrorDiffusion(
 		work[workOffset + 2] = b;
 	}
 	recordTiming(caches, 'quantize rgb diffusion work init', initStart);
+	let nearestRgbCount = 0;
 	const loopStart = performance.now();
 
 	for (let y = 0; y < height; y++) {
@@ -1511,26 +1853,97 @@ function quantizeErrorDiffusion(
 			const r = clampByte(work[workOffset]!);
 			const g = clampByte(work[workOffset + 1]!);
 			const b = clampByte(work[workOffset + 2]!);
-			caches?.recordCount?.('nearest rgb');
+			nearestRgbCount++;
 			const match = matcher.nearestIndexByteRgb(r, g, b);
 			indices[index] = match;
-			const chosen = matcher.paletteRgbAt(match);
-			const mask = placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors);
-			const errorR = r - chosen.r;
-			const errorG = g - chosen.g;
-			const errorB = b - chosen.b;
-			for (const [dxBase, dy, weight] of kernel) {
-				const dx = reverse ? -dxBase : dxBase;
-				const xx = x + dx;
-				const yy = y + dy;
-				if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
-				const target = (yy * width + xx) * 3;
-				const scaledWeight = weight * strength * mask;
-				work[target] += errorR * scaledWeight;
-				work[target + 1] += errorG * scaledWeight;
-				work[target + 2] += errorB * scaledWeight;
+			const mask = useAdaptivePlacement
+				? placementMask(source, width, height, x, y, settings, vectorSpace, sourceVectors)
+				: 1;
+			const errorR = r - matcher.paletteRedAt(match);
+			const errorG = g - matcher.paletteGreenAt(match);
+			const errorB = b - matcher.paletteBlueAt(match);
+			if (settings.dither.algorithm === 'floyd-steinberg') {
+				const strengthMask = strength * mask;
+				if (reverse) {
+					if (x > 0) {
+						const target = workOffset - 3;
+						const scaledWeight = (7 / 16) * strengthMask;
+						work[target] += errorR * scaledWeight;
+						work[target + 1] += errorG * scaledWeight;
+						work[target + 2] += errorB * scaledWeight;
+					}
+					if (y + 1 < height) {
+						const nextRow = workOffset + width * 3;
+						if (x + 1 < width) {
+							const target = nextRow + 3;
+							const scaledWeight = (3 / 16) * strengthMask;
+							work[target] += errorR * scaledWeight;
+							work[target + 1] += errorG * scaledWeight;
+							work[target + 2] += errorB * scaledWeight;
+						}
+						{
+							const target = nextRow;
+							const scaledWeight = (5 / 16) * strengthMask;
+							work[target] += errorR * scaledWeight;
+							work[target + 1] += errorG * scaledWeight;
+							work[target + 2] += errorB * scaledWeight;
+						}
+						if (x > 0) {
+							const target = nextRow - 3;
+							const scaledWeight = (1 / 16) * strengthMask;
+							work[target] += errorR * scaledWeight;
+							work[target + 1] += errorG * scaledWeight;
+							work[target + 2] += errorB * scaledWeight;
+						}
+					}
+				} else {
+					if (x + 1 < width) {
+						const target = workOffset + 3;
+						const scaledWeight = (7 / 16) * strengthMask;
+						work[target] += errorR * scaledWeight;
+						work[target + 1] += errorG * scaledWeight;
+						work[target + 2] += errorB * scaledWeight;
+					}
+					if (y + 1 < height) {
+						const nextRow = workOffset + width * 3;
+						if (x > 0) {
+							const target = nextRow - 3;
+							const scaledWeight = (3 / 16) * strengthMask;
+							work[target] += errorR * scaledWeight;
+							work[target + 1] += errorG * scaledWeight;
+							work[target + 2] += errorB * scaledWeight;
+						}
+						{
+							const target = nextRow;
+							const scaledWeight = (5 / 16) * strengthMask;
+							work[target] += errorR * scaledWeight;
+							work[target + 1] += errorG * scaledWeight;
+							work[target + 2] += errorB * scaledWeight;
+						}
+						if (x + 1 < width) {
+							const target = nextRow + 3;
+							const scaledWeight = (1 / 16) * strengthMask;
+							work[target] += errorR * scaledWeight;
+							work[target + 1] += errorG * scaledWeight;
+							work[target + 2] += errorB * scaledWeight;
+						}
+					}
+				}
+			} else {
+				for (const [dxBase, dy, weight] of kernel) {
+					const dx = reverse ? -dxBase : dxBase;
+					const xx = x + dx;
+					const yy = y + dy;
+					if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+					const target = (yy * width + xx) * 3;
+					const scaledWeight = weight * strength * mask;
+					work[target] += errorR * scaledWeight;
+					work[target + 1] += errorG * scaledWeight;
+					work[target + 2] += errorB * scaledWeight;
+				}
 			}
 		}
 	}
+	caches?.recordCount?.('nearest rgb', nearestRgbCount);
 	recordTiming(caches, 'quantize rgb diffusion dither+match loop', loopStart);
 }
