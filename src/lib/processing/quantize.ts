@@ -1,6 +1,8 @@
 import { bayerSizeForAlgorithm, normalizedBayerMatrix } from './bayer';
 import { clampByte, createPaletteMatcher, srgbByteToLinear, vectorForRgb } from './color';
 import { compositedRgb } from './compositing';
+import { errorKernelForAlgorithm } from './quantize-algorithms/error-kernels';
+import { quantizeAlgorithmFor } from './quantize-algorithms/registry';
 import type {
 	AlphaMode,
 	ColorSpaceId,
@@ -102,40 +104,6 @@ export type QuantizeCaches = QuantizeDiagnosticsSink & {
 
 const MIN_THRESHOLD_VECTOR_CACHE_BITS = 18;
 const MAX_THRESHOLD_VECTOR_CACHE_BITS = 22;
-
-const ERROR_KERNELS = {
-	'floyd-steinberg': [
-		[1, 0, 7 / 16],
-		[-1, 1, 3 / 16],
-		[0, 1, 5 / 16],
-		[1, 1, 1 / 16]
-	],
-	sierra: [
-		[1, 0, 5 / 32],
-		[2, 0, 3 / 32],
-		[-2, 1, 2 / 32],
-		[-1, 1, 4 / 32],
-		[0, 1, 5 / 32],
-		[1, 1, 4 / 32],
-		[2, 1, 2 / 32],
-		[-1, 2, 2 / 32],
-		[0, 2, 3 / 32],
-		[1, 2, 2 / 32]
-	],
-	'sierra-lite': [
-		[1, 0, 2 / 4],
-		[-1, 1, 1 / 4],
-		[0, 1, 1 / 4]
-	]
-} as const satisfies Partial<Record<DitherId, readonly (readonly [number, number, number])[]>>;
-
-type ErrorDiffusionAlgorithm = keyof typeof ERROR_KERNELS;
-
-function errorKernelForAlgorithm(algorithm: DitherId) {
-	return Object.hasOwn(ERROR_KERNELS, algorithm)
-		? ERROR_KERNELS[algorithm as ErrorDiffusionAlgorithm]
-		: undefined;
-}
 
 function supportsVectorDither(settings: ProcessingSettings) {
 	return settings.dither.useColorSpace && settings.colorSpace !== 'weighted-rgb';
@@ -1263,20 +1231,7 @@ export function quantizeImage(
 	const pixels = image.width * image.height;
 	const indices = new Uint8Array(pixels);
 
-	if (errorKernelForAlgorithm(settings.dither.algorithm) && strength > 0) {
-		quantizeErrorDiffusion(
-			image,
-			indices,
-			matcher,
-			settings,
-			matte,
-			tIndex,
-			fallbackTransparentIndex,
-			strength,
-			paletteCacheKey,
-			caches
-		);
-	} else {
+	const runDirect = () =>
 		quantizeDirect(
 			image,
 			indices,
@@ -1289,7 +1244,25 @@ export function quantizeImage(
 			paletteCacheKey,
 			caches
 		);
-	}
+	const runErrorDiffusion = () =>
+		quantizeErrorDiffusion(
+			image,
+			indices,
+			matcher,
+			settings,
+			matte,
+			tIndex,
+			fallbackTransparentIndex,
+			strength,
+			paletteCacheKey,
+			caches
+		);
+	quantizeAlgorithmFor(settings.dither.algorithm).quantize({
+		settings,
+		strength,
+		runDirect,
+		runErrorDiffusion
+	});
 	recordMatcherMemoStats(matcher, caches);
 
 	return { indices, palette: nextPalette, transparentIndex: tIndex, warnings };
