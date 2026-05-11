@@ -1,5 +1,9 @@
 import { WPLACE_PALETTE } from '$lib/palette/wplace';
-import { createPaletteMatcher, type PaletteMatcherOptions } from '$lib/processing/color';
+import {
+	createPaletteMatcher,
+	vectorForRgb,
+	type PaletteMatcherOptions
+} from '$lib/processing/color';
 import type { ColorSpaceId, DitherId, EnabledPaletteColor } from '$lib/processing/types';
 
 export type PaletteStudyId =
@@ -17,7 +21,11 @@ export type PaletteStudyVariant =
 	| 'distance-tables'
 	| 'dense-rgb-distance-tables'
 	| 'generic-kernel'
-	| 'unrolled-kernel';
+	| 'unrolled-kernel'
+	| 'rolling-row-kernel'
+	| 'vp-tree'
+	| 'ball-tree'
+	| 'previous-verify';
 
 export type PaletteStudySource = {
 	id: string;
@@ -91,9 +99,18 @@ const DEFAULT_VARIANTS: readonly PaletteStudyVariant[] = [
 const DEFAULT_DIFFUSION_DITHERS: readonly DitherId[] = ['floyd-steinberg', 'sierra', 'sierra-lite'];
 const DIFFUSION_KERNEL_VARIANTS: readonly PaletteStudyVariant[] = [
 	'generic-kernel',
-	'unrolled-kernel'
+	'unrolled-kernel',
+	'rolling-row-kernel'
+];
+const DIFFUSION_TRACE_VARIANTS: readonly PaletteStudyVariant[] = [
+	'scan',
+	'vp-tree',
+	'ball-tree',
+	'previous-verify'
 ];
 const RGB24_SIZE = 256 * 256 * 256;
+const FNV_OFFSET = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
 
 export function runPaletteStudy(options: PaletteStudyOptions): PaletteStudyResult {
 	const iterations = Math.max(1, Math.floor(options.iterations ?? 3));
@@ -110,22 +127,54 @@ export function runPaletteStudy(options: PaletteStudyOptions): PaletteStudyResul
 				const kernelVariants = options.variants?.length
 					? options.variants
 					: DIFFUSION_KERNEL_VARIANTS;
+				const baselines = new Map<DitherId, string>();
 				for (const dither of dithers) {
 					if (!DEFAULT_DIFFUSION_DITHERS.includes(dither)) continue;
 					for (const variant of kernelVariants) {
-						if (variant !== 'generic-kernel' && variant !== 'unrolled-kernel') continue;
+						if (
+							variant !== 'generic-kernel' &&
+							variant !== 'unrolled-kernel' &&
+							variant !== 'rolling-row-kernel'
+						)
+							continue;
 						for (let warmup = 0; warmup < warmups; warmup++) {
 							runDiffusionKernelStudy(source, dither, variant);
 						}
 						const runs = Array.from({ length: iterations }, () =>
 							runDiffusionKernelStudy(source, dither, variant)
 						);
-						rows.push(meanDirectRows(runs));
+						const row = meanDirectRows(runs);
+						const baseline = baselines.get(dither) ?? row.checksum;
+						baselines.set(dither, baseline);
+						rows.push({ ...row, matchesBaseline: row.checksum === baseline });
 					}
 				}
 				continue;
 			}
-			if (study !== 'direct-byte-rgb' && study !== 'cache-study' && study !== 'matcher') {
+			if (study === 'diffusion-trace' || study === 'matcher') {
+				const dithers = options.dithers?.length ? options.dithers : DEFAULT_DIFFUSION_DITHERS;
+				const traceVariants = options.variants?.length
+					? options.variants
+					: DIFFUSION_TRACE_VARIANTS;
+				for (const dither of dithers) {
+					if (!DEFAULT_DIFFUSION_DITHERS.includes(dither)) continue;
+					for (const colorSpace of colorSpaces) {
+						const trace = buildDiffusionTrace(source, colorSpace, dither);
+						for (const variant of traceVariants) {
+							if (!DIFFUSION_TRACE_VARIANTS.includes(variant)) continue;
+							for (let warmup = 0; warmup < warmups; warmup++) {
+								runDiffusionTraceStudy(source, trace, colorSpace, dither, variant, study);
+							}
+							const runs = Array.from({ length: iterations }, () =>
+								runDiffusionTraceStudy(source, trace, colorSpace, dither, variant, study)
+							);
+							rows.push(meanDirectRows(runs));
+						}
+					}
+				}
+				continue;
+			}
+			if (study !== 'direct-byte-rgb' && study !== 'cache-study') {
 				rows.push(...unsupportedRows(source, study, variants, colorSpaces));
 				continue;
 			}
@@ -240,6 +289,9 @@ function runDiffusionKernelStudy(
 	const pixels = image.width * image.height;
 	const totalStart = performance.now();
 	const buildStart = performance.now();
+	if (variant === 'rolling-row-kernel') {
+		return runRollingRowKernelStudy(source, dither, buildStart, totalStart);
+	}
 	const work = new Float32Array(pixels * 3);
 	for (
 		let index = 0, sourceOffset = 0, workOffset = 0;
@@ -324,6 +376,672 @@ function runDiffusionKernelStudy(
 		matchesBaseline: true,
 		notes: 'fake nearest-color diffusion scatter/update only'
 	};
+}
+
+type VectorPalette = {
+	indices: Uint8Array;
+	v0: Float64Array;
+	v1: Float64Array;
+	v2: Float64Array;
+	count: number;
+};
+
+type DiffusionTrace = {
+	pixels: number;
+	width: number;
+	height: number;
+	v0: Float32Array;
+	v1: Float32Array;
+	v2: Float32Array;
+	baselineChecksum: string;
+	traceBuildMs: number;
+	palette: VectorPalette;
+};
+
+type TraceMatcher = {
+	nearest(v0: number, v1: number, v2: number): number;
+	candidateEvaluations(): number;
+	cacheHits(): number;
+	cacheMisses(): number;
+	bytes(): number;
+	notes(): string;
+};
+
+type BallNode = {
+	start: number;
+	end: number;
+	left: number;
+	right: number;
+	center0: number;
+	center1: number;
+	center2: number;
+	radius: number;
+};
+
+type VpNode = {
+	ordinal: number;
+	left: number;
+	right: number;
+	threshold: number;
+};
+
+function buildDiffusionTrace(
+	source: PaletteStudySource,
+	colorSpace: ColorSpaceId,
+	dither: DitherId
+): DiffusionTrace {
+	const start = performance.now();
+	const image = source.imageData;
+	const pixels = image.width * image.height;
+	const palette = vectorPalette(enabledBenchmarkPalette(), colorSpace);
+	const work0 = new Float32Array(pixels);
+	const work1 = new Float32Array(pixels);
+	const work2 = new Float32Array(pixels);
+	const trace0 = new Float32Array(pixels);
+	const trace1 = new Float32Array(pixels);
+	const trace2 = new Float32Array(pixels);
+	for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+		const vector = vectorForRgb(
+			image.data[offset]!,
+			image.data[offset + 1]!,
+			image.data[offset + 2]!,
+			colorSpace
+		);
+		work0[index] = vector[0];
+		work1[index] = vector[1];
+		work2[index] = vector[2];
+	}
+	let checksum = FNV_OFFSET;
+	for (let y = 0; y < image.height; y++) {
+		const reverse = y % 2 === 1;
+		const rowOffset = y * image.width;
+		const startX = reverse ? image.width - 1 : 0;
+		const end = reverse ? -1 : image.width;
+		const step = reverse ? -1 : 1;
+		for (let x = startX; x !== end; x += step) {
+			const index = rowOffset + x;
+			const current0 = work0[index]!;
+			const current1 = work1[index]!;
+			const current2 = work2[index]!;
+			trace0[index] = current0;
+			trace1[index] = current1;
+			trace2[index] = current2;
+			const ordinal = nearestScanOrdinal(palette, colorSpace, current0, current1, current2);
+			checksum ^= palette.indices[ordinal]! + 1;
+			checksum = Math.imul(checksum, FNV_PRIME) >>> 0;
+			scatterTraceError(
+				work0,
+				work1,
+				work2,
+				image.width,
+				image.height,
+				x,
+				y,
+				reverse,
+				dither,
+				current0 - palette.v0[ordinal]!,
+				current1 - palette.v1[ordinal]!,
+				current2 - palette.v2[ordinal]!
+			);
+		}
+	}
+	return {
+		pixels,
+		width: image.width,
+		height: image.height,
+		v0: trace0,
+		v1: trace1,
+		v2: trace2,
+		baselineChecksum: checksum.toString(16).padStart(8, '0'),
+		traceBuildMs: performance.now() - start,
+		palette
+	};
+}
+
+function runDiffusionTraceStudy(
+	source: PaletteStudySource,
+	trace: DiffusionTrace,
+	colorSpace: ColorSpaceId,
+	dither: DitherId,
+	variant: PaletteStudyVariant,
+	study: PaletteStudyId
+): PaletteStudyRow {
+	const totalStart = performance.now();
+	const buildStart = performance.now();
+	const matcher = createTraceMatcher(trace.palette, colorSpace, variant);
+	const buildMs = performance.now() - buildStart;
+	let checksum = FNV_OFFSET;
+	const loopStart = performance.now();
+	for (let y = 0; y < trace.height; y++) {
+		const reverse = y % 2 === 1;
+		const start = reverse ? trace.width - 1 : 0;
+		const end = reverse ? -1 : trace.width;
+		const step = reverse ? -1 : 1;
+		const rowOffset = y * trace.width;
+		for (let x = start; x !== end; x += step) {
+			const index = rowOffset + x;
+			const ordinal = matcher.nearest(trace.v0[index]!, trace.v1[index]!, trace.v2[index]!);
+			checksum ^= trace.palette.indices[ordinal]! + 1;
+			checksum = Math.imul(checksum, FNV_PRIME) >>> 0;
+		}
+	}
+	const loopMs = performance.now() - loopStart;
+	const checksumText = checksum.toString(16).padStart(8, '0');
+	return {
+		study,
+		source: source.id,
+		pixels: trace.pixels,
+		paletteColors: trace.palette.count,
+		dither,
+		colorSpace,
+		variant,
+		buildMs,
+		loopMs,
+		totalMs: performance.now() - totalStart,
+		candidateEvaluations: matcher.candidateEvaluations(),
+		queries: trace.pixels,
+		uniqueKeys: 0,
+		cacheHits: matcher.cacheHits(),
+		cacheMisses: matcher.cacheMisses(),
+		cacheCollisions: 0,
+		cacheSets: 0,
+		cacheBytes: matcher.bytes(),
+		tableBytes: 0,
+		workBytes: trace.v0.byteLength + trace.v1.byteLength + trace.v2.byteLength,
+		checksum: checksumText,
+		matchesBaseline: checksumText === trace.baselineChecksum,
+		notes: `${matcher.notes()}; trace build ${trace.traceBuildMs.toFixed(1)}ms`
+	};
+}
+
+function createTraceMatcher(
+	palette: VectorPalette,
+	colorSpace: ColorSpaceId,
+	variant: PaletteStudyVariant
+): TraceMatcher {
+	switch (variant) {
+		case 'vp-tree':
+			return createVpTraceMatcher(palette, colorSpace);
+		case 'ball-tree':
+			return createBallTraceMatcher(palette, colorSpace);
+		case 'previous-verify':
+			return createPreviousVerifyMatcher(palette, colorSpace);
+		case 'scan':
+		default:
+			return createScanTraceMatcher(palette, colorSpace);
+	}
+}
+
+function vectorPalette(colors: EnabledPaletteColor[], colorSpace: ColorSpaceId): VectorPalette {
+	const visible = colors.filter((color) => color.rgb && color.kind !== 'transparent');
+	const indices = new Uint8Array(visible.length);
+	const v0 = new Float64Array(visible.length);
+	const v1 = new Float64Array(visible.length);
+	const v2 = new Float64Array(visible.length);
+	for (let ordinal = 0; ordinal < visible.length; ordinal++) {
+		const color = visible[ordinal]!;
+		const rgb = color.rgb!;
+		const vector = vectorForRgb(rgb.r, rgb.g, rgb.b, colorSpace);
+		indices[ordinal] = colors.indexOf(color);
+		v0[ordinal] = vector[0];
+		v1[ordinal] = vector[1];
+		v2[ordinal] = vector[2];
+	}
+	return { indices, v0, v1, v2, count: visible.length };
+}
+
+function createScanTraceMatcher(palette: VectorPalette, colorSpace: ColorSpaceId): TraceMatcher {
+	let candidates = 0;
+	return {
+		nearest(v0, v1, v2) {
+			candidates += palette.count;
+			return nearestScanOrdinal(palette, colorSpace, v0, v1, v2);
+		},
+		candidateEvaluations: () => candidates,
+		cacheHits: () => 0,
+		cacheMisses: () => 0,
+		bytes: () => 0,
+		notes: () => 'brute vector scan replay'
+	};
+}
+
+function createPreviousVerifyMatcher(
+	palette: VectorPalette,
+	colorSpace: ColorSpaceId
+): TraceMatcher {
+	if (colorSpace === 'oklch') return createScanTraceMatcher(palette, colorSpace);
+	let previous = 0;
+	let candidates = 0;
+	let hits = 0;
+	let misses = 0;
+	return {
+		nearest(v0, v1, v2) {
+			candidates += palette.count;
+			if (verifyEuclideanOrdinal(palette, previous, v0, v1, v2)) {
+				hits++;
+				return previous;
+			}
+			misses++;
+			candidates += palette.count;
+			previous = nearestScanOrdinal(palette, colorSpace, v0, v1, v2);
+			return previous;
+		},
+		candidateEvaluations: () => candidates,
+		cacheHits: () => hits,
+		cacheMisses: () => misses,
+		bytes: () => 0,
+		notes: () => 'previous winner Voronoi half-space verification with scan fallback'
+	};
+}
+
+function createVpTraceMatcher(palette: VectorPalette, colorSpace: ColorSpaceId): TraceMatcher {
+	if (colorSpace === 'oklch') return createScanTraceMatcher(palette, colorSpace);
+	const ordinals = Array.from({ length: palette.count }, (_, ordinal) => ordinal);
+	const nodes: VpNode[] = [];
+	buildVpNode(palette, ordinals, nodes);
+	let candidates = 0;
+	return {
+		nearest(v0, v1, v2) {
+			let bestOrdinal = -1;
+			let bestDistance = Infinity;
+			const visit = (nodeIndex: number) => {
+				if (nodeIndex === -1) return;
+				const node = nodes[nodeIndex]!;
+				const squaredDistance = euclideanDistanceToOrdinal(palette, node.ordinal, v0, v1, v2);
+				const distance = Math.sqrt(squaredDistance);
+				candidates++;
+				if (isBetterOrdinal(squaredDistance, node.ordinal, bestDistance, bestOrdinal)) {
+					bestDistance = squaredDistance;
+					bestOrdinal = node.ordinal;
+				}
+				const leftFirst = distance < node.threshold;
+				const near = leftFirst ? node.left : node.right;
+				const far = leftFirst ? node.right : node.left;
+				visit(near);
+				if (Math.abs(distance - node.threshold) <= Math.sqrt(bestDistance)) visit(far);
+			};
+			visit(0);
+			return bestOrdinal;
+		},
+		candidateEvaluations: () => candidates,
+		cacheHits: () => 0,
+		cacheMisses: () => 0,
+		bytes: () => nodes.length * (4 * 3 + 8),
+		notes: () => `exact VP-tree replay (${nodes.length} nodes)`
+	};
+}
+
+function createBallTraceMatcher(palette: VectorPalette, colorSpace: ColorSpaceId): TraceMatcher {
+	if (colorSpace === 'oklch') return createScanTraceMatcher(palette, colorSpace);
+	const ordinals = Array.from({ length: palette.count }, (_, ordinal) => ordinal);
+	const nodes: BallNode[] = [];
+	const ordered: number[] = [];
+	buildBallNode(palette, ordinals, nodes, ordered);
+	let candidates = 0;
+	return {
+		nearest(v0, v1, v2) {
+			let bestOrdinal = -1;
+			let bestDistance = Infinity;
+			const visit = (nodeIndex: number) => {
+				if (nodeIndex === -1) return;
+				const node = nodes[nodeIndex]!;
+				const centerDistance = Math.sqrt(
+					(v0 - node.center0) ** 2 + (v1 - node.center1) ** 2 + (v2 - node.center2) ** 2
+				);
+				const lowerBound = Math.max(0, centerDistance - node.radius);
+				if (lowerBound * lowerBound > bestDistance) return;
+				if (node.left === -1 && node.right === -1) {
+					for (let index = node.start; index < node.end; index++) {
+						const ordinal = ordered[index]!;
+						const distance = euclideanDistanceToOrdinal(palette, ordinal, v0, v1, v2);
+						candidates++;
+						if (isBetterOrdinal(distance, ordinal, bestDistance, bestOrdinal)) {
+							bestDistance = distance;
+							bestOrdinal = ordinal;
+						}
+					}
+					return;
+				}
+				const left = node.left === -1 ? undefined : nodes[node.left]!;
+				const right = node.right === -1 ? undefined : nodes[node.right]!;
+				const leftBound = left
+					? Math.max(
+							0,
+							Math.sqrt(
+								(v0 - left.center0) ** 2 + (v1 - left.center1) ** 2 + (v2 - left.center2) ** 2
+							) - left.radius
+						)
+					: Infinity;
+				const rightBound = right
+					? Math.max(
+							0,
+							Math.sqrt(
+								(v0 - right.center0) ** 2 + (v1 - right.center1) ** 2 + (v2 - right.center2) ** 2
+							) - right.radius
+						)
+					: Infinity;
+				if (leftBound <= rightBound) {
+					visit(node.left);
+					visit(node.right);
+				} else {
+					visit(node.right);
+					visit(node.left);
+				}
+			};
+			visit(0);
+			return bestOrdinal;
+		},
+		candidateEvaluations: () => candidates,
+		cacheHits: () => 0,
+		cacheMisses: () => 0,
+		bytes: () => nodes.length * 56 + ordered.length * 4,
+		notes: () => `exact ball-tree replay (${nodes.length} nodes, leaf<=4)`
+	};
+}
+
+function buildVpNode(palette: VectorPalette, ordinals: number[], nodes: VpNode[]): number {
+	if (ordinals.length === 0) return -1;
+	const ordinal = ordinals[0]!;
+	const nodeIndex = nodes.length;
+	nodes.push({ ordinal, left: -1, right: -1, threshold: 0 });
+	if (ordinals.length === 1) return nodeIndex;
+	const rest = ordinals.slice(1).sort((left, right) => {
+		const dl = euclideanDistanceBetweenOrdinals(palette, ordinal, left);
+		const dr = euclideanDistanceBetweenOrdinals(palette, ordinal, right);
+		return dl - dr;
+	});
+	const mid = Math.floor(rest.length / 2);
+	const threshold = Math.sqrt(euclideanDistanceBetweenOrdinals(palette, ordinal, rest[mid]!));
+	nodes[nodeIndex]!.threshold = threshold;
+	nodes[nodeIndex]!.left = buildVpNode(palette, rest.slice(0, mid), nodes);
+	nodes[nodeIndex]!.right = buildVpNode(palette, rest.slice(mid), nodes);
+	return nodeIndex;
+}
+
+function buildBallNode(
+	palette: VectorPalette,
+	ordinals: number[],
+	nodes: BallNode[],
+	ordered: number[]
+): number {
+	const nodeIndex = nodes.length;
+	const center0 = mean(ordinals.map((ordinal) => palette.v0[ordinal]!));
+	const center1 = mean(ordinals.map((ordinal) => palette.v1[ordinal]!));
+	const center2 = mean(ordinals.map((ordinal) => palette.v2[ordinal]!));
+	const radius = Math.max(
+		...ordinals.map((ordinal) =>
+			Math.sqrt(
+				(palette.v0[ordinal]! - center0) ** 2 +
+					(palette.v1[ordinal]! - center1) ** 2 +
+					(palette.v2[ordinal]! - center2) ** 2
+			)
+		)
+	);
+	const node: BallNode = {
+		start: ordered.length,
+		end: ordered.length,
+		left: -1,
+		right: -1,
+		center0,
+		center1,
+		center2,
+		radius
+	};
+	nodes.push(node);
+	if (ordinals.length <= 4) {
+		node.start = ordered.length;
+		ordered.push(...ordinals);
+		node.end = ordered.length;
+		return nodeIndex;
+	}
+	const ranges = [
+		Math.max(...ordinals.map((ordinal) => palette.v0[ordinal]!)) -
+			Math.min(...ordinals.map((ordinal) => palette.v0[ordinal]!)),
+		Math.max(...ordinals.map((ordinal) => palette.v1[ordinal]!)) -
+			Math.min(...ordinals.map((ordinal) => palette.v1[ordinal]!)),
+		Math.max(...ordinals.map((ordinal) => palette.v2[ordinal]!)) -
+			Math.min(...ordinals.map((ordinal) => palette.v2[ordinal]!))
+	];
+	const axis =
+		ranges[0]! >= ranges[1]! && ranges[0]! >= ranges[2]! ? 0 : ranges[1]! >= ranges[2]! ? 1 : 2;
+	const sorted = ordinals
+		.slice()
+		.sort((left, right) => paletteValue(palette, left, axis) - paletteValue(palette, right, axis));
+	const mid = Math.floor(sorted.length / 2);
+	node.left = buildBallNode(palette, sorted.slice(0, mid), nodes, ordered);
+	node.right = buildBallNode(palette, sorted.slice(mid), nodes, ordered);
+	return nodeIndex;
+}
+
+function nearestScanOrdinal(
+	palette: VectorPalette,
+	colorSpace: ColorSpaceId,
+	v0: number,
+	v1: number,
+	v2: number
+) {
+	let winner = -1;
+	let best = Infinity;
+	for (let ordinal = 0; ordinal < palette.count; ordinal++) {
+		const distance = vectorDistanceToOrdinal(palette, colorSpace, ordinal, v0, v1, v2);
+		if (isBetterOrdinal(distance, ordinal, best, winner)) {
+			best = distance;
+			winner = ordinal;
+		}
+	}
+	return winner;
+}
+
+function vectorDistanceToOrdinal(
+	palette: VectorPalette,
+	colorSpace: ColorSpaceId,
+	ordinal: number,
+	v0: number,
+	v1: number,
+	v2: number
+) {
+	if (colorSpace === 'oklch') {
+		const dl = v0 - palette.v0[ordinal]!;
+		const dc = v1 - palette.v1[ordinal]!;
+		let hue = Math.abs(v2 - palette.v2[ordinal]!);
+		if (hue > Math.PI) hue = Math.PI * 2 - hue;
+		const dh = Math.min(v1, palette.v1[ordinal]!) * hue;
+		return dl * dl + dc * dc + dh * dh;
+	}
+	return euclideanDistanceToOrdinal(palette, ordinal, v0, v1, v2);
+}
+
+function euclideanDistanceToOrdinal(
+	palette: VectorPalette,
+	ordinal: number,
+	v0: number,
+	v1: number,
+	v2: number
+) {
+	const dx = v0 - palette.v0[ordinal]!;
+	const dy = v1 - palette.v1[ordinal]!;
+	const dz = v2 - palette.v2[ordinal]!;
+	return dx * dx + dy * dy + dz * dz;
+}
+
+function euclideanDistanceBetweenOrdinals(palette: VectorPalette, left: number, right: number) {
+	return euclideanDistanceToOrdinal(
+		palette,
+		left,
+		palette.v0[right]!,
+		palette.v1[right]!,
+		palette.v2[right]!
+	);
+}
+
+function verifyEuclideanOrdinal(
+	palette: VectorPalette,
+	ordinal: number,
+	v0: number,
+	v1: number,
+	v2: number
+) {
+	const candidate0 = palette.v0[ordinal]!;
+	const candidate1 = palette.v1[ordinal]!;
+	const candidate2 = palette.v2[ordinal]!;
+	const candidateNorm = candidate0 * candidate0 + candidate1 * candidate1 + candidate2 * candidate2;
+	const epsilon = 1e-10;
+	for (let other = 0; other < palette.count; other++) {
+		if (other === ordinal) continue;
+		const other0 = palette.v0[other]!;
+		const other1 = palette.v1[other]!;
+		const other2 = palette.v2[other]!;
+		const otherNorm = other0 * other0 + other1 * other1 + other2 * other2;
+		const delta =
+			2 * (v0 * (other0 - candidate0) + v1 * (other1 - candidate1) + v2 * (other2 - candidate2)) -
+			(otherNorm - candidateNorm);
+		if (delta < -epsilon) continue;
+		if (Math.abs(delta) <= epsilon && ordinal < other) continue;
+		return false;
+	}
+	return true;
+}
+
+function isBetterOrdinal(distance: number, ordinal: number, best: number, winner: number) {
+	return distance < best || (distance === best && (winner === -1 || ordinal < winner));
+}
+
+function paletteValue(palette: VectorPalette, ordinal: number, axis: number) {
+	if (axis === 0) return palette.v0[ordinal]!;
+	if (axis === 1) return palette.v1[ordinal]!;
+	return palette.v2[ordinal]!;
+}
+
+function scatterTraceError(
+	work0: Float32Array,
+	work1: Float32Array,
+	work2: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	reverse: boolean,
+	dither: DitherId,
+	error0: number,
+	error1: number,
+	error2: number
+) {
+	for (const [dxBase, dy, weight] of diffusionKernel(dither)) {
+		const dx = reverse ? -dxBase : dxBase;
+		const xx = x + dx;
+		const yy = y + dy;
+		if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+		const index = yy * width + xx;
+		work0[index] += error0 * weight;
+		work1[index] += error1 * weight;
+		work2[index] += error2 * weight;
+	}
+}
+
+function runRollingRowKernelStudy(
+	source: PaletteStudySource,
+	dither: DitherId,
+	buildStart: number,
+	totalStart: number
+): PaletteStudyRow {
+	const image = source.imageData;
+	const pixels = image.width * image.height;
+	const rows = dither === 'sierra' ? 3 : 2;
+	const work = new Float32Array(image.width * rows * 3);
+	const buildMs = performance.now() - buildStart;
+	let checksum = FNV_OFFSET;
+	const loopStart = performance.now();
+	for (let y = 0; y < image.height; y++) {
+		const rowSlot = y % rows;
+		const rowBase = rowSlot * image.width * 3;
+		for (let x = 0; x < image.width; x++) {
+			const sourceOffset = (y * image.width + x) * 4;
+			const offset = rowBase + x * 3;
+			work[offset] += image.data[sourceOffset]!;
+			work[offset + 1] += image.data[sourceOffset + 1]!;
+			work[offset + 2] += image.data[sourceOffset + 2]!;
+		}
+		const reverse = y % 2 === 1;
+		const start = reverse ? image.width - 1 : 0;
+		const end = reverse ? -1 : image.width;
+		const step = reverse ? -1 : 1;
+		for (let x = start; x !== end; x += step) {
+			const offset = rowBase + x * 3;
+			const current0 = work[offset]!;
+			const current1 = work[offset + 1]!;
+			const current2 = work[offset + 2]!;
+			const error0 = current0 - 96;
+			const error1 = current1 - 96;
+			const error2 = current2 - 96;
+			checksum ^= ((current0 + current1 + current2) | 0) & 255;
+			checksum = Math.imul(checksum, FNV_PRIME) >>> 0;
+			scatterRollingKernel(
+				work,
+				image.width,
+				image.height,
+				rows,
+				x,
+				y,
+				reverse,
+				dither,
+				error0,
+				error1,
+				error2
+			);
+			work[offset] = 0;
+			work[offset + 1] = 0;
+			work[offset + 2] = 0;
+		}
+	}
+	const loopMs = performance.now() - loopStart;
+	return {
+		study: 'diffusion-kernel-only',
+		source: source.id,
+		pixels,
+		paletteColors: 0,
+		dither,
+		colorSpace: 'srgb',
+		variant: 'rolling-row-kernel',
+		buildMs,
+		loopMs,
+		totalMs: performance.now() - totalStart,
+		candidateEvaluations: 0,
+		queries: pixels,
+		uniqueKeys: 0,
+		cacheHits: 0,
+		cacheMisses: 0,
+		cacheCollisions: 0,
+		cacheSets: 0,
+		cacheBytes: 0,
+		tableBytes: 0,
+		workBytes: work.byteLength,
+		checksum: checksum.toString(16).padStart(8, '0'),
+		matchesBaseline: true,
+		notes: `rolling ${rows}-row fake nearest-color diffusion scatter/update only`
+	};
+}
+
+function scatterRollingKernel(
+	work: Float32Array,
+	width: number,
+	height: number,
+	rows: number,
+	x: number,
+	y: number,
+	reverse: boolean,
+	dither: DitherId,
+	error0: number,
+	error1: number,
+	error2: number
+) {
+	for (const [dxBase, dy, weight] of diffusionKernel(dither)) {
+		const dx = reverse ? -dxBase : dxBase;
+		const xx = x + dx;
+		const yy = y + dy;
+		if (xx < 0 || xx >= width || yy < 0 || yy >= height) continue;
+		const target = ((yy % rows) * width + xx) * 3;
+		addKernelError(work, target, error0, error1, error2, weight);
+	}
 }
 
 function scatterKernelGeneric(
@@ -570,6 +1288,10 @@ function matcherOptionsForVariant(variant: PaletteStudyVariant): PaletteMatcherO
 		case 'scan':
 		case 'generic-kernel':
 		case 'unrolled-kernel':
+		case 'rolling-row-kernel':
+		case 'vp-tree':
+		case 'ball-tree':
+		case 'previous-verify':
 			return { denseRgbMemo: false, distanceTables: false };
 	}
 }

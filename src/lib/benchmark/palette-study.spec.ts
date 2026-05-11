@@ -53,7 +53,7 @@ describe('palette study harness', () => {
 			iterations: 1,
 			warmups: 0,
 			studies: ['diffusion-kernel-only'],
-			variants: ['generic-kernel', 'unrolled-kernel'],
+			variants: ['generic-kernel', 'unrolled-kernel', 'rolling-row-kernel'],
 			dithers: ['sierra'],
 			sources: [
 				{
@@ -64,10 +64,32 @@ describe('palette study harness', () => {
 			]
 		});
 
-		expect(result.rows).toHaveLength(2);
+		expect(result.rows).toHaveLength(3);
 		expect(result.rows.every((row) => row.study === 'diffusion-kernel-only')).toBe(true);
 		expect(result.rows.every((row) => row.dither === 'sierra')).toBe(true);
 		expect(result.rows.every((row) => row.queries === 4)).toBe(true);
+	});
+
+	it('replays diffusion traces through exact vector matchers', () => {
+		const result = runPaletteStudy({
+			iterations: 1,
+			warmups: 0,
+			studies: ['diffusion-trace'],
+			variants: ['scan', 'vp-tree', 'ball-tree', 'previous-verify'],
+			colorSpaces: ['oklab'],
+			dithers: ['floyd-steinberg'],
+			sources: [
+				{
+					id: 'tiny',
+					label: 'Tiny',
+					imageData: new ImageData(tinyImageData(), 2, 2)
+				}
+			]
+		});
+
+		expect(result.rows).toHaveLength(4);
+		expect(result.rows.every((row) => row.study === 'diffusion-trace')).toBe(true);
+		expect(result.rows.every((row) => row.matchesBaseline)).toBe(true);
 	});
 });
 
