@@ -234,7 +234,7 @@ fn resize_exact_integer_downscale_word(
         for output_x in 0..output_width {
             let source_x = output_x * x_step + x_step / 2;
 
-            copy_pixel_slice(
+            copy_pixel_word(
                 source_rgba,
                 rgba::pixel_byte_offset(source_width, source_x, source_y),
                 output_rgba,
@@ -291,7 +291,7 @@ fn resize_precomputed_offsets_word_into(
         let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
 
         for (output_x, source_x_offset) in source_x_byte_offsets.iter().copied().enumerate() {
-            copy_pixel_slice(
+            copy_pixel_word(
                 source_rgba,
                 source_row_offset + source_x_offset,
                 output_rgba,
@@ -463,14 +463,20 @@ fn copy_pixel_bytes(
         .copy_from_slice(&source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT]);
 }
 
-fn copy_pixel_slice(
+fn copy_pixel_word(
     source_rgba: &[u8],
     source_offset: usize,
     output_rgba: &mut [u8],
     output_offset: usize,
 ) {
-    output_rgba[output_offset..output_offset + rgba::RGBA_CHANNEL_COUNT]
-        .copy_from_slice(&source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT]);
+    // SAFETY: Callers pass offsets produced from validated image dimensions and
+    // in-bounds loop coordinates. `read_unaligned` and `write_unaligned` avoid
+    // alignment requirements for byte-backed Wasm memory.
+    unsafe {
+        let source_ptr = source_rgba.as_ptr().add(source_offset).cast::<u32>();
+        let output_ptr = output_rgba.as_mut_ptr().add(output_offset).cast::<u32>();
+        output_ptr.write_unaligned(source_ptr.read_unaligned());
+    }
 }
 
 fn map_output_coordinate(output_coordinate: usize, source_size: u32, output_size: u32) -> usize {
