@@ -127,6 +127,9 @@ export type StageStats = {
 	medianMs: number;
 	p95Ms: number;
 	maxMs: number;
+	stddevMs: number;
+	coefficientOfVariation: number;
+	outlierCount: number;
 };
 
 export type BenchmarkMemoryShape = {
@@ -992,12 +995,25 @@ function summarizeNamedRecords(records: Array<Record<string, number>>) {
 function summarize(values: number[]): StageStats {
 	const sorted = [...values].sort((left, right) => left - right);
 	const sum = sorted.reduce((total, value) => total + value, 0);
+	const meanMs = sum / Math.max(1, sorted.length);
+	const variance =
+		sorted.reduce((total, value) => total + (value - meanMs) * (value - meanMs), 0) /
+		Math.max(1, sorted.length);
+	const q1 = percentile(sorted, 0.25);
+	const q3 = percentile(sorted, 0.75);
+	const iqr = q3 - q1;
+	const lowFence = q1 - iqr * 1.5;
+	const highFence = q3 + iqr * 1.5;
 	return {
 		minMs: sorted[0] ?? 0,
-		meanMs: sum / Math.max(1, sorted.length),
+		meanMs,
 		medianMs: percentile(sorted, 0.5),
 		p95Ms: percentile(sorted, 0.95),
-		maxMs: sorted.at(-1) ?? 0
+		maxMs: sorted.at(-1) ?? 0,
+		stddevMs: Math.sqrt(variance),
+		coefficientOfVariation: meanMs === 0 ? 0 : Math.sqrt(variance) / meanMs,
+		outlierCount:
+			iqr === 0 ? 0 : sorted.filter((value) => value < lowFence || value > highFence).length
 	};
 }
 
@@ -1075,6 +1091,25 @@ function quantizeCountMean(entry: BenchmarkCaseResult, name: string) {
 	return entry.quantizeCounters[name]?.meanMs ?? 0;
 }
 
+function hitRate(hits: number, misses: number) {
+	const total = hits + misses;
+	return total === 0 ? 0 : hits / total;
+}
+
+function rgbMemoHitRate(entry: BenchmarkCaseResult) {
+	return hitRate(
+		quantizeCountMean(entry, 'rgb memo hit'),
+		quantizeCountMean(entry, 'rgb memo miss')
+	);
+}
+
+function vectorMemoHitRate(entry: BenchmarkCaseResult) {
+	return hitRate(
+		quantizeCountMean(entry, 'vector memo hit'),
+		quantizeCountMean(entry, 'vector memo miss')
+	);
+}
+
 export function benchmarkResultsToCsv(result: BenchmarkResult): string {
 	const quantizeSubstageNames = [
 		...new Set(result.results.flatMap((entry) => Object.keys(entry.quantizeSubstages)))
@@ -1096,13 +1131,25 @@ export function benchmarkResultsToCsv(result: BenchmarkResult): string {
 			'sourcePixels',
 			'outputPixels',
 			'resizeMeanMs',
+			'resizeStddevMs',
+			'resizeCv',
+			'resizeOutliers',
+			'resizeCacheHitRate',
 			'quantizeMeanMs',
 			'quantizeStageMeanMs',
+			'quantizeStageStddevMs',
+			'quantizeStageCv',
+			'quantizeStageOutliers',
+			'rgbMemoHitRate',
+			'vectorMemoHitRate',
 			...quantizeSubstageNames.map((name) => `quantize:${name}:meanMs`),
 			...quantizeCounterNames.map((name) => `quantize-count:${name}:mean`),
 			'previewRenderMeanMs',
 			'pngEncodeMeanMs',
 			'totalMeanMs',
+			'totalStddevMs',
+			'totalCv',
+			'totalOutliers',
 			'hotspot',
 			'quantizeHotspot',
 			'resizedRgbaBytes',
@@ -1123,13 +1170,27 @@ export function benchmarkResultsToCsv(result: BenchmarkResult): string {
 			entry.memory.sourcePixels,
 			entry.memory.outputPixels,
 			entry.stages.resize.meanMs,
+			entry.stages.resize.stddevMs,
+			entry.stages.resize.coefficientOfVariation,
+			entry.stages.resize.outlierCount,
+			entry.runs.length === 0
+				? 0
+				: entry.runs.filter((run) => run.resizeCacheHit).length / entry.runs.length,
 			quantizeLoopMean(entry),
 			entry.stages.quantize.meanMs,
+			entry.stages.quantize.stddevMs,
+			entry.stages.quantize.coefficientOfVariation,
+			entry.stages.quantize.outlierCount,
+			rgbMemoHitRate(entry),
+			vectorMemoHitRate(entry),
 			...quantizeSubstageNames.map((name) => entry.quantizeSubstages[name]?.meanMs ?? ''),
 			...quantizeCounterNames.map((name) => entry.quantizeCounters[name]?.meanMs ?? ''),
 			entry.stages.previewRender.meanMs,
 			entry.stages.pngEncode.meanMs,
 			entry.stages.total.meanMs,
+			entry.stages.total.stddevMs,
+			entry.stages.total.coefficientOfVariation,
+			entry.stages.total.outlierCount,
 			entry.hotspot,
 			entry.quantizeHotspot ?? '',
 			entry.memory.resizedRgbaBytes,
@@ -1163,6 +1224,7 @@ export function formatBenchmarkTable(result: BenchmarkResult): string {
 		formatCount(
 			quantizeCountMean(entry, 'rgb memo hit') + quantizeCountMean(entry, 'vector memo hit')
 		),
+		formatPercent(Math.max(rgbMemoHitRate(entry), vectorMemoHitRate(entry))),
 		formatMs(entry.stages.previewRender.meanMs),
 		formatMs(entry.stages.pngEncode.meanMs),
 		formatMs(entry.stages.total.meanMs),
@@ -1182,6 +1244,7 @@ export function formatBenchmarkTable(result: BenchmarkResult): string {
 			'q palette',
 			'q loop',
 			'q memo hits',
+			'q hit rate',
 			'preview',
 			'png',
 			'total',
@@ -1205,6 +1268,11 @@ function formatCount(value: number) {
 	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
 	if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
 	return String(Math.round(value));
+}
+
+function formatPercent(value: number) {
+	if (value === 0) return '0%';
+	return `${(value * 100).toFixed(value >= 0.1 ? 1 : 2)}%`;
 }
 
 function formatPixels(value: number) {

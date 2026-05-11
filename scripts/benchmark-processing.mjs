@@ -326,15 +326,26 @@ function formatCaseSummary(event) {
 	const result = event.result;
 	const resizeHits = result.runs.filter((run) => run.resizeCacheHit).length;
 	const details = [
-		`  mean total ${formatMs(result.stages.total.meanMs)}`,
+		`  mean total ${formatMs(result.stages.total.meanMs)} ± ${formatMs(result.stages.total.stddevMs ?? 0)} cv ${formatPercent(result.stages.total.coefficientOfVariation ?? 0)}${result.stages.total.outlierCount ? ` outliers ${result.stages.total.outlierCount}` : ''}`,
 		`resize ${formatMs(result.stages.resize.meanMs)} (${resizeHits}/${result.runs.length} hits)`,
-		`q stage ${formatMs(result.stages.quantize.meanMs)}`,
+		`q stage ${formatMs(result.stages.quantize.meanMs)} cv ${formatPercent(result.stages.quantize.coefficientOfVariation ?? 0)}`,
 		`q convert ${formatMs(quantizeConvertMean(result))}`,
 		`q image ${formatMs(quantizeMean(result, 'color space convert composited image') + quantizeMean(result, 'color space convert source image'))}`,
 		`q palette ${formatMs(quantizeMean(result, 'color space convert palette'))}`,
 		`q loop ${formatMs(quantizeLoopMean(result))}`
 	];
 	appendQuantizeMeanPieces(details, result);
+	const memoHitRate = Math.max(
+		hitRate(
+			quantizeCounterMean(result, 'rgb memo hit'),
+			quantizeCounterMean(result, 'rgb memo miss')
+		),
+		hitRate(
+			quantizeCounterMean(result, 'vector memo hit'),
+			quantizeCounterMean(result, 'vector memo miss')
+		)
+	);
+	if (memoHitRate > 0) details.push(`memo hit rate ${formatPercent(memoHitRate)}`);
 	return `${details.join(' · ')}\n  hotspots ${result.hotspot} / ${result.quantizeHotspot ?? '—'} · case wall ${formatMs(event.durationMs)}`;
 }
 
@@ -432,6 +443,11 @@ function quantizeMean(result, name) {
 
 function quantizeCounterMean(result, name) {
 	return result.quantizeCounters[name]?.meanMs ?? 0;
+}
+
+function hitRate(hits, misses) {
+	const total = hits + misses;
+	return total === 0 ? 0 : hits / total;
 }
 
 function formatMs(value) {
