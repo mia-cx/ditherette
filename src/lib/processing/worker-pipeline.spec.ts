@@ -273,6 +273,18 @@ describe('ProcessorWorkerPipeline', () => {
 		);
 	});
 
+	it('async processing path returns complete responses', async () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+
+		const response = await pipeline.handleAsync(processRequest({ id: 2 }), () => undefined);
+
+		expect(response?.type).toBe('complete');
+	});
+
 	it('returns transferred index buffers for complete responses', () => {
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(
