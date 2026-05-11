@@ -174,6 +174,8 @@ fn write_reference_resize(
 }
 
 const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 8;
+const MIN_SPAN_COPY_SCALE_NUMERATOR: u32 = 7;
+const MIN_SPAN_COPY_SCALE_DENOMINATOR: u32 = 8;
 
 // TODO(perf): Thread a reusable scratch object through repeated nearest resizes
 // so span/offset buffers do not allocate for every frame in interactive previews.
@@ -432,13 +434,19 @@ fn has_wide_source_x_spans(
         return Ok(false);
     }
 
-    // TODO(perf): Replace average-span heuristic with direct planning-cost vs
-    // copy-savings estimate using expected span count and output byte volume.
     let skipped_source_columns =
         source_dimensions.width_usize()? - output_dimensions.width_usize()?;
     let average_span_pixels = output_dimensions.width_usize()? / skipped_source_columns.max(1);
 
-    Ok(average_span_pixels >= MIN_SPAN_COPY_AVERAGE_PIXELS)
+    Ok(
+        is_near_identity_downscale(source_dimensions.width(), output_dimensions.width())
+            && average_span_pixels >= MIN_SPAN_COPY_AVERAGE_PIXELS,
+    )
+}
+
+fn is_near_identity_downscale(source_size: u32, output_size: u32) -> bool {
+    u64::from(output_size) * u64::from(MIN_SPAN_COPY_SCALE_DENOMINATOR)
+        >= u64::from(source_size) * u64::from(MIN_SPAN_COPY_SCALE_NUMERATOR)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -512,8 +520,9 @@ fn map_output_coordinate(output_coordinate: usize, source_size: u32, output_size
 #[cfg(test)]
 mod tests {
     use super::{
-        is_exact_integer_downscale, map_output_coordinate, resize_rgba_nearest,
-        resize_rgba_nearest_into, resize_rgba_nearest_reference, write_reference_resize,
+        is_exact_integer_downscale, is_near_identity_downscale, map_output_coordinate,
+        resize_rgba_nearest, resize_rgba_nearest_into, resize_rgba_nearest_reference,
+        write_reference_resize,
     };
     use crate::image::ImageDimensions;
 
@@ -539,6 +548,14 @@ mod tests {
             dimensions(2, 2),
             dimensions(4, 4)
         ));
+    }
+
+    #[test]
+    fn detects_near_identity_downscale_for_span_copy_gate() {
+        assert!(is_near_identity_downscale(100, 95));
+        assert!(is_near_identity_downscale(8, 7));
+        assert!(!is_near_identity_downscale(4, 3));
+        assert!(!is_near_identity_downscale(2, 1));
     }
 
     #[test]
