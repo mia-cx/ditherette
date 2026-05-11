@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use crate::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
@@ -72,23 +74,29 @@ pub fn resize_rgba_nearest_into(
         return Ok(());
     }
 
-    if has_wide_source_x_spans(source_dimensions, output_dimensions)? {
-        return resize_span_copy_into(
+    NEAREST_RESIZE_SCRATCH.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+
+        if has_wide_source_x_spans(source_dimensions, output_dimensions)? {
+            return resize_span_copy_into(
+                source_rgba,
+                source_dimensions,
+                output_dimensions,
+                output_rgba,
+                &mut scratch.span_copy,
+            );
+        }
+
+        // TODO(perf): Revisit unchecked offset helpers and SIMD once broader
+        // resize/dither kernels are in place.
+        resize_precomputed_offsets_word_into(
             source_rgba,
             source_dimensions,
             output_dimensions,
             output_rgba,
-        );
-    }
-
-    // TODO(perf): Revisit unchecked offset helpers and SIMD once broader
-    // resize/dither kernels are in place.
-    resize_precomputed_offsets_word_into(
-        source_rgba,
-        source_dimensions,
-        output_dimensions,
-        output_rgba,
-    )
+            &mut scratch.precomputed_offsets,
+        )
+    })
 }
 
 /// Straightforward reference implementation used by tests and benchmarks.
@@ -169,10 +177,28 @@ fn write_reference_resize(
 
 const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 8;
 
-// TODO(perf): Thread a reusable scratch object through repeated nearest resizes
-// so span/offset buffers do not allocate for every frame in interactive previews.
+thread_local! {
+    static NEAREST_RESIZE_SCRATCH: RefCell<NearestResizeScratch> = RefCell::default();
+}
+
+#[derive(Default)]
+struct NearestResizeScratch {
+    precomputed_offsets: PrecomputedOffsetScratch,
+    span_copy: SpanCopyScratch,
+}
+
+#[derive(Default)]
+struct PrecomputedOffsetScratch {
+    source_dimensions: Option<ImageDimensions>,
+    output_dimensions: Option<ImageDimensions>,
+    source_row_byte_offsets: Vec<usize>,
+    source_x_byte_offsets: Vec<usize>,
+}
+
 #[derive(Default)]
 struct SpanCopyScratch {
+    source_dimensions: Option<ImageDimensions>,
+    output_dimensions: Option<ImageDimensions>,
     source_row_byte_offsets: Vec<usize>,
     source_x_copy_spans: Vec<SourceXCopySpan>,
 }
@@ -251,6 +277,7 @@ fn resize_precomputed_offsets_word_into(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
+    scratch: &mut PrecomputedOffsetScratch,
 ) -> Result<(), ProcessingError> {
     validate_resize_buffers(
         source_rgba,
@@ -259,38 +286,15 @@ fn resize_precomputed_offsets_word_into(
         output_rgba,
     )?;
 
-    let source_width = source_dimensions.width_usize()?;
+    prepare_precomputed_offsets(source_dimensions, output_dimensions, scratch)?;
+
     let output_width = output_dimensions.width_usize()?;
-    let output_height = output_dimensions.height_usize()?;
-
-    // TODO(perf): Reuse source_x/source_y offset buffers across calls via a
-    // resize plan or scratch object; these allocations are pure setup overhead.
-    let source_x_byte_offsets: Vec<usize> = (0..output_width)
-        .map(|output_x| {
-            let source_x = map_output_coordinate(
-                output_x,
-                source_dimensions.width(),
-                output_dimensions.width(),
-            );
-            source_x * rgba::RGBA_CHANNEL_COUNT
-        })
-        .collect();
-
-    let source_row_byte_offsets: Vec<usize> = (0..output_height)
-        .map(|output_y| {
-            let source_y = map_output_coordinate(
-                output_y,
-                source_dimensions.height(),
-                output_dimensions.height(),
-            );
-            source_y * source_width * rgba::RGBA_CHANNEL_COUNT
-        })
-        .collect();
-
-    for (output_y, source_row_offset) in source_row_byte_offsets.into_iter().enumerate() {
+    for (output_y, source_row_offset) in scratch.source_row_byte_offsets.iter().copied().enumerate()
+    {
         let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
 
-        for (output_x, source_x_offset) in source_x_byte_offsets.iter().copied().enumerate() {
+        for (output_x, source_x_offset) in scratch.source_x_byte_offsets.iter().copied().enumerate()
+        {
             copy_pixel_word(
                 source_rgba,
                 source_row_offset + source_x_offset,
@@ -303,17 +307,61 @@ fn resize_precomputed_offsets_word_into(
     Ok(())
 }
 
+fn prepare_precomputed_offsets(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    scratch: &mut PrecomputedOffsetScratch,
+) -> Result<(), ProcessingError> {
+    if scratch.source_dimensions == Some(source_dimensions)
+        && scratch.output_dimensions == Some(output_dimensions)
+    {
+        return Ok(());
+    }
+
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+
+    scratch.source_x_byte_offsets.clear();
+    scratch.source_x_byte_offsets.reserve(output_width);
+    scratch
+        .source_x_byte_offsets
+        .extend((0..output_width).map(|output_x| {
+            let source_x = map_output_coordinate(
+                output_x,
+                source_dimensions.width(),
+                output_dimensions.width(),
+            );
+            source_x * rgba::RGBA_CHANNEL_COUNT
+        }));
+
+    scratch.source_row_byte_offsets.clear();
+    scratch.source_row_byte_offsets.reserve(output_height);
+    scratch
+        .source_row_byte_offsets
+        .extend((0..output_height).map(|output_y| {
+            let source_y = map_output_coordinate(
+                output_y,
+                source_dimensions.height(),
+                output_dimensions.height(),
+            );
+            source_y * source_width * rgba::RGBA_CHANNEL_COUNT
+        }));
+
+    scratch.source_dimensions = Some(source_dimensions);
+    scratch.output_dimensions = Some(output_dimensions);
+
+    Ok(())
+}
+
 fn resize_span_copy_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
+    scratch: &mut SpanCopyScratch,
 ) -> Result<(), ProcessingError> {
-    let mut scratch = SpanCopyScratch::default();
-    // TODO(perf): Avoid rebuilding span-copy scratch when the same source/output
-    // dimensions are resized repeatedly; only source bytes change between frames.
-    prepare_source_row_byte_offsets(source_dimensions, output_dimensions, &mut scratch)?;
-    prepare_source_x_copy_spans(source_dimensions, output_dimensions, &mut scratch)?;
+    prepare_span_copy_scratch(source_dimensions, output_dimensions, scratch)?;
 
     let output_row_byte_len = output_dimensions.width_usize()? * rgba::RGBA_CHANNEL_COUNT;
     let mut output_row_offset = 0;
@@ -327,6 +375,25 @@ fn resize_span_copy_into(
         }
         output_row_offset += output_row_byte_len;
     }
+
+    Ok(())
+}
+
+fn prepare_span_copy_scratch(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    scratch: &mut SpanCopyScratch,
+) -> Result<(), ProcessingError> {
+    if scratch.source_dimensions == Some(source_dimensions)
+        && scratch.output_dimensions == Some(output_dimensions)
+    {
+        return Ok(());
+    }
+
+    prepare_source_row_byte_offsets(source_dimensions, output_dimensions, scratch)?;
+    prepare_source_x_copy_spans(source_dimensions, output_dimensions, scratch)?;
+    scratch.source_dimensions = Some(source_dimensions);
+    scratch.output_dimensions = Some(output_dimensions);
 
     Ok(())
 }
