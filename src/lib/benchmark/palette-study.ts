@@ -1,4 +1,13 @@
 import { WPLACE_PALETTE } from '$lib/palette/wplace';
+import { bayerSizeForAlgorithm, normalizedBayerMatrix } from '$lib/processing/bayer';
+import {
+	WEIGHTED_RGB_601_B,
+	WEIGHTED_RGB_601_G,
+	WEIGHTED_RGB_601_R,
+	WEIGHTED_RGB_709_B,
+	WEIGHTED_RGB_709_G,
+	WEIGHTED_RGB_709_R
+} from '$lib/processing/quantize-shared';
 import {
 	createPaletteMatcher,
 	vectorForRgb,
@@ -25,7 +34,14 @@ export type PaletteStudyVariant =
 	| 'rolling-row-kernel'
 	| 'vp-tree'
 	| 'ball-tree'
-	| 'previous-verify';
+	| 'previous-verify'
+	| 'threshold-scan'
+	| 'threshold-direct-cache'
+	| 'threshold-direct-cache-23'
+	| 'threshold-direct-cache-24'
+	| 'threshold-probe-4'
+	| 'threshold-unique-map'
+	| 'threshold-unique-map-hot';
 
 export type PaletteStudySource = {
 	id: string;
@@ -108,9 +124,20 @@ const DIFFUSION_TRACE_VARIANTS: readonly PaletteStudyVariant[] = [
 	'ball-tree',
 	'previous-verify'
 ];
+const BAYER_THRESHOLD_VARIANTS: readonly PaletteStudyVariant[] = [
+	'threshold-scan',
+	'threshold-direct-cache',
+	'threshold-direct-cache-23',
+	'threshold-direct-cache-24',
+	'threshold-probe-4',
+	'threshold-unique-map',
+	'threshold-unique-map-hot'
+];
 const RGB24_SIZE = 256 * 256 * 256;
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
+const STUDY_DITHER_STRENGTH = 100;
+const COLOR_SPACE_THRESHOLD_SCALE = 0.25;
 
 export function runPaletteStudy(options: PaletteStudyOptions): PaletteStudyResult {
 	const iterations = Math.max(1, Math.floor(options.iterations ?? 3));
@@ -122,6 +149,39 @@ export function runPaletteStudy(options: PaletteStudyOptions): PaletteStudyResul
 
 	for (const source of options.sources) {
 		for (const study of studies) {
+			if (study === 'bayer-threshold-vector') {
+				const dithers: readonly DitherId[] = options.dithers?.length
+					? options.dithers
+					: ['bayer-8', 'bayer-16'];
+				const thresholdVariants = options.variants?.length
+					? options.variants
+					: BAYER_THRESHOLD_VARIANTS;
+				for (const dither of dithers) {
+					if (!bayerSizeForAlgorithm(dither)) continue;
+					for (const colorSpace of colorSpaces) {
+						if (!supportsBayerThresholdStudy(colorSpace)) continue;
+						const dataset = bayerThresholdDataset(source.imageData, dither);
+						const baselines = new Map<ColorSpaceId, string>();
+						for (const variant of thresholdVariants) {
+							if (!BAYER_THRESHOLD_VARIANTS.includes(variant)) continue;
+							const runner = isPersistentThresholdVariant(variant)
+								? runPersistentBayerThresholdStudy
+								: runBayerThresholdStudy;
+							for (let warmup = 0; warmup < warmups; warmup++) {
+								runner(source, dataset, colorSpace, dither, variant);
+							}
+							const runs = Array.from({ length: iterations }, () =>
+								runner(source, dataset, colorSpace, dither, variant)
+							);
+							const row = meanDirectRows(runs);
+							const baseline = baselines.get(colorSpace) ?? row.checksum;
+							baselines.set(colorSpace, baseline);
+							rows.push({ ...row, matchesBaseline: row.checksum === baseline });
+						}
+					}
+				}
+				continue;
+			}
 			if (study === 'diffusion-kernel-only') {
 				const dithers = options.dithers?.length ? options.dithers : DEFAULT_DIFFUSION_DITHERS;
 				const kernelVariants = options.variants?.length
@@ -376,6 +436,405 @@ function runDiffusionKernelStudy(
 		matchesBaseline: true,
 		notes: 'fake nearest-color diffusion scatter/update only'
 	};
+}
+
+type BayerThresholdDataset = {
+	pixels: number;
+	thresholds: readonly number[];
+	keys: Uint32Array;
+	uniqueKeys: number;
+};
+
+type ThresholdTerms = {
+	palette: VectorPalette;
+	term0: Float64Array;
+	term1: Float64Array;
+	term2: Float64Array;
+	thresholdTermBases: Uint32Array;
+	thresholdKeyBases: Uint32Array;
+	tableBytes: number;
+};
+
+type ThresholdStudyMatcher = {
+	nearestIndex(key: number): number;
+	candidateEvaluations(): number;
+	cacheHits(): number;
+	cacheMisses(): number;
+	cacheCollisions(): number;
+	cacheSets(): number;
+	cacheBytes(): number;
+	notes(): string;
+};
+
+function supportsBayerThresholdStudy(colorSpace: ColorSpaceId) {
+	return colorSpace === 'weighted-rgb-601' || colorSpace === 'weighted-rgb-709';
+}
+
+function isPersistentThresholdVariant(variant: PaletteStudyVariant) {
+	return variant === 'threshold-unique-map-hot';
+}
+
+function bayerThresholdDataset(image: ImageData, dither: DitherId): BayerThresholdDataset {
+	const bayerSize = bayerSizeForAlgorithm(dither);
+	if (!bayerSize) throw new Error(`Unsupported Bayer threshold study dither: ${dither}`);
+	const thresholds = normalizedBayerMatrix(bayerSize);
+	const bayerMask = bayerSize - 1;
+	const pixels = image.width * image.height;
+	const keys = new Uint32Array(pixels);
+	const seen = new Set<number>();
+	for (let y = 0; y < image.height; y++) {
+		const rowOffset = y * image.width;
+		const thresholdRow = (y & bayerMask) * bayerSize;
+		for (let x = 0; x < image.width; x++) {
+			const index = rowOffset + x;
+			const offset = index * 4;
+			const thresholdIndex = thresholdRow + (x & bayerMask);
+			const key =
+				((thresholdIndex << 24) |
+					(image.data[offset]! << 16) |
+					(image.data[offset + 1]! << 8) |
+					image.data[offset + 2]!) >>>
+				0;
+			keys[index] = key;
+			seen.add(key);
+		}
+	}
+	return { pixels, thresholds, keys, uniqueKeys: seen.size };
+}
+
+function runBayerThresholdStudy(
+	source: PaletteStudySource,
+	dataset: BayerThresholdDataset,
+	colorSpace: ColorSpaceId,
+	dither: DitherId,
+	variant: PaletteStudyVariant
+): PaletteStudyRow {
+	const totalStart = performance.now();
+	const buildStart = performance.now();
+	const terms = buildThresholdTerms(colorSpace, dataset.thresholds);
+	const matcher = createThresholdStudyMatcher(terms, dataset, variant);
+	const buildMs = performance.now() - buildStart;
+	let checksum = FNV_OFFSET;
+	const loopStart = performance.now();
+	for (let index = 0; index < dataset.keys.length; index++) {
+		const match = matcher.nearestIndex(dataset.keys[index]!);
+		checksum ^= match + 1;
+		checksum = Math.imul(checksum, FNV_PRIME) >>> 0;
+	}
+	const loopMs = performance.now() - loopStart;
+	return {
+		study: 'bayer-threshold-vector',
+		source: source.id,
+		pixels: dataset.pixels,
+		paletteColors: terms.palette.count,
+		dither,
+		colorSpace,
+		variant,
+		buildMs,
+		loopMs,
+		totalMs: performance.now() - totalStart,
+		candidateEvaluations: matcher.candidateEvaluations(),
+		queries: dataset.pixels,
+		uniqueKeys: dataset.uniqueKeys,
+		cacheHits: matcher.cacheHits(),
+		cacheMisses: matcher.cacheMisses(),
+		cacheCollisions: matcher.cacheCollisions(),
+		cacheSets: matcher.cacheSets(),
+		cacheBytes: matcher.cacheBytes(),
+		tableBytes: terms.tableBytes,
+		workBytes: dataset.keys.byteLength,
+		checksum: checksum.toString(16).padStart(8, '0'),
+		matchesBaseline: true,
+		notes: matcher.notes()
+	};
+}
+
+function runPersistentBayerThresholdStudy(
+	source: PaletteStudySource,
+	dataset: BayerThresholdDataset,
+	colorSpace: ColorSpaceId,
+	dither: DitherId,
+	variant: PaletteStudyVariant
+): PaletteStudyRow {
+	if (variant !== 'threshold-unique-map-hot') {
+		return runBayerThresholdStudy(source, dataset, colorSpace, dither, variant);
+	}
+	const totalStart = performance.now();
+	const buildStart = performance.now();
+	const terms = buildThresholdTerms(colorSpace, dataset.thresholds);
+	const cache = buildUniqueThresholdCache(terms, dataset.keys);
+	const buildMs = performance.now() - buildStart;
+	let checksum = FNV_OFFSET;
+	const loopStart = performance.now();
+	for (let index = 0; index < dataset.keys.length; index++) {
+		const match = cache.results.get(dataset.keys[index]!)!;
+		checksum ^= match + 1;
+		checksum = Math.imul(checksum, FNV_PRIME) >>> 0;
+	}
+	const loopMs = performance.now() - loopStart;
+	return {
+		study: 'bayer-threshold-vector',
+		source: source.id,
+		pixels: dataset.pixels,
+		paletteColors: terms.palette.count,
+		dither,
+		colorSpace,
+		variant,
+		buildMs,
+		loopMs,
+		totalMs: performance.now() - totalStart,
+		candidateEvaluations: cache.candidateEvaluations,
+		queries: dataset.pixels,
+		uniqueKeys: dataset.uniqueKeys,
+		cacheHits: dataset.pixels,
+		cacheMisses: 0,
+		cacheCollisions: 0,
+		cacheSets: cache.results.size,
+		cacheBytes: cache.results.size * 8,
+		tableBytes: terms.tableBytes,
+		workBytes: dataset.keys.byteLength,
+		checksum: checksum.toString(16).padStart(8, '0'),
+		matchesBaseline: true,
+		notes: 'persistent JS Map threshold+RGB LUT hot replay; build cost is reusable'
+	};
+}
+
+function buildThresholdTerms(
+	colorSpace: ColorSpaceId,
+	thresholds: readonly number[]
+): ThresholdTerms {
+	const palette = vectorPalette(enabledBenchmarkPalette(), colorSpace);
+	const count = palette.count;
+	const ranges = paletteRanges(palette);
+	const termsPerThreshold = count * 256;
+	const term0 = new Float64Array(thresholds.length * termsPerThreshold);
+	const term1 = new Float64Array(thresholds.length * termsPerThreshold);
+	const term2 = new Float64Array(thresholds.length * termsPerThreshold);
+	const thresholdTermBases = new Uint32Array(thresholds.length);
+	const thresholdKeyBases = new Uint32Array(thresholds.length);
+	for (let thresholdIndex = 0; thresholdIndex < thresholds.length; thresholdIndex++) {
+		const amount =
+			thresholds[thresholdIndex]! * STUDY_DITHER_STRENGTH * COLOR_SPACE_THRESHOLD_SCALE;
+		const offset0 = amount * ranges[0];
+		const offset1 = amount * ranges[1];
+		const offset2 = amount * ranges[2];
+		const thresholdBase = thresholdIndex * termsPerThreshold;
+		thresholdTermBases[thresholdIndex] = thresholdBase;
+		thresholdKeyBases[thresholdIndex] = (thresholdIndex << 24) >>> 0;
+		for (let value = 0; value < 256; value++) {
+			const base = thresholdBase + value * count;
+			const v0 = thresholdByteComponent(value, colorSpace, 0) + offset0;
+			const v1 = thresholdByteComponent(value, colorSpace, 1) + offset1;
+			const v2 = thresholdByteComponent(value, colorSpace, 2) + offset2;
+			for (let ordinal = 0; ordinal < count; ordinal++) {
+				const d0 = v0 - palette.v0[ordinal]!;
+				const d1 = v1 - palette.v1[ordinal]!;
+				const d2 = v2 - palette.v2[ordinal]!;
+				term0[base + ordinal] = d0 * d0;
+				term1[base + ordinal] = d1 * d1;
+				term2[base + ordinal] = d2 * d2;
+			}
+		}
+	}
+	return {
+		palette,
+		term0,
+		term1,
+		term2,
+		thresholdTermBases,
+		thresholdKeyBases,
+		tableBytes:
+			term0.byteLength +
+			term1.byteLength +
+			term2.byteLength +
+			thresholdTermBases.byteLength +
+			thresholdKeyBases.byteLength
+	};
+}
+
+function createThresholdStudyMatcher(
+	terms: ThresholdTerms,
+	dataset: BayerThresholdDataset,
+	variant: PaletteStudyVariant
+): ThresholdStudyMatcher {
+	switch (variant) {
+		case 'threshold-direct-cache':
+			return createDirectThresholdMatcher(terms, dataset.pixels, 0);
+		case 'threshold-direct-cache-23':
+			return createDirectThresholdMatcher(terms, dataset.pixels, 0, 23);
+		case 'threshold-direct-cache-24':
+			return createDirectThresholdMatcher(terms, dataset.pixels, 0, 24);
+		case 'threshold-probe-4':
+			return createDirectThresholdMatcher(terms, dataset.pixels, 4);
+		case 'threshold-unique-map':
+		case 'threshold-unique-map-hot':
+			return createUniqueThresholdMatcher(terms, dataset.keys);
+		case 'threshold-scan':
+		default:
+			return createScanThresholdMatcher(terms);
+	}
+}
+
+function createScanThresholdMatcher(terms: ThresholdTerms): ThresholdStudyMatcher {
+	let candidates = 0;
+	return {
+		nearestIndex(key) {
+			candidates += terms.palette.count;
+			return thresholdScanIndex(terms, key);
+		},
+		candidateEvaluations: () => candidates,
+		cacheHits: () => 0,
+		cacheMisses: () => 0,
+		cacheCollisions: () => 0,
+		cacheSets: () => 0,
+		cacheBytes: () => 0,
+		notes: () => 'threshold table scan without memo cache'
+	};
+}
+
+function createDirectThresholdMatcher(
+	terms: ThresholdTerms,
+	pixels: number,
+	probeLimit: number,
+	cacheBitsOverride?: number
+): ThresholdStudyMatcher {
+	const cacheBits =
+		cacheBitsOverride ?? Math.min(22, Math.max(18, Math.ceil(Math.log2(pixels * 2))));
+	const cacheSize = 1 << cacheBits;
+	const cacheMask = cacheSize - 1;
+	const cacheKeys = new Uint32Array(cacheSize);
+	const cacheValues = new Uint16Array(cacheSize);
+	const cacheValid = new Uint8Array(cacheSize);
+	let candidates = 0;
+	let hits = 0;
+	let misses = 0;
+	let collisions = 0;
+	let sets = 0;
+	return {
+		nearestIndex(key) {
+			let slot = thresholdCacheSlot(key, cacheMask);
+			const probes = probeLimit || 1;
+			for (let probe = 0; probe < probes; probe++) {
+				if (!cacheValid[slot]) break;
+				if (cacheKeys[slot] === key) {
+					hits++;
+					return cacheValues[slot]!;
+				}
+				collisions++;
+				if (!probeLimit) break;
+				slot = (slot + 1) & cacheMask;
+			}
+			misses++;
+			candidates += terms.palette.count;
+			const value = thresholdScanIndex(terms, key);
+			cacheKeys[slot] = key;
+			cacheValues[slot] = value;
+			cacheValid[slot] = 1;
+			sets++;
+			return value;
+		},
+		candidateEvaluations: () => candidates,
+		cacheHits: () => hits,
+		cacheMisses: () => misses,
+		cacheCollisions: () => collisions,
+		cacheSets: () => sets,
+		cacheBytes: () => cacheKeys.byteLength + cacheValues.byteLength + cacheValid.byteLength,
+		notes: () =>
+			probeLimit
+				? `threshold direct cache with ${probeLimit} linear probes`
+				: 'threshold direct-mapped cache'
+	};
+}
+
+function createUniqueThresholdMatcher(
+	terms: ThresholdTerms,
+	keys: Uint32Array
+): ThresholdStudyMatcher {
+	const { candidateEvaluations, results } = buildUniqueThresholdCache(terms, keys);
+	return {
+		nearestIndex(key) {
+			return results.get(key)!;
+		},
+		candidateEvaluations: () => candidateEvaluations,
+		cacheHits: () => keys.length - results.size,
+		cacheMisses: () => results.size,
+		cacheCollisions: () => 0,
+		cacheSets: () => results.size,
+		cacheBytes: () => results.size * 8,
+		notes: () => 'JS Map unique-key prepass for threshold+RGB queries'
+	};
+}
+
+function buildUniqueThresholdCache(terms: ThresholdTerms, keys: Uint32Array) {
+	const results = new Map<number, number>();
+	let candidateEvaluations = 0;
+	for (let index = 0; index < keys.length; index++) {
+		const key = keys[index]!;
+		if (results.has(key)) continue;
+		candidateEvaluations += terms.palette.count;
+		results.set(key, thresholdScanIndex(terms, key));
+	}
+	return { candidateEvaluations, results };
+}
+
+function thresholdScanIndex(terms: ThresholdTerms, key: number) {
+	const thresholdIndex = key >>> 24;
+	const r = (key >>> 16) & 255;
+	const g = (key >>> 8) & 255;
+	const b = key & 255;
+	const count = terms.palette.count;
+	const thresholdBase = terms.thresholdTermBases[thresholdIndex]!;
+	const base0 = thresholdBase + r * count;
+	const base1 = thresholdBase + g * count;
+	const base2 = thresholdBase + b * count;
+	let winner = -1;
+	let best = Infinity;
+	for (let ordinal = 0; ordinal < count; ordinal++) {
+		const distance =
+			terms.term0[base0 + ordinal]! + terms.term1[base1 + ordinal]! + terms.term2[base2 + ordinal]!;
+		if (distance < best) {
+			best = distance;
+			winner = ordinal;
+		}
+	}
+	return terms.palette.indices[winner]!;
+}
+
+function thresholdCacheSlot(key: number, mask: number) {
+	return (Math.imul(key ^ (key >>> 16), 0x45d9f3b) >>> 0) & mask;
+}
+
+function thresholdByteComponent(value: number, colorSpace: ColorSpaceId, channel: 0 | 1 | 2) {
+	if (colorSpace === 'weighted-rgb-601') {
+		if (channel === 0) return value * WEIGHTED_RGB_601_R;
+		if (channel === 1) return value * WEIGHTED_RGB_601_G;
+		return value * WEIGHTED_RGB_601_B;
+	}
+	if (channel === 0) return value * WEIGHTED_RGB_709_R;
+	if (channel === 1) return value * WEIGHTED_RGB_709_G;
+	return value * WEIGHTED_RGB_709_B;
+}
+
+function paletteRanges(palette: VectorPalette): [number, number, number] {
+	let min0 = Infinity;
+	let min1 = Infinity;
+	let min2 = Infinity;
+	let max0 = -Infinity;
+	let max1 = -Infinity;
+	let max2 = -Infinity;
+	for (let ordinal = 0; ordinal < palette.count; ordinal++) {
+		min0 = Math.min(min0, palette.v0[ordinal]!);
+		min1 = Math.min(min1, palette.v1[ordinal]!);
+		min2 = Math.min(min2, palette.v2[ordinal]!);
+		max0 = Math.max(max0, palette.v0[ordinal]!);
+		max1 = Math.max(max1, palette.v1[ordinal]!);
+		max2 = Math.max(max2, palette.v2[ordinal]!);
+	}
+	return [
+		Math.max(max0 - min0, Number.EPSILON),
+		Math.max(max1 - min1, Number.EPSILON),
+		Math.max(max2 - min2, Number.EPSILON)
+	];
 }
 
 type VectorPalette = {
@@ -1292,6 +1751,13 @@ function matcherOptionsForVariant(variant: PaletteStudyVariant): PaletteMatcherO
 		case 'vp-tree':
 		case 'ball-tree':
 		case 'previous-verify':
+		case 'threshold-scan':
+		case 'threshold-direct-cache':
+		case 'threshold-direct-cache-23':
+		case 'threshold-direct-cache-24':
+		case 'threshold-probe-4':
+		case 'threshold-unique-map':
+		case 'threshold-unique-map-hot':
 			return { denseRgbMemo: false, distanceTables: false };
 	}
 }

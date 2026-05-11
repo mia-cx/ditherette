@@ -70,6 +70,36 @@ describe('palette study harness', () => {
 		expect(result.rows.every((row) => row.queries === 4)).toBe(true);
 	});
 
+	it('runs Bayer threshold-vector cache studies', () => {
+		const result = runPaletteStudy({
+			iterations: 1,
+			warmups: 0,
+			studies: ['bayer-threshold-vector'],
+			variants: [
+				'threshold-scan',
+				'threshold-direct-cache',
+				'threshold-direct-cache-23',
+				'threshold-direct-cache-24',
+				'threshold-probe-4',
+				'threshold-unique-map',
+				'threshold-unique-map-hot'
+			],
+			colorSpaces: ['weighted-rgb-601'],
+			dithers: ['bayer-2'],
+			sources: [
+				{
+					id: 'tiny',
+					label: 'Tiny',
+					imageData: new ImageData(tinyImageData(), 2, 2)
+				}
+			]
+		});
+
+		expect(result.rows).toHaveLength(7);
+		expect(result.rows.every((row) => row.study === 'bayer-threshold-vector')).toBe(true);
+		expect(result.rows.every((row) => row.matchesBaseline)).toBe(true);
+	});
+
 	it('replays diffusion traces through exact vector matchers', () => {
 		const result = runPaletteStudy({
 			iterations: 1,
