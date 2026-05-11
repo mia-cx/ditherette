@@ -52,9 +52,6 @@ pub fn resize_rgba_nearest_into(
         return Ok(());
     }
 
-    // TODO(perf): Benchmark axis-specific fast paths for same-height resize and
-    // pure horizontal downscale/upscale. The same-width row copy is valuable,
-    // but common UI previews may hit one-axis changes too.
     if source_dimensions.width() == output_dimensions.width() {
         copy_same_width_rows(
             source_rgba,
@@ -75,9 +72,6 @@ pub fn resize_rgba_nearest_into(
         return Ok(());
     }
 
-    // TODO(perf): Replace the static span-copy gate with measured thresholds by
-    // scale/CPU target. Pixel-center mapping changed span distributions, so the
-    // old average-span heuristic should be revalidated.
     if has_wide_source_x_spans(source_dimensions, output_dimensions)? {
         return resize_span_copy_into(
             source_rgba,
@@ -199,8 +193,6 @@ fn copy_same_width_rows(
     let row_byte_len = source_dimensions.width_usize()? * rgba::RGBA_CHANNEL_COUNT;
     let output_height = output_dimensions.height_usize()?;
 
-    // TODO(perf): Detect repeated source_y values during vertical upscales and
-    // copy the already-written output row instead of re-reading the source row.
     for output_y in 0..output_height {
         let source_y = map_output_coordinate(
             output_y,
@@ -236,9 +228,6 @@ fn resize_exact_integer_downscale_word(
     let x_step = source_dimensions.width_usize()? / output_width;
     let y_step = source_dimensions.height_usize()? / output_height;
 
-    // TODO(perf): Add specialized 2x/4x exact-downscale loops that unroll source
-    // strides and output writes. Center sampling is now `step / 2`, so these are
-    // simple fixed-offset copies.
     for output_y in 0..output_height {
         let source_y = output_y * y_step + y_step / 2;
 
@@ -301,8 +290,6 @@ fn resize_precomputed_offsets_word_into(
     for (output_y, source_row_offset) in source_row_byte_offsets.into_iter().enumerate() {
         let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
 
-        // TODO(perf): Write output offsets incrementally instead of recomputing
-        // pixel_byte_offset for every pixel in the fallback path.
         for (output_x, source_x_offset) in source_x_byte_offsets.iter().copied().enumerate() {
             copy_pixel_word(
                 source_rgba,
@@ -332,8 +319,6 @@ fn resize_span_copy_into(
     let mut output_row_offset = 0;
 
     for source_row_offset in scratch.source_row_byte_offsets.iter().copied() {
-        // TODO(perf): For repeated source rows during vertical upscales, copy the
-        // previous output row rather than repeating every span copy.
         for span in &scratch.source_x_copy_spans {
             let source_start = source_row_offset + span.source_x_byte_offset;
             let output_start = output_row_offset + span.output_x_byte_offset;
@@ -355,31 +340,16 @@ fn prepare_source_row_byte_offsets(
     let output_height = output_dimensions.height_usize()?;
 
     scratch.source_row_byte_offsets.clear();
-    scratch.source_row_byte_offsets.reserve(output_height);
-
-    let source_height = u64::from(source_dimensions.height());
-    let output_height_u64 = u64::from(output_dimensions.height());
-    let denominator = 2 * output_height_u64;
-    let step = 2 * source_height;
-    let base_step = step / denominator;
-    let step_remainder = step % denominator;
-    let mut source_y = source_height / denominator;
-    let mut remainder = source_height % denominator;
-    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
-
-    for _ in 0..output_height {
-        let clamped_source_y = source_y.min(source_height - 1) as usize;
-        scratch
-            .source_row_byte_offsets
-            .push(clamped_source_y * source_row_byte_len);
-
-        source_y += base_step;
-        remainder += step_remainder;
-        if remainder >= denominator {
-            source_y += 1;
-            remainder -= denominator;
-        }
-    }
+    scratch
+        .source_row_byte_offsets
+        .extend((0..output_height).map(|output_y| {
+            let source_y = map_output_coordinate(
+                output_y,
+                source_dimensions.height(),
+                output_dimensions.height(),
+            );
+            source_y * source_width * rgba::RGBA_CHANNEL_COUNT
+        }));
 
     Ok(())
 }
@@ -445,8 +415,6 @@ fn has_wide_source_x_spans(
         return Ok(false);
     }
 
-    // TODO(perf): Replace average-span heuristic with direct planning-cost vs
-    // copy-savings estimate using expected span count and output byte volume.
     let skipped_source_columns =
         source_dimensions.width_usize()? - output_dimensions.width_usize()?;
     let average_span_pixels = output_dimensions.width_usize()? / skipped_source_columns.max(1);
