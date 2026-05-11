@@ -39,6 +39,8 @@ export type PaletteStudyVariant =
 	| 'threshold-direct-cache'
 	| 'threshold-direct-cache-23'
 	| 'threshold-direct-cache-24'
+	| 'threshold-2way-cache'
+	| 'threshold-2way-cache-f32'
 	| 'threshold-probe-4'
 	| 'threshold-unique-map'
 	| 'threshold-unique-map-hot';
@@ -129,6 +131,8 @@ const BAYER_THRESHOLD_VARIANTS: readonly PaletteStudyVariant[] = [
 	'threshold-direct-cache',
 	'threshold-direct-cache-23',
 	'threshold-direct-cache-24',
+	'threshold-2way-cache',
+	'threshold-2way-cache-f32',
 	'threshold-probe-4',
 	'threshold-unique-map',
 	'threshold-unique-map-hot'
@@ -447,9 +451,9 @@ type BayerThresholdDataset = {
 
 type ThresholdTerms = {
 	palette: VectorPalette;
-	term0: Float64Array;
-	term1: Float64Array;
-	term2: Float64Array;
+	term0: Float32Array | Float64Array;
+	term1: Float32Array | Float64Array;
+	term2: Float32Array | Float64Array;
 	thresholdTermBases: Uint32Array;
 	thresholdKeyBases: Uint32Array;
 	tableBytes: number;
@@ -511,7 +515,7 @@ function runBayerThresholdStudy(
 ): PaletteStudyRow {
 	const totalStart = performance.now();
 	const buildStart = performance.now();
-	const terms = buildThresholdTerms(colorSpace, dataset.thresholds);
+	const terms = buildThresholdTerms(colorSpace, dataset.thresholds, variant.endsWith('-f32'));
 	const matcher = createThresholdStudyMatcher(terms, dataset, variant);
 	const buildMs = performance.now() - buildStart;
 	let checksum = FNV_OFFSET;
@@ -601,15 +605,17 @@ function runPersistentBayerThresholdStudy(
 
 function buildThresholdTerms(
 	colorSpace: ColorSpaceId,
-	thresholds: readonly number[]
+	thresholds: readonly number[],
+	float32 = false
 ): ThresholdTerms {
 	const palette = vectorPalette(enabledBenchmarkPalette(), colorSpace);
 	const count = palette.count;
 	const ranges = paletteRanges(palette);
 	const termsPerThreshold = count * 256;
-	const term0 = new Float64Array(thresholds.length * termsPerThreshold);
-	const term1 = new Float64Array(thresholds.length * termsPerThreshold);
-	const term2 = new Float64Array(thresholds.length * termsPerThreshold);
+	const TermArray = float32 ? Float32Array : Float64Array;
+	const term0 = new TermArray(thresholds.length * termsPerThreshold);
+	const term1 = new TermArray(thresholds.length * termsPerThreshold);
+	const term2 = new TermArray(thresholds.length * termsPerThreshold);
 	const thresholdTermBases = new Uint32Array(thresholds.length);
 	const thresholdKeyBases = new Uint32Array(thresholds.length);
 	for (let thresholdIndex = 0; thresholdIndex < thresholds.length; thresholdIndex++) {
@@ -664,6 +670,9 @@ function createThresholdStudyMatcher(
 			return createDirectThresholdMatcher(terms, dataset.pixels, 0, 23);
 		case 'threshold-direct-cache-24':
 			return createDirectThresholdMatcher(terms, dataset.pixels, 0, 24);
+		case 'threshold-2way-cache':
+		case 'threshold-2way-cache-f32':
+			return createTwoWayThresholdMatcher(terms, dataset.pixels);
 		case 'threshold-probe-4':
 			return createDirectThresholdMatcher(terms, dataset.pixels, 4);
 		case 'threshold-unique-map':
@@ -743,6 +752,63 @@ function createDirectThresholdMatcher(
 			probeLimit
 				? `threshold direct cache with ${probeLimit} linear probes`
 				: 'threshold direct-mapped cache'
+	};
+}
+
+function createTwoWayThresholdMatcher(
+	terms: ThresholdTerms,
+	pixels: number
+): ThresholdStudyMatcher {
+	const cacheBits = Math.min(22, Math.max(18, Math.ceil(Math.log2(pixels * 2))));
+	const setCount = 1 << cacheBits;
+	const setMask = setCount - 1;
+	const cacheKeys = new Uint32Array(setCount * 2);
+	const cacheValues = new Uint16Array(setCount * 2);
+	const cacheValid = new Uint8Array(setCount * 2);
+	let candidates = 0;
+	let hits = 0;
+	let misses = 0;
+	let collisions = 0;
+	let sets = 0;
+	let replacementClock = 0;
+	return {
+		nearestIndex(key) {
+			const slot = thresholdCacheSlot(key, setMask) << 1;
+			const nextSlot = slot + 1;
+			if (cacheValid[slot]) {
+				if (cacheKeys[slot] === key) {
+					hits++;
+					return cacheValues[slot]!;
+				}
+				if (cacheValid[nextSlot]) {
+					if (cacheKeys[nextSlot] === key) {
+						hits++;
+						return cacheValues[nextSlot]!;
+					}
+					collisions++;
+				}
+			}
+			misses++;
+			candidates += terms.palette.count;
+			const value = thresholdScanIndex(terms, key);
+			const writeSlot = !cacheValid[slot]
+				? slot
+				: !cacheValid[nextSlot]
+					? nextSlot
+					: slot + (replacementClock++ & 1);
+			cacheKeys[writeSlot] = key;
+			cacheValues[writeSlot] = value;
+			cacheValid[writeSlot] = 1;
+			sets++;
+			return value;
+		},
+		candidateEvaluations: () => candidates,
+		cacheHits: () => hits,
+		cacheMisses: () => misses,
+		cacheCollisions: () => collisions,
+		cacheSets: () => sets,
+		cacheBytes: () => cacheKeys.byteLength + cacheValues.byteLength + cacheValid.byteLength,
+		notes: () => 'threshold 2-way set-associative cache'
 	};
 }
 
@@ -1755,6 +1821,8 @@ function matcherOptionsForVariant(variant: PaletteStudyVariant): PaletteMatcherO
 		case 'threshold-direct-cache':
 		case 'threshold-direct-cache-23':
 		case 'threshold-direct-cache-24':
+		case 'threshold-2way-cache':
+		case 'threshold-2way-cache-f32':
 		case 'threshold-probe-4':
 		case 'threshold-unique-map':
 		case 'threshold-unique-map-hot':

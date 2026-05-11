@@ -118,6 +118,7 @@ export type BenchmarkOptions = {
 	matrixDimensions?: readonly BenchmarkMatrixDimension[];
 	stopAfterStage?: BenchmarkStopStage;
 	noResize?: boolean;
+	syntheticCorpus?: boolean;
 	onProgress?: (event: BenchmarkProgressEvent) => void;
 };
 
@@ -410,9 +411,11 @@ export function runProcessingBenchmarks(options: BenchmarkOptions = {}): Benchma
 		options.stopAfterStage === 'resize' ? undefined : new Map<string, ImageData>();
 	const results: BenchmarkCaseResult[] = [];
 	let caseIndex = 0;
-	if (options.sources?.length) {
-		const totalCases = options.sources.length * cases.length;
-		for (const source of options.sources) {
+	const syntheticCorpus = options.syntheticCorpus ? syntheticCorpusSources(profile) : undefined;
+	const benchmarkSources = options.sources?.length ? options.sources : syntheticCorpus;
+	if (benchmarkSources?.length) {
+		const totalCases = benchmarkSources.length * cases.length;
+		for (const source of benchmarkSources) {
 			for (const testCase of cases) {
 				caseIndex++;
 				results.push(
@@ -466,6 +469,39 @@ function syntheticSourceForCase(testCase: BenchmarkCase): BenchmarkSource {
 		kind: 'synthetic',
 		imageData: createFixtureImage(width, height, id)
 	};
+}
+
+function syntheticCorpusSources(profile: BenchmarkProfile): BenchmarkSource[] {
+	const large = profile === 'large' || profile === 'exhaustive';
+	const sources: BenchmarkSource[] = [
+		{
+			id: 'synthetic-gradient-1536x1024',
+			label: 'Synthetic gradient 1536×1024',
+			kind: 'synthetic',
+			imageData: createGradientImage(1536, 1024)
+		},
+		{
+			id: 'synthetic-alpha-1024x1024',
+			label: 'Synthetic alpha stress 1024×1024',
+			kind: 'synthetic',
+			imageData: createAlphaFixtureImage(1024, 1024)
+		},
+		{
+			id: 'synthetic-photoish-1920x1080',
+			label: 'Synthetic photo-like 1920×1080',
+			kind: 'synthetic',
+			imageData: createFixtureImage(1920, 1080, 'photoish')
+		}
+	];
+	if (large) {
+		sources.push({
+			id: 'synthetic-memory-4096x4096',
+			label: 'Synthetic memory pressure 4096×4096',
+			kind: 'synthetic',
+			imageData: createFixtureImage(4096, 4096, 'memory-pressure')
+		});
+	}
+	return sources;
 }
 
 function runBenchmarkCase(
@@ -915,6 +951,37 @@ function createFixtureImage(width: number, height: number, seedKey: string): Ima
 			data[offset + 1] = (x * 5 + y * 17 + seed * 3 - wave * 24) & 255;
 			data[offset + 2] = (x * y + seed * 7 + wave * 18) & 255;
 			data[offset + 3] = (x + y + seed) % 31 === 0 ? 96 : 255;
+		}
+	}
+	return new ImageData(data, width, height);
+}
+
+function createGradientImage(width: number, height: number): ImageData {
+	const data = new Uint8ClampedArray(width * height * 4);
+	for (let y = 0; y < height; y++) {
+		const vertical = y / Math.max(1, height - 1);
+		for (let x = 0; x < width; x++) {
+			const horizontal = x / Math.max(1, width - 1);
+			const offset = (y * width + x) * 4;
+			data[offset] = Math.round(horizontal * 255);
+			data[offset + 1] = Math.round(vertical * 255);
+			data[offset + 2] = Math.round((1 - Math.abs(horizontal - vertical)) * 255);
+			data[offset + 3] = 255;
+		}
+	}
+	return new ImageData(data, width, height);
+}
+
+function createAlphaFixtureImage(width: number, height: number): ImageData {
+	const data = new Uint8ClampedArray(width * height * 4);
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const offset = (y * width + x) * 4;
+			const ring = Math.hypot(x - width / 2, y - height / 2) / Math.max(width, height);
+			data[offset] = (x * 9 + y * 5) & 255;
+			data[offset + 1] = (x * 3 + y * 11) & 255;
+			data[offset + 2] = (x * 17 + y * 7) & 255;
+			data[offset + 3] = ring < 0.18 ? 0 : ring < 0.32 ? 96 : 255;
 		}
 	}
 	return new ImageData(data, width, height);

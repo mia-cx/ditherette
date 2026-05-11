@@ -155,6 +155,24 @@ describe('processing benchmark harness', () => {
 		);
 	});
 
+	it('can run the synthetic corpus for benchmark hardening', () => {
+		const result = runProcessingBenchmarks({
+			profile: 'smoke',
+			caseIds: ['smoke-direct'],
+			iterations: 1,
+			warmups: 0,
+			includePng: false,
+			syntheticCorpus: true
+		});
+
+		expect(result.results.map((entry) => entry.source.id)).toEqual([
+			'synthetic-gradient-1536x1024',
+			'synthetic-alpha-1024x1024',
+			'synthetic-photoish-1920x1080'
+		]);
+		expect(result.results.some((entry) => entry.source.id.includes('alpha'))).toBe(true);
+	});
+
 	it('runs a smoke benchmark and reports stage timings', () => {
 		const result = runProcessingBenchmarks({
 			profile: 'smoke',

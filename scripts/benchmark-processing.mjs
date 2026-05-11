@@ -53,6 +53,7 @@ try {
 		sources,
 		matrixDimensions,
 		noResize: args.noResize,
+		syntheticCorpus: args.syntheticCorpus,
 		stopAfterStage: args.stopAfterStage ?? stopStageForDimensions(matrixDimensions),
 		onProgress: args.quiet ? undefined : logProgress
 	});
@@ -192,6 +193,7 @@ async function closeResources() {
 
 async function benchmarkImagePaths(root, args) {
 	const explicit = args.images.map((imagePath) => path.resolve(root, imagePath));
+	if (args.syntheticCorpus) return explicit;
 	if (args.synthetic || (explicit.length && !args.fixtureDirs.length)) return explicit;
 	const fixtureDirs = args.fixtureDirs.length
 		? args.fixtureDirs
@@ -533,6 +535,9 @@ function parseArgs(argv) {
 				break;
 			case 'synthetic':
 				options.synthetic = optionalBoolean();
+				break;
+			case 'synthetic-corpus':
+				options.syntheticCorpus = optionalBoolean();
 				break;
 			case 'include-png':
 				options.includePng = optionalBoolean();
