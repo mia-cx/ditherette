@@ -252,19 +252,27 @@ fn resize_exact_integer_downscale_word(
     let output_height = output_dimensions.height_usize()?;
     let x_step = source_dimensions.width_usize()? / output_width;
     let y_step = source_dimensions.height_usize()? / output_height;
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+    let first_source_x_byte_offset = x_step / 2 * rgba::RGBA_CHANNEL_COUNT;
+    let source_x_byte_step = x_step * rgba::RGBA_CHANNEL_COUNT;
 
     for output_y in 0..output_height {
         let source_y = output_y * y_step + y_step / 2;
+        let source_row_offset = source_y * source_row_byte_len;
+        let output_row_offset = output_y * output_row_byte_len;
+        let mut source_x_offset = first_source_x_byte_offset;
+        let mut output_offset = output_row_offset;
 
-        for output_x in 0..output_width {
-            let source_x = output_x * x_step + x_step / 2;
-
+        for _ in 0..output_width {
             copy_pixel_word(
                 source_rgba,
-                rgba::pixel_byte_offset(source_width, source_x, source_y),
+                source_row_offset + source_x_offset,
                 output_rgba,
-                rgba::pixel_byte_offset(output_width, output_x, output_y),
+                output_offset,
             );
+            source_x_offset += source_x_byte_step;
+            output_offset += rgba::RGBA_CHANNEL_COUNT;
         }
     }
 
