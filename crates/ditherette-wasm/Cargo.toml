@@ -1,0 +1,19 @@
+[package]
+name = "ditherette-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "Rust/Wasm core for Ditherette experiments."
+license = "UNLICENSED"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+opt-level = "s"
