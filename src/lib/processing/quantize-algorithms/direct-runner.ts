@@ -7,6 +7,7 @@ import {
 	colorSpaceThresholdIndexValues,
 	createPaletteVectorMatcher,
 	createThresholdByteVectorMatcher,
+	createThresholdRgbVectorMatcher,
 	paletteVectorSpace,
 	placementMask,
 	recordTiming,
@@ -34,6 +35,8 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 	const bayerSize = bayerSizeForAlgorithm(settings.dither.algorithm);
 	const bayer = bayerSize ? normalizedBayerMatrix(bayerSize) : undefined;
 	const bayerMask = bayerSize ? bayerSize - 1 : 0;
+	const bayerShift =
+		bayerSize === 2 ? 1 : bayerSize === 4 ? 2 : bayerSize === 8 ? 3 : bayerSize === 16 ? 4 : 0;
 	const source = image.data;
 	const pixels = image.width * image.height;
 	const alphaMode = settings.output.alphaMode;
@@ -47,14 +50,15 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 	const useAdaptivePlacement = usesAdaptivePlacement(settings);
 	const thresholdVectorMatcher =
 		useBayer && bayer && useVectorDither && !useAdaptivePlacement
-			? createThresholdByteVectorMatcher(
+			? (createThresholdByteVectorMatcher(
 					vectorSpace,
 					settings.colorSpace,
 					bayer,
 					strength,
 					pixels,
 					caches
-				)
+				) ??
+				createThresholdRgbVectorMatcher(vectorSpace, settings, bayer, strength, pixels, caches))
 			: undefined;
 	const needsCompositedVectors =
 		supportsCachedVectorMatching(settings.colorSpace) && useVectorDither && !thresholdVectorMatcher;
@@ -123,7 +127,7 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 
 	for (let y = 0; y < image.height; y++) {
 		const rowOffset = y * image.width;
-		const bayerRow = bayerSize ? (y & bayerMask) * bayerSize : 0;
+		const bayerRow = bayerSize ? (y & bayerMask) << bayerShift : 0;
 		for (let x = 0; x < image.width; x++) {
 			const index = rowOffset + x;
 			const offset = index * 4;

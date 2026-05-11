@@ -42,7 +42,13 @@ export type QuantizeCounterName =
 	| 'vector memo hit'
 	| 'vector memo miss'
 	| 'vector memo set'
-	| 'vector memo eviction';
+	| 'vector memo eviction'
+	| 'threshold cache collision'
+	| 'candidate evaluations'
+	| 'threshold table bytes'
+	| 'threshold cache bytes'
+	| 'dense cache bytes'
+	| 'distance table bytes';
 
 export type QuantizeTimingName =
 	| 'palette prepare'
@@ -372,6 +378,67 @@ function byteVectorComponent(value: number, colorSpace: ColorSpaceId, channel: 0
 		default:
 			return value;
 	}
+}
+
+export function createThresholdRgbVectorMatcher(
+	space: PaletteVectorSpace,
+	settings: ProcessingSettings,
+	thresholds: readonly number[],
+	strength: number,
+	pixels: number,
+	caches?: QuantizeCaches
+): ThresholdByteVectorMatcher | undefined {
+	if (supportsThresholdByteVectorMatching(settings.colorSpace)) return undefined;
+	if (!supportsVectorDither(settings)) return undefined;
+	const vectorMatcher = createPaletteVectorMatcher(space, settings, caches);
+	const cacheBits = Math.min(
+		MAX_THRESHOLD_VECTOR_CACHE_BITS,
+		Math.max(MIN_THRESHOLD_VECTOR_CACHE_BITS, Math.ceil(Math.log2(pixels * 2)))
+	);
+	const cacheSize = 1 << cacheBits;
+	const cacheMask = cacheSize - 1;
+	const cacheKeys = new Uint32Array(cacheSize);
+	const cacheValues = new Uint16Array(cacheSize);
+	const cacheValid = new Uint8Array(cacheSize);
+	let memoHits = 0;
+	let memoCollisions = 0;
+	return {
+		nearestIndexRgb(r, g, b, thresholdIndex) {
+			const rgbKey = ((r << 16) | (g << 8) | b) >>> 0;
+			const key = (((thresholdIndex << 24) >>> 0) | rgbKey) >>> 0;
+			const slot = (Math.imul(key ^ (key >>> 16), 0x45d9f3b) >>> 0) & cacheMask;
+			if (cacheValid[slot]) {
+				if (cacheKeys[slot] === key) {
+					memoHits++;
+					return cacheValues[slot]!;
+				}
+				memoCollisions++;
+			}
+			const index = colorSpaceThresholdIndexRgb(
+				r,
+				g,
+				b,
+				thresholds[thresholdIndex]!,
+				space,
+				vectorMatcher,
+				settings,
+				strength
+			);
+			cacheKeys[slot] = key;
+			cacheValues[slot] = index;
+			cacheValid[slot] = 1;
+			return index;
+		},
+		flushCounts() {
+			vectorMatcher.flushCounts();
+			caches?.recordCount?.('vector memo hit', memoHits);
+			caches?.recordCount?.('threshold cache collision', memoCollisions);
+			caches?.recordCount?.(
+				'threshold cache bytes',
+				cacheKeys.byteLength + cacheValues.byteLength + cacheValid.byteLength
+			);
+		}
+	};
 }
 
 export function createThresholdByteVectorMatcher(

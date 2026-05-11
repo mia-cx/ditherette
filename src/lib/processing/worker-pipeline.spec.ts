@@ -240,7 +240,6 @@ describe('ProcessorWorkerPipeline', () => {
 			expect.arrayContaining([
 				'color space convert palette cache lookup',
 				'color space convert palette',
-				'color space convert composited image cache lookup',
 				'quantize direct dither+match loop'
 			])
 		);
