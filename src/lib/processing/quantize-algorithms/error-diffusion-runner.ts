@@ -268,6 +268,7 @@ function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 		alphaMode === 'preserve' && hasPreservedTransparentPixels(source, alphaThreshold);
 
 	for (let index = 0; index < width * height; index++) {
+		throwIfCanceled(caches, index);
 		const sourceOffset = index * 4;
 		const workOffset = index * 3;
 		if (compositedVectors) {
@@ -285,6 +286,7 @@ function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 	const loopStart = performance.now();
 
 	for (let y = 0; y < height; y++) {
+		throwIfCanceled(caches, 0);
 		const reverse = settings.dither.serpentine && y % 2 === 1;
 		const start = reverse ? width - 1 : 0;
 		const end = reverse ? -1 : width;
@@ -365,6 +367,7 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 			index < width * height;
 			index++, sourceOffset += 4, workOffset += 3
 		) {
+			throwIfCanceled(caches, index);
 			work[workOffset] = source[sourceOffset]!;
 			work[workOffset + 1] = source[sourceOffset + 1]!;
 			work[workOffset + 2] = source[sourceOffset + 2]!;
@@ -375,6 +378,7 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 			index < width * height;
 			index++, sourceOffset += 4, workOffset += 3
 		) {
+			throwIfCanceled(caches, index);
 			const alpha = source[sourceOffset + 3]!;
 			let r = source[sourceOffset]!;
 			let g = source[sourceOffset + 1]!;
@@ -402,6 +406,7 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 	const loopStart = performance.now();
 
 	for (let y = 0; y < height; y++) {
+		throwIfCanceled(caches, 0);
 		const reverse = settings.dither.serpentine && y % 2 === 1;
 		const start = reverse ? width - 1 : 0;
 		const end = reverse ? -1 : width;
@@ -516,4 +521,11 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 	}
 	caches?.recordCount?.('nearest rgb', nearestRgbCount);
 	recordTiming(caches, 'quantize rgb diffusion dither+match loop', loopStart);
+}
+
+const CANCEL_CHECK_PIXELS = 8192;
+
+function throwIfCanceled(caches: QuantizeAlgorithmContext['caches'], pixelIndex: number) {
+	if (pixelIndex % CANCEL_CHECK_PIXELS !== 0) return;
+	if (caches?.shouldCancel?.()) throw new Error('Processing was canceled.');
 }

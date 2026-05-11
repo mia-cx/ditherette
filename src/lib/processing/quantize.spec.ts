@@ -227,6 +227,18 @@ describe('quantizeImage caches', () => {
 		expect(caches.counts.get('vector memo miss')).toBeGreaterThan(0);
 	});
 
+	it.each(['none', 'bayer-2', 'random', 'floyd-steinberg'] as const)(
+		'checks cancellation during %s quantization',
+		(algorithm) => {
+			const caches = cacheMaps('cancel');
+			caches.shouldCancel = () => true;
+
+			expect(() =>
+				quantizeImage(image(), palette, settingsForAlgorithm(algorithm), caches)
+			).toThrow('Processing was canceled.');
+		}
+	);
+
 	it('records quantize sub-stage timings', () => {
 		const caches = cacheMaps('timings');
 

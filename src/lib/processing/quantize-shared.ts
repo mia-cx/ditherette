@@ -105,6 +105,7 @@ export type QuantizeCaches = QuantizeDiagnosticsSink & {
 	getColorVectorImage?(key: string): ColorVectorImage | undefined;
 	canStoreColorVectorImage?(key: string, bytes: number): boolean;
 	setColorVectorImage?(key: string, value: ColorVectorImage, bytes: number): void;
+	shouldCancel?(): boolean;
 };
 
 const MIN_THRESHOLD_VECTOR_CACHE_BITS = 18;
@@ -395,24 +396,33 @@ export function createThresholdRgbVectorMatcher(
 		MAX_THRESHOLD_VECTOR_CACHE_BITS,
 		Math.max(MIN_THRESHOLD_VECTOR_CACHE_BITS, Math.ceil(Math.log2(pixels * 2)))
 	);
-	const cacheSize = 1 << cacheBits;
-	const cacheMask = cacheSize - 1;
+	const setCount = 1 << cacheBits;
+	const setMask = setCount - 1;
+	const cacheSize = setCount * 2;
 	const cacheKeys = new Uint32Array(cacheSize);
 	const cacheValues = new Uint16Array(cacheSize);
 	const cacheValid = new Uint8Array(cacheSize);
 	let memoHits = 0;
 	let memoCollisions = 0;
+	let replacementClock = 0;
 	return {
 		nearestIndexRgb(r, g, b, thresholdIndex) {
 			const rgbKey = ((r << 16) | (g << 8) | b) >>> 0;
 			const key = (((thresholdIndex << 24) >>> 0) | rgbKey) >>> 0;
-			const slot = (Math.imul(key ^ (key >>> 16), 0x45d9f3b) >>> 0) & cacheMask;
+			const slot = ((Math.imul(key ^ (key >>> 16), 0x45d9f3b) >>> 0) & setMask) << 1;
+			const nextSlot = slot + 1;
 			if (cacheValid[slot]) {
 				if (cacheKeys[slot] === key) {
 					memoHits++;
 					return cacheValues[slot]!;
 				}
-				memoCollisions++;
+				if (cacheValid[nextSlot]) {
+					if (cacheKeys[nextSlot] === key) {
+						memoHits++;
+						return cacheValues[nextSlot]!;
+					}
+					memoCollisions++;
+				}
 			}
 			const index = colorSpaceThresholdIndexRgb(
 				r,
@@ -424,9 +434,14 @@ export function createThresholdRgbVectorMatcher(
 				settings,
 				strength
 			);
-			cacheKeys[slot] = key;
-			cacheValues[slot] = index;
-			cacheValid[slot] = 1;
+			const writeSlot = !cacheValid[slot]
+				? slot
+				: !cacheValid[nextSlot]
+					? nextSlot
+					: slot + (replacementClock++ & 1);
+			cacheKeys[writeSlot] = key;
+			cacheValues[writeSlot] = index;
+			cacheValid[writeSlot] = 1;
 			return index;
 		},
 		flushCounts() {
@@ -495,8 +510,9 @@ export function createThresholdByteVectorMatcher(
 		MAX_THRESHOLD_VECTOR_CACHE_BITS,
 		Math.max(MIN_THRESHOLD_VECTOR_CACHE_BITS, Math.ceil(Math.log2(pixels * 2)))
 	);
-	const cacheSize = 1 << cacheBits;
-	const cacheMask = cacheSize - 1;
+	const setCount = 1 << cacheBits;
+	const setMask = setCount - 1;
+	const cacheSize = setCount * 2;
 	const cacheKeys = new Uint32Array(cacheSize);
 	const cacheValues = new Uint16Array(cacheSize);
 	const cacheValid = new Uint8Array(cacheSize);
@@ -507,17 +523,25 @@ export function createThresholdByteVectorMatcher(
 	let memoSets = 0;
 	let memoCollisions = 0;
 	let candidateEvaluations = 0;
+	let replacementClock = 0;
 	return {
 		nearestIndexRgb(r, g, b, thresholdIndex) {
 			const rgbKey = ((r << 16) | (g << 8) | b) >>> 0;
 			const key = (thresholdKeyBases[thresholdIndex]! | rgbKey) >>> 0;
-			const slot = (Math.imul(key ^ (key >>> 16), 0x45d9f3b) >>> 0) & cacheMask;
+			const slot = ((Math.imul(key ^ (key >>> 16), 0x45d9f3b) >>> 0) & setMask) << 1;
+			const nextSlot = slot + 1;
 			if (cacheValid[slot]) {
 				if (cacheKeys[slot] === key) {
 					memoHits++;
 					return cacheValues[slot]!;
 				}
-				memoCollisions++;
+				if (cacheValid[nextSlot]) {
+					if (cacheKeys[nextSlot] === key) {
+						memoHits++;
+						return cacheValues[nextSlot]!;
+					}
+					memoCollisions++;
+				}
 			}
 			memoMisses++;
 			nearestCount++;
@@ -537,9 +561,14 @@ export function createThresholdByteVectorMatcher(
 				}
 			}
 			const index = winner === -1 ? -1 : paletteIndices[winner]!;
-			cacheKeys[slot] = key;
-			cacheValues[slot] = index;
-			cacheValid[slot] = 1;
+			const writeSlot = !cacheValid[slot]
+				? slot
+				: !cacheValid[nextSlot]
+					? nextSlot
+					: slot + (replacementClock++ & 1);
+			cacheKeys[writeSlot] = key;
+			cacheValues[writeSlot] = index;
+			cacheValid[writeSlot] = 1;
 			memoSets++;
 			return index;
 		},

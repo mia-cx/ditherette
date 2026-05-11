@@ -17,6 +17,8 @@ import {
 } from '../quantize-shared';
 import type { QuantizeAlgorithmContext } from './types';
 
+const CANCEL_CHECK_PIXELS = 8192;
+
 export function quantizeDirect(context: QuantizeAlgorithmContext) {
 	const {
 		image,
@@ -76,6 +78,7 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 	if (!useBayer && !useRandom) {
 		if (useDirectVectorMatch && compositedVectors) {
 			for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+				throwIfCanceled(caches, index);
 				const alpha = source[offset + 3]!;
 				if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
 					indices[index] =
@@ -94,6 +97,7 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 		}
 
 		for (let index = 0, offset = 0; index < pixels; index++, offset += 4) {
+			throwIfCanceled(caches, index);
 			const alpha = source[offset + 3]!;
 			if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
 				indices[index] =
@@ -125,7 +129,52 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 		return;
 	}
 
+	if (useBayer && bayerSize && thresholdVectorMatcher && !useAdaptivePlacement) {
+		for (let y = 0; y < image.height; y++) {
+			throwIfCanceled(caches, 0);
+			const rowOffset = y * image.width;
+			const bayerRow = (y & bayerMask) << bayerShift;
+			for (let x = 0; x < image.width; x++) {
+				const index = rowOffset + x;
+				const offset = index * 4;
+				const alpha = source[offset + 3]!;
+				if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
+					indices[index] =
+						transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
+					continue;
+				}
+
+				let r = source[offset]!;
+				let g = source[offset + 1]!;
+				let b = source[offset + 2]!;
+				if (alphaMode !== 'preserve' && alpha !== 255) {
+					const opacity = alpha / 255;
+					if (alphaMode === 'premultiplied') {
+						r = Math.round(r * opacity);
+						g = Math.round(g * opacity);
+						b = Math.round(b * opacity);
+					} else {
+						const background = 1 - opacity;
+						r = Math.round(r * opacity + matte.r * background);
+						g = Math.round(g * opacity + matte.g * background);
+						b = Math.round(b * opacity + matte.b * background);
+					}
+				}
+				indices[index] = thresholdVectorMatcher.nearestIndexRgb(
+					r,
+					g,
+					b,
+					bayerRow + (x & bayerMask)
+				);
+			}
+		}
+		thresholdVectorMatcher.flushCounts();
+		recordTiming(caches, 'quantize direct dither+match loop', loopStart);
+		return;
+	}
+
 	for (let y = 0; y < image.height; y++) {
+		throwIfCanceled(caches, 0);
 		const rowOffset = y * image.width;
 		const bayerRow = bayerSize ? (y & bayerMask) << bayerShift : 0;
 		for (let x = 0; x < image.width; x++) {
@@ -266,4 +315,9 @@ export function quantizeDirect(context: QuantizeAlgorithmContext) {
 	vectorMatcher.flushCounts();
 	thresholdVectorMatcher?.flushCounts();
 	recordTiming(caches, 'quantize direct dither+match loop', loopStart);
+}
+
+function throwIfCanceled(caches: QuantizeAlgorithmContext['caches'], pixelIndex: number) {
+	if (pixelIndex % CANCEL_CHECK_PIXELS !== 0) return;
+	if (caches?.shouldCancel?.()) throw new Error('Processing was canceled.');
 }
