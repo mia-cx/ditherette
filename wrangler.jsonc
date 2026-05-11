@@ -9,5 +9,34 @@
 		"directory": ".svelte-kit/cloudflare"
 	},
 	"workers_dev": true,
-	"preview_urls": true
+	"preview_urls": true,
+	"env": {
+		"production": {
+			"routes": [
+				{
+					"zone_name": "mia.cx",
+					"custom_domain": true,
+					"pattern": "ditherette.mia.cx"
+				}
+			]
+		},
+		"staging": {
+			"routes": [
+				{
+					"zone_name": "mia.cx",
+					"custom_domain": true,
+					"pattern": "staging.ditherette.mia.cx"
+				}
+			]
+		},
+		"development": {
+			"routes": [
+				{
+					"zone_name": "mia.cx",
+					"custom_domain": true,
+					"pattern": "development.ditherette.mia.cx"
+				}
+			]
+		}
+	}
 }

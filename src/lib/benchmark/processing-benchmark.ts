@@ -1,6 +1,12 @@
 import { WPLACE_PALETTE } from '$lib/palette/wplace';
 import { encodeIndexedPng } from '$lib/processing/png';
-import { quantizeImage } from '$lib/processing/quantize';
+import {
+	prepareQuantizeColorSpace,
+	quantizeImage,
+	type ColorVectorImage,
+	type PaletteVectorSpace,
+	type QuantizeCaches
+} from '$lib/processing/quantize';
 import { processedToImageData } from '$lib/processing/render';
 import { resizeImageData } from '$lib/processing/resize';
 import type {
@@ -16,7 +22,7 @@ import type {
 export type BenchmarkProfile = 'smoke' | 'baseline' | 'large' | 'exhaustive';
 export type BenchmarkStage = 'resize' | 'quantize' | 'previewRender' | 'pngEncode' | 'total';
 export type BenchmarkMatrixDimension = 'scale' | 'resize' | 'dither' | 'colorSpace';
-export type BenchmarkStopStage = Exclude<BenchmarkStage, 'total'>;
+export type BenchmarkStopStage = Exclude<BenchmarkStage, 'total'> | 'colorSpaceConvert';
 
 export type BenchmarkCase = {
 	id: string;
@@ -26,6 +32,7 @@ export type BenchmarkCase = {
 	outputWidth?: number;
 	outputHeight?: number;
 	outputScale?: number;
+	noResize?: boolean;
 	resize: ResizeId;
 	dither: DitherId;
 	colorSpace: ColorSpaceId;
@@ -49,7 +56,10 @@ export type BenchmarkProgressEvent =
 			totalCases: number;
 			sourceId: string;
 			caseId: string;
+			case: BenchmarkCase;
 			label: string;
+			outputWidth: number;
+			outputHeight: number;
 			outputPixels: number;
 	  }
 	| {
@@ -59,6 +69,7 @@ export type BenchmarkProgressEvent =
 			sourceId: string;
 			caseId: string;
 			durationMs: number;
+			result: BenchmarkCaseResult;
 	  }
 	| {
 			type: 'iteration-start';
@@ -74,6 +85,10 @@ export type BenchmarkProgressEvent =
 			iteration: number;
 			warmup: boolean;
 			durationMs: number;
+			resizeCacheHit: boolean;
+			stages: Record<BenchmarkStage, number>;
+			quantizeTimings: Record<string, number>;
+			quantizeCounts: Record<string, number>;
 	  }
 	| {
 			type: 'stage-start';
@@ -102,6 +117,8 @@ export type BenchmarkOptions = {
 	sources?: readonly BenchmarkSource[];
 	matrixDimensions?: readonly BenchmarkMatrixDimension[];
 	stopAfterStage?: BenchmarkStopStage;
+	noResize?: boolean;
+	syntheticCorpus?: boolean;
 	onProgress?: (event: BenchmarkProgressEvent) => void;
 };
 
@@ -111,6 +128,9 @@ export type StageStats = {
 	medianMs: number;
 	p95Ms: number;
 	maxMs: number;
+	stddevMs: number;
+	coefficientOfVariation: number;
+	outlierCount: number;
 };
 
 export type BenchmarkMemoryShape = {
@@ -130,14 +150,23 @@ export type BenchmarkSourceSummary = Omit<BenchmarkSource, 'imageData'> & {
 	pixels: number;
 };
 
+export type BenchmarkRunRecord = Record<BenchmarkStage, number> & {
+	resizeCacheHit: boolean;
+	quantizeTimings: Record<string, number>;
+	quantizeCounts: Record<string, number>;
+};
+
 export type BenchmarkCaseResult = {
 	case: BenchmarkCase;
 	source: BenchmarkSourceSummary;
 	iterations: number;
 	stages: Record<BenchmarkStage, StageStats>;
-	runs: Array<Record<BenchmarkStage, number>>;
+	quantizeSubstages: Record<string, StageStats>;
+	quantizeCounters: Record<string, StageStats>;
+	runs: BenchmarkRunRecord[];
 	memory: BenchmarkMemoryShape;
 	hotspot: BenchmarkStage;
+	quantizeHotspot?: string;
 };
 
 export type BenchmarkResult = {
@@ -146,6 +175,8 @@ export type BenchmarkResult = {
 	runAt: string;
 	results: BenchmarkCaseResult[];
 };
+
+type BenchmarkResizeCache = Map<string, ImageData>;
 
 const DEFAULT_ITERATIONS = 3;
 const DEFAULT_WARMUPS = 1;
@@ -300,32 +331,44 @@ const CASES_BY_PROFILE: Record<Exclude<BenchmarkProfile, 'exhaustive'>, readonly
 
 export function benchmarkCases(
 	profile: BenchmarkProfile,
-	matrixDimensions: readonly BenchmarkMatrixDimension[] = []
+	matrixDimensions: readonly BenchmarkMatrixDimension[] = [],
+	options: { noResize?: boolean } = {}
 ): BenchmarkCase[] {
-	if (matrixDimensions.length) return matrixCases(matrixDimensions);
-	if (profile === 'exhaustive') return exhaustiveCases();
+	if (matrixDimensions.length || options.noResize)
+		return matrixCases(matrixDimensions, false, options.noResize);
+	if (profile === 'exhaustive') return exhaustiveCases(options.noResize);
 	const ids = new Set(CASES_BY_PROFILE[profile]);
 	return CASES.filter((testCase) => ids.has(testCase.id));
 }
 
 function defaultCaseIds(
 	profile: BenchmarkProfile,
-	matrixDimensions: readonly BenchmarkMatrixDimension[]
+	matrixDimensions: readonly BenchmarkMatrixDimension[],
+	noResize = false
 ): readonly string[] {
-	return benchmarkCases(profile, matrixDimensions).map((testCase) => testCase.id);
+	return benchmarkCases(profile, matrixDimensions, { noResize }).map((testCase) => testCase.id);
 }
 
-function exhaustiveCases(): BenchmarkCase[] {
-	return matrixCases(['scale', 'resize', 'dither', 'colorSpace'], true);
+function exhaustiveCases(noResize = false): BenchmarkCase[] {
+	return matrixCases(['scale', 'resize', 'dither', 'colorSpace'], true, noResize);
 }
 
 function matrixCases(
 	dimensions: readonly BenchmarkMatrixDimension[],
-	includePng = false
+	includePng = false,
+	noResize = false
 ): BenchmarkCase[] {
 	const selected = new Set(dimensions);
-	const scales = selected.has('scale') ? EXHAUSTIVE_SCALES : [DEFAULT_MATRIX_SCALE];
-	const resizeModes = selected.has('resize') ? EXHAUSTIVE_RESIZE_MODES : [DEFAULT_MATRIX_RESIZE];
+	const scales: readonly (number | undefined)[] = noResize
+		? [undefined]
+		: selected.has('scale')
+			? EXHAUSTIVE_SCALES
+			: [DEFAULT_MATRIX_SCALE];
+	const resizeModes = noResize
+		? [DEFAULT_MATRIX_RESIZE]
+		: selected.has('resize')
+			? EXHAUSTIVE_RESIZE_MODES
+			: [DEFAULT_MATRIX_RESIZE];
 	const ditherModes = selected.has('dither') ? EXHAUSTIVE_DITHER_MODES : [DEFAULT_MATRIX_DITHER];
 	const colorSpaces = selected.has('colorSpace')
 		? EXHAUSTIVE_COLOR_SPACES
@@ -335,9 +378,14 @@ function matrixCases(
 		resizeModes.flatMap((resize) =>
 			ditherModes.flatMap((dither) =>
 				colorSpaces.map((colorSpace) => ({
-					id: `scale-${scaleLabel(scale)}-${resize}-${dither}-${colorSpace}`,
-					label: `${formatScale(scale)} scale · ${resize} · ${dither} · ${colorSpace}`,
+					id: noResize
+						? `native-${dither}-${colorSpace}`
+						: `scale-${scaleLabel(scale!)}-${resize}-${dither}-${colorSpace}`,
+					label: noResize
+						? `Native size · no resize · ${dither} · ${colorSpace}`
+						: `${formatScale(scale!)} scale · ${resize} · ${dither} · ${colorSpace}`,
 					outputScale: scale,
+					noResize,
 					resize,
 					dither,
 					colorSpace,
@@ -354,18 +402,33 @@ export function runProcessingBenchmarks(options: BenchmarkOptions = {}): Benchma
 	const iterations = Math.max(1, Math.floor(options.iterations ?? DEFAULT_ITERATIONS));
 	const warmups = Math.max(0, Math.floor(options.warmups ?? DEFAULT_WARMUPS));
 	const matrixDimensions = options.matrixDimensions ?? [];
-	const availableCases = benchmarkCases(profile, matrixDimensions);
-	const selectedIds = new Set(options.caseIds ?? defaultCaseIds(profile, matrixDimensions));
+	const availableCases = benchmarkCases(profile, matrixDimensions, { noResize: options.noResize });
+	const selectedIds = new Set(
+		options.caseIds ?? defaultCaseIds(profile, matrixDimensions, options.noResize)
+	);
 	const cases = availableCases.filter((testCase) => selectedIds.has(testCase.id));
+	const resizeCache =
+		options.stopAfterStage === 'resize' ? undefined : new Map<string, ImageData>();
 	const results: BenchmarkCaseResult[] = [];
 	let caseIndex = 0;
-	if (options.sources?.length) {
-		const totalCases = options.sources.length * cases.length;
-		for (const source of options.sources) {
+	const syntheticCorpus = options.syntheticCorpus ? syntheticCorpusSources(profile) : undefined;
+	const benchmarkSources = options.sources?.length ? options.sources : syntheticCorpus;
+	if (benchmarkSources?.length) {
+		const totalCases = benchmarkSources.length * cases.length;
+		for (const source of benchmarkSources) {
 			for (const testCase of cases) {
 				caseIndex++;
 				results.push(
-					runBenchmarkCase(testCase, source, iterations, warmups, options, caseIndex, totalCases)
+					runBenchmarkCase(
+						testCase,
+						source,
+						iterations,
+						warmups,
+						options,
+						caseIndex,
+						totalCases,
+						resizeCache
+					)
 				);
 			}
 		}
@@ -381,7 +444,8 @@ export function runProcessingBenchmarks(options: BenchmarkOptions = {}): Benchma
 					warmups,
 					options,
 					caseIndex,
-					totalCases
+					totalCases,
+					resizeCache
 				)
 			);
 		}
@@ -396,16 +460,48 @@ export function runProcessingBenchmarks(options: BenchmarkOptions = {}): Benchma
 }
 
 function syntheticSourceForCase(testCase: BenchmarkCase): BenchmarkSource {
+	const width = sourceWidthForCase(testCase);
+	const height = sourceHeightForCase(testCase);
+	const id = `synthetic-${width}x${height}`;
 	return {
-		id: `synthetic-${testCase.id}`,
-		label: `Synthetic ${sourceWidthForCase(testCase)}×${sourceHeightForCase(testCase)}`,
+		id,
+		label: `Synthetic ${width}×${height}`,
 		kind: 'synthetic',
-		imageData: createFixtureImage(
-			sourceWidthForCase(testCase),
-			sourceHeightForCase(testCase),
-			testCase.id
-		)
+		imageData: createFixtureImage(width, height, id)
 	};
+}
+
+function syntheticCorpusSources(profile: BenchmarkProfile): BenchmarkSource[] {
+	const large = profile === 'large' || profile === 'exhaustive';
+	const sources: BenchmarkSource[] = [
+		{
+			id: 'synthetic-gradient-1536x1024',
+			label: 'Synthetic gradient 1536×1024',
+			kind: 'synthetic',
+			imageData: createGradientImage(1536, 1024)
+		},
+		{
+			id: 'synthetic-alpha-1024x1024',
+			label: 'Synthetic alpha stress 1024×1024',
+			kind: 'synthetic',
+			imageData: createAlphaFixtureImage(1024, 1024)
+		},
+		{
+			id: 'synthetic-photoish-1920x1080',
+			label: 'Synthetic photo-like 1920×1080',
+			kind: 'synthetic',
+			imageData: createFixtureImage(1920, 1080, 'photoish')
+		}
+	];
+	if (large) {
+		sources.push({
+			id: 'synthetic-memory-4096x4096',
+			label: 'Synthetic memory pressure 4096×4096',
+			kind: 'synthetic',
+			imageData: createFixtureImage(4096, 4096, 'memory-pressure')
+		});
+	}
+	return sources;
 }
 
 function runBenchmarkCase(
@@ -415,7 +511,8 @@ function runBenchmarkCase(
 	warmups: number,
 	options: BenchmarkOptions,
 	caseIndex: number,
-	totalCases: number
+	totalCases: number,
+	resizeCache: BenchmarkResizeCache | undefined
 ): BenchmarkCaseResult {
 	const includePng = options.includePng ?? testCase.includePng;
 	const dimensions = outputDimensionsForCase(testCase, source.imageData);
@@ -426,37 +523,65 @@ function runBenchmarkCase(
 		totalCases,
 		sourceId: source.id,
 		caseId: testCase.id,
+		case: { ...testCase, includePng },
 		label: testCase.label,
+		outputWidth: dimensions.width,
+		outputHeight: dimensions.height,
 		outputPixels: dimensions.width * dimensions.height
 	});
 	for (let index = 0; index < warmups; index++)
-		runOnce(testCase, source.imageData, includePng, options, source.id, index + 1, true);
+		runOnce(
+			testCase,
+			source.imageData,
+			includePng,
+			options,
+			source.id,
+			index + 1,
+			true,
+			resizeCache
+		);
 	const runs = Array.from({ length: iterations }, (_, index) =>
-		runOnce(testCase, source.imageData, includePng, options, source.id, index + 1, false)
+		runOnce(
+			testCase,
+			source.imageData,
+			includePng,
+			options,
+			source.id,
+			index + 1,
+			false,
+			resizeCache
+		)
 	);
 	const stages = summarizeRuns(runs);
+	const quantizeSubstages = summarizeQuantizeSubstages(runs);
+	const quantizeCounters = summarizeQuantizeCounters(runs);
 	const memory = memoryShape(
 		source.imageData,
 		testCase,
 		runs.find((run) => run.pngBytes !== undefined)?.pngBytes
 	);
+	const result: BenchmarkCaseResult = {
+		case: { ...testCase, includePng },
+		source: summarizeSource(source),
+		iterations,
+		stages,
+		quantizeSubstages,
+		quantizeCounters,
+		runs: runs.map(recordedStages),
+		memory,
+		hotspot: hottestStage(stages),
+		quantizeHotspot: hottestQuantizeSubstage(quantizeSubstages)
+	};
 	options.onProgress?.({
 		type: 'case-end',
 		caseIndex,
 		totalCases,
 		sourceId: source.id,
 		caseId: testCase.id,
-		durationMs: performance.now() - caseStart
+		durationMs: performance.now() - caseStart,
+		result
 	});
-	return {
-		case: { ...testCase, includePng },
-		source: summarizeSource(source),
-		iterations,
-		stages,
-		runs: runs.map(recordedStages),
-		memory,
-		hotspot: hottestStage(stages)
-	};
+	return result;
 }
 
 function runOnce(
@@ -466,11 +591,15 @@ function runOnce(
 	options: BenchmarkOptions,
 	sourceId: string,
 	iteration: number,
-	warmup: boolean
+	warmup: boolean,
+	resizeCache: BenchmarkResizeCache | undefined
 ) {
 	const dimensions = outputDimensionsForCase(testCase, source);
 	const settings = processingSettingsForCase(testCase, dimensions);
 	const palette = enabledBenchmarkPalette();
+	const skipResize = options.noResize || testCase.noResize;
+	const resizeKey = skipResize ? '' : resizeCacheKey(sourceId, source, dimensions, testCase.resize);
+	let resizeCacheHit = false;
 	const totalStart = performance.now();
 	options.onProgress?.({
 		type: 'iteration-start',
@@ -480,15 +609,23 @@ function runOnce(
 		warmup
 	});
 
-	const [resizeMs, resized] = measureStage(
-		'resize',
-		options,
-		sourceId,
-		testCase.id,
-		iteration,
-		warmup,
-		() => resizeImageData(source, dimensions.width, dimensions.height, testCase.resize)
-	);
+	const [resizeMs, resized] = skipResize
+		? ([0, source] as const)
+		: measureStage('resize', options, sourceId, testCase.id, iteration, warmup, () => {
+				const cached = resizeCache?.get(resizeKey);
+				if (cached) {
+					resizeCacheHit = true;
+					return cached;
+				}
+				const resized = resizeImageData(
+					source,
+					dimensions.width,
+					dimensions.height,
+					testCase.resize
+				);
+				resizeCache?.set(resizeKey, resized);
+				return resized;
+			});
 	if (shouldStopAfter('resize', options.stopAfterStage)) {
 		return finishRun({
 			resize: resizeMs,
@@ -496,6 +633,44 @@ function runOnce(
 			previewRender: 0,
 			pngEncode: 0,
 			pngBytes: undefined,
+			resizeCacheHit,
+			quantizeTimings: {},
+			quantizeCounts: {},
+			totalStart,
+			options,
+			sourceId,
+			caseId: testCase.id,
+			iteration,
+			warmup
+		});
+	}
+
+	const quantizeTimings: Record<string, number> = {};
+	const quantizeCounts: Record<string, number> = {};
+	const quantizeCaches = benchmarkQuantizeCaches(
+		`${sourceId}|${testCase.id}|${warmup ? 'warmup' : 'run'}-${iteration}`,
+		quantizeTimings,
+		quantizeCounts
+	);
+	if (shouldStopAfter('colorSpaceConvert', options.stopAfterStage)) {
+		const [quantizeMs] = measureStage(
+			'quantize',
+			options,
+			sourceId,
+			testCase.id,
+			iteration,
+			warmup,
+			() => prepareQuantizeColorSpace(resized, palette, settings, quantizeCaches)
+		);
+		return finishRun({
+			resize: resizeMs,
+			quantize: quantizeMs,
+			previewRender: 0,
+			pngEncode: 0,
+			pngBytes: undefined,
+			resizeCacheHit,
+			quantizeTimings,
+			quantizeCounts,
 			totalStart,
 			options,
 			sourceId,
@@ -512,7 +687,7 @@ function runOnce(
 		testCase.id,
 		iteration,
 		warmup,
-		() => quantizeImage(resized, palette, settings)
+		() => quantizeImage(resized, palette, settings, quantizeCaches)
 	);
 	if (shouldStopAfter('quantize', options.stopAfterStage)) {
 		return finishRun({
@@ -521,6 +696,9 @@ function runOnce(
 			previewRender: 0,
 			pngEncode: 0,
 			pngBytes: undefined,
+			resizeCacheHit,
+			quantizeTimings,
+			quantizeCounts,
 			totalStart,
 			options,
 			sourceId,
@@ -553,6 +731,9 @@ function runOnce(
 			previewRender: previewMs,
 			pngEncode: 0,
 			pngBytes: undefined,
+			resizeCacheHit,
+			quantizeTimings,
+			quantizeCounts,
 			totalStart,
 			options,
 			sourceId,
@@ -584,6 +765,9 @@ function runOnce(
 		previewRender: previewMs,
 		pngEncode: pngEncodeMs,
 		pngBytes,
+		resizeCacheHit,
+		quantizeTimings,
+		quantizeCounts,
 		totalStart,
 		options,
 		sourceId,
@@ -595,6 +779,9 @@ function runOnce(
 
 type FinishRunInput = Record<Exclude<BenchmarkStage, 'total'>, number> & {
 	pngBytes: number | undefined;
+	resizeCacheHit: boolean;
+	quantizeTimings: Record<string, number>;
+	quantizeCounts: Record<string, number>;
 	totalStart: number;
 	options: BenchmarkOptions;
 	sourceId: string;
@@ -611,7 +798,17 @@ function finishRun(input: FinishRunInput) {
 		caseId: input.caseId,
 		iteration: input.iteration,
 		warmup: input.warmup,
-		durationMs: totalMs
+		durationMs: totalMs,
+		resizeCacheHit: input.resizeCacheHit,
+		stages: {
+			resize: input.resize,
+			quantize: input.quantize,
+			previewRender: input.previewRender,
+			pngEncode: input.pngEncode,
+			total: totalMs
+		},
+		quantizeTimings: input.quantizeTimings,
+		quantizeCounts: input.quantizeCounts
 	});
 	return {
 		resize: input.resize,
@@ -619,7 +816,10 @@ function finishRun(input: FinishRunInput) {
 		previewRender: input.previewRender,
 		pngEncode: input.pngEncode,
 		total: totalMs,
-		pngBytes: input.pngBytes
+		pngBytes: input.pngBytes,
+		resizeCacheHit: input.resizeCacheHit,
+		quantizeTimings: input.quantizeTimings,
+		quantizeCounts: input.quantizeCounts
 	};
 }
 
@@ -630,14 +830,54 @@ function shouldStopAfter(
 	return stopAfterStage === stage;
 }
 
-function recordedStages(run: ReturnType<typeof runOnce>): Record<BenchmarkStage, number> {
+function recordedStages(run: ReturnType<typeof runOnce>): BenchmarkRunRecord {
 	return {
 		resize: run.resize,
 		quantize: run.quantize,
 		previewRender: run.previewRender,
 		pngEncode: run.pngEncode,
-		total: run.total
+		total: run.total,
+		resizeCacheHit: run.resizeCacheHit,
+		quantizeTimings: run.quantizeTimings,
+		quantizeCounts: run.quantizeCounts
 	};
+}
+
+function benchmarkQuantizeCaches(
+	colorVectorImageScope: string,
+	quantizeTimings: Record<string, number>,
+	quantizeCounts: Record<string, number>
+): QuantizeCaches {
+	const paletteVectors = new Map<string, PaletteVectorSpace>();
+	const images = new Map<string, ColorVectorImage>();
+	return {
+		colorVectorImageScope,
+		getPaletteVectorSpace: (key) => paletteVectors.get(key),
+		setPaletteVectorSpace: (key, value) => paletteVectors.set(key, value),
+		getColorVectorImage: (key) => images.get(key),
+		canStoreColorVectorImage: () => true,
+		setColorVectorImage: (key, value) => images.set(key, value),
+		recordTiming(name, ms) {
+			quantizeTimings[name] = (quantizeTimings[name] ?? 0) + ms;
+		},
+		recordCount(name, amount = 1) {
+			quantizeCounts[name] = (quantizeCounts[name] ?? 0) + amount;
+		}
+	};
+}
+
+function resizeCacheKey(
+	sourceId: string,
+	source: ImageData,
+	dimensions: { width: number; height: number },
+	resize: ResizeId
+) {
+	return [
+		sourceId,
+		`${source.width}x${source.height}`,
+		`${dimensions.width}x${dimensions.height}`,
+		resize
+	].join('|');
 }
 
 function processingSettingsForCase(
@@ -671,6 +911,7 @@ function enabledBenchmarkPalette(): EnabledPaletteColor[] {
 }
 
 function outputDimensionsForCase(testCase: BenchmarkCase, source: ImageData) {
+	if (testCase.noResize) return { width: source.width, height: source.height };
 	if (testCase.outputScale) {
 		return {
 			width: Math.max(1, Math.round(source.width * testCase.outputScale)),
@@ -710,6 +951,37 @@ function createFixtureImage(width: number, height: number, seedKey: string): Ima
 			data[offset + 1] = (x * 5 + y * 17 + seed * 3 - wave * 24) & 255;
 			data[offset + 2] = (x * y + seed * 7 + wave * 18) & 255;
 			data[offset + 3] = (x + y + seed) % 31 === 0 ? 96 : 255;
+		}
+	}
+	return new ImageData(data, width, height);
+}
+
+function createGradientImage(width: number, height: number): ImageData {
+	const data = new Uint8ClampedArray(width * height * 4);
+	for (let y = 0; y < height; y++) {
+		const vertical = y / Math.max(1, height - 1);
+		for (let x = 0; x < width; x++) {
+			const horizontal = x / Math.max(1, width - 1);
+			const offset = (y * width + x) * 4;
+			data[offset] = Math.round(horizontal * 255);
+			data[offset + 1] = Math.round(vertical * 255);
+			data[offset + 2] = Math.round((1 - Math.abs(horizontal - vertical)) * 255);
+			data[offset + 3] = 255;
+		}
+	}
+	return new ImageData(data, width, height);
+}
+
+function createAlphaFixtureImage(width: number, height: number): ImageData {
+	const data = new Uint8ClampedArray(width * height * 4);
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const offset = (y * width + x) * 4;
+			const ring = Math.hypot(x - width / 2, y - height / 2) / Math.max(width, height);
+			data[offset] = (x * 9 + y * 5) & 255;
+			data[offset + 1] = (x * 3 + y * 11) & 255;
+			data[offset + 2] = (x * 17 + y * 7) & 255;
+			data[offset + 3] = ring < 0.18 ? 0 : ring < 0.32 ? 96 : 255;
 		}
 	}
 	return new ImageData(data, width, height);
@@ -765,15 +1037,50 @@ function summarizeRuns(
 	};
 }
 
+function summarizeQuantizeSubstages(runs: Array<ReturnType<typeof runOnce>>) {
+	return summarizeNamedRecords(runs.map((run) => run.quantizeTimings));
+}
+
+function summarizeQuantizeCounters(runs: Array<ReturnType<typeof runOnce>>) {
+	return summarizeNamedRecords(runs.map((run) => run.quantizeCounts));
+}
+
+function summarizeNamedRecords(records: Array<Record<string, number>>) {
+	const valuesByName = new Map<string, number[]>();
+	for (const record of records) {
+		for (const [name, value] of Object.entries(record)) {
+			const values = valuesByName.get(name) ?? [];
+			values.push(value);
+			valuesByName.set(name, values);
+		}
+	}
+	return Object.fromEntries(
+		[...valuesByName.entries()].map(([name, values]) => [name, summarize(values)])
+	) as Record<string, StageStats>;
+}
+
 function summarize(values: number[]): StageStats {
 	const sorted = [...values].sort((left, right) => left - right);
 	const sum = sorted.reduce((total, value) => total + value, 0);
+	const meanMs = sum / Math.max(1, sorted.length);
+	const variance =
+		sorted.reduce((total, value) => total + (value - meanMs) * (value - meanMs), 0) /
+		Math.max(1, sorted.length);
+	const q1 = percentile(sorted, 0.25);
+	const q3 = percentile(sorted, 0.75);
+	const iqr = q3 - q1;
+	const lowFence = q1 - iqr * 1.5;
+	const highFence = q3 + iqr * 1.5;
 	return {
 		minMs: sorted[0] ?? 0,
-		meanMs: sum / Math.max(1, sorted.length),
+		meanMs,
 		medianMs: percentile(sorted, 0.5),
 		p95Ms: percentile(sorted, 0.95),
-		maxMs: sorted.at(-1) ?? 0
+		maxMs: sorted.at(-1) ?? 0,
+		stddevMs: Math.sqrt(variance),
+		coefficientOfVariation: meanMs === 0 ? 0 : Math.sqrt(variance) / meanMs,
+		outlierCount:
+			iqr === 0 ? 0 : sorted.filter((value) => value < lowFence || value > highFence).length
 	};
 }
 
@@ -811,7 +1118,7 @@ function memoryShape(
 		sourcePixels,
 		outputPixels,
 		sourceRgbaBytes: sourcePixels * 4,
-		resizedRgbaBytes: outputPixels * 4,
+		resizedRgbaBytes: testCase.noResize ? 0 : outputPixels * 4,
 		indexBytes: outputPixels,
 		errorWorkBufferBytes: ERROR_DIFFUSION_ALGORITHMS.has(testCase.dither)
 			? outputPixels * 3 * 4
@@ -828,7 +1135,55 @@ function hottestStage(stages: Record<BenchmarkStage, StageStats>): BenchmarkStag
 	);
 }
 
+function hottestQuantizeSubstage(substages: Record<string, StageStats>) {
+	return Object.entries(substages).reduce<string | undefined>((hottest, [name, stats]) => {
+		if (!hottest) return name;
+		return stats.meanMs > substages[hottest]!.meanMs ? name : hottest;
+	}, undefined);
+}
+
+function quantizeMean(entry: BenchmarkCaseResult, name: string) {
+	return entry.quantizeSubstages[name]?.meanMs ?? 0;
+}
+
+function quantizeLoopMean(entry: BenchmarkCaseResult) {
+	return (
+		quantizeMean(entry, 'quantize direct dither+match loop') +
+		quantizeMean(entry, 'quantize vector diffusion dither+match loop') +
+		quantizeMean(entry, 'quantize rgb diffusion dither+match loop')
+	);
+}
+
+function quantizeCountMean(entry: BenchmarkCaseResult, name: string) {
+	return entry.quantizeCounters[name]?.meanMs ?? 0;
+}
+
+function hitRate(hits: number, misses: number) {
+	const total = hits + misses;
+	return total === 0 ? 0 : hits / total;
+}
+
+function rgbMemoHitRate(entry: BenchmarkCaseResult) {
+	return hitRate(
+		quantizeCountMean(entry, 'rgb memo hit'),
+		quantizeCountMean(entry, 'rgb memo miss')
+	);
+}
+
+function vectorMemoHitRate(entry: BenchmarkCaseResult) {
+	return hitRate(
+		quantizeCountMean(entry, 'vector memo hit'),
+		quantizeCountMean(entry, 'vector memo miss')
+	);
+}
+
 export function benchmarkResultsToCsv(result: BenchmarkResult): string {
+	const quantizeSubstageNames = [
+		...new Set(result.results.flatMap((entry) => Object.keys(entry.quantizeSubstages)))
+	].sort();
+	const quantizeCounterNames = [
+		...new Set(result.results.flatMap((entry) => Object.keys(entry.quantizeCounters)))
+	].sort();
 	const rows = [
 		[
 			'profile',
@@ -843,11 +1198,27 @@ export function benchmarkResultsToCsv(result: BenchmarkResult): string {
 			'sourcePixels',
 			'outputPixels',
 			'resizeMeanMs',
+			'resizeStddevMs',
+			'resizeCv',
+			'resizeOutliers',
+			'resizeCacheHitRate',
 			'quantizeMeanMs',
+			'quantizeStageMeanMs',
+			'quantizeStageStddevMs',
+			'quantizeStageCv',
+			'quantizeStageOutliers',
+			'rgbMemoHitRate',
+			'vectorMemoHitRate',
+			...quantizeSubstageNames.map((name) => `quantize:${name}:meanMs`),
+			...quantizeCounterNames.map((name) => `quantize-count:${name}:mean`),
 			'previewRenderMeanMs',
 			'pngEncodeMeanMs',
 			'totalMeanMs',
+			'totalStddevMs',
+			'totalCv',
+			'totalOutliers',
 			'hotspot',
+			'quantizeHotspot',
 			'resizedRgbaBytes',
 			'indexBytes',
 			'errorWorkBufferBytes',
@@ -866,11 +1237,29 @@ export function benchmarkResultsToCsv(result: BenchmarkResult): string {
 			entry.memory.sourcePixels,
 			entry.memory.outputPixels,
 			entry.stages.resize.meanMs,
+			entry.stages.resize.stddevMs,
+			entry.stages.resize.coefficientOfVariation,
+			entry.stages.resize.outlierCount,
+			entry.runs.length === 0
+				? 0
+				: entry.runs.filter((run) => run.resizeCacheHit).length / entry.runs.length,
+			quantizeLoopMean(entry),
 			entry.stages.quantize.meanMs,
+			entry.stages.quantize.stddevMs,
+			entry.stages.quantize.coefficientOfVariation,
+			entry.stages.quantize.outlierCount,
+			rgbMemoHitRate(entry),
+			vectorMemoHitRate(entry),
+			...quantizeSubstageNames.map((name) => entry.quantizeSubstages[name]?.meanMs ?? ''),
+			...quantizeCounterNames.map((name) => entry.quantizeCounters[name]?.meanMs ?? ''),
 			entry.stages.previewRender.meanMs,
 			entry.stages.pngEncode.meanMs,
 			entry.stages.total.meanMs,
+			entry.stages.total.stddevMs,
+			entry.stages.total.coefficientOfVariation,
+			entry.stages.total.outlierCount,
 			entry.hotspot,
+			entry.quantizeHotspot ?? '',
 			entry.memory.resizedRgbaBytes,
 			entry.memory.indexBytes,
 			entry.memory.errorWorkBufferBytes,
@@ -887,11 +1276,27 @@ export function formatBenchmarkTable(result: BenchmarkResult): string {
 		formatPixels(entry.memory.sourcePixels),
 		formatPixels(entry.memory.outputPixels),
 		formatMs(entry.stages.resize.meanMs),
-		formatMs(entry.stages.quantize.meanMs),
+		formatMs(quantizeLoopMean(entry)),
+		formatMs(
+			quantizeMean(entry, 'color space convert palette') +
+				quantizeMean(entry, 'color space convert composited image') +
+				quantizeMean(entry, 'color space convert source image')
+		),
+		formatMs(
+			quantizeMean(entry, 'color space convert composited image') +
+				quantizeMean(entry, 'color space convert source image')
+		),
+		formatMs(quantizeMean(entry, 'color space convert palette')),
+		formatMs(quantizeLoopMean(entry)),
+		formatCount(
+			quantizeCountMean(entry, 'rgb memo hit') + quantizeCountMean(entry, 'vector memo hit')
+		),
+		formatPercent(Math.max(rgbMemoHitRate(entry), vectorMemoHitRate(entry))),
 		formatMs(entry.stages.previewRender.meanMs),
 		formatMs(entry.stages.pngEncode.meanMs),
 		formatMs(entry.stages.total.meanMs),
-		entry.hotspot
+		entry.hotspot,
+		entry.quantizeHotspot ?? '—'
 	]);
 	return formatTable([
 		[
@@ -901,10 +1306,17 @@ export function formatBenchmarkTable(result: BenchmarkResult): string {
 			'out px',
 			'resize',
 			'quantize',
+			'q convert',
+			'q image',
+			'q palette',
+			'q loop',
+			'q memo hits',
+			'q hit rate',
 			'preview',
 			'png',
 			'total',
-			'hotspot'
+			'hotspot',
+			'q hotspot'
 		],
 		...rows
 	]);
@@ -917,6 +1329,17 @@ function csvCell(value: unknown) {
 
 function formatMs(value: number) {
 	return `${value.toFixed(value >= 100 ? 0 : 1)}ms`;
+}
+
+function formatCount(value: number) {
+	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+	if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+	return String(Math.round(value));
+}
+
+function formatPercent(value: number) {
+	if (value === 0) return '0%';
+	return `${(value * 100).toFixed(value >= 0.1 ? 1 : 2)}%`;
 }
 
 function formatPixels(value: number) {

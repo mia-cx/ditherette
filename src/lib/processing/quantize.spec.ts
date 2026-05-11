@@ -69,13 +69,21 @@ function image() {
 function cacheMaps(colorVectorImageScope?: string): QuantizeCaches & {
 	paletteVectors: Map<string, PaletteVectorSpace>;
 	images: Map<string, ColorVectorImage>;
+	counts: Map<string, number>;
+	timings: Map<string, number>;
 } {
 	const paletteVectors = new Map<string, PaletteVectorSpace>();
 	const images = new Map<string, ColorVectorImage>();
+	const counts = new Map<string, number>();
+	const timings = new Map<string, number>();
 	return {
 		paletteVectors,
 		images,
+		counts,
+		timings,
 		colorVectorImageScope,
+		recordCount: (key, amount = 1) => counts.set(key, (counts.get(key) ?? 0) + amount),
+		recordTiming: (key, ms) => timings.set(key, (timings.get(key) ?? 0) + ms),
 		getPaletteVectorSpace: (key) => paletteVectors.get(key),
 		setPaletteVectorSpace: (key, value) => paletteVectors.set(key, value),
 		getColorVectorImage: (key) => images.get(key),
@@ -103,12 +111,13 @@ describe('quantizeImage caches', () => {
 		expect(caches.paletteVectors.size).toBeGreaterThan(0);
 	});
 
-	it('reuses cached color-vector images on repeated runs', () => {
+	it('reuses cached color-vector images on repeated vector-dither runs', () => {
 		const caches = cacheMaps('image-1');
-		quantizeImage(image(), palette, baseSettings, caches);
+		const settings = settingsForAlgorithm('bayer-2');
+		quantizeImage(image(), palette, settings, caches);
 		const firstImages = caches.images.size;
 
-		quantizeImage(image(), palette, baseSettings, caches);
+		quantizeImage(image(), palette, settings, caches);
 
 		expect(caches.images.size).toBe(firstImages);
 		expect(firstImages).toBeGreaterThan(0);
@@ -117,7 +126,7 @@ describe('quantizeImage caches', () => {
 	it('stores cached color-vector images as 32-bit floats', () => {
 		const caches = cacheMaps('image-1');
 
-		quantizeImage(image(), palette, baseSettings, caches);
+		quantizeImage(image(), palette, settingsForAlgorithm('bayer-2'), caches);
 
 		expect([...caches.images.values()].every((vectors) => vectors.v0 instanceof Float32Array)).toBe(
 			true
@@ -126,10 +135,11 @@ describe('quantizeImage caches', () => {
 
 	it('ignores stale color-vector images with different dimensions', () => {
 		const caches = cacheMaps('image-1');
+		const settings = settingsForAlgorithm('bayer-2');
 		quantizeImage(
 			new ImageData(new Uint8ClampedArray([0, 0, 0, 255]), 1, 1),
 			palette,
-			baseSettings,
+			settings,
 			caches
 		);
 		const nextImage = new ImageData(
@@ -137,19 +147,20 @@ describe('quantizeImage caches', () => {
 			2,
 			1
 		);
-		const uncached = quantizeImage(nextImage, palette, baseSettings);
+		const uncached = quantizeImage(nextImage, palette, settings);
 
-		const cached = quantizeImage(nextImage, palette, baseSettings, caches);
+		const cached = quantizeImage(nextImage, palette, settings, caches);
 
 		expect([...cached.indices]).toEqual([...uncached.indices]);
 	});
 
 	it('separates same-size color-vector images by scope', () => {
 		const caches = cacheMaps('dark');
+		const settings = settingsForAlgorithm('bayer-2');
 		quantizeImage(
 			new ImageData(new Uint8ClampedArray([0, 0, 0, 255, 20, 20, 20, 255]), 2, 1),
 			palette,
-			baseSettings,
+			settings,
 			caches
 		);
 		caches.colorVectorImageScope = 'light';
@@ -158,9 +169,9 @@ describe('quantizeImage caches', () => {
 			2,
 			1
 		);
-		const uncached = quantizeImage(lightImage, palette, baseSettings);
+		const uncached = quantizeImage(lightImage, palette, settings);
 
-		const cached = quantizeImage(lightImage, palette, baseSettings, caches);
+		const cached = quantizeImage(lightImage, palette, settings, caches);
 
 		expect([...cached.indices]).toEqual([...uncached.indices]);
 	});
@@ -172,5 +183,77 @@ describe('quantizeImage caches', () => {
 
 		expect(caches.images.size).toBe(0);
 		expect(caches.paletteVectors.size).toBeGreaterThan(0);
+	});
+
+	it('records RGB matcher memo hits for repeated byte colors', () => {
+		const caches = cacheMaps('rgb-repeats');
+		const repeated = new ImageData(
+			new Uint8ClampedArray([10, 20, 30, 255, 10, 20, 30, 255, 10, 20, 30, 255]),
+			3,
+			1
+		);
+		const settings: ProcessingSettings = {
+			...baseSettings,
+			colorSpace: 'srgb',
+			dither: { ...baseSettings.dither, useColorSpace: false, algorithm: 'none' }
+		};
+
+		quantizeImage(repeated, palette, settings, caches);
+
+		expect(caches.counts.get('rgb memo hit')).toBeGreaterThan(0);
+		expect(caches.counts.get('rgb memo miss')).toBe(1);
+	});
+
+	it('records vector matcher counts for vector dither', () => {
+		const caches = cacheMaps('vector-repeats');
+		const repeated = new ImageData(
+			new Uint8ClampedArray([10, 20, 30, 255, 10, 20, 30, 255, 10, 20, 30, 255, 10, 20, 30, 255]),
+			4,
+			1
+		);
+
+		const settings = {
+			...settingsForAlgorithm('bayer-2'),
+			dither: {
+				...baseSettings.dither,
+				algorithm: 'bayer-2' as const,
+				placement: 'everywhere' as const
+			}
+		};
+
+		quantizeImage(repeated, palette, settings, caches);
+
+		expect(caches.counts.get('nearest vector')).toBeGreaterThan(0);
+		expect(caches.counts.get('vector memo miss')).toBeGreaterThan(0);
+	});
+
+	it.each(['none', 'bayer-2', 'random', 'floyd-steinberg'] as const)(
+		'checks cancellation during %s quantization',
+		(algorithm) => {
+			const caches = cacheMaps('cancel');
+			caches.shouldCancel = () => true;
+
+			expect(() =>
+				quantizeImage(image(), palette, settingsForAlgorithm(algorithm), caches)
+			).toThrow('Processing was canceled.');
+		}
+	);
+
+	it('records quantize sub-stage timings', () => {
+		const caches = cacheMaps('timings');
+
+		quantizeImage(image(), palette, settingsForAlgorithm('bayer-2'), caches);
+
+		expect(caches.timings.get('palette prepare')).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('matcher build')).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('color space convert palette cache lookup')).toBeGreaterThanOrEqual(
+			0
+		);
+		expect(caches.timings.get('color space convert palette')).toBeGreaterThanOrEqual(0);
+		expect(
+			caches.timings.get('color space convert composited image cache lookup')
+		).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('color space convert composited image')).toBeGreaterThanOrEqual(0);
+		expect(caches.timings.get('quantize direct dither+match loop')).toBeGreaterThanOrEqual(0);
 	});
 });

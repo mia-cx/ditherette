@@ -1,4 +1,5 @@
 import { resizeImageData } from '$lib/processing/resize';
+import { quantizeImageWithRowWorkers } from '$lib/processing/quantize-row-workers';
 import {
 	quantizeImage,
 	type PaletteVectorSpace,
@@ -119,8 +120,134 @@ export class ProcessorWorkerPipeline {
 		} else {
 			progress('Quantizing palette', PROGRESS.quantizing);
 			const quantizeStart = performance.now();
-			result = quantizeImage(resized, palette, settings, this.quantizeCaches(branchKey));
+			result = quantizeImage(
+				resized,
+				palette,
+				settings,
+				this.quantizeCaches(branchKey, timings, id)
+			);
 			const quantizeMs = timings.mark('quantize compute', quantizeStart);
+			const quantizeCacheWriteStart = performance.now();
+			this.cacheQuantizeResult(branchKey, settingsHash, result, quantizeMs);
+			timings.mark('quantize cache write', quantizeCacheWriteStart);
+		}
+		const finalizingStart = performance.now();
+		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
+		progress('Finalizing indexed output', PROGRESS.finalizing);
+		const cacheAfter = this.cacheSnapshot();
+		const memory = estimateProcessingMemory({
+			sourceWidth: source.width,
+			sourceHeight: source.height,
+			outputWidth: size.width,
+			outputHeight: size.height,
+			settings,
+			branchCacheBytes: cacheAfter.branchBytes,
+			branchCacheMaxBytes: cacheAfter.branchMaxBytes
+		});
+		timings.mark('worker finalizing', finalizingStart);
+		const completedAt = performance.now();
+		return {
+			id,
+			type: 'complete',
+			image: {
+				...result,
+				width: size.width,
+				height: size.height,
+				warnings,
+				settingsHash,
+				updatedAt: Date.now()
+			},
+			metrics: {
+				id,
+				settingsHash,
+				sourceId,
+				scopeKey: branchKey,
+				startedAt,
+				completedAt,
+				totalMs: completedAt - startedAt,
+				timings: timings.values,
+				cache: {
+					delta: deltaCacheSnapshot(cacheBefore, cacheAfter),
+					lifetime: cacheAfter
+				},
+				memory,
+				outputPixels: size.width * size.height,
+				colorSpace: settings.colorSpace,
+				dither: settings.dither.algorithm,
+				resize: settings.output.resize,
+				warnings
+			}
+		};
+	}
+
+	async handleAsync(
+		request: WorkerRequest,
+		progress: ProgressSink
+	): Promise<WorkerResponse | undefined> {
+		if (request.type !== 'process') return this.handle(request, progress);
+		if (this.#canceledIds.has(request.id)) return undefined;
+
+		const startedAt = performance.now();
+		const timings = timingSink();
+		const cacheBefore = this.cacheSnapshot();
+		const { id, sourceId, settings, palette, settingsHash } = request;
+		const source = this.sourceFor(sourceId);
+		progress('Sizing output', PROGRESS.queued);
+		const sizingStart = performance.now();
+		const size = clampOutputSize(settings.output.width, settings.output.height);
+		const branchKey = pipelineBranchKey({
+			sourceId,
+			width: size.width,
+			height: size.height,
+			resize: settings.output.resize,
+			crop: settings.output.crop,
+			gradeKey: IDENTITY_GRADE_KEY
+		});
+		timings.mark('worker sizing', sizingStart);
+		const resizeLookupStart = performance.now();
+		let resized = this.#branchCache.getResized(branchKey);
+		timings.mark('resize cache lookup', resizeLookupStart);
+		if (resized) {
+			progress('Using cached resize', PROGRESS.cacheHit);
+			timings.replay('resize compute', this.#branchCache.getResizedTiming(branchKey));
+		} else {
+			progress('Resizing', PROGRESS.resizing);
+			const resizeStart = performance.now();
+			resized = resizeImageData(
+				source,
+				size.width,
+				size.height,
+				settings.output.resize,
+				settings.output.crop
+			);
+			const resizeMs = timings.mark('resize compute', resizeStart);
+			const resizeCacheWriteStart = performance.now();
+			this.#branchCache.setResized(branchKey, resized, resizeMs);
+			timings.mark('resize cache write', resizeCacheWriteStart);
+		}
+		if (this.#canceledIds.has(id)) return undefined;
+		const quantizeCacheLookupStart = performance.now();
+		const cachedResult = this.cachedQuantizeResult(branchKey, settingsHash);
+		timings.mark('quantize cache lookup', quantizeCacheLookupStart);
+		let result = cachedResult?.result;
+		if (result) {
+			progress('Using cached quantization', PROGRESS.quantizeCacheHit);
+			timings.replay('quantize compute', cachedResult?.timingMs);
+		} else {
+			progress('Quantizing palette', PROGRESS.quantizing);
+			const quantizeStart = performance.now();
+			const caches = this.quantizeCaches(branchKey, timings, id);
+			try {
+				result =
+					(await quantizeImageWithRowWorkers(resized, palette, settings, caches, {
+						shouldCancel: () => this.#canceledIds.has(id)
+					})) ?? quantizeImage(resized, palette, settings, caches);
+			} catch (error) {
+				if (this.#canceledIds.has(id) && isCanceledError(error)) return undefined;
+				throw error;
+			}
+			const quantizeMs = timings.mark('quantize compute', quantizeStart);
+			if (this.#canceledIds.has(id)) return undefined;
 			const quantizeCacheWriteStart = performance.now();
 			this.cacheQuantizeResult(branchKey, settingsHash, result, quantizeMs);
 			timings.mark('quantize cache write', quantizeCacheWriteStart);
@@ -202,8 +329,14 @@ export class ProcessorWorkerPipeline {
 		);
 	}
 
-	private quantizeCaches(branchKey: string): QuantizeCaches {
+	private quantizeCaches(
+		branchKey: string,
+		timings?: TimingSink,
+		requestId?: number
+	): QuantizeCaches {
 		return {
+			shouldCancel: () => (requestId === undefined ? false : this.#canceledIds.has(requestId)),
+			recordTiming: (name, ms) => timings?.add(quantizeTimingName(name), ms),
 			getPaletteVectorSpace: (key) => this.#paletteVectorCache.get(key),
 			setPaletteVectorSpace: (key, value) => this.#paletteVectorCache.set(key, value),
 			colorVectorImageScope: branchKey,
@@ -231,6 +364,12 @@ export class ProcessorWorkerPipeline {
 			this.#paletteVectorCache.snapshotMetrics()
 		);
 	}
+}
+
+function quantizeTimingName(name: string) {
+	return name.startsWith('quantize ') || name.startsWith('color space ')
+		? name
+		: `quantize ${name}`;
 }
 
 function timingSink(): TimingSink {
@@ -263,6 +402,10 @@ function cloneQuantizeResult(result: QuantizeResult): QuantizeResult {
 		transparentIndex: result.transparentIndex,
 		warnings: result.warnings.slice()
 	};
+}
+
+function isCanceledError(error: unknown) {
+	return error instanceof Error && /canceled/i.test(error.message);
 }
 
 export function transferablesForWorkerResponse(response: WorkerResponse): Transferable[] {

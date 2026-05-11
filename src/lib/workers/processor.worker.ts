@@ -12,6 +12,7 @@ type WorkerPostTarget = {
 
 const pipeline = new ProcessorWorkerPipeline();
 const workerSelf = self as unknown as WorkerPostTarget;
+let workQueue = Promise.resolve();
 
 function requestIdFromMessage(value: unknown) {
 	if (!value || typeof value !== 'object') return -1;
@@ -38,9 +39,20 @@ self.onmessage = (event: MessageEvent<unknown>) => {
 		return;
 	}
 
+	if (request.type === 'cancel') {
+		pipeline.handle(request, () => undefined);
+		return;
+	}
+
+	workQueue = workQueue.then(() => handleRequest(request));
+};
+
+async function handleRequest(
+	request: Exclude<ReturnType<typeof validateWorkerRequest>, { type: 'cancel' }>
+) {
 	try {
 		postResponse(
-			pipeline.handle(request, (stage, progress) => {
+			await pipeline.handleAsync(request, (stage, progress) => {
 				workerSelf.postMessage({
 					id: request.id,
 					type: 'progress',
@@ -56,6 +68,6 @@ self.onmessage = (event: MessageEvent<unknown>) => {
 			message: error instanceof Error ? error.message : 'Processing failed'
 		} satisfies WorkerResponse);
 	}
-};
+}
 
 export {};

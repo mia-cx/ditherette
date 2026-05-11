@@ -8,7 +8,7 @@
 		"build": "wrangler types --check && vite build",
 		"preview": "wrangler dev .svelte-kit/cloudflare/_worker.js --port 4173",
 		"prepare": "svelte-kit sync || echo ''",
-		"check": "wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check": "node -e \"import('node:fs').then(fs=>{fs.rmSync('.svelte-kit/output',{recursive:true,force:true});fs.rmSync('.svelte-kit/cloudflare',{recursive:true,force:true});})\" && wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
@@ -16,7 +16,9 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:unit": "vitest",
 		"gen": "wrangler types",
-		"bench:processing": "node scripts/benchmark-processing.mjs"
+		"bench:processing": "node scripts/benchmark-processing.mjs",
+		"bench:palette-study": "node scripts/benchmark-palette-study.mjs",
+		"bench:row-workers": "node scripts/benchmark-row-workers.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",

@@ -75,6 +75,104 @@ describe('processing benchmark harness', () => {
 		expect(entry.stages.pngEncode.meanMs).toBe(0);
 	});
 
+	it('stops after color-space conversion when requested', () => {
+		const result = runProcessingBenchmarks({
+			matrixDimensions: ['colorSpace'],
+			caseIds: ['scale-5-lanczos3-none-oklab'],
+			iterations: 1,
+			warmups: 0,
+			stopAfterStage: 'colorSpaceConvert',
+			includePng: false,
+			sources: [
+				{
+					id: 'fixture',
+					label: 'Fixture',
+					kind: 'synthetic',
+					imageData: new ImageData(16, 16)
+				}
+			]
+		});
+		const entry = result.results[0]!;
+
+		expect(entry.stages.quantize.meanMs).toBeGreaterThanOrEqual(0);
+		expect(
+			entry.quantizeSubstages['color space convert composited image']?.meanMs
+		).toBeGreaterThanOrEqual(0);
+		expect(entry.quantizeSubstages['quantize direct dither+match loop']).toBeUndefined();
+		expect(entry.stages.previewRender.meanMs).toBe(0);
+	});
+
+	it('can run native-size dither/color-space permutations without resize work', () => {
+		const result = runProcessingBenchmarks({
+			matrixDimensions: ['dither', 'colorSpace'],
+			iterations: 1,
+			warmups: 0,
+			stopAfterStage: 'quantize',
+			includePng: false,
+			noResize: true,
+			sources: [
+				{
+					id: 'fixture',
+					label: 'Fixture',
+					kind: 'synthetic',
+					imageData: new ImageData(16, 12)
+				}
+			]
+		});
+		const entry = result.results[0]!;
+
+		expect(result.results).toHaveLength(9 * 8);
+		expect(entry.case.id).toMatch(/^native-/);
+		expect(entry.case.noResize).toBe(true);
+		expect(entry.memory.outputPixels).toBe(16 * 12);
+		expect(entry.memory.resizedRgbaBytes).toBe(0);
+		expect(result.results.every((caseResult) => caseResult.stages.resize.meanMs === 0)).toBe(true);
+		expect(
+			result.results.every((caseResult) => caseResult.runs.every((run) => !run.resizeCacheHit))
+		).toBe(true);
+	});
+
+	it('memoizes resize work when benchmarking downstream stages', () => {
+		const result = runProcessingBenchmarks({
+			matrixDimensions: ['colorSpace'],
+			iterations: 1,
+			warmups: 1,
+			stopAfterStage: 'quantize',
+			includePng: false,
+			sources: [
+				{
+					id: 'fixture',
+					label: 'Fixture',
+					kind: 'synthetic',
+					imageData: new ImageData(16, 16)
+				}
+			]
+		});
+
+		expect(result.results).toHaveLength(8);
+		expect(result.results.every((entry) => entry.runs.every((run) => run.resizeCacheHit))).toBe(
+			true
+		);
+	});
+
+	it('can run the synthetic corpus for benchmark hardening', () => {
+		const result = runProcessingBenchmarks({
+			profile: 'smoke',
+			caseIds: ['smoke-direct'],
+			iterations: 1,
+			warmups: 0,
+			includePng: false,
+			syntheticCorpus: true
+		});
+
+		expect(result.results.map((entry) => entry.source.id)).toEqual([
+			'synthetic-gradient-1536x1024',
+			'synthetic-alpha-1024x1024',
+			'synthetic-photoish-1920x1080'
+		]);
+		expect(result.results.some((entry) => entry.source.id.includes('alpha'))).toBe(true);
+	});
+
 	it('runs a smoke benchmark and reports stage timings', () => {
 		const result = runProcessingBenchmarks({
 			profile: 'smoke',
@@ -89,8 +187,13 @@ describe('processing benchmark harness', () => {
 		expect(entry.case.id).toBe('smoke-direct');
 		expect(entry.stages.resize.meanMs).toBeGreaterThanOrEqual(0);
 		expect(entry.stages.quantize.meanMs).toBeGreaterThanOrEqual(0);
+		expect(
+			entry.quantizeSubstages['quantize direct dither+match loop']?.meanMs
+		).toBeGreaterThanOrEqual(0);
+		expect(entry.quantizeCounters['nearest rgb']?.meanMs).toBeGreaterThanOrEqual(0);
 		expect(entry.memory.outputPixels).toBe(160 * 120);
 		expect(entry.hotspot).toBeTypeOf('string');
+		expect(entry.quantizeHotspot).toBeTypeOf('string');
 	});
 
 	it('formats machine-readable CSV and a concise table', () => {
@@ -102,7 +205,10 @@ describe('processing benchmark harness', () => {
 			includePng: false
 		});
 
-		expect(benchmarkResultsToCsv(result)).toContain('caseId');
-		expect(formatBenchmarkTable(result)).toContain('hotspot');
+		const csv = benchmarkResultsToCsv(result);
+		expect(csv).toContain('caseId');
+		expect(csv).toContain('quantize:quantize direct dither+match loop:meanMs');
+		expect(csv).toContain('quantize-count:nearest rgb:mean');
+		expect(formatBenchmarkTable(result)).toContain('q hotspot');
 	});
 });
