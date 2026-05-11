@@ -12,6 +12,113 @@ import {
 import { errorKernelForAlgorithm } from './error-kernels';
 import type { QuantizeAlgorithmContext } from './types';
 
+function hasPreservedTransparentPixels(source: Uint8ClampedArray, alphaThreshold: number) {
+	for (let offset = 3; offset < source.length; offset += 4) {
+		if (source[offset]! <= alphaThreshold) return true;
+	}
+	return false;
+}
+
+function scatterSierra(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number,
+	strengthMask: number
+) {
+	if (reverse) {
+		if (x > 0) addError(work, workOffset - 3, error0, error1, error2, (5 / 32) * strengthMask);
+		if (x > 1) addError(work, workOffset - 6, error0, error1, error2, (3 / 32) * strengthMask);
+		if (y + 1 < height) {
+			const nextRow = workOffset + width * 3;
+			if (x + 2 < width)
+				addError(work, nextRow + 6, error0, error1, error2, (2 / 32) * strengthMask);
+			if (x + 1 < width)
+				addError(work, nextRow + 3, error0, error1, error2, (4 / 32) * strengthMask);
+			addError(work, nextRow, error0, error1, error2, (5 / 32) * strengthMask);
+			if (x > 0) addError(work, nextRow - 3, error0, error1, error2, (4 / 32) * strengthMask);
+			if (x > 1) addError(work, nextRow - 6, error0, error1, error2, (2 / 32) * strengthMask);
+		}
+		if (y + 2 < height) {
+			const next2Row = workOffset + width * 6;
+			if (x + 1 < width)
+				addError(work, next2Row + 3, error0, error1, error2, (2 / 32) * strengthMask);
+			addError(work, next2Row, error0, error1, error2, (3 / 32) * strengthMask);
+			if (x > 0) addError(work, next2Row - 3, error0, error1, error2, (2 / 32) * strengthMask);
+		}
+		return;
+	}
+	if (x + 1 < width)
+		addError(work, workOffset + 3, error0, error1, error2, (5 / 32) * strengthMask);
+	if (x + 2 < width)
+		addError(work, workOffset + 6, error0, error1, error2, (3 / 32) * strengthMask);
+	if (y + 1 < height) {
+		const nextRow = workOffset + width * 3;
+		if (x > 1) addError(work, nextRow - 6, error0, error1, error2, (2 / 32) * strengthMask);
+		if (x > 0) addError(work, nextRow - 3, error0, error1, error2, (4 / 32) * strengthMask);
+		addError(work, nextRow, error0, error1, error2, (5 / 32) * strengthMask);
+		if (x + 1 < width) addError(work, nextRow + 3, error0, error1, error2, (4 / 32) * strengthMask);
+		if (x + 2 < width) addError(work, nextRow + 6, error0, error1, error2, (2 / 32) * strengthMask);
+	}
+	if (y + 2 < height) {
+		const next2Row = workOffset + width * 6;
+		if (x > 0) addError(work, next2Row - 3, error0, error1, error2, (2 / 32) * strengthMask);
+		addError(work, next2Row, error0, error1, error2, (3 / 32) * strengthMask);
+		if (x + 1 < width)
+			addError(work, next2Row + 3, error0, error1, error2, (2 / 32) * strengthMask);
+	}
+}
+
+function scatterSierraLite(
+	work: Float32Array,
+	width: number,
+	height: number,
+	x: number,
+	y: number,
+	workOffset: number,
+	reverse: boolean,
+	error0: number,
+	error1: number,
+	error2: number,
+	strengthMask: number
+) {
+	if (reverse) {
+		if (x > 0) addError(work, workOffset - 3, error0, error1, error2, (2 / 4) * strengthMask);
+		if (y + 1 < height) {
+			const nextRow = workOffset + width * 3;
+			if (x + 1 < width)
+				addError(work, nextRow + 3, error0, error1, error2, (1 / 4) * strengthMask);
+			addError(work, nextRow, error0, error1, error2, (1 / 4) * strengthMask);
+		}
+		return;
+	}
+	if (x + 1 < width) addError(work, workOffset + 3, error0, error1, error2, (2 / 4) * strengthMask);
+	if (y + 1 < height) {
+		const nextRow = workOffset + width * 3;
+		if (x > 0) addError(work, nextRow - 3, error0, error1, error2, (1 / 4) * strengthMask);
+		addError(work, nextRow, error0, error1, error2, (1 / 4) * strengthMask);
+	}
+}
+
+function addError(
+	work: Float32Array,
+	target: number,
+	error0: number,
+	error1: number,
+	error2: number,
+	weight: number
+) {
+	work[target] += error0 * weight;
+	work[target + 1] += error1 * weight;
+	work[target + 2] += error2 * weight;
+}
+
 function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 	const {
 		image,
@@ -43,6 +150,8 @@ function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 	const sourceVectors = useAdaptivePlacement
 		? cachedColorVectorImage(image, settings, matte, 'source', caches)
 		: undefined;
+	const checkTransparency =
+		alphaMode === 'preserve' && hasPreservedTransparentPixels(source, alphaThreshold);
 
 	for (let index = 0; index < width * height; index++) {
 		const sourceOffset = index * 4;
@@ -68,12 +177,13 @@ function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 		const step = reverse ? -1 : 1;
 		for (let x = start; x !== end; x += step) {
 			const index = y * width + x;
-			const sourceOffset = index * 4;
-			const alpha = source[sourceOffset + 3]!;
-			if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
-				indices[index] =
-					transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
-				continue;
+			if (checkTransparency) {
+				const alpha = source[index * 4 + 3]!;
+				if (alpha <= alphaThreshold) {
+					indices[index] =
+						transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
+					continue;
+				}
 			}
 
 			const workOffset = index * 3;
@@ -156,6 +266,34 @@ function quantizeVectorErrorDiffusion(context: QuantizeAlgorithmContext) {
 						}
 					}
 				}
+			} else if (settings.dither.algorithm === 'sierra') {
+				scatterSierra(
+					work,
+					width,
+					height,
+					x,
+					y,
+					workOffset,
+					reverse,
+					error0,
+					error1,
+					error2,
+					strength * mask
+				);
+			} else if (settings.dither.algorithm === 'sierra-lite') {
+				scatterSierraLite(
+					work,
+					width,
+					height,
+					x,
+					y,
+					workOffset,
+					reverse,
+					error0,
+					error1,
+					error2,
+					strength * mask
+				);
 			} else {
 				for (const [dxBase, dy, weight] of kernel) {
 					const dx = reverse ? -dxBase : dxBase;
@@ -209,32 +347,46 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 	const sourceVectors = useAdaptivePlacement
 		? cachedColorVectorImage(image, settings, matte, 'source', caches)
 		: undefined;
+	const checkTransparency =
+		alphaMode === 'preserve' && hasPreservedTransparentPixels(source, alphaThreshold);
 
-	for (
-		let index = 0, sourceOffset = 0, workOffset = 0;
-		index < width * height;
-		index++, sourceOffset += 4, workOffset += 3
-	) {
-		const alpha = source[sourceOffset + 3]!;
-		let r = source[sourceOffset]!;
-		let g = source[sourceOffset + 1]!;
-		let b = source[sourceOffset + 2]!;
-		if (alphaMode !== 'preserve' && alpha !== 255) {
-			const opacity = alpha / 255;
-			if (alphaMode === 'premultiplied') {
-				r = Math.round(r * opacity);
-				g = Math.round(g * opacity);
-				b = Math.round(b * opacity);
-			} else {
-				const background = 1 - opacity;
-				r = Math.round(r * opacity + matte.r * background);
-				g = Math.round(g * opacity + matte.g * background);
-				b = Math.round(b * opacity + matte.b * background);
-			}
+	if (alphaMode === 'preserve') {
+		for (
+			let index = 0, sourceOffset = 0, workOffset = 0;
+			index < width * height;
+			index++, sourceOffset += 4, workOffset += 3
+		) {
+			work[workOffset] = source[sourceOffset]!;
+			work[workOffset + 1] = source[sourceOffset + 1]!;
+			work[workOffset + 2] = source[sourceOffset + 2]!;
 		}
-		work[workOffset] = r;
-		work[workOffset + 1] = g;
-		work[workOffset + 2] = b;
+	} else {
+		for (
+			let index = 0, sourceOffset = 0, workOffset = 0;
+			index < width * height;
+			index++, sourceOffset += 4, workOffset += 3
+		) {
+			const alpha = source[sourceOffset + 3]!;
+			let r = source[sourceOffset]!;
+			let g = source[sourceOffset + 1]!;
+			let b = source[sourceOffset + 2]!;
+			if (alpha !== 255) {
+				const opacity = alpha / 255;
+				if (alphaMode === 'premultiplied') {
+					r = Math.round(r * opacity);
+					g = Math.round(g * opacity);
+					b = Math.round(b * opacity);
+				} else {
+					const background = 1 - opacity;
+					r = Math.round(r * opacity + matte.r * background);
+					g = Math.round(g * opacity + matte.g * background);
+					b = Math.round(b * opacity + matte.b * background);
+				}
+			}
+			work[workOffset] = r;
+			work[workOffset + 1] = g;
+			work[workOffset + 2] = b;
+		}
 	}
 	recordTiming(caches, 'quantize rgb diffusion work init', initStart);
 	let nearestRgbCount = 0;
@@ -247,12 +399,13 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 		const step = reverse ? -1 : 1;
 		for (let x = start; x !== end; x += step) {
 			const index = y * width + x;
-			const sourceOffset = index * 4;
-			const alpha = source[sourceOffset + 3]!;
-			if (alphaMode === 'preserve' && alpha <= alphaThreshold) {
-				indices[index] =
-					transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
-				continue;
+			if (checkTransparency) {
+				const alpha = source[index * 4 + 3]!;
+				if (alpha <= alphaThreshold) {
+					indices[index] =
+						transparentIndexValue !== -1 ? transparentIndexValue : fallbackTransparentIndex;
+					continue;
+				}
 			}
 
 			const workOffset = index * 3;
@@ -335,6 +488,34 @@ export function quantizeErrorDiffusion(context: QuantizeAlgorithmContext) {
 						}
 					}
 				}
+			} else if (settings.dither.algorithm === 'sierra') {
+				scatterSierra(
+					work,
+					width,
+					height,
+					x,
+					y,
+					workOffset,
+					reverse,
+					errorR,
+					errorG,
+					errorB,
+					strength * mask
+				);
+			} else if (settings.dither.algorithm === 'sierra-lite') {
+				scatterSierraLite(
+					work,
+					width,
+					height,
+					x,
+					y,
+					workOffset,
+					reverse,
+					errorR,
+					errorG,
+					errorB,
+					strength * mask
+				);
 			} else {
 				for (const [dxBase, dy, weight] of kernel) {
 					const dx = reverse ? -dxBase : dxBase;
