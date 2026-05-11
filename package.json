@@ -17,7 +17,8 @@
 		"test:unit": "vitest",
 		"gen": "wrangler types",
 		"bench:processing": "node scripts/benchmark-processing.mjs",
-		"bench:palette-study": "node scripts/benchmark-palette-study.mjs"
+		"bench:palette-study": "node scripts/benchmark-palette-study.mjs",
+		"bench:row-workers": "node scripts/benchmark-row-workers.mjs"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",
