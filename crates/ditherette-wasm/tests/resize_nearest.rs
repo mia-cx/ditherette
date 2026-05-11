@@ -1,5 +1,8 @@
 use ditherette_wasm::{image::ImageDimensions, resize::resize_rgba_nearest};
 
+#[cfg(not(target_arch = "wasm32"))]
+use image::{imageops::FilterType, ImageBuffer, RgbaImage};
+
 fn dimensions(width: u32, height: u32) -> ImageDimensions {
     ImageDimensions::new(width, height).unwrap()
 }
@@ -52,7 +55,7 @@ fn two_by_two_upscale_repeats_each_pixel_into_blocks() {
 }
 
 #[test]
-fn four_by_four_downscale_samples_top_left_proportional_pixels() {
+fn four_by_four_downscale_samples_pixel_center_aligned_pixels() {
     let source_rgba: Vec<u8> = (0..16)
         .flat_map(|value| [value, value, value, 255])
         .collect();
@@ -61,14 +64,51 @@ fn four_by_four_downscale_samples_top_left_proportional_pixels() {
         resize_rgba_nearest(&source_rgba, dimensions(4, 4), dimensions(2, 2)).unwrap();
 
     let expected_rgba = [
-        [0, 0, 0, 255],
-        [2, 2, 2, 255],
-        [8, 8, 8, 255],
-        [10, 10, 10, 255],
+        [5, 5, 5, 255],
+        [7, 7, 7, 255],
+        [13, 13, 13, 255],
+        [15, 15, 15, 255],
     ]
     .concat();
 
     assert_eq!(output_rgba, expected_rgba);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn matches_image_crate_nearest_filter() {
+    let source_width = 7;
+    let source_height = 5;
+    let source_rgba: Vec<u8> = (0..source_width * source_height)
+        .flat_map(|index| {
+            [
+                ((index * 17) % 251) as u8,
+                ((index * 31) % 251) as u8,
+                ((index * 47) % 251) as u8,
+                255,
+            ]
+        })
+        .collect();
+    let source_image: RgbaImage =
+        ImageBuffer::from_raw(source_width, source_height, source_rgba.clone()).unwrap();
+
+    for (output_width, output_height) in [(2, 2), (5, 3), (13, 9), (7, 5)] {
+        let output_rgba = resize_rgba_nearest(
+            &source_rgba,
+            dimensions(source_width, source_height),
+            dimensions(output_width, output_height),
+        )
+        .unwrap();
+        let image_rgba = image::imageops::resize(
+            &source_image,
+            output_width,
+            output_height,
+            FilterType::Nearest,
+        )
+        .into_raw();
+
+        assert_eq!(output_rgba, image_rgba);
+    }
 }
 
 #[test]
@@ -82,11 +122,11 @@ fn non_square_resize_uses_independent_x_and_y_mapping() {
 
     let expected_rgba = [
         [0, 0, 0, 255],
-        [1, 1, 1, 255],
-        [0, 0, 0, 255],
-        [1, 1, 1, 255],
+        [2, 2, 2, 255],
         [3, 3, 3, 255],
-        [4, 4, 4, 255],
+        [5, 5, 5, 255],
+        [3, 3, 3, 255],
+        [5, 5, 5, 255],
     ]
     .concat();
 

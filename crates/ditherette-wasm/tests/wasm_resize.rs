@@ -18,6 +18,21 @@ fn resize_exports_rgba_bytes() {
 }
 
 #[wasm_bindgen_test]
+fn bilinear_resize_exports_rgba_bytes() {
+    let source_rgba = [
+        0, 0, 0, 255, // black
+        100, 100, 100, 255, // gray
+    ];
+
+    let output_rgba = ditherette_wasm::resize_rgba_bilinear(&source_rgba, 2, 1, 3, 1).unwrap();
+
+    assert_eq!(
+        output_rgba,
+        [0, 0, 0, 255, 50, 50, 50, 255, 100, 100, 100, 255]
+    );
+}
+
+#[wasm_bindgen_test]
 fn resize_rejects_invalid_source_length() {
     let source_rgba = [1, 2, 3, 4];
 
