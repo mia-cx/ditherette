@@ -102,6 +102,36 @@ describe('processing benchmark harness', () => {
 		expect(entry.stages.previewRender.meanMs).toBe(0);
 	});
 
+	it('can run native-size dither/color-space permutations without resize work', () => {
+		const result = runProcessingBenchmarks({
+			matrixDimensions: ['dither', 'colorSpace'],
+			iterations: 1,
+			warmups: 0,
+			stopAfterStage: 'quantize',
+			includePng: false,
+			noResize: true,
+			sources: [
+				{
+					id: 'fixture',
+					label: 'Fixture',
+					kind: 'synthetic',
+					imageData: new ImageData(16, 12)
+				}
+			]
+		});
+		const entry = result.results[0]!;
+
+		expect(result.results).toHaveLength(9 * 8);
+		expect(entry.case.id).toMatch(/^native-/);
+		expect(entry.case.noResize).toBe(true);
+		expect(entry.memory.outputPixels).toBe(16 * 12);
+		expect(entry.memory.resizedRgbaBytes).toBe(0);
+		expect(result.results.every((caseResult) => caseResult.stages.resize.meanMs === 0)).toBe(true);
+		expect(
+			result.results.every((caseResult) => caseResult.runs.every((run) => !run.resizeCacheHit))
+		).toBe(true);
+	});
+
 	it('memoizes resize work when benchmarking downstream stages', () => {
 		const result = runProcessingBenchmarks({
 			matrixDimensions: ['colorSpace'],

@@ -32,6 +32,7 @@ export type BenchmarkCase = {
 	outputWidth?: number;
 	outputHeight?: number;
 	outputScale?: number;
+	noResize?: boolean;
 	resize: ResizeId;
 	dither: DitherId;
 	colorSpace: ColorSpaceId;
@@ -55,7 +56,10 @@ export type BenchmarkProgressEvent =
 			totalCases: number;
 			sourceId: string;
 			caseId: string;
+			case: BenchmarkCase;
 			label: string;
+			outputWidth: number;
+			outputHeight: number;
 			outputPixels: number;
 	  }
 	| {
@@ -113,6 +117,7 @@ export type BenchmarkOptions = {
 	sources?: readonly BenchmarkSource[];
 	matrixDimensions?: readonly BenchmarkMatrixDimension[];
 	stopAfterStage?: BenchmarkStopStage;
+	noResize?: boolean;
 	onProgress?: (event: BenchmarkProgressEvent) => void;
 };
 
@@ -322,32 +327,44 @@ const CASES_BY_PROFILE: Record<Exclude<BenchmarkProfile, 'exhaustive'>, readonly
 
 export function benchmarkCases(
 	profile: BenchmarkProfile,
-	matrixDimensions: readonly BenchmarkMatrixDimension[] = []
+	matrixDimensions: readonly BenchmarkMatrixDimension[] = [],
+	options: { noResize?: boolean } = {}
 ): BenchmarkCase[] {
-	if (matrixDimensions.length) return matrixCases(matrixDimensions);
-	if (profile === 'exhaustive') return exhaustiveCases();
+	if (matrixDimensions.length || options.noResize)
+		return matrixCases(matrixDimensions, false, options.noResize);
+	if (profile === 'exhaustive') return exhaustiveCases(options.noResize);
 	const ids = new Set(CASES_BY_PROFILE[profile]);
 	return CASES.filter((testCase) => ids.has(testCase.id));
 }
 
 function defaultCaseIds(
 	profile: BenchmarkProfile,
-	matrixDimensions: readonly BenchmarkMatrixDimension[]
+	matrixDimensions: readonly BenchmarkMatrixDimension[],
+	noResize = false
 ): readonly string[] {
-	return benchmarkCases(profile, matrixDimensions).map((testCase) => testCase.id);
+	return benchmarkCases(profile, matrixDimensions, { noResize }).map((testCase) => testCase.id);
 }
 
-function exhaustiveCases(): BenchmarkCase[] {
-	return matrixCases(['scale', 'resize', 'dither', 'colorSpace'], true);
+function exhaustiveCases(noResize = false): BenchmarkCase[] {
+	return matrixCases(['scale', 'resize', 'dither', 'colorSpace'], true, noResize);
 }
 
 function matrixCases(
 	dimensions: readonly BenchmarkMatrixDimension[],
-	includePng = false
+	includePng = false,
+	noResize = false
 ): BenchmarkCase[] {
 	const selected = new Set(dimensions);
-	const scales = selected.has('scale') ? EXHAUSTIVE_SCALES : [DEFAULT_MATRIX_SCALE];
-	const resizeModes = selected.has('resize') ? EXHAUSTIVE_RESIZE_MODES : [DEFAULT_MATRIX_RESIZE];
+	const scales: readonly (number | undefined)[] = noResize
+		? [undefined]
+		: selected.has('scale')
+			? EXHAUSTIVE_SCALES
+			: [DEFAULT_MATRIX_SCALE];
+	const resizeModes = noResize
+		? [DEFAULT_MATRIX_RESIZE]
+		: selected.has('resize')
+			? EXHAUSTIVE_RESIZE_MODES
+			: [DEFAULT_MATRIX_RESIZE];
 	const ditherModes = selected.has('dither') ? EXHAUSTIVE_DITHER_MODES : [DEFAULT_MATRIX_DITHER];
 	const colorSpaces = selected.has('colorSpace')
 		? EXHAUSTIVE_COLOR_SPACES
@@ -357,9 +374,14 @@ function matrixCases(
 		resizeModes.flatMap((resize) =>
 			ditherModes.flatMap((dither) =>
 				colorSpaces.map((colorSpace) => ({
-					id: `scale-${scaleLabel(scale)}-${resize}-${dither}-${colorSpace}`,
-					label: `${formatScale(scale)} scale · ${resize} · ${dither} · ${colorSpace}`,
+					id: noResize
+						? `native-${dither}-${colorSpace}`
+						: `scale-${scaleLabel(scale!)}-${resize}-${dither}-${colorSpace}`,
+					label: noResize
+						? `Native size · no resize · ${dither} · ${colorSpace}`
+						: `${formatScale(scale!)} scale · ${resize} · ${dither} · ${colorSpace}`,
 					outputScale: scale,
+					noResize,
 					resize,
 					dither,
 					colorSpace,
@@ -376,8 +398,10 @@ export function runProcessingBenchmarks(options: BenchmarkOptions = {}): Benchma
 	const iterations = Math.max(1, Math.floor(options.iterations ?? DEFAULT_ITERATIONS));
 	const warmups = Math.max(0, Math.floor(options.warmups ?? DEFAULT_WARMUPS));
 	const matrixDimensions = options.matrixDimensions ?? [];
-	const availableCases = benchmarkCases(profile, matrixDimensions);
-	const selectedIds = new Set(options.caseIds ?? defaultCaseIds(profile, matrixDimensions));
+	const availableCases = benchmarkCases(profile, matrixDimensions, { noResize: options.noResize });
+	const selectedIds = new Set(
+		options.caseIds ?? defaultCaseIds(profile, matrixDimensions, options.noResize)
+	);
 	const cases = availableCases.filter((testCase) => selectedIds.has(testCase.id));
 	const resizeCache =
 		options.stopAfterStage === 'resize' ? undefined : new Map<string, ImageData>();
@@ -460,7 +484,10 @@ function runBenchmarkCase(
 		totalCases,
 		sourceId: source.id,
 		caseId: testCase.id,
+		case: { ...testCase, includePng },
 		label: testCase.label,
+		outputWidth: dimensions.width,
+		outputHeight: dimensions.height,
 		outputPixels: dimensions.width * dimensions.height
 	});
 	for (let index = 0; index < warmups; index++)
@@ -531,7 +558,8 @@ function runOnce(
 	const dimensions = outputDimensionsForCase(testCase, source);
 	const settings = processingSettingsForCase(testCase, dimensions);
 	const palette = enabledBenchmarkPalette();
-	const resizeKey = resizeCacheKey(sourceId, source, dimensions, testCase.resize);
+	const skipResize = options.noResize || testCase.noResize;
+	const resizeKey = skipResize ? '' : resizeCacheKey(sourceId, source, dimensions, testCase.resize);
 	let resizeCacheHit = false;
 	const totalStart = performance.now();
 	options.onProgress?.({
@@ -542,24 +570,23 @@ function runOnce(
 		warmup
 	});
 
-	const [resizeMs, resized] = measureStage(
-		'resize',
-		options,
-		sourceId,
-		testCase.id,
-		iteration,
-		warmup,
-		() => {
-			const cached = resizeCache?.get(resizeKey);
-			if (cached) {
-				resizeCacheHit = true;
-				return cached;
-			}
-			const resized = resizeImageData(source, dimensions.width, dimensions.height, testCase.resize);
-			resizeCache?.set(resizeKey, resized);
-			return resized;
-		}
-	);
+	const [resizeMs, resized] = skipResize
+		? ([0, source] as const)
+		: measureStage('resize', options, sourceId, testCase.id, iteration, warmup, () => {
+				const cached = resizeCache?.get(resizeKey);
+				if (cached) {
+					resizeCacheHit = true;
+					return cached;
+				}
+				const resized = resizeImageData(
+					source,
+					dimensions.width,
+					dimensions.height,
+					testCase.resize
+				);
+				resizeCache?.set(resizeKey, resized);
+				return resized;
+			});
 	if (shouldStopAfter('resize', options.stopAfterStage)) {
 		return finishRun({
 			resize: resizeMs,
@@ -845,6 +872,7 @@ function enabledBenchmarkPalette(): EnabledPaletteColor[] {
 }
 
 function outputDimensionsForCase(testCase: BenchmarkCase, source: ImageData) {
+	if (testCase.noResize) return { width: source.width, height: source.height };
 	if (testCase.outputScale) {
 		return {
 			width: Math.max(1, Math.round(source.width * testCase.outputScale)),
@@ -1007,7 +1035,7 @@ function memoryShape(
 		sourcePixels,
 		outputPixels,
 		sourceRgbaBytes: sourcePixels * 4,
-		resizedRgbaBytes: outputPixels * 4,
+		resizedRgbaBytes: testCase.noResize ? 0 : outputPixels * 4,
 		indexBytes: outputPixels,
 		errorWorkBufferBytes: ERROR_DIFFUSION_ALGORITHMS.has(testCase.dither)
 			? outputPixels * 3 * 4

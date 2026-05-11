@@ -52,6 +52,7 @@ try {
 		includePng: args.includePng,
 		sources,
 		matrixDimensions,
+		noResize: args.noResize,
 		stopAfterStage: args.stopAfterStage ?? stopStageForDimensions(matrixDimensions),
 		onProgress: args.quiet ? undefined : logProgress
 	});
@@ -291,8 +292,9 @@ function logProgress(event) {
 	switch (event.type) {
 		case 'case-start':
 			console.log(
-				`\n[${event.caseIndex}/${event.totalCases}] ${event.sourceId} › ${event.caseId} (${formatPixels(event.outputPixels)})`
+				`\n[${event.caseIndex}/${event.totalCases}] ${event.sourceId} › ${event.caseId} (output ${event.outputWidth}×${event.outputHeight} · ${formatPixels(event.outputPixels)})`
 			);
+			console.log(`  vars ${formatCaseVariables(event.case)}`);
 			break;
 		case 'iteration-end':
 			console.log(formatIterationProgress(event));
@@ -310,18 +312,13 @@ function formatIterationProgress(event) {
 		`  ${iterationLabel(event)}`,
 		`total ${formatMs(event.durationMs)}`,
 		`${event.resizeCacheHit ? 'resize hit' : 'resize'} ${formatMs(event.stages.resize)}`,
-		`quantize ${formatMs(loopMs)}`
+		`q stage ${formatMs(event.stages.quantize)}`
 	];
 	if (convertMs > 0 || loopMs > 0) {
 		pieces.push(`q convert ${formatMs(convertMs)}`);
 		pieces.push(`q loop ${formatMs(loopMs)}`);
 	}
-	const matchCount = quantizeMatchCount(event.quantizeCounts);
-	const memoHits = quantizeMemoHits(event.quantizeCounts);
-	if (matchCount > 0 || memoHits > 0) {
-		pieces.push(`matches ${formatCount(matchCount)}`);
-		pieces.push(`memo hits ${formatCount(memoHits)}`);
-	}
+	appendQuantizeCountPieces(pieces, event.quantizeCounts);
 	return pieces.join(' · ');
 }
 
@@ -331,25 +328,70 @@ function formatCaseSummary(event) {
 	const details = [
 		`  mean total ${formatMs(result.stages.total.meanMs)}`,
 		`resize ${formatMs(result.stages.resize.meanMs)} (${resizeHits}/${result.runs.length} hits)`,
-		`quantize ${formatMs(quantizeLoopMean(result))}`,
+		`q stage ${formatMs(result.stages.quantize.meanMs)}`,
 		`q convert ${formatMs(quantizeConvertMean(result))}`,
 		`q image ${formatMs(quantizeMean(result, 'color space convert composited image') + quantizeMean(result, 'color space convert source image'))}`,
 		`q palette ${formatMs(quantizeMean(result, 'color space convert palette'))}`,
 		`q loop ${formatMs(quantizeLoopMean(result))}`
 	];
-	const matchCount =
-		quantizeCounterMean(result, 'nearest rgb') + quantizeCounterMean(result, 'nearest vector');
-	const memoHits =
-		quantizeCounterMean(result, 'rgb memo hit') + quantizeCounterMean(result, 'vector memo hit');
-	if (matchCount > 0 || memoHits > 0) {
-		details.push(`matches/run ${formatCount(matchCount)}`);
-		details.push(`memo hits/run ${formatCount(memoHits)}`);
-	}
+	appendQuantizeMeanPieces(details, result);
 	return `${details.join(' · ')}\n  hotspots ${result.hotspot} / ${result.quantizeHotspot ?? '—'} · case wall ${formatMs(event.durationMs)}`;
 }
 
 function iterationLabel(event) {
 	return event.warmup ? `warmup ${event.iteration}` : `run ${event.iteration}`;
+}
+
+function formatCaseVariables(testCase) {
+	return [
+		`scale=${formatScaleVariable(testCase)}`,
+		`resize=${testCase.noResize ? 'none' : testCase.resize}`,
+		`dither=${testCase.dither}`,
+		`color=${testCase.colorSpace}`,
+		`color-space=${testCase.useColorSpace ? 'on' : 'off'}`,
+		`png=${testCase.includePng ? 'on' : 'off'}`
+	].join(' · ');
+}
+
+function formatScaleVariable(testCase) {
+	if (testCase.noResize) return 'native';
+	if (typeof testCase.outputScale === 'number') return `${formatPercent(testCase.outputScale)}`;
+	if (testCase.outputWidth && testCase.outputHeight)
+		return `${testCase.outputWidth}×${testCase.outputHeight}`;
+	return 'default';
+}
+
+function formatPercent(value) {
+	const percent = value * 100;
+	return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(1)}%`;
+}
+
+function appendQuantizeCountPieces(pieces, counts) {
+	appendCountPiece(pieces, 'candidates', counts['candidate evaluations']);
+	appendCountPiece(pieces, 'rgb matches', counts['nearest rgb']);
+	appendCountPiece(pieces, 'vec matches', counts['nearest vector']);
+	appendCountPiece(pieces, 'rgb memo hits', counts['rgb memo hit']);
+	appendCountPiece(pieces, 'vec memo hits', counts['vector memo hit']);
+	appendCountPiece(pieces, 'threshold unique', counts['threshold unique keys']);
+	appendCountPiece(pieces, 'threshold prepass hits', counts['threshold prepass hit']);
+	appendCountPiece(pieces, 'threshold collisions', counts['threshold cache collision']);
+}
+
+function appendQuantizeMeanPieces(pieces, result) {
+	appendCountPiece(pieces, 'candidates/run', quantizeCounterMean(result, 'candidate evaluations'));
+	appendCountPiece(pieces, 'rgb matches/run', quantizeCounterMean(result, 'nearest rgb'));
+	appendCountPiece(pieces, 'vec matches/run', quantizeCounterMean(result, 'nearest vector'));
+	appendCountPiece(pieces, 'rgb memo hits/run', quantizeCounterMean(result, 'rgb memo hit'));
+	appendCountPiece(pieces, 'vec memo hits/run', quantizeCounterMean(result, 'vector memo hit'));
+	appendCountPiece(
+		pieces,
+		'threshold collisions/run',
+		quantizeCounterMean(result, 'threshold cache collision')
+	);
+}
+
+function appendCountPiece(pieces, label, value = 0) {
+	if (value > 0) pieces.push(`${label} ${formatCount(value)}`);
 }
 
 function quantizeConvertMs(timings) {
@@ -366,14 +408,6 @@ function quantizeLoopMs(timings) {
 		(timings['quantize vector diffusion dither+match loop'] ?? 0) +
 		(timings['quantize rgb diffusion dither+match loop'] ?? 0)
 	);
-}
-
-function quantizeMatchCount(counts) {
-	return (counts['nearest rgb'] ?? 0) + (counts['nearest vector'] ?? 0);
-}
-
-function quantizeMemoHits(counts) {
-	return (counts['rgb memo hit'] ?? 0) + (counts['vector memo hit'] ?? 0);
 }
 
 function quantizeConvertMean(result) {
@@ -464,6 +498,10 @@ function parseArgs(argv) {
 			case 'resize':
 				if (optionalBoolean()) options.matrixDimensions.push('resize');
 				break;
+			case 'no-resize':
+			case 'native':
+				options.noResize = optionalBoolean();
+				break;
 			case 'dither':
 				if (optionalBoolean()) options.matrixDimensions.push('dither');
 				break;
@@ -508,7 +546,7 @@ function parseBoolean(value) {
 
 function printHelp() {
 	console.log(
-		`Usage: pnpm bench:processing -- [options]\n\nOptions:\n  --profile smoke|baseline|large|exhaustive\n                                  Fixture profile to run (default: smoke). exhaustive runs\n                                  0.125×/0.25×/0.5×/0.75× × every resize mode × every color space × every dither mode.\n  --iterations N                  Recorded iterations per case (default: 3)\n  --warmups N                     Warmup iterations per case (default: 1)\n  --cases id,id                   Comma-separated case IDs\n  --scale                         Vary 0.125×, 0.25×, 0.5×, 0.75×; stops after resize unless later flags are set\n  --resize                        Vary nearest, bilinear, lanczos3, area; stops after resize unless later flags are set\n  --dither                        Vary every dither mode; stops after quantize\n  --color-space                   Vary every color space; stops after color conversion unless --dither is set\n  --preview                       Stop after preview render\n  --png                           Stop after PNG encode\n  --image FILE                    Decode and benchmark a real image; repeatable\n  --fixtures-dir DIR              Decode all images in a fixture directory\n                                  Defaults to benchmark-fixtures/ when it exists\n  --synthetic true|false          Ignore benchmark-fixtures/ and use synthetic sources unless --image is set\n  --include-png true|false        Override per-case PNG encode stage\n  --quiet true|false              Disable per-case/stage progress logs\n  --out DIR                       Artifact directory (default: benchmark-results/processing-<timestamp>)\n\nExamples:\n  pnpm bench:processing -- --image ~/Pictures/photo.jpg --profile exhaustive\n  pnpm bench:processing -- --scale --resize\n  pnpm bench:processing -- --dither --color-space\n  mkdir -p benchmark-fixtures && cp ~/Pictures/*.png benchmark-fixtures/\n  pnpm bench:processing -- --fixtures-dir benchmark-fixtures --profile smoke\n`
+		`Usage: pnpm bench:processing -- [options]\n\nOptions:\n  --profile smoke|baseline|large|exhaustive\n                                  Fixture profile to run (default: smoke). exhaustive runs\n                                  0.125×/0.25×/0.5×/0.75× × every resize mode × every color space × every dither mode.\n  --iterations N                  Recorded iterations per case (default: 3)\n  --warmups N                     Warmup iterations per case (default: 1)\n  --cases id,id                   Comma-separated case IDs\n  --scale                         Vary 0.125×, 0.25×, 0.5×, 0.75×; stops after resize unless later flags are set\n  --resize                        Vary nearest, bilinear, lanczos3, area; stops after resize unless later flags are set\n  --no-resize                     Use decoded source dimensions directly; no resize stage/cache lookup\n  --dither                        Vary every dither mode; stops after quantize\n  --color-space                   Vary every color space; stops after color conversion unless --dither is set\n  --preview                       Stop after preview render\n  --png                           Stop after PNG encode\n  --image FILE                    Decode and benchmark a real image; repeatable\n  --fixtures-dir DIR              Decode all images in a fixture directory\n                                  Defaults to benchmark-fixtures/ when it exists\n  --synthetic true|false          Ignore benchmark-fixtures/ and use synthetic sources unless --image is set\n  --include-png true|false        Override per-case PNG encode stage\n  --quiet true|false              Disable per-case/stage progress logs\n  --out DIR                       Artifact directory (default: benchmark-results/processing-<timestamp>)\n\nExamples:\n  pnpm bench:processing -- --image ~/Pictures/photo.jpg --profile exhaustive\n  pnpm bench:processing -- --scale --resize\n  pnpm bench:processing -- --dither --color-space\n  pnpm bench:processing -- --image benchmark-fixtures/Celeste_box_art_full.png --no-resize --dither --color-space\n  mkdir -p benchmark-fixtures && cp ~/Pictures/*.png benchmark-fixtures/\n  pnpm bench:processing -- --fixtures-dir benchmark-fixtures --profile smoke\n`
 	);
 }
 
