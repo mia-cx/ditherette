@@ -223,7 +223,6 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "image",
- "rayon",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]
