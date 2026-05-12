@@ -1,8 +1,14 @@
 use crate::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
-    resize::buffers::{allocate_output_rgba, validate_resize_buffers},
+    resize::{
+        buffers::{allocate_output_rgba, validate_resize_buffers},
+        cpu_tiling::{process_row_bands, RowBand, RowBandTiling, DEFAULT_MAX_ROW_BAND_WORKERS},
+    },
 };
+
+const BILINEAR_ROW_BAND_TILING: RowBandTiling =
+    RowBandTiling::new(500_000, 128, DEFAULT_MAX_ROW_BAND_WORKERS);
 
 /// Resizes a tightly packed RGBA image with bilinear interpolation.
 ///
@@ -75,12 +81,43 @@ fn resize_same_width_bilinear_into(
         return Ok(());
     }
 
-    let row_byte_len = source_dimensions.width_usize()? * rgba::RGBA_CHANNEL_COUNT;
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
     let y_samples = prepare_axis_samples(source_dimensions.height(), output_dimensions.height())?;
 
-    for (output_y, y_sample) in y_samples.iter().enumerate() {
-        let output_row_offset = output_y * row_byte_len;
-        let output_row = &mut output_rgba[output_row_offset..output_row_offset + row_byte_len];
+    process_row_bands(
+        output_rgba,
+        output_width,
+        output_height,
+        BILINEAR_ROW_BAND_TILING,
+        |band, output_rows| {
+            resize_same_width_bilinear_rows_into(
+                source_rgba,
+                row_byte_len,
+                &y_samples,
+                band,
+                output_rows,
+            )
+        },
+    )
+}
+
+fn resize_same_width_bilinear_rows_into(
+    source_rgba: &[u8],
+    row_byte_len: usize,
+    y_samples: &[AxisSample],
+    band: RowBand,
+    output_rows: &mut [u8],
+) -> Result<(), ProcessingError> {
+    for (output_y, y_sample) in y_samples
+        .iter()
+        .enumerate()
+        .take(band.output_y_end)
+        .skip(band.output_y_start)
+    {
+        let local_row_offset = (output_y - band.output_y_start) * row_byte_len;
+        let output_row = &mut output_rows[local_row_offset..local_row_offset + row_byte_len];
         let top_row_offset = y_sample.lower * row_byte_len;
         let top_row = &source_rgba[top_row_offset..top_row_offset + row_byte_len];
 
@@ -123,26 +160,57 @@ fn resize_precomputed_bilinear_into(
         source_width,
     )?;
 
-    for (output_y, y_sample) in y_samples.iter().take(output_height).enumerate() {
-        let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
+    process_row_bands(
+        output_rgba,
+        output_width,
+        output_height,
+        BILINEAR_ROW_BAND_TILING,
+        |band, output_rows| {
+            resize_precomputed_bilinear_rows_into(
+                source_rgba,
+                output_width,
+                &x_samples,
+                &y_samples,
+                band,
+                output_rows,
+            )
+        },
+    )
+}
+
+fn resize_precomputed_bilinear_rows_into(
+    source_rgba: &[u8],
+    output_width: usize,
+    x_samples: &[ByteAxisSample],
+    y_samples: &[ByteAxisSample],
+    band: RowBand,
+    output_rows: &mut [u8],
+) -> Result<(), ProcessingError> {
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for (output_y, y_sample) in y_samples
+        .iter()
+        .enumerate()
+        .take(band.output_y_end)
+        .skip(band.output_y_start)
+    {
+        let local_row_offset = (output_y - band.output_y_start) * output_row_byte_len;
 
         for (output_x, x_sample) in x_samples.iter().take(output_width).enumerate() {
             let top_left_offset = y_sample.lower_byte_offset + x_sample.lower_byte_offset;
             let top_right_offset = y_sample.lower_byte_offset + x_sample.upper_byte_offset;
             let bottom_left_offset = y_sample.upper_byte_offset + x_sample.lower_byte_offset;
             let bottom_right_offset = y_sample.upper_byte_offset + x_sample.upper_byte_offset;
-            let output_offset = output_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT;
+            let output_offset = local_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT;
 
             for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                output_rgba[output_offset + channel] = interpolate_channel_by_weight(
+                output_rows[output_offset + channel] = interpolate_channel_by_weight(
                     source_rgba[top_left_offset + channel],
                     source_rgba[top_right_offset + channel],
                     source_rgba[bottom_left_offset + channel],
                     source_rgba[bottom_right_offset + channel],
-                    x_sample.weight_numerator,
-                    x_sample.denominator,
-                    y_sample.weight_numerator,
-                    y_sample.denominator,
+                    (x_sample.weight_numerator, x_sample.denominator),
+                    (y_sample.weight_numerator, y_sample.denominator),
                 );
             }
         }
@@ -360,10 +428,8 @@ fn interpolate_channel(
         top_right,
         bottom_left,
         bottom_right,
-        x_sample.weight_numerator,
-        x_sample.denominator,
-        y_sample.weight_numerator,
-        y_sample.denominator,
+        (x_sample.weight_numerator, x_sample.denominator),
+        (y_sample.weight_numerator, y_sample.denominator),
     )
 }
 
@@ -372,21 +438,21 @@ fn interpolate_channel_by_weight(
     top_right: u8,
     bottom_left: u8,
     bottom_right: u8,
-    x_weight_numerator: u64,
-    x_denominator: u64,
-    y_weight_numerator: u64,
-    y_denominator: u64,
+    x_weight: (u64, u64),
+    y_weight: (u64, u64),
 ) -> u8 {
-    let x_weight = u128::from(x_weight_numerator);
-    let y_weight = u128::from(y_weight_numerator);
-    let x_inverse = u128::from(x_denominator) - x_weight;
-    let y_inverse = u128::from(y_denominator) - y_weight;
+    let x_weight_numerator = u128::from(x_weight.0);
+    let y_weight_numerator = u128::from(y_weight.0);
+    let x_denominator = u128::from(x_weight.1);
+    let y_denominator = u128::from(y_weight.1);
+    let x_inverse = x_denominator - x_weight_numerator;
+    let y_inverse = y_denominator - y_weight_numerator;
 
     let weighted_sum = u128::from(top_left) * x_inverse * y_inverse
-        + u128::from(top_right) * x_weight * y_inverse
-        + u128::from(bottom_left) * x_inverse * y_weight
-        + u128::from(bottom_right) * x_weight * y_weight;
-    let denominator = u128::from(x_denominator) * u128::from(y_denominator);
+        + u128::from(top_right) * x_weight_numerator * y_inverse
+        + u128::from(bottom_left) * x_inverse * y_weight_numerator
+        + u128::from(bottom_right) * x_weight_numerator * y_weight_numerator;
+    let denominator = x_denominator * y_denominator;
 
     ((weighted_sum + denominator / 2) / denominator) as u8
 }
