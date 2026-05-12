@@ -315,6 +315,17 @@ fn should_tile_output(
 ) -> Result<bool, ProcessingError> {
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
+    let output_pixels =
+        output_width
+            .checked_mul(output_height)
+            .ok_or(ProcessingError::SizeOverflow {
+                context: "nearest tiling output pixel count",
+            })?;
+
+    if output_pixels < tiling.min_parallel_output_pixels {
+        return Ok(false);
+    }
+
     Ok(plan_row_bands(output_width, output_height, tiling).band_count > 1)
 }
 
