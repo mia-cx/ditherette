@@ -2,9 +2,10 @@ use crate::{error::ProcessingError, image::rgba};
 
 /// Default cap for row-band CPU tiling.
 ///
-/// We intentionally use at most half the available native parallelism and cap it
-/// at four workers so preview/export work does not monopolize the machine.
-pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 4;
+/// We intentionally use at most half the available native parallelism. The cap
+/// prevents absurd many-core hosts from turning one resize into a scheduler
+/// stress test while still letting normal workstations use their cores.
+pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 16;
 
 /// Default row-band policy for resize experiments.
 pub const DEFAULT_ROW_BAND_TILING: RowBandTiling =
