@@ -1,8 +1,9 @@
-#[cfg(not(feature = "tiling"))]
 use std::cell::RefCell;
 
 #[cfg(feature = "tiling")]
-use crate::resize::cpu_tiling::{process_row_bands, RowBand, DEFAULT_ROW_BAND_TILING};
+use crate::resize::cpu_tiling::{
+    plan_row_bands, process_row_bands, RowBand, DEFAULT_ROW_BAND_TILING,
+};
 use crate::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
@@ -88,7 +89,6 @@ pub fn resize_rgba_nearest_into(
     }
 }
 
-#[cfg(not(feature = "tiling"))]
 fn resize_rgba_nearest_scalar_after_fast_paths(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -136,6 +136,15 @@ fn resize_rgba_nearest_tiled_after_fast_paths(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
+    if !should_tile_output(output_dimensions)? {
+        return resize_rgba_nearest_scalar_after_fast_paths(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        );
+    }
+
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         return resize_exact_integer_downscale_tiled_into(
             source_rgba,
@@ -154,6 +163,13 @@ fn resize_rgba_nearest_tiled_after_fast_paths(
     let mut scratch = PrecomputedOffsetScratch::default();
     prepare_precomputed_offsets(source_dimensions, output_dimensions, &mut scratch)?;
     resize_precomputed_offsets_tiled_into(source_rgba, output_dimensions, output_rgba, &scratch)
+}
+
+#[cfg(feature = "tiling")]
+fn should_tile_output(output_dimensions: ImageDimensions) -> Result<bool, ProcessingError> {
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    Ok(plan_row_bands(output_width, output_height, DEFAULT_ROW_BAND_TILING).band_count > 1)
 }
 
 /// Straightforward reference implementation used by tests and benchmarks.
@@ -234,12 +250,10 @@ fn write_reference_resize(
 
 const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 8;
 
-#[cfg(not(feature = "tiling"))]
 thread_local! {
     static NEAREST_RESIZE_SCRATCH: RefCell<NearestResizeScratch> = RefCell::default();
 }
 
-#[cfg(not(feature = "tiling"))]
 #[derive(Default)]
 struct NearestResizeScratch {
     precomputed_offsets: PrecomputedOffsetScratch,
@@ -303,7 +317,6 @@ fn copy_same_width_rows(
     Ok(())
 }
 
-#[cfg(not(feature = "tiling"))]
 fn resize_exact_integer_downscale_word(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -410,7 +423,6 @@ fn resize_exact_integer_downscale_rows_into(
     }
 }
 
-#[cfg(not(feature = "tiling"))]
 fn resize_precomputed_offsets_word_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -553,7 +565,6 @@ fn prepare_precomputed_offsets(
     Ok(())
 }
 
-#[cfg(not(feature = "tiling"))]
 fn resize_span_copy_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,

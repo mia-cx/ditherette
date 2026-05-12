@@ -168,11 +168,12 @@ fn report_tiling_plan(
     );
 
     eprintln!(
-        "tiling {} {}x{} filter={} available_logical_threads={} worker_count={} band_count={} tile={}x{} min_rows_per_band={} min_parallel_output_pixels={} max_workers={}",
+        "tiling {} {}x{} filter={} enabled={} available_logical_threads={} worker_count={} band_count={} tile={}x{} min_rows_per_band={} min_parallel_output_pixels={} max_workers={}",
         scale.label,
         output_dimensions.width(),
         output_dimensions.height(),
         selected_filter.unwrap_or("all"),
+        plan.band_count > 1,
         plan.available_logical_threads,
         plan.worker_count,
         plan.band_count,
