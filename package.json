@@ -23,7 +23,7 @@
 		"bench:rust-bilinear": "node scripts/benchmark-rust-resize.mjs --kernel bilinear",
 		"bench:rust-filters": "node scripts/benchmark-rust-resize.mjs --kernel filters",
 		"bench:nearest": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest",
-		"bench:nearest:parallel": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest --cargo-feature parallel",
+		"bench:nearest:tiling": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest --cargo-feature tiling",
 		"bench:nearest:aa": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest_aa",
 		"bench:bilinear": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter bilinear",
 		"bench:trilinear": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter trilinear",

@@ -139,10 +139,8 @@ fn resize_precomputed_bilinear_into(
                     source_rgba[top_right_offset + channel],
                     source_rgba[bottom_left_offset + channel],
                     source_rgba[bottom_right_offset + channel],
-                    x_sample.weight_numerator,
-                    x_sample.denominator,
-                    y_sample.weight_numerator,
-                    y_sample.denominator,
+                    (x_sample.weight_numerator, x_sample.denominator),
+                    (y_sample.weight_numerator, y_sample.denominator),
                 );
             }
         }
@@ -360,10 +358,8 @@ fn interpolate_channel(
         top_right,
         bottom_left,
         bottom_right,
-        x_sample.weight_numerator,
-        x_sample.denominator,
-        y_sample.weight_numerator,
-        y_sample.denominator,
+        (x_sample.weight_numerator, x_sample.denominator),
+        (y_sample.weight_numerator, y_sample.denominator),
     )
 }
 
@@ -372,21 +368,21 @@ fn interpolate_channel_by_weight(
     top_right: u8,
     bottom_left: u8,
     bottom_right: u8,
-    x_weight_numerator: u64,
-    x_denominator: u64,
-    y_weight_numerator: u64,
-    y_denominator: u64,
+    x_weight: (u64, u64),
+    y_weight: (u64, u64),
 ) -> u8 {
-    let x_weight = u128::from(x_weight_numerator);
-    let y_weight = u128::from(y_weight_numerator);
-    let x_inverse = u128::from(x_denominator) - x_weight;
-    let y_inverse = u128::from(y_denominator) - y_weight;
+    let x_weight_numerator = u128::from(x_weight.0);
+    let y_weight_numerator = u128::from(y_weight.0);
+    let x_denominator = u128::from(x_weight.1);
+    let y_denominator = u128::from(y_weight.1);
+    let x_inverse = x_denominator - x_weight_numerator;
+    let y_inverse = y_denominator - y_weight_numerator;
 
     let weighted_sum = u128::from(top_left) * x_inverse * y_inverse
-        + u128::from(top_right) * x_weight * y_inverse
-        + u128::from(bottom_left) * x_inverse * y_weight
-        + u128::from(bottom_right) * x_weight * y_weight;
-    let denominator = u128::from(x_denominator) * u128::from(y_denominator);
+        + u128::from(top_right) * x_weight_numerator * y_inverse
+        + u128::from(bottom_left) * x_inverse * y_weight_numerator
+        + u128::from(bottom_right) * x_weight_numerator * y_weight_numerator;
+    let denominator = x_denominator * y_denominator;
 
     ((weighted_sum + denominator / 2) / denominator) as u8
 }

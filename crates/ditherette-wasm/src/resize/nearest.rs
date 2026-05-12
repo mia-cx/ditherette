@@ -1,5 +1,10 @@
+#[cfg(not(feature = "tiling"))]
 use std::cell::RefCell;
 
+#[cfg(feature = "tiling")]
+use crate::resize::cpu_tiling::{
+    process_row_bands, RowBand, RowBandTiling, DEFAULT_MAX_ROW_BAND_WORKERS,
+};
 use crate::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
@@ -64,6 +69,34 @@ pub fn resize_rgba_nearest_into(
         return Ok(());
     }
 
+    #[cfg(feature = "tiling")]
+    {
+        resize_rgba_nearest_tiled_after_fast_paths(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )
+    }
+
+    #[cfg(not(feature = "tiling"))]
+    {
+        resize_rgba_nearest_scalar_after_fast_paths(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )
+    }
+}
+
+#[cfg(not(feature = "tiling"))]
+fn resize_rgba_nearest_scalar_after_fast_paths(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         resize_exact_integer_downscale_word(
             source_rgba,
@@ -96,6 +129,33 @@ pub fn resize_rgba_nearest_into(
             &mut scratch.precomputed_offsets,
         )
     })
+}
+
+#[cfg(feature = "tiling")]
+fn resize_rgba_nearest_tiled_after_fast_paths(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    if is_exact_integer_downscale(source_dimensions, output_dimensions) {
+        return resize_exact_integer_downscale_tiled_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        );
+    }
+
+    if has_wide_source_x_spans(source_dimensions, output_dimensions)? {
+        let mut scratch = SpanCopyScratch::default();
+        prepare_span_copy_scratch(source_dimensions, output_dimensions, &mut scratch)?;
+        return resize_span_copy_tiled_into(source_rgba, output_dimensions, output_rgba, &scratch);
+    }
+
+    let mut scratch = PrecomputedOffsetScratch::default();
+    prepare_precomputed_offsets(source_dimensions, output_dimensions, &mut scratch)?;
+    resize_precomputed_offsets_tiled_into(source_rgba, output_dimensions, output_rgba, &scratch)
 }
 
 /// Straightforward reference implementation used by tests and benchmarks.
@@ -175,11 +235,16 @@ fn write_reference_resize(
 }
 
 const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 8;
+#[cfg(feature = "tiling")]
+const NEAREST_ROW_BAND_TILING: RowBandTiling =
+    RowBandTiling::new(1_000_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
 
+#[cfg(not(feature = "tiling"))]
 thread_local! {
     static NEAREST_RESIZE_SCRATCH: RefCell<NearestResizeScratch> = RefCell::default();
 }
 
+#[cfg(not(feature = "tiling"))]
 #[derive(Default)]
 struct NearestResizeScratch {
     precomputed_offsets: PrecomputedOffsetScratch,
@@ -192,6 +257,15 @@ struct PrecomputedOffsetScratch {
     output_dimensions: Option<ImageDimensions>,
     source_row_byte_offsets: Vec<usize>,
     source_x_byte_offsets: Vec<usize>,
+}
+
+#[cfg(feature = "tiling")]
+struct ExactIntegerDownscalePlan {
+    source_row_byte_len: usize,
+    output_width: usize,
+    y_step: usize,
+    first_source_x_byte_offset: usize,
+    source_x_byte_step: usize,
 }
 
 #[derive(Default)]
@@ -234,6 +308,7 @@ fn copy_same_width_rows(
     Ok(())
 }
 
+#[cfg(not(feature = "tiling"))]
 fn resize_exact_integer_downscale_word(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -279,6 +354,68 @@ fn resize_exact_integer_downscale_word(
     Ok(())
 }
 
+#[cfg(feature = "tiling")]
+fn resize_exact_integer_downscale_tiled_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let x_step = source_dimensions.width_usize()? / output_width;
+    let y_step = source_dimensions.height_usize()? / output_height;
+    let plan = ExactIntegerDownscalePlan {
+        source_row_byte_len: source_width * rgba::RGBA_CHANNEL_COUNT,
+        output_width,
+        y_step,
+        first_source_x_byte_offset: x_step / 2 * rgba::RGBA_CHANNEL_COUNT,
+        source_x_byte_step: x_step * rgba::RGBA_CHANNEL_COUNT,
+    };
+
+    process_row_bands(
+        output_rgba,
+        output_width,
+        output_height,
+        NEAREST_ROW_BAND_TILING,
+        |band, output_rows| {
+            resize_exact_integer_downscale_rows_into(source_rgba, &plan, band, output_rows);
+            Ok(())
+        },
+    )
+}
+
+#[cfg(feature = "tiling")]
+fn resize_exact_integer_downscale_rows_into(
+    source_rgba: &[u8],
+    plan: &ExactIntegerDownscalePlan,
+    band: RowBand,
+    output_rows: &mut [u8],
+) {
+    let output_row_byte_len = plan.output_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for output_y in band.output_y_start..band.output_y_end {
+        let source_y = output_y * plan.y_step + plan.y_step / 2;
+        let source_row_offset = source_y * plan.source_row_byte_len;
+        let local_output_row_offset = (output_y - band.output_y_start) * output_row_byte_len;
+        let mut source_x_offset = plan.first_source_x_byte_offset;
+        let mut output_offset = local_output_row_offset;
+
+        for _ in 0..plan.output_width {
+            copy_pixel_word(
+                source_rgba,
+                source_row_offset + source_x_offset,
+                output_rows,
+                output_offset,
+            );
+            source_x_offset += plan.source_x_byte_step;
+            output_offset += rgba::RGBA_CHANNEL_COUNT;
+        }
+    }
+}
+
+#[cfg(not(feature = "tiling"))]
 fn resize_precomputed_offsets_word_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -312,6 +449,66 @@ fn resize_precomputed_offsets_word_into(
     }
 
     Ok(())
+}
+
+#[cfg(feature = "tiling")]
+fn resize_precomputed_offsets_tiled_into(
+    source_rgba: &[u8],
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    scratch: &PrecomputedOffsetScratch,
+) -> Result<(), ProcessingError> {
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+
+    process_row_bands(
+        output_rgba,
+        output_width,
+        output_height,
+        NEAREST_ROW_BAND_TILING,
+        |band, output_rows| {
+            resize_precomputed_offset_rows_into(
+                source_rgba,
+                output_width,
+                &scratch.source_row_byte_offsets,
+                &scratch.source_x_byte_offsets,
+                band,
+                output_rows,
+            );
+            Ok(())
+        },
+    )
+}
+
+#[cfg(feature = "tiling")]
+fn resize_precomputed_offset_rows_into(
+    source_rgba: &[u8],
+    output_width: usize,
+    source_row_byte_offsets: &[usize],
+    source_x_byte_offsets: &[usize],
+    band: RowBand,
+    output_rows: &mut [u8],
+) {
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for (output_y, source_row_offset) in source_row_byte_offsets
+        .iter()
+        .copied()
+        .enumerate()
+        .take(band.output_y_end)
+        .skip(band.output_y_start)
+    {
+        let local_output_row_offset = (output_y - band.output_y_start) * output_row_byte_len;
+
+        for (output_x, source_x_offset) in source_x_byte_offsets.iter().copied().enumerate() {
+            copy_pixel_word(
+                source_rgba,
+                source_row_offset + source_x_offset,
+                output_rows,
+                local_output_row_offset + output_x * rgba::RGBA_CHANNEL_COUNT,
+            );
+        }
+    }
 }
 
 fn prepare_precomputed_offsets(
@@ -361,6 +558,7 @@ fn prepare_precomputed_offsets(
     Ok(())
 }
 
+#[cfg(not(feature = "tiling"))]
 fn resize_span_copy_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -384,6 +582,56 @@ fn resize_span_copy_into(
     }
 
     Ok(())
+}
+
+#[cfg(feature = "tiling")]
+fn resize_span_copy_tiled_into(
+    source_rgba: &[u8],
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    scratch: &SpanCopyScratch,
+) -> Result<(), ProcessingError> {
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+
+    process_row_bands(
+        output_rgba,
+        output_width,
+        output_height,
+        NEAREST_ROW_BAND_TILING,
+        |band, output_rows| {
+            resize_span_copy_rows_into(source_rgba, output_width, scratch, band, output_rows);
+            Ok(())
+        },
+    )
+}
+
+#[cfg(feature = "tiling")]
+fn resize_span_copy_rows_into(
+    source_rgba: &[u8],
+    output_width: usize,
+    scratch: &SpanCopyScratch,
+    band: RowBand,
+    output_rows: &mut [u8],
+) {
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for (output_y, source_row_offset) in scratch
+        .source_row_byte_offsets
+        .iter()
+        .copied()
+        .enumerate()
+        .take(band.output_y_end)
+        .skip(band.output_y_start)
+    {
+        let local_output_row_offset = (output_y - band.output_y_start) * output_row_byte_len;
+        for span in &scratch.source_x_copy_spans {
+            let source_start = source_row_offset + span.source_x_byte_offset;
+            let output_start = local_output_row_offset + span.output_x_byte_offset;
+            output_rows[output_start..output_start + span.byte_len]
+                .copy_from_slice(&source_rgba[source_start..source_start + span.byte_len]);
+        }
+    }
 }
 
 fn prepare_span_copy_scratch(
