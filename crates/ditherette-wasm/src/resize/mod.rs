@@ -1,9 +1,14 @@
 //! Image resize algorithms.
 
+/// Small box-filter antialiasing helpers.
 pub mod antialias;
+/// Exact area resampling for coverage-preserving resize.
 pub mod area;
+/// Bicubic RGBA resize filter.
 pub mod bicubic;
+/// Bilinear RGBA resize filter.
 pub mod bilinear;
+/// Box-filter resize, implemented as the area filter.
 pub mod r#box;
 mod buffers;
 mod convolution;
@@ -12,16 +17,22 @@ mod convolution_reference;
 #[doc(hidden)]
 pub mod cpu_tiling;
 mod lanczos;
+/// Lanczos2 RGBA resize filter.
 pub mod lanczos2;
+/// Scale-aware Lanczos2 RGBA resize filter.
 pub mod lanczos2_scale_aware;
+/// Lanczos3 RGBA resize filter.
 pub mod lanczos3;
+/// Scale-aware Lanczos3 RGBA resize filter.
 pub mod lanczos3_scale_aware;
+/// Nearest-neighbor RGBA resize filter.
 pub mod nearest;
 mod reference;
 mod scalar;
 mod shared;
 #[cfg(feature = "tiling")]
 mod tiling;
+/// Trilinear RGBA resize filter.
 pub mod trilinear;
 
 pub use antialias::{antialias_rgba_box3, antialias_rgba_box3_into};
