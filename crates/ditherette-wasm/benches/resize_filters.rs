@@ -3,7 +3,8 @@ use std::{env, hint::black_box, path::PathBuf, sync::OnceLock};
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
 #[cfg(feature = "tiling")]
 use ditherette_wasm::resize::{
-    cpu_tiling::{plan_row_bands, DEFAULT_ROW_BAND_TILING},
+    area::AREA_ROW_BAND_TILING,
+    cpu_tiling::{plan_row_bands, RowBandTiling, DEFAULT_ROW_BAND_TILING},
     nearest::nearest_tiling_plan,
 };
 use ditherette_wasm::{
@@ -170,20 +171,17 @@ fn report_tiling_plan(
     output_dimensions: ImageDimensions,
     selected_filter: Option<&str>,
 ) {
+    let tiling = reported_tiling_config(selected_filter);
     let plan = plan_row_bands(
         output_dimensions.width() as usize,
         output_dimensions.height() as usize,
-        DEFAULT_ROW_BAND_TILING,
+        tiling,
     );
 
     let enabled = if matches!(selected_filter, Some("nearest")) {
-        nearest_tiling_plan(
-            source_dimensions,
-            output_dimensions,
-            DEFAULT_ROW_BAND_TILING,
-        )
-        .unwrap()
-        .is_some()
+        nearest_tiling_plan(source_dimensions, output_dimensions, tiling)
+            .unwrap()
+            .is_some()
     } else {
         plan.band_count > 1
     };
@@ -205,6 +203,15 @@ fn report_tiling_plan(
         plan.min_pixels_per_band,
         plan.max_workers,
     );
+}
+
+#[cfg(feature = "tiling")]
+fn reported_tiling_config(selected_filter: Option<&str>) -> RowBandTiling {
+    if matches!(selected_filter, Some("area")) {
+        AREA_ROW_BAND_TILING
+    } else {
+        DEFAULT_ROW_BAND_TILING
+    }
 }
 
 #[cfg(not(feature = "tiling"))]
