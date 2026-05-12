@@ -32,8 +32,6 @@ pub fn resize_rgba_area_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Represent coverage weights as fixed-point integers. This keeps
-    // output deterministic and avoids f64 multiplies in the resize hot path.
     // TODO(perf): Add row-band tiling once the scalar area kernel is optimized;
     // large downscales have independent output rows and should amortize
     // scheduling better than nearest's tiny kernels.
