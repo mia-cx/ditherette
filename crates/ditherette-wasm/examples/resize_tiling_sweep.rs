@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let scalar_median = scalar_case.stats.median;
         cases.push(scalar_case);
 
-        let one_band_config = RowBandTiling::new(usize::MAX, MIN_ROWS_PER_BAND, 1);
+        let one_band_config = RowBandTiling::new(usize::MAX, usize::MAX, MIN_ROWS_PER_BAND, 1);
         cases.push(measure_case(
             &fixture,
             CaseConfig {
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for max_workers in MAX_WORKERS {
             for min_pixels_per_band in MIN_PIXELS_PER_BAND {
                 let config =
-                    RowBandTiling::new(min_pixels_per_band, MIN_ROWS_PER_BAND, max_workers);
+                    RowBandTiling::new(0, min_pixels_per_band, MIN_ROWS_PER_BAND, max_workers);
                 cases.push(measure_case(
                     &fixture,
                     CaseConfig {
@@ -198,7 +198,9 @@ fn run_resize(
 }
 
 fn print_table(cases: &[SweepCase]) {
-    println!("scale\tsize\tmode\tmax_workers\tminpix\tworkers\tbands\ttile\tmedian\tp75\tspeedup");
+    println!(
+        "scale\tsize\tmode\tmax_workers\tmin_band_px\tworkers\tbands\ttile\tmedian\tp75\tspeedup"
+    );
 
     for case in cases {
         let config = case.config;
@@ -211,7 +213,7 @@ fn print_table(cases: &[SweepCase]) {
             case.mode,
             config.map_or("—".to_string(), |config| config.max_workers.to_string()),
             config.map_or("—".to_string(), |config| config
-                .min_parallel_output_pixels
+                .min_pixels_per_band
                 .to_string()),
             plan.map_or("—".to_string(), |plan| plan.worker_count.to_string()),
             plan.map_or("—".to_string(), |plan| plan.band_count.to_string()),
@@ -280,8 +282,13 @@ fn write_case_json(file: &mut File, case: &SweepCase, is_last: bool) -> io::Resu
         writeln!(file, "      \"maxWorkers\": {},", config.max_workers)?;
         writeln!(
             file,
-            "      \"minPixelsPerBand\": {},",
+            "      \"minParallelOutputPixels\": {},",
             config.min_parallel_output_pixels
+        )?;
+        writeln!(
+            file,
+            "      \"minPixelsPerBand\": {},",
+            config.min_pixels_per_band
         )?;
         writeln!(
             file,
@@ -290,6 +297,7 @@ fn write_case_json(file: &mut File, case: &SweepCase, is_last: bool) -> io::Resu
         )?;
     } else {
         writeln!(file, "      \"maxWorkers\": null,")?;
+        writeln!(file, "      \"minParallelOutputPixels\": null,")?;
         writeln!(file, "      \"minPixelsPerBand\": null,")?;
         writeln!(file, "      \"minRowsPerBand\": null,")?;
     }
