@@ -35,8 +35,6 @@ pub fn resize_rgba_area_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Reuse area scratch state across calls like nearest does. The
-    // coverage vectors are shape-specific and currently allocate on every resize.
     resize_rgba_area_reference_into(
         source_rgba,
         source_dimensions,
