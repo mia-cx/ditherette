@@ -94,7 +94,6 @@ pub(crate) fn resize_rgba_nearest_scalar_after_fast_paths(
             );
         }
 
-        // TODO(perf): Revisit SIMD once broader resize/dither kernels are in place.
         resize_precomputed_offsets_word_into(
             source_rgba,
             source_dimensions,
@@ -219,7 +218,7 @@ fn resize_exact_integer_downscale_word(
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
-    let x_step = source_dimensions.width_usize()? / output_width;
+    let x_step = source_width / output_width;
     let y_step = source_dimensions.height_usize()? / output_height;
     let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
@@ -515,8 +514,6 @@ pub(crate) fn map_output_coordinate(
     source_size: u32,
     output_size: u32,
 ) -> usize {
-    // TODO(perf): For hot loops that cannot precompute offsets, use an
-    // incremental Bresenham-style mapper to avoid per-pixel division.
     let mapped = (((2 * output_coordinate as u64 + 1) * u64::from(source_size))
         / (2 * u64::from(output_size))) as usize;
 
