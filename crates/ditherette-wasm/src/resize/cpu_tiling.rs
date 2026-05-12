@@ -3,13 +3,13 @@ use crate::{error::ProcessingError, image::rgba};
 /// Default cap for row-band CPU tiling.
 ///
 /// We intentionally use at most half the available native parallelism. The cap
-/// prevents absurd many-core hosts from turning one resize into a scheduler
-/// stress test while still letting normal workstations use their cores.
-pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 16;
+/// keeps nearest-neighbor resize at the stable scaling knee instead of chasing
+/// noisy wins from extra workers.
+pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 8;
 
 /// Default row-band policy for resize experiments.
 pub const DEFAULT_ROW_BAND_TILING: RowBandTiling =
-    RowBandTiling::new(1_000_000, 250_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
+    RowBandTiling::new(1_000_000, 256_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
 
 /// Configuration for splitting output rows into CPU work bands.
 #[derive(Debug, Clone, Copy)]
@@ -115,7 +115,7 @@ pub fn plan_row_bands(
     let available_logical_threads = available_logical_threads();
     let worker_count = worker_count(available_logical_threads, config.max_workers);
     let output_pixels = output_width.saturating_mul(output_height);
-    let useful_bands_by_rows = output_height.div_ceil(min_rows_per_band).max(1);
+    let useful_bands_by_rows = (output_height / min_rows_per_band).max(1);
     let useful_bands_by_pixels = output_pixels
         .checked_div(config.min_pixels_per_band.max(1))
         .unwrap_or(usize::MAX)
