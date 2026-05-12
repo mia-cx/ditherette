@@ -24,10 +24,6 @@ wasm-bindgen-test = "0.3"
 criterion = { version = "0.7", features = ["html_reports"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
-[[example]]
-name = "resize_tiling_sweep"
-required-features = ["tiling"]
-
 [[bench]]
 name = "resize_nearest"
 harness = false

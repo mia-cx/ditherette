@@ -24,8 +24,6 @@
 		"bench:rust-filters": "node scripts/benchmark-rust-resize.mjs --kernel filters",
 		"bench:nearest": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest",
 		"bench:nearest:tiling": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest --cargo-feature tiling",
-		"bench:nearest:tiling-sweep": "cargo run --release --manifest-path crates/ditherette-wasm/Cargo.toml --features tiling --example resize_tiling_sweep -- --filter nearest",
-		"bench:area:tiling-sweep": "cargo run --release --manifest-path crates/ditherette-wasm/Cargo.toml --features tiling --example resize_tiling_sweep -- --filter area",
 		"bench:row-band-tiling": "cargo bench --manifest-path crates/ditherette-wasm/Cargo.toml --features tiling --bench row_band_tiling",
 		"bench:area-resampling": "cargo bench --manifest-path crates/ditherette-wasm/Cargo.toml --bench area_resampling",
 		"bench:nearest:aa": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest_aa",
