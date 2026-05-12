@@ -45,6 +45,11 @@ pub fn resize_rgba_area_into(
     // TODO(perf): Special-case pure downscale vs upscale. Area is most useful for
     // minification; for enlargement, bilinear/nearest may be better behind a
     // compatibility API.
+    // TODO(perf): Add row-band tiling once the scalar area kernel is optimized;
+    // large downscales have independent output rows and should amortize
+    // scheduling better than nearest's tiny kernels.
+    // TODO(perf): Reuse area scratch state across calls like nearest does. The
+    // coverage vectors are shape-specific and currently allocate on every resize.
     resize_rgba_area_reference_into(
         source_rgba,
         source_dimensions,
@@ -96,10 +101,14 @@ pub fn resize_rgba_area_reference_into(
     let y_coverages =
         prepare_axis_coverages(source_dimensions.height(), output_dimensions.height())?;
 
+    // TODO(perf): Precompute output row byte offsets or advance a running row
+    // pointer. `pixel_byte_offset` repeats a multiply for every output pixel.
     for (output_y, y_coverage) in y_coverages.iter().enumerate() {
         for (output_x, x_coverage) in x_coverages.iter().enumerate() {
             let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
 
+            // TODO(perf): Write RGBA in one footprint walk. Four channel calls
+            // reread the same source offsets and coverage weights.
             for channel in 0..rgba::RGBA_CHANNEL_COUNT {
                 output_rgba[output_offset + channel] =
                     area_channel(source_rgba, source_width, x_coverage, y_coverage, channel);
@@ -135,6 +144,10 @@ fn prepare_axis_coverages(
     let scale = f64::from(source_size) / f64::from(output_size);
     let mut coverages = Vec::with_capacity(output_len);
 
+    // TODO(perf): Store coverage samples in a flat Vec plus per-output ranges
+    // instead of one Vec allocation per output coordinate.
+    // TODO(perf): For integer downscale ratios, skip coverage construction and
+    // generate fixed contiguous ranges with equal weights.
     for output_coordinate in 0..output_len {
         let start = output_coordinate as f64 * scale;
         let end = (output_coordinate + 1) as f64 * scale;
@@ -143,6 +156,10 @@ fn prepare_axis_coverages(
         let mut samples = Vec::new();
         let mut total_weight = 0.0;
 
+        // TODO(perf): Reserve the exact footprint length here; repeated sample
+        // pushes can reallocate for large minification ratios.
+        // TODO(perf): Increment start/end coverage with integer recurrence
+        // instead of recomputing floor/ceil and f64 bounds for every output.
         for source_coordinate in first_source..last_source_exclusive.min(source_len) {
             let source_start = source_coordinate as f64;
             let source_end = source_start + 1.0;
@@ -178,9 +195,13 @@ fn area_channel(
     let mut weighted_sum = 0.0;
 
     for y_sample in &y_coverage.samples {
+        // TODO(perf): Compute the source row base once per y sample, then add
+        // x byte offsets. `pixel_byte_offset` repeats row math for every sample.
         for x_sample in &x_coverage.samples {
             let source_offset =
                 rgba::pixel_byte_offset(source_width, x_sample.index, y_sample.index);
+            // TODO(perf): Precompute combined x*y weights for repeated channel
+            // use, or precompute x byte offsets and y row offsets separately.
             weighted_sum +=
                 f64::from(source_rgba[source_offset + channel]) * x_sample.weight * y_sample.weight;
         }
