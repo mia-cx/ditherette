@@ -91,7 +91,7 @@ fn resize_exact_integer_downscale_tiled_into(
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
-    let x_step = source_dimensions.width_usize()? / output_width;
+    let x_step = source_width / output_width;
     let y_step = source_dimensions.height_usize()? / output_dimensions.height_usize()?;
     let plan = ExactIntegerDownscalePlan {
         source_row_byte_len: source_width * rgba::RGBA_CHANNEL_COUNT,
