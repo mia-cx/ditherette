@@ -9,7 +9,7 @@ use std::{
 use ditherette_wasm::{
     image::{rgba, ImageDimensions},
     resize::{
-        cpu_tiling::{plan_row_bands, RowBandPlan, RowBandTiling},
+        cpu_tiling::{plan_row_bands, RowBandPlan, RowBandTiling, DEFAULT_ROW_BAND_TILING},
         nearest::{
             resize_rgba_nearest_scalar_into, resize_rgba_nearest_with_forced_tiling_into,
             resize_rgba_nearest_with_tiling_into,
@@ -53,20 +53,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for scale in SCALES {
         let output_dimensions = scale.dimensions_for(fixture.dimensions);
         let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions)?;
-        let scalar_case = measure_case(
+        let no_tiling_case = measure_case(
             &fixture,
             CaseConfig {
                 scale,
                 output_dimensions,
                 output_byte_len,
-                mode: SweepMode::Scalar,
+                mode: SweepMode::NoTiling,
                 tiling: None,
+                baseline_median: None,
                 iterations,
                 warmup_iterations,
             },
         )?;
-        let scalar_median = scalar_case.stats.median;
-        cases.push(scalar_case);
+        let no_tiling_median = no_tiling_case.stats.median;
+        cases.push(no_tiling_case);
+
+        cases.push(measure_case(
+            &fixture,
+            CaseConfig {
+                scale,
+                output_dimensions,
+                output_byte_len,
+                mode: SweepMode::DefaultTiling,
+                tiling: Some(DEFAULT_ROW_BAND_TILING),
+                baseline_median: Some(no_tiling_median),
+                iterations,
+                warmup_iterations,
+            },
+        )?);
 
         let one_band_config = RowBandTiling::new(usize::MAX, usize::MAX, MIN_ROWS_PER_BAND, 1);
         cases.push(measure_case(
@@ -77,6 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 output_byte_len,
                 mode: SweepMode::ForcedOneBand,
                 tiling: Some(one_band_config),
+                baseline_median: Some(no_tiling_median),
                 iterations,
                 warmup_iterations,
             },
@@ -92,8 +108,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         scale,
                         output_dimensions,
                         output_byte_len,
-                        mode: SweepMode::Tiling { scalar_median },
+                        mode: SweepMode::CustomTiling,
                         tiling: Some(config),
+                        baseline_median: Some(no_tiling_median),
                         iterations,
                         warmup_iterations,
                     },
@@ -147,10 +164,9 @@ fn measure_case(
     }
 
     let stats = Stats::from_timings(&timings);
-    let speedup_vs_scalar = config
-        .mode
-        .scalar_median()
-        .map(|scalar_median| scalar_median as f64 / stats.median as f64);
+    let speedup_vs_no_tiling = config
+        .baseline_median
+        .map(|baseline_median| baseline_median as f64 / stats.median as f64);
 
     Ok(SweepCase {
         scale: config.scale,
@@ -160,7 +176,7 @@ fn measure_case(
         plan,
         timings,
         stats,
-        speedup_vs_scalar,
+        speedup_vs_no_tiling,
     })
 }
 
@@ -172,7 +188,7 @@ fn run_resize(
     config: Option<RowBandTiling>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
-        SweepMode::Scalar => resize_rgba_nearest_scalar_into(
+        SweepMode::NoTiling => resize_rgba_nearest_scalar_into(
             black_box(&fixture.rgba),
             fixture.dimensions,
             output_dimensions,
@@ -185,7 +201,7 @@ fn run_resize(
             black_box(output_rgba),
             config.expect("forced one-band case should provide tiling config"),
         )?,
-        SweepMode::Tiling { .. } => resize_rgba_nearest_with_tiling_into(
+        SweepMode::DefaultTiling | SweepMode::CustomTiling => resize_rgba_nearest_with_tiling_into(
             black_box(&fixture.rgba),
             fixture.dimensions,
             output_dimensions,
@@ -199,7 +215,7 @@ fn run_resize(
 
 fn print_table(cases: &[SweepCase]) {
     println!(
-        "scale\tsize\tmode\tmax_workers\tmin_band_px\tworkers\tbands\ttile\tmedian\tp75\tspeedup"
+        "scale\tsize\tmode\tmax_workers\tmin_band_px\tworkers\tbands\ttile\tmedian\tp75\tspeedup_vs_no_tiling"
     );
 
     for case in cases {
@@ -225,7 +241,7 @@ fn print_table(cases: &[SweepCase]) {
                 .to_string()),
             format_duration(case.stats.median),
             format_duration(case.stats.p75),
-            case.speedup_vs_scalar
+            case.speedup_vs_no_tiling
                 .map_or("—".to_string(), |speedup| format!("{speedup:.3}×")),
         );
     }
@@ -327,9 +343,9 @@ fn write_case_json(file: &mut File, case: &SweepCase, is_last: bool) -> io::Resu
         case.stats.min,
         case.stats.max,
     )?;
-    match case.speedup_vs_scalar {
-        Some(speedup) => writeln!(file, "      \"speedupVsScalar\": {speedup:.6}")?,
-        None => writeln!(file, "      \"speedupVsScalar\": null")?,
+    match case.speedup_vs_no_tiling {
+        Some(speedup) => writeln!(file, "      \"speedupVsNoTiling\": {speedup:.6}")?,
+        None => writeln!(file, "      \"speedupVsNoTiling\": null")?,
     }
     write!(file, "    }}")?;
     if !is_last {
@@ -359,30 +375,26 @@ struct CaseConfig {
     output_byte_len: usize,
     mode: SweepMode,
     tiling: Option<RowBandTiling>,
+    baseline_median: Option<u64>,
     iterations: usize,
     warmup_iterations: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum SweepMode {
-    Scalar,
+    NoTiling,
+    DefaultTiling,
     ForcedOneBand,
-    Tiling { scalar_median: u64 },
+    CustomTiling,
 }
 
 impl SweepMode {
     fn name(self) -> &'static str {
         match self {
-            Self::Scalar => "scalar",
+            Self::NoTiling => "no-tiling",
+            Self::DefaultTiling => "default-tiling",
             Self::ForcedOneBand => "forced-one-band",
-            Self::Tiling { .. } => "tiling",
-        }
-    }
-
-    fn scalar_median(self) -> Option<u64> {
-        match self {
-            Self::Scalar | Self::ForcedOneBand => None,
-            Self::Tiling { scalar_median } => Some(scalar_median),
+            Self::CustomTiling => "tiling",
         }
     }
 }
@@ -396,7 +408,7 @@ struct SweepCase {
     plan: Option<RowBandPlan>,
     timings: Vec<u64>,
     stats: Stats,
-    speedup_vs_scalar: Option<f64>,
+    speedup_vs_no_tiling: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy)]
