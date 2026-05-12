@@ -336,8 +336,12 @@ fn write_area_rows<R>(
 
 #[derive(Debug)]
 struct AxisCoverage {
+    // TODO(perf): Represent coverage as leading/trailing partial samples plus an
+    // interior full-weight range. This may avoid one f64 multiply per fully
+    // covered source pixel on heavy downscales while preserving exact fractional
+    // edge handling. Benchmark with `pnpm bench:area` before accepting.
     samples: Vec<WeightedSourceIndex>,
-    total_weight: f64,
+    inverse_total_weight: f64,
 }
 
 #[derive(Debug)]
@@ -386,7 +390,7 @@ fn prepare_axis_coverages(
 
         coverages.push(AxisCoverage {
             samples,
-            total_weight,
+            inverse_total_weight: 1.0 / total_weight,
         });
     }
 
@@ -417,11 +421,11 @@ fn write_area_pixel(
         }
     }
 
-    let total_weight = x_coverage.total_weight * y_coverage.total_weight;
-    output_pixel[0] = round_channel(weighted_sums[0] / total_weight);
-    output_pixel[1] = round_channel(weighted_sums[1] / total_weight);
-    output_pixel[2] = round_channel(weighted_sums[2] / total_weight);
-    output_pixel[3] = round_channel(weighted_sums[3] / total_weight);
+    let inverse_total_weight = x_coverage.inverse_total_weight * y_coverage.inverse_total_weight;
+    output_pixel[0] = round_channel(weighted_sums[0] * inverse_total_weight);
+    output_pixel[1] = round_channel(weighted_sums[1] * inverse_total_weight);
+    output_pixel[2] = round_channel(weighted_sums[2] * inverse_total_weight);
+    output_pixel[3] = round_channel(weighted_sums[3] * inverse_total_weight);
 }
 
 fn round_channel(value: f64) -> u8 {
