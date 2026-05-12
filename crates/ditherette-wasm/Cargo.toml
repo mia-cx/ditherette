@@ -45,6 +45,10 @@ name = "row_band_tiling"
 harness = false
 required-features = ["tiling"]
 
+[[bench]]
+name = "area_resampling"
+harness = false
+
 [profile.release]
 opt-level = "s"
 
