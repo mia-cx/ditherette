@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 #[cfg(feature = "tiling")]
 use crate::resize::cpu_tiling::{
-    plan_row_bands, process_row_bands, RowBand, DEFAULT_ROW_BAND_TILING,
+    plan_row_bands, process_row_bands, RowBand, RowBandTiling, DEFAULT_ROW_BAND_TILING,
 };
 use crate::{
     error::ProcessingError,
@@ -70,11 +70,13 @@ pub fn resize_rgba_nearest_into(
 
     #[cfg(feature = "tiling")]
     {
-        resize_rgba_nearest_tiled_after_fast_paths(
+        resize_rgba_nearest_with_tiling_after_fast_paths(
             source_rgba,
             source_dimensions,
             output_dimensions,
             output_rgba,
+            DEFAULT_ROW_BAND_TILING,
+            TilingFallback::ScalarWhenSingleBand,
         )
     }
 
@@ -130,13 +132,141 @@ fn resize_rgba_nearest_scalar_after_fast_paths(
 }
 
 #[cfg(feature = "tiling")]
-fn resize_rgba_nearest_tiled_after_fast_paths(
+#[doc(hidden)]
+pub fn resize_rgba_nearest_scalar_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    if !should_tile_output(output_dimensions)? {
+    validate_resize_buffers(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )?;
+
+    if source_dimensions == output_dimensions {
+        output_rgba.copy_from_slice(source_rgba);
+        return Ok(());
+    }
+
+    if source_dimensions.width() == output_dimensions.width() {
+        copy_same_width_rows(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )?;
+        return Ok(());
+    }
+
+    resize_rgba_nearest_scalar_after_fast_paths(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_nearest_with_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: RowBandTiling,
+) -> Result<(), ProcessingError> {
+    resize_rgba_nearest_with_tiling(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        tiling,
+        TilingFallback::ScalarWhenSingleBand,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_nearest_with_forced_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: RowBandTiling,
+) -> Result<(), ProcessingError> {
+    resize_rgba_nearest_with_tiling(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        tiling,
+        TilingFallback::AlwaysUseTilingAdapter,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[derive(Debug, Clone, Copy)]
+enum TilingFallback {
+    ScalarWhenSingleBand,
+    AlwaysUseTilingAdapter,
+}
+
+#[cfg(feature = "tiling")]
+fn resize_rgba_nearest_with_tiling(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: RowBandTiling,
+    fallback: TilingFallback,
+) -> Result<(), ProcessingError> {
+    validate_resize_buffers(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )?;
+
+    if source_dimensions == output_dimensions {
+        output_rgba.copy_from_slice(source_rgba);
+        return Ok(());
+    }
+
+    if source_dimensions.width() == output_dimensions.width() {
+        copy_same_width_rows(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )?;
+        return Ok(());
+    }
+
+    resize_rgba_nearest_with_tiling_after_fast_paths(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        tiling,
+        fallback,
+    )
+}
+
+#[cfg(feature = "tiling")]
+fn resize_rgba_nearest_with_tiling_after_fast_paths(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: RowBandTiling,
+    fallback: TilingFallback,
+) -> Result<(), ProcessingError> {
+    if matches!(fallback, TilingFallback::ScalarWhenSingleBand)
+        && !should_tile_output(output_dimensions, tiling)?
+    {
         return resize_rgba_nearest_scalar_after_fast_paths(
             source_rgba,
             source_dimensions,
@@ -151,25 +281,41 @@ fn resize_rgba_nearest_tiled_after_fast_paths(
             source_dimensions,
             output_dimensions,
             output_rgba,
+            tiling,
         );
     }
 
     if has_wide_source_x_spans(source_dimensions, output_dimensions)? {
         let mut scratch = SpanCopyScratch::default();
         prepare_span_copy_scratch(source_dimensions, output_dimensions, &mut scratch)?;
-        return resize_span_copy_tiled_into(source_rgba, output_dimensions, output_rgba, &scratch);
+        return resize_span_copy_tiled_into(
+            source_rgba,
+            output_dimensions,
+            output_rgba,
+            &scratch,
+            tiling,
+        );
     }
 
     let mut scratch = PrecomputedOffsetScratch::default();
     prepare_precomputed_offsets(source_dimensions, output_dimensions, &mut scratch)?;
-    resize_precomputed_offsets_tiled_into(source_rgba, output_dimensions, output_rgba, &scratch)
+    resize_precomputed_offsets_tiled_into(
+        source_rgba,
+        output_dimensions,
+        output_rgba,
+        &scratch,
+        tiling,
+    )
 }
 
 #[cfg(feature = "tiling")]
-fn should_tile_output(output_dimensions: ImageDimensions) -> Result<bool, ProcessingError> {
+fn should_tile_output(
+    output_dimensions: ImageDimensions,
+    tiling: RowBandTiling,
+) -> Result<bool, ProcessingError> {
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
-    Ok(plan_row_bands(output_width, output_height, DEFAULT_ROW_BAND_TILING).band_count > 1)
+    Ok(plan_row_bands(output_width, output_height, tiling).band_count > 1)
 }
 
 /// Straightforward reference implementation used by tests and benchmarks.
@@ -368,6 +514,7 @@ fn resize_exact_integer_downscale_tiled_into(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
+    tiling: RowBandTiling,
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
@@ -386,7 +533,7 @@ fn resize_exact_integer_downscale_tiled_into(
         output_rgba,
         output_width,
         output_height,
-        DEFAULT_ROW_BAND_TILING,
+        tiling,
         |band, output_rows| {
             resize_exact_integer_downscale_rows_into(source_rgba, &plan, band, output_rows);
             Ok(())
@@ -464,6 +611,7 @@ fn resize_precomputed_offsets_tiled_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
     scratch: &PrecomputedOffsetScratch,
+    tiling: RowBandTiling,
 ) -> Result<(), ProcessingError> {
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
@@ -472,7 +620,7 @@ fn resize_precomputed_offsets_tiled_into(
         output_rgba,
         output_width,
         output_height,
-        DEFAULT_ROW_BAND_TILING,
+        tiling,
         |band, output_rows| {
             resize_precomputed_offset_rows_into(
                 source_rgba,
@@ -596,6 +744,7 @@ fn resize_span_copy_tiled_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
     scratch: &SpanCopyScratch,
+    tiling: RowBandTiling,
 ) -> Result<(), ProcessingError> {
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
@@ -604,7 +753,7 @@ fn resize_span_copy_tiled_into(
         output_rgba,
         output_width,
         output_height,
-        DEFAULT_ROW_BAND_TILING,
+        tiling,
         |band, output_rows| {
             resize_span_copy_rows_into(source_rgba, output_width, scratch, band, output_rows);
             Ok(())
