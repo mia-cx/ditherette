@@ -9,6 +9,10 @@ use std::{
 use ditherette_wasm::{
     image::{rgba, ImageDimensions},
     resize::{
+        area::{
+            resize_rgba_area_scalar_into, resize_rgba_area_with_forced_tiling_into,
+            resize_rgba_area_with_tiling_into,
+        },
         cpu_tiling::{plan_row_bands, RowBandPlan, RowBandTiling, DEFAULT_ROW_BAND_TILING},
         nearest::{
             resize_rgba_nearest_scalar_into, resize_rgba_nearest_with_forced_tiling_into,
@@ -51,9 +55,10 @@ const MIN_PIXELS_PER_BAND: [usize; 5] = [64_000, 128_000, 256_000, 512_000, 1_00
 const MIN_ROWS_PER_BAND: usize = 192;
 const DEFAULT_ITERATIONS: usize = 12;
 const DEFAULT_WARMUP_ITERATIONS: usize = 2;
-const OUTPUT_JSON: &str = "benchmark-results/resize-tiling-sweep-nearest.json";
+const OUTPUT_JSON_PREFIX: &str = "benchmark-results/resize-tiling-sweep";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let filter = SweepFilter::from_args()?;
     let iterations = env_usize("RESIZE_TILING_SWEEP_ITERATIONS", DEFAULT_ITERATIONS);
     let warmup_iterations = env_usize(
         "RESIZE_TILING_SWEEP_WARMUP_ITERATIONS",
@@ -68,6 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let no_tiling_case = measure_case(
             &fixture,
             CaseConfig {
+                filter,
                 scale,
                 output_dimensions,
                 output_byte_len,
@@ -84,6 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cases.push(measure_case(
             &fixture,
             CaseConfig {
+                filter,
                 scale,
                 output_dimensions,
                 output_byte_len,
@@ -99,6 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cases.push(measure_case(
             &fixture,
             CaseConfig {
+                filter,
                 scale,
                 output_dimensions,
                 output_byte_len,
@@ -117,6 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cases.push(measure_case(
                     &fixture,
                     CaseConfig {
+                        filter,
                         scale,
                         output_dimensions,
                         output_byte_len,
@@ -132,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     print_table(&cases);
-    write_json(&fixture, iterations, warmup_iterations, &cases)?;
+    write_json(filter, &fixture, iterations, warmup_iterations, &cases)?;
 
     Ok(())
 }
@@ -157,6 +166,7 @@ fn measure_case(
             &mut output_rgba,
             config.mode,
             config.tiling,
+            config.filter,
         )?;
         black_box(&output_rgba);
     }
@@ -170,6 +180,7 @@ fn measure_case(
             &mut output_rgba,
             config.mode,
             config.tiling,
+            config.filter,
         )?;
         black_box(&output_rgba);
         timings.push(started.elapsed().as_nanos() as u64);
@@ -198,6 +209,22 @@ fn run_resize(
     output_rgba: &mut [u8],
     mode: SweepMode,
     config: Option<RowBandTiling>,
+    filter: SweepFilter,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match filter {
+        SweepFilter::Nearest => {
+            run_nearest_resize(fixture, output_dimensions, output_rgba, mode, config)
+        }
+        SweepFilter::Area => run_area_resize(fixture, output_dimensions, output_rgba, mode, config),
+    }
+}
+
+fn run_nearest_resize(
+    fixture: &RgbaFixture,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    mode: SweepMode,
+    config: Option<RowBandTiling>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         SweepMode::NoTiling => resize_rgba_nearest_scalar_into(
@@ -214,6 +241,39 @@ fn run_resize(
             config.expect("forced one-band case should provide tiling config"),
         )?,
         SweepMode::DefaultTiling | SweepMode::CustomTiling => resize_rgba_nearest_with_tiling_into(
+            black_box(&fixture.rgba),
+            fixture.dimensions,
+            output_dimensions,
+            black_box(output_rgba),
+            config.expect("tiling case should provide tiling config"),
+        )?,
+    }
+
+    Ok(())
+}
+
+fn run_area_resize(
+    fixture: &RgbaFixture,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    mode: SweepMode,
+    config: Option<RowBandTiling>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match mode {
+        SweepMode::NoTiling => resize_rgba_area_scalar_into(
+            black_box(&fixture.rgba),
+            fixture.dimensions,
+            output_dimensions,
+            black_box(output_rgba),
+        )?,
+        SweepMode::ForcedOneBand => resize_rgba_area_with_forced_tiling_into(
+            black_box(&fixture.rgba),
+            fixture.dimensions,
+            output_dimensions,
+            black_box(output_rgba),
+            config.expect("forced one-band case should provide tiling config"),
+        )?,
+        SweepMode::DefaultTiling | SweepMode::CustomTiling => resize_rgba_area_with_tiling_into(
             black_box(&fixture.rgba),
             fixture.dimensions,
             output_dimensions,
@@ -260,12 +320,13 @@ fn print_table(cases: &[SweepCase]) {
 }
 
 fn write_json(
+    filter: SweepFilter,
     fixture: &RgbaFixture,
     iterations: usize,
     warmup_iterations: usize,
     cases: &[SweepCase],
 ) -> io::Result<()> {
-    let output_path = repo_root().join(OUTPUT_JSON);
+    let output_path = repo_root().join(format!("{OUTPUT_JSON_PREFIX}-{}.json", filter.name()));
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -279,7 +340,7 @@ fn write_json(
         fixture.dimensions.width(),
         fixture.dimensions.height()
     )?;
-    writeln!(file, "  \"filter\": \"nearest\",")?;
+    writeln!(file, "  \"filter\": \"{}\",", filter.name())?;
     writeln!(file, "  \"iterations\": {iterations},")?;
     writeln!(file, "  \"warmupIterations\": {warmup_iterations},")?;
     writeln!(file, "  \"cases\": [")?;
@@ -381,7 +442,54 @@ fn json_array(values: &[u64]) -> String {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum SweepFilter {
+    Nearest,
+    Area,
+}
+
+impl SweepFilter {
+    fn from_args() -> Result<Self, Box<dyn std::error::Error>> {
+        let mut args = std::env::args().skip(1);
+        let mut filter = Self::Nearest;
+
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--filter" => {
+                    let value = args.next().ok_or("--filter requires nearest or area")?;
+                    filter = Self::parse(&value)?;
+                }
+                "--filter=nearest" => filter = Self::Nearest,
+                "--filter=area" => filter = Self::Area,
+                "--help" | "-h" => {
+                    println!("usage: resize_tiling_sweep [--filter nearest|area]");
+                    std::process::exit(0);
+                }
+                _ => return Err(format!("unknown argument: {arg}").into()),
+            }
+        }
+
+        Ok(filter)
+    }
+
+    fn parse(value: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        match value {
+            "nearest" => Ok(Self::Nearest),
+            "area" => Ok(Self::Area),
+            _ => Err(format!("unsupported filter: {value}").into()),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Nearest => "nearest",
+            Self::Area => "area",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 struct CaseConfig {
+    filter: SweepFilter,
     scale: Scale,
     output_dimensions: ImageDimensions,
     output_byte_len: usize,
