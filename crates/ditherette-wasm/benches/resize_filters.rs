@@ -168,7 +168,7 @@ fn report_tiling_plan(
     );
 
     eprintln!(
-        "tiling {} {}x{} filter={} enabled={} available_logical_threads={} worker_count={} band_count={} tile={}x{} min_rows_per_band={} min_parallel_output_pixels={} max_workers={}",
+        "tiling {} {}x{} filter={} enabled={} available_logical_threads={} worker_count={} band_count={} tile={}x{} min_rows_per_band={} min_parallel_output_pixels={} min_pixels_per_band={} max_workers={}",
         scale.label,
         output_dimensions.width(),
         output_dimensions.height(),
@@ -181,6 +181,7 @@ fn report_tiling_plan(
         plan.band_height,
         plan.min_rows_per_band,
         plan.min_parallel_output_pixels,
+        plan.min_pixels_per_band,
         plan.max_workers,
     );
 }

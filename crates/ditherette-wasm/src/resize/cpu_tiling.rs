@@ -9,14 +9,16 @@ pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 16;
 
 /// Default row-band policy for resize experiments.
 pub const DEFAULT_ROW_BAND_TILING: RowBandTiling =
-    RowBandTiling::new(1_000_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
+    RowBandTiling::new(1_000_000, 250_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
 
 /// Configuration for splitting output rows into CPU work bands.
 #[derive(Debug, Clone, Copy)]
 pub struct RowBandTiling {
     /// Minimum output pixels before row-band splitting can use more than one band.
     pub min_parallel_output_pixels: usize,
-    /// Minimum rows per band so scheduling overhead does not dominate small images.
+    /// Minimum output pixels per band so per-worker work amortizes scheduling.
+    pub min_pixels_per_band: usize,
+    /// Minimum rows per band so wide-short outputs do not create tiny bands.
     pub min_rows_per_band: usize,
     /// Maximum workers to use for a single resize.
     pub max_workers: usize,
@@ -25,11 +27,13 @@ pub struct RowBandTiling {
 impl RowBandTiling {
     pub const fn new(
         min_parallel_output_pixels: usize,
+        min_pixels_per_band: usize,
         min_rows_per_band: usize,
         max_workers: usize,
     ) -> Self {
         Self {
             min_parallel_output_pixels,
+            min_pixels_per_band,
             min_rows_per_band,
             max_workers,
         }
@@ -47,6 +51,7 @@ pub struct RowBandPlan {
     pub band_height: usize,
     pub min_rows_per_band: usize,
     pub min_parallel_output_pixels: usize,
+    pub min_pixels_per_band: usize,
     pub max_workers: usize,
 }
 
@@ -110,7 +115,12 @@ pub fn plan_row_bands(
     let available_logical_threads = available_logical_threads();
     let worker_count = worker_count(available_logical_threads, config.max_workers);
     let output_pixels = output_width.saturating_mul(output_height);
-    let useful_bands = output_height.div_ceil(min_rows_per_band).max(1);
+    let useful_bands_by_rows = output_height.div_ceil(min_rows_per_band).max(1);
+    let useful_bands_by_pixels = output_pixels
+        .checked_div(config.min_pixels_per_band.max(1))
+        .unwrap_or(usize::MAX)
+        .max(1);
+    let useful_bands = useful_bands_by_rows.min(useful_bands_by_pixels);
     let band_count = if output_pixels < config.min_parallel_output_pixels {
         1
     } else {
@@ -127,6 +137,7 @@ pub fn plan_row_bands(
         band_height,
         min_rows_per_band,
         min_parallel_output_pixels: config.min_parallel_output_pixels,
+        min_pixels_per_band: config.min_pixels_per_band,
         max_workers: config.max_workers,
     }
 }
@@ -241,7 +252,7 @@ mod tests {
     #[test]
     fn serial_fallback_processes_full_output_as_one_band() {
         let mut output = vec![0; 4 * 4 * 3];
-        let config = RowBandTiling::new(usize::MAX, 2, 4);
+        let config = RowBandTiling::new(usize::MAX, 1, 2, 4);
         let observed_band = Mutex::new(None);
 
         process_row_bands(&mut output, 4, 3, config, |band, output_rows| {
