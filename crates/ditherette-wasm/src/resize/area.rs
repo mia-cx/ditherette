@@ -336,15 +336,14 @@ fn write_area_rows<R>(
 
 #[derive(Debug)]
 struct AxisCoverage {
-    // TODO(perf): Represent coverage as leading/trailing partial samples plus an
-    // interior full-weight range. This may avoid one f64 multiply per fully
-    // covered source pixel on heavy downscales while preserving exact fractional
-    // edge handling. Benchmark with `pnpm bench:area` before accepting.
-    samples: Vec<WeightedSourceIndex>,
+    leading_partial: Option<WeightedSourceIndex>,
+    full_start: usize,
+    full_end: usize,
+    trailing_partial: Option<WeightedSourceIndex>,
     inverse_total_weight: f64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct WeightedSourceIndex {
     index: usize,
     weight: f64,
@@ -369,7 +368,10 @@ fn prepare_axis_coverages(
         let first_source = start.floor() as usize;
         let last_source_exclusive = end.ceil() as usize;
         let capped_last_source_exclusive = last_source_exclusive.min(source_len);
-        let mut samples = Vec::with_capacity(capped_last_source_exclusive - first_source);
+        let mut leading_partial = None;
+        let mut full_start = capped_last_source_exclusive;
+        let mut full_end = capped_last_source_exclusive;
+        let mut trailing_partial = None;
         let mut total_weight = 0.0;
 
         for source_coordinate in first_source..capped_last_source_exclusive {
@@ -381,15 +383,32 @@ fn prepare_axis_coverages(
                 continue;
             }
 
-            samples.push(WeightedSourceIndex {
+            total_weight += weight;
+
+            if weight == 1.0 {
+                if full_start == capped_last_source_exclusive {
+                    full_start = source_coordinate;
+                }
+                full_end = source_coordinate + 1;
+                continue;
+            }
+
+            let partial = WeightedSourceIndex {
                 index: source_coordinate,
                 weight,
-            });
-            total_weight += weight;
+            };
+            if full_start == capped_last_source_exclusive {
+                leading_partial = Some(partial);
+            } else {
+                trailing_partial = Some(partial);
+            }
         }
 
         coverages.push(AxisCoverage {
-            samples,
+            leading_partial,
+            full_start,
+            full_end,
+            trailing_partial,
             inverse_total_weight: 1.0 / total_weight,
         });
     }
@@ -406,19 +425,37 @@ fn write_area_pixel(
 ) {
     let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
 
-    for y_sample in &y_coverage.samples {
-        for x_sample in &x_coverage.samples {
-            let source_offset =
-                rgba::pixel_byte_offset(source_width, x_sample.index, y_sample.index);
-            let sample_weight = x_sample.weight * y_sample.weight;
-            let source_pixel =
-                &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
+    if let Some(y_sample) = y_coverage.leading_partial {
+        accumulate_area_row(
+            source_rgba,
+            source_width,
+            x_coverage,
+            y_sample.index,
+            y_sample.weight,
+            &mut weighted_sums,
+        );
+    }
 
-            weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
-            weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
-            weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
-            weighted_sums[3] += f64::from(source_pixel[3]) * sample_weight;
-        }
+    for source_y in y_coverage.full_start..y_coverage.full_end {
+        accumulate_area_row(
+            source_rgba,
+            source_width,
+            x_coverage,
+            source_y,
+            1.0,
+            &mut weighted_sums,
+        );
+    }
+
+    if let Some(y_sample) = y_coverage.trailing_partial {
+        accumulate_area_row(
+            source_rgba,
+            source_width,
+            x_coverage,
+            y_sample.index,
+            y_sample.weight,
+            &mut weighted_sums,
+        );
     }
 
     let inverse_total_weight = x_coverage.inverse_total_weight * y_coverage.inverse_total_weight;
@@ -426,6 +463,65 @@ fn write_area_pixel(
     output_pixel[1] = round_channel(weighted_sums[1] * inverse_total_weight);
     output_pixel[2] = round_channel(weighted_sums[2] * inverse_total_weight);
     output_pixel[3] = round_channel(weighted_sums[3] * inverse_total_weight);
+}
+
+fn accumulate_area_row(
+    source_rgba: &[u8],
+    source_width: usize,
+    x_coverage: &AxisCoverage,
+    source_y: usize,
+    y_weight: f64,
+    weighted_sums: &mut [f64; rgba::RGBA_CHANNEL_COUNT],
+) {
+    if let Some(x_sample) = x_coverage.leading_partial {
+        accumulate_area_sample(
+            source_rgba,
+            source_width,
+            x_sample.index,
+            source_y,
+            x_sample.weight * y_weight,
+            weighted_sums,
+        );
+    }
+
+    for source_x in x_coverage.full_start..x_coverage.full_end {
+        accumulate_area_sample(
+            source_rgba,
+            source_width,
+            source_x,
+            source_y,
+            y_weight,
+            weighted_sums,
+        );
+    }
+
+    if let Some(x_sample) = x_coverage.trailing_partial {
+        accumulate_area_sample(
+            source_rgba,
+            source_width,
+            x_sample.index,
+            source_y,
+            x_sample.weight * y_weight,
+            weighted_sums,
+        );
+    }
+}
+
+fn accumulate_area_sample(
+    source_rgba: &[u8],
+    source_width: usize,
+    source_x: usize,
+    source_y: usize,
+    sample_weight: f64,
+    weighted_sums: &mut [f64; rgba::RGBA_CHANNEL_COUNT],
+) {
+    let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
+    let source_pixel = &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
+
+    weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
+    weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
+    weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
+    weighted_sums[3] += f64::from(source_pixel[3]) * sample_weight;
 }
 
 fn round_channel(value: f64) -> u8 {
