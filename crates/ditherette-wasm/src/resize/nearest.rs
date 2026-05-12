@@ -265,7 +265,7 @@ fn resize_rgba_nearest_with_tiling_after_fast_paths(
     fallback: TilingFallback,
 ) -> Result<(), ProcessingError> {
     if matches!(fallback, TilingFallback::ScalarWhenSingleBand)
-        && !should_tile_output(output_dimensions, tiling)?
+        && !should_tile_nearest(source_dimensions, output_dimensions, tiling)?
     {
         return resize_rgba_nearest_scalar_after_fast_paths(
             source_rgba,
@@ -309,7 +309,15 @@ fn resize_rgba_nearest_with_tiling_after_fast_paths(
 }
 
 #[cfg(feature = "tiling")]
-fn should_tile_output(
+const LOW_WORKER_NEAR_IDENTITY_LIMIT: usize = 5;
+#[cfg(feature = "tiling")]
+const NEAR_IDENTITY_DOWNSCALE_NUMERATOR: u64 = 97;
+#[cfg(feature = "tiling")]
+const NEAR_IDENTITY_DOWNSCALE_DENOMINATOR: u64 = 100;
+
+#[cfg(feature = "tiling")]
+fn should_tile_nearest(
+    source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     tiling: RowBandTiling,
 ) -> Result<bool, ProcessingError> {
@@ -326,7 +334,35 @@ fn should_tile_output(
         return Ok(false);
     }
 
-    Ok(plan_row_bands(output_width, output_height, tiling).band_count > 1)
+    let plan = plan_row_bands(output_width, output_height, tiling);
+    if plan.band_count <= 1 {
+        return Ok(false);
+    }
+
+    Ok(!is_low_worker_near_identity_downscale(
+        source_dimensions,
+        output_dimensions,
+        plan.worker_count,
+    ))
+}
+
+#[cfg(feature = "tiling")]
+fn is_low_worker_near_identity_downscale(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    worker_count: usize,
+) -> bool {
+    worker_count <= LOW_WORKER_NEAR_IDENTITY_LIMIT
+        && output_dimensions.width() < source_dimensions.width()
+        && output_dimensions.height() < source_dimensions.height()
+        && is_near_identity_ratio(output_dimensions.width(), source_dimensions.width())
+        && is_near_identity_ratio(output_dimensions.height(), source_dimensions.height())
+}
+
+#[cfg(feature = "tiling")]
+fn is_near_identity_ratio(output_size: u32, source_size: u32) -> bool {
+    u64::from(output_size) * NEAR_IDENTITY_DOWNSCALE_DENOMINATOR
+        >= u64::from(source_size) * NEAR_IDENTITY_DOWNSCALE_NUMERATOR
 }
 
 /// Straightforward reference implementation used by tests and benchmarks.
@@ -980,7 +1016,11 @@ mod tests {
         is_exact_integer_downscale, map_output_coordinate, resize_rgba_nearest,
         resize_rgba_nearest_into, resize_rgba_nearest_reference, write_reference_resize,
     };
+    #[cfg(feature = "tiling")]
+    use super::{is_low_worker_near_identity_downscale, should_tile_nearest};
     use crate::image::ImageDimensions;
+    #[cfg(feature = "tiling")]
+    use crate::resize::cpu_tiling::RowBandTiling;
 
     #[test]
     fn maps_coordinates_with_pixel_center_alignment() {
@@ -1004,6 +1044,42 @@ mod tests {
             dimensions(2, 2),
             dimensions(4, 4)
         ));
+    }
+
+    #[cfg(feature = "tiling")]
+    #[test]
+    fn skips_low_worker_near_identity_downscales() {
+        let source_dimensions = dimensions(2600, 4168);
+        let near_identity = dimensions(2535, 4063);
+        let beyond_guard = dimensions(2470, 3959);
+
+        assert!(is_low_worker_near_identity_downscale(
+            source_dimensions,
+            near_identity,
+            5
+        ));
+        assert!(!is_low_worker_near_identity_downscale(
+            source_dimensions,
+            near_identity,
+            6
+        ));
+        assert!(!is_low_worker_near_identity_downscale(
+            source_dimensions,
+            beyond_guard,
+            5
+        ));
+    }
+
+    #[cfg(feature = "tiling")]
+    #[test]
+    fn nearest_tiling_policy_skips_low_worker_near_identity_downscales() {
+        let tiling = RowBandTiling::new(1_000_000, 256_000, 256, 5);
+        let source_dimensions = dimensions(2600, 4168);
+        let near_identity = dimensions(2535, 4063);
+        let beyond_guard = dimensions(2470, 3959);
+
+        assert!(!should_tile_nearest(source_dimensions, near_identity, tiling).unwrap());
+        assert!(should_tile_nearest(source_dimensions, beyond_guard, tiling).unwrap());
     }
 
     #[test]
