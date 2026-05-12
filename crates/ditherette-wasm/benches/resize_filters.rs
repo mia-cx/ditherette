@@ -1,6 +1,8 @@
 use std::{env, hint::black_box, path::PathBuf, sync::OnceLock};
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
+#[cfg(feature = "tiling")]
+use ditherette_wasm::resize::cpu_tiling::{plan_row_bands, DEFAULT_ROW_BAND_TILING};
 use ditherette_wasm::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
@@ -107,6 +109,7 @@ fn bench_scale(
     selected_filter: Option<&str>,
 ) {
     let output_dimensions = scale.dimensions_for(fixture.dimensions);
+    report_tiling_plan(scale, output_dimensions, selected_filter);
     let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
     assert_resize_filters_succeed(fixture, output_dimensions, output_byte_len, selected_filter);
 
@@ -150,6 +153,43 @@ fn bench_scale(
     }
 
     group.finish();
+}
+
+#[cfg(feature = "tiling")]
+fn report_tiling_plan(
+    scale: Scale,
+    output_dimensions: ImageDimensions,
+    selected_filter: Option<&str>,
+) {
+    let plan = plan_row_bands(
+        output_dimensions.width() as usize,
+        output_dimensions.height() as usize,
+        DEFAULT_ROW_BAND_TILING,
+    );
+
+    eprintln!(
+        "tiling {} {}x{} filter={} available_logical_threads={} worker_count={} band_count={} tile={}x{} min_rows_per_band={} min_parallel_output_pixels={} max_workers={}",
+        scale.label,
+        output_dimensions.width(),
+        output_dimensions.height(),
+        selected_filter.unwrap_or("all"),
+        plan.available_logical_threads,
+        plan.worker_count,
+        plan.band_count,
+        plan.output_width,
+        plan.band_height,
+        plan.min_rows_per_band,
+        plan.min_parallel_output_pixels,
+        plan.max_workers,
+    );
+}
+
+#[cfg(not(feature = "tiling"))]
+fn report_tiling_plan(
+    _scale: Scale,
+    _output_dimensions: ImageDimensions,
+    _selected_filter: Option<&str>,
+) {
 }
 
 fn bench_resize_filter(

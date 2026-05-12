@@ -2,9 +2,7 @@
 use std::cell::RefCell;
 
 #[cfg(feature = "tiling")]
-use crate::resize::cpu_tiling::{
-    process_row_bands, RowBand, RowBandTiling, DEFAULT_MAX_ROW_BAND_WORKERS,
-};
+use crate::resize::cpu_tiling::{process_row_bands, RowBand, DEFAULT_ROW_BAND_TILING};
 use crate::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
@@ -235,9 +233,6 @@ fn write_reference_resize(
 }
 
 const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 8;
-#[cfg(feature = "tiling")]
-const NEAREST_ROW_BAND_TILING: RowBandTiling =
-    RowBandTiling::new(1_000_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
 
 #[cfg(not(feature = "tiling"))]
 thread_local! {
@@ -378,7 +373,7 @@ fn resize_exact_integer_downscale_tiled_into(
         output_rgba,
         output_width,
         output_height,
-        NEAREST_ROW_BAND_TILING,
+        DEFAULT_ROW_BAND_TILING,
         |band, output_rows| {
             resize_exact_integer_downscale_rows_into(source_rgba, &plan, band, output_rows);
             Ok(())
@@ -465,7 +460,7 @@ fn resize_precomputed_offsets_tiled_into(
         output_rgba,
         output_width,
         output_height,
-        NEAREST_ROW_BAND_TILING,
+        DEFAULT_ROW_BAND_TILING,
         |band, output_rows| {
             resize_precomputed_offset_rows_into(
                 source_rgba,
@@ -598,7 +593,7 @@ fn resize_span_copy_tiled_into(
         output_rgba,
         output_width,
         output_height,
-        NEAREST_ROW_BAND_TILING,
+        DEFAULT_ROW_BAND_TILING,
         |band, output_rows| {
             resize_span_copy_rows_into(source_rgba, output_width, scratch, band, output_rows);
             Ok(())
