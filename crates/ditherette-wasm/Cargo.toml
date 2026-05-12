@@ -40,6 +40,11 @@ harness = false
 name = "resize_filters"
 harness = false
 
+[[bench]]
+name = "row_band_tiling"
+harness = false
+required-features = ["tiling"]
+
 [profile.release]
 opt-level = "s"
 
