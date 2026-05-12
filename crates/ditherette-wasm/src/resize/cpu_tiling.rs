@@ -6,6 +6,10 @@ use crate::{error::ProcessingError, image::rgba};
 /// at four workers so preview/export work does not monopolize the machine.
 pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 4;
 
+/// Default row-band policy for resize experiments.
+pub const DEFAULT_ROW_BAND_TILING: RowBandTiling =
+    RowBandTiling::new(1_000_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
+
 /// Configuration for splitting output rows into CPU work bands.
 #[derive(Debug, Clone, Copy)]
 pub struct RowBandTiling {
@@ -29,6 +33,20 @@ impl RowBandTiling {
             max_workers,
         }
     }
+}
+
+/// Resolved row-band plan for one output image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RowBandPlan {
+    pub output_width: usize,
+    pub output_height: usize,
+    pub available_logical_threads: usize,
+    pub worker_count: usize,
+    pub band_count: usize,
+    pub band_height: usize,
+    pub min_rows_per_band: usize,
+    pub min_parallel_output_pixels: usize,
+    pub max_workers: usize,
 }
 
 /// A contiguous output-row range assigned to one worker.
@@ -60,9 +78,9 @@ where
             context: "row-band output row byte length",
         },
     )?;
-    let band_count = effective_band_count(output_width, output_height, config);
+    let plan = plan_row_bands(output_width, output_height, config);
 
-    if band_count <= 1 {
+    if plan.band_count <= 1 {
         let band = RowBand {
             output_y_start: 0,
             output_y_end: output_height,
@@ -72,43 +90,64 @@ where
         return kernel(band, output_rgba);
     }
 
-    let band_height = output_height.div_ceil(band_count);
     process_chunks(
         output_rgba,
         output_row_byte_len,
         output_height,
-        band_height,
+        plan.band_height,
         kernel,
     )
 }
 
-fn effective_band_count(output_width: usize, output_height: usize, config: RowBandTiling) -> usize {
+/// Resolves the worker count and row-band size for an output image.
+pub fn plan_row_bands(
+    output_width: usize,
+    output_height: usize,
+    config: RowBandTiling,
+) -> RowBandPlan {
+    let min_rows_per_band = config.min_rows_per_band.max(1);
+    let available_logical_threads = available_logical_threads();
+    let worker_count = worker_count(available_logical_threads, config.max_workers);
     let output_pixels = output_width.saturating_mul(output_height);
-    if output_pixels < config.min_parallel_output_pixels {
-        return 1;
-    }
+    let useful_bands = output_height.div_ceil(min_rows_per_band).max(1);
+    let band_count = if output_pixels < config.min_parallel_output_pixels {
+        1
+    } else {
+        worker_count.min(useful_bands)
+    };
+    let band_height = output_height.div_ceil(band_count);
 
-    let useful_bands = output_height
-        .div_ceil(config.min_rows_per_band.max(1))
-        .max(1);
-    default_worker_count(config.max_workers).min(useful_bands)
+    RowBandPlan {
+        output_width,
+        output_height,
+        available_logical_threads,
+        worker_count,
+        band_count,
+        band_height,
+        min_rows_per_band,
+        min_parallel_output_pixels: config.min_parallel_output_pixels,
+        max_workers: config.max_workers,
+    }
 }
 
-fn default_worker_count(max_workers: usize) -> usize {
+fn worker_count(available_logical_threads: usize, max_workers: usize) -> usize {
     if max_workers == 0 {
         return 1;
     }
 
+    (available_logical_threads / 2).max(1).min(max_workers)
+}
+
+fn available_logical_threads() -> usize {
     #[cfg(all(feature = "tiling", not(target_arch = "wasm32")))]
     {
         std::thread::available_parallelism()
-            .map(|parallelism| (parallelism.get() / 2).max(1).min(max_workers))
+            .map(|parallelism| parallelism.get())
             .unwrap_or(1)
     }
 
     #[cfg(not(all(feature = "tiling", not(target_arch = "wasm32"))))]
     {
-        let _ = max_workers;
         1
     }
 }
