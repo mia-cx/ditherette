@@ -9,7 +9,7 @@ pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 8;
 
 /// Default row-band policy for resize experiments.
 pub const DEFAULT_ROW_BAND_TILING: RowBandTiling =
-    RowBandTiling::new(1_000_000, 256_000, 256, DEFAULT_MAX_ROW_BAND_WORKERS);
+    RowBandTiling::new(750_000, 64_000, 192, DEFAULT_MAX_ROW_BAND_WORKERS);
 
 /// Configuration for splitting output rows into CPU work bands.
 #[derive(Debug, Clone, Copy)]
@@ -79,12 +79,26 @@ pub fn process_row_bands<F>(
 where
     F: Fn(RowBand, &mut [u8]) -> Result<(), ProcessingError> + Sync,
 {
+    let plan = plan_row_bands(output_width, output_height, config);
+    process_row_bands_with_plan(output_rgba, plan, kernel)
+}
+
+/// Runs a row-range kernel over a precomputed row-band plan.
+pub fn process_row_bands_with_plan<F>(
+    output_rgba: &mut [u8],
+    plan: RowBandPlan,
+    kernel: F,
+) -> Result<(), ProcessingError>
+where
+    F: Fn(RowBand, &mut [u8]) -> Result<(), ProcessingError> + Sync,
+{
+    let output_width = plan.output_width;
+    let output_height = plan.output_height;
     let output_row_byte_len = output_width.checked_mul(rgba::RGBA_CHANNEL_COUNT).ok_or(
         ProcessingError::SizeOverflow {
             context: "row-band output row byte length",
         },
     )?;
-    let plan = plan_row_bands(output_width, output_height, config);
 
     if plan.band_count <= 1 {
         let band = RowBand {
@@ -126,6 +140,9 @@ pub fn plan_row_bands(
     } else {
         worker_count.min(useful_bands)
     };
+    // TODO(perf): Model scheduling cost explicitly here instead of only using
+    // pixels/rows. Near-identity nearest shows that equal output pixels can
+    // have very different scalar-vs-tiled break-even points.
     let band_height = output_height.div_ceil(band_count);
 
     RowBandPlan {
@@ -153,9 +170,14 @@ fn worker_count(available_logical_threads: usize, max_workers: usize) -> usize {
 fn available_logical_threads() -> usize {
     #[cfg(all(feature = "tiling", not(target_arch = "wasm32")))]
     {
-        std::thread::available_parallelism()
-            .map(|parallelism| parallelism.get())
-            .unwrap_or(1)
+        use std::sync::OnceLock;
+
+        static AVAILABLE_LOGICAL_THREADS: OnceLock<usize> = OnceLock::new();
+        *AVAILABLE_LOGICAL_THREADS.get_or_init(|| {
+            std::thread::available_parallelism()
+                .map(|parallelism| parallelism.get())
+                .unwrap_or(1)
+        })
     }
 
     #[cfg(not(all(feature = "tiling", not(target_arch = "wasm32"))))]
@@ -175,8 +197,6 @@ fn process_chunks<F>(
 where
     F: Fn(RowBand, &mut [u8]) -> Result<(), ProcessingError> + Sync,
 {
-    use rayon::prelude::*;
-
     let band_byte_len =
         output_row_byte_len
             .checked_mul(band_height)
@@ -184,25 +204,40 @@ where
                 context: "row-band byte length",
             })?;
 
-    output_rgba
-        .par_chunks_mut(band_byte_len)
-        .enumerate()
-        .try_for_each(|(band_index, output_rows)| {
-            let output_y_start = band_index * band_height;
-            let output_y_end =
-                (output_y_start + output_rows.len() / output_row_byte_len).min(output_height);
-            let output_byte_start = output_y_start * output_row_byte_len;
+    use std::sync::Mutex;
 
-            kernel(
-                RowBand {
-                    output_y_start,
-                    output_y_end,
-                    output_byte_start,
-                    output_byte_end: output_byte_start + output_rows.len(),
-                },
-                output_rows,
-            )
-        })
+    let result = Mutex::new(Ok(()));
+
+    rayon::scope(|scope| {
+        for (band_index, output_rows) in output_rgba.chunks_mut(band_byte_len).enumerate() {
+            let kernel = &kernel;
+            let result = &result;
+            scope.spawn(move |_| {
+                if result.lock().unwrap().is_err() {
+                    return;
+                }
+
+                let output_y_start = band_index * band_height;
+                let output_y_end = (output_y_start + band_height).min(output_height);
+                let output_byte_start = output_y_start * output_row_byte_len;
+                let output_byte_end = output_y_end * output_row_byte_len;
+
+                if let Err(error) = kernel(
+                    RowBand {
+                        output_y_start,
+                        output_y_end,
+                        output_byte_start,
+                        output_byte_end,
+                    },
+                    output_rows,
+                ) {
+                    *result.lock().unwrap() = Err(error);
+                }
+            });
+        }
+    });
+
+    result.into_inner().unwrap()
 }
 
 #[cfg(not(all(feature = "tiling", not(target_arch = "wasm32"))))]
@@ -225,16 +260,16 @@ where
 
     for (band_index, output_rows) in output_rgba.chunks_mut(band_byte_len).enumerate() {
         let output_y_start = band_index * band_height;
-        let output_y_end =
-            (output_y_start + output_rows.len() / output_row_byte_len).min(output_height);
+        let output_y_end = (output_y_start + band_height).min(output_height);
         let output_byte_start = output_y_start * output_row_byte_len;
+        let output_byte_end = output_y_end * output_row_byte_len;
 
         kernel(
             RowBand {
                 output_y_start,
                 output_y_end,
                 output_byte_start,
-                output_byte_end: output_byte_start + output_rows.len(),
+                output_byte_end,
             },
             output_rows,
         )?;

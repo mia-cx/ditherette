@@ -2,7 +2,8 @@ use std::cell::RefCell;
 
 #[cfg(feature = "tiling")]
 use crate::resize::cpu_tiling::{
-    plan_row_bands, process_row_bands, RowBand, RowBandTiling, DEFAULT_ROW_BAND_TILING,
+    plan_row_bands, process_row_bands_with_plan, RowBand, RowBandPlan, RowBandTiling,
+    DEFAULT_ROW_BAND_TILING,
 };
 use crate::{
     error::ProcessingError,
@@ -264,16 +265,25 @@ fn resize_rgba_nearest_with_tiling_after_fast_paths(
     tiling: RowBandTiling,
     fallback: TilingFallback,
 ) -> Result<(), ProcessingError> {
-    if matches!(fallback, TilingFallback::ScalarWhenSingleBand)
-        && !should_tile_nearest(source_dimensions, output_dimensions, tiling)?
-    {
-        return resize_rgba_nearest_scalar_after_fast_paths(
-            source_rgba,
-            source_dimensions,
-            output_dimensions,
-            output_rgba,
-        );
-    }
+    let tiling_plan = if matches!(fallback, TilingFallback::ScalarWhenSingleBand) {
+        match nearest_tiling_plan(source_dimensions, output_dimensions, tiling)? {
+            Some(plan) => plan,
+            None => {
+                return resize_rgba_nearest_scalar_after_fast_paths(
+                    source_rgba,
+                    source_dimensions,
+                    output_dimensions,
+                    output_rgba,
+                );
+            }
+        }
+    } else {
+        plan_row_bands(
+            output_dimensions.width_usize()?,
+            output_dimensions.height_usize()?,
+            tiling,
+        )
+    };
 
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         return resize_exact_integer_downscale_tiled_into(
@@ -281,7 +291,7 @@ fn resize_rgba_nearest_with_tiling_after_fast_paths(
             source_dimensions,
             output_dimensions,
             output_rgba,
-            tiling,
+            tiling_plan,
         );
     }
 
@@ -293,7 +303,7 @@ fn resize_rgba_nearest_with_tiling_after_fast_paths(
             output_dimensions,
             output_rgba,
             &scratch,
-            tiling,
+            tiling_plan,
         );
     }
 
@@ -304,23 +314,24 @@ fn resize_rgba_nearest_with_tiling_after_fast_paths(
         output_dimensions,
         output_rgba,
         &scratch,
-        tiling,
+        tiling_plan,
     )
 }
 
 #[cfg(feature = "tiling")]
 const LOW_WORKER_NEAR_IDENTITY_LIMIT: usize = 5;
 #[cfg(feature = "tiling")]
-const NEAR_IDENTITY_DOWNSCALE_NUMERATOR: u64 = 97;
+const NEAR_IDENTITY_DOWNSCALE_NUMERATOR: u64 = 949;
 #[cfg(feature = "tiling")]
-const NEAR_IDENTITY_DOWNSCALE_DENOMINATOR: u64 = 100;
+const NEAR_IDENTITY_DOWNSCALE_DENOMINATOR: u64 = 1_000;
 
 #[cfg(feature = "tiling")]
-fn should_tile_nearest(
+#[doc(hidden)]
+pub fn nearest_tiling_plan(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     tiling: RowBandTiling,
-) -> Result<bool, ProcessingError> {
+) -> Result<Option<RowBandPlan>, ProcessingError> {
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
     let output_pixels =
@@ -331,19 +342,21 @@ fn should_tile_nearest(
             })?;
 
     if output_pixels < tiling.min_parallel_output_pixels {
-        return Ok(false);
+        return Ok(None);
     }
 
     let plan = plan_row_bands(output_width, output_height, tiling);
-    if plan.band_count <= 1 {
-        return Ok(false);
+    if plan.band_count <= 1
+        || is_low_worker_near_identity_downscale(
+            source_dimensions,
+            output_dimensions,
+            plan.worker_count,
+        )
+    {
+        return Ok(None);
     }
 
-    Ok(!is_low_worker_near_identity_downscale(
-        source_dimensions,
-        output_dimensions,
-        plan.worker_count,
-    ))
+    Ok(Some(plan))
 }
 
 #[cfg(feature = "tiling")]
@@ -561,13 +574,12 @@ fn resize_exact_integer_downscale_tiled_into(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
-    tiling: RowBandTiling,
+    tiling_plan: RowBandPlan,
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
-    let output_height = output_dimensions.height_usize()?;
     let x_step = source_dimensions.width_usize()? / output_width;
-    let y_step = source_dimensions.height_usize()? / output_height;
+    let y_step = source_dimensions.height_usize()? / output_dimensions.height_usize()?;
     let plan = ExactIntegerDownscalePlan {
         source_row_byte_len: source_width * rgba::RGBA_CHANNEL_COUNT,
         output_width,
@@ -576,16 +588,10 @@ fn resize_exact_integer_downscale_tiled_into(
         source_x_byte_step: x_step * rgba::RGBA_CHANNEL_COUNT,
     };
 
-    process_row_bands(
-        output_rgba,
-        output_width,
-        output_height,
-        tiling,
-        |band, output_rows| {
-            resize_exact_integer_downscale_rows_into(source_rgba, &plan, band, output_rows);
-            Ok(())
-        },
-    )
+    process_row_bands_with_plan(output_rgba, tiling_plan, |band, output_rows| {
+        resize_exact_integer_downscale_rows_into(source_rgba, &plan, band, output_rows);
+        Ok(())
+    })
 }
 
 #[cfg(feature = "tiling")]
@@ -658,28 +664,21 @@ fn resize_precomputed_offsets_tiled_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
     scratch: &PrecomputedOffsetScratch,
-    tiling: RowBandTiling,
+    tiling_plan: RowBandPlan,
 ) -> Result<(), ProcessingError> {
     let output_width = output_dimensions.width_usize()?;
-    let output_height = output_dimensions.height_usize()?;
 
-    process_row_bands(
-        output_rgba,
-        output_width,
-        output_height,
-        tiling,
-        |band, output_rows| {
-            resize_precomputed_offset_rows_into(
-                source_rgba,
-                output_width,
-                &scratch.source_row_byte_offsets,
-                &scratch.source_x_byte_offsets,
-                band,
-                output_rows,
-            );
-            Ok(())
-        },
-    )
+    process_row_bands_with_plan(output_rgba, tiling_plan, |band, output_rows| {
+        resize_precomputed_offset_rows_into(
+            source_rgba,
+            output_width,
+            &scratch.source_row_byte_offsets,
+            &scratch.source_x_byte_offsets,
+            band,
+            output_rows,
+        );
+        Ok(())
+    })
 }
 
 #[cfg(feature = "tiling")]
@@ -791,21 +790,14 @@ fn resize_span_copy_tiled_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
     scratch: &SpanCopyScratch,
-    tiling: RowBandTiling,
+    tiling_plan: RowBandPlan,
 ) -> Result<(), ProcessingError> {
     let output_width = output_dimensions.width_usize()?;
-    let output_height = output_dimensions.height_usize()?;
 
-    process_row_bands(
-        output_rgba,
-        output_width,
-        output_height,
-        tiling,
-        |band, output_rows| {
-            resize_span_copy_rows_into(source_rgba, output_width, scratch, band, output_rows);
-            Ok(())
-        },
-    )
+    process_row_bands_with_plan(output_rgba, tiling_plan, |band, output_rows| {
+        resize_span_copy_rows_into(source_rgba, output_width, scratch, band, output_rows);
+        Ok(())
+    })
 }
 
 #[cfg(feature = "tiling")]
@@ -1017,7 +1009,7 @@ mod tests {
         resize_rgba_nearest_into, resize_rgba_nearest_reference, write_reference_resize,
     };
     #[cfg(feature = "tiling")]
-    use super::{is_low_worker_near_identity_downscale, should_tile_nearest};
+    use super::{is_low_worker_near_identity_downscale, nearest_tiling_plan};
     use crate::image::ImageDimensions;
     #[cfg(feature = "tiling")]
     use crate::resize::cpu_tiling::RowBandTiling;
@@ -1050,8 +1042,8 @@ mod tests {
     #[test]
     fn skips_low_worker_near_identity_downscales() {
         let source_dimensions = dimensions(2600, 4168);
-        let near_identity = dimensions(2535, 4063);
-        let beyond_guard = dimensions(2470, 3959);
+        let near_identity = dimensions(2470, 3959);
+        let beyond_guard = dimensions(2405, 3855);
 
         assert!(is_low_worker_near_identity_downscale(
             source_dimensions,
@@ -1075,11 +1067,17 @@ mod tests {
     fn nearest_tiling_policy_skips_low_worker_near_identity_downscales() {
         let tiling = RowBandTiling::new(1_000_000, 256_000, 256, 5);
         let source_dimensions = dimensions(2600, 4168);
-        let near_identity = dimensions(2535, 4063);
-        let beyond_guard = dimensions(2470, 3959);
+        let near_identity = dimensions(2470, 3959);
+        let beyond_guard = dimensions(2405, 3855);
 
-        assert!(!should_tile_nearest(source_dimensions, near_identity, tiling).unwrap());
-        assert!(should_tile_nearest(source_dimensions, beyond_guard, tiling).unwrap());
+        assert!(
+            nearest_tiling_plan(source_dimensions, near_identity, tiling)
+                .unwrap()
+                .is_none()
+        );
+        assert!(nearest_tiling_plan(source_dimensions, beyond_guard, tiling)
+            .unwrap()
+            .is_some());
     }
 
     #[test]
