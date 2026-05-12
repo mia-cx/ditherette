@@ -18,23 +18,35 @@ use ditherette_wasm::{
 };
 use image::ImageReader;
 
-const SCALES: [Scale; 14] = [
+const SCALES: [Scale; 26] = [
     Scale::new("2x", 2.0),
     Scale::new("1.5x", 1.5),
     Scale::new("1.25x", 1.25),
+    Scale::new("1.125x", 1.125),
+    Scale::new("1.0625x", 1.0625),
     Scale::new("1x", 1.0),
+    Scale::new("0.99x", 0.99),
+    Scale::new("0.975x", 0.975),
     Scale::new("0.95x", 0.95),
+    Scale::new("0.925x", 0.925),
+    Scale::new("0.9x", 0.9),
     Scale::new("0.875x", 0.875),
+    Scale::new("0.8125x", 0.8125),
     Scale::new("0.75x", 0.75),
+    Scale::new("0.6875x", 0.6875),
     Scale::new("0.625x", 0.625),
+    Scale::new("0.5625x", 0.5625),
     Scale::new("0.5x", 0.5),
+    Scale::new("0.4375x", 0.4375),
     Scale::new("0.375x", 0.375),
+    Scale::new("0.34375x", 0.34375),
     Scale::new("0.3125x", 0.3125),
+    Scale::new("0.28125x", 0.28125),
     Scale::new("0.25x", 0.25),
     Scale::new("0.1875x", 0.1875),
     Scale::new("0.125x", 0.125),
 ];
-const MAX_WORKERS: [usize; 6] = [1, 2, 4, 8, 12, 16];
+const MAX_WORKERS: [usize; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 const MIN_PIXELS_PER_BAND: [usize; 5] = [64_000, 128_000, 256_000, 512_000, 1_000_000];
 const MIN_ROWS_PER_BAND: usize = 192;
 const DEFAULT_ITERATIONS: usize = 12;
