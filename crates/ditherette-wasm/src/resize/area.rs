@@ -97,20 +97,23 @@ pub fn resize_rgba_area_reference_into(
 
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
     let x_coverages = prepare_axis_coverages(source_dimensions.width(), output_dimensions.width())?;
     let y_coverages =
         prepare_axis_coverages(source_dimensions.height(), output_dimensions.height())?;
 
-    // TODO(perf): Precompute output row byte offsets or advance a running row
-    // pointer. `pixel_byte_offset` repeats a multiply for every output pixel.
-    for (output_y, y_coverage) in y_coverages.iter().enumerate() {
-        for (output_x, x_coverage) in x_coverages.iter().enumerate() {
-            let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
-
+    for (output_row, y_coverage) in output_rgba
+        .chunks_exact_mut(output_row_byte_len)
+        .zip(y_coverages.iter())
+    {
+        for (output_pixel, x_coverage) in output_row
+            .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+            .zip(x_coverages.iter())
+        {
             // TODO(perf): Write RGBA in one footprint walk. Four channel calls
             // reread the same source offsets and coverage weights.
-            for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                output_rgba[output_offset + channel] =
+            for (channel, output_channel) in output_pixel.iter_mut().enumerate() {
+                *output_channel =
                     area_channel(source_rgba, source_width, x_coverage, y_coverage, channel);
             }
         }
