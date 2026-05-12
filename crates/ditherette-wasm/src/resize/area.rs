@@ -156,14 +156,13 @@ fn prepare_axis_coverages(
         let end = (output_coordinate + 1) as f64 * scale;
         let first_source = start.floor() as usize;
         let last_source_exclusive = end.ceil() as usize;
-        let mut samples = Vec::new();
+        let capped_last_source_exclusive = last_source_exclusive.min(source_len);
+        let mut samples = Vec::with_capacity(capped_last_source_exclusive - first_source);
         let mut total_weight = 0.0;
 
-        // TODO(perf): Reserve the exact footprint length here; repeated sample
-        // pushes can reallocate for large minification ratios.
         // TODO(perf): Increment start/end coverage with integer recurrence
         // instead of recomputing floor/ceil and f64 bounds for every output.
-        for source_coordinate in first_source..last_source_exclusive.min(source_len) {
+        for source_coordinate in first_source..capped_last_source_exclusive {
             let source_start = source_coordinate as f64;
             let source_end = source_start + 1.0;
             let weight = end.min(source_end) - start.max(source_start);
