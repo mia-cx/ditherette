@@ -37,9 +37,6 @@ pub fn resize_rgba_area_into(
     // pixel from an x*y nested footprint into two linear passes.
     // TODO(perf): Represent coverage weights as fixed-point integers. This keeps
     // output deterministic and avoids f64 multiplies in the resize hot path.
-    // TODO(perf): Special-case pure downscale vs upscale. Area is most useful for
-    // minification; for enlargement, bilinear/nearest may be better behind a
-    // compatibility API.
     // TODO(perf): Add row-band tiling once the scalar area kernel is optimized;
     // large downscales have independent output rows and should amortize
     // scheduling better than nearest's tiny kernels.
