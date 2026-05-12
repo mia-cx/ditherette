@@ -5,9 +5,11 @@ use crate::{
 };
 
 #[cfg(feature = "tiling")]
-use crate::resize::cpu_tiling::{
-    process_row_bands_with_plan, RowBand, RowBandPlan, RowBandTiling, DEFAULT_ROW_BAND_TILING,
-};
+use crate::resize::cpu_tiling::{process_row_bands_with_plan, RowBand, RowBandPlan, RowBandTiling};
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub const AREA_ROW_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_000, 192, 4);
 
 /// Resizes RGBA with exact pixel-area averaging.
 ///
@@ -44,7 +46,7 @@ pub fn resize_rgba_area_into(
             source_dimensions,
             output_dimensions,
             output_rgba,
-            DEFAULT_ROW_BAND_TILING,
+            AREA_ROW_BAND_TILING,
         )
     }
 
