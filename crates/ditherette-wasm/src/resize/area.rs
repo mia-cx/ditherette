@@ -38,8 +38,6 @@ pub fn resize_rgba_area_into(
     // TODO(perf): Use separable area resampling: horizontal weighted sums into
     // a scratch buffer, then vertical weighted sums. That turns each output
     // pixel from an x*y nested footprint into two linear passes.
-    // TODO(perf): Accumulate all RGBA channels for a source sample in one
-    // footprint walk instead of calling area_channel per channel.
     // TODO(perf): Represent coverage weights as fixed-point integers. This keeps
     // output deterministic and avoids f64 multiplies in the resize hot path.
     // TODO(perf): Special-case pure downscale vs upscale. Area is most useful for
@@ -110,12 +108,13 @@ pub fn resize_rgba_area_reference_into(
             .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
             .zip(x_coverages.iter())
         {
-            // TODO(perf): Write RGBA in one footprint walk. Four channel calls
-            // reread the same source offsets and coverage weights.
-            for (channel, output_channel) in output_pixel.iter_mut().enumerate() {
-                *output_channel =
-                    area_channel(source_rgba, source_width, x_coverage, y_coverage, channel);
-            }
+            write_area_pixel(
+                source_rgba,
+                source_width,
+                x_coverage,
+                y_coverage,
+                output_pixel,
+            );
         }
     }
 
@@ -187,14 +186,14 @@ fn prepare_axis_coverages(
     Ok(coverages)
 }
 
-fn area_channel(
+fn write_area_pixel(
     source_rgba: &[u8],
     source_width: usize,
     x_coverage: &AxisCoverage,
     y_coverage: &AxisCoverage,
-    channel: usize,
-) -> u8 {
-    let mut weighted_sum = 0.0;
+    output_pixel: &mut [u8],
+) {
+    let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
 
     for y_sample in &y_coverage.samples {
         // TODO(perf): Compute the source row base once per y sample, then add
@@ -202,15 +201,22 @@ fn area_channel(
         for x_sample in &x_coverage.samples {
             let source_offset =
                 rgba::pixel_byte_offset(source_width, x_sample.index, y_sample.index);
-            // TODO(perf): Precompute combined x*y weights for repeated channel
-            // use, or precompute x byte offsets and y row offsets separately.
-            weighted_sum +=
-                f64::from(source_rgba[source_offset + channel]) * x_sample.weight * y_sample.weight;
+            let sample_weight = x_sample.weight * y_sample.weight;
+            let source_pixel =
+                &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
+
+            weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
+            weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
+            weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
+            weighted_sums[3] += f64::from(source_pixel[3]) * sample_weight;
         }
     }
 
     let total_weight = x_coverage.total_weight * y_coverage.total_weight;
-    round_channel(weighted_sum / total_weight)
+    output_pixel[0] = round_channel(weighted_sums[0] / total_weight);
+    output_pixel[1] = round_channel(weighted_sums[1] / total_weight);
+    output_pixel[2] = round_channel(weighted_sums[2] / total_weight);
+    output_pixel[3] = round_channel(weighted_sums[3] / total_weight);
 }
 
 fn round_channel(value: f64) -> u8 {
