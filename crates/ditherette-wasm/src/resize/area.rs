@@ -32,9 +32,6 @@ pub fn resize_rgba_area_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Add exact-integer downscale fast paths. Common cases like
-    // 2x/4x minification can average fixed-size source blocks with integer sums
-    // and no per-pixel coverage vectors.
     // TODO(perf): Use separable area resampling: horizontal weighted sums into
     // a scratch buffer, then vertical weighted sums. That turns each output
     // pixel from an x*y nested footprint into two linear passes.
@@ -146,10 +143,6 @@ fn prepare_axis_coverages(
     let scale = f64::from(source_size) / f64::from(output_size);
     let mut coverages = Vec::with_capacity(output_len);
 
-    // TODO(perf): Store coverage samples in a flat Vec plus per-output ranges
-    // instead of one Vec allocation per output coordinate.
-    // TODO(perf): For integer downscale ratios, skip coverage construction and
-    // generate fixed contiguous ranges with equal weights.
     for output_coordinate in 0..output_len {
         let start = output_coordinate as f64 * scale;
         let end = (output_coordinate + 1) as f64 * scale;
@@ -159,8 +152,6 @@ fn prepare_axis_coverages(
         let mut samples = Vec::with_capacity(capped_last_source_exclusive - first_source);
         let mut total_weight = 0.0;
 
-        // TODO(perf): Increment start/end coverage with integer recurrence
-        // instead of recomputing floor/ceil and f64 bounds for every output.
         for source_coordinate in first_source..capped_last_source_exclusive {
             let source_start = source_coordinate as f64;
             let source_end = source_start + 1.0;
@@ -196,8 +187,6 @@ fn write_area_pixel(
     let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
 
     for y_sample in &y_coverage.samples {
-        // TODO(perf): Compute the source row base once per y sample, then add
-        // x byte offsets. `pixel_byte_offset` repeats row math for every sample.
         for x_sample in &x_coverage.samples {
             let source_offset =
                 rgba::pixel_byte_offset(source_width, x_sample.index, y_sample.index);
