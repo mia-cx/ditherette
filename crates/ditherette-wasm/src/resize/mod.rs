@@ -8,7 +8,6 @@ pub mod r#box;
 mod buffers;
 mod convolution;
 mod convolution_reference;
-mod cpu_tiling;
 mod lanczos;
 pub mod lanczos2;
 pub mod lanczos2_scale_aware;

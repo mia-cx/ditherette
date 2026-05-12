@@ -63,7 +63,6 @@ const cargo = spawnSync(
 		'crates/ditherette-wasm/Cargo.toml',
 		'--bench',
 		benchmarkConfig.bench,
-		...args.cargoArgs,
 		'--',
 		'--noplot',
 		...args.criterionArgs
@@ -272,7 +271,6 @@ function variantIndex(variant) {
 }
 
 function parseArgs(argv) {
-	const cargoArgs = [];
 	const criterionArgs = [];
 	let kernel = 'nearest';
 	let filter;
@@ -300,22 +298,6 @@ function parseArgs(argv) {
 
 		if (arg.startsWith('--filter=')) {
 			filter = arg.slice('--filter='.length);
-			continue;
-		}
-
-		if (arg === '--cargo-feature' || arg === '--cargo-features') {
-			cargoArgs.push('--features', argv[index + 1]);
-			index += 1;
-			continue;
-		}
-
-		if (arg.startsWith('--cargo-feature=')) {
-			cargoArgs.push('--features', arg.slice('--cargo-feature='.length));
-			continue;
-		}
-
-		if (arg.startsWith('--cargo-features=')) {
-			cargoArgs.push('--features', arg.slice('--cargo-features='.length));
 			continue;
 		}
 
@@ -351,7 +333,7 @@ function parseArgs(argv) {
 		);
 	}
 
-	return { kernel, filter, baseline, cargoArgs, criterionArgs };
+	return { kernel, filter, baseline, criterionArgs };
 }
 
 function table(rows) {

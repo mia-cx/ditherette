@@ -25,7 +25,6 @@
 		"bench:nearest": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest",
 		"bench:nearest:aa": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter nearest_aa",
 		"bench:bilinear": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter bilinear",
-		"bench:bilinear:parallel": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter bilinear --cargo-feature parallel",
 		"bench:trilinear": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter trilinear",
 		"bench:bicubic": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter bicubic",
 		"bench:lanczos2": "node scripts/benchmark-rust-resize.mjs --kernel filters --filter lanczos2",
