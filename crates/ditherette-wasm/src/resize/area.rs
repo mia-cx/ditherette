@@ -37,12 +37,26 @@ pub fn resize_rgba_area_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    resize_rgba_area_reference_into(
-        source_rgba,
-        source_dimensions,
-        output_dimensions,
-        output_rgba,
-    )
+    #[cfg(feature = "tiling")]
+    {
+        resize_rgba_area_with_tiling_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+            DEFAULT_ROW_BAND_TILING,
+        )
+    }
+
+    #[cfg(not(feature = "tiling"))]
+    {
+        resize_rgba_area_reference_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )
+    }
 }
 
 /// Straightforward reference implementation for exact pixel-area averaging.
@@ -89,16 +103,20 @@ pub fn resize_rgba_area_reference_into(
     let y_coverages =
         prepare_axis_coverages(source_dimensions.height(), output_dimensions.height())?;
 
-    process_area_rows(
+    write_area_rows(
         source_rgba,
         source_width,
-        output_width,
-        output_dimensions.height_usize()?,
         output_row_byte_len,
         &x_coverages,
         &y_coverages,
+        AreaRowRange {
+            output_y_start: 0,
+            output_y_end: output_dimensions.height_usize()?,
+        },
         output_rgba,
-    )
+    );
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -128,12 +146,40 @@ pub fn resize_rgba_area_scalar_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    resize_rgba_area_reference_into(
+    validate_resize_buffers(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
-    )
+    )?;
+
+    if source_dimensions == output_dimensions {
+        output_rgba.copy_from_slice(source_rgba);
+        return Ok(());
+    }
+
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+    let x_coverages = prepare_axis_coverages(source_dimensions.width(), output_dimensions.width())?;
+    let y_coverages =
+        prepare_axis_coverages(source_dimensions.height(), output_dimensions.height())?;
+
+    write_area_rows(
+        source_rgba,
+        source_width,
+        output_row_byte_len,
+        &x_coverages,
+        &y_coverages,
+        AreaRowRange {
+            output_y_start: 0,
+            output_y_end: output_height,
+        },
+        output_rgba,
+    );
+
+    Ok(())
 }
 
 #[cfg(feature = "tiling")]
@@ -232,33 +278,6 @@ fn resize_rgba_area_with_tiling(
 }
 
 #[cfg(feature = "tiling")]
-fn process_area_rows(
-    source_rgba: &[u8],
-    source_width: usize,
-    output_width: usize,
-    output_height: usize,
-    output_row_byte_len: usize,
-    x_coverages: &[AxisCoverage],
-    y_coverages: &[AxisCoverage],
-    output_rgba: &mut [u8],
-) -> Result<(), ProcessingError> {
-    let plan = crate::resize::cpu_tiling::plan_row_bands(
-        output_width,
-        output_height,
-        DEFAULT_ROW_BAND_TILING,
-    );
-    process_area_rows_with_plan(
-        source_rgba,
-        source_width,
-        output_row_byte_len,
-        x_coverages,
-        y_coverages,
-        output_rgba,
-        plan,
-    )
-}
-
-#[cfg(feature = "tiling")]
 fn process_area_rows_with_plan(
     source_rgba: &[u8],
     source_width: usize,
@@ -280,32 +299,6 @@ fn process_area_rows_with_plan(
         );
         Ok(())
     })
-}
-
-#[cfg(not(feature = "tiling"))]
-fn process_area_rows(
-    source_rgba: &[u8],
-    source_width: usize,
-    _output_width: usize,
-    output_height: usize,
-    output_row_byte_len: usize,
-    x_coverages: &[AxisCoverage],
-    y_coverages: &[AxisCoverage],
-    output_rgba: &mut [u8],
-) -> Result<(), ProcessingError> {
-    write_area_rows(
-        source_rgba,
-        source_width,
-        output_row_byte_len,
-        x_coverages,
-        y_coverages,
-        AreaRowRange {
-            output_y_start: 0,
-            output_y_end: output_height,
-        },
-        output_rgba,
-    );
-    Ok(())
 }
 
 fn write_area_rows<R>(
