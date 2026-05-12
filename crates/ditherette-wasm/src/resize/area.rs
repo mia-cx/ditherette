@@ -32,9 +32,6 @@ pub fn resize_rgba_area_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Use separable area resampling: horizontal weighted sums into
-    // a scratch buffer, then vertical weighted sums. That turns each output
-    // pixel from an x*y nested footprint into two linear passes.
     // TODO(perf): Represent coverage weights as fixed-point integers. This keeps
     // output deterministic and avoids f64 multiplies in the resize hot path.
     // TODO(perf): Add row-band tiling once the scalar area kernel is optimized;
