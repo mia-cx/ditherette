@@ -17,6 +17,11 @@ pub mod lanczos2_scale_aware;
 pub mod lanczos3;
 pub mod lanczos3_scale_aware;
 pub mod nearest;
+mod reference;
+mod scalar;
+mod shared;
+#[cfg(feature = "tiling")]
+mod tiling;
 pub mod trilinear;
 
 pub use antialias::{antialias_rgba_box3, antialias_rgba_box3_into};
