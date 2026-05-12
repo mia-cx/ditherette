@@ -8,11 +8,22 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessingError {
     /// A required width or height was zero.
-    ZeroDimension { name: &'static str },
+    ZeroDimension {
+        /// Name of the dimension that was zero.
+        name: &'static str,
+    },
     /// Checked arithmetic overflowed while calculating a pixel or byte count.
-    SizeOverflow { context: &'static str },
+    SizeOverflow {
+        /// Operation or value whose checked size calculation overflowed.
+        context: &'static str,
+    },
     /// A byte buffer did not match the dimensions that describe it.
-    InvalidBufferLength { expected: usize, actual: usize },
+    InvalidBufferLength {
+        /// Required byte length for the supplied dimensions.
+        expected: usize,
+        /// Actual byte length supplied by the caller.
+        actual: usize,
+    },
 }
 
 impl fmt::Display for ProcessingError {
