@@ -5,7 +5,9 @@ use crate::{
 };
 
 #[cfg(feature = "tiling")]
-use crate::resize::cpu_tiling::{process_row_bands, RowBand, DEFAULT_ROW_BAND_TILING};
+use crate::resize::cpu_tiling::{
+    process_row_bands_with_plan, RowBand, RowBandPlan, RowBandTiling, DEFAULT_ROW_BAND_TILING,
+};
 
 /// Resizes RGBA with exact pixel-area averaging.
 ///
@@ -99,14 +101,12 @@ pub fn resize_rgba_area_reference_into(
     )
 }
 
-#[cfg(not(feature = "tiling"))]
 #[derive(Debug, Clone, Copy)]
 struct AreaRowRange {
     output_y_start: usize,
     output_y_end: usize,
 }
 
-#[cfg(not(feature = "tiling"))]
 impl From<AreaRowRange> for (usize, usize) {
     fn from(row_range: AreaRowRange) -> Self {
         (row_range.output_y_start, row_range.output_y_end)
@@ -121,6 +121,117 @@ impl From<RowBand> for (usize, usize) {
 }
 
 #[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_area_scalar_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    resize_rgba_area_reference_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_area_with_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: RowBandTiling,
+) -> Result<(), ProcessingError> {
+    resize_rgba_area_with_tiling(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        tiling,
+        false,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_area_with_forced_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: RowBandTiling,
+) -> Result<(), ProcessingError> {
+    resize_rgba_area_with_tiling(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        tiling,
+        true,
+    )
+}
+
+#[cfg(feature = "tiling")]
+fn resize_rgba_area_with_tiling(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: RowBandTiling,
+    force_tiling_adapter: bool,
+) -> Result<(), ProcessingError> {
+    validate_resize_buffers(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )?;
+
+    if source_dimensions == output_dimensions {
+        output_rgba.copy_from_slice(source_rgba);
+        return Ok(());
+    }
+
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+    let x_coverages = prepare_axis_coverages(source_dimensions.width(), output_dimensions.width())?;
+    let y_coverages =
+        prepare_axis_coverages(source_dimensions.height(), output_dimensions.height())?;
+    let plan = crate::resize::cpu_tiling::plan_row_bands(output_width, output_height, tiling);
+
+    if plan.band_count <= 1 && !force_tiling_adapter {
+        write_area_rows(
+            source_rgba,
+            source_width,
+            output_row_byte_len,
+            &x_coverages,
+            &y_coverages,
+            AreaRowRange {
+                output_y_start: 0,
+                output_y_end: output_height,
+            },
+            output_rgba,
+        );
+        return Ok(());
+    }
+
+    process_area_rows_with_plan(
+        source_rgba,
+        source_width,
+        output_row_byte_len,
+        &x_coverages,
+        &y_coverages,
+        output_rgba,
+        plan,
+    )
+}
+
+#[cfg(feature = "tiling")]
 fn process_area_rows(
     source_rgba: &[u8],
     source_width: usize,
@@ -131,24 +242,44 @@ fn process_area_rows(
     y_coverages: &[AxisCoverage],
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    process_row_bands(
-        output_rgba,
+    let plan = crate::resize::cpu_tiling::plan_row_bands(
         output_width,
         output_height,
         DEFAULT_ROW_BAND_TILING,
-        |band, output_rows| {
-            write_area_rows(
-                source_rgba,
-                source_width,
-                output_row_byte_len,
-                x_coverages,
-                y_coverages,
-                band,
-                output_rows,
-            );
-            Ok(())
-        },
+    );
+    process_area_rows_with_plan(
+        source_rgba,
+        source_width,
+        output_row_byte_len,
+        x_coverages,
+        y_coverages,
+        output_rgba,
+        plan,
     )
+}
+
+#[cfg(feature = "tiling")]
+fn process_area_rows_with_plan(
+    source_rgba: &[u8],
+    source_width: usize,
+    output_row_byte_len: usize,
+    x_coverages: &[AxisCoverage],
+    y_coverages: &[AxisCoverage],
+    output_rgba: &mut [u8],
+    plan: RowBandPlan,
+) -> Result<(), ProcessingError> {
+    process_row_bands_with_plan(output_rgba, plan, |band, output_rows| {
+        write_area_rows(
+            source_rgba,
+            source_width,
+            output_row_byte_len,
+            x_coverages,
+            y_coverages,
+            band,
+            output_rows,
+        );
+        Ok(())
+    })
 }
 
 #[cfg(not(feature = "tiling"))]
