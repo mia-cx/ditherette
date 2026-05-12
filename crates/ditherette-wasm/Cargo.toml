@@ -9,6 +9,10 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = []
+parallel = []
+
 [dependencies]
 wasm-bindgen = "0.2"
 
