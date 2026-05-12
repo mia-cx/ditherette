@@ -4,6 +4,9 @@ use crate::{
     resize::buffers::{allocate_output_rgba, validate_resize_buffers},
 };
 
+#[cfg(feature = "tiling")]
+use crate::resize::cpu_tiling::{process_row_bands, RowBand, DEFAULT_ROW_BAND_TILING};
+
 /// Resizes RGBA with exact pixel-area averaging.
 ///
 /// This is the practical "box" downsampling filter: every output pixel covers a
@@ -32,9 +35,6 @@ pub fn resize_rgba_area_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Add row-band tiling once the scalar area kernel is optimized;
-    // large downscales have independent output rows and should amortize
-    // scheduling better than nearest's tiny kernels.
     // TODO(perf): Reuse area scratch state across calls like nearest does. The
     // coverage vectors are shape-specific and currently allocate on every resize.
     resize_rgba_area_reference_into(
@@ -89,9 +89,111 @@ pub fn resize_rgba_area_reference_into(
     let y_coverages =
         prepare_axis_coverages(source_dimensions.height(), output_dimensions.height())?;
 
+    process_area_rows(
+        source_rgba,
+        source_width,
+        output_width,
+        output_dimensions.height_usize()?,
+        output_row_byte_len,
+        &x_coverages,
+        &y_coverages,
+        output_rgba,
+    )
+}
+
+#[cfg(not(feature = "tiling"))]
+#[derive(Debug, Clone, Copy)]
+struct AreaRowRange {
+    output_y_start: usize,
+    output_y_end: usize,
+}
+
+#[cfg(not(feature = "tiling"))]
+impl From<AreaRowRange> for (usize, usize) {
+    fn from(row_range: AreaRowRange) -> Self {
+        (row_range.output_y_start, row_range.output_y_end)
+    }
+}
+
+#[cfg(feature = "tiling")]
+impl From<RowBand> for (usize, usize) {
+    fn from(row_band: RowBand) -> Self {
+        (row_band.output_y_start, row_band.output_y_end)
+    }
+}
+
+#[cfg(feature = "tiling")]
+fn process_area_rows(
+    source_rgba: &[u8],
+    source_width: usize,
+    output_width: usize,
+    output_height: usize,
+    output_row_byte_len: usize,
+    x_coverages: &[AxisCoverage],
+    y_coverages: &[AxisCoverage],
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    process_row_bands(
+        output_rgba,
+        output_width,
+        output_height,
+        DEFAULT_ROW_BAND_TILING,
+        |band, output_rows| {
+            write_area_rows(
+                source_rgba,
+                source_width,
+                output_row_byte_len,
+                x_coverages,
+                y_coverages,
+                band,
+                output_rows,
+            );
+            Ok(())
+        },
+    )
+}
+
+#[cfg(not(feature = "tiling"))]
+fn process_area_rows(
+    source_rgba: &[u8],
+    source_width: usize,
+    _output_width: usize,
+    output_height: usize,
+    output_row_byte_len: usize,
+    x_coverages: &[AxisCoverage],
+    y_coverages: &[AxisCoverage],
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    write_area_rows(
+        source_rgba,
+        source_width,
+        output_row_byte_len,
+        x_coverages,
+        y_coverages,
+        AreaRowRange {
+            output_y_start: 0,
+            output_y_end: output_height,
+        },
+        output_rgba,
+    );
+    Ok(())
+}
+
+fn write_area_rows<R>(
+    source_rgba: &[u8],
+    source_width: usize,
+    output_row_byte_len: usize,
+    x_coverages: &[AxisCoverage],
+    y_coverages: &[AxisCoverage],
+    row_range: R,
+    output_rgba: &mut [u8],
+) where
+    R: Into<(usize, usize)>,
+{
+    let (output_y_start, output_y_end) = row_range.into();
     for (output_row, y_coverage) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
-        .zip(y_coverages.iter())
+        .zip(y_coverages[output_y_start..output_y_end].iter())
     {
         for (output_pixel, x_coverage) in output_row
             .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
@@ -106,8 +208,6 @@ pub fn resize_rgba_area_reference_into(
             );
         }
     }
-
-    Ok(())
 }
 
 #[derive(Debug)]
