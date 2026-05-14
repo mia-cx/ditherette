@@ -32,6 +32,7 @@ fn scalar_matches_reference_across_resize_shapes() {
         (dimensions(4, 4), dimensions(2, 2)),
         (dimensions(5, 3), dimensions(4, 2)),
         (dimensions(3, 2), dimensions(5, 4)),
+        (dimensions(3, 2), dimensions(6, 4)),
         (dimensions(4, 5), dimensions(4, 3)),
         (dimensions(4, 3), dimensions(4, 3)),
         (dimensions(1, 1), dimensions(5, 4)),
