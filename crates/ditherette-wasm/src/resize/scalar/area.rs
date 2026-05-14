@@ -56,10 +56,9 @@ pub fn resize_rgba_area_scalar_into(
         let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
 
         for (output_x, x_range) in x_ranges.iter().copied().enumerate() {
-            // TODO(perf): Replace the temporary weighted_sums array with named
-            // channel accumulators to reduce indexing and stack traffic in the
-            // hottest loop. Benchmark with `pnpm bench:resize:area` before
-            // accepting.
+            // REJECT(perf): Replacing weighted_sums with named channel
+            // accumulators preserved correctness but regressed 2x and produced no
+            // meaningful downscale win in `pnpm bench:resize:area`.
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
             let mut total_weight = 0.0;
 
