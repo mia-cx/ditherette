@@ -335,8 +335,9 @@ fn write_area_pixel(
 // fractional area scales, produced one-byte mismatches at 0.95x/0.75x, and
 // regressed most scales in `pnpm bench:resize:area`; exact integer downscales now
 // use a dedicated u64 path instead.
-// TODO(perf): Try an interior-row helper that preserves f64 accumulation order
-// while walking byte offsets directly before changing arithmetic.
+// REJECT(perf): Walking full x spans by byte offset while preserving f64
+// accumulation order regressed 2x/0.95x/0.75x by 37%/72%/87%; leave the simple
+// indexed sample helper alone unless a narrower hot shape is isolated.
 fn accumulate_area_row(
     source_rgba: &[u8],
     source_width: usize,
