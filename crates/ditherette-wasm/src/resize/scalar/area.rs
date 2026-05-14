@@ -86,10 +86,10 @@ pub fn resize_rgba_area_scalar_into(
                     let x_weight = x_range.overlap_with(source_x);
                     let sample_weight = x_weight * y_weight;
 
-                    // TODO(perf): Test f32 or fixed-point weights/sums against
-                    // exact-reference byte output; lower precision may be faster
-                    // if it still matches accepted cases. Benchmark with
-                    // `pnpm bench:resize:area` before accepting.
+                    // REJECT(perf): Switching generic area weights/sums to f32
+                    // failed correctness preflight at 0.95x in
+                    // `pnpm bench:resize:area` (one-byte mismatch), so keep f64
+                    // for fractional area accumulation.
                     weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
                     weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
                     weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
