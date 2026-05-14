@@ -630,7 +630,7 @@ function positiveInteger(value, name) {
 }
 
 function helpText() {
-	return `Usage: pnpm bench:wasm-resize -- [options]
+	return `Usage: pnpm bench:resize:wasm -- [options]
 
 Options:
   --image FILE    Browser-decode this fixture before benchmarking Wasm resize.
@@ -647,8 +647,8 @@ Lanes:
   decoded-rgba         Reuse the decoded RGBA bytes, then time Wasm resize only.
 
 Examples:
-  pnpm bench:wasm-resize
-  pnpm bench:wasm-resize -- --image benchmark-fixtures/Celeste_box_art_full.png --iterations 10`;
+  pnpm bench:resize:wasm
+  pnpm bench:resize:wasm -- --image benchmark-fixtures/Celeste_box_art_full.png --iterations 10`;
 }
 
 async function assertFile(filePath, message) {
