@@ -51,6 +51,23 @@ pub use crate::resize::reference::nearest::{
     resize_rgba_nearest_reference, resize_rgba_nearest_reference_into,
 };
 
-#[cfg(feature = "tiling")]
 #[doc(hidden)]
 pub use crate::resize::scalar::nearest::resize_rgba_nearest_scalar_into;
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_nearest_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    crate::resize::tiling::nearest::resize_rgba_nearest_with_tiling_after_fast_paths(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        crate::resize::cpu_tiling::DEFAULT_ROW_BAND_TILING,
+        true,
+    )
+}

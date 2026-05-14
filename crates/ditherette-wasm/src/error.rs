@@ -17,6 +17,13 @@ pub enum ProcessingError {
         /// Operation or value whose checked size calculation overflowed.
         context: &'static str,
     },
+    /// A caller-supplied processing parameter was outside the supported range.
+    InvalidParameter {
+        /// Name of the invalid parameter.
+        name: &'static str,
+        /// Human-readable constraint that the parameter violated.
+        reason: &'static str,
+    },
     /// A byte buffer did not match the dimensions that describe it.
     InvalidBufferLength {
         /// Required byte length for the supplied dimensions.
@@ -31,6 +38,7 @@ impl fmt::Display for ProcessingError {
         match self {
             Self::ZeroDimension { name } => write!(formatter, "{name} must be greater than zero"),
             Self::SizeOverflow { context } => write!(formatter, "{context} is too large"),
+            Self::InvalidParameter { name, reason } => write!(formatter, "{name} {reason}"),
             Self::InvalidBufferLength { expected, actual } => write!(
                 formatter,
                 "RGBA buffer length mismatch: expected {expected} bytes, got {actual} bytes"

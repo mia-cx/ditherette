@@ -150,7 +150,31 @@ pub fn resize_rgba_bicubic(
     )
 }
 
-/// Resizes canonical RGBA bytes with fixed-radius Lanczos2 interpolation.
+/// Resizes canonical RGBA bytes with configurable Lanczos interpolation.
+#[wasm_bindgen]
+pub fn resize_rgba_lanczos(
+    source_rgba: &[u8],
+    source_width: u32,
+    source_height: u32,
+    output_width: u32,
+    output_height: u32,
+    window_size: f64,
+    scale_aware: bool,
+) -> Result<Vec<u8>, JsValue> {
+    let (source_dimensions, output_dimensions) =
+        resize_dimensions(source_width, source_height, output_width, output_height)?;
+
+    resize::resize_rgba_lanczos(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        window_size,
+        scale_aware,
+    )
+    .map_err(to_js_error)
+}
+
+/// Resizes canonical RGBA bytes with fixed-window Lanczos2 interpolation.
 #[wasm_bindgen]
 pub fn resize_rgba_lanczos2(
     source_rgba: &[u8],
@@ -169,7 +193,7 @@ pub fn resize_rgba_lanczos2(
     )
 }
 
-/// Resizes canonical RGBA bytes with fixed-radius Lanczos3 interpolation.
+/// Resizes canonical RGBA bytes with fixed-window Lanczos3 interpolation.
 #[wasm_bindgen]
 pub fn resize_rgba_lanczos3(
     source_rgba: &[u8],

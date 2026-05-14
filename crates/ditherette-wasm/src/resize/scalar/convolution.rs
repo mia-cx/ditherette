@@ -1,16 +1,11 @@
-use std::f64::consts::PI;
-
 use crate::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
-    resize::buffers::{allocate_output_rgba, validate_resize_buffers},
+    resize::{
+        buffers::{allocate_output_rgba, validate_resize_buffers},
+        shared::convolution::Kernel,
+    },
 };
-
-/// Separable reconstruction kernel used by convolution-based resize modes.
-pub(crate) trait Kernel: Copy {
-    fn radius(self) -> f64;
-    fn weight(self, distance: f64) -> f64;
-}
 
 // TODO(perf): Store contributions in a flat buffer plus per-output ranges. One
 // Vec per output coordinate creates allocation overhead and scattered reads in
@@ -206,10 +201,4 @@ fn convolution_channel(
     }
 
     value.round().clamp(0.0, 255.0) as u8
-}
-
-/// Normalized sinc used by Lanczos filters.
-pub(crate) fn sinc(x: f64) -> f64 {
-    let x_pi = x * PI;
-    x_pi.sin() / x_pi
 }

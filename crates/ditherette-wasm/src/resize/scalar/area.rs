@@ -1,6 +1,8 @@
-use crate::{error::ProcessingError, image::rgba};
-#[cfg(feature = "tiling")]
-use crate::{image::ImageDimensions, resize::buffers::validate_resize_buffers};
+use crate::{
+    error::ProcessingError,
+    image::{rgba, ImageDimensions},
+    resize::buffers::validate_resize_buffers,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct AreaRowRange {
@@ -14,7 +16,6 @@ impl From<AreaRowRange> for (usize, usize) {
     }
 }
 
-#[cfg(feature = "tiling")]
 #[doc(hidden)]
 pub fn resize_rgba_area_scalar_into(
     source_rgba: &[u8],
@@ -152,7 +153,7 @@ pub(crate) fn prepare_axis_coverages(
                 index: source_coordinate,
                 weight,
             };
-            if full_start == capped_last_source_exclusive {
+            if full_start == capped_last_source_exclusive && leading_partial.is_none() {
                 leading_partial = Some(partial);
             } else {
                 trailing_partial = Some(partial);

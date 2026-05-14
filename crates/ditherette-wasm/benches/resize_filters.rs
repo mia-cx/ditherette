@@ -3,25 +3,99 @@ use std::{env, hint::black_box, path::PathBuf, sync::OnceLock};
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
 #[cfg(feature = "tiling")]
 use ditherette_wasm::resize::cpu_tiling::{plan_row_bands, DEFAULT_ROW_BAND_TILING};
+#[cfg(feature = "tiling")]
+use ditherette_wasm::resize::{
+    area::resize_rgba_area_tiling_into, nearest::resize_rgba_nearest_tiling_into,
+};
 use ditherette_wasm::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
     resize::{
         antialias::antialias_rgba_box3_reference_into, antialias_rgba_box3_into,
         area::resize_rgba_area_reference_into, bicubic::resize_rgba_bicubic_reference_into,
-        bilinear::resize_rgba_bilinear_reference_into,
-        lanczos2::resize_rgba_lanczos2_reference_into,
-        lanczos2_scale_aware::resize_rgba_lanczos2_scale_aware_reference_into,
-        lanczos3::resize_rgba_lanczos3_reference_into,
-        lanczos3_scale_aware::resize_rgba_lanczos3_scale_aware_reference_into,
+        bilinear::resize_rgba_bilinear_reference_into, lanczos::resize_rgba_lanczos_reference_into,
         nearest::resize_rgba_nearest_reference_into, r#box::resize_rgba_box_reference_into,
-        resize_rgba_area_into, resize_rgba_bicubic_into, resize_rgba_bilinear_into,
-        resize_rgba_box_into, resize_rgba_lanczos2_into, resize_rgba_lanczos2_scale_aware_into,
-        resize_rgba_lanczos3_into, resize_rgba_lanczos3_scale_aware_into, resize_rgba_nearest_into,
+        resize_rgba_bicubic_into, resize_rgba_bilinear_into, resize_rgba_box_into,
+        resize_rgba_lanczos2_into, resize_rgba_lanczos2_scale_aware_into,
+        resize_rgba_lanczos3_into, resize_rgba_lanczos3_scale_aware_into,
         resize_rgba_trilinear_into, trilinear::resize_rgba_trilinear_reference_into,
     },
 };
 use image::{imageops::FilterType, ImageBuffer, ImageReader, RgbaImage};
+
+#[cfg(not(feature = "tiling"))]
+use ditherette_wasm::resize::{
+    area::resize_rgba_area_scalar_into as resize_rgba_area_bench_into,
+    nearest::resize_rgba_nearest_scalar_into as resize_rgba_nearest_bench_into,
+};
+#[cfg(feature = "tiling")]
+use resize_rgba_area_tiling_into as resize_rgba_area_bench_into;
+#[cfg(feature = "tiling")]
+use resize_rgba_nearest_tiling_into as resize_rgba_nearest_bench_into;
+
+fn resize_rgba_lanczos2_reference_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    resize_rgba_lanczos_reference_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        2.0,
+        false,
+    )
+}
+
+fn resize_rgba_lanczos2_scale_aware_reference_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    resize_rgba_lanczos_reference_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        2.0,
+        true,
+    )
+}
+
+fn resize_rgba_lanczos3_reference_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    resize_rgba_lanczos_reference_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        3.0,
+        false,
+    )
+}
+
+fn resize_rgba_lanczos3_scale_aware_reference_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    resize_rgba_lanczos_reference_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        3.0,
+        true,
+    )
+}
 
 const RESIZE_SCALES: [Scale; 6] = [
     Scale::new("2x", 2.0),
@@ -33,7 +107,7 @@ const RESIZE_SCALES: [Scale; 6] = [
 ];
 
 const RESIZE_FILTERS: [ResizeFilter; 20] = [
-    ResizeFilter::new("nearest", resize_rgba_nearest_into),
+    ResizeFilter::new("nearest", resize_rgba_nearest_bench_into),
     ResizeFilter::new("nearest_reference", resize_rgba_nearest_reference_into),
     ResizeFilter::new("bilinear", resize_rgba_bilinear_into),
     ResizeFilter::new("bilinear_reference", resize_rgba_bilinear_reference_into),
@@ -61,7 +135,7 @@ const RESIZE_FILTERS: [ResizeFilter; 20] = [
         "lanczos3_scale_aware_reference",
         resize_rgba_lanczos3_scale_aware_reference_into,
     ),
-    ResizeFilter::new("area", resize_rgba_area_into),
+    ResizeFilter::new("area", resize_rgba_area_bench_into),
     ResizeFilter::new("area_reference", resize_rgba_area_reference_into),
     ResizeFilter::new("box", resize_rgba_box_into),
     ResizeFilter::new("box_reference", resize_rgba_box_reference_into),
@@ -70,7 +144,7 @@ const RESIZE_FILTERS: [ResizeFilter; 20] = [
 const NEAREST_ANTIALIAS_FILTERS: [NearestAntialiasFilter; 2] = [
     NearestAntialiasFilter::new(
         "nearest_aa",
-        resize_rgba_nearest_into,
+        resize_rgba_nearest_bench_into,
         antialias_rgba_box3_into,
     ),
     NearestAntialiasFilter::new(
@@ -615,7 +689,7 @@ fn resized_nearest_fixture(
     output_byte_len: usize,
 ) -> Vec<u8> {
     let mut output_rgba = vec![0; output_byte_len];
-    resize_rgba_nearest_into(
+    resize_rgba_nearest_bench_into(
         &fixture.rgba,
         fixture.dimensions,
         output_dimensions,

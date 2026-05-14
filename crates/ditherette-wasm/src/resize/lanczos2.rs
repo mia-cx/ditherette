@@ -1,15 +1,12 @@
 use crate::{
     error::ProcessingError,
     image::ImageDimensions,
-    resize::lanczos::{
-        resize_rgba_lanczos, resize_rgba_lanczos_into, resize_rgba_lanczos_reference,
-        resize_rgba_lanczos_reference_into,
-    },
+    resize::{buffers::allocate_output_rgba, lanczos::resize_rgba_lanczos_into},
 };
 
-pub(crate) const LANCZOS2_LOBES: f64 = 2.0;
+pub(crate) const LANCZOS2_WINDOW_SIZE: f64 = 2.0;
 
-/// Resizes RGBA with a fixed-radius Lanczos2 filter.
+/// Resizes RGBA with a fixed-window Lanczos2 filter.
 // TODO(perf): Inline identity and equal-dimension checks here before allocating
 // through the shared Lanczos path; this named mode knows it has no extra setup.
 // TODO(perf): For small preview outputs, consider a direct single-pass Lanczos2
@@ -19,21 +16,22 @@ pub fn resize_rgba_lanczos2(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
 ) -> Result<Vec<u8>, ProcessingError> {
-    resize_rgba_lanczos(
+    let mut output_rgba = allocate_output_rgba(source_rgba, source_dimensions, output_dimensions)?;
+    resize_rgba_lanczos2_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
-        LANCZOS2_LOBES,
-        false,
-    )
+        &mut output_rgba,
+    )?;
+    Ok(output_rgba)
 }
 
-/// Resizes into a caller-provided output buffer with a fixed-radius Lanczos2 filter.
+/// Resizes into a caller-provided output buffer with a fixed-window Lanczos2 filter.
 // TODO(perf): Add fixed 4-tap Lanczos2 hot loops and precomputed fixed-point
 // weights if the generic convolution path is too slow for this mode.
-// TODO(perf): Precompute exactly four x indices/weights per output column and
-// four y indices/weights per output row for normal upscales; Lanczos2 support is
-// fixed, so Vec-backed variable tap lists are unnecessary there.
+// TODO(perf): Precompute exactly four source indices/weights per output column
+// and four y indices/weights per output row for normal upscales; Lanczos2
+// support is fixed, so Vec-backed variable tap lists are unnecessary there.
 // TODO(perf): Split unclamped interior pixels from clamped edge pixels. Interior
 // Lanczos2 samples can use four predictable taps per axis with no bounds merges.
 // TODO(perf): Add a two-pass separable implementation specialized for 2 lobes:
@@ -55,49 +53,15 @@ pub fn resize_rgba_lanczos2_into(
         source_dimensions,
         output_dimensions,
         output_rgba,
-        LANCZOS2_LOBES,
-        false,
-    )
-}
-
-/// Straightforward reference implementation for Lanczos2 resize.
-#[doc(hidden)]
-pub fn resize_rgba_lanczos2_reference(
-    source_rgba: &[u8],
-    source_dimensions: ImageDimensions,
-    output_dimensions: ImageDimensions,
-) -> Result<Vec<u8>, ProcessingError> {
-    resize_rgba_lanczos_reference(
-        source_rgba,
-        source_dimensions,
-        output_dimensions,
-        LANCZOS2_LOBES,
-        false,
-    )
-}
-
-/// Allocation-free form of the Lanczos2 reference implementation.
-#[doc(hidden)]
-pub fn resize_rgba_lanczos2_reference_into(
-    source_rgba: &[u8],
-    source_dimensions: ImageDimensions,
-    output_dimensions: ImageDimensions,
-    output_rgba: &mut [u8],
-) -> Result<(), ProcessingError> {
-    resize_rgba_lanczos_reference_into(
-        source_rgba,
-        source_dimensions,
-        output_dimensions,
-        output_rgba,
-        LANCZOS2_LOBES,
+        LANCZOS2_WINDOW_SIZE,
         false,
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::resize_rgba_lanczos2;
-    use crate::image::ImageDimensions;
+    use super::{resize_rgba_lanczos2, LANCZOS2_WINDOW_SIZE};
+    use crate::{image::ImageDimensions, resize::lanczos::resize_rgba_lanczos_reference};
 
     #[test]
     fn identity_resize_returns_same_bytes() {
@@ -108,6 +72,17 @@ mod tests {
 
         assert_eq!(
             resize_rgba_lanczos2(&source_rgba, dimensions, dimensions).unwrap(),
+            source_rgba
+        );
+        assert_eq!(
+            resize_rgba_lanczos_reference(
+                &source_rgba,
+                dimensions,
+                dimensions,
+                LANCZOS2_WINDOW_SIZE,
+                false,
+            )
+            .unwrap(),
             source_rgba
         );
     }

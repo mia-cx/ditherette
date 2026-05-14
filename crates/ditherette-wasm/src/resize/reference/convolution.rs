@@ -3,7 +3,7 @@ use crate::{
     image::{rgba, ImageDimensions},
     resize::{
         buffers::{allocate_output_rgba, validate_resize_buffers},
-        convolution::Kernel,
+        shared::convolution::Kernel,
     },
 };
 
