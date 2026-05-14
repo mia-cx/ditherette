@@ -44,7 +44,7 @@ fn two_by_two_to_three_by_three_blends_center_aligned_pixels() {
 }
 
 #[test]
-fn four_by_four_to_two_by_two_averages_source_pixel_centers() {
+fn four_by_four_to_two_by_two_matches_triangle_filter() {
     let source_rgba: Vec<u8> = (0..16)
         .flat_map(|value| [value, value, value, 255])
         .collect();
@@ -53,10 +53,10 @@ fn four_by_four_to_two_by_two_averages_source_pixel_centers() {
         resize_rgba_bilinear(&source_rgba, dimensions(4, 4), dimensions(2, 2)).unwrap();
 
     let expected_rgba = [
-        [3, 3, 3, 255],
+        [4, 4, 4, 255],
         [5, 5, 5, 255],
+        [10, 10, 10, 255],
         [11, 11, 11, 255],
-        [13, 13, 13, 255],
     ]
     .concat();
 
@@ -71,10 +71,10 @@ fn non_square_resize_uses_independent_x_and_y_weights() {
         resize_rgba_bilinear(&source_rgba, dimensions(3, 1), dimensions(2, 2)).unwrap();
 
     let expected_rgba = [
-        [23, 23, 23, 255],
-        [158, 158, 158, 255],
-        [23, 23, 23, 255],
-        [158, 158, 158, 255],
+        [34, 34, 34, 255],
+        [146, 146, 146, 255],
+        [34, 34, 34, 255],
+        [146, 146, 146, 255],
     ]
     .concat();
 

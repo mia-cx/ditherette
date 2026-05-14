@@ -1,3 +1,5 @@
+#[cfg(feature = "tiling")]
+use super::resize_rgba_nearest_scalar_into;
 use super::{is_exact_integer_downscale, map_output_coordinate, resize_rgba_nearest_into};
 #[cfg(feature = "tiling")]
 use crate::resize::cpu_tiling::RowBandTiling;
@@ -5,10 +7,7 @@ use crate::resize::cpu_tiling::RowBandTiling;
 use crate::resize::tiling::nearest::nearest_tiling_plan;
 use crate::{
     image::ImageDimensions,
-    resize::{
-        nearest::resize_rgba_nearest,
-        reference::nearest::{resize_rgba_nearest_reference, write_reference_resize},
-    },
+    resize::{nearest::resize_rgba_nearest, reference::nearest::resize_rgba_nearest_reference},
 };
 
 #[test]
@@ -68,24 +67,15 @@ fn assert_variants_match_baseline(
     output_dimensions: ImageDimensions,
 ) {
     let source_rgba = patterned_rgba(source_dimensions);
-    let baseline =
+    let reference =
         resize_rgba_nearest_reference(&source_rgba, source_dimensions, output_dimensions).unwrap();
 
     assert_eq!(
         resize_rgba_nearest(&source_rgba, source_dimensions, output_dimensions).unwrap(),
-        baseline
+        reference
     );
-    let mut output_rgba = vec![0xA5; baseline.len()];
-    write_reference_resize(
-        &source_rgba,
-        source_dimensions,
-        output_dimensions,
-        &mut output_rgba,
-    )
-    .unwrap();
-    assert_eq!(output_rgba, baseline);
 
-    let mut output_rgba = vec![0xA5; baseline.len()];
+    let mut output_rgba = vec![0xA5; reference.len()];
     resize_rgba_nearest_into(
         &source_rgba,
         source_dimensions,
@@ -93,7 +83,20 @@ fn assert_variants_match_baseline(
         &mut output_rgba,
     )
     .unwrap();
-    assert_eq!(output_rgba, baseline);
+    assert_eq!(output_rgba, reference);
+
+    #[cfg(feature = "tiling")]
+    {
+        let mut output_rgba = vec![0xA5; reference.len()];
+        resize_rgba_nearest_scalar_into(
+            &source_rgba,
+            source_dimensions,
+            output_dimensions,
+            &mut output_rgba,
+        )
+        .unwrap();
+        assert_eq!(output_rgba, reference);
+    }
 }
 
 fn patterned_rgba(dimensions: ImageDimensions) -> Vec<u8> {

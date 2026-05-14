@@ -2,12 +2,8 @@ use crate::{
     error::ProcessingError,
     image::ImageDimensions,
     resize::{
-        lanczos::{
-            resize_rgba_lanczos_scale_aware, resize_rgba_lanczos_scale_aware_into,
-            resize_rgba_lanczos_scale_aware_reference,
-            resize_rgba_lanczos_scale_aware_reference_into,
-        },
-        lanczos3::LANCZOS3_LOBES,
+        buffers::allocate_output_rgba, lanczos::resize_rgba_lanczos_into,
+        lanczos3::LANCZOS3_WINDOW_SIZE,
     },
 };
 
@@ -21,12 +17,14 @@ pub fn resize_rgba_lanczos3_scale_aware(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
 ) -> Result<Vec<u8>, ProcessingError> {
-    resize_rgba_lanczos_scale_aware(
+    let mut output_rgba = allocate_output_rgba(source_rgba, source_dimensions, output_dimensions)?;
+    resize_rgba_lanczos3_scale_aware_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
-        LANCZOS3_LOBES,
-    )
+        &mut output_rgba,
+    )?;
+    Ok(output_rgba)
 }
 
 /// Resizes into a caller-provided output buffer with scale-aware Lanczos3.
@@ -36,51 +34,20 @@ pub fn resize_rgba_lanczos3_scale_aware_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    resize_rgba_lanczos_scale_aware_into(
+    resize_rgba_lanczos_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
-        LANCZOS3_LOBES,
-    )
-}
-
-/// Straightforward reference implementation for scale-aware Lanczos3 resize.
-#[doc(hidden)]
-pub fn resize_rgba_lanczos3_scale_aware_reference(
-    source_rgba: &[u8],
-    source_dimensions: ImageDimensions,
-    output_dimensions: ImageDimensions,
-) -> Result<Vec<u8>, ProcessingError> {
-    resize_rgba_lanczos_scale_aware_reference(
-        source_rgba,
-        source_dimensions,
-        output_dimensions,
-        LANCZOS3_LOBES,
-    )
-}
-
-/// Allocation-free form of the scale-aware Lanczos3 reference implementation.
-#[doc(hidden)]
-pub fn resize_rgba_lanczos3_scale_aware_reference_into(
-    source_rgba: &[u8],
-    source_dimensions: ImageDimensions,
-    output_dimensions: ImageDimensions,
-    output_rgba: &mut [u8],
-) -> Result<(), ProcessingError> {
-    resize_rgba_lanczos_scale_aware_reference_into(
-        source_rgba,
-        source_dimensions,
-        output_dimensions,
-        output_rgba,
-        LANCZOS3_LOBES,
+        LANCZOS3_WINDOW_SIZE,
+        true,
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::resize_rgba_lanczos3_scale_aware;
-    use crate::image::ImageDimensions;
+    use super::{resize_rgba_lanczos3_scale_aware, LANCZOS3_WINDOW_SIZE};
+    use crate::{image::ImageDimensions, resize::lanczos::resize_rgba_lanczos_reference};
 
     #[test]
     fn identity_resize_returns_same_bytes() {
@@ -91,6 +58,17 @@ mod tests {
 
         assert_eq!(
             resize_rgba_lanczos3_scale_aware(&source_rgba, dimensions, dimensions).unwrap(),
+            source_rgba
+        );
+        assert_eq!(
+            resize_rgba_lanczos_reference(
+                &source_rgba,
+                dimensions,
+                dimensions,
+                LANCZOS3_WINDOW_SIZE,
+                true,
+            )
+            .unwrap(),
             source_rgba
         );
     }

@@ -104,7 +104,6 @@ pub(crate) fn resize_rgba_nearest_scalar_after_fast_paths(
     })
 }
 
-#[cfg(feature = "tiling")]
 #[doc(hidden)]
 pub fn resize_rgba_nearest_scalar_into(
     source_rgba: &[u8],
