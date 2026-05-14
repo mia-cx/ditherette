@@ -598,7 +598,7 @@ fn report_byte_equality(
     right: &[u8],
 ) {
     if let Some(mismatch) = first_mismatch(left, right) {
-        eprintln!(
+        panic!(
             "correctness {}x{}: {} differs from {} at byte {}: {}={} {}={}",
             output_dimensions.width(),
             output_dimensions.height(),
@@ -610,7 +610,6 @@ fn report_byte_equality(
             right_name,
             mismatch.right
         );
-        return;
     }
 
     eprintln!(
