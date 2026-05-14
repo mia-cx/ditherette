@@ -42,6 +42,7 @@ pub fn resize_rgba_area_scalar_into(
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
     let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
 
@@ -72,17 +73,18 @@ pub fn resize_rgba_area_scalar_into(
             // accepting.
             for source_y in y_range.first..y_range.last_exclusive {
                 let y_weight = y_range.overlap_with(source_y);
+                let source_row_start = source_y * source_row_byte_len;
+                let source_start = source_row_start + x_range.first * rgba::RGBA_CHANNEL_COUNT;
+                let source_end =
+                    source_row_start + x_range.last_exclusive * rgba::RGBA_CHANNEL_COUNT;
+                let source_pixels =
+                    source_rgba[source_start..source_end].chunks_exact(rgba::RGBA_CHANNEL_COUNT);
 
-                for source_x in x_range.first..x_range.last_exclusive {
+                for (source_x, source_pixel) in
+                    (x_range.first..x_range.last_exclusive).zip(source_pixels)
+                {
                     let x_weight = x_range.overlap_with(source_x);
                     let sample_weight = x_weight * y_weight;
-                    // TODO(perf): Carry row byte offsets through the source-y
-                    // loop and increment source offsets by RGBA stride instead
-                    // of multiplying in `pixel_byte_offset` for each sample.
-                    // Benchmark with `pnpm bench:resize:area` before accepting.
-                    let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
-                    let source_pixel =
-                        &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
 
                     // TODO(perf): Test f32 or fixed-point weights/sums against
                     // exact-reference byte output; lower precision may be faster
