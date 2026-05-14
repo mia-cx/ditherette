@@ -35,6 +35,9 @@ pub fn resize_rgba_area_scalar_into(
         return Ok(());
     }
 
+    // TODO(perf): Cache x/y coverage plans for repeated preview resizes with the
+    // same dimensions to avoid rebuilding float coverage tables every frame.
+    // Benchmark with `pnpm bench:resize:area` before accepting.
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
@@ -43,6 +46,16 @@ pub fn resize_rgba_area_scalar_into(
     let y_coverages =
         prepare_axis_coverages(source_dimensions.height(), output_dimensions.height())?;
 
+    // TODO(perf): Dispatch integer-ratio downscales (2x, 4x, etc.) to an
+    // integer-sum fast path that avoids fractional coverage branches and f64
+    // weights. Benchmark with `pnpm bench:resize:area` before accepting.
+    // TODO(perf): Add single-axis paths for same-width or same-height resizes so
+    // exact area work only runs along the changing axis. Benchmark with
+    // `pnpm bench:resize:area` before accepting.
+    // TODO(perf): Specialize enlargement where each output pixel covers at most
+    // two source samples per axis; a compact 1x/2x-by-1x/2x path may avoid the
+    // generic partial/full/trailing loops. Benchmark with `pnpm bench:resize:area`
+    // before accepting.
     write_area_rows(
         source_rgba,
         source_width,
@@ -105,6 +118,13 @@ struct WeightedSourceIndex {
     weight: f64,
 }
 
+// TODO(perf): Store byte offsets for x coverage and source row offsets for y
+// coverage instead of source indices, reducing multiply/add work in the per-sample
+// hot loop. Benchmark with `pnpm bench:resize:area` before accepting.
+// TODO(perf): Split AxisCoverage into enum variants for common shapes
+// (single-source, two-partial upscale, exact integer interior, fractional edge)
+// so hot loops can avoid Option branches. Benchmark with `pnpm bench:resize:area`
+// before accepting.
 pub(crate) fn prepare_axis_coverages(
     source_size: u32,
     output_size: u32,
@@ -172,6 +192,14 @@ pub(crate) fn prepare_axis_coverages(
     Ok(coverages)
 }
 
+// TODO(perf): Evaluate a separable area implementation with a horizontal scratch
+// pass followed by vertical accumulation. It may reduce repeated x coverage work
+// for large y footprints. Benchmark with `pnpm bench:cmp --compare
+// resize:area:scalar --to resize:area:scalar` on the candidate branch before
+// accepting.
+// TODO(perf): Evaluate row/integral prefix sums for full interior spans so large
+// minification ratios do O(1) full-span accumulation plus fractional edges.
+// Benchmark with `pnpm bench:resize:area` before accepting.
 fn write_area_pixel(
     source_rgba: &[u8],
     source_width: usize,
@@ -179,7 +207,7 @@ fn write_area_pixel(
     y_coverage: &AxisCoverage,
     output_pixel: &mut [u8],
 ) {
-    let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
+    let mut weighted_sums = WeightedSums::default();
 
     if let Some(y_sample) = y_coverage.leading_partial {
         accumulate_area_row(
@@ -215,19 +243,32 @@ fn write_area_pixel(
     }
 
     let inverse_total_weight = x_coverage.inverse_total_weight * y_coverage.inverse_total_weight;
-    output_pixel[0] = round_channel(weighted_sums[0] * inverse_total_weight);
-    output_pixel[1] = round_channel(weighted_sums[1] * inverse_total_weight);
-    output_pixel[2] = round_channel(weighted_sums[2] * inverse_total_weight);
-    output_pixel[3] = round_channel(weighted_sums[3] * inverse_total_weight);
+    output_pixel[0] = round_channel(weighted_sums.red * inverse_total_weight);
+    output_pixel[1] = round_channel(weighted_sums.green * inverse_total_weight);
+    output_pixel[2] = round_channel(weighted_sums.blue * inverse_total_weight);
+    output_pixel[3] = round_channel(weighted_sums.alpha * inverse_total_weight);
 }
 
+#[derive(Debug, Default)]
+struct WeightedSums {
+    red: f64,
+    green: f64,
+    blue: f64,
+    alpha: f64,
+}
+
+// REJECT(perf): Pre-summing full x spans as u32 changed rounding for fractional
+// area scales, produced one-byte mismatches at 0.95x/0.75x, and regressed most
+// scales in `pnpm bench:resize:area`; only 0.125x improved.
+// TODO(perf): Try an interior-row helper that preserves f64 accumulation order
+// while walking byte offsets directly before changing arithmetic.
 fn accumulate_area_row(
     source_rgba: &[u8],
     source_width: usize,
     x_coverage: &AxisCoverage,
     source_y: usize,
     y_weight: f64,
-    weighted_sums: &mut [f64; rgba::RGBA_CHANNEL_COUNT],
+    weighted_sums: &mut WeightedSums,
 ) {
     if let Some(x_sample) = x_coverage.leading_partial {
         accumulate_area_sample(
@@ -263,21 +304,28 @@ fn accumulate_area_row(
     }
 }
 
+// TODO(perf): Test f32 or fixed-point weights/sums against exact-reference byte
+// output; lower precision may be faster if it still matches accepted cases.
+// Benchmark with `pnpm bench:cmp --compare resize:area:reference --to
+// resize:area:scalar` before accepting.
 fn accumulate_area_sample(
     source_rgba: &[u8],
     source_width: usize,
     source_x: usize,
     source_y: usize,
     sample_weight: f64,
-    weighted_sums: &mut [f64; rgba::RGBA_CHANNEL_COUNT],
+    weighted_sums: &mut WeightedSums,
 ) {
     let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
     let source_pixel = &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
 
-    weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
-    weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
-    weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
-    weighted_sums[3] += f64::from(source_pixel[3]) * sample_weight;
+    // TODO(perf): Add an opaque-alpha fast path that writes 255 without
+    // accumulating alpha when the source buffer is known opaque. Benchmark with
+    // `pnpm bench:resize:area` before accepting.
+    weighted_sums.red += f64::from(source_pixel[0]) * sample_weight;
+    weighted_sums.green += f64::from(source_pixel[1]) * sample_weight;
+    weighted_sums.blue += f64::from(source_pixel[2]) * sample_weight;
+    weighted_sums.alpha += f64::from(source_pixel[3]) * sample_weight;
 }
 
 fn round_channel(value: f64) -> u8 {
