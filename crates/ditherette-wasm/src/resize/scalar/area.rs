@@ -48,6 +48,16 @@ pub fn resize_rgba_area_scalar_into(
         return Ok(());
     }
 
+    if is_exact_integer_upscale(source_dimensions, output_dimensions) {
+        resize_exact_integer_upscale_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )?;
+        return Ok(());
+    }
+
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
@@ -59,10 +69,10 @@ pub fn resize_rgba_area_scalar_into(
     // TODO(perf): Add single-axis paths for same-width or same-height resizes so
     // exact area work only runs along the changing axis. Benchmark with
     // `pnpm bench:resize:area` before accepting.
-    // TODO(perf): Specialize enlargement where each output pixel covers at most
-    // two source samples per axis; a compact 1x/2x-by-1x/2x path may avoid the
-    // generic partial/full/trailing loops. Benchmark with `pnpm bench:resize:area`
-    // before accepting.
+    // TODO(perf): Specialize non-integer enlargement where each output pixel
+    // covers at most two source samples per axis; exact integer upscales already
+    // use a copy fast path. Benchmark with `pnpm bench:resize:area` before
+    // accepting.
     write_area_rows(
         source_rgba,
         source_width,
@@ -93,6 +103,59 @@ fn is_exact_integer_downscale(
         && (source_width > output_width || source_height > output_height)
         && source_width.is_multiple_of(output_width)
         && source_height.is_multiple_of(output_height)
+}
+
+fn is_exact_integer_upscale(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    let source_width = source_dimensions.width();
+    let source_height = source_dimensions.height();
+    let output_width = output_dimensions.width();
+    let output_height = output_dimensions.height();
+
+    output_width >= source_width
+        && output_height >= source_height
+        && (output_width > source_width || output_height > source_height)
+        && output_width.is_multiple_of(source_width)
+        && output_height.is_multiple_of(source_height)
+}
+
+fn resize_exact_integer_upscale_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    let source_width = source_dimensions.width_usize()?;
+    let source_height = source_dimensions.height_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let x_step = output_width / source_width;
+    let y_step = output_dimensions.height_usize()? / source_height;
+
+    for source_y in 0..source_height {
+        let source_row_start = source_y * source_row_byte_len;
+        let source_row = &source_rgba[source_row_start..source_row_start + source_row_byte_len];
+
+        for output_y in source_y * y_step..(source_y + 1) * y_step {
+            let output_row_start = output_y * output_row_byte_len;
+            let output_row =
+                &mut output_rgba[output_row_start..output_row_start + output_row_byte_len];
+
+            for (source_pixel, output_pixels) in source_row
+                .chunks_exact(rgba::RGBA_CHANNEL_COUNT)
+                .zip(output_row.chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT * x_step))
+            {
+                for output_pixel in output_pixels.chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT) {
+                    output_pixel.copy_from_slice(source_pixel);
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn resize_exact_integer_downscale_into(
