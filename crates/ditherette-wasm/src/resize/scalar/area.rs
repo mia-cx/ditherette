@@ -46,8 +46,8 @@ pub fn resize_rgba_area_scalar_into(
     let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
     let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
 
-    let x_ranges: Vec<_> = (0..output_width)
-        .map(|output_x| SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width()))
+    let x_coverages: Vec<_> = (0..output_width)
+        .map(|output_x| XCoverage::for_output_pixel(output_x, x_scale, source_dimensions.width()))
         .collect();
 
     // REJECT(perf): Iterating output rows with `chunks_exact_mut` and writing
@@ -56,7 +56,7 @@ pub fn resize_rgba_area_scalar_into(
     for output_y in 0..output_height {
         let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
 
-        for (output_x, x_range) in x_ranges.iter().copied().enumerate() {
+        for (output_x, x_coverage) in x_coverages.iter().enumerate() {
             // REJECT(perf): Replacing weighted_sums with named channel
             // accumulators preserved correctness but regressed 2x and produced no
             // meaningful downscale win in `pnpm bench:resize:area`.
@@ -64,8 +64,8 @@ pub fn resize_rgba_area_scalar_into(
             let mut total_weight = 0.0;
 
             // TODO(perf): Use a separable horizontal scratch pass followed by
-            // vertical accumulation to avoid redoing x coverage work for every
-            // covered source row. Benchmark with `pnpm bench:resize:area` before
+            // vertical accumulation to avoid rereading source rows for every
+            // covered output row. Benchmark with `pnpm bench:resize:area` before
             // accepting.
             // TODO(perf): Use row or integral prefix sums for full interior spans
             // so large downscales do O(1) full-span accumulation plus fractional
@@ -74,16 +74,14 @@ pub fn resize_rgba_area_scalar_into(
             for source_y in y_range.first..y_range.last_exclusive {
                 let y_weight = y_range.overlap_with(source_y);
                 let source_row_start = source_y * source_row_byte_len;
-                let source_start = source_row_start + x_range.first * rgba::RGBA_CHANNEL_COUNT;
-                let source_end =
-                    source_row_start + x_range.last_exclusive * rgba::RGBA_CHANNEL_COUNT;
+                let source_start = source_row_start + x_coverage.first_byte_offset;
+                let source_end = source_row_start + x_coverage.last_exclusive_byte_offset;
                 let source_pixels =
                     source_rgba[source_start..source_end].chunks_exact(rgba::RGBA_CHANNEL_COUNT);
 
-                for (source_x, source_pixel) in
-                    (x_range.first..x_range.last_exclusive).zip(source_pixels)
+                for (x_weight, source_pixel) in
+                    x_coverage.weights.iter().copied().zip(source_pixels)
                 {
-                    let x_weight = x_range.overlap_with(source_x);
                     let sample_weight = x_weight * y_weight;
 
                     // REJECT(perf): Switching generic area weights/sums to f32
@@ -180,6 +178,28 @@ fn resize_exact_integer_downscale_into(
 
 fn round_average_channel(sum: u64, divisor: u64) -> u8 {
     ((sum * 2 + divisor) / (divisor * 2)).min(u64::from(u8::MAX)) as u8
+}
+
+#[derive(Debug)]
+struct XCoverage {
+    first_byte_offset: usize,
+    last_exclusive_byte_offset: usize,
+    weights: Vec<f64>,
+}
+
+impl XCoverage {
+    fn for_output_pixel(output_coordinate: usize, scale: f64, source_size: u32) -> Self {
+        let range = SourceRange::for_output_pixel(output_coordinate, scale, source_size);
+        let weights = (range.first..range.last_exclusive)
+            .map(|source_x| range.overlap_with(source_x))
+            .collect();
+
+        Self {
+            first_byte_offset: range.first * rgba::RGBA_CHANNEL_COUNT,
+            last_exclusive_byte_offset: range.last_exclusive * rgba::RGBA_CHANNEL_COUNT,
+            weights,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
