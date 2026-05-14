@@ -49,9 +49,9 @@ pub fn resize_rgba_area_scalar_into(
         .map(|output_x| SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width()))
         .collect();
 
-    // TODO(perf): Iterate output rows with `chunks_exact_mut` instead of
-    // recomputing byte offsets per output pixel. Benchmark with
-    // `pnpm bench:resize:area` before accepting.
+    // REJECT(perf): Iterating output rows with `chunks_exact_mut` and writing
+    // output pixels directly preserved correctness but regressed 0.8x, 0.75x,
+    // 0.625x, 0.5x, 0.375x, 0.25x, and 0.125x in `pnpm bench:resize:area`.
     for output_y in 0..output_height {
         let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
 
