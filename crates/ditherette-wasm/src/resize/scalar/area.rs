@@ -395,9 +395,10 @@ fn accumulate_area_sample(
     let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
     let source_pixel = &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
 
-    // TODO(perf): Add an opaque-alpha fast path that writes 255 without
-    // accumulating alpha when the source buffer is known opaque. Benchmark with
-    // `pnpm bench:resize:area` before accepting.
+    // REJECT(perf): Scanning for opaque alpha and branching around alpha
+    // accumulation regressed all scales in `pnpm bench:resize:area`; the scan and
+    // extra branch cost more than skipping the alpha multiply on the Celeste
+    // fixture.
     weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
     weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
     weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
