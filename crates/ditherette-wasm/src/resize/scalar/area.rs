@@ -26,13 +26,19 @@ pub fn resize_rgba_area_scalar_into(
     // TODO(perf): Cache x/y range plans for repeated preview resizes with the
     // same dimensions so interactive downscales do not rebuild coverage metadata
     // every frame. Benchmark with `pnpm bench:resize:area` before accepting.
-    // TODO(perf): Add an exact integer downscale fast path that accumulates each
-    // output footprint with integer sums, avoiding f64 overlap math for 0.5x,
-    // 0.25x, and 0.125x. Benchmark with `pnpm bench:resize:area` before
-    // accepting.
     // TODO(perf): Add single-axis downscale paths for same-width or same-height
     // resizes so exact area work only runs along the changing axis. Benchmark
     // with `pnpm bench:resize:area` before accepting.
+    if is_exact_integer_downscale(source_dimensions, output_dimensions) {
+        resize_exact_integer_downscale_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )?;
+        return Ok(());
+    }
+
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
@@ -101,6 +107,79 @@ pub fn resize_rgba_area_scalar_into(
     }
 
     Ok(())
+}
+
+fn is_exact_integer_downscale(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    let source_width = source_dimensions.width();
+    let source_height = source_dimensions.height();
+    let output_width = output_dimensions.width();
+    let output_height = output_dimensions.height();
+
+    source_width >= output_width
+        && source_height >= output_height
+        && (source_width > output_width || source_height > output_height)
+        && source_width.is_multiple_of(output_width)
+        && source_height.is_multiple_of(output_height)
+}
+
+fn resize_exact_integer_downscale_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let x_step = source_width / output_width;
+    let y_step = source_dimensions.height_usize()? / output_dimensions.height_usize()?;
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+    let divisor = (x_step * y_step) as u64;
+
+    for (output_y, output_row) in output_rgba
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let source_y_start = output_y * y_step;
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+            .enumerate()
+        {
+            let source_x_start = output_x * x_step;
+            let mut red_sum = 0u64;
+            let mut green_sum = 0u64;
+            let mut blue_sum = 0u64;
+            let mut alpha_sum = 0u64;
+
+            for source_y in source_y_start..source_y_start + y_step {
+                let row_start = source_y * source_row_byte_len;
+                let source_start = row_start + source_x_start * rgba::RGBA_CHANNEL_COUNT;
+                let source_end = source_start + x_step * rgba::RGBA_CHANNEL_COUNT;
+                for source_pixel in
+                    source_rgba[source_start..source_end].chunks_exact(rgba::RGBA_CHANNEL_COUNT)
+                {
+                    red_sum += u64::from(source_pixel[0]);
+                    green_sum += u64::from(source_pixel[1]);
+                    blue_sum += u64::from(source_pixel[2]);
+                    alpha_sum += u64::from(source_pixel[3]);
+                }
+            }
+
+            output_pixel[0] = round_average_channel(red_sum, divisor);
+            output_pixel[1] = round_average_channel(green_sum, divisor);
+            output_pixel[2] = round_average_channel(blue_sum, divisor);
+            output_pixel[3] = round_average_channel(alpha_sum, divisor);
+        }
+    }
+
+    Ok(())
+}
+
+fn round_average_channel(sum: u64, divisor: u64) -> u8 {
+    ((sum * 2 + divisor) / (divisor * 2)).min(u64::from(u8::MAX)) as u8
 }
 
 #[derive(Debug, Clone, Copy)]
