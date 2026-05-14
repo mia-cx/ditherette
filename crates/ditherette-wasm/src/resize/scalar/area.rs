@@ -45,18 +45,17 @@ pub fn resize_rgba_area_scalar_into(
     let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
     let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
 
-    // TODO(perf): Precompute x SourceRange values once before the row loop; the
-    // x coverage is reused for every output row. Benchmark with
-    // `pnpm bench:resize:area` before accepting.
+    let x_ranges: Vec<_> = (0..output_width)
+        .map(|output_x| SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width()))
+        .collect();
+
     // TODO(perf): Iterate output rows with `chunks_exact_mut` instead of
     // recomputing byte offsets per output pixel. Benchmark with
     // `pnpm bench:resize:area` before accepting.
     for output_y in 0..output_height {
         let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
 
-        for output_x in 0..output_width {
-            let x_range =
-                SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width());
+        for (output_x, x_range) in x_ranges.iter().copied().enumerate() {
             // TODO(perf): Replace the temporary weighted_sums array with named
             // channel accumulators to reduce indexing and stack traffic in the
             // hottest loop. Benchmark with `pnpm bench:resize:area` before
