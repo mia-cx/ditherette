@@ -47,44 +47,44 @@ pnpm wasm:test:browser
 Run the Rust nearest-neighbor kernel benchmark:
 
 ```sh
-pnpm bench:rust-resize
+pnpm bench:resize
 ```
 
 Run the Rust bilinear kernel benchmark:
 
 ```sh
-pnpm bench:rust-bilinear
+pnpm bench:resize:bilinear-criterion
 ```
 
 Run all canonical Rust resize filters in Criterion. Before sampling, the bench reports byte equality for local `<filter>` vs `<filter>_reference` and, where useful, for `<filter>_reference` vs matching `image` crate output; mismatches are reported but do not stop the benchmark.
 
 ```sh
-pnpm bench:rust-filters
+pnpm bench:resize:filters
 ```
 
 Run one filter at a time:
 
 ```sh
-pnpm bench:nearest
-pnpm bench:nearest:aa
-pnpm bench:bilinear
-pnpm bench:trilinear
-pnpm bench:bicubic
-pnpm bench:lanczos2
-pnpm bench:lanczos2-scale-aware
-pnpm bench:lanczos3
-pnpm bench:lanczos3-scale-aware
-pnpm bench:area
-pnpm bench:box
-pnpm bench:antialias
+pnpm bench:resize:nearest
+pnpm bench:resize:nearest:aa
+pnpm bench:resize:bilinear
+pnpm bench:resize:trilinear
+pnpm bench:resize:bicubic
+pnpm bench:resize:lanczos2
+pnpm bench:resize:lanczos2-scale-aware
+pnpm bench:resize:lanczos3
+pnpm bench:resize:lanczos3-scale-aware
+pnpm bench:resize:area
+pnpm bench:resize:box
+pnpm bench:resize:antialias
 ```
 
 Pass Criterion options when you want a longer or shorter run:
 
 ```sh
-pnpm bench:rust-resize --measurement-time 30 --sample-size 100 --warm-up-time 5
-pnpm bench:rust-bilinear --measurement-time 30 --sample-size 100 --warm-up-time 5
-pnpm bench:rust-filters --measurement-time 30 --sample-size 100 --warm-up-time 5
+pnpm bench:resize --measurement-time 30 --sample-size 100 --warm-up-time 5
+pnpm bench:resize:bilinear-criterion --measurement-time 30 --sample-size 100 --warm-up-time 5
+pnpm bench:resize:filters --measurement-time 30 --sample-size 100 --warm-up-time 5
 ```
 
 The npm script preserves Criterion's saved benchmark state so `--save-baseline` and `--baseline` can show regressions and speedups. After Criterion finishes, it prints a percentile summary from Criterion's raw samples. Before sampling each scale, the benchmark checks selected canonical filters against their reference implementations.
@@ -92,7 +92,7 @@ The npm script preserves Criterion's saved benchmark state so `--save-baseline` 
 Run the real-browser nearest-neighbor resize smoke benchmark:
 
 ```sh
-pnpm bench:wasm-resize
+pnpm bench:resize:wasm
 ```
 
 Both benchmarks use `benchmark-fixtures/Celeste_box_art_full.png` by default at 2x, 0.95x, 0.75x, 0.5x, 0.25x, and 0.125x. Criterion measures canonical production kernels only; reference implementations run in preflight correctness checks. The Rust benchmark times kernels over decoded RGBA memory; the browser benchmark includes the generated Wasm package and reports browser decode/normalization context.
