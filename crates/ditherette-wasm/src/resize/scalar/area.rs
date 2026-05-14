@@ -23,31 +23,67 @@ pub fn resize_rgba_area_scalar_into(
         return Ok(());
     }
 
+    // TODO(perf): Cache x/y range plans for repeated preview resizes with the
+    // same dimensions so interactive downscales do not rebuild coverage metadata
+    // every frame. Benchmark with `pnpm bench:resize:area` before accepting.
+    // TODO(perf): Add an exact integer downscale fast path that accumulates each
+    // output footprint with integer sums, avoiding f64 overlap math for 0.5x,
+    // 0.25x, and 0.125x. Benchmark with `pnpm bench:resize:area` before
+    // accepting.
+    // TODO(perf): Add single-axis downscale paths for same-width or same-height
+    // resizes so exact area work only runs along the changing axis. Benchmark
+    // with `pnpm bench:resize:area` before accepting.
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
     let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
     let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
 
+    // TODO(perf): Precompute x SourceRange values once before the row loop; the
+    // x coverage is reused for every output row. Benchmark with
+    // `pnpm bench:resize:area` before accepting.
+    // TODO(perf): Iterate output rows with `chunks_exact_mut` instead of
+    // recomputing byte offsets per output pixel. Benchmark with
+    // `pnpm bench:resize:area` before accepting.
     for output_y in 0..output_height {
         let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
 
         for output_x in 0..output_width {
             let x_range =
                 SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width());
+            // TODO(perf): Replace the temporary weighted_sums array with named
+            // channel accumulators to reduce indexing and stack traffic in the
+            // hottest loop. Benchmark with `pnpm bench:resize:area` before
+            // accepting.
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
             let mut total_weight = 0.0;
 
+            // TODO(perf): Use a separable horizontal scratch pass followed by
+            // vertical accumulation to avoid redoing x coverage work for every
+            // covered source row. Benchmark with `pnpm bench:resize:area` before
+            // accepting.
+            // TODO(perf): Use row or integral prefix sums for full interior spans
+            // so large downscales do O(1) full-span accumulation plus fractional
+            // edge samples. Benchmark with `pnpm bench:resize:area` before
+            // accepting.
             for source_y in y_range.first..y_range.last_exclusive {
                 let y_weight = y_range.overlap_with(source_y);
 
                 for source_x in x_range.first..x_range.last_exclusive {
                     let x_weight = x_range.overlap_with(source_x);
                     let sample_weight = x_weight * y_weight;
+                    // TODO(perf): Carry row byte offsets through the source-y
+                    // loop and increment source offsets by RGBA stride instead
+                    // of multiplying in `pixel_byte_offset` for each sample.
+                    // Benchmark with `pnpm bench:resize:area` before accepting.
                     let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
                     let source_pixel =
                         &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
 
+                    // TODO(perf): Test f32 or fixed-point weights/sums against
+                    // exact-reference byte output; lower precision may be faster
+                    // if it still matches accepted cases. Benchmark with
+                    // `pnpm bench:resize:area` before accepting.
                     weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
                     weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
                     weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
