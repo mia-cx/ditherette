@@ -103,17 +103,31 @@ fn resize_rgba_lanczos3_scale_aware_reference_into(
     )
 }
 
-const RESIZE_SCALES: [Scale; 10] = [
-    Scale::new("2x", 2.0),
+const UPSCALE_SCALES: [Scale; 1] = [Scale::new("2x", 2.0)];
+const FRACTIONAL_DOWNSCALE_SCALES: [Scale; 5] = [
     Scale::new("0.95x", 0.95),
     Scale::new("0.875x", 0.875),
     Scale::new("0.8x", 0.8),
     Scale::new("0.75x", 0.75),
     Scale::new("0.625x", 0.625),
+];
+const EXACT_DOWNSCALE_SCALES: [Scale; 4] = [
     Scale::new("0.5x", 0.5),
     Scale::new("0.375x", 0.375),
     Scale::new("0.25x", 0.25),
     Scale::new("0.125x", 0.125),
+];
+const RESIZE_SCALES: [Scale; 10] = [
+    UPSCALE_SCALES[0],
+    FRACTIONAL_DOWNSCALE_SCALES[0],
+    FRACTIONAL_DOWNSCALE_SCALES[1],
+    FRACTIONAL_DOWNSCALE_SCALES[2],
+    FRACTIONAL_DOWNSCALE_SCALES[3],
+    FRACTIONAL_DOWNSCALE_SCALES[4],
+    EXACT_DOWNSCALE_SCALES[0],
+    EXACT_DOWNSCALE_SCALES[1],
+    EXACT_DOWNSCALE_SCALES[2],
+    EXACT_DOWNSCALE_SCALES[3],
 ];
 
 const RESIZE_FILTERS: [ResizeFilter; 22] = [
@@ -182,32 +196,70 @@ static CELESTE_FIXTURE: OnceLock<RgbaFixture> = OnceLock::new();
 fn resize_filter_variants(criterion: &mut Criterion) {
     let fixture = CELESTE_FIXTURE.get_or_init(load_celeste_fixture);
 
+    let selected_scale_group = requested_resize_scale_group();
+
     if let Some(comparison) = requested_resize_comparison() {
-        preflight_resize_comparison(fixture, &comparison);
-        for scale in RESIZE_SCALES {
+        preflight_resize_comparison(fixture, &comparison, selected_scale_group);
+        for &scale in selected_resize_scales(selected_scale_group) {
             bench_scale_comparison(criterion, fixture, scale, &comparison);
         }
         return;
     }
 
     let selected_filter = requested_resize_filter();
-    preflight_resize_filter_correctness(fixture, selected_filter.as_deref());
+    preflight_resize_filter_correctness(fixture, selected_filter.as_deref(), selected_scale_group);
 
-    for scale in RESIZE_SCALES {
+    for &scale in selected_resize_scales(selected_scale_group) {
         bench_scale(criterion, fixture, scale, selected_filter.as_deref());
     }
 }
 
-fn preflight_resize_comparison(fixture: &RgbaFixture, comparison: &ResizeComparison) {
-    for scale in RESIZE_SCALES {
+#[derive(Debug, Clone, Copy)]
+enum ScaleGroup {
+    Upscale,
+    FractionalDownscale,
+    ExactDownscale,
+}
+
+fn selected_resize_scales(selected_scale_group: Option<ScaleGroup>) -> &'static [Scale] {
+    match selected_scale_group {
+        None => &RESIZE_SCALES,
+        Some(ScaleGroup::Upscale) => &UPSCALE_SCALES,
+        Some(ScaleGroup::FractionalDownscale) => &FRACTIONAL_DOWNSCALE_SCALES,
+        Some(ScaleGroup::ExactDownscale) => &EXACT_DOWNSCALE_SCALES,
+    }
+}
+
+fn requested_resize_scale_group() -> Option<ScaleGroup> {
+    let value = env::var("RESIZE_SCALE_GROUP").ok()?;
+    match value.as_str() {
+        "upscale" => Some(ScaleGroup::Upscale),
+        "fractional-downscale" => Some(ScaleGroup::FractionalDownscale),
+        "exact-downscale" => Some(ScaleGroup::ExactDownscale),
+        _ => panic!(
+            "RESIZE_SCALE_GROUP must be one of: upscale, fractional-downscale, exact-downscale"
+        ),
+    }
+}
+
+fn preflight_resize_comparison(
+    fixture: &RgbaFixture,
+    comparison: &ResizeComparison,
+    selected_scale_group: Option<ScaleGroup>,
+) {
+    for &scale in selected_resize_scales(selected_scale_group) {
         let output_dimensions = scale.dimensions_for(fixture.dimensions);
         let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
         assert_comparison_succeeds(fixture, output_dimensions, output_byte_len, comparison);
     }
 }
 
-fn preflight_resize_filter_correctness(fixture: &RgbaFixture, selected_filter: Option<&str>) {
-    for scale in RESIZE_SCALES {
+fn preflight_resize_filter_correctness(
+    fixture: &RgbaFixture,
+    selected_filter: Option<&str>,
+    selected_scale_group: Option<ScaleGroup>,
+) {
+    for &scale in selected_resize_scales(selected_scale_group) {
         let output_dimensions = scale.dimensions_for(fixture.dimensions);
         let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
         assert_resize_filters_succeed(fixture, output_dimensions, output_byte_len, selected_filter);

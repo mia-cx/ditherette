@@ -278,6 +278,7 @@ function parseArgs(argv) {
 	let kernel = 'nearest';
 	let filter;
 	let baseline;
+	let scaleGroup;
 
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
@@ -301,6 +302,17 @@ function parseArgs(argv) {
 
 		if (arg.startsWith('--filter=')) {
 			filter = arg.slice('--filter='.length);
+			continue;
+		}
+
+		if (arg === '--scale-group') {
+			scaleGroup = argv[index + 1];
+			index += 1;
+			continue;
+		}
+
+		if (arg.startsWith('--scale-group=')) {
+			scaleGroup = arg.slice('--scale-group='.length);
 			continue;
 		}
 
@@ -352,7 +364,11 @@ function parseArgs(argv) {
 		);
 	}
 
-	return { kernel, filter, baseline, cargoArgs, criterionArgs };
+	if (scaleGroup && !['upscale', 'fractional-downscale', 'exact-downscale'].includes(scaleGroup)) {
+		throw new Error('Expected --scale-group to be one of: upscale, fractional-downscale, exact-downscale.');
+	}
+
+	return { kernel, filter, scaleGroup, baseline, cargoArgs, criterionArgs };
 }
 
 function table(rows) {

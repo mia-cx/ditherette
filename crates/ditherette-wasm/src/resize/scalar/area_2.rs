@@ -43,10 +43,6 @@ pub fn resize_rgba_area_2_into(
         return Ok(());
     }
 
-    // TODO(perf:harness): Add area_2-vs-area comparison fixtures grouped by
-    // exact integer downscale, fractional downscale, and upscale so future work
-    // can judge path-level changes without reading noisy all-scale Criterion
-    // output. Benchmark with `pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar`.
     // TODO(perf:path): Decide whether area_2 should dispatch to an old-area-style
     // fractional downscale path while keeping its current fast upscale path;
     // area_2 now wins 2x but still loses several fractional downscales.
