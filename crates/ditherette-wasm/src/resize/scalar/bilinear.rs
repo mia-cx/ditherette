@@ -44,9 +44,10 @@ fn resize_rgba_triangle_filter_into(
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
-    // TODO(perf): Reuse cached contribution tables for repeated preview resizes
-    // with the same dimensions to avoid rebuilding x/y weights every frame.
-    // Benchmark with `pnpm bench:resize:bilinear` before accepting.
+    // REJECT(perf): Caching x/y contribution tables in thread-local scratch
+    // preserved correctness but produced no meaningful all-scale
+    // `pnpm bench:resize:bilinear` win; 0.375x improved ~2%, but the other
+    // scales were neutral or within noise, so keep simpler per-call planning.
     let y_contributions = prepare_axis_contributions(
         source_dimensions.height(),
         output_dimensions.height(),
