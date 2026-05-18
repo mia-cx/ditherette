@@ -154,9 +154,9 @@ pub fn resize_rgba_area_2_into(
                 }
             }
 
-            // TODO(perf): For exact arithmetic paths, compute total_weight from
-            // x/y interval area once (`x_scale * y_scale`) instead of summing per
-            // tap; benchmark carefully because f64 rounding must stay byte-exact.
+            // REJECT(perf): Precomputing x/y total weights and multiplying them
+            // once changed f64 rounding and failed area_2 correctness at 0.95x;
+            // keep accumulating total_weight in the same tap order as sums.
             let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
             output_rgba[output_offset] = round_channel(weighted_sums[0] / total_weight);
             output_rgba[output_offset + 1] = round_channel(weighted_sums[1] / total_weight);
