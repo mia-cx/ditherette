@@ -128,10 +128,11 @@ fn resize_rgba_triangle_filter_into(
                 let mut blue = 0.0;
                 let mut alpha = 0.0;
 
-                // TODO(perf): Store contribution source byte offsets during planning
-                // so the horizontal pass can add precomputed offsets to the current
-                // vertical row base instead of recomputing `source_x * 4` per tap.
-                // Benchmark with `pnpm bench:resize:bilinear` before accepting.
+                // REJECT(perf): Precomputing contribution source byte offsets
+                // and incrementing them in the horizontal pass preserved
+                // correctness but regressed most scales by ~3-6% in
+                // `pnpm bench:resize:bilinear`; keep deriving offsets from
+                // source_x in the loop.
                 for (weight_index, weight) in contribution.weights.iter().enumerate() {
                     let source_x = contribution.first + weight_index;
                     let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
