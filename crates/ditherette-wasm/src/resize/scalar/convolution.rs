@@ -293,10 +293,10 @@ fn prepare_axis_contributions<K: Kernel>(
             total_weight += weight;
         }
 
-        // TODO(perf): Normalize weights with one reciprocal multiply instead of
-        // dividing every tap by the total weight. Benchmark with
-        // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
-        // accepting.
+        // REJECT(perf): Normalizing weights with one reciprocal multiply instead
+        // of dividing each tap changed f32 rounding and failed
+        // `pnpm bench:resize:bicubic --baseline convolution_accepted`
+        // correctness at 0.95x; keep per-tap division to match the oracle.
         if total_weight.abs() > f32::EPSILON {
             for weight in &mut weights {
                 *weight /= total_weight;
