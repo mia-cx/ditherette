@@ -54,10 +54,12 @@ pub fn resize_rgba_area_2_into(
     let y_weights_by_output =
         AxisWeights::for_output_axis(output_height, y_scale, source_dimensions.height());
 
-    // TODO(perf): Split area_2 into architecture-specific paths at the top:
-    // enlargement, mild fractional minification, exact integer minification, and
-    // large minification. Benchmark each split with `pnpm bench:resize:area_2`
-    // or bench:cmp before accepting.
+    // REJECT(perf): A top-level exact-integer minification path with integer
+    // block sums preserved correctness but regressed all minification scales in
+    // `pnpm bench:resize:area_2`; keep the shared weighted path for now.
+    // TODO(perf): Split area_2 into architecture-specific paths for enlargement,
+    // mild fractional minification, and large minification after profiling the
+    // flattened weight plan. Benchmark with `pnpm bench:resize:area_2`.
     // TODO(perf): Add a transposed traversal variant for tall/narrow output bands
     // so the hotter loop walks contiguous source bytes when y coverage is wider
     // than x coverage. Benchmark with area_2 fractional downscales before
