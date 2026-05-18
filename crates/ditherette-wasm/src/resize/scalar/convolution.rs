@@ -95,11 +95,11 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
     // allocating a large f32 intermediate every frame. Benchmark with
     // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
     // accepting.
-    // TODO(perf): Stream one vertical row into the horizontal pass instead of
-    // materializing the full output_height * source_width f32 intermediate; this
-    // may greatly reduce memory bandwidth for large resizes. Benchmark with
-    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
-    // accepting.
+    // REJECT(perf): Streaming one vertical row into the horizontal pass instead
+    // of materializing the full f32 intermediate preserved correctness but
+    // regressed most `pnpm bench:resize:bicubic --baseline convolution_accepted`
+    // scales by ~2-10%; keeping the full intermediate preserves horizontal row
+    // locality for downscales.
     // TODO(perf): Process output rows in reusable row bands so future tiling can
     // share a bounded scratch buffer rather than one full intermediate image.
     // Benchmark with `pnpm bench:resize:bicubic:tiling` before accepting.
