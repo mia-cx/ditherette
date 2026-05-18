@@ -322,7 +322,9 @@ fn prepare_axis_contributions<K: Kernel>(
     })?;
     let ratio = source_size as f32 / output_size as f32;
     let scale = if scale_aware { ratio.max(1.0) } else { 1.0 };
-    let support = kernel.support() * scale;
+    let kernel_support = K::FIXED_SUPPORT.unwrap_or_else(|| kernel.support());
+    let support = kernel_support * scale;
+    let fixed_upscale_tap_count = K::FIXED_UPSCALE_TAP_COUNT.filter(|_| scale == 1.0);
     let mut contributions = Vec::with_capacity(output_len);
 
     // TODO(perf): Detect identity-axis contribution plans and represent them as
@@ -360,7 +362,7 @@ fn prepare_axis_contributions<K: Kernel>(
         // interior coordinates can skip clamp calls and use known tap bounds.
         // Benchmark with `pnpm bench:resize:bicubic` and
         // `pnpm bench:resize:lanczos3` before accepting.
-        let mut weights = Vec::with_capacity(right - left);
+        let mut weights = Vec::with_capacity(fixed_upscale_tap_count.unwrap_or(right - left));
         let mut total_weight = 0.0;
 
         // TODO(perf): Add fixed-support specialized planners for bicubic and
