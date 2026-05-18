@@ -211,14 +211,7 @@ fn horizontal_sample(
                 alpha += vertical_row[vertical_offset + 3] * weight;
             }
 
-            // TODO(perf): Benchmark a fused clamp/round/write helper for RGBA
-            // lanes to reduce repeated function calls and bounds checks at the
-            // output boundary. Benchmark with `pnpm bench:resize:bicubic` and
-            // `pnpm bench:resize:lanczos3` before accepting.
-            output_pixel[0] = round_u8(red);
-            output_pixel[1] = round_u8(green);
-            output_pixel[2] = round_u8(blue);
-            output_pixel[3] = round_u8(alpha);
+            write_rounded_rgba(output_pixel, red, green, blue, alpha);
         }
     }
 }
@@ -322,6 +315,13 @@ fn prepare_axis_contributions<K: Kernel>(
 
 fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
     value.max(min).min(max)
+}
+
+fn write_rounded_rgba(output_pixel: &mut [u8], red: f32, green: f32, blue: f32, alpha: f32) {
+    output_pixel[0] = round_u8(red);
+    output_pixel[1] = round_u8(green);
+    output_pixel[2] = round_u8(blue);
+    output_pixel[3] = round_u8(alpha);
 }
 
 fn round_u8(value: f32) -> u8 {
