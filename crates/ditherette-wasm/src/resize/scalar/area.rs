@@ -23,10 +23,9 @@ pub fn resize_rgba_area_scalar_into(
         return Ok(());
     }
 
-    // TODO(perf): Cache precomputed x/y coverage plans across repeated preview
-    // resizes with the same dimensions so interactive downscales do not rebuild
-    // coverage metadata every frame. Benchmark with `pnpm bench:resize:area`
-    // before accepting.
+    // REJECT(perf): Caching precomputed x/y coverage plans with a single-entry
+    // global Mutex+Arc cache preserved correctness but produced no meaningful
+    // `pnpm bench:resize:area` win and regressed 0.25x.
     // TODO(perf): Add single-axis downscale paths for same-width or same-height
     // resizes so exact area work only runs along the changing axis. Benchmark
     // with `pnpm bench:resize:area` before accepting.
