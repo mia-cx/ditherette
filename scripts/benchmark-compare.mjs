@@ -37,6 +37,7 @@ runBenchmark({
 	triple: left,
 	criterionMode: ['--save-baseline', compareId],
 	criterionArgs: args.criterionArgs,
+	scaleGroup: args.scaleGroup,
 	compareId
 });
 
@@ -45,12 +46,13 @@ runBenchmark({
 	triple: right,
 	criterionMode: ['--baseline', compareId],
 	criterionArgs: args.criterionArgs,
+	scaleGroup: args.scaleGroup,
 	compareId
 });
 
 console.log(`\nCompared ${formatTriple(left)} -> ${formatTriple(right)} with baseline ${compareId}.`);
 
-function runBenchmark({ label, triple, criterionMode, criterionArgs, compareId }) {
+function runBenchmark({ label, triple, criterionMode, criterionArgs, scaleGroup, compareId }) {
 	const cargoArgs = [
 		'bench',
 		'--manifest-path',
@@ -95,6 +97,7 @@ function parseArgs(argv) {
 	const criterionArgs = separatorIndex === -1 ? [] : argv.slice(separatorIndex + 1);
 	let compare;
 	let to;
+	let scaleGroup;
 
 	for (let index = 0; index < ownArgs.length; index += 1) {
 		const arg = ownArgs[index];
@@ -121,6 +124,17 @@ function parseArgs(argv) {
 			continue;
 		}
 
+		if (arg === '--scale-group') {
+			scaleGroup = ownArgs[index + 1];
+			index += 1;
+			continue;
+		}
+
+		if (arg.startsWith('--scale-group=')) {
+			scaleGroup = arg.slice('--scale-group='.length);
+			continue;
+		}
+
 		if (arg === '--help' || arg === '-h') {
 			console.log(helpText());
 			process.exit(0);
@@ -133,7 +147,11 @@ function parseArgs(argv) {
 		throw new Error('Expected both --compare <category:filter:implementation> and --to <category:filter:implementation>.');
 	}
 
-	return { compare, to, criterionArgs };
+	if (scaleGroup && !['upscale', 'fractional-downscale', 'exact-downscale'].includes(scaleGroup)) {
+		throw new Error('Expected --scale-group to be one of: upscale, fractional-downscale, exact-downscale.');
+	}
+
+	return { compare, to, scaleGroup, criterionArgs };
 }
 
 function parseTriple(value, flagName) {
@@ -202,5 +220,6 @@ Supported resize implementations: reference, scalar, tiling.
 Examples:
   pnpm bench:cmp --compare resize:area:reference --to resize:area:scalar
   pnpm bench:cmp --compare resize:area:scalar --to resize:area:tiling
+  pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar --scale-group fractional-downscale
   pnpm bench:cmp --compare resize:bilinear:scalar --to resize:bicubic:scalar -- --measurement-time 30`;
 }
