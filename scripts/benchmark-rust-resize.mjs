@@ -114,6 +114,10 @@ async function criterionSummaries() {
 			continue;
 		}
 
+		if (!activeCaseId(benchmark.group_id)) {
+			continue;
+		}
+
 		summaries.push({
 			caseId: benchmark.group_id,
 			variant: benchmark.function_id,
@@ -219,6 +223,20 @@ function activeVariantNames() {
 	}
 
 	return variants;
+}
+
+function activeCaseId(caseId) {
+	if (!args.scaleGroup) return true;
+
+	const scale = caseId.split('/').at(-1)?.split('-').at(0);
+	return scalesForGroup(args.scaleGroup).includes(scale);
+}
+
+function scalesForGroup(scaleGroup) {
+	if (scaleGroup === 'upscale') return ['2x'];
+	if (scaleGroup === 'fractional-downscale') return ['0.95x', '0.875x', '0.8x', '0.75x', '0.625x'];
+	if (scaleGroup === 'exact-downscale') return ['0.5x', '0.375x', '0.25x', '0.125x'];
+	return [];
 }
 
 function referenceVariantFor(variant) {
