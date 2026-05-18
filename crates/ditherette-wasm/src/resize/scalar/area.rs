@@ -23,9 +23,10 @@ pub fn resize_rgba_area_scalar_into(
         return Ok(());
     }
 
-    // TODO(perf): Cache x/y range plans for repeated preview resizes with the
-    // same dimensions so interactive downscales do not rebuild coverage metadata
-    // every frame. Benchmark with `pnpm bench:resize:area` before accepting.
+    // TODO(perf): Cache precomputed x/y coverage plans across repeated preview
+    // resizes with the same dimensions so interactive downscales do not rebuild
+    // coverage metadata every frame. Benchmark with `pnpm bench:resize:area`
+    // before accepting.
     // TODO(perf): Add single-axis downscale paths for same-width or same-height
     // resizes so exact area work only runs along the changing axis. Benchmark
     // with `pnpm bench:resize:area` before accepting.
@@ -49,13 +50,16 @@ pub fn resize_rgba_area_scalar_into(
     let x_coverages: Vec<_> = (0..output_width)
         .map(|output_x| XCoverage::for_output_pixel(output_x, x_scale, source_dimensions.width()))
         .collect();
+    let y_coverages: Vec<_> = (0..output_height)
+        .map(|output_y| {
+            AxisCoverage::for_output_pixel(output_y, y_scale, source_dimensions.height())
+        })
+        .collect();
 
     // REJECT(perf): Iterating output rows with `chunks_exact_mut` and writing
     // output pixels directly preserved correctness but regressed 0.8x, 0.75x,
     // 0.625x, 0.5x, 0.375x, 0.25x, and 0.125x in `pnpm bench:resize:area`.
-    for output_y in 0..output_height {
-        let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
-
+    for (output_y, y_coverage) in y_coverages.iter().enumerate() {
         for (output_x, x_coverage) in x_coverages.iter().enumerate() {
             // REJECT(perf): Replacing weighted_sums with named channel
             // accumulators preserved correctness but regressed 2x and produced no
@@ -75,8 +79,8 @@ pub fn resize_rgba_area_scalar_into(
             // so large downscales do O(1) full-span accumulation plus fractional
             // edge samples. Benchmark with `pnpm bench:resize:area` before
             // accepting.
-            for source_y in y_range.first..y_range.last_exclusive {
-                let y_weight = y_range.overlap_with(source_y);
+            for (source_y_offset, y_weight) in y_coverage.weights.iter().copied().enumerate() {
+                let source_y = y_coverage.first + source_y_offset;
                 let source_row_start = source_y * source_row_byte_len;
                 let source_start = source_row_start + x_coverage.first_byte_offset;
                 let source_end = source_row_start + x_coverage.last_exclusive_byte_offset;
@@ -201,6 +205,26 @@ impl XCoverage {
         Self {
             first_byte_offset: range.first * rgba::RGBA_CHANNEL_COUNT,
             last_exclusive_byte_offset: range.last_exclusive * rgba::RGBA_CHANNEL_COUNT,
+            weights,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct AxisCoverage {
+    first: usize,
+    weights: Vec<f64>,
+}
+
+impl AxisCoverage {
+    fn for_output_pixel(output_coordinate: usize, scale: f64, source_size: u32) -> Self {
+        let range = SourceRange::for_output_pixel(output_coordinate, scale, source_size);
+        let weights = (range.first..range.last_exclusive)
+            .map(|source_coordinate| range.overlap_with(source_coordinate))
+            .collect();
+
+        Self {
+            first: range.first,
             weights,
         }
     }
