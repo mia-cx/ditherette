@@ -177,9 +177,9 @@ pub(crate) struct SpanCopyScratch {
     pub(crate) source_x_copy_spans: Vec<SourceXCopySpan>,
 }
 
-// TODO(perf): Cache same-width nearest source row offsets in thread-local
-// scratch so both scalar entry points can reuse them across preview frames.
-// Benchmark with `pnpm bench:resize:nearest` before accepting.
+// REJECT(perf): Caching same-width row offsets adds another thread-local plan
+// for a narrow one-axis path; the general precomputed-offset cache already
+// handles repeated non-same-width previews where nearest spends most time.
 pub(crate) fn copy_same_width_rows(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
