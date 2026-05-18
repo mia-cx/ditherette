@@ -211,10 +211,10 @@ fn horizontal_sample(
                 alpha += vertical_row[vertical_offset + 3] * weight;
             }
 
-            // TODO(perf): Benchmark a fused clamp/round/write helper for RGBA
-            // lanes to reduce repeated function calls and bounds checks at the
-            // output boundary. Benchmark with `pnpm bench:resize:bicubic` and
-            // `pnpm bench:resize:lanczos3` before accepting.
+            // REJECT(perf): A fused clamp/round/write helper looked neutral in
+            // candidate comparison, but the baseline refresh showed broad small
+            // downscale regressions in `pnpm bench:resize:bicubic`; keep the
+            // explicit channel writes.
             output_pixel[0] = round_u8(red);
             output_pixel[1] = round_u8(green);
             output_pixel[2] = round_u8(blue);
