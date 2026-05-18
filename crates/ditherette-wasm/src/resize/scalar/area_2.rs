@@ -49,6 +49,16 @@ pub fn resize_rgba_area_2_into(
     let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
     let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
 
+    let x_weights_by_output: Vec<Vec<(usize, f64)>> = (0..output_width)
+        .map(|output_x| {
+            let x_range =
+                SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width());
+            (x_range.first..x_range.last_exclusive)
+                .map(|source_x| (source_x, x_range.overlap_with(source_x)))
+                .collect()
+        })
+        .collect();
+
     // TODO(perf): Build area_2 around precomputed x/y interval metadata, but use
     // a different layout from scalar/area.rs: store starts, ends, edge weights,
     // and full interior spans in separate dense arrays. Benchmark with
@@ -73,9 +83,7 @@ pub fn resize_rgba_area_2_into(
         // horizontal-only area_2 kernel that avoids y_weight multiplication and
         // total_weight accumulation. Benchmark upscale and 0.95x before
         // accepting.
-        for output_x in 0..output_width {
-            let x_range =
-                SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width());
+        for (output_x, x_weights) in x_weights_by_output.iter().enumerate() {
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
             let mut total_weight = 0.0;
 
@@ -100,8 +108,7 @@ pub fn resize_rgba_area_2_into(
                 // coverage cases with straight-line edge/interior formulas
                 // instead of generic nested overlap calls. Benchmark 0.75x and
                 // 0.625x before accepting.
-                for source_x in x_range.first..x_range.last_exclusive {
-                    let x_weight = x_range.overlap_with(source_x);
+                for &(source_x, x_weight) in x_weights {
                     let sample_weight = x_weight * y_weight;
                     let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
                     let source_pixel =
