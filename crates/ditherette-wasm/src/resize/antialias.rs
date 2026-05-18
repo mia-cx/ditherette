@@ -25,13 +25,13 @@ pub fn antialias_rgba_box3_into(
     dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Split corners, edges, and interior. Interior pixels always use
-    // a 3x3 footprint, so they can avoid saturating/min bounds checks and the
-    // variable divisor in the hot path.
+    // REJECT(perf): Branching per pixel to split corners/edges/interior kept
+    // correctness but regressed antialias by ~30-60%; the generic combined
+    // footprint loop stays faster.
     // TODO(perf): Use a separable box blur: horizontal 3-pixel sums into a
     // scratch row buffer, then vertical sums over those intermediates.
-    // TODO(perf): For interior pixels, divide by the constant 9 with a fixed
-    // reciprocal multiply instead of tracking count and using integer division.
+    // REJECT(perf): Constant-divisor interior specialization was part of the
+    // split-path attempt above and regressed; keep tracked count/division.
     crate::resize::scalar::antialias::antialias_rgba_box3_into(source_rgba, dimensions, output_rgba)
 }
 
