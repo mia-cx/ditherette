@@ -18,7 +18,7 @@ pub(crate) fn resize_rgba_bicubic(
         source_dimensions,
         output_dimensions,
         Bicubic,
-        false,
+        true,
     )
 }
 
@@ -72,6 +72,6 @@ pub(crate) fn resize_rgba_bicubic_into(
         output_dimensions,
         output_rgba,
         Bicubic,
-        false,
+        true,
     )
 }

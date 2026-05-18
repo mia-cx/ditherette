@@ -21,7 +21,7 @@ pub fn resize_rgba_bicubic_reference(
         source_dimensions,
         output_dimensions,
         Bicubic,
-        false,
+        true,
     )
 }
 
@@ -39,6 +39,6 @@ pub fn resize_rgba_bicubic_reference_into(
         output_dimensions,
         output_rgba,
         Bicubic,
-        false,
+        true,
     )
 }

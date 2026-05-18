@@ -42,6 +42,36 @@ fn convolution_filters_preserve_identity() {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn bicubic_matches_image_catmull_rom() {
+    use image::{imageops::FilterType, RgbaImage};
+
+    let source_dimensions = dimensions(7, 5);
+    let output_dimensions = dimensions(4, 9);
+    let source_rgba: Vec<u8> = (0..source_dimensions.width() * source_dimensions.height() * 4)
+        .map(|value| (value * 37 % 251) as u8)
+        .collect();
+    let image = RgbaImage::from_raw(
+        source_dimensions.width(),
+        source_dimensions.height(),
+        source_rgba.clone(),
+    )
+    .unwrap();
+
+    let output_rgba = resize_rgba_bicubic(&source_rgba, source_dimensions, output_dimensions)
+        .expect("bicubic resize should succeed");
+    let image_rgba = image::imageops::resize(
+        &image,
+        output_dimensions.width(),
+        output_dimensions.height(),
+        FilterType::CatmullRom,
+    )
+    .into_raw();
+
+    assert_eq!(output_rgba, image_rgba);
+}
+
 #[test]
 fn post_resize_antialias_blurs_local_neighbors() {
     let source_rgba: Vec<u8> = (0..9)

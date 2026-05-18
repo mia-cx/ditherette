@@ -1,4 +1,4 @@
-use std::f64::consts::PI;
+use std::f32::consts::PI;
 
 use crate::{
     error::ProcessingError,
@@ -11,22 +11,24 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 struct ScalarLanczos {
-    window_size: f64,
+    window_size: f32,
 }
 
 impl ScalarLanczos {
     fn new(window_size: f64) -> Result<Self, ProcessingError> {
         validate_window_size(window_size)?;
-        Ok(Self { window_size })
+        Ok(Self {
+            window_size: window_size as f32,
+        })
     }
 }
 
 impl Kernel for ScalarLanczos {
-    fn radius(self) -> f64 {
+    fn support(self) -> f32 {
         self.window_size
     }
 
-    fn weight(self, distance: f64) -> f64 {
+    fn weight(self, distance: f32) -> f32 {
         // TODO(perf): Split the x==0 and x>=window_size guards into
         // contribution-table construction so the inner kernel can assume valid
         // non-zero support.
@@ -34,7 +36,7 @@ impl Kernel for ScalarLanczos {
         // approximation once visual error is benchmarked against the reference.
         let x = distance.abs();
 
-        if x < f64::EPSILON {
+        if x < f32::EPSILON {
             1.0
         } else if x >= self.window_size {
             0.0
@@ -73,7 +75,7 @@ pub(crate) fn resize_rgba_lanczos_into(
     )
 }
 
-fn sinc(x: f64) -> f64 {
+fn sinc(x: f32) -> f32 {
     let x_pi = x * PI;
     x_pi.sin() / x_pi
 }
