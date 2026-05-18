@@ -95,6 +95,9 @@ pub fn resize_rgba_area_scalar_into(
             // a full-weight interior loop preserved correctness but regressed
             // 0.95x, 0.875x, 0.8x, 0.75x, 0.625x, and 0.375x in
             // `pnpm bench:resize:area`.
+            // REJECT(perf): Row prefix sums for fractional scales changed f64
+            // grouping and failed `pnpm bench:resize:area` correctness preflight
+            // at 0.375x (one-byte mismatch).
             // TODO(perf): Use row or integral prefix sums for full interior spans
             // so large downscales do O(1) full-span accumulation plus fractional
             // edge samples. Benchmark with `pnpm bench:resize:area` before
