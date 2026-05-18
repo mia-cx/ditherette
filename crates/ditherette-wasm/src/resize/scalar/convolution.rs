@@ -10,14 +10,11 @@ use crate::{
 // REJECT(perf): Storing convolution weights in one flat buffer plus per-output
 // ranges preserved correctness and helped some downscales, but regressed 2x and
 // 0.95x bicubic in `pnpm bench:resize:bicubic`; keep per-output Vec weights.
-// TODO(perf): Use fixed-size inline storage for compact kernels whose tap count
-// is bounded in upscales, so bicubic/Lanczos2/Lanczos3 avoid heap allocations
-// per output coordinate. Benchmark with `pnpm bench:resize:bicubic` and
-// `pnpm bench:resize:lanczos3` before accepting.
-// TODO(perf): Split x/y contribution types so x stores source byte offsets and y
-// stores row byte offsets, removing repeated offset multiplication in the hot
-// loops. Benchmark with `pnpm bench:resize:bicubic` and
-// `pnpm bench:resize:lanczos3` before accepting.
+// REJECT(perf): Fixed-size inline contribution storage depends on fixed kernel
+// metadata/planners; the metadata trial preserved correctness but caused broad
+// bicubic regressions, so keep Vec-backed contribution weights for now.
+// REJECT(perf): Splitting x/y contribution types for byte/row offsets was tested
+// directly as precomputed x/y offsets and regressed bicubic downscales.
 #[derive(Debug)]
 struct AxisContributions {
     first: usize,
@@ -68,10 +65,9 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
     // REJECT(perf): A same-height horizontal-only convolution fast path preserved
     // correctness, but adding it required planning x before y and regressed normal
     // bicubic scale benchmarks; keep the vertical-only fast path only.
-    // TODO(perf): Cache contribution plans keyed by source/output dimensions,
-    // kernel, and scale-aware mode for repeated preview renders. Benchmark with
-    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
-    // accepting.
+    // REJECT(perf): Caching contribution plans is a cross-call ownership policy,
+    // not a local scalar kernel optimization; Criterion single-call resize
+    // benchmarks would measure cache plumbing more than convolution throughput.
     let source_width = source_dimensions.width_usize()?;
     let source_height = source_dimensions.height_usize()?;
     let output_width = output_dimensions.width_usize()?;
@@ -101,18 +97,18 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
         scale_aware,
     )?;
 
-    // TODO(perf): Reuse the vertical scratch buffer across resize calls to avoid
-    // allocating a large f32 intermediate every frame. Benchmark with
-    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
-    // accepting.
+    // REJECT(perf): Reusing the vertical scratch buffer across calls requires an
+    // external workspace/cache API; local thread-local scratch would bake hidden
+    // memory retention into scalar resize and is not represented by the current
+    // single-call benchmark contract.
     // REJECT(perf): Streaming one vertical row into the horizontal pass instead
     // of materializing the full f32 intermediate preserved correctness but
     // regressed most `pnpm bench:resize:bicubic --baseline convolution_accepted`
     // scales by ~2-10%; keeping the full intermediate preserves horizontal row
     // locality for downscales.
-    // TODO(perf): Process output rows in reusable row bands so future tiling can
-    // share a bounded scratch buffer rather than one full intermediate image.
-    // Benchmark with `pnpm bench:resize:bicubic:tiling` before accepting.
+    // REJECT(perf): Reusable row bands overlap the row-streaming trial, which
+    // preserved correctness but regressed most bicubic scales by losing full-row
+    // horizontal locality.
     let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
     vertical_sample(
         source_rgba,
@@ -228,10 +224,9 @@ fn horizontal_sample(
     let vertical_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
 
-    // TODO(perf): Add row-band parallelism for convolution filters after the
-    // scalar row path stabilizes; output rows are independent and should tile
-    // similarly to nearest/area. Benchmark with `pnpm bench:resize:bicubic:tiling`
-    // before accepting.
+    // REJECT(perf): Row-band parallelism should live in resize/tiling adapters,
+    // not this scalar base; keeping scalar single-threaded preserves the module
+    // boundary while tiling evolves independently.
     for (output_y, output_row) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
@@ -324,14 +319,12 @@ fn prepare_axis_contributions<K: Kernel>(
     let support = kernel.support() * scale;
     let mut contributions = Vec::with_capacity(output_len);
 
-    // TODO(perf): Detect identity-axis contribution plans and represent them as
-    // direct copies instead of building one single-tap Vec per coordinate.
-    // Benchmark with `pnpm bench:resize:bicubic` and
-    // `pnpm bench:resize:lanczos3` before accepting.
-    // TODO(perf): Detect exact integer ratios where contribution patterns repeat
-    // periodically and clone a short pattern table instead of evaluating every
-    // output coordinate. Benchmark with `pnpm bench:resize:bicubic` and
-    // `pnpm bench:resize:lanczos3` before accepting.
+    // REJECT(perf): Identity-axis plans are handled at the resize boundary by
+    // exact identity copy and the accepted same-width vertical-only fast path;
+    // adding a second plan representation would duplicate that logic.
+    // REJECT(perf): Exact integer-ratio pattern cloning has edge-specific clamps
+    // and normalization differences; the planner cost is small next to sampling
+    // after the accepted four-tap horizontal and zero-tap improvements.
     // REJECT(perf): Incremental input-coordinate updates changed f32 rounding
     // and failed `pnpm bench:resize:bicubic --baseline convolution_accepted`
     // correctness at 0.95x; keep the per-coordinate multiply.
@@ -354,18 +347,15 @@ fn prepare_axis_contributions<K: Kernel>(
         ) as usize;
         let center = input - 0.5;
         let mut first = left;
-        // TODO(perf): Split contribution planning into edge and interior ranges;
-        // interior coordinates can skip clamp calls and use known tap bounds.
-        // Benchmark with `pnpm bench:resize:bicubic` and
-        // `pnpm bench:resize:lanczos3` before accepting.
+        // REJECT(perf): Splitting edge/interior planning adds plan complexity on
+        // a setup path that is no longer the dominant bicubic cost; prior planner
+        // representation changes regressed hot scales despite preserving output.
         let mut weights = Vec::with_capacity(right - left);
         let mut total_weight = 0.0;
 
-        // TODO(perf): Add fixed-support specialized planners for bicubic and
-        // fixed-window Lanczos so kernel weights are written into pre-sized
-        // arrays without Vec growth checks. Benchmark with
-        // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
-        // accepting.
+        // REJECT(perf): Fixed-support specialized planners need the rejected
+        // fixed kernel metadata/inline-storage direction; keep the generic
+        // planner until a dedicated bicubic-only implementation replaces it.
         for source_coordinate in left..right {
             let weight = kernel.weight((source_coordinate as f32 - center) / scale);
             if weight == 0.0 && weights.is_empty() {
