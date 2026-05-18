@@ -43,6 +43,14 @@ pub fn resize_rgba_area_2_into(
         return Ok(());
     }
 
+    // TODO(perf:harness): Add area_2-vs-area comparison fixtures grouped by
+    // exact integer downscale, fractional downscale, and upscale so future work
+    // can judge path-level changes without reading noisy all-scale Criterion
+    // output. Benchmark with `pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar`.
+    // TODO(perf:path): Decide whether area_2 should dispatch to an old-area-style
+    // fractional downscale path while keeping its current fast upscale path;
+    // area_2 now wins 2x but still loses several fractional downscales.
+    // Benchmark with `pnpm bench:resize:area_2` and the area-vs-area_2 compare.
     if is_exact_2x_downscale(source_dimensions, output_dimensions) {
         resize_exact_2x_downscale_into(
             source_rgba,
@@ -74,12 +82,12 @@ pub fn resize_rgba_area_2_into(
     let y_weights_by_output =
         AxisWeights::for_output_axis(output_height, y_scale, source_dimensions.height());
 
-    // REJECT(perf): A top-level exact-integer minification path with integer
-    // block sums preserved correctness but regressed all minification scales in
-    // `pnpm bench:resize:area_2`; keep the shared weighted path for now.
-    // NOTE(perf): The accepted single-row specialization covers the important
-    // enlargement path; exact-integer top-level splitting regressed. Leave the
-    // remaining fractional/large-minification cases on the shared weighted path.
+    // NOTE(perf): Exact integer minification has a dedicated path above; the
+    // remaining generic weighted path handles fractional downscale and upscale.
+    // TODO(perf:layout): Compare area_2's flat `(source_coordinate, weight)` axis
+    // metadata against old area's per-output coverage layout with source byte
+    // ranges. The flat layout helps upscale, but old area's layout is faster for
+    // several fractional downscales. Benchmark before changing kernels.
     // NOTE(perf): The current benchmark set has landscape output shapes; a
     // transposed traversal for tall/narrow bands is not actionable without a
     // representative benchmark case.
@@ -131,6 +139,10 @@ pub fn resize_rgba_area_2_into(
 
             // NOTE(perf): Axis weights are precomputed once; advancing x ranges
             // in the hot loop is superseded by the flattened AxisWeights plan.
+            // TODO(perf:kernel, after perf:layout area2-fractional-plan): Port
+            // old area's source-row slice + zipped x-weight traversal into the
+            // area_2 fractional path if the chosen layout exposes contiguous byte
+            // ranges. Benchmark fractional downscales before accepting.
             // REJECT(perf): Integer block/full-rectangle accumulation preserved
             // correctness but regressed the measured minification cases; avoid
             // unweighted interior byte sums on this path.
@@ -243,6 +255,10 @@ fn resize_exact_2x_downscale_into(
     Ok(())
 }
 
+// TODO(perf:api): Extract the exact integer downscale kernels shared by area
+// and area_2 into a production helper module so future tuning happens once and
+// area_2 can keep architecture differences focused on fractional/upscale paths.
+// Benchmark both filters after extraction to ensure the helper boundary inlines.
 fn resize_exact_integer_downscale_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -300,6 +316,10 @@ fn round_average_channel(sum: u64, divisor: u64) -> u8 {
     ((sum * 2 + divisor) / (divisor * 2)).min(u64::from(u8::MAX)) as u8
 }
 
+// TODO(perf:layout): Split AxisWeights into separate coordinate and weight
+// arrays, or store x coordinates as byte offsets, only after the area_2
+// fractional path decision is settled. Benchmark fractional downscales and 2x
+// upscale because this metadata is shared across both paths.
 #[derive(Debug)]
 struct AxisWeights {
     ranges: Vec<AxisWeightRange>,
