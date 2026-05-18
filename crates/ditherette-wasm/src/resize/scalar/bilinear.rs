@@ -155,9 +155,9 @@ fn prepare_axis_contributions(
     let support = scale;
     let mut contributions = Vec::with_capacity(output_len);
 
-    // TODO(perf): Use incremental input-coordinate updates instead of computing
-    // `(output + 0.5) * ratio` for every output coordinate. Benchmark with
-    // `pnpm bench:resize:bilinear` before accepting.
+    // REJECT(perf): Incremental input-coordinate updates changed f32 rounding
+    // and failed benchmark correctness at 0.95x against the independent bilinear
+    // reference; keep direct `(output + 0.5) * ratio` evaluation.
     for output_coordinate in 0..output_len {
         let input = (output_coordinate as f32 + 0.5) * ratio;
         let left = clamp_i64(
