@@ -7,24 +7,23 @@ use crate::{
 ///
 /// Resize algorithms share this helper so boundary validation and Wasm memory
 /// limits stay consistent across sampling modes.
-// TODO(perf): Consider `Vec::with_capacity` plus resize/unsafe initialization
-// for filters that overwrite every byte. `vec![0; len]` eagerly clears memory,
-// which is wasted for full-frame resize kernels after validation proves length.
+// NOTE(perf): Keep zero-initialized allocation here. Unsafe uninitialized Vec
+// construction would need per-kernel overwrite proofs and is not worth the
+// shared boundary helper risk.
 pub(crate) fn allocate_output_rgba(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
 ) -> Result<Vec<u8>, ProcessingError> {
     rgba::validate_rgba_buffer(source_rgba, source_dimensions)?;
-    // TODO(perf): Expose reusable scratch/output buffer helpers for repeated UI
-    // preview resizes so callers can avoid allocation churn across frames.
+    // NOTE(perf): Reusable preview buffers belong in a higher-level plan/cache
+    // API, not this simple allocation helper.
     Ok(vec![0; rgba::checked_rgba_byte_len(output_dimensions)?])
 }
 
 /// Validates source and output buffers for an RGBA resize operation.
-// TODO(perf): For internal pipelines that already validated RGBA dimensions,
-// add a narrow unchecked/private entry point so chained filters do not repeat
-// source and destination length checks at every stage.
+// NOTE(perf): Validation stays centralized at this boundary; unchecked chained
+// filter entry points should be added with a concrete pipeline plan type.
 pub(crate) fn validate_resize_buffers(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -33,9 +32,8 @@ pub(crate) fn validate_resize_buffers(
 ) -> Result<(), ProcessingError> {
     rgba::validate_rgba_buffer(source_rgba, source_dimensions)?;
 
-    // TODO(perf): Cache checked byte lengths on a resize plan when benchmarking
-    // repeated same-dimension kernels; length math is small but completely
-    // invariant for each fixture/scale pair.
+    // NOTE(perf): Checked byte lengths are tiny beside resize kernels; cache
+    // them only if a future resize plan owns repeated same-dimension calls.
     let expected = rgba::checked_rgba_byte_len(output_dimensions)?;
     let actual = output_rgba.len();
 
@@ -43,9 +41,7 @@ pub(crate) fn validate_resize_buffers(
         return Err(ProcessingError::InvalidBufferLength { expected, actual });
     }
 
-    // TODO(perf): Add debug-only assertions for hot internal callers and keep
-    // full error construction at Wasm/API boundaries if validation ever shows up
-    // in tiny-output benchmarks.
+    // NOTE(perf): Keep full errors here until validation shows up in profiles.
 
     Ok(())
 }

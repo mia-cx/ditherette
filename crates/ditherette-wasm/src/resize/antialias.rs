@@ -28,8 +28,8 @@ pub fn antialias_rgba_box3_into(
     // REJECT(perf): Branching per pixel to split corners/edges/interior kept
     // correctness but regressed antialias by ~30-60%; the generic combined
     // footprint loop stays faster.
-    // TODO(perf): Use a separable box blur: horizontal 3-pixel sums into a
-    // scratch row buffer, then vertical sums over those intermediates.
+    // NOTE(perf): Separable blur would add scratch-row plumbing; the accepted
+    // one-pass RGBA accumulator now makes memory bandwidth the likely limiter.
     // REJECT(perf): Constant-divisor interior specialization was part of the
     // split-path attempt above and regressed; keep tracked count/division.
     crate::resize::scalar::antialias::antialias_rgba_box3_into(source_rgba, dimensions, output_rgba)
