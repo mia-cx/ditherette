@@ -63,10 +63,14 @@ pub fn resize_rgba_area_scalar_into(
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
             let mut total_weight = 0.0;
 
+            // REJECT(perf): Reordering fractional area accumulation to process
+            // each covered source row across all output columns preserved
+            // correctness but regressed 2x, 0.95x, 0.875x, 0.8x, 0.75x,
+            // 0.625x, and 0.375x in `pnpm bench:resize:area`.
             // TODO(perf): Use a separable horizontal scratch pass followed by
-            // vertical accumulation to avoid rereading source rows for every
-            // covered output row. Benchmark with `pnpm bench:resize:area` before
-            // accepting.
+            // vertical accumulation to reuse horizontal source-row work across
+            // covered output rows. Benchmark with `pnpm bench:resize:area`
+            // before accepting.
             // TODO(perf): Use row or integral prefix sums for full interior spans
             // so large downscales do O(1) full-span accumulation plus fractional
             // edge samples. Benchmark with `pnpm bench:resize:area` before
