@@ -30,7 +30,10 @@ pub fn resize_rgba_area_scalar_into(
     // temporary single-axis `pnpm bench:resize:area` cases by 5-13%, but they
     // regressed common proportional fractional downscales by ~2-3%, so keep the
     // generic path for non-integer single-axis resizes.
-    // TODO(perf): Specialize common 4x/8x exact area downscale kernels with
+    // REJECT(perf): A specialized 4x exact area downscale kernel with direct
+    // source block sums preserved correctness but regressed 0.25x by ~54% in
+    // `pnpm bench:resize:area`; keep 4x on the generic exact path.
+    // TODO(perf): Specialize common 8x exact area downscale kernels with
     // unrolled source block sums to reduce generic nested-loop overhead on
     // thumbnail scales. Benchmark with `pnpm bench:resize:area` before accepting.
     if is_exact_2x_downscale(source_dimensions, output_dimensions) {
@@ -149,8 +152,16 @@ fn is_exact_2x_downscale(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
 ) -> bool {
-    output_dimensions.width().checked_mul(2) == Some(source_dimensions.width())
-        && output_dimensions.height().checked_mul(2) == Some(source_dimensions.height())
+    is_exact_square_downscale(source_dimensions, output_dimensions, 2)
+}
+
+fn is_exact_square_downscale(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    step: u32,
+) -> bool {
+    output_dimensions.width().checked_mul(step) == Some(source_dimensions.width())
+        && output_dimensions.height().checked_mul(step) == Some(source_dimensions.height())
 }
 
 fn is_exact_integer_downscale(
