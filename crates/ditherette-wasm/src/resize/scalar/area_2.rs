@@ -240,9 +240,9 @@ impl SourceRange {
     }
 
     fn overlap_with(self, source_coordinate: usize) -> f64 {
-        // TODO(perf): Replace min/max overlap math with preclassified left-edge,
-        // interior, and right-edge weights when constructing range metadata.
-        // Benchmark with area_2 before accepting.
+        // REJECT(perf): Preclassifying first/interior/last weights while
+        // constructing range metadata preserved correctness but regressed
+        // 0.95x, 0.5x, 0.375x, 0.25x, and 0.125x in area_2.
         let source_start = source_coordinate as f64;
         let source_end = source_start + 1.0;
 
