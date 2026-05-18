@@ -26,9 +26,10 @@ pub fn resize_rgba_area_scalar_into(
     // REJECT(perf): Caching precomputed x/y coverage plans with a single-entry
     // global Mutex+Arc cache preserved correctness but produced no meaningful
     // `pnpm bench:resize:area` win and regressed 0.25x.
-    // TODO(perf): Add single-axis downscale paths for same-width or same-height
-    // resizes so exact area work only runs along the changing axis. Benchmark
-    // with `pnpm bench:resize:area` before accepting.
+    // REJECT(perf): Same-width/same-height fractional downscale paths improved
+    // temporary single-axis `pnpm bench:resize:area` cases by 5-13%, but they
+    // regressed common proportional fractional downscales by ~2-3%, so keep the
+    // generic path for non-integer single-axis resizes.
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         resize_exact_integer_downscale_into(
             source_rgba,
