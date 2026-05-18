@@ -88,6 +88,10 @@ pub fn resize_rgba_area_scalar_into(
             // multiplying by 1.0 preserved correctness but regressed 2x, 0.95x,
             // 0.875x, 0.8x, 0.75x, 0.625x, and 0.375x in
             // `pnpm bench:resize:area`.
+            // REJECT(perf): Splitting each x coverage into weighted edges plus
+            // a full-weight interior loop preserved correctness but regressed
+            // 0.95x, 0.875x, 0.8x, 0.75x, 0.625x, and 0.375x in
+            // `pnpm bench:resize:area`.
             // TODO(perf): Use row or integral prefix sums for full interior spans
             // so large downscales do O(1) full-span accumulation plus fractional
             // edge samples. Benchmark with `pnpm bench:resize:area` before
