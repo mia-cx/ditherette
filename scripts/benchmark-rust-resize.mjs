@@ -74,7 +74,8 @@ const cargo = spawnSync(
 		stdio: 'inherit',
 		env: {
 			...process.env,
-			...(args.filter ? { RESIZE_FILTER: args.filter } : {})
+			...(args.filter ? { RESIZE_FILTER: args.filter } : {}),
+			...(args.scaleGroup ? { RESIZE_SCALE_GROUP: args.scaleGroup } : {})
 		}
 	}
 );
