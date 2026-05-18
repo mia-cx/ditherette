@@ -336,10 +336,9 @@ fn prepare_axis_contributions<K: Kernel>(
     // REJECT(perf): Incremental input-coordinate updates changed f32 rounding
     // and failed `pnpm bench:resize:bicubic --baseline convolution_accepted`
     // correctness at 0.95x; keep the per-coordinate multiply.
-    // TODO(perf): Split scale-aware minification planning from fixed-support
-    // upscale planning so the common fixed-radius case avoids scale branches and
-    // wider dynamic capacities. Benchmark with `pnpm bench:resize:bicubic` and
-    // `pnpm bench:resize:lanczos3` before accepting.
+    // REJECT(perf): Replacing ratio.max(1.0) with a dimension branch preserved
+    // correctness but baseline refresh regressed several bicubic scales; keep
+    // the compact scale-aware expression.
     for output_coordinate in 0..output_len {
         let input = (output_coordinate as f32 + 0.5) * ratio;
         let left = clamp_i64(
