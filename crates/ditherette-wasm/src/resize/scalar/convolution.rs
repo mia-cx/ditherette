@@ -194,10 +194,10 @@ fn horizontal_sample(
             let mut blue = 0.0;
             let mut alpha = 0.0;
 
-            // TODO(perf): Precompute x source byte offsets in the contribution
-            // plan to avoid multiplying each source_x by RGBA channel count in
-            // every output pixel. Benchmark with `pnpm bench:resize:bicubic` and
-            // `pnpm bench:resize:lanczos3` before accepting.
+            // REJECT(perf): Precomputing x source byte offsets in each
+            // contribution improved enlargement and near-identity bicubic, but
+            // regressed 0.25x/0.125x and threshold variants still regressed small
+            // downscales in `pnpm bench:resize:bicubic --baseline convolution_accepted`.
             // TODO(perf): Unroll fixed-tap horizontal loops for compact kernels
             // so bicubic/Lanczos upscales avoid iterator overhead. Benchmark
             // with `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3`
