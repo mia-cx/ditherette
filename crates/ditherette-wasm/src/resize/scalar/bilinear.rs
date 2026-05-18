@@ -171,6 +171,7 @@ fn prepare_axis_contributions(
             i64::from(source_size),
         ) as usize;
         let center = input - 0.5;
+        let mut first = left;
         let mut weights = Vec::with_capacity(right - left);
         let mut sum = 0.0;
 
@@ -181,13 +182,19 @@ fn prepare_axis_contributions(
         // TODO(perf): Specialize enlargement and near-identity paths where the
         // triangle support contains at most two non-zero taps. Benchmark with
         // `pnpm bench:resize:bilinear` before accepting.
-        // TODO(perf): Drop zero-weight edge taps during contribution planning to
-        // avoid sampling pixels whose normalized weight remains zero. Benchmark
-        // with `pnpm bench:resize:bilinear` before accepting.
         for source_coordinate in left..right {
             let weight = triangle_weight((source_coordinate as f32 - center) / scale);
+            if weight == 0.0 && weights.is_empty() {
+                first += 1;
+                continue;
+            }
+
             weights.push(weight);
             sum += weight;
+        }
+
+        while weights.last() == Some(&0.0) {
+            weights.pop();
         }
 
         // TODO(perf): Precompute normalized weights into a flat buffer plus
@@ -198,10 +205,7 @@ fn prepare_axis_contributions(
             *weight /= sum;
         }
 
-        contributions.push(AxisContribution {
-            first: left,
-            weights,
-        });
+        contributions.push(AxisContribution { first, weights });
     }
 
     debug_assert_eq!(contributions.len(), output_len);
