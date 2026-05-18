@@ -12,6 +12,10 @@ impl Kernel for Bicubic {
         let x = distance.abs();
         let a = -0.5;
 
+        // TODO(perf): Replace the generic f64 `powi` Catmull-Rom evaluation
+        // with explicit polynomial multiplies, and consider a scalar-only f32
+        // variant if byte-exactness holds. Benchmark with
+        // `pnpm bench:resize:bicubic` before accepting.
         if x < 1.0 {
             (a + 2.0) * x.powi(3) - (a + 3.0) * x.powi(2) + 1.0
         } else if x < 2.0 {
