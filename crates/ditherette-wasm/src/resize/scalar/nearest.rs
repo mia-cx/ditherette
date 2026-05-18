@@ -313,10 +313,9 @@ pub(crate) fn prepare_precomputed_offsets(
 
     scratch.source_x_byte_offsets.clear();
     scratch.source_x_byte_offsets.reserve(output_width);
-    // TODO(perf): Generate nearest coordinate maps with an incremental integer
-    // accumulator to replace the multiply/divide in `map_output_coordinate` for
-    // every output coordinate. Benchmark with `pnpm bench:resize:nearest`
-    // before accepting.
+    // REJECT(perf): Incremental integer coordinate generation preserved
+    // correctness and helped 0.875x/0.5x, but regressed several downscales in
+    // `pnpm bench:resize:nearest`; keep the direct map expression.
     scratch
         .source_x_byte_offsets
         .extend((0..output_width).map(|output_x| {
