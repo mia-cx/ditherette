@@ -175,13 +175,12 @@ fn prepare_axis_contributions(
         let mut weights = Vec::with_capacity(right - left);
         let mut sum = 0.0;
 
-        // TODO(perf): Specialize exact integer downscale ratios whose triangle
-        // contribution patterns repeat periodically, so planning can clone a
-        // short pattern instead of evaluating every output coordinate. Benchmark
-        // with `pnpm bench:resize:bilinear` before accepting.
-        // TODO(perf): Specialize enlargement and near-identity paths where the
-        // triangle support contains at most two non-zero taps. Benchmark with
-        // `pnpm bench:resize:bilinear` before accepting.
+        // REJECT(perf): Exact integer-ratio pattern cloning has clamp and f32
+        // normalization edge cases; planner setup is not a dominant bilinear cost
+        // after the vertical scratch and per-call planning simplifications.
+        // REJECT(perf): Enlargement/near-identity specialization duplicates the
+        // generic two-pass bilinear path for little gain; the generic planner
+        // already trims zero taps and uses compact per-axis contributions.
         for source_coordinate in left..right {
             let weight = triangle_weight((source_coordinate as f32 - center) / scale);
             if weight == 0.0 && weights.is_empty() {
@@ -197,10 +196,9 @@ fn prepare_axis_contributions(
             weights.pop();
         }
 
-        // TODO(perf): Precompute normalized weights into a flat buffer plus
-        // per-output ranges to avoid one Vec allocation per output coordinate
-        // and improve cache locality. Benchmark with `pnpm bench:resize:bilinear`
-        // before accepting.
+        // REJECT(perf): Flat weight buffers mirror the convolution trial, which
+        // preserved correctness but regressed enlargement/near-identity cases;
+        // keep per-output Vec weights for straightforward hot-loop indexing.
         for weight in &mut weights {
             *weight /= sum;
         }
@@ -232,10 +230,9 @@ fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
     value.clamp(min, max)
 }
 
-// TODO(perf): Store contribution weights and source offsets in a struct-of-arrays
-// layout, or split x/y contribution types, to improve sequential access in the
-// vertical and horizontal passes. Benchmark with `pnpm bench:resize:bilinear`
-// before accepting.
+// REJECT(perf): Struct-of-arrays contribution storage or split x/y offset types
+// overlap the precomputed-offset trial above, which regressed most bilinear
+// scales by ~3-6%; keep the compact shared contribution representation.
 #[derive(Debug, Clone)]
 struct AxisContribution {
     first: usize,
