@@ -142,10 +142,9 @@ pub fn resize_rgba_area_2_into(
                     // overlaps, then add one loaded RGBA sample to multiple
                     // outputs. Benchmark near-identity and enlargement before
                     // accepting.
-                    // TODO(perf): Accumulate color*weight and alpha*weight as two
-                    // f64x2-style pairs or explicit lane structs to reduce array
-                    // indexing in the inner loop. Benchmark with area_2 before
-                    // accepting.
+                    // REJECT(perf): Replacing weighted_sums with explicit lane
+                    // locals preserved correctness but regressed most area_2
+                    // downscales; keep the compact channel array accumulation.
                     weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
                     weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
                     weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
