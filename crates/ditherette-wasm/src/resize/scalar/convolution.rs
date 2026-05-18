@@ -201,6 +201,10 @@ fn horizontal_sample(
             // contribution improved enlargement and near-identity bicubic, but
             // regressed 0.25x/0.125x and threshold variants still regressed small
             // downscales in `pnpm bench:resize:bicubic --baseline convolution_accepted`.
+            // REJECT(perf): Splitting the four-tap horizontal fast path into
+            // a separate all-four-tap row function preserved correctness but
+            // regressed enlargement and near-identity bicubic; keep the inline
+            // branch that was accepted with the four-tap unroll.
             if x_contribution.weights.len() == 4 {
                 let mut vertical_offset = x_contribution.first * rgba::RGBA_CHANNEL_COUNT;
                 let weight = x_contribution.weights[0];
