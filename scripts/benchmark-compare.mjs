@@ -16,7 +16,6 @@ const resizeFilters = new Set([
 	'lanczos3',
 	'lanczos3_scale_aware',
 	'area',
-	'area_2',
 	'box',
 	'antialias'
 ]);
@@ -223,6 +222,6 @@ Supported resize implementations: reference, scalar, tiling.
 Examples:
   pnpm bench:cmp --compare resize:area:reference --to resize:area:scalar
   pnpm bench:cmp --compare resize:area:scalar --to resize:area:tiling
-  pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar --scale-group fractional-downscale
+  pnpm bench:cmp --compare resize:bicubic:scalar --to resize:area:scalar --scale-group fractional-downscale
   pnpm bench:cmp --compare resize:bilinear:scalar --to resize:bicubic:scalar -- --measurement-time 30`;
 }
