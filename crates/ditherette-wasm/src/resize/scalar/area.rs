@@ -52,6 +52,9 @@ pub fn resize_rgba_area_scalar_into(
     let x_coverages: Vec<_> = (0..output_width)
         .map(|output_x| XCoverage::for_output_pixel(output_x, x_scale, source_dimensions.width()))
         .collect();
+    // REJECT(perf): Precomputing source row byte offsets inside y coverage
+    // preserved correctness but produced no meaningful downscale win in
+    // `pnpm bench:resize:area`.
     let y_coverages: Vec<_> = (0..output_height)
         .map(|output_y| {
             AxisCoverage::for_output_pixel(output_y, y_scale, source_dimensions.height())
