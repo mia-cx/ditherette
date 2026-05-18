@@ -1,4 +1,4 @@
-use std::f64::consts::PI;
+use std::f32::consts::PI;
 
 use crate::{
     error::ProcessingError,
@@ -13,25 +13,27 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 struct ReferenceLanczos {
-    window_size: f64,
+    window_size: f32,
 }
 
 impl ReferenceLanczos {
     fn new(window_size: f64) -> Result<Self, ProcessingError> {
         validate_window_size(window_size)?;
-        Ok(Self { window_size })
+        Ok(Self {
+            window_size: window_size as f32,
+        })
     }
 }
 
 impl Kernel for ReferenceLanczos {
-    fn radius(self) -> f64 {
+    fn support(self) -> f32 {
         self.window_size
     }
 
-    fn weight(self, distance: f64) -> f64 {
+    fn weight(self, distance: f32) -> f32 {
         let x = distance.abs();
 
-        if x < f64::EPSILON {
+        if x < f32::EPSILON {
             1.0
         } else if x >= self.window_size {
             0.0
@@ -77,7 +79,7 @@ pub fn resize_rgba_lanczos_reference_into(
     )
 }
 
-fn sinc(x: f64) -> f64 {
+fn sinc(x: f32) -> f32 {
     let x_pi = x * PI;
     x_pi.sin() / x_pi
 }

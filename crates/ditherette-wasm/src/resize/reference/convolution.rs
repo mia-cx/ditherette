@@ -7,7 +7,7 @@ use crate::{
     },
 };
 
-/// Allocates and resizes with the straightforward separable convolution path.
+/// Allocates and resizes with the straightforward image-compatible separable convolution path.
 pub(crate) fn resize_with_convolution_reference<K: Kernel>(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -27,7 +27,7 @@ pub(crate) fn resize_with_convolution_reference<K: Kernel>(
     Ok(output_rgba)
 }
 
-/// Straightforward reference implementation for separable convolution filters.
+/// Straightforward reference implementation for image-compatible separable convolution filters.
 pub(crate) fn resize_with_convolution_reference_into<K: Kernel>(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -49,48 +49,127 @@ pub(crate) fn resize_with_convolution_reference_into<K: Kernel>(
     }
 
     let source_width = source_dimensions.width_usize()?;
+    let source_height = source_dimensions.height_usize()?;
     let output_width = output_dimensions.width_usize()?;
-    let x_contributions = prepare_axis_contributions(
-        source_dimensions.width(),
-        output_dimensions.width(),
-        kernel,
-        scale_aware,
-    )?;
+    let output_height = output_dimensions.height_usize()?;
     let y_contributions = prepare_axis_contributions(
         source_dimensions.height(),
         output_dimensions.height(),
         kernel,
         scale_aware,
     )?;
+    let x_contributions = prepare_axis_contributions(
+        source_dimensions.width(),
+        output_dimensions.width(),
+        kernel,
+        scale_aware,
+    )?;
 
-    for (output_y, y_contribution) in y_contributions.iter().enumerate() {
-        for (output_x, x_contribution) in x_contributions.iter().enumerate() {
-            let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
-
-            for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                output_rgba[output_offset + channel] = convolution_channel(
-                    source_rgba,
-                    source_width,
-                    x_contribution,
-                    y_contribution,
-                    channel,
-                );
-            }
-        }
-    }
+    let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
+    vertical_sample(
+        source_rgba,
+        source_width,
+        source_height,
+        &y_contributions,
+        &mut vertical_rgba,
+    );
+    horizontal_sample(
+        &vertical_rgba,
+        source_width,
+        output_width,
+        &x_contributions,
+        output_rgba,
+    );
 
     Ok(())
 }
 
 #[derive(Debug)]
 struct AxisContributions {
-    samples: Vec<WeightedSourceIndex>,
+    first: usize,
+    weights: Vec<f32>,
 }
 
-#[derive(Debug)]
-struct WeightedSourceIndex {
-    index: usize,
-    weight: f64,
+fn vertical_sample(
+    source_rgba: &[u8],
+    source_width: usize,
+    source_height: usize,
+    y_contributions: &[AxisContributions],
+    vertical_rgba: &mut [f32],
+) {
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let vertical_row_byte_len = source_row_byte_len;
+
+    for (output_y, y_contribution) in y_contributions.iter().enumerate() {
+        let vertical_row = &mut vertical_rgba
+            [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
+
+        for source_x in 0..source_width {
+            let mut red = 0.0;
+            let mut green = 0.0;
+            let mut blue = 0.0;
+            let mut alpha = 0.0;
+
+            for (weight_offset, weight) in y_contribution.weights.iter().enumerate() {
+                let source_y = y_contribution.first + weight_offset;
+                debug_assert!(source_y < source_height);
+                let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
+                red += f32::from(source_rgba[source_offset]) * weight;
+                green += f32::from(source_rgba[source_offset + 1]) * weight;
+                blue += f32::from(source_rgba[source_offset + 2]) * weight;
+                alpha += f32::from(source_rgba[source_offset + 3]) * weight;
+            }
+
+            let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
+            vertical_row[vertical_offset] = red;
+            vertical_row[vertical_offset + 1] = green;
+            vertical_row[vertical_offset + 2] = blue;
+            vertical_row[vertical_offset + 3] = alpha;
+        }
+    }
+}
+
+fn horizontal_sample(
+    vertical_rgba: &[f32],
+    source_width: usize,
+    output_width: usize,
+    x_contributions: &[AxisContributions],
+    output_rgba: &mut [u8],
+) {
+    let vertical_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for (output_y, output_row) in output_rgba
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let vertical_row = &vertical_rgba
+            [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
+
+        for (output_pixel, x_contribution) in output_row
+            .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+            .zip(x_contributions)
+        {
+            let mut red = 0.0;
+            let mut green = 0.0;
+            let mut blue = 0.0;
+            let mut alpha = 0.0;
+
+            for (weight_offset, weight) in x_contribution.weights.iter().enumerate() {
+                let source_x = x_contribution.first + weight_offset;
+                let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
+                red += vertical_row[vertical_offset] * weight;
+                green += vertical_row[vertical_offset + 1] * weight;
+                blue += vertical_row[vertical_offset + 2] * weight;
+                alpha += vertical_row[vertical_offset + 3] * weight;
+            }
+
+            output_pixel[0] = round_u8(red);
+            output_pixel[1] = round_u8(green);
+            output_pixel[2] = round_u8(blue);
+            output_pixel[3] = round_u8(alpha);
+        }
+    }
 }
 
 fn prepare_axis_contributions<K: Kernel>(
@@ -105,66 +184,59 @@ fn prepare_axis_contributions<K: Kernel>(
     let output_len = usize::try_from(output_size).map_err(|_| ProcessingError::SizeOverflow {
         context: "convolution output axis",
     })?;
-    let scale = f64::from(output_size) / f64::from(source_size);
-    let filter_scale = if scale_aware && scale < 1.0 {
-        scale
-    } else {
-        1.0
-    };
-    let radius = kernel.radius() / filter_scale;
+    let ratio = source_size as f32 / output_size as f32;
+    let scale = if scale_aware { ratio.max(1.0) } else { 1.0 };
+    let support = kernel.support() * scale;
     let mut contributions = Vec::with_capacity(output_len);
 
     for output_coordinate in 0..output_len {
-        let center = (output_coordinate as f64 + 0.5) / scale - 0.5;
-        let first_source = (center - radius).floor() as isize;
-        let last_source = (center + radius).ceil() as isize;
-        let mut samples = Vec::new();
+        let input = (output_coordinate as f32 + 0.5) * ratio;
+        let left = clamp_i64(
+            (input - support).floor() as i64,
+            0,
+            i64::from(source_size) - 1,
+        ) as usize;
+        let right = clamp_i64(
+            (input + support).ceil() as i64,
+            i64::try_from(left + 1).map_err(|_| ProcessingError::SizeOverflow {
+                context: "convolution output axis",
+            })?,
+            i64::from(source_size),
+        ) as usize;
+        let center = input - 0.5;
+        let mut weights = Vec::with_capacity(right - left);
         let mut total_weight = 0.0;
 
-        for source_coordinate in first_source..=last_source {
-            let clamped_source = source_coordinate.clamp(0, source_len as isize - 1) as usize;
-            let weight = kernel.weight((center - source_coordinate as f64) * filter_scale);
-
-            if weight.abs() <= f64::EPSILON {
-                continue;
-            }
-
-            samples.push(WeightedSourceIndex {
-                index: clamped_source,
-                weight,
-            });
+        for source_coordinate in left..right {
+            let weight = kernel.weight((source_coordinate as f32 - center) / scale);
+            weights.push(weight);
             total_weight += weight;
         }
 
-        if total_weight.abs() > f64::EPSILON {
-            for sample in &mut samples {
-                sample.weight /= total_weight;
+        if total_weight.abs() > f32::EPSILON {
+            for weight in &mut weights {
+                *weight /= total_weight;
             }
         }
 
-        contributions.push(AxisContributions { samples });
+        contributions.push(AxisContributions {
+            first: left,
+            weights,
+        });
     }
+
+    debug_assert_eq!(contributions.len(), output_len);
+    debug_assert!(contributions
+        .iter()
+        .all(|contribution| contribution.first < source_len));
 
     Ok(contributions)
 }
 
-fn convolution_channel(
-    source_rgba: &[u8],
-    source_width: usize,
-    x_contribution: &AxisContributions,
-    y_contribution: &AxisContributions,
-    channel: usize,
-) -> u8 {
-    let mut value = 0.0;
+fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
+    value.max(min).min(max)
+}
 
-    for y_sample in &y_contribution.samples {
-        for x_sample in &x_contribution.samples {
-            let source_offset =
-                rgba::pixel_byte_offset(source_width, x_sample.index, y_sample.index);
-            value +=
-                f64::from(source_rgba[source_offset + channel]) * x_sample.weight * y_sample.weight;
-        }
-    }
-
-    value.round().clamp(0.0, 255.0) as u8
+fn round_u8(value: f32) -> u8 {
+    value.clamp(0.0, 255.0).round() as u8
 }
