@@ -94,14 +94,23 @@ fn resize_rgba_triangle_filter_into(
         }
     }
 
-    // TODO(perf): Iterate horizontal output rows with `chunks_exact_mut` and the
-    // matching vertical scratch row slice to remove output/vertical byte-offset
-    // multiplies from the hot path. Benchmark with `pnpm bench:resize:bilinear`
-    // before accepting.
-    for output_y in 0..output_height {
-        for (output_x, contribution) in x_contributions.iter().enumerate() {
-            let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
-            let mut accumulated = [0.0; rgba::RGBA_CHANNEL_COUNT];
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+    for (output_y, output_row) in output_rgba
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let vertical_row_start = output_y * source_row_byte_len;
+        let vertical_row =
+            &vertical_rgba[vertical_row_start..vertical_row_start + source_row_byte_len];
+
+        for (output_pixel, contribution) in output_row
+            .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+            .zip(&x_contributions)
+        {
+            let mut red = 0.0;
+            let mut green = 0.0;
+            let mut blue = 0.0;
+            let mut alpha = 0.0;
 
             // TODO(perf): Store contribution source byte offsets during planning
             // so the horizontal pass can add precomputed offsets to the current
@@ -109,23 +118,18 @@ fn resize_rgba_triangle_filter_into(
             // Benchmark with `pnpm bench:resize:bilinear` before accepting.
             for (weight_index, weight) in contribution.weights.iter().enumerate() {
                 let source_x = contribution.first + weight_index;
-                let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
+                let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
 
-                // TODO(perf): Accumulate the horizontal pass as four explicit
-                // RGBA lanes to reduce channel-loop overhead and improve SIMD
-                // opportunities. Benchmark with `pnpm bench:resize:bilinear`
-                // before accepting.
-                for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                    accumulated[channel] += vertical_rgba[vertical_offset + channel] * weight;
-                }
+                red += vertical_row[vertical_offset] * weight;
+                green += vertical_row[vertical_offset + 1] * weight;
+                blue += vertical_row[vertical_offset + 2] * weight;
+                alpha += vertical_row[vertical_offset + 3] * weight;
             }
 
-            // TODO(perf): Round and store RGBA as explicit lanes instead of a
-            // channel loop to reduce per-output-pixel loop overhead. Benchmark
-            // with `pnpm bench:resize:bilinear` before accepting.
-            for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                output_rgba[output_offset + channel] = round_u8(accumulated[channel]);
-            }
+            output_pixel[0] = round_u8(red);
+            output_pixel[1] = round_u8(green);
+            output_pixel[2] = round_u8(blue);
+            output_pixel[3] = round_u8(alpha);
         }
     }
 
