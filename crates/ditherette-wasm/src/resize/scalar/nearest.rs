@@ -273,10 +273,10 @@ fn resize_precomputed_offsets_word_into(
     prepare_precomputed_offsets(source_dimensions, output_dimensions, scratch)?;
 
     let output_width = output_dimensions.width_usize()?;
-    // TODO(perf): Iterate output rows with `chunks_exact_mut` and zip output
-    // pixels with precomputed source x offsets to avoid recomputing output byte
-    // offsets in the inner loop. Benchmark with `pnpm bench:resize:nearest`
-    // before accepting.
+    // REJECT(perf): Iterating output rows with `chunks_exact_mut` and zipping
+    // output pixels with precomputed source x offsets preserved correctness but
+    // produced no meaningful `pnpm bench:resize:nearest` win and regressed
+    // 0.25x by ~3%.
     for (output_y, source_row_offset) in scratch.source_row_byte_offsets.iter().copied().enumerate()
     {
         let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
