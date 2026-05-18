@@ -87,10 +87,10 @@ pub(crate) fn resize_rgba_nearest_scalar_after_fast_paths(
     NEAREST_RESIZE_SCRATCH.with(|scratch| {
         let mut scratch = scratch.borrow_mut();
 
-        // TODO(perf): Tune span-copy selection with the current resize scale
-        // suite instead of a fixed average-span threshold, since branch choice
-        // can dominate near the cutoff. Benchmark with
-        // `pnpm bench:resize:nearest` before accepting.
+        // REJECT(perf): Lowering the span-copy average-pixel threshold from 8
+        // to 4 routed 0.875x and 0.8x through span copies, preserved
+        // correctness, but regressed those cases by ~157% and ~212% in
+        // `pnpm bench:resize:nearest`; keep the stricter threshold.
         if has_wide_source_x_spans(source_dimensions, output_dimensions)? {
             return resize_span_copy_into(
                 source_rgba,
