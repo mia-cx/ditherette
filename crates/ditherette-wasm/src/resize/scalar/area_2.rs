@@ -65,10 +65,44 @@ pub fn resize_rgba_area_2_into(
     for output_y in 0..output_height {
         let y_weights = y_weights_by_output.weights_for(output_y);
 
-        // TODO(perf): For rows whose y_range covers one source row, dispatch to a
-        // horizontal-only area_2 kernel that avoids y_weight multiplication and
-        // total_weight accumulation. Benchmark upscale and 0.95x before
-        // accepting.
+        if let [(source_y, _)] = y_weights {
+            let source_y = *source_y;
+            for output_x in 0..output_width {
+                let x_weights = x_weights_by_output.weights_for(output_x);
+                let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
+
+                if let [(source_x, _)] = x_weights {
+                    let source_offset = rgba::pixel_byte_offset(source_width, *source_x, source_y);
+                    output_rgba[output_offset..output_offset + rgba::RGBA_CHANNEL_COUNT]
+                        .copy_from_slice(
+                            &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT],
+                        );
+                    continue;
+                }
+
+                let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
+                let mut total_weight = 0.0;
+
+                for &(source_x, x_weight) in x_weights {
+                    let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
+                    let source_pixel =
+                        &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
+
+                    weighted_sums[0] += f64::from(source_pixel[0]) * x_weight;
+                    weighted_sums[1] += f64::from(source_pixel[1]) * x_weight;
+                    weighted_sums[2] += f64::from(source_pixel[2]) * x_weight;
+                    weighted_sums[3] += f64::from(source_pixel[3]) * x_weight;
+                    total_weight += x_weight;
+                }
+
+                output_rgba[output_offset] = round_channel(weighted_sums[0] / total_weight);
+                output_rgba[output_offset + 1] = round_channel(weighted_sums[1] / total_weight);
+                output_rgba[output_offset + 2] = round_channel(weighted_sums[2] / total_weight);
+                output_rgba[output_offset + 3] = round_channel(weighted_sums[3] / total_weight);
+            }
+            continue;
+        }
+
         for output_x in 0..output_width {
             let x_weights = x_weights_by_output.weights_for(output_x);
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
