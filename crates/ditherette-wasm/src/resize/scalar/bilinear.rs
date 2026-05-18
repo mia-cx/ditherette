@@ -71,7 +71,15 @@ fn resize_rgba_triangle_filter_into(
     // slices to improve cache locality; the current column walk jumps by whole
     // source rows for each source_x. Benchmark with `pnpm bench:resize:bilinear`
     // before accepting.
+    // TODO(perf): Fill the vertical scratch row from the first y tap and add
+    // remaining taps instead of zero-initializing the whole scratch and using
+    // `+=` for every tap; this may reduce writes across all scales. Benchmark
+    // with `pnpm bench:resize:bilinear` before accepting.
     for (output_y, contribution) in y_contributions.iter().enumerate() {
+        // TODO(perf): Walk vertical/output/source row slices with chunk iterators
+        // so the hot loop increments offsets by 4 instead of calling
+        // `pixel_byte_offset` for each source_x/tap pair. Benchmark with
+        // `pnpm bench:resize:bilinear` before accepting.
         for source_x in 0..source_width {
             let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
 
@@ -90,11 +98,19 @@ fn resize_rgba_triangle_filter_into(
         }
     }
 
+    // TODO(perf): Iterate horizontal output rows with `chunks_exact_mut` and the
+    // matching vertical scratch row slice to remove output/vertical byte-offset
+    // multiplies from the hot path. Benchmark with `pnpm bench:resize:bilinear`
+    // before accepting.
     for output_y in 0..output_height {
         for (output_x, contribution) in x_contributions.iter().enumerate() {
             let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
             let mut accumulated = [0.0; rgba::RGBA_CHANNEL_COUNT];
 
+            // TODO(perf): Store contribution source byte offsets during planning
+            // so the horizontal pass can add precomputed offsets to the current
+            // vertical row base instead of recomputing `source_x * 4` per tap.
+            // Benchmark with `pnpm bench:resize:bilinear` before accepting.
             for (weight_index, weight) in contribution.weights.iter().enumerate() {
                 let source_x = contribution.first + weight_index;
                 let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
@@ -207,6 +223,10 @@ fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
     value.clamp(min, max)
 }
 
+// TODO(perf): Store contribution weights and source offsets in a struct-of-arrays
+// layout, or split x/y contribution types, to improve sequential access in the
+// vertical and horizontal passes. Benchmark with `pnpm bench:resize:bilinear`
+// before accepting.
 #[derive(Debug, Clone)]
 struct AxisContribution {
     first: usize,
