@@ -95,10 +95,10 @@ pub fn resize_rgba_area_2_into(
             for source_y in y_range.first..y_range.last_exclusive {
                 let y_weight = y_range.overlap_with(source_y);
 
-                // TODO(perf): Precompute source row slice bounds once per
-                // source_y and walk row chunks with a byte cursor to avoid
-                // pixel_byte_offset multiplication inside the source_x loop.
-                // Benchmark with area_2 before accepting.
+                // REJECT(perf): Precomputing source row bounds and advancing a
+                // byte cursor preserved correctness but regressed 2x, 0.75x,
+                // and 0.125x in `pnpm bench:resize:area_2`; keep the direct
+                // pixel_byte_offset expression.
                 // TODO(perf): Specialize the common two-column/four-column x
                 // coverage cases with straight-line edge/interior formulas
                 // instead of generic nested overlap calls. Benchmark 0.75x and
