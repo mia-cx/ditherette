@@ -198,17 +198,43 @@ fn horizontal_sample(
             // contribution improved enlargement and near-identity bicubic, but
             // regressed 0.25x/0.125x and threshold variants still regressed small
             // downscales in `pnpm bench:resize:bicubic --baseline convolution_accepted`.
-            // TODO(perf): Unroll fixed-tap horizontal loops for compact kernels
-            // so bicubic/Lanczos upscales avoid iterator overhead. Benchmark
-            // with `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3`
-            // before accepting.
-            for (weight_offset, weight) in x_contribution.weights.iter().enumerate() {
-                let source_x = x_contribution.first + weight_offset;
-                let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
+            if x_contribution.weights.len() == 4 {
+                let mut vertical_offset = x_contribution.first * rgba::RGBA_CHANNEL_COUNT;
+                let weight = x_contribution.weights[0];
                 red += vertical_row[vertical_offset] * weight;
                 green += vertical_row[vertical_offset + 1] * weight;
                 blue += vertical_row[vertical_offset + 2] * weight;
                 alpha += vertical_row[vertical_offset + 3] * weight;
+
+                vertical_offset += rgba::RGBA_CHANNEL_COUNT;
+                let weight = x_contribution.weights[1];
+                red += vertical_row[vertical_offset] * weight;
+                green += vertical_row[vertical_offset + 1] * weight;
+                blue += vertical_row[vertical_offset + 2] * weight;
+                alpha += vertical_row[vertical_offset + 3] * weight;
+
+                vertical_offset += rgba::RGBA_CHANNEL_COUNT;
+                let weight = x_contribution.weights[2];
+                red += vertical_row[vertical_offset] * weight;
+                green += vertical_row[vertical_offset + 1] * weight;
+                blue += vertical_row[vertical_offset + 2] * weight;
+                alpha += vertical_row[vertical_offset + 3] * weight;
+
+                vertical_offset += rgba::RGBA_CHANNEL_COUNT;
+                let weight = x_contribution.weights[3];
+                red += vertical_row[vertical_offset] * weight;
+                green += vertical_row[vertical_offset + 1] * weight;
+                blue += vertical_row[vertical_offset + 2] * weight;
+                alpha += vertical_row[vertical_offset + 3] * weight;
+            } else {
+                for (weight_offset, weight) in x_contribution.weights.iter().enumerate() {
+                    let source_x = x_contribution.first + weight_offset;
+                    let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
+                    red += vertical_row[vertical_offset] * weight;
+                    green += vertical_row[vertical_offset + 1] * weight;
+                    blue += vertical_row[vertical_offset + 2] * weight;
+                    alpha += vertical_row[vertical_offset + 3] * weight;
+                }
             }
 
             // REJECT(perf): A fused clamp/round/write helper looked neutral in
