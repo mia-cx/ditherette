@@ -67,33 +67,29 @@ fn resize_rgba_triangle_filter_into(
     // TODO(perf): Add a same-width vertical-only path to skip horizontal
     // contribution planning and the horizontal pass when only height changes.
     // Benchmark with `pnpm bench:resize:bilinear` before accepting.
-    // TODO(perf): Reorder the vertical pass around source rows or source row
-    // slices to improve cache locality; the current column walk jumps by whole
-    // source rows for each source_x. Benchmark with `pnpm bench:resize:bilinear`
-    // before accepting.
     // TODO(perf): Fill the vertical scratch row from the first y tap and add
     // remaining taps instead of zero-initializing the whole scratch and using
     // `+=` for every tap; this may reduce writes across all scales. Benchmark
     // with `pnpm bench:resize:bilinear` before accepting.
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     for (output_y, contribution) in y_contributions.iter().enumerate() {
-        // TODO(perf): Walk vertical/output/source row slices with chunk iterators
-        // so the hot loop increments offsets by 4 instead of calling
-        // `pixel_byte_offset` for each source_x/tap pair. Benchmark with
-        // `pnpm bench:resize:bilinear` before accepting.
-        for source_x in 0..source_width {
-            let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
+        let vertical_row_start = output_y * source_row_byte_len;
+        let vertical_row =
+            &mut vertical_rgba[vertical_row_start..vertical_row_start + source_row_byte_len];
 
-            for (weight_index, weight) in contribution.weights.iter().enumerate() {
-                let source_y = contribution.first + weight_index;
-                let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
+        for (weight_index, weight) in contribution.weights.iter().enumerate() {
+            let source_y = contribution.first + weight_index;
+            let source_row_start = source_y * source_row_byte_len;
+            let source_row = &source_rgba[source_row_start..source_row_start + source_row_byte_len];
 
-                // TODO(perf): Accumulate RGBA as four explicit lanes instead of
-                // looping over channels to reduce inner-loop branch/index work.
-                // Benchmark with `pnpm bench:resize:bilinear` before accepting.
-                for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                    vertical_rgba[vertical_offset + channel] +=
-                        f32::from(source_rgba[source_offset + channel]) * weight;
-                }
+            for (vertical_pixel, source_pixel) in vertical_row
+                .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+                .zip(source_row.chunks_exact(rgba::RGBA_CHANNEL_COUNT))
+            {
+                vertical_pixel[0] += f32::from(source_pixel[0]) * weight;
+                vertical_pixel[1] += f32::from(source_pixel[1]) * weight;
+                vertical_pixel[2] += f32::from(source_pixel[2]) * weight;
+                vertical_pixel[3] += f32::from(source_pixel[3]) * weight;
             }
         }
     }
