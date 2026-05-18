@@ -30,9 +30,19 @@ pub fn resize_rgba_area_scalar_into(
     // temporary single-axis `pnpm bench:resize:area` cases by 5-13%, but they
     // regressed common proportional fractional downscales by ~2-3%, so keep the
     // generic path for non-integer single-axis resizes.
-    // TODO(perf): Specialize common 2x/4x/8x exact area downscale kernels with
+    // TODO(perf): Specialize common 4x/8x exact area downscale kernels with
     // unrolled source block sums to reduce generic nested-loop overhead on
     // thumbnail scales. Benchmark with `pnpm bench:resize:area` before accepting.
+    if is_exact_2x_downscale(source_dimensions, output_dimensions) {
+        resize_exact_2x_downscale_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )?;
+        return Ok(());
+    }
+
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         resize_exact_integer_downscale_into(
             source_rgba,
@@ -135,6 +145,14 @@ pub fn resize_rgba_area_scalar_into(
     Ok(())
 }
 
+fn is_exact_2x_downscale(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    output_dimensions.width().checked_mul(2) == Some(source_dimensions.width())
+        && output_dimensions.height().checked_mul(2) == Some(source_dimensions.height())
+}
+
 fn is_exact_integer_downscale(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
@@ -149,6 +167,47 @@ fn is_exact_integer_downscale(
         && (source_width > output_width || source_height > output_height)
         && source_width.is_multiple_of(output_width)
         && source_height.is_multiple_of(output_height)
+}
+
+fn resize_exact_2x_downscale_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for (output_y, output_row) in output_rgba
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let first_source_row_start = output_y * 2 * source_row_byte_len;
+        let second_source_row_start = first_source_row_start + source_row_byte_len;
+
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+            .enumerate()
+        {
+            let source_x_start = output_x * 2 * rgba::RGBA_CHANNEL_COUNT;
+            let top_left = first_source_row_start + source_x_start;
+            let top_right = top_left + rgba::RGBA_CHANNEL_COUNT;
+            let bottom_left = second_source_row_start + source_x_start;
+            let bottom_right = bottom_left + rgba::RGBA_CHANNEL_COUNT;
+
+            for channel in 0..rgba::RGBA_CHANNEL_COUNT {
+                let sum = u64::from(source_rgba[top_left + channel])
+                    + u64::from(source_rgba[top_right + channel])
+                    + u64::from(source_rgba[bottom_left + channel])
+                    + u64::from(source_rgba[bottom_right + channel]);
+                output_pixel[channel] = round_average_channel(sum, 4);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn resize_exact_integer_downscale_into(
