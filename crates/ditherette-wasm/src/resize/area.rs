@@ -70,6 +70,8 @@ pub use crate::resize::reference::area::{
 
 #[doc(hidden)]
 pub use crate::resize::scalar::area::resize_rgba_area_scalar_into;
+#[doc(hidden)]
+pub use crate::resize::scalar::area_2::resize_rgba_area_2_into;
 
 #[cfg(feature = "tiling")]
 #[doc(hidden)]
@@ -79,11 +81,29 @@ pub fn resize_rgba_area_tiling_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    crate::resize::tiling::area::resize_rgba_area_with_tiling_into(
+    resize_rgba_area_with_row_band_tiling_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
         crate::resize::tiling::area::AREA_ROW_BAND_TILING,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_area_with_row_band_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: crate::resize::cpu_tiling::RowBandTiling,
+) -> Result<(), ProcessingError> {
+    crate::resize::tiling::area::resize_rgba_area_with_tiling_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        tiling,
     )
 }

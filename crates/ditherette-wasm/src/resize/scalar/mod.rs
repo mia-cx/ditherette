@@ -1,5 +1,6 @@
 pub(crate) mod antialias;
 pub(crate) mod area;
+pub(crate) mod area_2;
 pub(crate) mod bicubic;
 pub(crate) mod bilinear;
 pub(crate) mod convolution;

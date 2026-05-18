@@ -11,25 +11,31 @@ use ditherette_wasm::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
     resize::{
-        antialias::antialias_rgba_box3_reference_into, antialias_rgba_box3_into,
-        area::resize_rgba_area_reference_into, bicubic::resize_rgba_bicubic_reference_into,
-        bilinear::resize_rgba_bilinear_reference_into, lanczos::resize_rgba_lanczos_reference_into,
-        nearest::resize_rgba_nearest_reference_into, r#box::resize_rgba_box_reference_into,
+        antialias::antialias_rgba_box3_reference_into,
+        antialias_rgba_box3_into,
+        area::{
+            resize_rgba_area_2_into, resize_rgba_area_reference_into, resize_rgba_area_scalar_into,
+        },
+        bicubic::resize_rgba_bicubic_reference_into,
+        bilinear::resize_rgba_bilinear_reference_into,
+        lanczos::resize_rgba_lanczos_reference_into,
+        nearest::{resize_rgba_nearest_reference_into, resize_rgba_nearest_scalar_into},
+        r#box::resize_rgba_box_reference_into,
         resize_rgba_bicubic_into, resize_rgba_bilinear_into, resize_rgba_box_into,
         resize_rgba_lanczos2_into, resize_rgba_lanczos2_scale_aware_into,
         resize_rgba_lanczos3_into, resize_rgba_lanczos3_scale_aware_into,
-        resize_rgba_trilinear_into, trilinear::resize_rgba_trilinear_reference_into,
+        resize_rgba_trilinear_into,
+        trilinear::resize_rgba_trilinear_reference_into,
     },
 };
 use image::{imageops::FilterType, ImageBuffer, ImageReader, RgbaImage};
 
 #[cfg(not(feature = "tiling"))]
-use ditherette_wasm::resize::{
-    area::resize_rgba_area_scalar_into as resize_rgba_area_bench_into,
-    nearest::resize_rgba_nearest_scalar_into as resize_rgba_nearest_bench_into,
-};
+use resize_rgba_area_scalar_into as resize_rgba_area_bench_into;
 #[cfg(feature = "tiling")]
 use resize_rgba_area_tiling_into as resize_rgba_area_bench_into;
+#[cfg(not(feature = "tiling"))]
+use resize_rgba_nearest_scalar_into as resize_rgba_nearest_bench_into;
 #[cfg(feature = "tiling")]
 use resize_rgba_nearest_tiling_into as resize_rgba_nearest_bench_into;
 
@@ -97,16 +103,20 @@ fn resize_rgba_lanczos3_scale_aware_reference_into(
     )
 }
 
-const RESIZE_SCALES: [Scale; 6] = [
+const RESIZE_SCALES: [Scale; 10] = [
     Scale::new("2x", 2.0),
     Scale::new("0.95x", 0.95),
+    Scale::new("0.875x", 0.875),
+    Scale::new("0.8x", 0.8),
     Scale::new("0.75x", 0.75),
+    Scale::new("0.625x", 0.625),
     Scale::new("0.5x", 0.5),
+    Scale::new("0.375x", 0.375),
     Scale::new("0.25x", 0.25),
     Scale::new("0.125x", 0.125),
 ];
 
-const RESIZE_FILTERS: [ResizeFilter; 20] = [
+const RESIZE_FILTERS: [ResizeFilter; 22] = [
     ResizeFilter::new("nearest", resize_rgba_nearest_bench_into),
     ResizeFilter::new("nearest_reference", resize_rgba_nearest_reference_into),
     ResizeFilter::new("bilinear", resize_rgba_bilinear_into),
@@ -137,6 +147,8 @@ const RESIZE_FILTERS: [ResizeFilter; 20] = [
     ),
     ResizeFilter::new("area", resize_rgba_area_bench_into),
     ResizeFilter::new("area_reference", resize_rgba_area_reference_into),
+    ResizeFilter::new("area_2", resize_rgba_area_2_into),
+    ResizeFilter::new("area_2_reference", resize_rgba_area_reference_into),
     ResizeFilter::new("box", resize_rgba_box_into),
     ResizeFilter::new("box_reference", resize_rgba_box_reference_into),
 ];
@@ -169,11 +181,72 @@ static CELESTE_FIXTURE: OnceLock<RgbaFixture> = OnceLock::new();
 /// or JavaScript/Wasm boundary costs.
 fn resize_filter_variants(criterion: &mut Criterion) {
     let fixture = CELESTE_FIXTURE.get_or_init(load_celeste_fixture);
+
+    if let Some(comparison) = requested_resize_comparison() {
+        preflight_resize_comparison(fixture, &comparison);
+        for scale in RESIZE_SCALES {
+            bench_scale_comparison(criterion, fixture, scale, &comparison);
+        }
+        return;
+    }
+
     let selected_filter = requested_resize_filter();
+    preflight_resize_filter_correctness(fixture, selected_filter.as_deref());
 
     for scale in RESIZE_SCALES {
         bench_scale(criterion, fixture, scale, selected_filter.as_deref());
     }
+}
+
+fn preflight_resize_comparison(fixture: &RgbaFixture, comparison: &ResizeComparison) {
+    for scale in RESIZE_SCALES {
+        let output_dimensions = scale.dimensions_for(fixture.dimensions);
+        let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
+        assert_comparison_succeeds(fixture, output_dimensions, output_byte_len, comparison);
+    }
+}
+
+fn preflight_resize_filter_correctness(fixture: &RgbaFixture, selected_filter: Option<&str>) {
+    for scale in RESIZE_SCALES {
+        let output_dimensions = scale.dimensions_for(fixture.dimensions);
+        let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
+        assert_resize_filters_succeed(fixture, output_dimensions, output_byte_len, selected_filter);
+    }
+}
+
+fn bench_scale_comparison(
+    criterion: &mut Criterion,
+    fixture: &RgbaFixture,
+    scale: Scale,
+    comparison: &ResizeComparison,
+) {
+    let output_dimensions = scale.dimensions_for(fixture.dimensions);
+    report_tiling_plan(
+        scale,
+        fixture.dimensions,
+        output_dimensions,
+        Some(comparison.filter_name.as_str()),
+    );
+    let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
+
+    let group_name = format!(
+        "resize_filters/celeste_rgba/{}-{}x{}",
+        scale.label,
+        output_dimensions.width(),
+        output_dimensions.height()
+    );
+    let mut group = criterion.benchmark_group(group_name);
+
+    group.sampling_mode(SamplingMode::Flat);
+    group.throughput(Throughput::Bytes(output_byte_len as u64));
+    bench_comparison_filter(
+        &mut group,
+        fixture,
+        output_dimensions,
+        output_byte_len,
+        comparison,
+    );
+    group.finish();
 }
 
 fn bench_scale(
@@ -190,7 +263,6 @@ fn bench_scale(
         selected_filter,
     );
     let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
-    assert_resize_filters_succeed(fixture, output_dimensions, output_byte_len, selected_filter);
 
     let group_name = format!(
         "resize_filters/celeste_rgba/{}-{}x{}",
@@ -349,6 +421,119 @@ fn bench_antialias_filter(
             black_box(&output_rgba);
         });
     });
+}
+
+fn bench_comparison_filter(
+    group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
+    fixture: &RgbaFixture,
+    output_dimensions: ImageDimensions,
+    output_byte_len: usize,
+    comparison: &ResizeComparison,
+) {
+    match comparison.operation {
+        CompareOperation::Resize(resize_into) => {
+            group.bench_function(comparison.benchmark_id.as_str(), |bencher| {
+                let mut output_rgba = vec![0; output_byte_len];
+
+                bencher.iter(|| {
+                    resize_into(
+                        black_box(&fixture.rgba),
+                        fixture.dimensions,
+                        output_dimensions,
+                        black_box(&mut output_rgba),
+                    )
+                    .unwrap();
+                    black_box(&output_rgba);
+                });
+            });
+        }
+        CompareOperation::NearestAntialias(filter) => {
+            group.bench_function(comparison.benchmark_id.as_str(), |bencher| {
+                let mut resized_rgba = vec![0; output_byte_len];
+                let mut output_rgba = vec![0; output_byte_len];
+
+                bencher.iter(|| {
+                    (filter.resize_into)(
+                        black_box(&fixture.rgba),
+                        fixture.dimensions,
+                        output_dimensions,
+                        black_box(&mut resized_rgba),
+                    )
+                    .unwrap();
+                    (filter.antialias_into)(
+                        black_box(&resized_rgba),
+                        output_dimensions,
+                        black_box(&mut output_rgba),
+                    )
+                    .unwrap();
+                    black_box(&output_rgba);
+                });
+            });
+        }
+        CompareOperation::Antialias(antialias_into) => {
+            group.bench_function(comparison.benchmark_id.as_str(), |bencher| {
+                let resized_rgba =
+                    resized_nearest_fixture(fixture, output_dimensions, output_byte_len);
+                let mut output_rgba = vec![0; output_byte_len];
+
+                bencher.iter(|| {
+                    antialias_into(
+                        black_box(&resized_rgba),
+                        output_dimensions,
+                        black_box(&mut output_rgba),
+                    )
+                    .unwrap();
+                    black_box(&output_rgba);
+                });
+            });
+        }
+    }
+}
+
+fn assert_comparison_succeeds(
+    fixture: &RgbaFixture,
+    output_dimensions: ImageDimensions,
+    output_byte_len: usize,
+    comparison: &ResizeComparison,
+) {
+    match comparison.operation {
+        CompareOperation::Resize(resize_into) => {
+            let mut output_rgba = vec![0xA5; output_byte_len];
+            resize_into(
+                &fixture.rgba,
+                fixture.dimensions,
+                output_dimensions,
+                &mut output_rgba,
+            )
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{} {} resize should succeed: {error}",
+                    comparison.filter_name, comparison.implementation
+                )
+            });
+        }
+        CompareOperation::NearestAntialias(filter) => {
+            nearest_antialias_for_check(fixture, output_dimensions, output_byte_len, filter)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "{} {} resize should succeed: {error}",
+                        comparison.filter_name, comparison.implementation
+                    )
+                });
+        }
+        CompareOperation::Antialias(antialias_into) => {
+            let resized_rgba = resized_nearest_fixture(fixture, output_dimensions, output_byte_len);
+            let mut output_rgba = vec![0xA5; output_byte_len];
+            antialias_into(&resized_rgba, output_dimensions, &mut output_rgba).unwrap_or_else(
+                |error| {
+                    panic!(
+                        "{} {} should succeed: {error}",
+                        comparison.filter_name, comparison.implementation
+                    )
+                },
+            );
+        }
+    }
 }
 
 fn assert_resize_filters_succeed(
@@ -640,6 +825,150 @@ fn first_mismatch(left: &[u8], right: &[u8]) -> Option<ByteMismatch> {
         })
 }
 
+fn requested_resize_comparison() -> Option<ResizeComparison> {
+    let benchmark_id = env::var("RESIZE_FILTER_COMPARE_ID").ok()?;
+    if benchmark_id.is_empty() {
+        return None;
+    }
+
+    let filter_name = env::var("RESIZE_FILTER")
+        .unwrap_or_else(|_| panic!("RESIZE_FILTER is required in comparison mode"));
+    let implementation = env::var("RESIZE_FILTER_IMPLEMENTATION")
+        .unwrap_or_else(|_| panic!("RESIZE_FILTER_IMPLEMENTATION is required in comparison mode"));
+    let operation = compare_operation_for(&filter_name, &implementation).unwrap_or_else(|| {
+        panic!("unsupported resize comparison implementation `{filter_name}:{implementation}`")
+    });
+
+    Some(ResizeComparison {
+        benchmark_id,
+        filter_name,
+        implementation,
+        operation,
+    })
+}
+
+fn compare_operation_for(filter_name: &str, implementation: &str) -> Option<CompareOperation> {
+    match (filter_name, implementation) {
+        ("nearest", "reference") => {
+            Some(CompareOperation::Resize(resize_rgba_nearest_reference_into))
+        }
+        ("nearest", "scalar") => Some(CompareOperation::Resize(resize_rgba_nearest_scalar_into)),
+        ("nearest", "tiling") => nearest_tiling_compare_operation(),
+        ("nearest_aa", "reference") => Some(CompareOperation::NearestAntialias(
+            NearestAntialiasFilter::new(
+                "nearest_aa_reference",
+                resize_rgba_nearest_reference_into,
+                antialias_rgba_box3_reference_into,
+            ),
+        )),
+        ("nearest_aa", "scalar") => Some(CompareOperation::NearestAntialias(
+            NearestAntialiasFilter::new(
+                "nearest_aa",
+                resize_rgba_nearest_scalar_into,
+                antialias_rgba_box3_into,
+            ),
+        )),
+        ("nearest_aa", "tiling") => nearest_antialias_tiling_compare_operation(),
+        ("bilinear", "reference") => Some(CompareOperation::Resize(
+            resize_rgba_bilinear_reference_into,
+        )),
+        ("bilinear", "scalar") => Some(CompareOperation::Resize(resize_rgba_bilinear_into)),
+        ("bilinear", "tiling") => planned_tiling_compare_operation("bilinear"),
+        ("trilinear", "reference") => Some(CompareOperation::Resize(
+            resize_rgba_trilinear_reference_into,
+        )),
+        ("trilinear", "scalar") => Some(CompareOperation::Resize(resize_rgba_trilinear_into)),
+        ("trilinear", "tiling") => planned_tiling_compare_operation("trilinear"),
+        ("bicubic", "reference") => {
+            Some(CompareOperation::Resize(resize_rgba_bicubic_reference_into))
+        }
+        ("bicubic", "scalar") => Some(CompareOperation::Resize(resize_rgba_bicubic_into)),
+        ("bicubic", "tiling") => planned_tiling_compare_operation("bicubic"),
+        ("lanczos2", "reference") => Some(CompareOperation::Resize(
+            resize_rgba_lanczos2_reference_into,
+        )),
+        ("lanczos2", "scalar") => Some(CompareOperation::Resize(resize_rgba_lanczos2_into)),
+        ("lanczos2", "tiling") => planned_tiling_compare_operation("lanczos2"),
+        ("lanczos2_scale_aware", "reference") => Some(CompareOperation::Resize(
+            resize_rgba_lanczos2_scale_aware_reference_into,
+        )),
+        ("lanczos2_scale_aware", "scalar") => Some(CompareOperation::Resize(
+            resize_rgba_lanczos2_scale_aware_into,
+        )),
+        ("lanczos2_scale_aware", "tiling") => {
+            planned_tiling_compare_operation("lanczos2_scale_aware")
+        }
+        ("lanczos3", "reference") => Some(CompareOperation::Resize(
+            resize_rgba_lanczos3_reference_into,
+        )),
+        ("lanczos3", "scalar") => Some(CompareOperation::Resize(resize_rgba_lanczos3_into)),
+        ("lanczos3", "tiling") => planned_tiling_compare_operation("lanczos3"),
+        ("lanczos3_scale_aware", "reference") => Some(CompareOperation::Resize(
+            resize_rgba_lanczos3_scale_aware_reference_into,
+        )),
+        ("lanczos3_scale_aware", "scalar") => Some(CompareOperation::Resize(
+            resize_rgba_lanczos3_scale_aware_into,
+        )),
+        ("lanczos3_scale_aware", "tiling") => {
+            planned_tiling_compare_operation("lanczos3_scale_aware")
+        }
+        ("area", "reference") => Some(CompareOperation::Resize(resize_rgba_area_reference_into)),
+        ("area", "scalar") => Some(CompareOperation::Resize(resize_rgba_area_scalar_into)),
+        ("area", "tiling") => area_tiling_compare_operation(),
+        ("area_2", "reference") => Some(CompareOperation::Resize(resize_rgba_area_reference_into)),
+        ("area_2", "scalar") => Some(CompareOperation::Resize(resize_rgba_area_2_into)),
+        ("box", "reference") => Some(CompareOperation::Resize(resize_rgba_area_reference_into)),
+        ("box", "scalar") => Some(CompareOperation::Resize(resize_rgba_area_scalar_into)),
+        ("box", "tiling") => area_tiling_compare_operation(),
+        ("antialias", "reference") => Some(CompareOperation::Antialias(
+            antialias_rgba_box3_reference_into,
+        )),
+        ("antialias", "scalar") => Some(CompareOperation::Antialias(antialias_rgba_box3_into)),
+        ("antialias", "tiling") => planned_tiling_compare_operation("antialias"),
+        _ => None,
+    }
+}
+
+fn planned_tiling_compare_operation(filter_name: &str) -> Option<CompareOperation> {
+    panic!("resize:{filter_name}:tiling is planned but not implemented yet")
+}
+
+#[cfg(feature = "tiling")]
+fn nearest_tiling_compare_operation() -> Option<CompareOperation> {
+    Some(CompareOperation::Resize(resize_rgba_nearest_tiling_into))
+}
+
+#[cfg(not(feature = "tiling"))]
+fn nearest_tiling_compare_operation() -> Option<CompareOperation> {
+    None
+}
+
+#[cfg(feature = "tiling")]
+fn nearest_antialias_tiling_compare_operation() -> Option<CompareOperation> {
+    Some(CompareOperation::NearestAntialias(
+        NearestAntialiasFilter::new(
+            "nearest_aa_tiling",
+            resize_rgba_nearest_tiling_into,
+            antialias_rgba_box3_into,
+        ),
+    ))
+}
+
+#[cfg(not(feature = "tiling"))]
+fn nearest_antialias_tiling_compare_operation() -> Option<CompareOperation> {
+    None
+}
+
+#[cfg(feature = "tiling")]
+fn area_tiling_compare_operation() -> Option<CompareOperation> {
+    Some(CompareOperation::Resize(resize_rgba_area_tiling_into))
+}
+
+#[cfg(not(feature = "tiling"))]
+fn area_tiling_compare_operation() -> Option<CompareOperation> {
+    None
+}
+
 fn requested_resize_filter() -> Option<String> {
     let filter = env::var("RESIZE_FILTER").ok()?;
     if filter.is_empty() {
@@ -726,6 +1055,21 @@ fn fixture_path() -> PathBuf {
         .and_then(|crates_dir| crates_dir.parent())
         .map(|repo_root| repo_root.join("benchmark-fixtures/Celeste_box_art_full.png"))
         .expect("crate should live under crates/ditherette-wasm")
+}
+
+#[derive(Debug)]
+struct ResizeComparison {
+    benchmark_id: String,
+    filter_name: String,
+    implementation: String,
+    operation: CompareOperation,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CompareOperation {
+    Resize(ResizeInto),
+    NearestAntialias(NearestAntialiasFilter),
+    Antialias(AntialiasInto),
 }
 
 #[derive(Debug)]

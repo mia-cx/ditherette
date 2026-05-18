@@ -15,6 +15,7 @@ const resizeFilterNames = [
 	'lanczos3',
 	'lanczos3_scale_aware',
 	'area',
+	'area_2',
 	'box',
 	'antialias'
 ];
