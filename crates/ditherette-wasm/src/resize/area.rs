@@ -1,3 +1,14 @@
+//! Exact pixel-area resampling.
+//!
+//! This implementation is optimized where it can be without changing results,
+//! but it is intentionally byte-for-byte aligned with the independent area
+//! reference. That exactness prevents the broad fast paths that normally make a
+//! box/area filter cheap, such as separable passes, prefix sums, integral images,
+//! f32 accumulation, or reordered accumulation: those change rounding or have
+//! benchmarked slower in `pnpm bench:resize:area`. If area must beat bilinear
+//! across fractional scales, add a separate approximate/fast-area mode with its
+//! own documented rounding contract instead of weakening this exact filter.
+
 use crate::{
     error::ProcessingError, image::ImageDimensions, resize::buffers::allocate_output_rgba,
 };
