@@ -43,10 +43,8 @@ pub fn resize_rgba_area_2_into(
         return Ok(());
     }
 
-    // TODO(perf:path): Decide whether area_2 should dispatch to an old-area-style
-    // fractional downscale path while keeping its current fast upscale path;
-    // area_2 now wins 2x but still loses several fractional downscales.
-    // Benchmark with `pnpm bench:resize:area_2` and the area-vs-area_2 compare.
+    // NOTE(perf): area_2 dispatches fractional minification to an old-area-style
+    // coverage layout while keeping the flat AxisWeights path for upscale.
     if is_exact_2x_downscale(source_dimensions, output_dimensions) {
         resize_exact_2x_downscale_into(
             source_rgba,
@@ -67,6 +65,16 @@ pub fn resize_rgba_area_2_into(
         return Ok(());
     }
 
+    if is_minifying(source_dimensions, output_dimensions) {
+        resize_fractional_downscale_area_style_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        )?;
+        return Ok(());
+    }
+
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
@@ -78,12 +86,8 @@ pub fn resize_rgba_area_2_into(
     let y_weights_by_output =
         AxisWeights::for_output_axis(output_height, y_scale, source_dimensions.height());
 
-    // NOTE(perf): Exact integer minification has a dedicated path above; the
-    // remaining generic weighted path handles fractional downscale and upscale.
-    // TODO(perf:layout): Compare area_2's flat `(source_coordinate, weight)` axis
-    // metadata against old area's per-output coverage layout with source byte
-    // ranges. The flat layout helps upscale, but old area's layout is faster for
-    // several fractional downscales. Benchmark before changing kernels.
+    // NOTE(perf): Exact integer and fractional minification have dedicated paths
+    // above; the remaining generic weighted path handles upscale.
     // NOTE(perf): The current benchmark set has landscape output shapes; a
     // transposed traversal for tall/narrow bands is not actionable without a
     // representative benchmark case.
@@ -135,10 +139,6 @@ pub fn resize_rgba_area_2_into(
 
             // NOTE(perf): Axis weights are precomputed once; advancing x ranges
             // in the hot loop is superseded by the flattened AxisWeights plan.
-            // TODO(perf:kernel, after perf:layout area2-fractional-plan): Port
-            // old area's source-row slice + zipped x-weight traversal into the
-            // area_2 fractional path if the chosen layout exposes contiguous byte
-            // ranges. Benchmark fractional downscales before accepting.
             // REJECT(perf): Integer block/full-rectangle accumulation preserved
             // correctness but regressed the measured minification cases; avoid
             // unweighted interior byte sums on this path.
@@ -184,6 +184,11 @@ pub fn resize_rgba_area_2_into(
     }
 
     Ok(())
+}
+
+fn is_minifying(source_dimensions: ImageDimensions, output_dimensions: ImageDimensions) -> bool {
+    source_dimensions.width() > output_dimensions.width()
+        || source_dimensions.height() > output_dimensions.height()
 }
 
 fn is_exact_2x_downscale(
@@ -316,6 +321,106 @@ fn round_average_channel(sum: u64, divisor: u64) -> u8 {
 // arrays, or store x coordinates as byte offsets, only after the area_2
 // fractional path decision is settled. Benchmark fractional downscales and 2x
 // upscale because this metadata is shared across both paths.
+fn resize_fractional_downscale_area_style_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    let source_width = source_dimensions.width_usize()?;
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
+    let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
+
+    let x_coverages: Vec<_> = (0..output_width)
+        .map(|output_x| XCoverage::for_output_pixel(output_x, x_scale, source_dimensions.width()))
+        .collect();
+    let y_coverages: Vec<_> = (0..output_height)
+        .map(|output_y| {
+            AxisCoverage::for_output_pixel(output_y, y_scale, source_dimensions.height())
+        })
+        .collect();
+
+    for (output_y, y_coverage) in y_coverages.iter().enumerate() {
+        for (output_x, x_coverage) in x_coverages.iter().enumerate() {
+            let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
+            let mut total_weight = 0.0;
+
+            for (source_y_offset, y_weight) in y_coverage.weights.iter().copied().enumerate() {
+                let source_y = y_coverage.first + source_y_offset;
+                let source_row_start = source_y * source_row_byte_len;
+                let source_start = source_row_start + x_coverage.first_byte_offset;
+                let source_end = source_row_start + x_coverage.last_exclusive_byte_offset;
+                let source_pixels =
+                    source_rgba[source_start..source_end].chunks_exact(rgba::RGBA_CHANNEL_COUNT);
+
+                for (x_weight, source_pixel) in
+                    x_coverage.weights.iter().copied().zip(source_pixels)
+                {
+                    let sample_weight = x_weight * y_weight;
+                    weighted_sums[0] += f64::from(source_pixel[0]) * sample_weight;
+                    weighted_sums[1] += f64::from(source_pixel[1]) * sample_weight;
+                    weighted_sums[2] += f64::from(source_pixel[2]) * sample_weight;
+                    weighted_sums[3] += f64::from(source_pixel[3]) * sample_weight;
+                    total_weight += sample_weight;
+                }
+            }
+
+            let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
+            output_rgba[output_offset] = round_channel(weighted_sums[0] / total_weight);
+            output_rgba[output_offset + 1] = round_channel(weighted_sums[1] / total_weight);
+            output_rgba[output_offset + 2] = round_channel(weighted_sums[2] / total_weight);
+            output_rgba[output_offset + 3] = round_channel(weighted_sums[3] / total_weight);
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+struct XCoverage {
+    first_byte_offset: usize,
+    last_exclusive_byte_offset: usize,
+    weights: Vec<f64>,
+}
+
+impl XCoverage {
+    fn for_output_pixel(output_coordinate: usize, scale: f64, source_size: u32) -> Self {
+        let range = SourceRange::for_output_pixel(output_coordinate, scale, source_size);
+        let weights = (range.first..range.last_exclusive)
+            .map(|source_x| range.overlap_with(source_x))
+            .collect();
+
+        Self {
+            first_byte_offset: range.first * rgba::RGBA_CHANNEL_COUNT,
+            last_exclusive_byte_offset: range.last_exclusive * rgba::RGBA_CHANNEL_COUNT,
+            weights,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct AxisCoverage {
+    first: usize,
+    weights: Vec<f64>,
+}
+
+impl AxisCoverage {
+    fn for_output_pixel(output_coordinate: usize, scale: f64, source_size: u32) -> Self {
+        let range = SourceRange::for_output_pixel(output_coordinate, scale, source_size);
+        let weights = (range.first..range.last_exclusive)
+            .map(|source_coordinate| range.overlap_with(source_coordinate))
+            .collect();
+
+        Self {
+            first: range.first,
+            weights,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct AxisWeights {
     ranges: Vec<AxisWeightRange>,
