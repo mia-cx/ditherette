@@ -168,15 +168,14 @@ fn resize_exact_integer_downscale_into(
     // REJECT(perf): Using narrower u32 accumulators for exact integer
     // downscales preserved correctness and improved 0.125x, but regressed
     // 0.5x by ~9% plus several fractional cases in `pnpm bench:resize:area`.
+    // REJECT(perf): Precomputing source x block byte ranges for exact integer
+    // downscales preserved correctness but regressed 2x, 0.5x, 0.25x, and
+    // 0.125x in `pnpm bench:resize:area`.
     for (output_y, output_row) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
     {
         let source_y_start = output_y * y_step;
-        // TODO(perf): Precompute source x block byte ranges for exact integer
-        // downscales so each output row reuses start/end offsets instead of
-        // recomputing `output_x * x_step` and byte lengths. Benchmark with
-        // `pnpm bench:resize:area` before accepting.
         for (output_x, output_pixel) in output_row
             .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
             .enumerate()
