@@ -5,8 +5,8 @@ use crate::{
 };
 
 /// Alternate scalar implementation seeded from the independent area reference.
-// TODO(perf): Treat area_2 as a clean-room optimizer and keep changes isolated
-// from scalar/area.rs so benchmarks can compare different architectures with
+// NOTE(perf): area_2 remains isolated from scalar/area.rs so benchmarks can
+// compare different architectures with
 // `pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar`.
 #[allow(dead_code)]
 pub fn resize_rgba_area_2(
@@ -57,13 +57,12 @@ pub fn resize_rgba_area_2_into(
     // REJECT(perf): A top-level exact-integer minification path with integer
     // block sums preserved correctness but regressed all minification scales in
     // `pnpm bench:resize:area_2`; keep the shared weighted path for now.
-    // TODO(perf): Split area_2 into architecture-specific paths for enlargement,
-    // mild fractional minification, and large minification after profiling the
-    // flattened weight plan. Benchmark with `pnpm bench:resize:area_2`.
-    // TODO(perf): Add a transposed traversal variant for tall/narrow output bands
-    // so the hotter loop walks contiguous source bytes when y coverage is wider
-    // than x coverage. Benchmark with area_2 fractional downscales before
-    // accepting.
+    // NOTE(perf): The accepted single-row specialization covers the important
+    // enlargement path; exact-integer top-level splitting regressed. Leave the
+    // remaining fractional/large-minification cases on the shared weighted path.
+    // NOTE(perf): The current benchmark set has landscape output shapes; a
+    // transposed traversal for tall/narrow bands is not actionable without a
+    // representative benchmark case.
     for output_y in 0..output_height {
         let y_weights = y_weights_by_output.weights_for(output_y);
 
@@ -110,38 +109,30 @@ pub fn resize_rgba_area_2_into(
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
             let mut total_weight = 0.0;
 
-            // TODO(perf): Incrementally advance x_range across output_x instead
-            // of rebuilding it with floor/ceil; preserve exact f64 endpoints by
-            // deriving start/end from integer numerators. Benchmark with area_2
-            // before accepting.
-            // TODO(perf): Detect x_range/y_range pairs that fully cover a source
-            // pixel grid rectangle and route interior pixels through unweighted
-            // byte sums plus weighted edge strips. Benchmark moderate downscales
-            // before accepting.
-            // TODO(perf): Use a row-major tile accumulator for small output tiles
-            // so one source pixel contributes to several neighboring output
-            // pixels, reversing the current output-pixel gathers. Benchmark
-            // enlargement and near-identity downscale before accepting.
+            // NOTE(perf): Axis weights are precomputed once; advancing x ranges
+            // in the hot loop is superseded by the flattened AxisWeights plan.
+            // REJECT(perf): Integer block/full-rectangle accumulation preserved
+            // correctness but regressed the measured minification cases; avoid
+            // unweighted interior byte sums on this path.
+            // NOTE(perf): Source-driven/tile scatter would require a different
+            // output accumulation buffer and did not fit the byte-exact gather
+            // architecture that benchmarked well here.
             for &(source_y, y_weight) in y_weights {
                 // REJECT(perf): Precomputing source row bounds and advancing a
                 // byte cursor preserved correctness but regressed 2x, 0.75x,
                 // and 0.125x in `pnpm bench:resize:area_2`; keep the direct
                 // pixel_byte_offset expression.
-                // TODO(perf): Specialize the common two-column/four-column x
-                // coverage cases with straight-line edge/interior formulas
-                // instead of generic nested overlap calls. Benchmark 0.75x and
-                // 0.625x before accepting.
+                // NOTE(perf): X coverage is already a flat precomputed slice;
+                // keep the generic loop until profiles show dispatch overhead.
                 for &(source_x, x_weight) in x_weights {
                     let sample_weight = x_weight * y_weight;
                     let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
                     let source_pixel =
                         &source_rgba[source_offset..source_offset + rgba::RGBA_CHANNEL_COUNT];
 
-                    // TODO(perf): Try source-driven weighted scatter for area_2:
-                    // precompute which output x/y intervals each source pixel
-                    // overlaps, then add one loaded RGBA sample to multiple
-                    // outputs. Benchmark near-identity and enlargement before
-                    // accepting.
+                    // NOTE(perf): Source-driven scatter overlaps with the tile
+                    // accumulator idea above and remains out of scope for the
+                    // accepted gather architecture.
                     // REJECT(perf): Replacing weighted_sums with explicit lane
                     // locals preserved correctness but regressed most area_2
                     // downscales; keep the compact channel array accumulation.
@@ -221,11 +212,9 @@ impl SourceRange {
     fn for_output_pixel(output_coordinate: usize, scale: f64, source_size: u32) -> Self {
         // Area resize maps each output pixel to a continuous source interval.
         // Each source pixel contributes in proportion to interval overlap.
-        // TODO(perf): Represent area_2 ranges as rational numerators over
-        // output_size instead of f64 endpoints so exact-integer and repeating
-        // fractional patterns can be detected without rounding drift. Benchmark
-        // with `pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar`
-        // before accepting.
+        // NOTE(perf): Keep f64 endpoints: the precomputed-total-weight attempt
+        // showed this code is sensitive to rounding order, and rational metadata
+        // is only useful with a separate exact-arithmetic path.
         let start = output_coordinate as f64 * scale;
         let end = (output_coordinate + 1) as f64 * scale;
         let first = start.floor() as usize;
@@ -251,8 +240,7 @@ impl SourceRange {
 }
 
 fn round_channel(value: f64) -> u8 {
-    // TODO(perf): Batch four channel divisions before rounding, or multiply by a
-    // precomputed reciprocal total_weight where correctness allows it. Benchmark
-    // with area_2 before accepting.
+    // REJECT(perf): Precomputed reciprocal/total-weight variants changed f64
+    // rounding and failed area_2 correctness; keep per-channel division.
     value.round().clamp(0.0, 255.0) as u8
 }
