@@ -65,11 +65,10 @@ pub fn resize_rgba_area_2_into(
     for output_y in 0..output_height {
         let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
 
-        // TODO(perf): Hoist y_range overlap weights into a tiny stack buffer per
-        // output row so each output_x reuses the same y weights instead of
-        // recomputing overlap_with for every pixel. Benchmark with
-        // `pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar`
-        // before accepting.
+        let y_weights: Vec<_> = (y_range.first..y_range.last_exclusive)
+            .map(|source_y| (source_y, y_range.overlap_with(source_y)))
+            .collect();
+
         // TODO(perf): For rows whose y_range covers one source row, dispatch to a
         // horizontal-only area_2 kernel that avoids y_weight multiplication and
         // total_weight accumulation. Benchmark upscale and 0.95x before
@@ -92,9 +91,7 @@ pub fn resize_rgba_area_2_into(
             // so one source pixel contributes to several neighboring output
             // pixels, reversing the current output-pixel gathers. Benchmark
             // enlargement and near-identity downscale before accepting.
-            for source_y in y_range.first..y_range.last_exclusive {
-                let y_weight = y_range.overlap_with(source_y);
-
+            for &(source_y, y_weight) in &y_weights {
                 // REJECT(perf): Precomputing source row bounds and advancing a
                 // byte cursor preserved correctness but regressed 2x, 0.75x,
                 // and 0.125x in `pnpm bench:resize:area_2`; keep the direct
