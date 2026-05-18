@@ -71,9 +71,10 @@ pub(crate) fn resize_rgba_nearest_scalar_after_fast_paths(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Add specialized 2x/4x exact nearest downscale kernels that
-    // advance source/output pointers without per-pixel loop bookkeeping.
-    // Benchmark with `pnpm bench:resize:nearest` before accepting.
+    // REJECT(perf): Specialized 2x/4x exact nearest downscale kernels that
+    // advanced raw source/output pointers preserved correctness but regressed
+    // exact downscales: 0.5x by ~23%, 0.25x by ~26%, and 0.125x by ~5% in
+    // `pnpm bench:resize:nearest`; keep the generic exact integer loop.
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         resize_exact_integer_downscale_word(
             source_rgba,
