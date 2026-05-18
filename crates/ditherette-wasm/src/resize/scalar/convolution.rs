@@ -141,10 +141,10 @@ fn vertical_sample(
             [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
         vertical_row.fill(0.0);
 
-        // TODO(perf): Precompute y source row offsets in the contribution
-        // plan so every output row reuses them. Benchmark with
-        // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3`
-        // before accepting.
+        // REJECT(perf): Precomputing y source row offsets in the contribution
+        // plan preserved correctness but regressed 0.8x and 0.375x in
+        // `pnpm bench:resize:bicubic --baseline convolution_accepted`; keep the
+        // multiply in the vertical loop.
         for (weight_offset, weight) in y_contribution.weights.iter().enumerate() {
             let source_y = y_contribution.first + weight_offset;
             debug_assert!(source_y < source_height);
