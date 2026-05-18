@@ -7,6 +7,18 @@ use crate::{
     },
 };
 
+// TODO(perf): Store convolution weights in a flat buffer plus per-output ranges
+// to avoid one Vec allocation per output coordinate and improve sequential
+// access during sampling. Benchmark with `pnpm bench:resize:bicubic` and
+// `pnpm bench:resize:lanczos3` before accepting.
+// TODO(perf): Use fixed-size inline storage for compact kernels whose tap count
+// is bounded in upscales, so bicubic/Lanczos2/Lanczos3 avoid heap allocations
+// per output coordinate. Benchmark with `pnpm bench:resize:bicubic` and
+// `pnpm bench:resize:lanczos3` before accepting.
+// TODO(perf): Split x/y contribution types so x stores source byte offsets and y
+// stores row byte offsets, removing repeated offset multiplication in the hot
+// loops. Benchmark with `pnpm bench:resize:bicubic` and
+// `pnpm bench:resize:lanczos3` before accepting.
 #[derive(Debug)]
 struct AxisContributions {
     first: usize,
@@ -54,6 +66,14 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
         return Ok(());
     }
 
+    // TODO(perf): Add one-axis fast paths for same-width or same-height resizes
+    // so pure vertical or horizontal convolution skips the unchanged axis.
+    // Benchmark with `pnpm bench:resize:bicubic` and
+    // `pnpm bench:resize:lanczos3` before accepting.
+    // TODO(perf): Cache contribution plans keyed by source/output dimensions,
+    // kernel, and scale-aware mode for repeated preview renders. Benchmark with
+    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
+    // accepting.
     let source_width = source_dimensions.width_usize()?;
     let source_height = source_dimensions.height_usize()?;
     let output_width = output_dimensions.width_usize()?;
@@ -71,6 +91,18 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
         scale_aware,
     )?;
 
+    // TODO(perf): Reuse the vertical scratch buffer across resize calls to avoid
+    // allocating a large f32 intermediate every frame. Benchmark with
+    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
+    // accepting.
+    // TODO(perf): Stream one vertical row into the horizontal pass instead of
+    // materializing the full output_height * source_width f32 intermediate; this
+    // may greatly reduce memory bandwidth for large resizes. Benchmark with
+    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
+    // accepting.
+    // TODO(perf): Process output rows in reusable row bands so future tiling can
+    // share a bounded scratch buffer rather than one full intermediate image.
+    // Benchmark with `pnpm bench:resize:bicubic:tiling` before accepting.
     let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
     vertical_sample(
         source_rgba,
@@ -100,6 +132,14 @@ fn vertical_sample(
     let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let vertical_row_byte_len = source_row_byte_len;
 
+    // TODO(perf): Walk vertical sampling by source row slices instead of by
+    // source_x columns to improve cache locality and avoid per-pixel row offset
+    // multiplication. Benchmark with `pnpm bench:resize:bicubic` and
+    // `pnpm bench:resize:lanczos3` before accepting.
+    // TODO(perf): Fill the vertical row from the first y tap, then add remaining
+    // taps, to remove per-pixel zero initialization and one add. Benchmark with
+    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
+    // accepting.
     for (output_y, y_contribution) in y_contributions.iter().enumerate() {
         let vertical_row = &mut vertical_rgba
             [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
@@ -110,6 +150,10 @@ fn vertical_sample(
             let mut blue = 0.0;
             let mut alpha = 0.0;
 
+            // TODO(perf): Precompute y source row offsets in the contribution
+            // plan so every source_x in this output row reuses them. Benchmark
+            // with `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3`
+            // before accepting.
             for (weight_offset, weight) in y_contribution.weights.iter().enumerate() {
                 let source_y = y_contribution.first + weight_offset;
                 debug_assert!(source_y < source_height);
@@ -139,6 +183,10 @@ fn horizontal_sample(
     let vertical_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
 
+    // TODO(perf): Add row-band parallelism for convolution filters after the
+    // scalar row path stabilizes; output rows are independent and should tile
+    // similarly to nearest/area. Benchmark with `pnpm bench:resize:bicubic:tiling`
+    // before accepting.
     for (output_y, output_row) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
@@ -155,6 +203,14 @@ fn horizontal_sample(
             let mut blue = 0.0;
             let mut alpha = 0.0;
 
+            // TODO(perf): Precompute x source byte offsets in the contribution
+            // plan to avoid multiplying each source_x by RGBA channel count in
+            // every output pixel. Benchmark with `pnpm bench:resize:bicubic` and
+            // `pnpm bench:resize:lanczos3` before accepting.
+            // TODO(perf): Unroll fixed-tap horizontal loops for compact kernels
+            // so bicubic/Lanczos upscales avoid iterator overhead. Benchmark
+            // with `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3`
+            // before accepting.
             for (weight_offset, weight) in x_contribution.weights.iter().enumerate() {
                 let source_x = x_contribution.first + weight_offset;
                 let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
@@ -164,6 +220,10 @@ fn horizontal_sample(
                 alpha += vertical_row[vertical_offset + 3] * weight;
             }
 
+            // TODO(perf): Benchmark a fused clamp/round/write helper for RGBA
+            // lanes to reduce repeated function calls and bounds checks at the
+            // output boundary. Benchmark with `pnpm bench:resize:bicubic` and
+            // `pnpm bench:resize:lanczos3` before accepting.
             output_pixel[0] = round_u8(red);
             output_pixel[1] = round_u8(green);
             output_pixel[2] = round_u8(blue);
@@ -189,6 +249,22 @@ fn prepare_axis_contributions<K: Kernel>(
     let support = kernel.support() * scale;
     let mut contributions = Vec::with_capacity(output_len);
 
+    // TODO(perf): Detect identity-axis contribution plans and represent them as
+    // direct copies instead of building one single-tap Vec per coordinate.
+    // Benchmark with `pnpm bench:resize:bicubic` and
+    // `pnpm bench:resize:lanczos3` before accepting.
+    // TODO(perf): Detect exact integer ratios where contribution patterns repeat
+    // periodically and clone a short pattern table instead of evaluating every
+    // output coordinate. Benchmark with `pnpm bench:resize:bicubic` and
+    // `pnpm bench:resize:lanczos3` before accepting.
+    // TODO(perf): Use incremental input-coordinate updates instead of computing
+    // `(output + 0.5) * ratio` for every output coordinate. Benchmark with
+    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
+    // accepting.
+    // TODO(perf): Split scale-aware minification planning from fixed-support
+    // upscale planning so the common fixed-radius case avoids scale branches and
+    // wider dynamic capacities. Benchmark with `pnpm bench:resize:bicubic` and
+    // `pnpm bench:resize:lanczos3` before accepting.
     for output_coordinate in 0..output_len {
         let input = (output_coordinate as f32 + 0.5) * ratio;
         let left = clamp_i64(
@@ -204,15 +280,32 @@ fn prepare_axis_contributions<K: Kernel>(
             i64::from(source_size),
         ) as usize;
         let center = input - 0.5;
+        // TODO(perf): Split contribution planning into edge and interior ranges;
+        // interior coordinates can skip clamp calls and use known tap bounds.
+        // Benchmark with `pnpm bench:resize:bicubic` and
+        // `pnpm bench:resize:lanczos3` before accepting.
         let mut weights = Vec::with_capacity(right - left);
         let mut total_weight = 0.0;
 
+        // TODO(perf): Drop leading/trailing zero-weight taps while preserving
+        // byte-for-byte results to avoid useless vertical/horizontal samples.
+        // Benchmark with `pnpm bench:resize:bicubic` and
+        // `pnpm bench:resize:lanczos3` before accepting.
+        // TODO(perf): Add fixed-support specialized planners for bicubic and
+        // fixed-window Lanczos so kernel weights are written into pre-sized
+        // arrays without Vec growth checks. Benchmark with
+        // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
+        // accepting.
         for source_coordinate in left..right {
             let weight = kernel.weight((source_coordinate as f32 - center) / scale);
             weights.push(weight);
             total_weight += weight;
         }
 
+        // TODO(perf): Normalize weights with one reciprocal multiply instead of
+        // dividing every tap by the total weight. Benchmark with
+        // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
+        // accepting.
         if total_weight.abs() > f32::EPSILON {
             for weight in &mut weights {
                 *weight /= total_weight;
