@@ -7,10 +7,9 @@ use crate::{
     },
 };
 
-// TODO(perf): Store convolution weights in a flat buffer plus per-output ranges
-// to avoid one Vec allocation per output coordinate and improve sequential
-// access during sampling. Benchmark with `pnpm bench:resize:bicubic` and
-// `pnpm bench:resize:lanczos3` before accepting.
+// REJECT(perf): Storing convolution weights in one flat buffer plus per-output
+// ranges preserved correctness and helped some downscales, but regressed 2x and
+// 0.95x bicubic in `pnpm bench:resize:bicubic`; keep per-output Vec weights.
 // TODO(perf): Use fixed-size inline storage for compact kernels whose tap count
 // is bounded in upscales, so bicubic/Lanczos2/Lanczos3 avoid heap allocations
 // per output coordinate. Benchmark with `pnpm bench:resize:bicubic` and
