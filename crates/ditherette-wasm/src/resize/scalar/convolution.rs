@@ -66,10 +66,9 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
         return Ok(());
     }
 
-    // TODO(perf): Add one-axis fast paths for same-width or same-height resizes
-    // so pure vertical or horizontal convolution skips the unchanged axis.
-    // Benchmark with `pnpm bench:resize:bicubic` and
-    // `pnpm bench:resize:lanczos3` before accepting.
+    // TODO(perf): Add a same-height horizontal-only convolution fast path so
+    // pure horizontal resizes skip the unchanged vertical axis. Benchmark with
+    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before accepting.
     // TODO(perf): Cache contribution plans keyed by source/output dimensions,
     // kernel, and scale-aware mode for repeated preview renders. Benchmark with
     // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
@@ -84,6 +83,18 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
         kernel,
         scale_aware,
     )?;
+
+    if source_width == output_width {
+        vertical_sample_into_output(
+            source_rgba,
+            source_width,
+            source_height,
+            &y_contributions,
+            output_rgba,
+        );
+        return Ok(());
+    }
+
     let x_contributions = prepare_axis_contributions(
         source_dimensions.width(),
         output_dimensions.width(),
@@ -163,6 +174,47 @@ fn vertical_sample(
                 vertical_pixel[2] += f32::from(source_pixel[2]) * weight;
                 vertical_pixel[3] += f32::from(source_pixel[3]) * weight;
             }
+        }
+    }
+}
+
+fn vertical_sample_into_output(
+    source_rgba: &[u8],
+    source_width: usize,
+    source_height: usize,
+    y_contributions: &[AxisContributions],
+    output_rgba: &mut [u8],
+) {
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+
+    for (output_row, y_contribution) in output_rgba
+        .chunks_exact_mut(source_row_byte_len)
+        .zip(y_contributions)
+    {
+        for (output_pixel, source_x) in output_row
+            .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+            .zip(0..source_width)
+        {
+            let mut red = 0.0;
+            let mut green = 0.0;
+            let mut blue = 0.0;
+            let mut alpha = 0.0;
+
+            for (weight_offset, weight) in y_contribution.weights.iter().enumerate() {
+                let source_y = y_contribution.first + weight_offset;
+                debug_assert!(source_y < source_height);
+                let source_offset =
+                    source_y * source_row_byte_len + source_x * rgba::RGBA_CHANNEL_COUNT;
+                red += f32::from(source_rgba[source_offset]) * weight;
+                green += f32::from(source_rgba[source_offset + 1]) * weight;
+                blue += f32::from(source_rgba[source_offset + 2]) * weight;
+                alpha += f32::from(source_rgba[source_offset + 3]) * weight;
+            }
+
+            output_pixel[0] = round_u8(red);
+            output_pixel[1] = round_u8(green);
+            output_pixel[2] = round_u8(blue);
+            output_pixel[3] = round_u8(alpha);
         }
     }
 }
