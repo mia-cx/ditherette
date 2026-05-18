@@ -85,9 +85,6 @@ pub fn resize_rgba_area_scalar_into(
             // fractional downscales changed f64 grouping and failed
             // `pnpm bench:resize:area` correctness preflight at 0.95x
             // (one-byte mismatch).
-            // TODO(perf): Use a separable horizontal scratch pass followed by
-            // vertical accumulation only if it preserves per-sample f64 order.
-            // Benchmark with `pnpm bench:resize:area` before accepting.
             // REJECT(perf): Branching on full-span x/y weights to skip
             // multiplying by 1.0 preserved correctness but regressed 2x, 0.95x,
             // 0.875x, 0.8x, 0.75x, 0.625x, and 0.375x in
@@ -99,10 +96,6 @@ pub fn resize_rgba_area_scalar_into(
             // REJECT(perf): Row prefix sums for fractional scales changed f64
             // grouping and failed `pnpm bench:resize:area` correctness preflight
             // at 0.375x (one-byte mismatch).
-            // TODO(perf): Use row or integral prefix sums for full interior spans
-            // so large downscales do O(1) full-span accumulation plus fractional
-            // edge samples. Benchmark with `pnpm bench:resize:area` before
-            // accepting.
             for (source_y_offset, y_weight) in y_coverage.weights.iter().copied().enumerate() {
                 let source_y = y_coverage.first + source_y_offset;
                 let source_row_start = source_y * source_row_byte_len;
