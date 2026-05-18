@@ -33,9 +33,9 @@ pub fn resize_rgba_area_scalar_into(
     // REJECT(perf): A specialized 4x exact area downscale kernel with direct
     // source block sums preserved correctness but regressed 0.25x by ~54% in
     // `pnpm bench:resize:area`; keep 4x on the generic exact path.
-    // TODO(perf): Specialize common 8x exact area downscale kernels with
-    // unrolled source block sums to reduce generic nested-loop overhead on
-    // thumbnail scales. Benchmark with `pnpm bench:resize:area` before accepting.
+    // REJECT(perf): A specialized 8x exact area downscale kernel with direct
+    // source block sums preserved correctness but regressed 0.125x by ~85% in
+    // `pnpm bench:resize:area`; keep 8x on the generic exact path.
     if is_exact_2x_downscale(source_dimensions, output_dimensions) {
         resize_exact_2x_downscale_into(
             source_rgba,
