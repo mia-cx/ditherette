@@ -271,6 +271,7 @@ fn prepare_axis_contributions<K: Kernel>(
             i64::from(source_size),
         ) as usize;
         let center = input - 0.5;
+        let mut first = left;
         // TODO(perf): Split contribution planning into edge and interior ranges;
         // interior coordinates can skip clamp calls and use known tap bounds.
         // Benchmark with `pnpm bench:resize:bicubic` and
@@ -278,10 +279,6 @@ fn prepare_axis_contributions<K: Kernel>(
         let mut weights = Vec::with_capacity(right - left);
         let mut total_weight = 0.0;
 
-        // TODO(perf): Drop leading/trailing zero-weight taps while preserving
-        // byte-for-byte results to avoid useless vertical/horizontal samples.
-        // Benchmark with `pnpm bench:resize:bicubic` and
-        // `pnpm bench:resize:lanczos3` before accepting.
         // TODO(perf): Add fixed-support specialized planners for bicubic and
         // fixed-window Lanczos so kernel weights are written into pre-sized
         // arrays without Vec growth checks. Benchmark with
@@ -289,8 +286,17 @@ fn prepare_axis_contributions<K: Kernel>(
         // accepting.
         for source_coordinate in left..right {
             let weight = kernel.weight((source_coordinate as f32 - center) / scale);
+            if weight == 0.0 && weights.is_empty() {
+                first += 1;
+                continue;
+            }
+
             weights.push(weight);
             total_weight += weight;
+        }
+
+        while weights.last() == Some(&0.0) {
+            weights.pop();
         }
 
         // REJECT(perf): Normalizing weights with one reciprocal multiply instead
@@ -303,10 +309,7 @@ fn prepare_axis_contributions<K: Kernel>(
             }
         }
 
-        contributions.push(AxisContributions {
-            first: left,
-            weights,
-        });
+        contributions.push(AxisContributions { first, weights });
     }
 
     debug_assert_eq!(contributions.len(), output_len);
