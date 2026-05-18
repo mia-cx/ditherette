@@ -70,8 +70,6 @@ pub use crate::resize::reference::area::{
 
 #[doc(hidden)]
 pub use crate::resize::scalar::area::resize_rgba_area_scalar_into;
-#[doc(hidden)]
-pub use crate::resize::scalar::area_2::resize_rgba_area_2_into;
 
 #[cfg(feature = "tiling")]
 #[doc(hidden)]

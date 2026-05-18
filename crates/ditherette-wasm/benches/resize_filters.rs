@@ -13,9 +13,7 @@ use ditherette_wasm::{
     resize::{
         antialias::antialias_rgba_box3_reference_into,
         antialias_rgba_box3_into,
-        area::{
-            resize_rgba_area_2_into, resize_rgba_area_reference_into, resize_rgba_area_scalar_into,
-        },
+        area::{resize_rgba_area_reference_into, resize_rgba_area_scalar_into},
         bicubic::resize_rgba_bicubic_reference_into,
         bilinear::resize_rgba_bilinear_reference_into,
         lanczos::resize_rgba_lanczos_reference_into,
@@ -130,7 +128,7 @@ const RESIZE_SCALES: [Scale; 10] = [
     EXACT_DOWNSCALE_SCALES[3],
 ];
 
-const RESIZE_FILTERS: [ResizeFilter; 22] = [
+const RESIZE_FILTERS: [ResizeFilter; 20] = [
     ResizeFilter::new("nearest", resize_rgba_nearest_bench_into),
     ResizeFilter::new("nearest_reference", resize_rgba_nearest_reference_into),
     ResizeFilter::new("bilinear", resize_rgba_bilinear_into),
@@ -161,8 +159,6 @@ const RESIZE_FILTERS: [ResizeFilter; 22] = [
     ),
     ResizeFilter::new("area", resize_rgba_area_bench_into),
     ResizeFilter::new("area_reference", resize_rgba_area_reference_into),
-    ResizeFilter::new("area_2", resize_rgba_area_2_into),
-    ResizeFilter::new("area_2_reference", resize_rgba_area_reference_into),
     ResizeFilter::new("box", resize_rgba_box_into),
     ResizeFilter::new("box_reference", resize_rgba_box_reference_into),
 ];
@@ -967,8 +963,6 @@ fn compare_operation_for(filter_name: &str, implementation: &str) -> Option<Comp
         ("area", "reference") => Some(CompareOperation::Resize(resize_rgba_area_reference_into)),
         ("area", "scalar") => Some(CompareOperation::Resize(resize_rgba_area_scalar_into)),
         ("area", "tiling") => area_tiling_compare_operation(),
-        ("area_2", "reference") => Some(CompareOperation::Resize(resize_rgba_area_reference_into)),
-        ("area_2", "scalar") => Some(CompareOperation::Resize(resize_rgba_area_2_into)),
         ("box", "reference") => Some(CompareOperation::Resize(resize_rgba_area_reference_into)),
         ("box", "scalar") => Some(CompareOperation::Resize(resize_rgba_area_scalar_into)),
         ("box", "tiling") => area_tiling_compare_operation(),

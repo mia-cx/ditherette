@@ -1,4 +1,4 @@
-use super::resize_rgba_area_scalar_into;
+use super::area::resize_rgba_area_scalar_into;
 use crate::{
     image::{rgba, ImageDimensions},
     resize::{area::resize_rgba_area, reference::area::resize_rgba_area_reference},
