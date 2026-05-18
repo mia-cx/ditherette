@@ -66,9 +66,9 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
         return Ok(());
     }
 
-    // TODO(perf): Add a same-height horizontal-only convolution fast path so
-    // pure horizontal resizes skip the unchanged vertical axis. Benchmark with
-    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before accepting.
+    // REJECT(perf): A same-height horizontal-only convolution fast path preserved
+    // correctness, but adding it required planning x before y and regressed normal
+    // bicubic scale benchmarks; keep the vertical-only fast path only.
     // TODO(perf): Cache contribution plans keyed by source/output dimensions,
     // kernel, and scale-aware mode for repeated preview renders. Benchmark with
     // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
