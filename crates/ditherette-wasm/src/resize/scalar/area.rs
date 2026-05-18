@@ -30,6 +30,9 @@ pub fn resize_rgba_area_scalar_into(
     // temporary single-axis `pnpm bench:resize:area` cases by 5-13%, but they
     // regressed common proportional fractional downscales by ~2-3%, so keep the
     // generic path for non-integer single-axis resizes.
+    // TODO(perf): Specialize common 2x/4x/8x exact area downscale kernels with
+    // unrolled source block sums to reduce generic nested-loop overhead on
+    // thumbnail scales. Benchmark with `pnpm bench:resize:area` before accepting.
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         resize_exact_integer_downscale_into(
             source_rgba,
@@ -162,11 +165,19 @@ fn resize_exact_integer_downscale_into(
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
     let divisor = (x_step * y_step) as u64;
 
+    // TODO(perf): Use narrower u32 accumulators for exact integer downscales
+    // when `255 * x_step * y_step` cannot overflow, to reduce register pressure
+    // versus the current always-u64 sums. Benchmark with `pnpm bench:resize:area`
+    // before accepting.
     for (output_y, output_row) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
     {
         let source_y_start = output_y * y_step;
+        // TODO(perf): Precompute source x block byte ranges for exact integer
+        // downscales so each output row reuses start/end offsets instead of
+        // recomputing `output_x * x_step` and byte lengths. Benchmark with
+        // `pnpm bench:resize:area` before accepting.
         for (output_x, output_pixel) in output_row
             .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
             .enumerate()

@@ -55,6 +55,10 @@ fn resize_rgba_triangle_filter_into(
     // TODO(perf): Reuse the vertical scratch buffer across resize calls to avoid
     // allocating and zero-initializing `output_height * source_width * 4` f32s
     // per frame. Benchmark with `pnpm bench:resize:bilinear` before accepting.
+    // TODO(perf): Stream one output row or a small row band through the vertical
+    // and horizontal passes to reduce scratch footprint and cache pressure versus
+    // materializing the full `output_height * source_width * 4` intermediate.
+    // Benchmark with `pnpm bench:resize:bilinear` before accepting.
     let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
 
     // TODO(perf): Add a same-height horizontal-only path to skip the vertical
@@ -63,6 +67,10 @@ fn resize_rgba_triangle_filter_into(
     // TODO(perf): Add a same-width vertical-only path to skip horizontal
     // contribution planning and the horizontal pass when only height changes.
     // Benchmark with `pnpm bench:resize:bilinear` before accepting.
+    // TODO(perf): Reorder the vertical pass around source rows or source row
+    // slices to improve cache locality; the current column walk jumps by whole
+    // source rows for each source_x. Benchmark with `pnpm bench:resize:bilinear`
+    // before accepting.
     for (output_y, contribution) in y_contributions.iter().enumerate() {
         for source_x in 0..source_width {
             let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
@@ -145,6 +153,10 @@ fn prepare_axis_contributions(
         let mut weights = Vec::with_capacity(right - left);
         let mut sum = 0.0;
 
+        // TODO(perf): Specialize exact integer downscale ratios whose triangle
+        // contribution patterns repeat periodically, so planning can clone a
+        // short pattern instead of evaluating every output coordinate. Benchmark
+        // with `pnpm bench:resize:bilinear` before accepting.
         // TODO(perf): Specialize enlargement and near-identity paths where the
         // triangle support contains at most two non-zero taps. Benchmark with
         // `pnpm bench:resize:bilinear` before accepting.
