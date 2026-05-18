@@ -321,7 +321,11 @@ fn prepare_axis_contributions<K: Kernel>(
         context: "convolution output axis",
     })?;
     let ratio = source_size as f32 / output_size as f32;
-    let scale = if scale_aware { ratio.max(1.0) } else { 1.0 };
+    let scale = if scale_aware && source_size > output_size {
+        ratio
+    } else {
+        1.0
+    };
     let support = kernel.support() * scale;
     let mut contributions = Vec::with_capacity(output_len);
 
@@ -336,10 +340,6 @@ fn prepare_axis_contributions<K: Kernel>(
     // REJECT(perf): Incremental input-coordinate updates changed f32 rounding
     // and failed `pnpm bench:resize:bicubic --baseline convolution_accepted`
     // correctness at 0.95x; keep the per-coordinate multiply.
-    // TODO(perf): Split scale-aware minification planning from fixed-support
-    // upscale planning so the common fixed-radius case avoids scale branches and
-    // wider dynamic capacities. Benchmark with `pnpm bench:resize:bicubic` and
-    // `pnpm bench:resize:lanczos3` before accepting.
     for output_coordinate in 0..output_len {
         let input = (output_coordinate as f32 + 0.5) * ratio;
         let left = clamp_i64(
