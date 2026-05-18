@@ -318,10 +318,10 @@ fn round_average_channel(sum: u64, divisor: u64) -> u8 {
     ((sum * 2 + divisor) / (divisor * 2)).min(u64::from(u8::MAX)) as u8
 }
 
-// TODO(perf:layout): Split AxisWeights into separate coordinate and weight
-// arrays, or store x coordinates as byte offsets, only after the area_2
-// fractional path decision is settled. Benchmark fractional downscales and 2x
-// upscale because this metadata is shared across both paths.
+// NOTE(perf): AxisWeights now serves only the upscale path; fractional
+// minification uses the old-area-style coverage layout above. Keep the compact
+// tuple layout until profiles show tuple iteration, not memory copy bandwidth,
+// dominates 2x upscale.
 fn resize_fractional_downscale_area_style_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
