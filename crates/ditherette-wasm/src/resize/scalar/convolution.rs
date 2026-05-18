@@ -132,10 +132,6 @@ fn vertical_sample(
     let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let vertical_row_byte_len = source_row_byte_len;
 
-    // TODO(perf): Walk vertical sampling by source row slices instead of by
-    // source_x columns to improve cache locality and avoid per-pixel row offset
-    // multiplication. Benchmark with `pnpm bench:resize:bicubic` and
-    // `pnpm bench:resize:lanczos3` before accepting.
     // TODO(perf): Fill the vertical row from the first y tap, then add remaining
     // taps, to remove per-pixel zero initialization and one add. Benchmark with
     // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
@@ -143,32 +139,27 @@ fn vertical_sample(
     for (output_y, y_contribution) in y_contributions.iter().enumerate() {
         let vertical_row = &mut vertical_rgba
             [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
+        vertical_row.fill(0.0);
 
-        for source_x in 0..source_width {
-            let mut red = 0.0;
-            let mut green = 0.0;
-            let mut blue = 0.0;
-            let mut alpha = 0.0;
+        // TODO(perf): Precompute y source row offsets in the contribution
+        // plan so every output row reuses them. Benchmark with
+        // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3`
+        // before accepting.
+        for (weight_offset, weight) in y_contribution.weights.iter().enumerate() {
+            let source_y = y_contribution.first + weight_offset;
+            debug_assert!(source_y < source_height);
+            let source_row_start = source_y * source_row_byte_len;
+            let source_row = &source_rgba[source_row_start..source_row_start + source_row_byte_len];
 
-            // TODO(perf): Precompute y source row offsets in the contribution
-            // plan so every source_x in this output row reuses them. Benchmark
-            // with `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3`
-            // before accepting.
-            for (weight_offset, weight) in y_contribution.weights.iter().enumerate() {
-                let source_y = y_contribution.first + weight_offset;
-                debug_assert!(source_y < source_height);
-                let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
-                red += f32::from(source_rgba[source_offset]) * weight;
-                green += f32::from(source_rgba[source_offset + 1]) * weight;
-                blue += f32::from(source_rgba[source_offset + 2]) * weight;
-                alpha += f32::from(source_rgba[source_offset + 3]) * weight;
+            for (vertical_pixel, source_pixel) in vertical_row
+                .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+                .zip(source_row.chunks_exact(rgba::RGBA_CHANNEL_COUNT))
+            {
+                vertical_pixel[0] += f32::from(source_pixel[0]) * weight;
+                vertical_pixel[1] += f32::from(source_pixel[1]) * weight;
+                vertical_pixel[2] += f32::from(source_pixel[2]) * weight;
+                vertical_pixel[3] += f32::from(source_pixel[3]) * weight;
             }
-
-            let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
-            vertical_row[vertical_offset] = red;
-            vertical_row[vertical_offset + 1] = green;
-            vertical_row[vertical_offset + 2] = blue;
-            vertical_row[vertical_offset + 3] = alpha;
         }
     }
 }
