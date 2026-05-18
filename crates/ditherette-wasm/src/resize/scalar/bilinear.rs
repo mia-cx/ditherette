@@ -44,7 +44,6 @@ fn resize_rgba_triangle_filter_into(
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
-    let output_height = output_dimensions.height_usize()?;
     // TODO(perf): Reuse cached contribution tables for repeated preview resizes
     // with the same dimensions to avoid rebuilding x/y weights every frame.
     // Benchmark with `pnpm bench:resize:bilinear` before accepting.
@@ -60,26 +59,22 @@ fn resize_rgba_triangle_filter_into(
     )?;
     let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
-    let scratch_len = output_height * source_row_byte_len;
 
-    // TODO(perf): Stream one output row or a small row band through the vertical
-    // and horizontal passes to reduce scratch footprint and cache pressure versus
-    // materializing the full `output_height * source_width * 4` intermediate.
-    // Benchmark with `pnpm bench:resize:bilinear` before accepting.
     BILINEAR_VERTICAL_SCRATCH.with(|vertical_rgba| {
         let mut vertical_rgba = vertical_rgba.borrow_mut();
-        vertical_rgba.resize(scratch_len, 0.0);
+        vertical_rgba.resize(source_row_byte_len, 0.0);
 
-        for (output_y, contribution) in y_contributions.iter().enumerate() {
-            let vertical_row_start = output_y * source_row_byte_len;
-            let vertical_row =
-                &mut vertical_rgba[vertical_row_start..vertical_row_start + source_row_byte_len];
+        for (output_row, y_contribution) in output_rgba
+            .chunks_exact_mut(output_row_byte_len)
+            .zip(&y_contributions)
+        {
+            let vertical_row = vertical_rgba.as_mut_slice();
 
-            let (first_weight, remaining_weights) = contribution
+            let (first_weight, remaining_weights) = y_contribution
                 .weights
                 .split_first()
                 .expect("bilinear contributions always have at least one weight");
-            let first_source_row_start = contribution.first * source_row_byte_len;
+            let first_source_row_start = y_contribution.first * source_row_byte_len;
             let first_source_row =
                 &source_rgba[first_source_row_start..first_source_row_start + source_row_byte_len];
 
@@ -94,7 +89,7 @@ fn resize_rgba_triangle_filter_into(
             }
 
             for (weight_offset, weight) in remaining_weights.iter().enumerate() {
-                let source_y = contribution.first + weight_offset + 1;
+                let source_y = y_contribution.first + weight_offset + 1;
                 let source_row_start = source_y * source_row_byte_len;
                 let source_row =
                     &source_rgba[source_row_start..source_row_start + source_row_byte_len];
@@ -109,17 +104,8 @@ fn resize_rgba_triangle_filter_into(
                     vertical_pixel[3] += f32::from(source_pixel[3]) * weight;
                 }
             }
-        }
 
-        for (output_y, output_row) in output_rgba
-            .chunks_exact_mut(output_row_byte_len)
-            .enumerate()
-        {
-            let vertical_row_start = output_y * source_row_byte_len;
-            let vertical_row =
-                &vertical_rgba[vertical_row_start..vertical_row_start + source_row_byte_len];
-
-            for (output_pixel, contribution) in output_row
+            for (output_pixel, x_contribution) in output_row
                 .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
                 .zip(&x_contributions)
             {
@@ -133,8 +119,8 @@ fn resize_rgba_triangle_filter_into(
                 // correctness but regressed most scales by ~3-6% in
                 // `pnpm bench:resize:bilinear`; keep deriving offsets from
                 // source_x in the loop.
-                for (weight_index, weight) in contribution.weights.iter().enumerate() {
-                    let source_x = contribution.first + weight_index;
+                for (weight_index, weight) in x_contribution.weights.iter().enumerate() {
+                    let source_x = x_contribution.first + weight_index;
                     let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
 
                     red += vertical_row[vertical_offset] * weight;
