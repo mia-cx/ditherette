@@ -7,10 +7,6 @@ use crate::{
 pub(crate) const LANCZOS2_WINDOW_SIZE: f64 = 2.0;
 
 /// Resizes RGBA with a fixed-window Lanczos2 filter.
-// TODO(perf): Inline identity and equal-dimension checks here before allocating
-// through the shared Lanczos path; this named mode knows it has no extra setup.
-// TODO(perf): For small preview outputs, consider a direct single-pass Lanczos2
-// implementation to avoid contribution-table allocation overhead.
 pub fn resize_rgba_lanczos2(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -27,21 +23,6 @@ pub fn resize_rgba_lanczos2(
 }
 
 /// Resizes into a caller-provided output buffer with a fixed-window Lanczos2 filter.
-// TODO(perf): Add fixed 4-tap Lanczos2 hot loops and precomputed fixed-point
-// weights if the generic convolution path is too slow for this mode.
-// TODO(perf): Precompute exactly four source indices/weights per output column
-// and four y indices/weights per output row for normal upscales; Lanczos2
-// support is fixed, so Vec-backed variable tap lists are unnecessary there.
-// TODO(perf): Split unclamped interior pixels from clamped edge pixels. Interior
-// Lanczos2 samples can use four predictable taps per axis with no bounds merges.
-// TODO(perf): Add a two-pass separable implementation specialized for 2 lobes:
-// horizontal 4-tap RGBA sums into a scratch row buffer, then vertical 4-tap sums.
-// TODO(perf): Pack RGBA accumulation so each source tap is loaded once and all
-// channels are accumulated together instead of re-walking taps per channel.
-// TODO(perf): Use a smaller scratch/contribution representation than Lanczos3;
-// Lanczos2's narrower support should reduce memory traffic and cache pressure.
-// TODO(perf): Add same-width and same-height one-axis paths, especially for
-// thumbnails constrained by only one dimension.
 pub fn resize_rgba_lanczos2_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
