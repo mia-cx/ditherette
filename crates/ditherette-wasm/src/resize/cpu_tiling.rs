@@ -140,9 +140,8 @@ pub fn plan_row_bands(
     } else {
         worker_count.min(useful_bands)
     };
-    // TODO(perf): Model scheduling cost explicitly here instead of only using
-    // pixels/rows. Near-identity nearest shows that equal output pixels can
-    // have very different scalar-vs-tiled break-even points.
+    // NOTE(perf): Keep the simple pixel/row heuristic until tiling benchmarks
+    // provide a stable cross-filter scheduling cost model.
     let band_height = output_height.div_ceil(band_count);
 
     RowBandPlan {

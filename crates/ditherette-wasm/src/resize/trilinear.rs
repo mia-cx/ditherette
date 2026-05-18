@@ -9,11 +9,9 @@ use crate::{
 /// minification, then blend between those levels. It is included for comparison,
 /// but area or scale-aware Lanczos are more direct choices for one-shot CPU image
 /// resizing.
-// TODO(perf): Fast-path identity and non-minifying resizes before allocating the
-// output Vec. Upscales can dispatch directly to optimized bilinear once that path
-// exists.
-// TODO(perf): Accept a caller-owned mip pyramid for repeated preview sizes of
-// the same source so this allocating API does not rebuild levels each call.
+// NOTE(perf): Keep this wrapper simple; identity/upscale fast paths and
+// caller-owned mip pyramids belong in the scalar implementation or a future
+// resize-plan API, not the public allocation wrapper.
 pub fn resize_rgba_trilinear(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -36,27 +34,11 @@ pub fn resize_rgba_trilinear_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Cache mip pyramids for repeated previews of the same source.
-    // TODO(perf): Build only the two mip levels needed for the target scale.
-    // TODO(perf): Build mip levels incrementally in reusable scratch buffers to
-    // avoid allocating and copying a fresh Vec at each level.
-    // TODO(perf): Downsample mip levels with exact 2x box fast paths instead of
-    // the general area reference path.
-    // TODO(perf): Sample the two selected mip levels into one output pass. The
-    // current reference path bilinearly resizes both levels into full buffers,
-    // then walks the output a third time to blend them.
-    // TODO(perf): Fuse bilinear sampling and LOD blending per pixel so the lower
-    // and upper samples share coordinate math and avoid two intermediate images.
-    // TODO(perf): Blend mip levels in a fixed-point pass instead of f64 per byte.
-    // TODO(perf): Precompute bilinear source indices and weights per output axis
-    // once for both mip levels; the output grid is shared.
-    // TODO(perf): Special-case exact power-of-two minification. If blend is zero,
-    // only one mip level is needed and the final LOD blend can be skipped.
-    // TODO(perf): Add anisotropic handling instead of using max-axis LOD for both
-    // axes; resizing width-only or height-only should not over-blur the other
-    // axis and may need fewer mip levels.
-    // TODO(perf): Store mip levels in a compact pyramid object with dimensions
-    // and byte offsets to improve locality and reduce Vec metadata churn.
+    // NOTE(perf): Trilinear remains a comparison filter. The obvious production
+    // optimizations (mip cache, partial pyramid, fused bilinear/LOD sampling,
+    // fixed-point blend, exact power-of-two path, anisotropic LOD, and compact
+    // pyramid storage) should be designed together if trilinear becomes a real
+    // product path; piecemeal wrapper TODOs are not actionable.
     crate::resize::scalar::trilinear::resize_rgba_trilinear_into(
         source_rgba,
         source_dimensions,
