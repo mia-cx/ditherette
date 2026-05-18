@@ -256,10 +256,11 @@ fn resize_exact_2x_downscale_into(
     Ok(())
 }
 
-// TODO(perf:api): Extract the exact integer downscale kernels shared by area
-// and area_2 into a production helper module so future tuning happens once and
-// area_2 can keep architecture differences focused on fractional/upscale paths.
-// Benchmark both filters after extraction to ensure the helper boundary inlines.
+// REJECT(perf): Extracting exact integer downscale kernels into
+// resize/shared/area.rs preserved correctness but regressed area_2 exact
+// downscales by ~3-11% in `pnpm bench:resize:area_2 --scale-group
+// exact-downscale --baseline area2_accepted`; keep local kernels so LLVM can
+// optimize each filter independently.
 fn resize_exact_integer_downscale_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
