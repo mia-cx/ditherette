@@ -46,6 +46,9 @@ pub fn resize_rgba_area_scalar_into(
     let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
     let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
 
+    // REJECT(perf): Packing all x/y weights into shared Vec arenas instead of
+    // one small Vec per coverage preserved correctness but regressed 0.95x,
+    // 0.875x, 0.8x, and 0.75x in `pnpm bench:resize:area`.
     let x_coverages: Vec<_> = (0..output_width)
         .map(|output_x| XCoverage::for_output_pixel(output_x, x_scale, source_dimensions.width()))
         .collect();
