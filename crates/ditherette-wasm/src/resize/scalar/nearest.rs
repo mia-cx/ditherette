@@ -71,6 +71,9 @@ pub(crate) fn resize_rgba_nearest_scalar_after_fast_paths(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
+    // TODO(perf): Add specialized 2x/4x exact nearest downscale kernels that
+    // advance source/output pointers without per-pixel loop bookkeeping.
+    // Benchmark with `pnpm bench:resize:nearest` before accepting.
     if is_exact_integer_downscale(source_dimensions, output_dimensions) {
         resize_exact_integer_downscale_word(
             source_rgba,
@@ -84,6 +87,10 @@ pub(crate) fn resize_rgba_nearest_scalar_after_fast_paths(
     NEAREST_RESIZE_SCRATCH.with(|scratch| {
         let mut scratch = scratch.borrow_mut();
 
+        // TODO(perf): Tune span-copy selection with the current resize scale
+        // suite instead of a fixed average-span threshold, since branch choice
+        // can dominate near the cutoff. Benchmark with
+        // `pnpm bench:resize:nearest` before accepting.
         if has_wide_source_x_spans(source_dimensions, output_dimensions)? {
             return resize_span_copy_into(
                 source_rgba,
@@ -169,6 +176,9 @@ pub(crate) struct SpanCopyScratch {
     pub(crate) source_x_copy_spans: Vec<SourceXCopySpan>,
 }
 
+// TODO(perf): Cache same-width nearest source row offsets in thread-local
+// scratch so both scalar entry points can reuse them across preview frames.
+// Benchmark with `pnpm bench:resize:nearest` before accepting.
 pub(crate) fn copy_same_width_rows(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -263,6 +273,10 @@ fn resize_precomputed_offsets_word_into(
     prepare_precomputed_offsets(source_dimensions, output_dimensions, scratch)?;
 
     let output_width = output_dimensions.width_usize()?;
+    // TODO(perf): Iterate output rows with `chunks_exact_mut` and zip output
+    // pixels with precomputed source x offsets to avoid recomputing output byte
+    // offsets in the inner loop. Benchmark with `pnpm bench:resize:nearest`
+    // before accepting.
     for (output_y, source_row_offset) in scratch.source_row_byte_offsets.iter().copied().enumerate()
     {
         let output_row_offset = output_y * output_width * rgba::RGBA_CHANNEL_COUNT;
@@ -298,6 +312,10 @@ pub(crate) fn prepare_precomputed_offsets(
 
     scratch.source_x_byte_offsets.clear();
     scratch.source_x_byte_offsets.reserve(output_width);
+    // TODO(perf): Generate nearest coordinate maps with an incremental integer
+    // accumulator to replace the multiply/divide in `map_output_coordinate` for
+    // every output coordinate. Benchmark with `pnpm bench:resize:nearest`
+    // before accepting.
     scratch
         .source_x_byte_offsets
         .extend((0..output_width).map(|output_x| {
