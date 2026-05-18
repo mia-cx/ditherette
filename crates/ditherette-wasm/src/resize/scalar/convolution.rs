@@ -136,6 +136,9 @@ fn vertical_sample(
     // zeroing then adding all taps preserved correctness but had no meaningful
     // `pnpm bench:resize:bicubic --baseline convolution_accepted` win after row
     // slice traversal; keep the simpler zero-fill loop.
+    // REJECT(perf): Unrolling four-tap vertical sampling preserved correctness
+    // but regressed every bicubic benchmark scale by ~6-43%, likely from worse
+    // row-stream locality; keep the compact weighted-row accumulation loop.
     for (output_y, y_contribution) in y_contributions.iter().enumerate() {
         let vertical_row = &mut vertical_rgba
             [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
