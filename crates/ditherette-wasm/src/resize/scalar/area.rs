@@ -165,10 +165,9 @@ fn resize_exact_integer_downscale_into(
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
     let divisor = (x_step * y_step) as u64;
 
-    // TODO(perf): Use narrower u32 accumulators for exact integer downscales
-    // when `255 * x_step * y_step` cannot overflow, to reduce register pressure
-    // versus the current always-u64 sums. Benchmark with `pnpm bench:resize:area`
-    // before accepting.
+    // REJECT(perf): Using narrower u32 accumulators for exact integer
+    // downscales preserved correctness and improved 0.125x, but regressed
+    // 0.5x by ~9% plus several fractional cases in `pnpm bench:resize:area`.
     for (output_y, output_row) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
