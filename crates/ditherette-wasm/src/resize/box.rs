@@ -21,9 +21,6 @@ use crate::{
 /// source samples are averaged over a rectangular footprint. This module keeps
 /// the box-filter name separate so callers and benchmarks can use common image
 /// processing vocabulary without duplicating the implementation.
-// TODO(perf): Decide whether box should remain a pure area alias or grow a
-// cheaper approximate path. A classic unscaled box filter can use constant-size
-// footprints, while exact area supports arbitrary fractional coverage.
 pub fn resize_rgba_box(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -33,10 +30,6 @@ pub fn resize_rgba_box(
 }
 
 /// Resizes into a caller-provided output buffer with a box filter.
-// TODO(perf): Add integer-ratio box fast paths here if we want box semantics to
-// prefer speed over exact area generality for common 2x/4x downscales.
-// TODO(perf): Benchmark whether dispatching to a separable/rolling-sum box
-// implementation beats the shared area code for large minification ratios.
 pub fn resize_rgba_box_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
