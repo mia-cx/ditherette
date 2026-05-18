@@ -25,12 +25,6 @@ pub fn resize_rgba_bicubic_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    // TODO(perf): Add a bicubic-specific separable implementation once benchmarks
-    // show this filter matters. The generic convolution path is readable, but it
-    // cannot exploit the fixed 4-tap Catmull-Rom footprint.
-    // TODO(perf): Precompute four source indices and four fixed-point weights per
-    // output coordinate. Bicubic has a constant support radius, so all per-pixel
-    // dynamic contribution assembly can move out of the hot loop.
     crate::resize::scalar::bicubic::resize_rgba_bicubic_into(
         source_rgba,
         source_dimensions,
