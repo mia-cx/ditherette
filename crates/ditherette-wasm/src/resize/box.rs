@@ -1,3 +1,11 @@
+//! Box-filter public API.
+//!
+//! `box` is currently an exact alias for [`crate::resize::area`], not a cheaper
+//! approximate box filter. Keeping the alias preserves byte-for-byte area
+//! semantics and reference-test coverage, but it also inherits area's performance
+//! ceiling: broad separable/prefix/integral-image optimizations would require a
+//! distinct fast-box mode with an explicit rounding/accuracy contract.
+
 use crate::{
     error::ProcessingError,
     image::ImageDimensions,
