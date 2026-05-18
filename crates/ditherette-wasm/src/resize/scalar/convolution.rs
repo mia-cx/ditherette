@@ -277,10 +277,9 @@ fn prepare_axis_contributions<K: Kernel>(
     // periodically and clone a short pattern table instead of evaluating every
     // output coordinate. Benchmark with `pnpm bench:resize:bicubic` and
     // `pnpm bench:resize:lanczos3` before accepting.
-    // TODO(perf): Use incremental input-coordinate updates instead of computing
-    // `(output + 0.5) * ratio` for every output coordinate. Benchmark with
-    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
-    // accepting.
+    // REJECT(perf): Incremental input-coordinate updates changed f32 rounding
+    // and failed `pnpm bench:resize:bicubic --baseline convolution_accepted`
+    // correctness at 0.95x; keep the per-coordinate multiply.
     // TODO(perf): Split scale-aware minification planning from fixed-support
     // upscale planning so the common fixed-radius case avoids scale branches and
     // wider dynamic capacities. Benchmark with `pnpm bench:resize:bicubic` and
