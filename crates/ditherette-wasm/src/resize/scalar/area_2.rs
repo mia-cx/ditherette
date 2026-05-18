@@ -49,21 +49,11 @@ pub fn resize_rgba_area_2_into(
     let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
     let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
 
-    let x_weights_by_output: Vec<Vec<(usize, f64)>> = (0..output_width)
-        .map(|output_x| {
-            let x_range =
-                SourceRange::for_output_pixel(output_x, x_scale, source_dimensions.width());
-            (x_range.first..x_range.last_exclusive)
-                .map(|source_x| (source_x, x_range.overlap_with(source_x)))
-                .collect()
-        })
-        .collect();
+    let x_weights_by_output =
+        AxisWeights::for_output_axis(output_width, x_scale, source_dimensions.width());
+    let y_weights_by_output =
+        AxisWeights::for_output_axis(output_height, y_scale, source_dimensions.height());
 
-    // TODO(perf): Build area_2 around precomputed x/y interval metadata, but use
-    // a different layout from scalar/area.rs: store starts, ends, edge weights,
-    // and full interior spans in separate dense arrays. Benchmark with
-    // `pnpm bench:cmp --compare resize:area:scalar --to resize:area_2:scalar`
-    // before accepting.
     // TODO(perf): Split area_2 into architecture-specific paths at the top:
     // enlargement, mild fractional minification, exact integer minification, and
     // large minification. Benchmark each split with `pnpm bench:resize:area_2`
@@ -73,17 +63,14 @@ pub fn resize_rgba_area_2_into(
     // than x coverage. Benchmark with area_2 fractional downscales before
     // accepting.
     for output_y in 0..output_height {
-        let y_range = SourceRange::for_output_pixel(output_y, y_scale, source_dimensions.height());
-
-        let y_weights: Vec<_> = (y_range.first..y_range.last_exclusive)
-            .map(|source_y| (source_y, y_range.overlap_with(source_y)))
-            .collect();
+        let y_weights = y_weights_by_output.weights_for(output_y);
 
         // TODO(perf): For rows whose y_range covers one source row, dispatch to a
         // horizontal-only area_2 kernel that avoids y_weight multiplication and
         // total_weight accumulation. Benchmark upscale and 0.95x before
         // accepting.
-        for (output_x, x_weights) in x_weights_by_output.iter().enumerate() {
+        for output_x in 0..output_width {
+            let x_weights = x_weights_by_output.weights_for(output_x);
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
             let mut total_weight = 0.0;
 
@@ -99,7 +86,7 @@ pub fn resize_rgba_area_2_into(
             // so one source pixel contributes to several neighboring output
             // pixels, reversing the current output-pixel gathers. Benchmark
             // enlargement and near-identity downscale before accepting.
-            for &(source_y, y_weight) in &y_weights {
+            for &(source_y, y_weight) in y_weights {
                 // REJECT(perf): Precomputing source row bounds and advancing a
                 // byte cursor preserved correctness but regressed 2x, 0.75x,
                 // and 0.125x in `pnpm bench:resize:area_2`; keep the direct
@@ -143,6 +130,48 @@ pub fn resize_rgba_area_2_into(
     }
 
     Ok(())
+}
+
+#[derive(Debug)]
+struct AxisWeights {
+    ranges: Vec<AxisWeightRange>,
+    weights: Vec<(usize, f64)>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AxisWeightRange {
+    start: usize,
+    len: usize,
+}
+
+impl AxisWeights {
+    fn for_output_axis(output_len: usize, scale: f64, source_size: u32) -> Self {
+        let mut ranges = Vec::with_capacity(output_len);
+        let mut weights = Vec::new();
+
+        for output_coordinate in 0..output_len {
+            let range = SourceRange::for_output_pixel(output_coordinate, scale, source_size);
+            let start = weights.len();
+
+            weights.extend(
+                (range.first..range.last_exclusive).map(|source_coordinate| {
+                    (source_coordinate, range.overlap_with(source_coordinate))
+                }),
+            );
+
+            ranges.push(AxisWeightRange {
+                start,
+                len: weights.len() - start,
+            });
+        }
+
+        Self { ranges, weights }
+    }
+
+    fn weights_for(&self, output_coordinate: usize) -> &[(usize, f64)] {
+        let range = self.ranges[output_coordinate];
+        &self.weights[range.start..range.start + range.len]
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
