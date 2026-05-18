@@ -191,9 +191,6 @@ fn resize_exact_2x_downscale_into(
     let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
 
-    // TODO(perf): Iterate exact 2x source rows as paired 8-byte chunks zipped
-    // with output pixels to avoid per-output-x offset arithmetic in the hot
-    // 0.5x path. Benchmark with `pnpm bench:resize:area` before accepting.
     for (output_y, output_row) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
@@ -211,13 +208,6 @@ fn resize_exact_2x_downscale_into(
             let bottom_left = second_source_row_start + source_x_start;
             let bottom_right = bottom_left + rgba::RGBA_CHANNEL_COUNT;
 
-            // TODO(perf): Write exact 2x RGBA lanes explicitly instead of using
-            // a channel loop to reduce index work on the hot 0.5x path. Benchmark
-            // with `pnpm bench:resize:area` before accepting.
-            // TODO(perf): Use the exact 2x rounding formula `(sum + 2) >> 2`
-            // with a narrow integer sum to avoid the generic u64
-            // `round_average_channel` helper per channel. Benchmark with
-            // `pnpm bench:resize:area` before accepting.
             for channel in 0..rgba::RGBA_CHANNEL_COUNT {
                 let sum = u64::from(source_rgba[top_left + channel])
                     + u64::from(source_rgba[top_right + channel])
