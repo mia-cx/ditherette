@@ -66,6 +66,10 @@ pub fn resize_rgba_area_scalar_into(
             let mut weighted_sums = [0.0; rgba::RGBA_CHANNEL_COUNT];
             let mut total_weight = 0.0;
 
+            // REJECT(perf): Precomputing x/y total weights and reusing their
+            // product instead of accumulating total_weight in sample order failed
+            // `pnpm bench:resize:area` correctness preflight at 0.95x
+            // (one-byte mismatch), so preserve the exact accumulation order.
             // REJECT(perf): Reordering fractional area accumulation to process
             // each covered source row across all output columns preserved
             // correctness but regressed 2x, 0.95x, 0.875x, 0.8x, 0.75x,
