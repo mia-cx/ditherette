@@ -4,9 +4,6 @@ use crate::resize::shared::convolution::Kernel;
 pub(crate) struct Bicubic;
 
 impl Kernel for Bicubic {
-    const FIXED_SUPPORT: Option<f32> = Some(2.0);
-    const FIXED_UPSCALE_TAP_COUNT: Option<usize> = Some(4);
-
     fn support(self) -> f32 {
         2.0
     }
