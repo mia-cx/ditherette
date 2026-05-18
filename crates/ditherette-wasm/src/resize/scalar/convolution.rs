@@ -132,10 +132,10 @@ fn vertical_sample(
     let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let vertical_row_byte_len = source_row_byte_len;
 
-    // TODO(perf): Fill the vertical row from the first y tap, then add remaining
-    // taps, to remove per-pixel zero initialization and one add. Benchmark with
-    // `pnpm bench:resize:bicubic` and `pnpm bench:resize:lanczos3` before
-    // accepting.
+    // REJECT(perf): Filling the vertical row from the first y tap instead of
+    // zeroing then adding all taps preserved correctness but had no meaningful
+    // `pnpm bench:resize:bicubic --baseline convolution_accepted` win after row
+    // slice traversal; keep the simpler zero-fill loop.
     for (output_y, y_contribution) in y_contributions.iter().enumerate() {
         let vertical_row = &mut vertical_rgba
             [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
