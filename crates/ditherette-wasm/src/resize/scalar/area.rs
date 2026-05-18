@@ -80,10 +80,13 @@ pub fn resize_rgba_area_scalar_into(
             // each covered source row across all output columns preserved
             // correctness but regressed 2x, 0.95x, 0.875x, 0.8x, 0.75x,
             // 0.625x, and 0.375x in `pnpm bench:resize:area`.
+            // REJECT(perf): A full separable horizontal scratch pass for
+            // fractional downscales changed f64 grouping and failed
+            // `pnpm bench:resize:area` correctness preflight at 0.95x
+            // (one-byte mismatch).
             // TODO(perf): Use a separable horizontal scratch pass followed by
-            // vertical accumulation to reuse horizontal source-row work across
-            // covered output rows. Benchmark with `pnpm bench:resize:area`
-            // before accepting.
+            // vertical accumulation only if it preserves per-sample f64 order.
+            // Benchmark with `pnpm bench:resize:area` before accepting.
             // REJECT(perf): Branching on full-span x/y weights to skip
             // multiplying by 1.0 preserved correctness but regressed 2x, 0.95x,
             // 0.875x, 0.8x, 0.75x, 0.625x, and 0.375x in
