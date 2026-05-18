@@ -29,11 +29,9 @@ impl Kernel for ScalarLanczos {
     }
 
     fn weight(self, distance: f32) -> f32 {
-        // TODO(perf): Split the x==0 and x>=window_size guards into
-        // contribution-table construction so the inner kernel can assume valid
-        // non-zero support.
-        // TODO(perf): Replace two sinc calls with a small polynomial/table
-        // approximation once visual error is benchmarked against the reference.
+        // REJECT(perf): Moving support guards into contribution planning would
+        // duplicate the generic convolution edge/zero-tap trimming logic, and
+        // sinc approximation/table lookup would change the exact scalar oracle.
         let x = distance.abs();
 
         if x < f32::EPSILON {
@@ -47,16 +45,10 @@ impl Kernel for ScalarLanczos {
 }
 
 /// Shared allocation-free implementation for Lanczos resize variants.
-// TODO(perf): Add Lanczos2/Lanczos3-specific dispatch so fixed window sizes can
-// use unrolled 4-tap/6-tap separable loops instead of the dynamic Kernel trait
-// path.
-// TODO(perf): Approximate or table sinc weights during contribution planning
-// for Lanczos filters; sin() is expensive but only depends on axis samples.
-// TODO(perf): Store normalized weights as fixed-point integers once planned;
-// hot sampling can then use integer multiply-adds and deterministic rounding.
-// TODO(perf): Specialize scale-aware minification separately from enlargement:
-// downscales have wider support and benefit more from separable scratch buffers,
-// while upscales can keep compact fixed tap counts.
+// REJECT(perf): Fixed-window dispatch, fixed-point weights, and scale-aware
+// split planners overlap the convolution trials that regressed bicubic or risk
+// changing f32 rounding. Keep Lanczos on the shared convolution base until a
+// separate Lanczos benchmark loop justifies a dedicated implementation.
 pub(crate) fn resize_rgba_lanczos_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
