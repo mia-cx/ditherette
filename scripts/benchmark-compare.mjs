@@ -27,7 +27,9 @@ const left = parseTriple(args.compare, '--compare');
 const right = parseTriple(args.to, '--to');
 validateComparison(left, right, args.criterionArgs);
 
-const compareId = `${sanitizeTriple(left)}__${sanitizeTriple(right)}`;
+const compareId = [sanitizeTriple(left), sanitizeTriple(right), args.scaleGroup]
+	.filter(Boolean)
+	.join('__');
 
 console.log(`Comparing ${formatTriple(left)} -> ${formatTriple(right)}`);
 console.log(`Criterion baseline/id: ${compareId}\n`);
@@ -78,7 +80,8 @@ function runBenchmark({ label, triple, criterionMode, criterionArgs, scaleGroup,
 			...process.env,
 			RESIZE_FILTER: triple.filter,
 			RESIZE_FILTER_IMPLEMENTATION: triple.implementation,
-			RESIZE_FILTER_COMPARE_ID: compareId
+			RESIZE_FILTER_COMPARE_ID: compareId,
+			...(scaleGroup ? { RESIZE_SCALE_GROUP: scaleGroup } : {})
 		}
 	});
 
