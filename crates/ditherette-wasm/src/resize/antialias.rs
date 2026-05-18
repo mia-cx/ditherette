@@ -30,8 +30,6 @@ pub fn antialias_rgba_box3_into(
     // variable divisor in the hot path.
     // TODO(perf): Use a separable box blur: horizontal 3-pixel sums into a
     // scratch row buffer, then vertical sums over those intermediates.
-    // TODO(perf): Sum RGBA channels together per sample instead of re-walking
-    // the same 3x3 footprint once per channel.
     // TODO(perf): For interior pixels, divide by the constant 9 with a fixed
     // reciprocal multiply instead of tracking count and using integer division.
     crate::resize::scalar::antialias::antialias_rgba_box3_into(source_rgba, dimensions, output_rgba)
