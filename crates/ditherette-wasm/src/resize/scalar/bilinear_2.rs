@@ -99,10 +99,26 @@ fn resize_rgba_triangle_filter_into(
             .zip(&y_contributions)
         {
             let vertical_row = vertical_rgba.as_mut_slice();
-            vertical_row.fill(0.0);
+            let (first_weight, remaining_weights) = y_contribution
+                .weights
+                .split_first()
+                .expect("bilinear contributions always have at least one weight");
+            let first_source_row_start = y_contribution.first * source_row_byte_len;
+            let first_source_row =
+                &source_rgba[first_source_row_start..first_source_row_start + source_row_byte_len];
 
-            for (weight_index, weight) in y_contribution.weights.iter().enumerate() {
-                let source_y = y_contribution.first + weight_index;
+            for (vertical_pixel, source_pixel) in vertical_row
+                .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+                .zip(first_source_row.chunks_exact(rgba::RGBA_CHANNEL_COUNT))
+            {
+                vertical_pixel[0] = f32::from(source_pixel[0]) * first_weight;
+                vertical_pixel[1] = f32::from(source_pixel[1]) * first_weight;
+                vertical_pixel[2] = f32::from(source_pixel[2]) * first_weight;
+                vertical_pixel[3] = f32::from(source_pixel[3]) * first_weight;
+            }
+
+            for (weight_offset, weight) in remaining_weights.iter().enumerate() {
+                let source_y = y_contribution.first + weight_offset + 1;
                 let source_row_start = source_y * source_row_byte_len;
                 let source_row =
                     &source_rgba[source_row_start..source_row_start + source_row_byte_len];
