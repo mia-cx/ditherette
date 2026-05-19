@@ -235,6 +235,9 @@ fn horizontal_sample(
             let mut blue = 0.0;
             let mut alpha = 0.0;
 
+            // REJECT(perf): Reversing horizontal downscale accumulation by source column
+            // regressed `pnpm crit:resize:convolution_2 --baseline conv2_source_row` across
+            // the observed cases. Keep output-pixel accumulation for the horizontal pass.
             // TODO(perf:kernel, rank=6, after perf:layout flat-contribution-plan):
             // Evaluate row-pair/channel-unrolled horizontal kernels after contribution layout
             // is fixed; this may reduce bounds checks and weight loads in the hottest pass.
@@ -324,8 +327,5 @@ fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
 }
 
 fn round_u8(value: f32) -> u8 {
-    // TODO(perf:micro, rank=7, after perf:kernel horizontal-unroll): Benchmark a
-    // branch-light saturating round helper only after the horizontal kernel shape settles;
-    // preserve image-compatible rounding exactly.
-    value.clamp(0.0, 255.0).round() as u8
+    (value.clamp(0.0, 255.0) + 0.5) as u8
 }
