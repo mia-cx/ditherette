@@ -69,9 +69,10 @@ fn resize_rgba_triangle_filter_into(
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
-    // TODO(perf:layout): Own x/y contribution plans in reusable scratch so
-    // repeated preview resizes avoid per-call Vec allocation. Benchmark against
-    // `baseline` and `bilinear_2` with `pnpm bench:resize:bilinear-criterion`.
+    // REJECT(perf): Owning x/y contribution Vecs in the thread-local scratch
+    // preserved correctness but regressed `pnpm bench:resize:bilinear-criterion
+    // --baseline bilinear2_accepted`: bilinear_2 2x 134ms→139ms, 0.95x
+    // 37ms→39ms, and 0.125x 7.5ms→8.3ms. Keep per-call contribution Vecs.
     let y_contributions = prepare_axis_contributions(
         source_dimensions.height(),
         output_dimensions.height(),
