@@ -269,12 +269,12 @@ fn prepare_axis_contributions<K: Kernel>(
     let scale = if scale_aware { ratio.max(1.0) } else { 1.0 };
     let support = kernel.support() * scale;
     let mut contributions = Vec::with_capacity(output_len);
+    let mut input = 0.5 * ratio;
 
     // TODO(perf:path, rank=4, after perf:layout flat-contribution-plan): Detect stable
     // exact-ratio/fractional-minify tap patterns and reuse contribution spans instead of
     // recomputing nearly identical weight vectors for every output coordinate.
-    for output_coordinate in 0..output_len {
-        let input = (output_coordinate as f32 + 0.5) * ratio;
+    for _output_coordinate in 0..output_len {
         let left = clamp_i64(
             (input - support).floor() as i64,
             0,
@@ -307,6 +307,7 @@ fn prepare_axis_contributions<K: Kernel>(
             first: left,
             weights,
         });
+        input += ratio;
     }
 
     debug_assert_eq!(contributions.len(), output_len);
