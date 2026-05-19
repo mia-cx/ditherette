@@ -11,9 +11,9 @@ thread_local! {
 }
 
 /// Clean-room scalar bilinear_2 implementation seeded from the independent reference.
-// TODO(perf:api): Decide the promotion boundary for bilinear_2: keep it as an
-// experimental exact candidate until it beats `baseline` in
-// `pnpm bench:resize:bilinear-criterion`, then either canonize it or delete it.
+// NOTE(perf): Keep bilinear_2 experimental until it beats `baseline` across
+// `pnpm bench:resize:bilinear-criterion`; row-scratch reuse made it much faster
+// than the reference seed but it still trails baseline on every measured scale.
 #[allow(dead_code)]
 pub fn resize_rgba_bilinear_2(
     source_rgba: &[u8],
