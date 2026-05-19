@@ -89,6 +89,22 @@ pnpm bench:resize:filters --measurement-time 30 --sample-size 100 --warm-up-time
 
 The npm script preserves Criterion's saved benchmark state so `--save-baseline` and `--baseline` can show regressions and speedups. After Criterion finishes, it prints a percentile summary from Criterion's raw samples. Before sampling each scale, the benchmark checks selected canonical filters against their reference implementations.
 
+Compare two resize filter implementations with Criterion baselines:
+
+```sh
+pnpm bench:cmp --compare resize:area:reference --to resize:area:scalar
+pnpm bench:cmp --compare resize:area:scalar --to resize:area:tiling
+pnpm bench:cmp --compare resize:bilinear:scalar --to resize:bicubic:scalar
+```
+
+Sweep row-band tiling policies for a target kernel:
+
+```sh
+pnpm bench:tiling-sweep --target resize:nearest
+pnpm bench:tiling-sweep --target resize:area
+pnpm bench:tiling-sweep --target resize:box
+```
+
 Run the real-browser nearest-neighbor resize smoke benchmark:
 
 ```sh
