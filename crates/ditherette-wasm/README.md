@@ -97,7 +97,13 @@ pnpm bench:cmp --compare resize:area:scalar --to resize:area:tiling
 pnpm bench:cmp --compare resize:bilinear:scalar --to resize:bicubic:scalar
 ```
 
-Sweep row-band tiling policies for a target kernel. By default this covers every 0.05x scale from 2x down to 0.05x plus binary exact scales 0.125x and 0.0625x:
+Measure row-band overhead directly and in area/nearest context on a small scale subset (`2x`, `1x`, `0.8x`, `0.5x`, `0.25x`, `0.125x`):
+
+```sh
+pnpm bench:resize:tiling-overhead
+```
+
+Sweep row-band tiling policies for a target kernel. By default this covers every 0.1x scale from 2x down to 0.1x plus exact downscale waypoints 0.25x, 0.125x, and 0.0625x:
 
 ```sh
 pnpm bench:tiling-sweep --target resize:nearest

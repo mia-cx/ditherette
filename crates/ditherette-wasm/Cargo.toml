@@ -42,6 +42,11 @@ harness = false
 required-features = ["tiling"]
 
 [[bench]]
+name = "tiling_overhead"
+harness = false
+required-features = ["tiling"]
+
+[[bench]]
 name = "area_resampling"
 harness = false
 
