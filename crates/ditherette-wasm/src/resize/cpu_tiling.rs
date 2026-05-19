@@ -213,10 +213,11 @@ where
 
     use std::sync::Mutex;
 
-    // TODO(perf:kernel, after perf:harness row-band-overhead): Replace the
-    // shared `Mutex<Result<()>>` cancellation path with a cheaper per-band error
-    // collection or no-lock fast path for infallible kernels. Benchmark nearest
-    // tiling first; tiny-output sweeps show scheduler overhead can dominate.
+    // REJECT(perf): Replacing the shared `Mutex<Result<()>>` with an atomic
+    // failure flag plus locked error slot regressed nearest 0.5x in
+    // `pnpm bench:resize:tiling-overhead` by ~42%, with no representative
+    // resize-context win. Keep the simple cancellation path until an executor
+    // API/layout change removes per-band error handling entirely.
     let result = Mutex::new(Ok(()));
 
     rayon::scope(|scope| {
