@@ -20,6 +20,8 @@ const NEAREST_TINY_TWO_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_000
 const NEAREST_SMALL_OUTPUT_PIXEL_LIMIT: usize = 750_000;
 const NEAREST_TINY_OUTPUT_PIXEL_LIMIT: usize = 150_000;
 const NEAREST_TWO_BAND_OUTPUT_PIXEL_LIMIT: usize = 250_000;
+const NEAREST_SCALAR_NEAR_IDENTITY_NUMERATOR: u64 = 98;
+const NEAREST_SCALAR_NEAR_IDENTITY_DENOMINATOR: u64 = 100;
 
 struct ExactIntegerDownscalePlan {
     source_row_byte_len: usize,
@@ -258,6 +260,8 @@ pub(crate) fn dynamic_nearest_tiling_plan(
 
     let tiling = if output_pixels < NEAREST_TINY_OUTPUT_PIXEL_LIMIT {
         return Ok(None);
+    } else if is_scalar_near_identity_minify(source_dimensions, output_dimensions) {
+        return Ok(None);
     } else if is_near_source_size(source_dimensions, output_dimensions) {
         NEAREST_NEAR_SOURCE_TILING
     } else if output_pixels < NEAREST_TWO_BAND_OUTPUT_PIXEL_LIMIT {
@@ -274,6 +278,18 @@ pub(crate) fn dynamic_nearest_tiling_plan(
     }
 
     Ok(Some(plan))
+}
+
+fn is_scalar_near_identity_minify(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    output_dimensions.width() < source_dimensions.width()
+        && output_dimensions.height() < source_dimensions.height()
+        && u64::from(output_dimensions.width()) * NEAREST_SCALAR_NEAR_IDENTITY_DENOMINATOR
+            >= u64::from(source_dimensions.width()) * NEAREST_SCALAR_NEAR_IDENTITY_NUMERATOR
+        && u64::from(output_dimensions.height()) * NEAREST_SCALAR_NEAR_IDENTITY_DENOMINATOR
+            >= u64::from(source_dimensions.height()) * NEAREST_SCALAR_NEAR_IDENTITY_NUMERATOR
 }
 
 fn is_near_source_size(
@@ -333,7 +349,16 @@ mod dynamic_plan_tests {
     }
 
     #[test]
-    fn dynamic_plan_uses_near_source_shape_for_near_identity_resizes() {
+    fn dynamic_plan_keeps_tiny_near_identity_minify_scalar() {
+        assert!(
+            dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(2574, 4126))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn dynamic_plan_uses_near_source_shape_after_near_identity_cliff() {
         let plan = dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(2470, 3959))
             .unwrap()
             .unwrap();
