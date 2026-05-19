@@ -70,9 +70,9 @@ pub(crate) fn resize_with_convolution_2_into<K: Kernel>(
         scale_aware,
     )?;
 
-    // TODO(perf:api, rank=2): Add caller-owned scratch/plan plumbing for convolution_2
-    // so repeated fixture/scale benchmark passes can reuse vertical buffers and prepared
-    // weights. Benchmark scalar_2 vs scalar with `pnpm crit:cmp --compare resize:bicubic:scalar --to resize:bicubic:scalar_2`.
+    // NOTE(perf): Caller-owned scratch/plan plumbing would target batched repeated
+    // resizes, but `pnpm crit:resize:convolution_2` measures single-call production
+    // wrappers. Defer until a batch/reuse benchmark exists.
     let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
     vertical_sample(
         source_rgba,
@@ -226,10 +226,7 @@ fn horizontal_sample(
         let vertical_row = &vertical_rgba
             [output_y * vertical_row_byte_len..(output_y + 1) * vertical_row_byte_len];
 
-        for (output_pixel, x_contribution) in output_row
-            .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
-            .zip(x_contributions)
-        {
+        for (output_x, x_contribution) in x_contributions.iter().enumerate() {
             let mut red = 0.0;
             let mut green = 0.0;
             let mut blue = 0.0;
@@ -238,22 +235,20 @@ fn horizontal_sample(
             // REJECT(perf): Reversing horizontal downscale accumulation by source column
             // regressed `pnpm crit:resize:convolution_2 --baseline conv2_source_row` across
             // the observed cases. Keep output-pixel accumulation for the horizontal pass.
-            // TODO(perf:kernel, rank=6, after perf:layout flat-contribution-plan):
-            // Evaluate row-pair/channel-unrolled horizontal kernels after contribution layout
-            // is fixed; this may reduce bounds checks and weight loads in the hottest pass.
             for (weight_offset, weight) in x_contribution.weights.iter().enumerate() {
-                let source_x = x_contribution.first + weight_offset;
-                let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
+                let vertical_offset =
+                    (x_contribution.first + weight_offset) * rgba::RGBA_CHANNEL_COUNT;
                 red += vertical_row[vertical_offset] * weight;
                 green += vertical_row[vertical_offset + 1] * weight;
                 blue += vertical_row[vertical_offset + 2] * weight;
                 alpha += vertical_row[vertical_offset + 3] * weight;
             }
 
-            output_pixel[0] = round_u8(red);
-            output_pixel[1] = round_u8(green);
-            output_pixel[2] = round_u8(blue);
-            output_pixel[3] = round_u8(alpha);
+            let output_offset = output_x * rgba::RGBA_CHANNEL_COUNT;
+            output_row[output_offset] = round_u8(red);
+            output_row[output_offset + 1] = round_u8(green);
+            output_row[output_offset + 2] = round_u8(blue);
+            output_row[output_offset + 3] = round_u8(alpha);
         }
     }
 }
