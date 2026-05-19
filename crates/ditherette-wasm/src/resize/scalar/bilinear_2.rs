@@ -197,23 +197,30 @@ fn prepare_axis_contributions(
             i64::from(source_size),
         ) as usize;
         let center = input - 0.5;
+        let mut first = left;
         let mut weights = Vec::with_capacity(right - left);
         let mut sum = 0.0;
 
         for source_coordinate in left..right {
             let weight = triangle_weight((source_coordinate as f32 - center) / scale);
+            if weight == 0.0 && weights.is_empty() {
+                first += 1;
+                continue;
+            }
+
             weights.push(weight);
             sum += weight;
+        }
+
+        while weights.last() == Some(&0.0) {
+            weights.pop();
         }
 
         for weight in &mut weights {
             *weight /= sum;
         }
 
-        contributions.push(AxisContribution {
-            first: left,
-            weights,
-        });
+        contributions.push(AxisContribution { first, weights });
     }
 
     debug_assert_eq!(contributions.len(), output_len);
