@@ -45,6 +45,10 @@ required-features = ["tiling"]
 name = "area_resampling"
 harness = false
 
+[[example]]
+name = "tiling_sweep"
+required-features = ["tiling"]
+
 [profile.release]
 opt-level = "s"
 

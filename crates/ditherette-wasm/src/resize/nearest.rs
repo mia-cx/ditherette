@@ -62,12 +62,32 @@ pub fn resize_rgba_nearest_tiling_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    crate::resize::tiling::nearest::resize_rgba_nearest_with_tiling_after_fast_paths(
+    resize_rgba_nearest_with_row_band_tiling_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
         crate::resize::cpu_tiling::DEFAULT_ROW_BAND_TILING,
         true,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
+pub fn resize_rgba_nearest_with_row_band_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    tiling: crate::resize::cpu_tiling::RowBandTiling,
+    fallback_to_scalar: bool,
+) -> Result<(), ProcessingError> {
+    crate::resize::tiling::nearest::resize_rgba_nearest_with_tiling_after_fast_paths(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        tiling,
+        fallback_to_scalar,
     )
 }
