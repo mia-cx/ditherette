@@ -113,8 +113,27 @@ fn run_sweep(
     warmup_iterations: usize,
 ) -> Result<Vec<SweepCase>, String> {
     let mut cases = Vec::new();
+    let tiling_modes = tiling_modes();
+    let cases_per_scale = tiling_modes.len() + 1;
+    let total_cases = RESIZE_SCALES.len() * cases_per_scale;
+    let timing = TimingConfig {
+        iterations,
+        warmup_iterations,
+    };
 
-    for scale in RESIZE_SCALES {
+    eprintln!(
+        "starting tiling sweep: target={target} fixture={} source={}x{} scales={} cases_per_scale={} total_cases={} iterations={} warmup={}",
+        fixture.path.display(),
+        fixture.dimensions.width(),
+        fixture.dimensions.height(),
+        RESIZE_SCALES.len(),
+        cases_per_scale,
+        total_cases,
+        iterations,
+        warmup_iterations,
+    );
+
+    for (scale_index, scale) in RESIZE_SCALES.iter().copied().enumerate() {
         let output_dimensions = scale.dimensions_for(fixture.dimensions);
         let output_len = rgba::checked_rgba_byte_len(output_dimensions)
             .map_err(|error| format!("invalid output size: {error}"))?;
@@ -123,16 +142,40 @@ fn run_sweep(
             dimensions: output_dimensions,
             byte_len: output_len,
         };
-        let timing = TimingConfig {
-            iterations,
-            warmup_iterations,
-        };
-        let scalar = run_case(fixture, target, output, CaseMode::Scalar, timing)?;
+        let scale_case_start = scale_index * cases_per_scale;
+
+        eprintln!(
+            "scale {}/{}: {} -> {}x{} ({} cases)",
+            scale_index + 1,
+            RESIZE_SCALES.len(),
+            scale.label,
+            output_dimensions.width(),
+            output_dimensions.height(),
+            cases_per_scale,
+        );
+
+        let scalar = run_logged_case(
+            fixture,
+            target,
+            output,
+            CaseMode::Scalar,
+            timing,
+            scale_case_start + 1,
+            total_cases,
+        )?;
         let baseline_median = scalar.stats.median;
         cases.push(scalar);
 
-        for mode in tiling_modes() {
-            let mut case = run_case(fixture, target, output, mode, timing)?;
+        for (mode_index, mode) in tiling_modes.iter().copied().enumerate() {
+            let mut case = run_logged_case(
+                fixture,
+                target,
+                output,
+                mode,
+                timing,
+                scale_case_start + mode_index + 2,
+                total_cases,
+            )?;
             case.speedup_vs_scalar = if case.stats.median == 0 {
                 None
             } else {
@@ -142,7 +185,44 @@ fn run_sweep(
         }
     }
 
+    eprintln!("finished tiling sweep: {total_cases} cases");
     Ok(cases)
+}
+
+fn run_logged_case(
+    fixture: &Fixture,
+    target: TilingTarget,
+    output: ResizeOutputCase,
+    mode: CaseMode,
+    timing: TimingConfig,
+    case_index: usize,
+    total_cases: usize,
+) -> Result<SweepCase, String> {
+    let resolved = mode.tiling().map(|config| {
+        plan_row_bands(
+            output.dimensions.width() as usize,
+            output.dimensions.height() as usize,
+            config,
+        )
+    });
+    eprintln!(
+        "  case {case_index}/{total_cases}: {} {} -> {}",
+        output.scale.label,
+        mode.describe(),
+        resolved
+            .map(format_row_band_plan)
+            .unwrap_or_else(|| "scalar".to_owned()),
+    );
+
+    let case = run_case(fixture, target, output, mode, timing)?;
+    eprintln!(
+        "  done {case_index}/{total_cases}: {} {} median={} p95={}",
+        output.scale.label,
+        mode.name(),
+        format_duration_ns(case.stats.median),
+        format_duration_ns(case.stats.p95),
+    );
+    Ok(case)
 }
 
 fn run_case(
@@ -352,6 +432,23 @@ fn format_duration_ns(nanoseconds: u128) -> String {
     }
 }
 
+fn format_tiling(tiling: RowBandTiling) -> String {
+    format!(
+        "min_parallel_pixels={} min_pixels_per_band={} min_rows_per_band={} max_workers={}",
+        tiling.min_parallel_output_pixels,
+        tiling.min_pixels_per_band,
+        tiling.min_rows_per_band,
+        tiling.max_workers,
+    )
+}
+
+fn format_row_band_plan(plan: RowBandPlan) -> String {
+    format!(
+        "bands={} workers={} tile={}x{}",
+        plan.band_count, plan.worker_count, plan.output_width, plan.band_height,
+    )
+}
+
 #[derive(Debug)]
 struct Options {
     target: String,
@@ -509,6 +606,20 @@ impl CaseMode {
             Self::DefaultTiling => "default-tiling",
             Self::ForcedOneBand => "forced-one-band",
             Self::Tiling(_) => "tiling",
+        }
+    }
+
+    fn describe(self) -> String {
+        match self {
+            Self::Scalar => "scalar".to_owned(),
+            Self::DefaultTiling => {
+                format!("default-tiling {}", format_tiling(DEFAULT_ROW_BAND_TILING))
+            }
+            Self::ForcedOneBand => format!(
+                "forced-one-band {}",
+                format_tiling(RowBandTiling::new(usize::MAX, usize::MAX, 192, 1))
+            ),
+            Self::Tiling(tiling) => format!("tiling {}", format_tiling(tiling)),
         }
     }
 
