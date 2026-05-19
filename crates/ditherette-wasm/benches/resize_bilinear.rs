@@ -26,15 +26,14 @@ static CELESTE_FIXTURE: OnceLock<RgbaFixture> = OnceLock::new();
 /// The PNG is decoded before Criterion measures each kernel. These timings cover
 /// Rust resize work over an already-materialized RGBA buffer, not browser decode
 /// or JavaScript/Wasm boundary costs.
-// TODO(perf:harness): Add a repeated-resize bilinear2 group that reuses output
-// dimensions across many iterations outside Criterion's per-call setup so API
-// experiments like caller-owned plans are judged on amortized preview workloads.
 fn resize_bilinear_variants(criterion: &mut Criterion) {
     let fixture = CELESTE_FIXTURE.get_or_init(load_celeste_fixture);
 
     for scale in RESIZE_SCALES {
         bench_scale(criterion, fixture, scale);
     }
+
+    bench_repeated_bilinear2(criterion, fixture, Scale::new("0.95x", 0.95));
 }
 
 fn bench_scale(criterion: &mut Criterion, fixture: &RgbaFixture, scale: Scale) {
@@ -100,6 +99,46 @@ fn bench_resize_into(
             black_box(&output_rgba);
         });
     });
+}
+
+fn bench_repeated_bilinear2(criterion: &mut Criterion, fixture: &RgbaFixture, scale: Scale) {
+    const RESIZES_PER_ITERATION: usize = 8;
+
+    let output_dimensions = scale.dimensions_for(fixture.dimensions);
+    let output_byte_len = rgba::checked_rgba_byte_len(output_dimensions).unwrap();
+    assert_resize_variants_match_baseline(fixture, output_dimensions, output_byte_len);
+
+    let group_name = format!(
+        "resize_bilinear_repeated/celeste_rgba/{}-{}x{}",
+        scale.label,
+        output_dimensions.width(),
+        output_dimensions.height()
+    );
+    let mut group = criterion.benchmark_group(group_name);
+
+    group.sampling_mode(SamplingMode::Flat);
+    group.throughput(Throughput::Bytes(
+        (output_byte_len * RESIZES_PER_ITERATION) as u64,
+    ));
+
+    group.bench_function("bilinear_2", |bencher| {
+        let mut output_rgba = vec![0; output_byte_len];
+
+        bencher.iter(|| {
+            for _ in 0..RESIZES_PER_ITERATION {
+                resize_rgba_bilinear_2_into(
+                    black_box(&fixture.rgba),
+                    fixture.dimensions,
+                    output_dimensions,
+                    black_box(&mut output_rgba),
+                )
+                .unwrap();
+            }
+            black_box(&output_rgba);
+        });
+    });
+
+    group.finish();
 }
 
 fn assert_resize_variants_match_baseline(
