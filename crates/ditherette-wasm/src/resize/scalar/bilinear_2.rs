@@ -1,8 +1,14 @@
+use std::cell::RefCell;
+
 use crate::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
     resize::buffers::{allocate_output_rgba, validate_resize_buffers},
 };
+
+thread_local! {
+    static BILINEAR2_VERTICAL_SCRATCH: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+}
 
 /// Clean-room scalar bilinear_2 implementation seeded from the independent reference.
 // TODO(perf:api): Decide the promotion boundary for bilinear_2: keep it as an
@@ -60,10 +66,6 @@ fn resize_rgba_triangle_filter_into(
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
-    let output_height = output_dimensions.height_usize()?;
-    // TODO(perf:layout): Replace the reference-sized full vertical image with
-    // reusable row scratch sized to the smaller intermediate axis. Benchmark
-    // `bilinear_2` across exact and fractional downscales before changing kernels.
     let y_contributions = prepare_axis_contributions(
         source_dimensions.height(),
         output_dimensions.height(),
@@ -74,54 +76,62 @@ fn resize_rgba_triangle_filter_into(
         output_dimensions.width(),
         "bilinear output x axis",
     )?;
-    let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
 
-    // TODO(perf:path, after perf:layout bilinear2-plan): Choose the pass order
-    // by dimensions/scale class instead of always materializing vertical rows;
-    // downscales may prefer horizontal-first while upscales may prefer two-tap
-    // direct rows. Judge with `pnpm bench:resize:bilinear-criterion`.
-    for (output_y, contribution) in y_contributions.iter().enumerate() {
-        for source_x in 0..source_width {
-            let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
+    BILINEAR2_VERTICAL_SCRATCH.with(|vertical_rgba| {
+        let mut vertical_rgba = vertical_rgba.borrow_mut();
+        vertical_rgba.resize(source_row_byte_len, 0.0);
 
-            for (weight_index, weight) in contribution.weights.iter().enumerate() {
-                let source_y = contribution.first + weight_index;
-                let source_offset = rgba::pixel_byte_offset(source_width, source_x, source_y);
+        for (output_row, y_contribution) in output_rgba
+            .chunks_exact_mut(output_row_byte_len)
+            .zip(&y_contributions)
+        {
+            let vertical_row = vertical_rgba.as_mut_slice();
+            vertical_row.fill(0.0);
 
-                for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                    vertical_rgba[vertical_offset + channel] +=
-                        f32::from(source_rgba[source_offset + channel]) * weight;
-                }
-            }
-        }
-    }
+            for (weight_index, weight) in y_contribution.weights.iter().enumerate() {
+                let source_y = y_contribution.first + weight_index;
+                let source_row_start = source_y * source_row_byte_len;
+                let source_row =
+                    &source_rgba[source_row_start..source_row_start + source_row_byte_len];
 
-    for output_y in 0..output_height {
-        for (output_x, contribution) in x_contributions.iter().enumerate() {
-            let output_offset = rgba::pixel_byte_offset(output_width, output_x, output_y);
-            let mut accumulated = [0.0; rgba::RGBA_CHANNEL_COUNT];
-
-            for (weight_index, weight) in contribution.weights.iter().enumerate() {
-                let source_x = contribution.first + weight_index;
-                let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
-
-                for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                    accumulated[channel] += vertical_rgba[vertical_offset + channel] * weight;
+                for (vertical_pixel, source_pixel) in vertical_row
+                    .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+                    .zip(source_row.chunks_exact(rgba::RGBA_CHANNEL_COUNT))
+                {
+                    vertical_pixel[0] += f32::from(source_pixel[0]) * weight;
+                    vertical_pixel[1] += f32::from(source_pixel[1]) * weight;
+                    vertical_pixel[2] += f32::from(source_pixel[2]) * weight;
+                    vertical_pixel[3] += f32::from(source_pixel[3]) * weight;
                 }
             }
 
-            for channel in 0..rgba::RGBA_CHANNEL_COUNT {
-                output_rgba[output_offset + channel] = round_u8(accumulated[channel]);
+            for (output_pixel, x_contribution) in output_row
+                .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
+                .zip(&x_contributions)
+            {
+                let mut accumulated = [0.0; rgba::RGBA_CHANNEL_COUNT];
+
+                for (weight_index, weight) in x_contribution.weights.iter().enumerate() {
+                    let source_x = x_contribution.first + weight_index;
+                    let vertical_offset = source_x * rgba::RGBA_CHANNEL_COUNT;
+
+                    for channel in 0..rgba::RGBA_CHANNEL_COUNT {
+                        accumulated[channel] += vertical_row[vertical_offset + channel] * weight;
+                    }
+                }
+
+                for channel in 0..rgba::RGBA_CHANNEL_COUNT {
+                    output_pixel[channel] = round_u8(accumulated[channel]);
+                }
             }
         }
-    }
 
-    Ok(())
+        Ok(())
+    })
 }
 
-// TODO(perf:layout): Trim leading/trailing zero weights and encode common
-// two-tap contributions without per-output heap allocations. Compare against
-// both `baseline` and this reference-shaped `bilinear_2` before accepting.
 fn prepare_axis_contributions(
     source_size: u32,
     output_size: u32,
