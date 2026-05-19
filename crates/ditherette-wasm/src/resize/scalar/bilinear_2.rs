@@ -143,9 +143,10 @@ fn resize_rgba_triangle_filter_into(
     })
 }
 
-// TODO(perf:layout): Trim zero weights and flatten contribution weights into
-// contiguous buffers with per-output ranges; this should reduce allocation and
-// pointer chasing without forcing the rejected inline-weight layout.
+// REJECT(perf): Flattening contribution weights into one contiguous buffer
+// preserved correctness but regressed `pnpm bench:resize:bilinear-criterion
+// --baseline bilinear2_accepted`: bilinear_2 2x 146ms→162ms, 0.95x
+// 40ms→43ms, and 0.25x 10.6ms→11.0ms. Keep per-output Vec weights.
 fn prepare_axis_contributions(
     source_size: u32,
     output_size: u32,
