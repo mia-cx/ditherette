@@ -109,7 +109,10 @@ Sweep row-band tiling policies for a target kernel. By default this covers every
 pnpm bench:tiling-sweep --target resize:nearest
 pnpm bench:tiling-sweep --target resize:area
 pnpm bench:tiling-sweep --target resize:box
+pnpm bench:tiling-plot benchmark-results/tiling-sweep-resize-nearest.json
 ```
+
+The plot highlights the dense near-identity band (`0.95x` through `1.05x`) and colors each best point by resolved band count, which makes the near-1x scalar/tiling cliff visible.
 
 Run the real-browser nearest-neighbor resize smoke benchmark:
 

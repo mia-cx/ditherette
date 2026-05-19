@@ -21,6 +21,7 @@
 		"wasm:test:browser": "pnpm dlx wasm-pack test --headless --chrome crates/ditherette-wasm",
 		"bench:cmp": "node scripts/benchmark-compare.mjs",
 		"bench:tiling-sweep": "node scripts/benchmark-tiling-sweep.mjs",
+		"bench:tiling-plot": "node scripts/plot-tiling-sweep.mjs",
 		"bench:resize": "node scripts/benchmark-rust-resize.mjs",
 		"bench:resize:bilinear-criterion": "node scripts/benchmark-rust-resize.mjs --kernel bilinear",
 		"bench:resize:filters": "node scripts/benchmark-rust-resize.mjs --kernel filters",
