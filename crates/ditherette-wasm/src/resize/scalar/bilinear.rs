@@ -122,6 +122,10 @@ fn resize_rgba_triangle_filter_into(
             // current vertical-then-horizontal gather with scale-class-specific
             // paths: two-tap upscale/near-identity, exact-ratio shrink, and
             // strong minify. Benchmark before adding leaf SIMD/micro-kernel work.
+            // REJECT(perf): A horizontal-first strong-minify path was faster in
+            // theory but changed the accumulation order/rounding contract: 0.5x
+            // matched the `resize` crate checksum and differed from image-compatible
+            // bilinear by max Δ 1, while also regressing 0.5x 36ms→54ms.
             for (output_pixel, x_contribution) in output_row
                 .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
                 .zip(&x_contributions)
