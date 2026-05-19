@@ -11,6 +11,11 @@ pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 8;
 pub const DEFAULT_ROW_BAND_TILING: RowBandTiling =
     RowBandTiling::new(750_000, 64_000, 192, DEFAULT_MAX_ROW_BAND_WORKERS);
 
+// TODO(perf:harness): Extend the tiling sweep/report to measure scheduler-only
+// overhead with no-op and memcpy row kernels, then benchmark with
+// `pnpm bench:tiling-sweep --target resize:nearest` and `resize:area`. That
+// isolates shared row-band overhead from resize-kernel work before tuning the
+// executor or per-filter planners.
 /// Configuration for splitting output rows into CPU work bands.
 #[derive(Debug, Clone, Copy)]
 pub struct RowBandTiling {
@@ -84,6 +89,10 @@ where
 }
 
 /// Runs a row-range kernel over a precomputed row-band plan.
+// TODO(perf:api): Add a caller-owned row-band execution context so repeated
+// resizes can reuse scheduling/error state instead of constructing per-call
+// scope plumbing. Benchmark nearest/area tiling groups before changing filter
+// planners, because a cheaper executor may shift optimal band counts.
 pub fn process_row_bands_with_plan<F>(
     output_rgba: &mut [u8],
     plan: RowBandPlan,
@@ -185,6 +194,10 @@ fn available_logical_threads() -> usize {
     }
 }
 
+// TODO(perf:layout): Precompute row-band byte ranges into `RowBandPlan` or a
+// companion plan so `process_chunks` does not recompute offsets for every
+// kernel invocation. Benchmark all tiling-enabled resize filters; this changes
+// shared metadata layout and may simplify filter-side dynamic planners.
 #[cfg(all(feature = "tiling", not(target_arch = "wasm32")))]
 fn process_chunks<F>(
     output_rgba: &mut [u8],
@@ -205,6 +218,10 @@ where
 
     use std::sync::Mutex;
 
+    // TODO(perf:kernel, after perf:harness row-band-overhead): Replace the
+    // shared `Mutex<Result<()>>` cancellation path with a cheaper per-band error
+    // collection or no-lock fast path for infallible kernels. Benchmark nearest
+    // tiling first; tiny-output sweeps show scheduler overhead can dominate.
     let result = Mutex::new(Ok(()));
 
     rayon::scope(|scope| {
