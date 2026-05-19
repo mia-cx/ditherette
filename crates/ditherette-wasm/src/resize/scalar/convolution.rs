@@ -15,6 +15,12 @@ use crate::{
 // bicubic regressions, so keep Vec-backed contribution weights for now.
 // REJECT(perf): Splitting x/y contribution types for byte/row offsets was tested
 // directly as precomputed x/y offsets and regressed bicubic downscales.
+// TODO(perf:layout): Revisit convolution contribution storage only after the
+// multi-fixture `crit:*`/`brunch:*` harnesses establish stable bicubic/lanczos
+// baselines. The next testable parent plan is a single cache-friendly metadata
+// shape that can serve scalar and future tiling adapters without duplicating x/y
+// planners; benchmark with `pnpm crit:resize:bicubic -- --save-baseline ...`
+// and `pnpm brunch:resize:bicubic` across all fixtures.
 #[derive(Debug)]
 struct AxisContributions {
     first: usize,
@@ -68,6 +74,10 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
     // REJECT(perf): Caching contribution plans is a cross-call ownership policy,
     // not a local scalar kernel optimization; Criterion single-call resize
     // benchmarks would measure cache plumbing more than convolution throughput.
+    // TODO(perf:api): Add a repeated-resize convolution benchmark before
+    // changing plan ownership. If same-filter/same-dim calls show setup cost is
+    // material across fixtures, introduce a caller-owned convolution plan API;
+    // otherwise keep per-call planning local to this exact scalar boundary.
     let source_width = source_dimensions.width_usize()?;
     let source_height = source_dimensions.height_usize()?;
     let output_width = output_dimensions.width_usize()?;
@@ -109,6 +119,11 @@ pub(crate) fn resize_with_convolution_into<K: Kernel>(
     // REJECT(perf): Reusable row bands overlap the row-streaming trial, which
     // preserved correctness but regressed most bicubic scales by losing full-row
     // horizontal locality.
+    // TODO(perf:layout): Benchmark caller-owned convolution workspace for the
+    // full f32 intermediate. This scalar path allocates output_height ×
+    // source_width × RGBA f32s per resize; a workspace API may help repeated
+    // convolution calls while preserving the full-row locality that beat
+    // streaming. Use repeated bicubic/lanczos benches before kernel changes.
     let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
     vertical_sample(
         source_rgba,
@@ -227,6 +242,10 @@ fn horizontal_sample(
     // REJECT(perf): Row-band parallelism should live in resize/tiling adapters,
     // not this scalar base; keeping scalar single-threaded preserves the module
     // boundary while tiling evolves independently.
+    // TODO(perf:path): Add per-filter convolution tiling adapters before more
+    // scalar hot-loop work. Bilinear row-band tiling shows stable wins, and
+    // bicubic/lanczos have more work per output row, but each filter needs its
+    // own dimension-derived tiling formula and correctness gate.
     for (output_y, output_row) in output_rgba
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
