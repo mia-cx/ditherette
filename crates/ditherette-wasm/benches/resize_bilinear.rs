@@ -26,6 +26,9 @@ static CELESTE_FIXTURE: OnceLock<RgbaFixture> = OnceLock::new();
 /// The PNG is decoded before Criterion measures each kernel. These timings cover
 /// Rust resize work over an already-materialized RGBA buffer, not browser decode
 /// or JavaScript/Wasm boundary costs.
+// TODO(perf:harness): Add a repeated-resize bilinear2 group that reuses output
+// dimensions across many iterations outside Criterion's per-call setup so API
+// experiments like caller-owned plans are judged on amortized preview workloads.
 fn resize_bilinear_variants(criterion: &mut Criterion) {
     let fixture = CELESTE_FIXTURE.get_or_init(load_celeste_fixture);
 
