@@ -8,6 +8,7 @@ const resizeFilterNames = [
 	'nearest',
 	'nearest_aa',
 	'bilinear',
+	'bilinear_2',
 	'trilinear',
 	'bicubic',
 	'lanczos2',
@@ -29,7 +30,7 @@ const benchmarkConfigs = {
 	bilinear: {
 		bench: 'resize_bilinear',
 		groupPrefix: 'resize_bilinear/celeste_rgba/',
-		variants: ['baseline'],
+		variants: ['baseline', 'bilinear_2'],
 		referenceMode: 'none'
 	},
 	filters: {
@@ -251,6 +252,7 @@ function referenceVariantFor(variant) {
 }
 
 function baseVariantName(variant) {
+	if (variant === 'bilinear_2') return 'bilinear';
 	return variant.replace(/_(reference|image)$/, '');
 }
 

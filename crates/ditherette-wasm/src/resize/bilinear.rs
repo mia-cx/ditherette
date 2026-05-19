@@ -43,6 +43,9 @@ pub use crate::resize::reference::bilinear::{
     resize_rgba_bilinear_reference, resize_rgba_bilinear_reference_into,
 };
 
+#[doc(hidden)]
+pub use crate::resize::scalar::bilinear_2::{resize_rgba_bilinear_2, resize_rgba_bilinear_2_into};
+
 #[cfg(test)]
 mod tests {
     use super::{resize_rgba_bilinear, resize_rgba_bilinear_reference};

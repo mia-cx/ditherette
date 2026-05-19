@@ -4,7 +4,8 @@ use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throug
 use ditherette_wasm::{
     image::{rgba, ImageDimensions},
     resize::{
-        bilinear::resize_rgba_bilinear_reference, resize_rgba_bilinear, resize_rgba_bilinear_into,
+        bilinear::{resize_rgba_bilinear_2_into, resize_rgba_bilinear_reference},
+        resize_rgba_bilinear, resize_rgba_bilinear_into,
     },
 };
 use image::ImageReader;
@@ -49,11 +50,44 @@ fn bench_scale(criterion: &mut Criterion, fixture: &RgbaFixture, scale: Scale) {
     group.sampling_mode(SamplingMode::Flat);
     group.throughput(Throughput::Bytes(output_byte_len as u64));
 
-    group.bench_function("baseline", |bencher| {
+    bench_resize_into(
+        &mut group,
+        "baseline",
+        fixture,
+        output_dimensions,
+        output_byte_len,
+        resize_rgba_bilinear_into,
+    );
+    bench_resize_into(
+        &mut group,
+        "bilinear_2",
+        fixture,
+        output_dimensions,
+        output_byte_len,
+        resize_rgba_bilinear_2_into,
+    );
+
+    group.finish();
+}
+
+fn bench_resize_into(
+    group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+    name: &str,
+    fixture: &RgbaFixture,
+    output_dimensions: ImageDimensions,
+    output_byte_len: usize,
+    resize: fn(
+        &[u8],
+        ImageDimensions,
+        ImageDimensions,
+        &mut [u8],
+    ) -> Result<(), ditherette_wasm::error::ProcessingError>,
+) {
+    group.bench_function(name, |bencher| {
         let mut output_rgba = vec![0; output_byte_len];
 
         bencher.iter(|| {
-            resize_rgba_bilinear_into(
+            resize(
                 black_box(&fixture.rgba),
                 fixture.dimensions,
                 output_dimensions,
@@ -63,8 +97,6 @@ fn bench_scale(criterion: &mut Criterion, fixture: &RgbaFixture, scale: Scale) {
             black_box(&output_rgba);
         });
     });
-
-    group.finish();
 }
 
 fn assert_resize_variants_match_baseline(
@@ -92,6 +124,16 @@ fn assert_resize_variants_match_baseline(
     )
     .expect("baseline bilinear resize should succeed");
     assert_bytes_equal("baseline", &output_rgba, &expected);
+
+    output_rgba.fill(0xA5);
+    resize_rgba_bilinear_2_into(
+        &fixture.rgba,
+        fixture.dimensions,
+        output_dimensions,
+        &mut output_rgba,
+    )
+    .expect("bilinear_2 resize should succeed");
+    assert_bytes_equal("bilinear_2", &output_rgba, &expected);
 }
 
 fn assert_bytes_equal(variant: &str, actual: &[u8], expected: &[u8]) {
