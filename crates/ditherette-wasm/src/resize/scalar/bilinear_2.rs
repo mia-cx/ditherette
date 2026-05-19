@@ -5,6 +5,9 @@ use crate::{
 };
 
 /// Clean-room scalar bilinear_2 implementation seeded from the independent reference.
+// TODO(perf:api): Decide the promotion boundary for bilinear_2: keep it as an
+// experimental exact candidate until it beats `baseline` in
+// `pnpm bench:resize:bilinear-criterion`, then either canonize it or delete it.
 #[allow(dead_code)]
 pub fn resize_rgba_bilinear_2(
     source_rgba: &[u8],
@@ -58,6 +61,9 @@ fn resize_rgba_triangle_filter_into(
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
+    // TODO(perf:layout): Replace the reference-sized full vertical image with
+    // reusable row scratch sized to the smaller intermediate axis. Benchmark
+    // `bilinear_2` across exact and fractional downscales before changing kernels.
     let y_contributions = prepare_axis_contributions(
         source_dimensions.height(),
         output_dimensions.height(),
@@ -70,6 +76,10 @@ fn resize_rgba_triangle_filter_into(
     )?;
     let mut vertical_rgba = vec![0.0; output_height * source_width * rgba::RGBA_CHANNEL_COUNT];
 
+    // TODO(perf:path, after perf:layout bilinear2-plan): Choose the pass order
+    // by dimensions/scale class instead of always materializing vertical rows;
+    // downscales may prefer horizontal-first while upscales may prefer two-tap
+    // direct rows. Judge with `pnpm bench:resize:bilinear-criterion`.
     for (output_y, contribution) in y_contributions.iter().enumerate() {
         for source_x in 0..source_width {
             let vertical_offset = rgba::pixel_byte_offset(source_width, source_x, output_y);
@@ -109,6 +119,9 @@ fn resize_rgba_triangle_filter_into(
     Ok(())
 }
 
+// TODO(perf:layout): Trim leading/trailing zero weights and encode common
+// two-tap contributions without per-output heap allocations. Compare against
+// both `baseline` and this reference-shaped `bilinear_2` before accepting.
 fn prepare_axis_contributions(
     source_size: u32,
     output_size: u32,
