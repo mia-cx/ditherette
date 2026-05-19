@@ -14,9 +14,9 @@ thread_local! {
 // NOTE(perf): Keep bilinear_2 experimental until it beats `baseline` across
 // `pnpm bench:resize:bilinear-criterion`; row-scratch reuse made it much faster
 // than the reference seed but it still trails baseline on every measured scale.
-// TODO(perf:api): Decide whether bilinear_2 should stay an exact alternative or
-// become a tolerance-based fast bilinear candidate. Compare against the shootout
-// crates before changing rounding or pass order.
+// NOTE(perf): Keep bilinear_2 as an exact alternative for now. Tolerance-based
+// fast bilinear should be a separate future filter so this clean-room path can
+// continue comparing byte-for-byte against the reference and baseline.
 #[allow(dead_code)]
 pub fn resize_rgba_bilinear_2(
     source_rgba: &[u8],
