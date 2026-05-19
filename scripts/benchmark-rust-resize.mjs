@@ -30,7 +30,13 @@ const benchmarkConfigs = {
 	bilinear: {
 		bench: 'resize_bilinear',
 		groupPrefix: 'resize_bilinear/celeste_rgba/',
-		variants: ['baseline', 'bilinear_2'],
+		variants: ['bilinear'],
+		referenceMode: 'none'
+	},
+	bilinear_2: {
+		bench: 'resize_bilinear',
+		groupPrefix: 'resize_bilinear/celeste_rgba/',
+		variants: ['bilinear_2'],
 		referenceMode: 'none'
 	},
 	filters: {
@@ -252,7 +258,6 @@ function referenceVariantFor(variant) {
 }
 
 function baseVariantName(variant) {
-	if (variant === 'bilinear_2') return 'bilinear';
 	return variant.replace(/_(reference|image)$/, '');
 }
 
@@ -385,7 +390,9 @@ function parseArgs(argv) {
 	}
 
 	if (scaleGroup && !['upscale', 'fractional-downscale', 'exact-downscale'].includes(scaleGroup)) {
-		throw new Error('Expected --scale-group to be one of: upscale, fractional-downscale, exact-downscale.');
+		throw new Error(
+			'Expected --scale-group to be one of: upscale, fractional-downscale, exact-downscale.'
+		);
 	}
 
 	return { kernel, filter, scaleGroup, baseline, cargoArgs, criterionArgs };
