@@ -368,43 +368,145 @@ fn load_fixture(path: &Path) -> Result<Fixture, String> {
 }
 
 fn print_summary(report: &SweepReport) {
+    println!("\n## Tiling sweep report");
     println!(
-        "target={} fixture={} source={}x{} iterations={} warmup={}",
+        "target={} fixture={} source={}x{} scales={} cases={} iterations={} warmup={}",
         report.target,
         report.fixture_name,
         report.source_dimensions.width(),
         report.source_dimensions.height(),
+        RESIZE_SCALES.len(),
+        report.cases.len(),
         report.iterations,
         report.warmup_iterations,
     );
-    println!("case mode median speedup bands workers tile");
+    println!("\n### Per-scale best");
+    println!("| scale | output | scalar | default | default speedup | best | best speedup | best config |");
+    println!("|---|---:|---:|---:|---:|---:|---:|---|");
 
-    for case in &report.cases {
-        let speedup = case
-            .speedup_vs_scalar
-            .filter(|value| value.is_finite())
-            .map(|value| format!("{value:.3}x"))
-            .unwrap_or_else(|| "—".to_owned());
-        let resolved = case
-            .resolved
-            .map(|plan| {
-                format!(
-                    "{} {} {}x{}",
-                    plan.band_count, plan.worker_count, plan.output_width, plan.band_height
-                )
-            })
-            .unwrap_or_else(|| "— — —".to_owned());
+    for scale in RESIZE_SCALES {
+        let scale_cases = cases_for_scale(report, scale.label);
+        let Some(scalar) = scale_cases
+            .iter()
+            .copied()
+            .find(|case| case.mode_name == "scalar")
+        else {
+            continue;
+        };
+        let Some(default_tiling) = scale_cases
+            .iter()
+            .copied()
+            .find(|case| case.mode_name == "default-tiling")
+        else {
+            continue;
+        };
+        let Some(best_tiling) = scale_cases
+            .iter()
+            .copied()
+            .filter(|case| case.mode_name != "scalar")
+            .min_by_key(|case| case.stats.median)
+        else {
+            continue;
+        };
+
         println!(
-            "{}-{}x{} {} {} {} {}",
-            case.scale_label,
-            case.output_dimensions.width(),
-            case.output_dimensions.height(),
-            case.mode_name,
-            format_duration_ns(case.stats.median),
-            speedup,
-            resolved,
+            "| {} | {}x{} | {} | {} | {} | {} | {} | `{}` |",
+            scale.label,
+            scalar.output_dimensions.width(),
+            scalar.output_dimensions.height(),
+            format_duration_ns(scalar.stats.median),
+            format_duration_ns(default_tiling.stats.median),
+            format_speedup(scalar.stats.median, default_tiling.stats.median),
+            format_duration_ns(best_tiling.stats.median),
+            format_speedup(scalar.stats.median, best_tiling.stats.median),
+            format_case_config(best_tiling),
         );
     }
+
+    println!("\n### Default tiling loses to scalar");
+    let mut printed_loss = false;
+    for scale in RESIZE_SCALES {
+        let scale_cases = cases_for_scale(report, scale.label);
+        let Some(scalar) = scale_cases
+            .iter()
+            .copied()
+            .find(|case| case.mode_name == "scalar")
+        else {
+            continue;
+        };
+        let Some(default_tiling) = scale_cases
+            .iter()
+            .copied()
+            .find(|case| case.mode_name == "default-tiling")
+        else {
+            continue;
+        };
+        if default_tiling.stats.median <= scalar.stats.median {
+            continue;
+        }
+        printed_loss = true;
+        let best_tiling = scale_cases
+            .iter()
+            .copied()
+            .filter(|case| case.mode_name != "scalar")
+            .min_by_key(|case| case.stats.median)
+            .expect("scale with default tiling should have at least one tiled case");
+        println!(
+            "- {}: default {} vs scalar {} ({}); best {} ({}) `{}`",
+            scale.label,
+            format_duration_ns(default_tiling.stats.median),
+            format_duration_ns(scalar.stats.median),
+            format_speedup(scalar.stats.median, default_tiling.stats.median),
+            format_duration_ns(best_tiling.stats.median),
+            format_speedup(scalar.stats.median, best_tiling.stats.median),
+            format_case_config(best_tiling),
+        );
+    }
+    if !printed_loss {
+        println!("- none");
+    }
+}
+
+fn cases_for_scale<'a>(report: &'a SweepReport, scale_label: &str) -> Vec<&'a SweepCase> {
+    report
+        .cases
+        .iter()
+        .filter(|case| case.scale_label == scale_label)
+        .collect()
+}
+
+fn format_speedup(scalar_median: u128, candidate_median: u128) -> String {
+    if candidate_median == 0 {
+        return "—".to_owned();
+    }
+    format!("{:.2}x", scalar_median as f64 / candidate_median as f64)
+}
+
+fn format_case_config(case: &SweepCase) -> String {
+    if case.mode_name == "scalar" {
+        return "scalar".to_owned();
+    }
+
+    let tiling = case
+        .tiling
+        .map(|tiling| {
+            format!(
+                "p{} r{} w{}",
+                tiling.min_pixels_per_band, tiling.min_rows_per_band, tiling.max_workers,
+            )
+        })
+        .unwrap_or_else(|| "no-tiling".to_owned());
+    let resolved = case
+        .resolved
+        .map(|plan| {
+            format!(
+                "bands={} workers={} band_h={}",
+                plan.band_count, plan.worker_count, plan.band_height,
+            )
+        })
+        .unwrap_or_else(|| "unplanned".to_owned());
+
+    format!("{} {tiling} {resolved}", case.mode_name)
 }
 
 fn default_output_path(target: &TilingTarget) -> PathBuf {
