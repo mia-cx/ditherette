@@ -1,4 +1,4 @@
-use std::{hint::black_box, path::PathBuf, sync::OnceLock};
+use std::{env, hint::black_box, path::PathBuf, sync::OnceLock};
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
 use ditherette_wasm::{
@@ -21,6 +21,9 @@ const RESIZE_SCALES: [Scale; 6] = [
 
 static CELESTE_FIXTURE: OnceLock<RgbaFixture> = OnceLock::new();
 
+const BILINEAR_FILTER: &str = "bilinear";
+const BILINEAR2_FILTER: &str = "bilinear_2";
+
 /// Benchmarks bilinear resize against the Celeste fixture.
 ///
 /// The PNG is decoded before Criterion measures each kernel. These timings cover
@@ -33,7 +36,9 @@ fn resize_bilinear_variants(criterion: &mut Criterion) {
         bench_scale(criterion, fixture, scale);
     }
 
-    bench_repeated_bilinear2(criterion, fixture, Scale::new("0.95x", 0.95));
+    if active_filter_is(BILINEAR2_FILTER) {
+        bench_repeated_bilinear2(criterion, fixture, Scale::new("0.95x", 0.95));
+    }
 }
 
 fn bench_scale(criterion: &mut Criterion, fixture: &RgbaFixture, scale: Scale) {
@@ -52,24 +57,33 @@ fn bench_scale(criterion: &mut Criterion, fixture: &RgbaFixture, scale: Scale) {
     group.sampling_mode(SamplingMode::Flat);
     group.throughput(Throughput::Bytes(output_byte_len as u64));
 
-    bench_resize_into(
-        &mut group,
-        "baseline",
-        fixture,
-        output_dimensions,
-        output_byte_len,
-        resize_rgba_bilinear_into,
-    );
-    bench_resize_into(
-        &mut group,
-        "bilinear_2",
-        fixture,
-        output_dimensions,
-        output_byte_len,
-        resize_rgba_bilinear_2_into,
-    );
+    if active_filter_is(BILINEAR_FILTER) {
+        bench_resize_into(
+            &mut group,
+            BILINEAR_FILTER,
+            fixture,
+            output_dimensions,
+            output_byte_len,
+            resize_rgba_bilinear_into,
+        );
+    }
+
+    if active_filter_is(BILINEAR2_FILTER) {
+        bench_resize_into(
+            &mut group,
+            BILINEAR2_FILTER,
+            fixture,
+            output_dimensions,
+            output_byte_len,
+            resize_rgba_bilinear_2_into,
+        );
+    }
 
     group.finish();
+}
+
+fn active_filter_is(filter: &str) -> bool {
+    env::var("RESIZE_FILTER").map_or(true, |active_filter| active_filter == filter)
 }
 
 fn bench_resize_into(
