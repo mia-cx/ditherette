@@ -21,9 +21,9 @@ thread_local! {
 // the repeated same-size harness: bilinear_2 0.95x repeated 221ms vs planned
 // 223ms in `pnpm bench:resize:bilinear-criterion`. Per-call contribution setup
 // is not the bottleneck after zero-tap trimming.
-// TODO(perf:path): Prototype a separate
-// tolerance-based bilinear2_fast contract with max/mean-delta reporting so
-// FIR-like two-tap paths can be benchmarked without weakening exact bilinear_2.
+// NOTE(perf): A tolerance-based bilinear2_fast path is deferred to a separate
+// fast-filter API. Exact bilinear_2 is now parity-focused; FIR-like two-tap
+// semantics need their own correctness budget and shootout delta reporting.
 #[allow(dead_code)]
 pub fn resize_rgba_bilinear_2(
     source_rgba: &[u8],
