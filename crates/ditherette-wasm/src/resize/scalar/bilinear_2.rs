@@ -14,6 +14,9 @@ thread_local! {
 // NOTE(perf): Keep bilinear_2 experimental until it beats `baseline` across
 // `pnpm bench:resize:bilinear-criterion`; row-scratch reuse made it much faster
 // than the reference seed but it still trails baseline on every measured scale.
+// TODO(perf:api): Decide whether bilinear_2 should stay an exact alternative or
+// become a tolerance-based fast bilinear candidate. Compare against the shootout
+// crates before changing rounding or pass order.
 #[allow(dead_code)]
 pub fn resize_rgba_bilinear_2(
     source_rgba: &[u8],
@@ -66,6 +69,9 @@ fn resize_rgba_triangle_filter_into(
 ) -> Result<(), ProcessingError> {
     let source_width = source_dimensions.width_usize()?;
     let output_width = output_dimensions.width_usize()?;
+    // TODO(perf:layout): Own x/y contribution plans in reusable scratch so
+    // repeated preview resizes avoid per-call Vec allocation. Benchmark against
+    // `baseline` and `bilinear_2` with `pnpm bench:resize:bilinear-criterion`.
     let y_contributions = prepare_axis_contributions(
         source_dimensions.height(),
         output_dimensions.height(),
@@ -83,6 +89,10 @@ fn resize_rgba_triangle_filter_into(
         let mut vertical_rgba = vertical_rgba.borrow_mut();
         vertical_rgba.resize(source_row_byte_len, 0.0);
 
+        // TODO(perf:path, after perf:api bilinear2-contract): Try scale-class
+        // dispatch for exact path shapes: two-tap upscale/near-identity,
+        // vertical-first minify, and exact-ratio downscale. Keep byte equality
+        // unless bilinear_2 explicitly becomes tolerance-based.
         for (output_row, y_contribution) in output_rgba
             .chunks_exact_mut(output_row_byte_len)
             .zip(&y_contributions)
@@ -132,6 +142,9 @@ fn resize_rgba_triangle_filter_into(
     })
 }
 
+// TODO(perf:layout): Trim zero weights and flatten contribution weights into
+// contiguous buffers with per-output ranges; this should reduce allocation and
+// pointer chasing without forcing the rejected inline-weight layout.
 fn prepare_axis_contributions(
     source_size: u32,
     output_size: u32,
