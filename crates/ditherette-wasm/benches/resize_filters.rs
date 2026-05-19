@@ -1071,10 +1071,6 @@ fn should_bench_antialias(selected_filter: Option<&str>) -> bool {
 }
 
 fn base_filter_name(filter_name: &str) -> &str {
-    if filter_name == "bilinear_2" {
-        return "bilinear";
-    }
-
     filter_name
         .strip_suffix("_reference")
         .or_else(|| filter_name.strip_suffix("_image"))
