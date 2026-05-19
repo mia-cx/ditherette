@@ -90,10 +90,10 @@ fn resize_rgba_triangle_filter_into(
         let mut vertical_rgba = vertical_rgba.borrow_mut();
         vertical_rgba.resize(source_row_byte_len, 0.0);
 
-        // TODO(perf:path, after perf:api bilinear2-contract): Try scale-class
-        // dispatch for exact path shapes: two-tap upscale/near-identity,
-        // vertical-first minify, and exact-ratio downscale. Keep byte equality
-        // unless bilinear_2 explicitly becomes tolerance-based.
+        // NOTE(perf): Exact bilinear_2 keeps this vertical-first pass order.
+        // Horizontal-first minify changed image-compatible rounding in the
+        // baseline path, and reusable/flat contribution layouts regressed; any
+        // future scale-class split should start as a separate fast-mode contract.
         for (output_row, y_contribution) in output_rgba
             .chunks_exact_mut(output_row_byte_len)
             .zip(&y_contributions)
