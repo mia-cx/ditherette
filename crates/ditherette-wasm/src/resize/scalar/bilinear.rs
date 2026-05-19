@@ -10,6 +10,14 @@ thread_local! {
     static BILINEAR_VERTICAL_SCRATCH: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
 }
 
+// TODO(perf:harness): Add a dedicated bilinear shootout/baseline group that
+// records exact Ditherette/image-compatible timing separately from tolerance
+// based `fast_image_resize`/`resize` comparisons. Use scales
+// `2,1.8,1.5,0.99,0.95,0.875,0.75,0.5,0.25,0.125` before changing kernels.
+// TODO(perf:api): Decide whether bilinear should expose an exact
+// image-compatible mode plus a tolerance-based fast mode; external crates are
+// 1.6-7x faster in the shootout but often differ by max Δ 1.
+
 pub(crate) fn resize_rgba_bilinear_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
@@ -61,6 +69,10 @@ fn resize_rgba_triangle_filter_into(
     let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
     let output_row_byte_len = output_width * rgba::RGBA_CHANNEL_COUNT;
 
+    // TODO(perf:layout, after perf:api bilinear-fast-contract): Prototype a
+    // reusable bilinear plan/scratch object that owns x/y contributions and row
+    // buffers across repeated preview resizes. Benchmark against the current
+    // thread-local vertical scratch with `pnpm bench:resize:shootout --filter bilinear`.
     BILINEAR_VERTICAL_SCRATCH.with(|vertical_rgba| {
         let mut vertical_rgba = vertical_rgba.borrow_mut();
         vertical_rgba.resize(source_row_byte_len, 0.0);
@@ -106,6 +118,10 @@ fn resize_rgba_triangle_filter_into(
                 }
             }
 
+            // TODO(perf:path, after perf:layout bilinear-plan): Compare this
+            // current vertical-then-horizontal gather with scale-class-specific
+            // paths: two-tap upscale/near-identity, exact-ratio shrink, and
+            // strong minify. Benchmark before adding leaf SIMD/micro-kernel work.
             for (output_pixel, x_contribution) in output_row
                 .chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT)
                 .zip(&x_contributions)
@@ -141,6 +157,9 @@ fn resize_rgba_triangle_filter_into(
     })
 }
 
+// TODO(perf:layout): Investigate a compact fixed-inline contribution layout
+// for bilinear where most upscale/near-identity pixels have two taps per axis.
+// Benchmark memory locality and allocation count before replacing Vec weights.
 fn prepare_axis_contributions(
     source_size: u32,
     output_size: u32,
