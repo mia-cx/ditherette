@@ -2,7 +2,10 @@ use crate::{
     error::ProcessingError,
     image::ImageDimensions,
     resize::{
-        scalar::convolution::{resize_with_convolution, resize_with_convolution_into},
+        scalar::{
+            convolution::{resize_with_convolution, resize_with_convolution_into},
+            convolution_2::resize_with_convolution_2_into,
+        },
         shared::bicubic::Bicubic,
     },
 };
@@ -36,6 +39,25 @@ pub(crate) fn resize_rgba_bicubic_into(
     // fast paths. Keep bicubic on the shared convolution base until a dedicated
     // end-to-end replacement is justified by a new benchmark target.
     resize_with_convolution_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        Bicubic,
+        true,
+    )
+}
+
+pub(crate) fn resize_rgba_bicubic_2_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    // NOTE(perf): convolution_2 source-row vertical accumulation improved bicubic_2
+    // downscales by ~27-59% in `pnpm crit:resize:convolution_2 --baseline conv2_accepted`.
+    // Small-source 2x upscale stays on the original vertical loop to avoid a ~8% regression.
+    resize_with_convolution_2_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
