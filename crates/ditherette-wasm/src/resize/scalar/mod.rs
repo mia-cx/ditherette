@@ -6,6 +6,7 @@ pub(crate) mod bicubic;
 pub(crate) mod bilinear;
 pub(crate) mod bilinear_2;
 pub(crate) mod convolution;
+pub(crate) mod convolution_2;
 pub(crate) mod lanczos;
 pub(crate) mod nearest;
 pub(crate) mod trilinear;

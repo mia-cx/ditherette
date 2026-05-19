@@ -38,6 +38,21 @@ pub use crate::resize::reference::bicubic::{
     resize_rgba_bicubic_reference, resize_rgba_bicubic_reference_into,
 };
 
+#[doc(hidden)]
+pub fn resize_rgba_bicubic_2_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    crate::resize::scalar::bicubic::resize_rgba_bicubic_2_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{resize_rgba_bicubic, resize_rgba_bicubic_reference};

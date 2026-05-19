@@ -39,6 +39,23 @@ pub fn resize_rgba_lanczos3_into(
     )
 }
 
+#[doc(hidden)]
+pub fn resize_rgba_lanczos3_2_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    crate::resize::scalar::lanczos::resize_rgba_lanczos_2_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        LANCZOS3_WINDOW_SIZE,
+        false,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{resize_rgba_lanczos3, LANCZOS3_WINDOW_SIZE};
