@@ -103,7 +103,7 @@ Measure row-band overhead directly and in area/nearest context on a small scale 
 pnpm bench:resize:tiling-overhead
 ```
 
-Sweep row-band tiling policies for a target kernel. By default this covers every 0.1x scale from 2x down to 0.1x plus exact downscale waypoints 0.25x, 0.125x, and 0.0625x:
+Sweep row-band tiling policies for a target kernel. By default this covers every 0.1x scale from 2x down to 0.1x, every 0.01x scale near identity from 1.05x through 0.95x, plus exact downscale waypoints 0.25x, 0.125x, and 0.0625x:
 
 ```sh
 pnpm bench:tiling-sweep --target resize:nearest
