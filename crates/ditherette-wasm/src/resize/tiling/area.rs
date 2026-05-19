@@ -9,12 +9,41 @@ use crate::{
     },
 };
 
-pub(crate) const AREA_ROW_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_000, 192, 4);
+pub(crate) const AREA_ROW_BAND_TILING: RowBandTiling = RowBandTiling::new(750_000, 64_000, 192, 8);
+
+const AREA_FOUR_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_000, 64, 4);
+const AREA_SMALL_FRACTIONAL_TILING: RowBandTiling = RowBandTiling::new(0, 64_000, 192, 8);
+const AREA_TINY_OUTPUT_PIXEL_LIMIT: usize = 200_000;
+const AREA_SMALL_FRACTIONAL_OUTPUT_PIXEL_LIMIT: usize = 500_000;
 
 impl From<RowBand> for (usize, usize) {
     fn from(row_band: RowBand) -> Self {
         (row_band.output_y_start, row_band.output_y_end)
     }
+}
+
+pub(crate) fn resize_rgba_area_with_dynamic_tiling_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    let Some(plan) = dynamic_area_tiling_plan(source_dimensions, output_dimensions)? else {
+        return crate::resize::scalar::area::resize_rgba_area_scalar_into(
+            source_rgba,
+            source_dimensions,
+            output_dimensions,
+            output_rgba,
+        );
+    };
+
+    resize_rgba_area_with_plan(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        plan,
+    )
 }
 
 pub(crate) fn resize_rgba_area_with_tiling_into(
@@ -24,21 +53,23 @@ pub(crate) fn resize_rgba_area_with_tiling_into(
     output_rgba: &mut [u8],
     tiling: RowBandTiling,
 ) -> Result<(), ProcessingError> {
-    resize_rgba_area_with_tiling(
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    resize_rgba_area_with_plan(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
-        tiling,
+        plan_row_bands(output_width, output_height, tiling),
     )
 }
 
-fn resize_rgba_area_with_tiling(
+fn resize_rgba_area_with_plan(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
-    tiling: RowBandTiling,
+    plan: RowBandPlan,
 ) -> Result<(), ProcessingError> {
     validate_resize_buffers(
         source_rgba,
@@ -52,9 +83,7 @@ fn resize_rgba_area_with_tiling(
         return Ok(());
     }
 
-    let output_width = output_dimensions.width_usize()?;
     let output_height = output_dimensions.height_usize()?;
-    let plan = plan_row_bands(output_width, output_height, tiling);
     let kernel = AreaKernel::new(source_rgba, source_dimensions, output_dimensions)?;
 
     if plan.band_count <= 1 {
@@ -74,6 +103,84 @@ fn process_area_rows_with_plan(
         kernel.write_rows(band, output_rows);
         Ok(())
     })
+}
+
+pub(crate) fn dynamic_area_tiling_plan(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> Result<Option<RowBandPlan>, ProcessingError> {
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let output_pixels =
+        output_width
+            .checked_mul(output_height)
+            .ok_or(ProcessingError::SizeOverflow {
+                context: "area tiling output pixel count",
+            })?;
+
+    if output_pixels < AREA_TINY_OUTPUT_PIXEL_LIMIT
+        || (output_dimensions.width() >= source_dimensions.width()
+            && output_dimensions.height() >= source_dimensions.height())
+    {
+        return Ok(None);
+    }
+
+    // Chosen from the dense area tiling sweep over the Celeste fixture and
+    // checked against Criterion after area_2 became canonical scalar area. The
+    // dimensions matter more than nominal scale labels: exact strong minifiers
+    // stay scalar, scalar keeps the faster optimized upscale path, exact 2x
+    // downscales prefer four row bands, near-source minification prefers the
+    // default five-worker shape, and small fractional outputs need enough row
+    // height to amortize scheduling.
+    let tiling = if is_exact_integer_downscale(source_dimensions, output_dimensions) {
+        let x_step = source_dimensions.width() / output_dimensions.width();
+        let y_step = source_dimensions.height() / output_dimensions.height();
+        if x_step >= 4 || y_step >= 4 {
+            return Ok(None);
+        }
+        AREA_FOUR_BAND_TILING
+    } else if is_near_source_size(source_dimensions, output_dimensions) {
+        AREA_ROW_BAND_TILING
+    } else if output_pixels < AREA_SMALL_FRACTIONAL_OUTPUT_PIXEL_LIMIT {
+        AREA_SMALL_FRACTIONAL_TILING
+    } else if output_dimensions.width() < source_dimensions.width()
+        || output_dimensions.height() < source_dimensions.height()
+    {
+        AREA_FOUR_BAND_TILING
+    } else {
+        AREA_ROW_BAND_TILING
+    };
+
+    let plan = plan_row_bands(output_width, output_height, tiling);
+    if plan.band_count <= 1 {
+        return Ok(None);
+    }
+
+    Ok(Some(plan))
+}
+
+fn is_near_source_size(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    u64::from(output_dimensions.width()) * 10 > u64::from(source_dimensions.width()) * 9
+        || u64::from(output_dimensions.height()) * 10 > u64::from(source_dimensions.height()) * 9
+}
+
+fn is_exact_integer_downscale(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    let source_width = source_dimensions.width();
+    let source_height = source_dimensions.height();
+    let output_width = output_dimensions.width();
+    let output_height = output_dimensions.height();
+
+    source_width >= output_width
+        && source_height >= output_height
+        && (source_width > output_width || source_height > output_height)
+        && source_width.is_multiple_of(output_width)
+        && source_height.is_multiple_of(output_height)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -193,4 +300,53 @@ impl SourceRange {
 
 fn round_channel(value: f64) -> u8 {
     value.round().clamp(0.0, 255.0) as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dimensions(width: u32, height: u32) -> ImageDimensions {
+        ImageDimensions::new(width, height).unwrap()
+    }
+
+    #[test]
+    fn dynamic_plan_keeps_upscale_scalar_and_uses_default_shape_for_near_source() {
+        assert!(
+            dynamic_area_tiling_plan(dimensions(2600, 4168), dimensions(5200, 8336))
+                .unwrap()
+                .is_none()
+        );
+
+        let plan = dynamic_area_tiling_plan(dimensions(2600, 4168), dimensions(2470, 3959))
+            .unwrap()
+            .unwrap();
+        assert_eq!(plan.min_rows_per_band, 192);
+        assert_eq!(plan.max_workers, 8);
+    }
+
+    #[test]
+    fn dynamic_plan_uses_four_band_shape_for_common_downscales() {
+        let plan = dynamic_area_tiling_plan(dimensions(2600, 4168), dimensions(1300, 2084))
+            .unwrap()
+            .unwrap();
+        assert_eq!(plan.min_pixels_per_band, 64_000);
+        assert_eq!(plan.min_rows_per_band, 64);
+        assert_eq!(plan.max_workers, 4);
+
+        assert!(
+            dynamic_area_tiling_plan(dimensions(2600, 4168), dimensions(650, 1042))
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn dynamic_plan_keeps_tiny_exact_downscales_scalar() {
+        assert!(
+            dynamic_area_tiling_plan(dimensions(2600, 4168), dimensions(325, 521))
+                .unwrap()
+                .is_none()
+        );
+    }
 }

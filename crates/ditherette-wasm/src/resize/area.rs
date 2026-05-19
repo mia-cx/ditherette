@@ -43,12 +43,11 @@ pub fn resize_rgba_area_into(
 ) -> Result<(), ProcessingError> {
     #[cfg(feature = "tiling")]
     {
-        crate::resize::tiling::area::resize_rgba_area_with_tiling_into(
+        crate::resize::tiling::area::resize_rgba_area_with_dynamic_tiling_into(
             source_rgba,
             source_dimensions,
             output_dimensions,
             output_rgba,
-            crate::resize::tiling::area::AREA_ROW_BAND_TILING,
         )
     }
 
@@ -73,18 +72,26 @@ pub use crate::resize::scalar::area::resize_rgba_area_scalar_into;
 
 #[cfg(feature = "tiling")]
 #[doc(hidden)]
+pub fn resize_rgba_area_dynamic_tiling_plan(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> Result<Option<crate::resize::cpu_tiling::RowBandPlan>, ProcessingError> {
+    crate::resize::tiling::area::dynamic_area_tiling_plan(source_dimensions, output_dimensions)
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
 pub fn resize_rgba_area_tiling_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
-    resize_rgba_area_with_row_band_tiling_into(
+    crate::resize::tiling::area::resize_rgba_area_with_dynamic_tiling_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
-        crate::resize::tiling::area::AREA_ROW_BAND_TILING,
     )
 }
 

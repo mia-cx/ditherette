@@ -5,7 +5,8 @@ use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throug
 use ditherette_wasm::resize::cpu_tiling::{plan_row_bands, DEFAULT_ROW_BAND_TILING};
 #[cfg(feature = "tiling")]
 use ditherette_wasm::resize::{
-    area::resize_rgba_area_tiling_into, nearest::resize_rgba_nearest_tiling_into,
+    area::{resize_rgba_area_dynamic_tiling_plan, resize_rgba_area_tiling_into},
+    nearest::{resize_rgba_nearest_dynamic_tiling_plan, resize_rgba_nearest_tiling_into},
 };
 use ditherette_wasm::{
     error::ProcessingError,
@@ -357,16 +358,33 @@ fn bench_scale(
 #[cfg(feature = "tiling")]
 fn report_tiling_plan(
     scale: Scale,
-    _source_dimensions: ImageDimensions,
+    source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     selected_filter: Option<&str>,
 ) {
-    let plan = plan_row_bands(
-        output_dimensions.width() as usize,
-        output_dimensions.height() as usize,
-        DEFAULT_ROW_BAND_TILING,
-    );
-    let enabled = plan.band_count > 1;
+    let plan = match selected_filter {
+        Some("area" | "box") => {
+            resize_rgba_area_dynamic_tiling_plan(source_dimensions, output_dimensions)
+                .expect("area dynamic tiling plan should fit benchmark dimensions")
+        }
+        Some("nearest") => {
+            resize_rgba_nearest_dynamic_tiling_plan(source_dimensions, output_dimensions)
+                .expect("nearest dynamic tiling plan should fit benchmark dimensions")
+        }
+        _ => Some(plan_row_bands(
+            output_dimensions.width() as usize,
+            output_dimensions.height() as usize,
+            DEFAULT_ROW_BAND_TILING,
+        )),
+    };
+    let enabled = plan.is_some_and(|plan| plan.band_count > 1);
+    let plan = plan.unwrap_or_else(|| {
+        plan_row_bands(
+            output_dimensions.width() as usize,
+            output_dimensions.height() as usize,
+            DEFAULT_ROW_BAND_TILING,
+        )
+    });
 
     eprintln!(
         "tiling {} {}x{} filter={} enabled={} available_logical_threads={} worker_count={} band_count={} tile={}x{} min_rows_per_band={} min_parallel_output_pixels={} min_pixels_per_band={} max_workers={}",

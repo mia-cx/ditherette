@@ -13,6 +13,14 @@ use crate::{
     },
 };
 
+const NEAREST_LARGE_TILING: RowBandTiling = RowBandTiling::new(0, 128_000, 64, 4);
+const NEAREST_NEAR_SOURCE_TILING: RowBandTiling = RowBandTiling::new(0, 512_000, 64, 8);
+const NEAREST_SMALL_TILING: RowBandTiling = RowBandTiling::new(0, 128_000, 128, 4);
+const NEAREST_TINY_TWO_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_000, 128, 2);
+const NEAREST_SMALL_OUTPUT_PIXEL_LIMIT: usize = 750_000;
+const NEAREST_TINY_OUTPUT_PIXEL_LIMIT: usize = 150_000;
+const NEAREST_TWO_BAND_OUTPUT_PIXEL_LIMIT: usize = 250_000;
+
 struct ExactIntegerDownscalePlan {
     source_row_byte_len: usize,
     output_width: usize,
@@ -30,7 +38,7 @@ pub(crate) fn resize_rgba_nearest_with_tiling_after_fast_paths(
     fallback_to_scalar: bool,
 ) -> Result<(), ProcessingError> {
     let tiling_plan = if fallback_to_scalar {
-        match nearest_tiling_plan(source_dimensions, output_dimensions, tiling)? {
+        match dynamic_nearest_tiling_plan(source_dimensions, output_dimensions)? {
             Some(plan) => plan,
             None => {
                 return resize_rgba_nearest_scalar_after_fast_paths(
@@ -229,6 +237,57 @@ fn resize_span_copy_rows_into(
     }
 }
 
+pub(crate) fn dynamic_nearest_tiling_plan(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> Result<Option<RowBandPlan>, ProcessingError> {
+    if source_dimensions == output_dimensions
+        || source_dimensions.width() == output_dimensions.width()
+    {
+        return Ok(None);
+    }
+
+    let output_width = output_dimensions.width_usize()?;
+    let output_height = output_dimensions.height_usize()?;
+    let output_pixels =
+        output_width
+            .checked_mul(output_height)
+            .ok_or(ProcessingError::SizeOverflow {
+                context: "nearest tiling output pixel count",
+            })?;
+
+    let tiling = if output_pixels < NEAREST_TINY_OUTPUT_PIXEL_LIMIT {
+        return Ok(None);
+    } else if is_near_source_size(source_dimensions, output_dimensions) {
+        NEAREST_NEAR_SOURCE_TILING
+    } else if output_pixels < NEAREST_TWO_BAND_OUTPUT_PIXEL_LIMIT {
+        NEAREST_TINY_TWO_BAND_TILING
+    } else if output_pixels < NEAREST_SMALL_OUTPUT_PIXEL_LIMIT {
+        NEAREST_SMALL_TILING
+    } else {
+        NEAREST_LARGE_TILING
+    };
+
+    let plan = plan_row_bands(output_width, output_height, tiling);
+    if plan.band_count <= 1 {
+        return Ok(None);
+    }
+
+    Ok(Some(plan))
+}
+
+fn is_near_source_size(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    (output_dimensions.width() < source_dimensions.width()
+        || output_dimensions.height() < source_dimensions.height())
+        && (u64::from(output_dimensions.width()) * 10 > u64::from(source_dimensions.width()) * 9
+            || u64::from(output_dimensions.height()) * 10
+                > u64::from(source_dimensions.height()) * 9)
+}
+
+#[cfg(test)]
 pub(crate) fn nearest_tiling_plan(
     _source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
@@ -253,4 +312,64 @@ pub(crate) fn nearest_tiling_plan(
     }
 
     Ok(Some(plan))
+}
+
+#[cfg(test)]
+mod dynamic_plan_tests {
+    use super::*;
+
+    fn dimensions(width: u32, height: u32) -> ImageDimensions {
+        ImageDimensions::new(width, height).unwrap()
+    }
+
+    #[test]
+    fn dynamic_plan_uses_four_band_shape_for_large_resizes() {
+        let plan = dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(5200, 8336))
+            .unwrap()
+            .unwrap();
+        assert_eq!(plan.min_pixels_per_band, 128_000);
+        assert_eq!(plan.min_rows_per_band, 64);
+        assert_eq!(plan.max_workers, 4);
+    }
+
+    #[test]
+    fn dynamic_plan_uses_near_source_shape_for_near_identity_resizes() {
+        let plan = dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(2470, 3959))
+            .unwrap()
+            .unwrap();
+        assert_eq!(plan.min_pixels_per_band, 512_000);
+        assert_eq!(plan.min_rows_per_band, 64);
+        assert_eq!(plan.max_workers, 8);
+    }
+
+    #[test]
+    fn dynamic_plan_uses_small_shapes_for_small_outputs() {
+        let plan = dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(650, 1042))
+            .unwrap()
+            .unwrap();
+        assert_eq!(plan.min_pixels_per_band, 128_000);
+        assert_eq!(plan.min_rows_per_band, 128);
+        assert_eq!(plan.max_workers, 4);
+
+        let plan = dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(325, 521))
+            .unwrap()
+            .unwrap();
+        assert_eq!(plan.min_pixels_per_band, 64_000);
+        assert_eq!(plan.min_rows_per_band, 128);
+        assert_eq!(plan.max_workers, 2);
+    }
+
+    #[test]
+    fn dynamic_plan_keeps_identity_and_tiny_outputs_scalar() {
+        assert!(
+            dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(2600, 4168))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            dynamic_nearest_tiling_plan(dimensions(2600, 4168), dimensions(130, 208))
+                .unwrap()
+                .is_none()
+        );
+    }
 }
