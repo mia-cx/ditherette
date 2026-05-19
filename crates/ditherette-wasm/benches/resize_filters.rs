@@ -16,7 +16,7 @@ use ditherette_wasm::{
         antialias_rgba_box3_into,
         area::{resize_rgba_area_reference_into, resize_rgba_area_scalar_into},
         bicubic::resize_rgba_bicubic_reference_into,
-        bilinear::resize_rgba_bilinear_reference_into,
+        bilinear::{resize_rgba_bilinear_2_into, resize_rgba_bilinear_reference_into},
         lanczos::resize_rgba_lanczos_reference_into,
         nearest::{resize_rgba_nearest_reference_into, resize_rgba_nearest_scalar_into},
         r#box::resize_rgba_box_reference_into,
@@ -129,10 +129,11 @@ const RESIZE_SCALES: [Scale; 10] = [
     EXACT_DOWNSCALE_SCALES[3],
 ];
 
-const RESIZE_FILTERS: [ResizeFilter; 20] = [
+const RESIZE_FILTERS: [ResizeFilter; 21] = [
     ResizeFilter::new("nearest", resize_rgba_nearest_bench_into),
     ResizeFilter::new("nearest_reference", resize_rgba_nearest_reference_into),
     ResizeFilter::new("bilinear", resize_rgba_bilinear_into),
+    ResizeFilter::new("bilinear_2", resize_rgba_bilinear_2_into),
     ResizeFilter::new("bilinear_reference", resize_rgba_bilinear_reference_into),
     ResizeFilter::new("trilinear", resize_rgba_trilinear_into),
     ResizeFilter::new("trilinear_reference", resize_rgba_trilinear_reference_into),
@@ -939,6 +940,7 @@ fn compare_operation_for(filter_name: &str, implementation: &str) -> Option<Comp
             resize_rgba_bilinear_reference_into,
         )),
         ("bilinear", "scalar") => Some(CompareOperation::Resize(resize_rgba_bilinear_into)),
+        ("bilinear", "scalar_2") => Some(CompareOperation::Resize(resize_rgba_bilinear_2_into)),
         ("bilinear", "tiling") => planned_tiling_compare_operation("bilinear"),
         ("trilinear", "reference") => Some(CompareOperation::Resize(
             resize_rgba_trilinear_reference_into,
@@ -1069,6 +1071,10 @@ fn should_bench_antialias(selected_filter: Option<&str>) -> bool {
 }
 
 fn base_filter_name(filter_name: &str) -> &str {
+    if filter_name == "bilinear_2" {
+        return "bilinear";
+    }
+
     filter_name
         .strip_suffix("_reference")
         .or_else(|| filter_name.strip_suffix("_image"))
