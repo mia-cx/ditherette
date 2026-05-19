@@ -84,10 +84,11 @@ where
 }
 
 /// Runs a row-range kernel over a precomputed row-band plan.
-// TODO(perf:api): Add a caller-owned row-band execution context so repeated
-// resizes can reuse scheduling/error state instead of constructing per-call
-// scope plumbing. Benchmark nearest/area tiling groups before changing filter
-// planners, because a cheaper executor may shift optimal band counts.
+// NOTE(perf): The current public shape keeps row-band execution per-resize.
+// A caller-owned executor/context would only pay off for batched resizes and
+// would need a representative batch benchmark; the current tiling-overhead
+// harness shows single-resize overhead is dominated by Rayon scheduling, not
+// reusable validation state.
 pub fn process_row_bands_with_plan<F>(
     output_rgba: &mut [u8],
     plan: RowBandPlan,
@@ -189,10 +190,10 @@ fn available_logical_threads() -> usize {
     }
 }
 
-// TODO(perf:layout): Precompute row-band byte ranges into `RowBandPlan` or a
-// companion plan so `process_chunks` does not recompute offsets for every
-// kernel invocation. Benchmark all tiling-enabled resize filters; this changes
-// shared metadata layout and may simplify filter-side dynamic planners.
+// NOTE(perf): Keep `RowBandPlan` copy-sized. Precomputing per-band byte ranges
+// would either allocate in the hot path or require a caller-owned execution
+// context, and the tiling-overhead harness shows the offset math is below the
+// Rayon scheduling noise floor for the current band counts.
 #[cfg(all(feature = "tiling", not(target_arch = "wasm32")))]
 fn process_chunks<F>(
     output_rgba: &mut [u8],
