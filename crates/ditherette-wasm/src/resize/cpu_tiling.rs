@@ -11,11 +11,6 @@ pub const DEFAULT_MAX_ROW_BAND_WORKERS: usize = 8;
 pub const DEFAULT_ROW_BAND_TILING: RowBandTiling =
     RowBandTiling::new(750_000, 64_000, 192, DEFAULT_MAX_ROW_BAND_WORKERS);
 
-// TODO(perf:harness): Extend the tiling sweep/report to measure scheduler-only
-// overhead with no-op and memcpy row kernels, then benchmark with
-// `pnpm bench:tiling-sweep --target resize:nearest` and `resize:area`. That
-// isolates shared row-band overhead from resize-kernel work before tuning the
-// executor or per-filter planners.
 /// Configuration for splitting output rows into CPU work bands.
 #[derive(Debug, Clone, Copy)]
 pub struct RowBandTiling {
