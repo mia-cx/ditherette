@@ -157,9 +157,6 @@ fn resize_rgba_triangle_filter_into(
     })
 }
 
-// TODO(perf:layout): Investigate a compact fixed-inline contribution layout
-// for bilinear where most upscale/near-identity pixels have two taps per axis.
-// Benchmark memory locality and allocation count before replacing Vec weights.
 fn prepare_axis_contributions(
     source_size: u32,
     output_size: u32,
@@ -252,6 +249,10 @@ fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
 // REJECT(perf): Struct-of-arrays contribution storage or split x/y offset types
 // overlap the precomputed-offset trial above, which regressed most bilinear
 // scales by ~3-6%; keep the compact shared contribution representation.
+// REJECT(perf): Inline `[f32; 32]` contribution storage preserved correctness
+// but regressed the bilinear shootout across representative scales: 2x
+// 157ms→178ms, 0.99x 54ms→59ms, and 0.5x 36ms→39ms. Keep per-output Vec
+// weights until a broader plan/layout change is tested.
 #[derive(Debug, Clone)]
 struct AxisContribution {
     first: usize,
