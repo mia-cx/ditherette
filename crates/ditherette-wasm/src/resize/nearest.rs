@@ -56,6 +56,18 @@ pub use crate::resize::scalar::nearest::resize_rgba_nearest_scalar_into;
 
 #[cfg(feature = "tiling")]
 #[doc(hidden)]
+pub fn resize_rgba_nearest_dynamic_tiling_plan(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> Result<Option<crate::resize::cpu_tiling::RowBandPlan>, ProcessingError> {
+    crate::resize::tiling::nearest::dynamic_nearest_tiling_plan(
+        source_dimensions,
+        output_dimensions,
+    )
+}
+
+#[cfg(feature = "tiling")]
+#[doc(hidden)]
 pub fn resize_rgba_nearest_tiling_into(
     source_rgba: &[u8],
     source_dimensions: ImageDimensions,
