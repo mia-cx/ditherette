@@ -17,11 +17,11 @@ thread_local! {
 // NOTE(perf): Keep bilinear_2 as an exact alternative for now. Tolerance-based
 // fast bilinear should be a separate future filter so this clean-room path can
 // continue comparing byte-for-byte against the reference and baseline.
-// TODO(perf:api): Benchmark a caller-owned Bilinear2Plan for repeated same-size
-// resizes before changing per-call contribution ownership; single-call
-// thread-local plan scratch regressed, but interactive previews may amortize
-// x/y contribution construction. Judge with a batched bilinear2 Criterion group.
-// TODO(perf:path, after perf:api bilinear2-plan): Prototype a separate
+// REJECT(perf): A caller-owned Bilinear2Plan preserved correctness but regressed
+// the repeated same-size harness: bilinear_2 0.95x repeated 221ms vs planned
+// 223ms in `pnpm bench:resize:bilinear-criterion`. Per-call contribution setup
+// is not the bottleneck after zero-tap trimming.
+// TODO(perf:path): Prototype a separate
 // tolerance-based bilinear2_fast contract with max/mean-delta reporting so
 // FIR-like two-tap paths can be benchmarked without weakening exact bilinear_2.
 #[allow(dead_code)]
