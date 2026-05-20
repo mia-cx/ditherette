@@ -50,11 +50,15 @@ impl Default for ResizeAnchor {
     }
 }
 
-// TODO(perf:layout, rank=1): Introduce a reusable nearest-axis map that
-// precomputes source coordinates or byte offsets per output coordinate so prod
-// nearest can remove coordinate division from measured row loops. Verify with
-// `ditherette-bench run nearest --oracle spec:resize:nearest:scalar`, then
-// benchmark with `ditherette-bench run nearest --baseline perf-loop-nearest`.
+/// Build a source-coordinate lookup table for one resize axis.
+pub fn axis_coordinate_map(source_len: u32, output_len: u32, alignment: AxisAlignment) -> Vec<u32> {
+    (0..output_len)
+        .map(|output_coordinate| {
+            map_axis_coordinate(output_coordinate, source_len, output_len, alignment)
+        })
+        .collect()
+}
+
 pub fn map_axis_coordinate(
     output_coordinate: u32,
     source_len: u32,
@@ -68,11 +72,11 @@ pub fn map_axis_coordinate(
     }
 }
 
-// TODO(perf:micro, rank=5, after perf:layout nearest-axis-map): Replace the
-// per-coordinate u128 divisions with a validated u64/fixed-increment mapper if
-// image dimension bounds make it exact for every anchor. Verify all anchors via
-// `ditherette-bench run nearest --oracle spec:resize:nearest:scalar`; benchmark
-// with `ditherette-bench run nearest --baseline perf-loop-nearest`.
+// TODO(perf:micro, rank=5): Replace the one-time map-building u128 divisions
+// with a validated u64/fixed-increment mapper if image dimension bounds make it
+// exact for every anchor. Verify all anchors via `ditherette-bench run nearest
+// --oracle spec:resize:nearest:scalar`; benchmark with `ditherette-bench run
+// nearest --baseline accepted`.
 fn map_start_coordinate(output_coordinate: u32, source_len: u32, output_len: u32) -> u32 {
     let mapped = u128::from(output_coordinate) * u128::from(source_len) / u128::from(output_len);
     mapped.min(u128::from(source_len - 1)) as u32
