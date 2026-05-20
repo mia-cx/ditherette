@@ -17,6 +17,8 @@ ImageViewMut<'_, F>
 
 where `F` is a packed format marker such as `Rgba8`, `Oklab32`, or `PaletteIndex8`.
 
+Specs stay generic so they can document the math independently of storage choices. Ditherette production resize is narrower: all production resize filters operate on normalized packed `Rgba8`. HDR or non-RGBA inputs must be converted at the boundary before resize.
+
 Specs should not accept raw `(data, width, height)` triples. Boundary wrappers validate raw buffers and construct views before calling resize specs or future production code.
 
 ## Module map

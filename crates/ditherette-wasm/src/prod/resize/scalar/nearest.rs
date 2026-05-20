@@ -18,6 +18,30 @@ use crate::{
 // DEFER(perf): Fractional nearest path splits have no concrete benchmarkable
 // shape yet; exact downscale is accepted, while identity-only and exact-upscale
 // paths were rejected under the default `nearest` profile.
+// TODO(perf:api, rank=1): Split production nearest into an explicit `Rgba8`
+// entry point instead of optimizing the format-generic `ImageFormat` path; all
+// Ditherette resize inputs are normalized RGBA8, and this should let prod use
+// old-crate byte/word kernels without preserving unused color-space generality.
+// Verify with `ditherette-bench run nearest --oracle spec:resize:nearest:scalar`;
+// benchmark Celeste box art with `ditherette-bench run nearest --baseline accepted`.
+// TODO(perf:kernel, rank=2, after perf:api rgba8-nearest): Word-pack nearest
+// pixel copies for RGBA8 using unaligned u32 reads/writes like
+// `ditherette-wasm-old/src/resize/scalar/nearest.rs::copy_pixel_word`. This is
+// probably specific to nearest because other filters compute channel values
+// rather than copying whole source pixels. Benchmark `ditherette-bench run
+// nearest --baseline accepted`, especially 0.25x/0.5x/0.75x/0.95x/2x Celeste
+// box-art cases that still trail the old crate.
+// TODO(perf:path, rank=3, after perf:api rgba8-nearest): Restore old nearest
+// identity and same-width row-copy fast paths for RGBA8; the expanded Celeste
+// box-art matrix includes 1x and near-axis-preserving cases where whole-buffer
+// or whole-row copies should dominate per-pixel loops. Benchmark with
+// `ditherette-bench run nearest --baseline accepted`.
+// TODO(perf:path, rank=4, after perf:kernel rgba8-word-copy): Restore the old
+// nearest span-copy path for near-1x downscales where source x coordinates form
+// long contiguous runs. Keep the old average-span threshold as the first
+// hypothesis; verify with `--oracle spec:resize:nearest:scalar` and benchmark
+// `ditherette-bench run nearest --baseline accepted` on 0.85x-0.99x Celeste box
+// art.
 
 /// Reusable nearest-neighbor resize metadata for one source/output shape.
 pub struct NearestResizePlan {
