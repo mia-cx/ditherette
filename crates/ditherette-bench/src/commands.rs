@@ -10,10 +10,11 @@ use crate::{
     case::scales_from_flags,
     cli::{split_domain, Flags},
     compare::{
-        acceptance_report, attach_accepted_comparisons, attach_measured_oracle_comparisons,
-        attach_measured_spec_comparisons, attach_named_oracle_comparisons,
-        attach_named_spec_comparisons, attach_pair_comparisons, attach_previous_comparisons,
-        ensure_compatible_baseline, has_exact_comparisons, require_accepted_comparisons,
+        acceptance_report, attach_accepted_comparison, attach_accepted_comparisons,
+        attach_measured_oracle_comparisons, attach_measured_spec_comparisons,
+        attach_named_oracle_comparisons, attach_named_spec_comparisons, attach_pair_comparisons,
+        attach_previous_comparisons, ensure_compatible_baseline, has_exact_comparisons,
+        require_accepted_comparisons,
     },
     error::BenchError,
     fixture::fixtures_from_flags,
@@ -229,7 +230,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                 let case = format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale);
                 let mut logger =
                     MeasurementLogger::new(&subject.descriptor.id.to_string(), &case, measurement);
-                let result = measure_resize_case(
+                let mut result = measure_resize_case(
                     subject,
                     fixture,
                     output,
@@ -239,6 +240,9 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                     None,
                     &mut logger,
                 )?;
+                if let Some(baseline) = accepted_baseline.as_ref() {
+                    attach_accepted_comparison(&mut result, baseline);
+                }
                 logger.finish(&result);
                 results.push(result);
             }

@@ -8,7 +8,7 @@ use ditherette_bench_api::SubjectId;
 use crate::{
     fixture::Fixture,
     measure::{MeasurementConfig, MeasurementObserver, MeasurementProgress},
-    result::{BenchResult, SampleStats},
+    result::{BenchResult, ComparisonReport, SampleStats},
     runtime::RuntimeTuningReport,
     util::{dim, format_comparison, format_duration, format_ns, format_significant, heading},
 };
@@ -245,6 +245,7 @@ struct MeasurementBlock {
     total_iterations: usize,
     output: (u32, u32),
     stats: Option<SampleStats>,
+    accepted_comparison: Option<ComparisonReport>,
 }
 
 impl MeasurementBlock {
@@ -258,6 +259,7 @@ impl MeasurementBlock {
             total_iterations: result.total_iterations,
             output: (result.output_width, result.output_height),
             stats: Some(SampleStats::from_samples(&result.sample_ns)),
+            accepted_comparison: result.comparisons.get("accepted").cloned(),
         }
     }
 
@@ -270,6 +272,7 @@ impl MeasurementBlock {
             total_iterations: progress.total_iterations,
             output,
             stats: Some(SampleStats::from_samples(samples)),
+            accepted_comparison: None,
         }
     }
 }
@@ -313,6 +316,14 @@ fn render_measurement_block(block: &MeasurementBlock) -> Vec<String> {
         format_mpix_per_s(throughput_mean),
         dim(format_mpix_per_s(throughput_upper))
     ));
+
+    if let Some(comparison) = block.accepted_comparison.as_ref() {
+        lines.extend(render_change_block(
+            block.output,
+            stats.median_ns,
+            comparison,
+        ));
+    }
 
     let percentiles = [
         ("p50", format_ns(stats.median_ns)),
@@ -360,6 +371,32 @@ fn render_measurement_block(block: &MeasurementBlock) -> Vec<String> {
         dim(format_ns(stats.max_ns))
     ));
     lines
+}
+
+fn render_change_block(
+    output: (u32, u32),
+    current_median_ns: f64,
+    comparison: &ComparisonReport,
+) -> Vec<String> {
+    let baseline_throughput = output_mpix_per_s(output, comparison.median_ns);
+    let current_throughput = output_mpix_per_s(output, current_median_ns);
+    let change = format_comparison(Some(comparison));
+
+    vec![
+        "  change:".to_owned(),
+        format!(
+            "    time:   {} -> {} ({})",
+            format_ns(comparison.median_ns),
+            format_ns(current_median_ns),
+            change
+        ),
+        format!(
+            "    thrpt:  {} -> {} ({})",
+            format_mpix_per_s(baseline_throughput),
+            format_mpix_per_s(current_throughput),
+            format_comparison(Some(comparison))
+        ),
+    ]
 }
 
 pub(crate) fn print_perf_table(results: &[BenchResult]) {
