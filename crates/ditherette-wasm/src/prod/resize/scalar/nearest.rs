@@ -38,6 +38,10 @@ pub fn resize_nearest_into<F: ImageFormat>(
         return;
     }
 
+    // TODO(perf:layout, rank=2, after perf:api nearest-plan): Store x byte
+    // starts and y source rows directly in the nearest plan so the hot path can
+    // skip temporary `Vec<u32>` maps and per-call `source_x * CHANNEL_COUNT`.
+    // Benchmark with `ditherette-bench run nearest --baseline accepted`.
     let x_source_starts = axis_coordinate_map(
         source_dimensions.width(),
         output_dimensions.width(),
@@ -92,6 +96,11 @@ fn exact_downscale_factors(
     Some((source_width / output_width, source_height / output_height))
 }
 
+// TODO(perf:kernel, rank=3, after perf:layout nearest-plan): Specialize the
+// accepted exact-downscale path for packed RGBA8 rows, copying 4-byte pixels
+// with a representation-specific helper only inside this path. Verify with
+// `--oracle spec:resize:nearest:scalar`; benchmark `ditherette-bench run nearest
+// --baseline accepted` with attention to 0.1x/0.125x/0.25x/0.5x.
 fn resize_exact_downscale<F: ImageFormat>(
     source: ImageView<'_, F>,
     mut output: ImageViewMut<'_, F>,

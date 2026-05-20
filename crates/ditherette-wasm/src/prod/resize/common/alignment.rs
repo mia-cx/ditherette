@@ -50,6 +50,11 @@ impl Default for ResizeAnchor {
     }
 }
 
+// TODO(perf:api, rank=1): Add a caller-owned nearest resize plan that caches
+// axis maps across repeated same-shape resizes, so benchmark batches and future
+// UI preview loops do not allocate/recompute coordinates per image. Verify with
+// `ditherette-bench run nearest --oracle spec:resize:nearest:scalar`; benchmark
+// with `ditherette-bench run nearest --baseline accepted`.
 /// Build a source-coordinate lookup table for one resize axis.
 pub fn axis_coordinate_map(source_len: u32, output_len: u32, alignment: AxisAlignment) -> Vec<u32> {
     (0..output_len)
