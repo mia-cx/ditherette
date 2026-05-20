@@ -46,13 +46,60 @@ pub fn resize_rgba_lanczos3_2_into(
     output_dimensions: ImageDimensions,
     output_rgba: &mut [u8],
 ) -> Result<(), ProcessingError> {
+    resize_rgba_lanczos3_2_fixed_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )
+}
+
+#[doc(hidden)]
+pub fn resize_rgba_lanczos3_2_fixed_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    resize_rgba_lanczos3_2_with_scale_policy_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        false,
+    )
+}
+
+#[doc(hidden)]
+pub fn resize_rgba_lanczos3_2_scale_aware_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    resize_rgba_lanczos3_2_with_scale_policy_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+        true,
+    )
+}
+
+fn resize_rgba_lanczos3_2_with_scale_policy_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+    scale_aware: bool,
+) -> Result<(), ProcessingError> {
     crate::resize::scalar::lanczos::resize_rgba_lanczos_2_into(
         source_rgba,
         source_dimensions,
         output_dimensions,
         output_rgba,
         LANCZOS3_WINDOW_SIZE,
-        false,
+        scale_aware,
     )
 }
 

@@ -53,6 +53,36 @@ pub fn resize_rgba_bicubic_2_into(
     )
 }
 
+#[doc(hidden)]
+pub fn resize_rgba_bicubic_2_fixed_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    crate::resize::scalar::bicubic::resize_rgba_bicubic_2_fixed_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )
+}
+
+#[doc(hidden)]
+pub fn resize_rgba_bicubic_2_scale_aware_into(
+    source_rgba: &[u8],
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    output_rgba: &mut [u8],
+) -> Result<(), ProcessingError> {
+    crate::resize::scalar::bicubic::resize_rgba_bicubic_2_scale_aware_into(
+        source_rgba,
+        source_dimensions,
+        output_dimensions,
+        output_rgba,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::{resize_rgba_bicubic, resize_rgba_bicubic_reference};

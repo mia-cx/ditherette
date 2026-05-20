@@ -12,10 +12,14 @@ const resizeFilterNames = [
 	'trilinear',
 	'bicubic',
 	'bicubic_2',
+	'bicubic_2_fixed',
+	'bicubic_2_scale_aware',
 	'lanczos2',
 	'lanczos2_scale_aware',
 	'lanczos3',
 	'lanczos3_2',
+	'lanczos3_2_fixed',
+	'lanczos3_2_scale_aware',
 	'lanczos3_scale_aware',
 	'area',
 	'box',
@@ -50,7 +54,13 @@ const benchmarkConfigs = {
 	convolution_2: {
 		bench: 'crit_resize_filters',
 		groupPrefix: 'resize_filters/',
-		variants: ['bicubic_2', 'lanczos3_2'],
+		variants: ['bicubic_2_scale_aware', 'lanczos3_2_scale_aware'],
+		referenceMode: 'none'
+	},
+	convolution_2_fixed: {
+		bench: 'crit_resize_filters',
+		groupPrefix: 'resize_filters/',
+		variants: ['bicubic_2_fixed', 'lanczos3_2_fixed'],
 		referenceMode: 'none'
 	}
 };
@@ -234,7 +244,8 @@ function caseVariantKey(caseId, variant) {
 
 function resizeFilterEnv() {
 	if (args.filter) return args.filter;
-	if (args.kernel === 'convolution_2') return 'bicubic_2,lanczos3_2';
+	if (args.kernel === 'convolution_2') return 'bicubic_2_scale_aware,lanczos3_2_scale_aware';
+	if (args.kernel === 'convolution_2_fixed') return 'bicubic_2_fixed,lanczos3_2_fixed';
 	return undefined;
 }
 
