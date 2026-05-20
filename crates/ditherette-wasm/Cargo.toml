@@ -2,7 +2,7 @@
 name = "ditherette-wasm"
 version = "0.1.0"
 edition = "2021"
-description = "Rust/Wasm core for Ditherette experiments."
+description = "Fresh Rust/Wasm image-processing core for Ditherette."
 license = "UNLICENSED"
 publish = false
 
@@ -11,51 +11,14 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-tiling = ["dep:rayon"]
+bench-subjects = ["dep:ditherette-bench-api"]
 
 [dependencies]
-rayon = { version = "1.11", optional = true }
+ditherette-bench-api = { path = "../ditherette-bench-api", optional = true }
 wasm-bindgen = "0.2"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = { version = "0.7", features = ["html_reports"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
-
-[[bench]]
-name = "resize_nearest"
-harness = false
-
-[[bench]]
-name = "resize_bilinear"
-harness = false
-
-[[bench]]
-name = "resize_filters"
-harness = false
-
-[[bench]]
-name = "row_band_tiling"
-harness = false
-required-features = ["tiling"]
-
-[[bench]]
-name = "tiling_overhead"
-harness = false
-required-features = ["tiling"]
-
-[[bench]]
-name = "area_resampling"
-harness = false
-
-[[example]]
-name = "tiling_sweep"
-required-features = ["tiling"]
-
 [profile.release]
 opt-level = "s"
-
-[profile.bench]
-opt-level = 3

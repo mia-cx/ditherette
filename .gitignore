@@ -10,6 +10,9 @@ dist/
 .vercel/
 .netlify/
 .wrangler/
+target/
+crates/*/target/
+bench/results/
 
 # Generated Cloudflare types
 worker-configuration.d.ts

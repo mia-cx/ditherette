@@ -1,20 +1,15 @@
-//! Rust/Wasm image-processing core for Ditherette.
+//! Fresh Rust/Wasm image-processing core for Ditherette.
 //!
-//! Browser and TypeScript code own file input and decode. This crate receives
-//! canonical, tightly packed RGBA buffers plus explicit dimensions, then applies
-//! deterministic image-processing stages.
+//! This crate intentionally starts small. The legacy implementation lives in
+//! `crates/ditherette-wasm-old` while the new API, reference model, and
+//! optimization boundaries are specified cleanly here.
 
-/// Error types shared by Rust and Wasm-facing processing code.
-pub mod error;
-/// Image buffer dimensions and RGBA buffer helpers.
+#[cfg(feature = "bench-subjects")]
+pub mod bench_subjects;
 pub mod image;
-/// Resize and antialiasing filters for tightly packed RGBA buffers.
-pub mod resize;
+pub mod spec;
 mod wasm;
 
-pub use wasm::{
-    antialias_rgba_box3, hello, resize_rgba_area, resize_rgba_bicubic, resize_rgba_bilinear,
-    resize_rgba_box, resize_rgba_lanczos, resize_rgba_lanczos2, resize_rgba_lanczos2_scale_aware,
-    resize_rgba_lanczos3, resize_rgba_lanczos3_scale_aware, resize_rgba_nearest,
-    resize_rgba_trilinear,
-};
+#[cfg(feature = "bench-subjects")]
+pub use bench_subjects::bench_subjects;
+pub use wasm::hello;
