@@ -324,9 +324,9 @@ fn prepare_axis_contributions<K: Kernel>(
     let mut contributions = Vec::with_capacity(output_len);
     let mut input = 0.5 * ratio;
 
-    // TODO(perf:path, rank=4, after perf:layout flat-contribution-plan): Detect stable
-    // exact-ratio/fractional-minify tap patterns and reuse contribution spans instead of
-    // recomputing nearly identical weight vectors for every output coordinate.
+    // NOTE(perf): Stable exact-ratio tap reuse needs a borrowed/flat contribution
+    // plan to avoid cloning per-output weight Vecs. The flat plan regressed, and the
+    // accepted incremental input update removed the cheap arithmetic part of this idea.
     for _output_coordinate in 0..output_len {
         let left = clamp_i64(
             (input - support).floor() as i64,
