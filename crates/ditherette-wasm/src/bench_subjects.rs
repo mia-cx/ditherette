@@ -17,7 +17,8 @@ use crate::{
     prod::resize::{
         common::alignment::ResizeAnchor as ProdResizeAnchor,
         scalar::nearest::{
-            resize_nearest_with_plan_into as resize_prod_nearest_with_plan_into, NearestResizePlan,
+            resize_nearest_rgba8_with_plan_into as resize_prod_nearest_rgba8_with_plan_into,
+            NearestResizePlan,
         },
     },
     spec::resize::{
@@ -171,7 +172,7 @@ fn resize_prod_nearest_subject(
             }
 
             let plan = cached.as_ref().expect("nearest plan should be initialized");
-            resize_prod_nearest_with_plan_into(source, output, plan);
+            resize_prod_nearest_rgba8_with_plan_into(source, output, plan);
         });
     })
 }
