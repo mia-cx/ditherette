@@ -152,11 +152,10 @@ fn exact_downscale_factors(
     Some((source_width / output_width, source_height / output_height))
 }
 
-// TODO(perf:kernel, rank=3, after perf:layout nearest-plan): Specialize the
-// accepted exact-downscale path for packed RGBA8 rows, copying 4-byte pixels
-// with a representation-specific helper only inside this path. Verify with
-// `--oracle spec:resize:nearest:scalar`; benchmark `ditherette-bench run nearest
-// --baseline accepted` with attention to 0.1x/0.125x/0.25x/0.5x.
+// REJECT(perf): Incrementing exact-downscale source/output offsets instead of
+// multiplying per pixel did not improve the targeted 0.1x/0.125x/0.25x/0.5x
+// cases and regressed 0.75x by -2.95% in `ditherette-bench run nearest
+// --baseline accepted`.
 fn resize_exact_downscale<F: ImageFormat>(
     source: ImageView<'_, F>,
     mut output: ImageViewMut<'_, F>,
