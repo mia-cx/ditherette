@@ -318,11 +318,7 @@ fn render_measurement_block(block: &MeasurementBlock) -> Vec<String> {
     ));
 
     if let Some(comparison) = block.accepted_comparison.as_ref() {
-        lines.extend(render_change_block(
-            block.output,
-            stats.median_ns,
-            comparison,
-        ));
+        lines.extend(render_change_block(&stats, comparison));
     }
 
     let percentiles = [
@@ -373,30 +369,50 @@ fn render_measurement_block(block: &MeasurementBlock) -> Vec<String> {
     lines
 }
 
-fn render_change_block(
-    output: (u32, u32),
-    current_median_ns: f64,
-    comparison: &ComparisonReport,
-) -> Vec<String> {
-    let baseline_throughput = output_mpix_per_s(output, comparison.median_ns);
-    let current_throughput = output_mpix_per_s(output, current_median_ns);
-    let change = format_comparison(Some(comparison));
+fn render_change_block(stats: &SampleStats, comparison: &ComparisonReport) -> Vec<String> {
+    let time_lower = percent_change(stats.median_ns - stats.stdev_ns, comparison.median_ns);
+    let time_median = percent_change(stats.median_ns, comparison.median_ns);
+    let time_upper = percent_change(stats.median_ns + stats.stdev_ns, comparison.median_ns);
+    let throughput_lower =
+        speed_change_percent(stats.median_ns + stats.stdev_ns, comparison.median_ns);
+    let throughput_median = speed_change_percent(stats.median_ns, comparison.median_ns);
+    let throughput_upper =
+        speed_change_percent(stats.median_ns - stats.stdev_ns, comparison.median_ns);
+    let verdict = match comparison.status.as_str() {
+        "faster" => "Performance has improved.",
+        "slower" => "Performance has regressed.",
+        _ => "Change within noise threshold.",
+    };
 
     vec![
         "  change:".to_owned(),
         format!(
-            "    time:   {} -> {} ({})",
-            format_ns(comparison.median_ns),
-            format_ns(current_median_ns),
-            change
+            "    time:   [{} {} {}]",
+            format_delta_percent(time_lower),
+            format_delta_percent(time_median),
+            format_delta_percent(time_upper)
         ),
         format!(
-            "    thrpt:  {} -> {} ({})",
-            format_mpix_per_s(baseline_throughput),
-            format_mpix_per_s(current_throughput),
-            format_comparison(Some(comparison))
+            "    thrpt:  [{} {} {}]",
+            format_delta_percent(throughput_lower),
+            format_delta_percent(throughput_median),
+            format_delta_percent(throughput_upper)
         ),
+        format!("    {verdict}"),
     ]
+}
+
+fn percent_change(current: f64, baseline: f64) -> f64 {
+    (current / baseline - 1.0) * 100.0
+}
+
+fn speed_change_percent(current: f64, baseline: f64) -> f64 {
+    (baseline / current - 1.0) * 100.0
+}
+
+fn format_delta_percent(value: f64) -> String {
+    let sign = if value < 0.0 { "−" } else { "+" };
+    format!("{sign}{:.4}%", value.abs())
 }
 
 pub(crate) fn print_perf_table(results: &[BenchResult]) {
