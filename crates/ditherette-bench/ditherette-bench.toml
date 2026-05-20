@@ -1,0 +1,66 @@
+# Ditherette benchmark defaults.
+#
+# CLI flags always win over this file:
+# built-in defaults < [defaults] < [profiles.NAME] < CLI flags.
+#
+# Keep [defaults] subject/oracle/baseline-free. Profiles may pin subjects for
+# repeatable workflows, but should not pin oracles or baseline names by default.
+
+[defaults]
+fixtures = ["Celeste_Insta_selfie.png","Celeste_box_art.png"]
+scale_group = ["downscale"]
+sample_size = 100
+measurement_time = "5s"
+warm_up_time = "3s"
+target_sample_time = "auto"
+sample_mode = "throughput"
+cache_state = "warm"
+cache_scrub_size = "64MiB"
+inter_sample_delay = "0ms"
+live_stats = true
+preheat_time = "5s"
+process_priority = "high"
+
+[profiles.resize-nearest]
+command = "perf"
+domain = "resize"
+subjects = ["spec:resize:nearest:scalar"]
+
+[profiles.resize-area]
+command = "perf"
+domain = "resize"
+subjects = ["spec:resize:area:scalar"]
+
+[profiles.resize-bilinear]
+command = "perf"
+domain = "resize"
+subjects = ["spec:resize:bilinear:scalar"]
+
+[profiles.resize-bicubic]
+command = "perf"
+domain = "resize"
+subjects = [
+  "spec:resize:bicubic:catmull-rom",
+  "spec:resize:bicubic:catmull-rom-scale-aware",
+]
+
+[profiles.resize-lanczos2]
+command = "perf"
+domain = "resize"
+subjects = [
+  "spec:resize:lanczos2:fixed",
+  "spec:resize:lanczos2:scale-aware",
+]
+
+[profiles.resize-lanczos3]
+command = "perf"
+domain = "resize"
+subjects = [
+  "spec:resize:lanczos3:fixed",
+  "spec:resize:lanczos3:scale-aware",
+]
+
+[profiles.resize-trilinear]
+command = "perf"
+domain = "resize"
+subjects = ["spec:resize:trilinear:mip-area"]
