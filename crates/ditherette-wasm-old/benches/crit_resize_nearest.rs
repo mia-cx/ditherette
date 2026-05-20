@@ -1,7 +1,7 @@
 use std::{hint::black_box, path::PathBuf, sync::OnceLock};
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
-use ditherette_wasm::{
+use ditherette_wasm_old::{
     image::{rgba, ImageDimensions},
     resize::{
         nearest::resize_rgba_nearest_reference, resize_rgba_nearest, resize_rgba_nearest_into,
@@ -138,7 +138,7 @@ fn fixture_path() -> PathBuf {
     manifest_dir
         .parent()
         .and_then(|crates_dir| crates_dir.parent())
-        .map(|repo_root| repo_root.join("benchmark-fixtures/Celeste_box_art_full.png"))
+        .map(|repo_root| repo_root.join("benchmark-fixtures/Celeste_box_art.png"))
         .expect("crate should live under crates/ditherette-wasm")
 }
 

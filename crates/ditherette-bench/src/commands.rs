@@ -172,11 +172,22 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let scales = scales_from_flags(&flags)?;
     let measurement = MeasurementConfig::from_flags(&flags)?;
     let accepted_baseline_name = flags.optional("--baseline");
-    let accepted_baseline = accepted_baseline_name
-        .map(|name| load_baseline("accepted", name))
-        .transpose()?;
-    if let Some(baseline) = accepted_baseline.as_ref() {
-        ensure_compatible_baseline(baseline, "perf", domain, &measurement)?;
+    let mut accepted_baseline = None;
+    let mut seed_missing_accepted_baseline = false;
+    if let Some(name) = accepted_baseline_name {
+        match load_baseline("accepted", name) {
+            Ok(baseline) => {
+                if ensure_compatible_baseline(&baseline, "perf", domain, &measurement).is_ok() {
+                    accepted_baseline = Some(baseline);
+                } else {
+                    seed_missing_accepted_baseline = true;
+                }
+            }
+            Err(BenchError::Baseline(_)) => {
+                seed_missing_accepted_baseline = true;
+            }
+            Err(error) => return Err(error),
+        }
     }
     let previous_run = if accepted_baseline_name.is_none() {
         load_latest_run("perf", domain)
@@ -282,6 +293,10 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
         write_json(out, &run)?;
     }
     if let Some(name) = save_baseline_name {
+        save_baseline("accepted", name, &run, true)?;
+    } else if seed_missing_accepted_baseline {
+        let name =
+            accepted_baseline_name.expect("seeded baselines require a requested baseline name");
         save_baseline("accepted", name, &run, true)?;
     }
     if let Some(name) = flags.optional("--save-spec-baseline") {
