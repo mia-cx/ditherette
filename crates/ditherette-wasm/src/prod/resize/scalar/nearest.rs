@@ -22,15 +22,7 @@ use crate::{
 // found no represented 1x/same-width case in the current nearest profile and
 // regressed most measured cases in `ditherette-bench run nearest --baseline
 // accepted`; do not retry without a dedicated identity/same-width subject.
-// TODO(perf:path, rank=2): Split the packed
-// nearest dispatcher into measured scale classes (`exact-downscale`,
-// `near-identity-downscale`, `other-downscale`, `upscale`) before adding more
-// kernels. Hypothesis: old wins and losses are strongly scale-class dependent
-// (`0.9x` current faster, `0.75x`/upscales old faster), so one fallback loop is
-// leaving class-specific wins hidden. Benchmark with `ditherette-bench run
-// nearest --baseline accepted` and compare against the old parity table in
-// `crates/ditherette-bench/ARTIFACTS.md`.
-// TODO(perf:layout, rank=3, after perf:path nearest-scale-classes): Replace
+// TODO(perf:layout, rank=3): Replace
 // per-output-row `u32` y coordinates in the packed path with byte row offsets
 // and repeated-y run metadata. Hypothesis: upscales repeatedly revisit the same
 // source rows, and old's cached row-byte offsets plus flat buffer addressing may
@@ -43,7 +35,7 @@ use crate::{
 // upscale gap against old without retrying the rejected generic exact-upscale
 // span-fill. Benchmark `ditherette-bench run nearest --baseline accepted`; reject
 // if 2x regresses like the previous generic exact-upscale experiment.
-// TODO(perf:kernel, rank=5, after perf:path nearest-scale-classes): Specialize
+// TODO(perf:kernel, rank=5): Specialize
 // the 0.75x/other-downscale packed kernel separately from near-identity span
 // copy. Hypothesis: current span-copy wins at 0.9x but old is still 35-39%
 // faster at 0.75x, so a mid-downscale kernel may need different span threshold
@@ -60,6 +52,15 @@ pub struct NearestResizePlan {
     y_coordinates: Vec<u32>,
     exact_downscale: Option<(u32, u32)>,
     source_x_copy_spans: Vec<SourceXCopySpan>,
+    scale_class: NearestScaleClass,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NearestScaleClass {
+    ExactDownscale,
+    NearIdentityDownscale,
+    OtherDownscale,
+    Upscale,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -111,6 +112,14 @@ impl NearestResizePlan {
             output_dimensions.height(),
             &x_source_starts,
         );
+        let scale_class = nearest_scale_class(
+            source_dimensions.width(),
+            source_dimensions.height(),
+            output_dimensions.width(),
+            output_dimensions.height(),
+            exact_downscale,
+            &source_x_copy_spans,
+        );
 
         Self {
             source_dimensions,
@@ -120,6 +129,7 @@ impl NearestResizePlan {
             y_coordinates,
             exact_downscale,
             source_x_copy_spans,
+            scale_class,
         }
     }
 
@@ -264,40 +274,64 @@ fn resize_nearest_packed_rgba8_with_plan_into(
     output: &mut [u8],
     plan: &NearestResizePlan,
 ) {
-    let (x_alignment, y_alignment) = plan.anchor.axes();
-    if let Some((x_factor, y_factor)) = plan.exact_downscale {
-        resize_exact_downscale_packed_rgba8(
-            source,
-            source_dimensions,
-            output,
-            plan.output_dimensions,
-            x_factor,
-            y_factor,
-            x_alignment,
-            y_alignment,
-        );
-        return;
+    match plan.scale_class {
+        NearestScaleClass::ExactDownscale => {
+            let (x_factor, y_factor) = plan
+                .exact_downscale
+                .expect("exact-downscale class should have factors");
+            let (x_alignment, y_alignment) = plan.anchor.axes();
+            resize_exact_downscale_packed_rgba8(
+                source,
+                source_dimensions,
+                output,
+                plan.output_dimensions,
+                x_factor,
+                y_factor,
+                x_alignment,
+                y_alignment,
+            );
+        }
+        NearestScaleClass::NearIdentityDownscale => {
+            resize_span_copy_packed_rgba8(source, source_dimensions, output, plan);
+        }
+        NearestScaleClass::OtherDownscale | NearestScaleClass::Upscale => {
+            resize_word_copy_packed_rgba8(source, source_dimensions, output, plan);
+        }
     }
+}
 
+fn resize_word_copy_packed_rgba8(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+) {
     let source_row_len = source_dimensions.width_usize() * 4;
     let output_row_len = plan.output_dimensions.width_usize() * 4;
 
-    if plan.source_x_copy_spans.is_empty() {
-        for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
-            let source_row_start = source_y as usize * source_row_len;
-            let output_row_start = output_y * output_row_len;
+    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+        let source_row_start = source_y as usize * source_row_len;
+        let output_row_start = output_y * output_row_len;
 
-            for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
-                copy_rgba8_pixel_word(
-                    source,
-                    source_row_start + source_start,
-                    output,
-                    output_row_start + output_x * 4,
-                );
-            }
+        for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
+            copy_rgba8_pixel_word(
+                source,
+                source_row_start + source_start,
+                output,
+                output_row_start + output_x * 4,
+            );
         }
-        return;
     }
+}
+
+fn resize_span_copy_packed_rgba8(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+) {
+    let source_row_len = source_dimensions.width_usize() * 4;
+    let output_row_len = plan.output_dimensions.width_usize() * 4;
 
     for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
         let source_row_start = source_y as usize * source_row_len;
@@ -340,6 +374,27 @@ fn resize_exact_downscale_packed_rgba8(
             copy_rgba8_pixel_word(source, source_start, output, output_start);
         }
     }
+}
+
+fn nearest_scale_class(
+    source_width: u32,
+    source_height: u32,
+    output_width: u32,
+    output_height: u32,
+    exact_downscale: Option<(u32, u32)>,
+    source_x_copy_spans: &[SourceXCopySpan],
+) -> NearestScaleClass {
+    if exact_downscale.is_some() {
+        return NearestScaleClass::ExactDownscale;
+    }
+    if !source_x_copy_spans.is_empty() {
+        return NearestScaleClass::NearIdentityDownscale;
+    }
+    if source_width > output_width && source_height > output_height {
+        return NearestScaleClass::OtherDownscale;
+    }
+
+    NearestScaleClass::Upscale
 }
 
 fn source_x_copy_spans(
