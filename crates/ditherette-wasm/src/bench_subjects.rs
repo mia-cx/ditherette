@@ -4,6 +4,8 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
+use std::cell::RefCell;
+
 use ditherette_bench_api::{
     BenchSubject, BenchSubjectError, ParamSchema, PixelFormat, ResizeBenchSubject,
     ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams, ResizeU8RgbaFn, SubjectCapabilities,
@@ -14,7 +16,9 @@ use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
     prod::resize::{
         common::alignment::ResizeAnchor as ProdResizeAnchor,
-        scalar::nearest::resize_nearest_into as resize_prod_nearest_into,
+        scalar::nearest::{
+            resize_nearest_with_plan_into as resize_prod_nearest_with_plan_into, NearestResizePlan,
+        },
     },
     spec::resize::{
         common::alignment::ResizeAnchor,
@@ -143,13 +147,32 @@ fn resize_nearest_subject(
     })
 }
 
+thread_local! {
+    static PROD_NEAREST_PLAN: RefCell<Option<NearestResizePlan>> = const { RefCell::new(None) };
+}
+
 fn resize_prod_nearest_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        resize_prod_nearest_into(source, output, prod_anchor(params));
+        let anchor = prod_anchor(params);
+        PROD_NEAREST_PLAN.with_borrow_mut(|cached| {
+            if !cached
+                .as_ref()
+                .is_some_and(|plan| plan.matches(source.dimensions(), output.dimensions(), anchor))
+            {
+                *cached = Some(NearestResizePlan::new::<Rgba8>(
+                    source.dimensions(),
+                    output.dimensions(),
+                    anchor,
+                ));
+            }
+
+            let plan = cached.as_ref().expect("nearest plan should be initialized");
+            resize_prod_nearest_with_plan_into(source, output, plan);
+        });
     })
 }
 

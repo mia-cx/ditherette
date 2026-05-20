@@ -5,7 +5,7 @@
 //! or specialize loops while preserving oracle compatibility.
 
 use crate::{
-    image::{ImageFormat, ImageView, ImageViewMut},
+    image::{ImageDimensions, ImageFormat, ImageView, ImageViewMut},
     prod::resize::common::alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor},
 };
 
@@ -18,45 +18,101 @@ use crate::{
 // DEFER(perf): Fractional nearest path splits have no concrete benchmarkable
 // shape yet; exact downscale is accepted, while identity-only and exact-upscale
 // paths were rejected under the default `nearest` profile.
+
+/// Reusable nearest-neighbor resize metadata for one source/output shape.
+pub struct NearestResizePlan {
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    anchor: ResizeAnchor,
+    x_source_starts: Vec<usize>,
+    y_coordinates: Vec<u32>,
+    exact_downscale: Option<(u32, u32)>,
+}
+
+impl NearestResizePlan {
+    /// Builds reusable coordinate metadata for nearest-neighbor resize.
+    pub fn new<F: ImageFormat>(
+        source_dimensions: ImageDimensions,
+        output_dimensions: ImageDimensions,
+        anchor: ResizeAnchor,
+    ) -> Self {
+        let (x_alignment, y_alignment) = anchor.axes();
+        let exact_downscale = exact_downscale_factors(
+            source_dimensions.width(),
+            source_dimensions.height(),
+            output_dimensions.width(),
+            output_dimensions.height(),
+        );
+        let x_source_starts = if exact_downscale.is_some() {
+            Vec::new()
+        } else {
+            axis_coordinate_map(
+                source_dimensions.width(),
+                output_dimensions.width(),
+                x_alignment,
+            )
+            .into_iter()
+            .map(|source_x| source_x as usize * F::CHANNEL_COUNT)
+            .collect()
+        };
+        let y_coordinates = if exact_downscale.is_some() {
+            Vec::new()
+        } else {
+            axis_coordinate_map(
+                source_dimensions.height(),
+                output_dimensions.height(),
+                y_alignment,
+            )
+        };
+
+        Self {
+            source_dimensions,
+            output_dimensions,
+            anchor,
+            x_source_starts,
+            y_coordinates,
+            exact_downscale,
+        }
+    }
+
+    pub fn matches(
+        &self,
+        source_dimensions: ImageDimensions,
+        output_dimensions: ImageDimensions,
+        anchor: ResizeAnchor,
+    ) -> bool {
+        self.source_dimensions == source_dimensions
+            && self.output_dimensions == output_dimensions
+            && self.anchor == anchor
+    }
+}
+
 /// Resize `source` into `output` by copying the nearest source pixel.
 pub fn resize_nearest_into<F: ImageFormat>(
     source: ImageView<'_, F>,
-    mut output: ImageViewMut<'_, F>,
+    output: ImageViewMut<'_, F>,
     anchor: ResizeAnchor,
 ) {
-    let source_dimensions = source.dimensions();
-    let output_dimensions = output.dimensions();
-    let (x_alignment, y_alignment) = anchor.axes();
+    let plan = NearestResizePlan::new::<F>(source.dimensions(), output.dimensions(), anchor);
+    resize_nearest_with_plan_into(source, output, &plan);
+}
 
-    if let Some((x_factor, y_factor)) = exact_downscale_factors(
-        source_dimensions.width(),
-        source_dimensions.height(),
-        output_dimensions.width(),
-        output_dimensions.height(),
-    ) {
+/// Resize `source` into `output` using precomputed nearest-neighbor metadata.
+pub fn resize_nearest_with_plan_into<F: ImageFormat>(
+    source: ImageView<'_, F>,
+    mut output: ImageViewMut<'_, F>,
+    plan: &NearestResizePlan,
+) {
+    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
+    debug_assert_eq!(output.dimensions(), plan.output_dimensions);
+
+    let (x_alignment, y_alignment) = plan.anchor.axes();
+    if let Some((x_factor, y_factor)) = plan.exact_downscale {
         resize_exact_downscale(source, output, x_factor, y_factor, x_alignment, y_alignment);
         return;
     }
 
-    // TODO(perf:layout, rank=2, after perf:api nearest-plan): Store x byte
-    // starts and y source rows directly in the nearest plan so the hot path can
-    // skip temporary `Vec<u32>` maps and per-call `source_x * CHANNEL_COUNT`.
-    // Benchmark with `ditherette-bench run nearest --baseline accepted`.
-    let x_source_starts = axis_coordinate_map(
-        source_dimensions.width(),
-        output_dimensions.width(),
-        x_alignment,
-    )
-    .into_iter()
-    .map(|source_x| source_x as usize * F::CHANNEL_COUNT)
-    .collect::<Vec<_>>();
-    let y_coordinates = axis_coordinate_map(
-        source_dimensions.height(),
-        output_dimensions.height(),
-        y_alignment,
-    );
-
-    for (output_y, source_y) in y_coordinates.into_iter().enumerate() {
+    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
         let source_row = source
             .row(source_y)
             .expect("mapped source y should stay in bounds");
@@ -70,7 +126,7 @@ pub fn resize_nearest_into<F: ImageFormat>(
         // REJECT(perf): Replacing slice `copy_from_slice` with four scalar
         // channel assignments regressed every default nearest case by roughly
         // -45% to -56% in `ditherette-bench run nearest --baseline accepted`.
-        for (output_x, source_start) in x_source_starts.iter().copied().enumerate() {
+        for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
             let output_start = output_x * F::CHANNEL_COUNT;
             let source_pixel = &source_row[source_start..source_start + F::CHANNEL_COUNT];
             let output_pixel = &mut output_row[output_start..output_start + F::CHANNEL_COUNT];
