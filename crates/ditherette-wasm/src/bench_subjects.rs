@@ -12,6 +12,10 @@ use ditherette_bench_api::{
 
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
+    prod::resize::{
+        common::alignment::ResizeAnchor as ProdResizeAnchor,
+        scalar::nearest::resize_nearest_into as resize_prod_nearest_into,
+    },
     spec::resize::{
         common::alignment::ResizeAnchor,
         scalar::{
@@ -34,6 +38,12 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "spec nearest scalar",
             "crates/ditherette-wasm/src/spec/resize/scalar/nearest.rs",
             resize_nearest_subject,
+        ),
+        resize_subject(
+            "prod:resize:nearest:scalar",
+            "prod nearest scalar",
+            "crates/ditherette-wasm/src/prod/resize/scalar/nearest.rs",
+            resize_prod_nearest_subject,
         ),
         resize_subject(
             "spec:resize:area:scalar",
@@ -130,6 +140,16 @@ fn resize_nearest_subject(
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
         resize_nearest_into(source, output, anchor(params));
+    })
+}
+
+fn resize_prod_nearest_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_nearest_into(source, output, prod_anchor(params));
     })
 }
 
@@ -247,6 +267,20 @@ fn with_views(
 
     resize(source, output);
     Ok(())
+}
+
+fn prod_anchor(params: &ResizeParams) -> ProdResizeAnchor {
+    match params.anchor {
+        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdResizeAnchor::TopLeft,
+        ditherette_bench_api::ResizeAnchorParam::Top => ProdResizeAnchor::Top,
+        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdResizeAnchor::TopRight,
+        ditherette_bench_api::ResizeAnchorParam::Left => ProdResizeAnchor::Left,
+        ditherette_bench_api::ResizeAnchorParam::Center => ProdResizeAnchor::Center,
+        ditherette_bench_api::ResizeAnchorParam::Right => ProdResizeAnchor::Right,
+        ditherette_bench_api::ResizeAnchorParam::BottomLeft => ProdResizeAnchor::BottomLeft,
+        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdResizeAnchor::Bottom,
+        ditherette_bench_api::ResizeAnchorParam::BottomRight => ProdResizeAnchor::BottomRight,
+    }
 }
 
 fn anchor(params: &ResizeParams) -> ResizeAnchor {

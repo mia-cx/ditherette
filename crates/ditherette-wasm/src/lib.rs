@@ -7,6 +7,7 @@
 #[cfg(feature = "bench-subjects")]
 pub mod bench_subjects;
 pub mod image;
+pub mod prod;
 pub mod spec;
 mod wasm;
 
