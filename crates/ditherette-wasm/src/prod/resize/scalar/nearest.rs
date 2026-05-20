@@ -6,15 +6,17 @@
 
 use crate::{
     image::{ImageFormat, ImageView, ImageViewMut},
-    prod::resize::common::alignment::{axis_coordinate_map, ResizeAnchor},
+    prod::resize::common::alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor},
 };
 
-// TODO(perf:path, rank=2): Define nearest-paths by splitting prod nearest into
-// identity, exact-ratio, and fractional resize paths before tuning row kernels;
-// the generic anchor path may be hiding simpler copies. Verify with
-// `ditherette-bench run nearest --oracle spec:resize:nearest:scalar`; benchmark
-// with `ditherette-bench run nearest --baseline perf-loop-nearest` plus explicit
-// `--scales 1,0.5,2`.
+// REJECT(perf): Adding an identity-only path was not represented in the default
+// `nearest` profile and regressed/noised small cases by up to -9.67% in
+// `ditherette-bench run nearest --baseline accepted`.
+// TODO(perf:path, rank=2): Define nearest-paths by splitting exact upscale and
+// fractional resize paths before tuning row kernels; the generic anchor path may
+// be hiding simpler copies. Verify with `ditherette-bench run nearest --oracle
+// spec:resize:nearest:scalar`; benchmark with `ditherette-bench run nearest
+// --baseline accepted` plus explicit `--scales 2`.
 /// Resize `source` into `output` by copying the nearest source pixel.
 pub fn resize_nearest_into<F: ImageFormat>(
     source: ImageView<'_, F>,
@@ -24,6 +26,16 @@ pub fn resize_nearest_into<F: ImageFormat>(
     let source_dimensions = source.dimensions();
     let output_dimensions = output.dimensions();
     let (x_alignment, y_alignment) = anchor.axes();
+
+    if let Some((x_factor, y_factor)) = exact_downscale_factors(
+        source_dimensions.width(),
+        source_dimensions.height(),
+        output_dimensions.width(),
+        output_dimensions.height(),
+    ) {
+        resize_exact_downscale(source, output, x_factor, y_factor, x_alignment, y_alignment);
+        return;
+    }
 
     let x_source_starts = axis_coordinate_map(
         source_dimensions.width(),
@@ -64,5 +76,62 @@ pub fn resize_nearest_into<F: ImageFormat>(
 
             output_pixel.copy_from_slice(source_pixel);
         }
+    }
+}
+
+fn exact_downscale_factors(
+    source_width: u32,
+    source_height: u32,
+    output_width: u32,
+    output_height: u32,
+) -> Option<(u32, u32)> {
+    if source_width <= output_width || source_height <= output_height {
+        return None;
+    }
+    if source_width % output_width != 0 || source_height % output_height != 0 {
+        return None;
+    }
+
+    Some((source_width / output_width, source_height / output_height))
+}
+
+fn resize_exact_downscale<F: ImageFormat>(
+    source: ImageView<'_, F>,
+    mut output: ImageViewMut<'_, F>,
+    x_factor: u32,
+    y_factor: u32,
+    x_alignment: AxisAlignment,
+    y_alignment: AxisAlignment,
+) {
+    let x_offset = alignment_offset(x_factor, x_alignment) as usize * F::CHANNEL_COUNT;
+    let y_offset = alignment_offset(y_factor, y_alignment);
+    let x_step = x_factor as usize * F::CHANNEL_COUNT;
+    let output_width = output.dimensions().width_usize();
+
+    for output_y in 0..output.dimensions().height() {
+        let source_y = output_y * y_factor + y_offset;
+        let source_row = source
+            .row(source_y)
+            .expect("mapped source y should stay in bounds");
+        let output_row = output
+            .row_mut(output_y)
+            .expect("output y from dimensions should stay in bounds");
+
+        for output_x in 0..output_width {
+            let source_start = output_x * x_step + x_offset;
+            let output_start = output_x * F::CHANNEL_COUNT;
+            let source_pixel = &source_row[source_start..source_start + F::CHANNEL_COUNT];
+            let output_pixel = &mut output_row[output_start..output_start + F::CHANNEL_COUNT];
+
+            output_pixel.copy_from_slice(source_pixel);
+        }
+    }
+}
+
+fn alignment_offset(factor: u32, alignment: AxisAlignment) -> u32 {
+    match alignment {
+        AxisAlignment::Start => 0,
+        AxisAlignment::Center => factor / 2,
+        AxisAlignment::End => factor - 1,
     }
 }
