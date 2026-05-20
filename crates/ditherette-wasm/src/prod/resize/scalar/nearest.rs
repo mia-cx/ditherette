@@ -26,12 +26,6 @@ use crate::{
 // correctness but was neutral/noisy and regressed large near-identity downscale
 // by -2.06% in `ditherette-bench run nearest --baseline accepted`; keep row
 // byte math local to the loops until repeated-y run metadata is actually used.
-// TODO(perf:path, rank=4): Add an upscale
-// row-repeat path that computes a source row once per y-run and copies/expands it
-// into all repeated output rows. Hypothesis: this targets the remaining large
-// upscale gap against old without retrying the rejected generic exact-upscale
-// span-fill. Benchmark `ditherette-bench run nearest --baseline accepted`; reject
-// if 2x regresses like the previous generic exact-upscale experiment.
 // TODO(perf:kernel, rank=5): Specialize
 // the 0.75x/other-downscale packed kernel separately from near-identity span
 // copy. Hypothesis: current span-copy wins at 0.9x but old is still 35-39%
@@ -291,8 +285,11 @@ fn resize_nearest_packed_rgba8_with_plan_into(
         NearestScaleClass::NearIdentityDownscale => {
             resize_span_copy_packed_rgba8(source, source_dimensions, output, plan);
         }
-        NearestScaleClass::OtherDownscale | NearestScaleClass::Upscale => {
+        NearestScaleClass::OtherDownscale => {
             resize_word_copy_packed_rgba8(source, source_dimensions, output, plan);
+        }
+        NearestScaleClass::Upscale => {
+            resize_upscale_row_repeat_packed_rgba8(source, source_dimensions, output, plan);
         }
     }
 }
@@ -318,6 +315,45 @@ fn resize_word_copy_packed_rgba8(
                 output_row_start + output_x * 4,
             );
         }
+    }
+}
+
+fn resize_upscale_row_repeat_packed_rgba8(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+) {
+    let source_row_len = source_dimensions.width_usize() * 4;
+    let output_row_len = plan.output_dimensions.width_usize() * 4;
+    let mut output_y = 0;
+
+    while output_y < plan.y_coordinates.len() {
+        let source_y = plan.y_coordinates[output_y];
+        let source_row_start = source_y as usize * source_row_len;
+        let output_row_start = output_y * output_row_len;
+
+        for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
+            copy_rgba8_pixel_word(
+                source,
+                source_row_start + source_start,
+                output,
+                output_row_start + output_x * 4,
+            );
+        }
+
+        let mut next_output_y = output_y + 1;
+        while next_output_y < plan.y_coordinates.len()
+            && plan.y_coordinates[next_output_y] == source_y
+        {
+            let duplicate_row_start = next_output_y * output_row_len;
+            output.copy_within(
+                output_row_start..output_row_start + output_row_len,
+                duplicate_row_start,
+            );
+            next_output_y += 1;
+        }
+        output_y = next_output_y;
     }
 }
 
