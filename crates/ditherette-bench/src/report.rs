@@ -10,7 +10,9 @@ use crate::{
     measure::{MeasurementConfig, MeasurementObserver, MeasurementProgress},
     result::{BenchResult, ComparisonReport, SampleStats},
     runtime::RuntimeTuningReport,
-    util::{dim, format_comparison, format_duration, format_ns, format_significant, heading},
+    util::{
+        dim, format_comparison, format_duration, format_ns, format_significant, green, heading, red,
+    },
 };
 
 pub(crate) fn log_perf_start(
@@ -388,15 +390,15 @@ fn render_change_block(stats: &SampleStats, comparison: &ComparisonReport) -> Ve
         "  change:".to_owned(),
         format!(
             "    time:   [{} {} {}]",
-            format_delta_percent(time_lower),
-            format_delta_percent(time_median),
-            format_delta_percent(time_upper)
+            dim(format_delta_percent(time_lower)),
+            color_change(time_median, true),
+            dim(format_delta_percent(time_upper))
         ),
         format!(
             "    thrpt:  [{} {} {}]",
-            format_delta_percent(throughput_lower),
-            format_delta_percent(throughput_median),
-            format_delta_percent(throughput_upper)
+            dim(format_delta_percent(throughput_lower)),
+            color_change(throughput_median, false),
+            dim(format_delta_percent(throughput_upper))
         ),
         format!("    {verdict}"),
     ]
@@ -408,6 +410,17 @@ fn percent_change(current: f64, baseline: f64) -> f64 {
 
 fn speed_change_percent(current: f64, baseline: f64) -> f64 {
     (baseline / current - 1.0) * 100.0
+}
+
+fn color_change(value: f64, lower_is_better: bool) -> String {
+    let formatted = format_delta_percent(value);
+    if (value < 0.0 && lower_is_better) || (value > 0.0 && !lower_is_better) {
+        green(formatted)
+    } else if (value > 0.0 && lower_is_better) || (value < 0.0 && !lower_is_better) {
+        red(formatted)
+    } else {
+        formatted
+    }
 }
 
 fn format_delta_percent(value: f64) -> String {
