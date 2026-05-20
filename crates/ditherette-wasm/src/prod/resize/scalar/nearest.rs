@@ -22,14 +22,11 @@ use crate::{
 // found no represented 1x/same-width case in the current nearest profile and
 // regressed most measured cases in `ditherette-bench run nearest --baseline
 // accepted`; do not retry without a dedicated identity/same-width subject.
-// TODO(perf:layout, rank=3): Replace
-// per-output-row `u32` y coordinates in the packed path with byte row offsets
-// and repeated-y run metadata. Hypothesis: upscales repeatedly revisit the same
-// source rows, and old's cached row-byte offsets plus flat buffer addressing may
-// explain part of its 36-43% large-upscale lead. Benchmark `ditherette-bench run
-// nearest --baseline accepted`, focusing on 1.01x, 1.05x, 1.25x, 1.5x, 2x, and
-// 4x cases.
-// TODO(perf:path, rank=4, after perf:layout nearest-row-runs): Add an upscale
+// REJECT(perf): Precomputing packed nearest y/output row byte offsets passed
+// correctness but was neutral/noisy and regressed large near-identity downscale
+// by -2.06% in `ditherette-bench run nearest --baseline accepted`; keep row
+// byte math local to the loops until repeated-y run metadata is actually used.
+// TODO(perf:path, rank=4): Add an upscale
 // row-repeat path that computes a source row once per y-run and copies/expands it
 // into all repeated output rows. Hypothesis: this targets the remaining large
 // upscale gap against old without retrying the rejected generic exact-upscale
