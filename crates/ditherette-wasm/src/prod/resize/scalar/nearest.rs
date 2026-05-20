@@ -26,13 +26,10 @@ use crate::{
 // correctness but was neutral/noisy and regressed large near-identity downscale
 // by -2.06% in `ditherette-bench run nearest --baseline accepted`; keep row
 // byte math local to the loops until repeated-y run metadata is actually used.
-// TODO(perf:kernel, rank=5): Specialize
-// the 0.75x/other-downscale packed kernel separately from near-identity span
-// copy. Hypothesis: current span-copy wins at 0.9x but old is still 35-39%
-// faster at 0.75x, so a mid-downscale kernel may need different span threshold
-// or precomputed offset shape. Benchmark `ditherette-bench run nearest
-// --baseline accepted`; do not lower the near-identity span threshold globally
-// because the old crate already rejected that class of change.
+// REJECT(perf): Routing exact 0.75x downscales through span-copy lowered the
+// average-span threshold only for that shape but regressed the large 0.75x case
+// by -66.48% in `ditherette-bench run nearest --baseline accepted`; keep the
+// stricter near-identity span-copy gate.
 
 /// Reusable nearest-neighbor resize metadata for one source/output shape.
 pub struct NearestResizePlan {
