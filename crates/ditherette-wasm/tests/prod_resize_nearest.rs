@@ -1,8 +1,8 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
-    prod::resize::{
-        common::alignment::ResizeAnchor as ProdResizeAnchor,
-        scalar::nearest::resize_nearest_into as resize_prod_nearest_into,
+    prod::resize::scalar::nearest::{
+        alignment::ResizeAnchor as ProdResizeAnchor,
+        resize_nearest_into as resize_prod_nearest_into,
     },
     spec::resize::{
         common::alignment::ResizeAnchor as SpecResizeAnchor,

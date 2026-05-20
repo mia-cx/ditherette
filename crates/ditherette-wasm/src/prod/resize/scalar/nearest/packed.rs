@@ -1,9 +1,6 @@
-use crate::{
-    image::{rgba8, ImageDimensions},
-    prod::resize::common::alignment::AxisAlignment,
-};
+use crate::image::{rgba8, ImageDimensions};
 
-use super::{alignment_offset, NearestResizePlan, NearestScaleClass};
+use super::{alignment::AxisAlignment, alignment_offset, NearestResizePlan, NearestScaleClass};
 
 pub(super) fn resize_with_plan_into(
     source: &[u8],
