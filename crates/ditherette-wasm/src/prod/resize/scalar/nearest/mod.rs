@@ -7,7 +7,10 @@
 pub mod alignment;
 mod packed;
 
-use crate::image::{rgba8, ImageDimensions, ImageView, ImageViewMut, Rgba8};
+use crate::{
+    image::{rgba8, ImageDimensions, ImageView, ImageViewMut, Rgba8},
+    prod::resize::common,
+};
 
 use alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor};
 
@@ -154,14 +157,8 @@ pub fn resize_nearest_rgba8_with_plan_into(
     debug_assert_eq!(source.dimensions(), plan.source_dimensions);
     debug_assert_eq!(output.dimensions(), plan.output_dimensions);
 
-    assert!(
-        rgba8::is_packed_stride(source.dimensions(), source.stride()),
-        "production nearest resize requires packed RGBA8 source rows"
-    );
-    assert!(
-        rgba8::is_packed_stride(output.dimensions(), output.stride()),
-        "production nearest resize requires packed RGBA8 output rows"
-    );
+    common::rgba8::assert_packed_source(source, "nearest");
+    common::rgba8::assert_packed_output(&output, "nearest");
 
     packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), plan);
 }
