@@ -72,11 +72,9 @@ pub fn map_axis_coordinate(
     }
 }
 
-// TODO(perf:micro, rank=5): Replace the one-time map-building u128 divisions
-// with a validated u64/fixed-increment mapper if image dimension bounds make it
-// exact for every anchor. Verify all anchors via `ditherette-bench run nearest
-// --oracle spec:resize:nearest:scalar`; benchmark with `ditherette-bench run
-// nearest --baseline accepted`.
+// REJECT(perf): Replacing one-time map-building u128 divisions with u64 math
+// passed correctness but regressed small default nearest cases by roughly -2% to
+// -4% in `ditherette-bench run nearest --baseline accepted`.
 fn map_start_coordinate(output_coordinate: u32, source_len: u32, output_len: u32) -> u32 {
     let mapped = u128::from(output_coordinate) * u128::from(source_len) / u128::from(output_len);
     mapped.min(u128::from(source_len - 1)) as u32

@@ -60,14 +60,12 @@ pub fn resize_nearest_into<F: ImageFormat>(
             .row_mut(output_y as u32)
             .expect("output y from dimensions should stay in bounds");
 
-        // TODO(perf:kernel, rank=4): Specialize
-        // the hot RGBA8 path so four-channel copies use typed loads/stores or
-        // chunked rows instead of per-pixel slice construction. Verify with
-        // `--oracle spec:resize:nearest:scalar`; benchmark `ditherette-bench run
-        // nearest --baseline perf-loop-nearest`.
         // REJECT(perf): Generic exact-upscale run-fill regressed 2x by -21.03%
         // in `ditherette-bench run nearest --baseline accepted`; do not retry
         // without a 2x-specific strategy or different representative workload.
+        // REJECT(perf): Replacing slice `copy_from_slice` with four scalar
+        // channel assignments regressed every default nearest case by roughly
+        // -45% to -56% in `ditherette-bench run nearest --baseline accepted`.
         for (output_x, source_start) in x_source_starts.iter().copied().enumerate() {
             let output_start = output_x * F::CHANNEL_COUNT;
             let source_pixel = &source_row[source_start..source_start + F::CHANNEL_COUNT];
