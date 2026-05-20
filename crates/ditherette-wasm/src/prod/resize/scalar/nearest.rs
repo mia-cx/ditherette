@@ -12,11 +12,12 @@ use crate::{
 // REJECT(perf): Adding an identity-only path was not represented in the default
 // `nearest` profile and regressed/noised small cases by up to -9.67% in
 // `ditherette-bench run nearest --baseline accepted`.
-// TODO(perf:path, rank=2): Define nearest-paths by splitting exact upscale and
-// fractional resize paths before tuning row kernels; the generic anchor path may
-// be hiding simpler copies. Verify with `ditherette-bench run nearest --oracle
-// spec:resize:nearest:scalar`; benchmark with `ditherette-bench run nearest
-// --baseline accepted` plus explicit `--scales 2`.
+// REJECT(perf): A generic exact-upscale span-fill path regressed 2x by -21.03%
+// in `ditherette-bench run nearest --baseline accepted`; wider upscale gains do
+// not justify hurting the common 2x case.
+// DEFER(perf): Fractional nearest path splits have no concrete benchmarkable
+// shape yet; exact downscale is accepted, while identity-only and exact-upscale
+// paths were rejected under the default `nearest` profile.
 /// Resize `source` into `output` by copying the nearest source pixel.
 pub fn resize_nearest_into<F: ImageFormat>(
     source: ImageView<'_, F>,
@@ -59,16 +60,14 @@ pub fn resize_nearest_into<F: ImageFormat>(
             .row_mut(output_y as u32)
             .expect("output y from dimensions should stay in bounds");
 
-        // TODO(perf:kernel, rank=4, after perf:path nearest-paths): Specialize
+        // TODO(perf:kernel, rank=4): Specialize
         // the hot RGBA8 path so four-channel copies use typed loads/stores or
         // chunked rows instead of per-pixel slice construction. Verify with
         // `--oracle spec:resize:nearest:scalar`; benchmark `ditherette-bench run
         // nearest --baseline perf-loop-nearest`.
-        // TODO(perf:kernel, rank=6, after perf:path nearest-paths): Add an
-        // upscale run-fill kernel that writes repeated destination spans from
-        // one source pixel when adjacent output x coordinates map to the same
-        // input. Benchmark with `ditherette-bench run nearest --scales 2,4
-        // --baseline perf-loop-nearest-upscale`.
+        // REJECT(perf): Generic exact-upscale run-fill regressed 2x by -21.03%
+        // in `ditherette-bench run nearest --baseline accepted`; do not retry
+        // without a 2x-specific strategy or different representative workload.
         for (output_x, source_start) in x_source_starts.iter().copied().enumerate() {
             let output_start = output_x * F::CHANNEL_COUNT;
             let source_pixel = &source_row[source_start..source_start + F::CHANNEL_COUNT];
