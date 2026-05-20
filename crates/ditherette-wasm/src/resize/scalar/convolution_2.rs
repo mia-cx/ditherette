@@ -149,25 +149,78 @@ fn vertical_sample_by_source_row(
 
         vertical_row.fill(0.0);
 
-        // TODO(perf:kernel, rank=5, after perf:layout flat-contribution-plan):
-        // Specialize fixed-tap bicubic and lanczos3 vertical loops once the plan exposes
-        // tap counts without nested Vec iteration. Benchmark bicubic_2 and lanczos3_2 separately.
-        for (weight_offset, weight) in y_contribution.weights.iter().enumerate() {
-            let source_y = y_contribution.first + weight_offset;
-            debug_assert!(source_y < source_height);
-            let source_row_start = source_y * source_row_byte_len;
-            let source_row = &source_rgba[source_row_start..source_row_start + source_row_byte_len];
-
-            for (source_pixel, vertical_pixel) in source_row
-                .chunks_exact(rgba::RGBA_CHANNEL_COUNT)
-                .zip(vertical_row.chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT))
-            {
-                vertical_pixel[0] += f32::from(source_pixel[0]) * weight;
-                vertical_pixel[1] += f32::from(source_pixel[1]) * weight;
-                vertical_pixel[2] += f32::from(source_pixel[2]) * weight;
-                vertical_pixel[3] += f32::from(source_pixel[3]) * weight;
+        match y_contribution.weights.as_slice() {
+            [w0, w1, w2, w3] => {
+                accumulate_source_row(
+                    source_rgba,
+                    source_width,
+                    source_height,
+                    y_contribution.first,
+                    *w0,
+                    vertical_row,
+                );
+                accumulate_source_row(
+                    source_rgba,
+                    source_width,
+                    source_height,
+                    y_contribution.first + 1,
+                    *w1,
+                    vertical_row,
+                );
+                accumulate_source_row(
+                    source_rgba,
+                    source_width,
+                    source_height,
+                    y_contribution.first + 2,
+                    *w2,
+                    vertical_row,
+                );
+                accumulate_source_row(
+                    source_rgba,
+                    source_width,
+                    source_height,
+                    y_contribution.first + 3,
+                    *w3,
+                    vertical_row,
+                );
+            }
+            weights => {
+                for (weight_offset, weight) in weights.iter().enumerate() {
+                    accumulate_source_row(
+                        source_rgba,
+                        source_width,
+                        source_height,
+                        y_contribution.first + weight_offset,
+                        *weight,
+                        vertical_row,
+                    );
+                }
             }
         }
+    }
+}
+
+fn accumulate_source_row(
+    source_rgba: &[u8],
+    source_width: usize,
+    source_height: usize,
+    source_y: usize,
+    weight: f32,
+    vertical_row: &mut [f32],
+) {
+    debug_assert!(source_y < source_height);
+    let source_row_byte_len = source_width * rgba::RGBA_CHANNEL_COUNT;
+    let source_row_start = source_y * source_row_byte_len;
+    let source_row = &source_rgba[source_row_start..source_row_start + source_row_byte_len];
+
+    for (source_pixel, vertical_pixel) in source_row
+        .chunks_exact(rgba::RGBA_CHANNEL_COUNT)
+        .zip(vertical_row.chunks_exact_mut(rgba::RGBA_CHANNEL_COUNT))
+    {
+        vertical_pixel[0] += f32::from(source_pixel[0]) * weight;
+        vertical_pixel[1] += f32::from(source_pixel[1]) * weight;
+        vertical_pixel[2] += f32::from(source_pixel[2]) * weight;
+        vertical_pixel[3] += f32::from(source_pixel[3]) * weight;
     }
 }
 
