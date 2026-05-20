@@ -162,7 +162,7 @@ fn resize_prod_nearest_subject(
                 .as_ref()
                 .is_some_and(|plan| plan.matches(source.dimensions(), output.dimensions(), anchor))
             {
-                *cached = Some(NearestResizePlan::new::<Rgba8>(
+                *cached = Some(NearestResizePlan::new(
                     source.dimensions(),
                     output.dimensions(),
                     anchor,

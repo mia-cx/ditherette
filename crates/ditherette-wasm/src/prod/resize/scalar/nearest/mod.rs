@@ -1,15 +1,13 @@
 //! Scalar production nearest-neighbor resize.
 //!
-//! Production nearest keeps the readable spec independent and specializes the
-//! measured production default: normalized packed RGBA8. The generic path remains
-//! as a compatibility fallback; packed RGBA8 owns the hot kernels.
+//! Production nearest keeps the readable spec independent and enforces the
+//! production resize boundary: normalized packed RGBA8. Nearest is the only
+//! resize filter that currently word-copies pixels.
 
 pub mod alignment;
-mod generic;
 mod packed;
-mod strided_rgba8;
 
-use crate::image::{rgba8, ImageDimensions, ImageFormat, ImageView, ImageViewMut, Rgba8};
+use crate::image::{rgba8, ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
 use alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor};
 
@@ -64,7 +62,7 @@ struct SourceXCopySpan {
 
 impl NearestResizePlan {
     /// Builds reusable coordinate metadata for nearest-neighbor resize.
-    pub fn new<F: ImageFormat>(
+    pub fn new(
         source_dimensions: ImageDimensions,
         output_dimensions: ImageDimensions,
         anchor: ResizeAnchor,
@@ -85,7 +83,7 @@ impl NearestResizePlan {
                 x_alignment,
             )
             .into_iter()
-            .map(|source_x| source_x as usize * F::CHANNEL_COUNT)
+            .map(|source_x| source_x as usize * rgba8::RGBA8_CHANNELS)
             .collect()
         };
         let y_coordinates = if exact_downscale.is_some() {
@@ -143,7 +141,7 @@ pub fn resize_nearest_rgba8_into(
     output: ImageViewMut<'_, Rgba8>,
     anchor: ResizeAnchor,
 ) {
-    let plan = NearestResizePlan::new::<Rgba8>(source.dimensions(), output.dimensions(), anchor);
+    let plan = NearestResizePlan::new(source.dimensions(), output.dimensions(), anchor);
     resize_nearest_rgba8_with_plan_into(source, output, &plan);
 }
 
@@ -156,24 +154,16 @@ pub fn resize_nearest_rgba8_with_plan_into(
     debug_assert_eq!(source.dimensions(), plan.source_dimensions);
     debug_assert_eq!(output.dimensions(), plan.output_dimensions);
 
-    if rgba8::is_packed_stride(source.dimensions(), source.stride())
-        && rgba8::is_packed_stride(output.dimensions(), output.stride())
-    {
-        packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), plan);
-        return;
-    }
+    assert!(
+        rgba8::is_packed_stride(source.dimensions(), source.stride()),
+        "production nearest resize requires packed RGBA8 source rows"
+    );
+    assert!(
+        rgba8::is_packed_stride(output.dimensions(), output.stride()),
+        "production nearest resize requires packed RGBA8 output rows"
+    );
 
-    strided_rgba8::resize_with_plan_into(source, output, plan);
-}
-
-/// Resize `source` into `output` by copying the nearest source pixel.
-pub fn resize_nearest_into<F: ImageFormat>(
-    source: ImageView<'_, F>,
-    output: ImageViewMut<'_, F>,
-    anchor: ResizeAnchor,
-) {
-    let plan = NearestResizePlan::new::<F>(source.dimensions(), output.dimensions(), anchor);
-    generic::resize_with_plan_into(source, output, &plan);
+    packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), plan);
 }
 
 const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 10;
