@@ -22,12 +22,6 @@ use crate::{
 // found no represented 1x/same-width case in the current nearest profile and
 // regressed most measured cases in `ditherette-bench run nearest --baseline
 // accepted`; do not retry without a dedicated identity/same-width subject.
-// TODO(perf:path, rank=4, after perf:kernel rgba8-word-copy): Restore the old
-// nearest span-copy path for near-1x downscales where source x coordinates form
-// long contiguous runs. Keep the old average-span threshold as the first
-// hypothesis; verify with `--oracle spec:resize:nearest:scalar` and benchmark
-// `ditherette-bench run nearest --baseline accepted` on 0.85x-0.99x Celeste box
-// art.
 
 /// Reusable nearest-neighbor resize metadata for one source/output shape.
 pub struct NearestResizePlan {
@@ -37,6 +31,14 @@ pub struct NearestResizePlan {
     x_source_starts: Vec<usize>,
     y_coordinates: Vec<u32>,
     exact_downscale: Option<(u32, u32)>,
+    source_x_copy_spans: Vec<SourceXCopySpan>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SourceXCopySpan {
+    source_start: usize,
+    output_start: usize,
+    byte_len: usize,
 }
 
 impl NearestResizePlan {
@@ -74,6 +76,13 @@ impl NearestResizePlan {
                 y_alignment,
             )
         };
+        let source_x_copy_spans = source_x_copy_spans(
+            source_dimensions.width(),
+            source_dimensions.height(),
+            output_dimensions.width(),
+            output_dimensions.height(),
+            &x_source_starts,
+        );
 
         Self {
             source_dimensions,
@@ -82,6 +91,7 @@ impl NearestResizePlan {
             x_source_starts,
             y_coordinates,
             exact_downscale,
+            source_x_copy_spans,
         }
     }
 
@@ -122,6 +132,22 @@ pub fn resize_nearest_rgba8_with_plan_into(
         return;
     }
 
+    if plan.source_x_copy_spans.is_empty() {
+        for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+            let source_row = source
+                .row(source_y)
+                .expect("mapped source y should stay in bounds");
+            let output_row = output
+                .row_mut(output_y as u32)
+                .expect("output y from dimensions should stay in bounds");
+
+            for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
+                copy_rgba8_pixel_word(source_row, source_start, output_row, output_x * 4);
+            }
+        }
+        return;
+    }
+
     for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
         let source_row = source
             .row(source_y)
@@ -130,8 +156,9 @@ pub fn resize_nearest_rgba8_with_plan_into(
             .row_mut(output_y as u32)
             .expect("output y from dimensions should stay in bounds");
 
-        for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
-            copy_rgba8_pixel_word(source_row, source_start, output_row, output_x * 4);
+        for span in &plan.source_x_copy_spans {
+            output_row[span.output_start..span.output_start + span.byte_len]
+                .copy_from_slice(&source_row[span.source_start..span.source_start + span.byte_len]);
         }
     }
 }
@@ -183,6 +210,52 @@ fn resize_nearest_with_plan_into<F: ImageFormat>(
             output_pixel.copy_from_slice(source_pixel);
         }
     }
+}
+
+const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 10;
+
+fn source_x_copy_spans(
+    source_width: u32,
+    source_height: u32,
+    output_width: u32,
+    output_height: u32,
+    x_source_starts: &[usize],
+) -> Vec<SourceXCopySpan> {
+    if source_width <= output_width || source_height <= output_height || x_source_starts.is_empty()
+    {
+        return Vec::new();
+    }
+
+    let skipped_source_columns = source_width as usize - output_width as usize;
+    let average_span_pixels = output_width as usize / skipped_source_columns.max(1);
+    if average_span_pixels < MIN_SPAN_COPY_AVERAGE_PIXELS {
+        return Vec::new();
+    }
+
+    let mut spans = Vec::new();
+    let mut span_output_start = 0;
+    let mut span_source_start = x_source_starts[0];
+    let mut previous_source_start = span_source_start;
+
+    for (output_x, source_start) in x_source_starts.iter().copied().enumerate().skip(1) {
+        if source_start != previous_source_start + 4 {
+            spans.push(SourceXCopySpan {
+                source_start: span_source_start,
+                output_start: span_output_start * 4,
+                byte_len: (output_x - span_output_start) * 4,
+            });
+            span_output_start = output_x;
+            span_source_start = source_start;
+        }
+        previous_source_start = source_start;
+    }
+
+    spans.push(SourceXCopySpan {
+        source_start: span_source_start,
+        output_start: span_output_start * 4,
+        byte_len: (x_source_starts.len() - span_output_start) * 4,
+    });
+    spans
 }
 
 fn exact_downscale_factors(
