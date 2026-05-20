@@ -22,18 +22,7 @@ use crate::{
 // found no represented 1x/same-width case in the current nearest profile and
 // regressed most measured cases in `ditherette-bench run nearest --baseline
 // accepted`; do not retry without a dedicated identity/same-width subject.
-// TODO(perf:api, rank=1): Add a packed-RGBA8-only nearest entry point that
-// receives raw source/output slices plus dimensions after boundary validation,
-// bypassing `ImageView::row`/`ImageViewMut::row_mut` and stride handling for the
-// benchmarked production path. Hypothesis: the old parity snapshot in
-// `crates/ditherette-bench/ARTIFACTS.md` shows old is 35-43% faster on large
-// upscales and 0.75x; removing safe row lookup overhead may close part of that
-// broad gap without changing output layout. Verify with
-// `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --features
-// bench-subjects --test prod_resize_nearest`, then benchmark with
-// `cargo run --release --manifest-path crates/ditherette-bench/Cargo.toml -- run
-// nearest --baseline accepted`.
-// TODO(perf:path, rank=2, after perf:api packed-rgba8-nearest): Split the packed
+// TODO(perf:path, rank=2): Split the packed
 // nearest dispatcher into measured scale classes (`exact-downscale`,
 // `near-identity-downscale`, `other-downscale`, `upscale`) before adding more
 // kernels. Hypothesis: old wins and losses are strongly scale-class dependent
@@ -165,6 +154,18 @@ pub fn resize_nearest_rgba8_with_plan_into(
     debug_assert_eq!(source.dimensions(), plan.source_dimensions);
     debug_assert_eq!(output.dimensions(), plan.output_dimensions);
 
+    if is_packed_rgba8(source.dimensions(), source.stride().elements())
+        && is_packed_rgba8(output.dimensions(), output.stride().elements())
+    {
+        resize_nearest_packed_rgba8_with_plan_into(
+            source.data(),
+            source.dimensions(),
+            output.data_mut(),
+            plan,
+        );
+        return;
+    }
+
     let (x_alignment, y_alignment) = plan.anchor.axes();
     if let Some((x_factor, y_factor)) = plan.exact_downscale {
         resize_exact_downscale_rgba8(source, output, x_factor, y_factor, x_alignment, y_alignment);
@@ -252,6 +253,94 @@ fn resize_nearest_with_plan_into<F: ImageFormat>(
 }
 
 const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 10;
+
+fn is_packed_rgba8(dimensions: ImageDimensions, stride_elements: usize) -> bool {
+    stride_elements == dimensions.width_usize() * 4
+}
+
+fn resize_nearest_packed_rgba8_with_plan_into(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+) {
+    let (x_alignment, y_alignment) = plan.anchor.axes();
+    if let Some((x_factor, y_factor)) = plan.exact_downscale {
+        resize_exact_downscale_packed_rgba8(
+            source,
+            source_dimensions,
+            output,
+            plan.output_dimensions,
+            x_factor,
+            y_factor,
+            x_alignment,
+            y_alignment,
+        );
+        return;
+    }
+
+    let source_row_len = source_dimensions.width_usize() * 4;
+    let output_row_len = plan.output_dimensions.width_usize() * 4;
+
+    if plan.source_x_copy_spans.is_empty() {
+        for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+            let source_row_start = source_y as usize * source_row_len;
+            let output_row_start = output_y * output_row_len;
+
+            for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
+                copy_rgba8_pixel_word(
+                    source,
+                    source_row_start + source_start,
+                    output,
+                    output_row_start + output_x * 4,
+                );
+            }
+        }
+        return;
+    }
+
+    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+        let source_row_start = source_y as usize * source_row_len;
+        let output_row_start = output_y * output_row_len;
+
+        for span in &plan.source_x_copy_spans {
+            let source_start = source_row_start + span.source_start;
+            let output_start = output_row_start + span.output_start;
+            output[output_start..output_start + span.byte_len]
+                .copy_from_slice(&source[source_start..source_start + span.byte_len]);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resize_exact_downscale_packed_rgba8(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    output_dimensions: ImageDimensions,
+    x_factor: u32,
+    y_factor: u32,
+    x_alignment: AxisAlignment,
+    y_alignment: AxisAlignment,
+) {
+    let x_offset = alignment_offset(x_factor, x_alignment) as usize * 4;
+    let y_offset = alignment_offset(y_factor, y_alignment);
+    let x_step = x_factor as usize * 4;
+    let source_row_len = source_dimensions.width_usize() * 4;
+    let output_row_len = output_dimensions.width_usize() * 4;
+
+    for output_y in 0..output_dimensions.height_usize() {
+        let source_y = output_y as u32 * y_factor + y_offset;
+        let source_row_start = source_y as usize * source_row_len;
+        let output_row_start = output_y * output_row_len;
+
+        for output_x in 0..output_dimensions.width_usize() {
+            let source_start = source_row_start + output_x * x_step + x_offset;
+            let output_start = output_row_start + output_x * 4;
+            copy_rgba8_pixel_word(source, source_start, output, output_start);
+        }
+    }
+}
 
 fn source_x_copy_spans(
     source_width: u32,
