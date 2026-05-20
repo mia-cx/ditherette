@@ -1,0 +1,66 @@
+[package]
+name = "ditherette-wasm-old"
+version = "0.1.0"
+edition = "2021"
+description = "Rust/Wasm core for Ditherette experiments."
+license = "UNLICENSED"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+tiling = ["dep:rayon"]
+
+[dependencies]
+rayon = { version = "1.11", optional = true }
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+brunch = "0.11.1"
+criterion = { version = "0.7", features = ["html_reports"] }
+fast_image_resize = { version = "6.0.0", features = ["only_u8x4"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+resize = "0.8.9"
+rgb = "0.8"
+
+[[bench]]
+name = "crit_resize_nearest"
+harness = false
+
+[[bench]]
+name = "crit_resize_bilinear"
+harness = false
+
+
+[[bench]]
+name = "crit_row_band_tiling"
+harness = false
+required-features = ["tiling"]
+
+[[bench]]
+name = "crit_tiling_overhead"
+harness = false
+required-features = ["tiling"]
+
+[[bench]]
+name = "crit_area_resampling"
+harness = false
+
+
+[[example]]
+name = "tiling_sweep"
+required-features = ["tiling"]
+
+[[example]]
+name = "resize_quick_bench"
+
+[profile.release]
+opt-level = "s"
+
+[profile.bench]
+opt-level = 3

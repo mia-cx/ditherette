@@ -1,0 +1,9 @@
+[package]
+name = "ditherette-bench-api"
+version = "0.1.0"
+edition = "2021"
+description = "Stable benchmark subject contracts for Ditherette."
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
