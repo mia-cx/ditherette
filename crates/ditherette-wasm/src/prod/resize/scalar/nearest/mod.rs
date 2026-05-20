@@ -1,8 +1,11 @@
 //! Scalar production nearest-neighbor resize.
 //!
-//! Production nearest keeps the readable spec independent and enforces the
-//! production resize boundary: normalized packed RGBA8. Nearest is the only
-//! resize filter that currently word-copies pixels.
+//! Production nearest-neighbor resize.
+//!
+//! This module defines the optimized nearest path for production resize while
+//! keeping the readable `spec` oracle independent. Inputs cross the shared prod
+//! resize boundary as normalized packed RGBA8; this module owns only nearest
+//! planning and nearest-specific word-copy kernels.
 
 pub mod alignment;
 mod packed;
@@ -37,6 +40,11 @@ use alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor};
 // stricter near-identity span-copy gate.
 
 /// Reusable nearest-neighbor resize metadata for one source/output shape.
+///
+/// The plan caches x/y coordinate maps and scale-class decisions that are
+/// independent of the input pixels. Benchmarks reuse plans for repeated cases;
+/// callers must use a plan whose source dimensions, output dimensions, and
+/// anchor match the current resize request.
 pub struct NearestResizePlan {
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
@@ -64,7 +72,11 @@ struct SourceXCopySpan {
 }
 
 impl NearestResizePlan {
-    /// Builds reusable coordinate metadata for nearest-neighbor resize.
+    /// Build reusable coordinate metadata for one nearest-neighbor resize shape.
+    ///
+    /// The plan assumes production RGBA8 layout when it computes byte offsets
+    /// for x coordinates. Packed-row validation happens at the resize boundary,
+    /// not during plan construction.
     pub fn new(
         source_dimensions: ImageDimensions,
         output_dimensions: ImageDimensions,
@@ -126,6 +138,7 @@ impl NearestResizePlan {
         }
     }
 
+    /// Return whether this plan was built for the given shape and anchor.
     pub fn matches(
         &self,
         source_dimensions: ImageDimensions,
@@ -138,7 +151,11 @@ impl NearestResizePlan {
     }
 }
 
-/// Resize RGBA8 `source` into `output` by copying the nearest source pixel.
+/// Resize packed RGBA8 `source` into packed RGBA8 `output` with nearest sampling.
+///
+/// This is the convenience entrypoint for one-off production nearest calls. It
+/// builds a plan, validates the shared packed-RGBA8 resize boundary, then copies
+/// each output pixel from its nearest source pixel.
 pub fn resize_nearest_rgba8_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -148,7 +165,12 @@ pub fn resize_nearest_rgba8_into(
     resize_nearest_rgba8_with_plan_into(source, output, &plan);
 }
 
-/// Resize RGBA8 `source` into `output` using precomputed nearest-neighbor metadata.
+/// Resize packed RGBA8 `source` into packed RGBA8 `output` with a cached plan.
+///
+/// This is the benchmark and hot-loop entrypoint. The plan must match the input
+/// and output dimensions. Packed-row assertions are intentionally kept here so
+/// all callers hit the same production resize boundary before entering the
+/// nearest word-copy kernel.
 pub fn resize_nearest_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,

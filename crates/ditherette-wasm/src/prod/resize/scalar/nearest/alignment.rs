@@ -17,18 +17,28 @@ pub enum AxisAlignment {
 /// Two-dimensional resize anchor composed from x/y axis alignments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResizeAnchor {
+    /// Align source and output top-left corners.
     TopLeft,
+    /// Center horizontally and align top edges.
     Top,
+    /// Align source and output top-right corners.
     TopRight,
+    /// Align left edges and center vertically.
     Left,
+    /// Align pixel centers on both axes.
     Center,
+    /// Align right edges and center vertically.
     Right,
+    /// Align source and output bottom-left corners.
     BottomLeft,
+    /// Center horizontally and align bottom edges.
     Bottom,
+    /// Align source and output bottom-right corners.
     BottomRight,
 }
 
 impl ResizeAnchor {
+    /// Decompose the two-dimensional anchor into horizontal and vertical alignments.
     pub const fn axes(self) -> (AxisAlignment, AxisAlignment) {
         match self {
             Self::TopLeft => (AxisAlignment::Start, AxisAlignment::Start),
@@ -59,6 +69,11 @@ pub fn axis_coordinate_map(source_len: u32, output_len: u32, alignment: AxisAlig
         .collect()
 }
 
+/// Map one output coordinate to the nearest source coordinate for one axis.
+///
+/// The formulas are duplicated from `spec` so production kernels can build
+/// coordinate maps without importing oracle code. Results are clamped to the
+/// last source coordinate to cover integer edge cases at the far edge.
 pub fn map_axis_coordinate(
     output_coordinate: u32,
     source_len: u32,

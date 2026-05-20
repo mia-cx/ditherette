@@ -1,3 +1,10 @@
+//! Packed RGBA8 production kernels for nearest-neighbor resize.
+//!
+//! This module assumes the shared production resize boundary has already
+//! rejected padded rows and non-RGBA formats. Its nearest-specific optimization
+//! is copying unchanged RGBA pixels as unaligned `u32` words while preserving
+//! the public byte layout.
+
 use crate::image::{rgba8, ImageDimensions};
 
 use super::{alignment::AxisAlignment, alignment_offset, NearestResizePlan, NearestScaleClass};
