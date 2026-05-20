@@ -491,16 +491,16 @@ The accepted baseline represents the current approved performance state for the 
 --baseline area-prod-accepted
 --save-baseline area-prod-accepted
 --replace-baseline area-prod-accepted
---no-run
 ```
 
 Rules:
 
-- `--save-baseline` fails if the baseline already exists unless `--force` is passed.
+- `--baseline NAME` compares against accepted baseline `NAME`.
+- `--save-baseline NAME` runs the benchmark, writes the accepted baseline from that new run, and overwrites an existing baseline with the same name.
 - Every measured `perf` run writes a latest-run cache for its command/domain.
-- `--replace-baseline NAME` replaces accepted baseline `NAME` from that latest-run cache, then immediately performs a fresh run compared against the replaced baseline.
-- `--replace-baseline NAME --no-run` only replaces the accepted baseline from the latest-run cache and exits.
-- The harness does not decide whether a change is accepted; acceptance is a human/workflow decision made before invoking `--replace-baseline`.
+- `--replace-baseline NAME` does not start a benchmark run; it replaces accepted baseline `NAME` from that latest-run cache and exits.
+- `--replace-baseline NAME --no-run` is accepted for old muscle memory, but `--no-run` is otherwise unnecessary.
+- The harness does not decide whether a change is accepted; acceptance is a human/workflow decision made before invoking `--save-baseline`/`--replace-baseline`.
 - Accepted baseline comparisons are pass/fail gates when `--accept-if` or regression flags are set.
 
 ### Oracle and spec baseline support
@@ -742,7 +742,7 @@ ditherette-bench comp resize \
   --accept-if "right <= left * 0.98"
 ```
 
-If the comparison result is accepted, update the perf baseline separately with `perf --replace-baseline NAME --no-run` or `perf --replace-baseline NAME`.
+If the comparison result is accepted, update the perf baseline separately with `perf --replace-baseline NAME` to promote the latest run, or `perf --save-baseline NAME` to take a fresh accepted run.
 
 ### Comp table
 
