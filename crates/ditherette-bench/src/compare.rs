@@ -63,6 +63,15 @@ pub(crate) fn has_exact_comparisons(results: &[BenchResult], baseline: &BenchRun
     })
 }
 
+pub(crate) fn attach_accepted_comparison(result: &mut BenchResult, baseline: &BenchRun) {
+    attach_exact_baseline_comparisons(
+        std::slice::from_mut(result),
+        baseline,
+        "accepted",
+        "accepted",
+    );
+}
+
 pub(crate) fn attach_accepted_comparisons(
     results: &mut [BenchResult],
     baseline: Option<&BenchRun>,
