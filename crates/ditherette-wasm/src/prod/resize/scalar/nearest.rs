@@ -5,7 +5,7 @@
 //! or specialize loops while preserving oracle compatibility.
 
 use crate::{
-    image::{ImageDimensions, ImageFormat, ImageView, ImageViewMut},
+    image::{ImageDimensions, ImageFormat, ImageView, ImageViewMut, Rgba8},
     prod::resize::common::alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor},
 };
 
@@ -18,20 +18,7 @@ use crate::{
 // DEFER(perf): Fractional nearest path splits have no concrete benchmarkable
 // shape yet; exact downscale is accepted, while identity-only and exact-upscale
 // paths were rejected under the default `nearest` profile.
-// TODO(perf:api, rank=1): Split production nearest into an explicit `Rgba8`
-// entry point instead of optimizing the format-generic `ImageFormat` path; all
-// Ditherette resize inputs are normalized RGBA8, and this should let prod use
-// old-crate byte/word kernels without preserving unused color-space generality.
-// Verify with `ditherette-bench run nearest --oracle spec:resize:nearest:scalar`;
-// benchmark Celeste box art with `ditherette-bench run nearest --baseline accepted`.
-// TODO(perf:kernel, rank=2, after perf:api rgba8-nearest): Word-pack nearest
-// pixel copies for RGBA8 using unaligned u32 reads/writes like
-// `ditherette-wasm-old/src/resize/scalar/nearest.rs::copy_pixel_word`. This is
-// probably specific to nearest because other filters compute channel values
-// rather than copying whole source pixels. Benchmark `ditherette-bench run
-// nearest --baseline accepted`, especially 0.25x/0.5x/0.75x/0.95x/2x Celeste
-// box-art cases that still trail the old crate.
-// TODO(perf:path, rank=3, after perf:api rgba8-nearest): Restore old nearest
+// TODO(perf:path, rank=3): Restore old nearest
 // identity and same-width row-copy fast paths for RGBA8; the expanded Celeste
 // box-art matrix includes 1x and near-axis-preserving cases where whole-buffer
 // or whole-row copies should dominate per-pixel loops. Benchmark with
@@ -111,6 +98,45 @@ impl NearestResizePlan {
     }
 }
 
+/// Resize RGBA8 `source` into `output` by copying the nearest source pixel.
+pub fn resize_nearest_rgba8_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    anchor: ResizeAnchor,
+) {
+    let plan = NearestResizePlan::new::<Rgba8>(source.dimensions(), output.dimensions(), anchor);
+    resize_nearest_rgba8_with_plan_into(source, output, &plan);
+}
+
+/// Resize RGBA8 `source` into `output` using precomputed nearest-neighbor metadata.
+pub fn resize_nearest_rgba8_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &NearestResizePlan,
+) {
+    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
+    debug_assert_eq!(output.dimensions(), plan.output_dimensions);
+
+    let (x_alignment, y_alignment) = plan.anchor.axes();
+    if let Some((x_factor, y_factor)) = plan.exact_downscale {
+        resize_exact_downscale_rgba8(source, output, x_factor, y_factor, x_alignment, y_alignment);
+        return;
+    }
+
+    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+        let source_row = source
+            .row(source_y)
+            .expect("mapped source y should stay in bounds");
+        let output_row = output
+            .row_mut(output_y as u32)
+            .expect("output y from dimensions should stay in bounds");
+
+        for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
+            copy_rgba8_pixel_word(source_row, source_start, output_row, output_x * 4);
+        }
+    }
+}
+
 /// Resize `source` into `output` by copying the nearest source pixel.
 pub fn resize_nearest_into<F: ImageFormat>(
     source: ImageView<'_, F>,
@@ -122,7 +148,7 @@ pub fn resize_nearest_into<F: ImageFormat>(
 }
 
 /// Resize `source` into `output` using precomputed nearest-neighbor metadata.
-pub fn resize_nearest_with_plan_into<F: ImageFormat>(
+fn resize_nearest_with_plan_into<F: ImageFormat>(
     source: ImageView<'_, F>,
     mut output: ImageViewMut<'_, F>,
     plan: &NearestResizePlan,
@@ -174,6 +200,52 @@ fn exact_downscale_factors(
     }
 
     Some((source_width / output_width, source_height / output_height))
+}
+
+fn resize_exact_downscale_rgba8(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    x_factor: u32,
+    y_factor: u32,
+    x_alignment: AxisAlignment,
+    y_alignment: AxisAlignment,
+) {
+    let x_offset = alignment_offset(x_factor, x_alignment) as usize * 4;
+    let y_offset = alignment_offset(y_factor, y_alignment);
+    let x_step = x_factor as usize * 4;
+    let output_width = output.dimensions().width_usize();
+
+    for output_y in 0..output.dimensions().height() {
+        let source_y = output_y * y_factor + y_offset;
+        let source_row = source
+            .row(source_y)
+            .expect("mapped source y should stay in bounds");
+        let output_row = output
+            .row_mut(output_y)
+            .expect("output y from dimensions should stay in bounds");
+
+        for output_x in 0..output_width {
+            let source_start = output_x * x_step + x_offset;
+            let output_start = output_x * 4;
+            copy_rgba8_pixel_word(source_row, source_start, output_row, output_start);
+        }
+    }
+}
+
+fn copy_rgba8_pixel_word(
+    source_row: &[u8],
+    source_start: usize,
+    output_row: &mut [u8],
+    output_start: usize,
+) {
+    // SAFETY: Source and output offsets are derived from validated rows and
+    // in-bounds nearest coordinate maps. Unaligned access is intentional for
+    // packed byte-backed RGBA memory.
+    unsafe {
+        let source_ptr = source_row.as_ptr().add(source_start).cast::<u32>();
+        let output_ptr = output_row.as_mut_ptr().add(output_start).cast::<u32>();
+        output_ptr.write_unaligned(source_ptr.read_unaligned());
+    }
 }
 
 // REJECT(perf): Incrementing exact-downscale source/output offsets instead of
