@@ -71,7 +71,12 @@
 		"crit:cmp:bicubic2": "node scripts/criterion-compare.mjs --compare resize:bicubic:scalar --to resize:bicubic:scalar_2",
 		"crit:resize:convolution_2": "node scripts/criterion-resize.mjs --kernel convolution_2",
 		"crit:resize:lanczos3_2": "node scripts/criterion-resize.mjs --kernel filters --filter lanczos3_2",
-		"crit:cmp:lanczos3_2": "node scripts/criterion-compare.mjs --compare resize:lanczos3:scalar --to resize:lanczos3:scalar_2"
+		"crit:cmp:lanczos3_2": "node scripts/criterion-compare.mjs --compare resize:lanczos3:scalar --to resize:lanczos3:scalar_2",
+		"crit:resize:convolution_2:fixed": "node scripts/criterion-resize.mjs --kernel convolution_2_fixed",
+		"crit:resize:bicubic2:fixed": "node scripts/criterion-resize.mjs --kernel filters --filter bicubic_2_fixed",
+		"crit:resize:bicubic2:scale-aware": "node scripts/criterion-resize.mjs --kernel filters --filter bicubic_2_scale_aware",
+		"crit:resize:lanczos3_2:fixed": "node scripts/criterion-resize.mjs --kernel filters --filter lanczos3_2_fixed",
+		"crit:resize:lanczos3_2:scale-aware": "node scripts/criterion-resize.mjs --kernel filters --filter lanczos3_2_scale_aware"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.4",

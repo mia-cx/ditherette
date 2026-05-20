@@ -21,13 +21,19 @@ use ditherette_wasm::{
         antialias::antialias_rgba_box3_reference_into,
         antialias_rgba_box3_into,
         area::{resize_rgba_area_reference_into, resize_rgba_area_scalar_into},
-        bicubic::{resize_rgba_bicubic_2_into, resize_rgba_bicubic_reference_into},
+        bicubic::{
+            resize_rgba_bicubic_2_fixed_into, resize_rgba_bicubic_2_into,
+            resize_rgba_bicubic_2_scale_aware_into, resize_rgba_bicubic_reference_into,
+        },
         bilinear::{
             resize_rgba_bilinear_2_into, resize_rgba_bilinear_reference_into,
             resize_rgba_bilinear_scalar_into,
         },
         lanczos::resize_rgba_lanczos_reference_into,
-        lanczos3::resize_rgba_lanczos3_2_into,
+        lanczos3::{
+            resize_rgba_lanczos3_2_fixed_into, resize_rgba_lanczos3_2_into,
+            resize_rgba_lanczos3_2_scale_aware_into,
+        },
         nearest::{resize_rgba_nearest_reference_into, resize_rgba_nearest_scalar_into},
         r#box::resize_rgba_box_reference_into,
         resize_rgba_bicubic_into, resize_rgba_bilinear_into, resize_rgba_box_into,
@@ -139,7 +145,7 @@ const RESIZE_SCALES: [Scale; 10] = [
     EXACT_DOWNSCALE_SCALES[3],
 ];
 
-const RESIZE_FILTERS: [ResizeFilter; 23] = [
+const RESIZE_FILTERS: [ResizeFilter; 27] = [
     ResizeFilter::new("nearest", resize_rgba_nearest_bench_into),
     ResizeFilter::new("nearest_reference", resize_rgba_nearest_reference_into),
     ResizeFilter::new("bilinear", resize_rgba_bilinear_into),
@@ -149,6 +155,11 @@ const RESIZE_FILTERS: [ResizeFilter; 23] = [
     ResizeFilter::new("trilinear_reference", resize_rgba_trilinear_reference_into),
     ResizeFilter::new("bicubic", resize_rgba_bicubic_into),
     ResizeFilter::new("bicubic_2", resize_rgba_bicubic_2_into),
+    ResizeFilter::new("bicubic_2_fixed", resize_rgba_bicubic_2_fixed_into),
+    ResizeFilter::new(
+        "bicubic_2_scale_aware",
+        resize_rgba_bicubic_2_scale_aware_into,
+    ),
     ResizeFilter::new("bicubic_reference", resize_rgba_bicubic_reference_into),
     ResizeFilter::new("lanczos2", resize_rgba_lanczos2_into),
     ResizeFilter::new("lanczos2_reference", resize_rgba_lanczos2_reference_into),
@@ -162,6 +173,11 @@ const RESIZE_FILTERS: [ResizeFilter; 23] = [
     ),
     ResizeFilter::new("lanczos3", resize_rgba_lanczos3_into),
     ResizeFilter::new("lanczos3_2", resize_rgba_lanczos3_2_into),
+    ResizeFilter::new("lanczos3_2_fixed", resize_rgba_lanczos3_2_fixed_into),
+    ResizeFilter::new(
+        "lanczos3_2_scale_aware",
+        resize_rgba_lanczos3_2_scale_aware_into,
+    ),
     ResizeFilter::new("lanczos3_reference", resize_rgba_lanczos3_reference_into),
     ResizeFilter::new(
         "lanczos3_scale_aware",
@@ -978,6 +994,12 @@ fn compare_operation_for(filter_name: &str, implementation: &str) -> Option<Comp
         }
         ("bicubic", "scalar") => Some(CompareOperation::Resize(resize_rgba_bicubic_into)),
         ("bicubic", "scalar_2") => Some(CompareOperation::Resize(resize_rgba_bicubic_2_into)),
+        ("bicubic_fixed", "scalar_2") => {
+            Some(CompareOperation::Resize(resize_rgba_bicubic_2_fixed_into))
+        }
+        ("bicubic_scale_aware", "scalar_2") => Some(CompareOperation::Resize(
+            resize_rgba_bicubic_2_scale_aware_into,
+        )),
         ("bicubic", "tiling") => planned_tiling_compare_operation("bicubic"),
         ("lanczos2", "reference") => Some(CompareOperation::Resize(
             resize_rgba_lanczos2_reference_into,
@@ -998,6 +1020,12 @@ fn compare_operation_for(filter_name: &str, implementation: &str) -> Option<Comp
         )),
         ("lanczos3", "scalar") => Some(CompareOperation::Resize(resize_rgba_lanczos3_into)),
         ("lanczos3", "scalar_2") => Some(CompareOperation::Resize(resize_rgba_lanczos3_2_into)),
+        ("lanczos3_fixed", "scalar_2") => {
+            Some(CompareOperation::Resize(resize_rgba_lanczos3_2_fixed_into))
+        }
+        ("lanczos3_scale_aware", "scalar_2") => Some(CompareOperation::Resize(
+            resize_rgba_lanczos3_2_scale_aware_into,
+        )),
         ("lanczos3", "tiling") => planned_tiling_compare_operation("lanczos3"),
         ("lanczos3_scale_aware", "reference") => Some(CompareOperation::Resize(
             resize_rgba_lanczos3_scale_aware_reference_into,
