@@ -7,7 +7,8 @@
 
 use crate::image::{rgba8, ImageDimensions};
 
-use super::{alignment::AxisAlignment, alignment_offset, NearestResizePlan, NearestScaleClass};
+use super::alignment::AxisAlignment;
+use super::plan::{alignment_offset, NearestResizePlan, NearestScaleClass};
 
 pub(super) fn resize_with_plan_into(
     source: &[u8],
