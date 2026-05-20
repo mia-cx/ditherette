@@ -6,7 +6,7 @@
 
 use crate::{
     image::{ImageFormat, ImageView, ImageViewMut},
-    prod::resize::common::alignment::{map_axis_coordinate, ResizeAnchor},
+    prod::resize::common::alignment::{axis_coordinate_map, ResizeAnchor},
 };
 
 // TODO(perf:path, rank=2): Define nearest-paths by splitting prod nearest into
@@ -25,22 +25,26 @@ pub fn resize_nearest_into<F: ImageFormat>(
     let output_dimensions = output.dimensions();
     let (x_alignment, y_alignment) = anchor.axes();
 
-    // TODO(perf:layout, rank=3, after perf:layout nearest-axis-map): Precompute
-    // x byte offsets once per resize so the inner loop loads offsets instead of
-    // recomputing anchor math and `CHANNEL_COUNT` products. Benchmark with
-    // `ditherette-bench run nearest --baseline perf-loop-nearest`.
-    for output_y in 0..output_dimensions.height() {
-        let source_y = map_axis_coordinate(
-            output_y,
-            source_dimensions.height(),
-            output_dimensions.height(),
-            y_alignment,
-        );
+    let x_source_starts = axis_coordinate_map(
+        source_dimensions.width(),
+        output_dimensions.width(),
+        x_alignment,
+    )
+    .into_iter()
+    .map(|source_x| source_x as usize * F::CHANNEL_COUNT)
+    .collect::<Vec<_>>();
+    let y_coordinates = axis_coordinate_map(
+        source_dimensions.height(),
+        output_dimensions.height(),
+        y_alignment,
+    );
+
+    for (output_y, source_y) in y_coordinates.into_iter().enumerate() {
         let source_row = source
             .row(source_y)
             .expect("mapped source y should stay in bounds");
         let output_row = output
-            .row_mut(output_y)
+            .row_mut(output_y as u32)
             .expect("output y from dimensions should stay in bounds");
 
         // TODO(perf:kernel, rank=4, after perf:path nearest-paths): Specialize
@@ -53,15 +57,8 @@ pub fn resize_nearest_into<F: ImageFormat>(
         // one source pixel when adjacent output x coordinates map to the same
         // input. Benchmark with `ditherette-bench run nearest --scales 2,4
         // --baseline perf-loop-nearest-upscale`.
-        for output_x in 0..output_dimensions.width() {
-            let source_x = map_axis_coordinate(
-                output_x,
-                source_dimensions.width(),
-                output_dimensions.width(),
-                x_alignment,
-            );
-            let source_start = source_x as usize * F::CHANNEL_COUNT;
-            let output_start = output_x as usize * F::CHANNEL_COUNT;
+        for (output_x, source_start) in x_source_starts.iter().copied().enumerate() {
+            let output_start = output_x * F::CHANNEL_COUNT;
             let source_pixel = &source_row[source_start..source_start + F::CHANNEL_COUNT];
             let output_pixel = &mut output_row[output_start..output_start + F::CHANNEL_COUNT];
 
