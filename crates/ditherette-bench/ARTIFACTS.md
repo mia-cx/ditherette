@@ -92,9 +92,9 @@ Accepted baselines must match the current run config exactly:
 
 A missing or incompatible accepted baseline entry is an error. Dirty git trees are allowed and recorded.
 
-If no accepted baseline is specified, `perf` compares exact-subject results to the most recent compatible previous run from `crates/ditherette-bench/target/bench/latest/perf-resize.json` before overwriting it with the current run.
+If no accepted baseline is specified, `perf` compares exact-subject results to the most recent compatible previous run from `crates/ditherette-bench/target/bench/latest/perf-resize.json` before overwriting it with the current run. `--save-baseline NAME` runs the benchmark and overwrites accepted baseline `NAME` with that new run. `--replace-baseline NAME` does not run; it overwrites accepted baseline `NAME` from the current latest-run cache and exits.
 
-Oracle baselines are auto-managed. When `--oracle SUBJECT` is provided, the harness loads the matching `oracle` baseline for the current command/domain/measurement/fixture/scale matrix. If it is missing or more than 24 hours old, the harness measures the oracle first, saves a fresh baseline, then runs the requested subjects. `--save-oracle SUBJECT` forces a refresh of that matching oracle baseline before the normal run; bare `--save-oracle` refreshes the `--oracle` subject.
+Oracle baselines are auto-managed. When `--oracle SUBJECT` is provided, the harness loads the matching `oracle` baseline for the current command/domain/measurement/fixture/scale matrix. If it is missing or more than 24 hours old, the harness measures the oracle first, saves a fresh baseline, then runs the requested subjects. `--save-oracle SUBJECT` forces a refresh/replacement of that matching oracle baseline before the normal run; bare `--save-oracle` refreshes the `--oracle` subject. `--replace-oracle` is an alias for `--save-oracle`.
 
 ## Oracle/spec matching
 

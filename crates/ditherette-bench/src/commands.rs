@@ -104,6 +104,12 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     }
 
     let flags = Flags::parse(rest)?;
+    if flags.optional("--save-baseline").is_some() && flags.optional("--replace-baseline").is_some()
+    {
+        return Err(BenchError::Config(
+            "--save-baseline and --replace-baseline are mutually exclusive".to_owned(),
+        ));
+    }
     if flags.present("--no-run") && flags.optional("--replace-baseline").is_none() {
         return Err(BenchError::Config(
             "--no-run is only valid with --replace-baseline".to_owned(),
@@ -112,18 +118,19 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     if let Some(name) = flags.optional("--replace-baseline") {
         let latest = load_latest_run("perf", domain)?;
         save_baseline("accepted", name, &latest, true)?;
-        if flags.present("--no-run") {
-            println!("replaced accepted baseline {name:?} from latest perf/{domain} run");
-            return Ok(());
-        }
+        println!("replaced accepted baseline {name:?} from latest perf/{domain} run");
+        return Ok(());
     }
+    let save_baseline_name = flags.optional("--save-baseline");
 
     let mut subjects = registry.select_resize_subjects(&flags)?;
     if subjects.is_empty() {
         return Err(BenchError::Config("no resize subjects selected".to_owned()));
     }
 
-    let save_oracle = flags.optional("--save-oracle");
+    let save_oracle = flags
+        .optional("--save-oracle")
+        .or_else(|| flags.optional("--replace-oracle"));
     let oracle_arg = match save_oracle {
         Some("true") => flags.optional("--oracle").ok_or_else(|| {
             BenchError::Config(
@@ -163,9 +170,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let fixtures = fixtures_from_flags(&flags)?;
     let scales = scales_from_flags(&flags)?;
     let measurement = MeasurementConfig::from_flags(&flags)?;
-    let accepted_baseline_name = flags
-        .optional("--baseline")
-        .or_else(|| flags.optional("--replace-baseline"));
+    let accepted_baseline_name = flags.optional("--baseline");
     let accepted_baseline = accepted_baseline_name
         .map(|name| load_baseline("accepted", name))
         .transpose()?;
@@ -267,13 +272,13 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     print_perf_table(&run.results);
     let acceptance = acceptance_report(&run.results, &flags)?;
 
-    save_indexed_run(&run, flags.optional("--save-baseline"))?;
+    save_indexed_run(&run, save_baseline_name)?;
     save_latest_run(&run)?;
     if let Some(out) = flags.optional("--out") {
         write_json(out, &run)?;
     }
-    if let Some(name) = flags.optional("--save-baseline") {
-        save_baseline("accepted", name, &run, false)?;
+    if let Some(name) = save_baseline_name {
+        save_baseline("accepted", name, &run, true)?;
     }
     if let Some(name) = flags.optional("--save-spec-baseline") {
         save_baseline("spec", name, &run, false)?;
