@@ -381,9 +381,9 @@ fn render_change_block(stats: &SampleStats, comparison: &ComparisonReport) -> Ve
     let throughput_upper =
         speed_change_percent(stats.median_ns - stats.stdev_ns, comparison.median_ns);
     let verdict = match comparison.status.as_str() {
-        "faster" => "Performance has improved.",
-        "slower" => "Performance has regressed.",
-        _ => "Change within noise threshold.",
+        "faster" => format!("Performance has {}.", green("improved")),
+        "slower" => format!("Performance has {}.", red("regressed")),
+        _ => "Change within noise threshold.".to_owned(),
     };
 
     vec![
