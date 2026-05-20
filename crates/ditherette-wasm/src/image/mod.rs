@@ -9,6 +9,7 @@ pub mod dimensions;
 pub mod formats;
 pub mod owned;
 pub mod pixel;
+pub mod rgba8;
 pub mod stride;
 pub mod validate;
 pub mod view;
