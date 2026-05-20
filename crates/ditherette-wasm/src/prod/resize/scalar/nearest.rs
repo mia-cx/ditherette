@@ -18,11 +18,10 @@ use crate::{
 // DEFER(perf): Fractional nearest path splits have no concrete benchmarkable
 // shape yet; exact downscale is accepted, while identity-only and exact-upscale
 // paths were rejected under the default `nearest` profile.
-// TODO(perf:path, rank=3): Restore old nearest
-// identity and same-width row-copy fast paths for RGBA8; the expanded Celeste
-// box-art matrix includes 1x and near-axis-preserving cases where whole-buffer
-// or whole-row copies should dominate per-pixel loops. Benchmark with
-// `ditherette-bench run nearest --baseline accepted`.
+// REJECT(perf): Adding a same-width RGBA8 row-copy branch before the hot path
+// found no represented 1x/same-width case in the current nearest profile and
+// regressed most measured cases in `ditherette-bench run nearest --baseline
+// accepted`; do not retry without a dedicated identity/same-width subject.
 // TODO(perf:path, rank=4, after perf:kernel rgba8-word-copy): Restore the old
 // nearest span-copy path for near-1x downscales where source x coordinates form
 // long contiguous runs. Keep the old average-span threshold as the first
