@@ -8,6 +8,7 @@ The previous prototype has been preserved as `crates/ditherette-wasm-old`. This 
 
 - Keep public Wasm/API wrappers thin and stable.
 - Separate correctness references from optimized production code.
+- Treat production resize inputs as normalized packed `Rgba8`; convert HDR or other color spaces before resize.
 - Make resize/filter choices explicit presets, not accidental module coupling.
 - Keep shared code limited to invariants, data shapes, and neutral math helpers.
 - Let each optimized filter own its hot path and tiling plan.
