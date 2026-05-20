@@ -22,6 +22,45 @@ use crate::{
 // found no represented 1x/same-width case in the current nearest profile and
 // regressed most measured cases in `ditherette-bench run nearest --baseline
 // accepted`; do not retry without a dedicated identity/same-width subject.
+// TODO(perf:api, rank=1): Add a packed-RGBA8-only nearest entry point that
+// receives raw source/output slices plus dimensions after boundary validation,
+// bypassing `ImageView::row`/`ImageViewMut::row_mut` and stride handling for the
+// benchmarked production path. Hypothesis: the old parity snapshot in
+// `crates/ditherette-bench/ARTIFACTS.md` shows old is 35-43% faster on large
+// upscales and 0.75x; removing safe row lookup overhead may close part of that
+// broad gap without changing output layout. Verify with
+// `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --features
+// bench-subjects --test prod_resize_nearest`, then benchmark with
+// `cargo run --release --manifest-path crates/ditherette-bench/Cargo.toml -- run
+// nearest --baseline accepted`.
+// TODO(perf:path, rank=2, after perf:api packed-rgba8-nearest): Split the packed
+// nearest dispatcher into measured scale classes (`exact-downscale`,
+// `near-identity-downscale`, `other-downscale`, `upscale`) before adding more
+// kernels. Hypothesis: old wins and losses are strongly scale-class dependent
+// (`0.9x` current faster, `0.75x`/upscales old faster), so one fallback loop is
+// leaving class-specific wins hidden. Benchmark with `ditherette-bench run
+// nearest --baseline accepted` and compare against the old parity table in
+// `crates/ditherette-bench/ARTIFACTS.md`.
+// TODO(perf:layout, rank=3, after perf:path nearest-scale-classes): Replace
+// per-output-row `u32` y coordinates in the packed path with byte row offsets
+// and repeated-y run metadata. Hypothesis: upscales repeatedly revisit the same
+// source rows, and old's cached row-byte offsets plus flat buffer addressing may
+// explain part of its 36-43% large-upscale lead. Benchmark `ditherette-bench run
+// nearest --baseline accepted`, focusing on 1.01x, 1.05x, 1.25x, 1.5x, 2x, and
+// 4x cases.
+// TODO(perf:path, rank=4, after perf:layout nearest-row-runs): Add an upscale
+// row-repeat path that computes a source row once per y-run and copies/expands it
+// into all repeated output rows. Hypothesis: this targets the remaining large
+// upscale gap against old without retrying the rejected generic exact-upscale
+// span-fill. Benchmark `ditherette-bench run nearest --baseline accepted`; reject
+// if 2x regresses like the previous generic exact-upscale experiment.
+// TODO(perf:kernel, rank=5, after perf:path nearest-scale-classes): Specialize
+// the 0.75x/other-downscale packed kernel separately from near-identity span
+// copy. Hypothesis: current span-copy wins at 0.9x but old is still 35-39%
+// faster at 0.75x, so a mid-downscale kernel may need different span threshold
+// or precomputed offset shape. Benchmark `ditherette-bench run nearest
+// --baseline accepted`; do not lower the near-identity span threshold globally
+// because the old crate already rejected that class of change.
 
 /// Reusable nearest-neighbor resize metadata for one source/output shape.
 pub struct NearestResizePlan {

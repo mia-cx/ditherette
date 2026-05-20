@@ -162,3 +162,50 @@ Each result records identity, correctness, raw samples, summary statistics, thro
 `sample_ns` contains per-sample nanoseconds per operation. Each sample is one calibrated batch; `iterations_per_sample` records the batch size.
 
 Throughput is currently output megapixels per second. GiB/s is intentionally omitted until subjects expose a credible bytes-processed contract.
+
+## Nearest old-Criterion comparison snapshot
+
+2026-05-14 snapshot saved to avoid rerunning the long old-crate Criterion parity bench just to recover numbers.
+
+Old Criterion command:
+
+```sh
+cargo bench --manifest-path crates/ditherette-wasm-old/Cargo.toml --bench crit_resize_nearest
+```
+
+The old bench was patched to match `ditherette-bench.toml` nearest defaults: fixtures `Celeste_Insta_selfie.png` and `Celeste_box_art.png`; scales `0.1, 0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.01, 1.05, 1.25, 1.5, 2, 4`; sample size `100`; measurement time `5s`; warmup `1s`; output dimensions rounded like the custom harness.
+
+Current numbers are from accepted custom-bench baseline. `cur vs old` is speed-relative from mean times: positive means current prod is faster than old.
+
+| fixture | scale | current mean | old mean | cur vs old |
+|---|---:|---:|---:|---:|
+| Celeste_Insta_selfie | 0.1x | 2.251 µs | 2.176 µs | -3.3% |
+| Celeste_Insta_selfie | 0.125x | 2.947 µs | 2.758 µs | -6.4% |
+| Celeste_Insta_selfie | 0.25x | 9.228 µs | 8.195 µs | -11.2% |
+| Celeste_Insta_selfie | 0.5x | 31.325 µs | 26.437 µs | -15.6% |
+| Celeste_Insta_selfie | 0.75x | 97.676 µs | 59.434 µs | -39.2% |
+| Celeste_Insta_selfie | 0.9x | 140.618 µs | 180.098 µs | +28.1% |
+| Celeste_Insta_selfie | 0.95x | 79.977 µs | 73.276 µs | -8.4% |
+| Celeste_Insta_selfie | 0.99x | 65.532 µs | 55.505 µs | -15.3% |
+| Celeste_Insta_selfie | 1.01x | 174.812 µs | 104.659 µs | -40.1% |
+| Celeste_Insta_selfie | 1.05x | 189.411 µs | 111.957 µs | -40.9% |
+| Celeste_Insta_selfie | 1.25x | 267.959 µs | 157.033 µs | -41.4% |
+| Celeste_Insta_selfie | 1.5x | 382.192 µs | 228.022 µs | -40.3% |
+| Celeste_Insta_selfie | 2x | 671.828 µs | 401.666 µs | -40.2% |
+| Celeste_Insta_selfie | 4x | 2735.824 µs | 1566.540 µs | -42.7% |
+| Celeste_box_art | 0.1x | 42.363 µs | 39.542 µs | -6.7% |
+| Celeste_box_art | 0.125x | 52.478 µs | 50.247 µs | -4.3% |
+| Celeste_box_art | 0.25x | 174.062 µs | 156.456 µs | -10.1% |
+| Celeste_box_art | 0.5x | 720.805 µs | 667.063 µs | -7.5% |
+| Celeste_box_art | 0.75x | 1744.770 µs | 1133.879 µs | -35.0% |
+| Celeste_box_art | 0.9x | 2415.533 µs | 3217.213 µs | +33.2% |
+| Celeste_box_art | 0.95x | 1590.431 µs | 1546.192 µs | -2.8% |
+| Celeste_box_art | 0.99x | 1515.477 µs | 1476.660 µs | -2.6% |
+| Celeste_box_art | 1.01x | 3066.768 µs | 1943.027 µs | -36.6% |
+| Celeste_box_art | 1.05x | 3275.258 µs | 2064.467 µs | -37.0% |
+| Celeste_box_art | 1.25x | 4569.409 µs | 2934.479 µs | -35.8% |
+| Celeste_box_art | 1.5x | 6606.771 µs | 4083.916 µs | -38.2% |
+| Celeste_box_art | 2x | 11557.093 µs | 7139.055 µs | -38.2% |
+| Celeste_box_art | 4x | 46853.405 µs | 26999.089 µs | -42.4% |
+
+Takeaways: current prod is faster than old at `0.9x`; near parity on large `0.95x`/`0.99x`; old remains substantially faster for upscales and `0.75x`.
