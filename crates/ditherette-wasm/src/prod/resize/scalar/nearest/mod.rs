@@ -4,14 +4,14 @@
 //! measured production default: normalized packed RGBA8. The generic path remains
 //! as a compatibility fallback; packed RGBA8 owns the hot kernels.
 
+pub mod alignment;
 mod generic;
 mod packed;
 mod strided_rgba8;
 
-use crate::{
-    image::{rgba8, ImageDimensions, ImageFormat, ImageView, ImageViewMut, Rgba8},
-    prod::resize::common::alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor},
-};
+use crate::image::{rgba8, ImageDimensions, ImageFormat, ImageView, ImageViewMut, Rgba8};
+
+use alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor};
 
 // REJECT(perf): Adding an identity-only path was not represented in the default
 // `nearest` profile and regressed/noised small cases by up to -9.67% in

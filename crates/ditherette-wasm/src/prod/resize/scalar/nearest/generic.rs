@@ -1,9 +1,6 @@
-use crate::{
-    image::{ImageFormat, ImageView, ImageViewMut},
-    prod::resize::common::alignment::AxisAlignment,
-};
+use crate::image::{ImageFormat, ImageView, ImageViewMut};
 
-use super::{alignment_offset, NearestResizePlan};
+use super::{alignment::AxisAlignment, alignment_offset, NearestResizePlan};
 
 pub(super) fn resize_with_plan_into<F: ImageFormat>(
     source: ImageView<'_, F>,
