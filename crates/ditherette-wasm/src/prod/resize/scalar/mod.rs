@@ -40,11 +40,10 @@
 // output but broadly regressed non-identity cases in `ditherette-bench run
 // bilinear --baseline accepted`; keep the small channel loops for optimizer/code
 // layout until the surrounding kernel shape changes.
-// TODO(perf:micro, rank=13, after perf:layout bilinear-plan-weights): Test
-// precomputed f64 reciprocals for coordinate and weight scaling only after plan
-// exactness is locked, because changed f64 operation order may break the exact
-// oracle. Benchmark `ditherette-bench run bilinear --baseline accepted`
-// and reject on any byte mismatch.
+// CLOSE(perf): Precomputed f64 reciprocals for coordinate and weight scaling
+// would only affect `BilinearResizePlan` construction; the benchmark subject now
+// reuses that plan, so this micro-optimization is invisible to `run bilinear`
+// unless plan setup itself becomes the measured target.
 //
 // Prior-art pass from `crates/ditherette-wasm-old`:
 // - Old scalar bilinear used normalized per-axis contribution Vecs, trimmed zero
