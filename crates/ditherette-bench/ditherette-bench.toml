@@ -7,40 +7,51 @@
 # repeatable workflows, but should not pin oracles or baseline names by default.
 
 [defaults]
-fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
-scale_group = ["partial"]
-sample_size = 100
-measurement_time = "5s"
+preheat_time = "5s"
 warm_up_time = "1s"
-target_sample_time = "auto"
+sample_size = 100
+measurement_time = "10s"
+target_sample_time = "50ms"
+
+process_priority = "high"
+
+scale_group = ["partial"]
 sample_mode = "throughput"
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+
 cache_state = "warm"
 cache_scrub_size = "64MiB"
 inter_sample_delay = "0ms"
-live_stats = true
-preheat_time = "5s"
-process_priority = "high"
+
+correctness = "bounded"
+max_color_distance = 2.0
+max_mean_color_distance = 0.5
+max_rms_color_distance = 0.5
+
 baseline = "accepted"
+live_stats = true
 
 [profiles.nearest]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:nearest:scalar"]
 oracle = "spec:resize:nearest:scalar"
+correctness = "exact"
 
 [profiles.area]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:area:scalar"]
 oracle = "spec:resize:area:scalar"
-scale_group = ["area"]
 
-[profiles.resize-bilinear]
+[profiles.bilinear]
 command = "perf"
 domain = "resize"
-subjects = ["spec:resize:bilinear:scalar"]
+subjects = ["prod:resize:bilinear:scalar"]
+oracle = "spec:resize:bilinear:scalar"
+correctness = "exact"
 
-[profiles.resize-bicubic]
+[profiles.bicubic]
 command = "perf"
 domain = "resize"
 subjects = [
@@ -48,7 +59,7 @@ subjects = [
   "spec:resize:bicubic:catmull-rom-scale-aware",
 ]
 
-[profiles.resize-lanczos2]
+[profiles.lanczos2]
 command = "perf"
 domain = "resize"
 subjects = [
@@ -56,7 +67,7 @@ subjects = [
   "spec:resize:lanczos2:scale-aware",
 ]
 
-[profiles.resize-lanczos3]
+[profiles.lanczos3]
 command = "perf"
 domain = "resize"
 subjects = [
@@ -64,7 +75,7 @@ subjects = [
   "spec:resize:lanczos3:scale-aware",
 ]
 
-[profiles.resize-trilinear]
+[profiles.trilinear]
 command = "perf"
 domain = "resize"
 subjects = ["spec:resize:trilinear:mip-area"]

@@ -19,8 +19,13 @@ use crate::{
             resize_area_rgba8_with_plan_into as resize_prod_area_rgba8_with_plan_into,
             AreaResizePlan,
         },
+        bilinear::{
+            alignment::ResizeAnchor as ProdBilinearResizeAnchor,
+            resize_bilinear_rgba8_with_plan_into as resize_prod_bilinear_rgba8_with_plan_into,
+            BilinearResizePlan,
+        },
         nearest::{
-            alignment::ResizeAnchor as ProdResizeAnchor,
+            alignment::ResizeAnchor as ProdNearestResizeAnchor,
             resize_nearest_rgba8_with_plan_into as resize_prod_nearest_rgba8_with_plan_into,
             NearestResizePlan,
         },
@@ -71,6 +76,12 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "spec bilinear scalar",
             "crates/ditherette-wasm/src/spec/resize/scalar/bilinear.rs",
             resize_bilinear_subject,
+        ),
+        resize_subject(
+            "prod:resize:bilinear:scalar",
+            "prod bilinear scalar",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
+            resize_prod_bilinear_subject,
         ),
         resize_subject(
             "spec:resize:bicubic:catmull-rom",
@@ -168,7 +179,7 @@ fn resize_prod_nearest_subject(
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        let anchor = prod_anchor(params);
+        let anchor = prod_nearest_anchor(params);
         PROD_NEAREST_PLAN.with_borrow_mut(|cached| {
             if !cached
                 .as_ref()
@@ -229,6 +240,37 @@ fn resize_bilinear_subject(
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
         resize_bilinear_into(source, output, anchor(params));
+    })
+}
+
+thread_local! {
+    static PROD_BILINEAR_PLAN: RefCell<Option<BilinearResizePlan>> = const { RefCell::new(None) };
+}
+
+fn resize_prod_bilinear_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        let anchor = prod_bilinear_anchor(params);
+        PROD_BILINEAR_PLAN.with_borrow_mut(|cached| {
+            if !cached
+                .as_ref()
+                .is_some_and(|plan| plan.matches(source.dimensions(), output.dimensions(), anchor))
+            {
+                *cached = Some(BilinearResizePlan::new(
+                    source.dimensions(),
+                    output.dimensions(),
+                    anchor,
+                ));
+            }
+
+            let plan = cached
+                .as_ref()
+                .expect("bilinear plan should be initialized");
+            resize_prod_bilinear_rgba8_with_plan_into(source, output, plan);
+        });
     })
 }
 
@@ -330,17 +372,35 @@ fn with_views(
     Ok(())
 }
 
-fn prod_anchor(params: &ResizeParams) -> ProdResizeAnchor {
+fn prod_nearest_anchor(params: &ResizeParams) -> ProdNearestResizeAnchor {
     match params.anchor {
-        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdResizeAnchor::TopLeft,
-        ditherette_bench_api::ResizeAnchorParam::Top => ProdResizeAnchor::Top,
-        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdResizeAnchor::TopRight,
-        ditherette_bench_api::ResizeAnchorParam::Left => ProdResizeAnchor::Left,
-        ditherette_bench_api::ResizeAnchorParam::Center => ProdResizeAnchor::Center,
-        ditherette_bench_api::ResizeAnchorParam::Right => ProdResizeAnchor::Right,
-        ditherette_bench_api::ResizeAnchorParam::BottomLeft => ProdResizeAnchor::BottomLeft,
-        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdResizeAnchor::Bottom,
-        ditherette_bench_api::ResizeAnchorParam::BottomRight => ProdResizeAnchor::BottomRight,
+        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdNearestResizeAnchor::TopLeft,
+        ditherette_bench_api::ResizeAnchorParam::Top => ProdNearestResizeAnchor::Top,
+        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdNearestResizeAnchor::TopRight,
+        ditherette_bench_api::ResizeAnchorParam::Left => ProdNearestResizeAnchor::Left,
+        ditherette_bench_api::ResizeAnchorParam::Center => ProdNearestResizeAnchor::Center,
+        ditherette_bench_api::ResizeAnchorParam::Right => ProdNearestResizeAnchor::Right,
+        ditherette_bench_api::ResizeAnchorParam::BottomLeft => ProdNearestResizeAnchor::BottomLeft,
+        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdNearestResizeAnchor::Bottom,
+        ditherette_bench_api::ResizeAnchorParam::BottomRight => {
+            ProdNearestResizeAnchor::BottomRight
+        }
+    }
+}
+
+fn prod_bilinear_anchor(params: &ResizeParams) -> ProdBilinearResizeAnchor {
+    match params.anchor {
+        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdBilinearResizeAnchor::TopLeft,
+        ditherette_bench_api::ResizeAnchorParam::Top => ProdBilinearResizeAnchor::Top,
+        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdBilinearResizeAnchor::TopRight,
+        ditherette_bench_api::ResizeAnchorParam::Left => ProdBilinearResizeAnchor::Left,
+        ditherette_bench_api::ResizeAnchorParam::Center => ProdBilinearResizeAnchor::Center,
+        ditherette_bench_api::ResizeAnchorParam::Right => ProdBilinearResizeAnchor::Right,
+        ditherette_bench_api::ResizeAnchorParam::BottomLeft => ProdBilinearResizeAnchor::BottomLeft,
+        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdBilinearResizeAnchor::Bottom,
+        ditherette_bench_api::ResizeAnchorParam::BottomRight => {
+            ProdBilinearResizeAnchor::BottomRight
+        }
     }
 }
 

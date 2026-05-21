@@ -1,0 +1,85 @@
+//! Packed RGBA8 bilinear kernel.
+//!
+//! The current production kernel is intentionally direct: map one output pixel
+//! to source space, apply triangle-filter support, normalize by total weight,
+//! then round exactly like the independent spec oracle.
+
+use crate::image::{ImageView, ImageViewMut, Rgba8};
+
+use super::{AxisTap, BilinearResizePlan};
+
+const RGBA8_CHANNELS: usize = 4;
+
+pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+) {
+    // NOTE(perf): Nonzero x/y support taps are cached in `BilinearResizePlan`;
+    // keep duplicate clamped edge taps separate so accumulation order matches the
+    // direct exact oracle path.
+    for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
+        let output_row = output
+            .row_mut(output_y as u32)
+            .expect("output y from dimensions should stay in bounds");
+
+        for (output_x, x_taps) in plan.x_taps.iter().enumerate() {
+            let output_start = output_x * RGBA8_CHANNELS;
+            let output_pixel = &mut output_row[output_start..output_start + RGBA8_CHANNELS];
+            write_resized_pixel(source, output_pixel, x_taps, y_taps);
+        }
+    }
+}
+
+// TODO(perf:path, rank=19, after perf:layout bilinear-nonzero-taps): Split
+// edge pixels from the interior region so interior taps can skip clamping and
+// bounds-sensitive coordinate handling. Prior art warns exact-ratio and
+// near-identity splits regressed or duplicated the generic path, so benchmark
+// large default fixtures plus edge-heavy small cases with `ditherette-bench run
+// bilinear --baseline accepted` and exact oracle checks.
+// TODO(perf:kernel, rank=20, after perf:kernel direct-packed-indexing): Pass
+// packed source data, row byte length, and dimensions into this hot pixel writer
+// instead of an `ImageView` and per-tap `row()` lookup. Benchmark the default
+// `bilinear` profile after exact oracle verification.
+fn write_resized_pixel(
+    source: ImageView<'_, Rgba8>,
+    output_pixel: &mut [u8],
+    x_taps: &[AxisTap],
+    y_taps: &[AxisTap],
+) {
+    let mut accumulated = [0.0; RGBA8_CHANNELS];
+    let mut total_weight = 0.0;
+
+    // TODO(perf:kernel, rank=21, after perf:layout bilinear-nonzero-taps):
+    // Precompute x/y weight sums and the reciprocal normalization factor per
+    // output coordinate so the hot tap loop only accumulates weighted channels.
+    // Preserve f64 operation order where required by exactness; benchmark with
+    // `ditherette-bench run bilinear --baseline accepted`.
+    for y_tap in y_taps {
+        let source_row = source
+            .row(y_tap.index as u32)
+            .expect("clamped source y should stay in bounds");
+
+        for x_tap in x_taps {
+            let weight = x_tap.weight * y_tap.weight;
+            let source_start = x_tap.index * RGBA8_CHANNELS;
+            let source_pixel = &source_row[source_start..source_start + RGBA8_CHANNELS];
+
+            total_weight += weight;
+            // TODO(perf:kernel, rank=22, after perf:kernel direct-packed-indexing):
+            // Read RGBA8 as one packed word and widen channels locally before
+            // accumulation so the kernel avoids four indexed slice loads per
+            // tap. Benchmark `ditherette-bench run bilinear --baseline
+            // accepted` and reject on any exact-oracle mismatch.
+            for channel in 0..RGBA8_CHANNELS {
+                accumulated[channel] += f64::from(source_pixel[channel]) * weight;
+            }
+        }
+    }
+
+    for channel in 0..RGBA8_CHANNELS {
+        output_pixel[channel] = (accumulated[channel] / total_weight)
+            .clamp(0.0, 255.0)
+            .round() as u8;
+    }
+}
