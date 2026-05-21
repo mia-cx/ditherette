@@ -8,7 +8,7 @@ use ditherette_bench_api::SubjectId;
 use crate::{
     fixture::Fixture,
     measure::{MeasurementConfig, MeasurementObserver, MeasurementProgress},
-    result::{BenchResult, ComparisonReport, SampleStats},
+    result::{BenchResult, ComparisonReport, SampleStats, VerificationReport},
     runtime::RuntimeTuningReport,
     util::{
         dim, format_comparison, format_duration, format_ns, format_significant, green, heading, red,
@@ -109,8 +109,23 @@ pub(crate) fn log_correctness_start(total_checks: usize) {
     println!("{} {} checks", heading("Correctness"), total_checks);
 }
 
-pub(crate) fn log_correctness_ok(subject: &str, oracle: &SubjectId, case: &str) {
-    println!("  ok {subject} vs {oracle} · {case}");
+pub(crate) fn log_correctness_ok(
+    subject: &str,
+    oracle: &SubjectId,
+    case: &str,
+    verification: &VerificationReport,
+) {
+    if verification.mode == "exact" || verification.max_color_distance == 0.0 {
+        println!("  ok {subject} vs {oracle} · {case}");
+        return;
+    }
+
+    println!(
+        "  ok {subject} vs {oracle} · {case} · color Δ max {:.3}, mean {:.3}, rms {:.3}",
+        verification.max_color_distance,
+        verification.mean_color_distance,
+        verification.rms_color_distance
+    );
 }
 
 pub(crate) struct MeasurementLogger {
