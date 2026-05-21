@@ -6,7 +6,7 @@
 
 use crate::image::{ImageView, ImageViewMut, Rgba8};
 
-use super::{AxisTap, BilinearResizePlan};
+use super::plan::{AxisTap, BilinearResizePlan};
 
 const RGBA8_CHANNELS: usize = 4;
 

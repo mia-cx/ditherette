@@ -6,7 +6,7 @@
 //! rounding behavior before later benchmark-driven production changes.
 
 use crate::{
-    image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
+    image::{ImageView, ImageViewMut, Rgba8},
     prod::resize::common,
 };
 
@@ -14,93 +14,10 @@ pub mod alignment;
 mod coordinates;
 mod filter;
 mod kernel;
+mod plan;
 
 use alignment::ResizeAnchor;
-use coordinates::{clamp_i64, map_axis_position, support_range};
-use filter::triangle_weight;
-
-/// Reusable bilinear resize metadata for one source/output shape.
-pub struct BilinearResizePlan {
-    source_dimensions: ImageDimensions,
-    output_dimensions: ImageDimensions,
-    anchor: ResizeAnchor,
-    x_taps: Vec<Vec<AxisTap>>,
-    y_taps: Vec<Vec<AxisTap>>,
-}
-
-#[derive(Clone, Copy)]
-struct AxisTap {
-    index: usize,
-    weight: f64,
-}
-
-impl BilinearResizePlan {
-    /// Builds reusable coordinate metadata for packed RGBA8 bilinear resize.
-    pub fn new(
-        source_dimensions: ImageDimensions,
-        output_dimensions: ImageDimensions,
-        anchor: ResizeAnchor,
-    ) -> Self {
-        let (x_alignment, y_alignment) = anchor.axes();
-        let x_taps = axis_taps(
-            source_dimensions.width(),
-            output_dimensions.width(),
-            x_alignment,
-        );
-        let y_taps = axis_taps(
-            source_dimensions.height(),
-            output_dimensions.height(),
-            y_alignment,
-        );
-
-        Self {
-            source_dimensions,
-            output_dimensions,
-            anchor,
-            x_taps,
-            y_taps,
-        }
-    }
-
-    pub fn matches(
-        &self,
-        source_dimensions: ImageDimensions,
-        output_dimensions: ImageDimensions,
-        anchor: ResizeAnchor,
-    ) -> bool {
-        self.source_dimensions == source_dimensions
-            && self.output_dimensions == output_dimensions
-            && self.anchor == anchor
-    }
-
-    fn is_identity(&self) -> bool {
-        self.source_dimensions == self.output_dimensions
-    }
-}
-
-fn axis_taps(
-    source_len: u32,
-    output_len: u32,
-    alignment: alignment::AxisAlignment,
-) -> Vec<Vec<AxisTap>> {
-    let scale = (f64::from(source_len) / f64::from(output_len)).max(1.0);
-    (0..output_len)
-        .map(|output_coordinate| {
-            let position = map_axis_position(output_coordinate, source_len, output_len, alignment);
-            support_range(position, scale)
-                .filter_map(|source_coordinate| {
-                    let weight = triangle_weight((source_coordinate as f64 - position) / scale);
-                    if weight == 0.0 {
-                        return None;
-                    }
-
-                    let index = clamp_i64(source_coordinate, 0, i64::from(source_len) - 1) as usize;
-                    Some(AxisTap { index, weight })
-                })
-                .collect()
-        })
-        .collect()
-}
+pub use plan::BilinearResizePlan;
 
 // DEFER(perf): Anisotropic bilinear cases need a case identity that includes
 // independent x/y scales. The current baseline schema keys cases by one scalar
@@ -132,8 +49,8 @@ pub fn resize_bilinear_rgba8_with_plan_into(
 ) {
     common::rgba8::assert_packed_source(source, "bilinear");
     common::rgba8::assert_packed_output(&output, "bilinear");
-    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
-    debug_assert_eq!(output.dimensions(), plan.output_dimensions);
+    debug_assert_eq!(source.dimensions(), plan.source_dimensions());
+    debug_assert_eq!(output.dimensions(), plan.output_dimensions());
 
     if plan.is_identity() {
         output.data_mut().copy_from_slice(source.data());
