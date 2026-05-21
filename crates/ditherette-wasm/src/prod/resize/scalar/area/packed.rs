@@ -8,24 +8,10 @@ use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
 use super::AreaResizePlan;
 
-// TODO(perf:path, rank=7, after perf:layout area-resize-plan): Split identity
-// resize into a direct packed-row copy before coverage planning. Benchmark the
-// identity area case in `ditherette-bench run area --baseline
-// accepted`.
 // TODO(perf:path, rank=8, after perf:layout area-resize-plan): Split exact
 // integer upscales into pixel replication plus row repeat, matching the old area
 // scalar strategy. Benchmark 2x and 4x upscale cases with `ditherette-bench run
 // area --baseline accepted`.
-// TODO(perf:path, rank=9, after perf:layout area-resize-plan): Split exact 2x
-// downscale into a local four-pixel average kernel before generic integer
-// downscale. Benchmark 0.5x cases with `ditherette-bench run area --baseline
-// accepted`.
-// TODO(perf:path, rank=10, after perf:path area-exact-2x): Split remaining exact
-// integer downscales into a local uniform-weight block-average kernel; old
-// shared extraction regressed, so keep the kernel local to area. The accepted
-// x-byte-span layout regressed 0.1x/0.125x exact downscales, so benchmark
-// 0.25x and 0.125x cases with `ditherette-bench run area --baseline
-// accepted`.
 // TODO(perf:path, rank=11, after perf:layout area-resize-plan): Route fractional
 // minification through compact precomputed x/y coverage, using the old
 // fractional-minify area-style path as the first candidate. Benchmark 0.95x,
@@ -43,6 +29,18 @@ use super::AreaResizePlan;
 // coverage. Verify with `--oracle spec:resize:area:scalar` and benchmark
 // `ditherette-bench run area --baseline accepted`.
 
+pub(super) fn resize_exact_integer_downscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+) -> bool {
+    let Some((x_step, y_step)) = exact_integer_downscale_steps(source, output) else {
+        return false;
+    };
+
+    resize_exact_block_downscale_into(source, output, x_step, y_step);
+    true
+}
+
 pub(super) fn resize_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
@@ -59,6 +57,79 @@ pub(super) fn resize_with_plan_into(
             let output_start = output_x as usize * rgba8::RGBA8_CHANNELS;
             let output_pixel = &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS];
             let accumulated = accumulate_pixel(source, x_spans, y_spans, plan.area);
+
+            for channel in 0..rgba8::RGBA8_CHANNELS {
+                output_pixel[channel] = accumulated[channel].clamp(0.0, 255.0).round() as u8;
+            }
+        }
+    }
+}
+
+fn exact_integer_downscale_steps(
+    source: ImageView<'_, Rgba8>,
+    output: &ImageViewMut<'_, Rgba8>,
+) -> Option<(usize, usize)> {
+    let source_dimensions = source.dimensions();
+    let output_dimensions = output.dimensions();
+    let source_width = source_dimensions.width();
+    let source_height = source_dimensions.height();
+    let output_width = output_dimensions.width();
+    let output_height = output_dimensions.height();
+
+    if source_width < output_width || source_height < output_height {
+        return None;
+    }
+    if source_width == output_width && source_height == output_height {
+        return None;
+    }
+    if !source_width.is_multiple_of(output_width) || !source_height.is_multiple_of(output_height) {
+        return None;
+    }
+
+    Some((
+        (source_width / output_width) as usize,
+        (source_height / output_height) as usize,
+    ))
+}
+
+fn resize_exact_block_downscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+    x_step: usize,
+    y_step: usize,
+) {
+    let source_width = source.dimensions().width_usize();
+    let output_width = output.dimensions().width_usize();
+    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let weight = 1.0 / (x_step * y_step) as f64;
+    let source_data = source.data();
+
+    for (output_y, output_row) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let source_y_start = output_y * y_step;
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .enumerate()
+        {
+            let source_x_start = output_x * x_step;
+            let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+
+            for source_y in source_y_start..source_y_start + y_step {
+                let row_start = source_y * source_row_byte_len;
+                let source_start = row_start + source_x_start * rgba8::RGBA8_CHANNELS;
+                let source_end = source_start + x_step * rgba8::RGBA8_CHANNELS;
+                for source_pixel in
+                    source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS)
+                {
+                    for channel in 0..rgba8::RGBA8_CHANNELS {
+                        accumulated[channel] += f64::from(source_pixel[channel]) * weight;
+                    }
+                }
+            }
 
             for channel in 0..rgba8::RGBA8_CHANNELS {
                 output_pixel[channel] = accumulated[channel].clamp(0.0, 255.0).round() as u8;
