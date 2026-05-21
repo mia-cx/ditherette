@@ -60,7 +60,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
         resize_subject(
             "prod:resize:area:scalar",
             "prod area scalar",
-            "crates/ditherette-wasm/src/prod/resize/scalar/area.rs",
+            "crates/ditherette-wasm/src/prod/resize/scalar/area/mod.rs",
             resize_prod_area_subject,
         ),
         resize_subject(
