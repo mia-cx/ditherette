@@ -61,10 +61,9 @@
 // old scalar/tiled behavior before choosing kernels. Compare scales
 // `2,1.8,1.5,0.99,0.95,0.875,0.75,0.5,0.25,0.125` with
 // `ditherette-bench run bilinear --oracle spec:resize:bilinear:scalar`.
-// TODO(perf:harness, rank=26): Add prior-art scale coverage for 1.8x and 0.875x
-// to a bilinear-specific profile; the current partial group misses two scales
-// called out by the old resize shootout. Benchmark with `ditherette-bench run
-// bilinear --baseline accepted` before refreshing accepted baselines.
+// NOTE(perf): The `bilinear` profile includes the old shootout's 0.875x and
+// 1.8x scales through the `bilinear-prior-art` scale group, so prior-art
+// comparisons cover the same important ratios.
 // TODO(perf:harness, rank=27): Register a native row-band/tiled prod bilinear
 // subject before porting old tiling thresholds, so scalar and tiled paths can be
 // accepted independently. Judge with a dedicated `bilinear-tiling` profile
