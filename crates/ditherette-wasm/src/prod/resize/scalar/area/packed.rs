@@ -4,9 +4,9 @@
 //! normalized source and output rows to packed RGBA8. It mirrors the spec area
 //! coverage formula while keeping RGBA8-specific row traversal in one place.
 
-use crate::image::{rgba8, ImageDimensions, ImageView, ImageViewMut, Rgba8};
+use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
-use super::coverage::{clamp_i64, interval_overlap, output_coverage};
+use super::AreaResizePlan;
 
 // TODO(perf:path, rank=7, after perf:layout area-resize-plan): Split identity
 // resize into a direct packed-row copy before coverage planning. Benchmark the
@@ -42,22 +42,22 @@ use super::coverage::{clamp_i64, interval_overlap, output_coverage};
 // coverage. Verify with `--oracle spec:resize:area:scalar` and benchmark
 // `ditherette-bench run area --baseline accepted`.
 
-pub(super) fn resize_into(source: ImageView<'_, Rgba8>, mut output: ImageViewMut<'_, Rgba8>) {
-    let source_dimensions = source.dimensions();
-    let output_dimensions = output.dimensions();
-    let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
-    let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
-
-    for output_y in 0..output_dimensions.height() {
+pub(super) fn resize_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+) {
+    for output_y in 0..plan.output_dimensions.height() {
         let output_row = output
             .row_mut(output_y)
             .expect("output y from dimensions should stay in bounds");
+        let y_spans = &plan.y_spans[output_y as usize];
 
-        for output_x in 0..output_dimensions.width() {
-            let coverage = output_coverage(output_x, output_y, x_scale, y_scale);
+        for output_x in 0..plan.output_dimensions.width() {
+            let x_spans = &plan.x_spans[output_x as usize];
             let output_start = output_x as usize * rgba8::RGBA8_CHANNELS;
             let output_pixel = &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS];
-            let accumulated = accumulate_pixel(source, source_dimensions, coverage);
+            let accumulated = accumulate_pixel(source, x_spans, y_spans, plan.area);
 
             for channel in 0..rgba8::RGBA8_CHANNELS {
                 output_pixel[channel] = accumulated[channel].clamp(0.0, 255.0).round() as u8;
@@ -72,42 +72,20 @@ pub(super) fn resize_into(source: ImageView<'_, Rgba8>, mut output: ImageViewMut
 // with `ditherette-bench run area --baseline accepted`.
 fn accumulate_pixel(
     source: ImageView<'_, Rgba8>,
-    source_dimensions: ImageDimensions,
-    coverage: super::coverage::OutputCoverage,
+    x_spans: &[super::plan::AxisOverlap],
+    y_spans: &[super::plan::AxisOverlap],
+    area: f64,
 ) -> [f64; rgba8::RGBA8_CHANNELS] {
     let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
 
-    for source_y in coverage.y_start.floor() as i64..coverage.y_end.ceil() as i64 {
-        let y_overlap = interval_overlap(
-            coverage.y_start,
-            coverage.y_end,
-            source_y as f64,
-            source_y as f64 + 1.0,
-        );
-        if y_overlap == 0.0 {
-            continue;
-        }
-
-        let clamped_y = clamp_i64(source_y, 0, i64::from(source_dimensions.height()) - 1) as u32;
+    for y_span in y_spans {
         let source_row = source
-            .row(clamped_y)
-            .expect("clamped source y should stay in bounds");
+            .row(y_span.source_index as u32)
+            .expect("planned source y should stay in bounds");
 
-        for source_x in coverage.x_start.floor() as i64..coverage.x_end.ceil() as i64 {
-            let x_overlap = interval_overlap(
-                coverage.x_start,
-                coverage.x_end,
-                source_x as f64,
-                source_x as f64 + 1.0,
-            );
-            if x_overlap == 0.0 {
-                continue;
-            }
-
-            let clamped_x =
-                clamp_i64(source_x, 0, i64::from(source_dimensions.width()) - 1) as usize;
-            let weight = x_overlap * y_overlap / coverage.area;
-            let source_start = clamped_x * rgba8::RGBA8_CHANNELS;
+        for x_span in x_spans {
+            let weight = x_span.overlap * y_span.overlap / area;
+            let source_start = x_span.source_index * rgba8::RGBA8_CHANNELS;
             let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
             // TODO(perf:micro, rank=15, after perf:kernel area-span-kernel):
