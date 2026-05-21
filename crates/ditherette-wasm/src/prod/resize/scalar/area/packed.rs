@@ -8,6 +8,16 @@ use crate::image::{rgba8, ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
 use super::coverage::{clamp_i64, interval_overlap, output_coverage};
 
+// TODO(perf:path, rank=3, after perf:layout area-resize-plan): Split exact
+// integer downscales into a uniform-weight block-average path once area spans
+// are planned. Benchmark 0.5x, 0.25x, and 0.125x cases with
+// `ditherette-bench run resize-area --baseline perf-loop-resize-area`.
+// TODO(perf:path, rank=4, after perf:layout area-resize-plan): Test a separable
+// horizontal-then-vertical area path with reusable scratch rows for large
+// fractional downscales; exact area is separable, but scratch allocation and
+// cache behavior need proof. Verify with `--oracle spec:resize:area:scalar` and
+// benchmark `ditherette-bench run resize-area --baseline perf-loop-resize-area`.
+
 pub(super) fn resize_into(source: ImageView<'_, Rgba8>, mut output: ImageViewMut<'_, Rgba8>) {
     let source_dimensions = source.dimensions();
     let output_dimensions = output.dimensions();
@@ -32,6 +42,10 @@ pub(super) fn resize_into(source: ImageView<'_, Rgba8>, mut output: ImageViewMut
     }
 }
 
+// TODO(perf:kernel, rank=5, after perf:layout area-resize-plan): Drive this
+// loop from precomputed overlap spans so hot pixels avoid `floor`, `ceil`,
+// interval-overlap branches, and per-source-pixel coordinate clamps. Benchmark
+// with `ditherette-bench run resize-area --baseline perf-loop-resize-area`.
 fn accumulate_pixel(
     source: ImageView<'_, Rgba8>,
     source_dimensions: ImageDimensions,
@@ -72,6 +86,12 @@ fn accumulate_pixel(
             let source_start = clamped_x * rgba8::RGBA8_CHANNELS;
             let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
+            // TODO(perf:micro, rank=6, after perf:kernel area-span-kernel):
+            // Compare f32 accumulators for RGBA8 area once span planning fixes
+            // accumulation order; accept only if it remains byte-identical to
+            // `spec:resize:area:scalar` across `ditherette-bench run
+            // resize-area --oracle spec:resize:area:scalar --baseline
+            // perf-loop-resize-area`.
             for channel in 0..rgba8::RGBA8_CHANNELS {
                 accumulated[channel] += f64::from(source_pixel[channel]) * weight;
             }
