@@ -102,12 +102,10 @@ fn axis_taps(
         .collect()
 }
 
-// TODO(perf:harness, rank=14): Add anisotropic bilinear cases where only width
-// or height changes before optimizing dimension-preserving branches; the current
-// `bilinear` partial scale group exercises square scale factors only and
-// cannot judge horizontal-only or vertical-only fast paths. Benchmark with
-// `ditherette-bench run bilinear --oracle spec:resize:bilinear:scalar`
-// once the case matrix can express non-uniform output sizes.
+// DEFER(perf): Anisotropic bilinear cases need a case identity that includes
+// independent x/y scales. The current baseline schema keys cases by one scalar
+// scale, so width-only/height-only cases would collide with uniform-scale
+// baselines until the harness result model grows separate scale_x/scale_y keys.
 // NOTE(perf): Packed RGBA8 assertions are debug-only tripwires, so splitting
 // them out of the release hot path has no benchmarkable upside under `run
 // bilinear`; keep validation at the public prod entrypoints.
