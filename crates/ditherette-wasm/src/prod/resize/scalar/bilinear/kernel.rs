@@ -61,11 +61,11 @@ fn write_resized_pixel(
             let source_pixel = &source_row[source_start..source_start + RGBA8_CHANNELS];
 
             total_weight += weight;
-            // TODO(perf:kernel, rank=22, after perf:layout bilinear-nonzero-taps):
-            // Read RGBA8 as one packed word and widen channels locally before
-            // accumulation so the kernel avoids four indexed slice loads per
-            // tap. Benchmark `ditherette-bench run bilinear --baseline
-            // accepted` and reject on any exact-oracle mismatch.
+            // REJECT(perf): Reading RGBA8 as an unaligned `u32` and widening
+            // bytes locally preserved exactness but regressed representative
+            // large/upscale cases, including box 0.5x and selfie 2x, in
+            // `ditherette-bench run bilinear --baseline accepted`. Keep slice
+            // channel loads unless the surrounding kernel shape changes.
             for channel in 0..RGBA8_CHANNELS {
                 accumulated[channel] += f64::from(source_pixel[channel]) * weight;
             }
