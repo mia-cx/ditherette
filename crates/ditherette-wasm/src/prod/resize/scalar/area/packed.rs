@@ -210,9 +210,10 @@ fn resize_exact_block_downscale_into(
     }
 }
 
-// TODO(perf:kernel, rank=14, after perf:layout area-x-byte-spans): Flatten the
-// remaining y spans or specialize this span-driven kernel once path classes are
-// settled. Benchmark with `ditherette-bench run area --baseline accepted`.
+// REJECT(perf): Flattening y spans into `{ first_source_index, overlaps }`
+// preserved correctness but regressed fractional and upscale cases by roughly
+// 2-9% in `ditherette-bench run area --baseline accepted`; keep the copied
+// `AxisOverlap` y layout until the whole row traversal changes.
 fn accumulate_pixel(
     source: ImageView<'_, Rgba8>,
     x_spans: &super::plan::XAxisOverlapSpan,
