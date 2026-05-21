@@ -37,6 +37,10 @@ pub(super) fn resize_exact_integer_downscale_into(
         resize_exact_4x_downscale_into(source, output);
         return true;
     }
+    if x_step == 8 && y_step == 8 {
+        resize_exact_8x_downscale_into(source, output);
+        return true;
+    }
 
     resize_exact_block_downscale_into(source, output, x_step, y_step);
     true
@@ -198,11 +202,11 @@ fn resize_exact_2x_downscale_into(
             let bottom_right = bottom_left + rgba8::RGBA8_CHANNELS;
 
             for channel in 0..rgba8::RGBA8_CHANNELS {
-                let sum = u64::from(source_data[top_left + channel])
-                    + u64::from(source_data[top_right + channel])
-                    + u64::from(source_data[bottom_left + channel])
-                    + u64::from(source_data[bottom_right + channel]);
-                output_pixel[channel] = ((sum as f64) / 4.0).clamp(0.0, 255.0).round() as u8;
+                let sum = u16::from(source_data[top_left + channel])
+                    + u16::from(source_data[top_right + channel])
+                    + u16::from(source_data[bottom_left + channel])
+                    + u16::from(source_data[bottom_right + channel]);
+                output_pixel[channel] = ((sum + 2) / 4) as u8;
             }
         }
     }
@@ -230,10 +234,10 @@ fn resize_exact_4x_downscale_into(
             .enumerate()
         {
             let source_x_start = output_x * 4 * rgba8::RGBA8_CHANNELS;
-            let mut red_sum = 0u64;
-            let mut green_sum = 0u64;
-            let mut blue_sum = 0u64;
-            let mut alpha_sum = 0u64;
+            let mut red_sum = 0u16;
+            let mut green_sum = 0u16;
+            let mut blue_sum = 0u16;
+            let mut alpha_sum = 0u16;
 
             for source_row_offset in 0..4 {
                 let row_start = first_source_row_start + source_row_offset * source_row_byte_len;
@@ -242,17 +246,70 @@ fn resize_exact_4x_downscale_into(
                 for source_pixel in
                     source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS)
                 {
-                    red_sum += u64::from(source_pixel[0]);
-                    green_sum += u64::from(source_pixel[1]);
-                    blue_sum += u64::from(source_pixel[2]);
-                    alpha_sum += u64::from(source_pixel[3]);
+                    red_sum += u16::from(source_pixel[0]);
+                    green_sum += u16::from(source_pixel[1]);
+                    blue_sum += u16::from(source_pixel[2]);
+                    alpha_sum += u16::from(source_pixel[3]);
                 }
             }
 
-            output_pixel[0] = ((red_sum as f64) / 16.0).clamp(0.0, 255.0).round() as u8;
-            output_pixel[1] = ((green_sum as f64) / 16.0).clamp(0.0, 255.0).round() as u8;
-            output_pixel[2] = ((blue_sum as f64) / 16.0).clamp(0.0, 255.0).round() as u8;
-            output_pixel[3] = ((alpha_sum as f64) / 16.0).clamp(0.0, 255.0).round() as u8;
+            output_pixel[0] = ((red_sum + 8) / 16) as u8;
+            output_pixel[1] = ((green_sum + 8) / 16) as u8;
+            output_pixel[2] = ((blue_sum + 8) / 16) as u8;
+            output_pixel[3] = ((alpha_sum + 8) / 16) as u8;
+        }
+    }
+}
+
+fn resize_exact_8x_downscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+) {
+    const STEP: usize = 8;
+    const DIVISOR: u32 = (STEP * STEP) as u32;
+    const ROUNDING_HALF: u32 = DIVISOR / 2;
+
+    let source_width = source.dimensions().width_usize();
+    let output_width = output.dimensions().width_usize();
+    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
+
+    for (output_y, output_row) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let first_source_row_start = output_y * STEP * source_row_byte_len;
+
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .enumerate()
+        {
+            let source_x_start = output_x * STEP * rgba8::RGBA8_CHANNELS;
+            let mut red_sum = 0u32;
+            let mut green_sum = 0u32;
+            let mut blue_sum = 0u32;
+            let mut alpha_sum = 0u32;
+
+            for source_row_offset in 0..STEP {
+                let row_start = first_source_row_start + source_row_offset * source_row_byte_len;
+                let source_start = row_start + source_x_start;
+                let source_end = source_start + STEP * rgba8::RGBA8_CHANNELS;
+                for source_pixel in
+                    source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS)
+                {
+                    red_sum += u32::from(source_pixel[0]);
+                    green_sum += u32::from(source_pixel[1]);
+                    blue_sum += u32::from(source_pixel[2]);
+                    alpha_sum += u32::from(source_pixel[3]);
+                }
+            }
+
+            output_pixel[0] = ((red_sum + ROUNDING_HALF) / DIVISOR) as u8;
+            output_pixel[1] = ((green_sum + ROUNDING_HALF) / DIVISOR) as u8;
+            output_pixel[2] = ((blue_sum + ROUNDING_HALF) / DIVISOR) as u8;
+            output_pixel[3] = ((alpha_sum + ROUNDING_HALF) / DIVISOR) as u8;
         }
     }
 }
