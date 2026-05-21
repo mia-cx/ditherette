@@ -1,7 +1,7 @@
 use std::{hint::black_box, time::Duration};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use ditherette_wasm::{
+use ditherette_wasm_old::{
     image::{rgba, ImageDimensions},
     resize::area::resize_rgba_area_into,
 };
