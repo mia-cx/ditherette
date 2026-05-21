@@ -20,6 +20,7 @@ inter_sample_delay = "0ms"
 live_stats = true
 preheat_time = "5s"
 process_priority = "high"
+baseline = "accepted"
 
 [profiles.nearest]
 command = "perf"
@@ -27,10 +28,11 @@ domain = "resize"
 subjects = ["prod:resize:nearest:scalar"]
 oracle = "spec:resize:nearest:scalar"
 
-[profiles.resize-area]
+[profiles.area]
 command = "perf"
 domain = "resize"
-subjects = ["spec:resize:area:scalar"]
+subjects = ["prod:resize:area:scalar"]
+oracle = "spec:resize:area:scalar"
 
 [profiles.resize-bilinear]
 command = "perf"
