@@ -31,16 +31,12 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
     }
 }
 
-// TODO(perf:path, rank=19, after perf:layout bilinear-nonzero-taps): Split
-// edge pixels from the interior region so interior taps can skip clamping and
-// bounds-sensitive coordinate handling. Prior art warns exact-ratio and
-// near-identity splits regressed or duplicated the generic path, so benchmark
-// large default fixtures plus edge-heavy small cases with `ditherette-bench run
-// bilinear --baseline accepted` and exact oracle checks.
-// TODO(perf:kernel, rank=20, after perf:kernel direct-packed-indexing): Pass
-// packed source data, row byte length, and dimensions into this hot pixel writer
-// instead of an `ImageView` and per-tap `row()` lookup. Benchmark the default
-// `bilinear` profile after exact oracle verification.
+// NOTE(perf): Edge/interior splitting became unnecessary after the plan started
+// storing clamped taps; the hot kernel no longer performs per-tap clamping.
+// REJECT(perf): Passing packed source data plus row byte length directly into
+// this writer preserved exactness but regressed representative large/upscale
+// cases by roughly -5% to -19% in `ditherette-bench run bilinear --baseline
+// accepted`; keep the `ImageView::row` lookup shape after tap planning.
 fn write_resized_pixel(
     source: ImageView<'_, Rgba8>,
     output_pixel: &mut [u8],
