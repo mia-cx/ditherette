@@ -42,6 +42,15 @@ fn scale_group(group: &str) -> Result<Vec<f64>, BenchError> {
         "partial" => vec![
             0.1, 0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.01, 1.05, 1.25, 1.5, 2.0, 4.0,
         ],
+        "area" => vec![
+            // identity
+            1.0, // exact integer downscale
+            0.5, 0.25, 0.125, // exact integer upscale
+            2.0, 4.0, // near-source fractional minify
+            0.99, 0.95, 0.9, 0.75, // large fractional minify
+            0.33, 0.19, 0.16, 0.1, // fractional upscale
+            1.01, 1.25, 1.5,
+        ],
         "full" => vec![
             0.1, 0.125, 0.16, 0.19, 0.25, 0.33, 0.5, 0.75, 0.85, 0.9, 0.93, 0.95, 0.97, 0.98, 0.99,
             1.0, 1.01, 1.02, 1.03, 1.05, 1.07, 1.1, 1.15, 1.25, 1.5, 1.67, 2.0, 2.38, 2.83, 3.36,

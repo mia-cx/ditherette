@@ -33,6 +33,7 @@ command = "perf"
 domain = "resize"
 subjects = ["prod:resize:area:scalar"]
 oracle = "spec:resize:area:scalar"
+scale_group = ["area"]
 
 [profiles.resize-bilinear]
 command = "perf"
