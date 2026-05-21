@@ -36,10 +36,10 @@
 // contribution loop preserved exactness but regressed every upscale case by
 // about -52% to -55% in `ditherette-bench run bilinear --scales 1.05,1.5,2
 // --baseline accepted`.
-// TODO(perf:kernel, rank=12, after perf:layout bilinear-nonzero-taps): Unroll
-// RGBA accumulation and final rounding in the packed kernel to remove the inner
-// channel loop while preserving f64 exactness. Benchmark `ditherette-bench run
-// bilinear --baseline accepted`.
+// REJECT(perf): Unrolling RGBA accumulation and final rounding preserved exact
+// output but broadly regressed non-identity cases in `ditherette-bench run
+// bilinear --baseline accepted`; keep the small channel loops for optimizer/code
+// layout until the surrounding kernel shape changes.
 // TODO(perf:micro, rank=13, after perf:layout bilinear-plan-weights): Test
 // precomputed f64 reciprocals for coordinate and weight scaling only after plan
 // exactness is locked, because changed f64 operation order may break the exact
