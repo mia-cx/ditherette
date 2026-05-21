@@ -7,11 +7,11 @@
 # repeatable workflows, but should not pin oracles or baseline names by default.
 
 [defaults]
-fixtures = ["Celeste_Insta_selfie.png","Celeste_box_art.png"]
-scale_group = ["downscale"]
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+scale_group = ["partial"]
 sample_size = 100
 measurement_time = "5s"
-warm_up_time = "3s"
+warm_up_time = "1s"
 target_sample_time = "auto"
 sample_mode = "throughput"
 cache_state = "warm"
@@ -21,10 +21,11 @@ live_stats = true
 preheat_time = "5s"
 process_priority = "high"
 
-[profiles.resize-nearest]
+[profiles.nearest]
 command = "perf"
 domain = "resize"
-subjects = ["spec:resize:nearest:scalar"]
+subjects = ["prod:resize:nearest:scalar"]
+oracle = "spec:resize:nearest:scalar"
 
 [profiles.resize-area]
 command = "perf"
