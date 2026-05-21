@@ -14,10 +14,13 @@ use ditherette_bench_api::{
 
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
-    prod::resize::scalar::nearest::{
-        alignment::ResizeAnchor as ProdResizeAnchor,
-        resize_nearest_rgba8_with_plan_into as resize_prod_nearest_rgba8_with_plan_into,
-        NearestResizePlan,
+    prod::resize::scalar::{
+        area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
+        nearest::{
+            alignment::ResizeAnchor as ProdResizeAnchor,
+            resize_nearest_rgba8_with_plan_into as resize_prod_nearest_rgba8_with_plan_into,
+            NearestResizePlan,
+        },
     },
     spec::resize::{
         common::alignment::ResizeAnchor,
@@ -53,6 +56,12 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "spec area scalar",
             "crates/ditherette-wasm/src/spec/resize/scalar/area.rs",
             resize_area_subject,
+        ),
+        resize_subject(
+            "prod:resize:area:scalar",
+            "prod area scalar",
+            "crates/ditherette-wasm/src/prod/resize/scalar/area.rs",
+            resize_prod_area_subject,
         ),
         resize_subject(
             "spec:resize:bilinear:scalar",
@@ -181,6 +190,14 @@ fn resize_area_subject(
     _params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, resize_area_into::<Rgba8>)
+}
+
+fn resize_prod_area_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    _params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, resize_prod_area_rgba8_into)
 }
 
 fn resize_bilinear_subject(
