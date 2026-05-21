@@ -23,11 +23,11 @@
 // -52% to -55% in `ditherette-bench run bilinear --scales 1.05,1.5,2
 // --baseline accepted`; keep the generic tap iterator until a different kernel
 // shape is available.
-// TODO(perf:path, rank=8, after perf:path bilinear-scale-classes): Evaluate a
-// separable two-pass minify path with f64 scratch rows for large downscales;
-// accept only if it remains byte-exact against `spec:resize:bilinear:scalar`
-// and wins `ditherette-bench run bilinear --scales 0.1,0.125,0.25,0.5
-// --baseline accepted`.
+// DEFER(perf): A separable two-pass minify path changes f64 grouping relative
+// to the exact direct 2D tap order, and the exact profile has already rejected
+// denominator pre-sums for byte drift. Revisit only with a bounded/fast bilinear
+// profile or a separable design that demonstrably preserves exact operation
+// order before benchmarking minify scales.
 // REJECT(perf): Rewriting the packed kernel to index `source.data()` directly
 // with row byte offsets preserved exactness but regressed representative
 // large/upscale cases by roughly -5% to -19% in `ditherette-bench run bilinear
@@ -56,42 +56,32 @@
 //   offsets, incremental coordinate updates, and horizontal-first minify either
 //   regressed or changed exact output; only retest under materially changed exact
 //   oracle/profile/layout conditions.
-// TODO(perf:harness, rank=25): Add a pre-rewrite bilinear parity benchmark path
-// or archived-comparison profile so perf-loop can measure current scalar against
-// old scalar/tiled behavior before choosing kernels. Compare scales
-// `2,1.8,1.5,0.99,0.95,0.875,0.75,0.5,0.25,0.125` with
-// `ditherette-bench run bilinear --oracle spec:resize:bilinear:scalar`.
+// DEFER(perf): Pre-rewrite parity needs the old scalar/tiled implementation
+// registered as separate benchmark subjects or archived result import support.
+// The current harness can compare against spec and accepted baselines, but not
+// directly execute `crates/ditherette-wasm-old` subjects in `run bilinear`.
 // NOTE(perf): The `bilinear` profile includes the old shootout's 0.875x and
 // 1.8x scales through the `bilinear-prior-art` scale group, so prior-art
 // comparisons cover the same important ratios.
-// TODO(perf:harness, rank=27): Register a native row-band/tiled prod bilinear
-// subject before porting old tiling thresholds, so scalar and tiled paths can be
-// accepted independently. Judge with a dedicated `bilinear-tiling` profile
-// plus exact oracle checks against `spec:resize:bilinear:scalar`.
-// TODO(perf:layout, rank=28, after perf:api bilinear-resize-plan): Prototype the
-// old normalized `AxisContribution { first, weights }` plan in f64 with zero-tap
-// trimming, because the current direct 2D kernel recomputes ranges and weights
-// per pixel. Retest is justified by the changed current layout; reject if
-// `ditherette-bench run bilinear --baseline accepted` does not beat direct
-// current code while staying byte-exact.
-// TODO(perf:layout, rank=29, after perf:layout bilinear-axis-contributions):
-// Compare the old vertical-first separable scratch row against the current direct
-// 2D accumulation for all scale classes, not only large minify. Use f64 scratch
-// first for exact oracle compatibility; benchmark `ditherette-bench run
-// bilinear --baseline accepted`.
-// TODO(perf:path, rank=30, after perf:harness bilinear-tiling-subject): Sweep old
-// row-band cutoffs around 150k/250k output pixels and minify-vs-near-source band
-// shapes in the new harness before hard-coding dynamic tiling. Accept only if the
-// tiled subject wins default large fixtures without slowing scalar fallback.
-// TODO(perf:kernel, rank=31, after perf:layout bilinear-separable-scratch):
-// Port the old unrolled RGBA vertical and horizontal accumulation loops after the
-// separable scratch shape is chosen; benchmark with exact oracle checks and
-// compare against rank=12 direct-kernel unrolling.
-// TODO(perf:micro, rank=32, after perf:layout bilinear-axis-contributions): Treat
-// old f32 contribution math as a separate exactness experiment: run it only after
-// f64 contribution parity is locked, verify against `spec:resize:bilinear:scalar`,
-// and move any max-Δ1 wins to a bounded/fast-mode profile rather than exact
-// `bilinear` if bytes differ.
+// DEFER(perf): Native row-band/tiled bilinear should be a separate subject and
+// profile, not folded into scalar. Register it only when the production tiling
+// module owns row-band execution and can be accepted independently from scalar.
+// DEFER(perf): The old normalized `AxisContribution { first, weights }` plan is
+// not a drop-in replacement for the current exact unnormalized tap order. Exact
+// denominator pre-sums, packed reads, fixed two-tap loops, and channel unrolling
+// all regressed or failed, so prototype old contribution layouts only under a
+// new candidate subject/profile rather than perturbing accepted scalar.
+// DEFER(perf): Vertical-first separable scratch rows depend on the deferred old
+// contribution layout and change f64 grouping. Revisit with a candidate subject
+// and exactness proof, or move it to bounded/fast bilinear if bytes differ.
+// DEFER(perf): Row-band cutoff sweeps require the deferred tiled bilinear
+// subject; scalar perf-loop cannot judge dynamic tiling thresholds.
+// DEFER(perf): Old unrolled separable RGBA loops depend on a chosen separable
+// scratch layout. The direct-kernel unroll was exact but slower, so do not port
+// old unrolls until the surrounding separable kernel exists.
+// DEFER(perf): Old f32 contribution math belongs in a bounded/fast bilinear
+// profile. The exact `bilinear` profile should keep f64 tap math unless a future
+// experiment proves byte-identical output.
 
 pub mod area;
 pub mod bilinear;
