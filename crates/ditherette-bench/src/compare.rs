@@ -29,11 +29,15 @@ pub(crate) fn ensure_compatible_baseline(
     Ok(())
 }
 
-pub(crate) fn require_accepted_comparisons(
+pub(crate) fn has_exact_comparisons(results: &[BenchResult], baseline: &BenchRun) -> bool {
+    missing_exact_results(results, baseline).is_empty()
+}
+
+pub(crate) fn missing_exact_results(
     results: &[BenchResult],
     baseline: &BenchRun,
-) -> Result<(), BenchError> {
-    let missing = results
+) -> Vec<BenchResult> {
+    results
         .iter()
         .filter(|result| {
             !baseline
@@ -41,35 +45,8 @@ pub(crate) fn require_accepted_comparisons(
                 .iter()
                 .any(|baseline_result| exact_match(result, baseline_result))
         })
-        .map(|result| format!("{} {}", result.subject, result.case_id))
-        .collect::<Vec<_>>();
-
-    if missing.is_empty() {
-        Ok(())
-    } else {
-        Err(BenchError::Baseline(format!(
-            "accepted baseline is missing or incompatible for: {}",
-            missing.join(", ")
-        )))
-    }
-}
-
-pub(crate) fn has_exact_comparisons(results: &[BenchResult], baseline: &BenchRun) -> bool {
-    results.iter().all(|result| {
-        baseline
-            .results
-            .iter()
-            .any(|baseline_result| exact_match(result, baseline_result))
-    })
-}
-
-pub(crate) fn attach_accepted_comparison(result: &mut BenchResult, baseline: &BenchRun) {
-    attach_exact_baseline_comparisons(
-        std::slice::from_mut(result),
-        baseline,
-        "accepted",
-        "accepted",
-    );
+        .cloned()
+        .collect()
 }
 
 pub(crate) fn attach_accepted_comparisons(
