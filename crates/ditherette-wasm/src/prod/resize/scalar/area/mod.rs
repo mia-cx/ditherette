@@ -13,18 +13,13 @@ use crate::{
     prod::resize::common,
 };
 
-// TODO(perf:harness, rank=1): Save an accepted area baseline now that the
-// `area` profile benchmarks `prod:resize:area:scalar` against
-// `spec:resize:area:scalar`; kernel work needs a stable comparison point.
-// Benchmark with `ditherette-bench run area --oracle spec:resize:area:scalar
-// --save-baseline perf-loop-resize-area`.
-// TODO(perf:harness, rank=2, after perf:harness area-prod-baseline): Add area
+// TODO(perf:harness, rank=2): Add area
 // fixture/scale groups that distinguish identity, exact integer downscale,
 // exact integer upscale, near-source fractional minify, and large fractional
 // minify; the old area code had separate winners for these classes. Benchmark
 // with `ditherette-bench run area --oracle spec:resize:area:scalar --baseline
 // perf-loop-resize-area` before accepting path splits.
-// TODO(perf:api, rank=3, after perf:harness area-prod-baseline): Add a cached
+// TODO(perf:api, rank=3): Add a cached
 // `AreaResizePlan` entrypoint analogous to nearest so repeated Ditherette calls
 // and the bench adapter can own plan reuse instead of rebuilding coverage data
 // per image. Benchmark with `ditherette-bench run area --baseline
