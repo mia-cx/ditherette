@@ -15,7 +15,10 @@ use ditherette_bench_api::{
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
     prod::resize::scalar::{
-        area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
+        area::{
+            resize_area_rgba8_with_plan_into as resize_prod_area_rgba8_with_plan_into,
+            AreaResizePlan,
+        },
         nearest::{
             alignment::ResizeAnchor as ProdResizeAnchor,
             resize_nearest_rgba8_with_plan_into as resize_prod_nearest_rgba8_with_plan_into,
@@ -192,12 +195,31 @@ fn resize_area_subject(
     with_views(input, output, resize_area_into::<Rgba8>)
 }
 
+thread_local! {
+    static PROD_AREA_PLAN: RefCell<Option<AreaResizePlan>> = const { RefCell::new(None) };
+}
+
 fn resize_prod_area_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
     _params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
-    with_views(input, output, resize_prod_area_rgba8_into)
+    with_views(input, output, |source, output| {
+        PROD_AREA_PLAN.with_borrow_mut(|cached| {
+            if !cached
+                .as_ref()
+                .is_some_and(|plan| plan.matches(source.dimensions(), output.dimensions()))
+            {
+                *cached = Some(AreaResizePlan::new(
+                    source.dimensions(),
+                    output.dimensions(),
+                ));
+            }
+
+            let plan = cached.as_ref().expect("area plan should be initialized");
+            resize_prod_area_rgba8_with_plan_into(source, output, plan);
+        });
+    })
 }
 
 fn resize_bilinear_subject(

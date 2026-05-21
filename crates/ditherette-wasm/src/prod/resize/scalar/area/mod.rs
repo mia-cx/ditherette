@@ -7,11 +7,14 @@
 
 mod coverage;
 mod packed;
+mod plan;
 
 use crate::{
     image::{ImageView, ImageViewMut, Rgba8},
     prod::resize::common,
 };
+
+pub use plan::AreaResizePlan;
 
 // REJECT(perf): A cached `AreaResizePlan` that only stored dimensions and scale
 // factors was neutral overall and regressed represented small Celeste box-art
@@ -26,8 +29,24 @@ use crate::{
 /// per channel to `u8`. This function duplicates the spec formula instead of
 /// importing it so production remains independent from the oracle.
 pub fn resize_area_rgba8_into(source: ImageView<'_, Rgba8>, output: ImageViewMut<'_, Rgba8>) {
+    let plan = AreaResizePlan::new(source.dimensions(), output.dimensions());
+    resize_area_rgba8_with_plan_into(source, output, &plan);
+}
+
+/// Resize packed RGBA8 `source` into packed RGBA8 `output` with a cached area plan.
+///
+/// The plan must match the input and output dimensions. Packed-row assertions
+/// are development tripwires for the shared production resize boundary.
+pub fn resize_area_rgba8_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+) {
+    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
+    debug_assert_eq!(output.dimensions(), plan.output_dimensions);
+
     common::rgba8::assert_packed_source(source, "area");
     common::rgba8::assert_packed_output(&output, "area");
 
-    packed::resize_into(source, output);
+    packed::resize_with_plan_into(source, output, plan);
 }
