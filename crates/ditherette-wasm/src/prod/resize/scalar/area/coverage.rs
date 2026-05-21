@@ -9,17 +9,17 @@
 // per output coordinate so the packed kernel stops rebuilding coverage ranges
 // for every pixel. Start from the old `XCoverage`/`AxisCoverage` shape, but
 // verify with `--oracle spec:resize:area:scalar`, then benchmark with
-// `ditherette-bench run resize-area --baseline perf-loop-resize-area`.
+// `ditherette-bench run area --baseline perf-loop-resize-area`.
 // TODO(perf:layout, rank=5, after perf:layout area-resize-plan): Store x spans
 // with byte offsets and contiguous weights so each row can zip weights with
 // `chunks_exact(RGBA8_CHANNELS)` like the old fractional-minify path. Benchmark
-// 0.95x, 0.75x, 0.5x, and 0.125x with `ditherette-bench run resize-area
-// --baseline perf-loop-resize-area`.
+// 0.95x, 0.75x, 0.5x, and 0.125x with `ditherette-bench run area --baseline
+// perf-loop-resize-area`.
 // TODO(perf:layout, rank=6, after perf:layout area-resize-plan): Preserve
 // total-weight accumulation order in the plan-driven kernel; old
 // precomputed-total/reciprocal variants changed f64 rounding. Verify every
-// plan layout with `ditherette-bench run resize-area --oracle
-// spec:resize:area:scalar --baseline perf-loop-resize-area`.
+// plan layout with `ditherette-bench run area --oracle spec:resize:area:scalar
+// --baseline perf-loop-resize-area`.
 
 /// Source-space coverage for one output pixel.
 #[derive(Debug, Clone, Copy)]
