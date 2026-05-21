@@ -225,7 +225,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                 let case = format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale);
                 let mut logger =
                     MeasurementLogger::new(&subject.descriptor.id.to_string(), &case, measurement);
-                let result = measure_resize_case(
+                let mut result = measure_resize_case(
                     subject,
                     fixture,
                     output,
@@ -235,6 +235,20 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                     None,
                     &mut logger,
                 )?;
+                if let Some(name) = accepted_baseline_name {
+                    let probe_run = BenchRun::new(
+                        "perf",
+                        domain,
+                        Some(measurement.artifact()),
+                        vec![result.clone()],
+                    );
+                    let accepted_baseline = load_scoped_baseline("accepted", name, &probe_run)?;
+                    ensure_compatible_baseline(&accepted_baseline, "perf", domain, &measurement)?;
+                    attach_accepted_comparisons(
+                        std::slice::from_mut(&mut result),
+                        Some(&accepted_baseline),
+                    );
+                }
                 logger.finish(&result);
                 results.push(result);
             }
