@@ -4,7 +4,7 @@
 //! coverage math out of the packed RGBA8 hot loop while preserving the exact
 //! f64 weight calculation used by the scalar oracle-compatible kernel.
 
-use crate::image::ImageDimensions;
+use crate::image::{rgba8, ImageDimensions};
 
 use super::coverage::{clamp_i64, interval_overlap};
 
@@ -13,8 +13,15 @@ pub struct AreaResizePlan {
     pub(super) source_dimensions: ImageDimensions,
     pub(super) output_dimensions: ImageDimensions,
     pub(super) area: f64,
-    pub(super) x_spans: Vec<Vec<AxisOverlap>>,
+    pub(super) x_spans: Vec<XAxisOverlapSpan>,
     pub(super) y_spans: Vec<Vec<AxisOverlap>>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct XAxisOverlapSpan {
+    pub(super) first_byte_offset: usize,
+    pub(super) last_exclusive_byte_offset: usize,
+    pub(super) overlaps: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -28,7 +35,7 @@ impl AreaResizePlan {
     pub fn new(source_dimensions: ImageDimensions, output_dimensions: ImageDimensions) -> Self {
         let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
         let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
-        let x_spans = axis_spans(
+        let x_spans = x_axis_spans(
             source_dimensions.width(),
             output_dimensions.width(),
             x_scale,
@@ -58,6 +65,28 @@ impl AreaResizePlan {
     ) -> bool {
         self.source_dimensions == source_dimensions && self.output_dimensions == output_dimensions
     }
+}
+
+fn x_axis_spans(source_len: u32, output_len: u32, scale: f64) -> Vec<XAxisOverlapSpan> {
+    axis_spans(source_len, output_len, scale)
+        .into_iter()
+        .map(|span| {
+            let first_source_index = span
+                .first()
+                .expect("area x span should overlap at least one source pixel")
+                .source_index;
+            let last_source_index = span
+                .last()
+                .expect("area x span should overlap at least one source pixel")
+                .source_index;
+
+            XAxisOverlapSpan {
+                first_byte_offset: first_source_index * rgba8::RGBA8_CHANNELS,
+                last_exclusive_byte_offset: (last_source_index + 1) * rgba8::RGBA8_CHANNELS,
+                overlaps: span.into_iter().map(|overlap| overlap.overlap).collect(),
+            }
+        })
+        .collect()
 }
 
 fn axis_spans(source_len: u32, output_len: u32, scale: f64) -> Vec<Vec<AxisOverlap>> {

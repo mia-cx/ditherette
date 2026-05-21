@@ -22,7 +22,8 @@ use super::AreaResizePlan;
 // accepted`.
 // TODO(perf:path, rank=10, after perf:path area-exact-2x): Split remaining exact
 // integer downscales into a local uniform-weight block-average kernel; old
-// shared extraction regressed, so keep the kernel local to area. Benchmark
+// shared extraction regressed, so keep the kernel local to area. The accepted
+// x-byte-span layout regressed 0.1x/0.125x exact downscales, so benchmark
 // 0.25x and 0.125x cases with `ditherette-bench run area --baseline
 // accepted`.
 // TODO(perf:path, rank=11, after perf:layout area-resize-plan): Route fractional
@@ -66,13 +67,12 @@ pub(super) fn resize_with_plan_into(
     }
 }
 
-// TODO(perf:kernel, rank=14, after perf:layout area-x-byte-spans): Drive this
-// loop from precomputed overlap spans so hot pixels avoid `floor`, `ceil`,
-// interval-overlap branches, and per-source-pixel coordinate clamps. Benchmark
-// with `ditherette-bench run area --baseline accepted`.
+// TODO(perf:kernel, rank=14, after perf:layout area-x-byte-spans): Flatten the
+// remaining y spans or specialize this span-driven kernel once path classes are
+// settled. Benchmark with `ditherette-bench run area --baseline accepted`.
 fn accumulate_pixel(
     source: ImageView<'_, Rgba8>,
-    x_spans: &[super::plan::AxisOverlap],
+    x_spans: &super::plan::XAxisOverlapSpan,
     y_spans: &[super::plan::AxisOverlap],
     area: f64,
 ) -> [f64; rgba8::RGBA8_CHANNELS] {
@@ -82,11 +82,12 @@ fn accumulate_pixel(
         let source_row = source
             .row(y_span.source_index as u32)
             .expect("planned source y should stay in bounds");
+        let source_pixels = source_row
+            [x_spans.first_byte_offset..x_spans.last_exclusive_byte_offset]
+            .chunks_exact(rgba8::RGBA8_CHANNELS);
 
-        for x_span in x_spans {
-            let weight = x_span.overlap * y_span.overlap / area;
-            let source_start = x_span.source_index * rgba8::RGBA8_CHANNELS;
-            let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
+        for (x_overlap, source_pixel) in x_spans.overlaps.iter().copied().zip(source_pixels) {
+            let weight = x_overlap * y_span.overlap / area;
 
             // TODO(perf:micro, rank=15, after perf:kernel area-span-kernel):
             // Compare f32 accumulators only after the new custom harness and
