@@ -11,11 +11,10 @@ use super::AreaResizePlan;
 // NOTE(perf): Fractional minification now uses compact precomputed x coverage
 // plus planned y coverage. Exact integer downscales bypass this path because
 // 0.1x/0.125x are primary Ditherette cases and need local block kernels.
-// TODO(perf:kernel, rank=12, after perf:path area-fractional-minify): Recreate
-// old dynamic row-band tiling for large area outputs once scalar path classes
-// are settled; use four-band vs near-source tiling choices as hypotheses, not
-// constants. Benchmark with `ditherette-bench run area --baseline
-// accepted` and representative large fractional cases.
+// DEFER(perf): Row-band tiling needs an explicit production/tiled benchmark
+// subject and a native-only execution boundary. Keep scalar area focused on the
+// Wasm-compatible path until tiled subjects can compare four-band vs near-source
+// choices without hiding scheduling overhead inside this scalar subject.
 // TODO(perf:path, rank=13, after perf:layout area-resize-plan): Test a
 // separable horizontal-then-vertical area path with reusable scratch rows only
 // under the new packed-RGBA8/custom-harness conditions; older notes warned that
