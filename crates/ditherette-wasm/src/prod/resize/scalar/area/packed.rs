@@ -29,6 +29,15 @@ pub(super) fn resize_exact_integer_downscale_into(
         return false;
     };
 
+    if x_step == 2 && y_step == 2 {
+        resize_exact_2x_downscale_into(source, output);
+        return true;
+    }
+    if x_step == 4 && y_step == 4 {
+        resize_exact_4x_downscale_into(source, output);
+        return true;
+    }
+
     resize_exact_block_downscale_into(source, output, x_step, y_step);
     true
 }
@@ -160,6 +169,96 @@ fn resize_exact_block_upscale_into(
     }
 }
 
+fn resize_exact_2x_downscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+) {
+    let source_width = source.dimensions().width_usize();
+    let output_width = output.dimensions().width_usize();
+    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
+
+    for (output_y, output_row) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let first_source_row_start = output_y * 2 * source_row_byte_len;
+        let second_source_row_start = first_source_row_start + source_row_byte_len;
+
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .enumerate()
+        {
+            let source_x_start = output_x * 2 * rgba8::RGBA8_CHANNELS;
+            let top_left = first_source_row_start + source_x_start;
+            let top_right = top_left + rgba8::RGBA8_CHANNELS;
+            let bottom_left = second_source_row_start + source_x_start;
+            let bottom_right = bottom_left + rgba8::RGBA8_CHANNELS;
+
+            for channel in 0..rgba8::RGBA8_CHANNELS {
+                let sum = f64::from(source_data[top_left + channel]) * 0.25
+                    + f64::from(source_data[top_right + channel]) * 0.25
+                    + f64::from(source_data[bottom_left + channel]) * 0.25
+                    + f64::from(source_data[bottom_right + channel]) * 0.25;
+                output_pixel[channel] = sum.clamp(0.0, 255.0).round() as u8;
+            }
+        }
+    }
+}
+
+fn resize_exact_4x_downscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+) {
+    const WEIGHT: f64 = 1.0 / 16.0;
+
+    let source_width = source.dimensions().width_usize();
+    let output_width = output.dimensions().width_usize();
+    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
+
+    for (output_y, output_row) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let first_source_row_start = output_y * 4 * source_row_byte_len;
+
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .enumerate()
+        {
+            let source_x_start = output_x * 4 * rgba8::RGBA8_CHANNELS;
+            let mut red_sum = 0.0;
+            let mut green_sum = 0.0;
+            let mut blue_sum = 0.0;
+            let mut alpha_sum = 0.0;
+
+            for source_row_offset in 0..4 {
+                let row_start = first_source_row_start + source_row_offset * source_row_byte_len;
+                let source_start = row_start + source_x_start;
+                let source_end = source_start + 4 * rgba8::RGBA8_CHANNELS;
+                for source_pixel in
+                    source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS)
+                {
+                    red_sum += f64::from(source_pixel[0]) * WEIGHT;
+                    green_sum += f64::from(source_pixel[1]) * WEIGHT;
+                    blue_sum += f64::from(source_pixel[2]) * WEIGHT;
+                    alpha_sum += f64::from(source_pixel[3]) * WEIGHT;
+                }
+            }
+
+            output_pixel[0] = red_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[1] = green_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[2] = blue_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[3] = alpha_sum.clamp(0.0, 255.0).round() as u8;
+        }
+    }
+}
+
 fn resize_exact_block_downscale_into(
     source: ImageView<'_, Rgba8>,
     output: &mut ImageViewMut<'_, Rgba8>,
@@ -184,7 +283,10 @@ fn resize_exact_block_downscale_into(
             .enumerate()
         {
             let source_x_start = output_x * x_step;
-            let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+            let mut red_sum = 0.0;
+            let mut green_sum = 0.0;
+            let mut blue_sum = 0.0;
+            let mut alpha_sum = 0.0;
 
             for source_y in source_y_start..source_y_start + y_step {
                 let row_start = source_y * source_row_byte_len;
@@ -193,15 +295,17 @@ fn resize_exact_block_downscale_into(
                 for source_pixel in
                     source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS)
                 {
-                    for channel in 0..rgba8::RGBA8_CHANNELS {
-                        accumulated[channel] += f64::from(source_pixel[channel]) * weight;
-                    }
+                    red_sum += f64::from(source_pixel[0]) * weight;
+                    green_sum += f64::from(source_pixel[1]) * weight;
+                    blue_sum += f64::from(source_pixel[2]) * weight;
+                    alpha_sum += f64::from(source_pixel[3]) * weight;
                 }
             }
 
-            for channel in 0..rgba8::RGBA8_CHANNELS {
-                output_pixel[channel] = accumulated[channel].clamp(0.0, 255.0).round() as u8;
-            }
+            output_pixel[0] = red_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[1] = green_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[2] = blue_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[3] = alpha_sum.clamp(0.0, 255.0).round() as u8;
         }
     }
 }
