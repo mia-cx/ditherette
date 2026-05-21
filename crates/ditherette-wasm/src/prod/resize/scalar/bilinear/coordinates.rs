@@ -36,10 +36,9 @@ pub(super) fn support_range(position: f64, scale: f64) -> RangeInclusive<i64> {
     (position - support).floor() as i64..=(position + support).ceil() as i64
 }
 
-// TODO(perf:micro, rank=24, after perf:layout bilinear-nonzero-taps): Replace
-// per-tap generic clamping with precomputed edge/interior tap metadata once the
-// plan knows which coordinates can never cross image bounds. Benchmark default
-// `bilinear` plus edge-heavy small fixtures against the exact oracle.
+// CLOSE(perf): Tap clamping now happens once during `BilinearResizePlan`
+// construction, not in the hot pixel loop. Keep generic clamping here until plan
+// setup itself is benchmarked as material.
 pub(super) fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
     value.clamp(min, max)
 }
