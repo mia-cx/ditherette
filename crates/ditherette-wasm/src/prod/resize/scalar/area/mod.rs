@@ -19,6 +19,17 @@ use crate::{
 // profile. Benchmark with `ditherette-bench run resize-area --oracle
 // spec:resize:area:scalar --baseline perf-loop-resize-area` after updating the
 // profile subjects.
+// TODO(perf:harness, rank=2, after perf:harness area-prod-profile): Add area
+// fixture/scale groups that distinguish identity, exact integer downscale,
+// exact integer upscale, near-source fractional minify, and large fractional
+// minify; the old area code had separate winners for these classes. Benchmark
+// with `ditherette-bench run resize-area --oracle spec:resize:area:scalar
+// --baseline perf-loop-resize-area` before accepting path splits.
+// TODO(perf:api, rank=3, after perf:harness area-prod-profile): Add a cached
+// `AreaResizePlan` entrypoint analogous to nearest so repeated Ditherette calls
+// and the bench adapter can own plan reuse instead of rebuilding coverage data
+// per image. Benchmark with `ditherette-bench run resize-area --baseline
+// perf-loop-resize-area`.
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with exact area averaging.
 ///
