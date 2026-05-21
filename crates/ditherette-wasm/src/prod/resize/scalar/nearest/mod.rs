@@ -2,9 +2,10 @@
 //!
 //! This module defines the optimized nearest path for production resize while
 //! keeping the readable `spec` oracle independent. Inputs cross the shared prod
-//! resize boundary as normalized packed RGBA8; this module owns only nearest
-//! orchestration. Planning lives in `plan`, and nearest-specific word-copy
-//! kernels live in `packed`.
+//! resize boundary as normalized packed RGBA8; see `prod/resize/README.md` for
+//! the no-striding prod rule. This module owns only nearest orchestration.
+//! Planning lives in `plan`, and nearest-specific word-copy kernels live in
+//! `packed`.
 
 pub mod alignment;
 mod packed;
