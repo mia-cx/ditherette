@@ -5,16 +5,9 @@
 // Bilinear perf-search dependency map, current-code pass only:
 // harness baseline/profile coverage -> reusable plan/API -> scale-class path
 // split -> packed kernels -> arithmetic micro-tuning.
-// TODO(perf:harness, rank=1): Capture a clean `bilinear` accepted
-// baseline with exact oracle before optimizing so every later perf-loop can
-// compare against a stable production copy. Verify with `ditherette-bench run
-// bilinear --oracle spec:resize:bilinear:scalar --baseline accepted` and
-// replace only with the existing `accepted` baseline when accepted.
-// TODO(perf:harness, rank=2): Add an explicit identity/same-size bilinear case
-// to the benchmark matrix before adding copy fast paths, because the default
-// partial scale group has near-identity 0.99/1.05 cases but no exact 1.0 case.
-// Judge with `ditherette-bench run bilinear --scales 1 --baseline
-// accepted` plus exact oracle output.
+// NOTE(perf): The `bilinear` profile includes an explicit identity/same-size
+// scale via the `identity` scale group, so later copy fast paths are measured by
+// the default profile. Exact-oracle checks passed for the expanded matrix.
 // NOTE(perf): `BilinearResizePlan` with cached direct-evaluated x/y source
 // positions and thread-local bench reuse was accepted in `ditherette-bench run
 // bilinear --baseline accepted`; it improved most default cases by ~5-14% while
