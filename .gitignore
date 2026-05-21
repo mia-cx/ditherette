@@ -11,7 +11,7 @@ dist/
 .netlify/
 .wrangler/
 target/
-crates/*/target/
+crates/**/target/
 bench/results/
 
 # Generated Cloudflare types
@@ -57,6 +57,3 @@ vite.config.ts.timestamp-*
 # Benchmark artifacts
 benchmark-results/
 .ant-colony/
-benchmark-fixtures/*
-!benchmark-fixtures/
-!benchmark-fixtures/Celeste_box_art_full.png
