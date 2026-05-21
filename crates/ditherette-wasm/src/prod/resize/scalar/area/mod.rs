@@ -28,9 +28,16 @@ pub use plan::AreaResizePlan;
 /// is the coverage-weighted average of every overlapped source pixel, rounded
 /// per channel to `u8`. This function duplicates the spec formula instead of
 /// importing it so production remains independent from the oracle.
-pub fn resize_area_rgba8_into(source: ImageView<'_, Rgba8>, output: ImageViewMut<'_, Rgba8>) {
+pub fn resize_area_rgba8_into(source: ImageView<'_, Rgba8>, mut output: ImageViewMut<'_, Rgba8>) {
+    common::rgba8::assert_packed_source(source, "area");
+    common::rgba8::assert_packed_output(&output, "area");
+
+    if resize_area_fast_path_into(source, &mut output) {
+        return;
+    }
+
     let plan = AreaResizePlan::new(source.dimensions(), output.dimensions());
-    resize_area_rgba8_with_plan_into(source, output, &plan);
+    packed::resize_with_plan_into(source, output, &plan);
 }
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with a cached area plan.
@@ -39,7 +46,7 @@ pub fn resize_area_rgba8_into(source: ImageView<'_, Rgba8>, output: ImageViewMut
 /// are development tripwires for the shared production resize boundary.
 pub fn resize_area_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
     plan: &AreaResizePlan,
 ) {
     debug_assert_eq!(source.dimensions(), plan.source_dimensions);
@@ -48,5 +55,21 @@ pub fn resize_area_rgba8_with_plan_into(
     common::rgba8::assert_packed_source(source, "area");
     common::rgba8::assert_packed_output(&output, "area");
 
+    if resize_area_fast_path_into(source, &mut output) {
+        return;
+    }
+
     packed::resize_with_plan_into(source, output, plan);
+}
+
+fn resize_area_fast_path_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+) -> bool {
+    if source.dimensions() == output.dimensions() {
+        output.data_mut().copy_from_slice(source.data());
+        return true;
+    }
+
+    packed::resize_exact_integer_downscale_into(source, output)
 }
