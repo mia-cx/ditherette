@@ -23,12 +23,21 @@ use crate::{
     registry::Registry,
     report::{
         log_correctness_ok, log_correctness_start, log_perf_start, log_preheat_start,
-        log_runtime_tuning, print_comp_table, print_perf_table, MeasurementLogger,
+        log_runtime_tuning, print_comp_table, print_correctness_failure_warning, print_perf_table,
+        MeasurementLogger,
     },
-    result::{verify_with_bounds, BenchResult, BenchRun, VerificationBounds},
+    result::{verify_with_bounds, BenchResult, BenchRun, VerificationBounds, VerificationReport},
     runtime::{preheat_cpu, tune_runtime},
     util::{normalize_path_string, optional_id, output_dimensions},
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct CorrectnessFailure {
+    pub(crate) subject: SubjectId,
+    pub(crate) oracle: SubjectId,
+    pub(crate) case: String,
+    pub(crate) verification: VerificationReport,
+}
 
 pub(crate) fn list_subjects(registry: &Registry, args: &[String]) -> Result<(), BenchError> {
     let flags = Flags::parse(args)?;
@@ -173,6 +182,9 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let scales = scales_from_flags(&flags)?;
     let measurement = MeasurementConfig::from_flags(&flags)?;
     let verification_bounds = verification_bounds_from_flags(&flags)?;
+    let allow_correctness_failures = flags
+        .optional("--allow-correctness-failures")
+        .is_some_and(|value| value == "true");
     let accepted_baseline_name = flags.optional("--baseline");
     let previous_run = if accepted_baseline_name.is_none() {
         load_latest_run("perf", domain)
@@ -214,7 +226,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
         })
         .transpose()?;
 
-    if let Some(oracle_id) = oracle_id.as_ref() {
+    let correctness_failures = if let Some(oracle_id) = oracle_id.as_ref() {
         run_resize_correctness_checks(
             registry,
             oracle_id,
@@ -222,8 +234,11 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
             &fixtures,
             &scales,
             verification_bounds,
-        )?;
-    }
+            allow_correctness_failures,
+        )?
+    } else {
+        Vec::new()
+    };
 
     let mut results = Vec::new();
     for fixture in &fixtures {
@@ -286,6 +301,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     }
 
     print_perf_table(&run.results);
+    print_correctness_failure_warning(&correctness_failures);
     let acceptance = acceptance_report(&run.results, &flags)?;
 
     save_indexed_run(&run, save_baseline_name)?;
@@ -504,7 +520,8 @@ fn run_resize_correctness_checks(
     fixtures: &[crate::fixture::Fixture],
     scales: &[f64],
     verification_bounds: VerificationBounds,
-) -> Result<(), BenchError> {
+    allow_failures: bool,
+) -> Result<Vec<CorrectnessFailure>, BenchError> {
     let oracle = registry.resize_subject(oracle_id.as_str())?;
     let check_count = subjects
         .iter()
@@ -513,6 +530,7 @@ fn run_resize_correctness_checks(
         * fixtures.len()
         * scales.len();
     log_correctness_start(check_count);
+    let mut failures = Vec::new();
 
     for fixture in fixtures {
         for scale in scales {
@@ -530,18 +548,28 @@ fn run_resize_correctness_checks(
                 let verification =
                     verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
                 if !verification.passed {
-                    return Err(BenchError::Verify(format!(
-                        "{} failed {} verification against {} for {}: {:?}; differing_pixels={}, max_color_distance={:.6}, mean_color_distance={:.6}, rms_color_distance={:.6}",
-                        subject.descriptor.id,
-                        verification.mode,
-                        oracle_id,
-                        case,
-                        verification.first_mismatch,
-                        verification.differing_pixels,
-                        verification.max_color_distance,
-                        verification.mean_color_distance,
-                        verification.rms_color_distance
-                    )));
+                    if !allow_failures {
+                        return Err(BenchError::Verify(format!(
+                            "{} failed {} verification against {} for {}: {:?}; differing_pixels={}, max_color_distance={:.6}, mean_color_distance={:.6}, rms_color_distance={:.6}",
+                            subject.descriptor.id,
+                            verification.mode,
+                            oracle_id,
+                            case,
+                            verification.first_mismatch,
+                            verification.differing_pixels,
+                            verification.max_color_distance,
+                            verification.mean_color_distance,
+                            verification.rms_color_distance
+                        )));
+                    }
+
+                    failures.push(CorrectnessFailure {
+                        subject: subject.descriptor.id.clone(),
+                        oracle: oracle_id.clone(),
+                        case: case.clone(),
+                        verification,
+                    });
+                    continue;
                 }
                 log_correctness_ok(
                     &subject.descriptor.id.to_string(),
@@ -553,7 +581,7 @@ fn run_resize_correctness_checks(
         }
     }
     println!();
-    Ok(())
+    Ok(failures)
 }
 
 pub(crate) fn comp_command(registry: &Registry, args: &[String]) -> Result<(), BenchError> {

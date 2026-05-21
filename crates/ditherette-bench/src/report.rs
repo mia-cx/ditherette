@@ -11,7 +11,8 @@ use crate::{
     result::{BenchResult, ComparisonReport, SampleStats, VerificationReport},
     runtime::RuntimeTuningReport,
     util::{
-        dim, format_comparison, format_duration, format_ns, format_significant, green, heading, red,
+        bold_red, dim, format_comparison, format_duration, format_ns, format_significant, green,
+        heading, red,
     },
 };
 
@@ -126,6 +127,43 @@ pub(crate) fn log_correctness_ok(
         verification.mean_color_distance,
         verification.rms_color_distance
     );
+}
+
+pub(crate) fn print_correctness_failure_warning(failures: &[crate::commands::CorrectnessFailure]) {
+    if failures.is_empty() {
+        return;
+    }
+
+    println!("{}", bold_red("CORRECTNESS CHECKS FAILED"));
+    println!(
+        "{}",
+        bold_red("DO NOT ACCEPT THIS RUN WITHOUT MANUAL VISUAL/COLOR REVIEW")
+    );
+    println!(
+        "{} failing oracle comparison{}:",
+        failures.len(),
+        if failures.len() == 1 { "" } else { "s" }
+    );
+    for failure in failures {
+        let verification = &failure.verification;
+        println!(
+            "  {} vs {} · {} · {:?}",
+            failure.subject, failure.oracle, failure.case, verification.first_mismatch
+        );
+        println!(
+            "    color Δ max {:.6}, mean {:.6}, rms {:.6}; differing pixels {}/{}; differing bytes {}/{}; max byte Δ {}",
+            verification.max_color_distance,
+            verification.mean_color_distance,
+            verification.rms_color_distance,
+            verification.differing_pixels,
+            verification.pixels,
+            verification.differing_bytes,
+            verification.bytes,
+            verification.max_abs_diff
+        );
+    }
+    println!("{}", bold_red("BENCH RUN FAILED CORRECTNESS CHECKS"));
+    println!();
 }
 
 pub(crate) struct MeasurementLogger {
