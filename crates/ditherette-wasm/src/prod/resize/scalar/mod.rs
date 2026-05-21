@@ -15,16 +15,14 @@
 // NOTE(perf): Cached nonzero support taps in `BilinearResizePlan` were accepted
 // in `ditherette-bench run bilinear --baseline accepted`; preserving duplicate
 // clamped edge taps kept exact output and improved default cases by ~50-160%.
-// TODO(perf:path, rank=6, after perf:layout bilinear-plan-weights): Split
-// identity, upscale/two-tap, near-identity, and minify support-width classes so
+// NOTE(perf): The identity/same-size class copies packed RGBA8 bytes directly;
+// exact-oracle checks passed and `ditherette-bench run bilinear --scales 1
+// --baseline accepted` improved identity cases by >99%.
+// TODO(perf:path, rank=6, after perf:layout bilinear-nonzero-taps): Split the
+// remaining upscale/two-tap, near-identity, and minify support-width classes so
 // each class can use simpler loops without per-pixel support branching. Verify
 // exact oracle checks across the default partial scale group, then benchmark
 // `ditherette-bench run bilinear --baseline accepted`.
-// TODO(perf:path, rank=7, after perf:path bilinear-scale-classes): Add a packed
-// identity/same-size row-copy path if the explicit 1.0 profile proves
-// user-representative; prior art had this fast path, but current harness lacks a
-// 1.0 case to guard against optimizing an invisible path. Verify exactness with
-// `ditherette-bench run bilinear --scales 1 --oracle spec:resize:bilinear:scalar`.
 // TODO(perf:path, rank=8, after perf:path bilinear-scale-classes): Evaluate a
 // separable two-pass minify path with f64 scratch rows for large downscales;
 // accept only if it remains byte-exact against `spec:resize:bilinear:scalar`

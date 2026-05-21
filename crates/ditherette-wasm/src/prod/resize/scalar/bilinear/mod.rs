@@ -72,6 +72,10 @@ impl BilinearResizePlan {
             && self.output_dimensions == output_dimensions
             && self.anchor == anchor
     }
+
+    fn is_identity(&self) -> bool {
+        self.source_dimensions == self.output_dimensions
+    }
 }
 
 fn axis_taps(
@@ -125,13 +129,18 @@ pub fn resize_bilinear_rgba8_into(
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached metadata.
 pub fn resize_bilinear_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
 ) {
     common::rgba8::assert_packed_source(source, "bilinear");
     common::rgba8::assert_packed_output(&output, "bilinear");
     debug_assert_eq!(source.dimensions(), plan.source_dimensions);
     debug_assert_eq!(output.dimensions(), plan.output_dimensions);
+
+    if plan.is_identity() {
+        output.data_mut().copy_from_slice(source.data());
+        return;
+    }
 
     kernel::resize_packed_rgba8_with_triangle_filter_into(source, output, plan);
 }
