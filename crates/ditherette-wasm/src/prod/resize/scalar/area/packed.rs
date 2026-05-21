@@ -41,6 +41,10 @@ pub(super) fn resize_exact_integer_downscale_into(
         resize_exact_8x_downscale_into(source, output);
         return true;
     }
+    if x_step == 10 && y_step == 10 {
+        resize_exact_10x_downscale_into(source, output);
+        return true;
+    }
 
     resize_exact_block_downscale_into(source, output, x_step, y_step);
     true
@@ -63,17 +67,28 @@ pub(super) fn resize_with_plan_into(
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &AreaResizePlan,
 ) {
-    for output_y in 0..plan.output_dimensions.height() {
-        let output_row = output
-            .row_mut(output_y)
-            .expect("output y from dimensions should stay in bounds");
-        let y_spans = &plan.y_spans[output_y as usize];
+    let source_row_byte_len = source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = plan.output_dimensions.width_usize() * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
 
-        for output_x in 0..plan.output_dimensions.width() {
-            let x_spans = &plan.x_spans[output_x as usize];
-            let output_start = output_x as usize * rgba8::RGBA8_CHANNELS;
-            let output_pixel = &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS];
-            let accumulated = accumulate_pixel(source, x_spans, y_spans, plan.area);
+    for (output_y, output_row) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let y_spans = &plan.y_spans[output_y];
+
+        for (output_pixel, x_spans) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .zip(&plan.x_spans)
+        {
+            let accumulated = accumulate_pixel(
+                source_data,
+                source_row_byte_len,
+                x_spans,
+                y_spans,
+                plan.area,
+            );
 
             for channel in 0..rgba8::RGBA8_CHANNELS {
                 output_pixel[channel] = accumulated[channel].clamp(0.0, 255.0).round() as u8;
@@ -314,6 +329,58 @@ fn resize_exact_8x_downscale_into(
     }
 }
 
+fn resize_exact_10x_downscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+) {
+    const STEP: usize = 10;
+    const WEIGHT: f64 = 1.0 / (STEP * STEP) as f64;
+
+    let source_width = source.dimensions().width_usize();
+    let output_width = output.dimensions().width_usize();
+    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
+
+    for (output_y, output_row) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let first_source_row_start = output_y * STEP * source_row_byte_len;
+
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .enumerate()
+        {
+            let source_x_start = output_x * STEP * rgba8::RGBA8_CHANNELS;
+            let mut red_sum = 0.0;
+            let mut green_sum = 0.0;
+            let mut blue_sum = 0.0;
+            let mut alpha_sum = 0.0;
+
+            for source_row_offset in 0..STEP {
+                let row_start = first_source_row_start + source_row_offset * source_row_byte_len;
+                let source_start = row_start + source_x_start;
+                let source_end = source_start + STEP * rgba8::RGBA8_CHANNELS;
+                for source_pixel in
+                    source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS)
+                {
+                    red_sum += f64::from(source_pixel[0]) * WEIGHT;
+                    green_sum += f64::from(source_pixel[1]) * WEIGHT;
+                    blue_sum += f64::from(source_pixel[2]) * WEIGHT;
+                    alpha_sum += f64::from(source_pixel[3]) * WEIGHT;
+                }
+            }
+
+            output_pixel[0] = red_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[1] = green_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[2] = blue_sum.clamp(0.0, 255.0).round() as u8;
+            output_pixel[3] = alpha_sum.clamp(0.0, 255.0).round() as u8;
+        }
+    }
+}
+
 fn resize_exact_block_downscale_into(
     source: ImageView<'_, Rgba8>,
     output: &mut ImageViewMut<'_, Rgba8>,
@@ -370,22 +437,69 @@ fn resize_exact_block_downscale_into(
 // 2-9% in `ditherette-bench run area --baseline accepted`; keep the copied
 // `AxisOverlap` y layout until the whole row traversal changes.
 fn accumulate_pixel(
-    source: ImageView<'_, Rgba8>,
+    source_data: &[u8],
+    source_row_byte_len: usize,
     x_spans: &super::plan::XAxisOverlapSpan,
     y_spans: &[super::plan::AxisOverlap],
     area: f64,
 ) -> [f64; rgba8::RGBA8_CHANNELS] {
+    if y_spans.len() == 1 && x_spans.overlaps.len() == 1 {
+        let source_start =
+            y_spans[0].source_index * source_row_byte_len + x_spans.first_byte_offset;
+        let source_pixel = &source_data[source_start..source_start + rgba8::RGBA8_CHANNELS];
+        return [
+            f64::from(source_pixel[0]),
+            f64::from(source_pixel[1]),
+            f64::from(source_pixel[2]),
+            f64::from(source_pixel[3]),
+        ];
+    }
+
     let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
 
-    for y_span in y_spans {
-        let source_row = source
-            .row(y_span.source_index as u32)
-            .expect("planned source y should stay in bounds");
-        let source_pixels = source_row
-            [x_spans.first_byte_offset..x_spans.last_exclusive_byte_offset]
-            .chunks_exact(rgba8::RGBA8_CHANNELS);
+    if y_spans.len() == 1 {
+        let y_span = y_spans[0];
+        let source_row_start = y_span.source_index * source_row_byte_len;
+        let source_start = source_row_start + x_spans.first_byte_offset;
+        let source_end = source_row_start + x_spans.last_exclusive_byte_offset;
+        let source_pixels =
+            source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS);
 
         for (x_overlap, source_pixel) in x_spans.overlaps.iter().copied().zip(source_pixels) {
+            let weight = x_overlap * y_span.overlap / area;
+            for channel in 0..rgba8::RGBA8_CHANNELS {
+                accumulated[channel] += f64::from(source_pixel[channel]) * weight;
+            }
+        }
+
+        return accumulated;
+    }
+
+    if x_spans.overlaps.len() == 1 {
+        let x_overlap = x_spans.overlaps[0];
+        for y_span in y_spans {
+            let source_start =
+                y_span.source_index * source_row_byte_len + x_spans.first_byte_offset;
+            let source_pixel = &source_data[source_start..source_start + rgba8::RGBA8_CHANNELS];
+            let weight = x_overlap * y_span.overlap / area;
+            for channel in 0..rgba8::RGBA8_CHANNELS {
+                accumulated[channel] += f64::from(source_pixel[channel]) * weight;
+            }
+        }
+
+        return accumulated;
+    }
+
+    for y_span in y_spans {
+        let source_row_start = y_span.source_index * source_row_byte_len;
+        let source_start = source_row_start + x_spans.first_byte_offset;
+        let source_end = source_row_start + x_spans.last_exclusive_byte_offset;
+        let source_pixels =
+            source_data[source_start..source_end].chunks_exact(rgba8::RGBA8_CHANNELS);
+
+        for (x_overlap, source_pixel) in x_spans.overlaps.iter().copied().zip(source_pixels) {
+            // REJECT(perf): Hoisting `y_span.overlap / area` changed f64
+            // rounding order and failed exact verification on 0.75x box art.
             let weight = x_overlap * y_span.overlap / area;
 
             // REJECT(perf): f32 accumulators are not byte-identical to the f64
