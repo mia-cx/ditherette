@@ -46,11 +46,10 @@ fn write_resized_pixel(
     let mut accumulated = [0.0; RGBA8_CHANNELS];
     let mut total_weight = 0.0;
 
-    // TODO(perf:kernel, rank=21, after perf:layout bilinear-nonzero-taps):
-    // Precompute x/y weight sums and the reciprocal normalization factor per
-    // output coordinate so the hot tap loop only accumulates weighted channels.
-    // Preserve f64 operation order where required by exactness; benchmark with
-    // `ditherette-bench run bilinear --baseline accepted`.
+    // REJECT(perf): Precomputing x/y weight sums and replacing the nested
+    // `total_weight += x_weight * y_weight` accumulation changed f64 rounding
+    // and failed exact oracle output in `prod_resize_bilinear` for anchored
+    // cases. Keep denominator accumulation in the same order as channel sums.
     for y_tap in y_taps {
         let source_row = source
             .row(y_tap.index as u32)
