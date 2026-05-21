@@ -40,41 +40,43 @@ pub(crate) fn save_scoped_baseline(
     run: &BenchRun,
     replace: bool,
 ) -> Result<(), BenchError> {
-    let path = scoped_baseline_path(role, name, run);
-    if path.exists() && !replace {
-        return Err(BenchError::Baseline(format!(
-            "baseline {role}/{name} already exists for this config; use replace to overwrite"
-        )));
+    for result in &run.results {
+        let dir = scoped_baseline_dir(name, run, result);
+        if dir.exists() {
+            if !replace {
+                return Err(BenchError::Baseline(format!(
+                    "baseline {role}/{name} already exists for {} {}; use replace to overwrite",
+                    result.subject, result.case_id
+                )));
+            }
+            fs::remove_dir_all(&dir).map_err(BenchError::io)?;
+        }
+
+        let mut case_run = run.clone();
+        case_run.results = vec![result.clone()];
+        write_json(
+            dir.join(format!("{}.json", sanitize_path_component(&run.run_id))),
+            &case_run.as_baseline(role, name),
+        )?;
     }
-    write_json(path, &run.as_baseline(role, name))
+    Ok(())
 }
 
-pub(crate) fn load_scoped_baselines(role: &str, name: &str) -> Result<Vec<BenchRun>, BenchError> {
-    let mut baselines = Vec::new();
-    let legacy_path = baseline_path(role, name);
-    if legacy_path.exists() {
-        baselines.push(read_baseline_at(role, name, &legacy_path)?);
-    }
+pub(crate) fn load_scoped_baseline(
+    role: &str,
+    name: &str,
+    current_run: &BenchRun,
+) -> Result<BenchRun, BenchError> {
+    let mut baseline = current_run.as_baseline(role, name);
+    baseline.results.clear();
 
-    let dir = scoped_baseline_dir(role, name);
-    let entries = match fs::read_dir(&dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(baselines),
-        Err(error) => return Err(BenchError::io(error)),
-    };
-    let mut paths = entries
-        .map(|entry| entry.map(|entry| entry.path()).map_err(BenchError::io))
-        .collect::<Result<Vec<_>, _>>()?;
-    paths.sort();
-
-    for path in paths {
-        if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
-            continue;
+    for result in &current_run.results {
+        if let Some(case_baseline) = load_scoped_case_baseline(role, name, current_run, result)? {
+            baseline.results.extend(case_baseline.results);
         }
-        baselines.push(read_baseline_at(role, name, &path)?);
     }
 
-    Ok(baselines)
+    Ok(baseline)
 }
 
 pub(crate) fn save_latest_run(run: &BenchRun) -> Result<(), BenchError> {
@@ -122,6 +124,44 @@ pub(crate) fn write_json(path: impl AsRef<Path>, value: &BenchRun) -> Result<(),
     let data = serde_json::to_string_pretty(value)
         .map_err(|error| BenchError::Runtime(format!("failed to serialize JSON: {error}")))?;
     fs::write(path, data).map_err(BenchError::io)
+}
+
+fn load_scoped_case_baseline(
+    role: &str,
+    name: &str,
+    current_run: &BenchRun,
+    result: &BenchResult,
+) -> Result<Option<BenchRun>, BenchError> {
+    let dir = scoped_baseline_dir(name, current_run, result);
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(BenchError::io(error)),
+    };
+
+    let mut newest: Option<(u64, PathBuf, BenchRun)> = None;
+    for entry in entries {
+        let path = entry.map_err(BenchError::io)?.path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
+            continue;
+        }
+        let run = read_baseline_at(role, name, &path)?;
+        if run.results.len() != 1 {
+            return Err(BenchError::Baseline(format!(
+                "scoped baseline {} contains {} results, expected 1",
+                path.display(),
+                run.results.len()
+            )));
+        }
+        let candidate = (run.created_at_unix, path, run);
+        if newest.as_ref().is_none_or(|(created_at, current_path, _)| {
+            candidate.0 > *created_at || (candidate.0 == *created_at && candidate.1 > *current_path)
+        }) {
+            newest = Some(candidate);
+        }
+    }
+
+    Ok(newest.map(|(_, _, run)| run))
 }
 
 fn read_baseline_at(role: &str, name: &str, path: &Path) -> Result<BenchRun, BenchError> {
@@ -195,7 +235,7 @@ fn indexed_result_path(
     if let Some(baseline_key) = baseline_key {
         path = path.join(sanitize_path_component(baseline_key));
     }
-    path.join(sanitize_path_component(&result.fixture))
+    path.join(fixture_key(result))
         .join(scale_key(result.scale))
         .join("run.json")
 }
@@ -245,6 +285,10 @@ fn measurement_key(measurement: Option<&MeasurementArtifact>) -> String {
     )
 }
 
+fn fixture_key(result: &BenchResult) -> String {
+    compact_component(&result.fixture, "unknown-fixture")
+}
+
 fn scale_key(scale: f64) -> String {
     format!("{}x", sanitize_path_component(&scale.to_string()))
 }
@@ -291,49 +335,16 @@ fn baseline_path(role: &str, name: &str) -> PathBuf {
         .join(format!("{name}.json"))
 }
 
-fn scoped_baseline_path(role: &str, name: &str, run: &BenchRun) -> PathBuf {
-    scoped_baseline_dir(role, name).join(format!("{}.json", scoped_baseline_key(run)))
-}
-
-fn scoped_baseline_dir(role: &str, name: &str) -> PathBuf {
+fn scoped_baseline_dir(name: &str, run: &BenchRun, result: &BenchResult) -> PathBuf {
     artifact_root()
         .join("baselines")
-        .join(role)
+        .join(&run.command)
+        .join(&run.domain)
+        .join(benchmark_key(result))
+        .join(config_key(run, result))
+        .join(fixture_key(result))
+        .join(scale_key(result.scale))
         .join(sanitize_path_component(name))
-}
-
-fn scoped_baseline_key(run: &BenchRun) -> String {
-    let mut result_keys = run
-        .results
-        .iter()
-        .map(|result| {
-            format!(
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                result.subject,
-                result.variant,
-                result.fixture_fingerprint,
-                result.source_width,
-                result.source_height,
-                result.output_width,
-                result.output_height,
-                result.scale,
-                result.filter,
-                result.pixel_format,
-                result.params_fingerprint,
-                result.fixture
-            )
-        })
-        .collect::<Vec<_>>();
-    result_keys.sort();
-    let key = format!(
-        "command={}\ndomain={}\nprofile={}\nmeasurement={:?}\nresults={}\n",
-        run.command,
-        run.domain,
-        run.profile,
-        run.measurement,
-        result_keys.join("\n")
-    );
-    checksum(key.as_bytes())
 }
 
 fn artifact_root() -> PathBuf {

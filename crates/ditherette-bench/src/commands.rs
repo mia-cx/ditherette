@@ -1,20 +1,21 @@
 //! CLI command implementations.
 
+use std::collections::BTreeMap;
+
 use ditherette_bench_api::{ResizeBenchSubject, ResizeParams, SubjectId};
 
 use crate::{
     baseline::{
-        load_baseline, load_latest_run, load_scoped_baselines, save_baseline, save_indexed_run,
+        load_baseline, load_latest_run, load_scoped_baseline, save_baseline, save_indexed_run,
         save_latest_run, save_scoped_baseline, write_json,
     },
     case::scales_from_flags,
     cli::{split_domain, Flags},
     compare::{
-        acceptance_report, attach_accepted_comparison, attach_accepted_comparisons,
-        attach_measured_oracle_comparisons, attach_measured_spec_comparisons,
-        attach_named_oracle_comparisons, attach_named_spec_comparisons, attach_pair_comparisons,
-        attach_previous_comparisons, ensure_compatible_baseline, has_exact_comparisons,
-        require_accepted_comparisons,
+        acceptance_report, attach_accepted_comparisons, attach_measured_oracle_comparisons,
+        attach_measured_spec_comparisons, attach_named_oracle_comparisons,
+        attach_named_spec_comparisons, attach_pair_comparisons, attach_previous_comparisons,
+        ensure_compatible_baseline, has_exact_comparisons, missing_exact_results,
     },
     error::BenchError,
     fixture::fixtures_from_flags,
@@ -24,9 +25,9 @@ use crate::{
         log_correctness_ok, log_correctness_start, log_perf_start, log_preheat_start,
         log_runtime_tuning, print_comp_table, print_perf_table, MeasurementLogger,
     },
-    result::{verify_exact, BenchRun},
+    result::{verify_exact, BenchResult, BenchRun},
     runtime::{preheat_cpu, tune_runtime},
-    util::{checksum, normalize_path_string, optional_id, output_dimensions},
+    util::{normalize_path_string, optional_id, output_dimensions},
 };
 
 pub(crate) fn list_subjects(registry: &Registry, args: &[String]) -> Result<(), BenchError> {
@@ -172,11 +173,6 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let scales = scales_from_flags(&flags)?;
     let measurement = MeasurementConfig::from_flags(&flags)?;
     let accepted_baseline_name = flags.optional("--baseline");
-    let accepted_baseline_candidates = accepted_baseline_name
-        .map(|name| load_scoped_baselines("accepted", name))
-        .transpose()?;
-    let mut accepted_baseline = None;
-    let mut seed_missing_accepted_baseline = false;
     let previous_run = if accepted_baseline_name.is_none() {
         load_latest_run("perf", domain)
             .ok()
@@ -229,7 +225,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                 let case = format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale);
                 let mut logger =
                     MeasurementLogger::new(&subject.descriptor.id.to_string(), &case, measurement);
-                let mut result = measure_resize_case(
+                let result = measure_resize_case(
                     subject,
                     fixture,
                     output,
@@ -239,49 +235,34 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                     None,
                     &mut logger,
                 )?;
-                if let Some(baseline) = accepted_baseline.as_ref() {
-                    attach_accepted_comparison(&mut result, baseline);
-                }
                 logger.finish(&result);
                 results.push(result);
             }
         }
     }
 
-    if let Some(candidates) = accepted_baseline_candidates.as_ref() {
-        accepted_baseline = candidates
-            .iter()
-            .find(|baseline| {
-                ensure_compatible_baseline(baseline, "perf", domain, &measurement).is_ok()
-                    && has_exact_comparisons(&results, baseline)
-            })
-            .cloned();
-        seed_missing_accepted_baseline = accepted_baseline.is_none();
-    }
-    if let Some(baseline) = accepted_baseline.as_ref() {
-        require_accepted_comparisons(&results, baseline)?;
-    }
-    attach_accepted_comparisons(&mut results, accepted_baseline.as_ref());
-    if accepted_baseline.is_none() {
-        if let Some(previous_run) = previous_run.as_ref() {
-            if has_exact_comparisons(&results, previous_run) {
-                attach_previous_comparisons(&mut results, previous_run);
-            }
+    let mut run = BenchRun::new("perf", domain, Some(measurement.artifact()), results);
+    if let Some(name) = accepted_baseline_name {
+        let accepted_baseline = load_scoped_baseline("accepted", name, &run)?;
+        ensure_compatible_baseline(&accepted_baseline, "perf", domain, &measurement)?;
+        attach_accepted_comparisons(&mut run.results, Some(&accepted_baseline));
+    } else if let Some(previous_run) = previous_run.as_ref() {
+        if has_exact_comparisons(&run.results, previous_run) {
+            attach_previous_comparisons(&mut run.results, previous_run);
         }
     }
     if let Some(oracle_baseline) = oracle_baseline.as_ref() {
-        attach_named_oracle_comparisons(&mut results, oracle_baseline);
+        attach_named_oracle_comparisons(&mut run.results, oracle_baseline);
     } else if let Some(oracle_id) = oracle_id.as_ref() {
-        attach_measured_oracle_comparisons(&mut results, oracle_id);
+        attach_measured_oracle_comparisons(&mut run.results, oracle_id);
     }
     if let Some(spec_subject) = measured_spec_subject.as_ref() {
-        attach_measured_spec_comparisons(&mut results, spec_subject);
+        attach_measured_spec_comparisons(&mut run.results, spec_subject);
     }
     if let Some(spec_baseline) = loaded_spec_baseline.as_ref() {
-        attach_named_spec_comparisons(&mut results, spec_baseline);
+        attach_named_spec_comparisons(&mut run.results, spec_baseline);
     }
 
-    let run = BenchRun::new("perf", domain, Some(measurement.artifact()), results);
     print_perf_table(&run.results);
     let acceptance = acceptance_report(&run.results, &flags)?;
 
@@ -291,10 +272,6 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
         write_json(out, &run)?;
     }
     if let Some(name) = save_baseline_name {
-        save_scoped_baseline("accepted", name, &run, true)?;
-    } else if seed_missing_accepted_baseline {
-        let name =
-            accepted_baseline_name.expect("seeded baselines require a requested baseline name");
         save_scoped_baseline("accepted", name, &run, true)?;
     }
     if let Some(name) = flags.optional("--save-spec-baseline") {
@@ -311,7 +288,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     }
 }
 
-const ORACLE_BASELINE_MAX_AGE_SECONDS: u64 = 24 * 60 * 60;
+const ORACLE_BASELINE_NAME: &str = "oracle";
 
 fn ensure_oracle_baseline(
     oracle: &ResizeBenchSubject,
@@ -332,137 +309,124 @@ fn ensure_oracle_baseline(
         )));
     }
 
-    let name = oracle_baseline_name(oracle, fixtures, scales, measurement, domain);
-    if !force_refresh {
-        if let Ok(baseline) = load_baseline("oracle", &name) {
-            if oracle_baseline_is_fresh_and_matching(
-                &baseline,
-                oracle,
-                fixtures,
-                scales,
-                measurement,
-                domain,
-            ) {
-                return Ok(baseline);
-            }
-        }
+    let expected = oracle_probe_run(oracle, fixtures, scales, measurement, domain);
+    let cached = if force_refresh {
+        let mut empty = expected.as_baseline("oracle", ORACLE_BASELINE_NAME);
+        empty.results.clear();
+        empty
+    } else {
+        load_scoped_baseline("oracle", ORACLE_BASELINE_NAME, &expected)?
+    };
+    let missing = missing_exact_results(&expected.results, &cached);
+    if missing.is_empty() {
+        return Ok(cached);
     }
 
     let reason = if force_refresh {
         "refresh requested"
     } else {
-        "missing or stale"
+        "missing cases"
     };
     println!(
-        "{} oracle baseline {name:?} {reason}; measuring {}",
+        "{} oracle baseline {reason}; measuring {}",
         crate::util::heading("Oracle"),
         oracle.descriptor.id
     );
+
+    let mut measured = Vec::new();
+    for missing_case in &missing {
+        let fixture = fixtures
+            .iter()
+            .find(|fixture| {
+                fixture.id == missing_case.fixture
+                    && fixture.fingerprint == missing_case.fixture_fingerprint
+            })
+            .expect("missing oracle case should refer to a requested fixture");
+        let output = (missing_case.output_width, missing_case.output_height);
+        let case = format!(
+            "oracle-baseline/{}-{}x{}-{}x",
+            fixture.id, output.0, output.1, missing_case.scale
+        );
+        let mut logger =
+            MeasurementLogger::new(&oracle.descriptor.id.to_string(), &case, *measurement);
+        let result = measure_resize_case(
+            oracle,
+            fixture,
+            output,
+            missing_case.scale,
+            &ResizeParams::default(),
+            measurement,
+            None,
+            &mut logger,
+        )?;
+        logger.finish(&result);
+        measured.push(result);
+    }
+
+    let mut measured_run = BenchRun::new("perf", domain, Some(measurement.artifact()), measured);
+    save_scoped_baseline("oracle", ORACLE_BASELINE_NAME, &measured_run, true)?;
+    measured_run.results.extend(cached.results);
+    Ok(measured_run.as_baseline("oracle", ORACLE_BASELINE_NAME))
+}
+
+fn oracle_probe_run(
+    oracle: &ResizeBenchSubject,
+    fixtures: &[crate::fixture::Fixture],
+    scales: &[f64],
+    measurement: &MeasurementConfig,
+    domain: &str,
+) -> BenchRun {
     let mut results = Vec::new();
     for fixture in fixtures {
         for scale in scales {
             let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
-            let case = format!(
-                "oracle-baseline/{}-{}x{}-{}x",
-                fixture.id, output.0, output.1, scale
-            );
-            let mut logger =
-                MeasurementLogger::new(&oracle.descriptor.id.to_string(), &case, *measurement);
-            let result = measure_resize_case(
-                oracle,
-                fixture,
-                output,
-                *scale,
-                &ResizeParams::default(),
-                measurement,
-                None,
-                &mut logger,
-            )?;
-            logger.finish(&result);
-            results.push(result);
+            results.push(oracle_probe_result(oracle, fixture, output, *scale));
         }
     }
-    let run = BenchRun::new("perf", domain, Some(measurement.artifact()), results);
-    save_baseline("oracle", &name, &run, true)?;
-    load_baseline("oracle", &name)
+    BenchRun::new("perf", domain, Some(measurement.artifact()), results)
 }
 
-fn oracle_baseline_is_fresh_and_matching(
-    baseline: &BenchRun,
+fn oracle_probe_result(
     oracle: &ResizeBenchSubject,
-    fixtures: &[crate::fixture::Fixture],
-    scales: &[f64],
-    measurement: &MeasurementConfig,
-    domain: &str,
-) -> bool {
-    ensure_compatible_baseline(baseline, "perf", domain, measurement).is_ok()
-        && baseline.created_at_unix + ORACLE_BASELINE_MAX_AGE_SECONDS >= current_unix_seconds()
-        && fixtures.iter().all(|fixture| {
-            scales.iter().all(|scale| {
-                let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
-                baseline.results.iter().any(|result| {
-                    result.subject == oracle.descriptor.id.as_str()
-                        && result.fixture_fingerprint == fixture.fingerprint
-                        && result.source_width == fixture.width
-                        && result.source_height == fixture.height
-                        && result.output_width == output.0
-                        && result.output_height == output.1
-                        && result.scale == *scale
-                        && result.filter == oracle.descriptor.id.filter()
-                        && result.pixel_format == "rgba8"
-                        && result.params_fingerprint == "resize-default"
-                })
-            })
-        })
-}
-
-fn oracle_baseline_name(
-    oracle: &ResizeBenchSubject,
-    fixtures: &[crate::fixture::Fixture],
-    scales: &[f64],
-    measurement: &MeasurementConfig,
-    domain: &str,
-) -> String {
-    let mut key = format!(
-        "perf\n{domain}\n{}\n{:?}\n",
-        oracle.descriptor.id,
-        measurement.artifact()
-    );
-    for fixture in fixtures {
-        for scale in scales {
-            let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
-            key.push_str(&format!(
-                "{}:{}:{}x{}:{}x{}:{scale}\n",
-                fixture.id, fixture.fingerprint, fixture.width, fixture.height, output.0, output.1
-            ));
-        }
+    fixture: &crate::fixture::Fixture,
+    output: (u32, u32),
+    scale: f64,
+) -> BenchResult {
+    BenchResult {
+        subject: oracle.descriptor.id.to_string(),
+        case_id: format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale),
+        fixture: fixture.id.clone(),
+        fixture_kind: fixture.kind.clone(),
+        fixture_fingerprint: fixture.fingerprint.clone(),
+        filter: oracle.descriptor.id.filter().to_owned(),
+        variant: oracle.descriptor.id.variant().to_owned(),
+        source_width: fixture.width,
+        source_height: fixture.height,
+        output_width: output.0,
+        output_height: output.1,
+        scale,
+        pixel_format: "rgba8".to_owned(),
+        params_fingerprint: "resize-default".to_owned(),
+        verified: false,
+        verification: None,
+        checksum: String::new(),
+        samples: 0,
+        sample_ns: Vec::new(),
+        iterations_per_sample: 0,
+        total_iterations: 0,
+        min_ns: 0.0,
+        median_ns: 0.0,
+        mean_ns: 0.0,
+        stdev_ns: 0.0,
+        mode_ns: 0.0,
+        p75_ns: 0.0,
+        p90_ns: 0.0,
+        p95_ns: 0.0,
+        p99_ns: 0.0,
+        max_ns: 0.0,
+        output_mpix_per_s: 0.0,
+        comparisons: BTreeMap::new(),
     }
-    let hash = checksum(key.as_bytes());
-    format!(
-        "{}-{}",
-        sanitize_name(oracle.descriptor.id.as_str()),
-        &hash[..16]
-    )
-}
-
-fn sanitize_name(value: &str) -> String {
-    value
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect()
-}
-
-fn current_unix_seconds() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
 }
 
 fn run_resize_correctness_checks(

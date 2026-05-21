@@ -5,13 +5,14 @@
 ```text
 crates/ditherette-bench/target/bench/
   latest/<command>-<domain>.json
-  baselines/<role>/<name>.json
+  baselines/<role>/<name>.json                         # legacy whole-run/spec baselines
+  baselines/<command>/<domain>/<bench-key>/<config-key>/<fixture>/<scale>/<name>/<run-id>.json
   <command>/<domain>/<bench-key>/<config-key>/[baseline-name/]<fixture>/<scale>/run.json
 ```
 
 Artifacts under the crate-local `target/` are intentionally Criterion-like: generated benchmark state belongs in build output, not source-controlled project data, unless copied elsewhere with `--out`.
 
-Per-case run files are deterministic and overwritten in place, not timestamped. `bench-key` is derived from the measured subject. `config-key` is derived from measurement and subject configuration. The optional baseline-name directory is present when `--save-baseline <key>` is used.
+Per-case run files are deterministic and overwritten in place, not timestamped. Scoped baseline files are per-case and timestamped by `run-id` under the baseline name. `bench-key` is derived from the measured subject. `config-key` is derived from command/domain/profile, measurement settings, subject id, filter, variant, pixel format, and params. Fixture fingerprint and scale are path scopes below the config, not config hash inputs. The optional baseline-name directory in run output is present when `--save-baseline <key>` is used.
 
 ## Envelope
 
@@ -75,7 +76,13 @@ spec        saved spec characterization
 experiment  temporary comparison point
 ```
 
-Accepted baselines are scoped by run config while sharing a human-readable name. The same name, such as `accepted`, may coexist for different profiles, subjects, scale matrices, fixtures, or measurement configs.
+Accepted baselines are scoped per case while sharing a human-readable name. The same name, such as `accepted`, may coexist for different profiles, subjects, fixtures, scales, and measurement configs because the path scopes are explicit:
+
+```text
+baselines/perf/resize/prod-resize-area-scalar/<config>/Celeste_Insta_selfie/0-5x/accepted/<run-id>.json
+```
+
+Subset runs reuse matching per-fixture/per-scale baseline files without reestablishing the whole matrix.
 
 Accepted baseline comparisons still require an exact matching entry:
 
@@ -92,11 +99,11 @@ Accepted baseline comparisons still require an exact matching entry:
 - pixel format
 - params fingerprint
 
-When a requested accepted baseline name has no compatible exact entry for the current config, the run proceeds without accepted comparisons and saves the current run as that name for this config. Dirty git trees are allowed and recorded.
+When a requested accepted baseline name has missing per-case entries, the run attaches comparisons for cases already present and leaves missing cases blank (`—`) in the baseline column. Dirty git trees are allowed and recorded.
 
-If no accepted baseline is specified, `perf` compares exact-subject results to the most recent compatible previous run from `crates/ditherette-bench/target/bench/latest/perf-resize.json` before overwriting it with the current run. `--save-baseline NAME` runs the benchmark and overwrites accepted baseline `NAME` with that new run. `--replace-baseline NAME` does not run; it overwrites accepted baseline `NAME` from the current latest-run cache and exits.
+If no accepted baseline is specified, `perf` compares exact-subject results to the most recent compatible previous run from `crates/ditherette-bench/target/bench/latest/perf-resize.json` before overwriting it with the current run. `--save-baseline NAME` runs the benchmark and overwrites accepted baseline `NAME` for every measured case. `--replace-baseline NAME` does not run; it overwrites accepted baseline `NAME` from the current latest-run cache and exits.
 
-Oracle baselines are auto-managed. When `--oracle SUBJECT` is provided, the harness loads the matching `oracle` baseline for the current command/domain/measurement/fixture/scale matrix. If it is missing or more than 24 hours old, the harness measures the oracle first, saves a fresh baseline, then runs the requested subjects. `--save-oracle SUBJECT` forces a refresh/replacement of that matching oracle baseline before the normal run; bare `--save-oracle` refreshes the `--oracle` subject. `--replace-oracle` is an alias for `--save-oracle`.
+Oracle baselines use the same per-case scoped layout under the baseline name `oracle`. When `--oracle SUBJECT` is provided, the harness loads matching oracle cases and measures only missing requested cases before the normal run, so partial oracle baselines fill themselves incrementally. `--save-oracle SUBJECT` refreshes/replaces the requested oracle cases before the normal run; bare `--save-oracle` refreshes the `--oracle` subject. `--replace-oracle` is an alias for `--save-oracle`.
 
 ## Oracle/spec matching
 
