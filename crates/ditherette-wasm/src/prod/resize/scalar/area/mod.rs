@@ -13,11 +13,11 @@ use crate::{
     prod::resize::common,
 };
 
-// TODO(perf:api, rank=3): Add a cached
-// `AreaResizePlan` entrypoint analogous to nearest so repeated Ditherette calls
-// and the bench adapter can own plan reuse instead of rebuilding coverage data
-// per image. Benchmark with `ditherette-bench run area --baseline
-// accepted`.
+// REJECT(perf): A cached `AreaResizePlan` that only stored dimensions and scale
+// factors was neutral overall and regressed represented small Celeste box-art
+// minification cases by -5.08%/-8.81% in `ditherette-bench run area --baseline
+// accepted`. Introduce a plan only with layout metadata that removes hot-loop
+// work, not as an API-only wrapper.
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with exact area averaging.
 ///

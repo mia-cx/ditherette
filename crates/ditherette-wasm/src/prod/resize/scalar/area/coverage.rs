@@ -4,7 +4,7 @@
 //! rectangle math separate from RGBA8 row traversal so later optimization work
 //! can precompute spans without changing the semantic rule.
 
-// TODO(perf:layout, rank=4, after perf:api area-cached-plan): Introduce an
+// TODO(perf:layout, rank=4): Introduce an
 // `AreaResizePlan` that precomputes x/y overlap spans and normalized weights
 // per output coordinate so the packed kernel stops rebuilding coverage ranges
 // for every pixel. Start from the old `XCoverage`/`AxisCoverage` shape, but
