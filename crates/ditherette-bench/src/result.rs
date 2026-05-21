@@ -215,6 +215,14 @@ pub(crate) struct VerificationReport {
     pub(crate) mode: String,
     pub(crate) passed: bool,
     pub(crate) first_mismatch: Option<MismatchReport>,
+    #[serde(default)]
+    pub(crate) bytes: usize,
+    #[serde(default)]
+    pub(crate) differing_bytes: usize,
+    #[serde(default)]
+    pub(crate) max_abs_diff: u8,
+    #[serde(default)]
+    pub(crate) mean_abs_diff: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -274,20 +282,91 @@ impl SampleStats {
     }
 }
 
-pub(crate) fn verify_exact(left: &[u8], right: &[u8]) -> VerificationReport {
-    let first_mismatch = left
-        .iter()
-        .zip(right)
-        .position(|(left, right)| left != right)
-        .map(|index| MismatchReport {
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct VerificationBounds {
+    pub(crate) max_abs_diff: u8,
+    pub(crate) max_diff_bytes: usize,
+    pub(crate) max_diff_percent: f64,
+}
+
+impl VerificationBounds {
+    pub(crate) fn exact() -> Self {
+        Self {
+            max_abs_diff: 0,
+            max_diff_bytes: 0,
+            max_diff_percent: 0.0,
+        }
+    }
+
+    pub(crate) fn is_exact(self) -> bool {
+        self.max_abs_diff == 0 && self.max_diff_bytes == 0 && self.max_diff_percent == 0.0
+    }
+
+    fn allowed_diff_bytes(self, total_bytes: usize) -> usize {
+        let percent_bytes = (total_bytes as f64 * self.max_diff_percent / 100.0).ceil() as usize;
+        self.max_diff_bytes.max(percent_bytes)
+    }
+
+    fn mode(self, total_bytes: usize) -> String {
+        if self.is_exact() {
+            return "exact".to_owned();
+        }
+
+        format!(
+            "bounded(max_abs_diff<={}, max_diff_bytes<={})",
+            self.max_abs_diff,
+            self.allowed_diff_bytes(total_bytes)
+        )
+    }
+}
+
+pub(crate) fn verify_with_bounds(
+    left: &[u8],
+    right: &[u8],
+    bounds: VerificationBounds,
+) -> VerificationReport {
+    let bytes = left.len().max(right.len());
+    let mut first_mismatch = None;
+    let mut differing_bytes = left.len().abs_diff(right.len());
+    let mut max_abs_diff = if left.len() == right.len() {
+        0
+    } else {
+        u8::MAX
+    };
+    let mut diff_sum = 0usize;
+
+    for (index, (&left_byte, &right_byte)) in left.iter().zip(right).enumerate() {
+        let abs_diff = left_byte.abs_diff(right_byte);
+        if abs_diff == 0 {
+            continue;
+        }
+
+        first_mismatch.get_or_insert(MismatchReport {
             index,
-            left: left[index],
-            right: right[index],
+            left: left_byte,
+            right: right_byte,
         });
+        differing_bytes += 1;
+        max_abs_diff = max_abs_diff.max(abs_diff);
+        diff_sum += usize::from(abs_diff);
+    }
+
+    let passed = left.len() == right.len()
+        && max_abs_diff <= bounds.max_abs_diff
+        && differing_bytes <= bounds.allowed_diff_bytes(bytes);
+
     VerificationReport {
-        mode: "exact".to_owned(),
-        passed: first_mismatch.is_none() && left.len() == right.len(),
+        mode: bounds.mode(bytes),
+        passed,
         first_mismatch,
+        bytes,
+        differing_bytes,
+        max_abs_diff,
+        mean_abs_diff: if bytes == 0 {
+            0.0
+        } else {
+            diff_sum as f64 / bytes as f64
+        },
     }
 }
 

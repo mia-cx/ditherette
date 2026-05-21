@@ -25,7 +25,7 @@ use crate::{
         log_correctness_ok, log_correctness_start, log_perf_start, log_preheat_start,
         log_runtime_tuning, print_comp_table, print_perf_table, MeasurementLogger,
     },
-    result::{verify_exact, BenchResult, BenchRun},
+    result::{verify_with_bounds, BenchResult, BenchRun, VerificationBounds},
     runtime::{preheat_cpu, tune_runtime},
     util::{normalize_path_string, optional_id, output_dimensions},
 };
@@ -172,6 +172,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let fixtures = fixtures_from_flags(&flags)?;
     let scales = scales_from_flags(&flags)?;
     let measurement = MeasurementConfig::from_flags(&flags)?;
+    let verification_bounds = verification_bounds_from_flags(&flags)?;
     let accepted_baseline_name = flags.optional("--baseline");
     let previous_run = if accepted_baseline_name.is_none() {
         load_latest_run("perf", domain)
@@ -214,7 +215,14 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
         .transpose()?;
 
     if let Some(oracle_id) = oracle_id.as_ref() {
-        run_resize_correctness_checks(registry, oracle_id, &subjects, &fixtures, &scales)?;
+        run_resize_correctness_checks(
+            registry,
+            oracle_id,
+            &subjects,
+            &fixtures,
+            &scales,
+            verification_bounds,
+        )?;
     }
 
     let mut results = Vec::new();
@@ -443,12 +451,62 @@ fn oracle_probe_result(
     }
 }
 
+fn verification_bounds_from_flags(flags: &Flags) -> Result<VerificationBounds, BenchError> {
+    let has_explicit_bound = flags.present("--max-abs-diff")
+        || flags.present("--max-diff-bytes")
+        || flags.present("--max-diff-percent");
+    let mode = flags
+        .optional("--correctness")
+        .unwrap_or(if has_explicit_bound {
+            "bounded"
+        } else {
+            "exact"
+        });
+    let mut bounds = match mode {
+        "exact" => VerificationBounds::exact(),
+        "bounded" | "approx" | "tolerant" => VerificationBounds {
+            max_abs_diff: 1,
+            max_diff_bytes: 0,
+            max_diff_percent: 0.01,
+        },
+        other => {
+            return Err(BenchError::Config(format!(
+                "--correctness must be exact or bounded, got {other:?}"
+            )))
+        }
+    };
+
+    if let Some(value) = flags.optional("--max-abs-diff") {
+        bounds.max_abs_diff = value
+            .parse()
+            .map_err(|_| BenchError::Config(format!("invalid --max-abs-diff {value:?}")))?;
+    }
+    if let Some(value) = flags.optional("--max-diff-bytes") {
+        bounds.max_diff_bytes = value
+            .parse()
+            .map_err(|_| BenchError::Config(format!("invalid --max-diff-bytes {value:?}")))?;
+    }
+    if let Some(value) = flags.optional("--max-diff-percent") {
+        bounds.max_diff_percent = value
+            .parse()
+            .map_err(|_| BenchError::Config(format!("invalid --max-diff-percent {value:?}")))?;
+        if !(0.0..=100.0).contains(&bounds.max_diff_percent) {
+            return Err(BenchError::Config(
+                "--max-diff-percent must be between 0 and 100".to_owned(),
+            ));
+        }
+    }
+
+    Ok(bounds)
+}
+
 fn run_resize_correctness_checks(
     registry: &Registry,
     oracle_id: &SubjectId,
     subjects: &[ResizeBenchSubject],
     fixtures: &[crate::fixture::Fixture],
     scales: &[f64],
+    verification_bounds: VerificationBounds,
 ) -> Result<(), BenchError> {
     let oracle = registry.resize_subject(oracle_id.as_str())?;
     let check_count = subjects
@@ -472,11 +530,19 @@ fn run_resize_correctness_checks(
                 }
                 let candidate_output =
                     run_resize_once(subject, fixture, output, &ResizeParams::default())?;
-                let verification = verify_exact(&oracle_output, &candidate_output);
+                let verification =
+                    verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
                 if !verification.passed {
                     return Err(BenchError::Verify(format!(
-                        "{} failed exact verification against {} for {}: {:?}",
-                        subject.descriptor.id, oracle_id, case, verification.first_mismatch
+                        "{} failed {} verification against {} for {}: {:?}; differing_bytes={}, max_abs_diff={}, mean_abs_diff={:.6}",
+                        subject.descriptor.id,
+                        verification.mode,
+                        oracle_id,
+                        case,
+                        verification.first_mismatch,
+                        verification.differing_bytes,
+                        verification.max_abs_diff,
+                        verification.mean_abs_diff
                     )));
                 }
                 log_correctness_ok(&subject.descriptor.id.to_string(), oracle_id, &case);
@@ -517,6 +583,7 @@ pub(crate) fn comp_command(registry: &Registry, args: &[String]) -> Result<(), B
     let fixtures = fixtures_from_flags(&flags)?;
     let scales = scales_from_flags(&flags)?;
     let measurement = MeasurementConfig::from_flags(&flags)?;
+    let verification_bounds = verification_bounds_from_flags(&flags)?;
     let runtime_report = tune_runtime(measurement.process_priority());
     log_runtime_tuning(&runtime_report);
     log_preheat_start(measurement.preheat_time());
@@ -529,15 +596,20 @@ pub(crate) fn comp_command(registry: &Registry, args: &[String]) -> Result<(), B
             let oracle_output = run_resize_once(&left, fixture, output, &ResizeParams::default())?;
             let candidate_output =
                 run_resize_once(&right, fixture, output, &ResizeParams::default())?;
-            let verification = verify_exact(&oracle_output, &candidate_output);
+            let verification =
+                verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
             if !verification.passed {
                 return Err(BenchError::Verify(format!(
-                    "{} failed exact verification against {} for {} at {}x: {:?}",
+                    "{} failed {} verification against {} for {} at {}x: {:?}; differing_bytes={}, max_abs_diff={}, mean_abs_diff={:.6}",
                     right.descriptor.id,
+                    verification.mode,
                     left.descriptor.id,
                     fixture.id,
                     scale,
-                    verification.first_mismatch
+                    verification.first_mismatch,
+                    verification.differing_bytes,
+                    verification.max_abs_diff,
+                    verification.mean_abs_diff
                 )));
             }
 
