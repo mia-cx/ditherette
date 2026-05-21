@@ -18,27 +18,25 @@
 // NOTE(perf): The identity/same-size class copies packed RGBA8 bytes directly;
 // exact-oracle checks passed and `ditherette-bench run bilinear --scales 1
 // --baseline accepted` improved identity cases by >99%.
-// TODO(perf:path, rank=6, after perf:layout bilinear-nonzero-taps): Split the
-// remaining upscale/two-tap, near-identity, and minify support-width classes so
-// each class can use simpler loops without per-pixel support branching. Verify
-// exact oracle checks across the default partial scale group, then benchmark
-// `ditherette-bench run bilinear --baseline accepted`.
+// REJECT(perf): Splitting the remaining upscale/two-tap support class into a
+// fixed 2x2 kernel preserved exactness but regressed every upscale case by about
+// -52% to -55% in `ditherette-bench run bilinear --scales 1.05,1.5,2
+// --baseline accepted`; keep the generic tap iterator until a different kernel
+// shape is available.
 // TODO(perf:path, rank=8, after perf:path bilinear-scale-classes): Evaluate a
 // separable two-pass minify path with f64 scratch rows for large downscales;
 // accept only if it remains byte-exact against `spec:resize:bilinear:scalar`
 // and wins `ditherette-bench run bilinear --scales 0.1,0.125,0.25,0.5
 // --baseline accepted`.
-// TODO(perf:kernel, rank=9, after perf:layout bilinear-plan-weights): Rewrite
-// the packed kernel to index `source.data()` directly with row byte offsets,
-// avoiding per-tap `ImageView::row` lookups after the packed RGBA8 boundary has
-// already validated layout. Benchmark `ditherette-bench run bilinear
-// --baseline accepted` with exact oracle checks.
-// TODO(perf:kernel, rank=10, after perf:path bilinear-scale-classes): Specialize
-// the upscale/two-tap class into a fixed 2x2 contribution loop with no support
-// iterator, zero-weight branch, or dynamic normalization branch. Benchmark
-// `ditherette-bench run bilinear --scales 1.05,1.5,2 --baseline
-// accepted` against the exact oracle.
-// TODO(perf:kernel, rank=12, after perf:kernel direct-packed-indexing): Unroll
+// REJECT(perf): Rewriting the packed kernel to index `source.data()` directly
+// with row byte offsets preserved exactness but regressed representative
+// large/upscale cases by roughly -5% to -19% in `ditherette-bench run bilinear
+// --baseline accepted`; keep `ImageView::row` in the hot pixel writer.
+// REJECT(perf): Specializing the upscale/two-tap class into a fixed 2x2
+// contribution loop preserved exactness but regressed every upscale case by
+// about -52% to -55% in `ditherette-bench run bilinear --scales 1.05,1.5,2
+// --baseline accepted`.
+// TODO(perf:kernel, rank=12, after perf:layout bilinear-nonzero-taps): Unroll
 // RGBA accumulation and final rounding in the packed kernel to remove the inner
 // channel loop while preserving f64 exactness. Benchmark `ditherette-bench run
 // bilinear --baseline accepted`.
