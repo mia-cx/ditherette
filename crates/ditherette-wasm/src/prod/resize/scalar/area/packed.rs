@@ -8,10 +8,6 @@ use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
 use super::AreaResizePlan;
 
-// TODO(perf:path, rank=8, after perf:layout area-resize-plan): Split exact
-// integer upscales into pixel replication plus row repeat, matching the old area
-// scalar strategy. Benchmark 2x and 4x upscale cases with `ditherette-bench run
-// area --baseline accepted`.
 // TODO(perf:path, rank=11, after perf:layout area-resize-plan): Route fractional
 // minification through compact precomputed x/y coverage, using the old
 // fractional-minify area-style path as the first candidate. Benchmark 0.95x,
@@ -38,6 +34,18 @@ pub(super) fn resize_exact_integer_downscale_into(
     };
 
     resize_exact_block_downscale_into(source, output, x_step, y_step);
+    true
+}
+
+pub(super) fn resize_exact_integer_upscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+) -> bool {
+    let Some((x_step, y_step)) = exact_integer_upscale_steps(source, output) else {
+        return false;
+    };
+
+    resize_exact_block_upscale_into(source, output, x_step, y_step);
     true
 }
 
@@ -90,6 +98,70 @@ fn exact_integer_downscale_steps(
         (source_width / output_width) as usize,
         (source_height / output_height) as usize,
     ))
+}
+
+fn exact_integer_upscale_steps(
+    source: ImageView<'_, Rgba8>,
+    output: &ImageViewMut<'_, Rgba8>,
+) -> Option<(usize, usize)> {
+    let source_dimensions = source.dimensions();
+    let output_dimensions = output.dimensions();
+    let source_width = source_dimensions.width();
+    let source_height = source_dimensions.height();
+    let output_width = output_dimensions.width();
+    let output_height = output_dimensions.height();
+
+    if output_width < source_width || output_height < source_height {
+        return None;
+    }
+    if output_width == source_width && output_height == source_height {
+        return None;
+    }
+    if !output_width.is_multiple_of(source_width) || !output_height.is_multiple_of(source_height) {
+        return None;
+    }
+
+    Some((
+        (output_width / source_width) as usize,
+        (output_height / source_height) as usize,
+    ))
+}
+
+fn resize_exact_block_upscale_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+    x_step: usize,
+    y_step: usize,
+) {
+    let source_width = source.dimensions().width_usize();
+    let source_height = source.dimensions().height_usize();
+    let output_width = output.dimensions().width_usize();
+    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
+
+    for source_y in 0..source_height {
+        let source_row_start = source_y * source_row_byte_len;
+        let source_row = &source_data[source_row_start..source_row_start + source_row_byte_len];
+        let first_output_y = source_y * y_step;
+        let first_output_row_start = first_output_y * output_row_byte_len;
+        let (first_output_row, repeated_output_rows) = output.data_mut()
+            [first_output_row_start..first_output_row_start + output_row_byte_len * y_step]
+            .split_at_mut(output_row_byte_len);
+
+        for (source_pixel, output_pixels) in source_row
+            .chunks_exact(rgba8::RGBA8_CHANNELS)
+            .zip(first_output_row.chunks_exact_mut(rgba8::RGBA8_CHANNELS * x_step))
+        {
+            for output_pixel in output_pixels.chunks_exact_mut(rgba8::RGBA8_CHANNELS) {
+                output_pixel.copy_from_slice(source_pixel);
+            }
+        }
+
+        for repeated_output_row in repeated_output_rows.chunks_exact_mut(output_row_byte_len) {
+            repeated_output_row.copy_from_slice(first_output_row);
+        }
+    }
 }
 
 fn resize_exact_block_downscale_into(
