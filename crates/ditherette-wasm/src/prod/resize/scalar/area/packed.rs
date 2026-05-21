@@ -15,12 +15,11 @@ use super::AreaResizePlan;
 // subject and a native-only execution boundary. Keep scalar area focused on the
 // Wasm-compatible path until tiled subjects can compare four-band vs near-source
 // choices without hiding scheduling overhead inside this scalar subject.
-// TODO(perf:path, rank=13, after perf:layout area-resize-plan): Test a
-// separable horizontal-then-vertical area path with reusable scratch rows only
-// under the new packed-RGBA8/custom-harness conditions; older notes warned that
-// separable/prefix/integral variants can alter rounding or lose to direct
-// coverage. Verify with `--oracle spec:resize:area:scalar` and benchmark
-// `ditherette-bench run area --baseline accepted`.
+// DEFER(perf): Separable horizontal-then-vertical area is no longer the next
+// useful path for the focused Ditherette scale group: exact down/up scales now
+// bypass coverage, and near-source fractional cases have tiny spans. Revisit
+// only with a fixture/scale group that makes non-integer large minification hot
+// enough to justify a scratch-buffer path and f64 order audit.
 
 pub(super) fn resize_exact_integer_downscale_into(
     source: ImageView<'_, Rgba8>,
@@ -230,12 +229,9 @@ fn accumulate_pixel(
         for (x_overlap, source_pixel) in x_spans.overlaps.iter().copied().zip(source_pixels) {
             let weight = x_overlap * y_span.overlap / area;
 
-            // TODO(perf:micro, rank=15, after perf:kernel area-span-kernel):
-            // Compare f32 accumulators only after the new custom harness and
-            // span kernel are in place; old attempts changed rounding or lost,
-            // so accept only if byte-identical to `spec:resize:area:scalar`
-            // across `ditherette-bench run area --oracle spec:resize:area:scalar
-            // --baseline accepted`.
+            // REJECT(perf): f32 accumulators are not byte-identical to the f64
+            // spec oracle; `cargo test --test prod_resize_area` fails at a
+            // representative 3x7 resize. Keep f64 on the generic coverage path.
             for channel in 0..rgba8::RGBA8_CHANNELS {
                 accumulated[channel] += f64::from(source_pixel[channel]) * weight;
             }
