@@ -4,6 +4,13 @@
 //! rectangle math separate from RGBA8 row traversal so later optimization work
 //! can precompute spans without changing the semantic rule.
 
+// TODO(perf:layout, rank=2, after perf:harness area-prod-profile): Introduce
+// an `AreaResizePlan` that precomputes x/y overlap spans and normalized weights
+// per output coordinate so the packed kernel stops rebuilding coverage ranges
+// for every pixel. Verify with `--oracle spec:resize:area:scalar`, then
+// benchmark with `ditherette-bench run resize-area --baseline
+// perf-loop-resize-area`.
+
 /// Source-space coverage for one output pixel.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct OutputCoverage {

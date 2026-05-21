@@ -13,6 +13,13 @@ use crate::{
     prod::resize::common,
 };
 
+// TODO(perf:harness, rank=1): Promote `resize-area` to benchmark
+// `prod:resize:area:scalar` against `spec:resize:area:scalar` before kernel
+// work so area perf-loop decisions use the production path, not the spec-only
+// profile. Benchmark with `ditherette-bench run resize-area --oracle
+// spec:resize:area:scalar --baseline perf-loop-resize-area` after updating the
+// profile subjects.
+
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with exact area averaging.
 ///
 /// Each output pixel covers a rectangle in source-pixel space. The output value
