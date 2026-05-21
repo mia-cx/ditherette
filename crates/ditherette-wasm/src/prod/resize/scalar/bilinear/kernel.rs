@@ -62,7 +62,7 @@ fn write_resized_pixel(
             let source_pixel = &source_row[source_start..source_start + RGBA8_CHANNELS];
 
             total_weight += weight;
-            // TODO(perf:kernel, rank=22, after perf:kernel direct-packed-indexing):
+            // TODO(perf:kernel, rank=22, after perf:layout bilinear-nonzero-taps):
             // Read RGBA8 as one packed word and widen channels locally before
             // accumulation so the kernel avoids four indexed slice loads per
             // tap. Benchmark `ditherette-bench run bilinear --baseline
