@@ -69,6 +69,10 @@ pub(crate) fn red(text: impl AsRef<str>) -> String {
     color("31", text.as_ref())
 }
 
+pub(crate) fn bold_red(text: impl AsRef<str>) -> String {
+    color("1;31", text.as_ref())
+}
+
 pub(crate) fn format_duration(duration: Duration) -> String {
     let seconds = duration.as_secs_f64();
     if seconds >= 1.0 {
