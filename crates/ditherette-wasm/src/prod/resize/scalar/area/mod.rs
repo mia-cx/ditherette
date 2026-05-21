@@ -17,7 +17,7 @@ use crate::{
 // `AreaResizePlan` entrypoint analogous to nearest so repeated Ditherette calls
 // and the bench adapter can own plan reuse instead of rebuilding coverage data
 // per image. Benchmark with `ditherette-bench run area --baseline
-// perf-loop-resize-area`.
+// accepted`.
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with exact area averaging.
 ///
