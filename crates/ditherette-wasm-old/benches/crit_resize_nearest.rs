@@ -1,4 +1,4 @@
-use std::{hint::black_box, path::PathBuf, sync::OnceLock};
+use std::{hint::black_box, path::PathBuf, sync::OnceLock, time::Duration};
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
 use ditherette_wasm_old::{
@@ -9,16 +9,29 @@ use ditherette_wasm_old::{
 };
 use image::ImageReader;
 
-const RESIZE_SCALES: [Scale; 6] = [
-    Scale::new("2x", 2.0),
-    Scale::new("0.95x", 0.95),
-    Scale::new("0.75x", 0.75),
-    Scale::new("0.5x", 0.5),
-    Scale::new("0.25x", 0.25),
+const RESIZE_SCALES: [Scale; 14] = [
+    Scale::new("0.1x", 0.1),
     Scale::new("0.125x", 0.125),
+    Scale::new("0.25x", 0.25),
+    Scale::new("0.5x", 0.5),
+    Scale::new("0.75x", 0.75),
+    Scale::new("0.9x", 0.9),
+    Scale::new("0.95x", 0.95),
+    Scale::new("0.99x", 0.99),
+    Scale::new("1.01x", 1.01),
+    Scale::new("1.05x", 1.05),
+    Scale::new("1.25x", 1.25),
+    Scale::new("1.5x", 1.5),
+    Scale::new("2x", 2.0),
+    Scale::new("4x", 4.0),
 ];
 
-static CELESTE_FIXTURE: OnceLock<RgbaFixture> = OnceLock::new();
+const FIXTURES: [FixtureSpec; 2] = [
+    FixtureSpec::new("Celeste_Insta_selfie", "Celeste_Insta_selfie.png"),
+    FixtureSpec::new("Celeste_box_art", "Celeste_box_art.png"),
+];
+
+static FIXTURE_CACHE: OnceLock<Vec<RgbaFixture>> = OnceLock::new();
 
 /// Benchmarks nearest-neighbor resize variants against the Celeste fixture.
 ///
@@ -26,10 +39,12 @@ static CELESTE_FIXTURE: OnceLock<RgbaFixture> = OnceLock::new();
 /// Rust resize work over an already-materialized RGBA buffer, not browser decode
 /// or JavaScript/Wasm boundary costs.
 fn resize_nearest_variants(criterion: &mut Criterion) {
-    let fixture = CELESTE_FIXTURE.get_or_init(load_celeste_fixture);
+    let fixtures = FIXTURE_CACHE.get_or_init(load_fixtures);
 
-    for scale in RESIZE_SCALES {
-        bench_scale(criterion, fixture, scale);
+    for fixture in fixtures {
+        for scale in RESIZE_SCALES {
+            bench_scale(criterion, fixture, scale);
+        }
     }
 }
 
@@ -39,7 +54,8 @@ fn bench_scale(criterion: &mut Criterion, fixture: &RgbaFixture, scale: Scale) {
     assert_resize_variants_match_baseline(fixture, output_dimensions, output_byte_len);
 
     let group_name = format!(
-        "resize_nearest/celeste_rgba/{}-{}x{}",
+        "resize_nearest/{}/{}-{}x{}",
+        fixture.name,
         scale.label,
         output_dimensions.width(),
         output_dimensions.height()
@@ -117,8 +133,15 @@ fn assert_bytes_equal(variant: &str, actual: &[u8], expected: &[u8]) {
     }
 }
 
-fn load_celeste_fixture() -> RgbaFixture {
-    let fixture_path = fixture_path();
+fn load_fixtures() -> Vec<RgbaFixture> {
+    FIXTURES
+        .iter()
+        .map(|fixture| load_fixture(*fixture))
+        .collect()
+}
+
+fn load_fixture(fixture: FixtureSpec) -> RgbaFixture {
+    let fixture_path = fixture_path(fixture.file_name);
     let image = ImageReader::open(&fixture_path)
         .unwrap_or_else(|error| panic!("failed to open {}: {error}", fixture_path.display()))
         .decode()
@@ -128,24 +151,38 @@ fn load_celeste_fixture() -> RgbaFixture {
     let dimensions = ImageDimensions::new(image.width(), image.height()).unwrap();
 
     RgbaFixture {
+        name: fixture.name,
         dimensions,
         rgba: image.into_raw(),
     }
 }
 
-fn fixture_path() -> PathBuf {
+fn fixture_path(file_name: &str) -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest_dir
         .parent()
         .and_then(|crates_dir| crates_dir.parent())
-        .map(|repo_root| repo_root.join("benchmark-fixtures/Celeste_box_art.png"))
+        .map(|repo_root| repo_root.join("benchmark-fixtures").join(file_name))
         .expect("crate should live under crates/ditherette-wasm")
 }
 
 #[derive(Debug)]
 struct RgbaFixture {
+    name: &'static str,
     dimensions: ImageDimensions,
     rgba: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FixtureSpec {
+    name: &'static str,
+    file_name: &'static str,
+}
+
+impl FixtureSpec {
+    const fn new(name: &'static str, file_name: &'static str) -> Self {
+        Self { name, file_name }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -169,8 +206,15 @@ impl Scale {
 }
 
 fn scaled_dimension(source_dimension: u32, scale: f64) -> u32 {
-    ((f64::from(source_dimension) * scale).floor() as u32).max(1)
+    ((f64::from(source_dimension) * scale).round() as u32).max(1)
 }
 
-criterion_group!(benches, resize_nearest_variants);
+criterion_group! {
+    name = benches;
+    config = Criterion::default()
+        .sample_size(100)
+        .measurement_time(Duration::from_secs(5))
+        .warm_up_time(Duration::from_secs(1));
+    targets = resize_nearest_variants
+}
 criterion_main!(benches);
