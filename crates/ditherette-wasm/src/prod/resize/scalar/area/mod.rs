@@ -72,4 +72,5 @@ fn resize_area_fast_path_into(
     }
 
     packed::resize_exact_integer_downscale_into(source, output)
+        || packed::resize_exact_integer_upscale_into(source, output)
 }
