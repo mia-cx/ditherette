@@ -75,7 +75,9 @@ spec        saved spec characterization
 experiment  temporary comparison point
 ```
 
-Accepted baselines must match the current run config exactly:
+Accepted baselines are scoped by run config while sharing a human-readable name. The same name, such as `accepted`, may coexist for different profiles, subjects, scale matrices, fixtures, or measurement configs.
+
+Accepted baseline comparisons still require an exact matching entry:
 
 - command
 - domain
@@ -90,7 +92,7 @@ Accepted baselines must match the current run config exactly:
 - pixel format
 - params fingerprint
 
-A missing or incompatible accepted baseline entry is an error. Dirty git trees are allowed and recorded.
+When a requested accepted baseline name has no compatible exact entry for the current config, the run proceeds without accepted comparisons and saves the current run as that name for this config. Dirty git trees are allowed and recorded.
 
 If no accepted baseline is specified, `perf` compares exact-subject results to the most recent compatible previous run from `crates/ditherette-bench/target/bench/latest/perf-resize.json` before overwriting it with the current run. `--save-baseline NAME` runs the benchmark and overwrites accepted baseline `NAME` with that new run. `--replace-baseline NAME` does not run; it overwrites accepted baseline `NAME` from the current latest-run cache and exits.
 
