@@ -452,9 +452,9 @@ fn oracle_probe_result(
 }
 
 fn verification_bounds_from_flags(flags: &Flags) -> Result<VerificationBounds, BenchError> {
-    let has_explicit_bound = flags.present("--max-abs-diff")
-        || flags.present("--max-diff-bytes")
-        || flags.present("--max-diff-percent");
+    let has_explicit_bound = flags.present("--max-color-distance")
+        || flags.present("--max-mean-color-distance")
+        || flags.present("--max-rms-color-distance");
     let mode = flags
         .optional("--correctness")
         .unwrap_or(if has_explicit_bound {
@@ -464,11 +464,7 @@ fn verification_bounds_from_flags(flags: &Flags) -> Result<VerificationBounds, B
         });
     let mut bounds = match mode {
         "exact" => VerificationBounds::exact(),
-        "bounded" | "approx" | "tolerant" => VerificationBounds {
-            max_abs_diff: 1,
-            max_diff_bytes: 0,
-            max_diff_percent: 0.01,
-        },
+        "bounded" | "approx" | "tolerant" => VerificationBounds::bounded_default(),
         other => {
             return Err(BenchError::Config(format!(
                 "--correctness must be exact or bounded, got {other:?}"
@@ -476,28 +472,29 @@ fn verification_bounds_from_flags(flags: &Flags) -> Result<VerificationBounds, B
         }
     };
 
-    if let Some(value) = flags.optional("--max-abs-diff") {
-        bounds.max_abs_diff = value
-            .parse()
-            .map_err(|_| BenchError::Config(format!("invalid --max-abs-diff {value:?}")))?;
+    if let Some(value) = flags.optional("--max-color-distance") {
+        bounds.max_color_distance = parse_nonnegative_f64(value, "--max-color-distance")?;
     }
-    if let Some(value) = flags.optional("--max-diff-bytes") {
-        bounds.max_diff_bytes = value
-            .parse()
-            .map_err(|_| BenchError::Config(format!("invalid --max-diff-bytes {value:?}")))?;
+    if let Some(value) = flags.optional("--max-mean-color-distance") {
+        bounds.max_mean_color_distance = parse_nonnegative_f64(value, "--max-mean-color-distance")?;
     }
-    if let Some(value) = flags.optional("--max-diff-percent") {
-        bounds.max_diff_percent = value
-            .parse()
-            .map_err(|_| BenchError::Config(format!("invalid --max-diff-percent {value:?}")))?;
-        if !(0.0..=100.0).contains(&bounds.max_diff_percent) {
-            return Err(BenchError::Config(
-                "--max-diff-percent must be between 0 and 100".to_owned(),
-            ));
-        }
+    if let Some(value) = flags.optional("--max-rms-color-distance") {
+        bounds.max_rms_color_distance = parse_nonnegative_f64(value, "--max-rms-color-distance")?;
     }
 
     Ok(bounds)
+}
+
+fn parse_nonnegative_f64(value: &str, flag: &str) -> Result<f64, BenchError> {
+    let parsed = value
+        .parse::<f64>()
+        .map_err(|_| BenchError::Config(format!("invalid {flag} {value:?}")))?;
+    if parsed.is_sign_negative() || !parsed.is_finite() {
+        return Err(BenchError::Config(format!(
+            "{flag} must be a non-negative finite number"
+        )));
+    }
+    Ok(parsed)
 }
 
 fn run_resize_correctness_checks(
@@ -534,18 +531,24 @@ fn run_resize_correctness_checks(
                     verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
                 if !verification.passed {
                     return Err(BenchError::Verify(format!(
-                        "{} failed {} verification against {} for {}: {:?}; differing_bytes={}, max_abs_diff={}, mean_abs_diff={:.6}",
+                        "{} failed {} verification against {} for {}: {:?}; differing_pixels={}, max_color_distance={:.6}, mean_color_distance={:.6}, rms_color_distance={:.6}",
                         subject.descriptor.id,
                         verification.mode,
                         oracle_id,
                         case,
                         verification.first_mismatch,
-                        verification.differing_bytes,
-                        verification.max_abs_diff,
-                        verification.mean_abs_diff
+                        verification.differing_pixels,
+                        verification.max_color_distance,
+                        verification.mean_color_distance,
+                        verification.rms_color_distance
                     )));
                 }
-                log_correctness_ok(&subject.descriptor.id.to_string(), oracle_id, &case);
+                log_correctness_ok(
+                    &subject.descriptor.id.to_string(),
+                    oracle_id,
+                    &case,
+                    &verification,
+                );
             }
         }
     }
@@ -600,16 +603,17 @@ pub(crate) fn comp_command(registry: &Registry, args: &[String]) -> Result<(), B
                 verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
             if !verification.passed {
                 return Err(BenchError::Verify(format!(
-                    "{} failed {} verification against {} for {} at {}x: {:?}; differing_bytes={}, max_abs_diff={}, mean_abs_diff={:.6}",
+                    "{} failed {} verification against {} for {} at {}x: {:?}; differing_pixels={}, max_color_distance={:.6}, mean_color_distance={:.6}, rms_color_distance={:.6}",
                     right.descriptor.id,
                     verification.mode,
                     left.descriptor.id,
                     fixture.id,
                     scale,
                     verification.first_mismatch,
-                    verification.differing_bytes,
-                    verification.max_abs_diff,
-                    verification.mean_abs_diff
+                    verification.differing_pixels,
+                    verification.max_color_distance,
+                    verification.mean_color_distance,
+                    verification.rms_color_distance
                 )));
             }
 
