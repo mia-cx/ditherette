@@ -8,11 +8,9 @@ use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
 use super::AreaResizePlan;
 
-// TODO(perf:path, rank=11, after perf:layout area-resize-plan): Route fractional
-// minification through compact precomputed x/y coverage, using the old
-// fractional-minify area-style path as the first candidate. Benchmark 0.95x,
-// 0.9x, 0.75x, and 0.5x with `ditherette-bench run area --baseline
-// accepted`.
+// NOTE(perf): Fractional minification now uses compact precomputed x coverage
+// plus planned y coverage. Exact integer downscales bypass this path because
+// 0.1x/0.125x are primary Ditherette cases and need local block kernels.
 // TODO(perf:kernel, rank=12, after perf:path area-fractional-minify): Recreate
 // old dynamic row-band tiling for large area outputs once scalar path classes
 // are settled; use four-band vs near-source tiling choices as hypotheses, not
