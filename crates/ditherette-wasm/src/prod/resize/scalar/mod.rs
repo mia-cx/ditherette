@@ -5,19 +5,14 @@
 // Cross-filter perf-search dependency map, current-code pass only:
 // represented shared-layout benchmarks -> narrow common packed-RGBA8 APIs ->
 // exact integer/identity path sharing -> shared word-copy primitives.
-// TODO(perf:harness, rank=1): Ensure the manifest profiles represent the
-// cross-filter identity and exact-integer scale cases before extracting more
-// shared packed-RGBA8 fast paths. The current overlap is mostly identity copies,
-// exact repeat upscales, exact nearest/area downscale classification, and
-// unaligned pixel-word copies; judge candidates with `ditherette-bench run area`,
-// `ditherette-bench run nearest`, and `ditherette-bench run bilinear` so a
-// common helper cannot hide a regression in one filter.
-// TODO(perf:api, rank=2, after perf:harness cross-filter-exact-coverage): Test
-// a shared same-size packed RGBA8 copy helper for area and bilinear, and only
-// re-open nearest identity if the nearest manifest profile represents identity.
-// Benchmark with the three configured filter profiles before accepting shared
-// dispatch.
-// TODO(perf:api, rank=3, after perf:harness cross-filter-exact-coverage): Test
+// NOTE(perf): The manifest profiles include identity plus partial exact-integer
+// down/up scales, so shared packed-RGBA8 experiments can be judged with
+// `ditherette-bench run area`, `ditherette-bench run nearest`, and
+// `ditherette-bench run bilinear` as configured in the manifest.
+// TODO(perf:api, rank=2): Test a shared same-size packed RGBA8 copy helper for
+// area, nearest, and bilinear. Benchmark with the three configured filter
+// profiles before accepting shared dispatch.
+// TODO(perf:api, rank=3): Test
 // a shared exact-integer scale classifier for area and nearest so exact up/down
 // factor detection has one branch shape. This is plan/dispatch-level work, so
 // accept only if `ditherette-bench run area` and `ditherette-bench run nearest`

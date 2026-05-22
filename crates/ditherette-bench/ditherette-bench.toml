@@ -15,7 +15,7 @@ target_sample_time = "50ms"
 
 process_priority = "high"
 
-scale_group = ["partial"]
+scale_group = ["partial", "identity"]
 sample_mode = "throughput"
 fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
 
