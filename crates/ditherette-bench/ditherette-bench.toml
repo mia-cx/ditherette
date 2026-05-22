@@ -47,7 +47,6 @@ oracle = "spec:resize:area:scalar"
 [profiles.bilinear]
 command = "perf"
 domain = "resize"
-scale_group = ["partial", "identity", "bilinear-prior-art"]
 subjects = ["prod:resize:bilinear:scalar"]
 oracle = "spec:resize:bilinear:scalar"
 correctness = "exact"
