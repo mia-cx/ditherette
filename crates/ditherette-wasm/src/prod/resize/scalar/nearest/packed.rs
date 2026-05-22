@@ -5,10 +5,16 @@
 //! is copying unchanged RGBA pixels as unaligned `u32` words while preserving
 //! the public byte layout.
 
-use crate::image::{rgba8, ImageDimensions};
+use crate::{
+    image::{rgba8, ImageDimensions},
+    prod::resize::common,
+};
 
-use super::alignment::AxisAlignment;
-use super::plan::{alignment_offset, NearestResizePlan, NearestScaleClass};
+use super::{
+    alignment::AxisAlignment,
+    plan::NearestResizePlan,
+    scale::{alignment_offset, NearestScaleClass},
+};
 
 pub(super) fn resize_with_plan_into(
     source: &[u8],
@@ -33,6 +39,19 @@ pub(super) fn resize_with_plan_into(
                 y_alignment,
             );
         }
+        NearestScaleClass::ExactUpscale => {
+            let (x_factor, y_factor) = plan
+                .exact_upscale
+                .expect("exact-upscale class should have factors");
+            resize_exact_upscale(
+                source,
+                source_dimensions,
+                output,
+                plan.output_dimensions,
+                x_factor,
+                y_factor,
+            );
+        }
         NearestScaleClass::NearIdentityDownscale => {
             resize_span_copy(source, source_dimensions, output, plan);
         }
@@ -53,19 +72,20 @@ fn resize_word_copy(
 ) {
     let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
     let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
+    let output_width = plan.output_dimensions.width_usize();
+    let x_source_starts = &plan.x_source_starts;
 
     for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
         let source_row_start = source_y as usize * source_row_len;
         let output_row_start = output_y * output_row_len;
-
-        for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
-            copy_pixel_word(
-                source,
-                source_row_start + source_start,
-                output,
-                output_row_start + output_x * rgba8::RGBA8_CHANNELS,
-            );
-        }
+        copy_mapped_row_words(
+            source,
+            source_row_start,
+            output,
+            output_row_start,
+            x_source_starts,
+            output_width,
+        );
     }
 }
 
@@ -84,14 +104,14 @@ fn resize_upscale_row_repeat(
         let source_row_start = source_y as usize * source_row_len;
         let output_row_start = output_y * output_row_len;
 
-        for (output_x, source_start) in plan.x_source_starts.iter().copied().enumerate() {
-            copy_pixel_word(
-                source,
-                source_row_start + source_start,
-                output,
-                output_row_start + output_x * rgba8::RGBA8_CHANNELS,
-            );
-        }
+        copy_mapped_row_words(
+            source,
+            source_row_start,
+            output,
+            output_row_start,
+            &plan.x_source_starts,
+            plan.output_dimensions.width_usize(),
+        );
 
         let mut next_output_y = output_y + 1;
         while next_output_y < plan.y_coordinates.len()
@@ -105,6 +125,37 @@ fn resize_upscale_row_repeat(
             next_output_y += 1;
         }
         output_y = next_output_y;
+    }
+}
+
+#[inline(never)]
+fn copy_mapped_row_words(
+    source: &[u8],
+    source_row_start: usize,
+    output: &mut [u8],
+    output_row_start: usize,
+    x_source_starts: &[usize],
+    output_width: usize,
+) {
+    debug_assert!(output_width <= x_source_starts.len());
+    debug_assert!(source_row_start < source.len());
+    debug_assert!(output_row_start + output_width * rgba8::RGBA8_CHANNELS <= output.len());
+
+    // SAFETY: Prod nearest validates packed RGBA8 rows at the boundary. Source
+    // offsets are precomputed from in-bounds nearest coordinate maps and output
+    // offsets walk the validated packed row one RGBA8 word at a time.
+    unsafe {
+        let source_row = source.as_ptr().add(source_row_start);
+        let output_row = output.as_mut_ptr().add(output_row_start);
+        let x_starts = x_source_starts.as_ptr();
+        for output_x in 0..output_width {
+            let source_start = *x_starts.add(output_x);
+            let pixel = source_row.add(source_start).cast::<u32>().read_unaligned();
+            output_row
+                .add(output_x * rgba8::RGBA8_CHANNELS)
+                .cast::<u32>()
+                .write_unaligned(pixel);
+        }
     }
 }
 
@@ -128,6 +179,24 @@ fn resize_span_copy(
                 .copy_from_slice(&source[source_start..source_start + span.byte_len]);
         }
     }
+}
+
+fn resize_exact_upscale(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    output_dimensions: ImageDimensions,
+    x_factor: u32,
+    y_factor: u32,
+) {
+    common::rgba8::resize_exact_pixel_repeat_into(
+        source,
+        source_dimensions,
+        output,
+        output_dimensions,
+        x_factor as usize,
+        y_factor as usize,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -166,13 +235,36 @@ pub(super) fn copy_pixel_word(
     output_row: &mut [u8],
     output_start: usize,
 ) {
-    // SAFETY: Source and output offsets are derived from validated rows and
-    // in-bounds nearest coordinate maps. Unaligned access is intentional for
-    // packed byte-backed RGBA memory. This nearest-only word copy preserves the
+    write_pixel_word(
+        output_row,
+        output_start,
+        read_pixel_word(source_row, source_start),
+    );
+}
+
+fn read_pixel_word(source_row: &[u8], source_start: usize) -> u32 {
+    // SAFETY: Source offsets are derived from validated rows and in-bounds
+    // nearest coordinate maps. Unaligned access is intentional for packed
+    // byte-backed RGBA memory.
+    unsafe {
+        source_row
+            .as_ptr()
+            .add(source_start)
+            .cast::<u32>()
+            .read_unaligned()
+    }
+}
+
+fn write_pixel_word(output_row: &mut [u8], output_start: usize, pixel: u32) {
+    // SAFETY: Output offsets are derived from validated rows and in-bounds
+    // nearest coordinate maps. Unaligned access is intentional for packed
+    // byte-backed RGBA memory. This nearest-only word copy preserves the
     // byte-level RGBA8 contract; it does not expose a native-endian pixel format.
     unsafe {
-        let source_ptr = source_row.as_ptr().add(source_start).cast::<u32>();
-        let output_ptr = output_row.as_mut_ptr().add(output_start).cast::<u32>();
-        output_ptr.write_unaligned(source_ptr.read_unaligned());
+        output_row
+            .as_mut_ptr()
+            .add(output_start)
+            .cast::<u32>()
+            .write_unaligned(pixel);
     }
 }

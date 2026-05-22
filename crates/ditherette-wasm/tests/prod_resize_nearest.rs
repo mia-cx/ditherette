@@ -12,8 +12,24 @@ use ditherette_wasm::{
 
 #[test]
 fn prod_nearest_matches_spec_for_anchor_matrix() {
-    let source_dimensions = ImageDimensions::new(4, 3).unwrap();
-    let output_dimensions = ImageDimensions::new(7, 5).unwrap();
+    assert_prod_matches_spec(
+        ImageDimensions::new(4, 3).unwrap(),
+        ImageDimensions::new(7, 5).unwrap(),
+    );
+}
+
+#[test]
+fn prod_nearest_exact_upscale_matches_spec_for_anchor_matrix() {
+    assert_prod_matches_spec(
+        ImageDimensions::new(4, 3).unwrap(),
+        ImageDimensions::new(8, 9).unwrap(),
+    );
+}
+
+fn assert_prod_matches_spec(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) {
     let source = numbered_rgba_source(source_dimensions);
 
     for (spec_anchor, prod_anchor) in anchors() {

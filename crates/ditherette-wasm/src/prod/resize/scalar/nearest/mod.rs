@@ -10,6 +10,7 @@
 pub mod alignment;
 mod packed;
 mod plan;
+mod scale;
 
 use crate::{
     image::{ImageView, ImageViewMut, Rgba8},
