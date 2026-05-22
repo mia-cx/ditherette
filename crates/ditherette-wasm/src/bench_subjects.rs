@@ -84,6 +84,12 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             resize_prod_bilinear_subject,
         ),
         resize_subject(
+            "prod:resize:bilinear:fast",
+            "prod bilinear fast",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
+            resize_prod_bilinear_subject,
+        ),
+        resize_subject(
             "spec:resize:bicubic:catmull-rom",
             "spec bicubic Catmull-Rom",
             "crates/ditherette-wasm/src/spec/resize/scalar/bicubic.rs",
