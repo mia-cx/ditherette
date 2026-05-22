@@ -33,10 +33,9 @@ pub use plan::BilinearResizePlan;
 // NOTE(perf): `prod:resize:bilinear:cold` and the `bilinear-cold` manifest
 // profile measure `resize_bilinear_rgba8_into` plan construction plus execution
 // so uncached API-path changes have coverage outside the hot reused-plan profile.
-// TODO(perf:api, rank=4, after perf:harness cold-bilinear-profile): Check for
-// same-size output before building `BilinearResizePlan` in
-// `resize_bilinear_rgba8_into`. Benchmark with the cold bilinear profile so the
-// plan-build bypass is actually measured.
+// NOTE(perf): `resize_bilinear_rgba8_into` checks same-size output before
+// building `BilinearResizePlan`; `bilinear-cold` showed identity cases improve
+// while represented non-identity cases stayed within noise.
 // NOTE(perf): Packed RGBA8 assertions are debug-only tripwires, so splitting
 // them out of the release hot path has no benchmarkable upside under `run
 // bilinear`; keep validation at the public prod entrypoints.
@@ -48,9 +47,17 @@ pub use plan::BilinearResizePlan;
 /// plans and fast paths should land as benchmarked follow-up changes.
 pub fn resize_bilinear_rgba8_into(
     source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
     anchor: ResizeAnchor,
 ) {
+    common::rgba8::assert_packed_source(source, "bilinear");
+    common::rgba8::assert_packed_output(&output, "bilinear");
+
+    if source.dimensions() == output.dimensions() {
+        output.data_mut().copy_from_slice(source.data());
+        return;
+    }
+
     let plan = BilinearResizePlan::new(source.dimensions(), output.dimensions(), anchor);
     resize_bilinear_rgba8_with_plan_into(source, output, &plan);
 }
