@@ -19,10 +19,10 @@
 // regressions around -3% to -12% even after forced inlining and single-dispatch
 // classifier use. Keep exact scale classification local to each filter's branch
 // shape.
-// TODO(perf:kernel, rank=4, after perf:api shared-exact-scale-classifier): Test
-// promoting nearest/common unaligned RGBA8 word read/write into shared packed
-// primitives. Keep bilinear out of this experiment because packed tap reads are
-// already rejected there; judge with the configured nearest and area profiles.
+// CLOSE(perf): Shared unaligned RGBA8 word read/write primitives depended on a
+// shared exact-scale classifier to justify another common dispatch surface. That
+// parent classifier regressed area and was rejected, while bilinear packed tap
+// reads were already rejected, so leave nearest/common word helpers local.
 // NOTE(perf): Do not merge area and bilinear weighted support plans just because
 // both cache per-axis source weights. Area deliberately uses f32 bounded drift,
 // bilinear is exact f64, and both have local REJECT notes for changed
