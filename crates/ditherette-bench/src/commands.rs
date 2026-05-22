@@ -1,6 +1,6 @@
 //! CLI command implementations.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs, path::Path};
 
 use ditherette_bench_api::{ResizeBenchSubject, ResizeParams, SubjectId};
 
@@ -226,6 +226,16 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
         })
         .transpose()?;
 
+    if let Some(output_dir) = flags.optional("--output-img") {
+        write_resize_output_images(
+            Path::new(output_dir),
+            oracle_subject.as_ref(),
+            &subjects,
+            &fixtures,
+            &scales,
+        )?;
+    }
+
     let correctness_failures = if let Some(oracle_id) = oracle_id.as_ref() {
         run_resize_correctness_checks(
             registry,
@@ -324,6 +334,87 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     } else {
         Err(BenchError::Acceptance(acceptance.message))
     }
+}
+
+fn write_resize_output_images(
+    output_dir: &Path,
+    oracle: Option<&ResizeBenchSubject>,
+    subjects: &[ResizeBenchSubject],
+    fixtures: &[crate::fixture::Fixture],
+    scales: &[f64],
+) -> Result<(), BenchError> {
+    let mut written = 0usize;
+
+    for fixture in fixtures {
+        for scale in scales {
+            let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
+            let case_dir = output_dir
+                .join(sanitize_path_segment(&fixture.id))
+                .join(format!("{}x{}-{}x", output.0, output.1, scale));
+
+            if let Some(oracle) = oracle {
+                let rgba = run_resize_once(oracle, fixture, output, &ResizeParams::default())?;
+                let path = case_dir.join(format!(
+                    "oracle__{}.png",
+                    sanitize_path_segment(oracle.descriptor.id.as_str())
+                ));
+                write_rgba_png(&path, output, &rgba)?;
+                written += 1;
+            }
+
+            for subject in subjects {
+                if oracle.is_some_and(|oracle| oracle.descriptor.id == subject.descriptor.id) {
+                    continue;
+                }
+
+                let rgba = run_resize_once(subject, fixture, output, &ResizeParams::default())?;
+                let path = case_dir.join(format!(
+                    "perf__{}.png",
+                    sanitize_path_segment(subject.descriptor.id.as_str())
+                ));
+                write_rgba_png(&path, output, &rgba)?;
+                written += 1;
+            }
+        }
+    }
+
+    println!(
+        "{} wrote {written} PNG resize output{} under {}",
+        crate::util::heading("Images"),
+        if written == 1 { "" } else { "s" },
+        output_dir.display()
+    );
+    Ok(())
+}
+
+fn write_rgba_png(path: &Path, output: (u32, u32), rgba: &[u8]) -> Result<(), BenchError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(BenchError::io)?;
+    }
+    image::save_buffer_with_format(
+        path,
+        rgba,
+        output.0,
+        output.1,
+        image::ColorType::Rgba8,
+        image::ImageFormat::Png,
+    )
+    .map_err(|error| {
+        BenchError::Runtime(format!(
+            "failed to write resize output {}: {error}",
+            path.display()
+        ))
+    })
+}
+
+fn sanitize_path_segment(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| match character {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => character,
+            _ => '-',
+        })
+        .collect()
 }
 
 const ORACLE_BASELINE_NAME: &str = "oracle";
