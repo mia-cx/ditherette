@@ -27,10 +27,9 @@ pub use plan::BilinearResizePlan;
 // scale pairs, and the `bilinear` manifest profile includes width-only and
 // height-only cases. Exact correctness passed for the expanded matrix in
 // `ditherette-bench run bilinear`.
-// TODO(perf:harness, rank=2): Add a bounded/fast bilinear subject and manifest
-// profile before retesting f32, separable, or approximate minify paths that the
-// exact byte profile cannot accept. Judge the new subject with a configured
-// Ditherette manifest profile rather than one-off CLI scale/oracle overrides.
+// NOTE(perf): `prod:resize:bilinear:fast` and the `bilinear-fast` manifest
+// profile provide a bounded-correctness lane for future f32, separable, or
+// approximate minify paths without weakening the exact `bilinear` profile.
 // TODO(perf:harness, rank=3): Add a cold one-off bilinear profile that measures
 // `resize_bilinear_rgba8_into` plan construction plus execution, because the
 // current `bilinear` subject reuses `BilinearResizePlan` and cannot judge API
