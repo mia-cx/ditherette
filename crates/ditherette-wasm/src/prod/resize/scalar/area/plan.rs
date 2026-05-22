@@ -1,8 +1,8 @@
 //! Area resize planning.
 //!
 //! The plan stores source-overlap spans for each output x/y coordinate. It keeps
-//! coverage math out of the packed RGBA8 hot loop while preserving the exact
-//! f64 weight calculation used by the scalar oracle-compatible kernel.
+//! coverage math out of the packed RGBA8 hot loop while leaving the packed
+//! kernel free to choose the accumulator precision.
 
 use crate::image::{rgba8, ImageDimensions};
 
@@ -31,7 +31,7 @@ pub(super) struct AxisOverlap {
 }
 
 impl AreaResizePlan {
-    /// Build reusable overlap spans for one exact area resize shape.
+    /// Build reusable overlap spans for one area resize shape.
     pub fn new(source_dimensions: ImageDimensions, output_dimensions: ImageDimensions) -> Self {
         let x_scale = f64::from(source_dimensions.width()) / f64::from(output_dimensions.width());
         let y_scale = f64::from(source_dimensions.height()) / f64::from(output_dimensions.height());
@@ -46,8 +46,8 @@ impl AreaResizePlan {
             y_scale,
         );
 
-        // Keep raw overlaps plus area instead of pre-normalized weights. This
-        // preserves the original f64 evaluation order: x_overlap * y_overlap / area.
+        // Keep raw overlaps plus area instead of pre-normalized weights so the
+        // packed kernel can choose the precision and evaluation order.
         Self {
             source_dimensions,
             output_dimensions,
