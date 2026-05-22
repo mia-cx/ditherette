@@ -7,29 +7,35 @@
 
 use crate::image::{rgba8, ImageDimensions};
 
-use super::alignment::{axis_coordinate_map, AxisAlignment, ResizeAnchor};
+use super::{
+    alignment::{axis_coordinate_map, ResizeAnchor},
+    scale::{
+        exact_downscale_factors, exact_upscale_factors, nearest_scale_class, source_x_copy_spans,
+        NearestScaleClass, SourceXCopySpan,
+    },
+};
 
 // REJECT(perf): Adding an identity-only path was not represented in the default
 // `nearest` profile and regressed/noised small cases by up to -9.67% in
-// `ditherette-bench run nearest --baseline accepted`.
+// `ditherette-bench run nearest`.
 // REJECT(perf): A generic exact-upscale span-fill path regressed 2x by -21.03%
-// in `ditherette-bench run nearest --baseline accepted`; wider upscale gains do
+// in `ditherette-bench run nearest`; wider upscale gains do
 // not justify hurting the common 2x case.
 // DEFER(perf): Fractional nearest path splits have no concrete benchmarkable
 // shape yet; exact downscale is accepted, while identity-only and exact-upscale
 // paths were rejected under the default `nearest` profile.
 // REJECT(perf): Adding a same-width RGBA8 row-copy branch before the hot path
 // found no represented 1x/same-width case in the current nearest profile and
-// regressed most measured cases in `ditherette-bench run nearest --baseline
-// accepted`; do not retry without a dedicated identity/same-width subject.
+// regressed most measured cases in `ditherette-bench run nearest`; do not retry
+// without a dedicated identity/same-width subject.
 // REJECT(perf): Precomputing packed nearest y/output row byte offsets passed
 // correctness but was neutral/noisy and regressed large near-identity downscale
-// by -2.06% in `ditherette-bench run nearest --baseline accepted`; keep row
-// byte math local to the loops until repeated-y run metadata is actually used.
+// by -2.06% in `ditherette-bench run nearest`; keep row byte math local to the
+// loops until repeated-y run metadata is actually used.
 // REJECT(perf): Routing exact 0.75x downscales through span-copy lowered the
-// average-span threshold only for that shape but regressed the large 0.75x case
-// by -66.48% in `ditherette-bench run nearest --baseline accepted`; keep the
-// stricter near-identity span-copy gate.
+// average-span threshold only for that shape but regressed represented large
+// downscales by -66.48% in `ditherette-bench run nearest`; keep the stricter
+// near-identity span-copy gate.
 
 /// Reusable nearest-neighbor resize metadata for one source/output shape.
 ///
@@ -44,23 +50,9 @@ pub struct NearestResizePlan {
     pub(super) x_source_starts: Vec<usize>,
     pub(super) y_coordinates: Vec<u32>,
     pub(super) exact_downscale: Option<(u32, u32)>,
+    pub(super) exact_upscale: Option<(u32, u32)>,
     pub(super) source_x_copy_spans: Vec<SourceXCopySpan>,
     pub(super) scale_class: NearestScaleClass,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum NearestScaleClass {
-    ExactDownscale,
-    NearIdentityDownscale,
-    OtherDownscale,
-    Upscale,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct SourceXCopySpan {
-    pub(super) source_start: usize,
-    pub(super) output_start: usize,
-    pub(super) byte_len: usize,
 }
 
 impl NearestResizePlan {
@@ -81,27 +73,25 @@ impl NearestResizePlan {
             output_dimensions.width(),
             output_dimensions.height(),
         );
-        let x_source_starts = if exact_downscale.is_some() {
-            Vec::new()
-        } else {
-            axis_coordinate_map(
-                source_dimensions.width(),
-                output_dimensions.width(),
-                x_alignment,
-            )
-            .into_iter()
-            .map(|source_x| source_x as usize * rgba8::RGBA8_CHANNELS)
-            .collect()
-        };
-        let y_coordinates = if exact_downscale.is_some() {
-            Vec::new()
-        } else {
-            axis_coordinate_map(
-                source_dimensions.height(),
-                output_dimensions.height(),
-                y_alignment,
-            )
-        };
+        let exact_upscale = exact_upscale_factors(
+            source_dimensions.width(),
+            source_dimensions.height(),
+            output_dimensions.width(),
+            output_dimensions.height(),
+        );
+        let has_factor_fast_path = exact_downscale.is_some() || exact_upscale.is_some();
+        let x_source_starts = coordinate_byte_map(
+            source_dimensions.width(),
+            output_dimensions.width(),
+            x_alignment,
+            has_factor_fast_path,
+        );
+        let y_coordinates = coordinate_map(
+            source_dimensions.height(),
+            output_dimensions.height(),
+            y_alignment,
+            has_factor_fast_path,
+        );
         let source_x_copy_spans = source_x_copy_spans(
             source_dimensions.width(),
             source_dimensions.height(),
@@ -115,6 +105,7 @@ impl NearestResizePlan {
             output_dimensions.width(),
             output_dimensions.height(),
             exact_downscale,
+            exact_upscale,
             &source_x_copy_spans,
         );
 
@@ -125,6 +116,7 @@ impl NearestResizePlan {
             x_source_starts,
             y_coordinates,
             exact_downscale,
+            exact_upscale,
             source_x_copy_spans,
             scale_class,
         }
@@ -143,93 +135,31 @@ impl NearestResizePlan {
     }
 }
 
-const MIN_SPAN_COPY_AVERAGE_PIXELS: usize = 10;
-
-fn nearest_scale_class(
-    source_width: u32,
-    source_height: u32,
-    output_width: u32,
-    output_height: u32,
-    exact_downscale: Option<(u32, u32)>,
-    source_x_copy_spans: &[SourceXCopySpan],
-) -> NearestScaleClass {
-    if exact_downscale.is_some() {
-        return NearestScaleClass::ExactDownscale;
-    }
-    if !source_x_copy_spans.is_empty() {
-        return NearestScaleClass::NearIdentityDownscale;
-    }
-    if source_width > output_width && source_height > output_height {
-        return NearestScaleClass::OtherDownscale;
-    }
-
-    NearestScaleClass::Upscale
-}
-
-fn source_x_copy_spans(
-    source_width: u32,
-    source_height: u32,
-    output_width: u32,
-    output_height: u32,
-    x_source_starts: &[usize],
-) -> Vec<SourceXCopySpan> {
-    if source_width <= output_width || source_height <= output_height || x_source_starts.is_empty()
-    {
+fn coordinate_byte_map(
+    source_len: u32,
+    output_len: u32,
+    alignment: super::alignment::AxisAlignment,
+    skip: bool,
+) -> Vec<usize> {
+    if skip {
         return Vec::new();
     }
 
-    let skipped_source_columns = source_width as usize - output_width as usize;
-    let average_span_pixels = output_width as usize / skipped_source_columns.max(1);
-    if average_span_pixels < MIN_SPAN_COPY_AVERAGE_PIXELS {
-        return Vec::new();
-    }
-
-    let mut spans = Vec::new();
-    let mut span_output_start = 0;
-    let mut span_source_start = x_source_starts[0];
-    let mut previous_source_start = span_source_start;
-
-    for (output_x, source_start) in x_source_starts.iter().copied().enumerate().skip(1) {
-        if source_start != previous_source_start + rgba8::RGBA8_CHANNELS {
-            spans.push(SourceXCopySpan {
-                source_start: span_source_start,
-                output_start: span_output_start * rgba8::RGBA8_CHANNELS,
-                byte_len: (output_x - span_output_start) * rgba8::RGBA8_CHANNELS,
-            });
-            span_output_start = output_x;
-            span_source_start = source_start;
-        }
-        previous_source_start = source_start;
-    }
-
-    spans.push(SourceXCopySpan {
-        source_start: span_source_start,
-        output_start: span_output_start * rgba8::RGBA8_CHANNELS,
-        byte_len: (x_source_starts.len() - span_output_start) * rgba8::RGBA8_CHANNELS,
-    });
-    spans
+    axis_coordinate_map(source_len, output_len, alignment)
+        .into_iter()
+        .map(|source_x| source_x as usize * rgba8::RGBA8_CHANNELS)
+        .collect()
 }
 
-fn exact_downscale_factors(
-    source_width: u32,
-    source_height: u32,
-    output_width: u32,
-    output_height: u32,
-) -> Option<(u32, u32)> {
-    if source_width <= output_width || source_height <= output_height {
-        return None;
-    }
-    if source_width % output_width != 0 || source_height % output_height != 0 {
-        return None;
-    }
-
-    Some((source_width / output_width, source_height / output_height))
-}
-
-pub(super) fn alignment_offset(factor: u32, alignment: AxisAlignment) -> u32 {
-    match alignment {
-        AxisAlignment::Start => 0,
-        AxisAlignment::Center => factor / 2,
-        AxisAlignment::End => factor - 1,
+fn coordinate_map(
+    source_len: u32,
+    output_len: u32,
+    alignment: super::alignment::AxisAlignment,
+    skip: bool,
+) -> Vec<u32> {
+    if skip {
+        Vec::new()
+    } else {
+        axis_coordinate_map(source_len, output_len, alignment)
     }
 }
