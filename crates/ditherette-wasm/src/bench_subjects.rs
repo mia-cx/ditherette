@@ -21,6 +21,7 @@ use crate::{
         },
         bilinear::{
             alignment::ResizeAnchor as ProdBilinearResizeAnchor,
+            resize_bilinear_rgba8_into as resize_prod_bilinear_rgba8_into,
             resize_bilinear_rgba8_with_plan_into as resize_prod_bilinear_rgba8_with_plan_into,
             BilinearResizePlan,
         },
@@ -88,6 +89,12 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "prod bilinear fast",
             "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
             resize_prod_bilinear_subject,
+        ),
+        resize_subject(
+            "prod:resize:bilinear:cold",
+            "prod bilinear cold",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
+            resize_prod_bilinear_cold_subject,
         ),
         resize_subject(
             "spec:resize:bicubic:catmull-rom",
@@ -277,6 +284,16 @@ fn resize_prod_bilinear_subject(
                 .expect("bilinear plan should be initialized");
             resize_prod_bilinear_rgba8_with_plan_into(source, output, plan);
         });
+    })
+}
+
+fn resize_prod_bilinear_cold_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_bilinear_rgba8_into(source, output, prod_bilinear_anchor(params));
     })
 }
 

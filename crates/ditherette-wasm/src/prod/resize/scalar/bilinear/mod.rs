@@ -30,10 +30,9 @@ pub use plan::BilinearResizePlan;
 // NOTE(perf): `prod:resize:bilinear:fast` and the `bilinear-fast` manifest
 // profile provide a bounded-correctness lane for future f32, separable, or
 // approximate minify paths without weakening the exact `bilinear` profile.
-// TODO(perf:harness, rank=3): Add a cold one-off bilinear profile that measures
-// `resize_bilinear_rgba8_into` plan construction plus execution, because the
-// current `bilinear` subject reuses `BilinearResizePlan` and cannot judge API
-// changes that only affect uncached calls.
+// NOTE(perf): `prod:resize:bilinear:cold` and the `bilinear-cold` manifest
+// profile measure `resize_bilinear_rgba8_into` plan construction plus execution
+// so uncached API-path changes have coverage outside the hot reused-plan profile.
 // TODO(perf:api, rank=4, after perf:harness cold-bilinear-profile): Check for
 // same-size output before building `BilinearResizePlan` in
 // `resize_bilinear_rgba8_into`. Benchmark with the cold bilinear profile so the
