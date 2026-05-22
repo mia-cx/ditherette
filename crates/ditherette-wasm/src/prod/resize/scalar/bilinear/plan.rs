@@ -11,16 +11,13 @@ use super::{
     filter::triangle_weight,
 };
 
-// TODO(perf:layout, rank=5): Flatten `BilinearResizePlan` axis taps into
-// contiguous tap arrays plus per-output ranges to remove per-coordinate `Vec`
-// allocation and improve metadata locality while preserving duplicate clamped
-// edge taps and exact tap order. Verify exactness, then benchmark with
-// `ditherette-bench run bilinear`.
-// TODO(perf:layout, rank=6, after perf:layout flat-bilinear-axis-taps): Store
-// x tap byte offsets and y row coordinates in the flattened plan so the hot
-// kernel avoids `index * 4` and repeated integer casts without switching to the
-// already-rejected direct packed-source pointer shape. Benchmark with
-// `ditherette-bench run bilinear`.
+// REJECT(perf): Flattening axis taps into contiguous tap arrays plus per-output
+// ranges preserved exactness but regressed representative `ditherette-bench run
+// bilinear` cases by roughly -4% to -19%, especially anisotropic width-only and
+// height-only cases. Keep per-output tap vectors for the hot exact scalar path.
+// CLOSE(perf): Storing x byte offsets and y row coordinates depended on the
+// rejected flat tap layout, so there is no standalone exact-profile change to
+// test here.
 // TODO(perf:layout, rank=7): Test coalescing only duplicate clamped edge taps
 // that point at the same source pixel, preserving the direct tap order for
 // interior taps. This may fail exact f64 grouping, so gate on exact oracle
