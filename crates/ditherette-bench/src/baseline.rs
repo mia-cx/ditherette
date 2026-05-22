@@ -96,14 +96,8 @@ pub(crate) fn replace_scoped_baseline_from_indexed_run(
     name: &str,
     current_run: &BenchRun,
 ) -> Result<usize, BenchError> {
-    let case_runs = load_indexed_case_runs(
-        current_run,
-        MissingIndexedRun::Error {
-            role,
-            name,
-        },
-    )?
-    .expect("missing indexed case runs are errors when replacing baselines");
+    let case_runs = load_indexed_case_runs(current_run, MissingIndexedRun::Error { role, name })?
+        .expect("missing indexed case runs are errors when replacing baselines");
 
     for run in &case_runs {
         let result = run
@@ -267,7 +261,8 @@ fn ensure_indexed_case_matches(
         && actual.source_height == expected.source_height
         && actual.output_width == expected.output_width
         && actual.output_height == expected.output_height
-        && actual.scale == expected.scale
+        && result_scale_x(actual) == result_scale_x(expected)
+        && result_scale_y(actual) == result_scale_y(expected)
         && actual.pixel_format == expected.pixel_format
         && actual.params_fingerprint == expected.params_fingerprint;
     if matches {
@@ -336,7 +331,7 @@ fn indexed_result_path(
         path = path.join(sanitize_path_component(baseline_key));
     }
     path.join(fixture_key(result))
-        .join(scale_key(result.scale))
+        .join(scale_key(result))
         .join("run.json")
 }
 
@@ -389,8 +384,34 @@ fn fixture_key(result: &BenchResult) -> String {
     compact_component(&result.fixture, "unknown-fixture")
 }
 
-fn scale_key(scale: f64) -> String {
-    format!("{}x", sanitize_path_component(&scale.to_string()))
+fn scale_key(result: &BenchResult) -> String {
+    let scale_x = result_scale_x(result);
+    let scale_y = result_scale_y(result);
+    if (scale_x - scale_y).abs() < f64::EPSILON {
+        return format!("{}x", sanitize_path_component(&scale_x.to_string()));
+    }
+
+    format!(
+        "{}x-{}y",
+        sanitize_path_component(&scale_x.to_string()),
+        sanitize_path_component(&scale_y.to_string())
+    )
+}
+
+fn result_scale_x(result: &BenchResult) -> f64 {
+    if result.scale_x == 0.0 {
+        result.scale
+    } else {
+        result.scale_x
+    }
+}
+
+fn result_scale_y(result: &BenchResult) -> f64 {
+    if result.scale_y == 0.0 {
+        result.scale
+    } else {
+        result.scale_y
+    }
 }
 
 fn compact_component(value: &str, fallback: &str) -> String {
@@ -437,7 +458,7 @@ fn scoped_baseline_dir(name: &str, run: &BenchRun, result: &BenchResult) -> Path
         .join(benchmark_key(result))
         .join(config_key(run, result))
         .join(fixture_key(result))
-        .join(scale_key(result.scale))
+        .join(scale_key(result))
         .join(sanitize_path_component(name))
 }
 

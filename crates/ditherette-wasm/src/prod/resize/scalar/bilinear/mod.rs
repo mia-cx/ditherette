@@ -23,11 +23,10 @@ pub use plan::BilinearResizePlan;
 // harness shape -> cold/hot API coverage -> tap layout -> exact path splits ->
 // kernel/local arithmetic. The exact profile currently judges hot reused-plan
 // uniform-scale RGBA8 resizes only.
-// TODO(perf:harness, rank=1): Add anisotropic resize case identity to the bench
-// result/baseline model so bilinear width-only and height-only scale classes can
-// be represented without colliding with uniform scales. Benchmark with
-// `ditherette-bench run bilinear` after the manifest profile gains configured
-// anisotropic cases.
+// NOTE(perf): The bench result/baseline model now distinguishes anisotropic
+// scale pairs, and the `bilinear` manifest profile includes width-only and
+// height-only cases. Exact correctness passed for the expanded matrix in
+// `ditherette-bench run bilinear`.
 // TODO(perf:harness, rank=2): Add a bounded/fast bilinear subject and manifest
 // profile before retesting f32, separable, or approximate minify paths that the
 // exact byte profile cannot accept. Judge the new subject with a configured

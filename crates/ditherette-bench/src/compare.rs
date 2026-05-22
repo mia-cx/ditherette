@@ -241,10 +241,27 @@ fn semantic_match(result: &BenchResult, baseline: &BenchResult) -> bool {
         && result.source_height == baseline.source_height
         && result.output_width == baseline.output_width
         && result.output_height == baseline.output_height
-        && result.scale == baseline.scale
+        && result_scale_x(result) == result_scale_x(baseline)
+        && result_scale_y(result) == result_scale_y(baseline)
         && result.filter == baseline.filter
         && result.pixel_format == baseline.pixel_format
         && result.params_fingerprint == baseline.params_fingerprint
+}
+
+fn result_scale_x(result: &BenchResult) -> f64 {
+    if result.scale_x == 0.0 {
+        result.scale
+    } else {
+        result.scale_x
+    }
+}
+
+fn result_scale_y(result: &BenchResult) -> f64 {
+    if result.scale_y == 0.0 {
+        result.scale
+    } else {
+        result.scale_y
+    }
 }
 
 fn comparison(baseline: &str, current_ns: f64, baseline_ns: f64) -> ComparisonReport {

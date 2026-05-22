@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use ditherette_bench_api::SubjectId;
 
 use crate::{
+    case::ResizeScale,
     fixture::Fixture,
     measure::{MeasurementConfig, MeasurementObserver, MeasurementProgress},
     result::{BenchResult, ComparisonReport, SampleStats, VerificationReport},
@@ -20,7 +21,7 @@ pub(crate) fn log_perf_start(
     domain: &str,
     subjects: &[String],
     fixtures: &[Fixture],
-    scales: &[f64],
+    scales: &[ResizeScale],
     measurement: &MeasurementConfig,
     oracle: Option<&SubjectId>,
     baseline: Option<&str>,
@@ -666,10 +667,10 @@ fn format_bytes(bytes: usize) -> String {
     }
 }
 
-fn format_scales(scales: &[f64]) -> String {
+fn format_scales(scales: &[ResizeScale]) -> String {
     scales
         .iter()
-        .map(|scale| scale.to_string())
+        .map(|scale| scale.label())
         .collect::<Vec<_>>()
         .join(", ")
 }

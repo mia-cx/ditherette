@@ -82,7 +82,7 @@ Accepted baselines are scoped per case while sharing a human-readable name. The 
 baselines/perf/resize/prod-resize-area-scalar/<config>/Celeste_Insta_selfie/0-5x/accepted/<run-id>.json
 ```
 
-Subset runs reuse matching per-fixture/per-scale baseline files without reestablishing the whole matrix.
+Subset runs reuse matching per-fixture/per-scale baseline files without reestablishing the whole matrix. Uniform scales keep the legacy `0-5x` key; anisotropic scales use separate `0-5x-1y`-style keys so width-only and height-only cases cannot collide with uniform cases.
 
 Accepted baseline comparisons still require an exact matching entry:
 
@@ -95,7 +95,7 @@ Accepted baseline comparisons still require an exact matching entry:
 - fixture fingerprint
 - source dimensions
 - output dimensions
-- scale
+- scale_x / scale_y
 - pixel format
 - params fingerprint
 
@@ -112,7 +112,7 @@ Oracle and spec comparisons are intentionally looser than accepted baselines. Th
 - fixture fingerprint
 - source dimensions
 - output dimensions
-- scale
+- scale_x / scale_y
 - filter
 - pixel format
 - params fingerprint
@@ -137,6 +137,8 @@ Each result records identity, correctness, raw samples, summary statistics, thro
   "output_width": 1538,
   "output_height": 922,
   "scale": 0.95,
+  "scale_x": 0.95,
+  "scale_y": 0.95,
   "pixel_format": "rgba8",
   "params_fingerprint": "resize-default",
   "verified": false,
