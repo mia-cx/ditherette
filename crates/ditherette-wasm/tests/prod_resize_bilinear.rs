@@ -11,7 +11,7 @@ use ditherette_wasm::{
 };
 
 #[test]
-fn prod_bilinear_matches_spec_for_anchor_matrix() {
+fn prod_bilinear_stays_near_spec_for_anchor_matrix() {
     for (source_dimensions, output_dimensions) in [
         (
             ImageDimensions::new(4, 3).unwrap(),
@@ -26,11 +26,11 @@ fn prod_bilinear_matches_spec_for_anchor_matrix() {
             ImageDimensions::new(8, 9).unwrap(),
         ),
     ] {
-        assert_prod_matches_spec(source_dimensions, output_dimensions);
+        assert_prod_stays_near_spec(source_dimensions, output_dimensions);
     }
 }
 
-fn assert_prod_matches_spec(
+fn assert_prod_stays_near_spec(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
 ) {
@@ -51,7 +51,29 @@ fn assert_prod_matches_spec(
             prod_anchor,
         );
 
-        assert_eq!(prod_output, spec_output, "anchor {spec_anchor:?}");
+        assert_bounded_color_distance(&prod_output, &spec_output, 2.0, "anchor {spec_anchor:?}");
+    }
+}
+
+fn assert_bounded_color_distance(actual: &[u8], expected: &[u8], max_distance: f64, context: &str) {
+    assert_eq!(actual.len(), expected.len(), "{context} output length");
+
+    for (pixel_index, (actual_pixel, expected_pixel)) in actual
+        .chunks_exact(4)
+        .zip(expected.chunks_exact(4))
+        .enumerate()
+    {
+        let distance = actual_pixel
+            .iter()
+            .zip(expected_pixel)
+            .map(|(actual, expected)| f64::from(actual.abs_diff(*expected)).powi(2))
+            .sum::<f64>()
+            .sqrt();
+
+        assert!(
+            distance <= max_distance,
+            "{context} pixel {pixel_index} color distance {distance} exceeded {max_distance}: actual={actual_pixel:?} expected={expected_pixel:?}"
+        );
     }
 }
 

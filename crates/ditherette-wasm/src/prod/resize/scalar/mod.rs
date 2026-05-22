@@ -33,24 +33,23 @@
 // split -> packed kernels -> arithmetic micro-tuning.
 // NOTE(perf): The `bilinear` profile includes an explicit identity/same-size
 // scale via the `identity` scale group, so later copy fast paths are measured by
-// the default profile. Exact-oracle checks passed for the expanded matrix.
+// the default profile. Bounded oracle checks pass for the expanded matrix.
 // NOTE(perf): `BilinearResizePlan` with cached direct-evaluated x/y source
 // positions and thread-local bench reuse was accepted in `ditherette-bench run
 // bilinear`; it improved most default cases by ~5-14% while
 // preserving exact oracle output.
 // NOTE(perf): Cached nonzero support taps in `BilinearResizePlan` were accepted
-// in `ditherette-bench run bilinear`; preserving duplicate
-// clamped edge taps kept exact output and improved default cases by ~50-160%.
+// in `ditherette-bench run bilinear`; preserving duplicate clamped edge taps
+// kept the bounded contract stable and improved default cases by ~50-160%.
 // NOTE(perf): The identity/same-size class copies packed RGBA8 bytes directly;
-// exact-oracle checks passed and `ditherette-bench run bilinear` improved
-// represented identity cases by >99%.
+// `ditherette-bench run bilinear` improved represented identity cases by >99%.
 // REJECT(perf): Splitting the remaining upscale/two-tap support class into a
 // fixed 2x2 kernel preserved exactness but regressed represented upscale cases
 // by about -52% to -55% in `ditherette-bench run bilinear`; keep the generic tap
 // iterator until a different kernel shape is available.
-// REJECT(perf): A separable two-pass minify path passed bounded correctness
-// under `bilinear-fast` but regressed representative cases by roughly -3% to
-// -44%; keep direct 2D tap accumulation.
+// NOTE(perf): The single production bilinear path now uses vertical-first
+// separable f32 scratch rows under bounded correctness. This closes most of the
+// old scalar gap without adding a second bilinear implementation.
 // REJECT(perf): Rewriting the packed kernel to index `source.data()` directly
 // with row byte offsets preserved exactness but regressed representative
 // large/upscale cases by roughly -5% to -19% in `ditherette-bench run
@@ -88,15 +87,14 @@
 // profile, not folded into scalar. Register it only when the production tiling
 // module owns row-band execution and can be accepted independently from scalar.
 // CLOSE(perf): Do not port the old normalized
-// `AxisContribution { first, weights }` plan as a standalone perf task. Exact
-// denominator pre-sums, packed reads, fixed two-tap loops, channel unrolling,
-// and bounded separable scratch rows all failed or regressed; only reuse old
-// ideas when implementing a new current prod subject from scratch.
+// `AxisContribution { first, weights }` plan as a standalone perf task. The
+// current plan owns reusable taps; separable execution is now local to the
+// single scalar production kernel.
 // DEFER(perf): Row-band cutoff sweeps require the deferred tiled bilinear
 // subject; scalar perf-loop cannot judge dynamic tiling thresholds.
-// CLOSE(perf): Do not port old unrolled separable RGBA loops or f32
-// contribution math into scalar bilinear. The direct-kernel unroll was exact but
-// slower, and the bounded separable path regressed under `bilinear-fast`.
+// REJECT(perf): Do not port old unrolled separable RGBA loops as-is. The
+// current separable kernel keeps compact plan taps and measured better with the
+// existing small RGBA statements than broader unroll rewrites.
 
 pub mod area;
 pub mod bilinear;

@@ -12,15 +12,15 @@ use super::{
 };
 
 // REJECT(perf): Flattening axis taps into contiguous tap arrays plus per-output
-// ranges preserved exactness but regressed representative `ditherette-bench run
-// bilinear` cases by roughly -4% to -19%, especially anisotropic width-only and
-// height-only cases. Keep per-output tap vectors for the hot exact scalar path.
+// ranges regressed representative `ditherette-bench run bilinear` cases by
+// roughly -4% to -19%, especially anisotropic width-only and height-only cases.
+// Keep per-output tap vectors for the scalar path.
 // CLOSE(perf): Storing x byte offsets and y row coordinates depended on the
-// rejected flat tap layout, so there is no standalone exact-profile change to
+// rejected flat tap layout, so there is no standalone scalar-profile change to
 // test here.
-// REJECT(perf): Coalescing only duplicate clamped edge taps changed f64 grouping
-// and failed exact oracle output in `prod_resize_bilinear` for centered anchors;
-// keep duplicate clamped edge taps in direct contribution order.
+// REJECT(perf): Coalescing only duplicate clamped edge taps changed contribution
+// grouping and failed the earlier exact oracle output for centered anchors; keep
+// duplicate clamped edge taps unless a bounded-profile benchmark proves a win.
 /// Reusable bilinear resize metadata for one source/output shape.
 pub struct BilinearResizePlan {
     source_dimensions: ImageDimensions,

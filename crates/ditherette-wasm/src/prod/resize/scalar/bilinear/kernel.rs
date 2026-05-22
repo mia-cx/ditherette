@@ -1,8 +1,11 @@
 //! Packed RGBA8 bilinear kernel.
 //!
-//! The current production kernel is intentionally direct: map one output pixel
-//! to source space, apply triangle-filter support, normalize by total weight,
-//! then round exactly like the independent spec oracle.
+//! Production bilinear uses a separable triangle-filter kernel: each output row
+//! first accumulates one vertical source-width scratch row, then gathers that row
+//! horizontally. This is the same algorithmic shape as the old scalar path while
+//! keeping planning and validation in the rewritten production stack.
+
+use std::cell::RefCell;
 
 use crate::image::{ImageView, ImageViewMut, Rgba8};
 
@@ -10,76 +13,106 @@ use super::plan::{AxisTap, BilinearResizePlan};
 
 const RGBA8_CHANNELS: usize = 4;
 
+thread_local! {
+    static VERTICAL_SCRATCH: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+}
+
 pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
 ) {
-    // NOTE(perf): Nonzero x/y support taps are cached in `BilinearResizePlan`;
-    // keep duplicate clamped edge taps separate so accumulation order matches the
-    // direct exact oracle path.
-    for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
-        let output_row = output
-            .row_mut(output_y as u32)
-            .expect("output y from dimensions should stay in bounds");
+    VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
+        let source_width = source.dimensions().width_usize();
+        let output_width = output.dimensions().width_usize();
+        let source_row_len = source_width * RGBA8_CHANNELS;
+        let output_row_len = output_width * RGBA8_CHANNELS;
 
-        for (output_x, x_taps) in plan.x_taps.iter().enumerate() {
-            let output_start = output_x * RGBA8_CHANNELS;
-            let output_pixel = &mut output_row[output_start..output_start + RGBA8_CHANNELS];
-            write_resized_pixel(source, output_pixel, x_taps, y_taps);
-        }
-    }
-}
+        vertical_row.resize(source_row_len, 0.0);
+        let source_data = source.data();
+        let output_data = output.data_mut();
 
-// NOTE(perf): Edge/interior splitting became unnecessary after the plan started
-// storing clamped taps; the hot kernel no longer performs per-tap clamping.
-// CLOSE(perf): The minify-only kernel shape depended on the rejected flat tap
-// layout; with per-output tap vectors, there is no separate y-metadata hoist to
-// test under the exact profile.
-// REJECT(perf): A separable scratch-row minify path under `bilinear-fast`
-// passed bounded correctness but regressed nearly every representative case by
-// roughly -3% to -44%; keep the direct 2D accumulation shape.
-// REJECT(perf): Passing packed source data plus row byte length directly into
-// this writer preserved exactness but regressed representative large/upscale
-// cases by roughly -5% to -19% in `ditherette-bench run bilinear`; keep the
-// `ImageView::row` lookup shape after tap planning.
-fn write_resized_pixel(
-    source: ImageView<'_, Rgba8>,
-    output_pixel: &mut [u8],
-    x_taps: &[AxisTap],
-    y_taps: &[AxisTap],
-) {
-    let mut accumulated = [0.0; RGBA8_CHANNELS];
-    let mut total_weight = 0.0;
+        for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
+            vertical_row.fill(0.0);
+            let y_weight_sum = accumulate_vertical(
+                source_data,
+                source_row_len,
+                vertical_row.as_mut_slice(),
+                y_taps,
+            );
 
-    // REJECT(perf): Precomputing x/y weight sums and replacing the nested
-    // `total_weight += x_weight * y_weight` accumulation changed f64 rounding
-    // and failed exact oracle output in `prod_resize_bilinear` for anchored
-    // cases. Keep denominator accumulation in the same order as channel sums.
-    for y_tap in y_taps {
-        let source_row = source
-            .row(y_tap.index as u32)
-            .expect("clamped source y should stay in bounds");
+            let output_row_start = output_y * output_row_len;
+            let output_row = &mut output_data[output_row_start..output_row_start + output_row_len];
 
-        for x_tap in x_taps {
-            let weight = x_tap.weight * y_tap.weight;
-            let source_start = x_tap.index * RGBA8_CHANNELS;
-            let source_pixel = &source_row[source_start..source_start + RGBA8_CHANNELS];
-
-            total_weight += weight;
-            // REJECT(perf): Reading RGBA8 as an unaligned `u32` and widening
-            // bytes locally preserved exactness but regressed representative
-            // large/upscale cases in `ditherette-bench run bilinear`. Keep
-            // slice channel loads unless the surrounding kernel shape changes.
-            for channel in 0..RGBA8_CHANNELS {
-                accumulated[channel] += f64::from(source_pixel[channel]) * weight;
+            for (output_pixel, x_taps) in output_row
+                .chunks_exact_mut(RGBA8_CHANNELS)
+                .zip(&plan.x_taps)
+            {
+                write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
             }
         }
+    });
+}
+
+// NOTE(perf): This path intentionally uses f32 scratch accumulation. A f64
+// separable scratch row is closer to the direct oracle but materially slower;
+// the benchmark profile enforces bounded color-distance correctness for the
+// single production bilinear path instead of byte-for-byte f64 grouping.
+fn accumulate_vertical(
+    source: &[u8],
+    source_row_len: usize,
+    vertical_row: &mut [f32],
+    y_taps: &[AxisTap],
+) -> f32 {
+    let mut y_weight_sum = 0.0;
+
+    for y_tap in y_taps {
+        let y_weight = y_tap.weight as f32;
+        y_weight_sum += y_weight;
+        let source_start = y_tap.index * source_row_len;
+        let source_row = &source[source_start..source_start + source_row_len];
+
+        for (vertical_pixel, source_pixel) in vertical_row
+            .chunks_exact_mut(RGBA8_CHANNELS)
+            .zip(source_row.chunks_exact(RGBA8_CHANNELS))
+        {
+            vertical_pixel[0] += f32::from(source_pixel[0]) * y_weight;
+            vertical_pixel[1] += f32::from(source_pixel[1]) * y_weight;
+            vertical_pixel[2] += f32::from(source_pixel[2]) * y_weight;
+            vertical_pixel[3] += f32::from(source_pixel[3]) * y_weight;
+        }
     }
 
-    for channel in 0..RGBA8_CHANNELS {
-        output_pixel[channel] = (accumulated[channel] / total_weight)
-            .clamp(0.0, 255.0)
-            .round() as u8;
+    y_weight_sum
+}
+
+fn write_horizontal_pixel(
+    output_pixel: &mut [u8],
+    vertical_row: &[f32],
+    x_taps: &[AxisTap],
+    y_weight_sum: f32,
+) {
+    let mut accumulated = [0.0; RGBA8_CHANNELS];
+    let mut x_weight_sum = 0.0;
+
+    for x_tap in x_taps {
+        let x_weight = x_tap.weight as f32;
+        x_weight_sum += x_weight;
+        let source_start = x_tap.index * RGBA8_CHANNELS;
+
+        accumulated[0] += vertical_row[source_start] * x_weight;
+        accumulated[1] += vertical_row[source_start + 1] * x_weight;
+        accumulated[2] += vertical_row[source_start + 2] * x_weight;
+        accumulated[3] += vertical_row[source_start + 3] * x_weight;
     }
+
+    let total_weight = x_weight_sum * y_weight_sum;
+    output_pixel[0] = round_u8(accumulated[0] / total_weight);
+    output_pixel[1] = round_u8(accumulated[1] / total_weight);
+    output_pixel[2] = round_u8(accumulated[2] / total_weight);
+    output_pixel[3] = round_u8(accumulated[3] / total_weight);
+}
+
+fn round_u8(value: f32) -> u8 {
+    value.clamp(0.0, 255.0).round() as u8
 }
