@@ -33,6 +33,14 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
 
 // NOTE(perf): Edge/interior splitting became unnecessary after the plan started
 // storing clamped taps; the hot kernel no longer performs per-tap clamping.
+// TODO(perf:kernel, rank=8, after perf:layout flat-bilinear-axis-taps): Test a
+// minify-only kernel shape that hoists per-output-y tap metadata once per row
+// while preserving the exact nested y-then-x contribution order. Verify exact
+// oracle output, then benchmark with `ditherette-bench run bilinear`.
+// TODO(perf:path, rank=9, after perf:harness bounded-fast-bilinear-profile):
+// Test a separable or scratch-row minify path only under a bounded/fast bilinear
+// profile, because changing the direct 2D f64 contribution grouping is not
+// acceptable for the exact `ditherette-bench run bilinear` profile.
 // REJECT(perf): Passing packed source data plus row byte length directly into
 // this writer preserved exactness but regressed representative large/upscale
 // cases by roughly -5% to -19% in `ditherette-bench run bilinear`; keep the
