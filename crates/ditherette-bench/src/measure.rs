@@ -12,6 +12,7 @@ use ditherette_bench_api::{
 };
 
 use crate::{
+    case::ResizeScale,
     cli::Flags,
     error::BenchError,
     fixture::Fixture,
@@ -320,7 +321,7 @@ pub(crate) fn measure_resize_case(
     subject: &ResizeBenchSubject,
     fixture: &Fixture,
     output: (u32, u32),
-    scale: f64,
+    scale: ResizeScale,
     params: &ResizeParams,
     config: &MeasurementConfig,
     verification: Option<VerificationReport>,
@@ -413,7 +414,7 @@ pub(crate) fn measure_resize_case(
 
     Ok(BenchResult {
         subject: subject.descriptor.id.to_string(),
-        case_id: format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale),
+        case_id: format!("{}-{}x{}-{}", fixture.id, output.0, output.1, scale.label()),
         fixture: fixture.id.clone(),
         fixture_kind: fixture.kind.clone(),
         fixture_fingerprint: fixture.fingerprint.clone(),
@@ -423,7 +424,9 @@ pub(crate) fn measure_resize_case(
         source_height: fixture.height,
         output_width: output.0,
         output_height: output.1,
-        scale,
+        scale: scale.x,
+        scale_x: scale.x,
+        scale_y: scale.y,
         pixel_format: "rgba8".to_owned(),
         params_fingerprint: "resize-default".to_owned(),
         verified: verification

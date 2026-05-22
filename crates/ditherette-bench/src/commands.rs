@@ -10,7 +10,7 @@ use crate::{
         replace_scoped_baseline_from_indexed_run, save_baseline, save_indexed_run,
         save_scoped_baseline, write_json,
     },
-    case::scales_from_flags,
+    case::{scales_from_flags, ResizeScale},
     cli::{split_domain, Flags},
     compare::{
         acceptance_report, attach_accepted_comparisons, attach_measured_oracle_comparisons,
@@ -256,9 +256,9 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let mut results = Vec::new();
     for fixture in &fixtures {
         for scale in &scales {
-            let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
+            let output = output_dimensions(fixture.width, fixture.height, scale.x, scale.y);
             for subject in &subjects {
-                let case = format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale);
+                let case = format!("{}-{}x{}-{}", fixture.id, output.0, output.1, scale.label());
                 let mut logger =
                     MeasurementLogger::new(&subject.descriptor.id.to_string(), &case, measurement);
                 let mut result = measure_resize_case(
@@ -343,16 +343,16 @@ fn write_resize_output_images(
     oracle: Option<&ResizeBenchSubject>,
     subjects: &[ResizeBenchSubject],
     fixtures: &[crate::fixture::Fixture],
-    scales: &[f64],
+    scales: &[ResizeScale],
 ) -> Result<(), BenchError> {
     let mut written = 0usize;
 
     for fixture in fixtures {
         for scale in scales {
-            let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
+            let output = output_dimensions(fixture.width, fixture.height, scale.x, scale.y);
             let case_dir = output_dir
                 .join(sanitize_path_segment(&fixture.id))
-                .join(format!("{}x{}-{}x", output.0, output.1, scale));
+                .join(format!("{}x{}-{}", output.0, output.1, scale.label()));
 
             if let Some(oracle) = oracle {
                 let rgba = run_resize_once(oracle, fixture, output, &ResizeParams::default())?;
@@ -425,7 +425,7 @@ fn ensure_oracle_baseline(
     oracle: &ResizeBenchSubject,
     subjects: &[ResizeBenchSubject],
     fixtures: &[crate::fixture::Fixture],
-    scales: &[f64],
+    scales: &[ResizeScale],
     measurement: &MeasurementConfig,
     domain: &str,
     force_refresh: bool,
@@ -474,9 +474,13 @@ fn ensure_oracle_baseline(
             })
             .expect("missing oracle case should refer to a requested fixture");
         let output = (missing_case.output_width, missing_case.output_height);
+        let scale = result_scale(missing_case);
         let case = format!(
-            "oracle-baseline/{}-{}x{}-{}x",
-            fixture.id, output.0, output.1, missing_case.scale
+            "oracle-baseline/{}-{}x{}-{}",
+            fixture.id,
+            output.0,
+            output.1,
+            scale.label()
         );
         let mut logger =
             MeasurementLogger::new(&oracle.descriptor.id.to_string(), &case, *measurement);
@@ -484,7 +488,7 @@ fn ensure_oracle_baseline(
             oracle,
             fixture,
             output,
-            missing_case.scale,
+            scale,
             &ResizeParams::default(),
             measurement,
             None,
@@ -503,14 +507,14 @@ fn ensure_oracle_baseline(
 fn resize_probe_run(
     subjects: &[ResizeBenchSubject],
     fixtures: &[crate::fixture::Fixture],
-    scales: &[f64],
+    scales: &[ResizeScale],
     measurement: &MeasurementConfig,
     domain: &str,
 ) -> BenchRun {
     let mut results = Vec::new();
     for fixture in fixtures {
         for scale in scales {
-            let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
+            let output = output_dimensions(fixture.width, fixture.height, scale.x, scale.y);
             for subject in subjects {
                 results.push(resize_probe_result(subject, fixture, output, *scale));
             }
@@ -522,22 +526,28 @@ fn resize_probe_run(
 fn oracle_probe_run(
     oracle: &ResizeBenchSubject,
     fixtures: &[crate::fixture::Fixture],
-    scales: &[f64],
+    scales: &[ResizeScale],
     measurement: &MeasurementConfig,
     domain: &str,
 ) -> BenchRun {
-    resize_probe_run(std::slice::from_ref(oracle), fixtures, scales, measurement, domain)
+    resize_probe_run(
+        std::slice::from_ref(oracle),
+        fixtures,
+        scales,
+        measurement,
+        domain,
+    )
 }
 
 fn resize_probe_result(
     subject: &ResizeBenchSubject,
     fixture: &crate::fixture::Fixture,
     output: (u32, u32),
-    scale: f64,
+    scale: ResizeScale,
 ) -> BenchResult {
     BenchResult {
         subject: subject.descriptor.id.to_string(),
-        case_id: format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale),
+        case_id: format!("{}-{}x{}-{}", fixture.id, output.0, output.1, scale.label()),
         fixture: fixture.id.clone(),
         fixture_kind: fixture.kind.clone(),
         fixture_fingerprint: fixture.fingerprint.clone(),
@@ -547,7 +557,9 @@ fn resize_probe_result(
         source_height: fixture.height,
         output_width: output.0,
         output_height: output.1,
-        scale,
+        scale: scale.x,
+        scale_x: scale.x,
+        scale_y: scale.y,
         pixel_format: "rgba8".to_owned(),
         params_fingerprint: "resize-default".to_owned(),
         verified: false,
@@ -569,6 +581,21 @@ fn resize_probe_result(
         max_ns: 0.0,
         output_mpix_per_s: 0.0,
         comparisons: BTreeMap::new(),
+    }
+}
+
+fn result_scale(result: &BenchResult) -> ResizeScale {
+    ResizeScale {
+        x: if result.scale_x == 0.0 {
+            result.scale
+        } else {
+            result.scale_x
+        },
+        y: if result.scale_y == 0.0 {
+            result.scale
+        } else {
+            result.scale_y
+        },
     }
 }
 
@@ -623,7 +650,7 @@ fn run_resize_correctness_checks(
     oracle_id: &SubjectId,
     subjects: &[ResizeBenchSubject],
     fixtures: &[crate::fixture::Fixture],
-    scales: &[f64],
+    scales: &[ResizeScale],
     verification_bounds: VerificationBounds,
     allow_failures: bool,
 ) -> Result<Vec<CorrectnessFailure>, BenchError> {
@@ -639,10 +666,10 @@ fn run_resize_correctness_checks(
 
     for fixture in fixtures {
         for scale in scales {
-            let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
+            let output = output_dimensions(fixture.width, fixture.height, scale.x, scale.y);
             let oracle_output =
                 run_resize_once(&oracle, fixture, output, &ResizeParams::default())?;
-            let case = format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale);
+            let case = format!("{}-{}x{}-{}", fixture.id, output.0, output.1, scale.label());
 
             for subject in subjects {
                 if subject.descriptor.id == *oracle_id {
@@ -728,7 +755,7 @@ pub(crate) fn comp_command(registry: &Registry, args: &[String]) -> Result<(), B
 
     for fixture in &fixtures {
         for scale in &scales {
-            let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
+            let output = output_dimensions(fixture.width, fixture.height, scale.x, scale.y);
             let oracle_output = run_resize_once(&left, fixture, output, &ResizeParams::default())?;
             let candidate_output =
                 run_resize_once(&right, fixture, output, &ResizeParams::default())?;
@@ -736,12 +763,12 @@ pub(crate) fn comp_command(registry: &Registry, args: &[String]) -> Result<(), B
                 verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
             if !verification.passed {
                 return Err(BenchError::Verify(format!(
-                    "{} failed {} verification against {} for {} at {}x: {:?}; differing_pixels={}, max_color_distance={:.6}, mean_color_distance={:.6}, rms_color_distance={:.6}",
+                    "{} failed {} verification against {} for {} at {}: {:?}; differing_pixels={}, max_color_distance={:.6}, mean_color_distance={:.6}, rms_color_distance={:.6}",
                     right.descriptor.id,
                     verification.mode,
                     left.descriptor.id,
                     fixture.id,
-                    scale,
+                    scale.label(),
                     verification.first_mismatch,
                     verification.differing_pixels,
                     verification.max_color_distance,

@@ -182,6 +182,10 @@ pub(crate) struct BenchResult {
     pub(crate) output_width: u32,
     pub(crate) output_height: u32,
     pub(crate) scale: f64,
+    #[serde(default)]
+    pub(crate) scale_x: f64,
+    #[serde(default)]
+    pub(crate) scale_y: f64,
     pub(crate) pixel_format: String,
     pub(crate) params_fingerprint: String,
     pub(crate) verified: bool,

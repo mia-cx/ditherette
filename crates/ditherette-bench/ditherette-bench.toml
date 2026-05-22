@@ -50,6 +50,7 @@ domain = "resize"
 subjects = ["prod:resize:bilinear:scalar"]
 oracle = "spec:resize:bilinear:scalar"
 correctness = "exact"
+scale_group = ["partial", "identity", "bilinear-anisotropic"]
 
 [profiles.bicubic]
 command = "perf"
