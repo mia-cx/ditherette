@@ -14,10 +14,9 @@ const BILINEAR_TINY_TWO_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_00
 const BILINEAR_SCALAR_OUTPUT_PIXEL_LIMIT: usize = 150_000;
 const BILINEAR_TWO_BAND_OUTPUT_PIXEL_LIMIT: usize = 250_000;
 
-// TODO(perf): Densely sweep tiny bilinear outputs around the current
-// scalar/2-worker crossover and tighten these output-pixel cutoffs. Keep the
-// production formula dimension-derived; scale labels from sweep reports are
-// only breadcrumbs for choosing which dimensions to measure next.
+// DEFER(perf): Tiny-output tiled bilinear cutoffs are blocked until tiled
+// bilinear has a registered current-harness subject/profile. Keep this old-crate
+// formula unchanged until that benchmark exists.
 
 pub(crate) fn resize_rgba_bilinear_with_dynamic_tiling_into(
     source_rgba: &[u8],
@@ -139,10 +138,9 @@ fn resize_rgba_bilinear_with_plan_into(
     )?;
 
     process_row_bands_with_plan(output_rgba, tiling_plan, |band, output_rows| {
-        // TODO(perf): Benchmark per-worker/thread-local vertical scratch reuse
-        // for tiled bilinear. Row-band tiling is now hot enough that allocating
-        // one f32 row per band may show up in repeated-resize or small-output
-        // workloads even though the single-resize Criterion wins are large.
+        // DEFER(perf): Per-worker/thread-local scratch reuse needs a registered
+        // tiled bilinear subject/profile in the current harness; do not tune this
+        // old-crate allocation from one-off Criterion runs.
         let mut vertical_rgba = vec![0.0; source_row_byte_len];
 
         for (row_offset, output_row) in output_rows

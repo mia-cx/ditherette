@@ -73,11 +73,9 @@ pub fn resize_rgba_area_scalar_into(
     }
 
     if is_minifying(source_dimensions, output_dimensions) {
-        // TODO(perf): Investigate a compact near-source fractional-area path.
-        // The area-vs-bilinear cmp shows 0.95x..0.625x is dominated by exact
-        // overlap bookkeeping; a specialized small-overlap layout with
-        // precomputed x/y coverage may reduce branches without weakening exact
-        // area's rounding contract.
+        // DEFER(perf): This old-crate near-source fractional-area lead needs an
+        // active registered prod subject/profile before implementation. Revisit
+        // only if the old scalar path is promoted back into the current harness.
         resize_fractional_downscale_area_style_into(
             source_rgba,
             source_dimensions,
