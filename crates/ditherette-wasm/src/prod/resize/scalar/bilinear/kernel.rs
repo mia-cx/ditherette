@@ -36,10 +36,9 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
 // CLOSE(perf): The minify-only kernel shape depended on the rejected flat tap
 // layout; with per-output tap vectors, there is no separate y-metadata hoist to
 // test under the exact profile.
-// TODO(perf:path, rank=9, after perf:harness bounded-fast-bilinear-profile):
-// Test a separable or scratch-row minify path only under a bounded/fast bilinear
-// profile, because changing the direct 2D f64 contribution grouping is not
-// acceptable for the exact `ditherette-bench run bilinear` profile.
+// REJECT(perf): A separable scratch-row minify path under `bilinear-fast`
+// passed bounded correctness but regressed nearly every representative case by
+// roughly -3% to -44%; keep the direct 2D accumulation shape.
 // REJECT(perf): Passing packed source data plus row byte length directly into
 // this writer preserved exactness but regressed representative large/upscale
 // cases by roughly -5% to -19% in `ditherette-bench run bilinear`; keep the
