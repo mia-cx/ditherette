@@ -60,6 +60,14 @@ oracle = "spec:resize:bilinear:scalar"
 correctness = "bounded"
 scale_group = ["partial", "identity", "bilinear-anisotropic"]
 
+[profiles.bilinear-cold]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bilinear:cold"]
+oracle = "spec:resize:bilinear:scalar"
+correctness = "exact"
+scale_group = ["partial", "identity", "bilinear-anisotropic"]
+
 [profiles.bicubic]
 command = "perf"
 domain = "resize"
