@@ -79,6 +79,54 @@ pub(crate) fn load_scoped_baseline(
     Ok(baseline)
 }
 
+pub(crate) fn replace_scoped_baseline_from_indexed_run(
+    role: &str,
+    name: &str,
+    current_run: &BenchRun,
+) -> Result<usize, BenchError> {
+    let mut case_runs = Vec::with_capacity(current_run.results.len());
+    for result in &current_run.results {
+        let path = indexed_result_path(current_run, result, None);
+        if !path.exists() {
+            return Err(BenchError::Baseline(format!(
+                "no latest compatible run for {} {} at {}; run this benchmark profile once before replacing baseline {role}/{name}",
+                result.subject,
+                result.case_id,
+                path.display()
+            )));
+        }
+
+        let run = read_json(&path)?;
+        validate_artifact(&run, "run", &path)?;
+        if run.results.len() != 1 {
+            return Err(BenchError::Baseline(format!(
+                "indexed run {} contains {} results, expected 1",
+                path.display(),
+                run.results.len()
+            )));
+        }
+        ensure_indexed_case_matches(&run, current_run, result, &path)?;
+        case_runs.push(run);
+    }
+
+    for run in &case_runs {
+        let result = run
+            .results
+            .first()
+            .expect("validated indexed case runs contain one result");
+        let dir = scoped_baseline_dir(name, run, result);
+        if dir.exists() {
+            fs::remove_dir_all(&dir).map_err(BenchError::io)?;
+        }
+        write_json(
+            dir.join(format!("{}.json", sanitize_path_component(&run.run_id))),
+            &run.as_baseline(role, name),
+        )?;
+    }
+
+    Ok(case_runs.len())
+}
+
 pub(crate) fn save_latest_run(run: &BenchRun) -> Result<(), BenchError> {
     write_json(latest_run_path(&run.command, &run.domain), run)
 }
@@ -180,6 +228,44 @@ fn read_baseline_at(role: &str, name: &str, path: &Path) -> Result<BenchRun, Ben
             path.display()
         ))),
     }
+}
+
+fn ensure_indexed_case_matches(
+    run: &BenchRun,
+    expected_run: &BenchRun,
+    expected: &BenchResult,
+    path: &Path,
+) -> Result<(), BenchError> {
+    let actual = run
+        .results
+        .first()
+        .expect("validated indexed case runs contain one result");
+    let matches = run.command == expected_run.command
+        && run.domain == expected_run.domain
+        && run.profile == expected_run.profile
+        && run.measurement == expected_run.measurement
+        && actual.subject == expected.subject
+        && actual.fixture == expected.fixture
+        && actual.fixture_fingerprint == expected.fixture_fingerprint
+        && actual.filter == expected.filter
+        && actual.variant == expected.variant
+        && actual.source_width == expected.source_width
+        && actual.source_height == expected.source_height
+        && actual.output_width == expected.output_width
+        && actual.output_height == expected.output_height
+        && actual.scale == expected.scale
+        && actual.pixel_format == expected.pixel_format
+        && actual.params_fingerprint == expected.params_fingerprint;
+    if matches {
+        return Ok(());
+    }
+
+    Err(BenchError::Baseline(format!(
+        "indexed run {} does not match the requested benchmark case {} {}",
+        path.display(),
+        expected.subject,
+        expected.case_id
+    )))
 }
 
 fn read_json(path: &Path) -> Result<BenchRun, BenchError> {

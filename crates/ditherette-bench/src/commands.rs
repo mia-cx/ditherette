@@ -6,8 +6,9 @@ use ditherette_bench_api::{ResizeBenchSubject, ResizeParams, SubjectId};
 
 use crate::{
     baseline::{
-        load_baseline, load_latest_run, load_scoped_baseline, save_baseline, save_indexed_run,
-        save_latest_run, save_scoped_baseline, write_json,
+        load_baseline, load_latest_run, load_scoped_baseline,
+        replace_scoped_baseline_from_indexed_run, save_baseline, save_indexed_run, save_latest_run,
+        save_scoped_baseline, write_json,
     },
     case::scales_from_flags,
     cli::{split_domain, Flags},
@@ -126,12 +127,6 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
             "--no-run is only valid with --replace-baseline".to_owned(),
         ));
     }
-    if let Some(name) = flags.optional("--replace-baseline") {
-        let latest = load_latest_run("perf", domain)?;
-        save_scoped_baseline("accepted", name, &latest, true)?;
-        println!("replaced accepted baseline {name:?} from latest perf/{domain} run");
-        return Ok(());
-    }
     let save_baseline_name = flags.optional("--save-baseline");
 
     let mut subjects = registry.select_resize_subjects(&flags)?;
@@ -185,6 +180,15 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let allow_correctness_failures = flags
         .optional("--allow-correctness-failures")
         .is_some_and(|value| value == "true");
+    if let Some(name) = flags.optional("--replace-baseline") {
+        let probe_run = resize_probe_run(&subjects, &fixtures, &scales, &measurement, domain);
+        let replaced = replace_scoped_baseline_from_indexed_run("accepted", name, &probe_run)?;
+        println!(
+            "replaced accepted baseline {name:?} from {replaced} latest compatible perf/{domain} case runs"
+        );
+        return Ok(());
+    }
+
     let accepted_baseline_name = flags.optional("--baseline");
     let previous_run = if accepted_baseline_name.is_none() {
         load_latest_run("perf", domain)
@@ -498,8 +502,8 @@ fn ensure_oracle_baseline(
     Ok(measured_run.as_baseline("oracle", ORACLE_BASELINE_NAME))
 }
 
-fn oracle_probe_run(
-    oracle: &ResizeBenchSubject,
+fn resize_probe_run(
+    subjects: &[ResizeBenchSubject],
     fixtures: &[crate::fixture::Fixture],
     scales: &[f64],
     measurement: &MeasurementConfig,
@@ -509,26 +513,38 @@ fn oracle_probe_run(
     for fixture in fixtures {
         for scale in scales {
             let output = output_dimensions(fixture.width, fixture.height, *scale, *scale);
-            results.push(oracle_probe_result(oracle, fixture, output, *scale));
+            for subject in subjects {
+                results.push(resize_probe_result(subject, fixture, output, *scale));
+            }
         }
     }
     BenchRun::new("perf", domain, Some(measurement.artifact()), results)
 }
 
-fn oracle_probe_result(
+fn oracle_probe_run(
     oracle: &ResizeBenchSubject,
+    fixtures: &[crate::fixture::Fixture],
+    scales: &[f64],
+    measurement: &MeasurementConfig,
+    domain: &str,
+) -> BenchRun {
+    resize_probe_run(std::slice::from_ref(oracle), fixtures, scales, measurement, domain)
+}
+
+fn resize_probe_result(
+    subject: &ResizeBenchSubject,
     fixture: &crate::fixture::Fixture,
     output: (u32, u32),
     scale: f64,
 ) -> BenchResult {
     BenchResult {
-        subject: oracle.descriptor.id.to_string(),
+        subject: subject.descriptor.id.to_string(),
         case_id: format!("{}-{}x{}-{}x", fixture.id, output.0, output.1, scale),
         fixture: fixture.id.clone(),
         fixture_kind: fixture.kind.clone(),
         fixture_fingerprint: fixture.fingerprint.clone(),
-        filter: oracle.descriptor.id.filter().to_owned(),
-        variant: oracle.descriptor.id.variant().to_owned(),
+        filter: subject.descriptor.id.filter().to_owned(),
+        variant: subject.descriptor.id.variant().to_owned(),
         source_width: fixture.width,
         source_height: fixture.height,
         output_width: output.0,
