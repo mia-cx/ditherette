@@ -14,11 +14,11 @@
 // represented area cases by roughly -3% to -10% in `ditherette-bench run area`.
 // Keep identity copy branches local to filters until a caller-level pass-through
 // avoids output allocation entirely.
-// TODO(perf:api, rank=3): Test
-// a shared exact-integer scale classifier for area and nearest so exact up/down
-// factor detection has one branch shape. This is plan/dispatch-level work, so
-// accept only if `ditherette-bench run area` and `ditherette-bench run nearest`
-// show no codegen loss.
+// REJECT(perf): A shared exact-integer scale classifier for area and nearest
+// preserved correctness, but the area profile showed broad represented
+// regressions around -3% to -12% even after forced inlining and single-dispatch
+// classifier use. Keep exact scale classification local to each filter's branch
+// shape.
 // TODO(perf:kernel, rank=4, after perf:api shared-exact-scale-classifier): Test
 // promoting nearest/common unaligned RGBA8 word read/write into shared packed
 // primitives. Keep bilinear out of this experiment because packed tap reads are
