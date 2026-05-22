@@ -5,26 +5,27 @@
 // Cross-filter perf-search dependency map, current-code pass only:
 // represented shared-layout benchmarks -> narrow common packed-RGBA8 APIs ->
 // exact integer/identity path sharing -> shared word-copy primitives.
-// NOTE(perf): Cross-filter `accepted` baselines exist for area, nearest, and
-// bilinear, so shared packed-RGBA8 experiments can be judged against the three
-// production filters instead of one local benchmark.
-// REJECT(perf): A shared same-size packed RGBA8 copy helper for area and
-// bilinear preserved correctness but had no performance upside over local
-// `copy_from_slice` identity branches. Full `--scales 1 --baseline accepted`
-// runs showed equivalent raw means (~35µs selfie, ~0.96-0.99ms box); keep the
-// inline copy shape and do not re-open nearest identity without a represented 1x
-// nearest profile.
+// TODO(perf:harness, rank=1): Ensure the manifest profiles represent the
+// cross-filter identity and exact-integer scale cases before extracting more
+// shared packed-RGBA8 fast paths. The current overlap is mostly identity copies,
+// exact repeat upscales, exact nearest/area downscale classification, and
+// unaligned pixel-word copies; judge candidates with `ditherette-bench run area`,
+// `ditherette-bench run nearest`, and `ditherette-bench run bilinear` so a
+// common helper cannot hide a regression in one filter.
+// TODO(perf:api, rank=2, after perf:harness cross-filter-exact-coverage): Test
+// a shared same-size packed RGBA8 copy helper for area and bilinear, and only
+// re-open nearest identity if the nearest manifest profile represents identity.
+// Benchmark with the three configured filter profiles before accepting shared
+// dispatch.
 // TODO(perf:api, rank=3, after perf:harness cross-filter-exact-coverage): Test
 // a shared exact-integer scale classifier for area and nearest so exact up/down
 // factor detection has one branch shape. This is plan/dispatch-level work, so
-// accept only if `run area --scales 0.5,0.25,2,4 --baseline accepted` and `run
-// nearest --scales 0.5,0.25,2,4 --baseline accepted` show no codegen loss.
+// accept only if `ditherette-bench run area` and `ditherette-bench run nearest`
+// show no codegen loss.
 // TODO(perf:kernel, rank=4, after perf:api shared-exact-scale-classifier): Test
 // promoting nearest/common unaligned RGBA8 word read/write into shared packed
 // primitives. Keep bilinear out of this experiment because packed tap reads are
-// already rejected there; judge nearest exact/generic paths plus area exact
-// upscales with `run nearest --baseline accepted` and `run area --scales 2,4
-// --baseline accepted`.
+// already rejected there; judge with the configured nearest and area profiles.
 // NOTE(perf): Do not merge area and bilinear weighted support plans just because
 // both cache per-axis source weights. Area deliberately uses f32 bounded drift,
 // bilinear is exact f64, and both have local REJECT notes for changed
@@ -38,19 +39,18 @@
 // the default profile. Exact-oracle checks passed for the expanded matrix.
 // NOTE(perf): `BilinearResizePlan` with cached direct-evaluated x/y source
 // positions and thread-local bench reuse was accepted in `ditherette-bench run
-// bilinear --baseline accepted`; it improved most default cases by ~5-14% while
+// bilinear`; it improved most default cases by ~5-14% while
 // preserving exact oracle output.
 // NOTE(perf): Cached nonzero support taps in `BilinearResizePlan` were accepted
-// in `ditherette-bench run bilinear --baseline accepted`; preserving duplicate
+// in `ditherette-bench run bilinear`; preserving duplicate
 // clamped edge taps kept exact output and improved default cases by ~50-160%.
 // NOTE(perf): The identity/same-size class copies packed RGBA8 bytes directly;
-// exact-oracle checks passed and `ditherette-bench run bilinear --scales 1
-// --baseline accepted` improved identity cases by >99%.
+// exact-oracle checks passed and `ditherette-bench run bilinear` improved
+// represented identity cases by >99%.
 // REJECT(perf): Splitting the remaining upscale/two-tap support class into a
-// fixed 2x2 kernel preserved exactness but regressed every upscale case by about
-// -52% to -55% in `ditherette-bench run bilinear --scales 1.05,1.5,2
-// --baseline accepted`; keep the generic tap iterator until a different kernel
-// shape is available.
+// fixed 2x2 kernel preserved exactness but regressed represented upscale cases
+// by about -52% to -55% in `ditherette-bench run bilinear`; keep the generic tap
+// iterator until a different kernel shape is available.
 // DEFER(perf): A separable two-pass minify path changes f64 grouping relative
 // to the exact direct 2D tap order, and the exact profile has already rejected
 // denominator pre-sums for byte drift. Revisit only with a bounded/fast bilinear
@@ -58,15 +58,14 @@
 // order before benchmarking minify scales.
 // REJECT(perf): Rewriting the packed kernel to index `source.data()` directly
 // with row byte offsets preserved exactness but regressed representative
-// large/upscale cases by roughly -5% to -19% in `ditherette-bench run bilinear
-// --baseline accepted`; keep `ImageView::row` in the hot pixel writer.
+// large/upscale cases by roughly -5% to -19% in `ditherette-bench run
+// bilinear`; keep `ImageView::row` in the hot pixel writer.
 // REJECT(perf): Specializing the upscale/two-tap class into a fixed 2x2
-// contribution loop preserved exactness but regressed every upscale case by
-// about -52% to -55% in `ditherette-bench run bilinear --scales 1.05,1.5,2
-// --baseline accepted`.
+// contribution loop preserved exactness but regressed represented upscale cases
+// by about -52% to -55% in `ditherette-bench run bilinear`.
 // REJECT(perf): Unrolling RGBA accumulation and final rounding preserved exact
 // output but broadly regressed non-identity cases in `ditherette-bench run
-// bilinear --baseline accepted`; keep the small channel loops for optimizer/code
+// bilinear`; keep the small channel loops for optimizer/code
 // layout until the surrounding kernel shape changes.
 // CLOSE(perf): Precomputed f64 reciprocals for coordinate and weight scaling
 // would only affect `BilinearResizePlan` construction; the benchmark subject now

@@ -35,8 +35,8 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
 // storing clamped taps; the hot kernel no longer performs per-tap clamping.
 // REJECT(perf): Passing packed source data plus row byte length directly into
 // this writer preserved exactness but regressed representative large/upscale
-// cases by roughly -5% to -19% in `ditherette-bench run bilinear --baseline
-// accepted`; keep the `ImageView::row` lookup shape after tap planning.
+// cases by roughly -5% to -19% in `ditherette-bench run bilinear`; keep the
+// `ImageView::row` lookup shape after tap planning.
 fn write_resized_pixel(
     source: ImageView<'_, Rgba8>,
     output_pixel: &mut [u8],
@@ -63,9 +63,8 @@ fn write_resized_pixel(
             total_weight += weight;
             // REJECT(perf): Reading RGBA8 as an unaligned `u32` and widening
             // bytes locally preserved exactness but regressed representative
-            // large/upscale cases, including box 0.5x and selfie 2x, in
-            // `ditherette-bench run bilinear --baseline accepted`. Keep slice
-            // channel loads unless the surrounding kernel shape changes.
+            // large/upscale cases in `ditherette-bench run bilinear`. Keep
+            // slice channel loads unless the surrounding kernel shape changes.
             for channel in 0..RGBA8_CHANNELS {
                 accumulated[channel] += f64::from(source_pixel[channel]) * weight;
             }
