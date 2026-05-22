@@ -14,12 +14,9 @@ pub(crate) const AREA_ROW_BAND_TILING: RowBandTiling = RowBandTiling::new(750_00
 const AREA_FOUR_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_000, 64, 4);
 const AREA_TINY_OUTPUT_PIXEL_LIMIT: usize = 200_000;
 
-// TODO(perf): Re-sweep area fractional minification against bilinear tiling,
-// especially output dimensions close to source dimensions and exact-ratio
-// neighborhoods. The cmp bench shows bilinear's four-band plan dominating
-// awkward fractional coverage, so area's dynamic formula may need a more
-// explicit dimension graph rather than the current coarse near-source/default
-// vs four-band split.
+// DEFER(perf): Re-sweeping old-crate area tiling is blocked until tiled area has
+// a registered current-harness subject/profile. Revisit there, not through
+// one-off old-crate sweep scripts.
 
 impl From<RowBand> for (usize, usize) {
     fn from(row_band: RowBand) -> Self {
