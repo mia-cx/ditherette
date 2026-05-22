@@ -9,9 +9,11 @@
 // down/up scales, so shared packed-RGBA8 experiments can be judged with
 // `ditherette-bench run area`, `ditherette-bench run nearest`, and
 // `ditherette-bench run bilinear` as configured in the manifest.
-// TODO(perf:api, rank=2): Test a shared same-size packed RGBA8 copy helper for
-// area, nearest, and bilinear. Benchmark with the three configured filter
-// profiles before accepting shared dispatch.
+// REJECT(perf): A shared same-size packed RGBA8 copy helper for area, nearest,
+// and bilinear preserved correctness, but even with forced inlining it regressed
+// represented area cases by roughly -3% to -10% in `ditherette-bench run area`.
+// Keep identity copy branches local to filters until a caller-level pass-through
+// avoids output allocation entirely.
 // TODO(perf:api, rank=3): Test
 // a shared exact-integer scale classifier for area and nearest so exact up/down
 // factor detection has one branch shape. This is plan/dispatch-level work, so
