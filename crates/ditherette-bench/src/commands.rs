@@ -6,8 +6,8 @@ use ditherette_bench_api::{ResizeBenchSubject, ResizeParams, SubjectId};
 
 use crate::{
     baseline::{
-        load_baseline, load_latest_run, load_scoped_baseline,
-        replace_scoped_baseline_from_indexed_run, save_baseline, save_indexed_run, save_latest_run,
+        load_baseline, load_indexed_run, load_scoped_baseline,
+        replace_scoped_baseline_from_indexed_run, save_baseline, save_indexed_run,
         save_scoped_baseline, write_json,
     },
     case::scales_from_flags,
@@ -191,9 +191,8 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
 
     let accepted_baseline_name = flags.optional("--baseline");
     let previous_run = if accepted_baseline_name.is_none() {
-        load_latest_run("perf", domain)
-            .ok()
-            .filter(|run| ensure_compatible_baseline(run, "perf", domain, &measurement).is_ok())
+        let probe_run = resize_probe_run(&subjects, &fixtures, &scales, &measurement, domain);
+        load_indexed_run(&probe_run)?
     } else {
         None
     };
@@ -319,7 +318,6 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     let acceptance = acceptance_report(&run.results, &flags)?;
 
     save_indexed_run(&run, save_baseline_name)?;
-    save_latest_run(&run)?;
     if let Some(out) = flags.optional("--out") {
         write_json(out, &run)?;
     }
