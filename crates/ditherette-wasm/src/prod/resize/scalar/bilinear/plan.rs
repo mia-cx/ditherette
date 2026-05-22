@@ -18,10 +18,9 @@ use super::{
 // CLOSE(perf): Storing x byte offsets and y row coordinates depended on the
 // rejected flat tap layout, so there is no standalone exact-profile change to
 // test here.
-// TODO(perf:layout, rank=7): Test coalescing only duplicate clamped edge taps
-// that point at the same source pixel, preserving the direct tap order for
-// interior taps. This may fail exact f64 grouping, so gate on exact oracle
-// output before benchmarking with `ditherette-bench run bilinear`.
+// REJECT(perf): Coalescing only duplicate clamped edge taps changed f64 grouping
+// and failed exact oracle output in `prod_resize_bilinear` for centered anchors;
+// keep duplicate clamped edge taps in direct contribution order.
 /// Reusable bilinear resize metadata for one source/output shape.
 pub struct BilinearResizePlan {
     source_dimensions: ImageDimensions,
