@@ -101,7 +101,7 @@ Accepted baseline comparisons still require an exact matching entry:
 
 When a requested accepted baseline name has missing per-case entries, the run attaches comparisons for cases already present and leaves missing cases blank (`—`) in the baseline column. Dirty git trees are allowed and recorded.
 
-If no accepted baseline is specified, `perf` compares exact-subject results to the most recent compatible previous run from `crates/ditherette-bench/target/bench/latest/perf-resize.json` before overwriting it with the current run. `--save-baseline NAME` runs the benchmark and overwrites accepted baseline `NAME` for every measured case. `--replace-baseline NAME` does not run; it overwrites accepted baseline `NAME` from the current latest-run cache and exits.
+If no accepted baseline is specified, `perf` compares exact-subject results to the latest compatible indexed per-case runs, then overwrites those indexed runs with the current results. `--save-baseline NAME` runs the benchmark and overwrites accepted baseline `NAME` for every measured case. `--replace-baseline NAME` does not run; it rebuilds the requested profile shape and overwrites accepted baseline `NAME` from the latest compatible indexed per-case runs.
 
 Oracle baselines use the same per-case scoped layout under the baseline name `oracle`. When `--oracle SUBJECT` is provided, the harness loads matching oracle cases and measures only missing requested cases before the normal run, so partial oracle baselines fill themselves incrementally. `--save-oracle SUBJECT` refreshes/replaces the requested oracle cases before the normal run; bare `--save-oracle` refreshes the `--oracle` subject. `--replace-oracle` is an alias for `--save-oracle`.
 

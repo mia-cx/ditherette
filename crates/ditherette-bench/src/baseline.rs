@@ -1,4 +1,4 @@
-//! Baseline and latest-run JSON storage under the Cargo target directory.
+//! Baseline and indexed benchmark-run JSON storage under the Cargo target directory.
 
 use std::{
     fs,
@@ -79,35 +79,31 @@ pub(crate) fn load_scoped_baseline(
     Ok(baseline)
 }
 
+pub(crate) fn load_indexed_run(current_run: &BenchRun) -> Result<Option<BenchRun>, BenchError> {
+    let Some(case_runs) = load_indexed_case_runs(current_run, MissingIndexedRun::Skip)? else {
+        return Ok(None);
+    };
+    let mut run = current_run.clone();
+    run.results = case_runs
+        .into_iter()
+        .flat_map(|case_run| case_run.results)
+        .collect();
+    Ok(Some(run))
+}
+
 pub(crate) fn replace_scoped_baseline_from_indexed_run(
     role: &str,
     name: &str,
     current_run: &BenchRun,
 ) -> Result<usize, BenchError> {
-    let mut case_runs = Vec::with_capacity(current_run.results.len());
-    for result in &current_run.results {
-        let path = indexed_result_path(current_run, result, None);
-        if !path.exists() {
-            return Err(BenchError::Baseline(format!(
-                "no latest compatible run for {} {} at {}; run this benchmark profile once before replacing baseline {role}/{name}",
-                result.subject,
-                result.case_id,
-                path.display()
-            )));
-        }
-
-        let run = read_json(&path)?;
-        validate_artifact(&run, "run", &path)?;
-        if run.results.len() != 1 {
-            return Err(BenchError::Baseline(format!(
-                "indexed run {} contains {} results, expected 1",
-                path.display(),
-                run.results.len()
-            )));
-        }
-        ensure_indexed_case_matches(&run, current_run, result, &path)?;
-        case_runs.push(run);
-    }
+    let case_runs = load_indexed_case_runs(
+        current_run,
+        MissingIndexedRun::Error {
+            role,
+            name,
+        },
+    )?
+    .expect("missing indexed case runs are errors when replacing baselines");
 
     for run in &case_runs {
         let result = run
@@ -127,10 +123,6 @@ pub(crate) fn replace_scoped_baseline_from_indexed_run(
     Ok(case_runs.len())
 }
 
-pub(crate) fn save_latest_run(run: &BenchRun) -> Result<(), BenchError> {
-    write_json(latest_run_path(&run.command, &run.domain), run)
-}
-
 pub(crate) fn save_indexed_run(
     run: &BenchRun,
     baseline_key: Option<&str>,
@@ -144,26 +136,6 @@ pub(crate) fn save_indexed_run(
     Ok(())
 }
 
-pub(crate) fn load_latest_run(command: &str, domain: &str) -> Result<BenchRun, BenchError> {
-    let path = latest_run_path(command, domain);
-    let run = read_json(&path).map_err(|error| match error {
-        BenchError::Baseline(message) => BenchError::Baseline(format!(
-            "{message}; run the benchmark once before replacing a baseline"
-        )),
-        error => error,
-    })?;
-    validate_artifact(&run, "run", &path)?;
-    if run.command != command || run.domain != domain {
-        return Err(BenchError::Baseline(format!(
-            "latest run {} is for {}/{} but expected {command}/{domain}",
-            path.display(),
-            run.command,
-            run.domain
-        )));
-    }
-    Ok(run)
-}
-
 pub(crate) fn write_json(path: impl AsRef<Path>, value: &BenchRun) -> Result<(), BenchError> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
@@ -172,6 +144,48 @@ pub(crate) fn write_json(path: impl AsRef<Path>, value: &BenchRun) -> Result<(),
     let data = serde_json::to_string_pretty(value)
         .map_err(|error| BenchError::Runtime(format!("failed to serialize JSON: {error}")))?;
     fs::write(path, data).map_err(BenchError::io)
+}
+
+enum MissingIndexedRun<'a> {
+    Skip,
+    Error { role: &'a str, name: &'a str },
+}
+
+fn load_indexed_case_runs(
+    current_run: &BenchRun,
+    missing: MissingIndexedRun<'_>,
+) -> Result<Option<Vec<BenchRun>>, BenchError> {
+    let mut case_runs = Vec::with_capacity(current_run.results.len());
+    for result in &current_run.results {
+        let path = indexed_result_path(current_run, result, None);
+        if !path.exists() {
+            match missing {
+                MissingIndexedRun::Skip => return Ok(None),
+                MissingIndexedRun::Error { role, name } => {
+                    return Err(BenchError::Baseline(format!(
+                        "no latest compatible run for {} {} at {}; run this benchmark profile once before replacing baseline {role}/{name}",
+                        result.subject,
+                        result.case_id,
+                        path.display()
+                    )));
+                }
+            }
+        }
+
+        let run = read_json(&path)?;
+        validate_artifact(&run, "run", &path)?;
+        if run.results.len() != 1 {
+            return Err(BenchError::Baseline(format!(
+                "indexed run {} contains {} results, expected 1",
+                path.display(),
+                run.results.len()
+            )));
+        }
+        ensure_indexed_case_matches(&run, current_run, result, &path)?;
+        case_runs.push(run);
+    }
+
+    Ok(Some(case_runs))
 }
 
 fn load_scoped_case_baseline(
@@ -406,12 +420,6 @@ fn sanitize_path_component(value: &str) -> String {
         sanitized = sanitized.replace("--", "-");
     }
     sanitized.trim_matches('-').to_owned()
-}
-
-fn latest_run_path(command: &str, domain: &str) -> PathBuf {
-    artifact_root()
-        .join("latest")
-        .join(format!("{command}-{domain}.json"))
 }
 
 fn baseline_path(role: &str, name: &str) -> PathBuf {
