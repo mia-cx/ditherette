@@ -73,9 +73,8 @@ pub fn resize_rgba_area_scalar_into(
     }
 
     if is_minifying(source_dimensions, output_dimensions) {
-        // DEFER(perf): This old-crate near-source fractional-area lead needs an
-        // active registered prod subject/profile before implementation. Revisit
-        // only if the old scalar path is promoted back into the current harness.
+        // CLOSE(perf): Do not tune old-crate scalar area; this crate is a
+        // temporary rewrite source and will be removed after current prod parity.
         resize_fractional_downscale_area_style_into(
             source_rgba,
             source_dimensions,

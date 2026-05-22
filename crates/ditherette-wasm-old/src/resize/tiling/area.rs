@@ -14,9 +14,8 @@ pub(crate) const AREA_ROW_BAND_TILING: RowBandTiling = RowBandTiling::new(750_00
 const AREA_FOUR_BAND_TILING: RowBandTiling = RowBandTiling::new(0, 64_000, 64, 4);
 const AREA_TINY_OUTPUT_PIXEL_LIMIT: usize = 200_000;
 
-// DEFER(perf): Re-sweeping old-crate area tiling is blocked until tiled area has
-// a registered current-harness subject/profile. Revisit there, not through
-// one-off old-crate sweep scripts.
+// CLOSE(perf): Do not tune old-crate area tiling; this crate is a temporary
+// rewrite source and will be removed after current prod parity.
 
 impl From<RowBand> for (usize, usize) {
     fn from(row_band: RowBand) -> Self {
