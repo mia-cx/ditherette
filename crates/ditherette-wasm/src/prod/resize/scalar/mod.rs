@@ -5,19 +5,15 @@
 // Cross-filter perf-search dependency map, current-code pass only:
 // represented shared-layout benchmarks -> narrow common packed-RGBA8 APIs ->
 // exact integer/identity path sharing -> shared word-copy primitives.
-// TODO(perf:harness, rank=1): Add represented cross-filter identity and exact
-// integer scale coverage before extracting more shared packed-RGBA8 fast paths.
-// The current overlap is mostly identity copies, exact repeat upscales, exact
-// nearest/area downscale classification, and unaligned pixel-word copies; judge
-// candidates with `ditherette-bench run area --scales 1,0.5,2 --baseline
-// accepted`, `run nearest --scales 1,0.5,2 --baseline accepted`, and `run
-// bilinear --scales 1 --baseline accepted` so a common helper cannot hide a
-// regression in one filter.
-// TODO(perf:api, rank=2, after perf:harness cross-filter-exact-coverage): Test
-// a shared same-size packed RGBA8 copy helper for area and bilinear, and only
-// re-open nearest identity if the nearest profile has an explicit 1x case. The
-// previous nearest identity branch was unrepresented and noisy; benchmark the
-// three `--scales 1` runs above before accepting shared dispatch.
+// NOTE(perf): Cross-filter `accepted` baselines exist for area, nearest, and
+// bilinear, so shared packed-RGBA8 experiments can be judged against the three
+// production filters instead of one local benchmark.
+// REJECT(perf): A shared same-size packed RGBA8 copy helper for area and
+// bilinear preserved correctness but had no performance upside over local
+// `copy_from_slice` identity branches. Full `--scales 1 --baseline accepted`
+// runs showed equivalent raw means (~35µs selfie, ~0.96-0.99ms box); keep the
+// inline copy shape and do not re-open nearest identity without a represented 1x
+// nearest profile.
 // TODO(perf:api, rank=3, after perf:harness cross-filter-exact-coverage): Test
 // a shared exact-integer scale classifier for area and nearest so exact up/down
 // factor detection has one branch shape. This is plan/dispatch-level work, so
