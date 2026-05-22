@@ -19,10 +19,27 @@ mod plan;
 use alignment::ResizeAnchor;
 pub use plan::BilinearResizePlan;
 
-// DEFER(perf): Anisotropic bilinear cases need a case identity that includes
-// independent x/y scales. The current baseline schema keys cases by one scalar
-// scale, so width-only/height-only cases would collide with uniform-scale
-// baselines until the harness result model grows separate scale_x/scale_y keys.
+// Current-code bilinear perf-search dependency map:
+// harness shape -> cold/hot API coverage -> tap layout -> exact path splits ->
+// kernel/local arithmetic. The exact profile currently judges hot reused-plan
+// uniform-scale RGBA8 resizes only.
+// TODO(perf:harness, rank=1): Add anisotropic resize case identity to the bench
+// result/baseline model so bilinear width-only and height-only scale classes can
+// be represented without colliding with uniform scales. Benchmark with
+// `ditherette-bench run bilinear` after the manifest profile gains configured
+// anisotropic cases.
+// TODO(perf:harness, rank=2): Add a bounded/fast bilinear subject and manifest
+// profile before retesting f32, separable, or approximate minify paths that the
+// exact byte profile cannot accept. Judge the new subject with a configured
+// Ditherette manifest profile rather than one-off CLI scale/oracle overrides.
+// TODO(perf:harness, rank=3): Add a cold one-off bilinear profile that measures
+// `resize_bilinear_rgba8_into` plan construction plus execution, because the
+// current `bilinear` subject reuses `BilinearResizePlan` and cannot judge API
+// changes that only affect uncached calls.
+// TODO(perf:api, rank=4, after perf:harness cold-bilinear-profile): Check for
+// same-size output before building `BilinearResizePlan` in
+// `resize_bilinear_rgba8_into`. Benchmark with the cold bilinear profile so the
+// plan-build bypass is actually measured.
 // NOTE(perf): Packed RGBA8 assertions are debug-only tripwires, so splitting
 // them out of the release hot path has no benchmarkable upside under `run
 // bilinear`; keep validation at the public prod entrypoints.
