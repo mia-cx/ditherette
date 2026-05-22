@@ -321,6 +321,41 @@ function expectMaxChannelDelta(output: ImageData, reference: ImageData, maxDelta
 }
 
 describe('resizeImageData', () => {
+	it('returns the source image directly for uncropped identity resizes', () => {
+		const source = patternedImage(4, 3);
+
+		for (const mode of [
+			'nearest',
+			'bilinear',
+			'area',
+			'lanczos2',
+			'lanczos2-scale-aware',
+			'lanczos3',
+			'lanczos3-scale-aware'
+		] as const) {
+			expect(resizeImageData(source, source.width, source.height, mode)).toBe(source);
+			expect(
+				resizeImageData(source, source.width, source.height, mode, {
+					x: 0,
+					y: 0,
+					width: source.width,
+					height: source.height
+				})
+			).toBe(source);
+		}
+	});
+
+	it('resamples same-size cropped images instead of returning the source', () => {
+		const source = patternedImage(8, 5);
+
+		const output = resizeImageData(source, 5, 5, 'nearest', { x: 1, y: 0, width: 5, height: 5 });
+
+		expect(output).not.toBe(source);
+		expect([...output.data]).toEqual([
+			...referenceResize(source, 5, 5, 'nearest', { x: 1, y: 0, width: 5, height: 5 }).data
+		]);
+	});
+
 	it('does not bleed RGB from transparent pixels during bilinear resize', () => {
 		const source = new ImageData(new Uint8ClampedArray([255, 0, 0, 0, 0, 0, 255, 255]), 2, 1);
 
