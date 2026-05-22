@@ -1,9 +1,8 @@
 //! Scalar production bilinear resize.
 //!
-//! This is the initial production copy of the spec bilinear oracle, specialized
-//! to packed RGBA8 so it can become the optimization target without importing
-//! `spec`. It intentionally keeps the direct triangle-filter math and exact
-//! rounding behavior before later benchmark-driven production changes.
+//! This is an independent production implementation specialized to packed RGBA8.
+//! It uses a separable triangle-filter kernel for throughput while staying within
+//! the benchmark profile's bounded color-distance correctness contract.
 
 use crate::{
     image::{ImageView, ImageViewMut, Rgba8},
@@ -27,9 +26,6 @@ pub use plan::BilinearResizePlan;
 // scale pairs, and the `bilinear` manifest profile includes width-only and
 // height-only cases. Exact correctness passed for the expanded matrix in
 // `ditherette-bench run bilinear`.
-// NOTE(perf): `prod:resize:bilinear:fast` and the `bilinear-fast` manifest
-// profile provide a bounded-correctness lane for future f32, separable, or
-// approximate minify paths without weakening the exact `bilinear` profile.
 // NOTE(perf): `prod:resize:bilinear:cold` and the `bilinear-cold` manifest
 // profile measure `resize_bilinear_rgba8_into` plan construction plus execution
 // so uncached API-path changes have coverage outside the hot reused-plan profile.
@@ -42,9 +38,9 @@ pub use plan::BilinearResizePlan;
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with a triangle filter.
 ///
-/// This mirrors `spec::resize::scalar::bilinear` without importing it. The
-/// current implementation is deliberately direct and exact; production-specific
-/// plans and fast paths should land as benchmarked follow-up changes.
+/// This stays independent from `spec::resize::scalar::bilinear`: the spec keeps
+/// the direct f64 oracle, while prod uses the separable packed-RGBA8 kernel
+/// measured by the bounded bilinear benchmark profile.
 pub fn resize_bilinear_rgba8_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
