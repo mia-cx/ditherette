@@ -2,6 +2,38 @@
 //!
 //! Scalar kernels are the first production target for benchmark-driven work.
 
+// Cross-filter perf-search dependency map, current-code pass only:
+// represented shared-layout benchmarks -> narrow common packed-RGBA8 APIs ->
+// exact integer/identity path sharing -> shared word-copy primitives.
+// TODO(perf:harness, rank=1): Add represented cross-filter identity and exact
+// integer scale coverage before extracting more shared packed-RGBA8 fast paths.
+// The current overlap is mostly identity copies, exact repeat upscales, exact
+// nearest/area downscale classification, and unaligned pixel-word copies; judge
+// candidates with `ditherette-bench run area --scales 1,0.5,2 --baseline
+// accepted`, `run nearest --scales 1,0.5,2 --baseline accepted`, and `run
+// bilinear --scales 1 --baseline accepted` so a common helper cannot hide a
+// regression in one filter.
+// TODO(perf:api, rank=2, after perf:harness cross-filter-exact-coverage): Test
+// a shared same-size packed RGBA8 copy helper for area and bilinear, and only
+// re-open nearest identity if the nearest profile has an explicit 1x case. The
+// previous nearest identity branch was unrepresented and noisy; benchmark the
+// three `--scales 1` runs above before accepting shared dispatch.
+// TODO(perf:api, rank=3, after perf:harness cross-filter-exact-coverage): Test
+// a shared exact-integer scale classifier for area and nearest so exact up/down
+// factor detection has one branch shape. This is plan/dispatch-level work, so
+// accept only if `run area --scales 0.5,0.25,2,4 --baseline accepted` and `run
+// nearest --scales 0.5,0.25,2,4 --baseline accepted` show no codegen loss.
+// TODO(perf:kernel, rank=4, after perf:api shared-exact-scale-classifier): Test
+// promoting nearest/common unaligned RGBA8 word read/write into shared packed
+// primitives. Keep bilinear out of this experiment because packed tap reads are
+// already rejected there; judge nearest exact/generic paths plus area exact
+// upscales with `run nearest --baseline accepted` and `run area --scales 2,4
+// --baseline accepted`.
+// NOTE(perf): Do not merge area and bilinear weighted support plans just because
+// both cache per-axis source weights. Area deliberately uses f32 bounded drift,
+// bilinear is exact f64, and both have local REJECT notes for changed
+// normalization/evaluation order.
+
 // Bilinear perf-search dependency map, current-code pass only:
 // harness baseline/profile coverage -> reusable plan/API -> scale-class path
 // split -> packed kernels -> arithmetic micro-tuning.
