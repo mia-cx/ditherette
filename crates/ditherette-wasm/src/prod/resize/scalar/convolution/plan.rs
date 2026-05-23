@@ -27,9 +27,9 @@ use super::{
 // REJECT(perf): Coalescing duplicate clamped edge taps during planning changed
 // contribution grouping enough to fail exact `prod_resize_convolution` outputs
 // for bicubic, Lanczos2, and Lanczos3 before benchmarking.
-// DEFER(perf): Compact tap storage with narrower weights depends on a bounded
-// convolution correctness contract; current convolution tests and benchmark
-// oracles require exact output, and prior layout-only changes already regressed.
+// TODO(perf:layout, rank=13): Test compact tap storage such as `u32` offsets
+// plus `f32` weights/reciprocals now convolution benchmark profiles use bounded
+// correctness. Benchmark all six convolution profiles.
 
 /// Reusable convolution resize metadata for one source/output shape and kernel.
 pub struct ConvolutionResizePlan {
