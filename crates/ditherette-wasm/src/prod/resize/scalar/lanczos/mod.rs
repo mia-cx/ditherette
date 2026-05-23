@@ -1,0 +1,86 @@
+//! Packed RGBA8 production Lanczos resize.
+//!
+//! Lanczos is represented as a windowed-sinc reconstruction kernel applied
+//! through the production convolution engine.
+
+mod filter;
+
+use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
+
+use super::convolution::{
+    resize_convolution_rgba8_into, resize_convolution_rgba8_with_plan_into, ConvolutionResizePlan,
+    ResizeAnchor, SupportPolicy,
+};
+
+/// Reusable Lanczos resize metadata for one source/output shape and radius.
+pub struct LanczosResizePlan {
+    inner: ConvolutionResizePlan,
+}
+
+impl LanczosResizePlan {
+    /// Builds reusable coordinate metadata for packed RGBA8 Lanczos resize.
+    pub fn new(
+        source_dimensions: ImageDimensions,
+        output_dimensions: ImageDimensions,
+        anchor: ResizeAnchor,
+        radius: u32,
+        support_policy: SupportPolicy,
+    ) -> Self {
+        let kernel = filter::Lanczos::new(radius);
+        Self {
+            inner: ConvolutionResizePlan::new(
+                source_dimensions,
+                output_dimensions,
+                anchor,
+                &kernel,
+                support_policy,
+            ),
+        }
+    }
+}
+
+/// Resizes packed RGBA8 `source` into packed RGBA8 `output` with a Lanczos kernel.
+pub fn resize_lanczos_rgba8_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    anchor: ResizeAnchor,
+    radius: u32,
+    support_policy: SupportPolicy,
+) {
+    resize_convolution_rgba8_into(
+        source,
+        output,
+        anchor,
+        filter::Lanczos::new(radius),
+        support_policy,
+    );
+}
+
+/// Resizes packed RGBA8 `source` into packed RGBA8 `output` with a cached Lanczos plan.
+pub fn resize_lanczos_rgba8_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &LanczosResizePlan,
+) {
+    resize_convolution_rgba8_with_plan_into(source, output, &plan.inner);
+}
+
+/// Lanczos2 convenience wrapper for packed RGBA8.
+pub fn resize_lanczos2_rgba8_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    anchor: ResizeAnchor,
+    support_policy: SupportPolicy,
+) {
+    resize_lanczos_rgba8_into(source, output, anchor, 2, support_policy);
+}
+
+/// Lanczos3 convenience wrapper for packed RGBA8.
+pub fn resize_lanczos3_rgba8_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    anchor: ResizeAnchor,
+    support_policy: SupportPolicy,
+) {
+    resize_lanczos_rgba8_into(source, output, anchor, 3, support_policy);
+}
