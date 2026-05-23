@@ -4,6 +4,8 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
+use std::cell::RefCell;
+
 use ditherette_bench_api::{
     BenchSubject, BenchSubjectError, ParamSchema, PixelFormat, ResizeBenchSubject,
     ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams, ResizeU8RgbaFn, SubjectCapabilities,
@@ -14,7 +16,11 @@ use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
     prod::resize::scalar::{
         area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
-        bicubic::resize_bicubic_rgba8_into as resize_prod_bicubic_rgba8_into,
+        bicubic::{
+            resize_bicubic_rgba8_into as resize_prod_bicubic_rgba8_into,
+            resize_bicubic_rgba8_with_plan_into as resize_prod_bicubic_rgba8_with_plan_into,
+            BicubicResizePlan,
+        },
         bilinear::{
             alignment::ResizeAnchor as ProdBilinearResizeAnchor,
             resize_bilinear_rgba8_into as resize_prod_bilinear_rgba8_into,
@@ -26,6 +32,8 @@ use crate::{
         lanczos::{
             resize_lanczos2_rgba8_into as resize_prod_lanczos2_rgba8_into,
             resize_lanczos3_rgba8_into as resize_prod_lanczos3_rgba8_into,
+            resize_lanczos_rgba8_with_plan_into as resize_prod_lanczos_rgba8_with_plan_into,
+            LanczosResizePlan,
         },
         nearest::{
             alignment::ResizeAnchor as ProdNearestResizeAnchor,
@@ -111,6 +119,20 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             resize_prod_bicubic_scale_aware_subject,
             Some("spec:resize:bicubic:catmull-rom-scale-aware"),
         ),
+        resize_subject_with_oracle(
+            "prod:resize:bicubic:catmull-rom-cached-plan",
+            "prod bicubic Catmull-Rom cached plan",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bicubic.rs",
+            resize_prod_bicubic_fixed_cached_plan_subject,
+            Some("spec:resize:bicubic:catmull-rom"),
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:bicubic:catmull-rom-scale-aware-cached-plan",
+            "prod bicubic Catmull-Rom scale-aware cached plan",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bicubic.rs",
+            resize_prod_bicubic_scale_aware_cached_plan_subject,
+            Some("spec:resize:bicubic:catmull-rom-scale-aware"),
+        ),
         resize_subject(
             "spec:resize:lanczos2:fixed",
             "spec Lanczos2 fixed support",
@@ -137,6 +159,20 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             resize_prod_lanczos2_scale_aware_subject,
             Some("spec:resize:lanczos2:scale-aware"),
         ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos2:fixed-cached-plan",
+            "prod Lanczos2 fixed support cached plan",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos2_fixed_cached_plan_subject,
+            Some("spec:resize:lanczos2:fixed"),
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos2:scale-aware-cached-plan",
+            "prod Lanczos2 scale-aware cached plan",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos2_scale_aware_cached_plan_subject,
+            Some("spec:resize:lanczos2:scale-aware"),
+        ),
         resize_subject(
             "spec:resize:lanczos3:fixed",
             "spec Lanczos3 fixed support",
@@ -161,6 +197,20 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "prod Lanczos3 scale-aware",
             "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
             resize_prod_lanczos3_scale_aware_subject,
+            Some("spec:resize:lanczos3:scale-aware"),
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos3:fixed-cached-plan",
+            "prod Lanczos3 fixed support cached plan",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos3_fixed_cached_plan_subject,
+            Some("spec:resize:lanczos3:fixed"),
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos3:scale-aware-cached-plan",
+            "prod Lanczos3 scale-aware cached plan",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos3_scale_aware_cached_plan_subject,
             Some("spec:resize:lanczos3:scale-aware"),
         ),
         resize_subject(
@@ -346,6 +396,95 @@ fn resize_prod_bicubic_scale_aware_subject(
     })
 }
 
+struct CachedBicubicPlan {
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    anchor: ProdConvolutionResizeAnchor,
+    support_policy: ProdConvolutionSupportPolicy,
+    plan: BicubicResizePlan,
+}
+
+thread_local! {
+    static BICUBIC_FIXED_PLAN: RefCell<Option<CachedBicubicPlan>> = const { RefCell::new(None) };
+    static BICUBIC_SCALE_AWARE_PLAN: RefCell<Option<CachedBicubicPlan>> = const { RefCell::new(None) };
+}
+
+fn resize_prod_bicubic_fixed_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    resize_prod_bicubic_cached_plan_subject(
+        input,
+        output,
+        params,
+        ProdConvolutionSupportPolicy::Fixed,
+        &BICUBIC_FIXED_PLAN,
+    )
+}
+
+fn resize_prod_bicubic_scale_aware_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    resize_prod_bicubic_cached_plan_subject(
+        input,
+        output,
+        params,
+        ProdConvolutionSupportPolicy::ScaleAware,
+        &BICUBIC_SCALE_AWARE_PLAN,
+    )
+}
+
+fn resize_prod_bicubic_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+    support_policy: ProdConvolutionSupportPolicy,
+    cache: &'static std::thread::LocalKey<RefCell<Option<CachedBicubicPlan>>>,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        let source_dimensions = source.dimensions();
+        let output_dimensions = output.dimensions();
+        let anchor = prod_convolution_anchor(params);
+        cache.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let plan = cache.get_or_insert_with(|| CachedBicubicPlan {
+                source_dimensions,
+                output_dimensions,
+                anchor,
+                support_policy,
+                plan: BicubicResizePlan::new(
+                    source_dimensions,
+                    output_dimensions,
+                    anchor,
+                    support_policy,
+                ),
+            });
+            if plan.source_dimensions != source_dimensions
+                || plan.output_dimensions != output_dimensions
+                || plan.anchor != anchor
+                || plan.support_policy != support_policy
+            {
+                *plan = CachedBicubicPlan {
+                    source_dimensions,
+                    output_dimensions,
+                    anchor,
+                    support_policy,
+                    plan: BicubicResizePlan::new(
+                        source_dimensions,
+                        output_dimensions,
+                        anchor,
+                        support_policy,
+                    ),
+                };
+            }
+            resize_prod_bicubic_rgba8_with_plan_into(source, output, &plan.plan);
+        });
+    })
+}
+
 fn resize_lanczos2_fixed_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
@@ -443,6 +582,136 @@ fn resize_prod_lanczos3_scale_aware_subject(
             prod_convolution_anchor(params),
             ProdConvolutionSupportPolicy::ScaleAware,
         );
+    })
+}
+
+struct CachedLanczosPlan {
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+    anchor: ProdConvolutionResizeAnchor,
+    radius: u32,
+    support_policy: ProdConvolutionSupportPolicy,
+    plan: LanczosResizePlan,
+}
+
+thread_local! {
+    static LANCZOS2_FIXED_PLAN: RefCell<Option<CachedLanczosPlan>> = const { RefCell::new(None) };
+    static LANCZOS2_SCALE_AWARE_PLAN: RefCell<Option<CachedLanczosPlan>> = const { RefCell::new(None) };
+    static LANCZOS3_FIXED_PLAN: RefCell<Option<CachedLanczosPlan>> = const { RefCell::new(None) };
+    static LANCZOS3_SCALE_AWARE_PLAN: RefCell<Option<CachedLanczosPlan>> = const { RefCell::new(None) };
+}
+
+fn resize_prod_lanczos2_fixed_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    resize_prod_lanczos_cached_plan_subject(
+        input,
+        output,
+        params,
+        2,
+        ProdConvolutionSupportPolicy::Fixed,
+        &LANCZOS2_FIXED_PLAN,
+    )
+}
+
+fn resize_prod_lanczos2_scale_aware_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    resize_prod_lanczos_cached_plan_subject(
+        input,
+        output,
+        params,
+        2,
+        ProdConvolutionSupportPolicy::ScaleAware,
+        &LANCZOS2_SCALE_AWARE_PLAN,
+    )
+}
+
+fn resize_prod_lanczos3_fixed_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    resize_prod_lanczos_cached_plan_subject(
+        input,
+        output,
+        params,
+        3,
+        ProdConvolutionSupportPolicy::Fixed,
+        &LANCZOS3_FIXED_PLAN,
+    )
+}
+
+fn resize_prod_lanczos3_scale_aware_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    resize_prod_lanczos_cached_plan_subject(
+        input,
+        output,
+        params,
+        3,
+        ProdConvolutionSupportPolicy::ScaleAware,
+        &LANCZOS3_SCALE_AWARE_PLAN,
+    )
+}
+
+fn resize_prod_lanczos_cached_plan_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+    radius: u32,
+    support_policy: ProdConvolutionSupportPolicy,
+    cache: &'static std::thread::LocalKey<RefCell<Option<CachedLanczosPlan>>>,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        let source_dimensions = source.dimensions();
+        let output_dimensions = output.dimensions();
+        let anchor = prod_convolution_anchor(params);
+        cache.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let plan = cache.get_or_insert_with(|| CachedLanczosPlan {
+                source_dimensions,
+                output_dimensions,
+                anchor,
+                radius,
+                support_policy,
+                plan: LanczosResizePlan::new(
+                    source_dimensions,
+                    output_dimensions,
+                    anchor,
+                    radius,
+                    support_policy,
+                ),
+            });
+            if plan.source_dimensions != source_dimensions
+                || plan.output_dimensions != output_dimensions
+                || plan.anchor != anchor
+                || plan.radius != radius
+                || plan.support_policy != support_policy
+            {
+                *plan = CachedLanczosPlan {
+                    source_dimensions,
+                    output_dimensions,
+                    anchor,
+                    radius,
+                    support_policy,
+                    plan: LanczosResizePlan::new(
+                        source_dimensions,
+                        output_dimensions,
+                        anchor,
+                        radius,
+                        support_policy,
+                    ),
+                };
+            }
+            resize_prod_lanczos_rgba8_with_plan_into(source, output, &plan.plan);
+        });
     })
 }
 

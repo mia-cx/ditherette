@@ -17,9 +17,9 @@ use super::plan::{AxisTap, ConvolutionResizePlan};
 // preserved exact convolution output but regressed `ditherette-bench run bicubic`
 // representative non-identity cases by roughly 5-7%, so keep the compact channel
 // loops that LLVM optimizes better.
-// DEFER(perf): SIMD depends on a settled compact tap layout or an explicit
-// vector rounding contract; current exact scalar output remains the fallback and
-// no SIMD candidate should be benchmarked before that parent decision.
+// TODO(perf:kernel, rank=14, after perf:layout convolution-compact-taps): Test
+// Wasm/native SIMD after compact tap layout settles under bounded correctness;
+// benchmark the six convolution profiles and keep scalar output as fallback.
 
 pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,

@@ -55,10 +55,8 @@ scale_group = ["partial", "identity", "bilinear-anisotropic"]
 # ACCEPT(perf): Production convolution filters may use bounded color-distance
 # correctness, which unlocks f32 accumulation, normalized weights, compact taps,
 # and approximate path experiments against the six convolution profiles below.
-# TODO(perf:harness, rank=2): Add a diagnostic anisotropic/identity-axis scale
-# group for convolution filters before accepting width-only, height-only, or
-# separable path splits. Benchmark with the six convolution profiles below using
-# manifest-defined fixtures and oracles.
+# ACCEPT(perf): `convolution-anisotropic` covers identity-axis width-only and
+# height-only diagnostic cases for convolution path-split experiments.
 [profiles.bicubic]
 command = "perf"
 domain = "resize"
@@ -100,6 +98,97 @@ domain = "resize"
 subjects = ["prod:resize:lanczos3:scale-aware"]
 oracle = "spec:resize:lanczos3:scale-aware"
 correctness = "bounded"
+
+
+[profiles.bicubic-cached-plan]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom-cached-plan"]
+oracle = "spec:resize:bicubic:catmull-rom"
+correctness = "bounded"
+
+[profiles.bicubic-scale-aware-cached-plan]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom-scale-aware-cached-plan"]
+oracle = "spec:resize:bicubic:catmull-rom-scale-aware"
+correctness = "bounded"
+
+[profiles.lanczos2-cached-plan]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:fixed-cached-plan"]
+oracle = "spec:resize:lanczos2:fixed"
+correctness = "bounded"
+
+[profiles.lanczos2-scale-aware-cached-plan]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:scale-aware-cached-plan"]
+oracle = "spec:resize:lanczos2:scale-aware"
+correctness = "bounded"
+
+[profiles.lanczos3-cached-plan]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:fixed-cached-plan"]
+oracle = "spec:resize:lanczos3:fixed"
+correctness = "bounded"
+
+[profiles.lanczos3-scale-aware-cached-plan]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:scale-aware-cached-plan"]
+oracle = "spec:resize:lanczos3:scale-aware"
+correctness = "bounded"
+
+[profiles.bicubic-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom"]
+oracle = "spec:resize:bicubic:catmull-rom"
+correctness = "bounded"
+scale_group = ["convolution-anisotropic"]
+
+[profiles.bicubic-scale-aware-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom-scale-aware"]
+oracle = "spec:resize:bicubic:catmull-rom-scale-aware"
+correctness = "bounded"
+scale_group = ["convolution-anisotropic"]
+
+[profiles.lanczos2-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:fixed"]
+oracle = "spec:resize:lanczos2:fixed"
+correctness = "bounded"
+scale_group = ["convolution-anisotropic"]
+
+[profiles.lanczos2-scale-aware-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:scale-aware"]
+oracle = "spec:resize:lanczos2:scale-aware"
+correctness = "bounded"
+scale_group = ["convolution-anisotropic"]
+
+[profiles.lanczos3-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:fixed"]
+oracle = "spec:resize:lanczos3:fixed"
+correctness = "bounded"
+scale_group = ["convolution-anisotropic"]
+
+[profiles.lanczos3-scale-aware-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:scale-aware"]
+oracle = "spec:resize:lanczos3:scale-aware"
+correctness = "bounded"
+scale_group = ["convolution-anisotropic"]
 
 [profiles.trilinear]
 command = "perf"
