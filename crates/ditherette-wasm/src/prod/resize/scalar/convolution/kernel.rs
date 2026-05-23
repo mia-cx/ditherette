@@ -17,13 +17,12 @@ use super::plan::{AxisTap, ConvolutionResizePlan};
 // preserved exact convolution output but regressed `ditherette-bench run bicubic`
 // representative non-identity cases by roughly 5-7%, so keep the compact channel
 // loops that LLVM optimizes better.
-// TODO(perf:kernel, rank=14, after perf:layout convolution-compact-taps): Test
-// Wasm/native SIMD after compact tap layout settles under bounded correctness;
-// benchmark the six convolution profiles and keep scalar output as fallback.
-// TODO(perf:kernel, rank=24, after perf:layout convolution-compact-taps): Test
-// f32 convolution accumulation and rounding under bounded correctness once tap
-// precision/layout is explicit. Benchmark all six convolution profiles and keep
-// the f64 scalar kernel as fallback for exact-output callers.
+// CLOSE(perf): SIMD convolution remains blocked until a better parent layout
+// exists; compact tap storage attempts failed exact coverage or regressed
+// representative bicubic/convolution profiles.
+// CLOSE(perf): f32 convolution accumulation depends on relaxed precision and an
+// explicit compact tap layout; f32 tap weights already failed exact unit
+// coverage, so keep the f64 scalar kernel for exact-output callers.
 // ACCEPT(perf): One-axis convolution kernels skip the identity axis for
 // width-only and height-only resizes. Correctness passed, and the six
 // `*-anisotropic` profiles improved from small bicubic gains to large Lanczos
