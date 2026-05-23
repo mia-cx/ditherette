@@ -12,14 +12,14 @@ use super::{
     filter::{axis_kernel_scale, ReconstructionKernel, SupportPolicy},
 };
 
-// TODO(perf:layout, rank=5, after perf:path convolution-direct-vs-separable):
-// If the direct convolution kernel remains hot, flatten `Vec<Vec<AxisTap>>` into
-// contiguous tap storage plus per-output ranges to reduce allocation count and
-// pointer chasing. Benchmark fixed and scale-aware bicubic/Lanczos profiles.
-// TODO(perf:layout, rank=6, after perf:layout convolution-flat-taps): Store x
-// byte offsets and y row offsets in planned taps, or retest on the current tap
-// layout if flattening is rejected, to remove per-contribution offset
-// multiplication from the direct kernel. Benchmark the six convolution profiles.
+// REJECT(perf): Flattening `Vec<Vec<AxisTap>>` into contiguous taps with
+// per-output ranges kept correctness but was neutral for most fixed cases and
+// regressed several large scale-aware cases, including `lanczos3-scale-aware`
+// 1x/large-upscale by roughly 3-11%.
+// REJECT(perf): Storing x byte offsets and y row offsets in nested planned
+// taps kept correctness but regressed `bicubic` large cases by roughly 2-9% and
+// `lanczos2` fixed cases by roughly 2-5%; keep offset multiplication in the
+// direct kernel until a broader layout change makes it free.
 // TODO(perf:layout, rank=7, after perf:layout convolution-flat-taps): Precompute
 // per-axis weight sums or per-output reciprocal weights in the plan so the hot
 // pixel loop does not rebuild `total_weight`; verify exact or bounded oracle
