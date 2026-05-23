@@ -52,11 +52,9 @@ oracle = "spec:resize:bilinear:scalar"
 correctness = "bounded"
 scale_group = ["partial", "identity", "bilinear-anisotropic"]
 
-# TODO(perf:harness, rank=1): Decide whether production convolution filters
-# must remain byte-exact or may use bounded color-distance correctness before
-# trying f32 accumulation, normalized weights, or separable approximation paths.
-# Judge fixed and scale-aware Catmull-Rom/Lanczos with the six convolution
-# profiles below; keep exact oracles unless the product accepts bounded drift.
+# ACCEPT(perf): Production convolution filters may use bounded color-distance
+# correctness, which unlocks f32 accumulation, normalized weights, compact taps,
+# and approximate path experiments against the six convolution profiles below.
 # TODO(perf:harness, rank=2): Add a diagnostic anisotropic/identity-axis scale
 # group for convolution filters before accepting width-only, height-only, or
 # separable path splits. Benchmark with the six convolution profiles below using
@@ -66,42 +64,42 @@ command = "perf"
 domain = "resize"
 subjects = ["prod:resize:bicubic:catmull-rom"]
 oracle = "spec:resize:bicubic:catmull-rom"
-correctness = "exact"
+correctness = "bounded"
 
 [profiles.bicubic-scale-aware]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:bicubic:catmull-rom-scale-aware"]
 oracle = "spec:resize:bicubic:catmull-rom-scale-aware"
-correctness = "exact"
+correctness = "bounded"
 
 [profiles.lanczos2]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:lanczos2:fixed"]
 oracle = "spec:resize:lanczos2:fixed"
-correctness = "exact"
+correctness = "bounded"
 
 [profiles.lanczos2-scale-aware]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:lanczos2:scale-aware"]
 oracle = "spec:resize:lanczos2:scale-aware"
-correctness = "exact"
+correctness = "bounded"
 
 [profiles.lanczos3]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:lanczos3:fixed"]
 oracle = "spec:resize:lanczos3:fixed"
-correctness = "exact"
+correctness = "bounded"
 
 [profiles.lanczos3-scale-aware]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:lanczos3:scale-aware"]
 oracle = "spec:resize:lanczos3:scale-aware"
-correctness = "exact"
+correctness = "bounded"
 
 [profiles.trilinear]
 command = "perf"
