@@ -53,6 +53,23 @@ impl Rgb8 {
     pub const B: usize = 2;
 }
 
+/// Packed gamma-encoded sRGB with f32 channels normalized to `0..=1`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Srgb32 {}
+
+impl ImageFormat for Srgb32 {
+    type Storage = f32;
+
+    const CHANNEL_COUNT: usize = 3;
+    const NAME: &'static str = "srgb32";
+}
+
+impl Srgb32 {
+    pub const R: usize = 0;
+    pub const G: usize = 1;
+    pub const B: usize = 2;
+}
+
 /// Packed linear RGB with f32 channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LinearRgb32 {}
@@ -121,6 +138,74 @@ impl Oklaba32 {
     pub const A: usize = 1;
     pub const B: usize = 2;
     pub const ALPHA: usize = 3;
+}
+
+/// Packed OKLCH with f32 lightness, chroma, and hue-radians channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Oklch32 {}
+
+impl ImageFormat for Oklch32 {
+    type Storage = f32;
+
+    const CHANNEL_COUNT: usize = 3;
+    const NAME: &'static str = "oklch32";
+}
+
+impl Oklch32 {
+    pub const L: usize = 0;
+    pub const C: usize = 1;
+    pub const H: usize = 2;
+}
+
+/// Packed CIELAB with f32 L*, a*, b* channels using D65 white.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Cielab32 {}
+
+impl ImageFormat for Cielab32 {
+    type Storage = f32;
+
+    const CHANNEL_COUNT: usize = 3;
+    const NAME: &'static str = "cielab32";
+}
+
+impl Cielab32 {
+    pub const L: usize = 0;
+    pub const A: usize = 1;
+    pub const B: usize = 2;
+}
+
+/// Packed CIELCH with f32 lightness, chroma, and hue-radians channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Cielch32 {}
+
+impl ImageFormat for Cielch32 {
+    type Storage = f32;
+
+    const CHANNEL_COUNT: usize = 3;
+    const NAME: &'static str = "cielch32";
+}
+
+impl Cielch32 {
+    pub const L: usize = 0;
+    pub const C: usize = 1;
+    pub const H: usize = 2;
+}
+
+/// Packed full-range BT.601 YCbCr with f32 Y, Cb, Cr channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum YCbCr32 {}
+
+impl ImageFormat for YCbCr32 {
+    type Storage = f32;
+
+    const CHANNEL_COUNT: usize = 3;
+    const NAME: &'static str = "ycbcr32";
+}
+
+impl YCbCr32 {
+    pub const Y: usize = 0;
+    pub const CB: usize = 1;
+    pub const CR: usize = 2;
 }
 
 /// Packed single-channel palette index image.

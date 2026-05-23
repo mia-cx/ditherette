@@ -16,7 +16,8 @@ pub mod view;
 
 pub use dimensions::ImageDimensions;
 pub use formats::{
-    ImageFormat, LinearRgb32, LinearRgba32, Oklab32, Oklaba32, PaletteIndex8, Rgb8, Rgba8,
+    Cielab32, Cielch32, ImageFormat, LinearRgb32, LinearRgba32, Oklab32, Oklaba32, Oklch32,
+    PaletteIndex8, Rgb8, Rgba8, Srgb32, YCbCr32,
 };
 pub use owned::ImageBuf;
 pub use pixel::StorageElement;
