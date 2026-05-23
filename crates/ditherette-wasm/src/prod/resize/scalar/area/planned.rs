@@ -31,10 +31,13 @@ use super::AreaResizePlan;
 // strong x-downscale cases can use a narrower scratch axis. Verify bounded area
 // correctness, then benchmark `ditherette-bench run area-anisotropic` and the
 // manifest `area` profile.
-// TODO(perf:kernel, rank=4, after perf:path fractional-area-separable-gate):
-// Specialize common one- and two-overlap vertical/horizontal separable kernels
-// after path selection proves those shapes remain hot. Verify bounded area
-// correctness, then benchmark `ditherette-bench run area`.
+// REJECT(perf): Specializing one-overlap vertical/horizontal area spans
+// preserved bounded correctness but regressed near-identity and upscale cases by
+// roughly 40-45% in `ditherette-bench run area`; keep the compact generic
+// accumulation loops.
+// TODO(perf:kernel, rank=4): If area remains hot, test only a two-overlap span
+// specialization for fractional downscales. Verify bounded area correctness,
+// then benchmark `ditherette-bench run area`.
 // TODO(perf:micro, rank=5, after perf:kernel fractional-area-separable-spans):
 // If the separable path is accepted, test pre-normalized f32 axis weights or a
 // precomputed reciprocal area inside that path only. This retests closed weight
