@@ -53,6 +53,14 @@ subjects = ["prod:resize:nearest:scalar"]
 oracle = "spec:resize:nearest:scalar"
 correctness = "exact"
 
+[profiles.nearest-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:nearest:scalar"]
+oracle = "spec:resize:nearest:scalar"
+correctness = "exact"
+scale_group = ["nearest-anisotropic"]
+
 [profiles.area]
 command = "perf"
 domain = "resize"
