@@ -65,6 +65,14 @@ impl AreaResizePlan {
     ) -> bool {
         self.source_dimensions == source_dimensions && self.output_dimensions == output_dimensions
     }
+
+    pub(super) fn same_width(&self) -> bool {
+        self.source_dimensions.width() == self.output_dimensions.width()
+    }
+
+    pub(super) fn same_height(&self) -> bool {
+        self.source_dimensions.height() == self.output_dimensions.height()
+    }
 }
 
 fn x_axis_spans(source_len: u32, output_len: u32, scale: f64) -> Vec<XAxisOverlapSpan> {
