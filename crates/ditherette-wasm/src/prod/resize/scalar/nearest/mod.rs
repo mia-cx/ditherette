@@ -35,7 +35,7 @@ pub fn resize_nearest_rgba8_into(
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with a cached plan.
 ///
-/// This is the benchmark and hot-loop entrypoint. The plan must match the input
+/// This is the reusable-plan hot-loop entrypoint. The plan must match the input
 /// and output dimensions. Packed-row assertions are intentionally kept here so
 /// all callers hit the same production resize boundary before entering the
 /// nearest word-copy kernel.

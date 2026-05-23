@@ -80,8 +80,8 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
 
 // ACCEPT(perf): Specializing identity-axis resizes keeps the single production
 // bilinear path but skips the unnecessary separable scratch/gather pass.
-// `bilinear` and `bilinear-cold` improved identity-axis cases by ~40-240% with
-// representative 2D cases neutral to slightly faster.
+// `bilinear` improved identity-axis cases by ~40-240% with representative 2D
+// cases neutral to slightly faster.
 fn resize_height_only(
     source: &[u8],
     output: &mut [u8],
