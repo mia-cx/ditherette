@@ -21,16 +21,11 @@ pub use filter::{ReconstructionKernel, SupportPolicy};
 pub use plan::ConvolutionResizePlan;
 
 // Convolution perf-search dependency map:
-// correctness/profile coverage -> one-shot vs cached-plan API -> direct vs
-// separable path choice -> tap layout/weight metadata -> fixed-support kernels
-// -> arithmetic micro-tuning.
-// TODO(perf:api, rank=3): Use the cached-plan convolution profiles to tune
-// repeated same-dimension plan reuse separately from the one-shot public path.
-// Benchmark all six `*-cached-plan` profiles.
-// TODO(perf:api, rank=26, after perf:api convolution-cached-plan-profiles): If
-// cached-plan profiles improve materially, expose caller-owned plan reuse through
-// product call sites instead of thread-local benchmark adapters. Benchmark all
-// six cached-plan profiles before changing public ownership.
+// correctness/profile coverage -> direct vs separable path choice -> tap
+// layout/weight metadata -> fixed-support kernels -> arithmetic micro-tuning.
+// CLOSE(perf): Cached-plan convolution tuning does not match the current product
+// workload. The app performs cold, one-shot resizes rather than repeated
+// same-dimension resizes, so benchmark and tune the one-shot public path instead.
 // REJECT(perf): Splitting Lanczos3 through a y-then-x scratch row preserved
 // bounded correctness but regressed `ditherette-bench run lanczos3` by roughly
 // 30-38%; keep the direct 2D convolution path until a cheaper reuse strategy is

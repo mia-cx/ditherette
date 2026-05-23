@@ -22,6 +22,9 @@ use super::AreaResizePlan;
 // Reuse separable area scratch storage across rows/calls once the path gate is
 // chosen; one-shot benchmarks include allocation cost, so compare thread-local
 // reuse against per-call allocation with `ditherette-bench run area`.
+// TODO(perf:harness, rank=16): Add a scalar `area-anisotropic` profile now the
+// separable area path has one-axis gate TODOs. Benchmark with bounded area
+// correctness before tuning width-only/height-only area.
 // TODO(perf:path, rank=19, after perf:harness area-anisotropic-profile): Choose
 // y-then-x versus x-then-y separable area order by scale shape so width-only or
 // strong x-downscale cases can use a narrower scratch axis. Verify bounded area
