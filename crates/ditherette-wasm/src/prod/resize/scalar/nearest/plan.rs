@@ -25,10 +25,11 @@ use super::{
 // ACCEPT(perf): `nearest-anisotropic` now covers width-only and height-only
 // nearest profiles with exact correctness and manifest fixtures before testing
 // scalar path splits separately from `ditherette-bench run nearest`.
-// TODO(perf:path, rank=18, after perf:harness nearest-anisotropic-profile):
-// Test scalar width-only and height-only nearest paths once an anisotropic
-// nearest profile exists; exact downscale is accepted, while identity-only and
-// exact-upscale paths were rejected under the default `nearest` profile.
+// ACCEPT(perf): Same-width nearest now copies whole source rows for height-only
+// anisotropic resizes; `nearest-anisotropic` improved same-width cases by roughly
+// 20-180%.
+// REJECT(perf): Same-height nearest with a dedicated x-only loop was neutral for
+// x-only anisotropic cases and did not justify an extra dispatch path.
 // REJECT(perf): Adding a same-width RGBA8 row-copy branch before the hot path
 // found no represented 1x/same-width case in the current nearest profile and
 // regressed most measured cases in `ditherette-bench run nearest`; do not retry
@@ -142,6 +143,10 @@ impl NearestResizePlan {
         self.source_dimensions == source_dimensions
             && self.output_dimensions == output_dimensions
             && self.anchor == anchor
+    }
+
+    pub(super) fn same_width(&self) -> bool {
+        self.source_dimensions.width() == self.output_dimensions.width()
     }
 }
 

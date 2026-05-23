@@ -22,6 +22,11 @@ pub(super) fn resize_with_plan_into(
     output: &mut [u8],
     plan: &NearestResizePlan,
 ) {
+    if plan.same_width() {
+        resize_vertical_only(source, source_dimensions, output, plan);
+        return;
+    }
+
     match plan.scale_class {
         NearestScaleClass::ExactDownscale => {
             let (x_factor, y_factor) = plan
@@ -61,6 +66,23 @@ pub(super) fn resize_with_plan_into(
         NearestScaleClass::Upscale => {
             resize_upscale_row_repeat(source, source_dimensions, output, plan);
         }
+    }
+}
+
+fn resize_vertical_only(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+) {
+    let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
+    let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
+
+    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+        let source_start = source_y as usize * source_row_len;
+        let output_start = output_y * output_row_len;
+        output[output_start..output_start + output_row_len]
+            .copy_from_slice(&source[source_start..source_start + source_row_len]);
     }
 }
 
