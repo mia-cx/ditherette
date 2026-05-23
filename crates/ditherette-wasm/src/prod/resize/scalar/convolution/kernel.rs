@@ -13,10 +13,10 @@ use super::plan::{AxisTap, ConvolutionResizePlan};
 // ACCEPT(perf): Fixed 4x4 and 6x6 tap-count dispatch lets LLVM specialize the
 // hot convolution loops while preserving exact output; fixed bicubic, Lanczos2,
 // and Lanczos3 non-identity cases improved by roughly 3-7%.
-// TODO(perf:micro, rank=12, after perf:kernel convolution-fixed-interiors):
-// Retest RGBA accumulation/final-rounding unrolling in the wider convolution
-// kernels; accept only if exact or selected bounded oracles pass and the six
-// convolution profiles improve beyond noise.
+// REJECT(perf): Extracting explicit RGBA accumulation/final-rounding helpers
+// preserved exact convolution output but regressed `ditherette-bench run bicubic`
+// representative non-identity cases by roughly 5-7%, so keep the compact channel
+// loops that LLVM optimizes better.
 // TODO(perf:kernel, rank=14, after perf:layout convolution-compact-taps): Test
 // Wasm/native SIMD only after the tap precision/layout and direct-vs-separable
 // path are settled; benchmark the six convolution profiles and keep scalar exact
