@@ -30,6 +30,15 @@ pub use plan::ConvolutionResizePlan;
 // bounded correctness but regressed `ditherette-bench run lanczos3` by roughly
 // 30-38%; keep the direct 2D convolution path until a cheaper reuse strategy is
 // benchmarked.
+// TODO(perf:path, rank=27): Test x-then-y separable convolution for strong
+// x-downscale and scale-aware filters, where the intermediate scratch width is
+// output width instead of source width. This is a different shape from the
+// rejected y-then-x source-row scratch path. Verify bounded correctness, then
+// benchmark all six convolution profiles.
+// TODO(perf:path, rank=28): Test a streaming separable convolution that keeps a
+// small ring of horizontally filtered rows for the active y-tap window, reusing
+// them across neighboring output rows instead of materializing a full scratch
+// image. Verify bounded correctness, then benchmark all six convolution profiles.
 // TODO(perf:path, rank=9): Specialize width-only and height-only convolution
 // resizes if the `*-anisotropic` profiles show that skipping one identity axis
 // beats the generic direct path.
