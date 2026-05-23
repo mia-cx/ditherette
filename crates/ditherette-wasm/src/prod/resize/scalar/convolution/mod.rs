@@ -29,11 +29,10 @@ pub use plan::ConvolutionResizePlan;
 // resizes; until then, keep `bicubic`, `bicubic-scale-aware`, `lanczos2`,
 // `lanczos2-scale-aware`, `lanczos3`, and `lanczos3-scale-aware` focused on the
 // one-shot public path.
-// TODO(perf:path, rank=4, after perf:harness convolution-correctness-contract):
-// Split convolution dispatch between the current direct 2D kernel and a
-// separable y-then-x scratch path by filter, support policy, scale, and output
-// size. Verify exact or bounded correctness per the chosen contract, then
-// benchmark the six convolution profiles.
+// REJECT(perf): Splitting Lanczos3 through a y-then-x scratch row preserved
+// bounded correctness but regressed `ditherette-bench run lanczos3` by roughly
+// 30-38%; keep the direct 2D convolution path until a cheaper reuse strategy is
+// benchmarked.
 // TODO(perf:path, rank=9, after perf:harness convolution-anisotropic-profile):
 // Specialize width-only and height-only convolution resizes if diagnostic
 // identity-axis cases show that skipping one axis beats the generic direct path.

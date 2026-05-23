@@ -7,10 +7,9 @@ use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
 use super::plan::{AxisTap, ConvolutionResizePlan};
 
-// TODO(perf:layout, rank=8, after perf:path convolution-direct-vs-separable):
-// If separable convolution wins for any scale class, choose scratch ownership
-// and reuse strategy before tuning row kernels; test one-row, full-intermediate,
-// and thread-local scratch under the six convolution profiles.
+// CLOSE(perf): Scratch ownership tuning depended on a winning separable path;
+// the tested Lanczos3 y-then-x scratch row preserved bounded correctness but
+// regressed `ditherette-bench run lanczos3` by roughly 30-38%.
 // TODO(perf:kernel, rank=11, after perf:path convolution-direct-vs-separable):
 // Specialize fixed-support interior kernels for Catmull-Rom, Lanczos2, and
 // Lanczos3 once path dispatch is settled, keeping generic edge handling for
