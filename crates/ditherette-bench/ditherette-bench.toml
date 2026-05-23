@@ -56,25 +56,67 @@ scale_group = ["partial", "identity", "bilinear-anisotropic"]
 command = "perf"
 domain = "resize"
 subjects = [
-  "spec:resize:bicubic:catmull-rom",
-  "spec:resize:bicubic:catmull-rom-scale-aware",
+  "prod:resize:bicubic:catmull-rom",
+  "prod:resize:bicubic:catmull-rom-scale-aware",
 ]
+
+[profiles.bicubic-fixed]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom"]
+oracle = "spec:resize:bicubic:catmull-rom"
+correctness = "exact"
+
+[profiles.bicubic-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom-scale-aware"]
+oracle = "spec:resize:bicubic:catmull-rom-scale-aware"
+correctness = "exact"
 
 [profiles.lanczos2]
 command = "perf"
 domain = "resize"
 subjects = [
-  "spec:resize:lanczos2:fixed",
-  "spec:resize:lanczos2:scale-aware",
+  "prod:resize:lanczos2:fixed",
+  "prod:resize:lanczos2:scale-aware",
 ]
+
+[profiles.lanczos2-fixed]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:fixed"]
+oracle = "spec:resize:lanczos2:fixed"
+correctness = "exact"
+
+[profiles.lanczos2-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:scale-aware"]
+oracle = "spec:resize:lanczos2:scale-aware"
+correctness = "exact"
 
 [profiles.lanczos3]
 command = "perf"
 domain = "resize"
 subjects = [
-  "spec:resize:lanczos3:fixed",
-  "spec:resize:lanczos3:scale-aware",
+  "prod:resize:lanczos3:fixed",
+  "prod:resize:lanczos3:scale-aware",
 ]
+
+[profiles.lanczos3-fixed]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:fixed"]
+oracle = "spec:resize:lanczos3:fixed"
+correctness = "exact"
+
+[profiles.lanczos3-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:scale-aware"]
+oracle = "spec:resize:lanczos3:scale-aware"
+correctness = "exact"
 
 [profiles.trilinear]
 command = "perf"
