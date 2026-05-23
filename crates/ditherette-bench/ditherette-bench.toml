@@ -67,6 +67,13 @@ domain = "resize"
 subjects = ["prod:resize:area:scalar"]
 oracle = "spec:resize:area:scalar"
 
+[profiles.area-anisotropic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:area:scalar"]
+oracle = "spec:resize:area:scalar"
+scale_group = ["area-anisotropic"]
+
 [profiles.bilinear]
 command = "perf"
 domain = "resize"
