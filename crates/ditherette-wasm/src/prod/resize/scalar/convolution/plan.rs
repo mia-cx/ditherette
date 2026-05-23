@@ -24,10 +24,9 @@ use super::{
 // the pixel denominator changed floating-point rounding versus the current
 // contribution-order accumulation; `prod_resize_convolution` failed exact
 // Lanczos2 scale-aware output before benchmarking.
-// TODO(perf:kernel, rank=10, after perf:layout convolution-flat-taps): Coalesce
-// duplicate clamped edge taps during planning to avoid repeated edge-pixel
-// contributions; accept only if the configured convolution oracles still pass,
-// then benchmark all fixed and scale-aware convolution profiles.
+// REJECT(perf): Coalescing duplicate clamped edge taps during planning changed
+// contribution grouping enough to fail exact `prod_resize_convolution` outputs
+// for bicubic, Lanczos2, and Lanczos3 before benchmarking.
 // TODO(perf:layout, rank=13, after perf:harness convolution-correctness-contract):
 // If convolution filters move to bounded correctness, test compact tap storage
 // such as `u32` offsets plus `f32` weights/reciprocals to reduce plan memory and
