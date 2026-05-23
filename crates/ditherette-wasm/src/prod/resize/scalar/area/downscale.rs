@@ -3,6 +3,11 @@
 //! These keep area downscales byte-identical to the spec oracle. Power-of-two
 //! hot cases use integer sums; the 10x/default paths keep the spec's weighted
 //! f64 accumulation order.
+//!
+//! NOTE(perf): Exact integer area downscale is intentionally not a separable
+//! TODO. The block kernels already read each source pixel once for disjoint
+//! output blocks; a two-pass scratch image would add memory traffic without
+//! reducing coverage work. Fractional planned coverage is the separable target.
 
 use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 

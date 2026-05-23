@@ -18,6 +18,10 @@ use super::{
 // REJECT(perf): Adding an identity-only path was not represented in the default
 // `nearest` profile and regressed/noised small cases by up to -9.67% in
 // `ditherette-bench run nearest`.
+// TODO(perf:path, rank=6): Retest nearest identity pass-through now identity
+// scales are represented and prod subjects measure one-shot public APIs; the old
+// rejection's benchmark conditions no longer hold. Verify exact nearest oracle,
+// then benchmark `ditherette-bench run nearest`.
 // REJECT(perf): A generic exact-upscale span-fill path regressed 2x by -21.03%
 // in `ditherette-bench run nearest`; wider upscale gains do
 // not justify hurting the common 2x case.
@@ -36,6 +40,11 @@ use super::{
 // average-span threshold only for that shape but regressed represented large
 // downscales by -66.48% in `ditherette-bench run nearest`; keep the stricter
 // near-identity span-copy gate.
+// NOTE(perf): A separable nearest two-pass is not a current TODO. X/Y mapping is
+// already planned independently, and materializing an intermediate image would
+// add a full write/read without reducing sampling work. Revisit only if a future
+// `nearest` profile exposes a shape where axis-only materialization avoids more
+// work than it adds.
 
 /// Reusable nearest-neighbor resize metadata for one source/output shape.
 ///

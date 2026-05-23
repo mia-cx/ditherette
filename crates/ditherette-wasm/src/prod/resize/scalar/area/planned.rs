@@ -7,6 +7,32 @@ use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
 use super::AreaResizePlan;
 
+// Current-code area separability map:
+// fractional one-shot plan shape -> separable scratch layout -> shape gate ->
+// scratch reuse -> common-span kernels -> weight normalization.
+// TODO(perf:layout, rank=1): Prototype a fractional-area separable path that
+// first filters y coverage into f32 scratch rows and then applies x coverage,
+// avoiding repeated x*y overlap work in `accumulate_grid`. Verify exact integer
+// fast paths still bypass this code and fractional output stays within the
+// configured bounded area oracle, then benchmark `ditherette-bench run area`.
+// TODO(perf:path, rank=2, after perf:layout fractional-area-separable-scratch):
+// Gate the separable area path by span shape and output size so one-shot scratch
+// traffic does not hurt small or one-axis cases. Benchmark the manifest `area`
+// profile and accept only if representative aspect-preserving cases improve.
+// TODO(perf:layout, rank=3, after perf:layout fractional-area-separable-scratch):
+// Reuse separable area scratch storage across rows/calls once the scratch shape
+// is chosen; one-shot benchmarks include allocation cost, so compare thread-local
+// reuse against per-call allocation with `ditherette-bench run area`.
+// TODO(perf:kernel, rank=4, after perf:path fractional-area-separable-gate):
+// Specialize common one- and two-overlap vertical/horizontal separable kernels
+// after path selection proves those shapes remain hot. Verify bounded area
+// correctness, then benchmark `ditherette-bench run area`.
+// TODO(perf:micro, rank=5, after perf:kernel fractional-area-separable-spans):
+// If the separable path is accepted, test pre-normalized f32 axis weights or a
+// precomputed reciprocal area inside that path only. This retests closed weight
+// hoisting under changed one-shot/bounded/separable conditions; benchmark
+// `ditherette-bench run area`.
+
 pub(super) fn resize_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
