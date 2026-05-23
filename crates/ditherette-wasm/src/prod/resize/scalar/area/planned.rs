@@ -14,14 +14,15 @@ use super::AreaResizePlan;
 // applies x coverage. `ditherette-bench run area` preserved bounded correctness
 // and improved represented fractional cases by ~50-72% while exact integer paths
 // stayed on their existing bypasses.
-// TODO(perf:path, rank=2): Gate the separable area path by span shape and output
-// size so one-shot scratch traffic does not hurt small or one-axis cases.
-// Benchmark the manifest `area` profile and accept only if representative
-// aspect-preserving cases improve.
-// TODO(perf:layout, rank=3, after perf:path fractional-area-separable-gate):
-// Reuse separable area scratch storage across rows/calls once the path gate is
-// chosen; one-shot benchmarks include allocation cost, so compare thread-local
-// reuse against per-call allocation with `ditherette-bench run area`.
+// REJECT(perf): Gating tiny fractional outputs (<=10k output pixels) back to a
+// direct 2D area kernel preserved bounded correctness but did not improve tiny
+// cases and regressed representative large fractional cases by roughly 2-6% in
+// `ditherette-bench run area`; keep the separable area path for aspect-preserving
+// one-shot resizes.
+// TODO(perf:layout, rank=3): Reuse separable area scratch storage across rows
+// within a call now the path stays separable for aspect-preserving resizes;
+// one-shot benchmarks include allocation cost, so compare scratch reuse against
+// per-output-row fill with `ditherette-bench run area`.
 // TODO(perf:harness, rank=16): Add a scalar `area-anisotropic` profile now the
 // separable area path has one-axis gate TODOs. Benchmark with bounded area
 // correctness before tuning width-only/height-only area.
