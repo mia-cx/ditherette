@@ -82,6 +82,10 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
 // bilinear path but skips the unnecessary separable scratch/gather pass.
 // `bilinear` improved identity-axis cases by ~40-240% with representative 2D
 // cases neutral to slightly faster.
+// TODO(perf:path, rank=21): Test x-then-y separable bilinear order for strong
+// x-downscale cases so the intermediate scratch width follows output width
+// instead of source width. Verify bounded bilinear correctness, then benchmark
+// `ditherette-bench run bilinear`.
 fn resize_height_only(
     source: &[u8],
     output: &mut [u8],

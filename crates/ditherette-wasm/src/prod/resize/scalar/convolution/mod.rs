@@ -27,6 +27,10 @@ pub use plan::ConvolutionResizePlan;
 // TODO(perf:api, rank=3): Use the cached-plan convolution profiles to tune
 // repeated same-dimension plan reuse separately from the one-shot public path.
 // Benchmark all six `*-cached-plan` profiles.
+// TODO(perf:api, rank=26, after perf:api convolution-cached-plan-profiles): If
+// cached-plan profiles improve materially, expose caller-owned plan reuse through
+// product call sites instead of thread-local benchmark adapters. Benchmark all
+// six cached-plan profiles before changing public ownership.
 // REJECT(perf): Splitting Lanczos3 through a y-then-x scratch row preserved
 // bounded correctness but regressed `ditherette-bench run lanczos3` by roughly
 // 30-38%; keep the direct 2D convolution path until a cheaper reuse strategy is

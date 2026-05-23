@@ -22,6 +22,11 @@ use super::AreaResizePlan;
 // Reuse separable area scratch storage across rows/calls once the path gate is
 // chosen; one-shot benchmarks include allocation cost, so compare thread-local
 // reuse against per-call allocation with `ditherette-bench run area`.
+// TODO(perf:path, rank=19, after perf:harness area-anisotropic-profile): Choose
+// y-then-x versus x-then-y separable area order by scale shape so width-only or
+// strong x-downscale cases can use a narrower scratch axis. Verify bounded area
+// correctness, then benchmark `ditherette-bench run area-anisotropic` and the
+// manifest `area` profile.
 // TODO(perf:kernel, rank=4, after perf:path fractional-area-separable-gate):
 // Specialize common one- and two-overlap vertical/horizontal separable kernels
 // after path selection proves those shapes remain hot. Verify bounded area

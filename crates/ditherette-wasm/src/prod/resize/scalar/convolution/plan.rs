@@ -30,6 +30,11 @@ use super::{
 // TODO(perf:layout, rank=13): Test compact tap storage such as `u32` offsets
 // plus `f32` weights/reciprocals now convolution benchmark profiles use bounded
 // correctness. Benchmark all six convolution profiles.
+// TODO(perf:layout, rank=23, after perf:layout convolution-compact-taps): Retest
+// pre-normalized per-axis f32 weights or per-output reciprocals under bounded
+// convolution correctness. The exact-oracle denominator cache was rejected for
+// rounding, but bounded profiles materially change the acceptance condition;
+// benchmark all six convolution profiles.
 
 /// Reusable convolution resize metadata for one source/output shape and kernel.
 pub struct ConvolutionResizePlan {

@@ -25,9 +25,10 @@ use super::{
 // REJECT(perf): A generic exact-upscale span-fill path regressed 2x by -21.03%
 // in `ditherette-bench run nearest`; wider upscale gains do
 // not justify hurting the common 2x case.
-// DEFER(perf): Fractional nearest path splits have no concrete benchmarkable
-// shape yet; exact downscale is accepted, while identity-only and exact-upscale
-// paths were rejected under the default `nearest` profile.
+// TODO(perf:path, rank=18, after perf:harness nearest-anisotropic-profile):
+// Test scalar width-only and height-only nearest paths once an anisotropic
+// nearest profile exists; exact downscale is accepted, while identity-only and
+// exact-upscale paths were rejected under the default `nearest` profile.
 // REJECT(perf): Adding a same-width RGBA8 row-copy branch before the hot path
 // found no represented 1x/same-width case in the current nearest profile and
 // regressed most measured cases in `ditherette-bench run nearest`; do not retry

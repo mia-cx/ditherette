@@ -20,6 +20,14 @@ use super::plan::{AxisTap, ConvolutionResizePlan};
 // TODO(perf:kernel, rank=14, after perf:layout convolution-compact-taps): Test
 // Wasm/native SIMD after compact tap layout settles under bounded correctness;
 // benchmark the six convolution profiles and keep scalar output as fallback.
+// TODO(perf:kernel, rank=24, after perf:layout convolution-compact-taps): Test
+// f32 convolution accumulation and rounding under bounded correctness once tap
+// precision/layout is explicit. Benchmark all six convolution profiles and keep
+// the f64 scalar kernel as fallback for exact-output callers.
+// TODO(perf:kernel, rank=25, after perf:path convolution-anisotropic-paths): If
+// width-only or height-only profiles stay hot after path selection, specialize
+// one-axis convolution kernels that apply only the non-identity axis. Benchmark
+// the six `*-anisotropic` convolution profiles.
 
 pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,
