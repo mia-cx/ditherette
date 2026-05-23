@@ -24,10 +24,10 @@ use super::plan::{AxisTap, ConvolutionResizePlan};
 // f32 convolution accumulation and rounding under bounded correctness once tap
 // precision/layout is explicit. Benchmark all six convolution profiles and keep
 // the f64 scalar kernel as fallback for exact-output callers.
-// TODO(perf:kernel, rank=25, after perf:path convolution-anisotropic-paths): If
-// width-only or height-only profiles stay hot after path selection, specialize
-// one-axis convolution kernels that apply only the non-identity axis. Benchmark
-// the six `*-anisotropic` convolution profiles.
+// ACCEPT(perf): One-axis convolution kernels skip the identity axis for
+// width-only and height-only resizes. Correctness passed, and the six
+// `*-anisotropic` profiles improved from small bicubic gains to large Lanczos
+// wins.
 
 pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,
@@ -39,6 +39,28 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
     let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
     let source_data = source.data();
+
+    if plan.same_height() {
+        resize_horizontal_only_into(
+            source_data,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            &plan.x_taps,
+        );
+        return;
+    }
+
+    if plan.same_width() {
+        resize_vertical_only_into(
+            source_data,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            &plan.y_taps,
+        );
+        return;
+    }
 
     for (output_row, y_taps) in output
         .data_mut()
@@ -58,6 +80,97 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
             );
         }
     }
+}
+
+fn resize_horizontal_only_into(
+    source: &[u8],
+    output: &mut [u8],
+    source_row_byte_len: usize,
+    output_row_byte_len: usize,
+    x_taps_by_output: &[Vec<AxisTap>],
+) {
+    for (source_row, output_row) in source
+        .chunks_exact(source_row_byte_len)
+        .zip(output.chunks_exact_mut(output_row_byte_len))
+    {
+        for (output_pixel, x_taps) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .zip(x_taps_by_output)
+        {
+            write_horizontal_convolution_pixel(output_pixel, source_row, x_taps);
+        }
+    }
+}
+
+fn resize_vertical_only_into(
+    source: &[u8],
+    output: &mut [u8],
+    source_row_byte_len: usize,
+    output_row_byte_len: usize,
+    y_taps_by_output: &[Vec<AxisTap>],
+) {
+    for (output_row, y_taps) in output
+        .chunks_exact_mut(output_row_byte_len)
+        .zip(y_taps_by_output)
+    {
+        for (output_x, output_pixel) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .enumerate()
+        {
+            write_vertical_convolution_pixel(
+                output_pixel,
+                source,
+                source_row_byte_len,
+                output_x,
+                y_taps,
+            );
+        }
+    }
+}
+
+fn write_horizontal_convolution_pixel(
+    output_pixel: &mut [u8],
+    source_row: &[u8],
+    x_taps: &[AxisTap],
+) {
+    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut total_weight = 0.0;
+
+    for x_tap in x_taps {
+        let source_start = x_tap.index * rgba8::RGBA8_CHANNELS;
+        let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
+
+        total_weight += x_tap.weight;
+        for channel in 0..rgba8::RGBA8_CHANNELS {
+            accumulated[channel] += f64::from(source_pixel[channel]) * x_tap.weight;
+        }
+    }
+
+    write_accumulated_pixel(output_pixel, accumulated, total_weight);
+}
+
+fn write_vertical_convolution_pixel(
+    output_pixel: &mut [u8],
+    source: &[u8],
+    source_row_byte_len: usize,
+    output_x: usize,
+    y_taps: &[AxisTap],
+) {
+    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut total_weight = 0.0;
+    let source_x_start = output_x * rgba8::RGBA8_CHANNELS;
+
+    for y_tap in y_taps {
+        let source_start = y_tap.index * source_row_byte_len + source_x_start;
+        let source_pixel = &source[source_start..source_start + rgba8::RGBA8_CHANNELS];
+
+        total_weight += y_tap.weight;
+        for channel in 0..rgba8::RGBA8_CHANNELS {
+            accumulated[channel] += f64::from(source_pixel[channel]) * y_tap.weight;
+        }
+    }
+
+    write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
 fn write_convolution_pixel(

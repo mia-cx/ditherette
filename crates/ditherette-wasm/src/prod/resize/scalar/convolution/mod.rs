@@ -39,9 +39,9 @@ pub use plan::ConvolutionResizePlan;
 // small ring of horizontally filtered rows for the active y-tap window, reusing
 // them across neighboring output rows instead of materializing a full scratch
 // image. Verify bounded correctness, then benchmark all six convolution profiles.
-// TODO(perf:path, rank=9): Specialize width-only and height-only convolution
-// resizes if the `*-anisotropic` profiles show that skipping one identity axis
-// beats the generic direct path.
+// ACCEPT(perf): Width-only and height-only convolution resizes now skip the
+// identity axis. Correctness passed, and the `*-anisotropic` convolution
+// profiles improved from small bicubic gains to large Lanczos wins.
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with a separable kernel.
 pub fn resize_convolution_rgba8_into<K>(

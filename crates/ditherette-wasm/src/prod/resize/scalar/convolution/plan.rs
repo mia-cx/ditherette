@@ -102,6 +102,14 @@ impl ConvolutionResizePlan {
         self.source_dimensions == self.output_dimensions
     }
 
+    pub(super) fn same_width(&self) -> bool {
+        self.source_dimensions.width() == self.output_dimensions.width()
+    }
+
+    pub(super) fn same_height(&self) -> bool {
+        self.source_dimensions.height() == self.output_dimensions.height()
+    }
+
     #[allow(dead_code)]
     pub(super) fn anchor(&self) -> ResizeAnchor {
         self.anchor
