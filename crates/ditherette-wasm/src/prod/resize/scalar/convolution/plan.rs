@@ -12,6 +12,27 @@ use super::{
     filter::{axis_kernel_scale, ReconstructionKernel, SupportPolicy},
 };
 
+// TODO(perf:layout, rank=5, after perf:path convolution-direct-vs-separable):
+// If the direct convolution kernel remains hot, flatten `Vec<Vec<AxisTap>>` into
+// contiguous tap storage plus per-output ranges to reduce allocation count and
+// pointer chasing. Benchmark fixed and scale-aware bicubic/Lanczos profiles.
+// TODO(perf:layout, rank=6, after perf:layout convolution-flat-taps): Store x
+// byte offsets and y row offsets in planned taps, or retest on the current tap
+// layout if flattening is rejected, to remove per-contribution offset
+// multiplication from the direct kernel. Benchmark the six convolution profiles.
+// TODO(perf:layout, rank=7, after perf:layout convolution-flat-taps): Precompute
+// per-axis weight sums or per-output reciprocal weights in the plan so the hot
+// pixel loop does not rebuild `total_weight`; verify exact or bounded oracle
+// output per the selected correctness contract, then benchmark the six profiles.
+// TODO(perf:kernel, rank=10, after perf:layout convolution-flat-taps): Coalesce
+// duplicate clamped edge taps during planning to avoid repeated edge-pixel
+// contributions; accept only if the configured convolution oracles still pass,
+// then benchmark all fixed and scale-aware convolution profiles.
+// TODO(perf:layout, rank=13, after perf:harness convolution-correctness-contract):
+// If convolution filters move to bounded correctness, test compact tap storage
+// such as `u32` offsets plus `f32` weights/reciprocals to reduce plan memory and
+// cache pressure. Benchmark all six convolution profiles against bounded oracles.
+
 /// Reusable convolution resize metadata for one source/output shape and kernel.
 pub struct ConvolutionResizePlan {
     source_dimensions: ImageDimensions,

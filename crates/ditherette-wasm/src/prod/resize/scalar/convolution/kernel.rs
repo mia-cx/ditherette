@@ -7,6 +7,24 @@ use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
 use super::plan::{AxisTap, ConvolutionResizePlan};
 
+// TODO(perf:layout, rank=8, after perf:path convolution-direct-vs-separable):
+// If separable convolution wins for any scale class, choose scratch ownership
+// and reuse strategy before tuning row kernels; test one-row, full-intermediate,
+// and thread-local scratch under the six convolution profiles.
+// TODO(perf:kernel, rank=11, after perf:path convolution-direct-vs-separable):
+// Specialize fixed-support interior kernels for Catmull-Rom, Lanczos2, and
+// Lanczos3 once path dispatch is settled, keeping generic edge handling for
+// clamped taps. Benchmark `bicubic`, `lanczos2`, and `lanczos3` first, then the
+// scale-aware profiles if the shape generalizes.
+// TODO(perf:micro, rank=12, after perf:kernel convolution-fixed-interiors):
+// Retest RGBA accumulation/final-rounding unrolling in the wider convolution
+// kernels; accept only if exact or selected bounded oracles pass and the six
+// convolution profiles improve beyond noise.
+// TODO(perf:kernel, rank=14, after perf:layout convolution-compact-taps): Test
+// Wasm/native SIMD only after the tap precision/layout and direct-vs-separable
+// path are settled; benchmark the six convolution profiles and keep scalar exact
+// output as the fallback if vector rounding changes the oracle.
+
 pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,

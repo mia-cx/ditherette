@@ -52,6 +52,15 @@ oracle = "spec:resize:bilinear:scalar"
 correctness = "bounded"
 scale_group = ["partial", "identity", "bilinear-anisotropic"]
 
+# TODO(perf:harness, rank=1): Decide whether production convolution filters
+# must remain byte-exact or may use bounded color-distance correctness before
+# trying f32 accumulation, normalized weights, or separable approximation paths.
+# Judge fixed and scale-aware Catmull-Rom/Lanczos with the six convolution
+# profiles below; keep exact oracles unless the product accepts bounded drift.
+# TODO(perf:harness, rank=2): Add a diagnostic anisotropic/identity-axis scale
+# group for convolution filters before accepting width-only, height-only, or
+# separable path splits. Benchmark with the six convolution profiles below using
+# manifest-defined fixtures and oracles.
 [profiles.bicubic]
 command = "perf"
 domain = "resize"
