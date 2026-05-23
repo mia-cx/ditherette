@@ -10,11 +10,9 @@ use super::plan::{AxisTap, ConvolutionResizePlan};
 // CLOSE(perf): Scratch ownership tuning depended on a winning separable path;
 // the tested Lanczos3 y-then-x scratch row preserved bounded correctness but
 // regressed `ditherette-bench run lanczos3` by roughly 30-38%.
-// TODO(perf:kernel, rank=11, after perf:path convolution-direct-vs-separable):
-// Specialize fixed-support interior kernels for Catmull-Rom, Lanczos2, and
-// Lanczos3 once path dispatch is settled, keeping generic edge handling for
-// clamped taps. Benchmark `bicubic`, `lanczos2`, and `lanczos3` first, then the
-// scale-aware profiles if the shape generalizes.
+// ACCEPT(perf): Fixed 4x4 and 6x6 tap-count dispatch lets LLVM specialize the
+// hot convolution loops while preserving exact output; fixed bicubic, Lanczos2,
+// and Lanczos3 non-identity cases improved by roughly 3-7%.
 // TODO(perf:micro, rank=12, after perf:kernel convolution-fixed-interiors):
 // Retest RGBA accumulation/final-rounding unrolling in the wider convolution
 // kernels; accept only if exact or selected bounded oracles pass and the six
@@ -62,6 +60,30 @@ fn write_convolution_pixel(
     x_taps: &[AxisTap],
     y_taps: &[AxisTap],
 ) {
+    if let (Some(x_taps), Some(y_taps)) = (as_fixed_taps::<4>(x_taps), as_fixed_taps::<4>(y_taps)) {
+        write_fixed_convolution_pixel(output_pixel, source, source_row_byte_len, x_taps, y_taps);
+        return;
+    }
+
+    if let (Some(x_taps), Some(y_taps)) = (as_fixed_taps::<6>(x_taps), as_fixed_taps::<6>(y_taps)) {
+        write_fixed_convolution_pixel(output_pixel, source, source_row_byte_len, x_taps, y_taps);
+        return;
+    }
+
+    write_variable_convolution_pixel(output_pixel, source, source_row_byte_len, x_taps, y_taps);
+}
+
+fn as_fixed_taps<const TAP_COUNT: usize>(taps: &[AxisTap]) -> Option<&[AxisTap; TAP_COUNT]> {
+    taps.try_into().ok()
+}
+
+fn write_fixed_convolution_pixel<const TAP_COUNT: usize>(
+    output_pixel: &mut [u8],
+    source: &[u8],
+    source_row_byte_len: usize,
+    x_taps: &[AxisTap; TAP_COUNT],
+    y_taps: &[AxisTap; TAP_COUNT],
+) {
     let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
     let mut total_weight = 0.0;
 
@@ -80,6 +102,38 @@ fn write_convolution_pixel(
         }
     }
 
+    write_accumulated_pixel(output_pixel, accumulated, total_weight);
+}
+
+fn write_variable_convolution_pixel(
+    output_pixel: &mut [u8],
+    source: &[u8],
+    source_row_byte_len: usize,
+    x_taps: &[AxisTap],
+    y_taps: &[AxisTap],
+) {
+    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut total_weight = 0.0;
+
+    for y_tap in y_taps {
+        let source_row_start = y_tap.index * source_row_byte_len;
+
+        for x_tap in x_taps {
+            let weight = x_tap.weight * y_tap.weight;
+            let source_start = source_row_start + x_tap.index * rgba8::RGBA8_CHANNELS;
+            let source_pixel = &source[source_start..source_start + rgba8::RGBA8_CHANNELS];
+
+            total_weight += weight;
+            for channel in 0..rgba8::RGBA8_CHANNELS {
+                accumulated[channel] += f64::from(source_pixel[channel]) * weight;
+            }
+        }
+    }
+
+    write_accumulated_pixel(output_pixel, accumulated, total_weight);
+}
+
+fn write_accumulated_pixel(output_pixel: &mut [u8], accumulated: [f64; 4], total_weight: f64) {
     for channel in 0..rgba8::RGBA8_CHANNELS {
         output_pixel[channel] = (accumulated[channel] / total_weight)
             .clamp(0.0, 255.0)
