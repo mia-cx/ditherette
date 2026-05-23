@@ -20,10 +20,10 @@ use super::{
 // taps kept correctness but regressed `bicubic` large cases by roughly 2-9% and
 // `lanczos2` fixed cases by roughly 2-5%; keep offset multiplication in the
 // direct kernel until a broader layout change makes it free.
-// TODO(perf:layout, rank=7, after perf:layout convolution-flat-taps): Precompute
-// per-axis weight sums or per-output reciprocal weights in the plan so the hot
-// pixel loop does not rebuild `total_weight`; verify exact or bounded oracle
-// output per the selected correctness contract, then benchmark the six profiles.
+// REJECT(perf): Precomputing per-axis weight sums and using their product as
+// the pixel denominator changed floating-point rounding versus the current
+// contribution-order accumulation; `prod_resize_convolution` failed exact
+// Lanczos2 scale-aware output before benchmarking.
 // TODO(perf:kernel, rank=10, after perf:layout convolution-flat-taps): Coalesce
 // duplicate clamped edge taps during planning to avoid repeated edge-pixel
 // contributions; accept only if the configured convolution oracles still pass,
