@@ -26,11 +26,19 @@ pub use plan::NearestResizePlan;
 /// each output pixel from its nearest source pixel.
 pub fn resize_nearest_rgba8_into(
     source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
     anchor: alignment::ResizeAnchor,
 ) {
+    common::rgba8::assert_packed_source(source, "nearest");
+    common::rgba8::assert_packed_output(&output, "nearest");
+
+    if source.dimensions() == output.dimensions() {
+        output.data_mut().copy_from_slice(source.data());
+        return;
+    }
+
     let plan = NearestResizePlan::new(source.dimensions(), output.dimensions(), anchor);
-    resize_nearest_rgba8_with_plan_into(source, output, &plan);
+    packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), &plan);
 }
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with a cached plan.
@@ -49,6 +57,11 @@ pub fn resize_nearest_rgba8_with_plan_into(
 
     common::rgba8::assert_packed_source(source, "nearest");
     common::rgba8::assert_packed_output(&output, "nearest");
+
+    if source.dimensions() == output.dimensions() {
+        output.data_mut().copy_from_slice(source.data());
+        return;
+    }
 
     packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), plan);
 }
