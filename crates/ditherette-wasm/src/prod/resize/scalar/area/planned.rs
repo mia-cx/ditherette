@@ -39,11 +39,10 @@ use super::AreaResizePlan;
 // correctness but regressed fractional downscales and near-identity cases by
 // roughly 30-48% in `ditherette-bench run area`; keep the compact generic
 // horizontal loop.
-// TODO(perf:micro, rank=5, after perf:kernel fractional-area-separable-spans):
-// If the separable path is accepted, test pre-normalized f32 axis weights or a
-// precomputed reciprocal area inside that path only. This retests closed weight
-// hoisting under changed one-shot/bounded/separable conditions; benchmark
-// `ditherette-bench run area`.
+// REJECT(perf): Hoisting area division to one f32 reciprocal preserved bounded
+// correctness but regressed representative large fractional cases by roughly
+// 2-6% in `ditherette-bench run area`; keep the existing per-span f64 divide/cast
+// order.
 
 pub(super) fn resize_with_plan_into(
     source: ImageView<'_, Rgba8>,
