@@ -14,9 +14,18 @@ use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
     prod::resize::scalar::{
         area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
+        bicubic::resize_bicubic_rgba8_into as resize_prod_bicubic_rgba8_into,
         bilinear::{
             alignment::ResizeAnchor as ProdBilinearResizeAnchor,
             resize_bilinear_rgba8_into as resize_prod_bilinear_rgba8_into,
+        },
+        convolution::{
+            ResizeAnchor as ProdConvolutionResizeAnchor,
+            SupportPolicy as ProdConvolutionSupportPolicy,
+        },
+        lanczos::{
+            resize_lanczos2_rgba8_into as resize_prod_lanczos2_rgba8_into,
+            resize_lanczos3_rgba8_into as resize_prod_lanczos3_rgba8_into,
         },
         nearest::{
             alignment::ResizeAnchor as ProdNearestResizeAnchor,
@@ -88,6 +97,20 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "crates/ditherette-wasm/src/spec/resize/scalar/bicubic.rs",
             resize_bicubic_scale_aware_subject,
         ),
+        resize_subject_with_oracle(
+            "prod:resize:bicubic:catmull-rom",
+            "prod bicubic Catmull-Rom",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bicubic.rs",
+            resize_prod_bicubic_fixed_subject,
+            Some("spec:resize:bicubic:catmull-rom"),
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:bicubic:catmull-rom-scale-aware",
+            "prod bicubic Catmull-Rom scale-aware",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bicubic.rs",
+            resize_prod_bicubic_scale_aware_subject,
+            Some("spec:resize:bicubic:catmull-rom-scale-aware"),
+        ),
         resize_subject(
             "spec:resize:lanczos2:fixed",
             "spec Lanczos2 fixed support",
@@ -100,6 +123,20 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "crates/ditherette-wasm/src/spec/resize/scalar/lanczos.rs",
             resize_lanczos2_scale_aware_subject,
         ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos2:fixed",
+            "prod Lanczos2 fixed support",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos2_fixed_subject,
+            Some("spec:resize:lanczos2:fixed"),
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos2:scale-aware",
+            "prod Lanczos2 scale-aware",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos2_scale_aware_subject,
+            Some("spec:resize:lanczos2:scale-aware"),
+        ),
         resize_subject(
             "spec:resize:lanczos3:fixed",
             "spec Lanczos3 fixed support",
@@ -111,6 +148,20 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "spec Lanczos3 scale-aware",
             "crates/ditherette-wasm/src/spec/resize/scalar/lanczos.rs",
             resize_lanczos3_scale_aware_subject,
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos3:fixed",
+            "prod Lanczos3 fixed support",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos3_fixed_subject,
+            Some("spec:resize:lanczos3:fixed"),
+        ),
+        resize_subject_with_oracle(
+            "prod:resize:lanczos3:scale-aware",
+            "prod Lanczos3 scale-aware",
+            "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+            resize_prod_lanczos3_scale_aware_subject,
+            Some("spec:resize:lanczos3:scale-aware"),
         ),
         resize_subject(
             "spec:resize:trilinear:mip-area",
@@ -128,20 +179,57 @@ fn resize_subject(
     resize_u8_rgba: ResizeU8RgbaFn,
 ) -> BenchSubject {
     let id = SubjectId::parse(id).expect("hard-coded subject ID should be valid");
+    let default_oracle = if id.module() == "spec" {
+        None
+    } else {
+        Some(
+            SubjectId::parse(format!("spec:{}:{}:scalar", id.domain(), id.filter()))
+                .expect("constructed default oracle should be valid"),
+        )
+    };
+    resize_subject_from_id(
+        id,
+        display_name,
+        source_file,
+        resize_u8_rgba,
+        default_oracle,
+    )
+}
+
+fn resize_subject_with_oracle(
+    id: &str,
+    display_name: &str,
+    source_file: &str,
+    resize_u8_rgba: ResizeU8RgbaFn,
+    default_oracle: Option<&str>,
+) -> BenchSubject {
+    let id = SubjectId::parse(id).expect("hard-coded subject ID should be valid");
+    let default_oracle = default_oracle.map(|oracle| {
+        SubjectId::parse(oracle).expect("hard-coded oracle subject ID should be valid")
+    });
+    resize_subject_from_id(
+        id,
+        display_name,
+        source_file,
+        resize_u8_rgba,
+        default_oracle,
+    )
+}
+
+fn resize_subject_from_id(
+    id: SubjectId,
+    display_name: &str,
+    source_file: &str,
+    resize_u8_rgba: ResizeU8RgbaFn,
+    default_oracle: Option<SubjectId>,
+) -> BenchSubject {
     BenchSubject::Resize(ResizeBenchSubject {
         descriptor: SubjectDescriptor {
-            id: id.clone(),
+            id,
             display_name: display_name.to_owned(),
             source_file: source_file.to_owned(),
             source_line: 1,
-            default_oracle: if id.module() == "spec" {
-                None
-            } else {
-                Some(
-                    SubjectId::parse(format!("spec:{}:{}:scalar", id.domain(), id.filter()))
-                        .expect("constructed default oracle should be valid"),
-                )
-            },
+            default_oracle,
             capabilities: SubjectCapabilities {
                 pixel_formats: vec![PixelFormat::Rgba8],
                 ..SubjectCapabilities::rgba8_packed()
@@ -228,6 +316,36 @@ fn resize_bicubic_scale_aware_subject(
     })
 }
 
+fn resize_prod_bicubic_fixed_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_bicubic_rgba8_into(
+            source,
+            output,
+            prod_convolution_anchor(params),
+            ProdConvolutionSupportPolicy::Fixed,
+        );
+    })
+}
+
+fn resize_prod_bicubic_scale_aware_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_bicubic_rgba8_into(
+            source,
+            output,
+            prod_convolution_anchor(params),
+            ProdConvolutionSupportPolicy::ScaleAware,
+        );
+    })
+}
+
 fn resize_lanczos2_fixed_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
@@ -248,6 +366,36 @@ fn resize_lanczos2_scale_aware_subject(
     })
 }
 
+fn resize_prod_lanczos2_fixed_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_lanczos2_rgba8_into(
+            source,
+            output,
+            prod_convolution_anchor(params),
+            ProdConvolutionSupportPolicy::Fixed,
+        );
+    })
+}
+
+fn resize_prod_lanczos2_scale_aware_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_lanczos2_rgba8_into(
+            source,
+            output,
+            prod_convolution_anchor(params),
+            ProdConvolutionSupportPolicy::ScaleAware,
+        );
+    })
+}
+
 fn resize_lanczos3_fixed_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
@@ -265,6 +413,36 @@ fn resize_lanczos3_scale_aware_subject(
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
         resize_lanczos3_into(source, output, anchor(params), SupportPolicy::ScaleAware);
+    })
+}
+
+fn resize_prod_lanczos3_fixed_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_lanczos3_rgba8_into(
+            source,
+            output,
+            prod_convolution_anchor(params),
+            ProdConvolutionSupportPolicy::Fixed,
+        );
+    })
+}
+
+fn resize_prod_lanczos3_scale_aware_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_prod_lanczos3_rgba8_into(
+            source,
+            output,
+            prod_convolution_anchor(params),
+            ProdConvolutionSupportPolicy::ScaleAware,
+        );
     })
 }
 
@@ -334,6 +512,24 @@ fn prod_bilinear_anchor(params: &ResizeParams) -> ProdBilinearResizeAnchor {
         ditherette_bench_api::ResizeAnchorParam::Bottom => ProdBilinearResizeAnchor::Bottom,
         ditherette_bench_api::ResizeAnchorParam::BottomRight => {
             ProdBilinearResizeAnchor::BottomRight
+        }
+    }
+}
+
+fn prod_convolution_anchor(params: &ResizeParams) -> ProdConvolutionResizeAnchor {
+    match params.anchor {
+        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdConvolutionResizeAnchor::TopLeft,
+        ditherette_bench_api::ResizeAnchorParam::Top => ProdConvolutionResizeAnchor::Top,
+        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdConvolutionResizeAnchor::TopRight,
+        ditherette_bench_api::ResizeAnchorParam::Left => ProdConvolutionResizeAnchor::Left,
+        ditherette_bench_api::ResizeAnchorParam::Center => ProdConvolutionResizeAnchor::Center,
+        ditherette_bench_api::ResizeAnchorParam::Right => ProdConvolutionResizeAnchor::Right,
+        ditherette_bench_api::ResizeAnchorParam::BottomLeft => {
+            ProdConvolutionResizeAnchor::BottomLeft
+        }
+        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdConvolutionResizeAnchor::Bottom,
+        ditherette_bench_api::ResizeAnchorParam::BottomRight => {
+            ProdConvolutionResizeAnchor::BottomRight
         }
     }
 }
