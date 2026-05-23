@@ -30,14 +30,15 @@ use super::{
 // REJECT(perf): Narrowing tap weights to f32 failed exact
 // `prod_resize_convolution` outputs for bicubic, Lanczos2, and Lanczos3 before
 // benchmarking; keep f64 tap weights while exact unit coverage remains.
-// TODO(perf:layout, rank=13): Test compact tap storage such as `u32` offsets
-// now convolution benchmark profiles use bounded correctness. Benchmark all six
-// convolution profiles.
-// TODO(perf:layout, rank=23, after perf:layout convolution-compact-taps): Retest
-// pre-normalized per-axis f32 weights or per-output reciprocals under bounded
-// convolution correctness. The exact-oracle denominator cache was rejected for
-// rounding, but bounded profiles materially change the acceptance condition;
-// benchmark all six convolution profiles.
+// REJECT(perf): Narrowing tap indices to u32 kept correctness and improved
+// Lanczos profiles, but regressed bicubic scale-aware and several bicubic cases
+// in `ditherette-bench run bicubic*`; keep usize tap indices.
+// CLOSE(perf): Compact tap storage attempts either failed exact unit coverage or
+// regressed representative bicubic/convolution profiles; keep nested usize/f64
+// taps until a different parent layout exists.
+// CLOSE(perf): Pre-normalized per-axis f32 weights or per-output reciprocals
+// depended on compact tap storage and relaxed precision; compact layout is
+// rejected, and f32 tap weights fail exact unit coverage.
 
 /// Reusable convolution resize metadata for one source/output shape and kernel.
 pub struct ConvolutionResizePlan {
