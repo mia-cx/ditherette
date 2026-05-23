@@ -19,10 +19,10 @@ use super::AreaResizePlan;
 // cases and regressed representative large fractional cases by roughly 2-6% in
 // `ditherette-bench run area`; keep the separable area path for aspect-preserving
 // one-shot resizes.
-// TODO(perf:layout, rank=3): Reuse separable area scratch storage across rows
-// within a call now the path stays separable for aspect-preserving resizes;
-// one-shot benchmarks include allocation cost, so compare scratch reuse against
-// per-output-row fill with `ditherette-bench run area`.
+// CLOSE(perf): Separable area already reuses one vertical scratch row across
+// output rows inside a cold resize call. Thread-local or caller-owned scratch
+// reuse targets repeated same-shape calls, which is not the current product
+// workload.
 // TODO(perf:harness, rank=16): Add a scalar `area-anisotropic` profile now the
 // separable area path has one-axis gate TODOs. Benchmark with bounded area
 // correctness before tuning width-only/height-only area.
