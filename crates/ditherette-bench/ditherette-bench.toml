@@ -67,11 +67,6 @@ oracle = "spec:resize:bilinear:scalar"
 correctness = "bounded"
 scale_group = ["partial", "identity", "bilinear-anisotropic"]
 
-# ACCEPT(perf): Production convolution filters may use bounded color-distance
-# correctness, which unlocks f32 accumulation, normalized weights, compact taps,
-# and approximate path experiments against the six convolution profiles below.
-# ACCEPT(perf): `convolution-anisotropic` covers identity-axis width-only and
-# height-only diagnostic cases for convolution path-split experiments.
 [profiles.bicubic]
 command = "perf"
 domain = "resize"
