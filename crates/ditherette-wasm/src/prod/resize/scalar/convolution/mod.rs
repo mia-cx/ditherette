@@ -24,16 +24,16 @@ pub use plan::ConvolutionResizePlan;
 // correctness/profile coverage -> one-shot vs cached-plan API -> direct vs
 // separable path choice -> tap layout/weight metadata -> fixed-support kernels
 // -> arithmetic micro-tuning.
-// DEFER(perf): Cached-plan convolution benchmarking needs a manifest profile
-// that isolates repeated same-dimension plan reuse; the current six convolution
-// profiles measure the one-shot public path, so do not tune cached-plan API here.
+// TODO(perf:api, rank=3): Use the cached-plan convolution profiles to tune
+// repeated same-dimension plan reuse separately from the one-shot public path.
+// Benchmark all six `*-cached-plan` profiles.
 // REJECT(perf): Splitting Lanczos3 through a y-then-x scratch row preserved
 // bounded correctness but regressed `ditherette-bench run lanczos3` by roughly
 // 30-38%; keep the direct 2D convolution path until a cheaper reuse strategy is
 // benchmarked.
-// DEFER(perf): Width-only/height-only convolution specialization needs a
-// dedicated anisotropic benchmark profile first; the current six profiles do
-// not isolate identity-axis resizes, so a path change would be unmeasured.
+// TODO(perf:path, rank=9): Specialize width-only and height-only convolution
+// resizes if the `*-anisotropic` profiles show that skipping one identity axis
+// beats the generic direct path.
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with a separable kernel.
 pub fn resize_convolution_rgba8_into<K>(
