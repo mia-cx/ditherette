@@ -15,13 +15,10 @@ use super::{
     },
 };
 
-// REJECT(perf): Adding an identity-only path was not represented in the default
-// `nearest` profile and regressed/noised small cases by up to -9.67% in
+// ACCEPT(perf): Identity pass-through is now represented in the default
+// `nearest` profile and one-shot public subject; copying directly improved
+// identity cases by roughly 75-180% with other cases neutral/noisy in
 // `ditherette-bench run nearest`.
-// TODO(perf:path, rank=6): Retest nearest identity pass-through now identity
-// scales are represented and prod subjects measure one-shot public APIs; the old
-// rejection's benchmark conditions no longer hold. Verify exact nearest oracle,
-// then benchmark `ditherette-bench run nearest`.
 // REJECT(perf): A generic exact-upscale span-fill path regressed 2x by -21.03%
 // in `ditherette-bench run nearest`; wider upscale gains do
 // not justify hurting the common 2x case.
