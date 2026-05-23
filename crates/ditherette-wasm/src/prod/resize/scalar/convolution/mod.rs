@@ -23,13 +23,21 @@ pub use plan::ConvolutionResizePlan;
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with a separable kernel.
 pub fn resize_convolution_rgba8_into<K>(
     source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
     anchor: ResizeAnchor,
     kernel: K,
     support_policy: SupportPolicy,
 ) where
     K: ReconstructionKernel,
 {
+    common::rgba8::assert_packed_source(source, "convolution");
+    common::rgba8::assert_packed_output(&output, "convolution");
+
+    if source.dimensions() == output.dimensions() {
+        output.data_mut().copy_from_slice(source.data());
+        return;
+    }
+
     let plan = ConvolutionResizePlan::new(
         source.dimensions(),
         output.dimensions(),
@@ -37,7 +45,7 @@ pub fn resize_convolution_rgba8_into<K>(
         &kernel,
         support_policy,
     );
-    resize_convolution_rgba8_with_plan_into(source, output, &plan);
+    kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, &plan);
 }
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached convolution metadata.
