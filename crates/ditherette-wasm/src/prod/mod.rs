@@ -4,3 +4,4 @@
 //! spec formulas to preserve independence, but it must not import `crate::spec`.
 
 pub mod resize;
+pub mod tiling;
