@@ -1,7 +1,9 @@
 # Production resize rules
 
 This directory contains optimized internal resize kernels. These rules are kept
-here so they are visible while grepping or editing prod resize code.
+here so they are visible while grepping or editing prod resize code. See
+[`PERFORMANCE.md`](./PERFORMANCE.md) for the benchmark-driven optimization
+playbook.
 
 ## Packed RGBA8 is the prod boundary
 
