@@ -54,6 +54,14 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
     });
 }
 
+// TODO(perf:kernel, rank=2, after perf:layout bilinear-normalized-f32-plan):
+// Remove per-output-pixel x/y weight summing and division after the plan stores
+// normalized f32 axis weights. Verify bounded correctness, then benchmark
+// `ditherette-bench run bilinear`.
+// TODO(perf:path, rank=3, after perf:layout bilinear-normalized-f32-plan):
+// Specialize width-only and height-only resizes so anisotropic identity-axis
+// cases skip the unnecessary separable scratch/gather pass. Verify bounded
+// correctness, then benchmark `ditherette-bench run bilinear`.
 // NOTE(perf): This path intentionally uses f32 scratch accumulation. A f64
 // separable scratch row is closer to the direct oracle but materially slower;
 // the benchmark profile enforces bounded color-distance correctness for the

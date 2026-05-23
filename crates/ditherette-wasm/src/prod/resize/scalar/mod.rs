@@ -86,10 +86,10 @@
 // DEFER(perf): Native row-band/tiled bilinear should be a separate subject and
 // profile, not folded into scalar. Register it only when the production tiling
 // module owns row-band execution and can be accepted independently from scalar.
-// CLOSE(perf): Do not port the old normalized
-// `AxisContribution { first, weights }` plan as a standalone perf task. The
-// current plan owns reusable taps; separable execution is now local to the
-// single scalar production kernel.
+// NOTE(perf): The old normalized `AxisContribution { first, weights }` plan was
+// previously closed as a standalone exact-profile task. The bounded/separable
+// contract materially changes that condition; current retest TODOs live with the
+// bilinear plan/kernel code.
 // DEFER(perf): Row-band cutoff sweeps require the deferred tiled bilinear
 // subject; scalar perf-loop cannot judge dynamic tiling thresholds.
 // REJECT(perf): Do not port old unrolled separable RGBA loops as-is. The
