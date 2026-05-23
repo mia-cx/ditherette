@@ -35,9 +35,10 @@ use super::AreaResizePlan;
 // preserved bounded correctness but regressed near-identity and upscale cases by
 // roughly 40-45% in `ditherette-bench run area`; keep the compact generic
 // accumulation loops.
-// TODO(perf:kernel, rank=4): If area remains hot, test only a two-overlap span
-// specialization for fractional downscales. Verify bounded area correctness,
-// then benchmark `ditherette-bench run area`.
+// REJECT(perf): Specializing two-overlap horizontal area spans preserved bounded
+// correctness but regressed fractional downscales and near-identity cases by
+// roughly 30-48% in `ditherette-bench run area`; keep the compact generic
+// horizontal loop.
 // TODO(perf:micro, rank=5, after perf:kernel fractional-area-separable-spans):
 // If the separable path is accepted, test pre-normalized f32 axis weights or a
 // precomputed reciprocal area inside that path only. This retests closed weight
