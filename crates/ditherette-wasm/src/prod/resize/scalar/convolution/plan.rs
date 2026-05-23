@@ -27,9 +27,12 @@ use super::{
 // REJECT(perf): Coalescing duplicate clamped edge taps during planning changed
 // contribution grouping enough to fail exact `prod_resize_convolution` outputs
 // for bicubic, Lanczos2, and Lanczos3 before benchmarking.
+// REJECT(perf): Narrowing tap weights to f32 failed exact
+// `prod_resize_convolution` outputs for bicubic, Lanczos2, and Lanczos3 before
+// benchmarking; keep f64 tap weights while exact unit coverage remains.
 // TODO(perf:layout, rank=13): Test compact tap storage such as `u32` offsets
-// plus `f32` weights/reciprocals now convolution benchmark profiles use bounded
-// correctness. Benchmark all six convolution profiles.
+// now convolution benchmark profiles use bounded correctness. Benchmark all six
+// convolution profiles.
 // TODO(perf:layout, rank=23, after perf:layout convolution-compact-taps): Retest
 // pre-normalized per-axis f32 weights or per-output reciprocals under bounded
 // convolution correctness. The exact-oracle denominator cache was rejected for
