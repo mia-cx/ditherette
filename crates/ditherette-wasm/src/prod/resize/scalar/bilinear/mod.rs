@@ -19,19 +19,18 @@ use alignment::ResizeAnchor;
 pub use plan::BilinearResizePlan;
 
 // Current-code bilinear perf-search dependency map:
-// harness shape -> cold/hot API coverage -> tap layout -> exact path splits ->
-// kernel/local arithmetic. The exact profile currently judges hot reused-plan
-// uniform-scale RGBA8 resizes only.
+// harness shape -> one-shot API coverage -> tap layout -> exact path splits ->
+// kernel/local arithmetic.
 // NOTE(perf): The bench result/baseline model now distinguishes anisotropic
 // scale pairs, and the `bilinear` manifest profile includes width-only and
-// height-only cases. Exact correctness passed for the expanded matrix in
+// height-only cases. Bounded correctness passed for the expanded matrix in
 // `ditherette-bench run bilinear`.
-// NOTE(perf): `prod:resize:bilinear:cold` and the `bilinear-cold` manifest
-// profile measure `resize_bilinear_rgba8_into` plan construction plus execution
-// so uncached API-path changes have coverage outside the hot reused-plan profile.
+// NOTE(perf): `prod:resize:bilinear:scalar` measures
+// `resize_bilinear_rgba8_into` plan construction plus execution because the app
+// performs one-shot resizes rather than repeated resizes with cached dimensions.
 // NOTE(perf): `resize_bilinear_rgba8_into` checks same-size output before
-// building `BilinearResizePlan`; `bilinear-cold` showed identity cases improve
-// while represented non-identity cases stayed within noise.
+// building `BilinearResizePlan`; the one-shot benchmark covers that API-path
+// optimization directly.
 // NOTE(perf): Packed RGBA8 assertions are debug-only tripwires, so splitting
 // them out of the release hot path has no benchmarkable upside under `run
 // bilinear`; keep validation at the public prod entrypoints.

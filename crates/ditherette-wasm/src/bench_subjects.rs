@@ -4,8 +4,6 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
-use std::cell::RefCell;
-
 use ditherette_bench_api::{
     BenchSubject, BenchSubjectError, ParamSchema, PixelFormat, ResizeBenchSubject,
     ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams, ResizeU8RgbaFn, SubjectCapabilities,
@@ -15,20 +13,14 @@ use ditherette_bench_api::{
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
     prod::resize::scalar::{
-        area::{
-            resize_area_rgba8_with_plan_into as resize_prod_area_rgba8_with_plan_into,
-            AreaResizePlan,
-        },
+        area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
         bilinear::{
             alignment::ResizeAnchor as ProdBilinearResizeAnchor,
             resize_bilinear_rgba8_into as resize_prod_bilinear_rgba8_into,
-            resize_bilinear_rgba8_with_plan_into as resize_prod_bilinear_rgba8_with_plan_into,
-            BilinearResizePlan,
         },
         nearest::{
             alignment::ResizeAnchor as ProdNearestResizeAnchor,
-            resize_nearest_rgba8_with_plan_into as resize_prod_nearest_rgba8_with_plan_into,
-            NearestResizePlan,
+            resize_nearest_rgba8_into as resize_prod_nearest_rgba8_into,
         },
     },
     spec::resize::{
@@ -83,12 +75,6 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "prod bilinear scalar",
             "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
             resize_prod_bilinear_subject,
-        ),
-        resize_subject(
-            "prod:resize:bilinear:cold",
-            "prod bilinear cold",
-            "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
-            resize_prod_bilinear_cold_subject,
         ),
         resize_subject(
             "spec:resize:bicubic:catmull-rom",
@@ -176,32 +162,13 @@ fn resize_nearest_subject(
     })
 }
 
-thread_local! {
-    static PROD_NEAREST_PLAN: RefCell<Option<NearestResizePlan>> = const { RefCell::new(None) };
-}
-
 fn resize_prod_nearest_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        let anchor = prod_nearest_anchor(params);
-        PROD_NEAREST_PLAN.with_borrow_mut(|cached| {
-            if !cached
-                .as_ref()
-                .is_some_and(|plan| plan.matches(source.dimensions(), output.dimensions(), anchor))
-            {
-                *cached = Some(NearestResizePlan::new(
-                    source.dimensions(),
-                    output.dimensions(),
-                    anchor,
-                ));
-            }
-
-            let plan = cached.as_ref().expect("nearest plan should be initialized");
-            resize_prod_nearest_rgba8_with_plan_into(source, output, plan);
-        });
+        resize_prod_nearest_rgba8_into(source, output, prod_nearest_anchor(params));
     })
 }
 
@@ -213,31 +180,12 @@ fn resize_area_subject(
     with_views(input, output, resize_area_into::<Rgba8>)
 }
 
-thread_local! {
-    static PROD_AREA_PLAN: RefCell<Option<AreaResizePlan>> = const { RefCell::new(None) };
-}
-
 fn resize_prod_area_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
     _params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
-    with_views(input, output, |source, output| {
-        PROD_AREA_PLAN.with_borrow_mut(|cached| {
-            if !cached
-                .as_ref()
-                .is_some_and(|plan| plan.matches(source.dimensions(), output.dimensions()))
-            {
-                *cached = Some(AreaResizePlan::new(
-                    source.dimensions(),
-                    output.dimensions(),
-                ));
-            }
-
-            let plan = cached.as_ref().expect("area plan should be initialized");
-            resize_prod_area_rgba8_with_plan_into(source, output, plan);
-        });
-    })
+    with_views(input, output, resize_prod_area_rgba8_into)
 }
 
 fn resize_bilinear_subject(
@@ -250,38 +198,7 @@ fn resize_bilinear_subject(
     })
 }
 
-thread_local! {
-    static PROD_BILINEAR_PLAN: RefCell<Option<BilinearResizePlan>> = const { RefCell::new(None) };
-}
-
 fn resize_prod_bilinear_subject(
-    input: ResizeInputU8Rgba<'_>,
-    output: ResizeOutputU8Rgba<'_>,
-    params: &ResizeParams,
-) -> Result<(), BenchSubjectError> {
-    with_views(input, output, |source, output| {
-        let anchor = prod_bilinear_anchor(params);
-        PROD_BILINEAR_PLAN.with_borrow_mut(|cached| {
-            if !cached
-                .as_ref()
-                .is_some_and(|plan| plan.matches(source.dimensions(), output.dimensions(), anchor))
-            {
-                *cached = Some(BilinearResizePlan::new(
-                    source.dimensions(),
-                    output.dimensions(),
-                    anchor,
-                ));
-            }
-
-            let plan = cached
-                .as_ref()
-                .expect("bilinear plan should be initialized");
-            resize_prod_bilinear_rgba8_with_plan_into(source, output, plan);
-        });
-    })
-}
-
-fn resize_prod_bilinear_cold_subject(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
     params: &ResizeParams,
