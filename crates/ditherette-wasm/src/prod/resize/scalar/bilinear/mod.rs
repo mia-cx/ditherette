@@ -28,6 +28,10 @@ pub use plan::BilinearResizePlan;
 // NOTE(perf): `prod:resize:bilinear:scalar` measures
 // `resize_bilinear_rgba8_into` plan construction plus execution because the app
 // performs one-shot resizes rather than repeated resizes with cached dimensions.
+// TODO(perf:api, rank=22, after perf:harness bilinear-cached-plan-profile): If
+// repeated same-dimension bilinear resizes become product-representative, tune
+// caller-owned `BilinearResizePlan` reuse separately from one-shot API cost.
+// Benchmark with `ditherette-bench run bilinear-cached-plan`.
 // NOTE(perf): `resize_bilinear_rgba8_into` checks same-size output before
 // building `BilinearResizePlan`; the one-shot benchmark covers that API-path
 // optimization directly.

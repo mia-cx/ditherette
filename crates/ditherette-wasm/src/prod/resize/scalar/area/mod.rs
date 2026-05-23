@@ -24,6 +24,10 @@ pub use plan::AreaResizePlan;
 // minification cases by -5.08%/-8.81% in `ditherette-bench run area`. Introduce
 // a plan only with layout metadata that removes hot-loop
 // work, not as an API-only wrapper.
+// TODO(perf:api, rank=20, after perf:harness area-cached-plan-profile): Retest
+// cached area plans now `AreaResizePlan` owns x/y overlap spans instead of only
+// dimensions and scale factors. Benchmark `ditherette-bench run area-cached-plan`
+// against bounded area correctness.
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with production area averaging.
 ///

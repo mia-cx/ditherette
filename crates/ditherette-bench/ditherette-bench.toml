@@ -31,6 +31,21 @@ max_rms_color_distance = 0.5
 baseline = "accepted"
 live_stats = true
 
+[profiles.all]
+command = "perf"
+domain = "resize"
+subjects = [
+  "prod:resize:nearest:scalar",
+  "prod:resize:area:scalar",
+  "prod:resize:bilinear:scalar",
+  "prod:resize:bicubic:catmull-rom",
+  "prod:resize:bicubic:catmull-rom-scale-aware",
+  "prod:resize:lanczos2:fixed",
+  "prod:resize:lanczos2:scale-aware",
+  "prod:resize:lanczos3:fixed",
+  "prod:resize:lanczos3:scale-aware"
+]
+
 [profiles.nearest]
 command = "perf"
 domain = "resize"
@@ -38,11 +53,21 @@ subjects = ["prod:resize:nearest:scalar"]
 oracle = "spec:resize:nearest:scalar"
 correctness = "exact"
 
+# TODO(perf:harness, rank=15): Add a scalar nearest anisotropic profile before
+# testing width-only or height-only nearest path splits; use exact correctness
+# and manifest fixtures so same-width/same-height row-copy ideas are represented
+# separately from `ditherette-bench run nearest`.
+
 [profiles.area]
 command = "perf"
 domain = "resize"
 subjects = ["prod:resize:area:scalar"]
 oracle = "spec:resize:area:scalar"
+
+# TODO(perf:harness, rank=16): Add scalar `area-cached-plan` and
+# `area-anisotropic` profiles now `AreaResizePlan` stores overlap spans and the
+# separable area path has one-axis gate TODOs. Benchmark with bounded area
+# correctness before tuning cached-plan ownership or width-only/height-only area.
 
 [profiles.bilinear]
 command = "perf"
@@ -51,6 +76,11 @@ subjects = ["prod:resize:bilinear:scalar"]
 oracle = "spec:resize:bilinear:scalar"
 correctness = "bounded"
 scale_group = ["partial", "identity", "bilinear-anisotropic"]
+
+# TODO(perf:harness, rank=17): Add a scalar `bilinear-cached-plan` profile only
+# for repeated same-dimension resizes; the existing `bilinear` profile measures
+# one-shot public API cost, so cached-plan work needs a separate subject before
+# changing plan ownership or scratch reuse.
 
 # ACCEPT(perf): Production convolution filters may use bounded color-distance
 # correctness, which unlocks f32 accumulation, normalized weights, compact taps,
