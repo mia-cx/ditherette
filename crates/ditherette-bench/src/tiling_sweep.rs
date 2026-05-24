@@ -339,11 +339,7 @@ fn default_worker_counts() -> Vec<u32> {
         .map(|count| count.get() as u32)
         .unwrap_or(1)
         .max(1);
-    let mut counts = vec![1, 2, 3, 4, 6, 8, available];
-    counts.retain(|count| *count <= available.max(2));
-    counts.sort_unstable();
-    counts.dedup();
-    counts
+    (1..=available.min(8).max(1)).collect()
 }
 
 fn effective_band_height(band_height: u32, output_height: u32) -> u32 {
