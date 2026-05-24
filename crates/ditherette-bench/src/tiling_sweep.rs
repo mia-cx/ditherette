@@ -42,6 +42,7 @@ const DEFAULT_FILTERS: [&str; 9] = [
 const DEFAULT_FIXTURES: &str = "Celeste_Insta_selfie,Celeste_box_art";
 const DEFAULT_SAMPLES: usize = 7;
 const DEFAULT_WARMUP: usize = 2;
+const DEFAULT_MIN_BAND_HEIGHT: u32 = 32;
 const MAX_DIMENSION_CASES_PER_FIXTURE: usize = 26;
 const BALANCED_CHUNKS_PER_WORKER: [u32; 6] = [1, 2, 3, 4, 6, 8];
 const EPSILON: f64 = 0.000_001;
@@ -65,7 +66,13 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
             .iter()
             .flatten()
             .map(|output| {
-                tiling_candidates(output.1, &options.band_heights, &options.worker_counts).len()
+                tiling_candidates(
+                    output.1,
+                    &options.band_heights,
+                    &options.worker_counts,
+                    options.min_band_height,
+                )
+                .len()
             })
             .sum::<usize>();
     eprintln!(
@@ -96,9 +103,12 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                 let worker_budget = ditherette_wasm::prod::tiling::WorkerBudget::new(
                     options.worker_counts.iter().copied().max().unwrap_or(1),
                 );
-                for (band_height, worker_count) in
-                    tiling_candidates(output.1, &options.band_heights, &options.worker_counts)
-                {
+                for (band_height, worker_count) in tiling_candidates(
+                    output.1,
+                    &options.band_heights,
+                    &options.worker_counts,
+                    options.min_band_height,
+                ) {
                     let actual_band_height = effective_band_height(band_height, output.1);
                     let band_count = output.1.div_ceil(actual_band_height);
                     case_index += 1;
@@ -196,6 +206,7 @@ struct SweepOptions {
     filters: Vec<String>,
     band_heights: Vec<u32>,
     worker_counts: Vec<u32>,
+    min_band_height: u32,
     samples: usize,
     warmup_iterations: usize,
     max_cases_per_fixture: usize,
@@ -222,6 +233,11 @@ impl SweepOptions {
                 .map(parse_worker_counts)
                 .transpose()?
                 .unwrap_or_else(default_worker_counts),
+            min_band_height: flags
+                .optional("--min-band-height")
+                .map(parse_u32)
+                .transpose()?
+                .unwrap_or(DEFAULT_MIN_BAND_HEIGHT),
             samples: flags
                 .optional("--sample-size")
                 .or_else(|| flags.optional("--samples"))
@@ -340,9 +356,6 @@ fn dimension_scales() -> Vec<f64> {
 
 fn default_band_heights() -> Vec<u32> {
     vec![
-        8,
-        16,
-        24,
         32,
         48,
         64,
@@ -373,13 +386,19 @@ fn tiling_candidates(
     output_height: u32,
     fixed_band_heights: &[u32],
     worker_counts: &[u32],
+    min_band_height: u32,
 ) -> Vec<(u32, u32)> {
     let budget = ditherette_wasm::prod::tiling::WorkerBudget::new(
         worker_counts.iter().copied().max().unwrap_or(1),
     );
     let mut candidates = Vec::new();
 
+    let min_band_height = min_band_height.max(1).min(output_height);
+
     for &band_height in fixed_band_heights {
+        if effective_band_height(band_height, output_height) < min_band_height {
+            continue;
+        }
         let band_count = output_height.div_ceil(effective_band_height(band_height, output_height));
         candidates.extend(
             worker_counts
@@ -398,7 +417,9 @@ fn tiling_candidates(
             let target_band_count = worker_count
                 .saturating_mul(chunks_per_worker)
                 .clamp(1, output_height);
-            let band_height = output_height.div_ceil(target_band_count).max(1);
+            let band_height = output_height
+                .div_ceil(target_band_count)
+                .max(min_band_height);
             let band_count = output_height.div_ceil(band_height);
             if budget.can_use_workers(worker_count, band_count) {
                 candidates.push((band_height, worker_count));
@@ -1160,6 +1181,12 @@ fn parse_band_heights(value: &str) -> Result<Vec<u32>, BenchError> {
             })
         })
         .collect()
+}
+
+fn parse_u32(value: &str) -> Result<u32, BenchError> {
+    value
+        .parse::<u32>()
+        .map_err(|error| BenchError::Config(format!("invalid integer {value:?}: {error}")))
 }
 
 fn parse_worker_counts(value: &str) -> Result<Vec<u32>, BenchError> {
