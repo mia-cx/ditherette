@@ -5,7 +5,12 @@
 
 use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 
-use super::plan::{AxisTap, ConvolutionResizePlan};
+use super::{
+    filter::SupportPolicy,
+    plan::{AxisTap, ConvolutionResizePlan},
+};
+
+const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
 
 // CLOSE(perf): Scratch ownership tuning depended on a winning separable path;
 // the tested Lanczos3 y-then-x scratch row preserved bounded correctness but
@@ -65,6 +70,18 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
         return;
     }
 
+    if should_use_x_then_y(plan) {
+        resize_x_then_y_into(
+            source_data,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            &plan.x_taps,
+            &plan.y_taps,
+        );
+        return;
+    }
+
     for (output_row, y_taps) in output
         .data_mut()
         .chunks_exact_mut(output_row_byte_len)
@@ -83,6 +100,98 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
             );
         }
     }
+}
+
+fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
+    let source_dimensions = plan.source_dimensions();
+    plan.support_policy() == SupportPolicy::ScaleAware
+        && source_dimensions.width() > plan.output_dimensions().width()
+        && u64::from(source_dimensions.width()) * u64::from(source_dimensions.height())
+            >= X_THEN_Y_MIN_SOURCE_PIXELS
+}
+
+fn resize_x_then_y_into(
+    source: &[u8],
+    output: &mut [u8],
+    source_row_byte_len: usize,
+    output_row_byte_len: usize,
+    x_taps_by_output: &[Vec<AxisTap>],
+    y_taps_by_output: &[Vec<AxisTap>],
+) {
+    let source_height = source.len() / source_row_byte_len;
+    let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
+    let scratch_row_len = output_row_byte_len;
+    let mut scratch = vec![0.0; source_height * scratch_row_len];
+
+    for (source_row, scratch_row) in source
+        .chunks_exact(source_row_byte_len)
+        .zip(scratch.chunks_exact_mut(scratch_row_len))
+    {
+        for (scratch_pixel, x_taps) in scratch_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .zip(x_taps_by_output)
+        {
+            write_horizontal_scratch_pixel(scratch_pixel, source_row, x_taps);
+        }
+    }
+
+    for (output_row, y_taps) in output
+        .chunks_exact_mut(output_row_byte_len)
+        .zip(y_taps_by_output)
+    {
+        for output_x in 0..output_width {
+            let output_start = output_x * rgba8::RGBA8_CHANNELS;
+            write_vertical_scratch_pixel(
+                &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS],
+                &scratch,
+                scratch_row_len,
+                output_start,
+                y_taps,
+            );
+        }
+    }
+}
+
+fn write_horizontal_scratch_pixel(output_pixel: &mut [f64], source_row: &[u8], x_taps: &[AxisTap]) {
+    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut total_weight = 0.0;
+
+    for x_tap in x_taps {
+        let source_start = x_tap.index * rgba8::RGBA8_CHANNELS;
+        let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
+
+        total_weight += x_tap.weight;
+        for channel in 0..rgba8::RGBA8_CHANNELS {
+            accumulated[channel] += f64::from(source_pixel[channel]) * x_tap.weight;
+        }
+    }
+
+    for channel in 0..rgba8::RGBA8_CHANNELS {
+        output_pixel[channel] = accumulated[channel] / total_weight;
+    }
+}
+
+fn write_vertical_scratch_pixel(
+    output_pixel: &mut [u8],
+    scratch: &[f64],
+    scratch_row_len: usize,
+    output_start: usize,
+    y_taps: &[AxisTap],
+) {
+    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut total_weight = 0.0;
+
+    for y_tap in y_taps {
+        let scratch_start = y_tap.index * scratch_row_len + output_start;
+        let scratch_pixel = &scratch[scratch_start..scratch_start + rgba8::RGBA8_CHANNELS];
+
+        total_weight += y_tap.weight;
+        for channel in 0..rgba8::RGBA8_CHANNELS {
+            accumulated[channel] += scratch_pixel[channel] * y_tap.weight;
+        }
+    }
+
+    write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
 fn resize_horizontal_only_into(
