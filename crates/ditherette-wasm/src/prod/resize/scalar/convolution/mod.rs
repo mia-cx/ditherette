@@ -34,10 +34,9 @@ pub use plan::ConvolutionResizePlan;
 // preserves exact small-image tests and bounded benchmark correctness, while
 // improving scale-aware bicubic/Lanczos downscales by roughly 60-86% for square
 // fixtures and up to roughly 645% for strong Lanczos3 minification.
-// TODO(perf:path, rank=28): Test a streaming separable convolution that keeps a
-// small ring of horizontally filtered rows for the active y-tap window, reusing
-// them across neighboring output rows instead of materializing a full scratch
-// image. Verify bounded correctness, then benchmark all six convolution profiles.
+// REJECT(perf): Streaming x-then-y scratch rows preserved bounded correctness
+// but regressed `ditherette-bench run lanczos3-scale-aware` representative
+// downscales by roughly 30-56% versus the accepted full-scratch x-then-y path.
 // ACCEPT(perf): Width-only and height-only convolution resizes now skip the
 // identity axis. Correctness passed, and the `*-anisotropic` convolution
 // profiles improved from small bicubic gains to large Lanczos wins.
