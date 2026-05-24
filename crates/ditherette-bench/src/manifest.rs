@@ -22,7 +22,7 @@ pub(crate) fn expand_command(
     }
 
     let (profile, config_path, args_without_manifest_flags) = extract_manifest_flags(args)?;
-    if profile.is_none() && !matches!(command.as_str(), "perf" | "comp" | "tile") {
+    if profile.is_none() && !matches!(command.as_str(), "perf" | "comp" | "tile" | "tiling-sweep") {
         return Ok(ExpandedCommand {
             command,
             args: args_without_manifest_flags,
@@ -36,15 +36,24 @@ pub(crate) fn expand_command(
     };
 
     let mut expanded = Vec::new();
-    let domain = args_without_manifest_flags.first().cloned();
-    if let Some(domain) = domain {
-        expanded.push(domain);
-    }
+    let skip_positionals = if command_requires_domain(&command) {
+        let domain = args_without_manifest_flags.first().cloned();
+        if let Some(domain) = domain {
+            expanded.push(domain);
+        }
+        1
+    } else {
+        0
+    };
     expanded.extend(manifest.defaults_args()?);
     if let Some(profile) = profile {
         expanded.extend(manifest.profile_args(&profile, false)?.args);
     }
-    expanded.extend(args_without_manifest_flags.into_iter().skip(1));
+    expanded.extend(
+        args_without_manifest_flags
+            .into_iter()
+            .skip(skip_positionals),
+    );
 
     Ok(ExpandedCommand {
         command,
@@ -67,20 +76,29 @@ fn expand_run_command(args: Vec<String>) -> Result<ExpandedCommand, BenchError> 
     })?;
 
     let profile = manifest.profile_args(&profile, true)?;
+    let command = profile
+        .command
+        .ok_or_else(|| BenchError::Config("run profile requires command".to_owned()))?;
     let mut expanded_args = Vec::new();
-    expanded_args.push(profile.domain.ok_or_else(|| {
-        BenchError::Config("run profile requires domain = \"resize\"".to_owned())
-    })?);
+    if command_requires_domain(&command) {
+        expanded_args.push(profile.domain.ok_or_else(|| {
+            BenchError::Config(format!(
+                "run profile for {command:?} requires domain = \"resize\""
+            ))
+        })?);
+    }
     expanded_args.extend(manifest.defaults_args()?);
     expanded_args.extend(profile.args);
     expanded_args.extend(args_without_manifest_flags);
 
     Ok(ExpandedCommand {
-        command: profile.command.ok_or_else(|| {
-            BenchError::Config("run profile requires command = \"perf\"".to_owned())
-        })?,
+        command,
         args: expanded_args,
     })
+}
+
+fn command_requires_domain(command: &str) -> bool {
+    matches!(command, "perf" | "comp" | "tile")
 }
 
 struct BenchManifest {

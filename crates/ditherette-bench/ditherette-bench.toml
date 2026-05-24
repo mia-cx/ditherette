@@ -177,3 +177,83 @@ scale_group = ["convolution-anisotropic"]
 command = "perf"
 domain = "resize"
 subjects = ["spec:resize:trilinear:mip-area"]
+
+[profiles.tiling-sweep]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = [
+  "nearest",
+  "area",
+  "bilinear",
+  "bicubic",
+  "bicubic-scale-aware",
+  "lanczos2",
+  "lanczos2-scale-aware",
+  "lanczos3",
+  "lanczos3-scale-aware"
+]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-nearest]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["nearest"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-area]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["area"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-bilinear]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["bilinear"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-bicubic]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["bicubic"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-bicubic-scale-aware]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["bicubic-scale-aware"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-lanczos2]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos2"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-lanczos2-scale-aware]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos2-scale-aware"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-lanczos3]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos3"]
+sample_size = 7
+warm_up_iterations = 2
+
+[profiles.tiling-sweep-lanczos3-scale-aware]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos3-scale-aware"]
+sample_size = 7
+warm_up_iterations = 2
