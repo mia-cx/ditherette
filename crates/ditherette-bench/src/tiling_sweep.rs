@@ -60,9 +60,11 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
 
     let mut rows = Vec::new();
     let total_cases = subjects.len()
-        * dimensions.iter().map(Vec::len).sum::<usize>()
-        * options.band_heights.len()
-        * options.worker_counts.len();
+        * dimensions
+            .iter()
+            .flatten()
+            .map(|output| worker_band_case_count(*output, &options.band_heights, &options.worker_counts))
+            .sum::<usize>();
     eprintln!(
         "tiling sweep: fixtures={} filters={} dimension_sets={} band_heights={} worker_counts={} cases={} samples={} warmup={}",
         fixtures.len(),
@@ -89,7 +91,12 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                 )?;
 
                 for &band_height in &options.band_heights {
+                    let actual_band_height = effective_band_height(band_height, output.1);
+                    let band_count = output.1.div_ceil(actual_band_height);
                     for &worker_count in &options.worker_counts {
+                        if worker_count > band_count {
+                            continue;
+                        }
                         case_index += 1;
                         let tiled = measure_subject_row_bands(
                             subject,
@@ -101,9 +108,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                             options.samples,
                             options.warmup_iterations,
                         )?;
-                        let actual_band_height = effective_band_height(band_height, output.1);
-                        let band_count = output.1.div_ceil(actual_band_height);
-                        let effective_worker_count = worker_count.min(band_count.max(1));
+                        let effective_worker_count = worker_count;
                         let pixels_per_band =
                             u64::from(output.0) * u64::from(actual_band_height.min(output.1));
                         let speedup = scalar.stats.median_ns / tiled.stats.median_ns;
@@ -340,6 +345,25 @@ fn default_worker_counts() -> Vec<u32> {
         .unwrap_or(1)
         .max(1);
     (1..=available.min(8).max(1)).collect()
+}
+
+fn worker_band_case_count(
+    output_dimensions: (u32, u32),
+    band_heights: &[u32],
+    worker_counts: &[u32],
+) -> usize {
+    band_heights
+        .iter()
+        .map(|&band_height| {
+            let band_count = output_dimensions
+                .1
+                .div_ceil(effective_band_height(band_height, output_dimensions.1));
+            worker_counts
+                .iter()
+                .filter(|&&worker_count| worker_count <= band_count)
+                .count()
+        })
+        .sum()
 }
 
 fn effective_band_height(band_height: u32, output_height: u32) -> u32 {
