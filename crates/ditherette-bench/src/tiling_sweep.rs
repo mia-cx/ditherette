@@ -10,7 +10,7 @@ use std::{
     io::{BufWriter, Write},
     path::{Path, PathBuf},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use ditherette_bench_api::{
@@ -40,7 +40,8 @@ const DEFAULT_FILTERS: [&str; 9] = [
     "lanczos3-scale-aware",
 ];
 const DEFAULT_FIXTURES: &str = "Celeste_Insta_selfie,Celeste_box_art";
-const DEFAULT_SAMPLES: usize = 7;
+const DEFAULT_SAMPLES: usize = 50;
+const DEFAULT_TARGET_SAMPLE_TIME: Duration = Duration::from_millis(1);
 const DEFAULT_WARMUP: usize = 30;
 const DEFAULT_MIN_BAND_HEIGHT: u32 = 32;
 const MAX_DIMENSION_CASES_PER_FIXTURE: usize = 26;
@@ -76,7 +77,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
             })
             .sum::<usize>();
     eprintln!(
-        "tiling sweep: fixtures={} filters={} dimension_sets={} band_heights={} worker_counts={} cases={} samples={} warmup={}",
+        "tiling sweep: fixtures={} filters={} dimension_sets={} band_heights={} worker_counts={} cases={} samples={} target_sample={} warmup={}",
         fixtures.len(),
         subjects.len(),
         dimensions.iter().map(Vec::len).sum::<usize>(),
@@ -84,6 +85,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
         options.worker_counts.len(),
         total_cases,
         options.samples,
+        format_duration(options.target_sample_time),
         options.warmup_iterations,
     );
 
@@ -97,6 +99,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                     (fixture.width, fixture.height),
                     *output,
                     options.samples,
+                    options.target_sample_time,
                     options.warmup_iterations,
                 )?;
 
@@ -120,6 +123,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                         band_height,
                         worker_count,
                         options.samples,
+                        options.target_sample_time,
                         options.warmup_iterations,
                     )?;
                     let verification = verify_with_bounds(
@@ -208,6 +212,7 @@ struct SweepOptions {
     worker_counts: Vec<u32>,
     min_band_height: u32,
     samples: usize,
+    target_sample_time: Duration,
     warmup_iterations: usize,
     max_cases_per_fixture: usize,
 }
@@ -244,6 +249,12 @@ impl SweepOptions {
                 .map(parse_usize)
                 .transpose()?
                 .unwrap_or(DEFAULT_SAMPLES),
+            target_sample_time: flags
+                .optional("--target-sample-time")
+                .or_else(|| flags.optional("--target-sample-ms"))
+                .map(parse_duration_millis)
+                .transpose()?
+                .unwrap_or(DEFAULT_TARGET_SAMPLE_TIME),
             warmup_iterations: flags
                 .optional("--warm-up-iterations")
                 .or_else(|| flags.optional("--warmup-iterations"))
@@ -451,37 +462,25 @@ fn measure_subject(
     source_dimensions: (u32, u32),
     output_dimensions: (u32, u32),
     samples: usize,
+    target_sample_time: Duration,
     warmup_iterations: usize,
 ) -> Result<MeasuredOutput, BenchError> {
-    let mut output = vec![0; output_len(output_dimensions)?];
-    for _ in 0..warmup_iterations {
-        run_subject(
-            subject,
-            source,
-            &mut output,
-            source_dimensions,
-            output_dimensions,
-        )?;
-        black_box(&output);
-    }
-    let mut sample_ns = Vec::with_capacity(samples);
-    for _ in 0..samples {
-        let start = Instant::now();
-        run_subject(
-            subject,
-            black_box(source),
-            black_box(&mut output),
-            source_dimensions,
-            output_dimensions,
-        )?;
-        let elapsed = start.elapsed();
-        black_box(&output);
-        sample_ns.push(elapsed.as_nanos() as f64);
-    }
-    Ok(MeasuredOutput {
+    let output = vec![0; output_len(output_dimensions)?];
+    measure_output(
+        samples,
+        target_sample_time,
+        warmup_iterations,
         output,
-        stats: SampleStats::from_samples(&sample_ns),
-    })
+        |output| {
+            run_subject(
+                subject,
+                black_box(source),
+                black_box(output),
+                source_dimensions,
+                output_dimensions,
+            )
+        },
+    )
 }
 
 fn measure_subject_row_bands(
@@ -492,41 +491,74 @@ fn measure_subject_row_bands(
     band_height: u32,
     worker_count: u32,
     samples: usize,
+    target_sample_time: Duration,
     warmup_iterations: usize,
 ) -> Result<MeasuredOutput, BenchError> {
-    let mut output = vec![0; output_len(output_dimensions)?];
+    let output = vec![0; output_len(output_dimensions)?];
+    measure_output(
+        samples,
+        target_sample_time,
+        warmup_iterations,
+        output,
+        |output| {
+            run_subject_row_bands(
+                subject,
+                black_box(source),
+                black_box(output),
+                source_dimensions,
+                output_dimensions,
+                band_height,
+                worker_count,
+            )
+        },
+    )
+}
+
+fn measure_output(
+    samples: usize,
+    target_sample_time: Duration,
+    warmup_iterations: usize,
+    mut output: Vec<u8>,
+    mut run: impl FnMut(&mut [u8]) -> Result<(), BenchError>,
+) -> Result<MeasuredOutput, BenchError> {
     for _ in 0..warmup_iterations {
-        run_subject_row_bands(
-            subject,
-            source,
-            &mut output,
-            source_dimensions,
-            output_dimensions,
-            band_height,
-            worker_count,
-        )?;
+        run(&mut output)?;
         black_box(&output);
     }
+
+    let iterations_per_sample = calibrate_iterations(target_sample_time, &mut output, &mut run)?;
     let mut sample_ns = Vec::with_capacity(samples);
     for _ in 0..samples {
         let start = Instant::now();
-        run_subject_row_bands(
-            subject,
-            black_box(source),
-            black_box(&mut output),
-            source_dimensions,
-            output_dimensions,
-            band_height,
-            worker_count,
-        )?;
+        for _ in 0..iterations_per_sample {
+            run(&mut output)?;
+        }
         let elapsed = start.elapsed();
         black_box(&output);
-        sample_ns.push(elapsed.as_nanos() as f64);
+        sample_ns.push(elapsed.as_nanos() as f64 / iterations_per_sample as f64);
     }
     Ok(MeasuredOutput {
         output,
         stats: SampleStats::from_samples(&sample_ns),
     })
+}
+
+fn calibrate_iterations(
+    target_sample_time: Duration,
+    output: &mut [u8],
+    run: &mut impl FnMut(&mut [u8]) -> Result<(), BenchError>,
+) -> Result<usize, BenchError> {
+    let start = Instant::now();
+    run(output)?;
+    let elapsed = start.elapsed();
+    black_box(&output);
+    if elapsed >= target_sample_time || elapsed.is_zero() {
+        return Ok(1);
+    }
+
+    let target_ns = target_sample_time.as_nanos().max(1);
+    let elapsed_ns = elapsed.as_nanos().max(1);
+    Ok(((target_ns + elapsed_ns / 2) / elapsed_ns).max(1) as usize)
 }
 
 fn run_subject(
@@ -1292,6 +1324,37 @@ fn parse_band_heights(value: &str) -> Result<Vec<u32>, BenchError> {
             })
         })
         .collect()
+}
+
+fn parse_duration_millis(value: &str) -> Result<Duration, BenchError> {
+    let value = value.trim();
+    if let Some(milliseconds) = value.strip_suffix("ms") {
+        return parse_duration_seconds(milliseconds, 1_000.0);
+    }
+    if let Some(seconds) = value.strip_suffix('s') {
+        return parse_duration_seconds(seconds, 1.0);
+    }
+    parse_duration_seconds(value, 1_000.0)
+}
+
+fn parse_duration_seconds(value: &str, divisor: f64) -> Result<Duration, BenchError> {
+    let value = value
+        .parse::<f64>()
+        .map_err(|error| BenchError::Config(format!("invalid duration {value:?}: {error}")))?;
+    if !value.is_finite() || value <= 0.0 {
+        return Err(BenchError::Config(
+            "duration must be greater than zero".to_owned(),
+        ));
+    }
+    Ok(Duration::from_secs_f64(value / divisor))
+}
+
+fn format_duration(duration: Duration) -> String {
+    if duration.as_millis() > 0 {
+        format!("{}ms", duration.as_millis())
+    } else {
+        format!("{}ns", duration.as_nanos())
+    }
 }
 
 fn parse_u32(value: &str) -> Result<u32, BenchError> {
