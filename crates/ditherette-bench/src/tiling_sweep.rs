@@ -58,8 +58,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
     let report_path = options.output_dir.join("report.md");
 
     let mut rows = Vec::new();
-    let total_cases = fixtures.len()
-        * subjects.len()
+    let total_cases = subjects.len()
         * dimensions.iter().map(Vec::len).sum::<usize>()
         * options.band_heights.len();
     eprintln!(
