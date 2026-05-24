@@ -11,6 +11,9 @@ use super::super::convolution::ReconstructionKernel;
 // profiles.
 
 #[derive(Debug, Clone, Copy)]
+pub(super) struct FixedLanczos<const RADIUS: u32>;
+
+#[derive(Debug, Clone, Copy)]
 pub(super) struct Lanczos {
     radius: f64,
 }
@@ -24,20 +27,34 @@ impl Lanczos {
     }
 }
 
+impl<const RADIUS: u32> ReconstructionKernel for FixedLanczos<RADIUS> {
+    fn radius(&self) -> f64 {
+        f64::from(RADIUS)
+    }
+
+    fn weight(&self, distance: f64) -> f64 {
+        lanczos_weight(distance, f64::from(RADIUS))
+    }
+}
+
 impl ReconstructionKernel for Lanczos {
     fn radius(&self) -> f64 {
         self.radius
     }
 
     fn weight(&self, distance: f64) -> f64 {
-        let x = distance.abs();
-        if x == 0.0 {
-            1.0
-        } else if x < self.radius {
-            sinc(x) * sinc(x / self.radius)
-        } else {
-            0.0
-        }
+        lanczos_weight(distance, self.radius)
+    }
+}
+
+fn lanczos_weight(distance: f64, radius: f64) -> f64 {
+    let x = distance.abs();
+    if x == 0.0 {
+        1.0
+    } else if x < radius {
+        sinc(x) * sinc(x / radius)
+    } else {
+        0.0
     }
 }
 
