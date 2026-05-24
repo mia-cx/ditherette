@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    alignment::{axis_coordinate_map, AxisAlignment},
+    alignment::AxisAlignment,
     plan::NearestResizePlan,
     scale::{alignment_offset, NearestScaleClass},
 };
@@ -77,49 +77,54 @@ pub(super) fn resize_rows_with_plan_into(
     y_start: u32,
     y_end: u32,
 ) {
-    let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
-    let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
-    let output_width = plan.output_dimensions.width_usize();
-    let start = y_start as usize;
-    let end = y_end as usize;
-    let (x_alignment, y_alignment) = plan.anchor.axes();
-    let x_source_starts;
-    let x_source_starts = if plan.x_source_starts.is_empty() {
-        x_source_starts = axis_coordinate_map(
-            source_dimensions.width(),
-            plan.output_dimensions.width(),
-            x_alignment,
-        )
-        .into_iter()
-        .map(|x| x as usize * rgba8::RGBA8_CHANNELS)
-        .collect::<Vec<_>>();
-        &x_source_starts
-    } else {
-        &plan.x_source_starts
-    };
-    let y_coordinates;
-    let y_coordinates = if plan.y_coordinates.is_empty() {
-        y_coordinates = axis_coordinate_map(
-            source_dimensions.height(),
-            plan.output_dimensions.height(),
-            y_alignment,
-        );
-        &y_coordinates
-    } else {
-        &plan.y_coordinates
-    };
+    if plan.same_width() {
+        resize_vertical_only_rows(source, source_dimensions, output, plan, y_start, y_end);
+        return;
+    }
 
-    for (local_y, source_y) in y_coordinates[start..end].iter().copied().enumerate() {
-        let source_row_start = source_y as usize * source_row_len;
-        let output_row_start = local_y * output_row_len;
-        copy_mapped_row_words(
-            source,
-            source_row_start,
-            output,
-            output_row_start,
-            x_source_starts,
-            output_width,
-        );
+    match plan.scale_class {
+        NearestScaleClass::ExactDownscale => {
+            let (x_factor, y_factor) = plan
+                .exact_downscale
+                .expect("exact-downscale class should have factors");
+            let (x_alignment, y_alignment) = plan.anchor.axes();
+            resize_exact_downscale_rows(
+                source,
+                source_dimensions,
+                output,
+                plan.output_dimensions,
+                x_factor,
+                y_factor,
+                x_alignment,
+                y_alignment,
+                y_start,
+                y_end,
+            );
+        }
+        NearestScaleClass::ExactUpscale => {
+            let (x_factor, y_factor) = plan
+                .exact_upscale
+                .expect("exact-upscale class should have factors");
+            resize_exact_upscale_rows(
+                source,
+                source_dimensions,
+                output,
+                plan.output_dimensions,
+                x_factor,
+                y_factor,
+                y_start,
+                y_end,
+            );
+        }
+        NearestScaleClass::NearIdentityDownscale => {
+            resize_span_copy_rows(source, source_dimensions, output, plan, y_start, y_end);
+        }
+        NearestScaleClass::OtherDownscale => {
+            resize_word_copy_rows(source, source_dimensions, output, plan, y_start, y_end);
+        }
+        NearestScaleClass::Upscale => {
+            resize_upscale_row_repeat_rows(source, source_dimensions, output, plan, y_start, y_end);
+        }
     }
 }
 
@@ -129,12 +134,34 @@ fn resize_vertical_only(
     output: &mut [u8],
     plan: &NearestResizePlan,
 ) {
+    resize_vertical_only_rows(
+        source,
+        source_dimensions,
+        output,
+        plan,
+        0,
+        plan.output_dimensions.height(),
+    );
+}
+
+fn resize_vertical_only_rows(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+    y_start: u32,
+    y_end: u32,
+) {
     let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
     let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
 
-    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+    for (local_y, source_y) in plan.y_coordinates[y_start as usize..y_end as usize]
+        .iter()
+        .copied()
+        .enumerate()
+    {
         let source_start = source_y as usize * source_row_len;
-        let output_start = output_y * output_row_len;
+        let output_start = local_y * output_row_len;
         output[output_start..output_start + output_row_len]
             .copy_from_slice(&source[source_start..source_start + source_row_len]);
     }
@@ -146,14 +173,36 @@ fn resize_word_copy(
     output: &mut [u8],
     plan: &NearestResizePlan,
 ) {
+    resize_word_copy_rows(
+        source,
+        source_dimensions,
+        output,
+        plan,
+        0,
+        plan.output_dimensions.height(),
+    );
+}
+
+fn resize_word_copy_rows(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+    y_start: u32,
+    y_end: u32,
+) {
     let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
     let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
     let output_width = plan.output_dimensions.width_usize();
     let x_source_starts = &plan.x_source_starts;
 
-    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+    for (local_y, source_y) in plan.y_coordinates[y_start as usize..y_end as usize]
+        .iter()
+        .copied()
+        .enumerate()
+    {
         let source_row_start = source_y as usize * source_row_len;
-        let output_row_start = output_y * output_row_len;
+        let output_row_start = local_y * output_row_len;
         copy_mapped_row_words(
             source,
             source_row_start,
@@ -171,14 +220,34 @@ fn resize_upscale_row_repeat(
     output: &mut [u8],
     plan: &NearestResizePlan,
 ) {
+    resize_upscale_row_repeat_rows(
+        source,
+        source_dimensions,
+        output,
+        plan,
+        0,
+        plan.output_dimensions.height(),
+    );
+}
+
+fn resize_upscale_row_repeat_rows(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+    y_start: u32,
+    y_end: u32,
+) {
     let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
     let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
-    let mut output_y = 0;
+    let mut absolute_y = y_start as usize;
+    let end = y_end as usize;
 
-    while output_y < plan.y_coordinates.len() {
-        let source_y = plan.y_coordinates[output_y];
+    while absolute_y < end {
+        let source_y = plan.y_coordinates[absolute_y];
         let source_row_start = source_y as usize * source_row_len;
-        let output_row_start = output_y * output_row_len;
+        let local_y = absolute_y - y_start as usize;
+        let output_row_start = local_y * output_row_len;
 
         copy_mapped_row_words(
             source,
@@ -189,18 +258,16 @@ fn resize_upscale_row_repeat(
             plan.output_dimensions.width_usize(),
         );
 
-        let mut next_output_y = output_y + 1;
-        while next_output_y < plan.y_coordinates.len()
-            && plan.y_coordinates[next_output_y] == source_y
-        {
-            let duplicate_row_start = next_output_y * output_row_len;
+        let mut next_y = absolute_y + 1;
+        while next_y < end && plan.y_coordinates[next_y] == source_y {
+            let duplicate_row_start = (next_y - y_start as usize) * output_row_len;
             output.copy_within(
                 output_row_start..output_row_start + output_row_len,
                 duplicate_row_start,
             );
-            next_output_y += 1;
+            next_y += 1;
         }
-        output_y = next_output_y;
+        absolute_y = next_y;
     }
 }
 
@@ -241,12 +308,34 @@ fn resize_span_copy(
     output: &mut [u8],
     plan: &NearestResizePlan,
 ) {
+    resize_span_copy_rows(
+        source,
+        source_dimensions,
+        output,
+        plan,
+        0,
+        plan.output_dimensions.height(),
+    );
+}
+
+fn resize_span_copy_rows(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+    y_start: u32,
+    y_end: u32,
+) {
     let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
     let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
 
-    for (output_y, source_y) in plan.y_coordinates.iter().copied().enumerate() {
+    for (local_y, source_y) in plan.y_coordinates[y_start as usize..y_end as usize]
+        .iter()
+        .copied()
+        .enumerate()
+    {
         let source_row_start = source_y as usize * source_row_len;
-        let output_row_start = output_y * output_row_len;
+        let output_row_start = local_y * output_row_len;
 
         for span in &plan.source_x_copy_spans {
             let source_start = source_row_start + span.source_start;
@@ -275,6 +364,53 @@ fn resize_exact_upscale(
     );
 }
 
+fn resize_exact_upscale_rows(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    output_dimensions: ImageDimensions,
+    x_factor: u32,
+    y_factor: u32,
+    y_start: u32,
+    y_end: u32,
+) {
+    let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
+    let output_row_len = rgba8::packed_row_byte_len(output_dimensions);
+    let output_width = output_dimensions.width_usize();
+    let x_factor = x_factor as usize;
+    let y_factor = y_factor as usize;
+    let mut absolute_y = y_start as usize;
+    let end = y_end as usize;
+
+    while absolute_y < end {
+        let source_y = absolute_y / y_factor;
+        let source_row_start = source_y * source_row_len;
+        let local_y = absolute_y - y_start as usize;
+        let output_row_start = local_y * output_row_len;
+
+        for output_x in 0..output_width {
+            let source_x = output_x / x_factor;
+            copy_pixel_word(
+                source,
+                source_row_start + source_x * rgba8::RGBA8_CHANNELS,
+                output,
+                output_row_start + output_x * rgba8::RGBA8_CHANNELS,
+            );
+        }
+
+        let mut next_y = absolute_y + 1;
+        while next_y < end && next_y / y_factor == source_y {
+            let duplicate_row_start = (next_y - y_start as usize) * output_row_len;
+            output.copy_within(
+                output_row_start..output_row_start + output_row_len,
+                duplicate_row_start,
+            );
+            next_y += 1;
+        }
+        absolute_y = next_y;
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn resize_exact_downscale(
     source: &[u8],
@@ -286,16 +422,44 @@ fn resize_exact_downscale(
     x_alignment: AxisAlignment,
     y_alignment: AxisAlignment,
 ) {
+    resize_exact_downscale_rows(
+        source,
+        source_dimensions,
+        output,
+        output_dimensions,
+        x_factor,
+        y_factor,
+        x_alignment,
+        y_alignment,
+        0,
+        output_dimensions.height(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resize_exact_downscale_rows(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    output_dimensions: ImageDimensions,
+    x_factor: u32,
+    y_factor: u32,
+    x_alignment: AxisAlignment,
+    y_alignment: AxisAlignment,
+    y_start: u32,
+    y_end: u32,
+) {
     let x_offset = alignment_offset(x_factor, x_alignment) as usize * rgba8::RGBA8_CHANNELS;
     let y_offset = alignment_offset(y_factor, y_alignment);
     let x_step = x_factor as usize * rgba8::RGBA8_CHANNELS;
     let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
     let output_row_len = rgba8::packed_row_byte_len(output_dimensions);
 
-    for output_y in 0..output_dimensions.height_usize() {
-        let source_y = output_y as u32 * y_factor + y_offset;
+    for output_y in y_start..y_end {
+        let source_y = output_y * y_factor + y_offset;
         let source_row_start = source_y as usize * source_row_len;
-        let output_row_start = output_y * output_row_len;
+        let local_y = output_y - y_start;
+        let output_row_start = local_y as usize * output_row_len;
 
         for output_x in 0..output_dimensions.width_usize() {
             let source_start = source_row_start + output_x * x_step + x_offset;

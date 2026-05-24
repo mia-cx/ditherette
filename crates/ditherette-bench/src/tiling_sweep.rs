@@ -1107,7 +1107,7 @@ fn fit_curves(rows: &[SweepRow]) -> CurveFile {
     for subject in subjects {
         let subject_rows = best
             .iter()
-            .filter(|row| row.subject == subject)
+            .filter(|row| row.subject == subject && row.speedup > 1.0 + EPSILON)
             .collect::<Vec<_>>();
         if subject_rows.len() < 4 {
             continue;
@@ -1268,7 +1268,9 @@ fn write_report(
     writeln!(writer, "# Tiling sweep report\n").map_err(BenchError::io)?;
     writeln!(writer, "rows: {}", rows.len()).map_err(BenchError::io)?;
     writeln!(writer, "\nNote: this command measures full-output tiled resize using absolute-coordinate row-range adapters. Each candidate writes every output row through `prod::tiling::RowBandPlan`/`RowBandWorkPlan` and verifies the reconstructed output against the scalar subject before recording timings.\n").map_err(BenchError::io)?;
+    let tiled_win_rows = best_rows.iter().filter(|row| row.speedup > 1.0 + EPSILON).count();
     writeln!(writer, "best rows: {}", best_rows.len()).map_err(BenchError::io)?;
+    writeln!(writer, "best rows with tiled speedup: {}", tiled_win_rows).map_err(BenchError::io)?;
     writeln!(writer, "curves: {}\n", curves.curves.len()).map_err(BenchError::io)?;
     writeln!(
         writer,
