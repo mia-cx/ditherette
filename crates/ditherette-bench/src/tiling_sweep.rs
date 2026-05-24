@@ -9,6 +9,7 @@ use std::{
     hint::black_box,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
+    thread,
     time::Instant,
 };
 
@@ -60,13 +61,15 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
     let mut rows = Vec::new();
     let total_cases = subjects.len()
         * dimensions.iter().map(Vec::len).sum::<usize>()
-        * options.band_heights.len();
+        * options.band_heights.len()
+        * options.worker_counts.len();
     eprintln!(
-        "tiling sweep: fixtures={} filters={} dimension_sets={} band_heights={} cases={} samples={} warmup={}",
+        "tiling sweep: fixtures={} filters={} dimension_sets={} band_heights={} worker_counts={} cases={} samples={} warmup={}",
         fixtures.len(),
         subjects.len(),
         dimensions.iter().map(Vec::len).sum::<usize>(),
         options.band_heights.len(),
+        options.worker_counts.len(),
         total_cases,
         options.samples,
         options.warmup_iterations,
@@ -86,52 +89,63 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                 )?;
 
                 for &band_height in &options.band_heights {
-                    case_index += 1;
-                    let tiled = measure_subject_row_bands(
-                        subject,
-                        &fixture.rgba,
-                        (fixture.width, fixture.height),
-                        *output,
-                        band_height,
-                        options.samples,
-                        options.warmup_iterations,
-                    )?;
-                    let band_count = output.1.div_ceil(band_height);
-                    let pixels_per_band =
-                        u64::from(output.0) * u64::from(band_height.min(output.1));
-                    let speedup = scalar.stats.median_ns / tiled.stats.median_ns;
-                    rows.push(SweepRow {
-                        fixture: fixture.id.clone(),
-                        subject: subject.descriptor.id.to_string(),
-                        filter: filter_label(subject),
-                        source_width: fixture.width,
-                        source_height: fixture.height,
-                        output_width: output.0,
-                        output_height: output.1,
-                        output_pixels: u64::from(output.0) * u64::from(output.1),
-                        scale_x: f64::from(output.0) / f64::from(fixture.width),
-                        scale_y: f64::from(output.1) / f64::from(fixture.height),
-                        band_height,
-                        band_count,
-                        pixels_per_band,
-                        scalar_median_ns: scalar.stats.median_ns,
-                        tiled_median_ns: tiled.stats.median_ns,
-                        speedup,
-                        tiled_p95_ns: tiled.stats.p95_ns,
-                        tiled_stdev_ns: tiled.stats.stdev_ns,
-                        checksum: checksum(&tiled.output),
-                    });
+                    for &worker_count in &options.worker_counts {
+                        case_index += 1;
+                        let tiled = measure_subject_row_bands(
+                            subject,
+                            &fixture.rgba,
+                            (fixture.width, fixture.height),
+                            *output,
+                            band_height,
+                            worker_count,
+                            options.samples,
+                            options.warmup_iterations,
+                        )?;
+                        let actual_band_height = effective_band_height(band_height, output.1);
+                        let band_count = output.1.div_ceil(actual_band_height);
+                        let effective_worker_count = worker_count.min(band_count.max(1));
+                        let pixels_per_band =
+                            u64::from(output.0) * u64::from(actual_band_height.min(output.1));
+                        let speedup = scalar.stats.median_ns / tiled.stats.median_ns;
+                        let worker_efficiency = speedup / f64::from(effective_worker_count);
+                        rows.push(SweepRow {
+                            fixture: fixture.id.clone(),
+                            subject: subject.descriptor.id.to_string(),
+                            filter: filter_label(subject),
+                            source_width: fixture.width,
+                            source_height: fixture.height,
+                            output_width: output.0,
+                            output_height: output.1,
+                            output_pixels: u64::from(output.0) * u64::from(output.1),
+                            scale_x: f64::from(output.0) / f64::from(fixture.width),
+                            scale_y: f64::from(output.1) / f64::from(fixture.height),
+                            band_height,
+                            band_count,
+                            worker_count,
+                            effective_worker_count,
+                            worker_efficiency,
+                            pixels_per_band,
+                            scalar_median_ns: scalar.stats.median_ns,
+                            tiled_median_ns: tiled.stats.median_ns,
+                            speedup,
+                            tiled_p95_ns: tiled.stats.p95_ns,
+                            tiled_stdev_ns: tiled.stats.stdev_ns,
+                            checksum: checksum(&tiled.output),
+                        });
 
-                    eprintln!(
-                        "{case_index}/{total_cases} {} {} {}x{} band={} speedup={:.3} tiled={}",
-                        subject.descriptor.id,
-                        fixture.id,
-                        output.0,
-                        output.1,
-                        band_height,
-                        speedup,
-                        format_ns(tiled.stats.median_ns)
-                    );
+                        eprintln!(
+                            "{case_index}/{total_cases} {} {} {}x{} band={} workers={} speedup={:.3} eff={:.3} tiled={}",
+                            subject.descriptor.id,
+                            fixture.id,
+                            output.0,
+                            output.1,
+                            band_height,
+                            worker_count,
+                            speedup,
+                            worker_efficiency,
+                            format_ns(tiled.stats.median_ns)
+                        );
+                    }
                 }
             }
         }
@@ -155,6 +169,7 @@ struct SweepOptions {
     output_dir: PathBuf,
     filters: Vec<String>,
     band_heights: Vec<u32>,
+    worker_counts: Vec<u32>,
     samples: usize,
     warmup_iterations: usize,
     max_cases_per_fixture: usize,
@@ -176,6 +191,11 @@ impl SweepOptions {
                 .map(parse_band_heights)
                 .transpose()?
                 .unwrap_or_else(default_band_heights),
+            worker_counts: flags
+                .optional("--worker-counts")
+                .map(parse_worker_counts)
+                .transpose()?
+                .unwrap_or_else(default_worker_counts),
             samples: flags
                 .optional("--sample-size")
                 .or_else(|| flags.optional("--samples"))
@@ -314,6 +334,26 @@ fn default_band_heights() -> Vec<u32> {
     ]
 }
 
+fn default_worker_counts() -> Vec<u32> {
+    let available = thread::available_parallelism()
+        .map(|count| count.get() as u32)
+        .unwrap_or(1)
+        .max(1);
+    let mut counts = vec![1, 2, 3, 4, 6, 8, available];
+    counts.retain(|count| *count <= available.max(2));
+    counts.sort_unstable();
+    counts.dedup();
+    counts
+}
+
+fn effective_band_height(band_height: u32, output_height: u32) -> u32 {
+    if band_height == u32::MAX {
+        output_height
+    } else {
+        band_height
+    }
+}
+
 struct MeasuredOutput {
     output: Vec<u8>,
     stats: SampleStats,
@@ -364,6 +404,7 @@ fn measure_subject_row_bands(
     source_dimensions: (u32, u32),
     output_dimensions: (u32, u32),
     band_height: u32,
+    worker_count: u32,
     samples: usize,
     warmup_iterations: usize,
 ) -> Result<MeasuredOutput, BenchError> {
@@ -376,6 +417,7 @@ fn measure_subject_row_bands(
             source_dimensions,
             output_dimensions,
             band_height,
+            worker_count,
         )?;
         black_box(&output);
     }
@@ -389,6 +431,7 @@ fn measure_subject_row_bands(
             source_dimensions,
             output_dimensions,
             band_height,
+            worker_count,
         )?;
         let elapsed = start.elapsed();
         black_box(&output);
@@ -432,12 +475,9 @@ fn run_subject_row_bands(
     source_dimensions: (u32, u32),
     output_dimensions: (u32, u32),
     band_height: u32,
+    worker_count: u32,
 ) -> Result<(), BenchError> {
-    let actual_band_height = if band_height == u32::MAX {
-        output_dimensions.1
-    } else {
-        band_height
-    };
+    let actual_band_height = effective_band_height(band_height, output_dimensions.1);
     let Some(plan) = ditherette_wasm::prod::tiling::RowBandPlan::for_output_height(
         image_dimensions(output_dimensions)?,
         actual_band_height,
@@ -447,21 +487,90 @@ fn run_subject_row_bands(
         )));
     };
 
-    for band in plan.bands() {
-        let y_start = band.y_start();
-        let y_end = band.y_end();
-        let band_output_dimensions = (output_dimensions.0, y_end - y_start);
-        let mut band_output = vec![0; output_len(band_output_dimensions)?];
-        run_subject(
-            subject,
-            source,
-            &mut band_output,
-            source_dimensions,
-            band_output_dimensions,
-        )?;
+    let bands = plan
+        .bands()
+        .iter()
+        .map(|band| (band.y_start(), band.y_end()))
+        .collect::<Vec<_>>();
+    let effective_worker_count = usize::try_from(worker_count)
+        .unwrap_or(usize::MAX)
+        .clamp(1, bands.len().max(1));
+
+    if effective_worker_count == 1 {
+        for &(y_start, y_end) in &bands {
+            let band_output = render_band(
+                subject,
+                source,
+                source_dimensions,
+                output_dimensions.0,
+                y_start,
+                y_end,
+            )?;
+            copy_band_output(&band_output, output, output_dimensions.0, y_start)?;
+        }
+        return Ok(());
+    }
+
+    let chunk_size = bands.len().div_ceil(effective_worker_count);
+    let rendered_bands = thread::scope(|scope| {
+        let handles = bands
+            .chunks(chunk_size)
+            .map(|chunk| {
+                let chunk = chunk.to_vec();
+                scope.spawn(move || -> Result<Vec<(u32, Vec<u8>)>, BenchError> {
+                    chunk
+                        .into_iter()
+                        .map(|(y_start, y_end)| {
+                            render_band(
+                                subject,
+                                source,
+                                source_dimensions,
+                                output_dimensions.0,
+                                y_start,
+                                y_end,
+                            )
+                            .map(|band_output| (y_start, band_output))
+                        })
+                        .collect()
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let mut rendered_bands = Vec::new();
+        for handle in handles {
+            rendered_bands.extend(
+                handle
+                    .join()
+                    .map_err(|_| BenchError::Runtime("tiling sweep worker panicked".to_owned()))??,
+            );
+        }
+        Ok::<_, BenchError>(rendered_bands)
+    })?;
+
+    for (y_start, band_output) in rendered_bands {
         copy_band_output(&band_output, output, output_dimensions.0, y_start)?;
     }
     Ok(())
+}
+
+fn render_band(
+    subject: &ResizeBenchSubject,
+    source: &[u8],
+    source_dimensions: (u32, u32),
+    output_width: u32,
+    y_start: u32,
+    y_end: u32,
+) -> Result<Vec<u8>, BenchError> {
+    let band_output_dimensions = (output_width, y_end - y_start);
+    let mut band_output = vec![0; output_len(band_output_dimensions)?];
+    run_subject(
+        subject,
+        source,
+        &mut band_output,
+        source_dimensions,
+        band_output_dimensions,
+    )?;
+    Ok(band_output)
 }
 
 fn copy_band_output(
@@ -494,6 +603,9 @@ struct SweepRow {
     scale_y: f64,
     band_height: u32,
     band_count: u32,
+    worker_count: u32,
+    effective_worker_count: u32,
+    worker_efficiency: f64,
     pixels_per_band: u64,
     scalar_median_ns: f64,
     tiled_median_ns: f64,
@@ -505,11 +617,11 @@ struct SweepRow {
 
 fn write_raw_csv(path: &Path, rows: &[SweepRow]) -> Result<(), BenchError> {
     let mut writer = csv_writer(path)?;
-    writeln!(writer, "fixture,subject,filter,source_width,source_height,output_width,output_height,output_pixels,scale_x,scale_y,band_height,band_count,pixels_per_band,scalar_median_ns,tiled_median_ns,speedup,tiled_p95_ns,tiled_stdev_ns,checksum").map_err(BenchError::io)?;
+    writeln!(writer, "fixture,subject,filter,source_width,source_height,output_width,output_height,output_pixels,scale_x,scale_y,band_height,band_count,worker_count,effective_worker_count,worker_efficiency,pixels_per_band,scalar_median_ns,tiled_median_ns,speedup,tiled_p95_ns,tiled_stdev_ns,checksum").map_err(BenchError::io)?;
     for row in rows {
         writeln!(
             writer,
-            "{},{},{},{},{},{},{},{},{:.6},{:.6},{},{},{},{:.3},{:.3},{:.6},{:.3},{:.3},{}",
+            "{},{},{},{},{},{},{},{},{:.6},{:.6},{},{},{},{},{:.6},{},{:.3},{:.3},{:.6},{:.3},{:.3},{}",
             row.fixture,
             row.subject,
             row.filter,
@@ -522,6 +634,9 @@ fn write_raw_csv(path: &Path, rows: &[SweepRow]) -> Result<(), BenchError> {
             row.scale_y,
             row.band_height,
             row.band_count,
+            row.worker_count,
+            row.effective_worker_count,
+            row.worker_efficiency,
             row.pixels_per_band,
             row.scalar_median_ns,
             row.tiled_median_ns,
@@ -537,11 +652,11 @@ fn write_raw_csv(path: &Path, rows: &[SweepRow]) -> Result<(), BenchError> {
 
 fn write_best_csv(path: &Path, rows: &[SweepRow]) -> Result<(), BenchError> {
     let mut writer = csv_writer(path)?;
-    writeln!(writer, "fixture,subject,filter,source_width,source_height,output_width,output_height,output_pixels,best_band_height,best_band_count,best_pixels_per_band,scalar_median_ns,best_tiled_median_ns,best_speedup").map_err(BenchError::io)?;
+    writeln!(writer, "fixture,subject,filter,source_width,source_height,output_width,output_height,output_pixels,best_band_height,best_band_count,best_worker_count,best_effective_worker_count,best_worker_efficiency,best_pixels_per_band,scalar_median_ns,best_tiled_median_ns,best_speedup").map_err(BenchError::io)?;
     for row in rows {
         writeln!(
             writer,
-            "{},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.6}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{:.6},{},{:.3},{:.3},{:.6}",
             row.fixture,
             row.subject,
             row.filter,
@@ -552,6 +667,9 @@ fn write_best_csv(path: &Path, rows: &[SweepRow]) -> Result<(), BenchError> {
             row.output_pixels,
             row.band_height,
             row.band_count,
+            row.worker_count,
+            row.effective_worker_count,
+            row.worker_efficiency,
             row.pixels_per_band,
             row.scalar_median_ns,
             row.tiled_median_ns,
@@ -573,7 +691,8 @@ fn best_rows(rows: &[SweepRow]) -> Vec<SweepRow> {
         }) {
             if row.speedup > existing.speedup + EPSILON
                 || ((row.speedup - existing.speedup).abs() <= EPSILON
-                    && row.band_height < existing.band_height)
+                    && (row.worker_count, row.band_height)
+                        < (existing.worker_count, existing.band_height))
             {
                 *existing = row.clone();
             }
@@ -596,12 +715,18 @@ struct Curve {
     filter: String,
     subject: String,
     samples: usize,
-    formula: &'static str,
-    intercept: f64,
-    log_output_pixels: f64,
-    log_kernel_cost: f64,
-    log_minify: f64,
+    band_formula: &'static str,
+    worker_formula: &'static str,
+    band_intercept: f64,
+    band_log_output_pixels: f64,
+    band_log_kernel_cost: f64,
+    band_log_minify: f64,
+    worker_intercept: f64,
+    worker_log_output_pixels: f64,
+    worker_log_kernel_cost: f64,
+    worker_log_minify: f64,
     rmse_log_pixels_per_band: f64,
+    rmse_log_worker_count: f64,
 }
 
 fn fit_curves(rows: &[SweepRow]) -> CurveFile {
@@ -622,35 +747,51 @@ fn fit_curves(rows: &[SweepRow]) -> CurveFile {
         if subject_rows.len() < 4 {
             continue;
         }
-        let coefficients = fit_log_linear(&subject_rows);
-        let rmse = curve_rmse(&subject_rows, coefficients);
+        let band_coefficients = fit_log_linear_target(&subject_rows, |row| {
+            (row.pixels_per_band.max(1) as f64).ln()
+        });
+        let worker_coefficients = fit_log_linear_target(&subject_rows, |row| {
+            f64::from(row.effective_worker_count.max(1)).ln()
+        });
+        let band_rmse = curve_rmse(&subject_rows, band_coefficients, |row| {
+            (row.pixels_per_band.max(1) as f64).ln()
+        });
+        let worker_rmse = curve_rmse(&subject_rows, worker_coefficients, |row| {
+            f64::from(row.effective_worker_count.max(1)).ln()
+        });
         curves.push(Curve {
             filter: subject_rows[0].filter.clone(),
             subject,
             samples: subject_rows.len(),
-            formula: "target_pixels_per_band = exp(intercept + a*ln(output_pixels) + b*ln(kernel_cost) + c*ln(max(source_w/output_w, source_h/output_h, 1)))",
-            intercept: coefficients[0],
-            log_output_pixels: coefficients[1],
-            log_kernel_cost: coefficients[2],
-            log_minify: coefficients[3],
-            rmse_log_pixels_per_band: rmse,
+            band_formula: "target_pixels_per_band = exp(intercept + a*ln(output_pixels) + b*ln(kernel_cost) + c*ln(max(source_w/output_w, source_h/output_h, 1)))",
+            worker_formula: "target_worker_count = round(exp(intercept + a*ln(output_pixels) + b*ln(kernel_cost) + c*ln(max(source_w/output_w, source_h/output_h, 1))))",
+            band_intercept: band_coefficients[0],
+            band_log_output_pixels: band_coefficients[1],
+            band_log_kernel_cost: band_coefficients[2],
+            band_log_minify: band_coefficients[3],
+            worker_intercept: worker_coefficients[0],
+            worker_log_output_pixels: worker_coefficients[1],
+            worker_log_kernel_cost: worker_coefficients[2],
+            worker_log_minify: worker_coefficients[3],
+            rmse_log_pixels_per_band: band_rmse,
+            rmse_log_worker_count: worker_rmse,
         });
     }
 
     CurveFile {
         schema: "ditherette-tiling-sweep-curves-v1",
-        description: "Smooth empirical row-band tiling curves fitted from real fixture dimensions. Rows measure band-sized resize kernel cost through the public subject API; production row-range adapters should validate fitted curves before policy rollout.",
+        description: "Smooth empirical row-band and worker-count tiling curves fitted from real fixture dimensions. Rows measure band-sized resize kernel cost through the public subject API; production row-range adapters should validate fitted curves before policy rollout.",
         curves,
     }
 }
 
-fn fit_log_linear(rows: &[&SweepRow]) -> [f64; 4] {
+fn fit_log_linear_target(rows: &[&SweepRow], target: impl Fn(&SweepRow) -> f64) -> [f64; 4] {
     let lambda = 0.001;
     let mut xtx = [[0.0; 4]; 4];
     let mut xty = [0.0; 4];
     for row in rows {
         let x = curve_features(row);
-        let y = (row.pixels_per_band.max(1) as f64).ln();
+        let y = target(row);
         for i in 0..4 {
             xty[i] += x[i] * y;
             for j in 0..4 {
@@ -664,12 +805,16 @@ fn fit_log_linear(rows: &[&SweepRow]) -> [f64; 4] {
     solve_4x4(xtx, xty).unwrap_or([0.0, 1.0, 0.0, 0.0])
 }
 
-fn curve_rmse(rows: &[&SweepRow], coefficients: [f64; 4]) -> f64 {
+fn curve_rmse(
+    rows: &[&SweepRow],
+    coefficients: [f64; 4],
+    target: impl Fn(&SweepRow) -> f64,
+) -> f64 {
     let squared = rows
         .iter()
         .map(|row| {
             let predicted = dot(coefficients, curve_features(row));
-            let actual = (row.pixels_per_band.max(1) as f64).ln();
+            let actual = target(row);
             let error = predicted - actual;
             error * error
         })
@@ -757,27 +902,40 @@ fn write_report(
     let mut writer = csv_writer(path)?;
     writeln!(writer, "# Tiling sweep report\n").map_err(BenchError::io)?;
     writeln!(writer, "rows: {}", rows.len()).map_err(BenchError::io)?;
-    writeln!(writer, "\nNote: this command measures row-band cost by running public resize subjects on band-sized outputs and summing those costs. It uses `prod::tiling::RowBandPlan` for the candidate geometry, but final production curves still need validation with true absolute-coordinate row-range adapters.\n").map_err(BenchError::io)?;
+    writeln!(writer, "\nNote: this command measures parallel row-band cost by running public resize subjects on band-sized outputs across worker threads. It uses `prod::tiling::RowBandPlan` for candidate geometry, but final production curves still need validation with true absolute-coordinate row-range adapters.\n").map_err(BenchError::io)?;
     writeln!(writer, "best rows: {}", best_rows.len()).map_err(BenchError::io)?;
     writeln!(writer, "curves: {}\n", curves.curves.len()).map_err(BenchError::io)?;
     writeln!(
         writer,
-        "| filter | subject | samples | formula | rmse | coefficients |"
+        "| filter | subject | samples | parameter | rmse | coefficients |"
     )
     .map_err(BenchError::io)?;
     writeln!(writer, "| --- | --- | ---: | --- | ---: | --- |").map_err(BenchError::io)?;
     for curve in &curves.curves {
         writeln!(
             writer,
-            "| {} | `{}` | {} | target pixels/band | {:.4} | intercept={:.4}, output={:.4}, kernel={:.4}, minify={:.4} |",
+            "| {} | `{}` | {} | pixels/band | {:.4} | intercept={:.4}, output={:.4}, kernel={:.4}, minify={:.4} |",
             curve.filter,
             curve.subject,
             curve.samples,
             curve.rmse_log_pixels_per_band,
-            curve.intercept,
-            curve.log_output_pixels,
-            curve.log_kernel_cost,
-            curve.log_minify,
+            curve.band_intercept,
+            curve.band_log_output_pixels,
+            curve.band_log_kernel_cost,
+            curve.band_log_minify,
+        )
+        .map_err(BenchError::io)?;
+        writeln!(
+            writer,
+            "| {} | `{}` | {} | worker_count | {:.4} | intercept={:.4}, output={:.4}, kernel={:.4}, minify={:.4} |",
+            curve.filter,
+            curve.subject,
+            curve.samples,
+            curve.rmse_log_worker_count,
+            curve.worker_intercept,
+            curve.worker_log_output_pixels,
+            curve.worker_log_kernel_cost,
+            curve.worker_log_minify,
         )
         .map_err(BenchError::io)?;
     }
@@ -799,6 +957,24 @@ fn parse_band_heights(value: &str) -> Result<Vec<u32>, BenchError> {
             value.parse::<u32>().map_err(|error| {
                 BenchError::Config(format!("invalid band height {value:?}: {error}"))
             })
+        })
+        .collect()
+}
+
+fn parse_worker_counts(value: &str) -> Result<Vec<u32>, BenchError> {
+    value
+        .split(',')
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            let count = value.parse::<u32>().map_err(|error| {
+                BenchError::Config(format!("invalid worker count {value:?}: {error}"))
+            })?;
+            if count == 0 {
+                return Err(BenchError::Config(
+                    "worker counts must be positive".to_owned(),
+                ));
+            }
+            Ok(count)
         })
         .collect()
 }
