@@ -16,6 +16,7 @@ mod registry;
 mod report;
 mod result;
 mod runtime;
+mod tiling_sweep;
 mod util;
 
 use std::{env, process::ExitCode};
@@ -25,6 +26,7 @@ use commands::{comp_command, describe_subject, list_subjects, perf_command, tile
 use error::BenchError;
 use manifest::expand_command;
 use registry::Registry;
+use tiling_sweep::tiling_sweep_command;
 
 fn main() -> ExitCode {
     match run() {
@@ -53,6 +55,7 @@ fn run() -> Result<(), BenchError> {
         "perf" => perf_command(&registry, &expanded.args),
         "comp" => comp_command(&registry, &expanded.args),
         "tile" => tile_command(&registry, &expanded.args),
+        "tiling-sweep" => tiling_sweep_command(&registry, &expanded.args),
         unknown => Err(BenchError::Config(format!("unknown command {unknown:?}"))),
     }
 }
