@@ -11,7 +11,10 @@ pub enum SupportPolicy {
 
 /// Finite-support one-dimensional reconstruction kernel.
 pub trait ReconstructionKernel {
+    /// Native support radius in source-pixel units before scale-aware widening.
     fn radius(&self) -> f64;
+
+    /// Return the unnormalized kernel weight at `distance` source pixels.
     fn weight(&self, distance: f64) -> f64;
 }
 

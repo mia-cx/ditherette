@@ -1,14 +1,14 @@
 //! Reusable convolution resize planning.
 //!
-//! Plans cache axis taps for one source/output shape, anchor, support policy,
-//! and reconstruction kernel so the pixel kernel can iterate compact support
-//! lists without recomputing coordinate math.
+//! Plans cache axis taps for one source/output shape, support policy, and
+//! reconstruction kernel so the pixel kernel can iterate compact support lists
+//! without recomputing coordinate math.
 
 use crate::image::ImageDimensions;
 
 use super::{
     alignment::{self, ResizeAnchor},
-    coordinates::{clamp_i64, map_axis_position, support_range},
+    coordinates::{map_axis_position, support_range},
     filter::{axis_kernel_scale, ReconstructionKernel, SupportPolicy},
 };
 
@@ -59,7 +59,6 @@ use super::{
 pub struct ConvolutionResizePlan {
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
-    anchor: ResizeAnchor,
     support_policy: SupportPolicy,
     pub(super) x_taps: Vec<Vec<AxisTap>>,
     pub(super) y_taps: Vec<Vec<AxisTap>>,
@@ -102,7 +101,6 @@ impl ConvolutionResizePlan {
         Self {
             source_dimensions,
             output_dimensions,
-            anchor,
             support_policy,
             x_taps,
             y_taps,
@@ -129,12 +127,6 @@ impl ConvolutionResizePlan {
         self.source_dimensions.height() == self.output_dimensions.height()
     }
 
-    #[allow(dead_code)]
-    pub(super) fn anchor(&self) -> ResizeAnchor {
-        self.anchor
-    }
-
-    #[allow(dead_code)]
     pub(super) fn support_policy(&self) -> SupportPolicy {
         self.support_policy
     }
@@ -163,7 +155,7 @@ where
                         return None;
                     }
 
-                    let index = clamp_i64(source_coordinate, 0, i64::from(source_len) - 1) as usize;
+                    let index = source_coordinate.clamp(0, i64::from(source_len) - 1) as usize;
                     Some(AxisTap { index, weight })
                 })
                 .collect()

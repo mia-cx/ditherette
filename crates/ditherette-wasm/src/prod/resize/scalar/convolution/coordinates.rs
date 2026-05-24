@@ -27,7 +27,3 @@ pub(super) fn map_axis_position(
 pub(super) fn support_range(position: f64, support: f64) -> RangeInclusive<i64> {
     (position - support).floor() as i64..=(position + support).ceil() as i64
 }
-
-pub(super) fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
-    value.clamp(min, max)
-}
