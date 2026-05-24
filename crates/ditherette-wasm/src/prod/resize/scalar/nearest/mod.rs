@@ -49,30 +49,20 @@ pub fn resize_nearest_rgba8_into(
 /// nearest word-copy kernel.
 pub fn resize_nearest_rgba8_rows_into(
     source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
     full_output_dimensions: crate::image::ImageDimensions,
     y_start: u32,
     anchor: alignment::ResizeAnchor,
 ) {
-    let plan = NearestResizePlan::new(source.dimensions(), full_output_dimensions, anchor);
-    resize_nearest_rgba8_rows_with_plan_into(source, output, &plan, y_start);
-}
-
-pub fn resize_nearest_rgba8_rows_with_plan_into(
-    source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
-    plan: &NearestResizePlan,
-    y_start: u32,
-) {
-    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
     common::rgba8::assert_packed_source(source, "nearest");
     common::rgba8::assert_packed_output(&output, "nearest");
     let y_end = y_start + output.dimensions().height();
+    let plan = NearestResizePlan::new(source.dimensions(), full_output_dimensions, anchor);
     packed::resize_rows_with_plan_into(
         source.data(),
         source.dimensions(),
         output.data_mut(),
-        plan,
+        &plan,
         y_start,
         y_end,
     );
