@@ -43,6 +43,7 @@ const DEFAULT_FIXTURES: &str = "Celeste_Insta_selfie,Celeste_box_art";
 const DEFAULT_SAMPLES: usize = 7;
 const DEFAULT_WARMUP: usize = 2;
 const MAX_DIMENSION_CASES_PER_FIXTURE: usize = 26;
+const BALANCED_CHUNKS_PER_WORKER: [u32; 6] = [1, 2, 3, 4, 6, 8];
 const EPSILON: f64 = 0.000_001;
 
 pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Result<(), BenchError> {
@@ -64,7 +65,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
             .iter()
             .flatten()
             .map(|output| {
-                worker_band_case_count(*output, &options.band_heights, &options.worker_counts)
+                tiling_candidates(output.1, &options.band_heights, &options.worker_counts).len()
             })
             .sum::<usize>();
     eprintln!(
@@ -95,68 +96,65 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                 let worker_budget = ditherette_wasm::prod::tiling::WorkerBudget::new(
                     options.worker_counts.iter().copied().max().unwrap_or(1),
                 );
-                for &band_height in &options.band_heights {
+                for (band_height, worker_count) in
+                    tiling_candidates(output.1, &options.band_heights, &options.worker_counts)
+                {
                     let actual_band_height = effective_band_height(band_height, output.1);
                     let band_count = output.1.div_ceil(actual_band_height);
-                    for &worker_count in &options.worker_counts {
-                        if !worker_budget.can_use_workers(worker_count, band_count) {
-                            continue;
-                        }
-                        case_index += 1;
-                        let tiled = measure_subject_row_bands(
-                            subject,
-                            &fixture.rgba,
-                            (fixture.width, fixture.height),
-                            *output,
-                            band_height,
-                            worker_count,
-                            options.samples,
-                            options.warmup_iterations,
-                        )?;
-                        let effective_worker_count =
-                            worker_budget.active_workers(worker_count, band_count);
-                        let pixels_per_band =
-                            u64::from(output.0) * u64::from(actual_band_height.min(output.1));
-                        let speedup = scalar.stats.median_ns / tiled.stats.median_ns;
-                        let worker_efficiency = speedup / f64::from(effective_worker_count);
-                        rows.push(SweepRow {
-                            fixture: fixture.id.clone(),
-                            subject: subject.descriptor.id.to_string(),
-                            filter: filter_label(subject),
-                            source_width: fixture.width,
-                            source_height: fixture.height,
-                            output_width: output.0,
-                            output_height: output.1,
-                            output_pixels: u64::from(output.0) * u64::from(output.1),
-                            scale_x: f64::from(output.0) / f64::from(fixture.width),
-                            scale_y: f64::from(output.1) / f64::from(fixture.height),
-                            band_height,
-                            band_count,
-                            worker_count,
-                            effective_worker_count,
-                            worker_efficiency,
-                            pixels_per_band,
-                            scalar_median_ns: scalar.stats.median_ns,
-                            tiled_median_ns: tiled.stats.median_ns,
-                            speedup,
-                            tiled_p95_ns: tiled.stats.p95_ns,
-                            tiled_stdev_ns: tiled.stats.stdev_ns,
-                            checksum: checksum(&tiled.output),
-                        });
+                    case_index += 1;
+                    let tiled = measure_subject_row_bands(
+                        subject,
+                        &fixture.rgba,
+                        (fixture.width, fixture.height),
+                        *output,
+                        band_height,
+                        worker_count,
+                        options.samples,
+                        options.warmup_iterations,
+                    )?;
+                    let effective_worker_count =
+                        worker_budget.active_workers(worker_count, band_count);
+                    let pixels_per_band =
+                        u64::from(output.0) * u64::from(actual_band_height.min(output.1));
+                    let speedup = scalar.stats.median_ns / tiled.stats.median_ns;
+                    let worker_efficiency = speedup / f64::from(effective_worker_count);
+                    rows.push(SweepRow {
+                        fixture: fixture.id.clone(),
+                        subject: subject.descriptor.id.to_string(),
+                        filter: filter_label(subject),
+                        source_width: fixture.width,
+                        source_height: fixture.height,
+                        output_width: output.0,
+                        output_height: output.1,
+                        output_pixels: u64::from(output.0) * u64::from(output.1),
+                        scale_x: f64::from(output.0) / f64::from(fixture.width),
+                        scale_y: f64::from(output.1) / f64::from(fixture.height),
+                        band_height,
+                        band_count,
+                        worker_count,
+                        effective_worker_count,
+                        worker_efficiency,
+                        pixels_per_band,
+                        scalar_median_ns: scalar.stats.median_ns,
+                        tiled_median_ns: tiled.stats.median_ns,
+                        speedup,
+                        tiled_p95_ns: tiled.stats.p95_ns,
+                        tiled_stdev_ns: tiled.stats.stdev_ns,
+                        checksum: checksum(&tiled.output),
+                    });
 
-                        eprintln!(
-                            "{case_index}/{total_cases} {} {} {}x{} band={} workers={} speedup={:.3} eff={:.3} tiled={}",
-                            subject.descriptor.id,
-                            fixture.id,
-                            output.0,
-                            output.1,
-                            band_height,
-                            worker_count,
-                            speedup,
-                            worker_efficiency,
-                            format_ns(tiled.stats.median_ns)
-                        );
-                    }
+                    eprintln!(
+                        "{case_index}/{total_cases} {} {} {}x{} band={} workers={} speedup={:.3} eff={:.3} tiled={}",
+                        subject.descriptor.id,
+                        fixture.id,
+                        output.0,
+                        output.1,
+                        band_height,
+                        worker_count,
+                        speedup,
+                        worker_efficiency,
+                        format_ns(tiled.stats.median_ns)
+                    );
                 }
             }
         }
@@ -354,26 +352,46 @@ fn default_worker_counts() -> Vec<u32> {
         .collect()
 }
 
-fn worker_band_case_count(
-    output_dimensions: (u32, u32),
-    band_heights: &[u32],
+fn tiling_candidates(
+    output_height: u32,
+    fixed_band_heights: &[u32],
     worker_counts: &[u32],
-) -> usize {
-    band_heights
-        .iter()
-        .map(|&band_height| {
-            let band_count = output_dimensions
-                .1
-                .div_ceil(effective_band_height(band_height, output_dimensions.1));
-            let budget = ditherette_wasm::prod::tiling::WorkerBudget::new(
-                worker_counts.iter().copied().max().unwrap_or(1),
-            );
+) -> Vec<(u32, u32)> {
+    let budget = ditherette_wasm::prod::tiling::WorkerBudget::new(
+        worker_counts.iter().copied().max().unwrap_or(1),
+    );
+    let mut candidates = Vec::new();
+
+    for &band_height in fixed_band_heights {
+        let band_count = output_height.div_ceil(effective_band_height(band_height, output_height));
+        candidates.extend(
             worker_counts
                 .iter()
-                .filter(|&&worker_count| budget.can_use_workers(worker_count, band_count))
-                .count()
-        })
-        .sum()
+                .copied()
+                .filter(|&worker_count| budget.can_use_workers(worker_count, band_count))
+                .map(|worker_count| (band_height, worker_count)),
+        );
+    }
+
+    for &worker_count in worker_counts {
+        if !budget.can_use_workers(worker_count, output_height) {
+            continue;
+        }
+        for chunks_per_worker in BALANCED_CHUNKS_PER_WORKER {
+            let target_band_count = worker_count
+                .saturating_mul(chunks_per_worker)
+                .clamp(1, output_height);
+            let band_height = output_height.div_ceil(target_band_count).max(1);
+            let band_count = output_height.div_ceil(band_height);
+            if budget.can_use_workers(worker_count, band_count) {
+                candidates.push((band_height, worker_count));
+            }
+        }
+    }
+
+    candidates.sort_unstable();
+    candidates.dedup();
+    candidates
 }
 
 fn effective_band_height(band_height: u32, output_height: u32) -> u32 {
