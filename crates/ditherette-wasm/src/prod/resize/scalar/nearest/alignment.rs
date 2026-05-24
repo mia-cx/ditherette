@@ -62,6 +62,10 @@ impl Default for ResizeAnchor {
 
 /// Build a source-coordinate lookup table for one resize axis.
 pub fn axis_coordinate_map(source_len: u32, output_len: u32, alignment: AxisAlignment) -> Vec<u32> {
+    assert!(
+        source_len > 0 && output_len > 0,
+        "axis lengths must be non-zero"
+    );
     (0..output_len)
         .map(|output_coordinate| {
             map_axis_coordinate(output_coordinate, source_len, output_len, alignment)
@@ -80,6 +84,10 @@ pub fn map_axis_coordinate(
     output_len: u32,
     alignment: AxisAlignment,
 ) -> u32 {
+    assert!(
+        source_len > 0 && output_len > 0,
+        "axis lengths must be non-zero"
+    );
     match alignment {
         AxisAlignment::Start => map_start_coordinate(output_coordinate, source_len, output_len),
         AxisAlignment::Center => map_center_coordinate(output_coordinate, source_len, output_len),

@@ -1,6 +1,9 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
-    prod::resize::scalar::area::resize_area_rgba8_into as resize_prod_area_into,
+    prod::resize::scalar::area::{
+        resize_area_rgba8_into as resize_prod_area_into, resize_area_rgba8_rows_with_plan_into,
+        AreaResizePlan,
+    },
     spec::resize::scalar::area::resize_area_into as resize_spec_area_into,
 };
 
@@ -22,6 +25,30 @@ fn prod_area_matches_spec_for_exact_integer_rgba8_resizes() {
         let (spec_output, prod_output) =
             resize_outputs(&source, source_dimensions, output_dimensions);
         assert_eq!(prod_output, spec_output, "output {output_dimensions:?}");
+    }
+}
+
+#[test]
+fn prod_area_row_ranges_match_full_fast_paths() {
+    for (source_dimensions, output_dimensions) in [
+        (
+            ImageDimensions::new(8, 8).unwrap(),
+            ImageDimensions::new(8, 8).unwrap(),
+        ),
+        (
+            ImageDimensions::new(8, 8).unwrap(),
+            ImageDimensions::new(4, 4).unwrap(),
+        ),
+        (
+            ImageDimensions::new(4, 4).unwrap(),
+            ImageDimensions::new(8, 8).unwrap(),
+        ),
+        (
+            ImageDimensions::new(5, 4).unwrap(),
+            ImageDimensions::new(3, 7).unwrap(),
+        ),
+    ] {
+        assert_row_ranges_match_full(source_dimensions, output_dimensions);
     }
 }
 
@@ -61,6 +88,44 @@ fn resize_outputs(
     );
 
     (spec_output, prod_output)
+}
+
+fn assert_row_ranges_match_full(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) {
+    let source = patterned_rgba_source(source_dimensions);
+    let mut full_output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    resize_prod_area_into(
+        ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
+        ImageViewMut::<Rgba8>::packed(&mut full_output, output_dimensions).unwrap(),
+    );
+
+    let mut row_range_output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    let plan = AreaResizePlan::new(source_dimensions, output_dimensions);
+    let output_row_len = output_dimensions.width_usize() * 4;
+    let mut y_start = 0;
+    while y_start < output_dimensions.height() {
+        let y_end = (y_start + 2).min(output_dimensions.height());
+        let byte_start = y_start as usize * output_row_len;
+        let byte_end = y_end as usize * output_row_len;
+        resize_area_rgba8_rows_with_plan_into(
+            ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
+            ImageViewMut::<Rgba8>::packed(
+                &mut row_range_output[byte_start..byte_end],
+                ImageDimensions::new(output_dimensions.width(), y_end - y_start).unwrap(),
+            )
+            .unwrap(),
+            &plan,
+            y_start,
+        );
+        y_start = y_end;
+    }
+
+    assert_eq!(
+        row_range_output, full_output,
+        "{source_dimensions:?} -> {output_dimensions:?}"
+    );
 }
 
 fn assert_bounded_color_distance(left: &[u8], right: &[u8], output_dimensions: ImageDimensions) {
@@ -104,9 +169,9 @@ fn patterned_rgba_source(dimensions: ImageDimensions) -> Vec<u8> {
     for y in 0..dimensions.height_usize() {
         for x in 0..dimensions.width_usize() {
             source.extend_from_slice(&[
-                (x * 31 + y * 17) as u8,
-                (x * 13 + y * 43) as u8,
-                (x * 7 + y * 19) as u8,
+                ((x * 31 + y * 17) % 256) as u8,
+                ((x * 13 + y * 43) % 256) as u8,
+                ((x * 7 + y * 19) % 256) as u8,
                 255,
             ]);
         }

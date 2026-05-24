@@ -47,29 +47,54 @@ pub fn resize_area_rgba8_into(source: ImageView<'_, Rgba8>, mut output: ImageVie
     planned::resize_with_plan_into(source, output, &plan);
 }
 
-/// Resize packed RGBA8 `source` into packed RGBA8 `output` with a cached area plan.
+/// Resize one full-width output row range with production area averaging.
 ///
-/// The plan must match the input and output dimensions. Packed-row assertions
-/// are development tripwires for the shared production resize boundary.
+/// `full_output_dimensions` is the complete resize target, while `output`
+/// stores the local row band starting at absolute output row `y_start`.
 pub fn resize_area_rgba8_rows_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
     full_output_dimensions: crate::image::ImageDimensions,
     y_start: u32,
 ) {
-    common::rgba8::assert_packed_source(source, "area");
-    common::rgba8::assert_packed_output(&output, "area");
     let plan = AreaResizePlan::new(source.dimensions(), full_output_dimensions);
-    planned::resize_rows_with_plan_into(source, output, &plan, y_start);
+    resize_area_rgba8_rows_with_plan_into(source, output, &plan, y_start);
 }
 
+/// Resize one full-width output row range with cached area metadata.
+///
+/// The plan must match `source` and the complete output dimensions. The local
+/// `output` band must have the full output width and fit within `y_start..` of
+/// the complete output height.
+pub fn resize_area_rgba8_rows_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+    y_start: u32,
+) {
+    assert_eq!(source.dimensions(), plan.source_dimensions);
+    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions, y_start);
+    common::rgba8::assert_packed_source(source, "area");
+    common::rgba8::assert_packed_output(&output, "area");
+
+    if resize_area_rows_fast_path_into(source, &mut output, plan.output_dimensions, y_start) {
+        return;
+    }
+
+    planned::resize_rows_with_plan_into(source, output, plan, y_start);
+}
+
+/// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached area metadata.
+///
+/// The plan must match the input and output dimensions. Packed-row assertions
+/// are development tripwires for the shared production resize boundary.
 pub fn resize_area_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &AreaResizePlan,
 ) {
-    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
-    debug_assert_eq!(output.dimensions(), plan.output_dimensions);
+    assert_eq!(source.dimensions(), plan.source_dimensions);
+    assert_eq!(output.dimensions(), plan.output_dimensions);
 
     common::rgba8::assert_packed_source(source, "area");
     common::rgba8::assert_packed_output(&output, "area");
@@ -92,4 +117,43 @@ fn resize_area_fast_path_into(
 
     exact::resize_exact_integer_downscale_into(source, output)
         || exact::resize_exact_integer_upscale_into(source, output)
+}
+
+fn resize_area_rows_fast_path_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+) -> bool {
+    if source.dimensions() == full_output_dimensions {
+        let row_byte_len =
+            full_output_dimensions.width_usize() * crate::image::rgba8::RGBA8_CHANNELS;
+        let byte_start = y_start as usize * row_byte_len;
+        let byte_end = byte_start + output.dimensions().height_usize() * row_byte_len;
+        output
+            .data_mut()
+            .copy_from_slice(&source.data()[byte_start..byte_end]);
+        return true;
+    }
+
+    exact::resize_exact_integer_downscale_rows_into(source, output, full_output_dimensions, y_start)
+        || exact::resize_exact_integer_upscale_rows_into(
+            source,
+            output,
+            full_output_dimensions,
+            y_start,
+        )
+}
+
+fn assert_row_band_matches_plan(
+    band_dimensions: crate::image::ImageDimensions,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+) {
+    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
+    assert!(
+        y_start <= full_output_dimensions.height()
+            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
+        "row band must fit inside full output dimensions"
+    );
 }

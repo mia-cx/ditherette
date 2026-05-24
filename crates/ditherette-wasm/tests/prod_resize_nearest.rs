@@ -98,7 +98,8 @@ fn assert_row_ranges_match_full(
         output_dimensions,
         ProdResizeAnchor::Center,
     );
-    let output_row_len = output_dimensions.width_usize() * 4;
+    let output_row_len =
+        output_dimensions.storage_len::<Rgba8>().unwrap() / output_dimensions.height_usize();
     let mut y_start = 0;
     while y_start < output_dimensions.height() {
         let y_end = (y_start + 2).min(output_dimensions.height());
@@ -140,7 +141,7 @@ fn anchors() -> [(SpecResizeAnchor, ProdResizeAnchor); 9] {
 fn numbered_rgba_source(dimensions: ImageDimensions) -> Vec<u8> {
     let mut source = Vec::with_capacity(dimensions.storage_len::<Rgba8>().unwrap());
     for index in 0..dimensions.pixel_count().unwrap() {
-        source.extend_from_slice(&[index as u8, index.wrapping_mul(3) as u8, 0, 255]);
+        source.extend_from_slice(&(index as u32).to_le_bytes());
     }
     source
 }
