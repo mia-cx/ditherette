@@ -1,6 +1,8 @@
 use ditherette_wasm::{
     image::ImageDimensions,
-    prod::tiling::{for_each_row_band, for_each_tile, RowBand, RowBandPlan, Tile, TileGrid},
+    prod::tiling::{
+        for_each_row_band, for_each_tile, RowBand, RowBandPlan, Tile, TileGrid, WorkerBudget,
+    },
 };
 
 #[test]
@@ -92,6 +94,35 @@ fn tile_grid_covers_output_in_row_major_tiles() {
     );
     assert!(TileGrid::new(dimensions, 0, 3).is_none());
     assert!(TileGrid::new(dimensions, 2, 0).is_none());
+}
+
+#[test]
+fn worker_budget_uses_half_cpu_budget_clamped_to_eight() {
+    assert_eq!(WorkerBudget::from_available_parallelism(1).pool_size(), 1);
+    assert_eq!(WorkerBudget::from_available_parallelism(2).pool_size(), 1);
+    assert_eq!(WorkerBudget::from_available_parallelism(8).pool_size(), 4);
+    assert_eq!(WorkerBudget::from_available_parallelism(64).pool_size(), 8);
+
+    assert_eq!(
+        WorkerBudget::from_available_parallelism(8)
+            .worker_counts()
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3, 4]
+    );
+}
+
+#[test]
+fn worker_budget_caps_active_workers_by_pool_and_work_items() {
+    let budget = WorkerBudget::new(4);
+
+    assert_eq!(budget.active_workers(8, 10), 4);
+    assert_eq!(budget.active_workers(3, 2), 2);
+    assert_eq!(budget.active_workers(0, 3), 1);
+    assert_eq!(budget.active_workers(3, 0), 0);
+
+    assert!(budget.can_use_workers(2, 2));
+    assert!(!budget.can_use_workers(3, 2));
+    assert!(!budget.can_use_workers(5, 8));
 }
 
 #[test]

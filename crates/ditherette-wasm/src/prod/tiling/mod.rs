@@ -7,10 +7,12 @@
 
 mod executor;
 mod grid;
+mod policy;
 mod row_band;
 mod tile;
 
 pub use executor::{for_each_row_band, for_each_tile};
 pub use grid::TileGrid;
+pub use policy::{WorkerBudget, MAX_WORKER_BUDGET};
 pub use row_band::{RowBand, RowBandPlan};
 pub use tile::Tile;
