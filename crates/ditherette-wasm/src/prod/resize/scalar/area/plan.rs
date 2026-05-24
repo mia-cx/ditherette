@@ -6,7 +6,7 @@
 
 use crate::image::{rgba8, ImageDimensions};
 
-use super::coverage::{clamp_i64, interval_overlap};
+use super::coverage::interval_overlap;
 
 /// Reusable area-resize metadata for one source/output shape.
 pub struct AreaResizePlan {
@@ -103,6 +103,7 @@ fn axis_spans(source_len: u32, output_len: u32, scale: f64) -> Vec<Vec<AxisOverl
             let start = f64::from(output_index) * scale;
             let end = f64::from(output_index + 1) * scale;
             (start.floor() as i64..end.ceil() as i64)
+                .filter(|&source_index| (0..i64::from(source_len)).contains(&source_index))
                 .filter_map(|source_index| {
                     let overlap = interval_overlap(
                         start,
@@ -110,12 +111,7 @@ fn axis_spans(source_len: u32, output_len: u32, scale: f64) -> Vec<Vec<AxisOverl
                         source_index as f64,
                         source_index as f64 + 1.0,
                     );
-                    if overlap == 0.0 {
-                        return None;
-                    }
-
-                    let source_index = clamp_i64(source_index, 0, i64::from(source_len) - 1);
-                    Some(AxisOverlap {
+                    (overlap != 0.0).then_some(AxisOverlap {
                         source_index: source_index as usize,
                         overlap,
                     })

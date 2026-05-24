@@ -104,6 +104,9 @@ pub(super) fn exact_downscale_factors(
     output_width: u32,
     output_height: u32,
 ) -> Option<(u32, u32)> {
+    if output_width == 0 || output_height == 0 {
+        return None;
+    }
     if source_width <= output_width || source_height <= output_height {
         return None;
     }
@@ -123,6 +126,9 @@ pub(super) fn exact_upscale_factors(
     output_width: u32,
     output_height: u32,
 ) -> Option<(u32, u32)> {
+    if source_width == 0 || source_height == 0 {
+        return None;
+    }
     if source_width >= output_width || source_height >= output_height {
         return None;
     }
@@ -134,6 +140,7 @@ pub(super) fn exact_upscale_factors(
 }
 
 pub(super) fn alignment_offset(factor: u32, alignment: AxisAlignment) -> u32 {
+    assert!(factor > 0, "alignment factor must be non-zero");
     match alignment {
         AxisAlignment::Start => 0,
         AxisAlignment::Center => factor / 2,

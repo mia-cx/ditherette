@@ -17,17 +17,36 @@ pub(super) fn resize_exact_downscale_into(
     x_step: usize,
     y_step: usize,
 ) {
-    if x_step == 2 && y_step == 2 {
+    resize_exact_downscale_rows_into(source, output, x_step, y_step, 0);
+}
+
+pub(super) fn resize_exact_downscale_rows_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut ImageViewMut<'_, Rgba8>,
+    x_step: usize,
+    y_step: usize,
+    y_start: u32,
+) {
+    if y_start == 0 && x_step == 2 && y_step == 2 {
         resize_exact_2x_downscale_into(source, output);
-    } else if x_step == 4 && y_step == 4 {
+    } else if y_start == 0 && x_step == 4 && y_step == 4 {
         downscale_fixed_u16::<4, 16, 8>(source, output);
-    } else if x_step == 8 && y_step == 8 {
+    } else if y_start == 0 && x_step == 8 && y_step == 8 {
         downscale_fixed_u32::<8, 64, 32>(source, output);
     } else if x_step == 10 && y_step == 10 {
-        resize_exact_weighted_block_downscale_into(source, output, 10, 10, 1.0 / 100.0);
+        resize_exact_weighted_block_downscale_rows_into(
+            source,
+            output,
+            10,
+            10,
+            1.0 / 100.0,
+            y_start,
+        );
     } else {
         let weight = 1.0 / (x_step * y_step) as f64;
-        resize_exact_weighted_block_downscale_into(source, output, x_step, y_step, weight);
+        resize_exact_weighted_block_downscale_rows_into(
+            source, output, x_step, y_step, weight, y_start,
+        );
     }
 }
 
@@ -186,12 +205,13 @@ fn sum_block_u32<const STEP: usize>(
     sums
 }
 
-fn resize_exact_weighted_block_downscale_into(
+fn resize_exact_weighted_block_downscale_rows_into(
     source: ImageView<'_, Rgba8>,
     output: &mut ImageViewMut<'_, Rgba8>,
     x_step: usize,
     y_step: usize,
     weight: f64,
+    y_start: u32,
 ) {
     let source_width = source.dimensions().width_usize();
     let output_width = output.dimensions().width_usize();
@@ -199,12 +219,12 @@ fn resize_exact_weighted_block_downscale_into(
     let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
     let source_data = source.data();
 
-    for (output_y, output_row) in output
+    for (local_y, output_row) in output
         .data_mut()
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
     {
-        let source_y_start = output_y * y_step;
+        let source_y_start = (y_start as usize + local_y) * y_step;
         for (output_x, output_pixel) in output_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
             .enumerate()

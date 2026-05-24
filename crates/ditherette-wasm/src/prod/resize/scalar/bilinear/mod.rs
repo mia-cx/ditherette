@@ -61,6 +61,10 @@ pub fn resize_bilinear_rgba8_into(
     resize_bilinear_rgba8_with_plan_into(source, output, &plan);
 }
 
+/// Resize one full-width output row range with a triangle filter.
+///
+/// `full_output_dimensions` is the complete resize target, while `output`
+/// stores the local row band starting at absolute output row `y_start`.
 pub fn resize_bilinear_rgba8_rows_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -68,10 +72,22 @@ pub fn resize_bilinear_rgba8_rows_into(
     y_start: u32,
     anchor: ResizeAnchor,
 ) {
+    let plan = BilinearResizePlan::new(source.dimensions(), full_output_dimensions, anchor);
+    resize_bilinear_rgba8_rows_with_plan_into(source, output, &plan, y_start);
+}
+
+/// Resize one full-width output row range with cached bilinear metadata.
+pub fn resize_bilinear_rgba8_rows_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    y_start: u32,
+) {
     common::rgba8::assert_packed_source(source, "bilinear");
     common::rgba8::assert_packed_output(&output, "bilinear");
-    let plan = BilinearResizePlan::new(source.dimensions(), full_output_dimensions, anchor);
-    kernel::resize_packed_rgba8_rows_with_triangle_filter_into(source, output, &plan, y_start);
+    assert_eq!(source.dimensions(), plan.source_dimensions());
+    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    kernel::resize_packed_rgba8_rows_with_triangle_filter_into(source, output, plan, y_start);
 }
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached metadata.
@@ -82,8 +98,8 @@ pub fn resize_bilinear_rgba8_with_plan_into(
 ) {
     common::rgba8::assert_packed_source(source, "bilinear");
     common::rgba8::assert_packed_output(&output, "bilinear");
-    debug_assert_eq!(source.dimensions(), plan.source_dimensions());
-    debug_assert_eq!(output.dimensions(), plan.output_dimensions());
+    assert_eq!(source.dimensions(), plan.source_dimensions());
+    assert_eq!(output.dimensions(), plan.output_dimensions());
 
     if plan.is_identity() {
         output.data_mut().copy_from_slice(source.data());
@@ -91,4 +107,17 @@ pub fn resize_bilinear_rgba8_with_plan_into(
     }
 
     kernel::resize_packed_rgba8_with_triangle_filter_into(source, output, plan);
+}
+
+fn assert_row_band_matches_plan(
+    band_dimensions: crate::image::ImageDimensions,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+) {
+    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
+    assert!(
+        y_start <= full_output_dimensions.height()
+            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
+        "row band must fit inside full output dimensions"
+    );
 }

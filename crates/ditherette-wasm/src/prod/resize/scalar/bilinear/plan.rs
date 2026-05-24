@@ -7,7 +7,7 @@ use crate::image::ImageDimensions;
 
 use super::{
     alignment::{self, ResizeAnchor},
-    coordinates::{clamp_i64, map_axis_position, support_range},
+    coordinates::{map_axis_position, support_range},
     filter::triangle_weight,
 };
 
@@ -71,6 +71,7 @@ impl BilinearResizePlan {
         }
     }
 
+    /// Return whether this plan was built for the given shape and anchor.
     pub fn matches(
         &self,
         source_dimensions: ImageDimensions,
@@ -111,7 +112,7 @@ fn axis_taps(
                         return None;
                     }
 
-                    let index = clamp_i64(source_coordinate, 0, i64::from(source_len) - 1) as usize;
+                    let index = source_coordinate.clamp(0, i64::from(source_len) - 1) as usize;
                     Some(AxisTap { index, weight })
                 })
                 .collect()

@@ -41,12 +41,10 @@ pub fn resize_nearest_rgba8_into(
     packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), &plan);
 }
 
-/// Resize packed RGBA8 `source` into packed RGBA8 `output` with a cached plan.
+/// Resize one full-width output row range with nearest sampling.
 ///
-/// This is the reusable-plan hot-loop entrypoint. The plan must match the input
-/// and output dimensions. Packed-row assertions are intentionally kept here so
-/// all callers hit the same production resize boundary before entering the
-/// nearest word-copy kernel.
+/// `full_output_dimensions` is the complete resize target, while `output`
+/// stores the local row band starting at absolute output row `y_start`.
 pub fn resize_nearest_rgba8_rows_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -58,13 +56,19 @@ pub fn resize_nearest_rgba8_rows_into(
     resize_nearest_rgba8_rows_with_plan_into(source, output, &plan, y_start);
 }
 
+/// Resize one full-width output row range with cached nearest metadata.
+///
+/// The plan must match `source` and the complete output dimensions. The local
+/// `output` band must have the full output width and fit within `y_start..` of
+/// the complete output height.
 pub fn resize_nearest_rgba8_rows_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &NearestResizePlan,
     y_start: u32,
 ) {
-    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
+    assert_eq!(source.dimensions(), plan.source_dimensions);
+    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions, y_start);
     common::rgba8::assert_packed_source(source, "nearest");
     common::rgba8::assert_packed_output(&output, "nearest");
     let y_end = y_start + output.dimensions().height();
@@ -78,13 +82,16 @@ pub fn resize_nearest_rgba8_rows_with_plan_into(
     );
 }
 
+/// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached nearest metadata.
+///
+/// The plan must match the input and output dimensions.
 pub fn resize_nearest_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &NearestResizePlan,
 ) {
-    debug_assert_eq!(source.dimensions(), plan.source_dimensions);
-    debug_assert_eq!(output.dimensions(), plan.output_dimensions);
+    assert_eq!(source.dimensions(), plan.source_dimensions);
+    assert_eq!(output.dimensions(), plan.output_dimensions);
 
     common::rgba8::assert_packed_source(source, "nearest");
     common::rgba8::assert_packed_output(&output, "nearest");
@@ -95,4 +102,17 @@ pub fn resize_nearest_rgba8_with_plan_into(
     }
 
     packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), plan);
+}
+
+fn assert_row_band_matches_plan(
+    band_dimensions: crate::image::ImageDimensions,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+) {
+    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
+    assert!(
+        y_start <= full_output_dimensions.height()
+            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
+        "row band must fit inside full output dimensions"
+    );
 }
