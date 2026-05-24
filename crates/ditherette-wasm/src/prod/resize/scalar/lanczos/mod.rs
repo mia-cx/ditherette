@@ -12,6 +12,24 @@ use super::convolution::{
     ResizeAnchor, SupportPolicy,
 };
 
+// Lanczos perf-search dependency map:
+// baseline coverage -> Lanczos-specific fixed/scale-aware plan shape -> separable
+// path choice -> tap pruning/approximation -> fixed-radius kernels.
+// TODO(perf:harness, rank=29): Add an explicit Lanczos comparison profile or
+// artifact against the fastest available external CPU Lanczos baseline so the
+// current gap is measurable without relying on missing old crate code. Keep the
+// existing bounded oracle checks, then benchmark the four manifest Lanczos
+// profiles plus the comparison profile.
+// TODO(perf:path, rank=30): Split Lanczos2/Lanczos3 fixed-policy dispatch away
+// from the generic convolution entrypoint so fixed-radius kernels can avoid
+// generic plan and tap-shape branches. Verify bounded correctness, then
+// benchmark `ditherette-bench run lanczos2` and `ditherette-bench run lanczos3`.
+// TODO(perf:path, rank=31): Add a Lanczos-specific scale-aware downscale path
+// selector after the separability experiments settle; strong minification may
+// need a different algorithm than generic direct convolution. Verify bounded
+// correctness, then benchmark `ditherette-bench run lanczos2-scale-aware` and
+// `ditherette-bench run lanczos3-scale-aware`.
+
 /// Reusable Lanczos resize metadata for one source/output shape and radius.
 pub struct LanczosResizePlan {
     inner: ConvolutionResizePlan,
