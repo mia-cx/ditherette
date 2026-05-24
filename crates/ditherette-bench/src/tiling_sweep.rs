@@ -41,7 +41,7 @@ const DEFAULT_FILTERS: [&str; 9] = [
 ];
 const DEFAULT_FIXTURES: &str = "Celeste_Insta_selfie,Celeste_box_art";
 const DEFAULT_SAMPLES: usize = 7;
-const DEFAULT_WARMUP: usize = 2;
+const DEFAULT_WARMUP: usize = 30;
 const DEFAULT_MIN_BAND_HEIGHT: u32 = 32;
 const MAX_DIMENSION_CASES_PER_FIXTURE: usize = 26;
 const BALANCED_CHUNKS_PER_WORKER: [u32; 6] = [1, 2, 3, 4, 6, 8];
