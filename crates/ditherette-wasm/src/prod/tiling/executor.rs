@@ -1,8 +1,9 @@
-//! Sequential tiling executors.
+//! Sequential tiling visitors.
 //!
-//! These helpers intentionally do not choose tile sizes or parallelism. They are
-//! the small shared loop domain adapters can call before specialized schedulers
-//! exist.
+//! These helpers intentionally do not choose tile sizes or parallelism. Worker
+//! budgeting and assignment live in the generic tiling policy/work modules;
+//! domain adapters choose whether to execute those assignments sequentially,
+//! through a thread pool, or through a platform-specific scheduler.
 
 use super::{RowBandPlan, TileGrid};
 

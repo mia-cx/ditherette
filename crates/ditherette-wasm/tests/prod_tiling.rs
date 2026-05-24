@@ -1,7 +1,8 @@
 use ditherette_wasm::{
     image::ImageDimensions,
     prod::tiling::{
-        for_each_row_band, for_each_tile, RowBand, RowBandPlan, Tile, TileGrid, WorkerBudget,
+        for_each_row_band, for_each_tile, RowBand, RowBandPlan, RowBandWorkPlan, Tile, TileGrid,
+        WorkerBudget,
     },
 };
 
@@ -123,6 +124,37 @@ fn worker_budget_caps_active_workers_by_pool_and_work_items() {
     assert!(budget.can_use_workers(2, 2));
     assert!(!budget.can_use_workers(3, 2));
     assert!(!budget.can_use_workers(5, 8));
+}
+
+#[test]
+fn row_band_work_plan_assigns_contiguous_chunks_to_active_workers() {
+    let dimensions = ImageDimensions::new(8, 10).unwrap();
+    let bands = RowBandPlan::for_output_height(dimensions, 2).unwrap();
+    let work = RowBandWorkPlan::new(&bands, WorkerBudget::new(8), 3).unwrap();
+
+    assert_eq!(work.requested_workers(), 3);
+    assert_eq!(work.active_workers(), 3);
+    assert_eq!(work.assignments().len(), 3);
+    assert_eq!(work.assignments()[0].worker_index(), 0);
+    assert_eq!(
+        work.assignments()[0].bands(),
+        &[RowBand::new(0, 2).unwrap(), RowBand::new(2, 4).unwrap()]
+    );
+    assert_eq!(
+        work.assignments()[2].bands(),
+        &[RowBand::new(8, 10).unwrap()]
+    );
+}
+
+#[test]
+fn row_band_work_plan_caps_workers_by_band_count() {
+    let dimensions = ImageDimensions::new(8, 4).unwrap();
+    let bands = RowBandPlan::for_output_height(dimensions, 2).unwrap();
+    let work = RowBandWorkPlan::new(&bands, WorkerBudget::new(8), 8).unwrap();
+
+    assert_eq!(work.requested_workers(), 8);
+    assert_eq!(work.active_workers(), 2);
+    assert_eq!(work.assignments().len(), 2);
 }
 
 #[test]

@@ -535,16 +535,19 @@ fn run_subject_row_bands(
         )));
     };
 
+    let Some(work_plan) = ditherette_wasm::prod::tiling::RowBandWorkPlan::new(
+        &plan,
+        ditherette_wasm::prod::tiling::WorkerBudget::new(worker_count),
+        worker_count,
+    ) else {
+        return Ok(());
+    };
     let bands = plan
         .bands()
         .iter()
         .map(|band| (band.y_start(), band.y_end()))
         .collect::<Vec<_>>();
-    let worker_budget = ditherette_wasm::prod::tiling::WorkerBudget::new(worker_count);
-    let effective_worker_count = usize::try_from(
-        worker_budget.active_workers(worker_count, u32::try_from(bands.len()).unwrap_or(u32::MAX)),
-    )
-    .unwrap_or(usize::MAX);
+    let effective_worker_count = usize::try_from(work_plan.active_workers()).unwrap_or(usize::MAX);
 
     if effective_worker_count == 1 {
         for &(y_start, y_end) in &bands {
@@ -561,13 +564,17 @@ fn run_subject_row_bands(
         return Ok(());
     }
 
-    let chunk_size = bands.len().div_ceil(effective_worker_count);
     let rendered_bands =
         thread::scope(|scope| {
-            let handles = bands
-                .chunks(chunk_size)
-                .map(|chunk| {
-                    let chunk = chunk.to_vec();
+            let handles = work_plan
+                .assignments()
+                .iter()
+                .map(|assignment| {
+                    let chunk = assignment
+                        .bands()
+                        .iter()
+                        .map(|band| (band.y_start(), band.y_end()))
+                        .collect::<Vec<_>>();
                     scope.spawn(move || -> Result<Vec<(u32, Vec<u8>)>, BenchError> {
                         chunk
                             .into_iter()
