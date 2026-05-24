@@ -4,6 +4,12 @@ use std::f64::consts::PI;
 
 use super::super::convolution::ReconstructionKernel;
 
+// TODO(perf:micro, rank=35, after perf:layout lanczos-tap-pruning): Test a
+// bounded Lanczos weight approximation for plan construction, such as f32 math
+// or a small sinc lookup/polynomial, because cold one-shot resizes pay this sin
+// cost every call. Verify bounded correctness, then benchmark all four Lanczos
+// profiles.
+
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Lanczos {
     radius: f64,

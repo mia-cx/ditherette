@@ -39,6 +39,21 @@ use super::{
 // CLOSE(perf): Pre-normalized per-axis f32 weights or per-output reciprocals
 // depended on compact tap storage and relaxed precision; compact layout is
 // rejected, and f32 tap weights fail exact unit coverage.
+// TODO(perf:layout, rank=32, after perf:path lanczos-fixed-dispatch): Store
+// fixed-policy Lanczos2/Lanczos3 taps in fixed-size per-output arrays instead of
+// nested heap-allocated vectors. This is narrower than the rejected flattened
+// generic layout; verify bounded correctness, then benchmark `ditherette-bench
+// run lanczos2` and `ditherette-bench run lanczos3`.
+// TODO(perf:layout, rank=33): Test bounded Lanczos tap pruning for tiny absolute
+// weights in scale-aware downscales, followed by per-output renormalization.
+// This intentionally changes exact output, so judge it only with bounded
+// correctness in `ditherette-bench run lanczos2-scale-aware` and
+// `ditherette-bench run lanczos3-scale-aware`.
+// TODO(perf:layout, rank=34, after perf:layout lanczos-fixed-arrays): Test
+// precomputing byte offsets for fixed-size Lanczos array taps only. Generic
+// nested offsets regressed bicubic/Lanczos2, but fixed arrays may remove the
+// extra indirection; benchmark `ditherette-bench run lanczos2` and
+// `ditherette-bench run lanczos3`.
 
 /// Reusable convolution resize metadata for one source/output shape and kernel.
 pub struct ConvolutionResizePlan {

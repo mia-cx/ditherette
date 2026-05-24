@@ -27,6 +27,10 @@ use super::plan::{AxisTap, ConvolutionResizePlan};
 // width-only and height-only resizes. Correctness passed, and the six
 // `*-anisotropic` profiles improved from small bicubic gains to large Lanczos
 // wins.
+// TODO(perf:kernel, rank=36, after perf:layout lanczos-fixed-arrays): Test
+// Lanczos2/Lanczos3 fixed-radius kernels that unroll channel and tap loops
+// against fixed-size tap arrays. Verify bounded correctness, then benchmark
+// `ditherette-bench run lanczos2` and `ditherette-bench run lanczos3`.
 
 pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,
