@@ -83,6 +83,63 @@ pub(super) fn resize_with_plan_into(
     }
 }
 
+pub(super) fn resize_rows_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+    y_start: u32,
+) {
+    let source_row_byte_len = source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = plan.output_dimensions.width_usize() * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
+    let mut vertical_row = vec![0.0; source_row_byte_len];
+
+    for (local_y, output_row) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .enumerate()
+    {
+        let output_y = y_start as usize + local_y;
+        if plan.same_width() {
+            write_vertical_row(
+                output_row,
+                source_data,
+                source_row_byte_len,
+                &plan.y_spans[output_y],
+                plan.area,
+            );
+            continue;
+        }
+
+        if plan.same_height() {
+            let source_row_start = output_y * source_row_byte_len;
+            let source_row = &source_data[source_row_start..source_row_start + source_row_byte_len];
+            for (output_pixel, x_spans) in output_row
+                .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+                .zip(&plan.x_spans)
+            {
+                write_horizontal_source_pixel(output_pixel, source_row, x_spans, plan.area);
+            }
+            continue;
+        }
+
+        vertical_row.fill(0.0);
+        accumulate_vertical_row(
+            source_data,
+            source_row_byte_len,
+            &mut vertical_row,
+            &plan.y_spans[output_y],
+        );
+
+        for (output_pixel, x_spans) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .zip(&plan.x_spans)
+        {
+            write_horizontal_pixel(output_pixel, &vertical_row, x_spans, plan.area);
+        }
+    }
+}
+
 fn resize_vertical_only_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,

@@ -8,8 +8,8 @@ mod filter;
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
 use super::convolution::{
-    resize_convolution_rgba8_into, resize_convolution_rgba8_with_plan_into, ConvolutionResizePlan,
-    ResizeAnchor, SupportPolicy,
+    resize_convolution_rgba8_into, resize_convolution_rgba8_rows_into,
+    resize_convolution_rgba8_with_plan_into, ConvolutionResizePlan, ResizeAnchor, SupportPolicy,
 };
 
 /// Reusable Catmull-Rom bicubic resize metadata for one source/output shape.
@@ -45,6 +45,25 @@ pub fn resize_bicubic_rgba8_into(
     support_policy: SupportPolicy,
 ) {
     resize_convolution_rgba8_into(source, output, anchor, filter::CATMULL_ROM, support_policy);
+}
+
+pub fn resize_bicubic_rgba8_rows_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: ImageDimensions,
+    y_start: u32,
+    anchor: ResizeAnchor,
+    support_policy: SupportPolicy,
+) {
+    resize_convolution_rgba8_rows_into(
+        source,
+        output,
+        full_output_dimensions,
+        y_start,
+        anchor,
+        filter::CATMULL_ROM,
+        support_policy,
+    );
 }
 
 /// Resizes packed RGBA8 `source` into packed RGBA8 `output` with a cached bicubic plan.

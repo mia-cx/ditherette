@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    alignment::AxisAlignment,
+    alignment::{axis_coordinate_map, AxisAlignment},
     plan::NearestResizePlan,
     scale::{alignment_offset, NearestScaleClass},
 };
@@ -66,6 +66,60 @@ pub(super) fn resize_with_plan_into(
         NearestScaleClass::Upscale => {
             resize_upscale_row_repeat(source, source_dimensions, output, plan);
         }
+    }
+}
+
+pub(super) fn resize_rows_with_plan_into(
+    source: &[u8],
+    source_dimensions: ImageDimensions,
+    output: &mut [u8],
+    plan: &NearestResizePlan,
+    y_start: u32,
+    y_end: u32,
+) {
+    let source_row_len = rgba8::packed_row_byte_len(source_dimensions);
+    let output_row_len = rgba8::packed_row_byte_len(plan.output_dimensions);
+    let output_width = plan.output_dimensions.width_usize();
+    let start = y_start as usize;
+    let end = y_end as usize;
+    let (x_alignment, y_alignment) = plan.anchor.axes();
+    let x_source_starts;
+    let x_source_starts = if plan.x_source_starts.is_empty() {
+        x_source_starts = axis_coordinate_map(
+            source_dimensions.width(),
+            plan.output_dimensions.width(),
+            x_alignment,
+        )
+        .into_iter()
+        .map(|x| x as usize * rgba8::RGBA8_CHANNELS)
+        .collect::<Vec<_>>();
+        &x_source_starts
+    } else {
+        &plan.x_source_starts
+    };
+    let y_coordinates;
+    let y_coordinates = if plan.y_coordinates.is_empty() {
+        y_coordinates = axis_coordinate_map(
+            source_dimensions.height(),
+            plan.output_dimensions.height(),
+            y_alignment,
+        );
+        &y_coordinates
+    } else {
+        &plan.y_coordinates
+    };
+
+    for (local_y, source_y) in y_coordinates[start..end].iter().copied().enumerate() {
+        let source_row_start = source_y as usize * source_row_len;
+        let output_row_start = local_y * output_row_len;
+        copy_mapped_row_words(
+            source,
+            source_row_start,
+            output,
+            output_row_start,
+            x_source_starts,
+            output_width,
+        );
     }
 }
 

@@ -8,8 +8,8 @@ mod filter;
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
 use super::convolution::{
-    resize_convolution_rgba8_into, resize_convolution_rgba8_with_plan_into, ConvolutionResizePlan,
-    ResizeAnchor, SupportPolicy,
+    resize_convolution_rgba8_into, resize_convolution_rgba8_rows_into,
+    resize_convolution_rgba8_with_plan_into, ConvolutionResizePlan, ResizeAnchor, SupportPolicy,
 };
 
 // Lanczos perf-search dependency map:
@@ -74,6 +74,26 @@ pub fn resize_lanczos_rgba8_into(
     );
 }
 
+pub fn resize_lanczos_rgba8_rows_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: ImageDimensions,
+    y_start: u32,
+    anchor: ResizeAnchor,
+    radius: u32,
+    support_policy: SupportPolicy,
+) {
+    resize_convolution_rgba8_rows_into(
+        source,
+        output,
+        full_output_dimensions,
+        y_start,
+        anchor,
+        filter::Lanczos::new(radius),
+        support_policy,
+    );
+}
+
 /// Resizes packed RGBA8 `source` into packed RGBA8 `output` with a cached Lanczos plan.
 pub fn resize_lanczos_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
@@ -122,5 +142,67 @@ pub fn resize_lanczos3_rgba8_into(
         SupportPolicy::ScaleAware => {
             resize_lanczos_rgba8_into(source, output, anchor, 3, support_policy)
         }
+    }
+}
+
+/// Lanczos2 row-band convenience wrapper for packed RGBA8.
+pub fn resize_lanczos2_rgba8_rows_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: ImageDimensions,
+    y_start: u32,
+    anchor: ResizeAnchor,
+    support_policy: SupportPolicy,
+) {
+    match support_policy {
+        SupportPolicy::Fixed => resize_convolution_rgba8_rows_into(
+            source,
+            output,
+            full_output_dimensions,
+            y_start,
+            anchor,
+            filter::FixedLanczos::<2>,
+            support_policy,
+        ),
+        SupportPolicy::ScaleAware => resize_lanczos_rgba8_rows_into(
+            source,
+            output,
+            full_output_dimensions,
+            y_start,
+            anchor,
+            2,
+            support_policy,
+        ),
+    }
+}
+
+/// Lanczos3 row-band convenience wrapper for packed RGBA8.
+pub fn resize_lanczos3_rgba8_rows_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: ImageDimensions,
+    y_start: u32,
+    anchor: ResizeAnchor,
+    support_policy: SupportPolicy,
+) {
+    match support_policy {
+        SupportPolicy::Fixed => resize_convolution_rgba8_rows_into(
+            source,
+            output,
+            full_output_dimensions,
+            y_start,
+            anchor,
+            filter::FixedLanczos::<3>,
+            support_policy,
+        ),
+        SupportPolicy::ScaleAware => resize_lanczos_rgba8_rows_into(
+            source,
+            output,
+            full_output_dimensions,
+            y_start,
+            anchor,
+            3,
+            support_policy,
+        ),
     }
 }

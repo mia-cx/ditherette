@@ -23,7 +23,7 @@ use crate::{
     error::BenchError,
     fixture::fixtures_from_flags,
     registry::Registry,
-    result::SampleStats,
+    result::{verify_with_bounds, SampleStats, VerificationBounds},
     util::{checksum, format_ns, output_dimensions, RGBA_CHANNELS},
 };
 
@@ -112,6 +112,23 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                         options.samples,
                         options.warmup_iterations,
                     )?;
+                    let verification = verify_with_bounds(
+                        &scalar.output,
+                        &tiled.output,
+                        bounds_for_subject(subject),
+                    );
+                    if !verification.passed {
+                        return Err(BenchError::Runtime(format!(
+                            "tiled row-range output failed verification for {} {} {}x{} band_height={} workers={}: {:?}",
+                            subject.descriptor.id,
+                            fixture.id,
+                            output.0,
+                            output.1,
+                            band_height,
+                            worker_count,
+                            verification.first_mismatch,
+                        )));
+                    }
                     let effective_worker_count =
                         worker_budget.active_workers(worker_count, band_count);
                     let pixels_per_band =
@@ -516,6 +533,124 @@ fn run_subject(
     .map_err(|error| BenchError::Runtime(format!("resize subject failed: {error}")))
 }
 
+fn run_subject_rows(
+    subject: &ResizeBenchSubject,
+    source: &[u8],
+    output: &mut [u8],
+    source_dimensions: (u32, u32),
+    full_output_dimensions: (u32, u32),
+    y_start: u32,
+    band_output_dimensions: (u32, u32),
+) -> Result<(), BenchError> {
+    use ditherette_wasm::{
+        image::{ImageView, ImageViewMut, Rgba8, RowStride},
+        prod::resize::scalar::{
+            area::resize_area_rgba8_rows_into,
+            bicubic::resize_bicubic_rgba8_rows_into,
+            bilinear::{
+                alignment::ResizeAnchor as BilinearAnchor, resize_bilinear_rgba8_rows_into,
+            },
+            convolution::{ResizeAnchor as ConvolutionAnchor, SupportPolicy},
+            lanczos::{resize_lanczos2_rgba8_rows_into, resize_lanczos3_rgba8_rows_into},
+            nearest::{alignment::ResizeAnchor as NearestAnchor, resize_nearest_rgba8_rows_into},
+        },
+    };
+
+    let source_view = ImageView::<Rgba8>::new(
+        source,
+        image_dimensions(source_dimensions)?,
+        RowStride::new(usize::try_from(source_dimensions.0).unwrap() * RGBA_CHANNELS)
+            .map_err(|error| BenchError::Runtime(error.to_string()))?,
+    )
+    .map_err(|error| BenchError::Runtime(error.to_string()))?;
+    let output_view = ImageViewMut::<Rgba8>::new(
+        output,
+        image_dimensions(band_output_dimensions)?,
+        RowStride::new(usize::try_from(band_output_dimensions.0).unwrap() * RGBA_CHANNELS)
+            .map_err(|error| BenchError::Runtime(error.to_string()))?,
+    )
+    .map_err(|error| BenchError::Runtime(error.to_string()))?;
+    let full_output_dimensions = image_dimensions(full_output_dimensions)?;
+
+    match (
+        subject.descriptor.id.filter(),
+        subject.descriptor.id.variant(),
+    ) {
+        ("nearest", _) => resize_nearest_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            NearestAnchor::Center,
+        ),
+        ("area", _) => {
+            resize_area_rgba8_rows_into(source_view, output_view, full_output_dimensions, y_start)
+        }
+        ("bilinear", _) => resize_bilinear_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            BilinearAnchor::Center,
+        ),
+        ("bicubic", "catmull-rom") => resize_bicubic_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            ConvolutionAnchor::Center,
+            SupportPolicy::Fixed,
+        ),
+        ("bicubic", "catmull-rom-scale-aware") => resize_bicubic_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            ConvolutionAnchor::Center,
+            SupportPolicy::ScaleAware,
+        ),
+        ("lanczos2", "fixed") => resize_lanczos2_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            ConvolutionAnchor::Center,
+            SupportPolicy::Fixed,
+        ),
+        ("lanczos2", "scale-aware") => resize_lanczos2_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            ConvolutionAnchor::Center,
+            SupportPolicy::ScaleAware,
+        ),
+        ("lanczos3", "fixed") => resize_lanczos3_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            ConvolutionAnchor::Center,
+            SupportPolicy::Fixed,
+        ),
+        ("lanczos3", "scale-aware") => resize_lanczos3_rgba8_rows_into(
+            source_view,
+            output_view,
+            full_output_dimensions,
+            y_start,
+            ConvolutionAnchor::Center,
+            SupportPolicy::ScaleAware,
+        ),
+        _ => {
+            return Err(BenchError::Config(format!(
+                "tiling sweep has no row-range adapter for {}",
+                subject.descriptor.id
+            )))
+        }
+    }
+    Ok(())
+}
+
 fn run_subject_row_bands(
     subject: &ResizeBenchSubject,
     source: &[u8],
@@ -555,7 +690,7 @@ fn run_subject_row_bands(
                 subject,
                 source,
                 source_dimensions,
-                output_dimensions.0,
+                output_dimensions,
                 y_start,
                 y_end,
             )?;
@@ -583,7 +718,7 @@ fn run_subject_row_bands(
                                     subject,
                                     source,
                                     source_dimensions,
-                                    output_dimensions.0,
+                                    output_dimensions,
                                     y_start,
                                     y_end,
                                 )
@@ -613,17 +748,19 @@ fn render_band(
     subject: &ResizeBenchSubject,
     source: &[u8],
     source_dimensions: (u32, u32),
-    output_width: u32,
+    output_dimensions: (u32, u32),
     y_start: u32,
     y_end: u32,
 ) -> Result<Vec<u8>, BenchError> {
-    let band_output_dimensions = (output_width, y_end - y_start);
+    let band_output_dimensions = (output_dimensions.0, y_end - y_start);
     let mut band_output = vec![0; output_len(band_output_dimensions)?];
-    run_subject(
+    run_subject_rows(
         subject,
         source,
         &mut band_output,
         source_dimensions,
+        output_dimensions,
+        y_start,
         band_output_dimensions,
     )?;
     Ok(band_output)
@@ -643,6 +780,14 @@ fn copy_band_output(
         .ok_or_else(|| BenchError::Runtime("band output slice out of bounds".to_owned()))?
         .copy_from_slice(band_output);
     Ok(())
+}
+
+fn bounds_for_subject(subject: &ResizeBenchSubject) -> VerificationBounds {
+    if subject.descriptor.id.filter() == "nearest" {
+        VerificationBounds::exact()
+    } else {
+        VerificationBounds::bounded_default()
+    }
 }
 
 #[derive(Clone)]
@@ -836,7 +981,7 @@ fn fit_curves(rows: &[SweepRow]) -> CurveFile {
 
     CurveFile {
         schema: "ditherette-tiling-sweep-curves-v1",
-        description: "Smooth empirical row-band and worker-count tiling curves fitted from real fixture dimensions. Rows measure band-sized resize kernel cost through the public subject API; production row-range adapters should validate fitted curves before policy rollout.",
+        description: "Smooth empirical row-band and worker-count tiling curves fitted from real fixture dimensions. Rows measure absolute-coordinate resize row-range adapters and verify tiled output against the scalar subject before recording timings.",
         curves,
     }
 }
@@ -958,7 +1103,7 @@ fn write_report(
     let mut writer = csv_writer(path)?;
     writeln!(writer, "# Tiling sweep report\n").map_err(BenchError::io)?;
     writeln!(writer, "rows: {}", rows.len()).map_err(BenchError::io)?;
-    writeln!(writer, "\nNote: this command measures parallel row-band cost by running public resize subjects on band-sized outputs across worker threads. It uses `prod::tiling::RowBandPlan` for candidate geometry, but final production curves still need validation with true absolute-coordinate row-range adapters.\n").map_err(BenchError::io)?;
+    writeln!(writer, "\nNote: this command measures full-output tiled resize using absolute-coordinate row-range adapters. Each candidate writes every output row through `prod::tiling::RowBandPlan`/`RowBandWorkPlan` and verifies the reconstructed output against the scalar subject before recording timings.\n").map_err(BenchError::io)?;
     writeln!(writer, "best rows: {}", best_rows.len()).map_err(BenchError::io)?;
     writeln!(writer, "curves: {}\n", curves.curves.len()).map_err(BenchError::io)?;
     writeln!(

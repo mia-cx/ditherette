@@ -47,6 +47,27 @@ pub fn resize_nearest_rgba8_into(
 /// and output dimensions. Packed-row assertions are intentionally kept here so
 /// all callers hit the same production resize boundary before entering the
 /// nearest word-copy kernel.
+pub fn resize_nearest_rgba8_rows_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+    anchor: alignment::ResizeAnchor,
+) {
+    common::rgba8::assert_packed_source(source, "nearest");
+    common::rgba8::assert_packed_output(&output, "nearest");
+    let y_end = y_start + output.dimensions().height();
+    let plan = NearestResizePlan::new(source.dimensions(), full_output_dimensions, anchor);
+    packed::resize_rows_with_plan_into(
+        source.data(),
+        source.dimensions(),
+        output.data_mut(),
+        &plan,
+        y_start,
+        y_end,
+    );
+}
+
 pub fn resize_nearest_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,

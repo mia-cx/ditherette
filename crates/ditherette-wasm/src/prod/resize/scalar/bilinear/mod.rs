@@ -61,6 +61,19 @@ pub fn resize_bilinear_rgba8_into(
     resize_bilinear_rgba8_with_plan_into(source, output, &plan);
 }
 
+pub fn resize_bilinear_rgba8_rows_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+    anchor: ResizeAnchor,
+) {
+    common::rgba8::assert_packed_source(source, "bilinear");
+    common::rgba8::assert_packed_output(&output, "bilinear");
+    let plan = BilinearResizePlan::new(source.dimensions(), full_output_dimensions, anchor);
+    kernel::resize_packed_rgba8_rows_with_triangle_filter_into(source, output, &plan, y_start);
+}
+
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached metadata.
 pub fn resize_bilinear_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
