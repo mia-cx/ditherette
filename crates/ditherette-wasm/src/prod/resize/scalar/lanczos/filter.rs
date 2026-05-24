@@ -1,6 +1,6 @@
 //! Lanczos windowed-sinc filter weights.
 
-use std::f64::consts::PI;
+use std::{f64::consts::PI, num::NonZeroU32};
 
 use super::super::convolution::ReconstructionKernel;
 
@@ -11,18 +11,26 @@ use super::super::convolution::ReconstructionKernel;
 // profiles.
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct FixedLanczos<const RADIUS: u32>;
+pub(super) struct FixedLanczos<const RADIUS: u32> {
+    _private: (),
+}
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Lanczos {
     radius: f64,
 }
 
+impl<const RADIUS: u32> FixedLanczos<RADIUS> {
+    pub(super) const fn new() -> Self {
+        assert!(RADIUS > 0, "Lanczos radius must be greater than zero");
+        Self { _private: () }
+    }
+}
+
 impl Lanczos {
-    pub(super) fn new(radius: u32) -> Self {
-        assert!(radius > 0, "Lanczos radius must be greater than zero");
+    pub(super) fn new(radius: NonZeroU32) -> Self {
         Self {
-            radius: f64::from(radius),
+            radius: f64::from(radius.get()),
         }
     }
 }

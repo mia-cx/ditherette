@@ -140,13 +140,24 @@ pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
         return;
     }
 
-    // Keep row-band adapters semantically simple: use the direct 2D convolution
-    // grouping over the absolute output y range. Production policy can add a
-    // tiled x-then-y scratch strategy after the sweep has real row-range data.
+    let band_height = output.dimensions().height_usize();
+    let y_taps = &plan.y_taps[y_start..y_start + band_height];
+    if should_use_x_then_y(plan) {
+        resize_x_then_y_rows_into(
+            source_data,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            &plan.x_taps,
+            y_taps,
+        );
+        return;
+    }
+
     for (output_row, y_taps) in output
         .data_mut()
         .chunks_exact_mut(output_row_byte_len)
-        .zip(&plan.y_taps[y_start..])
+        .zip(y_taps)
     {
         for (output_pixel, x_taps) in output_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
@@ -213,6 +224,61 @@ fn resize_x_then_y_into(
     }
 }
 
+fn resize_x_then_y_rows_into(
+    source: &[u8],
+    output: &mut [u8],
+    source_row_byte_len: usize,
+    output_row_byte_len: usize,
+    x_taps_by_output: &[Vec<AxisTap>],
+    y_taps_by_output: &[Vec<AxisTap>],
+) {
+    let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
+    let scratch_row_len = output_row_byte_len;
+    let first_source_y = y_taps_by_output
+        .iter()
+        .flat_map(|taps| taps.iter().map(|tap| tap.index))
+        .min()
+        .unwrap_or(0);
+    let last_source_y = y_taps_by_output
+        .iter()
+        .flat_map(|taps| taps.iter().map(|tap| tap.index))
+        .max()
+        .unwrap_or(first_source_y);
+    let scratch_height = last_source_y - first_source_y + 1;
+    let mut scratch = vec![0.0; scratch_height * scratch_row_len];
+
+    for (source_row, scratch_row) in source
+        .chunks_exact(source_row_byte_len)
+        .skip(first_source_y)
+        .take(scratch_height)
+        .zip(scratch.chunks_exact_mut(scratch_row_len))
+    {
+        for (scratch_pixel, x_taps) in scratch_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .zip(x_taps_by_output)
+        {
+            write_horizontal_scratch_pixel(scratch_pixel, source_row, x_taps);
+        }
+    }
+
+    for (output_row, y_taps) in output
+        .chunks_exact_mut(output_row_byte_len)
+        .zip(y_taps_by_output)
+    {
+        for output_x in 0..output_width {
+            let output_start = output_x * rgba8::RGBA8_CHANNELS;
+            write_vertical_scratch_pixel_with_base(
+                &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS],
+                &scratch,
+                scratch_row_len,
+                output_start,
+                y_taps,
+                first_source_y,
+            );
+        }
+    }
+}
+
 fn write_horizontal_scratch_pixel(output_pixel: &mut [f64], source_row: &[u8], x_taps: &[AxisTap]) {
     let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
     let mut total_weight = 0.0;
@@ -239,11 +305,29 @@ fn write_vertical_scratch_pixel(
     output_start: usize,
     y_taps: &[AxisTap],
 ) {
+    write_vertical_scratch_pixel_with_base(
+        output_pixel,
+        scratch,
+        scratch_row_len,
+        output_start,
+        y_taps,
+        0,
+    );
+}
+
+fn write_vertical_scratch_pixel_with_base(
+    output_pixel: &mut [u8],
+    scratch: &[f64],
+    scratch_row_len: usize,
+    output_start: usize,
+    y_taps: &[AxisTap],
+    first_source_y: usize,
+) {
     let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
     let mut total_weight = 0.0;
 
     for y_tap in y_taps {
-        let scratch_start = y_tap.index * scratch_row_len + output_start;
+        let scratch_start = (y_tap.index - first_source_y) * scratch_row_len + output_start;
         let scratch_pixel = &scratch[scratch_start..scratch_start + rgba8::RGBA8_CHANNELS];
 
         total_weight += y_tap.weight;
@@ -426,7 +510,11 @@ fn write_variable_convolution_pixel(
     write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
-fn write_accumulated_pixel(output_pixel: &mut [u8], accumulated: [f64; 4], total_weight: f64) {
+fn write_accumulated_pixel(
+    output_pixel: &mut [u8],
+    accumulated: [f64; rgba8::RGBA8_CHANNELS],
+    total_weight: f64,
+) {
     for channel in 0..rgba8::RGBA8_CHANNELS {
         output_pixel[channel] = (accumulated[channel] / total_weight)
             .clamp(0.0, 255.0)

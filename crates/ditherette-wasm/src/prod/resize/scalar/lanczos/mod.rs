@@ -5,6 +5,8 @@
 
 mod filter;
 
+use std::num::NonZeroU32;
+
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
 use super::convolution::{
@@ -41,7 +43,7 @@ impl LanczosResizePlan {
         source_dimensions: ImageDimensions,
         output_dimensions: ImageDimensions,
         anchor: ResizeAnchor,
-        radius: u32,
+        radius: NonZeroU32,
         support_policy: SupportPolicy,
     ) -> Self {
         let kernel = filter::Lanczos::new(radius);
@@ -62,7 +64,7 @@ pub fn resize_lanczos_rgba8_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
     anchor: ResizeAnchor,
-    radius: u32,
+    radius: NonZeroU32,
     support_policy: SupportPolicy,
 ) {
     resize_convolution_rgba8_into(
@@ -74,13 +76,17 @@ pub fn resize_lanczos_rgba8_into(
     );
 }
 
+/// Resize one full-width output row range with a Lanczos kernel.
+///
+/// `full_output_dimensions` is the complete resize target, while `output`
+/// stores the local row band starting at absolute output row `y_start`.
 pub fn resize_lanczos_rgba8_rows_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
     full_output_dimensions: ImageDimensions,
     y_start: u32,
     anchor: ResizeAnchor,
-    radius: u32,
+    radius: NonZeroU32,
     support_policy: SupportPolicy,
 ) {
     resize_convolution_rgba8_rows_into(
@@ -115,12 +121,16 @@ pub fn resize_lanczos2_rgba8_into(
             source,
             output,
             anchor,
-            filter::FixedLanczos::<2>,
+            filter::FixedLanczos::<2>::new(),
             support_policy,
         ),
-        SupportPolicy::ScaleAware => {
-            resize_lanczos_rgba8_into(source, output, anchor, 2, support_policy)
-        }
+        SupportPolicy::ScaleAware => resize_lanczos_rgba8_into(
+            source,
+            output,
+            anchor,
+            NonZeroU32::new(2).unwrap(),
+            support_policy,
+        ),
     }
 }
 
@@ -136,12 +146,16 @@ pub fn resize_lanczos3_rgba8_into(
             source,
             output,
             anchor,
-            filter::FixedLanczos::<3>,
+            filter::FixedLanczos::<3>::new(),
             support_policy,
         ),
-        SupportPolicy::ScaleAware => {
-            resize_lanczos_rgba8_into(source, output, anchor, 3, support_policy)
-        }
+        SupportPolicy::ScaleAware => resize_lanczos_rgba8_into(
+            source,
+            output,
+            anchor,
+            NonZeroU32::new(3).unwrap(),
+            support_policy,
+        ),
     }
 }
 
@@ -161,7 +175,7 @@ pub fn resize_lanczos2_rgba8_rows_into(
             full_output_dimensions,
             y_start,
             anchor,
-            filter::FixedLanczos::<2>,
+            filter::FixedLanczos::<2>::new(),
             support_policy,
         ),
         SupportPolicy::ScaleAware => resize_lanczos_rgba8_rows_into(
@@ -170,7 +184,7 @@ pub fn resize_lanczos2_rgba8_rows_into(
             full_output_dimensions,
             y_start,
             anchor,
-            2,
+            NonZeroU32::new(2).unwrap(),
             support_policy,
         ),
     }
@@ -192,7 +206,7 @@ pub fn resize_lanczos3_rgba8_rows_into(
             full_output_dimensions,
             y_start,
             anchor,
-            filter::FixedLanczos::<3>,
+            filter::FixedLanczos::<3>::new(),
             support_policy,
         ),
         SupportPolicy::ScaleAware => resize_lanczos_rgba8_rows_into(
@@ -201,7 +215,7 @@ pub fn resize_lanczos3_rgba8_rows_into(
             full_output_dimensions,
             y_start,
             anchor,
-            3,
+            NonZeroU32::new(3).unwrap(),
             support_policy,
         ),
     }

@@ -47,6 +47,10 @@ pub fn resize_bicubic_rgba8_into(
     resize_convolution_rgba8_into(source, output, anchor, filter::CATMULL_ROM, support_policy);
 }
 
+/// Resize one full-width output row range with Catmull-Rom bicubic filtering.
+///
+/// `full_output_dimensions` is the complete resize target, while `output`
+/// stores the local row band starting at absolute output row `y_start`.
 pub fn resize_bicubic_rgba8_rows_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,

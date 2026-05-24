@@ -69,6 +69,10 @@ pub fn resize_convolution_rgba8_into<K>(
     kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, &plan);
 }
 
+/// Resize one full-width output row range with a separable convolution kernel.
+///
+/// `full_output_dimensions` is the complete resize target, while `output`
+/// stores the local row band starting at absolute output row `y_start`.
 pub fn resize_convolution_rgba8_rows_into<K>(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -82,6 +86,7 @@ pub fn resize_convolution_rgba8_rows_into<K>(
 {
     common::rgba8::assert_packed_source(source, "convolution");
     common::rgba8::assert_packed_output(&output, "convolution");
+    assert_row_band_matches_plan(output.dimensions(), full_output_dimensions, y_start);
     let plan = ConvolutionResizePlan::new(
         source.dimensions(),
         full_output_dimensions,
@@ -98,8 +103,8 @@ pub fn resize_convolution_rgba8_with_plan_into(
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
 ) {
-    debug_assert_eq!(source.dimensions(), plan.source_dimensions());
-    debug_assert_eq!(output.dimensions(), plan.output_dimensions());
+    assert_eq!(source.dimensions(), plan.source_dimensions());
+    assert_eq!(output.dimensions(), plan.output_dimensions());
 
     common::rgba8::assert_packed_source(source, "convolution");
     common::rgba8::assert_packed_output(&output, "convolution");
@@ -110,4 +115,17 @@ pub fn resize_convolution_rgba8_with_plan_into(
     }
 
     kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, plan);
+}
+
+fn assert_row_band_matches_plan(
+    band_dimensions: crate::image::ImageDimensions,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+) {
+    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
+    assert!(
+        y_start <= full_output_dimensions.height()
+            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
+        "row band must fit inside full output dimensions"
+    );
 }
