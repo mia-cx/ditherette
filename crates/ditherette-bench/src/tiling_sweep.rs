@@ -63,7 +63,9 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
         * dimensions
             .iter()
             .flatten()
-            .map(|output| worker_band_case_count(*output, &options.band_heights, &options.worker_counts))
+            .map(|output| {
+                worker_band_case_count(*output, &options.band_heights, &options.worker_counts)
+            })
             .sum::<usize>();
     eprintln!(
         "tiling sweep: fixtures={} filters={} dimension_sets={} band_heights={} worker_counts={} cases={} samples={} warmup={}",
@@ -90,11 +92,14 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                     options.warmup_iterations,
                 )?;
 
+                let worker_budget = ditherette_wasm::prod::tiling::WorkerBudget::new(
+                    options.worker_counts.iter().copied().max().unwrap_or(1),
+                );
                 for &band_height in &options.band_heights {
                     let actual_band_height = effective_band_height(band_height, output.1);
                     let band_count = output.1.div_ceil(actual_band_height);
                     for &worker_count in &options.worker_counts {
-                        if worker_count > band_count {
+                        if !worker_budget.can_use_workers(worker_count, band_count) {
                             continue;
                         }
                         case_index += 1;
@@ -108,7 +113,8 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                             options.samples,
                             options.warmup_iterations,
                         )?;
-                        let effective_worker_count = worker_count;
+                        let effective_worker_count =
+                            worker_budget.active_workers(worker_count, band_count);
                         let pixels_per_band =
                             u64::from(output.0) * u64::from(actual_band_height.min(output.1));
                         let speedup = scalar.stats.median_ns / tiled.stats.median_ns;
@@ -343,8 +349,9 @@ fn default_worker_counts() -> Vec<u32> {
     let available = thread::available_parallelism()
         .map(|count| count.get() as u32)
         .unwrap_or(1);
-    let budget = (available / 2).clamp(1, 8);
-    (1..=budget).collect()
+    ditherette_wasm::prod::tiling::WorkerBudget::from_available_parallelism(available)
+        .worker_counts()
+        .collect()
 }
 
 fn worker_band_case_count(
@@ -358,9 +365,12 @@ fn worker_band_case_count(
             let band_count = output_dimensions
                 .1
                 .div_ceil(effective_band_height(band_height, output_dimensions.1));
+            let budget = ditherette_wasm::prod::tiling::WorkerBudget::new(
+                worker_counts.iter().copied().max().unwrap_or(1),
+            );
             worker_counts
                 .iter()
-                .filter(|&&worker_count| worker_count <= band_count)
+                .filter(|&&worker_count| budget.can_use_workers(worker_count, band_count))
                 .count()
         })
         .sum()
@@ -512,9 +522,11 @@ fn run_subject_row_bands(
         .iter()
         .map(|band| (band.y_start(), band.y_end()))
         .collect::<Vec<_>>();
-    let effective_worker_count = usize::try_from(worker_count)
-        .unwrap_or(usize::MAX)
-        .clamp(1, bands.len().max(1));
+    let worker_budget = ditherette_wasm::prod::tiling::WorkerBudget::new(worker_count);
+    let effective_worker_count = usize::try_from(
+        worker_budget.active_workers(worker_count, u32::try_from(bands.len()).unwrap_or(u32::MAX)),
+    )
+    .unwrap_or(usize::MAX);
 
     if effective_worker_count == 1 {
         for &(y_start, y_end) in &bands {
@@ -532,40 +544,39 @@ fn run_subject_row_bands(
     }
 
     let chunk_size = bands.len().div_ceil(effective_worker_count);
-    let rendered_bands = thread::scope(|scope| {
-        let handles = bands
-            .chunks(chunk_size)
-            .map(|chunk| {
-                let chunk = chunk.to_vec();
-                scope.spawn(move || -> Result<Vec<(u32, Vec<u8>)>, BenchError> {
-                    chunk
-                        .into_iter()
-                        .map(|(y_start, y_end)| {
-                            render_band(
-                                subject,
-                                source,
-                                source_dimensions,
-                                output_dimensions.0,
-                                y_start,
-                                y_end,
-                            )
-                            .map(|band_output| (y_start, band_output))
-                        })
-                        .collect()
+    let rendered_bands =
+        thread::scope(|scope| {
+            let handles = bands
+                .chunks(chunk_size)
+                .map(|chunk| {
+                    let chunk = chunk.to_vec();
+                    scope.spawn(move || -> Result<Vec<(u32, Vec<u8>)>, BenchError> {
+                        chunk
+                            .into_iter()
+                            .map(|(y_start, y_end)| {
+                                render_band(
+                                    subject,
+                                    source,
+                                    source_dimensions,
+                                    output_dimensions.0,
+                                    y_start,
+                                    y_end,
+                                )
+                                .map(|band_output| (y_start, band_output))
+                            })
+                            .collect()
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
+                .collect::<Vec<_>>();
 
-        let mut rendered_bands = Vec::new();
-        for handle in handles {
-            rendered_bands.extend(
-                handle
-                    .join()
-                    .map_err(|_| BenchError::Runtime("tiling sweep worker panicked".to_owned()))??,
-            );
-        }
-        Ok::<_, BenchError>(rendered_bands)
-    })?;
+            let mut rendered_bands = Vec::new();
+            for handle in handles {
+                rendered_bands.extend(handle.join().map_err(|_| {
+                    BenchError::Runtime("tiling sweep worker panicked".to_owned())
+                })??);
+            }
+            Ok::<_, BenchError>(rendered_bands)
+        })?;
 
     for (y_start, band_output) in rendered_bands {
         copy_band_output(&band_output, output, output_dimensions.0, y_start)?;
