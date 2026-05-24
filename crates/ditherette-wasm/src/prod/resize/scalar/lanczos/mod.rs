@@ -20,10 +20,10 @@ use super::convolution::{
 // current gap is measurable without relying on missing old crate code. Keep the
 // existing bounded oracle checks, then benchmark the four manifest Lanczos
 // profiles plus the comparison profile.
-// TODO(perf:path, rank=30): Split Lanczos2/Lanczos3 fixed-policy dispatch away
-// from the generic convolution entrypoint so fixed-radius kernels can avoid
-// generic plan and tap-shape branches. Verify bounded correctness, then
-// benchmark `ditherette-bench run lanczos2` and `ditherette-bench run lanczos3`.
+// ACCEPT(perf): Fixed-policy Lanczos2/Lanczos3 wrappers now dispatch through
+// const-radius kernels instead of the dynamic-radius generic path. Correctness
+// passed, and `ditherette-bench run lanczos2`/`lanczos3` improved representative
+// cases by roughly 6-16%, with larger identity-baseline noise left unweighted.
 // TODO(perf:path, rank=31): Add a Lanczos-specific scale-aware downscale path
 // selector after the separability experiments settle; strong minification may
 // need a different algorithm than generic direct convolution. Verify bounded
@@ -90,7 +90,18 @@ pub fn resize_lanczos2_rgba8_into(
     anchor: ResizeAnchor,
     support_policy: SupportPolicy,
 ) {
-    resize_lanczos_rgba8_into(source, output, anchor, 2, support_policy);
+    match support_policy {
+        SupportPolicy::Fixed => resize_convolution_rgba8_into(
+            source,
+            output,
+            anchor,
+            filter::FixedLanczos::<2>,
+            support_policy,
+        ),
+        SupportPolicy::ScaleAware => {
+            resize_lanczos_rgba8_into(source, output, anchor, 2, support_policy)
+        }
+    }
 }
 
 /// Lanczos3 convenience wrapper for packed RGBA8.
@@ -100,5 +111,16 @@ pub fn resize_lanczos3_rgba8_into(
     anchor: ResizeAnchor,
     support_policy: SupportPolicy,
 ) {
-    resize_lanczos_rgba8_into(source, output, anchor, 3, support_policy);
+    match support_policy {
+        SupportPolicy::Fixed => resize_convolution_rgba8_into(
+            source,
+            output,
+            anchor,
+            filter::FixedLanczos::<3>,
+            support_policy,
+        ),
+        SupportPolicy::ScaleAware => {
+            resize_lanczos_rgba8_into(source, output, anchor, 3, support_policy)
+        }
+    }
 }
