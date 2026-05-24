@@ -19,14 +19,17 @@ impl RowBand {
         }
     }
 
+    /// First output row included in this band.
     pub const fn y_start(self) -> u32 {
         self.y_start
     }
 
+    /// First output row after this band.
     pub const fn y_end(self) -> u32 {
         self.y_end
     }
 
+    /// Number of output rows in this band.
     pub const fn height(self) -> u32 {
         self.y_end - self.y_start
     }
@@ -73,10 +76,12 @@ impl RowBandPlan {
         })
     }
 
+    /// Output dimensions covered exactly once by this plan.
     pub const fn output_dimensions(&self) -> ImageDimensions {
         self.output_dimensions
     }
 
+    /// Contiguous row bands covering the output height.
     pub fn bands(&self) -> &[RowBand] {
         &self.bands
     }

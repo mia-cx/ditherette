@@ -147,6 +147,28 @@ fn row_band_work_plan_assigns_contiguous_chunks_to_active_workers() {
 }
 
 #[test]
+fn row_band_work_plan_creates_one_assignment_per_active_worker() {
+    let dimensions = ImageDimensions::new(8, 8).unwrap();
+    let bands = RowBandPlan::for_output_height(dimensions, 2).unwrap();
+    let work = RowBandWorkPlan::new(&bands, WorkerBudget::new(8), 3).unwrap();
+
+    assert_eq!(work.active_workers(), 3);
+    assert_eq!(work.assignments().len(), 3);
+    assert_eq!(
+        work.assignments()[0].bands(),
+        &[RowBand::new(0, 2).unwrap(), RowBand::new(2, 4).unwrap()]
+    );
+    assert_eq!(
+        work.assignments()[1].bands(),
+        &[RowBand::new(4, 6).unwrap()]
+    );
+    assert_eq!(
+        work.assignments()[2].bands(),
+        &[RowBand::new(6, 8).unwrap()]
+    );
+}
+
+#[test]
 fn row_band_work_plan_caps_workers_by_band_count() {
     let dimensions = ImageDimensions::new(8, 4).unwrap();
     let bands = RowBandPlan::for_output_height(dimensions, 2).unwrap();

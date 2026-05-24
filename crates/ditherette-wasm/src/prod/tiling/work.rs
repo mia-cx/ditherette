@@ -14,10 +14,12 @@ pub struct RowBandWorkAssignment {
 }
 
 impl RowBandWorkAssignment {
+    /// Zero-based index of the active worker assigned this batch.
     pub const fn worker_index(&self) -> u32 {
         self.worker_index
     }
 
+    /// Contiguous row bands assigned to this worker.
     pub fn bands(&self) -> &[RowBand] {
         &self.bands
     }
@@ -41,14 +43,20 @@ impl RowBandWorkPlan {
         }
 
         let active_workers_usize = usize::try_from(active_workers).ok()?;
-        let chunk_size = plan.bands().len().div_ceil(active_workers_usize);
-        let assignments = plan
-            .bands()
-            .chunks(chunk_size)
-            .enumerate()
-            .map(|(worker_index, bands)| RowBandWorkAssignment {
-                worker_index: worker_index as u32,
-                bands: bands.to_vec(),
+        let band_count = plan.bands().len();
+        let base_bands_per_worker = band_count / active_workers_usize;
+        let extra_band_workers = band_count % active_workers_usize;
+        let mut next_band = 0;
+        let assignments = (0..active_workers_usize)
+            .map(|worker_index| {
+                let band_count =
+                    base_bands_per_worker + usize::from(worker_index < extra_band_workers);
+                let band_start = next_band;
+                next_band += band_count;
+                RowBandWorkAssignment {
+                    worker_index: worker_index as u32,
+                    bands: plan.bands()[band_start..next_band].to_vec(),
+                }
             })
             .collect::<Vec<_>>();
 
@@ -59,14 +67,17 @@ impl RowBandWorkPlan {
         })
     }
 
+    /// Worker count requested by the caller before budget and band-count caps.
     pub const fn requested_workers(&self) -> u32 {
         self.requested_workers
     }
 
+    /// Worker count actually used by this plan.
     pub const fn active_workers(&self) -> u32 {
         self.active_workers
     }
 
+    /// Per-worker contiguous row-band assignments.
     pub fn assignments(&self) -> &[RowBandWorkAssignment] {
         &self.assignments
     }

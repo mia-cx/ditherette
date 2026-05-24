@@ -46,10 +46,12 @@ impl TileGrid {
         })
     }
 
+    /// Output dimensions covered exactly once by this grid.
     pub const fn output_dimensions(&self) -> ImageDimensions {
         self.output_dimensions
     }
 
+    /// Row-major tiles covering the output image.
     pub fn tiles(&self) -> &[Tile] {
         &self.tiles
     }
