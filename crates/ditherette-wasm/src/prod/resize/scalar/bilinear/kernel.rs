@@ -78,6 +78,82 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
     });
 }
 
+pub(super) fn resize_packed_rgba8_rows_with_triangle_filter_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    y_start: u32,
+) {
+    let source_width = source.dimensions().width_usize();
+    let output_width = plan.output_dimensions().width_usize();
+    let source_row_len = source_width * RGBA8_CHANNELS;
+    let output_row_len = output_width * RGBA8_CHANNELS;
+    let y_start = y_start as usize;
+    let source_data = source.data();
+    let output_data = output.data_mut();
+
+    if source_width == output_width {
+        VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
+            vertical_row.resize(source_row_len, 0.0);
+            for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
+                let output_y = y_start + local_y;
+                vertical_row.fill(0.0);
+                let y_weight_sum = accumulate_vertical(
+                    source_data,
+                    source_row_len,
+                    vertical_row.as_mut_slice(),
+                    &plan.y_taps[output_y],
+                );
+                for (output_pixel, vertical_pixel) in output_row
+                    .chunks_exact_mut(RGBA8_CHANNELS)
+                    .zip(vertical_row.chunks_exact(RGBA8_CHANNELS))
+                {
+                    output_pixel[0] = round_u8(vertical_pixel[0] / y_weight_sum);
+                    output_pixel[1] = round_u8(vertical_pixel[1] / y_weight_sum);
+                    output_pixel[2] = round_u8(vertical_pixel[2] / y_weight_sum);
+                    output_pixel[3] = round_u8(vertical_pixel[3] / y_weight_sum);
+                }
+            }
+        });
+        return;
+    }
+
+    if source.dimensions().height_usize() == plan.output_dimensions().height_usize() {
+        for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
+            let output_y = y_start + local_y;
+            let source_row_start = output_y * source_row_len;
+            let source_row = &source_data[source_row_start..source_row_start + source_row_len];
+            for (output_pixel, x_taps) in output_row
+                .chunks_exact_mut(RGBA8_CHANNELS)
+                .zip(&plan.x_taps)
+            {
+                write_horizontal_source_pixel(output_pixel, source_row, x_taps);
+            }
+        }
+        return;
+    }
+
+    VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
+        vertical_row.resize(source_row_len, 0.0);
+        for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
+            let output_y = y_start + local_y;
+            vertical_row.fill(0.0);
+            let y_weight_sum = accumulate_vertical(
+                source_data,
+                source_row_len,
+                vertical_row.as_mut_slice(),
+                &plan.y_taps[output_y],
+            );
+            for (output_pixel, x_taps) in output_row
+                .chunks_exact_mut(RGBA8_CHANNELS)
+                .zip(&plan.x_taps)
+            {
+                write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
+            }
+        }
+    });
+}
+
 // ACCEPT(perf): Specializing identity-axis resizes keeps the single production
 // bilinear path but skips the unnecessary separable scratch/gather pass.
 // `bilinear` improved identity-axis cases by ~40-240% with representative 2D

@@ -102,6 +102,67 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     }
 }
 
+pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    y_start: u32,
+) {
+    let source_width = source.dimensions().width_usize();
+    let output_width = plan.output_dimensions().width_usize();
+    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let source_data = source.data();
+    let y_start = y_start as usize;
+
+    if plan.same_height() {
+        let start = y_start * source_row_byte_len;
+        let source_slice = &source_data[start..];
+        resize_horizontal_only_into(
+            source_slice,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            &plan.x_taps,
+        );
+        return;
+    }
+
+    if plan.same_width() {
+        let band_height = output.dimensions().height_usize();
+        resize_vertical_only_into(
+            source_data,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            &plan.y_taps[y_start..y_start + band_height],
+        );
+        return;
+    }
+
+    // Keep row-band adapters semantically simple: use the direct 2D convolution
+    // grouping over the absolute output y range. Production policy can add a
+    // tiled x-then-y scratch strategy after the sweep has real row-range data.
+    for (output_row, y_taps) in output
+        .data_mut()
+        .chunks_exact_mut(output_row_byte_len)
+        .zip(&plan.y_taps[y_start..])
+    {
+        for (output_pixel, x_taps) in output_row
+            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+            .zip(&plan.x_taps)
+        {
+            write_convolution_pixel(
+                output_pixel,
+                source_data,
+                source_row_byte_len,
+                x_taps,
+                y_taps,
+            );
+        }
+    }
+}
+
 fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
     let source_dimensions = plan.source_dimensions();
     plan.support_policy() == SupportPolicy::ScaleAware

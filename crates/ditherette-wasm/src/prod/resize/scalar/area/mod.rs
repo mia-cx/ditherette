@@ -51,6 +51,18 @@ pub fn resize_area_rgba8_into(source: ImageView<'_, Rgba8>, mut output: ImageVie
 ///
 /// The plan must match the input and output dimensions. Packed-row assertions
 /// are development tripwires for the shared production resize boundary.
+pub fn resize_area_rgba8_rows_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+) {
+    common::rgba8::assert_packed_source(source, "area");
+    common::rgba8::assert_packed_output(&output, "area");
+    let plan = AreaResizePlan::new(source.dimensions(), full_output_dimensions);
+    planned::resize_rows_with_plan_into(source, output, &plan, y_start);
+}
+
 pub fn resize_area_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,

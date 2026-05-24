@@ -69,6 +69,29 @@ pub fn resize_convolution_rgba8_into<K>(
     kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, &plan);
 }
 
+pub fn resize_convolution_rgba8_rows_into<K>(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    full_output_dimensions: crate::image::ImageDimensions,
+    y_start: u32,
+    anchor: ResizeAnchor,
+    kernel: K,
+    support_policy: SupportPolicy,
+) where
+    K: ReconstructionKernel,
+{
+    common::rgba8::assert_packed_source(source, "convolution");
+    common::rgba8::assert_packed_output(&output, "convolution");
+    let plan = ConvolutionResizePlan::new(
+        source.dimensions(),
+        full_output_dimensions,
+        anchor,
+        &kernel,
+        support_policy,
+    );
+    kernel::resize_packed_rgba8_rows_with_convolution_filter_into(source, output, &plan, y_start);
+}
+
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached convolution metadata.
 pub fn resize_convolution_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
