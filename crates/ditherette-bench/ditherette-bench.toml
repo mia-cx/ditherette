@@ -129,58 +129,48 @@ filters = [
   "lanczos3",
   "lanczos3-scale-aware"
 ]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-nearest]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["nearest"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-area]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["area"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-bilinear]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["bilinear"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-bicubic]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["bicubic"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-bicubic-scale-aware]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["bicubic-scale-aware"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-lanczos2]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["lanczos2"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-lanczos2-scale-aware]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["lanczos2-scale-aware"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-lanczos3]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["lanczos3"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
 
 [profiles.tiling-sweep-lanczos3-scale-aware]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
 filters = ["lanczos3-scale-aware"]
-worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]

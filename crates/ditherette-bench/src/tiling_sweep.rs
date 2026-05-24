@@ -342,9 +342,9 @@ fn default_band_heights() -> Vec<u32> {
 fn default_worker_counts() -> Vec<u32> {
     let available = thread::available_parallelism()
         .map(|count| count.get() as u32)
-        .unwrap_or(1)
-        .max(1);
-    (1..=available.min(8).max(1)).collect()
+        .unwrap_or(1);
+    let budget = (available / 2).clamp(1, 8);
+    (1..=budget).collect()
 }
 
 fn worker_band_case_count(
