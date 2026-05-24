@@ -681,6 +681,17 @@ fn run_subject_row_bands(
     band_height: u32,
     worker_count: u32,
 ) -> Result<(), BenchError> {
+    if subject.descriptor.id.filter() == "nearest" {
+        return run_nearest_subject_row_bands(
+            source,
+            output,
+            source_dimensions,
+            output_dimensions,
+            band_height,
+            worker_count,
+        );
+    }
+
     let actual_band_height = effective_band_height(band_height, output_dimensions.1);
     let Some(plan) = ditherette_wasm::prod::tiling::RowBandPlan::for_output_height(
         image_dimensions(output_dimensions)?,
@@ -785,6 +796,106 @@ fn render_band(
         band_output_dimensions,
     )?;
     Ok(band_output)
+}
+
+fn run_nearest_subject_row_bands(
+    source: &[u8],
+    output: &mut [u8],
+    source_dimensions: (u32, u32),
+    output_dimensions: (u32, u32),
+    band_height: u32,
+    worker_count: u32,
+) -> Result<(), BenchError> {
+    use ditherette_wasm::{
+        image::{ImageView, ImageViewMut, Rgba8, RowStride},
+        prod::resize::scalar::nearest::{
+            alignment::ResizeAnchor, resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
+        },
+    };
+
+    let actual_band_height = effective_band_height(band_height, output_dimensions.1);
+    let Some(plan) = ditherette_wasm::prod::tiling::RowBandPlan::for_output_height(
+        image_dimensions(output_dimensions)?,
+        actual_band_height,
+    ) else {
+        return Err(BenchError::Config(format!(
+            "invalid band height {band_height}"
+        )));
+    };
+    let Some(work_plan) = ditherette_wasm::prod::tiling::RowBandWorkPlan::new(
+        &plan,
+        ditherette_wasm::prod::tiling::WorkerBudget::new(worker_count),
+        worker_count,
+    ) else {
+        return Ok(());
+    };
+
+    let source_dimensions = image_dimensions(source_dimensions)?;
+    let output_dimensions = image_dimensions(output_dimensions)?;
+    let resize_plan =
+        NearestResizePlan::new(source_dimensions, output_dimensions, ResizeAnchor::Center);
+    let source_stride = RowStride::new(source_dimensions.width_usize() * RGBA_CHANNELS)
+        .map_err(|error| BenchError::Runtime(error.to_string()))?;
+
+    let render_band = |y_start: u32, y_end: u32| -> Result<Vec<u8>, BenchError> {
+        let band_dimensions = image_dimensions((output_dimensions.width(), y_end - y_start))?;
+        let mut band_output = vec![0; output_len((output_dimensions.width(), y_end - y_start))?];
+        let source_view = ImageView::<Rgba8>::new(source, source_dimensions, source_stride)
+            .map_err(|error| BenchError::Runtime(error.to_string()))?;
+        let output_stride = RowStride::new(output_dimensions.width_usize() * RGBA_CHANNELS)
+            .map_err(|error| BenchError::Runtime(error.to_string()))?;
+        let output_view =
+            ImageViewMut::<Rgba8>::new(&mut band_output, band_dimensions, output_stride)
+                .map_err(|error| BenchError::Runtime(error.to_string()))?;
+        resize_nearest_rgba8_rows_with_plan_into(source_view, output_view, &resize_plan, y_start);
+        Ok(band_output)
+    };
+
+    if work_plan.active_workers() == 1 {
+        for band in plan.bands() {
+            let band_output = render_band(band.y_start(), band.y_end())?;
+            copy_band_output(
+                &band_output,
+                output,
+                output_dimensions.width(),
+                band.y_start(),
+            )?;
+        }
+        return Ok(());
+    }
+
+    let rendered_bands = thread::scope(|scope| {
+        let handles = work_plan
+            .assignments()
+            .iter()
+            .map(|assignment| {
+                let bands = assignment.bands().to_vec();
+                let render_band = &render_band;
+                scope.spawn(move || -> Result<Vec<(u32, Vec<u8>)>, BenchError> {
+                    bands
+                        .into_iter()
+                        .map(|band| {
+                            render_band(band.y_start(), band.y_end())
+                                .map(|band_output| (band.y_start(), band_output))
+                        })
+                        .collect()
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let mut rendered_bands = Vec::new();
+        for handle in handles {
+            rendered_bands.extend(handle.join().map_err(|_| {
+                BenchError::Runtime("nearest tiling sweep worker panicked".to_owned())
+            })??);
+        }
+        Ok::<_, BenchError>(rendered_bands)
+    })?;
+
+    for (y_start, band_output) in rendered_bands {
+        copy_band_output(&band_output, output, output_dimensions.width(), y_start)?;
+    }
+    Ok(())
 }
 
 fn copy_band_output(
