@@ -809,13 +809,15 @@ function colorSubjectConfig(id, target, executionMode) {
 }
 
 function resizeSubjectConfig(id, family, variant) {
-	if (variant === 'pooled_direct' || variant === 'pooled_direct_per_band_plan') {
+	if (
+		['pooled_direct', 'pooled_direct_per_band_plan', 'pooled_noop', 'pooled_copy'].includes(variant)
+	) {
 		return {
 			id,
 			domain: 'resize',
 			filter: family,
 			anchor: 'center',
-			supportPolicy: variant === 'pooled_direct_per_band_plan' ? 'fixed+per-band-plan' : 'fixed',
+			supportPolicy: resizeSupportPolicyForVariant(variant),
 			parallelizationPolicy: true
 		};
 	}
@@ -840,6 +842,19 @@ function resizeSubjectConfig(id, family, variant) {
 		supportPolicy: 'fixed',
 		parallelizationPolicy: false
 	};
+}
+
+function resizeSupportPolicyForVariant(variant) {
+	switch (variant) {
+		case 'pooled_direct_per_band_plan':
+			return 'fixed+per-band-plan';
+		case 'pooled_noop':
+			return 'fixed+pooled-noop';
+		case 'pooled_copy':
+			return 'fixed+pooled-copy';
+		default:
+			return 'fixed';
+	}
 }
 
 function formatResultTable(run) {

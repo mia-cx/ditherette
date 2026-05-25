@@ -228,7 +228,6 @@ pub fn benchmark_resize_rgba8(
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
     let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
 
-    let _ = parallelization_policy;
     let config = WasmBenchmarkConfig {
         sample_size,
         measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
@@ -241,6 +240,7 @@ pub fn benchmark_resize_rgba8(
         source,
         output_dimensions,
         resize,
+        parallelization_policy,
         &mut output,
         config,
         reporter.as_ref(),
@@ -365,7 +365,7 @@ fn resize_rgba8_scalar(
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
     let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
 
-    if parallelization_policy && resize.run_pooled_direct(source, output_dimensions, &mut output)? {
+    if parallelization_policy && resize.run_pooled(source, output_dimensions, &mut output)? {
         return Ok(output);
     }
 
@@ -382,6 +382,14 @@ struct WasmResize {
     convolution_anchor: ConvolutionResizeAnchor,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
+    execution_mode: ResizeExecutionMode,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResizeExecutionMode {
+    PooledDirect,
+    PooledNoop,
+    PooledCopy,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -412,7 +420,8 @@ impl WasmResize {
             _ => return Err(JsValue::from_str("unsupported resize filter")),
         };
 
-        let (support_policy, plan_scope) = parse_support_policy_and_plan_scope(support_policy)?;
+        let (support_policy, plan_scope, execution_mode) =
+            parse_support_policy_and_execution(support_policy)?;
         Ok(Self {
             filter,
             nearest_anchor: nearest_anchor(anchor)?,
@@ -420,15 +429,28 @@ impl WasmResize {
             convolution_anchor: convolution_anchor(anchor)?,
             support_policy,
             plan_scope,
+            execution_mode,
         })
     }
 
-    fn run_pooled_direct(
+    fn run_pooled(
         self,
         source: ImageView<'_, Rgba8>,
         output_dimensions: ImageDimensions,
         output: &mut [u8],
     ) -> Result<bool, JsValue> {
+        match self.execution_mode {
+            ResizeExecutionMode::PooledNoop => {
+                resize_pooled_noop_into(output_dimensions, output)?;
+                return Ok(true);
+            }
+            ResizeExecutionMode::PooledCopy => {
+                resize_pooled_copy_into(source, output_dimensions, output)?;
+                return Ok(true);
+            }
+            ResizeExecutionMode::PooledDirect => {}
+        }
+
         match self.filter {
             WasmResizeFilter::Nearest => {
                 resize_nearest_rgba8_pooled_direct_into(
@@ -515,6 +537,30 @@ impl WasmResize {
         }
         Ok(())
     }
+}
+
+fn resize_pooled_noop_into(
+    output_dimensions: ImageDimensions,
+    output: &mut [u8],
+) -> Result<(), JsValue> {
+    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, _y_start| {
+        black_box(output_view.data().as_ptr());
+    })
+}
+
+fn resize_pooled_copy_into(
+    source: ImageView<'_, Rgba8>,
+    output_dimensions: ImageDimensions,
+    output: &mut [u8],
+) -> Result<(), JsValue> {
+    resize_rows_pooled_direct_into(output_dimensions, output, |mut output_view, y_start| {
+        let source = source.data();
+        let output = output_view.data_mut();
+        let source_offset = (y_start as usize * output.len()) % source.len();
+        for (index, byte) in output.iter_mut().enumerate() {
+            *byte = source[(source_offset + index) % source.len()];
+        }
+    })
 }
 
 fn resize_bicubic_rgba8_pooled_direct_into(
@@ -837,6 +883,7 @@ fn run_resize_benchmark(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     resize: WasmResize,
+    parallelization_policy: bool,
     output: &mut [u8],
     config: WasmBenchmarkConfig,
     reporter: Option<&Function>,
@@ -851,7 +898,14 @@ fn run_resize_benchmark(
     while warmup_elapsed < config.warm_up_time_ms
         || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
     {
-        let elapsed = run_resize_batch(source, output_dimensions, resize, output, batch_size)?;
+        let elapsed = run_resize_batch(
+            source,
+            output_dimensions,
+            resize,
+            parallelization_policy,
+            output,
+            batch_size,
+        )?;
         warmup_batches += 1;
         warmup_iterations += u64::from(batch_size);
         warmup_elapsed = performance_now() - warmup_started;
@@ -883,7 +937,14 @@ fn run_resize_benchmark(
     while samples_ns.len() < config.sample_size as usize
         && measurement_elapsed < config.measurement_time_ms
     {
-        let elapsed_ms = run_resize_batch(source, output_dimensions, resize, output, batch_size)?;
+        let elapsed_ms = run_resize_batch(
+            source,
+            output_dimensions,
+            resize,
+            parallelization_policy,
+            output,
+            batch_size,
+        )?;
         let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
         samples_ns.push(sample_ns);
         total_iterations += u64::from(batch_size);
@@ -913,12 +974,15 @@ fn run_resize_batch(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     resize: WasmResize,
+    parallelization_policy: bool,
     output: &mut [u8],
     batch_size: u32,
 ) -> Result<f64, JsValue> {
     let started = performance_now();
     for _ in 0..batch_size {
-        resize.run(source, output_dimensions, output)?;
+        if !(parallelization_policy && resize.run_pooled(source, output_dimensions, output)?) {
+            resize.run(source, output_dimensions, output)?;
+        }
         black_box(output.as_ref());
     }
     Ok(performance_now() - started)
@@ -1012,16 +1076,40 @@ fn assert_input_len(input: &[u8], dimensions: ImageDimensions) -> Result<(), JsV
     Ok(())
 }
 
-fn parse_support_policy_and_plan_scope(
+fn parse_support_policy_and_execution(
     value: &str,
-) -> Result<(SupportPolicy, ResizePlanScope), JsValue> {
+) -> Result<(SupportPolicy, ResizePlanScope, ResizeExecutionMode), JsValue> {
     match value {
-        "" | "fixed" => Ok((SupportPolicy::Fixed, ResizePlanScope::FullImage)),
-        "scale-aware" | "scale_aware" => Ok((SupportPolicy::ScaleAware, ResizePlanScope::FullImage)),
-        "fixed+per-band-plan" => Ok((SupportPolicy::Fixed, ResizePlanScope::PerBand)),
-        "scale-aware+per-band-plan" | "scale_aware+per_band_plan" => {
-            Ok((SupportPolicy::ScaleAware, ResizePlanScope::PerBand))
-        }
+        "" | "fixed" => Ok((
+            SupportPolicy::Fixed,
+            ResizePlanScope::FullImage,
+            ResizeExecutionMode::PooledDirect,
+        )),
+        "scale-aware" | "scale_aware" => Ok((
+            SupportPolicy::ScaleAware,
+            ResizePlanScope::FullImage,
+            ResizeExecutionMode::PooledDirect,
+        )),
+        "fixed+per-band-plan" => Ok((
+            SupportPolicy::Fixed,
+            ResizePlanScope::PerBand,
+            ResizeExecutionMode::PooledDirect,
+        )),
+        "scale-aware+per-band-plan" | "scale_aware+per_band_plan" => Ok((
+            SupportPolicy::ScaleAware,
+            ResizePlanScope::PerBand,
+            ResizeExecutionMode::PooledDirect,
+        )),
+        "fixed+pooled-noop" => Ok((
+            SupportPolicy::Fixed,
+            ResizePlanScope::FullImage,
+            ResizeExecutionMode::PooledNoop,
+        )),
+        "fixed+pooled-copy" => Ok((
+            SupportPolicy::Fixed,
+            ResizePlanScope::FullImage,
+            ResizeExecutionMode::PooledCopy,
+        )),
         _ => Err(JsValue::from_str("unsupported support policy")),
     }
 }
