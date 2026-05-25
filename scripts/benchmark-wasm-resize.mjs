@@ -1546,7 +1546,7 @@ Case flags:
   --jsonl-events             Internal transport mode for ditherette-bench.
 
 Examples:
-  pnpm bench:resize:wasm -- run nearest-smoke
+  pnpm bench:resize:wasm -- run nearest
   pnpm bench:resize:wasm -- run nearest --sample-size 20
   pnpm bench:resize:wasm -- --subjects wasm:resize:lanczos3:scale-aware --fixtures Celeste_box_art --scales 0.5`;
 }

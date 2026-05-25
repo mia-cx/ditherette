@@ -77,85 +77,39 @@ command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:lanczos3:scale-aware"]
 
-[profiles.resize-diagnostics-smoke]
+[profiles.resize-diagnostics]
 command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:nearest:pooled_noop", "wasm:resize:nearest:pooled_copy"]
-fixtures = ["Celeste_box_art.png"]
-scales = [0.5]
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+scale_group = ["partial", "identity"]
 lanes = ["decoded-rgba"]
-sample_size = 1
-measurement_time = "100ms"
-warm_up_time = "10ms"
-target_sample_time = "0.05ms"
-live_stats = false
 
-[profiles.convolution-plan-scope-smoke]
+[profiles.convolution-plan-scope]
 command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:lanczos3:fixed", "wasm:resize:lanczos3:pooled_direct", "wasm:resize:lanczos3:pooled_direct_per_band_plan"]
 periodic_scalar_remeasurement = true
-fixtures = ["Celeste_box_art.png"]
-scales = [0.5]
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+scale_group = ["partial", "identity"]
 lanes = ["decoded-rgba"]
-sample_size = 1
-measurement_time = "100ms"
-warm_up_time = "10ms"
-target_sample_time = "0.05ms"
-live_stats = false
 
-[profiles.convolution-thread-smoke]
+[profiles.convolution-thread]
 command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:lanczos3:fixed", "wasm:resize:lanczos3:pooled_direct"]
 periodic_scalar_remeasurement = true
-fixtures = ["Celeste_box_art.png"]
-scales = [0.5]
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+scale_group = ["partial", "identity"]
 lanes = ["decoded-rgba"]
-sample_size = 1
-measurement_time = "100ms"
-warm_up_time = "10ms"
-target_sample_time = "0.05ms"
-live_stats = false
 
-[profiles.nearest-thread-smoke]
+[profiles.nearest-thread]
 command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:nearest:scalar", "wasm:resize:nearest:pooled_direct"]
-fixtures = ["Celeste_box_art.png"]
-scales = [0.5]
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+scale_group = ["partial", "identity"]
 lanes = ["decoded-rgba"]
-sample_size = 1
-measurement_time = "100ms"
-warm_up_time = "10ms"
-target_sample_time = "0.05ms"
-live_stats = false
-
-[profiles.nearest-smoke]
-command = "perf"
-domain = "resize"
-subjects = ["wasm:resize:nearest:scalar"]
-fixtures = ["Celeste_box_art.png"]
-scales = [0.5]
-lanes = ["decoded-rgba"]
-sample_size = 1
-measurement_time = "100ms"
-warm_up_time = "10ms"
-target_sample_time = "0.05ms"
-live_stats = false
-
-[profiles.color-smoke]
-command = "perf"
-domain = "color"
-subjects = ["wasm:color:oklab-f32:scalar", "wasm:color:oklab-f32:pooled_direct", "wasm:color:oklab-f32:pooled_noop", "wasm:color:oklab-f32:pooled_copy"]
-fixtures = ["Celeste_box_art.png"]
-scales = [1]
-lanes = ["decoded-rgba"]
-sample_size = 1
-measurement_time = "100ms"
-warm_up_time = "10ms"
-target_sample_time = "0.05ms"
-live_stats = false
 
 [profiles.color]
 command = "perf"
@@ -172,26 +126,3 @@ subjects = [
 ]
 scales = [1]
 lanes = ["decoded-rgba"]
-
-[profiles.resize-all-smoke]
-command = "perf"
-domain = "resize"
-subjects = [
-  "wasm:resize:nearest:scalar",
-  "wasm:resize:area:scalar",
-  "wasm:resize:bilinear:scalar",
-  "wasm:resize:bicubic:catmull-rom",
-  "wasm:resize:bicubic:catmull-rom-scale-aware",
-  "wasm:resize:lanczos2:fixed",
-  "wasm:resize:lanczos2:scale-aware",
-  "wasm:resize:lanczos3:fixed",
-  "wasm:resize:lanczos3:scale-aware"
-]
-fixtures = ["Celeste_box_art.png"]
-scales = [0.5]
-lanes = ["decoded-rgba"]
-sample_size = 1
-measurement_time = "100ms"
-warm_up_time = "10ms"
-target_sample_time = "0.05ms"
-live_stats = false
