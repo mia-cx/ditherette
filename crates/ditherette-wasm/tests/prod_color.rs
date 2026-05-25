@@ -1,9 +1,7 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{
-        color::{
-            rgba8_to_color_space_f32, rgba8_to_color_space_f32_rows_into, ColorSpaceF32,
-        },
+        color::{rgba8_to_color_space_f32, rgba8_to_color_space_f32_rows_into, ColorSpaceF32},
         tiling::RowBand,
     },
 };
