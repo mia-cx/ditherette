@@ -783,6 +783,16 @@ function colorSubjectConfig(id, target, executionMode) {
 }
 
 function resizeSubjectConfig(id, family, variant) {
+	if (variant === 'pooled_direct') {
+		return {
+			id,
+			domain: 'resize',
+			filter: family,
+			anchor: 'center',
+			supportPolicy: 'fixed',
+			parallelizationPolicy: true
+		};
+	}
 	if (variant === 'scale-aware' || variant.endsWith('-scale-aware')) {
 		return {
 			id,
@@ -790,7 +800,7 @@ function resizeSubjectConfig(id, family, variant) {
 			filter: family,
 			anchor: 'center',
 			supportPolicy: 'scale-aware',
-			parallelizationPolicy: true
+			parallelizationPolicy: false
 		};
 	}
 	if (!['scalar', 'fixed', 'catmull-rom'].includes(variant)) {
@@ -802,7 +812,7 @@ function resizeSubjectConfig(id, family, variant) {
 		filter: family,
 		anchor: 'center',
 		supportPolicy: 'fixed',
-		parallelizationPolicy: true
+		parallelizationPolicy: false
 	};
 }
 
@@ -1028,7 +1038,7 @@ function defaultSubjects(domain) {
 }
 
 function requiresThreadedWasm(subjects) {
-	return subjects.some((subject) => subject.endsWith(':pooled_direct'));
+	return subjects.some((subject) => /:pooled_(direct|noop|copy)$/.test(subject));
 }
 
 function parseArgs(rawArgs) {
