@@ -25,7 +25,10 @@ use crate::{
             },
             convolution::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},
             lanczos::{resize_lanczos2_rgba8_into, resize_lanczos3_rgba8_into},
-            nearest::{alignment::ResizeAnchor as NearestResizeAnchor, resize_nearest_rgba8_into},
+            nearest::{
+                alignment::ResizeAnchor as NearestResizeAnchor, resize_nearest_rgba8_into,
+                resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
+            },
         },
     },
 };
@@ -354,7 +357,10 @@ fn resize_rgba8_scalar(
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
     let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
 
-    let _ = parallelization_policy;
+    if parallelization_policy && resize.run_pooled_direct(source, output_dimensions, &mut output)? {
+        return Ok(output);
+    }
+
     resize.run(source, output_dimensions, &mut output)?;
 
     Ok(output)
@@ -400,6 +406,26 @@ impl WasmResize {
         })
     }
 
+    fn run_pooled_direct(
+        self,
+        source: ImageView<'_, Rgba8>,
+        output_dimensions: ImageDimensions,
+        output: &mut [u8],
+    ) -> Result<bool, JsValue> {
+        match self.filter {
+            WasmResizeFilter::Nearest => {
+                resize_nearest_rgba8_pooled_direct_into(
+                    source,
+                    output_dimensions,
+                    output,
+                    self.nearest_anchor,
+                )?;
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn run(
         self,
         source: ImageView<'_, Rgba8>,
@@ -437,6 +463,42 @@ impl WasmResize {
         }
         Ok(())
     }
+}
+
+fn resize_nearest_rgba8_pooled_direct_into(
+    source: ImageView<'_, Rgba8>,
+    output_dimensions: ImageDimensions,
+    output: &mut [u8],
+    anchor: NearestResizeAnchor,
+) -> Result<(), JsValue> {
+    let row_len = output_dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
+    let row_dimensions = ImageDimensions::new(output_dimensions.width(), 1)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let plan = NearestResizePlan::new(source.dimensions(), output_dimensions, anchor);
+
+    #[cfg(feature = "threads")]
+    {
+        use rayon::prelude::*;
+        output
+            .par_chunks_mut(row_len)
+            .enumerate()
+            .for_each(|(y, output_row)| {
+                let output_view = ImageViewMut::<Rgba8>::packed(output_row, row_dimensions)
+                    .expect("row output view should be valid");
+                resize_nearest_rgba8_rows_with_plan_into(source, output_view, &plan, y as u32);
+            });
+    }
+
+    #[cfg(not(feature = "threads"))]
+    {
+        for (y, output_row) in output.chunks_mut(row_len).enumerate() {
+            let output_view = ImageViewMut::<Rgba8>::packed(output_row, row_dimensions)
+                .map_err(|error| JsValue::from_str(&error.to_string()))?;
+            resize_nearest_rgba8_rows_with_plan_into(source, output_view, &plan, y as u32);
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
