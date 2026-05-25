@@ -783,13 +783,13 @@ function colorSubjectConfig(id, target, executionMode) {
 }
 
 function resizeSubjectConfig(id, family, variant) {
-	if (variant === 'pooled_direct') {
+	if (variant === 'pooled_direct' || variant === 'pooled_direct_per_band_plan') {
 		return {
 			id,
 			domain: 'resize',
 			filter: family,
 			anchor: 'center',
-			supportPolicy: 'fixed',
+			supportPolicy: variant === 'pooled_direct_per_band_plan' ? 'fixed+per-band-plan' : 'fixed',
 			parallelizationPolicy: true
 		};
 	}

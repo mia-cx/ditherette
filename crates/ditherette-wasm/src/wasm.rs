@@ -20,15 +20,16 @@ use crate::{
         resize::scalar::{
             area::resize_area_rgba8_into,
             bicubic::{
-                resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_with_plan_into,
-                BicubicResizePlan,
+                resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_into,
+                resize_bicubic_rgba8_rows_with_plan_into, BicubicResizePlan,
             },
             bilinear::{
                 alignment::ResizeAnchor as BilinearResizeAnchor, resize_bilinear_rgba8_into,
             },
             convolution::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},
             lanczos::{
-                resize_lanczos2_rgba8_into, resize_lanczos3_rgba8_into,
+                resize_lanczos2_rgba8_into, resize_lanczos2_rgba8_rows_into,
+                resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
                 resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
             },
             nearest::{
@@ -380,6 +381,13 @@ struct WasmResize {
     bilinear_anchor: BilinearResizeAnchor,
     convolution_anchor: ConvolutionResizeAnchor,
     support_policy: SupportPolicy,
+    plan_scope: ResizePlanScope,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ResizePlanScope {
+    FullImage,
+    PerBand,
 }
 
 #[derive(Clone, Copy)]
@@ -404,12 +412,14 @@ impl WasmResize {
             _ => return Err(JsValue::from_str("unsupported resize filter")),
         };
 
+        let (support_policy, plan_scope) = parse_support_policy_and_plan_scope(support_policy)?;
         Ok(Self {
             filter,
             nearest_anchor: nearest_anchor(anchor)?,
             bilinear_anchor: bilinear_anchor(anchor)?,
             convolution_anchor: convolution_anchor(anchor)?,
-            support_policy: parse_support_policy(support_policy)?,
+            support_policy,
+            plan_scope,
         })
     }
 
@@ -436,6 +446,7 @@ impl WasmResize {
                     output,
                     self.convolution_anchor,
                     self.support_policy,
+                    self.plan_scope,
                 )?;
                 Ok(true)
             }
@@ -447,6 +458,7 @@ impl WasmResize {
                     self.convolution_anchor,
                     NonZeroU32::new(2).unwrap(),
                     self.support_policy,
+                    self.plan_scope,
                 )?;
                 Ok(true)
             }
@@ -458,6 +470,7 @@ impl WasmResize {
                     self.convolution_anchor,
                     NonZeroU32::new(3).unwrap(),
                     self.support_policy,
+                    self.plan_scope,
                 )?;
                 Ok(true)
             }
@@ -510,7 +523,21 @@ fn resize_bicubic_rgba8_pooled_direct_into(
     output: &mut [u8],
     anchor: ConvolutionResizeAnchor,
     support_policy: SupportPolicy,
+    plan_scope: ResizePlanScope,
 ) -> Result<(), JsValue> {
+    if plan_scope == ResizePlanScope::PerBand {
+        return resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
+            resize_bicubic_rgba8_rows_into(
+                source,
+                output_view,
+                output_dimensions,
+                y_start,
+                anchor,
+                support_policy,
+            );
+        });
+    }
+
     let plan = BicubicResizePlan::new(source.dimensions(), output_dimensions, anchor, support_policy);
     resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
         resize_bicubic_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
@@ -524,7 +551,32 @@ fn resize_lanczos_rgba8_pooled_direct_into(
     anchor: ConvolutionResizeAnchor,
     radius: NonZeroU32,
     support_policy: SupportPolicy,
+    plan_scope: ResizePlanScope,
 ) -> Result<(), JsValue> {
+    if plan_scope == ResizePlanScope::PerBand {
+        return resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
+            match radius.get() {
+                2 => resize_lanczos2_rgba8_rows_into(
+                    source,
+                    output_view,
+                    output_dimensions,
+                    y_start,
+                    anchor,
+                    support_policy,
+                ),
+                3 => resize_lanczos3_rgba8_rows_into(
+                    source,
+                    output_view,
+                    output_dimensions,
+                    y_start,
+                    anchor,
+                    support_policy,
+                ),
+                _ => unreachable!("only Lanczos2/3 pooled probes are wired"),
+            }
+        });
+    }
+
     let plan = LanczosResizePlan::new(
         source.dimensions(),
         output_dimensions,
@@ -960,10 +1012,16 @@ fn assert_input_len(input: &[u8], dimensions: ImageDimensions) -> Result<(), JsV
     Ok(())
 }
 
-fn parse_support_policy(value: &str) -> Result<SupportPolicy, JsValue> {
+fn parse_support_policy_and_plan_scope(
+    value: &str,
+) -> Result<(SupportPolicy, ResizePlanScope), JsValue> {
     match value {
-        "" | "fixed" => Ok(SupportPolicy::Fixed),
-        "scale-aware" | "scale_aware" => Ok(SupportPolicy::ScaleAware),
+        "" | "fixed" => Ok((SupportPolicy::Fixed, ResizePlanScope::FullImage)),
+        "scale-aware" | "scale_aware" => Ok((SupportPolicy::ScaleAware, ResizePlanScope::FullImage)),
+        "fixed+per-band-plan" => Ok((SupportPolicy::Fixed, ResizePlanScope::PerBand)),
+        "scale-aware+per-band-plan" | "scale_aware+per_band_plan" => {
+            Ok((SupportPolicy::ScaleAware, ResizePlanScope::PerBand))
+        }
         _ => Err(JsValue::from_str("unsupported support policy")),
     }
 }
