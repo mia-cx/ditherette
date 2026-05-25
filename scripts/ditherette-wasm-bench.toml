@@ -90,6 +90,33 @@ warm_up_time = "10ms"
 target_sample_time = "0.05ms"
 live_stats = false
 
+[profiles.color-smoke]
+command = "perf"
+domain = "color"
+subjects = ["wasm:color:oklab-f32:scalar", "wasm:color:oklab-f32:pooled_direct"]
+fixtures = ["Celeste_box_art.png"]
+scales = [1]
+lanes = ["decoded-rgba"]
+sample_size = 1
+measurement_time = "100ms"
+warm_up_time = "10ms"
+target_sample_time = "0.05ms"
+live_stats = false
+
+[profiles.color]
+command = "perf"
+domain = "color"
+subjects = [
+  "wasm:color:linear-srgb-f32:scalar",
+  "wasm:color:linear-srgb-f32:pooled_direct",
+  "wasm:color:oklab-f32:scalar",
+  "wasm:color:oklab-f32:pooled_direct",
+  "wasm:color:cielab-f32:scalar",
+  "wasm:color:cielab-f32:pooled_direct"
+]
+scales = [1]
+lanes = ["decoded-rgba"]
+
 [profiles.resize-all-smoke]
 command = "perf"
 domain = "resize"

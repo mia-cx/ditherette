@@ -7,7 +7,8 @@ import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-const pkgDir = path.join(root, 'static/wasm/ditherette-wasm');
+const scalarPkgDir = path.join(root, 'static/wasm/ditherette-wasm');
+const threadedPkgDir = path.join(root, 'static/wasm/ditherette-wasm-threads');
 const defaultManifestPath = path.join(root, 'scripts/ditherette-wasm-bench.toml');
 const artifactSchema = 'ditherette-wasm-bench';
 const artifactSchemaVersion = 1;
@@ -25,13 +26,15 @@ const outDir = path.resolve(
 	options.outputDir ?? `benchmark-results/wasm-resize-${timestamp}`
 );
 
+const pkgDir = options.threadedWasm ? threadedPkgDir : scalarPkgDir;
+const buildCommand = options.threadedWasm ? 'pnpm wasm:build:threads' : 'pnpm wasm:build';
 await assertFile(
 	path.join(pkgDir, 'ditherette_wasm.js'),
-	'Run `pnpm wasm:build` before benchmarking.'
+	`Run \`${buildCommand}\` before benchmarking.`
 );
 await assertFile(
 	path.join(pkgDir, 'ditherette_wasm_bg.wasm'),
-	'Run `pnpm wasm:build` before benchmarking.'
+	`Run \`${buildCommand}\` before benchmarking.`
 );
 
 const fixtures = await benchmarkFixtures(options.fixtures);
@@ -59,7 +62,7 @@ try {
 	});
 	await page.goto(server.url, { waitUntil: 'load' });
 
-	const browserResult = await page.evaluate(async (config) => globalThis.runResizeBench(config), {
+	const browserResult = await page.evaluate(async (config) => globalThis.runWasmBench(config), {
 		domain: options.domain,
 		profile: options.profile,
 		fixtures: fixtures.map((fixture) => ({
@@ -74,7 +77,9 @@ try {
 		warmUpTimeMs: options.warmUpTimeMs,
 		warmUpIterations: options.warmUpIterations,
 		targetSampleTimeMs: options.targetSampleTimeMs,
-		liveStats: options.liveStats
+		liveStats: options.liveStats,
+		threadedWasm: options.threadedWasm,
+		threadCount: options.threadCount
 	});
 	const artifact = benchRunArtifact(options, browserResult);
 
@@ -237,8 +242,10 @@ async function startBenchmarkServer({ pkgDir, fixtures }) {
 			}
 
 			if (requestUrl.pathname.startsWith('/pkg/')) {
-				const fileName = path.basename(requestUrl.pathname);
-				await serveFile(response, path.join(pkgDir, fileName));
+				const relativePath = decodeURIComponent(requestUrl.pathname.slice('/pkg/'.length));
+				const filePath = path.normalize(path.join(pkgDir, relativePath));
+				if (!filePath.startsWith(pkgDir)) throw new Error('Invalid package path');
+				await serveFile(response, filePath);
 				return;
 			}
 
@@ -293,12 +300,14 @@ function benchmarkHtml() {
 }
 
 function benchmarkBrowserModule() {
-	return String.raw`import init, { benchmarkResizeRgba8 } from '/pkg/ditherette_wasm.js';
+	return String.raw`import init, * as wasm from '/pkg/ditherette_wasm.js';
 
 const RGBA_CHANNEL_COUNT = 4;
+const F32_BYTES = 4;
 
-globalThis.runResizeBench = async function runResizeBench(config) {
+globalThis.runWasmBench = async function runWasmBench(config) {
 	await init('/pkg/ditherette_wasm_bg.wasm');
+	if (config.threadedWasm) await wasm.initThreadPool(config.threadCount);
 
 	const decodedFixtures = [];
 	for (const fixture of config.fixtures) decodedFixtures.push(await decodeFixture(fixture));
@@ -328,7 +337,7 @@ globalThis.runResizeBench = async function runResizeBench(config) {
 		}))
 	}));
 
-	const cases = decodedFixtures.flatMap((decodedFixture) => makeScaleCases(decodedFixture, config.scales, config.lanes));
+	const cases = decodedFixtures.flatMap((decodedFixture) => makeCases(decodedFixture, config));
 	const totalRuns = cases.length * config.subjects.length;
 	let completedRuns = 0;
 	const results = [];
@@ -337,7 +346,7 @@ globalThis.runResizeBench = async function runResizeBench(config) {
 	for (const benchmarkCase of cases) {
 		for (const subject of config.subjects) {
 			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + subject.id);
-			results.push(await measureResizeSubject(benchmarkCase, subject, config));
+			results.push(await measureSubject(benchmarkCase, subject, config));
 			completedRuns += 1;
 			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + subject.id);
 		}
@@ -387,6 +396,27 @@ async function decodeFixture(fixture) {
 	return { name: fixture.name, sourceWidth, sourceHeight, sourceRgba, decodeMs, normalizeMs };
 }
 
+function makeCases(decodedFixture, config) {
+	if (config.domain === 'color') return makeColorCases(decodedFixture, config.lanes);
+	return makeScaleCases(decodedFixture, config.scales, config.lanes);
+}
+
+function makeColorCases(decodedFixture, lanes) {
+	return lanes.map((lane) => ({
+		id: decodedFixture.name + '-' + lane,
+		fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
+		lane,
+		scale: { x: 1, y: 1 },
+		sourceWidth: decodedFixture.sourceWidth,
+		sourceHeight: decodedFixture.sourceHeight,
+		outputWidth: decodedFixture.sourceWidth,
+		outputHeight: decodedFixture.sourceHeight,
+		sourceRgba: decodedFixture.sourceRgba,
+		decodeMs: lane === 'browser-decode-rgba' ? decodedFixture.decodeMs : 0,
+		normalizeMs: lane === 'browser-decode-rgba' ? decodedFixture.normalizeMs : 0
+	}));
+}
+
 function makeScaleCases(decodedFixture, scales, lanes) {
 	const cases = [];
 
@@ -431,6 +461,11 @@ function makeScaleCases(decodedFixture, scales, lanes) {
 	return cases;
 }
 
+async function measureSubject(benchmarkCase, subject, config) {
+	if (subject.domain === 'color') return measureColorSubject(benchmarkCase, subject, config);
+	return measureResizeSubject(benchmarkCase, subject, config);
+}
+
 async function measureResizeSubject(benchmarkCase, subject, config) {
 	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT;
 	const resultId = benchmarkCase.id + '-' + subject.id;
@@ -442,7 +477,7 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 		console.debug('bench-event ' + JSON.stringify(event));
 	};
 	const wasmResult = JSON.parse(
-		benchmarkResizeRgba8(
+		wasm.benchmarkResizeRgba8(
 			benchmarkCase.sourceRgba,
 			benchmarkCase.sourceWidth,
 			benchmarkCase.sourceHeight,
@@ -471,6 +506,61 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 		subject: subject.id,
 		filter: subject.filter,
 		supportPolicy: subject.supportPolicy,
+		fixture: benchmarkCase.fixture,
+		lane: benchmarkCase.lane,
+		scale: benchmarkCase.scale,
+		source: { width: benchmarkCase.sourceWidth, height: benchmarkCase.sourceHeight },
+		output: { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight, byteLength: wasmResult.outputByteLength },
+		decodeNs: millisecondsToNanoseconds(benchmarkCase.decodeMs),
+		normalizeNs: millisecondsToNanoseconds(benchmarkCase.normalizeMs),
+		statsNs: summarizeSamplesNs(wasmResult.samplesNs),
+		checksum: wasmResult.checksum,
+		iterationsPerSample: wasmResult.batchSize,
+		totalIterations: wasmResult.totalIterations,
+		warmupTimeMs: config.warmUpTimeMs,
+		warmupIterations: config.warmUpIterations,
+		measurementTimeMs: config.measurementTimeMs
+	};
+	console.debug('bench-event ' + JSON.stringify({ kind: 'result', result }));
+	return result;
+}
+
+async function measureColorSubject(benchmarkCase, subject, config) {
+	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT * F32_BYTES;
+	const resultId = benchmarkCase.id + '-' + subject.id;
+	const reporter = (eventJson) => {
+		const event = JSON.parse(eventJson);
+		event.subject = subject.id;
+		event.caseId = benchmarkCase.id;
+		event.output = { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight };
+		console.debug('bench-event ' + JSON.stringify(event));
+	};
+	const wasmResult = JSON.parse(
+		wasm.benchmarkColorSpace(
+			benchmarkCase.sourceRgba,
+			benchmarkCase.sourceWidth,
+			benchmarkCase.sourceHeight,
+			subject.target,
+			subject.executionMode,
+			config.sampleSize,
+			config.measurementTimeMs,
+			config.warmUpTimeMs,
+			config.warmUpIterations,
+			config.targetSampleTimeMs,
+			config.liveStats,
+			reporter
+		)
+	);
+
+	if (wasmResult.outputByteLength !== expectedByteLength) {
+		throw new Error(resultId + ' produced ' + wasmResult.outputByteLength + ' bytes; expected ' + expectedByteLength);
+	}
+
+	const result = {
+		id: benchmarkCase.id,
+		subject: subject.id,
+		filter: subject.target,
+		supportPolicy: subject.executionMode,
 		fixture: benchmarkCase.fixture,
 		lane: benchmarkCase.lane,
 		scale: benchmarkCase.scale,
@@ -677,14 +767,26 @@ function runId(createdAtUnix) {
 
 function subjectConfig(id) {
 	const parts = id.split(':');
-	if (parts.length !== 4 || parts[0] !== 'wasm' || parts[1] !== 'resize') {
+	if (parts.length !== 4 || parts[0] !== 'wasm') {
 		throw new Error(`Unsupported Wasm bench subject: ${id}`);
 	}
-	const family = parts[2];
-	const variant = parts[3];
+	if (parts[1] === 'color') return colorSubjectConfig(id, parts[2], parts[3]);
+	if (parts[1] !== 'resize') throw new Error(`Unsupported Wasm bench subject: ${id}`);
+	return resizeSubjectConfig(id, parts[2], parts[3]);
+}
+
+function colorSubjectConfig(id, target, executionMode) {
+	if (!['scalar', 'pooled_direct'].includes(executionMode)) {
+		throw new Error(`Unsupported Wasm color subject variant: ${id}`);
+	}
+	return { id, domain: 'color', target, executionMode };
+}
+
+function resizeSubjectConfig(id, family, variant) {
 	if (variant === 'scale-aware' || variant.endsWith('-scale-aware')) {
 		return {
 			id,
+			domain: 'resize',
 			filter: family,
 			anchor: 'center',
 			supportPolicy: 'scale-aware',
@@ -696,6 +798,7 @@ function subjectConfig(id) {
 	}
 	return {
 		id,
+		domain: 'resize',
 		filter: family,
 		anchor: 'center',
 		supportPolicy: 'fixed',
@@ -875,11 +978,13 @@ async function resolveOptions(rawArgs) {
 	const profileValues = profile ? (manifest.profiles?.[profile] ?? unknownProfile(profile)) : {};
 	const merged = { ...defaults, ...profileValues, ...parsed.overrides };
 
+	const domain = stringValue(merged.domain, 'resize');
+	const subjects = stringArray(merged.subjects, defaultSubjects(domain));
 	return {
 		command: stringValue(merged.command, 'perf'),
-		domain: stringValue(merged.domain, 'resize'),
+		domain,
 		profile,
-		subjects: stringArray(merged.subjects, ['wasm:resize:nearest:scalar']),
+		subjects,
 		fixtures: stringArray(merged.fixtures ?? merged.image, ['Celeste_box_art.png']),
 		scales: scalesFromConfig(merged),
 		lanes: stringArray(merged.lanes, ['browser-decode-rgba', 'decoded-rgba']),
@@ -907,8 +1012,23 @@ async function resolveOptions(rawArgs) {
 		),
 		liveStats: booleanValue(merged.live_stats ?? merged.liveStats, false),
 		outputDir: stringValue(merged.output_dir ?? merged.outputDir ?? merged.out, undefined),
-		jsonlEvents: parsed.jsonlEvents
+		jsonlEvents: parsed.jsonlEvents,
+		threadedWasm: booleanValue(
+			merged.threaded_wasm ?? merged.threadedWasm,
+			requiresThreadedWasm(subjects)
+		),
+		threadCount: positiveInteger(merged.thread_count ?? merged.threadCount, '--thread-count', 2)
 	};
+}
+
+function defaultSubjects(domain) {
+	return domain === 'color'
+		? ['wasm:color:oklab-f32:scalar', 'wasm:color:oklab-f32:pooled_direct']
+		: ['wasm:resize:nearest:scalar'];
+}
+
+function requiresThreadedWasm(subjects) {
+	return subjects.some((subject) => subject.endsWith(':pooled_direct'));
 }
 
 function parseArgs(rawArgs) {
@@ -954,6 +1074,9 @@ function parseArgs(rawArgs) {
 			case '--subjects':
 				parsed.overrides.subjects = commaList(nextValue());
 				break;
+			case '--domain':
+				parsed.overrides.domain = nextValue();
+				break;
 			case '--scales':
 				parsed.overrides.scales = commaList(nextValue()).map(Number);
 				break;
@@ -988,6 +1111,15 @@ function parseArgs(rawArgs) {
 			case '--target-sample-time-ms':
 			case '--target-sample-ms':
 				parsed.overrides.target_sample_time = nextValue();
+				break;
+			case '--thread-count':
+				parsed.overrides.thread_count = Number(nextValue());
+				break;
+			case '--threaded-wasm':
+				parsed.overrides.threaded_wasm = true;
+				break;
+			case '--scalar-wasm':
+				parsed.overrides.threaded_wasm = false;
 				break;
 			case '--live-stats':
 				if (args[index + 1] && !args[index + 1].startsWith('--')) {

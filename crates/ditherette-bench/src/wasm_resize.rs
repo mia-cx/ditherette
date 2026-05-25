@@ -249,6 +249,7 @@ struct WasmRunState {
     logger: Option<MeasurementLogger>,
     profile: Option<String>,
     accepted_baseline: Option<String>,
+    domain: Option<String>,
 }
 
 impl WasmRunState {
@@ -302,6 +303,7 @@ impl WasmRunState {
     }
 
     fn start(&mut self, event: StartEvent) -> Result<(), BenchError> {
+        self.domain = Some(event.domain.clone());
         self.profile = event.profile;
         let measurement = event.measurement.config();
         log_perf_start(
@@ -349,7 +351,7 @@ impl WasmRunState {
     ) -> Result<(), BenchError> {
         let run = BenchRun::new(
             "wasm-resize",
-            "resize",
+            self.domain.as_deref().unwrap_or("resize"),
             Some(self.measurement()?.artifact()),
             vec![result.clone()],
         );
@@ -364,9 +366,10 @@ impl WasmRunState {
         })?;
         print_perf_table(&self.results);
 
+        let domain = self.domain.as_deref().unwrap_or("resize");
         let run = BenchRun::new(
             "wasm-resize",
-            "resize",
+            domain,
             Some(measurement.artifact()),
             self.results,
         );
