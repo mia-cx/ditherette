@@ -1,4 +1,4 @@
-use ditherette_wasm::{benchmark_resize_rgba8, convert_color_space, resize_rgba8};
+use ditherette_wasm::{benchmark_resize_rgba8, convert_color_space, process_rgba8, resize_rgba8};
 
 #[test]
 fn color_space_export_materializes_f32_buffer() {
@@ -15,6 +15,26 @@ fn resize_export_runs_prod_nearest() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let output = resize_rgba8(&source, 2, 1, 4, 2, "nearest", "center", "fixed", true)
         .expect("resize should succeed");
+
+    assert_eq!(output.len(), 4 * 2 * 4);
+    assert_eq!(&output[0..4], &[255, 0, 0, 255]);
+    assert_eq!(&output[12..16], &[0, 255, 0, 255]);
+}
+
+#[test]
+fn process_export_runs_scalar_pipeline_shell() {
+    let source = [255, 0, 0, 255, 0, 255, 0, 255];
+    let settings = r#"{
+        "output": {
+            "width": 4,
+            "height": 2,
+            "resize": "nearest"
+        },
+        "colorSpace": "srgb",
+        "dither": { "algorithm": "none" }
+    }"#;
+    let output = process_rgba8(&source, 2, 1, settings, true)
+        .expect("process shell should run scalar resize");
 
     assert_eq!(output.len(), 4 * 2 * 4);
     assert_eq!(&output[0..4], &[255, 0, 0, 255]);

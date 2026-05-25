@@ -57,6 +57,8 @@ version = "0.1.0"
 dependencies = [
  "ditherette-bench-api",
  "js-sys",
+ "serde",
+ "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]

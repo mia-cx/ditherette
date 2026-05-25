@@ -8,6 +8,7 @@
 use std::hint::black_box;
 
 use js_sys::Function;
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -83,19 +84,49 @@ pub fn resize_rgba8(
     support_policy: &str,
     parallelization_policy: bool,
 ) -> Result<Vec<u8>, JsValue> {
-    let source_dimensions = image_dimensions(source_width, source_height)?;
-    let output_dimensions = image_dimensions(output_width, output_height)?;
-    assert_input_len(input, source_dimensions)?;
+    resize_rgba8_scalar(
+        input,
+        source_width,
+        source_height,
+        output_width,
+        output_height,
+        filter,
+        anchor,
+        support_policy,
+        parallelization_policy,
+    )
+}
 
-    let source = ImageView::<Rgba8>::packed(input, source_dimensions)
-        .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    let resize = WasmResize::parse(filter, anchor, support_policy)?;
-    let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+/// Execute the coarse RGBA8 processing pipeline inside Wasm.
+///
+/// This is the full-pipeline shell from the parallelization plan. It accepts the
+/// app-style serialized processing settings and currently executes the scalar
+/// resize stage, returning RGBA8 for preview. Later stages can be inserted here
+/// without changing the JS/Wasm boundary shape.
+#[wasm_bindgen(js_name = processRgba8)]
+pub fn process_rgba8(
+    input: &[u8],
+    width: u32,
+    height: u32,
+    settings_json: &str,
+    parallelization_policy: bool,
+) -> Result<Vec<u8>, JsValue> {
+    let settings: ProcessRgba8Settings = serde_json::from_str(settings_json)
+        .map_err(|error| JsValue::from_str(&format!("invalid process settings: {error}")))?;
+    validate_process_crop(settings.output.crop, width, height)?;
+    let resize = resize_request_from_mode(&settings.output.resize)?;
 
-    let _ = parallelization_policy;
-    resize.run(source, output_dimensions, &mut output)?;
-
-    Ok(output)
+    resize_rgba8_scalar(
+        input,
+        width,
+        height,
+        settings.output.width,
+        settings.output.height,
+        resize.filter,
+        CENTER_ANCHOR,
+        resize.support_policy,
+        parallelization_policy,
+    )
 }
 
 /// Benchmark an RGBA8 resize entirely inside Wasm and return a JSON result.
@@ -159,6 +190,121 @@ pub fn benchmark_resize_rgba8(
         checksum_bytes(&output),
         &result.samples_ns,
     ))
+}
+
+const CENTER_ANCHOR: &str = "center";
+const FIXED_SUPPORT: &str = "fixed";
+const SCALE_AWARE_SUPPORT: &str = "scale-aware";
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProcessRgba8Settings {
+    output: ProcessOutputSettings,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProcessOutputSettings {
+    width: u32,
+    height: u32,
+    resize: String,
+    crop: Option<ProcessCropRect>,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProcessCropRect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Clone, Copy)]
+struct ProcessResizeRequest {
+    filter: &'static str,
+    support_policy: &'static str,
+}
+
+fn validate_process_crop(
+    crop: Option<ProcessCropRect>,
+    source_width: u32,
+    source_height: u32,
+) -> Result<(), JsValue> {
+    let Some(crop) = crop else {
+        return Ok(());
+    };
+    if crop.x == 0 && crop.y == 0 && crop.width == source_width && crop.height == source_height {
+        return Ok(());
+    }
+    Err(JsValue::from_str(
+        "processRgba8 does not support cropped sources yet",
+    ))
+}
+
+fn resize_request_from_mode(mode: &str) -> Result<ProcessResizeRequest, JsValue> {
+    let request = match mode {
+        "nearest" => ProcessResizeRequest {
+            filter: "nearest",
+            support_policy: FIXED_SUPPORT,
+        },
+        "area" => ProcessResizeRequest {
+            filter: "area",
+            support_policy: FIXED_SUPPORT,
+        },
+        "bilinear" => ProcessResizeRequest {
+            filter: "bilinear",
+            support_policy: FIXED_SUPPORT,
+        },
+        "bicubic" | "bicubic-catmull-rom" => ProcessResizeRequest {
+            filter: "bicubic",
+            support_policy: FIXED_SUPPORT,
+        },
+        "lanczos2" => ProcessResizeRequest {
+            filter: "lanczos2",
+            support_policy: FIXED_SUPPORT,
+        },
+        "lanczos2-scale-aware" => ProcessResizeRequest {
+            filter: "lanczos2",
+            support_policy: SCALE_AWARE_SUPPORT,
+        },
+        "lanczos3" => ProcessResizeRequest {
+            filter: "lanczos3",
+            support_policy: FIXED_SUPPORT,
+        },
+        "lanczos3-scale-aware" => ProcessResizeRequest {
+            filter: "lanczos3",
+            support_policy: SCALE_AWARE_SUPPORT,
+        },
+        _ => return Err(JsValue::from_str("unsupported process resize mode")),
+    };
+    Ok(request)
+}
+
+fn resize_rgba8_scalar(
+    input: &[u8],
+    source_width: u32,
+    source_height: u32,
+    output_width: u32,
+    output_height: u32,
+    filter: &str,
+    anchor: &str,
+    support_policy: &str,
+    parallelization_policy: bool,
+) -> Result<Vec<u8>, JsValue> {
+    let source_dimensions = image_dimensions(source_width, source_height)?;
+    let output_dimensions = image_dimensions(output_width, output_height)?;
+    assert_input_len(input, source_dimensions)?;
+
+    let source = ImageView::<Rgba8>::packed(input, source_dimensions)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let resize = WasmResize::parse(filter, anchor, support_policy)?;
+    let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+
+    let _ = parallelization_policy;
+    resize.run(source, output_dimensions, &mut output)?;
+
+    Ok(output)
 }
 
 #[derive(Clone, Copy)]

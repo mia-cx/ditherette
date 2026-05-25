@@ -1,5 +1,5 @@
 import { resizeImageData } from '$lib/processing/resize';
-import type { CropRect, ResizeId } from '$lib/processing/types';
+import type { CropRect, ProcessingSettings, ResizeId } from '$lib/processing/types';
 
 const WASM_MODULE_URL = '/wasm/ditherette-wasm/ditherette_wasm.js';
 const SOURCE_COLOR_SPACE = 'rgba8';
@@ -37,6 +37,13 @@ type DitheretteWasmModule = {
 		filter: string,
 		anchor: string,
 		supportPolicy: string,
+		parallelizationPolicy: boolean
+	) => Uint8Array;
+	processRgba8: (
+		input: Uint8Array,
+		width: number,
+		height: number,
+		settingsJson: string,
 		parallelizationPolicy: boolean
 	) => Uint8Array;
 };
@@ -89,6 +96,27 @@ export async function convertColorSpaceF32(
 		SOURCE_COLOR_SPACE,
 		target,
 		parallelizationPolicy
+	);
+}
+
+export async function processImageDataWithWasm(
+	source: ImageData,
+	settings: ProcessingSettings,
+	parallelizationPolicy = true
+): Promise<ImageData> {
+	const wasm = await loadDitheretteWasm();
+	if (!wasm) throw new Error('Ditherette Wasm module is not available. Run `pnpm wasm:build`.');
+	const output = wasm.processRgba8(
+		imageDataBytes(source),
+		source.width,
+		source.height,
+		JSON.stringify(settings),
+		parallelizationPolicy
+	);
+	return new ImageData(
+		new Uint8ClampedArray(output),
+		settings.output.width,
+		settings.output.height
 	);
 }
 
