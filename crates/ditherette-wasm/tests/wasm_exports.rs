@@ -1,4 +1,6 @@
-use ditherette_wasm::{benchmark_resize_rgba8, convert_color_space, process_rgba8, resize_rgba8};
+use ditherette_wasm::{
+    benchmark_color_space, benchmark_resize_rgba8, convert_color_space, process_rgba8, resize_rgba8,
+};
 
 #[test]
 fn color_space_export_materializes_f32_buffer() {
@@ -39,6 +41,30 @@ fn process_export_runs_scalar_pipeline_shell() {
     assert_eq!(output.len(), 4 * 2 * 4);
     assert_eq!(&output[0..4], &[255, 0, 0, 255]);
     assert_eq!(&output[12..16], &[0, 255, 0, 255]);
+}
+
+#[test]
+fn color_benchmark_export_returns_samples_json() {
+    let source = [255, 0, 0, 255, 0, 255, 0, 255];
+    let output = benchmark_color_space(
+        &source,
+        2,
+        1,
+        "oklab-f32",
+        "scalar",
+        2,
+        1.0,
+        0.01,
+        1,
+        0.01,
+        false,
+        None,
+    )
+    .expect("color benchmark should succeed");
+
+    assert!(output.contains("\"batchSize\":"));
+    assert!(output.contains("\"totalIterations\":"));
+    assert!(output.contains("\"samplesNs\":"));
 }
 
 #[test]

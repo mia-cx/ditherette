@@ -14,7 +14,9 @@ use wasm_bindgen::prelude::*;
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::{
-        color::{rgba8_to_color_space_f32, ColorSpaceF32},
+        color::{
+            rgba8_to_color_space_f32, rgba8_to_color_space_f32_with_policy_into, ColorSpaceF32,
+        },
         resize::scalar::{
             area::resize_area_rgba8_into,
             bicubic::resize_bicubic_rgba8_into,
@@ -127,6 +129,68 @@ pub fn process_rgba8(
         resize.support_policy,
         parallelization_policy,
     )
+}
+
+/// Benchmark color-space materialization entirely inside Wasm and return JSON.
+///
+/// The `scalar` mode runs the direct scalar row path. The `pooled_direct` mode
+/// allows the internal parallelization policy; in the threaded build that maps
+/// to the Rayon-backed direct row-write prototype.
+#[wasm_bindgen(js_name = benchmarkColorSpace)]
+pub fn benchmark_color_space(
+    input: &[u8],
+    width: u32,
+    height: u32,
+    to: &str,
+    execution_mode: &str,
+    sample_size: u32,
+    measurement_time_ms: f64,
+    warm_up_time_ms: f64,
+    warm_up_iterations: u32,
+    target_sample_time_ms: f64,
+    live_stats: bool,
+    reporter: Option<Function>,
+) -> Result<String, JsValue> {
+    let dimensions = image_dimensions(width, height)?;
+    assert_input_len(input, dimensions)?;
+    if sample_size == 0 {
+        return Err(JsValue::from_str("sample size must be greater than zero"));
+    }
+
+    let target = ColorSpaceF32::parse(to)
+        .ok_or_else(|| JsValue::from_str("unsupported target color space"))?;
+    let parallelization_policy = match execution_mode {
+        "scalar" => false,
+        "pooled_direct" => true,
+        _ => return Err(JsValue::from_str("unsupported color benchmark execution mode")),
+    };
+    let source = ImageView::<Rgba8>::packed(input, dimensions)
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut output = vec![0.0; dimensions.storage_len::<Rgba8>().unwrap()];
+    let config = WasmBenchmarkConfig {
+        sample_size,
+        measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
+        warm_up_time_ms: positive_or_default(warm_up_time_ms, 1_000.0),
+        warm_up_iterations,
+        target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
+        live_stats,
+    };
+    let result = run_color_benchmark(
+        source,
+        target,
+        parallelization_policy,
+        &mut output,
+        config,
+        reporter.as_ref(),
+    )?;
+
+    Ok(benchmark_result_json(
+        result.batch_size,
+        result.total_iterations,
+        output.len() * std::mem::size_of::<f32>(),
+        checksum_f32(&output),
+        &result.samples_ns,
+    ))
 }
 
 /// Benchmark an RGBA8 resize entirely inside Wasm and return a JSON result.
@@ -402,6 +466,97 @@ struct WasmBenchmarkResult {
     samples_ns: Vec<f64>,
 }
 
+fn run_color_benchmark(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    parallelization_policy: bool,
+    output: &mut [f32],
+    config: WasmBenchmarkConfig,
+    reporter: Option<&Function>,
+) -> Result<WasmBenchmarkResult, JsValue> {
+    const MAX_BATCH_SIZE: u32 = 1 << 20;
+
+    let mut batch_size = 1;
+    let warmup_started = performance_now();
+    let mut warmup_elapsed = 0.0;
+    let mut warmup_batches = 0;
+    let mut warmup_iterations = 0u64;
+    while warmup_elapsed < config.warm_up_time_ms
+        || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
+    {
+        let elapsed = run_color_batch(source, target, parallelization_policy, output, batch_size);
+        warmup_batches += 1;
+        warmup_iterations += u64::from(batch_size);
+        warmup_elapsed = performance_now() - warmup_started;
+        report_event(
+            reporter,
+            &format!(
+                "{{\"kind\":\"warmup-batch\",\"batchSize\":{batch_size},\"batchElapsedMs\":{elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6}}}"
+            ),
+        )?;
+
+        if elapsed < config.target_sample_time_ms && batch_size < MAX_BATCH_SIZE {
+            let multiplier = (config.target_sample_time_ms / elapsed.max(0.001)).ceil() as u32;
+            batch_size = batch_size
+                .saturating_mul(multiplier.max(2))
+                .min(MAX_BATCH_SIZE);
+        }
+    }
+    report_event(
+        reporter,
+        &format!(
+            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}"
+        ),
+    )?;
+
+    let measurement_started = performance_now();
+    let mut measurement_elapsed = 0.0;
+    let mut samples_ns = Vec::with_capacity(config.sample_size as usize);
+    let mut total_iterations = 0u64;
+    while samples_ns.len() < config.sample_size as usize
+        && measurement_elapsed < config.measurement_time_ms
+    {
+        let elapsed_ms = run_color_batch(source, target, parallelization_policy, output, batch_size);
+        let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
+        samples_ns.push(sample_ns);
+        total_iterations += u64::from(batch_size);
+        measurement_elapsed = performance_now() - measurement_started;
+        if config.live_stats {
+            report_event(
+                reporter,
+                &format!(
+                    "{{\"kind\":\"measurement-progress\",\"samplesDone\":{},\"sampleSize\":{},\"elapsedMs\":{measurement_elapsed:.6},\"measurementTimeMs\":{:.6},\"totalIterations\":{total_iterations},\"batchSize\":{batch_size},\"samplesNs\":[{}]}}",
+                    samples_ns.len(),
+                    config.sample_size,
+                    config.measurement_time_ms,
+                    join_samples(&samples_ns)
+                ),
+            )?;
+        }
+    }
+
+    Ok(WasmBenchmarkResult {
+        batch_size,
+        total_iterations,
+        samples_ns,
+    })
+}
+
+fn run_color_batch(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    parallelization_policy: bool,
+    output: &mut [f32],
+    batch_size: u32,
+) -> f64 {
+    let started = performance_now();
+    for _ in 0..batch_size {
+        rgba8_to_color_space_f32_with_policy_into(source, target, parallelization_policy, output);
+        black_box(output.as_ref());
+    }
+    performance_now() - started
+}
+
 fn run_resize_benchmark(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
@@ -534,6 +689,17 @@ fn checksum_bytes(bytes: &[u8]) -> u32 {
     for &byte in bytes {
         hash ^= u32::from(byte);
         hash = hash.wrapping_mul(16_777_619);
+    }
+    hash
+}
+
+fn checksum_f32(values: &[f32]) -> u32 {
+    let mut hash = 2_166_136_261u32;
+    for value in values {
+        for byte in value.to_bits().to_le_bytes() {
+            hash ^= u32::from(byte);
+            hash = hash.wrapping_mul(16_777_619);
+        }
     }
     hash
 }

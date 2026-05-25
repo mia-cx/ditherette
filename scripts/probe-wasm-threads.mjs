@@ -55,15 +55,33 @@ try {
 			'srgb-f32',
 			true
 		);
+		const benchmark = JSON.parse(
+			wasm.benchmarkColorSpace(
+				new Uint8Array([255, 128, 0, 255, 0, 128, 255, 128]),
+				2,
+				1,
+				'srgb-f32',
+				'pooled_direct',
+				1,
+				1,
+				0.01,
+				1,
+				0.01,
+				false
+			)
+		);
 		return {
 			crossOriginIsolated,
 			length: output.length,
-			values: Array.from(output.slice(0, 8))
+			values: Array.from(output.slice(0, 8)),
+			benchmarkSamples: benchmark.samplesNs.length,
+			benchmarkChecksum: benchmark.checksum
 		};
 	});
 	console.log(JSON.stringify(result, null, 2));
 	if (!result.crossOriginIsolated) throw new Error('browser page is not cross-origin isolated');
 	if (result.length !== 8) throw new Error(`unexpected output length ${result.length}`);
+	if (result.benchmarkSamples !== 1) throw new Error('threaded benchmark did not report a sample');
 } finally {
 	await browser.close();
 	server.close();
