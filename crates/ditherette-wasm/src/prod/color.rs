@@ -4,6 +4,9 @@
 //! color buffers used by pipeline caches. The first three channels are the
 //! requested color space; alpha is preserved as a normalized `0..=1` f32 value.
 
+#[cfg(feature = "threads")]
+use rayon::prelude::*;
+
 use crate::{
     image::{ImageDimensions, ImageFormat, ImageView, Rgba8},
     prod::tiling::RowBand,
@@ -56,6 +59,12 @@ pub fn rgba8_to_color_space_f32(
 ) -> Vec<f32> {
     let dimensions = source.dimensions();
     let mut output = vec![0.0; color_output_len(dimensions)];
+    #[cfg(feature = "threads")]
+    if _parallelization_policy {
+        rgba8_to_color_space_f32_parallel_into(source, target, &mut output);
+        return output;
+    }
+
     rgba8_to_color_space_f32_into(source, target, &mut output);
     output
 }
@@ -96,21 +105,45 @@ pub fn rgba8_to_color_space_f32_rows_into(
         let output_y_start = y as usize * dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
         let output_row = &mut output
             [output_y_start..output_y_start + dimensions.width_usize() * Rgba8::CHANNEL_COUNT];
+        materialize_color_row(source_row, target, output_row);
+    }
+}
 
-        for x in 0..dimensions.width_usize() {
-            let source_start = x * Rgba8::CHANNEL_COUNT;
-            let output_start = x * Rgba8::CHANNEL_COUNT;
-            let r = source_row[source_start + Rgba8::R];
-            let g = source_row[source_start + Rgba8::G];
-            let b = source_row[source_start + Rgba8::B];
-            let alpha = srgb8_to_unit(source_row[source_start + Rgba8::A]);
-            let channels = convert_rgb(r, g, b, target);
+#[cfg(feature = "threads")]
+fn rgba8_to_color_space_f32_parallel_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    output: &mut [f32],
+) {
+    let dimensions = source.dimensions();
+    assert_eq!(output.len(), color_output_len(dimensions));
+    let row_len = dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
 
-            output_row[output_start] = channels[0];
-            output_row[output_start + 1] = channels[1];
-            output_row[output_start + 2] = channels[2];
-            output_row[output_start + 3] = alpha;
-        }
+    output
+        .par_chunks_mut(row_len)
+        .enumerate()
+        .for_each(|(y, output_row)| {
+            let source_row = source
+                .row(y as u32)
+                .expect("parallel source row should be in bounds");
+            materialize_color_row(source_row, target, output_row);
+        });
+}
+
+fn materialize_color_row(source_row: &[u8], target: ColorSpaceF32, output_row: &mut [f32]) {
+    for x in 0..source_row.len() / Rgba8::CHANNEL_COUNT {
+        let source_start = x * Rgba8::CHANNEL_COUNT;
+        let output_start = x * Rgba8::CHANNEL_COUNT;
+        let r = source_row[source_start + Rgba8::R];
+        let g = source_row[source_start + Rgba8::G];
+        let b = source_row[source_start + Rgba8::B];
+        let alpha = srgb8_to_unit(source_row[source_start + Rgba8::A]);
+        let channels = convert_rgb(r, g, b, target);
+
+        output_row[output_start] = channels[0];
+        output_row[output_start + 1] = channels[1];
+        output_row[output_start + 2] = channels[2];
+        output_row[output_start + 3] = alpha;
     }
 }
 

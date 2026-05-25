@@ -20,6 +20,7 @@ export type ResizeEngine = 'typescript' | 'wasm scalar';
 
 type DitheretteWasmModule = {
 	default: (moduleOrPath?: unknown) => Promise<unknown>;
+	initThreadPool?: (workerCount: number) => Promise<void>;
 	convertColorSpace: (
 		input: Uint8Array,
 		width: number,
@@ -63,6 +64,18 @@ let warnedAboutLoadFailure = false;
 
 export function wasmResizeEnabled() {
 	return isTruthyFlag(import.meta.env.VITE_DITHERETTE_WASM_RESIZE);
+}
+
+export function wasmThreadsAvailable() {
+	return typeof SharedArrayBuffer !== 'undefined' && globalThis.crossOriginIsolated === true;
+}
+
+export async function initializeDitheretteWasmThreadPool(workerCount = defaultWasmWorkerCount()) {
+	if (!wasmThreadsAvailable()) return false;
+	const wasm = await loadDitheretteWasm();
+	if (!wasm?.initThreadPool) return false;
+	await wasm.initThreadPool(workerCount);
+	return true;
 }
 
 export function wasmResizeRequest(mode: ResizeId): ResizeRequest {
@@ -162,6 +175,11 @@ export async function tryResizeImageDataWithWasm(
 
 function imageDataBytes(source: ImageData) {
 	return new Uint8Array(source.data.buffer, source.data.byteOffset, source.data.byteLength);
+}
+
+function defaultWasmWorkerCount() {
+	const hardwareConcurrency = globalThis.navigator?.hardwareConcurrency ?? 2;
+	return Math.max(1, hardwareConcurrency - 1);
 }
 
 function isTruthyFlag(value: unknown) {
