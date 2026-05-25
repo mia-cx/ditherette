@@ -6,16 +6,22 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const args = parseArgs(process.argv.slice(2));
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-const outDir = path.resolve(root, args.out ?? `benchmark-results/wasm-resize-${timestamp}`);
 const pkgDir = path.join(root, 'static/wasm/ditherette-wasm');
-const resizeScales = [2, 0.95, 0.75, 0.5, 0.25, 0.125];
+const defaultManifestPath = path.join(root, 'scripts/ditherette-wasm-bench.toml');
+const artifactSchema = 'ditherette-wasm-bench';
+const artifactSchemaVersion = 1;
 const significantNumberFormatter = new Intl.NumberFormat('en-US', {
 	maximumSignificantDigits: 4,
 	minimumSignificantDigits: 4,
 	useGrouping: false
 });
+
+const options = await resolveOptions(process.argv.slice(2));
+const outDir = path.resolve(
+	root,
+	options.outputDir ?? `benchmark-results/wasm-resize-${timestamp}`
+);
 
 await assertFile(
 	path.join(pkgDir, 'ditherette_wasm.js'),
@@ -26,8 +32,8 @@ await assertFile(
 	'Run `pnpm wasm:build` before benchmarking.'
 );
 
-const fixtureFile = await benchmarkFixtureFile(args);
-const server = await startBenchmarkServer({ pkgDir, fixtureFile });
+const fixtures = await benchmarkFixtures(options.fixtures);
+const server = await startBenchmarkServer({ pkgDir, fixtures });
 const browser = await chromium.launch({ headless: true });
 let statusLineActive = false;
 
@@ -41,22 +47,25 @@ try {
 	});
 	await page.goto(server.url, { waitUntil: 'load' });
 
-	const result = await page.evaluate(async (config) => globalThis.runResizeBench(config), {
-		iterations: args.iterations,
-		warmups: args.warmups,
-		fixture: {
-			name: path.basename(fixtureFile),
-			url: `/fixtures/${encodeURIComponent(path.basename(fixtureFile))}`
-		},
-		scales: resizeScales
+	const browserResult = await page.evaluate(async (config) => globalThis.runResizeBench(config), {
+		fixtures: fixtures.map((fixture) => ({
+			name: fixture.name,
+			url: `/fixtures/${encodeURIComponent(fixture.name)}`
+		})),
+		subjects: options.subjects.map(subjectConfig),
+		scales: options.scales,
+		lanes: options.lanes,
+		sampleSize: options.sampleSize,
+		warmUpIterations: options.warmUpIterations
 	});
+	const artifact = benchRunArtifact(options, browserResult);
 
 	await mkdir(outDir, { recursive: true });
-	const jsonPath = path.join(outDir, 'wasm-resize-nearest.json');
-	await writeFile(jsonPath, `${JSON.stringify(result, null, 2)}\n`);
+	const jsonPath = path.join(outDir, `${sanitizePathComponent(options.profile ?? 'ad-hoc')}.json`);
+	await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
 
 	clearStatusLine();
-	console.log(formatResultTable(result));
+	console.log(formatResultTable(artifact));
 	console.log(`\nWrote ${path.relative(root, jsonPath)}`);
 } finally {
 	clearStatusLine();
@@ -83,16 +92,34 @@ function clearStatusLine() {
 	statusLineActive = false;
 }
 
-async function benchmarkFixtureFile(options) {
-	const fixture = path.resolve(
-		root,
-		options.image ?? 'benchmark-fixtures/Celeste_box_art_full.png'
-	);
-	await assertFile(fixture, `Benchmark fixture not found: ${fixture}`);
-	return fixture;
+async function benchmarkFixtures(values) {
+	const fixtures = [];
+	for (const value of values) {
+		const file = await resolveFixtureFile(value);
+		fixtures.push({ name: path.basename(file), file });
+	}
+	return fixtures;
 }
 
-async function startBenchmarkServer({ pkgDir, fixtureFile }) {
+async function resolveFixtureFile(value) {
+	const candidates = path.isAbsolute(value)
+		? [value]
+		: [
+				path.resolve(root, value),
+				path.resolve(root, 'benchmark-fixtures', value),
+				path.resolve(root, 'benchmark-fixtures', `${value}.png`),
+				path.resolve(root, 'benchmark-fixtures', `${value}.jpg`),
+				path.resolve(root, 'benchmark-fixtures', `${value}.webp`)
+			];
+
+	for (const candidate of candidates) {
+		if (await fileExists(candidate)) return candidate;
+	}
+	throw new Error(`Benchmark fixture not found: ${value}`);
+}
+
+async function startBenchmarkServer({ pkgDir, fixtures }) {
+	const fixturesByName = new Map(fixtures.map((fixture) => [fixture.name, fixture.file]));
 	const server = createServer(async (request, response) => {
 		try {
 			const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -116,6 +143,9 @@ async function startBenchmarkServer({ pkgDir, fixtureFile }) {
 			}
 
 			if (requestUrl.pathname.startsWith('/fixtures/')) {
+				const fileName = decodeURIComponent(path.basename(requestUrl.pathname));
+				const fixtureFile = fixturesByName.get(fileName);
+				if (!fixtureFile) throw new Error(`Unknown fixture: ${fileName}`);
 				await serveFile(response, fixtureFile);
 				return;
 			}
@@ -167,63 +197,39 @@ function benchmarkBrowserModule() {
 
 const RGBA_CHANNEL_COUNT = 4;
 
-const resizeVariants = [
-	{
-		id: 'baseline',
-		kind: 'allocating',
-		resize: (sourceRgba, sourceWidth, sourceHeight, outputWidth, outputHeight) =>
-			resizeRgba8(
-				sourceRgba,
-				sourceWidth,
-				sourceHeight,
-				outputWidth,
-				outputHeight,
-				'nearest',
-				'center',
-				'fixed',
-				true
-			)
-	}
-];
-
 globalThis.runResizeBench = async function runResizeBench(config) {
 	await init('/pkg/ditherette_wasm_bg.wasm');
 
-	const decodedFixture = await decodeFixture(config.fixture);
-	const cases = makeScaleCases(decodedFixture, config.scales);
+	const decodedFixtures = [];
+	for (const fixture of config.fixtures) decodedFixtures.push(await decodeFixture(fixture));
 
-	const totalRuns = cases.length * resizeVariants.length;
+	const cases = decodedFixtures.flatMap((decodedFixture) => makeScaleCases(decodedFixture, config.scales, config.lanes));
+	const totalRuns = cases.length * config.subjects.length;
 	let completedRuns = 0;
 	const results = [];
 	reportProgress(completedRuns, totalRuns, 'starting');
 
 	for (const benchmarkCase of cases) {
-		for (const variant of resizeVariants) {
-			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + variant.id);
-			results.push(await measureResizeVariant(benchmarkCase, variant, config));
+		for (const subject of config.subjects) {
+			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + subject.id);
+			results.push(await measureResizeSubject(benchmarkCase, subject, config));
 			completedRuns += 1;
-			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + variant.id);
+			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + subject.id);
 		}
 	}
 
-	assertMatchingVariantChecksums(results);
+	assertStableChecksums(results);
 
 	return {
-		benchmark: 'wasm-resize-nearest',
 		crossOriginIsolated: globalThis.crossOriginIsolated,
-		fixture: {
-			name: config.fixture.name,
-			width: decodedFixture.sourceWidth,
-			height: decodedFixture.sourceHeight,
-			decodeNs: millisecondsToNanoseconds(decodedFixture.decodeMs),
-			normalizeNs: millisecondsToNanoseconds(decodedFixture.normalizeMs)
-		},
-		timestamp: new Date().toISOString(),
 		userAgent: navigator.userAgent,
-		iterations: config.iterations,
-		warmups: config.warmups,
-		scales: config.scales,
-		variants: resizeVariants.map((variant) => variant.id),
+		fixtures: decodedFixtures.map((fixture) => ({
+			name: fixture.name,
+			width: fixture.sourceWidth,
+			height: fixture.sourceHeight,
+			decodeNs: millisecondsToNanoseconds(fixture.decodeMs),
+			normalizeNs: millisecondsToNanoseconds(fixture.normalizeMs)
+		})),
 		results
 	};
 };
@@ -253,81 +259,67 @@ async function decodeFixture(fixture) {
 	const normalizeMs = performance.now() - normalizeStarted;
 	bitmap.close?.();
 
-	return { sourceWidth, sourceHeight, sourceRgba, decodeMs, normalizeMs };
+	return { name: fixture.name, sourceWidth, sourceHeight, sourceRgba, decodeMs, normalizeMs };
 }
 
-function makeScaleCases(decodedFixture, scales) {
+function makeScaleCases(decodedFixture, scales, lanes) {
 	const cases = [];
 
 	for (const scale of scales) {
 		const outputWidth = scaledDimension(decodedFixture.sourceWidth, scale);
 		const outputHeight = scaledDimension(decodedFixture.sourceHeight, scale);
-		const id = scaleLabel(scale);
+		const id = decodedFixture.name + '-' + scaleLabel(scale);
 
-		cases.push({
-			id: id + '-browser-decode',
-			lane: 'browser-decode-rgba',
-			scale,
-			sourceWidth: decodedFixture.sourceWidth,
-			sourceHeight: decodedFixture.sourceHeight,
-			outputWidth,
-			outputHeight,
-			sourceRgba: decodedFixture.sourceRgba,
-			decodeMs: decodedFixture.decodeMs,
-			normalizeMs: decodedFixture.normalizeMs
-		});
+		if (lanes.includes('browser-decode-rgba')) {
+			cases.push({
+				id: id + '-browser-decode',
+				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
+				lane: 'browser-decode-rgba',
+				scale,
+				sourceWidth: decodedFixture.sourceWidth,
+				sourceHeight: decodedFixture.sourceHeight,
+				outputWidth,
+				outputHeight,
+				sourceRgba: decodedFixture.sourceRgba,
+				decodeMs: decodedFixture.decodeMs,
+				normalizeMs: decodedFixture.normalizeMs
+			});
+		}
 
-		cases.push({
-			id: id + '-decoded-rgba',
-			lane: 'decoded-rgba',
-			scale,
-			sourceWidth: decodedFixture.sourceWidth,
-			sourceHeight: decodedFixture.sourceHeight,
-			outputWidth,
-			outputHeight,
-			sourceRgba: decodedFixture.sourceRgba,
-			decodeMs: 0,
-			normalizeMs: 0
-		});
+		if (lanes.includes('decoded-rgba')) {
+			cases.push({
+				id: id + '-decoded-rgba',
+				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
+				lane: 'decoded-rgba',
+				scale,
+				sourceWidth: decodedFixture.sourceWidth,
+				sourceHeight: decodedFixture.sourceHeight,
+				outputWidth,
+				outputHeight,
+				sourceRgba: decodedFixture.sourceRgba,
+				decodeMs: 0,
+				normalizeMs: 0
+			});
+		}
 	}
 
 	return cases;
 }
 
-async function measureResizeVariant(benchmarkCase, variant, config) {
+async function measureResizeSubject(benchmarkCase, subject, config) {
 	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT;
 
-	if (variant.kind === 'reused-output') {
-		return measureIntoVariant(benchmarkCase, variant, config, expectedByteLength);
-	}
-
-	return measureAllocatingVariant(benchmarkCase, variant, config, expectedByteLength);
-}
-
-async function measureAllocatingVariant(benchmarkCase, variant, config, expectedByteLength) {
-	for (let index = 0; index < config.warmups; index += 1) {
-		variant.resize(
-			benchmarkCase.sourceRgba,
-			benchmarkCase.sourceWidth,
-			benchmarkCase.sourceHeight,
-			benchmarkCase.outputWidth,
-			benchmarkCase.outputHeight
-		);
+	for (let index = 0; index < config.warmUpIterations; index += 1) {
+		resizeSubject(benchmarkCase, subject);
 	}
 
 	const timingsMs = [];
 	const checksums = [];
 	let outputByteLength = 0;
 
-	for (let index = 0; index < config.iterations; index += 1) {
+	for (let index = 0; index < config.sampleSize; index += 1) {
 		const started = performance.now();
-		const outputRgba = variant.resize(
-			benchmarkCase.sourceRgba,
-			benchmarkCase.sourceWidth,
-			benchmarkCase.sourceHeight,
-			benchmarkCase.outputWidth,
-			benchmarkCase.outputHeight
-		);
+		const outputRgba = resizeSubject(benchmarkCase, subject);
 		const wasmMs = performance.now() - started;
 
 		outputByteLength = outputRgba.byteLength;
@@ -335,47 +327,25 @@ async function measureAllocatingVariant(benchmarkCase, variant, config, expected
 		checksums.push(checksumBytes(outputRgba));
 	}
 
-	return resizeResult(benchmarkCase, variant, timingsMs, checksums, outputByteLength, expectedByteLength);
+	return resizeResult(benchmarkCase, subject, timingsMs, checksums, outputByteLength, expectedByteLength);
 }
 
-async function measureIntoVariant(benchmarkCase, variant, config, expectedByteLength) {
-	const outputRgba = new Uint8Array(expectedByteLength);
-
-	for (let index = 0; index < config.warmups; index += 1) {
-		variant.resizeInto(
-			benchmarkCase.sourceRgba,
-			benchmarkCase.sourceWidth,
-			benchmarkCase.sourceHeight,
-			benchmarkCase.outputWidth,
-			benchmarkCase.outputHeight,
-			outputRgba
-		);
-	}
-
-	const timingsMs = [];
-	const checksums = [];
-
-	for (let index = 0; index < config.iterations; index += 1) {
-		const started = performance.now();
-		variant.resizeInto(
-			benchmarkCase.sourceRgba,
-			benchmarkCase.sourceWidth,
-			benchmarkCase.sourceHeight,
-			benchmarkCase.outputWidth,
-			benchmarkCase.outputHeight,
-			outputRgba
-		);
-		const wasmMs = performance.now() - started;
-
-		timingsMs.push(wasmMs);
-		checksums.push(checksumBytes(outputRgba));
-	}
-
-	return resizeResult(benchmarkCase, variant, timingsMs, checksums, outputRgba.byteLength, expectedByteLength);
+function resizeSubject(benchmarkCase, subject) {
+	return resizeRgba8(
+		benchmarkCase.sourceRgba,
+		benchmarkCase.sourceWidth,
+		benchmarkCase.sourceHeight,
+		benchmarkCase.outputWidth,
+		benchmarkCase.outputHeight,
+		subject.filter,
+		subject.anchor,
+		subject.supportPolicy,
+		subject.parallelizationPolicy
+	);
 }
 
-function resizeResult(benchmarkCase, variant, timingsMs, checksums, outputByteLength, expectedByteLength) {
-	const resultId = benchmarkCase.id + '-' + variant.id;
+function resizeResult(benchmarkCase, subject, timingsMs, checksums, outputByteLength, expectedByteLength) {
+	const resultId = benchmarkCase.id + '-' + subject.id;
 
 	if (outputByteLength !== expectedByteLength) {
 		throw new Error(resultId + ' produced ' + outputByteLength + ' bytes; expected ' + expectedByteLength);
@@ -387,36 +357,24 @@ function resizeResult(benchmarkCase, variant, timingsMs, checksums, outputByteLe
 
 	return {
 		id: benchmarkCase.id,
-		variant: variant.id,
+		subject: subject.id,
+		filter: subject.filter,
+		supportPolicy: subject.supportPolicy,
+		fixture: benchmarkCase.fixture,
 		lane: benchmarkCase.lane,
 		scale: benchmarkCase.scale,
 		source: { width: benchmarkCase.sourceWidth, height: benchmarkCase.sourceHeight },
 		output: { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight, byteLength: outputByteLength },
 		decodeNs: millisecondsToNanoseconds(benchmarkCase.decodeMs),
 		normalizeNs: millisecondsToNanoseconds(benchmarkCase.normalizeMs),
-		wasmNs: summarizeTimings(timingsMs),
+		statsNs: summarizeTimings(timingsMs),
 		checksum: checksums[0]
 	};
 }
 
-function assertMatchingVariantChecksums(results) {
-	const baselineChecksums = new Map();
-
+function assertStableChecksums(results) {
 	for (const result of results) {
-		const key = result.lane + ':' + result.scale;
-		if (result.variant === 'baseline') {
-			baselineChecksums.set(key, result.checksum);
-		}
-	}
-
-	for (const result of results) {
-		const key = result.lane + ':' + result.scale;
-		const baselineChecksum = baselineChecksums.get(key);
-		if (baselineChecksum !== result.checksum) {
-			throw new Error(
-				result.id + ' ' + result.variant + ' checksum ' + result.checksum + ' did not match baseline ' + baselineChecksum
-			);
-		}
+		if (!Number.isInteger(result.checksum)) throw new Error(result.id + ' missing checksum');
 	}
 }
 
@@ -502,51 +460,125 @@ function millisecondsToNanoseconds(milliseconds) {
 }
 `;
 }
-function formatResultTable(result) {
-	const baselines = baselineResultsByCase(result.results);
-	const rows = result.results.map((entry) => {
-		const baseline = baselines.get(entry.id);
+
+function benchRunArtifact(options, browserResult) {
+	const createdAtUnix = Math.floor(Date.now() / 1000);
+	return {
+		schema: artifactSchema,
+		schemaVersion: artifactSchemaVersion,
+		artifactKind: 'run',
+		runId: runId(createdAtUnix),
+		createdAtUnix,
+		createdAt: new Date(createdAtUnix * 1000).toISOString(),
+		command: options.command,
+		domain: options.domain,
+		profile: options.profile ?? 'ad-hoc',
+		tool: {
+			name: 'ditherette-wasm-bench',
+			script: 'scripts/benchmark-wasm-resize.mjs'
+		},
+		environment: {
+			userAgent: browserResult.userAgent,
+			crossOriginIsolated: browserResult.crossOriginIsolated
+		},
+		measurement: {
+			sampleSize: options.sampleSize,
+			warmUpIterations: options.warmUpIterations,
+			sampleMode: 'interactive'
+		},
+		config: {
+			subjects: options.subjects,
+			fixtures: browserResult.fixtures,
+			scales: options.scales,
+			lanes: options.lanes
+		},
+		results: browserResult.results
+	};
+}
+
+function runId(createdAtUnix) {
+	return `${createdAtUnix}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function subjectConfig(id) {
+	const parts = id.split(':');
+	if (parts.length !== 4 || parts[0] !== 'wasm' || parts[1] !== 'resize') {
+		throw new Error(`Unsupported Wasm bench subject: ${id}`);
+	}
+	const family = parts[2];
+	const variant = parts[3];
+	if (variant === 'scale-aware') {
+		return {
+			id,
+			filter: family,
+			anchor: 'center',
+			supportPolicy: 'scale-aware',
+			parallelizationPolicy: true
+		};
+	}
+	if (variant !== 'scalar' && variant !== 'fixed') {
+		throw new Error(`Unsupported Wasm resize subject variant: ${id}`);
+	}
+	return {
+		id,
+		filter: family,
+		anchor: 'center',
+		supportPolicy: 'fixed',
+		parallelizationPolicy: true
+	};
+}
+
+function formatResultTable(run) {
+	const baselines = baselineResultsByCase(run.results);
+	const rows = run.results.map((entry) => {
+		const baseline = baselines.get(`${entry.fixture.name}:${entry.id}`);
 
 		return {
+			fixture: entry.fixture.name,
 			case: entry.id,
-			variant: entry.variant,
+			subject: entry.subject,
 			lane: entry.lane,
 			scale: `${entry.scale}×`,
 			source: `${entry.source.width}×${entry.source.height}px`,
 			output: `${entry.output.width}×${entry.output.height}px`,
 			decode: formatDuration(entry.decodeNs),
 			normalize: formatDuration(entry.normalizeNs),
-			mean: formatDurationDelta(entry.wasmNs.mean, baseline?.wasmNs.mean),
-			median: formatDurationDelta(entry.wasmNs.median, baseline?.wasmNs.median),
-			mode: formatDurationDelta(entry.wasmNs.mode, baseline?.wasmNs.mode),
-			min: formatDurationDelta(entry.wasmNs.min, baseline?.wasmNs.min),
-			p1: formatDurationDelta(entry.wasmNs.p1, baseline?.wasmNs.p1),
-			p2: formatDurationDelta(entry.wasmNs.p2, baseline?.wasmNs.p2),
-			p5: formatDurationDelta(entry.wasmNs.p5, baseline?.wasmNs.p5),
-			p25: formatDurationDelta(entry.wasmNs.p25, baseline?.wasmNs.p25),
-			p50: formatDurationDelta(entry.wasmNs.p50, baseline?.wasmNs.p50),
-			p75: formatDurationDelta(entry.wasmNs.p75, baseline?.wasmNs.p75),
-			p95: formatDurationDelta(entry.wasmNs.p95, baseline?.wasmNs.p95),
-			p98: formatDurationDelta(entry.wasmNs.p98, baseline?.wasmNs.p98),
-			p99: formatDurationDelta(entry.wasmNs.p99, baseline?.wasmNs.p99),
-			max: formatDurationDelta(entry.wasmNs.max, baseline?.wasmNs.max),
+			mean: formatDurationDelta(entry.statsNs.mean, baseline?.statsNs.mean),
+			median: formatDurationDelta(entry.statsNs.median, baseline?.statsNs.median),
+			mode: formatDurationDelta(entry.statsNs.mode, baseline?.statsNs.mode),
+			min: formatDurationDelta(entry.statsNs.min, baseline?.statsNs.min),
+			p1: formatDurationDelta(entry.statsNs.p1, baseline?.statsNs.p1),
+			p2: formatDurationDelta(entry.statsNs.p2, baseline?.statsNs.p2),
+			p5: formatDurationDelta(entry.statsNs.p5, baseline?.statsNs.p5),
+			p25: formatDurationDelta(entry.statsNs.p25, baseline?.statsNs.p25),
+			p50: formatDurationDelta(entry.statsNs.p50, baseline?.statsNs.p50),
+			p75: formatDurationDelta(entry.statsNs.p75, baseline?.statsNs.p75),
+			p95: formatDurationDelta(entry.statsNs.p95, baseline?.statsNs.p95),
+			p98: formatDurationDelta(entry.statsNs.p98, baseline?.statsNs.p98),
+			p99: formatDurationDelta(entry.statsNs.p99, baseline?.statsNs.p99),
+			max: formatDurationDelta(entry.statsNs.max, baseline?.statsNs.max),
 			checksum: entry.checksum
 		};
 	});
 
 	return [
-		`Fixture: ${result.fixture.name} (${result.fixture.width}×${result.fixture.height})`,
-		`Browser: ${result.userAgent}`,
-		`Cross-origin isolated: ${result.crossOriginIsolated}`,
-		`Iterations: ${result.iterations}, warmups: ${result.warmups}`,
+		`Profile: ${run.profile}`,
+		`Subjects: ${run.config.subjects.join(', ')}`,
+		`Fixtures: ${run.config.fixtures.map((fixture) => `${fixture.name} (${fixture.width}×${fixture.height})`).join(', ')}`,
+		`Browser: ${run.environment.userAgent}`,
+		`Cross-origin isolated: ${run.environment.crossOriginIsolated}`,
+		`Samples: ${run.measurement.sampleSize}, warmups: ${run.measurement.warmUpIterations}`,
 		table(rows)
 	].join('\n');
 }
 
 function baselineResultsByCase(results) {
-	return new Map(
-		results.filter((result) => result.variant === 'baseline').map((result) => [result.id, result])
-	);
+	const baselines = new Map();
+	for (const result of results) {
+		const key = `${result.fixture.name}:${result.id}`;
+		if (!baselines.has(key)) baselines.set(key, result);
+	}
+	return baselines;
 }
 
 function formatDurationDelta(nanoseconds, baselineNanoseconds) {
@@ -590,36 +622,92 @@ function table(rows) {
 	].join('\n');
 }
 
-function parseArgs(rawArgs) {
-	const options = {
-		image: undefined,
-		iterations: 5,
-		warmups: 2,
-		out: undefined
-	};
+async function resolveOptions(rawArgs) {
+	const parsed = parseArgs(rawArgs);
+	const manifest = await loadManifest(parsed.configPath);
+	const defaults = manifest.defaults ?? {};
+	const profile = parsed.profile ?? parsed.runProfile;
+	const profileValues = profile ? (manifest.profiles?.[profile] ?? unknownProfile(profile)) : {};
+	const merged = { ...defaults, ...profileValues, ...parsed.overrides };
 
-	for (let index = 0; index < rawArgs.length; index += 1) {
-		const arg = rawArgs[index];
+	return {
+		command: stringValue(merged.command, 'perf'),
+		domain: stringValue(merged.domain, 'resize'),
+		profile,
+		subjects: stringArray(merged.subjects, ['wasm:resize:nearest:scalar']),
+		fixtures: stringArray(merged.fixtures ?? merged.image, ['Celeste_box_art.png']),
+		scales: numberArray(merged.scales, [2, 0.95, 0.75, 0.5, 0.25, 0.125]),
+		lanes: stringArray(merged.lanes, ['browser-decode-rgba', 'decoded-rgba']),
+		sampleSize: positiveInteger(
+			merged.sample_size ?? merged.sampleSize ?? merged.iterations,
+			'--sample-size',
+			5
+		),
+		warmUpIterations: positiveInteger(
+			merged.warm_up_iterations ?? merged.warmUpIterations ?? merged.warmups,
+			'--warm-up-iterations',
+			2
+		),
+		outputDir: stringValue(merged.output_dir ?? merged.outputDir ?? merged.out, undefined)
+	};
+}
+
+function parseArgs(rawArgs) {
+	const parsed = {
+		runProfile: undefined,
+		profile: undefined,
+		configPath: undefined,
+		overrides: {}
+	};
+	const args = [...rawArgs];
+	if (args[0] === '--') args.shift();
+	if (args[0] === 'run') {
+		args.shift();
+		parsed.runProfile = args.shift();
+		if (!parsed.runProfile) throw new Error('run requires a profile name');
+	}
+
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
 		const nextValue = () => {
 			index += 1;
-			if (index >= rawArgs.length) throw new Error(`Missing value for ${arg}`);
-			return rawArgs[index];
+			if (index >= args.length) throw new Error(`Missing value for ${arg}`);
+			return args[index];
 		};
 
 		switch (arg) {
-			case '--':
+			case '--profile':
+				parsed.profile = nextValue();
+				break;
+			case '--config':
+				parsed.configPath = nextValue();
 				break;
 			case '--image':
-				options.image = nextValue();
+				parsed.overrides.fixtures = [nextValue()];
 				break;
+			case '--fixtures':
+				parsed.overrides.fixtures = commaList(nextValue());
+				break;
+			case '--subjects':
+				parsed.overrides.subjects = commaList(nextValue());
+				break;
+			case '--scales':
+				parsed.overrides.scales = commaList(nextValue()).map(Number);
+				break;
+			case '--lanes':
+				parsed.overrides.lanes = commaList(nextValue());
+				break;
+			case '--sample-size':
 			case '--iterations':
-				options.iterations = positiveInteger(nextValue(), arg);
+				parsed.overrides.sample_size = Number(nextValue());
 				break;
+			case '--warm-up-iterations':
 			case '--warmups':
-				options.warmups = positiveInteger(nextValue(), arg);
+				parsed.overrides.warm_up_iterations = Number(nextValue());
 				break;
+			case '--output-dir':
 			case '--out':
-				options.out = nextValue();
+				parsed.overrides.output_dir = nextValue();
 				break;
 			case '--help':
 				console.log(helpText());
@@ -630,36 +718,169 @@ function parseArgs(rawArgs) {
 		}
 	}
 
-	return options;
+	return parsed;
 }
 
-function positiveInteger(value, name) {
-	const parsed = Number(value);
+async function loadManifest(configPath) {
+	const pathToManifest = path.resolve(root, configPath ?? defaultManifestPath);
+	if (!(await fileExists(pathToManifest))) return {};
+	return parseTomlSubset(await readFile(pathToManifest, 'utf8'));
+}
+
+function parseTomlSubset(text) {
+	const root = {};
+	let current = root;
+	let pendingArray;
+
+	for (const rawLine of text.split(/\r?\n/)) {
+		const line = stripComment(rawLine).trim();
+		if (!line) continue;
+
+		if (pendingArray) {
+			pendingArray.value += ` ${line}`;
+			if (line.includes(']')) {
+				pendingArray.target[pendingArray.key] = parseValue(pendingArray.value);
+				pendingArray = undefined;
+			}
+			continue;
+		}
+
+		const sectionMatch = line.match(/^\[([^\]]+)]$/);
+		if (sectionMatch) {
+			current = sectionFor(root, sectionMatch[1]);
+			continue;
+		}
+
+		const keyValue = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/);
+		if (!keyValue) throw new Error(`Unsupported manifest line: ${rawLine}`);
+		const [, key, value] = keyValue;
+		if (value.startsWith('[') && !value.includes(']')) {
+			pendingArray = { target: current, key, value };
+			continue;
+		}
+		current[key] = parseValue(value);
+	}
+
+	if (pendingArray) throw new Error(`Unclosed manifest array for ${pendingArray.key}`);
+	return root;
+}
+
+function sectionFor(root, dottedName) {
+	let current = root;
+	for (const part of dottedName.split('.')) {
+		current[part] ??= {};
+		current = current[part];
+	}
+	return current;
+}
+
+function stripComment(line) {
+	let inString = false;
+	for (let index = 0; index < line.length; index += 1) {
+		const char = line[index];
+		if (char === '"' && line[index - 1] !== '\\') inString = !inString;
+		if (char === '#' && !inString) return line.slice(0, index);
+	}
+	return line;
+}
+
+function parseValue(value) {
+	const trimmed = value.trim().replace(/,$/, '');
+	if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+		return splitArray(trimmed.slice(1, -1)).map(parseValue);
+	}
+	if (trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed.slice(1, -1);
+	if (trimmed === 'true') return true;
+	if (trimmed === 'false') return false;
+	const numeric = Number(trimmed);
+	if (Number.isFinite(numeric)) return numeric;
+	return trimmed;
+}
+
+function splitArray(value) {
+	const values = [];
+	let inString = false;
+	let start = 0;
+	for (let index = 0; index < value.length; index += 1) {
+		const char = value[index];
+		if (char === '"' && value[index - 1] !== '\\') inString = !inString;
+		if (char !== ',' || inString) continue;
+		values.push(value.slice(start, index).trim());
+		start = index + 1;
+	}
+	const tail = value.slice(start).trim();
+	if (tail) values.push(tail);
+	return values;
+}
+
+function unknownProfile(profile) {
+	throw new Error(`unknown Wasm benchmark profile ${JSON.stringify(profile)}`);
+}
+
+function stringValue(value, fallback) {
+	if (value === undefined) return fallback;
+	return String(value);
+}
+
+function stringArray(value, fallback) {
+	if (value === undefined) return fallback;
+	if (Array.isArray(value)) return value.map(String);
+	return commaList(String(value));
+}
+
+function numberArray(value, fallback) {
+	const values =
+		value === undefined ? fallback : Array.isArray(value) ? value : commaList(String(value));
+	return values.map((entry) => {
+		const parsed = Number(entry);
+		if (!Number.isFinite(parsed) || parsed <= 0)
+			throw new Error(`scale must be positive: ${entry}`);
+		return parsed;
+	});
+}
+
+function commaList(value) {
+	return String(value)
+		.split(',')
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+}
+
+function positiveInteger(value, name, fallback) {
+	const parsed = value === undefined ? fallback : Number(value);
 	if (!Number.isInteger(parsed) || parsed <= 0)
 		throw new Error(`${name} must be a positive integer`);
 	return parsed;
 }
 
 function helpText() {
-	return `Usage: pnpm bench:resize:wasm -- [options]
+	return `Usage:
+  pnpm bench:resize:wasm -- run PROFILE [overrides...]
+  pnpm bench:resize:wasm -- [overrides...]
 
-Options:
-  --image FILE    Browser-decode this fixture before benchmarking Wasm resize.
-                  Defaults to benchmark-fixtures/Celeste_box_art_full.png.
-  --iterations N  Recorded iterations per case. Default: 5.
-  --warmups N     Warmup iterations per case. Default: 2.
-  --out DIR       Output directory. Default: benchmark-results/wasm-resize-<timestamp>.
+Manifest flags:
+  --profile NAME             Load [profiles.NAME] from scripts/ditherette-wasm-bench.toml.
+  --config PATH              Use an alternate TOML manifest.
 
-Scales:
-  0.95x, 0.75x, 0.5x, 0.25x, 0.125x
+Measurement flags:
+  --sample-size N            Recorded samples per case. Default from manifest: 5.
+  --iterations N             Alias for --sample-size.
+  --warm-up-iterations N     Warmup iterations per case. Default from manifest: 2.
+  --warmups N                Alias for --warm-up-iterations.
 
-Lanes:
-  browser-decode-rgba  Decode + normalize fixture in browser, then time Wasm resize.
-  decoded-rgba         Reuse the decoded RGBA bytes, then time Wasm resize only.
+Case flags:
+  --subjects IDS             Comma-separated subject ids, e.g. wasm:resize:nearest:scalar.
+  --fixtures FILES           Comma-separated fixture paths or benchmark-fixtures stems.
+  --image FILE               Legacy alias for one fixture.
+  --scales VALUES            Comma-separated isotropic scales.
+  --lanes LANES              browser-decode-rgba,decoded-rgba.
+  --output-dir DIR           Output directory. Default: benchmark-results/wasm-resize-<timestamp>.
+  --out DIR                  Alias for --output-dir.
 
 Examples:
-  pnpm bench:resize:wasm
-  pnpm bench:resize:wasm -- --image benchmark-fixtures/Celeste_box_art_full.png --iterations 10`;
+  pnpm bench:resize:wasm -- run nearest-smoke
+  pnpm bench:resize:wasm -- run nearest --sample-size 20
+  pnpm bench:resize:wasm -- --subjects wasm:resize:lanczos3:scale-aware --fixtures Celeste_box_art --scales 0.5`;
 }
 
 async function assertFile(filePath, message) {
@@ -684,4 +905,8 @@ function contentType(filePath) {
 	if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
 	if (extension === '.webp') return 'image/webp';
 	return 'application/octet-stream';
+}
+
+function sanitizePathComponent(value) {
+	return value.replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-|-$/g, '') || 'run';
 }
