@@ -77,8 +77,10 @@ pub(crate) fn format_duration(duration: Duration) -> String {
     let seconds = duration.as_secs_f64();
     if seconds >= 1.0 {
         format!("{seconds:.2}s")
-    } else {
+    } else if seconds >= 0.001 {
         format!("{:.0}ms", seconds * 1_000.0)
+    } else {
+        format!("{:.0}µs", seconds * 1_000_000.0)
     }
 }
 

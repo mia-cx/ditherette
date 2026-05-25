@@ -18,6 +18,7 @@ mod result;
 mod runtime;
 mod tiling_sweep;
 mod util;
+mod wasm_resize;
 
 use std::{env, process::ExitCode};
 
@@ -27,6 +28,7 @@ use error::BenchError;
 use manifest::expand_command;
 use registry::Registry;
 use tiling_sweep::tiling_sweep_command;
+use wasm_resize::wasm_resize_command;
 
 fn main() -> ExitCode {
     match run() {
@@ -56,6 +58,7 @@ fn run() -> Result<(), BenchError> {
         "comp" => comp_command(&registry, &expanded.args),
         "tile" => tile_command(&registry, &expanded.args),
         "tiling-sweep" => tiling_sweep_command(&registry, &expanded.args),
+        "wasm-resize" => wasm_resize_command(&expanded.args),
         unknown => Err(BenchError::Config(format!("unknown command {unknown:?}"))),
     }
 }

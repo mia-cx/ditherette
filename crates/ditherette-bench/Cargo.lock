@@ -220,6 +220,7 @@ name = "ditherette-wasm"
 version = "0.1.0"
 dependencies = [
  "ditherette-bench-api",
+ "js-sys",
  "wasm-bindgen",
 ]
 
