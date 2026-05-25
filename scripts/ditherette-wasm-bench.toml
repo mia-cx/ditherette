@@ -77,6 +77,19 @@ command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:lanczos3:scale-aware"]
 
+[profiles.convolution-thread-smoke]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:lanczos3:fixed", "wasm:resize:lanczos3:pooled_direct"]
+fixtures = ["Celeste_box_art.png"]
+scales = [0.5]
+lanes = ["decoded-rgba"]
+sample_size = 1
+measurement_time = "100ms"
+warm_up_time = "10ms"
+target_sample_time = "0.05ms"
+live_stats = false
+
 [profiles.nearest-thread-smoke]
 command = "perf"
 domain = "resize"

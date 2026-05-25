@@ -5,7 +5,7 @@
 //! `processRgba8` exists, but staged exports are useful for lazy materialization,
 //! memoization, and browser/Wasm benchmarks.
 
-use std::hint::black_box;
+use std::{hint::black_box, num::NonZeroU32};
 
 use js_sys::Function;
 use serde::Deserialize;
@@ -19,12 +19,18 @@ use crate::{
         },
         resize::scalar::{
             area::resize_area_rgba8_into,
-            bicubic::resize_bicubic_rgba8_into,
+            bicubic::{
+                resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_with_plan_into,
+                BicubicResizePlan,
+            },
             bilinear::{
                 alignment::ResizeAnchor as BilinearResizeAnchor, resize_bilinear_rgba8_into,
             },
             convolution::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},
-            lanczos::{resize_lanczos2_rgba8_into, resize_lanczos3_rgba8_into},
+            lanczos::{
+                resize_lanczos2_rgba8_into, resize_lanczos3_rgba8_into,
+                resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
+            },
             nearest::{
                 alignment::ResizeAnchor as NearestResizeAnchor, resize_nearest_rgba8_into,
                 resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
@@ -422,6 +428,38 @@ impl WasmResize {
                 )?;
                 Ok(true)
             }
+            WasmResizeFilter::Bicubic => {
+                resize_bicubic_rgba8_pooled_direct_into(
+                    source,
+                    output_dimensions,
+                    output,
+                    self.convolution_anchor,
+                    self.support_policy,
+                )?;
+                Ok(true)
+            }
+            WasmResizeFilter::Lanczos2 => {
+                resize_lanczos_rgba8_pooled_direct_into(
+                    source,
+                    output_dimensions,
+                    output,
+                    self.convolution_anchor,
+                    NonZeroU32::new(2).unwrap(),
+                    self.support_policy,
+                )?;
+                Ok(true)
+            }
+            WasmResizeFilter::Lanczos3 => {
+                resize_lanczos_rgba8_pooled_direct_into(
+                    source,
+                    output_dimensions,
+                    output,
+                    self.convolution_anchor,
+                    NonZeroU32::new(3).unwrap(),
+                    self.support_policy,
+                )?;
+                Ok(true)
+            }
             _ => Ok(false),
         }
     }
@@ -465,16 +503,59 @@ impl WasmResize {
     }
 }
 
+fn resize_bicubic_rgba8_pooled_direct_into(
+    source: ImageView<'_, Rgba8>,
+    output_dimensions: ImageDimensions,
+    output: &mut [u8],
+    anchor: ConvolutionResizeAnchor,
+    support_policy: SupportPolicy,
+) -> Result<(), JsValue> {
+    let plan = BicubicResizePlan::new(source.dimensions(), output_dimensions, anchor, support_policy);
+    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
+        resize_bicubic_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
+    })
+}
+
+fn resize_lanczos_rgba8_pooled_direct_into(
+    source: ImageView<'_, Rgba8>,
+    output_dimensions: ImageDimensions,
+    output: &mut [u8],
+    anchor: ConvolutionResizeAnchor,
+    radius: NonZeroU32,
+    support_policy: SupportPolicy,
+) -> Result<(), JsValue> {
+    let plan = LanczosResizePlan::new(
+        source.dimensions(),
+        output_dimensions,
+        anchor,
+        radius,
+        support_policy,
+    );
+    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
+        resize_lanczos_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
+    })
+}
+
 fn resize_nearest_rgba8_pooled_direct_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
     anchor: NearestResizeAnchor,
 ) -> Result<(), JsValue> {
+    let plan = NearestResizePlan::new(source.dimensions(), output_dimensions, anchor);
+    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
+        resize_nearest_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
+    })
+}
+
+fn resize_rows_pooled_direct_into(
+    output_dimensions: ImageDimensions,
+    output: &mut [u8],
+    process_row: impl Fn(ImageViewMut<'_, Rgba8>, u32) + Sync,
+) -> Result<(), JsValue> {
     let row_len = output_dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
     let row_dimensions = ImageDimensions::new(output_dimensions.width(), 1)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    let plan = NearestResizePlan::new(source.dimensions(), output_dimensions, anchor);
 
     #[cfg(feature = "threads")]
     {
@@ -485,7 +566,7 @@ fn resize_nearest_rgba8_pooled_direct_into(
             .for_each(|(y, output_row)| {
                 let output_view = ImageViewMut::<Rgba8>::packed(output_row, row_dimensions)
                     .expect("row output view should be valid");
-                resize_nearest_rgba8_rows_with_plan_into(source, output_view, &plan, y as u32);
+                process_row(output_view, y as u32);
             });
     }
 
@@ -494,7 +575,7 @@ fn resize_nearest_rgba8_pooled_direct_into(
         for (y, output_row) in output.chunks_mut(row_len).enumerate() {
             let output_view = ImageViewMut::<Rgba8>::packed(output_row, row_dimensions)
                 .map_err(|error| JsValue::from_str(&error.to_string()))?;
-            resize_nearest_rgba8_rows_with_plan_into(source, output_view, &plan, y as u32);
+            process_row(output_view, y as u32);
         }
     }
 

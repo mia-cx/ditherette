@@ -35,6 +35,20 @@ fn resize_export_runs_pooled_direct_nearest() {
 }
 
 #[test]
+fn resize_export_runs_pooled_direct_lanczos() {
+    let source = [
+        255, 0, 0, 255, 0, 255, 0, 255,
+        0, 0, 255, 255, 255, 255, 255, 255,
+    ];
+    let scalar = resize_rgba8(&source, 2, 2, 3, 3, "lanczos3", "center", "fixed", false)
+        .expect("scalar resize should succeed");
+    let pooled = resize_rgba8(&source, 2, 2, 3, 3, "lanczos3", "center", "fixed", true)
+        .expect("pooled resize should succeed");
+
+    assert_eq!(pooled, scalar);
+}
+
+#[test]
 fn process_export_runs_scalar_pipeline_shell() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let settings = r#"{
