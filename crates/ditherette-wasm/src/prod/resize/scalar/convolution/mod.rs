@@ -97,6 +97,19 @@ pub fn resize_convolution_rgba8_rows_into<K>(
     kernel::resize_packed_rgba8_rows_with_convolution_filter_into(source, output, &plan, y_start);
 }
 
+/// Resize one full-width output row range with cached convolution metadata.
+pub fn resize_convolution_rgba8_rows_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    y_start: u32,
+) {
+    common::rgba8::assert_packed_source(source, "convolution");
+    common::rgba8::assert_packed_output(&output, "convolution");
+    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    kernel::resize_packed_rgba8_rows_with_convolution_filter_into(source, output, plan, y_start);
+}
+
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached convolution metadata.
 pub fn resize_convolution_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,

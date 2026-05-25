@@ -11,7 +11,8 @@ use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
 use super::convolution::{
     resize_convolution_rgba8_into, resize_convolution_rgba8_rows_into,
-    resize_convolution_rgba8_with_plan_into, ConvolutionResizePlan, ResizeAnchor, SupportPolicy,
+    resize_convolution_rgba8_rows_with_plan_into, resize_convolution_rgba8_with_plan_into,
+    ConvolutionResizePlan, ResizeAnchor, SupportPolicy,
 };
 
 // Lanczos perf-search dependency map:
@@ -98,6 +99,16 @@ pub fn resize_lanczos_rgba8_rows_into(
         filter::Lanczos::new(radius),
         support_policy,
     );
+}
+
+/// Resize one full-width output row range with a cached Lanczos plan.
+pub fn resize_lanczos_rgba8_rows_with_plan_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &LanczosResizePlan,
+    y_start: u32,
+) {
+    resize_convolution_rgba8_rows_with_plan_into(source, output, &plan.inner, y_start);
 }
 
 /// Resizes packed RGBA8 `source` into packed RGBA8 `output` with a cached Lanczos plan.
