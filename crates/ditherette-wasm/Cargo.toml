@@ -15,6 +15,7 @@ bench-subjects = ["dep:ditherette-bench-api"]
 
 [dependencies]
 ditherette-bench-api = { path = "../ditherette-bench-api", optional = true }
+js-sys = "0.3"
 wasm-bindgen = "0.2"
 
 [dev-dependencies]

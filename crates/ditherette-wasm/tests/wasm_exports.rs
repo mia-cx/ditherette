@@ -25,7 +25,7 @@ fn resize_export_runs_prod_nearest() {
 fn benchmark_export_returns_samples_json() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let output = benchmark_resize_rgba8(
-        &source, 2, 1, 4, 2, "nearest", "center", "fixed", true, 2, 1, 0.01,
+        &source, 2, 1, 4, 2, "nearest", "center", "fixed", true, 2, 1.0, 0.01, 1, 0.01, false, None,
     )
     .expect("benchmark should succeed");
 

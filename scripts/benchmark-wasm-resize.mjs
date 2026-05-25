@@ -16,6 +16,7 @@ const significantNumberFormatter = new Intl.NumberFormat('en-US', {
 	minimumSignificantDigits: 4,
 	useGrouping: false
 });
+const liveRenderState = { lines: 0, lastRenderMs: 0 };
 
 const options = await resolveOptions(process.argv.slice(2));
 const outDir = path.resolve(
@@ -42,8 +43,13 @@ try {
 	page.on('console', (message) => {
 		if (message.type() !== 'debug') return;
 		const text = message.text();
-		if (!text.startsWith('bench-progress ')) return;
-		writeStatusLine(text.slice('bench-progress '.length));
+		if (text.startsWith('bench-progress ')) {
+			writeStatusLine(text.slice('bench-progress '.length));
+			return;
+		}
+		if (text.startsWith('bench-event ')) {
+			handleBenchEvent(JSON.parse(text.slice('bench-event '.length)), options);
+		}
 	});
 	await page.goto(server.url, { waitUntil: 'load' });
 
@@ -56,8 +62,11 @@ try {
 		scales: options.scales,
 		lanes: options.lanes,
 		sampleSize: options.sampleSize,
+		measurementTimeMs: options.measurementTimeMs,
+		warmUpTimeMs: options.warmUpTimeMs,
 		warmUpIterations: options.warmUpIterations,
-		targetSampleTimeMs: options.targetSampleTimeMs
+		targetSampleTimeMs: options.targetSampleTimeMs,
+		liveStats: options.liveStats
 	});
 	const artifact = benchRunArtifact(options, browserResult);
 
@@ -91,6 +100,43 @@ function clearStatusLine() {
 	if (!statusLineActive || !process.stderr.isTTY) return;
 	process.stderr.write('\r\x1b[K');
 	statusLineActive = false;
+}
+
+function handleBenchEvent(event, options) {
+	if (!options.liveStats) return;
+	if (event.kind === 'warmup-batch') {
+		writeStatusLine(
+			`${event.subject} · ${event.caseId} warmup ${formatDuration(event.elapsedMs * 1_000_000)} batch ${event.batchSize}`
+		);
+		return;
+	}
+	if (event.kind !== 'measurement-progress') return;
+
+	const now = Date.now();
+	const complete =
+		event.samplesDone >= event.sampleSize || event.elapsedMs >= event.measurementTimeMs;
+	if (!complete && now - liveRenderState.lastRenderMs < 100) return;
+	liveRenderState.lastRenderMs = now;
+
+	const lines = [
+		`${heading('Benchmarking')} ${event.subject} · ${event.caseId}`,
+		...renderMeasurementBlock({
+			samplesDone: event.samplesDone,
+			sampleSize: event.sampleSize,
+			elapsedNs: event.elapsedMs * 1_000_000,
+			measurementTimeNs: event.measurementTimeMs * 1_000_000,
+			totalIterations: event.totalIterations,
+			output: event.output,
+			stats: summarizeSamplesNs(event.samplesNs)
+		})
+	];
+	if (process.stderr.isTTY) {
+		if (liveRenderState.lines > 0) process.stderr.write(`\x1b[${liveRenderState.lines}A`);
+		for (const line of lines) process.stderr.write(`\x1b[2K${line}\n`);
+		liveRenderState.lines = lines.length;
+		return;
+	}
+	console.error(lines.join('\n'));
 }
 
 async function benchmarkFixtures(values) {
@@ -310,6 +356,13 @@ function makeScaleCases(decodedFixture, scales, lanes) {
 async function measureResizeSubject(benchmarkCase, subject, config) {
 	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT;
 	const resultId = benchmarkCase.id + '-' + subject.id;
+	const reporter = (eventJson) => {
+		const event = JSON.parse(eventJson);
+		event.subject = subject.id;
+		event.caseId = benchmarkCase.id;
+		event.output = { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight };
+		console.debug('bench-event ' + JSON.stringify(event));
+	};
 	const wasmResult = JSON.parse(
 		benchmarkResizeRgba8(
 			benchmarkCase.sourceRgba,
@@ -322,8 +375,12 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 			subject.supportPolicy,
 			subject.parallelizationPolicy,
 			config.sampleSize,
+			config.measurementTimeMs,
+			config.warmUpTimeMs,
 			config.warmUpIterations,
-			config.targetSampleTimeMs
+			config.targetSampleTimeMs,
+			config.liveStats,
+			reporter
 		)
 	);
 
@@ -347,7 +404,9 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 		checksum: wasmResult.checksum,
 		iterationsPerSample: wasmResult.batchSize,
 		totalIterations: wasmResult.totalIterations,
-		warmupIterations: config.warmUpIterations
+		warmupTimeMs: config.warmUpTimeMs,
+		warmupIterations: config.warmUpIterations,
+		measurementTimeMs: config.measurementTimeMs
 	};
 }
 
@@ -446,6 +505,53 @@ function millisecondsToNanoseconds(milliseconds) {
 `;
 }
 
+function summarizeSamplesNs(samplesNs) {
+	const sorted = [...samplesNs].sort((left, right) => left - right);
+	const total = sorted.reduce((sum, value) => sum + value, 0);
+	const mean = total / sorted.length;
+	const variance = sorted.reduce((sum, value) => sum + (value - mean) ** 2, 0) / sorted.length;
+	return {
+		mean,
+		median: percentile(sorted, 50),
+		mode: modeNs(samplesNs),
+		stdev: Math.sqrt(variance),
+		min: sorted[0],
+		p50: percentile(sorted, 50),
+		p75: percentile(sorted, 75),
+		p90: percentile(sorted, 90),
+		p95: percentile(sorted, 95),
+		p99: percentile(sorted, 99),
+		max: sorted[sorted.length - 1],
+		samples: samplesNs
+	};
+}
+
+function percentile(sortedTimingsNs, percentileValue) {
+	if (sortedTimingsNs.length === 1) return sortedTimingsNs[0];
+	const rank = (percentileValue / 100) * (sortedTimingsNs.length - 1);
+	const lowerIndex = Math.floor(rank);
+	const upperIndex = Math.ceil(rank);
+	const weight = rank - lowerIndex;
+	return sortedTimingsNs[lowerIndex] * (1 - weight) + sortedTimingsNs[upperIndex] * weight;
+}
+
+function modeNs(samplesNs) {
+	const counts = new Map();
+	for (const sample of samplesNs) {
+		const nanoseconds = Math.round(sample);
+		counts.set(nanoseconds, (counts.get(nanoseconds) ?? 0) + 1);
+	}
+	let mode = Math.round(samplesNs[0]);
+	let modeCount = 0;
+	for (const [timing, count] of counts) {
+		if (count > modeCount || (count === modeCount && timing < mode)) {
+			mode = timing;
+			modeCount = count;
+		}
+	}
+	return mode;
+}
+
 function benchRunArtifact(options, browserResult) {
 	const createdAtUnix = Math.floor(Date.now() / 1000);
 	return {
@@ -468,8 +574,11 @@ function benchRunArtifact(options, browserResult) {
 		},
 		measurement: {
 			sampleSize: options.sampleSize,
+			measurementTimeMs: options.measurementTimeMs,
+			warmUpTimeMs: options.warmUpTimeMs,
 			warmUpIterations: options.warmUpIterations,
 			targetSampleTimeMs: options.targetSampleTimeMs,
+			liveStats: options.liveStats,
 			sampleMode: 'throughput'
 		},
 		config: {
@@ -536,7 +645,7 @@ function renderPerfStart(run) {
 		`  scales:   ${run.config.scales.map(scaleLabel).join(', ')}`,
 		'  oracle:   —',
 		'  baseline: —',
-		`  config:   ${run.measurement.sampleMode}, warmup ${run.measurement.warmUpIterations} iterations, target batch ${formatDuration(run.measurement.targetSampleTimeMs * 1_000_000)}, run until ${run.measurement.sampleSize} samples`,
+		`  config:   ${run.measurement.sampleMode}, warmup ${formatDuration(run.measurement.warmUpTimeMs * 1_000_000)}, target batch ${formatDuration(run.measurement.targetSampleTimeMs * 1_000_000)}, run until ${run.measurement.sampleSize} samples or ${formatDuration(run.measurement.measurementTimeMs * 1_000_000)}`,
 		`            timing loop inside Wasm; JS only decodes fixtures and logs`,
 		'  fixtures:',
 		...run.config.fixtures.map(
@@ -551,11 +660,12 @@ function renderMeasurementResult(result) {
 		result.statsNs.samples.reduce((sum, sample) => sum + sample, 0) * result.iterationsPerSample;
 	return [
 		`${heading('Benchmarking')} ${result.subject} · ${result.id}`,
-		`  warmup: ${result.warmupIterations ?? '—'} iterations (batch size: ${result.iterationsPerSample})`,
+		`  warmup: ${formatDuration((result.warmupTimeMs ?? 0) * 1_000_000)} (batch size: ${result.iterationsPerSample})`,
 		...renderMeasurementBlock({
 			samplesDone: result.statsNs.samples.length,
 			sampleSize: result.statsNs.samples.length,
 			elapsedNs,
+			measurementTimeNs: result.measurementTimeMs * 1_000_000,
 			totalIterations: result.totalIterations,
 			output: result.output,
 			stats: result.statsNs
@@ -571,7 +681,7 @@ function renderMeasurementBlock(block) {
 	const throughputMean = outputMpixPerS(block.output, block.stats.mean);
 	const throughputUpper = outputMpixPerS(block.output, timeLower);
 	return [
-		`  measure: ${block.samplesDone}/${block.sampleSize} smp | ${formatProgressDuration(block.elapsedNs)}/∞ | ${block.totalIterations} iter`,
+		`  measure: ${block.samplesDone}/${block.sampleSize} smp | ${formatProgressDuration(block.elapsedNs)}/${formatProgressDuration(block.measurementTimeNs)} | ${block.totalIterations} iter`,
 		`    time:   [${dim(formatNs(timeLower))} ${formatNs(block.stats.mean)} ${dim(formatNs(timeUpper))}]`,
 		`    thrpt:  [${dim(formatMpixPerS(throughputLower))} ${formatMpixPerS(throughputMean)} ${dim(formatMpixPerS(throughputUpper))}]`,
 		'  prct:    p50  p75  p90  p95  p99',
@@ -698,16 +808,24 @@ async function resolveOptions(rawArgs) {
 			'--sample-size',
 			5
 		),
-		warmUpIterations: positiveInteger(
+		measurementTimeMs: durationMs(
+			merged.measurement_time ?? merged.measurementTime ?? merged.measurement_time_ms,
+			5_000
+		),
+		warmUpTimeMs: durationMs(
+			merged.warm_up_time ?? merged.warmUpTime ?? merged.warmup_time ?? merged.warm_up_time_ms,
+			1_000
+		),
+		warmUpIterations: nonNegativeInteger(
 			merged.warm_up_iterations ?? merged.warmUpIterations ?? merged.warmups,
 			'--warm-up-iterations',
-			2
+			0
 		),
-		targetSampleTimeMs: positiveNumber(
-			merged.target_sample_time_ms ?? merged.targetSampleTimeMs,
-			'--target-sample-time-ms',
+		targetSampleTimeMs: durationMs(
+			merged.target_sample_time ?? merged.targetSampleTime ?? merged.target_sample_time_ms,
 			1
 		),
+		liveStats: booleanValue(merged.live_stats ?? merged.liveStats, false),
 		outputDir: stringValue(merged.output_dir ?? merged.outputDir ?? merged.out, undefined)
 	};
 }
@@ -767,13 +885,34 @@ function parseArgs(rawArgs) {
 			case '--iterations':
 				parsed.overrides.sample_size = Number(nextValue());
 				break;
+			case '--measurement-time':
+			case '--measurement-time-ms':
+				parsed.overrides.measurement_time = nextValue();
+				break;
+			case '--warm-up-time':
+			case '--warmup-time':
+			case '--warm-up-time-ms':
+			case '--warmup-ms':
+				parsed.overrides.warm_up_time = nextValue();
+				break;
 			case '--warm-up-iterations':
 			case '--warmups':
 				parsed.overrides.warm_up_iterations = Number(nextValue());
 				break;
+			case '--target-sample-time':
 			case '--target-sample-time-ms':
 			case '--target-sample-ms':
-				parsed.overrides.target_sample_time_ms = Number(nextValue());
+				parsed.overrides.target_sample_time = nextValue();
+				break;
+			case '--live-stats':
+				if (args[index + 1] && !args[index + 1].startsWith('--')) {
+					parsed.overrides.live_stats = booleanValue(nextValue(), true);
+				} else {
+					parsed.overrides.live_stats = true;
+				}
+				break;
+			case '--no-live-stats':
+				parsed.overrides.live_stats = false;
 				break;
 			case '--output-dir':
 			case '--out':
@@ -1001,10 +1140,30 @@ function positiveInteger(value, name, fallback) {
 	return parsed;
 }
 
-function positiveNumber(value, name, fallback) {
+function nonNegativeInteger(value, name, fallback) {
 	const parsed = value === undefined ? fallback : Number(value);
-	if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${name} must be a positive number`);
+	if (!Number.isInteger(parsed) || parsed < 0)
+		throw new Error(`${name} must be a non-negative integer`);
 	return parsed;
+}
+
+function durationMs(value, fallback) {
+	if (value === undefined) return fallback;
+	if (typeof value === 'number') {
+		if (value <= 0) throw new Error('duration must be positive');
+		return value;
+	}
+	const text = String(value).trim();
+	const match = text.match(/^(\d+(?:\.\d+)?)(ms|s)?$/);
+	if (!match) throw new Error(`invalid duration ${JSON.stringify(value)}`);
+	const amount = Number(match[1]);
+	if (amount <= 0) throw new Error('duration must be positive');
+	return match[2] === 's' ? amount * 1_000 : amount;
+}
+
+function booleanValue(value, fallback) {
+	if (value === undefined) return fallback;
+	return value === true || value === 'true' || value === '1' || value === 'yes';
 }
 
 function helpText() {
@@ -1017,11 +1176,15 @@ Manifest flags:
   --config PATH              Use an alternate TOML manifest.
 
 Measurement flags:
-  --sample-size N            Recorded samples per case. Default from manifest: 5.
+  --sample-size N            Stop after N samples.
   --iterations N             Alias for --sample-size.
-  --warm-up-iterations N     Warmup iterations per case. Default from manifest: 2.
+  --measurement-time D       Stop after duration, e.g. 10s or 500ms.
+  --warm-up-time D           Warm up for duration, e.g. 1s or 250ms.
+  --warm-up-iterations N     Optional extra warmup batch minimum. Default: 0.
   --warmups N                Alias for --warm-up-iterations.
-  --target-sample-time-ms N  Calibrate in-Wasm batches to roughly this many ms. Default: 1.
+  --target-sample-time D     Calibrate in-Wasm batches to roughly this duration.
+  --live-stats               Render live measurement blocks.
+  --no-live-stats            Disable live measurement blocks.
 
 Case flags:
   --subjects IDS             Comma-separated subject ids, e.g. wasm:resize:nearest:scalar.
