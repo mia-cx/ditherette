@@ -80,7 +80,8 @@ subjects = ["wasm:resize:lanczos3:scale-aware"]
 [profiles.convolution-plan-scope-smoke]
 command = "perf"
 domain = "resize"
-subjects = ["wasm:resize:lanczos3:pooled_direct", "wasm:resize:lanczos3:pooled_direct_per_band_plan"]
+subjects = ["wasm:resize:lanczos3:fixed", "wasm:resize:lanczos3:pooled_direct", "wasm:resize:lanczos3:pooled_direct_per_band_plan"]
+periodic_scalar_remeasurement = true
 fixtures = ["Celeste_box_art.png"]
 scales = [0.5]
 lanes = ["decoded-rgba"]
@@ -94,6 +95,7 @@ live_stats = false
 command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:lanczos3:fixed", "wasm:resize:lanczos3:pooled_direct"]
+periodic_scalar_remeasurement = true
 fixtures = ["Celeste_box_art.png"]
 scales = [0.5]
 lanes = ["decoded-rgba"]
