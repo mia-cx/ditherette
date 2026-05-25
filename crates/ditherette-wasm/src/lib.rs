@@ -13,4 +13,4 @@ mod wasm;
 
 #[cfg(feature = "bench-subjects")]
 pub use bench_subjects::bench_subjects;
-pub use wasm::{benchmark_resize_rgba8, convert_color_space, hello, resize_rgba8};
+pub use wasm::{benchmark_resize_rgba8, convert_color_space, hello, process_rgba8, resize_rgba8};
