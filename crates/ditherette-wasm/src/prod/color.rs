@@ -59,18 +59,28 @@ pub fn rgba8_to_color_space_f32(
 ) -> Vec<f32> {
     let dimensions = source.dimensions();
     let mut output = vec![0.0; color_output_len(dimensions)];
-    #[cfg(feature = "threads")]
-    if _parallelization_policy {
-        rgba8_to_color_space_f32_parallel_into(source, target, &mut output);
-        return output;
-    }
-
-    rgba8_to_color_space_f32_into(source, target, &mut output);
+    rgba8_to_color_space_f32_with_policy_into(source, target, _parallelization_policy, &mut output);
     output
 }
 
 fn color_output_len(dimensions: ImageDimensions) -> usize {
     dimensions.pixel_count().expect("valid dimensions") * Rgba8::CHANNEL_COUNT
+}
+
+pub fn rgba8_to_color_space_f32_with_policy_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    parallelization_policy: bool,
+    output: &mut [f32],
+) {
+    #[cfg(feature = "threads")]
+    if parallelization_policy {
+        rgba8_to_color_space_f32_parallel_into(source, target, output);
+        return;
+    }
+
+    let _ = parallelization_policy;
+    rgba8_to_color_space_f32_into(source, target, output);
 }
 
 pub fn rgba8_to_color_space_f32_into(
