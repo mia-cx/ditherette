@@ -73,6 +73,26 @@ fn resize_export_runs_per_band_plan_lanczos() {
 }
 
 #[test]
+fn resize_export_accepts_diagnostic_modes() {
+    let source = [255, 0, 0, 255, 0, 255, 0, 255];
+    for support_policy in ["fixed+pooled-noop", "fixed+pooled-copy"] {
+        let output = resize_rgba8(
+            &source,
+            2,
+            1,
+            4,
+            2,
+            "nearest",
+            "center",
+            support_policy,
+            true,
+        )
+        .expect("diagnostic resize should succeed");
+        assert_eq!(output.len(), 4 * 2 * 4);
+    }
+}
+
+#[test]
 fn process_export_runs_scalar_pipeline_shell() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let settings = r#"{
