@@ -1,26 +1,79 @@
 # Ditherette browser/Wasm benchmark defaults.
 #
-# This intentionally mirrors crates/ditherette-bench/ditherette-bench.toml:
+# Mirrors crates/ditherette-bench/ditherette-bench.toml where browser/Wasm can
+# support the same resize subject/filter matrix. CLI flags always win:
 # built-in defaults < [defaults] < [profiles.NAME] < CLI flags.
 
 [defaults]
 command = "perf"
 domain = "resize"
-fixtures = ["Celeste_box_art.png"]
-subjects = ["wasm:resize:nearest:scalar"]
-scales = [2, 0.95, 0.75, 0.5, 0.25, 0.125]
-lanes = ["browser-decode-rgba", "decoded-rgba"]
-sample_size = 5
-warm_up_iterations = 2
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+scale_group = ["partial", "identity"]
+lanes = ["decoded-rgba"]
+sample_size = 100
+warm_up_iterations = 20
 target_sample_time_ms = 1
+
+[profiles.all]
+command = "perf"
+domain = "resize"
+subjects = [
+  "wasm:resize:nearest:scalar",
+  "wasm:resize:area:scalar",
+  "wasm:resize:bilinear:scalar",
+  "wasm:resize:bicubic:catmull-rom",
+  "wasm:resize:bicubic:catmull-rom-scale-aware",
+  "wasm:resize:lanczos2:fixed",
+  "wasm:resize:lanczos2:scale-aware",
+  "wasm:resize:lanczos3:fixed",
+  "wasm:resize:lanczos3:scale-aware"
+]
 
 [profiles.nearest]
 command = "perf"
 domain = "resize"
 subjects = ["wasm:resize:nearest:scalar"]
-fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
-sample_size = 20
-warm_up_iterations = 5
+
+[profiles.area]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:area:scalar"]
+
+[profiles.bilinear]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:bilinear:scalar"]
+scale_group = ["partial", "identity", "bilinear-anisotropic"]
+
+[profiles.bicubic]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:bicubic:catmull-rom"]
+
+[profiles.bicubic-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:bicubic:catmull-rom-scale-aware"]
+
+[profiles.lanczos2]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:lanczos2:fixed"]
+
+[profiles.lanczos2-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:lanczos2:scale-aware"]
+
+[profiles.lanczos3]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:lanczos3:fixed"]
+
+[profiles.lanczos3-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:lanczos3:scale-aware"]
 
 [profiles.nearest-smoke]
 command = "perf"
@@ -31,6 +84,7 @@ scales = [0.5]
 lanes = ["decoded-rgba"]
 sample_size = 1
 warm_up_iterations = 1
+target_sample_time_ms = 0.05
 
 [profiles.resize-all-smoke]
 command = "perf"
@@ -39,8 +93,8 @@ subjects = [
   "wasm:resize:nearest:scalar",
   "wasm:resize:area:scalar",
   "wasm:resize:bilinear:scalar",
-  "wasm:resize:bicubic:fixed",
-  "wasm:resize:bicubic:scale-aware",
+  "wasm:resize:bicubic:catmull-rom",
+  "wasm:resize:bicubic:catmull-rom-scale-aware",
   "wasm:resize:lanczos2:fixed",
   "wasm:resize:lanczos2:scale-aware",
   "wasm:resize:lanczos3:fixed",
@@ -51,3 +105,4 @@ scales = [0.5]
 lanes = ["decoded-rgba"]
 sample_size = 1
 warm_up_iterations = 1
+target_sample_time_ms = 0.05

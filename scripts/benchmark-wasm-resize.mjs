@@ -267,8 +267,8 @@ function makeScaleCases(decodedFixture, scales, lanes) {
 	const cases = [];
 
 	for (const scale of scales) {
-		const outputWidth = scaledDimension(decodedFixture.sourceWidth, scale);
-		const outputHeight = scaledDimension(decodedFixture.sourceHeight, scale);
+		const outputWidth = scaledDimension(decodedFixture.sourceWidth, scale.x);
+		const outputHeight = scaledDimension(decodedFixture.sourceHeight, scale.y);
 		const id = decodedFixture.name + '-' + scaleLabel(scale);
 
 		if (lanes.includes('browser-decode-rgba')) {
@@ -367,7 +367,9 @@ function scaledDimension(sourceDimension, scale) {
 }
 
 function scaleLabel(scale) {
-	return Math.round(scale * 1000).toString().padStart(3, '0') + 'x';
+	if (typeof scale === 'number') return String(scale) + 'x';
+	if (Math.abs(scale.x - scale.y) < Number.EPSILON) return String(scale.x) + 'x';
+	return String(scale.x) + 'x-' + String(scale.y) + 'y';
 }
 
 function summarizeSamplesNs(samplesNs) {
@@ -491,7 +493,7 @@ function subjectConfig(id) {
 	}
 	const family = parts[2];
 	const variant = parts[3];
-	if (variant === 'scale-aware') {
+	if (variant === 'scale-aware' || variant.endsWith('-scale-aware')) {
 		return {
 			id,
 			filter: family,
@@ -500,7 +502,7 @@ function subjectConfig(id) {
 			parallelizationPolicy: true
 		};
 	}
-	if (variant !== 'scalar' && variant !== 'fixed') {
+	if (!['scalar', 'fixed', 'catmull-rom'].includes(variant)) {
 		throw new Error(`Unsupported Wasm resize subject variant: ${id}`);
 	}
 	return {
@@ -520,12 +522,18 @@ function formatResultTable(run) {
 	].join('\n');
 }
 
+function scaleLabel(scale) {
+	if (typeof scale === 'number') return `${scale}x`;
+	if (Math.abs(scale.x - scale.y) < Number.EPSILON) return `${scale.x}x`;
+	return `${scale.x}x-${scale.y}y`;
+}
+
 function renderPerfStart(run) {
 	return [
 		heading('Ditherette perf benchmark'),
 		`  domain:   ${run.domain}`,
 		`  subjects: ${run.config.subjects.join(', ')}`,
-		`  scales:   ${run.config.scales.join(', ')}`,
+		`  scales:   ${run.config.scales.map(scaleLabel).join(', ')}`,
 		'  oracle:   —',
 		'  baseline: —',
 		`  config:   ${run.measurement.sampleMode}, warmup ${run.measurement.warmUpIterations} iterations, target batch ${formatDuration(run.measurement.targetSampleTimeMs * 1_000_000)}, run until ${run.measurement.sampleSize} samples`,
@@ -683,7 +691,7 @@ async function resolveOptions(rawArgs) {
 		profile,
 		subjects: stringArray(merged.subjects, ['wasm:resize:nearest:scalar']),
 		fixtures: stringArray(merged.fixtures ?? merged.image, ['Celeste_box_art.png']),
-		scales: numberArray(merged.scales, [2, 0.95, 0.75, 0.5, 0.25, 0.125]),
+		scales: scalesFromConfig(merged),
 		lanes: stringArray(merged.lanes, ['browser-decode-rgba', 'decoded-rgba']),
 		sampleSize: positiveInteger(
 			merged.sample_size ?? merged.sampleSize ?? merged.iterations,
@@ -745,6 +753,12 @@ function parseArgs(rawArgs) {
 				break;
 			case '--scales':
 				parsed.overrides.scales = commaList(nextValue()).map(Number);
+				break;
+			case '--scale-group':
+				parsed.overrides.scale_group = commaList(nextValue());
+				break;
+			case '--scale-pairs':
+				parsed.overrides.scale_pairs = commaList(nextValue());
 				break;
 			case '--lanes':
 				parsed.overrides.lanes = commaList(nextValue());
@@ -884,15 +898,93 @@ function stringArray(value, fallback) {
 	return commaList(String(value));
 }
 
-function numberArray(value, fallback) {
-	const values =
-		value === undefined ? fallback : Array.isArray(value) ? value : commaList(String(value));
-	return values.map((entry) => {
-		const parsed = Number(entry);
-		if (!Number.isFinite(parsed) || parsed <= 0)
-			throw new Error(`scale must be positive: ${entry}`);
-		return parsed;
-	});
+function scalesFromConfig(config) {
+	let scales = [];
+	if (config.scales !== undefined) {
+		scales = uniformScales(config.scales);
+	} else {
+		for (const group of stringArray(config.scale_group ?? config.scaleGroup, [])) {
+			scales.push(...scaleGroup(group));
+		}
+		for (const pair of stringArray(config.scale_pairs ?? config.scalePairs, [])) {
+			scales.push(parseScalePair(pair));
+		}
+		if (scales.length === 0) scales = [uniformScale(0.5)];
+	}
+	return sortedScales(scales);
+}
+
+function uniformScales(value) {
+	const values = value === undefined ? [] : Array.isArray(value) ? value : commaList(String(value));
+	return values.map(uniformScale);
+}
+
+function uniformScale(value) {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`scale must be positive: ${value}`);
+	return { x: parsed, y: parsed };
+}
+
+function parseScalePair(value) {
+	const [x, y] = String(value).split('x');
+	if (!x || !y)
+		throw new Error(`invalid scale pair ${JSON.stringify(value)}; expected SCALE_XxSCALE_Y`);
+	return { x: Number(x), y: Number(y) };
+}
+
+function sortedScales(scales) {
+	const seen = new Set();
+	return scales
+		.map((scale) => ({ x: Number(scale.x), y: Number(scale.y) }))
+		.sort((left, right) => left.x - right.x || left.y - right.y)
+		.filter((scale) => {
+			if (!Number.isFinite(scale.x) || !Number.isFinite(scale.y) || scale.x <= 0 || scale.y <= 0) {
+				throw new Error(`scale must be positive: ${JSON.stringify(scale)}`);
+			}
+			const key = `${scale.x}:${scale.y}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+}
+
+function scaleGroup(group) {
+	if (group === 'preview') return uniformScales([0.5, 0.25]);
+	if (group === 'quick' || group === 'resize-critical')
+		return uniformScales([2, 0.95, 0.75, 0.5, 0.25, 0.125]);
+	if (group === 'near-identity')
+		return uniformScales([0.95, 0.97, 0.98, 0.99, 1, 1.01, 1.02, 1.03, 1.05]);
+	if (group === 'upscale')
+		return uniformScales([
+			1.01, 1.02, 1.03, 1.05, 1.07, 1.1, 1.15, 1.25, 1.5, 1.67, 2, 2.38, 2.83, 3.36, 4, 4.76, 5.66,
+			6.73, 8
+		]);
+	if (group === 'downscale')
+		return uniformScales([
+			0.99, 0.98, 0.97, 0.95, 0.93, 0.9, 0.85, 0.75, 0.5, 0.33, 0.25, 0.19, 0.16, 0.125, 0.1
+		]);
+	if (group === 'identity') return uniformScales([1]);
+	if (
+		[
+			'nearest-anisotropic',
+			'area-anisotropic',
+			'bilinear-anisotropic',
+			'convolution-anisotropic'
+		].includes(group)
+	) {
+		return ['0.5x1', '1x0.5', '0.75x1', '1x0.75', '1.5x1', '1x1.5'].map(parseScalePair);
+	}
+	if (group === 'bilinear-prior-art') return uniformScales([0.875, 1.8]);
+	if (group === 'partial')
+		return uniformScales([0.1, 0.125, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1.05, 1.5, 2]);
+	if (group === 'full')
+		return uniformScales([
+			0.1, 0.125, 0.16, 0.19, 0.25, 0.33, 0.5, 0.75, 0.85, 0.9, 0.93, 0.95, 0.97, 0.98, 0.99, 1,
+			1.01, 1.02, 1.03, 1.05, 1.07, 1.1, 1.15, 1.25, 1.5, 1.67, 2, 2.38, 2.83, 3.36, 4, 4.76, 5.66,
+			6.73, 8
+		]);
+	if (group === 'stress') return uniformScales([4, 2, 0.5, 0.125]);
+	throw new Error(`unknown scale group ${JSON.stringify(group)}`);
 }
 
 function commaList(value) {
@@ -936,6 +1028,8 @@ Case flags:
   --fixtures FILES           Comma-separated fixture paths or benchmark-fixtures stems.
   --image FILE               Legacy alias for one fixture.
   --scales VALUES            Comma-separated isotropic scales.
+  --scale-group GROUPS       Same groups as crates/ditherette-bench: partial, identity, bilinear-anisotropic, etc.
+  --scale-pairs PAIRS        Comma-separated anisotropic scales like 0.5x1,1x0.5.
   --lanes LANES              browser-decode-rgba,decoded-rgba.
   --output-dir DIR           Output directory. Default: benchmark-results/wasm-resize-<timestamp>.
   --out DIR                  Alias for --output-dir.
