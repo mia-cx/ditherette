@@ -49,6 +49,30 @@ fn resize_export_runs_pooled_direct_lanczos() {
 }
 
 #[test]
+fn resize_export_runs_per_band_plan_lanczos() {
+    let source = [
+        255, 0, 0, 255, 0, 255, 0, 255,
+        0, 0, 255, 255, 255, 255, 255, 255,
+    ];
+    let scalar = resize_rgba8(&source, 2, 2, 3, 3, "lanczos3", "center", "fixed", false)
+        .expect("scalar resize should succeed");
+    let per_band = resize_rgba8(
+        &source,
+        2,
+        2,
+        3,
+        3,
+        "lanczos3",
+        "center",
+        "fixed+per-band-plan",
+        true,
+    )
+    .expect("per-band plan resize should succeed");
+
+    assert_eq!(per_band, scalar);
+}
+
+#[test]
 fn process_export_runs_scalar_pipeline_shell() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let settings = r#"{
