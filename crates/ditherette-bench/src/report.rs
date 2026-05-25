@@ -214,12 +214,12 @@ impl MeasurementLogger {
 }
 
 impl MeasurementObserver for MeasurementLogger {
-    fn warmup_batch(&mut self, batch_size: usize, elapsed: Duration) {
+    fn warmup_batch(&mut self, batch_size: usize, _elapsed: Duration) {
         let line = format!(
-            "  warmup: {} (batch size: {}, taking {})",
+            "  warmup: {} (batch size: {}, target sample {})",
             format_duration(self.measurement.warmup_time()),
             batch_size,
-            format_duration(elapsed)
+            format_duration(self.measurement.target_sample())
         );
         if self.live {
             print!("\r\x1b[2K{line}");
@@ -227,12 +227,12 @@ impl MeasurementObserver for MeasurementLogger {
         }
     }
 
-    fn warmup_finished(&mut self, batch_size: usize, elapsed: Duration) {
+    fn warmup_finished(&mut self, batch_size: usize, _elapsed: Duration) {
         let line = format!(
-            "  warmup: {} (batch size: {}, taking {})",
+            "  warmup: {} (batch size: {}, target sample {})",
             format_duration(self.measurement.warmup_time()),
             batch_size,
-            format_duration(elapsed)
+            format_duration(self.measurement.target_sample())
         );
         if self.live {
             print!("\r\x1b[2K{line}\n");
