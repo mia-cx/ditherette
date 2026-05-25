@@ -11,8 +11,10 @@ fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
 scale_group = ["partial", "identity"]
 lanes = ["decoded-rgba"]
 sample_size = 100
-warm_up_iterations = 20
-target_sample_time_ms = 1
+measurement_time = "10s"
+warm_up_time = "1s"
+target_sample_time = "50ms"
+live_stats = true
 
 [profiles.all]
 command = "perf"
@@ -83,8 +85,10 @@ fixtures = ["Celeste_box_art.png"]
 scales = [0.5]
 lanes = ["decoded-rgba"]
 sample_size = 1
-warm_up_iterations = 1
-target_sample_time_ms = 0.05
+measurement_time = "100ms"
+warm_up_time = "10ms"
+target_sample_time = "0.05ms"
+live_stats = false
 
 [profiles.resize-all-smoke]
 command = "perf"
@@ -104,5 +108,7 @@ fixtures = ["Celeste_box_art.png"]
 scales = [0.5]
 lanes = ["decoded-rgba"]
 sample_size = 1
-warm_up_iterations = 1
-target_sample_time_ms = 0.05
+measurement_time = "100ms"
+warm_up_time = "10ms"
+target_sample_time = "0.05ms"
+live_stats = false
