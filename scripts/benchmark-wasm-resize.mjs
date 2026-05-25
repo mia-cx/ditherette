@@ -79,7 +79,8 @@ try {
 		targetSampleTimeMs: options.targetSampleTimeMs,
 		liveStats: options.liveStats,
 		threadedWasm: options.threadedWasm,
-		threadCount: options.threadCount
+		threadCount: options.threadCount,
+		periodicScalarRemeasurement: options.periodicScalarRemeasurement
 	});
 	const artifact = benchRunArtifact(options, browserResult);
 
@@ -338,13 +339,14 @@ globalThis.runWasmBench = async function runWasmBench(config) {
 	}));
 
 	const cases = decodedFixtures.flatMap((decodedFixture) => makeCases(decodedFixture, config));
-	const totalRuns = cases.length * config.subjects.length;
+	const subjectSchedule = scheduledSubjects(config.subjects, config.periodicScalarRemeasurement);
+	const totalRuns = cases.length * subjectSchedule.length;
 	let completedRuns = 0;
 	const results = [];
 	reportProgress(completedRuns, totalRuns, 'starting');
 
 	for (const benchmarkCase of cases) {
-		for (const subject of config.subjects) {
+		for (const subject of subjectSchedule) {
 			reportProgress(completedRuns, totalRuns, benchmarkCase.id + ' / ' + subject.id);
 			results.push(await measureSubject(benchmarkCase, subject, config));
 			completedRuns += 1;
@@ -394,6 +396,30 @@ async function decodeFixture(fixture) {
 	bitmap.close?.();
 
 	return { name: fixture.name, sourceWidth, sourceHeight, sourceRgba, decodeMs, normalizeMs };
+}
+
+function scheduledSubjects(subjects, periodicScalarRemeasurement) {
+	if (!periodicScalarRemeasurement) return subjects;
+	const schedule = [];
+	for (const subject of subjects) {
+		schedule.push(subject);
+		if (isScalarSubject(subject)) continue;
+		const scalar = subjects.find((candidate) => isMatchingScalarSubject(candidate, subject));
+		if (scalar) schedule.push({ ...scalar, id: scalar.id + ':remeasure' });
+	}
+	return schedule;
+}
+
+function isScalarSubject(subject) {
+	return subject.domain === 'color'
+		? subject.executionMode === 'scalar'
+		: subject.parallelizationPolicy === false;
+}
+
+function isMatchingScalarSubject(candidate, subject) {
+	if (!isScalarSubject(candidate) || candidate.domain !== subject.domain) return false;
+	if (subject.domain === 'color') return candidate.target === subject.target;
+	return candidate.filter === subject.filter && candidate.supportPolicy === 'fixed';
 }
 
 function makeCases(decodedFixture, config) {
@@ -1021,6 +1047,10 @@ async function resolveOptions(rawArgs) {
 			1
 		),
 		liveStats: booleanValue(merged.live_stats ?? merged.liveStats, false),
+		periodicScalarRemeasurement: booleanValue(
+			merged.periodic_scalar_remeasurement ?? merged.periodicScalarRemeasurement,
+			false
+		),
 		outputDir: stringValue(merged.output_dir ?? merged.outputDir ?? merged.out, undefined),
 		jsonlEvents: parsed.jsonlEvents,
 		threadedWasm: booleanValue(
@@ -1140,6 +1170,12 @@ function parseArgs(rawArgs) {
 				break;
 			case '--no-live-stats':
 				parsed.overrides.live_stats = false;
+				break;
+			case '--periodic-scalar-remeasurement':
+				parsed.overrides.periodic_scalar_remeasurement = true;
+				break;
+			case '--no-periodic-scalar-remeasurement':
+				parsed.overrides.periodic_scalar_remeasurement = false;
 				break;
 			case '--output-dir':
 			case '--out':
