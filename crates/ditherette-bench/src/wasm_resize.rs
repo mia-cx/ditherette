@@ -15,7 +15,9 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
+    baseline::{load_scoped_baseline, save_indexed_run, save_scoped_baseline},
     case::ResizeScale,
+    compare::attach_accepted_comparisons,
     error::BenchError,
     fixture::Fixture,
     measure::{MeasurementConfig, MeasurementObserver, MeasurementProgress},
@@ -28,9 +30,10 @@ const WASM_HARNESS: &str = "scripts/benchmark-wasm-resize.mjs";
 
 pub(crate) fn wasm_resize_command(args: &[String]) -> Result<(), BenchError> {
     let args = strip_leading_separator(args);
+    let bench_flags = WasmBenchFlags::parse(args)?;
     let mut child = Command::new("node")
         .arg(WASM_HARNESS)
-        .args(with_default_config(args))
+        .args(with_default_config(&bench_flags.harness_args))
         .arg("--jsonl-events")
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -44,7 +47,10 @@ pub(crate) fn wasm_resize_command(args: &[String]) -> Result<(), BenchError> {
     })?;
     let reader = BufReader::new(stdout);
 
-    let mut state = WasmRunState::default();
+    let mut state = WasmRunState {
+        accepted_baseline: bench_flags.accepted_baseline.clone(),
+        ..WasmRunState::default()
+    };
     for line in reader.lines() {
         let line = line.map_err(BenchError::io)?;
         if line.trim().is_empty() {
@@ -65,7 +71,7 @@ pub(crate) fn wasm_resize_command(args: &[String]) -> Result<(), BenchError> {
         )));
     }
 
-    state.finish(args)
+    state.finish(&bench_flags)
 }
 
 fn strip_leading_separator(args: &[String]) -> &[String] {
@@ -73,6 +79,56 @@ fn strip_leading_separator(args: &[String]) -> &[String] {
         &args[1..]
     } else {
         args
+    }
+}
+
+struct WasmBenchFlags {
+    harness_args: Vec<String>,
+    accepted_baseline: Option<String>,
+    save_baseline: Option<String>,
+}
+
+impl WasmBenchFlags {
+    fn parse(args: &[String]) -> Result<Self, BenchError> {
+        let mut harness_args = Vec::new();
+        let mut accepted_baseline = None;
+        let mut save_baseline = None;
+        let mut index = 0;
+        while index < args.len() {
+            let arg = &args[index];
+            if let Some(value) = arg.strip_prefix("--baseline=") {
+                accepted_baseline = Some(value.to_owned());
+                index += 1;
+            } else if arg == "--baseline" {
+                let value = args.get(index + 1).ok_or_else(|| {
+                    BenchError::Config("--baseline requires a baseline name".to_owned())
+                })?;
+                accepted_baseline = Some(value.clone());
+                index += 2;
+            } else if let Some(value) = arg.strip_prefix("--save-baseline=") {
+                save_baseline = Some(value.to_owned());
+                index += 1;
+            } else if arg == "--save-baseline" {
+                if args
+                    .get(index + 1)
+                    .is_some_and(|next| !next.starts_with("--"))
+                {
+                    save_baseline = Some(args[index + 1].clone());
+                    index += 2;
+                } else {
+                    save_baseline = Some("true".to_owned());
+                    index += 1;
+                }
+            } else {
+                harness_args.push(arg.clone());
+                index += 1;
+            }
+        }
+        Ok(Self {
+            harness_args,
+            accepted_baseline,
+            save_baseline,
+        })
     }
 }
 
@@ -104,6 +160,7 @@ struct WasmRunState {
     results: Vec<BenchResult>,
     logger: Option<MeasurementLogger>,
     profile: Option<String>,
+    accepted_baseline: Option<String>,
 }
 
 impl WasmRunState {
@@ -137,7 +194,10 @@ impl WasmRunState {
                 Ok(())
             }
             WasmEvent::Result(event) => {
-                let result = event.result.into_bench_result();
+                let mut result = event.result.into_bench_result();
+                if let Some(name) = self.accepted_baseline_name() {
+                    self.attach_accepted_comparison(name, &mut result)?;
+                }
                 if let Some(mut logger) = self.logger.take() {
                     logger.finish(&result);
                 } else {
@@ -171,7 +231,7 @@ impl WasmRunState {
                 .collect::<Vec<_>>(),
             &measurement,
             None,
-            None,
+            self.accepted_baseline.as_deref(),
         );
         self.measurement = Some(measurement);
         Ok(())
@@ -190,7 +250,27 @@ impl WasmRunState {
         })
     }
 
-    fn finish(self, args: &[String]) -> Result<(), BenchError> {
+    fn accepted_baseline_name(&self) -> Option<&str> {
+        self.accepted_baseline.as_deref()
+    }
+
+    fn attach_accepted_comparison(
+        &self,
+        name: &str,
+        result: &mut BenchResult,
+    ) -> Result<(), BenchError> {
+        let run = BenchRun::new(
+            "wasm-resize",
+            "resize",
+            Some(self.measurement()?.artifact()),
+            vec![result.clone()],
+        );
+        let accepted_baseline = load_scoped_baseline("accepted", name, &run)?;
+        attach_accepted_comparisons(std::slice::from_mut(result), Some(&accepted_baseline));
+        Ok(())
+    }
+
+    fn finish(self, flags: &WasmBenchFlags) -> Result<(), BenchError> {
         let measurement = self.measurement.ok_or_else(|| {
             BenchError::Runtime("browser/Wasm harness did not emit start event".to_owned())
         })?;
@@ -202,9 +282,21 @@ impl WasmRunState {
             Some(measurement.artifact()),
             self.results,
         );
-        let output_dir = output_dir(args, &run.run_id);
-        fs::create_dir_all(&output_dir).map_err(BenchError::io)?;
         let profile = self.profile.unwrap_or_else(|| "ad-hoc".to_owned());
+        let save_baseline_name = flags.save_baseline.as_deref().map(|name| {
+            if name == "true" {
+                profile.as_str()
+            } else {
+                name
+            }
+        });
+        save_indexed_run(&run, save_baseline_name)?;
+        if let Some(name) = save_baseline_name {
+            save_scoped_baseline("accepted", name, &run, true)?;
+        }
+
+        let output_dir = output_dir(&flags.harness_args, &run.run_id);
+        fs::create_dir_all(&output_dir).map_err(BenchError::io)?;
         let path = output_dir.join(format!("{}.json", sanitize_path_component(&profile)));
         let json = serde_json::to_string_pretty(&run).map_err(|error| {
             BenchError::Runtime(format!(
@@ -212,6 +304,9 @@ impl WasmRunState {
             ))
         })?;
         fs::write(&path, format!("{json}\n")).map_err(BenchError::io)?;
+        if let Some(name) = save_baseline_name {
+            println!("saved accepted baseline {name:?}");
+        }
         println!("\nWrote {}", path.display());
         Ok(())
     }
