@@ -1,0 +1,197 @@
+//! Production color-space materialization.
+//!
+//! These kernels convert browser RGBA8/sRGB pixels into packed four-channel
+//! color buffers used by pipeline caches. The first three channels are the
+//! requested color space; alpha is preserved as a normalized `0..=1` f32 value.
+
+use crate::image::{ImageDimensions, ImageFormat, ImageView, Rgba8};
+
+/// Supported f32 color-space materializations for RGBA8 input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorSpaceF32 {
+    /// Gamma-encoded sRGB channels normalized to `0..=1`, plus alpha.
+    Srgb,
+    /// Linearized sRGB channels, plus alpha.
+    LinearSrgb,
+    /// Oklab L, a, b, plus alpha.
+    Oklab,
+    /// OKLCH lightness, chroma, hue-radians, plus alpha.
+    Oklch,
+    /// D65 CIELAB L*, a*, b*, plus alpha.
+    Cielab,
+    /// D65 CIELCH lightness, chroma, hue-radians, plus alpha.
+    Cielch,
+    /// Full-range BT.601 Y, Cb, Cr over gamma-encoded sRGB, plus alpha.
+    YCbCr,
+}
+
+impl ColorSpaceF32 {
+    /// Parses string enums used by the Wasm API.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "srgb" | "srgb32" | "srgb-f32" => Some(Self::Srgb),
+            "linear-srgb" | "linear-srgb-f32" | "linear-rgba32" => Some(Self::LinearSrgb),
+            "oklab" | "oklab-f32" | "oklaba32" => Some(Self::Oklab),
+            "oklch" | "oklch-f32" | "oklch32" => Some(Self::Oklch),
+            "cielab" | "cielab-f32" | "cielab32" => Some(Self::Cielab),
+            "cielch" | "cielch-f32" | "cielch32" => Some(Self::Cielch),
+            "ycbcr" | "ycbcr-f32" | "ycbcr32" => Some(Self::YCbCr),
+            _ => None,
+        }
+    }
+}
+
+/// Materializes RGBA8/sRGB input into an AoS four-channel f32 color buffer.
+///
+/// Output channel order is defined by `target`; the fourth channel is always
+/// normalized alpha. `parallelization_policy` is accepted for API stability and
+/// ignored until the Wasm-thread implementation lands.
+pub fn rgba8_to_color_space_f32(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    _parallelization_policy: bool,
+) -> Vec<f32> {
+    let dimensions = source.dimensions();
+    let mut output = vec![0.0; color_output_len(dimensions)];
+    rgba8_to_color_space_f32_into(source, target, &mut output);
+    output
+}
+
+fn color_output_len(dimensions: ImageDimensions) -> usize {
+    dimensions.pixel_count().expect("valid dimensions") * Rgba8::CHANNEL_COUNT
+}
+
+fn rgba8_to_color_space_f32_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    output: &mut [f32],
+) {
+    let dimensions = source.dimensions();
+    assert_eq!(output.len(), color_output_len(dimensions));
+
+    for y in 0..dimensions.height() {
+        let source_row = source.row(y).expect("source row should be in bounds");
+        let output_y_start = y as usize * dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
+        let output_row = &mut output
+            [output_y_start..output_y_start + dimensions.width_usize() * Rgba8::CHANNEL_COUNT];
+
+        for x in 0..dimensions.width_usize() {
+            let source_start = x * Rgba8::CHANNEL_COUNT;
+            let output_start = x * Rgba8::CHANNEL_COUNT;
+            let r = source_row[source_start + Rgba8::R];
+            let g = source_row[source_start + Rgba8::G];
+            let b = source_row[source_start + Rgba8::B];
+            let alpha = srgb8_to_unit(source_row[source_start + Rgba8::A]);
+            let channels = convert_rgb(r, g, b, target);
+
+            output_row[output_start] = channels[0];
+            output_row[output_start + 1] = channels[1];
+            output_row[output_start + 2] = channels[2];
+            output_row[output_start + 3] = alpha;
+        }
+    }
+}
+
+fn convert_rgb(r: u8, g: u8, b: u8, target: ColorSpaceF32) -> [f32; 3] {
+    match target {
+        ColorSpaceF32::Srgb => [srgb8_to_unit(r), srgb8_to_unit(g), srgb8_to_unit(b)],
+        ColorSpaceF32::LinearSrgb => [srgb8_to_linear(r), srgb8_to_linear(g), srgb8_to_linear(b)],
+        ColorSpaceF32::Oklab => srgb8_to_oklab(r, g, b),
+        ColorSpaceF32::Oklch => {
+            let [l, a, b] = srgb8_to_oklab(r, g, b);
+            cartesian_to_cylindrical(l, a, b)
+        }
+        ColorSpaceF32::Cielab => srgb8_to_cielab(r, g, b),
+        ColorSpaceF32::Cielch => {
+            let [l, a, b] = srgb8_to_cielab(r, g, b);
+            cartesian_to_cylindrical(l, a, b)
+        }
+        ColorSpaceF32::YCbCr => srgb8_to_ycbcr(r, g, b),
+    }
+}
+
+fn srgb8_to_unit(channel: u8) -> f32 {
+    channel as f32 / 255.0
+}
+
+fn srgb_unit_to_linear(channel: f32) -> f32 {
+    if channel <= 0.04045 {
+        channel / 12.92
+    } else {
+        ((channel + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn srgb8_to_linear(channel: u8) -> f32 {
+    srgb_unit_to_linear(srgb8_to_unit(channel))
+}
+
+fn linear_srgb_to_xyz(r: f32, g: f32, b: f32) -> [f32; 3] {
+    [
+        0.412_456_4 * r + 0.357_576_1 * g + 0.180_437_5 * b,
+        0.212_672_9 * r + 0.715_152_2 * g + 0.072_175 * b,
+        0.019_333_9 * r + 0.119_192 * g + 0.950_304_1 * b,
+    ]
+}
+
+fn srgb8_to_oklab(r: u8, g: u8, b: u8) -> [f32; 3] {
+    linear_srgb_to_oklab(srgb8_to_linear(r), srgb8_to_linear(g), srgb8_to_linear(b))
+}
+
+fn linear_srgb_to_oklab(r: f32, g: f32, b: f32) -> [f32; 3] {
+    let l = 0.412_221_46 * r + 0.536_332_55 * g + 0.051_445_995 * b;
+    let m = 0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b;
+    let s = 0.088_302_46 * r + 0.281_718_85 * g + 0.629_978_7 * b;
+
+    let l_ = l.cbrt();
+    let m_ = m.cbrt();
+    let s_ = s.cbrt();
+
+    [
+        0.210_454_26 * l_ + 0.793_617_8 * m_ - 0.004_072_047 * s_,
+        1.977_998_5 * l_ - 2.428_592_2 * m_ + 0.450_593_7 * s_,
+        0.025_904_037 * l_ + 0.782_771_77 * m_ - 0.808_675_77 * s_,
+    ]
+}
+
+fn srgb8_to_cielab(r: u8, g: u8, b: u8) -> [f32; 3] {
+    let [x, y, z] = linear_srgb_to_xyz(srgb8_to_linear(r), srgb8_to_linear(g), srgb8_to_linear(b));
+    xyz_to_cielab(x, y, z)
+}
+
+fn xyz_to_cielab(x: f32, y: f32, z: f32) -> [f32; 3] {
+    const D65_XN: f32 = 0.95047;
+    const D65_YN: f32 = 1.0;
+    const D65_ZN: f32 = 1.08883;
+
+    let fx = lab_f(x / D65_XN);
+    let fy = lab_f(y / D65_YN);
+    let fz = lab_f(z / D65_ZN);
+
+    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+fn lab_f(t: f32) -> f32 {
+    const EPSILON: f32 = 216.0 / 24_389.0;
+    const KAPPA: f32 = 24_389.0 / 27.0;
+
+    if t > EPSILON {
+        t.cbrt()
+    } else {
+        (KAPPA * t + 16.0) / 116.0
+    }
+}
+
+fn cartesian_to_cylindrical(lightness: f32, a: f32, b: f32) -> [f32; 3] {
+    let chroma = (a * a + b * b).sqrt();
+    let hue = b.atan2(a).rem_euclid(std::f32::consts::TAU);
+    [lightness, chroma, hue]
+}
+
+fn srgb8_to_ycbcr(r: u8, g: u8, b: u8) -> [f32; 3] {
+    let r = srgb8_to_unit(r);
+    let g = srgb8_to_unit(g);
+    let b = srgb8_to_unit(b);
+    let y = 0.299 * r + 0.587 * g + 0.114 * b;
+    [y, 0.5 + (b - y) / 1.772, 0.5 + (r - y) / 1.402]
+}
