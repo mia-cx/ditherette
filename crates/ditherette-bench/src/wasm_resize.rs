@@ -86,6 +86,7 @@ struct WasmBenchFlags {
     harness_args: Vec<String>,
     accepted_baseline: Option<String>,
     save_baseline: Option<String>,
+    replacing_baseline: bool,
 }
 
 impl WasmBenchFlags {
@@ -93,6 +94,8 @@ impl WasmBenchFlags {
         let mut harness_args = Vec::new();
         let mut accepted_baseline = None;
         let mut save_baseline = None;
+        let mut replacing_baseline = false;
+        let mut no_run = false;
         let mut index = 0;
         while index < args.len() {
             let arg = &args[index];
@@ -100,35 +103,120 @@ impl WasmBenchFlags {
                 accepted_baseline = Some(value.to_owned());
                 index += 1;
             } else if arg == "--baseline" {
-                let value = args.get(index + 1).ok_or_else(|| {
-                    BenchError::Config("--baseline requires a baseline name".to_owned())
-                })?;
-                accepted_baseline = Some(value.clone());
-                index += 2;
+                accepted_baseline = Some(required_value(args, &mut index, "--baseline")?);
             } else if let Some(value) = arg.strip_prefix("--save-baseline=") {
                 save_baseline = Some(value.to_owned());
                 index += 1;
             } else if arg == "--save-baseline" {
-                if args
-                    .get(index + 1)
-                    .is_some_and(|next| !next.starts_with("--"))
-                {
-                    save_baseline = Some(args[index + 1].clone());
-                    index += 2;
-                } else {
-                    save_baseline = Some("true".to_owned());
-                    index += 1;
-                }
+                save_baseline =
+                    Some(optional_value(args, &mut index).unwrap_or_else(|| "true".to_owned()));
+            } else if let Some(value) = arg.strip_prefix("--replace-baseline=") {
+                save_baseline = Some(value.to_owned());
+                replacing_baseline = true;
+                index += 1;
+            } else if arg == "--replace-baseline" {
+                save_baseline = Some(required_value(args, &mut index, "--replace-baseline")?);
+                replacing_baseline = true;
+            } else if arg == "--no-run" {
+                no_run = true;
+                index += 1;
+            } else if let Some((flag, value)) = normalize_harness_alias(args, &mut index)? {
+                harness_args.push(flag);
+                harness_args.push(value);
+            } else if unsupported_bench_flag(arg).is_some() {
+                return Err(BenchError::Config(format!(
+                    "{arg} is a ditherette-bench flag that is not supported by wasm-resize yet"
+                )));
             } else {
                 harness_args.push(arg.clone());
                 index += 1;
             }
         }
+        if no_run {
+            return Err(BenchError::Config(
+                "wasm-resize does not support --no-run yet; use --replace-baseline NAME to refresh the baseline from a new browser run".to_owned(),
+            ));
+        }
         Ok(Self {
             harness_args,
             accepted_baseline,
             save_baseline,
+            replacing_baseline,
         })
+    }
+}
+
+fn required_value(args: &[String], index: &mut usize, flag: &str) -> Result<String, BenchError> {
+    let value = args
+        .get(*index + 1)
+        .filter(|value| !value.starts_with("--"))
+        .ok_or_else(|| BenchError::Config(format!("{flag} requires a value")))?;
+    *index += 2;
+    Ok(value.clone())
+}
+
+fn optional_value(args: &[String], index: &mut usize) -> Option<String> {
+    let value = args
+        .get(*index + 1)
+        .filter(|value| !value.starts_with("--"))
+        .cloned();
+    *index += if value.is_some() { 2 } else { 1 };
+    value
+}
+
+fn normalize_harness_alias(
+    args: &[String],
+    index: &mut usize,
+) -> Result<Option<(String, String)>, BenchError> {
+    let arg = &args[*index];
+    let (name, inline_value) = arg
+        .split_once('=')
+        .map_or((arg.as_str(), None), |(name, value)| (name, Some(value)));
+    let Some(flag) = normalized_harness_flag(name) else {
+        return Ok(None);
+    };
+    let value = if let Some(value) = inline_value {
+        *index += 1;
+        value.to_owned()
+    } else {
+        required_value(args, index, arg)?
+    };
+    Ok(Some((flag.to_owned(), value)))
+}
+
+fn normalized_harness_flag(flag: &str) -> Option<&'static str> {
+    match flag {
+        "--samples" | "--measurement-iterations" => Some("--sample-size"),
+        "--warmup-iterations" => Some("--warm-up-iterations"),
+        "--warmup-time" => Some("--warm-up-time"),
+        "--target-sample-ms" => Some("--target-sample-time"),
+        _ => None,
+    }
+}
+
+fn unsupported_bench_flag(flag: &str) -> Option<&str> {
+    let name = flag.split_once('=').map_or(flag, |(name, _)| name);
+    match name {
+        "--oracle"
+        | "--correctness"
+        | "--max-color-distance"
+        | "--max-mean-color-distance"
+        | "--max-rms-color-distance"
+        | "--allow-correctness-failures"
+        | "--output-img"
+        | "--save-oracle"
+        | "--replace-oracle"
+        | "--spec-baseline"
+        | "--save-spec-baseline"
+        | "--sample-mode"
+        | "--cache-state"
+        | "--cache-scrub-size"
+        | "--inter-sample-delay"
+        | "--inter-sample-delay-ms"
+        | "--preheat-time"
+        | "--preheat-time-ms"
+        | "--process-priority" => Some(name),
+        _ => None,
     }
 }
 
@@ -305,7 +393,12 @@ impl WasmRunState {
         })?;
         fs::write(&path, format!("{json}\n")).map_err(BenchError::io)?;
         if let Some(name) = save_baseline_name {
-            println!("saved accepted baseline {name:?}");
+            let action = if flags.replacing_baseline {
+                "replaced"
+            } else {
+                "saved"
+            };
+            println!("{action} accepted baseline {name:?}");
         }
         println!("\nWrote {}", path.display());
         Ok(())
