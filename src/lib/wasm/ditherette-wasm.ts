@@ -1,7 +1,8 @@
 import { resizeImageData } from '$lib/processing/resize';
 import type { CropRect, ProcessingSettings, ResizeId } from '$lib/processing/types';
 
-const WASM_MODULE_URL = '/wasm/ditherette-wasm/ditherette_wasm.js';
+const WASM_SCALAR_MODULE_URL = '/wasm/ditherette-wasm/ditherette_wasm.js';
+const WASM_THREADS_MODULE_URL = '/wasm/ditherette-wasm-threads/ditherette_wasm.js';
 const SOURCE_COLOR_SPACE = 'rgba8';
 const CENTER_ANCHOR = 'center';
 const FIXED_SUPPORT = 'fixed';
@@ -59,11 +60,18 @@ type ResizeResult = {
 	engine: ResizeEngine;
 };
 
-let wasmModulePromise: Promise<DitheretteWasmModule | undefined> | undefined;
+let scalarWasmModulePromise: Promise<DitheretteWasmModule | undefined> | undefined;
+let threadedWasmModulePromise: Promise<DitheretteWasmModule | undefined> | undefined;
+let threadPoolPromise: Promise<DitheretteWasmModule | undefined> | undefined;
 let warnedAboutLoadFailure = false;
+let warnedAboutThreadLoadFailure = false;
 
 export function wasmResizeEnabled() {
 	return isTruthyFlag(import.meta.env.VITE_DITHERETTE_WASM_RESIZE);
+}
+
+export function wasmThreadsEnabled() {
+	return isTruthyFlag(import.meta.env.VITE_DITHERETTE_WASM_THREADS);
 }
 
 export function wasmThreadsAvailable() {
@@ -72,10 +80,8 @@ export function wasmThreadsAvailable() {
 
 export async function initializeDitheretteWasmThreadPool(workerCount = defaultWasmWorkerCount()) {
 	if (!wasmThreadsAvailable()) return false;
-	const wasm = await loadDitheretteWasm();
-	if (!wasm?.initThreadPool) return false;
-	await wasm.initThreadPool(workerCount);
-	return true;
+	const wasm = await initializeThreadedWasm(workerCount);
+	return Boolean(wasm);
 }
 
 export function wasmResizeRequest(mode: ResizeId): ResizeRequest {
@@ -100,7 +106,7 @@ export async function convertColorSpaceF32(
 	target: WasmColorSpaceF32,
 	parallelizationPolicy = true
 ): Promise<Float32Array> {
-	const wasm = await loadDitheretteWasm();
+	const wasm = await loadDitheretteWasm(parallelizationPolicy);
 	if (!wasm) throw new Error('Ditherette Wasm module is not available. Run `pnpm wasm:build`.');
 	return wasm.convertColorSpace(
 		imageDataBytes(source),
@@ -186,8 +192,25 @@ function isTruthyFlag(value: unknown) {
 	return value === true || value === 'true' || value === '1' || value === 'yes';
 }
 
-async function loadDitheretteWasm() {
-	wasmModulePromise ??= import(/* @vite-ignore */ WASM_MODULE_URL)
+async function loadDitheretteWasm(preferThreads = false) {
+	if (preferThreads && wasmThreadsEnabled() && wasmThreadsAvailable()) {
+		const threadedWasm = await initializeThreadedWasm();
+		if (threadedWasm) return threadedWasm;
+	}
+	return loadScalarDitheretteWasm();
+}
+
+async function initializeThreadedWasm(workerCount = defaultWasmWorkerCount()) {
+	threadPoolPromise ??= loadThreadedDitheretteWasm().then(async (wasm) => {
+		if (!wasm?.initThreadPool) return undefined;
+		await wasm.initThreadPool(workerCount);
+		return wasm;
+	});
+	return threadPoolPromise;
+}
+
+async function loadScalarDitheretteWasm() {
+	scalarWasmModulePromise ??= import(/* @vite-ignore */ WASM_SCALAR_MODULE_URL)
 		.then(async (wasm: DitheretteWasmModule) => {
 			await wasm.default();
 			return wasm;
@@ -199,5 +222,21 @@ async function loadDitheretteWasm() {
 			}
 			return undefined;
 		});
-	return wasmModulePromise;
+	return scalarWasmModulePromise;
+}
+
+async function loadThreadedDitheretteWasm() {
+	threadedWasmModulePromise ??= import(/* @vite-ignore */ WASM_THREADS_MODULE_URL)
+		.then(async (wasm: DitheretteWasmModule) => {
+			await wasm.default();
+			return wasm;
+		})
+		.catch((error: unknown) => {
+			if (!warnedAboutThreadLoadFailure) {
+				warnedAboutThreadLoadFailure = true;
+				console.warn('Ditherette threaded Wasm module failed to load; using scalar Wasm.', error);
+			}
+			return undefined;
+		});
+	return threadedWasmModulePromise;
 }

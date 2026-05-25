@@ -136,7 +136,7 @@ fn exact_integer_downscale_steps_for_dimensions(
     if source_width == output_width && source_height == output_height {
         return None;
     }
-    if !source_width.is_multiple_of(output_width) || !source_height.is_multiple_of(output_height) {
+    if source_width % output_width != 0 || source_height % output_height != 0 {
         return None;
     }
 
@@ -168,7 +168,7 @@ fn exact_integer_upscale_steps_for_dimensions(
     if output_width == source_width && output_height == source_height {
         return None;
     }
-    if !output_width.is_multiple_of(source_width) || !output_height.is_multiple_of(source_height) {
+    if output_width % source_width != 0 || output_height % source_height != 0 {
         return None;
     }
 
