@@ -387,6 +387,7 @@ struct WasmResize {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ResizeExecutionMode {
+    PolicyDefault,
     PooledDirect,
     PooledNoop,
     PooledCopy,
@@ -440,6 +441,7 @@ impl WasmResize {
         output: &mut [u8],
     ) -> Result<bool, JsValue> {
         match self.execution_mode {
+            ResizeExecutionMode::PolicyDefault => return Ok(false),
             ResizeExecutionMode::PooledNoop => {
                 resize_pooled_noop_into(output_dimensions, output)?;
                 return Ok(true);
@@ -572,19 +574,28 @@ fn resize_bicubic_rgba8_pooled_direct_into(
     plan_scope: ResizePlanScope,
 ) -> Result<(), JsValue> {
     if plan_scope == ResizePlanScope::PerBand {
-        return resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
-            resize_bicubic_rgba8_rows_into(
-                source,
-                output_view,
-                output_dimensions,
-                y_start,
-                anchor,
-                support_policy,
-            );
-        });
+        return resize_rows_pooled_direct_into(
+            output_dimensions,
+            output,
+            |output_view, y_start| {
+                resize_bicubic_rgba8_rows_into(
+                    source,
+                    output_view,
+                    output_dimensions,
+                    y_start,
+                    anchor,
+                    support_policy,
+                );
+            },
+        );
     }
 
-    let plan = BicubicResizePlan::new(source.dimensions(), output_dimensions, anchor, support_policy);
+    let plan = BicubicResizePlan::new(
+        source.dimensions(),
+        output_dimensions,
+        anchor,
+        support_policy,
+    );
     resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
         resize_bicubic_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
     })
@@ -600,8 +611,10 @@ fn resize_lanczos_rgba8_pooled_direct_into(
     plan_scope: ResizePlanScope,
 ) -> Result<(), JsValue> {
     if plan_scope == ResizePlanScope::PerBand {
-        return resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
-            match radius.get() {
+        return resize_rows_pooled_direct_into(
+            output_dimensions,
+            output,
+            |output_view, y_start| match radius.get() {
                 2 => resize_lanczos2_rgba8_rows_into(
                     source,
                     output_view,
@@ -619,8 +632,8 @@ fn resize_lanczos_rgba8_pooled_direct_into(
                     support_policy,
                 ),
                 _ => unreachable!("only Lanczos2/3 pooled probes are wired"),
-            }
-        });
+            },
+        );
     }
 
     let plan = LanczosResizePlan::new(
@@ -1083,20 +1096,20 @@ fn parse_support_policy_and_execution(
         "" | "fixed" => Ok((
             SupportPolicy::Fixed,
             ResizePlanScope::FullImage,
-            ResizeExecutionMode::PooledDirect,
+            ResizeExecutionMode::PolicyDefault,
         )),
         "scale-aware" | "scale_aware" => Ok((
             SupportPolicy::ScaleAware,
             ResizePlanScope::FullImage,
-            ResizeExecutionMode::PooledDirect,
+            ResizeExecutionMode::PolicyDefault,
         )),
-        "fixed+per-band-plan" => Ok((
+        "fixed+pooled-direct" => Ok((
             SupportPolicy::Fixed,
-            ResizePlanScope::PerBand,
+            ResizePlanScope::FullImage,
             ResizeExecutionMode::PooledDirect,
         )),
-        "scale-aware+per-band-plan" | "scale_aware+per_band_plan" => Ok((
-            SupportPolicy::ScaleAware,
+        "fixed+pooled-direct+per-band-plan" => Ok((
+            SupportPolicy::Fixed,
             ResizePlanScope::PerBand,
             ResizeExecutionMode::PooledDirect,
         )),
