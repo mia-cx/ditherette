@@ -776,7 +776,7 @@ function subjectConfig(id) {
 }
 
 function colorSubjectConfig(id, target, executionMode) {
-	if (!['scalar', 'pooled_direct'].includes(executionMode)) {
+	if (!['scalar', 'pooled_direct', 'pooled_noop', 'pooled_copy'].includes(executionMode)) {
 		throw new Error(`Unsupported Wasm color subject variant: ${id}`);
 	}
 	return { id, domain: 'color', target, executionMode };

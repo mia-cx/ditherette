@@ -12,7 +12,7 @@ use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
+    image::{ImageDimensions, ImageFormat, ImageView, ImageViewMut, Rgba8},
     prod::{
         color::{
             rgba8_to_color_space_f32, rgba8_to_color_space_f32_with_policy_into, ColorSpaceF32,
@@ -159,11 +159,7 @@ pub fn benchmark_color_space(
 
     let target = ColorSpaceF32::parse(to)
         .ok_or_else(|| JsValue::from_str("unsupported target color space"))?;
-    let parallelization_policy = match execution_mode {
-        "scalar" => false,
-        "pooled_direct" => true,
-        _ => return Err(JsValue::from_str("unsupported color benchmark execution mode")),
-    };
+    let mode = ColorBenchmarkMode::parse(execution_mode)?;
     let source = ImageView::<Rgba8>::packed(input, dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut output = vec![0.0; dimensions.storage_len::<Rgba8>().unwrap()];
@@ -175,14 +171,7 @@ pub fn benchmark_color_space(
         target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
         live_stats,
     };
-    let result = run_color_benchmark(
-        source,
-        target,
-        parallelization_policy,
-        &mut output,
-        config,
-        reporter.as_ref(),
-    )?;
+    let result = run_color_benchmark(source, target, mode, &mut output, config, reporter.as_ref())?;
 
     Ok(benchmark_result_json(
         result.batch_size,
@@ -466,10 +455,32 @@ struct WasmBenchmarkResult {
     samples_ns: Vec<f64>,
 }
 
+#[derive(Clone, Copy)]
+enum ColorBenchmarkMode {
+    Scalar,
+    PooledDirect,
+    PooledNoop,
+    PooledCopy,
+}
+
+impl ColorBenchmarkMode {
+    fn parse(value: &str) -> Result<Self, JsValue> {
+        match value {
+            "scalar" => Ok(Self::Scalar),
+            "pooled_direct" => Ok(Self::PooledDirect),
+            "pooled_noop" => Ok(Self::PooledNoop),
+            "pooled_copy" => Ok(Self::PooledCopy),
+            _ => Err(JsValue::from_str(
+                "unsupported color benchmark execution mode",
+            )),
+        }
+    }
+}
+
 fn run_color_benchmark(
     source: ImageView<'_, Rgba8>,
     target: ColorSpaceF32,
-    parallelization_policy: bool,
+    mode: ColorBenchmarkMode,
     output: &mut [f32],
     config: WasmBenchmarkConfig,
     reporter: Option<&Function>,
@@ -484,7 +495,7 @@ fn run_color_benchmark(
     while warmup_elapsed < config.warm_up_time_ms
         || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
     {
-        let elapsed = run_color_batch(source, target, parallelization_policy, output, batch_size);
+        let elapsed = run_color_batch(source, target, mode, output, batch_size);
         warmup_batches += 1;
         warmup_iterations += u64::from(batch_size);
         warmup_elapsed = performance_now() - warmup_started;
@@ -516,7 +527,7 @@ fn run_color_benchmark(
     while samples_ns.len() < config.sample_size as usize
         && measurement_elapsed < config.measurement_time_ms
     {
-        let elapsed_ms = run_color_batch(source, target, parallelization_policy, output, batch_size);
+        let elapsed_ms = run_color_batch(source, target, mode, output, batch_size);
         let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
         samples_ns.push(sample_ns);
         total_iterations += u64::from(batch_size);
@@ -545,16 +556,78 @@ fn run_color_benchmark(
 fn run_color_batch(
     source: ImageView<'_, Rgba8>,
     target: ColorSpaceF32,
-    parallelization_policy: bool,
+    mode: ColorBenchmarkMode,
     output: &mut [f32],
     batch_size: u32,
 ) -> f64 {
     let started = performance_now();
     for _ in 0..batch_size {
-        rgba8_to_color_space_f32_with_policy_into(source, target, parallelization_policy, output);
+        match mode {
+            ColorBenchmarkMode::Scalar => {
+                rgba8_to_color_space_f32_with_policy_into(source, target, false, output)
+            }
+            ColorBenchmarkMode::PooledDirect => {
+                rgba8_to_color_space_f32_with_policy_into(source, target, true, output)
+            }
+            ColorBenchmarkMode::PooledNoop => benchmark_color_pooled_noop(source, output),
+            ColorBenchmarkMode::PooledCopy => benchmark_color_pooled_copy(source, output),
+        }
         black_box(output.as_ref());
     }
     performance_now() - started
+}
+
+fn benchmark_color_pooled_noop(source: ImageView<'_, Rgba8>, output: &mut [f32]) {
+    let dimensions = source.dimensions();
+    let row_len = dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
+    assert_eq!(output.len(), dimensions.storage_len::<Rgba8>().unwrap());
+
+    #[cfg(feature = "threads")]
+    {
+        use rayon::prelude::*;
+        output.par_chunks_mut(row_len).for_each(|row| {
+            black_box(row.as_ptr());
+        });
+    }
+
+    #[cfg(not(feature = "threads"))]
+    {
+        for row in output.chunks_mut(row_len) {
+            black_box(row.as_ptr());
+        }
+    }
+}
+
+fn benchmark_color_pooled_copy(source: ImageView<'_, Rgba8>, output: &mut [f32]) {
+    let dimensions = source.dimensions();
+    let row_len = dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
+    assert_eq!(output.len(), dimensions.storage_len::<Rgba8>().unwrap());
+
+    #[cfg(feature = "threads")]
+    {
+        use rayon::prelude::*;
+        output
+            .par_chunks_mut(row_len)
+            .enumerate()
+            .for_each(|(y, output_row)| {
+                let source_row = source.row(y as u32).expect("source row should exist");
+                copy_color_row_for_benchmark(source_row, output_row);
+            });
+    }
+
+    #[cfg(not(feature = "threads"))]
+    {
+        for (y, output_row) in output.chunks_mut(row_len).enumerate() {
+            let source_row = source.row(y as u32).expect("source row should exist");
+            copy_color_row_for_benchmark(source_row, output_row);
+        }
+    }
+}
+
+fn copy_color_row_for_benchmark(source_row: &[u8], output_row: &mut [f32]) {
+    for (output, source) in output_row.iter_mut().zip(source_row) {
+        *output = f32::from(*source);
+    }
 }
 
 fn run_resize_benchmark(
