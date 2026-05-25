@@ -257,6 +257,7 @@ pub fn benchmark_resize_rgba8(
 const CENTER_ANCHOR: &str = "center";
 const FIXED_SUPPORT: &str = "fixed";
 const SCALE_AWARE_SUPPORT: &str = "scale-aware";
+const PROTOTYPE_ROW_BAND_HEIGHT: usize = 32;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -554,28 +555,35 @@ fn resize_rows_pooled_direct_into(
     process_row: impl Fn(ImageViewMut<'_, Rgba8>, u32) + Sync,
 ) -> Result<(), JsValue> {
     let row_len = output_dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
-    let row_dimensions = ImageDimensions::new(output_dimensions.width(), 1)
-        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let band_len = row_len * PROTOTYPE_ROW_BAND_HEIGHT;
 
     #[cfg(feature = "threads")]
     {
         use rayon::prelude::*;
         output
-            .par_chunks_mut(row_len)
+            .par_chunks_mut(band_len)
             .enumerate()
-            .for_each(|(y, output_row)| {
-                let output_view = ImageViewMut::<Rgba8>::packed(output_row, row_dimensions)
-                    .expect("row output view should be valid");
-                process_row(output_view, y as u32);
+            .for_each(|(band_index, output_band)| {
+                let y_start = (band_index * PROTOTYPE_ROW_BAND_HEIGHT) as u32;
+                let band_height = (output_band.len() / row_len) as u32;
+                let band_dimensions = ImageDimensions::new(output_dimensions.width(), band_height)
+                    .expect("band dimensions should be valid");
+                let output_view = ImageViewMut::<Rgba8>::packed(output_band, band_dimensions)
+                    .expect("band output view should be valid");
+                process_row(output_view, y_start);
             });
     }
 
     #[cfg(not(feature = "threads"))]
     {
-        for (y, output_row) in output.chunks_mut(row_len).enumerate() {
-            let output_view = ImageViewMut::<Rgba8>::packed(output_row, row_dimensions)
+        for (band_index, output_band) in output.chunks_mut(band_len).enumerate() {
+            let y_start = (band_index * PROTOTYPE_ROW_BAND_HEIGHT) as u32;
+            let band_height = (output_band.len() / row_len) as u32;
+            let band_dimensions = ImageDimensions::new(output_dimensions.width(), band_height)
                 .map_err(|error| JsValue::from_str(&error.to_string()))?;
-            process_row(output_view, y as u32);
+            let output_view = ImageViewMut::<Rgba8>::packed(output_band, band_dimensions)
+                .map_err(|error| JsValue::from_str(&error.to_string()))?;
+            process_row(output_view, y_start);
         }
     }
 

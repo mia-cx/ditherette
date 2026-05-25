@@ -127,16 +127,22 @@ fn rgba8_to_color_space_f32_parallel_into(
 ) {
     let dimensions = source.dimensions();
     assert_eq!(output.len(), color_output_len(dimensions));
+    const PROTOTYPE_ROW_BAND_HEIGHT: usize = 32;
+
     let row_len = dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
+    let band_len = row_len * PROTOTYPE_ROW_BAND_HEIGHT;
 
     output
-        .par_chunks_mut(row_len)
+        .par_chunks_mut(band_len)
         .enumerate()
-        .for_each(|(y, output_row)| {
-            let source_row = source
-                .row(y as u32)
-                .expect("parallel source row should be in bounds");
-            materialize_color_row(source_row, target, output_row);
+        .for_each(|(band_index, output_band)| {
+            let y_start = band_index * PROTOTYPE_ROW_BAND_HEIGHT;
+            for (local_y, output_row) in output_band.chunks_mut(row_len).enumerate() {
+                let source_row = source
+                    .row((y_start + local_y) as u32)
+                    .expect("parallel source row should be in bounds");
+                materialize_color_row(source_row, target, output_row);
+            }
         });
 }
 
