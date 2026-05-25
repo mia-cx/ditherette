@@ -92,7 +92,8 @@ pub fn rgba8_to_color_space_f32_into(
     assert_eq!(output.len(), color_output_len(dimensions));
 
     let band = RowBand::new(0, dimensions.height()).expect("image height should be non-zero");
-    rgba8_to_color_space_f32_rows_into(source, target, band, output);
+    let tables = ColorTables::new();
+    rgba8_to_color_space_f32_rows_with_tables_into(source, target, band, output, &tables);
 }
 
 /// Materializes one absolute output row band into a full-image output buffer.
@@ -110,12 +111,27 @@ pub fn rgba8_to_color_space_f32_rows_into(
     assert_eq!(output.len(), color_output_len(dimensions));
     assert!(row_band.y_end() <= dimensions.height());
 
+    let tables = ColorTables::new();
+    rgba8_to_color_space_f32_rows_with_tables_into(source, target, row_band, output, &tables);
+}
+
+fn rgba8_to_color_space_f32_rows_with_tables_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    row_band: RowBand,
+    output: &mut [f32],
+    tables: &ColorTables,
+) {
+    let dimensions = source.dimensions();
+    assert_eq!(output.len(), color_output_len(dimensions));
+    assert!(row_band.y_end() <= dimensions.height());
+
     for y in row_band.y_start()..row_band.y_end() {
         let source_row = source.row(y).expect("source row should be in bounds");
         let output_y_start = y as usize * dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
         let output_row = &mut output
             [output_y_start..output_y_start + dimensions.width_usize() * Rgba8::CHANNEL_COUNT];
-        materialize_color_row(source_row, target, output_row);
+        materialize_color_row(source_row, target, output_row, tables);
     }
 }
 
@@ -131,6 +147,7 @@ fn rgba8_to_color_space_f32_parallel_into(
 
     let row_len = dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
     let band_len = row_len * PROTOTYPE_ROW_BAND_HEIGHT;
+    let tables = ColorTables::new();
 
     output
         .par_chunks_mut(band_len)
@@ -141,20 +158,51 @@ fn rgba8_to_color_space_f32_parallel_into(
                 let source_row = source
                     .row((y_start + local_y) as u32)
                     .expect("parallel source row should be in bounds");
-                materialize_color_row(source_row, target, output_row);
+                materialize_color_row(source_row, target, output_row, &tables);
             }
         });
 }
 
-fn materialize_color_row(source_row: &[u8], target: ColorSpaceF32, output_row: &mut [f32]) {
+struct ColorTables {
+    unit: [f32; 256],
+    linear: [f32; 256],
+}
+
+impl ColorTables {
+    fn new() -> Self {
+        let mut unit = [0.0; 256];
+        let mut linear = [0.0; 256];
+        for channel in 0..=255 {
+            let normalized = channel as f32 / 255.0;
+            unit[channel] = normalized;
+            linear[channel] = srgb_unit_to_linear(normalized);
+        }
+        Self { unit, linear }
+    }
+
+    fn unit(&self, channel: u8) -> f32 {
+        self.unit[channel as usize]
+    }
+
+    fn linear(&self, channel: u8) -> f32 {
+        self.linear[channel as usize]
+    }
+}
+
+fn materialize_color_row(
+    source_row: &[u8],
+    target: ColorSpaceF32,
+    output_row: &mut [f32],
+    tables: &ColorTables,
+) {
     for x in 0..source_row.len() / Rgba8::CHANNEL_COUNT {
         let source_start = x * Rgba8::CHANNEL_COUNT;
         let output_start = x * Rgba8::CHANNEL_COUNT;
         let r = source_row[source_start + Rgba8::R];
         let g = source_row[source_start + Rgba8::G];
         let b = source_row[source_start + Rgba8::B];
-        let alpha = srgb8_to_unit(source_row[source_start + Rgba8::A]);
-        let channels = convert_rgb(r, g, b, target);
+        let alpha = tables.unit(source_row[source_start + Rgba8::A]);
+        let channels = convert_rgb(r, g, b, target, tables);
 
         output_row[output_start] = channels[0];
         output_row[output_start + 1] = channels[1];
@@ -163,26 +211,22 @@ fn materialize_color_row(source_row: &[u8], target: ColorSpaceF32, output_row: &
     }
 }
 
-fn convert_rgb(r: u8, g: u8, b: u8, target: ColorSpaceF32) -> [f32; 3] {
+fn convert_rgb(r: u8, g: u8, b: u8, target: ColorSpaceF32, tables: &ColorTables) -> [f32; 3] {
     match target {
-        ColorSpaceF32::Srgb => [srgb8_to_unit(r), srgb8_to_unit(g), srgb8_to_unit(b)],
-        ColorSpaceF32::LinearSrgb => [srgb8_to_linear(r), srgb8_to_linear(g), srgb8_to_linear(b)],
-        ColorSpaceF32::Oklab => srgb8_to_oklab(r, g, b),
+        ColorSpaceF32::Srgb => [tables.unit(r), tables.unit(g), tables.unit(b)],
+        ColorSpaceF32::LinearSrgb => [tables.linear(r), tables.linear(g), tables.linear(b)],
+        ColorSpaceF32::Oklab => srgb8_to_oklab(r, g, b, tables),
         ColorSpaceF32::Oklch => {
-            let [l, a, b] = srgb8_to_oklab(r, g, b);
+            let [l, a, b] = srgb8_to_oklab(r, g, b, tables);
             cartesian_to_cylindrical(l, a, b)
         }
-        ColorSpaceF32::Cielab => srgb8_to_cielab(r, g, b),
+        ColorSpaceF32::Cielab => srgb8_to_cielab(r, g, b, tables),
         ColorSpaceF32::Cielch => {
-            let [l, a, b] = srgb8_to_cielab(r, g, b);
+            let [l, a, b] = srgb8_to_cielab(r, g, b, tables);
             cartesian_to_cylindrical(l, a, b)
         }
-        ColorSpaceF32::YCbCr => srgb8_to_ycbcr(r, g, b),
+        ColorSpaceF32::YCbCr => srgb8_to_ycbcr(r, g, b, tables),
     }
-}
-
-fn srgb8_to_unit(channel: u8) -> f32 {
-    channel as f32 / 255.0
 }
 
 fn srgb_unit_to_linear(channel: f32) -> f32 {
@@ -193,10 +237,6 @@ fn srgb_unit_to_linear(channel: f32) -> f32 {
     }
 }
 
-fn srgb8_to_linear(channel: u8) -> f32 {
-    srgb_unit_to_linear(srgb8_to_unit(channel))
-}
-
 fn linear_srgb_to_xyz(r: f32, g: f32, b: f32) -> [f32; 3] {
     [
         0.412_456_4 * r + 0.357_576_1 * g + 0.180_437_5 * b,
@@ -205,8 +245,8 @@ fn linear_srgb_to_xyz(r: f32, g: f32, b: f32) -> [f32; 3] {
     ]
 }
 
-fn srgb8_to_oklab(r: u8, g: u8, b: u8) -> [f32; 3] {
-    linear_srgb_to_oklab(srgb8_to_linear(r), srgb8_to_linear(g), srgb8_to_linear(b))
+fn srgb8_to_oklab(r: u8, g: u8, b: u8, tables: &ColorTables) -> [f32; 3] {
+    linear_srgb_to_oklab(tables.linear(r), tables.linear(g), tables.linear(b))
 }
 
 fn linear_srgb_to_oklab(r: f32, g: f32, b: f32) -> [f32; 3] {
@@ -225,8 +265,8 @@ fn linear_srgb_to_oklab(r: f32, g: f32, b: f32) -> [f32; 3] {
     ]
 }
 
-fn srgb8_to_cielab(r: u8, g: u8, b: u8) -> [f32; 3] {
-    let [x, y, z] = linear_srgb_to_xyz(srgb8_to_linear(r), srgb8_to_linear(g), srgb8_to_linear(b));
+fn srgb8_to_cielab(r: u8, g: u8, b: u8, tables: &ColorTables) -> [f32; 3] {
+    let [x, y, z] = linear_srgb_to_xyz(tables.linear(r), tables.linear(g), tables.linear(b));
     xyz_to_cielab(x, y, z)
 }
 
@@ -259,10 +299,10 @@ fn cartesian_to_cylindrical(lightness: f32, a: f32, b: f32) -> [f32; 3] {
     [lightness, chroma, hue]
 }
 
-fn srgb8_to_ycbcr(r: u8, g: u8, b: u8) -> [f32; 3] {
-    let r = srgb8_to_unit(r);
-    let g = srgb8_to_unit(g);
-    let b = srgb8_to_unit(b);
+fn srgb8_to_ycbcr(r: u8, g: u8, b: u8, tables: &ColorTables) -> [f32; 3] {
+    let r = tables.unit(r);
+    let g = tables.unit(g);
+    let b = tables.unit(b);
     let y = 0.299 * r + 0.587 * g + 0.114 * b;
     [y, 0.5 + (b - y) / 1.772, 0.5 + (r - y) / 1.402]
 }
