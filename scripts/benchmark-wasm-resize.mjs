@@ -783,8 +783,75 @@ function benchRunArtifact(options, browserResult) {
 			scales: options.scales,
 			lanes: options.lanes
 		},
-		results: browserResult.results
+		results: browserResult.results,
+		comparisons: candidateComparisons(browserResult.results)
 	};
+}
+
+function candidateComparisons(results) {
+	const byCaseAndKernel = new Map();
+	for (const result of results) {
+		const key = [result.id, result.filter, result.fixture.name].join('|');
+		const bucket = byCaseAndKernel.get(key) ?? { scalar: undefined, candidates: [] };
+		if (isScalarResult(result)) bucket.scalar = result;
+		else if (isCandidateResult(result)) bucket.candidates.push(result);
+		byCaseAndKernel.set(key, bucket);
+	}
+
+	const comparisons = [];
+	for (const bucket of byCaseAndKernel.values()) {
+		if (!bucket.scalar) continue;
+		for (const candidate of bucket.candidates)
+			comparisons.push(candidateComparison(bucket.scalar, candidate));
+	}
+	return comparisons;
+}
+
+function isScalarResult(result) {
+	return result.subject.endsWith(':scalar') || result.subject.endsWith(':fixed');
+}
+
+function isCandidateResult(result) {
+	return /:pooled_(direct|noop|copy|direct_per_band_plan)$/.test(result.subject);
+}
+
+function candidateComparison(scalar, candidate) {
+	const scalarMedianNs = scalar.statsNs.median;
+	const candidateMedianNs = candidate.statsNs.median;
+	const speedupMedian = scalarMedianNs / candidateMedianNs;
+	const scalarNoiseNs = scalar.statsNs.stdev;
+	const candidateNoiseNs = candidate.statsNs.stdev;
+	const pooledUpperNs = candidateMedianNs + candidateNoiseNs;
+	const scalarLowerNs = Math.max(0, scalarMedianNs - scalarNoiseNs);
+	const speedupLowerBound = scalarLowerNs / pooledUpperNs;
+	const observedNoise = Math.max(relativeNoise(scalar.statsNs), relativeNoise(candidate.statsNs));
+	const speedupMargin = speedupMedian - 1;
+	return {
+		caseId: candidate.id,
+		fixture: candidate.fixture.name,
+		filter: candidate.filter,
+		scalarSubject: scalar.subject,
+		candidateSubject: candidate.subject,
+		scalarMedianNs,
+		scalarStdevNs: scalar.statsNs.stdev,
+		scalarP05Ns: scalar.statsNs.p5,
+		scalarP95Ns: scalar.statsNs.p95,
+		candidateMedianNs,
+		candidateStdevNs: candidate.statsNs.stdev,
+		candidateP05Ns: candidate.statsNs.p5,
+		candidateP95Ns: candidate.statsNs.p95,
+		speedupMedian,
+		speedupLowerBound,
+		iterationsPerSample: candidate.iterationsPerSample,
+		acceptedWin:
+			speedupMedian > 1 &&
+			speedupLowerBound > 1 &&
+			speedupMargin > Math.max(0.03, 2 * observedNoise)
+	};
+}
+
+function relativeNoise(stats) {
+	return stats.mean > 0 ? stats.stdev / stats.mean : Infinity;
 }
 
 function runId(createdAtUnix) {
