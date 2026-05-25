@@ -93,7 +93,7 @@ live_stats = false
 [profiles.color-smoke]
 command = "perf"
 domain = "color"
-subjects = ["wasm:color:oklab-f32:scalar", "wasm:color:oklab-f32:pooled_direct"]
+subjects = ["wasm:color:oklab-f32:scalar", "wasm:color:oklab-f32:pooled_direct", "wasm:color:oklab-f32:pooled_noop", "wasm:color:oklab-f32:pooled_copy"]
 fixtures = ["Celeste_box_art.png"]
 scales = [1]
 lanes = ["decoded-rgba"]
@@ -109,6 +109,8 @@ domain = "color"
 subjects = [
   "wasm:color:linear-srgb-f32:scalar",
   "wasm:color:linear-srgb-f32:pooled_direct",
+  "wasm:color:linear-srgb-f32:pooled_noop",
+  "wasm:color:linear-srgb-f32:pooled_copy",
   "wasm:color:oklab-f32:scalar",
   "wasm:color:oklab-f32:pooled_direct",
   "wasm:color:cielab-f32:scalar",

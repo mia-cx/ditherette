@@ -68,6 +68,29 @@ fn color_benchmark_export_returns_samples_json() {
 }
 
 #[test]
+fn color_benchmark_accepts_diagnostic_modes() {
+    let source = [255, 0, 0, 255, 0, 255, 0, 255];
+    for mode in ["pooled_noop", "pooled_copy"] {
+        let output = benchmark_color_space(
+            &source,
+            2,
+            1,
+            "oklab-f32",
+            mode,
+            1,
+            0.01,
+            0.01,
+            1,
+            0.01,
+            false,
+            None,
+        )
+        .expect("diagnostic color benchmark should succeed");
+        assert!(output.contains("\"samplesNs\":"));
+    }
+}
+
+#[test]
 fn benchmark_export_returns_samples_json() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let output = benchmark_resize_rgba8(
