@@ -4,7 +4,10 @@
 //! color buffers used by pipeline caches. The first three channels are the
 //! requested color space; alpha is preserved as a normalized `0..=1` f32 value.
 
-use crate::image::{ImageDimensions, ImageFormat, ImageView, Rgba8};
+use crate::{
+    image::{ImageDimensions, ImageFormat, ImageView, Rgba8},
+    prod::tiling::RowBand,
+};
 
 /// Supported f32 color-space materializations for RGBA8 input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,7 +64,7 @@ fn color_output_len(dimensions: ImageDimensions) -> usize {
     dimensions.pixel_count().expect("valid dimensions") * Rgba8::CHANNEL_COUNT
 }
 
-fn rgba8_to_color_space_f32_into(
+pub fn rgba8_to_color_space_f32_into(
     source: ImageView<'_, Rgba8>,
     target: ColorSpaceF32,
     output: &mut [f32],
@@ -69,7 +72,26 @@ fn rgba8_to_color_space_f32_into(
     let dimensions = source.dimensions();
     assert_eq!(output.len(), color_output_len(dimensions));
 
-    for y in 0..dimensions.height() {
+    let band = RowBand::new(0, dimensions.height()).expect("image height should be non-zero");
+    rgba8_to_color_space_f32_rows_into(source, target, band, output);
+}
+
+/// Materializes one absolute output row band into a full-image output buffer.
+///
+/// The band uses full-image row coordinates and writes only those rows. This is
+/// the direct-write color conversion contract used by the Wasm-thread
+/// prototype; callers own splitting row bands into non-overlapping assignments.
+pub fn rgba8_to_color_space_f32_rows_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    row_band: RowBand,
+    output: &mut [f32],
+) {
+    let dimensions = source.dimensions();
+    assert_eq!(output.len(), color_output_len(dimensions));
+    assert!(row_band.y_end() <= dimensions.height());
+
+    for y in row_band.y_start()..row_band.y_end() {
         let source_row = source.row(y).expect("source row should be in bounds");
         let output_y_start = y as usize * dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
         let output_row = &mut output
