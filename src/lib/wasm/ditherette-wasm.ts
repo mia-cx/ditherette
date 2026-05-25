@@ -17,7 +17,7 @@ export type WasmColorSpaceF32 =
 	| 'cielch-f32'
 	| 'ycbcr-f32';
 
-export type ResizeEngine = 'typescript' | 'wasm scalar';
+export type ResizeEngine = 'typescript' | 'wasm scalar' | 'wasm threaded';
 
 type DitheretteWasmModule = {
 	default: (moduleOrPath?: unknown) => Promise<unknown>;
@@ -147,7 +147,7 @@ export async function resizeImageDataWithOptionalWasm(
 	crop?: CropRect
 ): Promise<ResizeResult> {
 	const wasmImage = await tryResizeImageDataWithWasm(source, width, height, mode, crop);
-	if (wasmImage) return { image: wasmImage, engine: 'wasm scalar' };
+	if (wasmImage) return wasmImage;
 	return { image: resizeImageData(source, width, height, mode, crop), engine: 'typescript' };
 }
 
@@ -157,13 +157,14 @@ export async function tryResizeImageDataWithWasm(
 	height: number,
 	mode: ResizeId,
 	crop?: CropRect
-): Promise<ImageData | undefined> {
+): Promise<{ image: ImageData; engine: Exclude<ResizeEngine, 'typescript'> } | undefined> {
 	if (!wasmResizeEnabled() || !canResizeWholeImageWithWasm(source, crop)) return undefined;
 
 	const wasm = await loadDitheretteWasm();
 	if (!wasm) return undefined;
 
 	const { filter, supportPolicy } = wasmResizeRequest(mode);
+	const threaded = wasmThreadsEnabled() && wasmThreadsAvailable();
 	const output = wasm.resizeRgba8(
 		imageDataBytes(source),
 		source.width,
@@ -176,7 +177,10 @@ export async function tryResizeImageDataWithWasm(
 		true
 	);
 
-	return new ImageData(new Uint8ClampedArray(output), width, height);
+	return {
+		image: new ImageData(new Uint8ClampedArray(output), width, height),
+		engine: threaded ? 'wasm threaded' : 'wasm scalar'
+	};
 }
 
 function imageDataBytes(source: ImageData) {
