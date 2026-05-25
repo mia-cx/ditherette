@@ -172,6 +172,30 @@ impl MeasurementConfig {
         self.process_priority
     }
 
+    pub(crate) fn browser_wasm(
+        sample_size: usize,
+        measurement_time: Duration,
+        warmup_iterations: Option<usize>,
+        warmup_time: Duration,
+        target_sample: Duration,
+        live_stats: bool,
+    ) -> Self {
+        Self {
+            sample_size,
+            measurement_time,
+            warmup_iterations,
+            warmup_time,
+            target_sample,
+            sample_mode: SampleMode::Throughput,
+            cache_state: CacheState::Warm,
+            cache_scrub_size: 0,
+            inter_sample_delay: Duration::ZERO,
+            live_stats,
+            preheat_time: Duration::ZERO,
+            process_priority: ProcessPriority::Normal,
+        }
+    }
+
     pub(crate) fn artifact(&self) -> MeasurementArtifact {
         MeasurementArtifact {
             sample_size: self.sample_size,

@@ -45,16 +45,23 @@ try {
 		if (message.type() !== 'debug') return;
 		const text = message.text();
 		if (text.startsWith('bench-progress ')) {
-			writeStatusLine(text.slice('bench-progress '.length));
+			if (!options.jsonlEvents) writeStatusLine(text.slice('bench-progress '.length));
 			return;
 		}
 		if (text.startsWith('bench-event ')) {
-			handleBenchEvent(JSON.parse(text.slice('bench-event '.length)), options);
+			const event = JSON.parse(text.slice('bench-event '.length));
+			if (options.jsonlEvents) {
+				console.log(JSON.stringify(event));
+				return;
+			}
+			handleBenchEvent(event, options);
 		}
 	});
 	await page.goto(server.url, { waitUntil: 'load' });
 
 	const browserResult = await page.evaluate(async (config) => globalThis.runResizeBench(config), {
+		domain: options.domain,
+		profile: options.profile,
 		fixtures: fixtures.map((fixture) => ({
 			name: fixture.name,
 			url: `/fixtures/${encodeURIComponent(fixture.name)}`
@@ -71,14 +78,21 @@ try {
 	});
 	const artifact = benchRunArtifact(options, browserResult);
 
-	await mkdir(outDir, { recursive: true });
-	const jsonPath = path.join(outDir, `${sanitizePathComponent(options.profile ?? 'ad-hoc')}.json`);
-	await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
+	if (options.jsonlEvents) {
+		console.log(JSON.stringify({ kind: 'complete', artifact }));
+	} else {
+		await mkdir(outDir, { recursive: true });
+		const jsonPath = path.join(
+			outDir,
+			`${sanitizePathComponent(options.profile ?? 'ad-hoc')}.json`
+		);
+		await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
 
-	clearStatusLine();
-	if (!runHeaderPrinted) console.log(renderPerfStart(artifact));
-	console.log(renderSummary(artifact));
-	console.log(`\nWrote ${path.relative(root, jsonPath)}`);
+		clearStatusLine();
+		if (!runHeaderPrinted) console.log(renderPerfStart(artifact));
+		console.log(renderSummary(artifact));
+		console.log(`\nWrote ${path.relative(root, jsonPath)}`);
+	}
 } finally {
 	clearStatusLine();
 	await browser.close();
@@ -290,10 +304,25 @@ globalThis.runResizeBench = async function runResizeBench(config) {
 	for (const fixture of config.fixtures) decodedFixtures.push(await decodeFixture(fixture));
 	console.debug('bench-event ' + JSON.stringify({
 		kind: 'start',
+		domain: config.domain,
+		profile: config.profile,
+		subjects: config.subjects.map((subject) => subject.id),
+		scales: config.scales,
+		lanes: config.lanes,
+		measurement: {
+			sampleSize: config.sampleSize,
+			measurementTimeMs: config.measurementTimeMs,
+			warmUpTimeMs: config.warmUpTimeMs,
+			warmUpIterations: config.warmUpIterations,
+			targetSampleTimeMs: config.targetSampleTimeMs,
+			liveStats: config.liveStats,
+			sampleMode: 'throughput'
+		},
 		fixtures: decodedFixtures.map((fixture) => ({
 			name: fixture.name,
 			width: fixture.sourceWidth,
 			height: fixture.sourceHeight,
+			kind: 'browser-image',
 			decodeNs: millisecondsToNanoseconds(fixture.decodeMs),
 			normalizeNs: millisecondsToNanoseconds(fixture.normalizeMs)
 		}))
@@ -877,7 +906,8 @@ async function resolveOptions(rawArgs) {
 			1
 		),
 		liveStats: booleanValue(merged.live_stats ?? merged.liveStats, false),
-		outputDir: stringValue(merged.output_dir ?? merged.outputDir ?? merged.out, undefined)
+		outputDir: stringValue(merged.output_dir ?? merged.outputDir ?? merged.out, undefined),
+		jsonlEvents: parsed.jsonlEvents
 	};
 }
 
@@ -886,6 +916,7 @@ function parseArgs(rawArgs) {
 		runProfile: undefined,
 		profile: undefined,
 		configPath: undefined,
+		jsonlEvents: false,
 		overrides: {}
 	};
 	const args = [...rawArgs];
@@ -905,6 +936,9 @@ function parseArgs(rawArgs) {
 		};
 
 		switch (arg) {
+			case '--jsonl-events':
+				parsed.jsonlEvents = true;
+				break;
 			case '--profile':
 				parsed.profile = nextValue();
 				break;
@@ -1247,6 +1281,7 @@ Case flags:
   --lanes LANES              browser-decode-rgba,decoded-rgba.
   --output-dir DIR           Output directory. Default: benchmark-results/wasm-resize-<timestamp>.
   --out DIR                  Alias for --output-dir.
+  --jsonl-events             Internal transport mode for ditherette-bench.
 
 Examples:
   pnpm bench:resize:wasm -- run nearest-smoke
