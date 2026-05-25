@@ -754,10 +754,18 @@ fn run_color_benchmark(
     let mut warmup_elapsed = 0.0;
     let mut warmup_batches = 0;
     let mut warmup_iterations = 0u64;
+    let mut best_batch_size = batch_size;
+    let mut best_batch_elapsed = f64::INFINITY;
     while warmup_elapsed < config.warm_up_time_ms
         || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
     {
         let elapsed = run_color_batch(source, target, mode, output, batch_size);
+        if (elapsed - config.target_sample_time_ms).abs()
+            < (best_batch_elapsed - config.target_sample_time_ms).abs()
+        {
+            best_batch_size = batch_size;
+            best_batch_elapsed = elapsed;
+        }
         warmup_batches += 1;
         warmup_iterations += u64::from(batch_size);
         warmup_elapsed = performance_now() - warmup_started;
@@ -768,17 +776,18 @@ fn run_color_benchmark(
             ),
         )?;
 
-        if elapsed < config.target_sample_time_ms && batch_size < MAX_BATCH_SIZE {
-            let multiplier = (config.target_sample_time_ms / elapsed.max(0.001)).ceil() as u32;
-            batch_size = batch_size
-                .saturating_mul(multiplier.max(2))
-                .min(MAX_BATCH_SIZE);
-        }
+        batch_size = calibrated_batch_size(
+            batch_size,
+            elapsed,
+            config.target_sample_time_ms,
+            MAX_BATCH_SIZE,
+        );
     }
+    batch_size = best_batch_size;
     report_event(
         reporter,
         &format!(
-            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}"
+            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}"
         ),
     )?;
 
@@ -892,6 +901,19 @@ fn copy_color_row_for_benchmark(source_row: &[u8], output_row: &mut [f32]) {
     }
 }
 
+fn calibrated_batch_size(
+    batch_size: u32,
+    elapsed_ms: f64,
+    target_ms: f64,
+    max_batch_size: u32,
+) -> u32 {
+    if !elapsed_ms.is_finite() || elapsed_ms <= 0.0 {
+        return batch_size.saturating_mul(2).clamp(1, max_batch_size);
+    }
+    let next = (f64::from(batch_size) * target_ms / elapsed_ms).round() as u32;
+    next.clamp(1, max_batch_size)
+}
+
 fn run_resize_benchmark(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
@@ -908,6 +930,8 @@ fn run_resize_benchmark(
     let mut warmup_elapsed = 0.0;
     let mut warmup_batches = 0;
     let mut warmup_iterations = 0u64;
+    let mut best_batch_size = batch_size;
+    let mut best_batch_elapsed = f64::INFINITY;
     while warmup_elapsed < config.warm_up_time_ms
         || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
     {
@@ -919,6 +943,12 @@ fn run_resize_benchmark(
             output,
             batch_size,
         )?;
+        if (elapsed - config.target_sample_time_ms).abs()
+            < (best_batch_elapsed - config.target_sample_time_ms).abs()
+        {
+            best_batch_size = batch_size;
+            best_batch_elapsed = elapsed;
+        }
         warmup_batches += 1;
         warmup_iterations += u64::from(batch_size);
         warmup_elapsed = performance_now() - warmup_started;
@@ -929,17 +959,18 @@ fn run_resize_benchmark(
             ),
         )?;
 
-        if elapsed < config.target_sample_time_ms && batch_size < MAX_BATCH_SIZE {
-            let multiplier = (config.target_sample_time_ms / elapsed.max(0.001)).ceil() as u32;
-            batch_size = batch_size
-                .saturating_mul(multiplier.max(2))
-                .min(MAX_BATCH_SIZE);
-        }
+        batch_size = calibrated_batch_size(
+            batch_size,
+            elapsed,
+            config.target_sample_time_ms,
+            MAX_BATCH_SIZE,
+        );
     }
+    batch_size = best_batch_size;
     report_event(
         reporter,
         &format!(
-            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}"
+            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}"
         ),
     )?;
 

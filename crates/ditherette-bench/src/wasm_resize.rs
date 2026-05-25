@@ -258,12 +258,12 @@ impl WasmRunState {
             WasmEvent::Start(event) => self.start(event),
             WasmEvent::WarmupBatch(event) => {
                 self.logger(&event.subject, &event.case_id)?
-                    .warmup_batch(event.batch_size, duration_ms(event.elapsed_ms));
+                    .warmup_batch(event.batch_size, event.batch_duration());
                 Ok(())
             }
             WasmEvent::WarmupFinished(event) => {
                 self.logger(&event.subject, &event.case_id)?
-                    .warmup_finished(event.batch_size, duration_ms(event.elapsed_ms));
+                    .warmup_finished(event.batch_size, event.batch_duration());
                 Ok(())
             }
             WasmEvent::MeasurementProgress(event) => {
@@ -442,7 +442,15 @@ struct ProgressEvent {
     subject: String,
     case_id: String,
     batch_size: usize,
+    #[serde(default)]
+    batch_elapsed_ms: Option<f64>,
     elapsed_ms: f64,
+}
+
+impl ProgressEvent {
+    fn batch_duration(&self) -> Duration {
+        duration_ms(self.batch_elapsed_ms.unwrap_or(self.elapsed_ms))
+    }
 }
 
 #[derive(Debug, Deserialize)]
