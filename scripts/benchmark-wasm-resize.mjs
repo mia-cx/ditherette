@@ -847,11 +847,13 @@ function resizeSubjectConfig(id, family, variant) {
 function resizeSupportPolicyForVariant(variant) {
 	switch (variant) {
 		case 'pooled_direct_per_band_plan':
-			return 'fixed+per-band-plan';
+			return 'fixed+pooled-direct+per-band-plan';
 		case 'pooled_noop':
 			return 'fixed+pooled-noop';
 		case 'pooled_copy':
 			return 'fixed+pooled-copy';
+		case 'pooled_direct':
+			return 'fixed+pooled-direct';
 		default:
 			return 'fixed';
 	}

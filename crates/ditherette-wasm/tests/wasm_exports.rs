@@ -28,8 +28,18 @@ fn resize_export_runs_pooled_direct_nearest() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let scalar = resize_rgba8(&source, 2, 1, 4, 2, "nearest", "center", "fixed", false)
         .expect("scalar resize should succeed");
-    let pooled = resize_rgba8(&source, 2, 1, 4, 2, "nearest", "center", "fixed", true)
-        .expect("pooled resize should succeed");
+    let pooled = resize_rgba8(
+        &source,
+        2,
+        1,
+        4,
+        2,
+        "nearest",
+        "center",
+        "fixed+pooled-direct",
+        true,
+    )
+    .expect("pooled resize should succeed");
 
     assert_eq!(pooled, scalar);
 }
@@ -37,13 +47,22 @@ fn resize_export_runs_pooled_direct_nearest() {
 #[test]
 fn resize_export_runs_pooled_direct_lanczos() {
     let source = [
-        255, 0, 0, 255, 0, 255, 0, 255,
-        0, 0, 255, 255, 255, 255, 255, 255,
+        255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
     ];
     let scalar = resize_rgba8(&source, 2, 2, 3, 3, "lanczos3", "center", "fixed", false)
         .expect("scalar resize should succeed");
-    let pooled = resize_rgba8(&source, 2, 2, 3, 3, "lanczos3", "center", "fixed", true)
-        .expect("pooled resize should succeed");
+    let pooled = resize_rgba8(
+        &source,
+        2,
+        2,
+        3,
+        3,
+        "lanczos3",
+        "center",
+        "fixed+pooled-direct",
+        true,
+    )
+    .expect("pooled resize should succeed");
 
     assert_eq!(pooled, scalar);
 }
@@ -51,8 +70,7 @@ fn resize_export_runs_pooled_direct_lanczos() {
 #[test]
 fn resize_export_runs_per_band_plan_lanczos() {
     let source = [
-        255, 0, 0, 255, 0, 255, 0, 255,
-        0, 0, 255, 255, 255, 255, 255, 255,
+        255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255,
     ];
     let scalar = resize_rgba8(&source, 2, 2, 3, 3, "lanczos3", "center", "fixed", false)
         .expect("scalar resize should succeed");
@@ -64,7 +82,7 @@ fn resize_export_runs_per_band_plan_lanczos() {
         3,
         "lanczos3",
         "center",
-        "fixed+per-band-plan",
+        "fixed+pooled-direct+per-band-plan",
         true,
     )
     .expect("per-band plan resize should succeed");
