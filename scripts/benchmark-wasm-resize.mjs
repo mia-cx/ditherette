@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = parseArgs(process.argv.slice(2));
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const outDir = path.resolve(root, args.out ?? `benchmark-results/wasm-resize-${timestamp}`);
-const pkgDir = path.join(root, 'crates/ditherette-wasm/pkg');
+const pkgDir = path.join(root, 'static/wasm/ditherette-wasm');
 const resizeScales = [2, 0.95, 0.75, 0.5, 0.25, 0.125];
 const significantNumberFormatter = new Intl.NumberFormat('en-US', {
 	maximumSignificantDigits: 4,
@@ -163,16 +163,27 @@ function benchmarkHtml() {
 }
 
 function benchmarkBrowserModule() {
-	return String.raw`import init, {
-	resize_rgba_nearest_into,
-	resize_rgba_nearest_reference
-} from '/pkg/ditherette_wasm.js';
+	return String.raw`import init, { resizeRgba8 } from '/pkg/ditherette_wasm.js';
 
 const RGBA_CHANNEL_COUNT = 4;
 
 const resizeVariants = [
-	{ id: 'reference', kind: 'allocating', resize: resize_rgba_nearest_reference },
-	{ id: 'baseline', kind: 'reused-output', resizeInto: resize_rgba_nearest_into }
+	{
+		id: 'baseline',
+		kind: 'allocating',
+		resize: (sourceRgba, sourceWidth, sourceHeight, outputWidth, outputHeight) =>
+			resizeRgba8(
+				sourceRgba,
+				sourceWidth,
+				sourceHeight,
+				outputWidth,
+				outputHeight,
+				'nearest',
+				'center',
+				'fixed',
+				true
+			)
+	}
 ];
 
 globalThis.runResizeBench = async function runResizeBench(config) {

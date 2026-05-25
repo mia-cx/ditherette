@@ -54,5 +54,8 @@ vite.config.ts.timestamp-*
 .worktrees/
 .references/
 
+# Generated Wasm package served by Vite/SvelteKit
+static/wasm/
+
 # Benchmark artifacts
 benchmark-results/

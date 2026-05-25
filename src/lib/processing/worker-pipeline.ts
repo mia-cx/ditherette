@@ -1,5 +1,6 @@
 import { resizeImageData } from '$lib/processing/resize';
 import { quantizeImageWithRowWorkers } from '$lib/processing/quantize-row-workers';
+import { resizeImageDataWithOptionalWasm } from '$lib/wasm/ditherette-wasm';
 import {
 	quantizeImage,
 	type PaletteVectorSpace,
@@ -213,13 +214,15 @@ export class ProcessorWorkerPipeline {
 		} else {
 			progress('Resizing', PROGRESS.resizing);
 			const resizeStart = performance.now();
-			resized = resizeImageData(
+			const resizeResult = await resizeImageDataWithOptionalWasm(
 				source,
 				size.width,
 				size.height,
 				settings.output.resize,
 				settings.output.crop
 			);
+			resized = resizeResult.image;
+			timings.add(`resize engine ${resizeResult.engine}`, 0);
 			const resizeMs = timings.mark('resize compute', resizeStart);
 			const resizeCacheWriteStart = performance.now();
 			this.#branchCache.setResized(branchKey, resized, resizeMs);
