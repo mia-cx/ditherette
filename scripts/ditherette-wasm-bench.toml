@@ -1,0 +1,52 @@
+# Ditherette browser/Wasm benchmark defaults.
+#
+# This intentionally mirrors crates/ditherette-bench/ditherette-bench.toml:
+# built-in defaults < [defaults] < [profiles.NAME] < CLI flags.
+
+[defaults]
+command = "perf"
+domain = "resize"
+fixtures = ["Celeste_box_art.png"]
+subjects = ["wasm:resize:nearest:scalar"]
+scales = [2, 0.95, 0.75, 0.5, 0.25, 0.125]
+lanes = ["browser-decode-rgba", "decoded-rgba"]
+sample_size = 5
+warm_up_iterations = 2
+
+[profiles.nearest]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:nearest:scalar"]
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+sample_size = 20
+warm_up_iterations = 5
+
+[profiles.nearest-smoke]
+command = "perf"
+domain = "resize"
+subjects = ["wasm:resize:nearest:scalar"]
+fixtures = ["Celeste_box_art.png"]
+scales = [0.5]
+lanes = ["decoded-rgba"]
+sample_size = 1
+warm_up_iterations = 1
+
+[profiles.resize-all-smoke]
+command = "perf"
+domain = "resize"
+subjects = [
+  "wasm:resize:nearest:scalar",
+  "wasm:resize:area:scalar",
+  "wasm:resize:bilinear:scalar",
+  "wasm:resize:bicubic:fixed",
+  "wasm:resize:bicubic:scale-aware",
+  "wasm:resize:lanczos2:fixed",
+  "wasm:resize:lanczos2:scale-aware",
+  "wasm:resize:lanczos3:fixed",
+  "wasm:resize:lanczos3:scale-aware"
+]
+fixtures = ["Celeste_box_art.png"]
+scales = [0.5]
+lanes = ["decoded-rgba"]
+sample_size = 1
+warm_up_iterations = 1
