@@ -56,7 +56,8 @@ try {
 		scales: options.scales,
 		lanes: options.lanes,
 		sampleSize: options.sampleSize,
-		warmUpIterations: options.warmUpIterations
+		warmUpIterations: options.warmUpIterations,
+		targetSampleTimeMs: options.targetSampleTimeMs
 	});
 	const artifact = benchRunArtifact(options, browserResult);
 
@@ -193,7 +194,7 @@ function benchmarkHtml() {
 }
 
 function benchmarkBrowserModule() {
-	return String.raw`import init, { resizeRgba8 } from '/pkg/ditherette_wasm.js';
+	return String.raw`import init, { benchmarkResizeRgba8 } from '/pkg/ditherette_wasm.js';
 
 const RGBA_CHANNEL_COUNT = 4;
 
@@ -308,51 +309,26 @@ function makeScaleCases(decodedFixture, scales, lanes) {
 
 async function measureResizeSubject(benchmarkCase, subject, config) {
 	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT;
-
-	for (let index = 0; index < config.warmUpIterations; index += 1) {
-		resizeSubject(benchmarkCase, subject);
-	}
-
-	const timingsMs = [];
-	const checksums = [];
-	let outputByteLength = 0;
-
-	for (let index = 0; index < config.sampleSize; index += 1) {
-		const started = performance.now();
-		const outputRgba = resizeSubject(benchmarkCase, subject);
-		const wasmMs = performance.now() - started;
-
-		outputByteLength = outputRgba.byteLength;
-		timingsMs.push(wasmMs);
-		checksums.push(checksumBytes(outputRgba));
-	}
-
-	return resizeResult(benchmarkCase, subject, timingsMs, checksums, outputByteLength, expectedByteLength);
-}
-
-function resizeSubject(benchmarkCase, subject) {
-	return resizeRgba8(
-		benchmarkCase.sourceRgba,
-		benchmarkCase.sourceWidth,
-		benchmarkCase.sourceHeight,
-		benchmarkCase.outputWidth,
-		benchmarkCase.outputHeight,
-		subject.filter,
-		subject.anchor,
-		subject.supportPolicy,
-		subject.parallelizationPolicy
-	);
-}
-
-function resizeResult(benchmarkCase, subject, timingsMs, checksums, outputByteLength, expectedByteLength) {
 	const resultId = benchmarkCase.id + '-' + subject.id;
+	const wasmResult = JSON.parse(
+		benchmarkResizeRgba8(
+			benchmarkCase.sourceRgba,
+			benchmarkCase.sourceWidth,
+			benchmarkCase.sourceHeight,
+			benchmarkCase.outputWidth,
+			benchmarkCase.outputHeight,
+			subject.filter,
+			subject.anchor,
+			subject.supportPolicy,
+			subject.parallelizationPolicy,
+			config.sampleSize,
+			config.warmUpIterations,
+			config.targetSampleTimeMs
+		)
+	);
 
-	if (outputByteLength !== expectedByteLength) {
-		throw new Error(resultId + ' produced ' + outputByteLength + ' bytes; expected ' + expectedByteLength);
-	}
-
-	if (new Set(checksums).size !== 1) {
-		throw new Error(resultId + ' produced unstable checksums: ' + checksums.join(', '));
+	if (wasmResult.outputByteLength !== expectedByteLength) {
+		throw new Error(resultId + ' produced ' + wasmResult.outputByteLength + ' bytes; expected ' + expectedByteLength);
 	}
 
 	return {
@@ -364,11 +340,14 @@ function resizeResult(benchmarkCase, subject, timingsMs, checksums, outputByteLe
 		lane: benchmarkCase.lane,
 		scale: benchmarkCase.scale,
 		source: { width: benchmarkCase.sourceWidth, height: benchmarkCase.sourceHeight },
-		output: { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight, byteLength: outputByteLength },
+		output: { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight, byteLength: wasmResult.outputByteLength },
 		decodeNs: millisecondsToNanoseconds(benchmarkCase.decodeMs),
 		normalizeNs: millisecondsToNanoseconds(benchmarkCase.normalizeMs),
-		statsNs: summarizeTimings(timingsMs),
-		checksum: checksums[0]
+		statsNs: summarizeSamplesNs(wasmResult.samplesNs),
+		checksum: wasmResult.checksum,
+		iterationsPerSample: wasmResult.batchSize,
+		totalIterations: wasmResult.totalIterations,
+		warmupIterations: config.warmUpIterations
 	};
 }
 
@@ -391,26 +370,30 @@ function scaleLabel(scale) {
 	return Math.round(scale * 1000).toString().padStart(3, '0') + 'x';
 }
 
-function summarizeTimings(timingsMs) {
-	const sorted = [...timingsMs].sort((left, right) => left - right);
+function summarizeSamplesNs(samplesNs) {
+	const sorted = [...samplesNs].sort((left, right) => left - right);
 	const total = sorted.reduce((sum, value) => sum + value, 0);
+	const mean = total / sorted.length;
+	const variance = sorted.reduce((sum, value) => sum + (value - mean) ** 2, 0) / sorted.length;
 
 	return {
-		mean: millisecondsToNanoseconds(total / sorted.length),
-		median: millisecondsToNanoseconds(percentile(sorted, 50)),
-		mode: modeNs(timingsMs),
-		min: millisecondsToNanoseconds(sorted[0]),
-		p1: millisecondsToNanoseconds(percentile(sorted, 1)),
-		p2: millisecondsToNanoseconds(percentile(sorted, 2)),
-		p5: millisecondsToNanoseconds(percentile(sorted, 5)),
-		p25: millisecondsToNanoseconds(percentile(sorted, 25)),
-		p50: millisecondsToNanoseconds(percentile(sorted, 50)),
-		p75: millisecondsToNanoseconds(percentile(sorted, 75)),
-		p95: millisecondsToNanoseconds(percentile(sorted, 95)),
-		p98: millisecondsToNanoseconds(percentile(sorted, 98)),
-		p99: millisecondsToNanoseconds(percentile(sorted, 99)),
-		max: millisecondsToNanoseconds(sorted[sorted.length - 1]),
-		samples: timingsMs.map(millisecondsToNanoseconds)
+		mean,
+		median: percentile(sorted, 50),
+		mode: modeNs(samplesNs),
+		stdev: Math.sqrt(variance),
+		min: sorted[0],
+		p1: percentile(sorted, 1),
+		p2: percentile(sorted, 2),
+		p5: percentile(sorted, 5),
+		p25: percentile(sorted, 25),
+		p50: percentile(sorted, 50),
+		p75: percentile(sorted, 75),
+		p90: percentile(sorted, 90),
+		p95: percentile(sorted, 95),
+		p98: percentile(sorted, 98),
+		p99: percentile(sorted, 99),
+		max: sorted[sorted.length - 1],
+		samples: samplesNs
 	};
 }
 
@@ -425,15 +408,15 @@ function percentile(sortedTimingsMs, percentileValue) {
 	return sortedTimingsMs[lowerIndex] * (1 - weight) + sortedTimingsMs[upperIndex] * weight;
 }
 
-function modeNs(timingsMs) {
+function modeNs(samplesNs) {
 	const counts = new Map();
 
-	for (const timing of timingsMs) {
-		const nanoseconds = millisecondsToNanoseconds(timing);
+	for (const sample of samplesNs) {
+		const nanoseconds = Math.round(sample);
 		counts.set(nanoseconds, (counts.get(nanoseconds) ?? 0) + 1);
 	}
 
-	let mode = millisecondsToNanoseconds(timingsMs[0]);
+	let mode = Math.round(samplesNs[0]);
 	let modeCount = 0;
 
 	for (const [timing, count] of counts) {
@@ -484,7 +467,8 @@ function benchRunArtifact(options, browserResult) {
 		measurement: {
 			sampleSize: options.sampleSize,
 			warmUpIterations: options.warmUpIterations,
-			sampleMode: 'interactive'
+			targetSampleTimeMs: options.targetSampleTimeMs,
+			sampleMode: 'throughput'
 		},
 		config: {
 			subjects: options.subjects,
@@ -529,47 +513,81 @@ function subjectConfig(id) {
 }
 
 function formatResultTable(run) {
-	const baselines = baselineResultsByCase(run.results);
-	const rows = run.results.map((entry) => {
-		const baseline = baselines.get(`${entry.fixture.name}:${entry.id}`);
-
-		return {
-			fixture: entry.fixture.name,
-			case: entry.id,
-			subject: entry.subject,
-			lane: entry.lane,
-			scale: `${entry.scale}×`,
-			source: `${entry.source.width}×${entry.source.height}px`,
-			output: `${entry.output.width}×${entry.output.height}px`,
-			decode: formatDuration(entry.decodeNs),
-			normalize: formatDuration(entry.normalizeNs),
-			mean: formatDurationDelta(entry.statsNs.mean, baseline?.statsNs.mean),
-			median: formatDurationDelta(entry.statsNs.median, baseline?.statsNs.median),
-			mode: formatDurationDelta(entry.statsNs.mode, baseline?.statsNs.mode),
-			min: formatDurationDelta(entry.statsNs.min, baseline?.statsNs.min),
-			p1: formatDurationDelta(entry.statsNs.p1, baseline?.statsNs.p1),
-			p2: formatDurationDelta(entry.statsNs.p2, baseline?.statsNs.p2),
-			p5: formatDurationDelta(entry.statsNs.p5, baseline?.statsNs.p5),
-			p25: formatDurationDelta(entry.statsNs.p25, baseline?.statsNs.p25),
-			p50: formatDurationDelta(entry.statsNs.p50, baseline?.statsNs.p50),
-			p75: formatDurationDelta(entry.statsNs.p75, baseline?.statsNs.p75),
-			p95: formatDurationDelta(entry.statsNs.p95, baseline?.statsNs.p95),
-			p98: formatDurationDelta(entry.statsNs.p98, baseline?.statsNs.p98),
-			p99: formatDurationDelta(entry.statsNs.p99, baseline?.statsNs.p99),
-			max: formatDurationDelta(entry.statsNs.max, baseline?.statsNs.max),
-			checksum: entry.checksum
-		};
-	});
-
 	return [
-		`Profile: ${run.profile}`,
-		`Subjects: ${run.config.subjects.join(', ')}`,
-		`Fixtures: ${run.config.fixtures.map((fixture) => `${fixture.name} (${fixture.width}×${fixture.height})`).join(', ')}`,
-		`Browser: ${run.environment.userAgent}`,
-		`Cross-origin isolated: ${run.environment.crossOriginIsolated}`,
-		`Samples: ${run.measurement.sampleSize}, warmups: ${run.measurement.warmUpIterations}`,
-		table(rows)
+		renderPerfStart(run),
+		...run.results.flatMap(renderMeasurementResult),
+		renderSummary(run)
 	].join('\n');
+}
+
+function renderPerfStart(run) {
+	return [
+		heading('Ditherette perf benchmark'),
+		`  domain:   ${run.domain}`,
+		`  subjects: ${run.config.subjects.join(', ')}`,
+		`  scales:   ${run.config.scales.join(', ')}`,
+		'  oracle:   —',
+		'  baseline: —',
+		`  config:   ${run.measurement.sampleMode}, warmup ${run.measurement.warmUpIterations} iterations, target batch ${formatDuration(run.measurement.targetSampleTimeMs * 1_000_000)}, run until ${run.measurement.sampleSize} samples`,
+		`            timing loop inside Wasm; JS only decodes fixtures and logs`,
+		'  fixtures:',
+		...run.config.fixtures.map(
+			(fixture) => `    - ${fixture.name} [browser-image] ${fixture.width}x${fixture.height}`
+		),
+		''
+	].join('\n');
+}
+
+function renderMeasurementResult(result) {
+	const elapsedNs =
+		result.statsNs.samples.reduce((sum, sample) => sum + sample, 0) * result.iterationsPerSample;
+	return [
+		`${heading('Benchmarking')} ${result.subject} · ${result.id}`,
+		`  warmup: ${result.warmupIterations ?? '—'} iterations (batch size: ${result.iterationsPerSample})`,
+		...renderMeasurementBlock({
+			samplesDone: result.statsNs.samples.length,
+			sampleSize: result.statsNs.samples.length,
+			elapsedNs,
+			totalIterations: result.totalIterations,
+			output: result.output,
+			stats: result.statsNs
+		}),
+		''
+	];
+}
+
+function renderMeasurementBlock(block) {
+	const timeLower = Math.max(0, block.stats.mean - block.stats.stdev);
+	const timeUpper = block.stats.mean + block.stats.stdev;
+	const throughputLower = outputMpixPerS(block.output, timeUpper);
+	const throughputMean = outputMpixPerS(block.output, block.stats.mean);
+	const throughputUpper = outputMpixPerS(block.output, timeLower);
+	return [
+		`  measure: ${block.samplesDone}/${block.sampleSize} smp | ${formatProgressDuration(block.elapsedNs)}/∞ | ${block.totalIterations} iter`,
+		`    time:   [${dim(formatNs(timeLower))} ${formatNs(block.stats.mean)} ${dim(formatNs(timeUpper))}]`,
+		`    thrpt:  [${dim(formatMpixPerS(throughputLower))} ${formatMpixPerS(throughputMean)} ${dim(formatMpixPerS(throughputUpper))}]`,
+		'  prct:    p50  p75  p90  p95  p99',
+		`          ${[block.stats.p50, block.stats.p75, block.stats.p90, block.stats.p95, block.stats.p99].map(formatNs).join('  ')}`,
+		'  stat:    mean  mode  stdev',
+		`          ${[block.stats.mean, block.stats.mode, block.stats.stdev].map(formatNs).join('  ')}`,
+		`  range:   [${dim(formatNs(block.stats.min))} ${dim(formatNs(block.stats.max))}]`
+	];
+}
+
+function renderSummary(run) {
+	const rows = run.results.map((result) => ({
+		subject: result.subject,
+		case: result.id,
+		mean: formatNs(result.statsNs.mean),
+		median: formatNs(result.statsNs.median),
+		stdev: formatNs(result.statsNs.stdev),
+		p95: formatNs(result.statsNs.p95),
+		'MPix/s': formatSignificant(outputMpixPerS(result.output, result.statsNs.mean), 5),
+		baseline: '—',
+		oracle: '—',
+		spec: '—'
+	}));
+	return `${heading('Summary')}\n${table(rows)}`;
 }
 
 function baselineResultsByCase(results) {
@@ -587,6 +605,35 @@ function formatDurationDelta(nanoseconds, baselineNanoseconds) {
 
 	const speedFactor = baselineNanoseconds / nanoseconds;
 	return `${duration} (${formatSignificant(speedFactor)}×)`;
+}
+
+function heading(text) {
+	return color('1;36', text);
+}
+
+function dim(text) {
+	return color('2', text);
+}
+
+function color(code, text) {
+	return `\x1b[${code}m${text}\x1b[0m`;
+}
+
+function formatNs(nanoseconds) {
+	return formatDuration(nanoseconds).replace(/([a-zµ]+)$/, ' $1');
+}
+
+function formatProgressDuration(nanoseconds) {
+	return `${(nanoseconds / 1_000_000_000).toFixed(2)}s`;
+}
+
+function outputMpixPerS(output, nanosecondsPerResize) {
+	if (nanosecondsPerResize <= 0) return Infinity;
+	return (output.width * output.height) / (nanosecondsPerResize / 1_000_000_000) / 1_000_000;
+}
+
+function formatMpixPerS(value) {
+	return `${formatSignificant(value)} MPix/s`;
 }
 
 function formatDuration(nanoseconds) {
@@ -648,6 +695,11 @@ async function resolveOptions(rawArgs) {
 			'--warm-up-iterations',
 			2
 		),
+		targetSampleTimeMs: positiveNumber(
+			merged.target_sample_time_ms ?? merged.targetSampleTimeMs,
+			'--target-sample-time-ms',
+			1
+		),
 		outputDir: stringValue(merged.output_dir ?? merged.outputDir ?? merged.out, undefined)
 	};
 }
@@ -704,6 +756,10 @@ function parseArgs(rawArgs) {
 			case '--warm-up-iterations':
 			case '--warmups':
 				parsed.overrides.warm_up_iterations = Number(nextValue());
+				break;
+			case '--target-sample-time-ms':
+			case '--target-sample-ms':
+				parsed.overrides.target_sample_time_ms = Number(nextValue());
 				break;
 			case '--output-dir':
 			case '--out':
@@ -853,6 +909,12 @@ function positiveInteger(value, name, fallback) {
 	return parsed;
 }
 
+function positiveNumber(value, name, fallback) {
+	const parsed = value === undefined ? fallback : Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${name} must be a positive number`);
+	return parsed;
+}
+
 function helpText() {
 	return `Usage:
   pnpm bench:resize:wasm -- run PROFILE [overrides...]
@@ -867,6 +929,7 @@ Measurement flags:
   --iterations N             Alias for --sample-size.
   --warm-up-iterations N     Warmup iterations per case. Default from manifest: 2.
   --warmups N                Alias for --warm-up-iterations.
+  --target-sample-time-ms N  Calibrate in-Wasm batches to roughly this many ms. Default: 1.
 
 Case flags:
   --subjects IDS             Comma-separated subject ids, e.g. wasm:resize:nearest:scalar.
