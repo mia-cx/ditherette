@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { canResizeWholeImageWithWasm, wasmResizeRequest } from './ditherette-wasm';
+import {
+	canResizeWholeImageWithWasm,
+	wasmResizeRequest,
+	wasmThreadsAvailable
+} from './ditherette-wasm';
 
 class TestImageData implements ImageData {
 	readonly data: Uint8ClampedArray<ArrayBuffer>;
@@ -28,6 +32,20 @@ describe('ditherette wasm wrapper', () => {
 			filter: 'lanczos3',
 			supportPolicy: 'scale-aware'
 		});
+	});
+
+	it('reports thread availability from browser shared-memory capabilities', () => {
+		const originalCrossOriginIsolated = Object.getOwnPropertyDescriptor(
+			globalThis,
+			'crossOriginIsolated'
+		);
+		Object.defineProperty(globalThis, 'crossOriginIsolated', { value: false, configurable: true });
+		expect(wasmThreadsAvailable()).toBe(false);
+		Object.defineProperty(globalThis, 'crossOriginIsolated', { value: true, configurable: true });
+		expect(wasmThreadsAvailable()).toBe(typeof SharedArrayBuffer !== 'undefined');
+		if (originalCrossOriginIsolated) {
+			Object.defineProperty(globalThis, 'crossOriginIsolated', originalCrossOriginIsolated);
+		}
 	});
 
 	it('only sends whole-image resizes to the current Wasm resize export', () => {
