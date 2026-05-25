@@ -1,13 +1,35 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, Rgba8},
-    prod::color::{rgba8_to_color_space_f32, ColorSpaceF32},
+    prod::{
+        color::{
+            rgba8_to_color_space_f32, rgba8_to_color_space_f32_rows_into, ColorSpaceF32,
+        },
+        tiling::RowBand,
+    },
 };
+
+const CHANNELS: usize = 4;
 
 fn assert_close(actual: f32, expected: f32, tolerance: f32) {
     assert!(
         (actual - expected).abs() <= tolerance,
         "expected {actual} to be within {tolerance} of {expected}"
     );
+}
+
+fn fixture_rgba8(width: u32, height: u32) -> Vec<u8> {
+    let mut source = Vec::with_capacity(width as usize * height as usize * CHANNELS);
+    for y in 0..height {
+        for x in 0..width {
+            source.extend_from_slice(&[
+                (x * 37 + y * 11) as u8,
+                (x * 13 + y * 29) as u8,
+                (x * 7 + y * 19) as u8,
+                (64 + x * 3 + y * 5) as u8,
+            ]);
+        }
+    }
+    source
 }
 
 #[test]
@@ -77,4 +99,53 @@ fn prod_color_materializes_cylindrical_and_ycbcr_spaces() {
     assert_close(ycbcr[1], 0.331_264, 0.000_001);
     assert_close(ycbcr[2], 1.0, 0.000_001);
     assert_close(ycbcr[3], 128.0 / 255.0, f32::EPSILON);
+}
+
+#[test]
+fn prod_color_row_bands_match_full_image_output() {
+    let dimensions = ImageDimensions::new(5, 4).unwrap();
+    let source = fixture_rgba8(dimensions.width(), dimensions.height());
+    let expected = rgba8_to_color_space_f32(
+        ImageView::<Rgba8>::packed(&source, dimensions).unwrap(),
+        ColorSpaceF32::Oklab,
+        false,
+    );
+    let mut actual = vec![f32::NAN; expected.len()];
+
+    for band in [
+        RowBand::new(0, 1).unwrap(),
+        RowBand::new(1, 3).unwrap(),
+        RowBand::new(3, 4).unwrap(),
+    ] {
+        rgba8_to_color_space_f32_rows_into(
+            ImageView::<Rgba8>::packed(&source, dimensions).unwrap(),
+            ColorSpaceF32::Oklab,
+            band,
+            &mut actual,
+        );
+    }
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn prod_color_row_band_writes_only_assigned_rows() {
+    let dimensions = ImageDimensions::new(3, 3).unwrap();
+    let source = fixture_rgba8(dimensions.width(), dimensions.height());
+    let mut output = vec![-1.0; dimensions.pixel_count().unwrap() * CHANNELS];
+    let band = RowBand::new(1, 2).unwrap();
+
+    rgba8_to_color_space_f32_rows_into(
+        ImageView::<Rgba8>::packed(&source, dimensions).unwrap(),
+        ColorSpaceF32::Srgb,
+        band,
+        &mut output,
+    );
+
+    let row_len = dimensions.width_usize() * CHANNELS;
+    assert!(output[..row_len].iter().all(|value| *value == -1.0));
+    assert!(output[row_len..row_len * 2]
+        .iter()
+        .all(|value| *value != -1.0));
+    assert!(output[row_len * 2..].iter().all(|value| *value == -1.0));
 }
