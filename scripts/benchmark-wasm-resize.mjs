@@ -17,6 +17,7 @@ const significantNumberFormatter = new Intl.NumberFormat('en-US', {
 	useGrouping: false
 });
 const liveRenderState = { lines: 0, lastRenderMs: 0 };
+let runHeaderPrinted = false;
 
 const options = await resolveOptions(process.argv.slice(2));
 const outDir = path.resolve(
@@ -75,7 +76,8 @@ try {
 	await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
 
 	clearStatusLine();
-	console.log(formatResultTable(artifact));
+	if (!runHeaderPrinted) console.log(renderPerfStart(artifact));
+	console.log(renderSummary(artifact));
 	console.log(`\nWrote ${path.relative(root, jsonPath)}`);
 } finally {
 	clearStatusLine();
@@ -87,22 +89,31 @@ try {
 
 function writeStatusLine(message) {
 	const status = `Benchmark ${message}`;
-	if (!process.stdout.isTTY) {
-		console.error(status);
-		return;
-	}
+	if (!process.stdout.isTTY) return;
 
-	process.stderr.write(`\r${status}\x1b[K`);
+	process.stdout.write(`\r${status}\x1b[K`);
 	statusLineActive = true;
 }
 
 function clearStatusLine() {
-	if (!statusLineActive || !process.stderr.isTTY) return;
-	process.stderr.write('\r\x1b[K');
+	if (!statusLineActive || !process.stdout.isTTY) return;
+	process.stdout.write('\r\x1b[K');
 	statusLineActive = false;
 }
 
 function handleBenchEvent(event, options) {
+	if (event.kind === 'start') {
+		clearStatusLine();
+		console.log(renderPerfStart(runPreview(options, event.fixtures)));
+		runHeaderPrinted = true;
+		return;
+	}
+
+	if (event.kind === 'result') {
+		printResultBlock(event.result);
+		return;
+	}
+
 	if (!options.liveStats) return;
 	if (event.kind === 'warmup-batch') {
 		writeStatusLine(
@@ -130,13 +141,41 @@ function handleBenchEvent(event, options) {
 			stats: summarizeSamplesNs(event.samplesNs)
 		})
 	];
-	if (process.stderr.isTTY) {
-		if (liveRenderState.lines > 0) process.stderr.write(`\x1b[${liveRenderState.lines}A`);
-		for (const line of lines) process.stderr.write(`\x1b[2K${line}\n`);
-		liveRenderState.lines = lines.length;
-		return;
+	writeLiveBlock(lines);
+}
+
+function runPreview(options, fixtures) {
+	return {
+		domain: options.domain,
+		config: { subjects: options.subjects, scales: options.scales, fixtures },
+		measurement: {
+			sampleMode: 'throughput',
+			warmUpTimeMs: options.warmUpTimeMs,
+			targetSampleTimeMs: options.targetSampleTimeMs,
+			sampleSize: options.sampleSize,
+			measurementTimeMs: options.measurementTimeMs
+		}
+	};
+}
+
+function printResultBlock(result) {
+	clearStatusLine();
+	const lines = renderMeasurementResult(result);
+	if (process.stdout.isTTY && liveRenderState.lines > 0) {
+		process.stdout.write(`\x1b[${liveRenderState.lines}A`);
+		for (const line of lines) process.stdout.write(`\x1b[2K${line}\n`);
+	} else {
+		console.log(lines.join('\n'));
 	}
-	console.error(lines.join('\n'));
+	liveRenderState.lines = 0;
+}
+
+function writeLiveBlock(lines) {
+	if (!process.stdout.isTTY) return;
+	clearStatusLine();
+	if (liveRenderState.lines > 0) process.stdout.write(`\x1b[${liveRenderState.lines}A`);
+	for (const line of lines) process.stdout.write(`\x1b[2K${line}\n`);
+	liveRenderState.lines = lines.length;
 }
 
 async function benchmarkFixtures(values) {
@@ -249,6 +288,16 @@ globalThis.runResizeBench = async function runResizeBench(config) {
 
 	const decodedFixtures = [];
 	for (const fixture of config.fixtures) decodedFixtures.push(await decodeFixture(fixture));
+	console.debug('bench-event ' + JSON.stringify({
+		kind: 'start',
+		fixtures: decodedFixtures.map((fixture) => ({
+			name: fixture.name,
+			width: fixture.sourceWidth,
+			height: fixture.sourceHeight,
+			decodeNs: millisecondsToNanoseconds(fixture.decodeMs),
+			normalizeNs: millisecondsToNanoseconds(fixture.normalizeMs)
+		}))
+	}));
 
 	const cases = decodedFixtures.flatMap((decodedFixture) => makeScaleCases(decodedFixture, config.scales, config.lanes));
 	const totalRuns = cases.length * config.subjects.length;
@@ -388,7 +437,7 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 		throw new Error(resultId + ' produced ' + wasmResult.outputByteLength + ' bytes; expected ' + expectedByteLength);
 	}
 
-	return {
+	const result = {
 		id: benchmarkCase.id,
 		subject: subject.id,
 		filter: subject.filter,
@@ -408,6 +457,8 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 		warmupIterations: config.warmUpIterations,
 		measurementTimeMs: config.measurementTimeMs
 	};
+	console.debug('bench-event ' + JSON.stringify({ kind: 'result', result }));
+	return result;
 }
 
 function assertStableChecksums(results) {
