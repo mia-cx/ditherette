@@ -145,6 +145,7 @@ fn color_benchmark_export_returns_samples_json() {
         1,
         0.01,
         false,
+        32,
         None,
     )
     .expect("color benchmark should succeed");
@@ -170,6 +171,7 @@ fn color_benchmark_accepts_diagnostic_modes() {
             1,
             0.01,
             false,
+            32,
             None,
         )
         .expect("diagnostic color benchmark should succeed");
@@ -181,7 +183,8 @@ fn color_benchmark_accepts_diagnostic_modes() {
 fn benchmark_export_returns_samples_json() {
     let source = [255, 0, 0, 255, 0, 255, 0, 255];
     let output = benchmark_resize_rgba8(
-        &source, 2, 1, 4, 2, "nearest", "center", "fixed", true, 2, 1.0, 0.01, 1, 0.01, false, None,
+        &source, 2, 1, 4, 2, "nearest", "center", "fixed", true, 2, 1.0, 0.01, 1, 0.01, false, 32,
+        None,
     )
     .expect("benchmark should succeed");
 
