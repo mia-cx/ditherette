@@ -12,6 +12,11 @@ use crate::{
     prod::tiling::RowBand,
 };
 
+const COLOR_PARALLEL_PIXEL_THRESHOLD: usize = 40_000;
+const DEFAULT_COLOR_ROW_BAND_HEIGHT: usize = 32;
+const LARGE_PERCEPTUAL_COLOR_PIXEL_THRESHOLD: usize = 2_700_000;
+const LARGE_PERCEPTUAL_COLOR_ROW_BAND_HEIGHT: usize = 64;
+
 /// Supported f32 color-space materializations for RGBA8 input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorSpaceF32 {
@@ -50,8 +55,9 @@ impl ColorSpaceF32 {
 /// Materializes RGBA8/sRGB input into an AoS four-channel f32 color buffer.
 ///
 /// Output channel order is defined by `target`; the fourth channel is always
-/// normalized alpha. `parallelization_policy` is accepted for API stability and
-/// ignored until the Wasm-thread implementation lands.
+/// normalized alpha. When threaded Wasm is enabled and
+/// `parallelization_policy` is true, production policy selects the pooled
+/// direct row-band adapter for images large enough to amortize worker overhead.
 pub fn rgba8_to_color_space_f32(
     source: ImageView<'_, Rgba8>,
     target: ColorSpaceF32,
@@ -74,8 +80,15 @@ pub fn rgba8_to_color_space_f32_with_policy_into(
     output: &mut [f32],
 ) {
     #[cfg(feature = "threads")]
-    if parallelization_policy {
-        rgba8_to_color_space_f32_parallel_into(source, target, output);
+    if let Some(policy) =
+        ColorTilingPolicy::for_request(source.dimensions(), target, parallelization_policy)
+    {
+        rgba8_to_color_space_f32_parallel_with_band_height_into(
+            source,
+            target,
+            output,
+            policy.row_band_height,
+        );
         return;
     }
 
@@ -135,19 +148,51 @@ fn rgba8_to_color_space_f32_rows_with_tables_into(
     }
 }
 
-#[cfg(feature = "threads")]
-fn rgba8_to_color_space_f32_parallel_into(
-    source: ImageView<'_, Rgba8>,
-    target: ColorSpaceF32,
-    output: &mut [f32],
-) {
-    const PROTOTYPE_ROW_BAND_HEIGHT: usize = 32;
-    rgba8_to_color_space_f32_parallel_with_band_height_into(
-        source,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColorTilingPolicy {
+    row_band_height: usize,
+}
+
+impl ColorTilingPolicy {
+    /// Selects the production color tiling policy from M4 browser/Wasm sweep data.
+    ///
+    /// The sweep showed pooled direct color conversion becomes reliably profitable
+    /// around 40k output pixels, prefers all available Rayon workers up to the
+    /// configured pool cap, and is best served by 32-row bands except for very
+    /// large perceptual conversions where 64-row bands are slightly steadier.
+    pub fn for_request(
+        dimensions: ImageDimensions,
+        target: ColorSpaceF32,
+        parallelization_policy: bool,
+    ) -> Option<Self> {
+        if !parallelization_policy
+            || dimensions.pixel_count().expect("valid dimensions") < COLOR_PARALLEL_PIXEL_THRESHOLD
+        {
+            return None;
+        }
+
+        let row_band_height = if is_perceptual_color_space(target)
+            && dimensions.pixel_count().expect("valid dimensions")
+                >= LARGE_PERCEPTUAL_COLOR_PIXEL_THRESHOLD
+        {
+            LARGE_PERCEPTUAL_COLOR_ROW_BAND_HEIGHT
+        } else {
+            DEFAULT_COLOR_ROW_BAND_HEIGHT
+        };
+
+        Some(Self { row_band_height })
+    }
+
+    pub const fn row_band_height(self) -> usize {
+        self.row_band_height
+    }
+}
+
+fn is_perceptual_color_space(target: ColorSpaceF32) -> bool {
+    matches!(
         target,
-        output,
-        PROTOTYPE_ROW_BAND_HEIGHT,
-    );
+        ColorSpaceF32::Oklab | ColorSpaceF32::Oklch | ColorSpaceF32::Cielab | ColorSpaceF32::Cielch
+    )
 }
 
 #[cfg(feature = "threads")]

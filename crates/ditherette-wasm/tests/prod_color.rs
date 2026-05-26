@@ -1,7 +1,10 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{
-        color::{rgba8_to_color_space_f32, rgba8_to_color_space_f32_rows_into, ColorSpaceF32},
+        color::{
+            rgba8_to_color_space_f32, rgba8_to_color_space_f32_rows_into, ColorSpaceF32,
+            ColorTilingPolicy,
+        },
         tiling::RowBand,
     },
 };
@@ -97,6 +100,43 @@ fn prod_color_materializes_cylindrical_and_ycbcr_spaces() {
     assert_close(ycbcr[1], 0.331_264, 0.000_001);
     assert_close(ycbcr[2], 1.0, 0.000_001);
     assert_close(ycbcr[3], 128.0 / 255.0, f32::EPSILON);
+}
+
+#[test]
+fn prod_color_tiling_policy_keeps_tiny_images_scalar() {
+    let dimensions = ImageDimensions::new(199, 201).unwrap();
+
+    assert_eq!(
+        ColorTilingPolicy::for_request(dimensions, ColorSpaceF32::LinearSrgb, true),
+        None
+    );
+}
+
+#[test]
+fn prod_color_tiling_policy_uses_small_bands_after_parallel_threshold() {
+    let dimensions = ImageDimensions::new(200, 200).unwrap();
+    let policy = ColorTilingPolicy::for_request(dimensions, ColorSpaceF32::LinearSrgb, true)
+        .expect("40k pixels should use color tiling");
+
+    assert_eq!(policy.row_band_height(), 32);
+}
+
+#[test]
+fn prod_color_tiling_policy_uses_larger_bands_for_large_perceptual_spaces() {
+    let dimensions = ImageDimensions::new(1800, 1500).unwrap();
+
+    assert_eq!(
+        ColorTilingPolicy::for_request(dimensions, ColorSpaceF32::Oklab, true)
+            .expect("large perceptual color conversion should use color tiling")
+            .row_band_height(),
+        64
+    );
+    assert_eq!(
+        ColorTilingPolicy::for_request(dimensions, ColorSpaceF32::LinearSrgb, true)
+            .expect("large linear sRGB conversion should use color tiling")
+            .row_band_height(),
+        32
+    );
 }
 
 #[test]

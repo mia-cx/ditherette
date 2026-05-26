@@ -50,8 +50,9 @@ pub fn hello(name: &str) -> String {
 ///
 /// `from` currently accepts `rgba8`, `srgb-rgba8`, or `srgb`. `to` accepts the
 /// prod f32 color-space names such as `oklab-f32`, `cielab-f32`, and
-/// `linear-srgb-f32`. `parallelization_policy` is accepted for API stability;
-/// this scalar checkpoint ignores it until the Wasm-thread prototype lands.
+/// `linear-srgb-f32`. When threaded Wasm is enabled,
+/// `parallelization_policy` enables production color tiling for images large
+/// enough to amortize worker overhead.
 #[wasm_bindgen(js_name = convertColorSpace)]
 pub fn convert_color_space(
     input: &[u8],
