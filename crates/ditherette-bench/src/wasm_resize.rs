@@ -308,6 +308,9 @@ impl WasmRunState {
         self.domain = Some(event.domain.clone());
         self.profile = event.profile;
         if self.accepted_baseline.is_none() {
+            self.accepted_baseline = event.baseline.clone();
+        }
+        if self.accepted_baseline.is_none() {
             if let Some(name) = self.save_baseline.as_deref() {
                 self.accepted_baseline = Some(if name == "true" {
                     self.profile
@@ -440,6 +443,8 @@ struct StartEvent {
     domain: String,
     #[serde(default)]
     profile: Option<String>,
+    #[serde(default)]
+    baseline: Option<String>,
     subjects: Vec<String>,
     scales: Vec<WasmScale>,
     measurement: WasmMeasurement,

@@ -72,6 +72,7 @@ try {
 		subjects: options.subjects.map(subjectConfig),
 		scales: options.scales,
 		lanes: options.lanes,
+		baseline: options.baseline,
 		sampleSize: options.sampleSize,
 		measurementTimeMs: options.measurementTimeMs,
 		warmUpTimeMs: options.warmUpTimeMs,
@@ -319,6 +320,7 @@ globalThis.runWasmBench = async function runWasmBench(config) {
 		subjects: config.subjects.map((subject) => subject.id),
 		scales: config.scales,
 		lanes: config.lanes,
+		baseline: config.baseline,
 		measurement: {
 			sampleSize: config.sampleSize,
 			measurementTimeMs: config.measurementTimeMs,
@@ -1108,6 +1110,7 @@ async function resolveOptions(rawArgs) {
 		fixtures: stringArray(merged.fixtures ?? merged.image, ['Celeste_box_art.png']),
 		scales: scalesFromConfig(merged),
 		lanes: stringArray(merged.lanes, ['browser-decode-rgba', 'decoded-rgba']),
+		baseline: stringValue(merged.baseline, undefined),
 		sampleSize: positiveInteger(
 			merged.sample_size ?? merged.sampleSize ?? merged.iterations,
 			'--sample-size',
