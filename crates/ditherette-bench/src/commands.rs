@@ -206,7 +206,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
         &fixtures,
         &scales,
         &measurement,
-        oracle_id.as_ref(),
+        oracle_id.as_ref().map(SubjectId::as_str),
         accepted_baseline_name,
     );
     let runtime_report = tune_runtime(measurement.process_priority());

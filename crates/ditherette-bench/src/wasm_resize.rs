@@ -330,10 +330,8 @@ impl WasmRunState {
                 .map(WasmScale::resize_scale)
                 .collect::<Vec<_>>(),
             &measurement,
-            None,
-            self.same_run_scalar_comparison
-                .then_some("same-run scalar")
-                .or(self.accepted_baseline.as_deref()),
+            self.same_run_scalar_comparison.then_some("same-run scalar"),
+            self.accepted_baseline.as_deref(),
         );
         self.measurement = Some(measurement);
         Ok(())
@@ -387,7 +385,7 @@ impl WasmRunState {
             return;
         };
         result.comparisons.insert(
-            "accepted".to_owned(),
+            "oracle".to_owned(),
             comparison("same-run scalar", result.median_ns, baseline.median_ns),
         );
     }
@@ -482,7 +480,7 @@ fn attach_same_run_scalar_comparisons(profile: Option<&str>, results: &mut [Benc
             continue;
         };
         results[index].comparisons.insert(
-            "accepted".to_owned(),
+            "oracle".to_owned(),
             comparison(
                 "same-run scalar",
                 results[index].median_ns,
