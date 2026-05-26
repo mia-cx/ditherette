@@ -263,7 +263,7 @@ subjects = [
   "wasm:color:cielab-f32:scalar",
   "wasm:color:cielab-f32:pooled_direct"
 ]
-scales = [0.25, 0.5, 1]
+scale_group = ["partial", "identity"]
 sample_size = 30
 measurement_time = "3s"
 warm_up_time = "250ms"
