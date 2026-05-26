@@ -453,33 +453,26 @@ function isMatchingScalarSubject(candidate, subject) {
 }
 
 function makeCases(decodedFixture, config) {
-	if (config.domain === 'color') return makeColorCases(decodedFixture, config.lanes, config.sweepLabel);
+	if (config.domain === 'color') {
+		return makeScaleCases(decodedFixture, config.scales, config.lanes, config.sweepLabel, {
+			materialize: nearestResizeRgba
+		});
+	}
 	return makeScaleCases(decodedFixture, config.scales, config.lanes, config.sweepLabel);
 }
 
-function makeColorCases(decodedFixture, lanes, sweepLabel) {
-	return lanes.map((lane) => ({
-		id: [decodedFixture.name, lane, sweepLabel].filter(Boolean).join('-'),
-		fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
-		lane,
-		scale: { x: 1, y: 1 },
-		sourceWidth: decodedFixture.sourceWidth,
-		sourceHeight: decodedFixture.sourceHeight,
-		outputWidth: decodedFixture.sourceWidth,
-		outputHeight: decodedFixture.sourceHeight,
-		sourceRgba: decodedFixture.sourceRgba,
-		decodeMs: lane === 'browser-decode-rgba' ? decodedFixture.decodeMs : 0,
-		normalizeMs: lane === 'browser-decode-rgba' ? decodedFixture.normalizeMs : 0
-	}));
-}
-
-function makeScaleCases(decodedFixture, scales, lanes, sweepLabel) {
+function makeScaleCases(decodedFixture, scales, lanes, sweepLabel, options = {}) {
 	const cases = [];
 
 	for (const scale of scales) {
 		const outputWidth = scaledDimension(decodedFixture.sourceWidth, scale.x);
 		const outputHeight = scaledDimension(decodedFixture.sourceHeight, scale.y);
 		const id = [decodedFixture.name, scaleLabel(scale), sweepLabel].filter(Boolean).join('-');
+		const sourceRgba = options.materialize
+			? options.materialize(decodedFixture.sourceRgba, decodedFixture.sourceWidth, decodedFixture.sourceHeight, outputWidth, outputHeight)
+			: decodedFixture.sourceRgba;
+		const sourceWidth = options.materialize ? outputWidth : decodedFixture.sourceWidth;
+		const sourceHeight = options.materialize ? outputHeight : decodedFixture.sourceHeight;
 
 		if (lanes.includes('browser-decode-rgba')) {
 			cases.push({
@@ -487,11 +480,11 @@ function makeScaleCases(decodedFixture, scales, lanes, sweepLabel) {
 				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
 				lane: 'browser-decode-rgba',
 				scale,
-				sourceWidth: decodedFixture.sourceWidth,
-				sourceHeight: decodedFixture.sourceHeight,
+				sourceWidth,
+				sourceHeight,
 				outputWidth,
 				outputHeight,
-				sourceRgba: decodedFixture.sourceRgba,
+				sourceRgba,
 				decodeMs: decodedFixture.decodeMs,
 				normalizeMs: decodedFixture.normalizeMs
 			});
@@ -503,11 +496,11 @@ function makeScaleCases(decodedFixture, scales, lanes, sweepLabel) {
 				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
 				lane: 'decoded-rgba',
 				scale,
-				sourceWidth: decodedFixture.sourceWidth,
-				sourceHeight: decodedFixture.sourceHeight,
+				sourceWidth,
+				sourceHeight,
 				outputWidth,
 				outputHeight,
-				sourceRgba: decodedFixture.sourceRgba,
+				sourceRgba,
 				decodeMs: 0,
 				normalizeMs: 0
 			});
@@ -651,7 +644,7 @@ function effectiveRowBandHeight(benchmarkCase, config) {
 
 function effectiveCaseId(benchmarkCase, config, rowBandHeight) {
 	if (config.rowBandHeight !== 'even') return benchmarkCase.id;
-	return benchmarkCase.id.replace(/band-even$/, 'band-even-' + rowBandHeight);
+	return benchmarkCase.id.replace('band-even', 'band-even-' + rowBandHeight);
 }
 
 function assertStableChecksums(results) {
@@ -663,6 +656,24 @@ function assertStableChecksums(results) {
 function reportProgress(completedRuns, totalRuns, label) {
 	const remainingRuns = totalRuns - completedRuns;
 	console.debug('bench-progress ' + completedRuns + '/' + totalRuns + ' complete · ' + remainingRuns + ' remaining · ' + label);
+}
+
+function nearestResizeRgba(source, sourceWidth, sourceHeight, outputWidth, outputHeight) {
+	if (sourceWidth === outputWidth && sourceHeight === outputHeight) return source;
+	const output = new Uint8Array(outputWidth * outputHeight * RGBA_CHANNEL_COUNT);
+	for (let y = 0; y < outputHeight; y += 1) {
+		const sourceY = Math.min(sourceHeight - 1, Math.floor((y * sourceHeight) / outputHeight));
+		for (let x = 0; x < outputWidth; x += 1) {
+			const sourceX = Math.min(sourceWidth - 1, Math.floor((x * sourceWidth) / outputWidth));
+			const sourceOffset = (sourceY * sourceWidth + sourceX) * RGBA_CHANNEL_COUNT;
+			const outputOffset = (y * outputWidth + x) * RGBA_CHANNEL_COUNT;
+			output[outputOffset] = source[sourceOffset];
+			output[outputOffset + 1] = source[sourceOffset + 1];
+			output[outputOffset + 2] = source[sourceOffset + 2];
+			output[outputOffset + 3] = source[sourceOffset + 3];
+		}
+	}
+	return output;
 }
 
 function scaledDimension(sourceDimension, scale) {
