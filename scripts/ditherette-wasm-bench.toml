@@ -227,6 +227,8 @@ subjects = ["wasm:resize:lanczos3:fixed", "wasm:resize:lanczos3:pooled_direct", 
 periodic_scalar_remeasurement = true
 fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
 scale_group = ["partial", "identity"]
+thread_counts = [2, 4, 6, 8]
+row_band_heights = [32, 64, 128, 256, "even"]
 lanes = ["decoded-rgba"]
 
 [profiles.convolution-thread]
@@ -236,6 +238,8 @@ subjects = ["wasm:resize:lanczos3:fixed", "wasm:resize:lanczos3:pooled_direct"]
 periodic_scalar_remeasurement = true
 fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
 scale_group = ["partial", "identity"]
+thread_counts = [2, 4, 6, 8]
+row_band_heights = [32, 64, 128, 256, "even"]
 lanes = ["decoded-rgba"]
 
 [profiles.nearest-thread]
@@ -244,6 +248,8 @@ domain = "resize"
 subjects = ["wasm:resize:nearest:scalar", "wasm:resize:nearest:pooled_direct"]
 fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
 scale_group = ["partial", "identity"]
+thread_counts = [2, 4, 6, 8]
+row_band_heights = [32, 64, 128, 256, "even"]
 lanes = ["decoded-rgba"]
 
 [profiles.color]
@@ -258,4 +264,6 @@ subjects = [
   "wasm:color:cielab-f32:pooled_direct"
 ]
 scales = [1]
+thread_counts = [2, 4, 6, 8]
+row_band_heights = [32, 64, 128, 256, "even"]
 lanes = ["decoded-rgba"]

@@ -43,8 +43,12 @@ const browser = await chromium.launch({ headless: true });
 let statusLineActive = false;
 
 try {
-	const page = await browser.newPage();
-	page.on('console', (message) => {
+	let browserResult;
+	const runConfigs = sweepRunConfigs(options);
+	for (let runIndex = 0; runIndex < runConfigs.length; runIndex += 1) {
+		const runConfig = runConfigs[runIndex];
+		const page = await browser.newPage();
+		page.on('console', (message) => {
 		if (message.type() !== 'debug') return;
 		const text = message.text();
 		if (text.startsWith('bench-progress ')) {
@@ -59,10 +63,10 @@ try {
 			}
 			handleBenchEvent(event, options);
 		}
-	});
-	await page.goto(server.url, { waitUntil: 'load' });
+		});
+		await page.goto(server.url, { waitUntil: 'load' });
 
-	const browserResult = await page.evaluate(async (config) => globalThis.runWasmBench(config), {
+		const partialResult = await page.evaluate(async (config) => globalThis.runWasmBench(config), {
 		domain: options.domain,
 		profile: options.profile,
 		fixtures: fixtures.map((fixture) => ({
@@ -80,9 +84,19 @@ try {
 		targetSampleTimeMs: options.targetSampleTimeMs,
 		liveStats: options.liveStats,
 		threadedWasm: options.threadedWasm,
-		threadCount: options.threadCount,
+		threadCount: runConfig.threadCount,
+		rowBandHeight: runConfig.rowBandHeight,
+		sweepLabel: runConfig.label,
+		emitStart: runIndex === 0,
 		periodicScalarRemeasurement: options.periodicScalarRemeasurement
-	});
+		});
+		await page.close();
+		if (!browserResult) {
+			browserResult = partialResult;
+		} else {
+			browserResult.results.push(...partialResult.results);
+		}
+	}
 	const artifact = benchRunArtifact(options, browserResult);
 
 	if (options.jsonlEvents) {
@@ -106,6 +120,20 @@ try {
 	await new Promise((resolve, reject) => {
 		server.instance.close((error) => (error ? reject(error) : resolve()));
 	});
+}
+
+function sweepRunConfigs(options) {
+	const configs = [];
+	for (const threadCount of options.threadCounts) {
+		for (const rowBandHeight of options.rowBandHeights) {
+			configs.push({
+				threadCount,
+				rowBandHeight,
+				label: `workers-${threadCount}-band-${rowBandHeight}`
+			});
+		}
+	}
+	return configs;
 }
 
 function writeStatusLine(message) {
@@ -313,7 +341,7 @@ globalThis.runWasmBench = async function runWasmBench(config) {
 
 	const decodedFixtures = [];
 	for (const fixture of config.fixtures) decodedFixtures.push(await decodeFixture(fixture));
-	console.debug('bench-event ' + JSON.stringify({
+	if (config.emitStart !== false) console.debug('bench-event ' + JSON.stringify({
 		kind: 'start',
 		domain: config.domain,
 		profile: config.profile,
@@ -425,13 +453,13 @@ function isMatchingScalarSubject(candidate, subject) {
 }
 
 function makeCases(decodedFixture, config) {
-	if (config.domain === 'color') return makeColorCases(decodedFixture, config.lanes);
-	return makeScaleCases(decodedFixture, config.scales, config.lanes);
+	if (config.domain === 'color') return makeColorCases(decodedFixture, config.lanes, config.sweepLabel);
+	return makeScaleCases(decodedFixture, config.scales, config.lanes, config.sweepLabel);
 }
 
-function makeColorCases(decodedFixture, lanes) {
+function makeColorCases(decodedFixture, lanes, sweepLabel) {
 	return lanes.map((lane) => ({
-		id: decodedFixture.name + '-' + lane,
+		id: [decodedFixture.name, lane, sweepLabel].filter(Boolean).join('-'),
 		fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
 		lane,
 		scale: { x: 1, y: 1 },
@@ -445,13 +473,13 @@ function makeColorCases(decodedFixture, lanes) {
 	}));
 }
 
-function makeScaleCases(decodedFixture, scales, lanes) {
+function makeScaleCases(decodedFixture, scales, lanes, sweepLabel) {
 	const cases = [];
 
 	for (const scale of scales) {
 		const outputWidth = scaledDimension(decodedFixture.sourceWidth, scale.x);
 		const outputHeight = scaledDimension(decodedFixture.sourceHeight, scale.y);
-		const id = decodedFixture.name + '-' + scaleLabel(scale);
+		const id = [decodedFixture.name, scaleLabel(scale), sweepLabel].filter(Boolean).join('-');
 
 		if (lanes.includes('browser-decode-rgba')) {
 			cases.push({
@@ -495,12 +523,14 @@ async function measureSubject(benchmarkCase, subject, config) {
 }
 
 async function measureResizeSubject(benchmarkCase, subject, config) {
+	const rowBandHeight = effectiveRowBandHeight(benchmarkCase, config);
+	const caseId = effectiveCaseId(benchmarkCase, config, rowBandHeight);
 	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT;
-	const resultId = benchmarkCase.id + '-' + subject.id;
+	const resultId = caseId + '-' + subject.id;
 	const reporter = (eventJson) => {
 		const event = JSON.parse(eventJson);
 		event.subject = subject.id;
-		event.caseId = benchmarkCase.id;
+		event.caseId = caseId;
 		event.output = { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight };
 		console.debug('bench-event ' + JSON.stringify(event));
 	};
@@ -521,6 +551,7 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 			config.warmUpIterations,
 			config.targetSampleTimeMs,
 			config.liveStats,
+			rowBandHeight,
 			reporter
 		)
 	);
@@ -530,7 +561,7 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 	}
 
 	const result = {
-		id: benchmarkCase.id,
+		id: caseId,
 		subject: subject.id,
 		filter: subject.filter,
 		supportPolicy: subject.supportPolicy,
@@ -554,12 +585,14 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 }
 
 async function measureColorSubject(benchmarkCase, subject, config) {
+	const rowBandHeight = effectiveRowBandHeight(benchmarkCase, config);
+	const caseId = effectiveCaseId(benchmarkCase, config, rowBandHeight);
 	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT * F32_BYTES;
-	const resultId = benchmarkCase.id + '-' + subject.id;
+	const resultId = caseId + '-' + subject.id;
 	const reporter = (eventJson) => {
 		const event = JSON.parse(eventJson);
 		event.subject = subject.id;
-		event.caseId = benchmarkCase.id;
+		event.caseId = caseId;
 		event.output = { width: benchmarkCase.outputWidth, height: benchmarkCase.outputHeight };
 		console.debug('bench-event ' + JSON.stringify(event));
 	};
@@ -576,6 +609,7 @@ async function measureColorSubject(benchmarkCase, subject, config) {
 			config.warmUpIterations,
 			config.targetSampleTimeMs,
 			config.liveStats,
+			rowBandHeight,
 			reporter
 		)
 	);
@@ -585,7 +619,7 @@ async function measureColorSubject(benchmarkCase, subject, config) {
 	}
 
 	const result = {
-		id: benchmarkCase.id,
+		id: caseId,
 		subject: subject.id,
 		filter: subject.target,
 		supportPolicy: subject.executionMode,
@@ -606,6 +640,18 @@ async function measureColorSubject(benchmarkCase, subject, config) {
 	};
 	console.debug('bench-event ' + JSON.stringify({ kind: 'result', result }));
 	return result;
+}
+
+function effectiveRowBandHeight(benchmarkCase, config) {
+	if (config.rowBandHeight === 'even') {
+		return Math.max(1, Math.ceil(benchmarkCase.outputHeight / config.threadCount));
+	}
+	return Math.max(1, Number(config.rowBandHeight));
+}
+
+function effectiveCaseId(benchmarkCase, config, rowBandHeight) {
+	if (config.rowBandHeight !== 'even') return benchmarkCase.id;
+	return benchmarkCase.id.replace(/band-even$/, 'band-even-' + rowBandHeight);
 }
 
 function assertStableChecksums(results) {
@@ -783,7 +829,9 @@ function benchRunArtifact(options, browserResult) {
 			subjects: options.subjects,
 			fixtures: browserResult.fixtures,
 			scales: options.scales,
-			lanes: options.lanes
+			lanes: options.lanes,
+			threadCounts: options.threadCounts,
+			rowBandHeights: options.rowBandHeights
 		},
 		results: browserResult.results,
 		comparisons: candidateComparisons(browserResult.results)
@@ -1144,8 +1192,23 @@ async function resolveOptions(rawArgs) {
 			merged.threaded_wasm ?? merged.threadedWasm,
 			requiresThreadedWasm(subjects)
 		),
-		threadCount: positiveInteger(merged.thread_count ?? merged.threadCount, '--thread-count', 2)
+		threadCount: positiveInteger(merged.thread_count ?? merged.threadCount, '--thread-count', 2),
+		threadCounts: threadCountsFromConfig(merged),
+		rowBandHeights: rowBandHeightsFromConfig(merged)
 	};
+}
+
+function threadCountsFromConfig(config) {
+	const values = config.thread_counts ?? config.threadCounts ?? config.thread_count ?? config.threadCount ?? [2];
+	return numberArray(values).map((value) => positiveInteger(value, 'thread_counts', 2));
+}
+
+function rowBandHeightsFromConfig(config) {
+	const values = config.row_band_heights ?? config.rowBandHeights ?? config.row_band_height ?? config.rowBandHeight ?? [32];
+	return arrayValue(values).map((value) => {
+		if (String(value) === 'even') return 'even';
+		return positiveInteger(value, 'row_band_heights', 32);
+	});
 }
 
 function defaultSubjects(domain) {
@@ -1241,6 +1304,17 @@ function parseArgs(rawArgs) {
 				break;
 			case '--thread-count':
 				parsed.overrides.thread_count = Number(nextValue());
+				break;
+			case '--thread-counts':
+				parsed.overrides.thread_counts = commaList(nextValue()).map(Number);
+				break;
+			case '--row-band-height':
+				parsed.overrides.row_band_height = nextValue();
+				break;
+			case '--row-band-heights':
+				parsed.overrides.row_band_heights = commaList(nextValue()).map((value) =>
+					value === 'even' ? value : Number(value)
+				);
 				break;
 			case '--threaded-wasm':
 				parsed.overrides.threaded_wasm = true;
@@ -1385,6 +1459,17 @@ function stringArray(value, fallback) {
 	if (value === undefined) return fallback;
 	if (Array.isArray(value)) return value.map(String);
 	return commaList(String(value));
+}
+
+function arrayValue(value) {
+	return Array.isArray(value) ? value : [value];
+}
+
+function numberArray(value) {
+	return arrayValue(value).flatMap((item) => {
+		if (typeof item === 'string' && item.includes(',')) return commaList(item).map(Number);
+		return [Number(item)];
+	});
 }
 
 function scalesFromConfig(config) {
@@ -1544,6 +1629,10 @@ Case flags:
   --scale-group GROUPS       Same groups as crates/ditherette-bench: partial, identity, bilinear-anisotropic, etc.
   --scale-pairs PAIRS        Comma-separated anisotropic scales like 0.5x1,1x0.5.
   --lanes LANES              browser-decode-rgba,decoded-rgba.
+  --thread-count N           Wasm worker count for one run.
+  --thread-counts LIST       Sweep worker counts, e.g. 2,4,6,8.
+  --row-band-height N        Row-band height for pooled direct kernels.
+  --row-band-heights LIST    Sweep row-band heights; use even for ceil(height/workers).
   --output-dir DIR           Output directory. Default: benchmark-results/wasm-resize-<timestamp>.
   --out DIR                  Alias for --output-dir.
   --jsonl-events             Internal transport mode for ditherette-bench.

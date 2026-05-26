@@ -141,19 +141,35 @@ fn rgba8_to_color_space_f32_parallel_into(
     target: ColorSpaceF32,
     output: &mut [f32],
 ) {
+    const PROTOTYPE_ROW_BAND_HEIGHT: usize = 32;
+    rgba8_to_color_space_f32_parallel_with_band_height_into(
+        source,
+        target,
+        output,
+        PROTOTYPE_ROW_BAND_HEIGHT,
+    );
+}
+
+#[cfg(feature = "threads")]
+pub fn rgba8_to_color_space_f32_parallel_with_band_height_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    output: &mut [f32],
+    row_band_height: usize,
+) {
     let dimensions = source.dimensions();
     assert_eq!(output.len(), color_output_len(dimensions));
-    const PROTOTYPE_ROW_BAND_HEIGHT: usize = 32;
+    let row_band_height = row_band_height.max(1);
 
     let row_len = dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
-    let band_len = row_len * PROTOTYPE_ROW_BAND_HEIGHT;
+    let band_len = row_len * row_band_height;
     let tables = ColorTables::new();
 
     output
         .par_chunks_mut(band_len)
         .enumerate()
         .for_each(|(band_index, output_band)| {
-            let y_start = band_index * PROTOTYPE_ROW_BAND_HEIGHT;
+            let y_start = band_index * row_band_height;
             for (local_y, output_row) in output_band.chunks_mut(row_len).enumerate() {
                 let source_row = source
                     .row((y_start + local_y) as u32)

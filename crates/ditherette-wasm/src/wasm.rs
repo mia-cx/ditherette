@@ -159,6 +159,7 @@ pub fn benchmark_color_space(
     warm_up_iterations: u32,
     target_sample_time_ms: f64,
     live_stats: bool,
+    row_band_height: u32,
     reporter: Option<Function>,
 ) -> Result<String, JsValue> {
     let dimensions = image_dimensions(width, height)?;
@@ -180,6 +181,7 @@ pub fn benchmark_color_space(
         warm_up_iterations,
         target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
         live_stats,
+        row_band_height: row_band_height.max(1) as usize,
     };
     let result = run_color_benchmark(source, target, mode, &mut output, config, reporter.as_ref())?;
 
@@ -214,6 +216,7 @@ pub fn benchmark_resize_rgba8(
     warm_up_iterations: u32,
     target_sample_time_ms: f64,
     live_stats: bool,
+    row_band_height: u32,
     reporter: Option<Function>,
 ) -> Result<String, JsValue> {
     let source_dimensions = image_dimensions(source_width, source_height)?;
@@ -235,6 +238,7 @@ pub fn benchmark_resize_rgba8(
         warm_up_iterations,
         target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
         live_stats,
+        row_band_height: row_band_height.max(1) as usize,
     };
     let result = run_resize_benchmark(
         source,
@@ -365,7 +369,14 @@ fn resize_rgba8_scalar(
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
     let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
 
-    if parallelization_policy && resize.run_pooled(source, output_dimensions, &mut output)? {
+    if parallelization_policy
+        && resize.run_pooled(
+            source,
+            output_dimensions,
+            &mut output,
+            PROTOTYPE_ROW_BAND_HEIGHT,
+        )?
+    {
         return Ok(output);
     }
 
@@ -439,15 +450,16 @@ impl WasmResize {
         source: ImageView<'_, Rgba8>,
         output_dimensions: ImageDimensions,
         output: &mut [u8],
+        row_band_height: usize,
     ) -> Result<bool, JsValue> {
         match self.execution_mode {
             ResizeExecutionMode::PolicyDefault => return Ok(false),
             ResizeExecutionMode::PooledNoop => {
-                resize_pooled_noop_into(output_dimensions, output)?;
+                resize_pooled_noop_into(output_dimensions, output, row_band_height)?;
                 return Ok(true);
             }
             ResizeExecutionMode::PooledCopy => {
-                resize_pooled_copy_into(source, output_dimensions, output)?;
+                resize_pooled_copy_into(source, output_dimensions, output, row_band_height)?;
                 return Ok(true);
             }
             ResizeExecutionMode::PooledDirect => {}
@@ -460,6 +472,7 @@ impl WasmResize {
                     output_dimensions,
                     output,
                     self.nearest_anchor,
+                    row_band_height,
                 )?;
                 Ok(true)
             }
@@ -471,6 +484,7 @@ impl WasmResize {
                     self.convolution_anchor,
                     self.support_policy,
                     self.plan_scope,
+                    row_band_height,
                 )?;
                 Ok(true)
             }
@@ -483,6 +497,7 @@ impl WasmResize {
                     NonZeroU32::new(2).unwrap(),
                     self.support_policy,
                     self.plan_scope,
+                    row_band_height,
                 )?;
                 Ok(true)
             }
@@ -495,6 +510,7 @@ impl WasmResize {
                     NonZeroU32::new(3).unwrap(),
                     self.support_policy,
                     self.plan_scope,
+                    row_band_height,
                 )?;
                 Ok(true)
             }
@@ -544,25 +560,37 @@ impl WasmResize {
 fn resize_pooled_noop_into(
     output_dimensions: ImageDimensions,
     output: &mut [u8],
+    row_band_height: usize,
 ) -> Result<(), JsValue> {
-    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, _y_start| {
-        black_box(output_view.data().as_ptr());
-    })
+    resize_rows_pooled_direct_into(
+        output_dimensions,
+        output,
+        row_band_height,
+        |output_view, _y_start| {
+            black_box(output_view.data().as_ptr());
+        },
+    )
 }
 
 fn resize_pooled_copy_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
+    row_band_height: usize,
 ) -> Result<(), JsValue> {
-    resize_rows_pooled_direct_into(output_dimensions, output, |mut output_view, y_start| {
-        let source = source.data();
-        let output = output_view.data_mut();
-        let source_offset = (y_start as usize * output.len()) % source.len();
-        for (index, byte) in output.iter_mut().enumerate() {
-            *byte = source[(source_offset + index) % source.len()];
-        }
-    })
+    resize_rows_pooled_direct_into(
+        output_dimensions,
+        output,
+        row_band_height,
+        |mut output_view, y_start| {
+            let source = source.data();
+            let output = output_view.data_mut();
+            let source_offset = (y_start as usize * output.len()) % source.len();
+            for (index, byte) in output.iter_mut().enumerate() {
+                *byte = source[(source_offset + index) % source.len()];
+            }
+        },
+    )
 }
 
 fn resize_bicubic_rgba8_pooled_direct_into(
@@ -572,11 +600,13 @@ fn resize_bicubic_rgba8_pooled_direct_into(
     anchor: ConvolutionResizeAnchor,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
+    row_band_height: usize,
 ) -> Result<(), JsValue> {
     if plan_scope == ResizePlanScope::PerBand {
         return resize_rows_pooled_direct_into(
             output_dimensions,
             output,
+            row_band_height,
             |output_view, y_start| {
                 resize_bicubic_rgba8_rows_into(
                     source,
@@ -596,9 +626,14 @@ fn resize_bicubic_rgba8_pooled_direct_into(
         anchor,
         support_policy,
     );
-    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
-        resize_bicubic_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
-    })
+    resize_rows_pooled_direct_into(
+        output_dimensions,
+        output,
+        row_band_height,
+        |output_view, y_start| {
+            resize_bicubic_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
+        },
+    )
 }
 
 fn resize_lanczos_rgba8_pooled_direct_into(
@@ -609,11 +644,13 @@ fn resize_lanczos_rgba8_pooled_direct_into(
     radius: NonZeroU32,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
+    row_band_height: usize,
 ) -> Result<(), JsValue> {
     if plan_scope == ResizePlanScope::PerBand {
         return resize_rows_pooled_direct_into(
             output_dimensions,
             output,
+            row_band_height,
             |output_view, y_start| match radius.get() {
                 2 => resize_lanczos2_rgba8_rows_into(
                     source,
@@ -643,9 +680,14 @@ fn resize_lanczos_rgba8_pooled_direct_into(
         radius,
         support_policy,
     );
-    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
-        resize_lanczos_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
-    })
+    resize_rows_pooled_direct_into(
+        output_dimensions,
+        output,
+        row_band_height,
+        |output_view, y_start| {
+            resize_lanczos_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
+        },
+    )
 }
 
 fn resize_nearest_rgba8_pooled_direct_into(
@@ -653,20 +695,28 @@ fn resize_nearest_rgba8_pooled_direct_into(
     output_dimensions: ImageDimensions,
     output: &mut [u8],
     anchor: NearestResizeAnchor,
+    row_band_height: usize,
 ) -> Result<(), JsValue> {
     let plan = NearestResizePlan::new(source.dimensions(), output_dimensions, anchor);
-    resize_rows_pooled_direct_into(output_dimensions, output, |output_view, y_start| {
-        resize_nearest_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
-    })
+    resize_rows_pooled_direct_into(
+        output_dimensions,
+        output,
+        row_band_height,
+        |output_view, y_start| {
+            resize_nearest_rgba8_rows_with_plan_into(source, output_view, &plan, y_start);
+        },
+    )
 }
 
 fn resize_rows_pooled_direct_into(
     output_dimensions: ImageDimensions,
     output: &mut [u8],
+    row_band_height: usize,
     process_row: impl Fn(ImageViewMut<'_, Rgba8>, u32) + Sync,
 ) -> Result<(), JsValue> {
+    let row_band_height = row_band_height.max(1);
     let row_len = output_dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
-    let band_len = row_len * PROTOTYPE_ROW_BAND_HEIGHT;
+    let band_len = row_len * row_band_height;
 
     #[cfg(feature = "threads")]
     {
@@ -675,7 +725,7 @@ fn resize_rows_pooled_direct_into(
             .par_chunks_mut(band_len)
             .enumerate()
             .for_each(|(band_index, output_band)| {
-                let y_start = (band_index * PROTOTYPE_ROW_BAND_HEIGHT) as u32;
+                let y_start = (band_index * row_band_height) as u32;
                 let band_height = (output_band.len() / row_len) as u32;
                 let band_dimensions = ImageDimensions::new(output_dimensions.width(), band_height)
                     .expect("band dimensions should be valid");
@@ -688,7 +738,7 @@ fn resize_rows_pooled_direct_into(
     #[cfg(not(feature = "threads"))]
     {
         for (band_index, output_band) in output.chunks_mut(band_len).enumerate() {
-            let y_start = (band_index * PROTOTYPE_ROW_BAND_HEIGHT) as u32;
+            let y_start = (band_index * row_band_height) as u32;
             let band_height = (output_band.len() / row_len) as u32;
             let band_dimensions = ImageDimensions::new(output_dimensions.width(), band_height)
                 .map_err(|error| JsValue::from_str(&error.to_string()))?;
@@ -709,6 +759,7 @@ struct WasmBenchmarkConfig {
     warm_up_iterations: u32,
     target_sample_time_ms: f64,
     live_stats: bool,
+    row_band_height: usize,
 }
 
 struct WasmBenchmarkResult {
@@ -759,7 +810,14 @@ fn run_color_benchmark(
     while warmup_elapsed < config.warm_up_time_ms
         || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
     {
-        let elapsed = run_color_batch(source, target, mode, output, batch_size);
+        let elapsed = run_color_batch(
+            source,
+            target,
+            mode,
+            output,
+            batch_size,
+            config.row_band_height,
+        );
         if (elapsed - config.target_sample_time_ms).abs()
             < (best_batch_elapsed - config.target_sample_time_ms).abs()
         {
@@ -798,7 +856,14 @@ fn run_color_benchmark(
     while samples_ns.len() < config.sample_size as usize
         && measurement_elapsed < config.measurement_time_ms
     {
-        let elapsed_ms = run_color_batch(source, target, mode, output, batch_size);
+        let elapsed_ms = run_color_batch(
+            source,
+            target,
+            mode,
+            output,
+            batch_size,
+            config.row_band_height,
+        );
         let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
         samples_ns.push(sample_ns);
         total_iterations += u64::from(batch_size);
@@ -830,6 +895,7 @@ fn run_color_batch(
     mode: ColorBenchmarkMode,
     output: &mut [f32],
     batch_size: u32,
+    row_band_height: usize,
 ) -> f64 {
     let started = performance_now();
     for _ in 0..batch_size {
@@ -838,7 +904,7 @@ fn run_color_batch(
                 rgba8_to_color_space_f32_with_policy_into(source, target, false, output)
             }
             ColorBenchmarkMode::PooledDirect => {
-                rgba8_to_color_space_f32_with_policy_into(source, target, true, output)
+                benchmark_color_pooled_direct(source, target, output, row_band_height)
             }
             ColorBenchmarkMode::PooledNoop => benchmark_color_pooled_noop(source, output),
             ColorBenchmarkMode::PooledCopy => benchmark_color_pooled_copy(source, output),
@@ -846,6 +912,29 @@ fn run_color_batch(
         black_box(output.as_ref());
     }
     performance_now() - started
+}
+
+fn benchmark_color_pooled_direct(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    output: &mut [f32],
+    row_band_height: usize,
+) {
+    #[cfg(feature = "threads")]
+    {
+        crate::prod::color::rgba8_to_color_space_f32_parallel_with_band_height_into(
+            source,
+            target,
+            output,
+            row_band_height,
+        );
+    }
+
+    #[cfg(not(feature = "threads"))]
+    {
+        black_box(row_band_height);
+        rgba8_to_color_space_f32_with_policy_into(source, target, true, output);
+    }
 }
 
 fn benchmark_color_pooled_noop(source: ImageView<'_, Rgba8>, output: &mut [f32]) {
@@ -942,6 +1031,7 @@ fn run_resize_benchmark(
             parallelization_policy,
             output,
             batch_size,
+            config.row_band_height,
         )?;
         if (elapsed - config.target_sample_time_ms).abs()
             < (best_batch_elapsed - config.target_sample_time_ms).abs()
@@ -988,6 +1078,7 @@ fn run_resize_benchmark(
             parallelization_policy,
             output,
             batch_size,
+            config.row_band_height,
         )?;
         let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
         samples_ns.push(sample_ns);
@@ -1021,10 +1112,13 @@ fn run_resize_batch(
     parallelization_policy: bool,
     output: &mut [u8],
     batch_size: u32,
+    row_band_height: usize,
 ) -> Result<f64, JsValue> {
     let started = performance_now();
     for _ in 0..batch_size {
-        if !(parallelization_policy && resize.run_pooled(source, output_dimensions, output)?) {
+        if !(parallelization_policy
+            && resize.run_pooled(source, output_dimensions, output, row_band_height)?)
+        {
             resize.run(source, output_dimensions, output)?;
         }
         black_box(output.as_ref());
