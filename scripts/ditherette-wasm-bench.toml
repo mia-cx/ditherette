@@ -14,6 +14,7 @@ sample_size = 100
 measurement_time = "10s"
 warm_up_time = "1s"
 target_sample_time = "50ms"
+baseline = "accepted"
 live_stats = true
 
 [profiles.all]
