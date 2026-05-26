@@ -73,7 +73,8 @@ try {
 			name: fixture.name,
 			url: `/fixtures/${encodeURIComponent(fixture.name)}`
 		})),
-		subjects: options.subjects.map(subjectConfig),
+		subjects: runConfig.subjects.map(subjectConfig),
+		reportSubjects: options.subjects.map(subjectConfig),
 		scales: runConfig.scales,
 		reportScales: options.scales,
 		lanes: options.lanes,
@@ -125,13 +126,28 @@ try {
 
 function sweepRunConfigs(options) {
 	const configs = [];
-	for (const threadCount of options.threadCounts) {
-		for (const rowBandHeight of options.rowBandHeights) {
-			for (const scale of options.scales) {
+	const scalarSubjects = options.subjects.filter((subject) => /:scalar$|:fixed$/.test(subject));
+	const candidateSubjects = options.subjects.filter((subject) => !scalarSubjects.includes(subject));
+
+	for (const scale of options.scales) {
+		if (options.domain === 'color' && scalarSubjects.length > 0) {
+			configs.push({
+				threadCount: options.threadCounts[0],
+				rowBandHeight: options.rowBandHeights[0],
+				scales: [scale],
+				subjects: scalarSubjects
+			});
+		}
+
+		for (const threadCount of options.threadCounts) {
+			for (const rowBandHeight of options.rowBandHeights) {
+				const subjects = options.domain === 'color' ? candidateSubjects : options.subjects;
+				if (subjects.length === 0) continue;
 				configs.push({
 					threadCount,
 					rowBandHeight,
 					scales: [scale],
+					subjects,
 					label: `workers-${threadCount}-band-${rowBandHeight}`
 				});
 			}
@@ -349,7 +365,7 @@ globalThis.runWasmBench = async function runWasmBench(config) {
 		kind: 'start',
 		domain: config.domain,
 		profile: config.profile,
-		subjects: config.subjects.map((subject) => subject.id),
+		subjects: (config.reportSubjects ?? config.subjects).map((subject) => subject.id),
 		scales: config.reportScales ?? config.scales,
 		lanes: config.lanes,
 		baseline: config.baseline,
@@ -856,7 +872,7 @@ function benchRunArtifact(options, browserResult) {
 function candidateComparisons(results) {
 	const byCaseAndKernel = new Map();
 	for (const result of results) {
-		const key = [result.id, result.filter, result.fixture.name].join('|');
+		const key = [comparisonCaseId(result), result.filter, result.fixture.name].join('|');
 		const bucket = byCaseAndKernel.get(key) ?? { scalar: undefined, candidates: [] };
 		if (isScalarResult(result)) bucket.scalar = result;
 		else if (isCandidateResult(result)) bucket.candidates.push(result);
@@ -870,6 +886,11 @@ function candidateComparisons(results) {
 			comparisons.push(candidateComparison(bucket.scalar, candidate));
 	}
 	return comparisons;
+}
+
+function comparisonCaseId(result) {
+	if (!result.subject.startsWith('wasm:color:')) return result.id;
+	return result.id.replace(/-workers-\d+-band-(?:even-\d+|even|\d+)(?=-decoded-rgba$)/, '');
 }
 
 function isScalarResult(result) {

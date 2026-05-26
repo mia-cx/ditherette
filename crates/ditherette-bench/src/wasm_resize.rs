@@ -491,7 +491,7 @@ fn attach_same_run_scalar_comparisons(profile: Option<&str>, results: &mut [Benc
 }
 
 fn same_case(result: &BenchResult, baseline: &BenchResult) -> bool {
-    result.case_id == baseline.case_id
+    same_case_id(result, baseline)
         && result.fixture_fingerprint == baseline.fixture_fingerprint
         && result.source_width == baseline.source_width
         && result.source_height == baseline.source_height
@@ -502,6 +502,14 @@ fn same_case(result: &BenchResult, baseline: &BenchResult) -> bool {
         && result.filter == baseline.filter
         && result.pixel_format == baseline.pixel_format
         && result.params_fingerprint == baseline.params_fingerprint
+}
+
+fn same_case_id(result: &BenchResult, baseline: &BenchResult) -> bool {
+    if result.case_id == baseline.case_id {
+        return true;
+    }
+
+    result.subject.starts_with("wasm:color:") && baseline.subject.starts_with("wasm:color:")
 }
 
 fn result_scale_x(result: &BenchResult) -> f64 {
