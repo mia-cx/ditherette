@@ -509,7 +509,7 @@ fn same_case_id(result: &BenchResult, baseline: &BenchResult) -> bool {
         return true;
     }
 
-    result.subject.starts_with("wasm:color:") && baseline.subject.starts_with("wasm:color:")
+    result.subject.starts_with("wasm:") && baseline.subject.starts_with("wasm:")
 }
 
 fn result_scale_x(result: &BenchResult) -> f64 {
