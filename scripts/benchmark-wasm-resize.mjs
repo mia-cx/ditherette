@@ -90,7 +90,7 @@ try {
 		rowBandHeight: runConfig.rowBandHeight,
 		sweepLabel: runConfig.label,
 		emitStart: runIndex === 0,
-		periodicScalarRemeasurement: options.periodicScalarRemeasurement
+		periodicScalarRemeasurement: runConfig.periodicScalarRemeasurement ?? options.periodicScalarRemeasurement
 		});
 		await page.close();
 		if (!browserResult) {
@@ -130,25 +130,26 @@ function sweepRunConfigs(options) {
 	const candidateSubjects = options.subjects.filter((subject) => !scalarSubjects.includes(subject));
 
 	for (const scale of options.scales) {
-		if (options.domain === 'color' && scalarSubjects.length > 0) {
+		if (scalarSubjects.length > 0) {
 			configs.push({
 				threadCount: options.threadCounts[0],
 				rowBandHeight: options.rowBandHeights[0],
 				scales: [scale],
-				subjects: scalarSubjects
+				subjects: scalarSubjects,
+				periodicScalarRemeasurement: false
 			});
 		}
 
 		for (const threadCount of options.threadCounts) {
 			for (const rowBandHeight of options.rowBandHeights) {
-				const subjects = options.domain === 'color' ? candidateSubjects : options.subjects;
-				if (subjects.length === 0) continue;
+				if (candidateSubjects.length === 0) continue;
 				configs.push({
 					threadCount,
 					rowBandHeight,
 					scales: [scale],
-					subjects,
-					label: `workers-${threadCount}-band-${rowBandHeight}`
+					subjects: candidateSubjects,
+					label: `workers-${threadCount}-band-${rowBandHeight}`,
+					periodicScalarRemeasurement: false
 				});
 			}
 		}
@@ -889,8 +890,8 @@ function candidateComparisons(results) {
 }
 
 function comparisonCaseId(result) {
-	if (!result.subject.startsWith('wasm:color:')) return result.id;
-	return result.id.replace(/-workers-\d+-band-(?:even-\d+|even|\d+)(?=-decoded-rgba$)/, '');
+	if (!result.subject.startsWith('wasm:')) return result.id;
+	return result.id.replace(/-workers-\d+-band-(?:even-\d+|even|\d+)(?=-(?:decoded-rgba|browser-decode)$)/, '');
 }
 
 function isScalarResult(result) {
