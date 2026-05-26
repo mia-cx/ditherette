@@ -49,7 +49,6 @@ pub(crate) fn wasm_resize_command(args: &[String]) -> Result<(), BenchError> {
 
     let mut state = WasmRunState {
         accepted_baseline: bench_flags.accepted_baseline.clone(),
-        save_baseline: bench_flags.save_baseline.clone(),
         ..WasmRunState::default()
     };
     for line in reader.lines() {
@@ -250,7 +249,6 @@ struct WasmRunState {
     logger: Option<MeasurementLogger>,
     profile: Option<String>,
     accepted_baseline: Option<String>,
-    save_baseline: Option<String>,
     domain: Option<String>,
 }
 
@@ -309,18 +307,6 @@ impl WasmRunState {
         self.profile = event.profile;
         if self.accepted_baseline.is_none() {
             self.accepted_baseline = event.baseline.clone();
-        }
-        if self.accepted_baseline.is_none() {
-            if let Some(name) = self.save_baseline.as_deref() {
-                self.accepted_baseline = Some(if name == "true" {
-                    self.profile
-                        .as_deref()
-                        .unwrap_or("ad-hoc")
-                        .to_owned()
-                } else {
-                    name.to_owned()
-                });
-            }
         }
         let measurement = event.measurement.config();
         log_perf_start(
