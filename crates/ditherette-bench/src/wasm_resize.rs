@@ -249,7 +249,7 @@ struct WasmRunState {
     logger: Option<MeasurementLogger>,
     profile: Option<String>,
     accepted_baseline: Option<String>,
-    scalar_comparison_subject: Option<String>,
+    same_run_scalar_comparison: bool,
     domain: Option<String>,
 }
 
@@ -285,8 +285,8 @@ impl WasmRunState {
             }
             WasmEvent::Result(event) => {
                 let mut result = event.result.into_bench_result();
-                if self.scalar_comparison_subject.is_some() {
-                    self.attach_scalar_sweep_comparison(&mut result);
+                if self.same_run_scalar_comparison {
+                    self.attach_same_run_scalar_comparison(&mut result);
                 } else if let Some(name) = self.accepted_baseline_name() {
                     self.attach_accepted_comparison(name, &mut result)?;
                 }
@@ -308,8 +308,9 @@ impl WasmRunState {
     fn start(&mut self, event: StartEvent) -> Result<(), BenchError> {
         self.domain = Some(event.domain.clone());
         self.profile = event.profile;
-        self.scalar_comparison_subject = scalar_sweep_baseline_subject(self.profile.as_deref());
-        if self.scalar_comparison_subject.is_some() {
+        self.same_run_scalar_comparison =
+            same_run_scalar_comparison_profile(self.profile.as_deref());
+        if self.same_run_scalar_comparison {
             self.accepted_baseline = None;
         } else if self.accepted_baseline.is_none() {
             self.accepted_baseline = event.baseline.clone();
@@ -330,9 +331,8 @@ impl WasmRunState {
                 .collect::<Vec<_>>(),
             &measurement,
             None,
-            self.scalar_comparison_subject
-                .as_deref()
-                .map(|_| "same-run scalar")
+            self.same_run_scalar_comparison
+                .then_some("same-run scalar")
                 .or(self.accepted_baseline.as_deref()),
         );
         self.measurement = Some(measurement);
@@ -372,8 +372,10 @@ impl WasmRunState {
         Ok(())
     }
 
-    fn attach_scalar_sweep_comparison(&self, result: &mut BenchResult) {
-        let Some(baseline_subject) = self.scalar_comparison_subject.as_deref() else {
+    fn attach_same_run_scalar_comparison(&self, result: &mut BenchResult) {
+        let Some(baseline_subject) =
+            same_run_scalar_baseline_subject(self.profile.as_deref(), result)
+        else {
             return;
         };
         if result.subject == baseline_subject {
@@ -394,10 +396,7 @@ impl WasmRunState {
         let measurement = self.measurement.ok_or_else(|| {
             BenchError::Runtime("browser/Wasm harness did not emit start event".to_owned())
         })?;
-        attach_scalar_sweep_comparisons(
-            self.scalar_comparison_subject.as_deref(),
-            &mut self.results,
-        );
+        attach_same_run_scalar_comparisons(self.profile.as_deref(), &mut self.results);
         print_perf_table(&self.results);
 
         let domain = self.domain.as_deref().unwrap_or("resize");
@@ -442,21 +441,38 @@ impl WasmRunState {
     }
 }
 
-fn scalar_sweep_baseline_subject(profile: Option<&str>) -> Option<String> {
+fn same_run_scalar_comparison_profile(profile: Option<&str>) -> bool {
+    matches!(
+        profile,
+        Some("nearest-thread" | "convolution-thread" | "convolution-plan-scope" | "color")
+    )
+}
+
+fn same_run_scalar_baseline_subject(profile: Option<&str>, result: &BenchResult) -> Option<String> {
     match profile? {
         "nearest-thread" => Some("wasm:resize:nearest:scalar".to_owned()),
         "convolution-thread" | "convolution-plan-scope" => {
             Some("wasm:resize:lanczos3:fixed".to_owned())
         }
+        "color" => result
+            .subject
+            .rsplit_once(':')
+            .and_then(|(prefix, variant)| {
+                (variant != "scalar").then(|| format!("{prefix}:scalar"))
+            }),
         _ => None,
     }
 }
 
-fn attach_scalar_sweep_comparisons(baseline_subject: Option<&str>, results: &mut [BenchResult]) {
-    let Some(baseline_subject) = baseline_subject else {
+fn attach_same_run_scalar_comparisons(profile: Option<&str>, results: &mut [BenchResult]) {
+    if !same_run_scalar_comparison_profile(profile) {
         return;
-    };
+    }
     for index in 0..results.len() {
+        let Some(baseline_subject) = same_run_scalar_baseline_subject(profile, &results[index])
+        else {
+            continue;
+        };
         if results[index].subject == baseline_subject {
             continue;
         }
