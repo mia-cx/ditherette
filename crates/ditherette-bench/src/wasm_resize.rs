@@ -22,7 +22,7 @@ use crate::{
     fixture::Fixture,
     measure::{MeasurementConfig, MeasurementObserver, MeasurementProgress},
     report::{log_perf_start, print_perf_table, MeasurementLogger},
-    result::{BenchResult, BenchRun, SampleStats},
+    result::{BenchResult, BenchRun, ComparisonReport, SampleStats},
 };
 
 const WASM_MANIFEST: &str = "scripts/ditherette-wasm-bench.toml";
@@ -249,6 +249,7 @@ struct WasmRunState {
     logger: Option<MeasurementLogger>,
     profile: Option<String>,
     accepted_baseline: Option<String>,
+    scalar_comparison_subject: Option<String>,
     domain: Option<String>,
 }
 
@@ -284,7 +285,9 @@ impl WasmRunState {
             }
             WasmEvent::Result(event) => {
                 let mut result = event.result.into_bench_result();
-                if let Some(name) = self.accepted_baseline_name() {
+                if self.scalar_comparison_subject.is_some() {
+                    self.attach_scalar_sweep_comparison(&mut result);
+                } else if let Some(name) = self.accepted_baseline_name() {
                     self.attach_accepted_comparison(name, &mut result)?;
                 }
                 if let Some(mut logger) = self.logger.take() {
@@ -305,7 +308,10 @@ impl WasmRunState {
     fn start(&mut self, event: StartEvent) -> Result<(), BenchError> {
         self.domain = Some(event.domain.clone());
         self.profile = event.profile;
-        if self.accepted_baseline.is_none() {
+        self.scalar_comparison_subject = scalar_sweep_baseline_subject(self.profile.as_deref());
+        if self.scalar_comparison_subject.is_some() {
+            self.accepted_baseline = None;
+        } else if self.accepted_baseline.is_none() {
             self.accepted_baseline = event.baseline.clone();
         }
         let measurement = event.measurement.config();
@@ -324,7 +330,10 @@ impl WasmRunState {
                 .collect::<Vec<_>>(),
             &measurement,
             None,
-            self.accepted_baseline.as_deref(),
+            self.scalar_comparison_subject
+                .as_deref()
+                .map(|_| "same-run scalar")
+                .or(self.accepted_baseline.as_deref()),
         );
         self.measurement = Some(measurement);
         Ok(())
@@ -363,10 +372,32 @@ impl WasmRunState {
         Ok(())
     }
 
-    fn finish(self, flags: &WasmBenchFlags) -> Result<(), BenchError> {
+    fn attach_scalar_sweep_comparison(&self, result: &mut BenchResult) {
+        let Some(baseline_subject) = self.scalar_comparison_subject.as_deref() else {
+            return;
+        };
+        if result.subject == baseline_subject {
+            return;
+        }
+        let Some(baseline) = self.results.iter().find(|candidate| {
+            candidate.subject == baseline_subject && same_case(result, candidate)
+        }) else {
+            return;
+        };
+        result.comparisons.insert(
+            "accepted".to_owned(),
+            comparison("same-run scalar", result.median_ns, baseline.median_ns),
+        );
+    }
+
+    fn finish(mut self, flags: &WasmBenchFlags) -> Result<(), BenchError> {
         let measurement = self.measurement.ok_or_else(|| {
             BenchError::Runtime("browser/Wasm harness did not emit start event".to_owned())
         })?;
+        attach_scalar_sweep_comparisons(
+            self.scalar_comparison_subject.as_deref(),
+            &mut self.results,
+        );
         print_perf_table(&self.results);
 
         let domain = self.domain.as_deref().unwrap_or("resize");
@@ -408,6 +439,85 @@ impl WasmRunState {
         }
         println!("\nWrote {}", path.display());
         Ok(())
+    }
+}
+
+fn scalar_sweep_baseline_subject(profile: Option<&str>) -> Option<String> {
+    match profile? {
+        "nearest-thread" => Some("wasm:resize:nearest:scalar".to_owned()),
+        "convolution-thread" | "convolution-plan-scope" => {
+            Some("wasm:resize:lanczos3:fixed".to_owned())
+        }
+        _ => None,
+    }
+}
+
+fn attach_scalar_sweep_comparisons(baseline_subject: Option<&str>, results: &mut [BenchResult]) {
+    let Some(baseline_subject) = baseline_subject else {
+        return;
+    };
+    for index in 0..results.len() {
+        if results[index].subject == baseline_subject {
+            continue;
+        }
+        let Some(baseline) = results.iter().find(|candidate| {
+            candidate.subject == baseline_subject && same_case(&results[index], candidate)
+        }) else {
+            continue;
+        };
+        results[index].comparisons.insert(
+            "accepted".to_owned(),
+            comparison(
+                "same-run scalar",
+                results[index].median_ns,
+                baseline.median_ns,
+            ),
+        );
+    }
+}
+
+fn same_case(result: &BenchResult, baseline: &BenchResult) -> bool {
+    result.fixture_fingerprint == baseline.fixture_fingerprint
+        && result.source_width == baseline.source_width
+        && result.source_height == baseline.source_height
+        && result.output_width == baseline.output_width
+        && result.output_height == baseline.output_height
+        && result_scale_x(result) == result_scale_x(baseline)
+        && result_scale_y(result) == result_scale_y(baseline)
+        && result.filter == baseline.filter
+        && result.pixel_format == baseline.pixel_format
+        && result.params_fingerprint == baseline.params_fingerprint
+}
+
+fn result_scale_x(result: &BenchResult) -> f64 {
+    if result.scale_x == 0.0 {
+        result.scale
+    } else {
+        result.scale_x
+    }
+}
+
+fn result_scale_y(result: &BenchResult) -> f64 {
+    if result.scale_y == 0.0 {
+        result.scale
+    } else {
+        result.scale_y
+    }
+}
+
+fn comparison(baseline: &str, current_ns: f64, baseline_ns: f64) -> ComparisonReport {
+    let ratio = current_ns / baseline_ns;
+    ComparisonReport {
+        baseline: baseline.to_owned(),
+        median_ns: baseline_ns,
+        ratio,
+        status: if ratio < 0.98 {
+            "faster".to_owned()
+        } else if ratio > 1.02 {
+            "slower".to_owned()
+        } else {
+            "same".to_owned()
+        },
     }
 }
 
