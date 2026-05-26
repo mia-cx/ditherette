@@ -23,19 +23,14 @@ pub(crate) fn log_perf_start(
     fixtures: &[Fixture],
     scales: &[ResizeScale],
     measurement: &MeasurementConfig,
-    oracle: Option<&SubjectId>,
+    oracle: Option<&str>,
     baseline: Option<&str>,
 ) {
     println!("{}", heading("Ditherette perf benchmark"));
     println!("  domain:   {domain}");
     println!("  subjects: {}", subjects.join(", "));
     println!("  scales:   {}", format_scales(scales));
-    println!(
-        "  oracle:   {}",
-        oracle
-            .map(ToString::to_string)
-            .unwrap_or_else(|| "—".to_owned())
-    );
+    println!("  oracle:   {}", oracle.unwrap_or("—"));
     println!("  baseline: {}", baseline.unwrap_or("—"));
     println!(
         "  config:   {}, warmup {}, target batch {}, run until {} samples or {}",
@@ -301,7 +296,7 @@ struct MeasurementBlock {
     total_iterations: usize,
     output: (u32, u32),
     stats: Option<SampleStats>,
-    accepted_comparison: Option<ComparisonReport>,
+    comparison: Option<ComparisonReport>,
 }
 
 impl MeasurementBlock {
@@ -315,7 +310,11 @@ impl MeasurementBlock {
             total_iterations: result.total_iterations,
             output: (result.output_width, result.output_height),
             stats: Some(SampleStats::from_samples(&result.sample_ns)),
-            accepted_comparison: result.comparisons.get("accepted").cloned(),
+            comparison: result
+                .comparisons
+                .get("accepted")
+                .or_else(|| result.comparisons.get("oracle"))
+                .cloned(),
         }
     }
 
@@ -328,7 +327,7 @@ impl MeasurementBlock {
             total_iterations: progress.total_iterations,
             output,
             stats: Some(SampleStats::from_samples(samples)),
-            accepted_comparison: None,
+            comparison: None,
         }
     }
 }
@@ -373,7 +372,7 @@ fn render_measurement_block(block: &MeasurementBlock) -> Vec<String> {
         dim(format_mpix_per_s(throughput_upper))
     ));
 
-    if let Some(comparison) = block.accepted_comparison.as_ref() {
+    if let Some(comparison) = block.comparison.as_ref() {
         lines.extend(render_change_block(&stats, comparison));
     }
 
