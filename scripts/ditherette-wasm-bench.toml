@@ -252,8 +252,6 @@ domain = "color"
 subjects = [
   "wasm:color:linear-srgb-f32:scalar",
   "wasm:color:linear-srgb-f32:pooled_direct",
-  "wasm:color:linear-srgb-f32:pooled_noop",
-  "wasm:color:linear-srgb-f32:pooled_copy",
   "wasm:color:oklab-f32:scalar",
   "wasm:color:oklab-f32:pooled_direct",
   "wasm:color:cielab-f32:scalar",
