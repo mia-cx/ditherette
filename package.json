@@ -17,7 +17,7 @@
 		"test:unit": "vitest",
 		"gen": "wrangler types",
 		"wasm:build": "pnpm dlx wasm-pack build crates/ditherette-wasm --target web --out-dir ../../static/wasm/ditherette-wasm",
-		"wasm:build:threads": "RUSTFLAGS='-C target-feature=+atomics,+bulk-memory' rustup run nightly-2024-08-02 pnpm dlx wasm-pack build crates/ditherette-wasm --target web --out-dir ../../static/wasm/ditherette-wasm-threads -- --features threads -Z build-std=panic_abort,std",
+		"wasm:build:threads": "RUSTFLAGS='-C target-feature=+atomics,+bulk-memory -C link-arg=--max-memory=2147483648' rustup run nightly-2024-08-02 pnpm dlx wasm-pack build crates/ditherette-wasm --target web --out-dir ../../static/wasm/ditherette-wasm-threads -- --features threads -Z build-std=panic_abort,std",
 		"wasm:probe:threads": "pnpm wasm:build:threads && node scripts/probe-wasm-threads.mjs",
 		"wasm:test": "pnpm dlx wasm-pack test --node crates/ditherette-wasm",
 		"wasm:test:browser": "pnpm dlx wasm-pack test --headless --chrome crates/ditherette-wasm",

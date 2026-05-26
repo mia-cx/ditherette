@@ -74,7 +74,8 @@ try {
 			url: `/fixtures/${encodeURIComponent(fixture.name)}`
 		})),
 		subjects: options.subjects.map(subjectConfig),
-		scales: options.scales,
+		scales: runConfig.scales,
+		reportScales: options.scales,
 		lanes: options.lanes,
 		baseline: options.baseline,
 		sampleSize: options.sampleSize,
@@ -126,11 +127,14 @@ function sweepRunConfigs(options) {
 	const configs = [];
 	for (const threadCount of options.threadCounts) {
 		for (const rowBandHeight of options.rowBandHeights) {
-			configs.push({
-				threadCount,
-				rowBandHeight,
-				label: `workers-${threadCount}-band-${rowBandHeight}`
-			});
+			for (const scale of options.scales) {
+				configs.push({
+					threadCount,
+					rowBandHeight,
+					scales: [scale],
+					label: `workers-${threadCount}-band-${rowBandHeight}`
+				});
+			}
 		}
 	}
 	return configs;
@@ -346,7 +350,7 @@ globalThis.runWasmBench = async function runWasmBench(config) {
 		domain: config.domain,
 		profile: config.profile,
 		subjects: config.subjects.map((subject) => subject.id),
-		scales: config.scales,
+		scales: config.reportScales ?? config.scales,
 		lanes: config.lanes,
 		baseline: config.baseline,
 		measurement: {
