@@ -271,8 +271,6 @@ const NEAREST_MIN_DOWNSCALE_RATIO: f64 = 0.25;
 #[allow(dead_code)]
 const NEAREST_NEAR_IDENTITY_DOWNSCALE_RATIO: f64 = 0.98;
 #[allow(dead_code)]
-const NEAREST_MAX_UPSCALE_RATIO: f64 = 2.0;
-#[allow(dead_code)]
 const NEAREST_ROW_BAND_HEIGHT: usize = 32;
 
 #[derive(Deserialize)]
@@ -553,6 +551,7 @@ impl WasmResize {
         if self.execution_mode != ResizeExecutionMode::PolicyDefault
             || !matches!(self.filter, WasmResizeFilter::Nearest)
             || source_dimensions == output_dimensions
+            || nearest_exact_integer_upscale(source_dimensions, output_dimensions)
             || output_dimensions.pixel_count().expect("valid dimensions")
                 < NEAREST_PARALLEL_PIXEL_THRESHOLD
         {
@@ -635,12 +634,17 @@ fn nearest_parallel_scale_is_profitable(scale_x: f64, scale_y: f64) -> bool {
             && max_scale <= NEAREST_NEAR_IDENTITY_DOWNSCALE_RATIO;
     }
 
-    if scale_x >= 1.0 && scale_y >= 1.0 {
-        let max_scale = scale_x.max(scale_y);
-        return max_scale > 1.0 && max_scale < NEAREST_MAX_UPSCALE_RATIO;
-    }
+    scale_x >= 1.0 && scale_y >= 1.0
+}
 
-    false
+fn nearest_exact_integer_upscale(
+    source_dimensions: ImageDimensions,
+    output_dimensions: ImageDimensions,
+) -> bool {
+    source_dimensions.width() < output_dimensions.width()
+        && source_dimensions.height() < output_dimensions.height()
+        && output_dimensions.width() % source_dimensions.width() == 0
+        && output_dimensions.height() % source_dimensions.height() == 0
 }
 
 fn resize_pooled_noop_into(
@@ -1400,8 +1404,23 @@ mod tests {
         assert!(!nearest_parallel_scale_is_profitable(0.125, 0.125));
         assert!(!nearest_parallel_scale_is_profitable(0.99, 0.99));
         assert!(!nearest_parallel_scale_is_profitable(1.0, 1.0));
-        assert!(!nearest_parallel_scale_is_profitable(2.0, 2.0));
         assert!(!nearest_parallel_scale_is_profitable(0.5, 1.5));
+    }
+
+    #[test]
+    fn nearest_exact_integer_upscale_detects_fast_copy_shapes() {
+        assert!(nearest_exact_integer_upscale(
+            ImageDimensions::new(800, 800).unwrap(),
+            ImageDimensions::new(1600, 1600).unwrap(),
+        ));
+        assert!(nearest_exact_integer_upscale(
+            ImageDimensions::new(2600, 4168).unwrap(),
+            ImageDimensions::new(7800, 8336).unwrap(),
+        ));
+        assert!(!nearest_exact_integer_upscale(
+            ImageDimensions::new(800, 800).unwrap(),
+            ImageDimensions::new(1200, 1200).unwrap(),
+        ));
     }
 
     #[test]
@@ -1420,6 +1439,14 @@ mod tests {
             resize.production_tiling_policy(
                 ImageDimensions::new(800, 800).unwrap(),
                 ImageDimensions::new(100, 100).unwrap(),
+            ),
+            None
+        );
+
+        assert_eq!(
+            resize.production_tiling_policy(
+                ImageDimensions::new(800, 800).unwrap(),
+                ImageDimensions::new(1600, 1600).unwrap(),
             ),
             None
         );
