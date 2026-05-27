@@ -264,6 +264,16 @@ const CENTER_ANCHOR: &str = "center";
 const FIXED_SUPPORT: &str = "fixed";
 const SCALE_AWARE_SUPPORT: &str = "scale-aware";
 const PROTOTYPE_ROW_BAND_HEIGHT: usize = 32;
+#[allow(dead_code)]
+const NEAREST_PARALLEL_PIXEL_THRESHOLD: usize = 40_000;
+#[allow(dead_code)]
+const NEAREST_MIN_DOWNSCALE_RATIO: f64 = 0.25;
+#[allow(dead_code)]
+const NEAREST_NEAR_IDENTITY_DOWNSCALE_RATIO: f64 = 0.98;
+#[allow(dead_code)]
+const NEAREST_MAX_UPSCALE_RATIO: f64 = 2.0;
+#[allow(dead_code)]
+const NEAREST_ROW_BAND_HEIGHT: usize = 32;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -370,6 +380,20 @@ fn resize_rgba8_scalar(
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
     let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
 
+    #[cfg(feature = "threads")]
+    if parallelization_policy {
+        if let Some(policy) = resize.production_tiling_policy(source_dimensions, output_dimensions)
+        {
+            resize.run_pooled_direct(
+                source,
+                output_dimensions,
+                &mut output,
+                policy.row_band_height(),
+            )?;
+            return Ok(output);
+        }
+    }
+
     if parallelization_policy
         && resize.run_pooled(
             source,
@@ -454,69 +478,96 @@ impl WasmResize {
         row_band_height: usize,
     ) -> Result<bool, JsValue> {
         match self.execution_mode {
-            ResizeExecutionMode::PolicyDefault => return Ok(false),
+            ResizeExecutionMode::PolicyDefault => Ok(false),
             ResizeExecutionMode::PooledNoop => {
                 resize_pooled_noop_into(output_dimensions, output, row_band_height)?;
-                return Ok(true);
+                Ok(true)
             }
             ResizeExecutionMode::PooledCopy => {
                 resize_pooled_copy_into(source, output_dimensions, output, row_band_height)?;
-                return Ok(true);
+                Ok(true)
             }
-            ResizeExecutionMode::PooledDirect => {}
+            ResizeExecutionMode::PooledDirect => {
+                self.run_pooled_direct(source, output_dimensions, output, row_band_height)?;
+                Ok(true)
+            }
+        }
+    }
+
+    fn run_pooled_direct(
+        self,
+        source: ImageView<'_, Rgba8>,
+        output_dimensions: ImageDimensions,
+        output: &mut [u8],
+        row_band_height: usize,
+    ) -> Result<(), JsValue> {
+        match self.filter {
+            WasmResizeFilter::Nearest => resize_nearest_rgba8_pooled_direct_into(
+                source,
+                output_dimensions,
+                output,
+                self.nearest_anchor,
+                row_band_height,
+            ),
+            WasmResizeFilter::Bicubic => resize_bicubic_rgba8_pooled_direct_into(
+                source,
+                output_dimensions,
+                output,
+                self.convolution_anchor,
+                self.support_policy,
+                self.plan_scope,
+                row_band_height,
+            ),
+            WasmResizeFilter::Lanczos2 => resize_lanczos_rgba8_pooled_direct_into(
+                source,
+                output_dimensions,
+                output,
+                self.convolution_anchor,
+                NonZeroU32::new(2).unwrap(),
+                self.support_policy,
+                self.plan_scope,
+                row_band_height,
+            ),
+            WasmResizeFilter::Lanczos3 => resize_lanczos_rgba8_pooled_direct_into(
+                source,
+                output_dimensions,
+                output,
+                self.convolution_anchor,
+                NonZeroU32::new(3).unwrap(),
+                self.support_policy,
+                self.plan_scope,
+                row_band_height,
+            ),
+            _ => Err(JsValue::from_str(
+                "resize filter does not support pooled direct",
+            )),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn production_tiling_policy(
+        self,
+        source_dimensions: ImageDimensions,
+        output_dimensions: ImageDimensions,
+    ) -> Option<NearestResizeTilingPolicy> {
+        if self.execution_mode != ResizeExecutionMode::PolicyDefault
+            || !matches!(self.filter, WasmResizeFilter::Nearest)
+            || source_dimensions == output_dimensions
+            || output_dimensions.pixel_count().expect("valid dimensions")
+                < NEAREST_PARALLEL_PIXEL_THRESHOLD
+        {
+            return None;
         }
 
-        match self.filter {
-            WasmResizeFilter::Nearest => {
-                resize_nearest_rgba8_pooled_direct_into(
-                    source,
-                    output_dimensions,
-                    output,
-                    self.nearest_anchor,
-                    row_band_height,
-                )?;
-                Ok(true)
-            }
-            WasmResizeFilter::Bicubic => {
-                resize_bicubic_rgba8_pooled_direct_into(
-                    source,
-                    output_dimensions,
-                    output,
-                    self.convolution_anchor,
-                    self.support_policy,
-                    self.plan_scope,
-                    row_band_height,
-                )?;
-                Ok(true)
-            }
-            WasmResizeFilter::Lanczos2 => {
-                resize_lanczos_rgba8_pooled_direct_into(
-                    source,
-                    output_dimensions,
-                    output,
-                    self.convolution_anchor,
-                    NonZeroU32::new(2).unwrap(),
-                    self.support_policy,
-                    self.plan_scope,
-                    row_band_height,
-                )?;
-                Ok(true)
-            }
-            WasmResizeFilter::Lanczos3 => {
-                resize_lanczos_rgba8_pooled_direct_into(
-                    source,
-                    output_dimensions,
-                    output,
-                    self.convolution_anchor,
-                    NonZeroU32::new(3).unwrap(),
-                    self.support_policy,
-                    self.plan_scope,
-                    row_band_height,
-                )?;
-                Ok(true)
-            }
-            _ => Ok(false),
+        let scale_x = output_dimensions.width() as f64 / source_dimensions.width() as f64;
+        let scale_y = output_dimensions.height() as f64 / source_dimensions.height() as f64;
+        if !nearest_parallel_scale_is_profitable(scale_x, scale_y) {
+            return None;
         }
+
+        Some(NearestResizeTilingPolicy {
+            row_band_height: NEAREST_ROW_BAND_HEIGHT,
+        })
     }
 
     fn run(
@@ -556,6 +607,40 @@ impl WasmResize {
         }
         Ok(())
     }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NearestResizeTilingPolicy {
+    row_band_height: usize,
+}
+
+#[allow(dead_code)]
+impl NearestResizeTilingPolicy {
+    const fn row_band_height(self) -> usize {
+        self.row_band_height
+    }
+}
+
+#[allow(dead_code)]
+fn nearest_parallel_scale_is_profitable(scale_x: f64, scale_y: f64) -> bool {
+    if scale_x <= 0.0 || scale_y <= 0.0 {
+        return false;
+    }
+
+    if scale_x <= 1.0 && scale_y <= 1.0 {
+        let min_scale = scale_x.min(scale_y);
+        let max_scale = scale_x.max(scale_y);
+        return min_scale >= NEAREST_MIN_DOWNSCALE_RATIO
+            && max_scale <= NEAREST_NEAR_IDENTITY_DOWNSCALE_RATIO;
+    }
+
+    if scale_x >= 1.0 && scale_y >= 1.0 {
+        let max_scale = scale_x.max(scale_y);
+        return max_scale > 1.0 && max_scale < NEAREST_MAX_UPSCALE_RATIO;
+    }
+
+    false
 }
 
 fn resize_pooled_noop_into(
@@ -1295,5 +1380,57 @@ fn convolution_anchor(value: &str) -> Result<ConvolutionResizeAnchor, JsValue> {
         "bottom" => Ok(ConvolutionResizeAnchor::Bottom),
         "bottom-right" => Ok(ConvolutionResizeAnchor::BottomRight),
         _ => Err(JsValue::from_str("unsupported resize anchor")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nearest_parallel_scale_policy_accepts_profitable_sweep_region() {
+        assert!(nearest_parallel_scale_is_profitable(0.25, 0.25));
+        assert!(nearest_parallel_scale_is_profitable(0.5, 0.5));
+        assert!(nearest_parallel_scale_is_profitable(1.05, 1.05));
+        assert!(nearest_parallel_scale_is_profitable(1.5, 1.5));
+    }
+
+    #[test]
+    fn nearest_parallel_scale_policy_rejects_bad_sweep_region() {
+        assert!(!nearest_parallel_scale_is_profitable(0.125, 0.125));
+        assert!(!nearest_parallel_scale_is_profitable(0.99, 0.99));
+        assert!(!nearest_parallel_scale_is_profitable(1.0, 1.0));
+        assert!(!nearest_parallel_scale_is_profitable(2.0, 2.0));
+        assert!(!nearest_parallel_scale_is_profitable(0.5, 1.5));
+    }
+
+    #[test]
+    fn nearest_production_tiling_policy_requires_threshold_and_policy_default() {
+        let resize = WasmResize::parse("nearest", "center", "fixed").unwrap();
+        assert_eq!(
+            resize.production_tiling_policy(
+                ImageDimensions::new(800, 800).unwrap(),
+                ImageDimensions::new(200, 200).unwrap(),
+            ),
+            Some(NearestResizeTilingPolicy {
+                row_band_height: NEAREST_ROW_BAND_HEIGHT,
+            })
+        );
+        assert_eq!(
+            resize.production_tiling_policy(
+                ImageDimensions::new(800, 800).unwrap(),
+                ImageDimensions::new(100, 100).unwrap(),
+            ),
+            None
+        );
+
+        let diagnostic = WasmResize::parse("nearest", "center", "fixed+pooled-direct").unwrap();
+        assert_eq!(
+            diagnostic.production_tiling_policy(
+                ImageDimensions::new(800, 800).unwrap(),
+                ImageDimensions::new(200, 200).unwrap(),
+            ),
+            None
+        );
     }
 }
