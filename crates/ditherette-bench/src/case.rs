@@ -92,7 +92,10 @@ fn scale_group(group: &str) -> Result<Vec<ResizeScale>, BenchError> {
             0.99, 0.98, 0.97, 0.95, 0.93, 0.9, 0.85, 0.75, 0.5, 0.33, 0.25, 0.19, 0.16, 0.125, 0.1,
         ]),
         "identity" => uniform(vec![1.0]),
-        "nearest-anisotropic" | "area-anisotropic" | "bilinear-anisotropic" | "convolution-anisotropic" => vec![
+        "nearest-anisotropic"
+        | "area-anisotropic"
+        | "bilinear-anisotropic"
+        | "convolution-anisotropic" => vec![
             ResizeScale { x: 0.5, y: 1.0 },
             ResizeScale { x: 1.0, y: 0.5 },
             ResizeScale { x: 0.75, y: 1.0 },
