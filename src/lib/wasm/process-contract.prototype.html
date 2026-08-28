@@ -49,8 +49,8 @@
 	</head>
 	<body>
 		<main>
-			<h1>One processing call, with nowhere for ambiguity to hide.</h1>
-			<p class="intro">Question: can one versioned, typed process contract carry Ditherette and Caelestis from already-cropped RGBA8 plus an ordered palette to a self-contained indexed image, while keeping scalar execution portable and every internal stage private?</p>
+			<h1>One end-to-end path, plus the useful stages.</h1>
+			<p class="intro">Question: can <code>createDitherette()</code> provide one stable end-to-end method plus typed resize, dither, quantize, and fused dither-and-quantize methods, while keeping scalar execution portable and raw Wasm exports private?</p>
 			<div class="notice">Throwaway contract prototype</div>
 
 			<div class="grid">
@@ -58,7 +58,7 @@
 					<div class="card">
 						<h2>Current contract state</h2>
 						<dl class="state-list" id="state"></dl>
-						<div class="verdict" id="verdict">Initialize the scalar processor, then push a request through it.</div>
+						<div class="verdict" id="verdict">Create scalar Ditherette, then call an end-to-end or staged method.</div>
 					</div>
 
 					<div class="card">
@@ -76,12 +76,18 @@
 				<aside>
 					<div class="card">
 						<h2>Proposed public interface</h2>
-						<pre><code>export async function createProcessor(
+						<pre><code>export async function createDitherette(
   options?: { wasm?: InitInput }
-): Promise&lt;Processor&gt;;
+): Promise&lt;Ditherette&gt;;
 
-export interface Processor {
+export interface Ditherette {
   process(request: ProcessRequest): IndexedImage;
+  resize(request: ResizeRequest): Rgba8Image;
+  dither(request: DitherRequest): Rgba8Image;
+  quantize(request: QuantizeRequest): IndexedImage;
+  ditherAndQuantize(
+    request: DitherQuantizeRequest
+  ): IndexedImage;
 }
 
 export type ProcessRequest = {
@@ -115,7 +121,7 @@ export class DitheretteError extends Error {
 
 					<div class="card">
 						<h2>What stays hidden</h2>
-						<p class="muted">Raw wasm-bindgen exports, JSON serialization, palette packing, stage order, scratch memory, caches, tiling, thread policy, benchmarks, and algorithm dispatch. There is no public stage graph.</p>
+						<p class="muted">Raw wasm-bindgen exports, JSON serialization, palette packing, scratch memory, caches, tiling, thread policy, benchmarks, and algorithm dispatch. Typed methods expose supported stages without exposing a configurable stage graph.</p>
 					</div>
 				</aside>
 			</div>
@@ -131,7 +137,7 @@ export class DitheretteError extends Error {
 					indices: 0,
 					paletteEntries: 0,
 					sourceBuffer: 'untouched',
-					message: 'Initialize the scalar processor, then push a request through it.'
+					message: 'Create scalar Ditherette, then call an end-to-end or staged method.'
 				});
 
 				const requests = {
@@ -180,7 +186,13 @@ export class DitheretteError extends Error {
 
 				function reduce(state, action) {
 					if (action.type === 'reset') return initialState();
-					if (action.type === 'initialize') return { ...state, processor: 'ready', execution: 'scalar', outcome: 'ready', message: 'Scalar processor ready. No workers, shared memory, or isolation required.' };
+					if (action.type === 'initialize') return { ...state, processor: 'ready', execution: 'scalar', outcome: 'ready', message: 'Scalar Ditherette ready. No workers, shared memory, or isolation required.' };
+					if (['resize', 'dither', 'quantize', 'ditherAndQuantize'].includes(action.type)) {
+						if (state.processor !== 'ready') return { ...state, lastRequest: action.type, outcome: 'error: processor-not-ready', message: 'Initialize Ditherette before calling a processing method.' };
+						if (action.type === 'dither' && action.mode === 'floyd-steinberg') return { ...state, lastRequest: 'dither(floyd-steinberg)', outcome: 'error: unsupported-operation', indices: 0, paletteEntries: 0, sourceBuffer: 'untouched', message: 'Error diffusion needs quantization feedback. Use ditherAndQuantize or process.' };
+						const indexed = action.type === 'quantize' || action.type === 'ditherAndQuantize';
+						return { ...state, lastRequest: action.type, outcome: indexed ? 'indexed image returned' : 'RGBA8 image returned', indices: indexed ? 57_600 : 0, paletteEntries: indexed ? 16 : 0, sourceBuffer: 'untouched', message: indexed ? 'Indices reference the exact ordered input palette.' : 'The method returned a display-ready RGBA8 image.' };
+					}
 					if (action.type === 'process') {
 						const request = requests[action.request];
 						if (state.processor !== 'ready') return { ...state, lastRequest: request.name, outcome: 'error: processor-not-ready', message: 'The package reports a structured initialization error before touching input buffers.' };
@@ -195,9 +207,14 @@ export class DitheretteError extends Error {
 			})();
 
 			const actions = [
-				{ id: 'initialize', label: 'Initialize scalar processor', action: { type: 'initialize' }, primary: true },
+				{ id: 'initialize', label: 'Create scalar Ditherette', action: { type: 'initialize' }, primary: true },
 				{ id: 'ditherette', label: 'Process current-mode recipe', action: { type: 'process', request: 'ditherette' } },
 				{ id: 'extra', label: 'Process extra-spec recipe', action: { type: 'process', request: 'extra' } },
+				{ id: 'resize', label: 'Resize only', action: { type: 'resize' } },
+				{ id: 'dither', label: 'Dither only with Bayer', action: { type: 'dither', mode: 'bayer-8' } },
+				{ id: 'quantize', label: 'Quantize only', action: { type: 'quantize' } },
+				{ id: 'ditherQuant', label: 'Dither + quantize', action: { type: 'ditherAndQuantize', mode: 'floyd-steinberg' } },
+				{ id: 'badDither', label: 'Dither only with error diffusion', action: { type: 'dither', mode: 'floyd-steinberg' } },
 				{ id: 'badBytes', label: 'Send truncated RGBA8', action: { type: 'process', request: 'badBytes' } },
 				{ id: 'badMatch', label: 'Send illegal match pair', action: { type: 'process', request: 'badMatch' } },
 				{ id: 'emptyPalette', label: 'Send empty palette', action: { type: 'process', request: 'emptyPalette' } },
@@ -207,6 +224,8 @@ export class DitheretteError extends Error {
 			const walkthroughs = [
 				{ title: 'Caelestis scalar', description: 'Prove the whole contract works without workers, shared memory, or cross-origin isolation.', steps: ['initialize', 'extra'] },
 				{ title: 'Ditherette parity', description: 'Pass a current Ditherette recipe through the same interface and get a self-contained indexed image.', steps: ['initialize', 'ditherette'] },
+				{ title: 'Public stages', description: 'Call resize, separable dither, and quantize independently. RGBA8 and indexed outputs stay explicit.', steps: ['initialize', 'resize', 'dither', 'quantize'] },
+				{ title: 'Fused diffusion', description: 'Error diffusion cannot run as dither-only because each error depends on palette matching.', steps: ['initialize', 'badDither', 'ditherQuant'] },
 				{ title: 'Plain JS mistake', description: 'TypeScript prevents this metric/space pair. Runtime validation protects plain JavaScript consumers too.', steps: ['initialize', 'badMatch'] },
 				{ title: 'Buffer safety', description: 'Reject malformed image storage without mutating the caller buffer or returning partial output.', steps: ['initialize', 'badBytes'] }
 			];
@@ -229,7 +248,7 @@ export class DitheretteError extends Error {
 
 			function render() {
 				const rows = [
-					['Processor', state.processor], ['Execution', state.execution], ['Last request', state.lastRequest], ['Outcome', state.outcome], ['Index bytes', state.indices.toLocaleString()], ['Palette entries', String(state.paletteEntries)], ['Caller source buffer', state.sourceBuffer]
+					['Ditherette', state.processor], ['Execution', state.execution], ['Last method', state.lastRequest], ['Outcome', state.outcome], ['Index bytes', state.indices.toLocaleString()], ['Palette entries', String(state.paletteEntries)], ['Caller source buffer', state.sourceBuffer]
 				];
 				stateElement.innerHTML = rows.map(([label, value]) => `<dt>${label}</dt><dd class="${String(value).startsWith('error') ? 'bad' : value === 'indexed image returned' || value === 'ready' ? 'good' : ''}">${value}</dd>`).join('');
 				verdictElement.textContent = state.message;
