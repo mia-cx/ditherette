@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Ditherette — color buffer decision probe</title>
+		<style>
+			:root {
+				color-scheme: dark;
+				font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+				background: #10110f;
+				color: #f2f0e8;
+				--ink-2: #b9b8af;
+				--line: #34372f;
+				--panel: #191b17;
+				--green: #a8ef8a;
+				--amber: #f4c76a;
+				--red: #f4887b;
+			}
+			* { box-sizing: border-box; }
+			body { margin: 0; }
+			main { width: min(1080px, calc(100% - 32px)); margin: 48px auto 80px; }
+			h1 { max-width: 760px; margin: 0 0 12px; font-size: clamp(2rem, 6vw, 4.7rem); line-height: .98; letter-spacing: -.05em; }
+			h2 { margin: 0 0 16px; font-size: 1.05rem; letter-spacing: .02em; }
+			p { color: var(--ink-2); line-height: 1.55; }
+			.lede { max-width: 780px; font-size: 1.12rem; }
+			.verdict { color: var(--green); font-weight: 720; }
+			section { margin-top: 36px; padding: 24px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+			.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+			.card { min-width: 0; padding: 17px; border: 1px solid var(--line); border-radius: 13px; background: #131510; }
+			.card.selected { border-color: #719f60; box-shadow: inset 0 0 0 1px #719f60; }
+			.card h3 { margin: 0 0 7px; font-size: .98rem; }
+			.big { margin-top: 10px; font-size: 1.55rem; font-weight: 760; letter-spacing: -.03em; }
+			.muted { color: var(--ink-2); font-size: .86rem; }
+			.controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+			button, select, label.control { padding: 9px 12px; color: inherit; background: #24271f; border: 1px solid #41453a; border-radius: 9px; font: inherit; cursor: pointer; }
+			button.active { background: #425d38; border-color: #75a864; }
+			label.control { cursor: default; }
+			input { accent-color: var(--green); }
+			table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+			th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+			th:first-child, td:first-child { text-align: left; }
+			.bar { height: 9px; margin-top: 9px; overflow: hidden; border-radius: 99px; background: #2b2d28; }
+			.bar > i { display: block; height: 100%; border-radius: inherit; background: var(--green); }
+			.warn .bar > i { background: var(--amber); }
+			.over .bar > i { background: var(--red); }
+			.scenario { display: none; }
+			.scenario.active { display: block; }
+			.callout { padding: 13px 15px; border-left: 3px solid var(--green); background: #20251c; }
+			code { color: #d9fbc9; }
+			footer { margin-top: 26px; color: #888b80; font-size: .8rem; }
+			@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } section { padding: 18px; } th:nth-child(4), td:nth-child(4) { display: none; } }
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>Keep three floats together.</h1>
+			<p class="lede"><span class="verdict">Proposed v1 decision:</span> private working colors are packed <code>f32 × 3</code>. Alpha stays in RGBA8. Public results are durable JS-owned RGBA8 or indexed buffers; the Ditherette instance owns reusable Wasm scratch.</p>
+
+			<section>
+				<h2>Measured browser–Wasm conversion</h2>
+				<table>
+					<thead><tr><th>Layout</th><th>800 × 800</th><th>2600 × 4168</th><th>Working bytes / pixel</th></tr></thead>
+					<tbody>
+						<tr><td>packed f32 × 4 (current)</td><td>12.06 ms</td><td>200.5 ms</td><td>16</td></tr>
+						<tr><td><strong>packed f32 × 3</strong></td><td><strong>11.09 ms</strong></td><td><strong>186.2 ms</strong></td><td><strong>12</strong></td></tr>
+						<tr><td>planar f32 × 3</td><td>11.23 ms</td><td>186.2 ms</td><td>12</td></tr>
+					</tbody>
+				</table>
+				<p class="muted">Chrome 147, scalar Wasm, Oklab, 30 samples or 3 seconds. Packed triples are 8.0% faster on the small fixture and 7.1% faster on the large fixture than the four-channel baseline. Planar storage has no measured material win.</p>
+			</section>
+
+			<section>
+				<h2>Free-play memory probe</h2>
+				<div class="controls" id="resolution-controls"></div>
+				<div class="controls">
+					<label class="control"><input id="duplicate-rgba" type="checkbox" checked /> source + resized RGBA8 coexist</label>
+					<label class="control"><input id="full-diffusion" type="checkbox" /> full-image diffusion scratch</label>
+				</div>
+				<div class="grid" id="memory-cards"></div>
+				<p class="muted">Peak model includes input RGBA8, optional resized RGBA8, the selected working buffer, and indexed output. Full-image diffusion adds another f32 × 3 buffer. The line is the threaded build’s current 2 GiB ceiling; scalar consumers can be tighter.</p>
+			</section>
+
+			<section>
+				<h2>Guided boundary checks</h2>
+				<div class="controls" id="scenario-controls"></div>
+				<div id="scenarios"></div>
+			</section>
+
+			<section>
+				<h2>Precision challenge</h2>
+				<div class="callout" id="precision-result">Comparing f32 and f16 nearest-color decisions over 65,536 deterministic RGB samples against Wplace’s 63 visible colors…</div>
+				<p class="muted">f16 is included to falsify the f32 choice. It saves another 50%, but WebAssembly has no native f16 arithmetic in the required scalar baseline, so every store/load needs conversion and palette-boundary changes are observable. f64 doubles memory with no input precision to recover.</p>
+			</section>
+
+			<section>
+				<h2>Contract consequences</h2>
+				<div class="grid">
+					<div class="card selected"><h3>Inside one method</h3><p>Resize, colorspace conversion, dither, and quantize stay inside Wasm. No working-color buffer crosses JS.</p></div>
+					<div class="card"><h3>Stage methods</h3><p><code>resize()</code> and separable <code>dither()</code> return copied RGBA8. Quantizing methods return copied indices plus palette metadata.</p></div>
+					<div class="card"><h3>Later optimization</h3><p>SoA, SIMD, lookup tables, and cache budgets remain replaceable internals. Revisit only with an end-to-end consumer benchmark.</p></div>
+				</div>
+			</section>
+			<footer>Decision probe for Wayfinder ticket “Choose intermediate color precision and memory layout”. Benchmark source and raw JSON live beside this artifact on the throwaway branch.</footer>
+		</main>
+
+		<script type="module">
+			const LayoutProbe = (() => {
+				const memoryLimit = 2 * 1024 ** 3;
+				const resolutions = {
+					'Caelestis 1 MP': [1000, 1000],
+					'4K': [3840, 2160],
+					'Max output': [8192, 8192]
+				};
+				const layouts = [
+					{ id: 'aos4', label: 'packed f32 × 4', bytes: 16 },
+					{ id: 'aos3', label: 'packed f32 × 3', bytes: 12, selected: true },
+					{ id: 'soa3', label: 'planar f32 × 3', bytes: 12 }
+				];
+				const scenarios = [
+					['Caelestis scalar', 'At 1 MP, the proposed fused pipeline is about 20 MiB with two RGBA8 buffers, working color, and indices. It requires no threads or cross-origin isolation.'],
+					['Ditherette 4K', 'At 4K, the same conservative lifetime model is about 166 MiB. Keeping intermediate color inside Wasm avoids an additional JS copy and keeps stage composition explicit.'],
+					['Maximum output', 'At 67.1 MP, packed triples save 256 MiB versus today’s float alpha. The conservative row-local pipeline is 1,344 MiB; a second full-image f32 × 3 diffusion buffer would push it to 2,112 MiB and must not be the v1 architecture.'],
+					['Stage composition', 'Returned RGBA8 and indexed results must remain valid after the next processor call. Private scratch may be reused only after copying the public result into JS-owned typed arrays.']
+				];
+
+				function peakBytes(width, height, bytesPerWorkingPixel, duplicateRgba, fullDiffusion) {
+					const pixels = width * height;
+					return pixels * (4 + (duplicateRgba ? 4 : 0) + bytesPerWorkingPixel + 1 + (fullDiffusion ? 12 : 0));
+				}
+				function mib(bytes) { return bytes / 1024 ** 2; }
+				function formatMemory(bytes) { const value = mib(bytes); return value >= 1024 ? `${(value / 1024).toFixed(2)} GiB` : `${value.toFixed(1)} MiB`; }
+
+				const f32 = new Float32Array(1);
+				const u32 = new Uint32Array(f32.buffer);
+				function halfBits(value) {
+					f32[0] = value;
+					const x = u32[0];
+					let bits = (x >>> 16) & 0x8000;
+					let mantissa = (x >>> 12) & 0x07ff;
+					const exponent = (x >>> 23) & 0xff;
+					if (exponent < 103) return bits;
+					if (exponent > 142) return bits | 0x7c00;
+					if (exponent < 113) {
+						mantissa |= 0x0800;
+						bits |= (mantissa >>> (114 - exponent)) + ((mantissa >>> (113 - exponent)) & 1);
+						return bits;
+					}
+					bits |= ((exponent - 112) << 10) | (mantissa >>> 1);
+					return bits + (mantissa & 1);
+				}
+				function fromHalf(bits) {
+					const sign = bits & 0x8000 ? -1 : 1;
+					const exponent = (bits >>> 10) & 31;
+					const mantissa = bits & 1023;
+					if (exponent === 0) return sign * mantissa * 2 ** -24;
+					if (exponent === 31) return mantissa ? NaN : sign * Infinity;
+					return sign * (1 + mantissa / 1024) * 2 ** (exponent - 15);
+				}
+				function half(value) { return fromHalf(halfBits(value)); }
+				function linear(channel) { const c = channel / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; }
+				function oklab(r, g, b) {
+					const lr = linear(r), lg = linear(g), lb = linear(b);
+					const l = Math.cbrt(.41222146 * lr + .53633255 * lg + .051445995 * lb);
+					const m = Math.cbrt(.2119035 * lr + .6806995 * lg + .10739696 * lb);
+					const s = Math.cbrt(.08830246 * lr + .28171885 * lg + .6299787 * lb);
+					return [Math.fround(.21045426 * l + .7936178 * m - .004072047 * s), Math.fround(1.9779985 * l - 2.4285922 * m + .4505937 * s), Math.fround(.025904037 * l + .78277177 * m - .80867577 * s)];
+				}
+				const paletteHex = ['000000','3C3C3C','787878','D2D2D2','FFFFFF','600018','ED1C24','FF7F27','F6AA09','F9DD3B','FFFABC','0EB968','13E67B','87FF5E','0C816E','10AE82','13E1BE','60F7F2','28509E','4093E4','6B50F6','99B1FB','780C99','AA38B9','E09FF9','CB007A','EC1F80','F38DA9','684634','95682A','F8B277','AAAAAA','A50E1E','FA8072','E45C1A','9C8431','C5AD31','E8D45F','4A6B3A','5A944A','84C573','0F799F','BBFAF2','7DC7FF','4D31B8','4A4284','7A71C4','B5AEF1','9B5249','D18078','FAB6A4','DBA463','7B6352','9C846B','D6B594','D18051','FFC5A5','6D643F','948C6B','CDC59E','333941','6D758D','B3B9D1'];
+				const palette = paletteHex.map(hex => oklab(Number.parseInt(hex.slice(0, 2), 16), Number.parseInt(hex.slice(2, 4), 16), Number.parseInt(hex.slice(4, 6), 16)));
+				const paletteHalf = palette.map(color => color.map(half));
+				function nearest(color, candidates) {
+					let best = 0, bestDistance = Infinity;
+					for (let i = 0; i < candidates.length; i++) {
+						const candidate = candidates[i];
+						const distance = (color[0] - candidate[0]) ** 2 + (color[1] - candidate[1]) ** 2 + (color[2] - candidate[2]) ** 2;
+						if (distance < bestDistance) { best = i; bestDistance = distance; }
+					}
+					return best;
+				}
+				async function precisionProbe(sampleCount = 65536) {
+					let state = 0xD17E7E;
+					let changed = 0, errorSum = 0, maxError = 0;
+					for (let i = 0; i < sampleCount; i++) {
+						state ^= state << 13; state ^= state >>> 17; state ^= state << 5;
+						const color = oklab(state & 255, (state >>> 8) & 255, (state >>> 16) & 255);
+						const reduced = color.map(half);
+						if (nearest(color, palette) !== nearest(reduced, paletteHalf)) changed++;
+						const error = Math.hypot(color[0] - reduced[0], color[1] - reduced[1], color[2] - reduced[2]);
+						errorSum += error; maxError = Math.max(maxError, error);
+						if (i % 4096 === 0) await new Promise(requestAnimationFrame);
+					}
+					return { sampleCount, changed, meanError: errorSum / sampleCount, maxError };
+				}
+				return { resolutions, layouts, scenarios, memoryLimit, peakBytes, formatMemory, precisionProbe };
+			})();
+
+			let selectedResolution = '4K';
+			const resolutionControls = document.querySelector('#resolution-controls');
+			const memoryCards = document.querySelector('#memory-cards');
+			function renderMemory() {
+				const [width, height] = LayoutProbe.resolutions[selectedResolution];
+				const duplicate = document.querySelector('#duplicate-rgba').checked;
+				const diffusion = document.querySelector('#full-diffusion').checked;
+				memoryCards.innerHTML = LayoutProbe.layouts.map(layout => {
+					const bytes = LayoutProbe.peakBytes(width, height, layout.bytes, duplicate, diffusion);
+					const ratio = bytes / LayoutProbe.memoryLimit;
+					const state = ratio > 1 ? 'over' : ratio > .75 ? 'warn' : '';
+					return `<article class="card ${layout.selected ? 'selected' : ''} ${state}"><h3>${layout.label}</h3><div class="big">${LayoutProbe.formatMemory(bytes)}</div><div class="muted">${(ratio * 100).toFixed(0)}% of 2 GiB</div><div class="bar"><i style="width:${Math.min(100, ratio * 100)}%"></i></div></article>`;
+				}).join('');
+			}
+			for (const name of Object.keys(LayoutProbe.resolutions)) {
+				const button = document.createElement('button'); button.textContent = name;
+				button.addEventListener('click', () => { selectedResolution = name; [...resolutionControls.children].forEach(item => item.classList.toggle('active', item === button)); renderMemory(); });
+				if (name === selectedResolution) button.classList.add('active'); resolutionControls.append(button);
+			}
+			document.querySelectorAll('input').forEach(input => input.addEventListener('change', renderMemory)); renderMemory();
+
+			const scenarioControls = document.querySelector('#scenario-controls');
+			const scenarioRoot = document.querySelector('#scenarios');
+			LayoutProbe.scenarios.forEach(([title, copy], index) => {
+				const button = document.createElement('button'); button.textContent = title; button.classList.toggle('active', index === 0);
+				const panel = document.createElement('div'); panel.className = `scenario ${index === 0 ? 'active' : ''}`; panel.innerHTML = `<div class="callout"><strong>${title}</strong><p>${copy}</p></div>`;
+				button.addEventListener('click', () => { [...scenarioControls.children].forEach(item => item.classList.remove('active')); [...scenarioRoot.children].forEach(item => item.classList.remove('active')); button.classList.add('active'); panel.classList.add('active'); });
+				scenarioControls.append(button); scenarioRoot.append(panel);
+			});
+
+			const precision = await LayoutProbe.precisionProbe();
+			document.querySelector('#precision-result').innerHTML = `<strong>${precision.changed.toLocaleString()} / ${precision.sampleCount.toLocaleString()} palette assignments changed under f16</strong><p>Mean Oklab vector error ${precision.meanError.toExponential(2)}; maximum ${precision.maxError.toExponential(2)}. The changes are small but prove reduced precision is observable, while f32 matches the existing Rust image formats and scalar arithmetic.</p>`;
+		</script>
+	</body>
+</html>

@@ -73,6 +73,64 @@ fn color_output_len(dimensions: ImageDimensions) -> usize {
     dimensions.pixel_count().expect("valid dimensions") * Rgba8::CHANNEL_COUNT
 }
 
+fn color_output_len_rgb(dimensions: ImageDimensions) -> usize {
+    dimensions.pixel_count().expect("valid dimensions") * 3
+}
+
+/// Prototype-only scalar materialization into packed RGB triplets.
+///
+/// This deliberately bypasses the production four-channel image format so the
+/// layout decision can be benchmarked without first changing that contract.
+pub fn rgba8_to_color_space_f32x3_aos_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    output: &mut [f32],
+) {
+    assert_eq!(output.len(), color_output_len_rgb(source.dimensions()));
+    let tables = ColorTables::new();
+
+    for (source_pixel, output_pixel) in source
+        .data()
+        .chunks_exact(Rgba8::CHANNEL_COUNT)
+        .zip(output.chunks_exact_mut(3))
+    {
+        let channels = convert_rgb(
+            source_pixel[Rgba8::R],
+            source_pixel[Rgba8::G],
+            source_pixel[Rgba8::B],
+            target,
+            &tables,
+        );
+        output_pixel.copy_from_slice(&channels);
+    }
+}
+
+/// Prototype-only scalar materialization into three contiguous channel planes.
+pub fn rgba8_to_color_space_f32x3_soa_into(
+    source: ImageView<'_, Rgba8>,
+    target: ColorSpaceF32,
+    output: &mut [f32],
+) {
+    let pixel_count = source.dimensions().pixel_count().expect("valid dimensions");
+    assert_eq!(output.len(), color_output_len_rgb(source.dimensions()));
+    let (plane_0, remaining) = output.split_at_mut(pixel_count);
+    let (plane_1, plane_2) = remaining.split_at_mut(pixel_count);
+    let tables = ColorTables::new();
+
+    for (index, source_pixel) in source.data().chunks_exact(Rgba8::CHANNEL_COUNT).enumerate() {
+        let channels = convert_rgb(
+            source_pixel[Rgba8::R],
+            source_pixel[Rgba8::G],
+            source_pixel[Rgba8::B],
+            target,
+            &tables,
+        );
+        plane_0[index] = channels[0];
+        plane_1[index] = channels[1];
+        plane_2[index] = channels[2];
+    }
+}
+
 pub fn rgba8_to_color_space_f32_with_policy_into(
     source: ImageView<'_, Rgba8>,
     target: ColorSpaceF32,

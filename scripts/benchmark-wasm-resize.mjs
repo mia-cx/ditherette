@@ -601,7 +601,8 @@ async function measureResizeSubject(benchmarkCase, subject, config) {
 async function measureColorSubject(benchmarkCase, subject, config) {
 	const rowBandHeight = effectiveRowBandHeight(benchmarkCase, config);
 	const caseId = effectiveCaseId(benchmarkCase, config, rowBandHeight);
-	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * RGBA_CHANNEL_COUNT * F32_BYTES;
+	const channelCount = ['scalar_aos3', 'scalar_soa3'].includes(subject.executionMode) ? 3 : RGBA_CHANNEL_COUNT;
+	const expectedByteLength = benchmarkCase.outputWidth * benchmarkCase.outputHeight * channelCount * F32_BYTES;
 	const resultId = caseId + '-' + subject.id;
 	const reporter = (eventJson) => {
 		const event = JSON.parse(eventJson);
@@ -956,7 +957,15 @@ function subjectConfig(id) {
 }
 
 function colorSubjectConfig(id, target, executionMode) {
-	if (!['scalar', 'pooled_direct', 'pooled_noop', 'pooled_copy'].includes(executionMode)) {
+	if (![
+		'scalar',
+		'scalar_aos4',
+		'scalar_aos3',
+		'scalar_soa3',
+		'pooled_direct',
+		'pooled_noop',
+		'pooled_copy'
+	].includes(executionMode)) {
 		throw new Error(`Unsupported Wasm color subject variant: ${id}`);
 	}
 	return { id, domain: 'color', target, executionMode };

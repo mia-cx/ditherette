@@ -1,0 +1,526 @@
+{
+  "schema": "ditherette-wasm-bench",
+  "schemaVersion": 1,
+  "artifactKind": "run",
+  "runId": "1788155053-4a4f2c20",
+  "createdAtUnix": 1788155053,
+  "createdAt": "2026-08-31T05:44:13.000Z",
+  "command": "perf",
+  "domain": "color",
+  "profile": "color",
+  "tool": {
+    "name": "ditherette-wasm-bench",
+    "script": "scripts/benchmark-wasm-resize.mjs"
+  },
+  "environment": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.7727.15 Safari/537.36",
+    "crossOriginIsolated": true
+  },
+  "measurement": {
+    "sampleSize": 30,
+    "measurementTimeMs": 3000,
+    "warmUpTimeMs": 250,
+    "warmUpIterations": 0,
+    "targetSampleTimeMs": 10,
+    "liveStats": true,
+    "sampleMode": "throughput"
+  },
+  "config": {
+    "subjects": [
+      "wasm:color:oklab-f32:scalar_aos4",
+      "wasm:color:oklab-f32:scalar_aos3",
+      "wasm:color:oklab-f32:scalar_soa3"
+    ],
+    "fixtures": [
+      {
+        "name": "Celeste_Insta_selfie.png",
+        "width": 800,
+        "height": 800,
+        "decodeNs": 8145000,
+        "normalizeNs": 175455000
+      },
+      {
+        "name": "Celeste_box_art.png",
+        "width": 2600,
+        "height": 4168,
+        "decodeNs": 56815000,
+        "normalizeNs": 42680000
+      }
+    ],
+    "scales": [
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "lanes": [
+      "decoded-rgba"
+    ],
+    "threadCounts": [
+      1
+    ],
+    "rowBandHeights": [
+      32
+    ]
+  },
+  "results": [
+    {
+      "id": "Celeste_Insta_selfie.png-1x-workers-1-band-32-decoded-rgba",
+      "subject": "wasm:color:oklab-f32:scalar_aos4",
+      "filter": "oklab-f32",
+      "supportPolicy": "scalar_aos4",
+      "fixture": {
+        "name": "Celeste_Insta_selfie.png",
+        "width": 800,
+        "height": 800
+      },
+      "lane": "decoded-rgba",
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "source": {
+        "width": 800,
+        "height": 800
+      },
+      "output": {
+        "width": 800,
+        "height": 800,
+        "byteLength": 10240000
+      },
+      "decodeNs": 0,
+      "normalizeNs": 0,
+      "statsNs": {
+        "mean": 12155000,
+        "median": 12060000,
+        "mode": 11710000,
+        "stdev": 392568.4653662339,
+        "min": 11710000,
+        "p1": 11712900,
+        "p2": 11715800,
+        "p5": 11733500,
+        "p25": 11870000,
+        "p50": 12060000,
+        "p75": 12311250,
+        "p90": 12761000,
+        "p95": 12919500,
+        "p98": 13091100,
+        "p99": 13150550,
+        "max": 13210000,
+        "samples": [
+          12815000,
+          12045000,
+          12180000,
+          12755000,
+          12080000,
+          12450000,
+          12150000,
+          12155000,
+          12735000,
+          11975000,
+          12095000,
+          11850000,
+          11855000,
+          13005000,
+          12025000,
+          12075000,
+          11935000,
+          11930000,
+          12355000,
+          11710000,
+          11800000,
+          12465000,
+          13210000,
+          11915000,
+          11965000,
+          11750000,
+          11770000,
+          11720000,
+          12115000,
+          11765000
+        ]
+      },
+      "checksum": 450822080,
+      "iterationsPerSample": 1,
+      "totalIterations": 30,
+      "warmupTimeMs": 250,
+      "warmupIterations": 0,
+      "measurementTimeMs": 3000
+    },
+    {
+      "id": "Celeste_Insta_selfie.png-1x-workers-1-band-32-decoded-rgba",
+      "subject": "wasm:color:oklab-f32:scalar_aos3",
+      "filter": "oklab-f32",
+      "supportPolicy": "scalar_aos3",
+      "fixture": {
+        "name": "Celeste_Insta_selfie.png",
+        "width": 800,
+        "height": 800
+      },
+      "lane": "decoded-rgba",
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "source": {
+        "width": 800,
+        "height": 800
+      },
+      "output": {
+        "width": 800,
+        "height": 800,
+        "byteLength": 7680000
+      },
+      "decodeNs": 0,
+      "normalizeNs": 0,
+      "statsNs": {
+        "mean": 11122666.666666666,
+        "median": 11087500,
+        "mode": 10940000,
+        "stdev": 188722.6065478702,
+        "min": 10930000,
+        "p1": 10932900,
+        "p2": 10935800,
+        "p5": 10940000,
+        "p25": 10986250,
+        "p50": 11087500,
+        "p75": 11182500,
+        "p90": 11345500,
+        "p95": 11372000,
+        "p98": 11589500,
+        "p99": 11727250,
+        "max": 11865000,
+        "samples": [
+          10970000,
+          10940000,
+          11090000,
+          11185000,
+          11175000,
+          11865000,
+          11345000,
+          11160000,
+          11230000,
+          11040000,
+          11040000,
+          11015000,
+          11250000,
+          11135000,
+          11350000,
+          11005000,
+          11390000,
+          11135000,
+          10970000,
+          10930000,
+          10985000,
+          11085000,
+          10965000,
+          10990000,
+          11260000,
+          11000000,
+          11160000,
+          11090000,
+          10940000,
+          10985000
+        ]
+      },
+      "checksum": 2448697728,
+      "iterationsPerSample": 1,
+      "totalIterations": 30,
+      "warmupTimeMs": 250,
+      "warmupIterations": 0,
+      "measurementTimeMs": 3000
+    },
+    {
+      "id": "Celeste_Insta_selfie.png-1x-workers-1-band-32-decoded-rgba",
+      "subject": "wasm:color:oklab-f32:scalar_soa3",
+      "filter": "oklab-f32",
+      "supportPolicy": "scalar_soa3",
+      "fixture": {
+        "name": "Celeste_Insta_selfie.png",
+        "width": 800,
+        "height": 800
+      },
+      "lane": "decoded-rgba",
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "source": {
+        "width": 800,
+        "height": 800
+      },
+      "output": {
+        "width": 800,
+        "height": 800,
+        "byteLength": 7680000
+      },
+      "decodeNs": 0,
+      "normalizeNs": 0,
+      "statsNs": {
+        "mean": 11411000,
+        "median": 11230000,
+        "mode": 11075000,
+        "stdev": 675409.0118834167,
+        "min": 10950000,
+        "p1": 10955800,
+        "p2": 10961600,
+        "p5": 10972250,
+        "p25": 11075000,
+        "p50": 11230000,
+        "p75": 11398750,
+        "p90": 11879000,
+        "p95": 12274750,
+        "p98": 13313199.999999996,
+        "p99": 13954100.000000002,
+        "max": 14595000,
+        "samples": [
+          10950000,
+          10975000,
+          11400000,
+          11040000,
+          11150000,
+          11065000,
+          11035000,
+          11010000,
+          11225000,
+          14595000,
+          11075000,
+          11435000,
+          11265000,
+          10970000,
+          11205000,
+          11075000,
+          11270000,
+          12385000,
+          11530000,
+          11355000,
+          11295000,
+          11615000,
+          11395000,
+          11850000,
+          12140000,
+          11170000,
+          11315000,
+          11235000,
+          11170000,
+          11135000
+        ]
+      },
+      "checksum": 1332902292,
+      "iterationsPerSample": 1,
+      "totalIterations": 30,
+      "warmupTimeMs": 250,
+      "warmupIterations": 0,
+      "measurementTimeMs": 3000
+    },
+    {
+      "id": "Celeste_box_art.png-1x-workers-1-band-32-decoded-rgba",
+      "subject": "wasm:color:oklab-f32:scalar_aos4",
+      "filter": "oklab-f32",
+      "supportPolicy": "scalar_aos4",
+      "fixture": {
+        "name": "Celeste_box_art.png",
+        "width": 2600,
+        "height": 4168
+      },
+      "lane": "decoded-rgba",
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "source": {
+        "width": 2600,
+        "height": 4168
+      },
+      "output": {
+        "width": 2600,
+        "height": 4168,
+        "byteLength": 173388800
+      },
+      "decodeNs": 0,
+      "normalizeNs": 0,
+      "statsNs": {
+        "mean": 200681000,
+        "median": 200460000,
+        "mode": 200365000,
+        "stdev": 1748540.5342742272,
+        "min": 198645000,
+        "p1": 198654100,
+        "p2": 198663200,
+        "p5": 198690500,
+        "p25": 199050000,
+        "p50": 200460000,
+        "p75": 201362500,
+        "p90": 202694000,
+        "p95": 203542500,
+        "p98": 204540000,
+        "p99": 204872500,
+        "max": 205205000,
+        "samples": [
+          201140000,
+          202830000,
+          202490000,
+          198645000,
+          199045000,
+          200365000,
+          200840000,
+          200460000,
+          199055000,
+          198710000,
+          201585000,
+          200365000,
+          205205000,
+          200475000,
+          199005000
+        ]
+      },
+      "checksum": 3341992878,
+      "iterationsPerSample": 1,
+      "totalIterations": 15,
+      "warmupTimeMs": 250,
+      "warmupIterations": 0,
+      "measurementTimeMs": 3000
+    },
+    {
+      "id": "Celeste_box_art.png-1x-workers-1-band-32-decoded-rgba",
+      "subject": "wasm:color:oklab-f32:scalar_aos3",
+      "filter": "oklab-f32",
+      "supportPolicy": "scalar_aos3",
+      "fixture": {
+        "name": "Celeste_box_art.png",
+        "width": 2600,
+        "height": 4168
+      },
+      "lane": "decoded-rgba",
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "source": {
+        "width": 2600,
+        "height": 4168
+      },
+      "output": {
+        "width": 2600,
+        "height": 4168,
+        "byteLength": 130041600
+      },
+      "decodeNs": 0,
+      "normalizeNs": 0,
+      "statsNs": {
+        "mean": 187028529.4117647,
+        "median": 186195000,
+        "mode": 187665000,
+        "stdev": 1811122.3078082912,
+        "min": 184840000,
+        "p1": 184886400,
+        "p2": 184932800,
+        "p5": 185072000,
+        "p25": 185500000,
+        "p50": 186195000,
+        "p75": 188425000,
+        "p90": 190001000,
+        "p95": 190248000,
+        "p98": 190315200,
+        "p99": 190337600,
+        "max": 190360000,
+        "samples": [
+          188425000,
+          185440000,
+          188605000,
+          186830000,
+          185500000,
+          184840000,
+          185130000,
+          185480000,
+          185725000,
+          187665000,
+          185865000,
+          185685000,
+          186195000,
+          189855000,
+          190360000,
+          190220000,
+          187665000
+        ]
+      },
+      "checksum": 168293350,
+      "iterationsPerSample": 1,
+      "totalIterations": 17,
+      "warmupTimeMs": 250,
+      "warmupIterations": 0,
+      "measurementTimeMs": 3000
+    },
+    {
+      "id": "Celeste_box_art.png-1x-workers-1-band-32-decoded-rgba",
+      "subject": "wasm:color:oklab-f32:scalar_soa3",
+      "filter": "oklab-f32",
+      "supportPolicy": "scalar_soa3",
+      "fixture": {
+        "name": "Celeste_box_art.png",
+        "width": 2600,
+        "height": 4168
+      },
+      "lane": "decoded-rgba",
+      "scale": {
+        "x": 1,
+        "y": 1
+      },
+      "source": {
+        "width": 2600,
+        "height": 4168
+      },
+      "output": {
+        "width": 2600,
+        "height": 4168,
+        "byteLength": 130041600
+      },
+      "decodeNs": 0,
+      "normalizeNs": 0,
+      "statsNs": {
+        "mean": 187262647.05882353,
+        "median": 186155000,
+        "mode": 185910000,
+        "stdev": 2176499.5626052306,
+        "min": 184880000,
+        "p1": 184950400,
+        "p2": 185020800,
+        "p5": 185232000,
+        "p25": 185865000,
+        "p50": 186155000,
+        "p75": 188010000,
+        "p90": 190252000,
+        "p95": 191124000,
+        "p98": 192201600,
+        "p99": 192560800,
+        "max": 192920000,
+        "samples": [
+          186825000,
+          185910000,
+          186495000,
+          186150000,
+          185320000,
+          184880000,
+          186155000,
+          185865000,
+          185910000,
+          185810000,
+          187255000,
+          185625000,
+          189970000,
+          189690000,
+          188010000,
+          190675000,
+          192920000
+        ]
+      },
+      "checksum": 2294078202,
+      "iterationsPerSample": 1,
+      "totalIterations": 17,
+      "warmupTimeMs": 250,
+      "warmupIterations": 0,
+      "measurementTimeMs": 3000
+    }
+  ],
+  "comparisons": []
+}

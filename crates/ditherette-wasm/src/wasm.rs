@@ -15,7 +15,9 @@ use crate::{
     image::{ImageDimensions, ImageFormat, ImageView, ImageViewMut, Rgba8},
     prod::{
         color::{
-            rgba8_to_color_space_f32, rgba8_to_color_space_f32_with_policy_into, ColorSpaceF32,
+            rgba8_to_color_space_f32, rgba8_to_color_space_f32_with_policy_into,
+            rgba8_to_color_space_f32x3_aos_into, rgba8_to_color_space_f32x3_soa_into,
+            ColorSpaceF32,
         },
         resize::scalar::{
             area::resize_area_rgba8_into,
@@ -174,7 +176,7 @@ pub fn benchmark_color_space(
     let mode = ColorBenchmarkMode::parse(execution_mode)?;
     let source = ImageView::<Rgba8>::packed(input, dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    let mut output = vec![0.0; dimensions.storage_len::<Rgba8>().unwrap()];
+    let mut output = vec![0.0; dimensions.pixel_count().unwrap() * mode.output_channel_count()];
     let config = WasmBenchmarkConfig {
         sample_size,
         measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
@@ -861,6 +863,8 @@ struct WasmBenchmarkResult {
 #[derive(Clone, Copy)]
 enum ColorBenchmarkMode {
     Scalar,
+    ScalarAos3,
+    ScalarSoa3,
     PooledDirect,
     PooledNoop,
     PooledCopy,
@@ -869,13 +873,22 @@ enum ColorBenchmarkMode {
 impl ColorBenchmarkMode {
     fn parse(value: &str) -> Result<Self, JsValue> {
         match value {
-            "scalar" => Ok(Self::Scalar),
+            "scalar" | "scalar_aos4" => Ok(Self::Scalar),
+            "scalar_aos3" => Ok(Self::ScalarAos3),
+            "scalar_soa3" => Ok(Self::ScalarSoa3),
             "pooled_direct" => Ok(Self::PooledDirect),
             "pooled_noop" => Ok(Self::PooledNoop),
             "pooled_copy" => Ok(Self::PooledCopy),
             _ => Err(JsValue::from_str(
                 "unsupported color benchmark execution mode",
             )),
+        }
+    }
+
+    const fn output_channel_count(self) -> usize {
+        match self {
+            Self::ScalarAos3 | Self::ScalarSoa3 => 3,
+            Self::Scalar | Self::PooledDirect | Self::PooledNoop | Self::PooledCopy => 4,
         }
     }
 }
@@ -992,6 +1005,12 @@ fn run_color_batch(
         match mode {
             ColorBenchmarkMode::Scalar => {
                 rgba8_to_color_space_f32_with_policy_into(source, target, false, output)
+            }
+            ColorBenchmarkMode::ScalarAos3 => {
+                rgba8_to_color_space_f32x3_aos_into(source, target, output)
+            }
+            ColorBenchmarkMode::ScalarSoa3 => {
+                rgba8_to_color_space_f32x3_soa_into(source, target, output)
             }
             ColorBenchmarkMode::PooledDirect => {
                 benchmark_color_pooled_direct(source, target, output, row_band_height)
