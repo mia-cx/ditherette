@@ -1,0 +1,36 @@
+# Ditherette v1 implementation stack
+
+Read the [execution contract](README.md#execution-contract) before claiming a slice. Each entry records the validated dependency commits and outstanding evidence.
+
+## S01 inherited port anchor
+
+- Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).
+- Owner: S01 anchor agent. Worktree: `.worktrees/v1-s01-anchor`.
+- Branch: `impl/v1-s01-anchor`. PR base: `main`. PR: pending baseline completion.
+- Main: `edc87f5da2b6958f7d9c892483e08af8149482b4`.
+- Inherited port: `5a5872badbba796f4effe92aba8051b43e30233e` (`origin/feat/rust-wasm-port`).
+- Rebased code checkpoint: `a9928ebe55a2571b4e6bb35fedea80aff5474302`. Dependencies: none.
+- Final validated head: pending documentation commit and remaining checks.
+
+All 448 inherited commits were replayed onto main. Two `.gitignore` conflicts preserved the port's fixture changes and main's `.ant-colony/` exclusion. The rebased tree differs from the inherited port only by that exclusion. Original port history remains on its existing branch. Root worktree edits remain untouched.
+
+### Baseline evidence
+
+Checks run in the isolated worktree at the rebased code checkpoint:
+
+| Command | Result |
+| --- | --- |
+| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` | Passed, 110 native tests; no doctests. |
+| `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` | Passed. |
+| `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` | Passed. |
+| `git diff --check origin/main...HEAD` | Passed. |
+| `pnpm install --frozen-lockfile` | Existing setup failure under pnpm 11.13.0: `ERR_PNPM_IGNORED_BUILDS`. The inherited `onlyBuiltDependencies` configuration does not satisfy pnpm 11's `allowBuilds` policy. Dependencies were installed; generated manifest placeholders were removed. |
+| `pnpm exec vitest run --project server src/lib/processing src/lib/wasm/ditherette-wasm.spec.ts` | Blocked by pnpm's automatic reinstall and the same build-policy failure; direct installed-binary check pending. |
+
+Tool versions: Rust/Cargo 1.97.0, Node 24.19.0, pnpm 11.13.0.
+
+No benchmark process ran. Native export tests include their existing benchmark-wrapper smoke assertions; these do not establish performance evidence. Browser, threaded-runtime, full website-build, and release conformance checks remain later slice obligations.
+
+### Next dependencies
+
+S02, S03, and S04 may prepare from the committed anchor. Mark implementation available only after recording the unmerged PR and final validated head. Child PRs target `impl/v1-s01-anchor` and record its exact SHA.
