@@ -18,8 +18,9 @@
 		"LICENSE"
 	],
 	"scripts": {
-		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && tsc && node scripts/stage-wasm.mjs",
+		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && node scripts/stage-wasm.mjs && tsc",
 		"check": "pnpm check:version && tsc --noEmit",
+		"test:staging": "node --test scripts/stage-wasm.test.mjs",
 		"check:version": "node scripts/check-version.mjs"
 	},
 	"devDependencies": {
