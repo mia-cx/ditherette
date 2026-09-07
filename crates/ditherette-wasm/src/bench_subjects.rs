@@ -4,10 +4,12 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
+pub mod field_calls;
+pub mod fields;
 pub mod quantize;
-pub mod scores;
 pub mod reference;
 mod resize_budgeted;
+pub mod scores;
 pub mod verification;
 
 /// Existing registry with this crate's concrete, borrowed conformance protocol.
@@ -189,6 +191,8 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(reference::subjects());
     subjects.extend(quantize::subjects());
     subjects.extend(scores::subjects());
+    subjects.extend(fields::subjects());
+    subjects.extend(field_calls::subjects());
     subjects
 }
 
