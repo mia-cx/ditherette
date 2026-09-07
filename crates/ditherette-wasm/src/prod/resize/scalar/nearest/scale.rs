@@ -57,22 +57,44 @@ pub(super) fn source_x_copy_spans(
     output_height: u32,
     x_source_starts: &[usize],
 ) -> Vec<SourceXCopySpan> {
-    if source_width <= output_width || source_height <= output_height || x_source_starts.is_empty()
+    if x_source_starts.is_empty()
+        || !uses_source_x_copy_spans(source_width, source_height, output_width, output_height)
     {
-        return Vec::new();
-    }
-
-    let skipped_source_columns = source_width as usize - output_width as usize;
-    let average_span_pixels = output_width as usize / skipped_source_columns.max(1);
-    if average_span_pixels < MIN_SPAN_COPY_AVERAGE_PIXELS {
         return Vec::new();
     }
 
     build_source_x_copy_spans(x_source_starts)
 }
 
+pub(super) fn uses_source_x_copy_spans(
+    source_width: u32,
+    source_height: u32,
+    output_width: u32,
+    output_height: u32,
+) -> bool {
+    if source_width <= output_width || source_height <= output_height {
+        return false;
+    }
+
+    let skipped_source_columns = source_width as usize - output_width as usize;
+    let average_span_pixels = output_width as usize / skipped_source_columns.max(1);
+    if average_span_pixels < MIN_SPAN_COPY_AVERAGE_PIXELS {
+        return false;
+    }
+
+    true
+}
+
 fn build_source_x_copy_spans(x_source_starts: &[usize]) -> Vec<SourceXCopySpan> {
     let mut spans = Vec::new();
+    build_source_x_copy_spans_into(x_source_starts, &mut spans);
+    spans
+}
+
+pub(super) fn build_source_x_copy_spans_into(
+    x_source_starts: &[usize],
+    spans: &mut Vec<SourceXCopySpan>,
+) {
     let mut span_output_start = 0;
     let mut span_source_start = x_source_starts[0];
     let mut previous_source_start = span_source_start;
@@ -95,7 +117,6 @@ fn build_source_x_copy_spans(x_source_starts: &[usize]) -> Vec<SourceXCopySpan> 
         output_start: span_output_start * rgba8::RGBA8_CHANNELS,
         byte_len: (x_source_starts.len() - span_output_start) * rgba8::RGBA8_CHANNELS,
     });
-    spans
 }
 
 pub(super) fn exact_downscale_factors(
