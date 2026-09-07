@@ -104,3 +104,5 @@ pub mod lanczos;
 pub mod nearest;
 /// Inherited optimized implementation, pending fresh baseline comparison.
 pub mod nearest_candidate;
+/// Exact incremental-coordinate candidate, pending fresh baseline comparison.
+pub mod nearest_incremental;
