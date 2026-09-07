@@ -3,6 +3,7 @@
 use crate::verification::{input_digest, settings_digest};
 use ditherette_bench_api::{verification::*, SubjectId};
 use ditherette_wasm::bench_subjects::reference::ReferenceRequest;
+pub use ditherette_wasm::bench_subjects::scores::MetricFamily;
 pub use ditherette_wasm::spec::contract::request::WorkingSpace;
 use std::io;
 
@@ -15,6 +16,9 @@ pub enum NativeOperation {
     ColorForward {
         space: WorkingSpace,
     },
+    MetricScores {
+        metric: MetricFamily,
+    },
 }
 
 impl NativeOperation {
@@ -25,6 +29,18 @@ impl NativeOperation {
     ) -> io::Result<ReferenceRequest<'a>> {
         match self {
             Self::Quantize { settings } => settings.reference_request(source, rgba),
+            Self::MetricScores { metric } => {
+                let request = ReferenceRequest::MetricScores {
+                    source: ditherette_wasm::spec::contract::request::Source {
+                        width: source.width,
+                        height: source.height,
+                        data: rgba,
+                    },
+                    metric: *metric,
+                };
+                request.dimensions().map_err(io::Error::other)?;
+                Ok(request)
+            }
             Self::ColorForward { space } => {
                 let request = ReferenceRequest::Color {
                     source: ditherette_wasm::spec::contract::request::Source {
@@ -53,6 +69,7 @@ impl NativeOperation {
     pub fn reference_subject(&self) -> &'static str {
         match self {
             Self::Quantize { .. } => "spec:quantize:request:v1",
+            Self::MetricScores { metric } => metric.reference_subject(),
             Self::ColorForward { space } => match space {
                 WorkingSpace::Srgb => "spec:color:srgb:f32-roundtrip-v1",
                 WorkingSpace::LinearRgb => "spec:color:linear-rgb:f32-roundtrip-v1",
@@ -69,6 +86,7 @@ impl NativeOperation {
         match self {
             Self::Quantize { .. } => super::CallScope::NativeCompleteCall,
             Self::ColorForward { .. } => super::CallScope::NativeForwardConversion,
+            Self::MetricScores { .. } => super::CallScope::NativeMetricScores,
         }
     }
 }
