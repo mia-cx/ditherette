@@ -7,7 +7,7 @@ Enforce content identity, independent compilation, and trusted-base validation.
 
 ## Acceptance criteria
 
-- [ ] Record the fixed S17 commit, tree IDs, content hashes, inventory, and blue-noise provenance.
+- [x] Record the fixed S17 commit, tree IDs, content hashes, inventory, and blue-noise provenance.
 - [ ] Reject frozen changes and direct or indirect semantic imports in both directions.
 - [ ] Bind reference dependencies, features, and Rust 1.97 without blocking unrelated S02/S06 integration.
 - [ ] Demonstrate controlled mutations fail and temporary trees are restored.
@@ -15,8 +15,8 @@ Enforce content identity, independent compilation, and trusted-base validation.
 
 ## TODOs
 
-- [~] Capture the immutable checkpoint and implement content validation with a shared-dependency audit.
-- [ ] Add Rust syntax checks, independent compilation, and resolved dependency validation.
+- [x] Capture the immutable checkpoint and implement content validation with a shared-dependency audit.
+- [~] Add Rust syntax checks, independent compilation, and resolved dependency validation.
 - [ ] Add trusted-base CI wiring and focused temporary mutation tests.
 - [ ] Record final checks and hand off the pushed implementation.
 
@@ -27,3 +27,4 @@ Enforce content identity, independent compilation, and trusted-base validation.
 - The coordinator owns `slices.md` and `stack-ledger.md`. Preserve its existing uncommitted slice status update.
 - No semantic edits, benchmarks, PR creation, merges, tags, deployment, or publication.
 - Read the approved PRD and resolutions in #40. Rechecked SHA-256 cache and thread-pool models in final S17.
+- Content validation passed. Frozen SHA-256: `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
