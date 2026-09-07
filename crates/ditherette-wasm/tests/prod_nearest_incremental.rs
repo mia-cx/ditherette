@@ -1,11 +1,11 @@
-//! Exact candidate conformance against the frozen nearest kernel.
+//! Promoted incremental kernel conformance against the frozen nearest kernel.
 
 use ditherette_wasm::{
     image::{
         ImageDimensions, ImageFormat, ImageView, ImageViewMut, Oklab32, PaletteIndex8, Rgba8,
         RowStride,
     },
-    prod::resize::{common::alignment::ResizeAnchor as ProdAnchor, scalar::nearest_incremental},
+    prod::resize::{common::alignment::ResizeAnchor as ProdAnchor, scalar::nearest},
     spec::resize::{common::alignment::ResizeAnchor as SpecAnchor, scalar::nearest as oracle},
 };
 
@@ -61,7 +61,7 @@ fn compare_matrix<F: ImageFormat + Copy>(
                             .unwrap(),
                             spec_anchor,
                         );
-                        nearest_incremental::resize_nearest_into(
+                        nearest::resize_nearest_into(
                             view,
                             ImageViewMut::new(
                                 &mut actual,
@@ -117,7 +117,7 @@ fn palette_indices_match_all_anchors_shapes_and_strides() {
 
 #[cfg(feature = "bench-subjects")]
 #[test]
-fn registry_calls_incremental_candidate_with_frozen_oracle() {
+fn registry_calls_historical_incremental_alias_with_frozen_oracle() {
     use ditherette_bench_api::{BenchSubject, ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams};
 
     let subjects = ditherette_wasm::bench_subjects::bench_subjects();
@@ -140,7 +140,7 @@ fn registry_calls_incremental_candidate_with_frozen_oracle() {
     assert!(candidate
         .descriptor
         .source_file
-        .ends_with("prod/resize/scalar/nearest_incremental.rs"));
+        .ends_with("prod/resize/scalar/nearest.rs"));
     let mut output = [0; 8];
     candidate
         .resize_u8_rgba(

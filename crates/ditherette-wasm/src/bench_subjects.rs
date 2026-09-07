@@ -33,12 +33,11 @@ use crate::{
             resize_lanczos2_rgba8_into as resize_prod_lanczos2_rgba8_into,
             resize_lanczos3_rgba8_into as resize_prod_lanczos3_rgba8_into,
         },
-        nearest::resize_nearest_into as resize_copied_nearest_into,
+        nearest::resize_nearest_into as resize_prod_nearest_into,
         nearest_candidate::{
             alignment::ResizeAnchor as CandidateNearestResizeAnchor,
             resize_nearest_rgba8_into as resize_candidate_nearest_rgba8_into,
         },
-        nearest_incremental::resize_nearest_into as resize_incremental_nearest_into,
     },
     spec::resize::{
         common::alignment::ResizeAnchor,
@@ -65,15 +64,15 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
         ),
         resize_subject(
             "prod:resize:nearest:scalar",
-            "copied prod nearest scalar",
+            "promoted incremental nearest scalar",
             "crates/ditherette-wasm/src/prod/resize/scalar/nearest.rs",
             resize_prod_nearest_subject,
         ),
         resize_subject(
             "candidate:resize:nearest:incremental",
-            "incremental nearest candidate (unpromoted)",
-            "crates/ditherette-wasm/src/prod/resize/scalar/nearest_incremental.rs",
-            resize_incremental_nearest_subject,
+            "incremental nearest (historical ID, promoted implementation alias)",
+            "crates/ditherette-wasm/src/prod/resize/scalar/nearest.rs",
+            resize_prod_nearest_subject,
         ),
         resize_subject(
             "candidate:resize:nearest:legacy",
@@ -278,17 +277,7 @@ fn resize_prod_nearest_subject(
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        resize_copied_nearest_into(source, output, copied_nearest_anchor(params));
-    })
-}
-
-fn resize_incremental_nearest_subject(
-    input: ResizeInputU8Rgba<'_>,
-    output: ResizeOutputU8Rgba<'_>,
-    params: &ResizeParams,
-) -> Result<(), BenchSubjectError> {
-    with_views(input, output, |source, output| {
-        resize_incremental_nearest_into(source, output, copied_nearest_anchor(params));
+        resize_prod_nearest_into(source, output, copied_nearest_anchor(params));
     })
 }
 

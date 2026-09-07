@@ -1,6 +1,6 @@
-# S19 nearest candidate
+# S19 nearest promotion
 
-The accepted implementation is the literal-copy checkpoint `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902`.
+The experiment's accepted baseline is the literal-copy checkpoint `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902`.
 This worktree starts from its validated policy join `89b570e0dbb4280352b157bfde5b20c3a7e80a9e`.
 The nearest subagent owns the candidate kernel, conformance tests, and implementation evidence in this file.
 The coordinator owns benchmark registration and experiment generation in the same worktree.
@@ -27,12 +27,13 @@ Full public browser-call measurements follow in S20 and remain required even if 
 ## TODOs
 
 - [x] Implement the separate exact candidate and focused conformance checks.
-- [ ] Register the candidate, prepare clean binaries, and record the typed experiment before measurement.
-- [ ] Drain agents and builds, run one exclusive paired trial, and record the measured outcome without automatic non-exact acceptance.
+- [x] Register the candidate, prepare clean binaries, and record the typed experiment before measurement.
+- [x] Drain agents and builds, run one exclusive paired trial, and record the measured outcome without automatic non-exact acceptance.
+- [x] Mechanically promote the measured kernel and validate canonical production without changing its arithmetic.
 
 No benchmark runs during implementation. All PRs remain unmerged.
 
-## Candidate implementation
+## Candidate implementation before measurement
 
 `prod/resize/scalar/nearest_incremental.rs` derives from the verified copied nearest loop at `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902`.
 Its public `resize_nearest_into<F: ImageFormat>` retains the accepted function's arguments and return type.
@@ -57,4 +58,27 @@ Validation before measurement:
   Its full result remains revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`, artifact `sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
 
 The initial generic test helper needed a `Copy` bound on its format marker to reuse the same validated view.
-After that test-only correction all checks pass. No candidate measurements or production promotion occurred.
+After that test-only correction all pre-measurement checks pass.
+
+## Mechanical promotion
+
+The coordinator's authorized native experiment compares accepted `89b570e0` with candidate `f9b51e45`.
+All ten cases pass with exact output, 8,000 samples, and 80 reaped children; maximum live benchmark children is one.
+The coordinator owns the detailed measurement report in `.plans/60-nearest-measurement.md` and the `target/s19-nearest-trial-01` artifacts.
+
+The measured implementation now lives in canonical `prod/resize/scalar/nearest.rs`; the redundant incremental module is removed.
+Only its module documentation changes. A direct comparison confirms every byte after those four documentation lines matches `f9b51e45cad691a207e8a0e346bdd419af7dd909`.
+The historical `candidate:resize:nearest:incremental` ID remains an explicit alias of promoted production with the canonical source path.
+The legacy nearest candidate stays unchanged. All existing output conformance remains, and the incremental fixtures target canonical production.
+Only the historical source-text equality test is removed. The verified `0ede7f6c` commit and its copy manifest remain the provenance record.
+
+This promotion claims native kernel evidence only. Public runtime and browser evidence remains pending S19 integration and S20.
+No additional measurements run during promotion.
+
+Promotion validation:
+
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --features bench-subjects` passes all 285 native tests.
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown --features bench-subjects` passes.
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all --check` and `git diff --check` pass.
+- The separate trusted guard command recorded above passes again, including independent native/Wasm compilation and the unchanged frozen identity.
+- The frozen spec/image closure, legacy candidate, common alignment, and literal-copy evidence have no changes.
