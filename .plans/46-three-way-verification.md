@@ -8,6 +8,7 @@ Branch: `impl/v1-s05-verification`. No measurements run in this slice.
 
 - [x] Add generic typed cases/subjects and one serializable output contract with full identities.
 - [x] Extend the existing RGBA verifier to three-way metadata, index, and coordinate comparisons with failure artifacts.
+- [x] Prevent bounded legacy results from promoting accepted baselines.
 - [ ] Adapt existing resize subjects and S03 storage, validate deterministic fixtures, and document the S17 handoff.
 - [ ] File an unmerged non-draft PR against the prerequisite join.
 
@@ -37,3 +38,10 @@ operation representations, exact/provisional status, required evidence, hard
 metadata failures, indexed RGBA max/mean/RMS, separate coordinate errors,
 non-finite raw preservation, SHA-256/canonical settings, and immutable PNG bundles.
 Existing benchmark executables compile against the extracted shared RGBA engine.
+
+The shared RGBA report now separates `within_bounds` from exact `passed`.
+Legacy resize stores the actual verification report with each measured row.
+Every accepted-baseline write or indexed refresh requires complete exact proof;
+all cases validate before replacement. A one-pixel fixture confirms that
+`--allow-correctness-failures` cannot overwrite an accepted artifact with bounded
+non-exact output. Missing verification also fails closed.

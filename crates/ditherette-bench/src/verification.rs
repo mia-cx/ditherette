@@ -291,7 +291,8 @@ fn compare(
         && rgba.as_ref().is_none_or(|value| value.differing_bytes == 0);
     PairComparison {
         exact,
-        within_rgba_bounds: coordinates_exact && rgba.as_ref().is_none_or(|value| value.passed),
+        within_rgba_bounds: coordinates_exact
+            && rgba.as_ref().is_none_or(|value| value.within_bounds),
         metadata_mismatches: mismatches,
         differing_indices,
         coordinates,

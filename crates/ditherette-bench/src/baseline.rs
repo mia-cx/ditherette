@@ -20,6 +20,7 @@ pub(crate) fn save_baseline(
     run: &BenchRun,
     replace: bool,
 ) -> Result<(), BenchError> {
+    require_accepted_verification(role, run)?;
     let path = baseline_path(role, name);
     if path.exists() && !replace {
         return Err(BenchError::Baseline(format!(
@@ -40,6 +41,7 @@ pub(crate) fn save_scoped_baseline(
     run: &BenchRun,
     replace: bool,
 ) -> Result<(), BenchError> {
+    require_accepted_verification(role, run)?;
     for result in &run.results {
         let dir = scoped_baseline_dir(name, run, result);
         if dir.exists() {
@@ -99,6 +101,11 @@ pub(crate) fn replace_scoped_baseline_from_indexed_run(
     let case_runs = load_indexed_case_runs(current_run, MissingIndexedRun::Error { role, name })?
         .expect("missing indexed case runs are errors when replacing baselines");
 
+    // Validate every case before replacing any existing accepted artifact.
+    for run in &case_runs {
+        require_accepted_verification(role, run)?;
+    }
+
     for run in &case_runs {
         let result = run
             .results
@@ -115,6 +122,27 @@ pub(crate) fn replace_scoped_baseline_from_indexed_run(
     }
 
     Ok(case_runs.len())
+}
+
+fn require_accepted_verification(role: &str, run: &BenchRun) -> Result<(), BenchError> {
+    if role != "accepted" {
+        return Ok(());
+    }
+    if run.results.is_empty()
+        || run.results.iter().any(|result| {
+            !result.verified
+                || !result.verification.as_ref().is_some_and(|verification| {
+                    verification.is_exact()
+                        && u64::try_from(verification.pixels).ok()
+                            == Some(
+                                u64::from(result.output_width) * u64::from(result.output_height),
+                            )
+                })
+        })
+    {
+        return Err(BenchError::Baseline("accepted baseline requires complete exact verification; numeric bounds and --allow-correctness-failures do not grant Mia's approval".into()));
+    }
+    Ok(())
 }
 
 pub(crate) fn save_indexed_run(

@@ -104,6 +104,8 @@ fn indexed_error_reuses_rgba_distances_without_numeric_auto_approval() {
     let comparison = report.reference_candidate.unwrap();
     assert_eq!(comparison.differing_indices, Some(1));
     let rgba = comparison.rgba.unwrap();
+    assert!(rgba.within_bounds);
+    assert!(!rgba.passed);
     assert_eq!(rgba.max_color_distance, 5.0);
     assert_eq!(rgba.mean_color_distance, 2.5);
     assert_eq!(rgba.rms_color_distance, (12.5_f64).sqrt());

@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 pub struct VerificationReport {
     pub mode: String,
     pub passed: bool,
+    /// Numeric diagnostics never establish approval for non-exact output.
+    #[serde(default)]
+    pub within_bounds: bool,
     pub first_mismatch: Option<MismatchReport>,
     #[serde(default)]
     pub bytes: usize,
@@ -40,6 +43,20 @@ pub struct MismatchReport {
     pub right_rgba: [u8; 4],
     #[serde(default)]
     pub color_distance: f64,
+}
+
+impl VerificationReport {
+    /// Require current, complete exact evidence when promoting persisted results.
+    pub fn is_exact(&self) -> bool {
+        self.passed
+            && self.within_bounds
+            && self.bytes > 0
+            && self.bytes % 4 == 0
+            && self.pixels == self.bytes / 4
+            && self.differing_bytes == 0
+            && self.differing_pixels == 0
+            && self.first_mismatch.is_none()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -158,7 +175,7 @@ pub fn verify_with_bounds(
     } else {
         (color_distance_squared_sum / pixels as f64).sqrt()
     };
-    let passed = left.len() == right.len()
+    let within_bounds = left.len() == right.len()
         && left.len() % 4 == 0
         && max_color_distance <= bounds.max_color_distance
         && mean_color_distance <= bounds.max_mean_color_distance
@@ -166,7 +183,8 @@ pub fn verify_with_bounds(
 
     VerificationReport {
         mode: bounds.mode(),
-        passed,
+        passed: within_bounds && bytes > 0 && differing_bytes == 0,
+        within_bounds,
         first_mismatch,
         bytes,
         pixels,
