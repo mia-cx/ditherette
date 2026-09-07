@@ -15,7 +15,7 @@ const anchors = [
 	'bottom-right'
 ];
 // Private ABI order. Existing algorithm tags remain stable as implementations are added.
-const algorithms = ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3'];
+const algorithms = ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3', 'trilinear'];
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
 const arrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get!;
 const arrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')!.get!;
@@ -177,14 +177,13 @@ export function validateResize(value: unknown) {
 		const algorithm = field(resize, 'algorithm');
 		const algorithmIndex = typeof algorithm === 'string' ? algorithms.indexOf(algorithm) : -1;
 		if (algorithmIndex < 0) {
-			const code = algorithm === 'trilinear' ? 'unsupported-operation' : 'invalid-settings';
 			throw new DitheretteError(
-				code,
+				'invalid-settings',
 				'output.resize.algorithm',
 				'This resize algorithm is not implemented in this package checkpoint.'
 			);
 		}
-		const convolution = algorithmIndex >= 3;
+		const convolution = algorithmIndex >= 3 && algorithmIndex <= 5;
 		if (!convolution && Object.hasOwn(resize, 'support'))
 			throw new DitheretteError(
 				'invalid-settings',

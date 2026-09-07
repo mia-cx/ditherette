@@ -102,3 +102,4 @@ pub mod bilinear;
 pub mod convolution;
 pub mod lanczos;
 pub mod nearest;
+pub mod trilinear;

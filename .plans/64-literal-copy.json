@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "issue": 64,
+  "frozen_checkpoint": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+  "copies": [
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/trilinear.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/trilinear/mod.rs",
+      "source_sha256": "3e2c45f00d6495a69c27ffe42035889eedb13f7b26ceca496ee2d4103e0908cc",
+      "copied_sha256": "bd0ba1b5ae95184abf94ad5ca867fd355799458346cc1efc3aed6c3574cb4819",
+      "substitution": "spec::resize -> prod::resize::scalar::trilinear::exact",
+      "module_declaration": "mod exact;"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/area.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/trilinear/exact/scalar/area.rs",
+      "source_sha256": "91e3e9596d61946ccd5fc5800bb6b58e116721b744091ce9388af98b881829aa",
+      "copied_sha256": "650cdbcb1b8209b87c7de3d3963284982a5472abd8a3967ebb039e3a0e913cfe",
+      "substitution": "spec::resize -> prod::resize::scalar::trilinear::exact",
+      "module_declaration": null
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/bilinear.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/trilinear/exact/scalar/bilinear.rs",
+      "source_sha256": "11635c667051f666d26e6b77905910b6298fd62eb26fb0eb1693412771cf2635",
+      "copied_sha256": "a0dc9320f227e517ba59a31f85d83dce7d1745fe98fefb7d49b4d8cf5611b7f9",
+      "substitution": "spec::resize -> prod::resize::scalar::trilinear::exact",
+      "module_declaration": null
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/sample.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/trilinear/exact/common/sample.rs",
+      "source_sha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9",
+      "copied_sha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9",
+      "substitution": "spec::resize -> prod::resize::scalar::trilinear::exact",
+      "module_declaration": null
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/coordinates.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/trilinear/exact/common/coordinates.rs",
+      "source_sha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f",
+      "copied_sha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f",
+      "substitution": "spec::resize -> prod::resize::scalar::trilinear::exact",
+      "module_declaration": null
+    }
+  ]
+}

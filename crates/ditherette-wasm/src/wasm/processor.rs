@@ -131,7 +131,7 @@ pub fn private_resize(
         Err(error) => return status(error),
     };
     let result = (|| {
-        if matches!(algorithm, 0.0 | 1.0 | 2.0) && support != 0.0 {
+        if matches!(algorithm, 0.0 | 1.0 | 2.0 | 6.0) && support != 0.0 {
             return Err(Failure::new(
                 ErrorCode::InvalidSettings,
                 ErrorPath::OutputResize,
@@ -188,6 +188,9 @@ pub fn private_resize(
                     5.0 => ResizePolicy::Lanczos3 {
                         anchor: parse_anchor(anchor)?,
                         support: parse_support(support)?,
+                    },
+                    6.0 => ResizePolicy::Trilinear {
+                        anchor: parse_anchor(anchor)?,
                     },
                     _ => {
                         return Err(Failure::new(

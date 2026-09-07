@@ -6,6 +6,7 @@
 
 pub mod reference;
 mod resize_budgeted;
+mod trilinear;
 pub mod verification;
 
 /// Existing registry with this crate's concrete, borrowed conformance protocol.
@@ -56,6 +57,7 @@ use crate::{
 /// Returns all benchmark subjects exposed by this crate.
 pub fn bench_subjects() -> Vec<BenchSubject> {
     let mut subjects = vec![
+        trilinear::subject(),
         resize_subject(
             "spec:resize:nearest:scalar",
             "spec nearest scalar",
