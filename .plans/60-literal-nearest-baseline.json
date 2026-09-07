@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "issue": 60,
+  "kind": "literal-copy-baseline",
+  "frozenRevision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+  "frozenContentSha256": "17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe",
+  "sourceBase": "5e45b7b6677d1fe4241a8109c39818a36c44b61d",
+  "files": [
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/nearest.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/nearest.rs",
+      "sourceSha256": "f373562060b034ce0dbde9f5c230ae06f19955500face15fe8a5c9f9c5604cd1",
+      "targetSha256": "e077bfd3bb97a76637a45e51ab2147b348fcc5e05483c04d6320dd5e37313d7e",
+      "substitutions": [
+        {
+          "from": "    spec::resize::common::alignment::",
+          "to": "    prod::resize::common::alignment::"
+        }
+      ]
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/alignment.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/common/alignment.rs",
+      "sourceSha256": "1805058261679b837adacdb55c34b106f495275494a22e152e8049a47ff533af",
+      "targetSha256": "1805058261679b837adacdb55c34b106f495275494a22e152e8049a47ff533af",
+      "substitutions": []
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/contract/request.rs",
+      "target": "crates/ditherette-wasm/src/prod/contract/request.rs",
+      "sourceSha256": "79f5f236771952bb2188f6a569be4ac70bea01ba833fe682eb9d1dd7d8679061",
+      "targetSha256": "79f5f236771952bb2188f6a569be4ac70bea01ba833fe682eb9d1dd7d8679061",
+      "substitutions": []
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/contract/error.rs",
+      "target": "crates/ditherette-wasm/src/prod/contract/error.rs",
+      "sourceSha256": "35f79187072422227427104cfd983778de3d4f094271b66aa64c4cb67621ffce",
+      "targetSha256": "35f79187072422227427104cfd983778de3d4f094271b66aa64c4cb67621ffce",
+      "substitutions": []
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/contract/lifecycle.rs",
+      "target": "crates/ditherette-wasm/src/prod/contract/lifecycle.rs",
+      "sourceSha256": "2973527c6da2c0a15394c0751c0dcb5c2f26c1c16128fc6310049ff27eafa259",
+      "targetSha256": "2973527c6da2c0a15394c0751c0dcb5c2f26c1c16128fc6310049ff27eafa259",
+      "substitutions": []
+    }
+  ]
+}

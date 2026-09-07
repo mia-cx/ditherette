@@ -1,6 +1,6 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
-    prod::resize::scalar::nearest::{
+    prod::resize::scalar::nearest_candidate::{
         alignment::ResizeAnchor as ProdResizeAnchor,
         resize_nearest_rgba8_into as resize_prod_nearest_into,
         resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
