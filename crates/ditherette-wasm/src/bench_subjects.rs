@@ -4,10 +4,16 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
+pub mod reference;
+pub mod verification;
+
+/// Existing registry with this crate's concrete, borrowed conformance protocol.
+pub type BenchSubject = ditherette_bench_api::BenchSubject<reference::ReferenceFn>;
+
 use ditherette_bench_api::{
-    BenchSubject, BenchSubjectError, ParamSchema, PixelFormat, ResizeBenchSubject,
-    ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams, ResizeU8RgbaFn, SubjectCapabilities,
-    SubjectDescriptor, SubjectId, SupportPolicyParam,
+    BenchSubjectError, ParamSchema, PixelFormat, ResizeBenchSubject, ResizeInputU8Rgba,
+    ResizeOutputU8Rgba, ResizeParams, ResizeU8RgbaFn, SubjectCapabilities, SubjectDescriptor,
+    SubjectId, SupportPolicyParam,
 };
 
 use crate::{
@@ -48,7 +54,7 @@ use crate::{
 
 /// Returns all benchmark subjects exposed by this crate.
 pub fn bench_subjects() -> Vec<BenchSubject> {
-    vec![
+    let mut subjects = vec![
         resize_subject(
             "spec:resize:nearest:scalar",
             "spec nearest scalar",
@@ -169,7 +175,9 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "crates/ditherette-wasm/src/spec/resize/scalar/trilinear.rs",
             resize_trilinear_subject,
         ),
-    ]
+    ];
+    subjects.extend(reference::subjects());
+    subjects
 }
 
 fn resize_subject(

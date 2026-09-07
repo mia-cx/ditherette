@@ -1,6 +1,7 @@
 //! Subject registry lookup and path resolution.
 
-use ditherette_bench_api::{BenchSubject, ResizeBenchSubject, SubjectId};
+use ditherette_bench_api::{ResizeBenchSubject, SubjectId};
+use ditherette_wasm::bench_subjects::BenchSubject;
 
 use crate::{
     cli::{csv_set, Flags},
@@ -22,6 +23,13 @@ impl Registry {
 
     pub(crate) fn subjects(&self) -> &[BenchSubject] {
         &self.subjects
+    }
+
+    pub(crate) fn subject(&self, id: &str) -> Result<&BenchSubject, BenchError> {
+        self.subjects
+            .iter()
+            .find(|subject| subject.descriptor().id.as_str() == id)
+            .ok_or_else(|| BenchError::Config(format!("unknown subject {id:?}")))
     }
 
     pub(crate) fn resize_subject(&self, id: &str) -> Result<ResizeBenchSubject, BenchError> {
@@ -55,8 +63,9 @@ impl Registry {
         Ok(self
             .subjects
             .iter()
-            .map(|subject| match subject {
-                BenchSubject::Resize(resize) => resize,
+            .filter_map(|subject| match subject {
+                BenchSubject::Resize(resize) => Some(resize),
+                BenchSubject::Conformance(_) => None,
             })
             .filter(|subject| {
                 let id = &subject.descriptor.id;
@@ -108,5 +117,30 @@ impl Registry {
                     .join(", ")
             ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discovery_includes_typed_references_but_resize_timing_skips_them() {
+        let registry = Registry::load();
+        let id = "spec:color:srgb:f32-roundtrip-v1";
+        assert!(matches!(
+            registry.subject(id).unwrap(),
+            BenchSubject::Conformance(_)
+        ));
+        crate::commands::describe_subject(&registry, &[id.into()]).unwrap();
+        let selected = registry
+            .select_resize_subjects(&Flags::parse(&[]).unwrap())
+            .unwrap();
+        assert!(!selected.is_empty());
+        assert!(selected
+            .iter()
+            .all(|subject| subject.descriptor.id.domain() == "resize"
+                && subject.descriptor.id.filter() != "request"));
+        assert!(registry.resize_subject("spec:resize:request:v1").is_err());
     }
 }

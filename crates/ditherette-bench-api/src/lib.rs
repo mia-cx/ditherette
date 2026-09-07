@@ -6,6 +6,8 @@
 
 use std::{collections::BTreeMap, error::Error, fmt, str::FromStr};
 
+pub mod verification;
+
 /// Stable identifier for a benchmarkable implementation.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubjectId(String);
@@ -85,12 +87,16 @@ impl Error for SubjectIdError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PixelFormat {
     Rgba8,
+    Indexed8,
+    Color32,
 }
 
 impl fmt::Display for PixelFormat {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Rgba8 => formatter.write_str("rgba8"),
+            Self::Indexed8 => formatter.write_str("indexed8"),
+            Self::Color32 => formatter.write_str("color32"),
         }
     }
 }
@@ -258,16 +264,26 @@ impl ResizeBenchSubject {
     }
 }
 
-/// Registered benchmark subject.
+/// A callable typed conformance adapter. The implementation crate owns its request type.
 #[derive(Clone)]
-pub enum BenchSubject {
-    Resize(ResizeBenchSubject),
+pub struct ConformanceBenchSubject<F> {
+    pub descriptor: SubjectDescriptor,
+    pub operation: verification::Operation,
+    pub run: F,
 }
 
-impl BenchSubject {
+/// Registered benchmark subject. Legacy users need no concrete conformance protocol.
+#[derive(Clone)]
+pub enum BenchSubject<F = std::convert::Infallible> {
+    Resize(ResizeBenchSubject),
+    Conformance(ConformanceBenchSubject<F>),
+}
+
+impl<F> BenchSubject<F> {
     pub fn descriptor(&self) -> &SubjectDescriptor {
         match self {
             Self::Resize(subject) => &subject.descriptor,
+            Self::Conformance(subject) => &subject.descriptor,
         }
     }
 }

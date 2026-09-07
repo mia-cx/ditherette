@@ -1,5 +1,11 @@
 # Ditherette bench artifacts
 
+Read [exclusive execution](EXECUTION.md) before collecting timings. Prepare builds,
+drain implementation work, then run prebuilt executables under the shared lease.
+
+[Three-way verification](VERIFICATION.md) defines typed result identities,
+exactness requirements, and retained raw/PNG review bundles.
+
 `ditherette-bench` writes benchmark run and baseline artifacts as JSON under:
 
 ```text

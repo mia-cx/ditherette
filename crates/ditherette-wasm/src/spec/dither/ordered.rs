@@ -75,3 +75,11 @@ pub fn bayer_value(x: usize, y: usize, width: usize) -> u16 {
     }
     value as u16
 }
+
+/// Palette-free centered Bayer threshold at global image coordinates.
+/// Matrix cell centers avoid either endpoint of [-0.5,0.5].
+pub fn bayer_noise_at(x: u32, y: u32, size: BayerSize) -> f32 {
+    let width = size.width();
+    let rank = bayer_value(x as usize % width, y as usize % width, width);
+    (f32::from(rank) + 0.5) / (width * width) as f32 - 0.5
+}
