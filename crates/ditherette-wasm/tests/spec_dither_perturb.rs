@@ -53,7 +53,7 @@ fn policy(field: Field, space: WorkingSpace, strength: f32) -> PerturbPolicy {
         field,
         space,
         strength,
-        placement: Placement::Everywhere,
+        placement: Placement::Everywhere {},
     }
 }
 
@@ -287,7 +287,7 @@ fn field_callback_draws_once_per_global_pixel_even_when_effect_is_zero() {
         output.as_view_mut(),
         WorkingSpace::Srgb,
         0.0,
-        Placement::Everywhere,
+        Placement::Everywhere {},
         RowBand::new(1, 2).unwrap(),
         |x, y, index| {
             calls.borrow_mut().push((x, y, index));
@@ -359,7 +359,7 @@ fn quantize_callback_sees_rounded_bytes_and_palette_changes_do_not_change_the_fi
             PaletteEntry::Color { rgb: [255; 3] },
         ],
     ] {
-        let prepared = PreparedPalette::new(&entries, AlphaPolicy::Premultiplied);
+        let prepared = PreparedPalette::new(&entries, AlphaPolicy::Premultiplied {});
         let result = quantize_after_perturb(source, settings, |bytes| {
             assert_eq!(bytes.data(), intermediate.data());
             assert_eq!(bytes.data(), &[104, 104, 104, 255]);

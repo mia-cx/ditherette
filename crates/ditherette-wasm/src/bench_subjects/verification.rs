@@ -88,7 +88,7 @@ fn resize(
         .map_err(|error| BenchSubjectError::new(error.to_string()))?;
     let (filter, variant, anchor, support) = match request.output.resize {
         ResizePolicy::Nearest { anchor } => ("nearest", "scalar", Some(anchor), None),
-        ResizePolicy::Area => ("area", "scalar", None, None),
+        ResizePolicy::Area {} => ("area", "scalar", None, None),
         ResizePolicy::Bilinear { anchor } => ("bilinear", "scalar", Some(anchor), None),
         ResizePolicy::Bicubic { anchor, support } => (
             "bicubic",
