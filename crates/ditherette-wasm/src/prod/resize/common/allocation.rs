@@ -27,7 +27,7 @@ impl CapacityBudget {
         if self
             .used
             .checked_add(bytes)
-            .is_none_or(|total| total > self.limit)
+            .map_or(true, |total| total > self.limit)
         {
             return Err(Failure::new(
                 ErrorCode::MemoryLimit,
@@ -42,7 +42,7 @@ impl CapacityBudget {
         let requested = (capacity as u64).checked_mul(size_of::<T>() as u64);
         if requested
             .and_then(|bytes| self.used.checked_add(bytes))
-            .is_none_or(|bytes| bytes > self.limit)
+            .map_or(true, |bytes| bytes > self.limit)
         {
             return Err(Failure::new(
                 ErrorCode::MemoryLimit,
