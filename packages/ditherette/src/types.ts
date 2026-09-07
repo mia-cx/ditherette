@@ -72,13 +72,23 @@ export type AlphaPolicy =
 	| { readonly mode: 'premultiplied' }
 	| { readonly mode: 'matte'; readonly rgb: readonly [number, number, number] };
 
-/** The five implemented ordinary coordinate spaces, each using direct Euclidean matching. */
+/** Valid tagged color/metric pairs. Cylindrical hue uses radians. */
 export type Matching =
 	| 'srgb-euclidean'
 	| 'linear-rgb-euclidean'
 	| 'oklab-euclidean'
 	| 'cielab-euclidean'
-	| 'ycbcr-euclidean';
+	| 'ycbcr-euclidean'
+	| 'srgb-compuphase'
+	| 'srgb-rec601'
+	| 'srgb-rec709'
+	| 'oklch-euclidean'
+	| 'oklch-circular-hue'
+	| 'oklch-hue-arc'
+	| 'cielab-ciede2000'
+	| 'cielch-euclidean'
+	| 'cielch-circular-hue'
+	| 'cielch-hue-arc';
 
 export interface QuantizeRequest {
 	readonly version: 1;
