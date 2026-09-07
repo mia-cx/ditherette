@@ -538,20 +538,22 @@ fn warm_up_and_calibrate(
     let warmup_start = Instant::now();
     let mut warmup_iterations = 0usize;
 
+    let discard_start = Instant::now();
     for _ in 0..WARMUP_DISCARD_ITERATIONS {
         run_resize_into(subject, fixture, output, output_rgba, params)?;
         warmup_iterations += 1;
     }
+    observer.warmup_batch(WARMUP_DISCARD_ITERATIONS, discard_start.elapsed());
     black_box(checksum(output_rgba));
 
     let single_start = Instant::now();
     run_resize_into(subject, fixture, output, output_rgba, params)?;
     let single_elapsed = single_start.elapsed();
     warmup_iterations += 1;
+    observer.warmup_batch(1, single_elapsed);
     black_box(checksum(output_rgba));
 
     if single_elapsed >= config.target_sample {
-        observer.warmup_batch(1, single_elapsed);
         continue_warmup(
             subject,
             fixture,
