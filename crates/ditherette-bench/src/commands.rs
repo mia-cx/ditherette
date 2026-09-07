@@ -149,8 +149,8 @@ pub(crate) fn describe_subject(registry: &Registry, args: &[String]) -> Result<(
     let id = args
         .first()
         .ok_or_else(|| BenchError::Config("expected subject id".to_owned()))?;
-    let subject = registry.resize_subject(id)?;
-    let descriptor = &subject.descriptor;
+    let subject = registry.subject(id)?;
+    let descriptor = subject.descriptor();
 
     println!("id: {}", descriptor.id);
     println!("display: {}", descriptor.display_name);
