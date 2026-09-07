@@ -13,8 +13,12 @@ function resources({ failLaunch = false, marker } = {}) {
 	let closed = false;
 	return {
 		server,
-		get child() { return child; },
-		get closed() { return closed; },
+		get child() {
+			return child;
+		},
+		get closed() {
+			return closed;
+		},
 		async startServer() {
 			server.listen(0, '127.0.0.1');
 			await once(server, 'listening');
@@ -23,7 +27,8 @@ function resources({ failLaunch = false, marker } = {}) {
 		async launchBrowserServer() {
 			if (failLaunch) throw new Error('fixture launch failed');
 			child = spawn(process.execPath, ['-e', "console.log('READY'); setInterval(() => {}, 1000)"], {
-				detached: true, stdio: ['ignore', 'pipe', 'inherit']
+				detached: true,
+				stdio: ['ignore', 'pipe', 'inherit']
 			});
 			await once(child.stdout, 'data');
 			return {
