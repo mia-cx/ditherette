@@ -3,8 +3,15 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { EventEmitter } from 'node:events';
+import { request as httpRequest } from 'node:http';
 import test from 'node:test';
-import { allowedRequest, assetPaths, startAssetServer } from './benchmark-public-browser.mjs';
+import {
+	allowedRequest,
+	assetPaths,
+	rejectOnPageFailure,
+	startAssetServer
+} from './benchmark-public-browser.mjs';
 import { preflightOperation, runTrial, timerResolution } from './benchmark-public-page.mjs';
 
 test('manifest rejects traversal and duplicates; routing rejects external and undeclared dependencies', () => {
@@ -153,5 +160,79 @@ test('mismatch response performs one fake preflight call and never begins warmup
 			Object.defineProperty(globalThis, 'crossOriginIsolated', previousIsolation);
 		else delete globalThis.crossOriginIsolated;
 		await rm(temporary, { recursive: true, force: true });
+	}
+});
+
+test('trial data routes reject collisions, duplicate submissions, and oversized chunked bodies', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'ditherette-data-boundary-'));
+	const assets = { tree: { root, files: [{ path: 'entry.js' }] }, entries: { page: 'entry.js' } };
+	const trial = {
+		case: { identity: { output: { width: 1, height: 1 } }, measurement: { samples: 1 } }
+	};
+	const servers = [];
+	try {
+		await assert.rejects(
+			startAssetServer(
+				{ tree: { root, files: [{ path: '__ditherette_trial__/request' }] }, entries: {} },
+				false,
+				trial
+			),
+			/collides/
+		);
+		const server = await startAssetServer(assets, false, trial);
+		servers.push(server);
+		assert.deepEqual(await (await fetch(server.url + server.requestUrl)).json(), trial);
+		assert.equal((await fetch(server.url + server.requestUrl)).status, 409);
+		const submit = () =>
+			fetch(server.url + server.resultUrl, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: '{"output":"complete"}'
+			});
+		assert.equal((await submit()).status, 204);
+		assert.equal((await submit()).status, 409);
+		assert.deepEqual(server.result, { output: 'complete' });
+		assert.deepEqual(server.failures, [
+			'Duplicate trial input request.',
+			'Duplicate trial result submission.'
+		]);
+		const oversized = await startAssetServer(assets, false, trial);
+		servers.push(oversized);
+		const status = await new Promise((resolve, reject) => {
+			const outgoing = httpRequest(
+				oversized.url + oversized.resultUrl,
+				{ method: 'POST', headers: { 'Content-Type': 'application/json' } },
+				(response) => {
+					response.resume();
+					response.on('end', () => resolve(response.statusCode));
+				}
+			);
+			outgoing.on('error', reject);
+			outgoing.write('x'.repeat(40_000));
+			outgoing.end('y'.repeat(40_000));
+		});
+		assert.equal(status, 413);
+		assert.equal(oversized.result, undefined);
+		assert.deepEqual(oversized.failures, ['Result body exceeds declared bound.']);
+	} finally {
+		for (const server of servers) {
+			server.instance.closeAllConnections();
+			await new Promise((resolve) => server.instance.close(resolve));
+		}
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('renderer crashes and disconnects reject pending work and remove every observation listener', async () => {
+	for (const event of ['crash', 'close', 'pageerror', 'disconnected']) {
+		const browser = new EventEmitter();
+		const page = new EventEmitter();
+		page.context = () => ({ browser: () => browser });
+		const pending = rejectOnPageFailure(page, () => new Promise(() => {}));
+		if (event === 'disconnected') browser.emit(event);
+		else page.emit(event, new Error('fixture page error'));
+		await assert.rejects(pending, /crashed|closed|disconnected|fixture page error/);
+		for (const name of ['crash', 'close', 'pageerror']) assert.equal(page.listenerCount(name), 0);
+		assert.equal(browser.listenerCount('disconnected'), 0);
 	}
 });
