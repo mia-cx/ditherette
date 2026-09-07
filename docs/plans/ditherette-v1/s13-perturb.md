@@ -13,7 +13,7 @@ Both ancestry checks pass. All 19 prerequisite placement/palette tests compile a
 
 - [x] Define Bayer thresholds and global-index random draws with exact fixtures.
 - [x] Reconstruct field-generated f64 coordinates without overflowing valid strengths, with seven-space fixtures.
-- [ ] Compose palette-free RGBA8 perturbation and quantize-after-perturb through the byte boundary, with focused tests.
+- [x] Compose palette-free RGBA8 perturbation and quantize-after-perturb through the byte boundary, with focused tests.
 
 ## Ownership
 
@@ -31,3 +31,20 @@ Independent JavaScript `Math.imul` fixtures cover three seeds, row-adjacent indi
 The one-draw-per-global-pixel assignment is independent of alpha, strength, placement, and traversal order.
 Four reconstruction fixtures pass, covering known vectors, sampled seven-space byte round trips, hue/neutral conventions, and maximum legal strengths.
 The numeric proof bounds valid inverse intermediates below `1e125`; no new public strength ceiling or coordinate clipping is needed.
+
+Final validation:
+
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 178 native tests.
+- Focused `spec_dither_perturb` passes 11 tests and `spec_color_reconstruct` passes four.
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check` and `git diff --check` pass.
+
+No benchmark measurement ran. Inherited native benchmark-export smoke tests provide no performance evidence.
+
+## Handoff
+
+Read [perturb.md](../../../crates/ditherette-wasm/src/spec/dither/perturb.md) before integrating S14 or the S17 pipeline.
+It defines the shared callback signature, global draw assignment, reconstruction boundary, and temporary blue-noise registration.
+The current `BlueNoise` branch is explicitly uncertified inherited data; S14 replaces its lookup at the validated join.
+S17 supplies the completed S10 quantizer to `quantize_after_perturb` and reconciles local forward dispatch.
+S38 converts historical raw-RGB strength by `64/63.75`; normalized color-space strength needs no correction.
