@@ -12,7 +12,7 @@ use ditherette_bench_api::{
 };
 use serde::{Serialize, Serializer};
 
-/// Typed processing requests plus the internal packed-f32 color conversion operation.
+/// Typed processing requests, internal packed-f32 color conversion, and scalar score batches.
 #[derive(Debug, Clone, Copy)]
 pub enum ReferenceRequest<'a> {
     Processing(Request<'a>),
