@@ -8,7 +8,7 @@ Only the coordinator owns this worktree. Other agents own package quantization a
 
 - [x] Reserve and fill one mip chain, retaining the lower level for the upper level's next reduction.
 - [x] Verify exact frozen bytes and f32 bits, all reservation failures, and public memory accounting.
-- [ ] Benchmark the prepared baseline and candidate under the exclusive lease; retain only measured exact improvements.
+- [x] Benchmark the prepared baseline and candidate under the exclusive lease; retain only measured exact improvements.
 
 The two independent baseline chains calculate the same storage-rounded lower levels from identical source pixels.
 Sharing these levels removes duplicate work without changing weights, rounding, LOD, anchors, or intermediate storage types.
@@ -40,3 +40,7 @@ One native adapter fixture, twelve public protocol fixtures, two budget fixtures
 The full candidate core passes 300 native tests without benchmark features. Both Wasm builds pass.
 Eighteen public interface tests and eight private ABI tests pass against the candidate package.
 Three-engine installed adapter conformance and fresh artifact preparation remain before measurement.
+
+Completed outcome supersedes the preparation notes above. Both artifact adapter suites pass all three engines.
+All 80 workers exit, retaining 1,344 samples and exact output. Every case passes; the candidate is selected.
+The [measurement record](64-measurement.md) contains revisions, hashes, scopes, sample counts, and actual medians.
