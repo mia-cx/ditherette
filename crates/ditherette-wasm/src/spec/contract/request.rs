@@ -127,9 +127,14 @@ pub struct Output {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum AlphaPolicy {
-    Preserve { threshold: f32 },
+    /// JavaScript-number precision matters at fractional byte thresholds.
+    Preserve {
+        threshold: f64,
+    },
     Premultiplied,
-    Matte { rgb: [u8; 3] },
+    Matte {
+        rgb: [u8; 3],
+    },
 }
 
 /// Palette-independent contrast placement. Threshold/softness use the existing 0..100 contrast scale.
