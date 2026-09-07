@@ -12,7 +12,22 @@ import {
 	rejectOnPageFailure,
 	startAssetServer
 } from './benchmark-public-browser.mjs';
-import { preflightOperation, runTrial, timerResolution } from './benchmark-public-page.mjs';
+import {
+	preflightOperation,
+	resizeRecipe,
+	runTrial,
+	timerResolution
+} from './benchmark-public-page.mjs';
+
+test('public resize recipes retain mode-specific settings', () => {
+	assert.deepEqual(resizeRecipe({ operation: 'resize-area' }), { algorithm: 'area' });
+	for (const algorithm of ['nearest', 'bilinear'])
+		assert.deepEqual(resizeRecipe({ operation: `resize-${algorithm}`, anchor: 'bottom-left' }), {
+			algorithm,
+			anchor: 'bottom-left'
+		});
+	assert.throws(() => resizeRecipe({ operation: 'unknown' }), /Unsupported/);
+});
 
 test('manifest rejects traversal and duplicates; routing rejects external and undeclared dependencies', () => {
 	for (const file of ['../outside', '/absolute', 'a/../b', 'a\\b'])

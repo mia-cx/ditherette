@@ -7,6 +7,50 @@ use ditherette_bench_api::verification::*;
 #[path = "fixtures/paired_model.rs"]
 mod model;
 
+#[test]
+fn area_and_bilinear_keep_distinct_recipes_and_validate_website_anchors() {
+    for (operation, filter) in [
+        (PublicOperation::ResizeArea {}, "area"),
+        (
+            PublicOperation::ResizeBilinear {
+                anchor: Anchor::Center,
+            },
+            "bilinear",
+        ),
+    ] {
+        let (mut prepared, _) = fixture();
+        let case = &mut prepared.experiment.cases[0];
+        let browser = case.browser.as_mut().unwrap();
+        browser.operation = operation.clone();
+        case.reference_subject = operation.reference_subject().into();
+        case.accepted_subject = operation.subject(browser.accepted).into();
+        case.candidate_subject = operation.subject(browser.candidate).into();
+        case.identity = operation
+            .identity(case.source, &case.rgba, case.identity.output)
+            .unwrap();
+        assert_eq!(
+            case.reference_subject,
+            format!("spec:resize:{filter}:scalar")
+        );
+        assert_eq!(
+            case.identity.semantics.recipe,
+            format!("{filter}-public-v1")
+        );
+        validate_case(case).unwrap();
+        let round_trip: PublicOperation =
+            serde_json::from_str(&serde_json::to_string(&operation).unwrap()).unwrap();
+        assert_eq!(round_trip, operation);
+        case.browser.as_mut().unwrap().operation = PublicOperation::ResizeBilinear {
+            anchor: Anchor::Left,
+        };
+        assert!(validate_case(case).is_err());
+    }
+    assert!(serde_json::from_str::<PublicOperation>(
+        r#"{"operation":"resize-area","anchor":"center"}"#
+    )
+    .is_err());
+}
+
 fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
     let browser = BrowserCase {

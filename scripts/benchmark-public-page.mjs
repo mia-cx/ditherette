@@ -14,12 +14,25 @@ export function timerResolution(now = () => performance.now()) {
 }
 
 /** Prepare only existing public operations. No private glue, synthetic hashing, or application caches. */
+export function resizeRecipe(operation) {
+	switch (operation.operation) {
+		case 'resize-nearest':
+			return { algorithm: 'nearest', anchor: operation.anchor };
+		case 'resize-area':
+			return { algorithm: 'area' };
+		case 'resize-bilinear':
+			return { algorithm: 'bilinear', anchor: operation.anchor };
+		default:
+			throw new Error('Unsupported browser operation.');
+	}
+}
+
+/** Prepare the actual package or website call outside measurement timers. */
 export async function prepareOperation(trial) {
 	const config = trial.case.browser;
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
-	if (config.operation.operation !== 'resize-nearest')
-		throw new Error('Unsupported browser operation.');
+	const resize = resizeRecipe(config.operation);
 	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
 		throw new Error('This package has no application cache.');
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
@@ -29,24 +42,24 @@ export async function prepareOperation(trial) {
 		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
 		output: {
 			...trial.case.identity.output,
-			resize: { algorithm: 'nearest', anchor: config.operation.anchor }
+			resize
 		}
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
-		if (config.operation.anchor !== 'center')
-			throw new Error('TypeScript non-center nearest is unavailable.');
+		if ('anchor' in resize && resize.anchor !== 'center')
+			throw new Error('TypeScript non-center resize is unavailable.');
 		if (
 			measurement.scope !== 'complete-call' ||
 			!['primed-instance', 'fresh-instance'].includes(config.preparation)
 		)
 			throw new Error('TypeScript has no Wasm initialization or processor-instance equivalent.');
 		// TypeScript is stateless: both labels execute its ordinary per-call preparation.
-		const { resize } = await import(url(trial.browser.assets.entries.typescript));
+		const { resize: resizeTypeScript } = await import(url(trial.browser.assets.entries.typescript));
 		return {
 			request,
-			call: () => resize(request),
-			prepare: async () => ({ call: () => resize(request), close() {} }),
+			call: () => resizeTypeScript(request),
+			prepare: async () => ({ call: () => resizeTypeScript(request), close() {} }),
 			close() {}
 		};
 	}
