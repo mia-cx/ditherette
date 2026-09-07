@@ -15,6 +15,11 @@ const anchors = [
 	'bottom-right'
 ];
 const laterFilters = ['area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3', 'trilinear'];
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const arrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get!;
+const arrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')!.get!;
+const arrayOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteOffset')!.get!;
+const arrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteLength')!.get!;
 
 function object(
 	value: unknown,
@@ -110,6 +115,27 @@ function isInitInput(value: unknown): value is InitInput {
 	);
 }
 
+function rgbaBytes(value: unknown, expectedBytes: number): Uint8Array {
+	if (
+		!ArrayBuffer.isView(value) ||
+		arrayTag.call(value) !== 'Uint8Array' ||
+		arrayLength.call(value) !== expectedBytes
+	) {
+		throw new DitheretteError(
+			'invalid-image',
+			'source.data',
+			'Expected packed RGBA8 Uint8Array bytes matching the dimensions.'
+		);
+	}
+	try {
+		// A plain borrowed view ignores caller-overridden length/getters without copying source bytes.
+		return new Uint8Array(arrayBuffer.call(value), arrayOffset.call(value), expectedBytes);
+	} catch (error) {
+		const code = error instanceof RangeError ? 'wasm-memory-unavailable' : 'invalid-image';
+		throw new DitheretteError(code, 'source.data', 'RGBA8 source bytes are unavailable.');
+	}
+}
+
 /** Read each caller property once and validate canonical tags before entering the private binding. */
 export function validateResize(value: unknown) {
 	try {
@@ -180,18 +206,9 @@ export function validateResize(value: unknown) {
 			'source'
 		);
 		const sourceSize = dimensions(source, 32_768, 'invalid-image', 'source');
-		const data = field(source, 'data');
-		if (
-			!(data instanceof Uint8Array) ||
-			data.byteLength !== sourceSize.width * sourceSize.height * 4
-		) {
-			throw new DitheretteError(
-				'invalid-image',
-				'source.data',
-				'Expected packed RGBA8 Uint8Array bytes matching the dimensions.'
-			);
-		}
+		const rawData = field(source, 'data');
 		const outputSize = dimensions(output, 16_384, 'invalid-settings', 'output');
+		const data = rgbaBytes(rawData, sourceSize.width * sourceSize.height * 4);
 		return {
 			data,
 			sourceWidth: sourceSize.width,

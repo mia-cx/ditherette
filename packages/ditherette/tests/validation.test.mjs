@@ -39,7 +39,8 @@ test('nearest validation preserves byte views and the frozen anchor order', () =
 			outputHeight: 1,
 			anchor
 		});
-		assert.equal(validateResize(value).data, value.source.data);
+		assert.equal(validateResize(value).data.buffer, value.source.data.buffer);
+		assert.equal(validateResize(value).data.byteOffset, 1);
 	}
 });
 
@@ -87,6 +88,18 @@ test('canonical raw request shapes reject coercions, sequence tags, and extra fi
 	const detached = request();
 	structuredClone(detached.source.data.buffer, { transfer: [detached.source.data.buffer] });
 	fails(() => validateResize(detached), 'invalid-image', 'source.data');
+	const overridden = request();
+	Object.defineProperty(overridden.source.data, 'length', {
+		get() {
+			throw new Error('caller override');
+		}
+	});
+	Object.defineProperty(overridden.source.data, 'byteLength', {
+		get() {
+			throw new Error('caller override');
+		}
+	});
+	assert.equal(validateResize(overridden).data.length, 4);
 });
 
 test('dimension validation enforces integer side and pixel limits before reading data', () => {
