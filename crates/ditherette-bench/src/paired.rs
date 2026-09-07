@@ -99,6 +99,28 @@ pub struct BuildIdentity {
     pub tool_version: String,
 }
 
+impl BuildIdentity {
+    /// Provenance embedded when the local benchmark crate was compiled.
+    pub fn current() -> Self {
+        Self {
+            revision: env!("DITHERETTE_BENCH_REVISION").into(),
+            dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
+            rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
+            tool_version: env!("CARGO_PKG_VERSION").into(),
+        }
+    }
+}
+
+/// Read-only preparation metadata. The caller holds the normal benchmark execution guard.
+pub fn build_info_json() -> std::io::Result<String> {
+    let bytes = std::fs::read(std::env::current_exe()?)?;
+    serde_json::to_string(&serde_json::json!({
+        "build": BuildIdentity::current(),
+        "executable": crate::verification::content_digest(&bytes),
+    }))
+    .map_err(std::io::Error::other)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Machine {
     pub os: String,
