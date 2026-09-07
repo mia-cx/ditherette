@@ -97,8 +97,10 @@
 // existing small RGBA statements than broader unroll rewrites.
 
 pub mod area;
+pub mod area_candidate;
 pub mod bicubic;
 pub mod bilinear;
+pub mod bilinear_candidate;
 pub mod convolution;
 pub mod lanczos;
 pub mod nearest;

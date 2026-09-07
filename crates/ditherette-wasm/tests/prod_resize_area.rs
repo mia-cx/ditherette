@@ -1,6 +1,6 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
-    prod::resize::scalar::area::{
+    prod::resize::scalar::area_candidate::{
         resize_area_rgba8_into as resize_prod_area_into, resize_area_rgba8_rows_with_plan_into,
         AreaResizePlan,
     },

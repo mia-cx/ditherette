@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "issue": 62,
+  "base": "711c7aec61587b45a91c2e404583161edb1e0de9",
+  "frozen_checkpoint": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+  "frozen_digest": "17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe",
+  "copies": [
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/area.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/area.rs",
+      "source_sha256": "91e3e9596d61946ccd5fc5800bb6b58e116721b744091ce9388af98b881829aa",
+      "copied_sha256": "f70c6cf6779b7394967dcea70341e78101cb39244fdbf8a0e426f09e57e41f3c",
+      "substitution": "spec::resize -> prod::resize"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/bilinear.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear.rs",
+      "source_sha256": "11635c667051f666d26e6b77905910b6298fd62eb26fb0eb1693412771cf2635",
+      "copied_sha256": "f4de607806273af6e4418364ab7d92c52fc2dba1dd881904b1088899453b6ebd",
+      "substitution": "spec::resize -> prod::resize"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/coordinates.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/common/coordinates.rs",
+      "source_sha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f",
+      "copied_sha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f",
+      "substitution": "none; byte-identical"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/sample.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/common/sample.rs",
+      "source_sha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9",
+      "copied_sha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9",
+      "substitution": "none; byte-identical"
+    }
+  ],
+  "candidates": [
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/area/coverage.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/area_candidate/coverage.rs",
+      "sha256": "0dd9f68bae67ff988b0e879c05a7e3b2b2cb3bd89e05367b3fd9b33b09afe7ca"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/area/downscale.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/area_candidate/downscale.rs",
+      "sha256": "175a9b03b9d9cdd65a7dbf71a704daf270c397ba9e46f653316eafcadf8c3ca5"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/area/exact.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/area_candidate/exact.rs",
+      "sha256": "4406a0627665f0a65a7b3d9dfb5e4faddcf1367f0e98a0656f9a7bffc435ef93"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/area/mod.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/area_candidate/mod.rs",
+      "sha256": "6b58fe5130067093039be644686df2539e842387f44630ad7f8debdff323a567"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/area/plan.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/area_candidate/plan.rs",
+      "sha256": "60e71d5af501420a407b8866666eda1f228ec5fbeb4ba754f3ada227e9aa05f6"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/area/planned.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/area_candidate/planned.rs",
+      "sha256": "ef66d3e1b0bb31d6f0596ee411ad828ba3683a95a6f4197abf085f35b6b32d32"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/alignment.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear_candidate/alignment.rs",
+      "sha256": "cb92ccdb3d0329497c96c180d885df17a7b465ea666d2943b6002930262a192a"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/coordinates.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear_candidate/coordinates.rs",
+      "sha256": "b9a11e8c2c7098a33c634b4ee8a90cd918fadfb0fdf0c3616f2389e58d82c6ac"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/filter.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear_candidate/filter.rs",
+      "sha256": "c8d0f9b391ead7df0497237ae664c2011aa847fc7f3c9fcdc179cdd922873011"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/kernel.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear_candidate/kernel.rs",
+      "sha256": "57a87745dc7ec20a9c5c76a58dea727443b715282718c1a9f0a5634342569e26"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear_candidate/mod.rs",
+      "sha256": "dfa554659add354e83b2399d2184bd87a767740da52c9f2c573d6f459d022c75"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/plan.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bilinear_candidate/plan.rs",
+      "sha256": "75e11a438af2829f23242d2f074b331f4d458b37ff5bbdca62d1370e012df96f"
+    }
+  ]
+}

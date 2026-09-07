@@ -20,12 +20,12 @@ use crate::{
             rgba8_to_color_space_f32, rgba8_to_color_space_f32_with_policy_into, ColorSpaceF32,
         },
         resize::scalar::{
-            area::resize_area_rgba8_into,
+            area_candidate::resize_area_rgba8_into,
             bicubic::{
                 resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_into,
                 resize_bicubic_rgba8_rows_with_plan_into, BicubicResizePlan,
             },
-            bilinear::{
+            bilinear_candidate::{
                 alignment::ResizeAnchor as BilinearResizeAnchor, resize_bilinear_rgba8_into,
             },
             convolution::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},

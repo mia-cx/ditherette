@@ -1,6 +1,6 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
-    prod::resize::scalar::bilinear::{
+    prod::resize::scalar::bilinear_candidate::{
         alignment::ResizeAnchor as ProdResizeAnchor,
         resize_bilinear_rgba8_into as resize_prod_bilinear_into,
     },
