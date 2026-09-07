@@ -18,7 +18,7 @@ Prod, spec, image, freeze policy, and public package files stay unchanged in thi
 - [x] Create the literal-baseline worktree with common benchmark protocol and thin old-signature adapter; leave production bytes unchanged.
 - [x] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
 - [x] Prepare immutable accepted/candidate artifacts as attempt 01 and hand off without measurements.
-- [ ] Integrate public retained-batch verification, then rebuild affected artifacts before coordinator-authorized measurements.
+- [~] Integrate public retained-batch verification, then rebuild affected artifacts before coordinator-authorized measurements.
 
 ## Interface
 
@@ -104,3 +104,13 @@ The coordinator accepts the fixed deterministic native callable scope with befor
 This cannot certify arbitrary stateful/nondeterministic callables or transient A/B/A behavior.
 Native disposal and timer boundaries remain unchanged; broader observation requires a separately declared scope or mechanism.
 Attempt 01 remains unmeasured historical preparation, not validated performance evidence.
+
+## Attempt 02 plan
+
+Join the clean stability correction `debaa849f9041657ccc9b6942f561213d25d5dbc` onto coordinator handoff `ee1dc6e8874ef2a9fb26a3b61934a9f6d0b10c32`.
+Extend its observer to indexed buffers and warning metadata, preserving the shared collector and its 64 MiB retained-result cap.
+Compare every returned indexed result outside the timer; retain the first and first distinct outputs and reject reused writable storage.
+Keep calibration, native destruction costs, and native checked-endpoint policy unchanged.
+Run controlled protocol tests and untimed installed-package conformance before creating new attempt 02 snapshots.
+Reuse the immutable native accepted worker only after confirming its unchanged wire protocol remains compatible.
+Preserve attempt 01 and the fixed 124-worker budget. The coordinator alone may authorize measurement.
