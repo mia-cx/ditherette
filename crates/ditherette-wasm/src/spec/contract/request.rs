@@ -112,7 +112,7 @@ pub enum Support {
 #[serde(tag = "algorithm", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ResizePolicy {
     Nearest { anchor: Anchor },
-    Area,
+    Area {},
     Bilinear { anchor: Anchor },
     Bicubic { anchor: Anchor, support: Support },
     Lanczos2 { anchor: Anchor, support: Support },
@@ -137,7 +137,7 @@ pub enum AlphaPolicy {
     Preserve {
         threshold: f64,
     },
-    Premultiplied,
+    Premultiplied {},
     Matte {
         rgb: [u8; 3],
     },
@@ -147,7 +147,7 @@ pub enum AlphaPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Placement {
-    Everywhere,
+    Everywhere {},
     Adaptive {
         radius: u32,
         threshold: f32,
@@ -174,7 +174,7 @@ pub enum BayerSize {
 pub enum Field {
     Bayer { size: BayerSize },
     Random { seed: u32 },
-    BlueNoise,
+    BlueNoise {},
 }
 
 /// Scalar scan-order-sensitive diffusion kernels.
@@ -209,7 +209,7 @@ pub struct PerturbPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "family", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum DitherPolicy {
-    None,
+    None {},
     Separable {
         perturb: PerturbPolicy,
     },
@@ -239,6 +239,9 @@ pub struct RecipeV1 {
 }
 
 /// Decodes recipe structure; numeric range checks run when the request is validated.
+///
+/// The JS adapter must require objects for tagged settings and strings for plain enum tags.
+/// Serde also accepts sequences such as `["area"]` and object tags such as `{"center":null}`.
 pub fn decode_recipe(json: &str) -> Result<RecipeV1, DitheretteError> {
     serde_json::from_str(json).map_err(|_| {
         DitheretteError::new(
@@ -484,7 +487,7 @@ fn validate_perturb(perturb: PerturbPolicy, path: &str) -> Result<(), Ditherette
 
 fn validate_dither(dither: DitherPolicy, path: &str) -> Result<(), DitheretteError> {
     match dither {
-        DitherPolicy::None => Ok(()),
+        DitherPolicy::None {} => Ok(()),
         DitherPolicy::Separable { perturb } => {
             validate_perturb(perturb, &format!("{path}.perturb"))
         }
