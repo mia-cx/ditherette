@@ -5,6 +5,7 @@
 //! consume stable subject descriptors without deep-importing internal modules.
 
 pub mod quantize;
+pub mod scores;
 pub mod reference;
 mod resize_budgeted;
 pub mod verification;
@@ -187,6 +188,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(resize_budgeted::subjects());
     subjects.extend(reference::subjects());
     subjects.extend(quantize::subjects());
+    subjects.extend(scores::subjects());
     subjects
 }
 

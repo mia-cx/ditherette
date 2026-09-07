@@ -12,13 +12,17 @@ use ditherette_bench_api::{
 };
 use serde::{Serialize, Serializer};
 
-/// Typed processing requests plus the internal packed-f32 color conversion operation.
+/// Typed processing requests, internal packed-f32 color conversion, and scalar score batches.
 #[derive(Debug, Clone, Copy)]
 pub enum ReferenceRequest<'a> {
     Processing(Request<'a>),
     Color {
         source: Source<'a>,
         space: WorkingSpace,
+    },
+    MetricScores {
+        source: Source<'a>,
+        metric: super::scores::MetricFamily,
     },
 }
 
@@ -35,7 +39,7 @@ impl ReferenceRequest<'_> {
             Self::Processing(Request::Perturb(request)) => request.source,
             Self::Processing(Request::Quantize(request)) => request.source,
             Self::Processing(Request::DitherAndQuantize(request)) => request.quantize.source,
-            Self::Color { source, .. } => source,
+            Self::Color { source, .. } | Self::MetricScores { source, .. } => source,
         }
     }
 
@@ -43,19 +47,21 @@ impl ReferenceRequest<'_> {
     pub fn dimensions(&self) -> Result<Dimensions, BenchSubjectError> {
         let output = match *self {
             Self::Processing(request) => request.validate().map(|layout| layout.output),
-            Self::Color { source, .. } => Request::Resize(ResizeRequest {
-                version: 1,
-                source,
-                output: Output {
-                    width: source.width,
-                    height: source.height,
-                    resize: ResizePolicy::Nearest {
-                        anchor: Anchor::Center,
+            Self::Color { source, .. } | Self::MetricScores { source, .. } => {
+                Request::Resize(ResizeRequest {
+                    version: 1,
+                    source,
+                    output: Output {
+                        width: source.width,
+                        height: source.height,
+                        resize: ResizePolicy::Nearest {
+                            anchor: Anchor::Center,
+                        },
                     },
-                },
-            })
-            .validate()
-            .map(|layout| layout.output),
+                })
+                .validate()
+                .map(|layout| layout.output)
+            }
         }
         .map_err(|error| BenchSubjectError::new(error.to_string()))?;
         Ok(Dimensions {
@@ -95,6 +101,12 @@ impl ReferenceRequest<'_> {
                 Some(request.quantize.matching.space()),
             ),
             Self::Color { space, .. } => (Operation::Color, "color-f32-roundtrip", 1, Some(space)),
+            Self::MetricScores { metric, .. } => (
+                Operation::MetricScores,
+                "metric-cyclic-successor-frozen-forward",
+                1,
+                Some(metric.space()),
+            ),
         };
         SemanticIdentity {
             operation,
@@ -137,6 +149,13 @@ impl Serialize for ReferenceRequest<'_> {
             )
                 .serialize(serializer),
             Self::Color { space, .. } => ("color-f32-roundtrip", 1u32, space).serialize(serializer),
+            Self::MetricScores { metric, .. } => (
+                "metric-cyclic-successor-frozen-forward",
+                1u32,
+                metric,
+                metric.space(),
+            )
+                .serialize(serializer),
         }
     }
 }

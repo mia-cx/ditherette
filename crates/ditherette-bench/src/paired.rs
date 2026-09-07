@@ -44,6 +44,8 @@ pub enum CallScope {
     NativeCompleteCall,
     /// Packed forward conversion into caller-owned coordinates; preparation and inverse are untimed.
     NativeForwardConversion,
+    /// Preconverted cyclic pairs into preallocated scores; no conversion or allocation is timed.
+    NativeMetricScores,
     CompleteCall,
     Initialization,
 }
