@@ -40,6 +40,83 @@ pub(crate) struct CorrectnessFailure {
     pub(crate) verification: VerificationReport,
 }
 
+#[derive(Default)]
+struct CorrectnessChecks {
+    failures: Vec<CorrectnessFailure>,
+    reports: BTreeMap<(SubjectId, String), VerificationReport>,
+}
+
+#[cfg(test)]
+mod verification_tests {
+    use super::*;
+    use crate::baseline::save_baseline;
+
+    #[test]
+    fn bounded_failure_cannot_replace_accepted_baselines_when_failures_are_allowed() {
+        let registry = Registry::load();
+        let oracle = registry
+            .resize_subject("spec:resize:nearest:scalar")
+            .unwrap();
+        let mut candidate = oracle.clone();
+        candidate.descriptor.id = SubjectId::parse("candidate:resize:nearest:scalar").unwrap();
+        candidate.resize_u8_rgba = |input, output, _| {
+            output.data.copy_from_slice(input.data);
+            output.data[0] += 1;
+            Ok(())
+        };
+        let flags = Flags::parse(&[
+            "--fixtures".into(),
+            "solid".into(),
+            "--size".into(),
+            "1x1".into(),
+            "--allow-correctness-failures".into(),
+        ])
+        .unwrap();
+        let fixtures = fixtures_from_flags(&flags).unwrap();
+        let scale = ResizeScale { x: 1.0, y: 1.0 };
+        let checks = run_resize_correctness_checks(
+            &registry,
+            &oracle.descriptor.id,
+            &[candidate.clone()],
+            &fixtures,
+            &[scale],
+            VerificationBounds::bounded_default(),
+            flags.optional("--allow-correctness-failures") == Some("true"),
+        )
+        .unwrap();
+        assert_eq!(checks.failures.len(), 1);
+        let mut result = resize_probe_result(&candidate, &fixtures[0], (1, 1), scale);
+        result.verification = checks
+            .reports
+            .get(&(candidate.descriptor.id, result.case_id.clone()))
+            .cloned();
+        assert!(result.verification.as_ref().unwrap().within_bounds);
+        assert!(!result.verification.as_ref().unwrap().passed);
+        let mut run = BenchRun::new("perf", "resize", None, vec![result]);
+        run.cli.push("--allow-correctness-failures".into());
+        let name = format!("nonexact-verification-fixture-{}", std::process::id());
+        assert!(save_scoped_baseline("accepted", &name, &run, true).is_err());
+
+        let mut exact = run.clone();
+        exact.results[0].verification = Some(verify_with_bounds(
+            &fixtures[0].rgba,
+            &fixtures[0].rgba,
+            VerificationBounds::exact(),
+        ));
+        exact.results[0].verified = true;
+        save_baseline("accepted", &name, &exact, false).unwrap();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target/bench/baselines/accepted")
+            .join(format!("{name}.json"));
+        let previous = fs::read(&path).unwrap();
+        assert!(save_baseline("accepted", &name, &run, true).is_err());
+        assert_eq!(fs::read(&path).unwrap(), previous);
+        run.results[0].verification = None;
+        assert!(save_baseline("accepted", &name, &run, true).is_err());
+        fs::remove_file(path).unwrap();
+    }
+}
+
 pub(crate) fn list_subjects(registry: &Registry, args: &[String]) -> Result<(), BenchError> {
     let flags = Flags::parse(args)?;
     let domain = flags.optional("--domain");
@@ -239,7 +316,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
         )?;
     }
 
-    let correctness_failures = if let Some(oracle_id) = oracle_id.as_ref() {
+    let correctness = if let Some(oracle_id) = oracle_id.as_ref() {
         run_resize_correctness_checks(
             registry,
             oracle_id,
@@ -250,7 +327,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
             allow_correctness_failures,
         )?
     } else {
-        Vec::new()
+        CorrectnessChecks::default()
     };
 
     let mut results = Vec::new();
@@ -268,7 +345,10 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                     *scale,
                     &ResizeParams::default(),
                     &measurement,
-                    None,
+                    correctness
+                        .reports
+                        .get(&(subject.descriptor.id.clone(), case.clone()))
+                        .cloned(),
                     &mut logger,
                 )?;
                 if let Some(name) = accepted_baseline_name {
@@ -314,7 +394,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
     }
 
     print_perf_table(&run.results);
-    print_correctness_failure_warning(&correctness_failures);
+    print_correctness_failure_warning(&correctness.failures);
     let acceptance = acceptance_report(&run.results, &flags)?;
 
     save_indexed_run(&run, save_baseline_name)?;
@@ -653,7 +733,7 @@ fn run_resize_correctness_checks(
     scales: &[ResizeScale],
     verification_bounds: VerificationBounds,
     allow_failures: bool,
-) -> Result<Vec<CorrectnessFailure>, BenchError> {
+) -> Result<CorrectnessChecks, BenchError> {
     let oracle = registry.resize_subject(oracle_id.as_str())?;
     let check_count = subjects
         .iter()
@@ -662,7 +742,7 @@ fn run_resize_correctness_checks(
         * fixtures.len()
         * scales.len();
     log_correctness_start(check_count);
-    let mut failures = Vec::new();
+    let mut checks = CorrectnessChecks::default();
 
     for fixture in fixtures {
         for scale in scales {
@@ -670,6 +750,10 @@ fn run_resize_correctness_checks(
             let oracle_output =
                 run_resize_once(&oracle, fixture, output, &ResizeParams::default())?;
             let case = format!("{}-{}x{}-{}", fixture.id, output.0, output.1, scale.label());
+            checks.reports.insert(
+                (oracle_id.clone(), case.clone()),
+                verify_with_bounds(&oracle_output, &oracle_output, VerificationBounds::exact()),
+            );
 
             for subject in subjects {
                 if subject.descriptor.id == *oracle_id {
@@ -679,6 +763,10 @@ fn run_resize_correctness_checks(
                     run_resize_once(subject, fixture, output, &ResizeParams::default())?;
                 let verification =
                     verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
+                checks.reports.insert(
+                    (subject.descriptor.id.clone(), case.clone()),
+                    verification.clone(),
+                );
                 if !verification.passed {
                     if !allow_failures {
                         return Err(BenchError::Verify(format!(
@@ -695,7 +783,7 @@ fn run_resize_correctness_checks(
                         )));
                     }
 
-                    failures.push(CorrectnessFailure {
+                    checks.failures.push(CorrectnessFailure {
                         subject: subject.descriptor.id.clone(),
                         oracle: oracle_id.clone(),
                         case: case.clone(),
@@ -713,7 +801,7 @@ fn run_resize_correctness_checks(
         }
     }
     println!();
-    Ok(failures)
+    Ok(checks)
 }
 
 pub(crate) fn comp_command(registry: &Registry, args: &[String]) -> Result<(), BenchError> {
