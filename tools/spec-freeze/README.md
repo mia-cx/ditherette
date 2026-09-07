@@ -48,3 +48,30 @@ use S05 `ReferenceState::Frozen` only after validating this checkout against tha
 record. Registration alone does not prove a checkout is frozen. Existing
 pre-freeze/control experiments remain pre-freeze; this does not promote them or
 any production candidate.
+
+## Validation boundary
+
+Run `node tools/spec-freeze/guard.mjs` for a local check. It verifies content,
+compiler, actual core/benchmark dependency resolution, Rust syntax, and independent
+native/Wasm compilation. The syntax check visits inactive `cfg` branches too.
+The reference and production compile separately with their own modules plus the
+frozen image tree. Production remains pure Rust; Wasm/JS adapters stay in `wasm`.
+Neither semantic family may call back through `wasm` or `bench_subjects`.
+
+Source redirection (`#[path]`, `include*`), environment-based source injection,
+and escaping macro definitions (`macro_export`, `macro_use`) are forbidden.
+Local macros and ordinary optimization attributes remain available. Rust, not a
+custom resolver, handles imported aliases and helper dependencies. The real crate
+root retains its audited module set and permits explicit adapter reexports.
+
+The two real Cargo manifests retain their approved profiles. Core release uses
+`opt-level = "s"`; benchmark release uses Cargo's defaults. Inherited debug
+overflow checks and release wrapping remain distinct, as specified by the legacy
+diagnostic adapters. Candidate flags, wrappers, build scripts, patches, or Cargo
+configuration cannot become hidden inputs to the validation compiler.
+
+The guard policy is separate from the frozen reference. A new production
+dependency, module-root arrangement, or source-generation mechanism may require a
+policy extension. Review that extension explicitly against a trusted policy
+checkout while keeping the checkpoint bytes unchanged. It cannot authorize a
+reference edit or select a replacement digest through an ordinary candidate PR.
