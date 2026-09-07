@@ -24,3 +24,19 @@ The memory fixture checks one chain plus two output buffers and verifies actual 
 Existing failure injection still covers every reservation and releases all partial ownership.
 Wasm compilation and trusted freeze enforcement pass at `07d528a6`.
 Frozen spec/image/policy and landed area/bilinear/shared-helper trees match `0be73eb6` byte-for-byte.
+
+## Fixed measurement budget
+
+Five cases run natively and through each of the three browser engines, totaling 80 serial workers.
+Two AB/BA pairs use 20 samples, 50 ms warmup, a 250 ms measurement cap, and a 2 ms throughput target.
+Cases cover shallow fractional reduction, deep fractional reduction in latency and throughput, integer LOD, and enlargement.
+The checked `resize_integration_plan s23` generator defines the exact shapes and opaque fixture.
+Both browser roles use the package. The website has no trilinear implementation.
+No non-exact timing override is enabled. Use prepared `0be73eb6` plus the same benchmark registration as accepted.
+Use candidate `07d528a6` plus registration as candidate. Freeze both artifacts after builds and record their exact revisions.
+
+Benchmark registration uses existing frozen subject `spec:resize:trilinear:mip-area`, not an invented scalar alias.
+One native adapter fixture, twelve public protocol fixtures, two budget fixtures, and nine JS protocol fixtures pass.
+The full candidate core passes 300 native tests without benchmark features. Both Wasm builds pass.
+Eighteen public interface tests and eight private ABI tests pass against the candidate package.
+Three-engine installed adapter conformance and fresh artifact preparation remain before measurement.
