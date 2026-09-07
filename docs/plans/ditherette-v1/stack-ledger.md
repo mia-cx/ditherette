@@ -124,7 +124,11 @@ The [measurement report](../../../.plans/60-nearest-measurement.md) records exac
 All three agents and builds stop for the measurement; every child exits before implementation resumes.
 Promotion `964683f46a24c248aa91318bd6280ca91bec88f7` preserves tested arithmetic and passes 285 native tests, Wasm compilation, and the trusted guard.
 Delivery `b48511321f47722fcfb48c51a40a05a825f06a7b` joins at `fdef72b5788c3c09fc6439991a01bfc851dc71ce`.
-The private Rust adapter and public wrapper remain in progress. S20 still owns complete browser-call timing; native evidence does not replace it.
+The final code join is `a9835a97276bfc726590f931caa2af1b4b0b3d9a`, including the private Rust adapter, public wrapper, and corrected tarball staging.
+It passes both Wasm builds, 285 native tests, 12 public/validation fixtures, public type checks, two staging fixtures, five factory fixtures, and six private Wasm fixtures.
+The installed tarball passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 using a task-local WebKit library launcher.
+Trusted freeze enforcement and Rust formatting pass. A merge-preserving rebase keeps the exact code head and all required checkpoint ancestry unchanged.
+S20 still owns complete browser-call timing; native evidence and browser conformance do not replace it.
 
 ## S01 inherited port anchor
 
