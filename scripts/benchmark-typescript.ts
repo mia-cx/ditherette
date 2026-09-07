@@ -1,10 +1,27 @@
 import { resizeImageData } from '../src/lib/processing/resize';
-import type { ResizeRequest, Rgba8Image } from '../packages/ditherette/src/types';
+import type { ResizeAnchor, Rgba8Image } from '../packages/ditherette/src/types';
 
-/** Actual website nearest, with a durable result matching the package ownership boundary. */
-export function resize(request: ResizeRequest): Rgba8Image {
-	if (request.output.resize.anchor !== 'center') {
-		throw new Error('The TypeScript nearest implementation supports only center alignment.');
+/** Developer-only recipes registered by the paired browser protocol. */
+interface BenchmarkResizeRequest {
+	source: Rgba8Image;
+	output: {
+		width: number;
+		height: number;
+		resize:
+			| { algorithm: 'area' }
+			| { algorithm: 'nearest' | 'bilinear'; anchor: ResizeAnchor }
+			| {
+					algorithm: 'lanczos2' | 'lanczos3';
+					anchor: ResizeAnchor;
+					support: 'fixed' | 'scale-aware';
+			  };
+	};
+}
+
+/** Actual website resize, with durable output matching the package ownership boundary. */
+export function resize(request: BenchmarkResizeRequest): Rgba8Image {
+	if ('anchor' in request.output.resize && request.output.resize.anchor !== 'center') {
+		throw new Error('The TypeScript implementation supports only center alignment.');
 	}
 	const { source, output } = request;
 	if (!(source.data.buffer instanceof ArrayBuffer))
@@ -14,7 +31,12 @@ export function resize(request: ResizeRequest): Rgba8Image {
 		source.width,
 		source.height
 	);
-	const result = resizeImageData(input, output.width, output.height, 'nearest');
+	const recipe = output.resize;
+	const mode =
+		'support' in recipe && recipe.support === 'scale-aware'
+			? (`${recipe.algorithm}-scale-aware` as const)
+			: recipe.algorithm;
+	const result = resizeImageData(input, output.width, output.height, mode);
 	// The website intentionally aliases identity output. The public comparison must own its bytes.
 	const data = result === input ? new Uint8Array(result.data) : new Uint8Array(result.data.buffer);
 	return { width: result.width, height: result.height, data };

@@ -12,7 +12,80 @@ import {
 	rejectOnPageFailure,
 	startAssetServer
 } from './benchmark-public-browser.mjs';
-import { preflightOperation, runTrial, timerResolution } from './benchmark-public-page.mjs';
+import {
+	preflightOperation,
+	resizeRecipe,
+	runTrial,
+	timerResolution,
+	outputStability
+} from './benchmark-public-page.mjs';
+import { collectInitializations } from './benchmark-public-timing.mjs';
+
+test('initialization A/B/A preserves the first distinct probe, including warmup, without timing comparisons', async () => {
+	for (const changedAt of [2, 4]) {
+		const tracker = outputStability(4);
+		let calls = 0,
+			clock = 0,
+			closes = 0;
+		const probe = () => ({
+			width: 1,
+			height: 1,
+			data: new Uint8Array([++calls === changedAt ? 99 : 0, 0, 0, 255])
+		});
+		tracker.observe([probe()]);
+		const result = await collectInitializations({
+			measurement: { samples: 5, warmup_ms: 1, measurement_ms: 100 },
+			now: () => clock,
+			outputBytes: 4,
+			create: async () => {
+				clock++;
+				return {
+					dispose() {
+						closes++;
+					}
+				};
+			},
+			probe,
+			observe: (outputs) => {
+				tracker.observe(outputs);
+				clock += 100;
+			}
+		});
+		assert.equal(result.output.data[0], 0);
+		assert.equal(tracker.evidence(result.output).unstable_output.pixels.data[0], 0);
+		assert.equal(tracker.evidence(result.output).output.pixels.data[0], 99);
+		assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+		assert.equal(closes, 6);
+	}
+});
+
+test('output storage aliases fail closed instead of hiding overwritten batch evidence', () => {
+	const tracker = outputStability(4);
+	const output = () => ({ width: 1, height: 1, data: new Uint8Array([0, 0, 0, 255]) });
+	tracker.observe([output()]);
+	const shared = output();
+	assert.throws(() => tracker.observe([shared, { ...shared }]), /aliases/);
+	assert.throws(
+		() => outputStability(4).observe([{ ...output(), data: new Uint8Array(8).subarray(0, 4) }]),
+		/storage/
+	);
+});
+
+test('public resize recipes retain mode-specific settings', () => {
+	assert.deepEqual(resizeRecipe({ operation: 'resize-area' }), { algorithm: 'area' });
+	for (const algorithm of ['nearest', 'bilinear'])
+		assert.deepEqual(resizeRecipe({ operation: `resize-${algorithm}`, anchor: 'bottom-left' }), {
+			algorithm,
+			anchor: 'bottom-left'
+		});
+	assert.throws(() => resizeRecipe({ operation: 'unknown' }), /Unsupported/);
+	for (const algorithm of ['bicubic', 'lanczos2', 'lanczos3'])
+		for (const support of ['fixed', 'scale-aware'])
+			assert.deepEqual(
+				resizeRecipe({ operation: `resize-${algorithm}`, anchor: 'center', support }),
+				{ algorithm, anchor: 'center', support }
+			);
+});
 
 test('manifest rejects traversal and duplicates; routing rejects external and undeclared dependencies', () => {
 	for (const file of ['../outside', '/absolute', 'a/../b', 'a\\b'])
@@ -104,11 +177,17 @@ test('mismatch response performs one fake preflight call and never begins warmup
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-mismatch-fixture-'));
 	const previousLocation = Object.getOwnPropertyDescriptor(globalThis, 'location');
 	const previousIsolation = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
+	const previousPerformance = Object.getOwnPropertyDescriptor(globalThis, 'performance');
 	try {
+		let tick = 0;
+		Object.defineProperty(globalThis, 'performance', {
+			configurable: true,
+			value: { now: () => ++tick }
+		});
 		const entry = path.join(temporary, 'fixture.mjs');
 		await writeFile(
 			entry,
-			'export let calls = 0; export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([10,20,30,40]) }; }'
+			'export let calls = 0; let changedAt = Infinity; export function changeOutput(at = 2) { calls = 0; changedAt = at; } export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([calls === changedAt ? 12 : 10,20,30,40]) }; }'
 		);
 		Object.defineProperty(globalThis, 'location', {
 			configurable: true,
@@ -153,13 +232,86 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		assert.equal(result.warmup_elapsed_ns, 0);
 		assert.deepEqual(result.output.pixels.data, [10, 20, 30, 40]);
 		assert.equal(result.pair, 2);
+		// Explicit developer diagnostics retain the same mismatch while timing the fake operation.
+		// This exercises protocol behavior, not image-processing performance.
+		trial.case.browser.measure_nonexact = true;
+		Object.assign(trial.case.measurement, {
+			warmup_ms: 1,
+			samples: 5,
+			measurement_ms: 1,
+			target_sample_ms: 1
+		});
+		const diagnostic = await runTrial(trial);
+		assert.equal(diagnostic.timing_skipped, undefined);
+		assert.equal(diagnostic.sample_ns.length, 5);
+		assert.deepEqual(diagnostic.output, result.output);
+		assert.equal(diagnostic.unstable_output, undefined);
+		(await import(pathToFileURL(entry))).changeOutput();
+		const unstable = await runTrial(trial);
+		assert.deepEqual(unstable.unstable_output.pixels.data, [10, 20, 30, 40]);
+		assert.deepEqual(unstable.output.pixels.data, [12, 20, 30, 40]);
+		assert.equal(unstable.sample_ns.length, 5);
+		assert.equal(unstable.timing_skipped, undefined);
+		// Transient output changes remain visible even when every endpoint returns A.
+		for (const [mode, changedAt] of [
+			['single-call', 3],
+			['throughput', 4]
+		]) {
+			trial.case.measurement.mode = mode;
+			trial.case.measurement.target_sample_ms = 3;
+			trial.case.browser.measure_nonexact = false;
+			trial.reference_output = result.output; // Exact preflight also requires stability checks.
+			(await import(pathToFileURL(entry))).changeOutput(changedAt);
+			const transient = await runTrial(trial);
+			assert.deepEqual(transient.unstable_output.pixels.data, [10, 20, 30, 40]);
+			assert.deepEqual(transient.output.pixels.data, [12, 20, 30, 40]);
+			assert.equal(transient.iterations_per_sample, mode === 'throughput' ? 3 : 1);
+			assert.equal(transient.sample_ns.length, 5);
+			assert.ok((await import(pathToFileURL(entry))).calls > changedAt);
+		}
 	} finally {
+		if (previousPerformance) Object.defineProperty(globalThis, 'performance', previousPerformance);
+		else delete globalThis.performance;
 		if (previousLocation) Object.defineProperty(globalThis, 'location', previousLocation);
 		else delete globalThis.location;
 		if (previousIsolation)
 			Object.defineProperty(globalThis, 'crossOriginIsolated', previousIsolation);
 		else delete globalThis.crossOriginIsolated;
 		await rm(temporary, { recursive: true, force: true });
+	}
+});
+
+test('ordinary HTTP response bound retains two complete actual images after exact preflight', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'ditherette-unstable-body-'));
+	const assets = { tree: { root, files: [{ path: 'entry.js' }] }, entries: { page: 'entry.js' } };
+	const trial = {
+		case: {
+			identity: { output: { width: 10_000, height: 1 } },
+			measurement: { samples: 5 },
+			browser: { measure_nonexact: false }
+		}
+	};
+	const actual = {
+		dimensions: trial.case.identity.output,
+		pixels: { format: 'rgba8', data: Array(40_000).fill(255) },
+		warnings: []
+	};
+	const body = JSON.stringify({ output: actual, unstable_output: actual });
+	assert.ok(Buffer.byteLength(body) > 10_000 * 16 + 65_536 + 5 * 32);
+	const server = await startAssetServer(assets, false, trial);
+	try {
+		const response = await fetch(server.url + server.resultUrl, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body
+		});
+		assert.equal(response.status, 204);
+		assert.deepEqual(server.result, JSON.parse(body));
+		assert.deepEqual(server.failures, []);
+	} finally {
+		server.instance.closeAllConnections();
+		await new Promise((resolve) => server.instance.close(resolve));
+		await rm(root, { recursive: true, force: true });
 	}
 });
 

@@ -1,4 +1,8 @@
-import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
+import {
+	collectCalls,
+	collectInitializations,
+	retainedOutputSlots
+} from './benchmark-public-timing.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -14,12 +18,33 @@ export function timerResolution(now = () => performance.now()) {
 }
 
 /** Prepare only existing public operations. No private glue, synthetic hashing, or application caches. */
+export function resizeRecipe(operation) {
+	switch (operation.operation) {
+		case 'resize-nearest':
+			return { algorithm: 'nearest', anchor: operation.anchor };
+		case 'resize-area':
+			return { algorithm: 'area' };
+		case 'resize-bilinear':
+			return { algorithm: 'bilinear', anchor: operation.anchor };
+		case 'resize-bicubic':
+		case 'resize-lanczos2':
+		case 'resize-lanczos3':
+			return {
+				algorithm: operation.operation.slice('resize-'.length),
+				anchor: operation.anchor,
+				support: operation.support
+			};
+		default:
+			throw new Error('Unsupported browser operation.');
+	}
+}
+
+/** Prepare the actual package or website call outside measurement timers. */
 export async function prepareOperation(trial) {
 	const config = trial.case.browser;
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
-	if (config.operation.operation !== 'resize-nearest')
-		throw new Error('Unsupported browser operation.');
+	const resize = resizeRecipe(config.operation);
 	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
 		throw new Error('This package has no application cache.');
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
@@ -29,24 +54,26 @@ export async function prepareOperation(trial) {
 		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
 		output: {
 			...trial.case.identity.output,
-			resize: { algorithm: 'nearest', anchor: config.operation.anchor }
+			resize
 		}
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
-		if (config.operation.anchor !== 'center')
-			throw new Error('TypeScript non-center nearest is unavailable.');
+		if (resize.algorithm === 'bicubic')
+			throw new Error('The website has no bicubic implementation.');
+		if ('anchor' in resize && resize.anchor !== 'center')
+			throw new Error('TypeScript non-center resize is unavailable.');
 		if (
 			measurement.scope !== 'complete-call' ||
 			!['primed-instance', 'fresh-instance'].includes(config.preparation)
 		)
 			throw new Error('TypeScript has no Wasm initialization or processor-instance equivalent.');
 		// TypeScript is stateless: both labels execute its ordinary per-call preparation.
-		const { resize } = await import(url(trial.browser.assets.entries.typescript));
+		const { resize: resizeTypeScript } = await import(url(trial.browser.assets.entries.typescript));
 		return {
 			request,
-			call: () => resize(request),
-			prepare: async () => ({ call: () => resize(request), close() {} }),
+			call: () => resizeTypeScript(request),
+			prepare: async () => ({ call: () => resizeTypeScript(request), close() {} }),
 			close() {}
 		};
 	}
@@ -96,8 +123,50 @@ function verificationOutput(output) {
 	};
 }
 
+/** Public outputs must own durable storage. Keep only the first and first distinct actual result. */
+export function outputStability(outputBytes) {
+	let first;
+	let distinct;
+	return {
+		observe(outputs) {
+			const buffers = new Set();
+			for (const output of outputs) {
+				const data = output.data;
+				if (
+					!ArrayBuffer.isView(data) ||
+					data.BYTES_PER_ELEMENT !== 1 ||
+					data.byteLength !== outputBytes ||
+					data.buffer.byteLength !== outputBytes
+				)
+					throw new Error('Output storage violates the declared durable byte-result contract.');
+				if (
+					buffers.has(data.buffer) ||
+					first?.data.buffer === data.buffer ||
+					distinct?.data.buffer === data.buffer
+				)
+					throw new Error('Output storage aliases an earlier retained result.');
+				buffers.add(data.buffer);
+				if (!first) {
+					first = output;
+					continue;
+				}
+				const equal =
+					output.width === first.width &&
+					output.height === first.height &&
+					data.every((byte, index) => byte === first.data[index]);
+				if (!equal && !distinct) distinct = output;
+			}
+		},
+		evidence(finalOutput) {
+			return distinct
+				? { unstable_output: verificationOutput(first), output: verificationOutput(distinct) }
+				: { output: verificationOutput(finalOutput) };
+		}
+	};
+}
+
 /** Compare one untimed actual call with worker-supplied frozen bytes; return concrete mismatch evidence. */
-export async function preflightOperation(operation, reference) {
+export async function preflightOperation(operation, reference, observe = () => {}) {
 	if (!reference || reference.pixels.format !== 'rgba8')
 		throw new Error('Browser trial requires frozen RGBA8 reference_output.');
 	let output;
@@ -116,6 +185,7 @@ export async function preflightOperation(operation, reference) {
 			prepared.close();
 		}
 	}
+	observe([output]);
 	if (
 		output.width === reference.dimensions.width &&
 		output.height === reference.dimensions.height &&
@@ -144,10 +214,13 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const mismatch = await preflightOperation(operation, trial.reference_output);
+		const outputBytes = trial.case.identity.output.width * trial.case.identity.output.height * 4;
+		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
+		const stability = outputStability(outputBytes);
+		const mismatch = await preflightOperation(operation, trial.reference_output, stability.observe);
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes during preflight.');
-		if (mismatch)
+		if (mismatch && trial.case.browser.measure_nonexact !== true)
 			return {
 				...identity,
 				sample_ns: [],
@@ -164,16 +237,26 @@ export async function runTrial(trial) {
 				? await collectInitializations({
 						measurement,
 						create: operation.create,
-						probe: operation.probe
+						probe: operation.probe,
+						observe: stability.observe,
+						outputBytes
 					})
-				: await collectCalls({ measurement, prepare: operation.prepare });
+				: await collectCalls({
+						measurement,
+						prepare: operation.prepare,
+						observe: stability.observe,
+						outputBytes
+					});
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
+		// Keep the actual timing result separate. Instability evidence is the first distinct pair,
+		// not a claim that the final timed output still differs (A/B/A must also fail).
+		const evidence = stability.evidence(output);
 		return {
 			...identity,
 			...timings,
-			output: verificationOutput(output),
+			...evidence,
 			observation
 		};
 	} finally {

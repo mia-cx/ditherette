@@ -20,8 +20,30 @@ processor.then((instance) => {
 	instance.wasm;
 });
 // @ts-expect-error Noncanonical anchor object tags are not accepted.
-const invalidAnchor: ResizeRequest['output']['resize']['anchor'] = { center: null };
+const invalidAnchor: Extract<ResizeRequest['output']['resize'], { anchor: unknown }>['anchor'] = {
+	center: null
+};
 void invalidAnchor;
+const area: ResizeRequest = {
+	...request,
+	output: { ...request.output, resize: { algorithm: 'area' } }
+};
+const bilinear: ResizeRequest = {
+	...request,
+	output: { ...request.output, resize: { algorithm: 'bilinear', anchor: 'top-left' } }
+};
+void area;
+void bilinear;
+// @ts-expect-error Area has no anchor.
+const invalidArea: ResizeRequest['output']['resize'] = { algorithm: 'area', anchor: 'center' };
+const invalidBilinear: ResizeRequest['output']['resize'] = {
+	algorithm: 'bilinear',
+	anchor: 'center',
+	// @ts-expect-error Bilinear has no support setting.
+	support: 'fixed'
+};
+void invalidArea;
+void invalidBilinear;
 // @ts-expect-error No backend-selection option exists.
 createDitherette({ backend: 'scalar' });
 // @ts-expect-error Threads must use the named policy, not a boolean.

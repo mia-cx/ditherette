@@ -106,6 +106,24 @@ pub fn resize_area_rgba8_with_plan_into(
     planned::resize_with_plan_into(source, output, plan);
 }
 
+/// Execute the landed full-call kernel with caller-owned, already-reserved scratch.
+pub fn resize_area_rgba8_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+    scratch: &mut [f32],
+) {
+    assert_eq!(source.dimensions(), plan.source_dimensions);
+    assert_eq!(output.dimensions(), plan.output_dimensions);
+    assert_eq!(scratch.len(), plan.scratch_elements());
+    common::rgba8::assert_packed_source(source, "area");
+    common::rgba8::assert_packed_output(&output, "area");
+    if resize_area_fast_path_into(source, &mut output) {
+        return;
+    }
+    planned::resize_with_scratch_into(source, output, plan, scratch);
+}
+
 fn resize_area_fast_path_into(
     source: ImageView<'_, Rgba8>,
     output: &mut ImageViewMut<'_, Rgba8>,

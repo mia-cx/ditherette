@@ -22,7 +22,7 @@ async function fresh(limit) {
 const source = () => new Uint8Array([10, 20, 30, 0, 40, 50, 60, 255]);
 function invoke(bindings, input, ...shape) {
 	const sink = { value: undefined };
-	const status = bindings.privateResize(input, ...shape, sink);
+	const status = bindings.privateResize(input, ...shape.slice(0, 4), 0, shape[4], sink);
 	if (status !== 0) {
 		assert.equal(sink.value, undefined, 'failed calls never publish a result');
 		return status;
@@ -127,7 +127,7 @@ test('caught copy failures and recursive calls recover without mutable glue borr
 		assert.equal(resize(bindings).data.length, 24);
 	}
 	const frozenSink = Object.freeze({});
-	assert.equal(bindings.privateResize(source(), 2, 1, 3, 2, 4, frozenSink), 9);
+	assert.equal(bindings.privateResize(source(), 2, 1, 3, 2, 0, 4, frozenSink), 9);
 	assert.equal(bindings.privateErrorPath(), 8);
 	assert.equal(frozenSink.value, undefined);
 	assert.equal(resize(bindings).data.length, 24);

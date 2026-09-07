@@ -55,11 +55,11 @@ export async function startAssetServer(assets, isolated, trial) {
 	let requestJson = trial === undefined ? undefined : JSON.stringify(trial);
 	let result;
 	let resultStarted = false;
-	// RGBA8 JSON needs at most four bytes per channel. Bound numeric timing/metadata separately.
+	// Any trial can discover instability after an exact preflight. Retain both actual outputs.
 	const maxResultBytes =
 		trial === undefined
 			? 0
-			: trial.case.identity.output.width * trial.case.identity.output.height * 16 +
+			: trial.case.identity.output.width * trial.case.identity.output.height * 16 * 2 +
 				trial.case.measurement.samples * 32 +
 				65_536;
 	if (trial !== undefined) {

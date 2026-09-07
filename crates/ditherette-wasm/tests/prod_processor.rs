@@ -6,7 +6,7 @@ use ditherette_wasm::{
             failure::{ErrorPath, Failure},
             request::{Anchor, Output, ResizePolicy},
         },
-        pipeline::processor::{Boundary, NearestRequest, Processor},
+        pipeline::processor::{Boundary, Processor, ResizeRequest},
     },
     spec::resize::{common::alignment::ResizeAnchor, scalar::nearest::resize_nearest_into},
 };
@@ -19,6 +19,7 @@ struct TestAllocator;
 thread_local! {
     static ALLOCATION_FAILURE: Cell<Option<usize>> = const { Cell::new(None) };
     static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
+    static LIVE_BYTES: Cell<isize> = const { Cell::new(0) };
 }
 #[global_allocator]
 static ALLOCATOR: TestAllocator = TestAllocator;
@@ -40,10 +41,16 @@ unsafe impl GlobalAlloc for TestAllocator {
         if fail {
             std::ptr::null_mut()
         } else {
-            System.alloc(layout)
+            let pointer = System.alloc(layout);
+            if !pointer.is_null() {
+                LIVE_BYTES
+                    .with(|bytes| bytes.set(bytes.get().wrapping_add(layout.size() as isize)));
+            }
+            pointer
         }
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        LIVE_BYTES.with(|bytes| bytes.set(bytes.get().wrapping_sub(layout.size() as isize)));
         System.dealloc(ptr, layout);
     }
 }
@@ -85,8 +92,8 @@ impl Boundary for Io {
     }
 }
 
-fn request() -> NearestRequest {
-    NearestRequest {
+fn request() -> ResizeRequest {
+    ResizeRequest {
         source_width: 2,
         source_height: 1,
         output: Output {
@@ -106,6 +113,190 @@ fn io() -> Io {
 }
 fn budget() -> u64 {
     Processor::bookkeeping_bytes(512) + 8 + 24 + (3 * std::mem::size_of::<usize>() + 2 * 4) as u64
+}
+
+#[test]
+fn public_area_and_bilinear_dispatch_preserves_landed_output() {
+    use ditherette_wasm::prod::resize::scalar::{area, bilinear};
+    for policy in [
+        ResizePolicy::Area {},
+        ResizePolicy::Bilinear {
+            anchor: Anchor::Center,
+        },
+    ] {
+        let mut request = request();
+        request.output.resize = policy;
+        let mut input = io();
+        let mut expected = vec![0; 24];
+        let source = ImageView::packed(&input.input, ImageDimensions::new(2, 1).unwrap()).unwrap();
+        let output =
+            ImageViewMut::packed(&mut expected, ImageDimensions::new(3, 2).unwrap()).unwrap();
+        match policy {
+            ResizePolicy::Area {} => area::resize_area_rgba8_into(source, output),
+            _ => bilinear::resize_bilinear_rgba8_into(
+                source,
+                output,
+                bilinear::alignment::ResizeAnchor::Center,
+            ),
+        }
+        let mut processor = Processor::new(1_000_000, 512).unwrap();
+        assert_eq!(processor.resize(request, &mut input).unwrap(), expected);
+    }
+}
+
+#[test]
+fn area_bilinear_reservation_failures_release_every_owned_byte_and_recover() {
+    for policy in [
+        ResizePolicy::Area {},
+        ResizePolicy::Bilinear {
+            anchor: Anchor::Center,
+        },
+    ] {
+        for (sw, sh, ow, oh) in [(3, 2, 5, 4), (3, 5, 3, 2), (5, 3, 2, 3), (2, 2, 4, 4)] {
+            let request = ResizeRequest {
+                source_width: sw,
+                source_height: sh,
+                output: Output {
+                    width: ow,
+                    height: oh,
+                    resize: policy,
+                },
+            };
+            let mut input = Io {
+                input: vec![73; (sw * sh * 4) as usize],
+                ..Io::default()
+            };
+            let mut processor = Processor::new(1_000_000, 512).unwrap();
+            let before = ALLOCATIONS.with(Cell::get);
+            let expected = processor.resize(request, &mut input).unwrap();
+            let reservations = ALLOCATIONS.with(Cell::get) - before - 1; // Durable fixture output is caller-owned.
+            let peak = processor.peak_capacity_bytes();
+            let mut exact = Processor::new(peak, 512).unwrap();
+            assert_eq!(exact.resize(request, &mut input).unwrap(), expected);
+            let mut short = Processor::new(peak - 1, 512).unwrap();
+            let before = ALLOCATIONS.with(Cell::get);
+            assert_eq!(
+                short.resize(request, &mut input).unwrap_err().code,
+                ErrorCode::MemoryLimit
+            );
+            assert_eq!(ALLOCATIONS.with(Cell::get), before);
+            for fail_after in 0..reservations {
+                input.copy_calls = 0;
+                input.complete_calls = 0;
+                let live = LIVE_BYTES.with(Cell::get);
+                ALLOCATION_FAILURE.with(|remaining| remaining.set(Some(fail_after)));
+                let failure = processor.resize(request, &mut input).unwrap_err();
+                ALLOCATION_FAILURE.with(|remaining| remaining.set(None));
+                assert_eq!(failure.code, ErrorCode::WasmMemoryUnavailable);
+                assert_eq!(
+                    LIVE_BYTES.with(Cell::get),
+                    live,
+                    "partial preparation leaked at allocation {fail_after}"
+                );
+                assert_eq!((input.copy_calls, input.complete_calls), (0, 0));
+                assert_eq!(processor.resize(request, &mut input).unwrap(), expected);
+            }
+            for complete in [false, true] {
+                input.fail_copy = !complete;
+                input.fail_complete = complete;
+                let live = LIVE_BYTES.with(Cell::get);
+                assert!(processor.resize(request, &mut input).is_err());
+                assert_eq!(LIVE_BYTES.with(Cell::get), live);
+            }
+        }
+    }
+}
+
+#[test]
+fn public_filters_keep_frozen_reference_bounds_across_alpha_anchors_and_extremes() {
+    use ditherette_wasm::spec::resize::scalar::{area, bilinear};
+    let anchors = [
+        (Anchor::TopLeft, ResizeAnchor::TopLeft),
+        (Anchor::Top, ResizeAnchor::Top),
+        (Anchor::TopRight, ResizeAnchor::TopRight),
+        (Anchor::Left, ResizeAnchor::Left),
+        (Anchor::Center, ResizeAnchor::Center),
+        (Anchor::Right, ResizeAnchor::Right),
+        (Anchor::BottomLeft, ResizeAnchor::BottomLeft),
+        (Anchor::Bottom, ResizeAnchor::Bottom),
+        (Anchor::BottomRight, ResizeAnchor::BottomRight),
+    ];
+    let mut maxima = [0u32; 2];
+    for (sw, sh, ow, oh) in [
+        (1, 1, 9, 7),
+        (7, 5, 7, 5),
+        (7, 5, 3, 2),
+        (3, 2, 7, 5),
+        (9, 1, 1, 9),
+        (1, 9, 9, 1),
+        (31, 3, 2, 17),
+        (2, 17, 31, 3),
+        (32768, 1, 1, 1),
+        (1, 1, 16384, 1),
+    ] {
+        let source = ImageDimensions::new(sw, sh).unwrap();
+        let output = ImageDimensions::new(ow, oh).unwrap();
+        let bytes: Vec<u8> = (0..sw * sh * 4)
+            .map(|x| {
+                if x % 4 == 3 {
+                    [0, 1, 127, 254, 255][(x / 4) as usize % 5]
+                } else {
+                    (x * 73) as u8
+                }
+            })
+            .collect();
+        for (anchor, oracle_anchor) in anchors {
+            for (mode, policy) in [
+                (0, ResizePolicy::Area {}),
+                (1, ResizePolicy::Bilinear { anchor }),
+            ] {
+                let mut expected = vec![0; (ow * oh * 4) as usize];
+                let input = ImageView::<Rgba8>::packed(&bytes, source).unwrap();
+                let target = ImageViewMut::packed(&mut expected, output).unwrap();
+                if mode == 0 {
+                    area::resize_area_into(input, target);
+                } else {
+                    bilinear::resize_bilinear_into(input, target, oracle_anchor);
+                }
+                let mut io = Io {
+                    input: bytes.clone(),
+                    ..Io::default()
+                };
+                let mut processor = Processor::new(10_000_000, 512).unwrap();
+                let actual = processor
+                    .resize(
+                        ResizeRequest {
+                            source_width: sw,
+                            source_height: sh,
+                            output: Output {
+                                width: ow,
+                                height: oh,
+                                resize: policy,
+                            },
+                        },
+                        &mut io,
+                    )
+                    .unwrap();
+                assert_eq!(io.input, bytes);
+                for (actual, expected) in actual.chunks_exact(4).zip(expected.chunks_exact(4)) {
+                    let distance_squared = actual
+                        .iter()
+                        .zip(expected)
+                        .map(|(a, b)| u32::from(a.abs_diff(*b)).pow(2))
+                        .sum::<u32>();
+                    maxima[mode] = maxima[mode].max(distance_squared);
+                    assert!(
+                        distance_squared <= 4,
+                        "{policy:?} {sw}x{sh}->{ow}x{oh}: {actual:?} vs {expected:?}"
+                    );
+                }
+            }
+        }
+    }
+    println!(
+        "frozen-reference maximum squared RGBA distances: area={}, bilinear={}",
+        maxima[0], maxima[1]
+    );
 }
 
 #[test]
@@ -162,7 +353,7 @@ fn each_real_reservation_failure_reports_without_allocating_an_error_and_recover
 
 #[test]
 fn near_identity_span_reservation_is_fallible_and_recovers_before_copy() {
-    let request = NearestRequest {
+    let request = ResizeRequest {
         source_width: 21,
         source_height: 21,
         output: Output {
@@ -234,21 +425,21 @@ fn invalid_settings_storage_and_tiny_initialization_are_allocation_free() {
     let mut input = io();
     for (request, expected) in [
         (
-            NearestRequest {
+            ResizeRequest {
                 source_width: 0,
                 ..request()
             },
             ErrorPath::SourceWidth,
         ),
         (
-            NearestRequest {
+            ResizeRequest {
                 source_height: 32769,
                 ..request()
             },
             ErrorPath::SourceHeight,
         ),
         (
-            NearestRequest {
+            ResizeRequest {
                 output: Output {
                     width: 0,
                     ..request().output
@@ -258,9 +449,11 @@ fn invalid_settings_storage_and_tiny_initialization_are_allocation_free() {
             ErrorPath::OutputWidth,
         ),
         (
-            NearestRequest {
+            ResizeRequest {
                 output: Output {
-                    resize: ResizePolicy::Area {},
+                    resize: ResizePolicy::Trilinear {
+                        anchor: Anchor::Center,
+                    },
                     ..request().output
                 },
                 ..request()
@@ -327,7 +520,7 @@ fn processor_bytes_match_frozen_nearest_across_all_anchors_and_shapes() {
                 ImageViewMut::packed(&mut expected, output).unwrap(),
                 oracle_anchor,
             );
-            let request = NearestRequest {
+            let request = ResizeRequest {
                 source_width: sw,
                 source_height: sh,
                 output: Output {
