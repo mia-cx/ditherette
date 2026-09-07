@@ -12,7 +12,8 @@ Integration base `af9c0d99dd140f3235968d5f481c5a2c879ce46e` contains:
 
 - [x] Complete exhaustive color/metric dispatch and audit inherited metric mathematics with independent vectors.
 - [x] Compose validated quantize requests with ordered palette matching, alpha handling, and complete-call fixtures.
-- [ ] Run native and Wasm validation, then file the unmerged stacked PR.
+- [x] Run native and Wasm validation and record the final evidence.
+- [ ] Rebase onto the latest integration base and file the unmerged stacked PR.
 
 ## Prerequisite validation
 
@@ -50,3 +51,15 @@ The CompuPhase black/red-17/blue-14 fixture selects blue; the inherited wrong co
 Rec.601 and Rec.709 independently calculated red-15/blue-25 fixtures select different indices.
 
 Focused validation passes 25 tests across `spec_quantize_request`, `spec_quantize_dispatch`, and `spec_quantize_metrics`.
+
+## Final validation
+
+Implementation head `6e1e7431` passes:
+
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: 168 native tests, zero failures.
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`: passes.
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all -- --check`: passes.
+- `git diff --check`: passes.
+
+These checks ran in this isolated worktree. No benchmark process or browser timing run was started.
+The reference still uses f32 working coordinates and metric arithmetic, with S09's f64 byte-alpha threshold/compositing rules unchanged.
