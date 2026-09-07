@@ -58,7 +58,8 @@ expire a lease because shutdown takes longer than expected.
 
 ## Fresh cross-revision pairs
 
-S06 can use the public `ditherette_bench::lease` module from a separate coordinator:
+The [fresh-pair coordinator](PAIRED.md) uses the public
+`ditherette_bench::lease` module from a separate executable:
 
 ```rust,ignore
 let lease = Lease::exclusive()?;
@@ -70,7 +71,7 @@ for command in alternating_prebuilt_commands {
 ```
 
 Set `DITHERETTE_BENCH_QUIET=1` on each `Command` after completing the quiet phase.
-Set each command's working directory to its prepared revision. `spawn` consumes
+Bind commands to prepared executable identities. `spawn` consumes
 the command and forwards the inherited lease descriptor. Keep the outer lease
 until all trials exit. The execution guard remains local to each benchmark.
 
