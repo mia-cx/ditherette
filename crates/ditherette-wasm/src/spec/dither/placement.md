@@ -1,5 +1,50 @@
 # Palette-independent placement reference
 
+## Mask recipe
+
+`placement_mask_at` takes source RGBA8, pixel coordinates, `WorkingSpace`, and the validated `Placement` request.
+There is no palette parameter or prepared-palette import. Palette selection cannot influence this mask.
+`Everywhere` returns 1. Adaptive placement reads source RGB, including hidden RGB, and ignores alpha.
+
+For radius r, sample offsets are `(-r,0),(r,0),(0,-r),(0,r),(-r,-r),(r,-r),(-r,r),(r,r)` in that order.
+Clamp each sample coordinate independently to the nearest image edge. Count duplicate samples and always divide by eight.
+Radius is the validated integer pixel distance, from 1 through 32768. It is not a box-filter radius.
+Typed image views exclude row padding. The caller supplies an in-bounds center pixel.
+
+Convert the center and each neighbor through the selected reference forward conversion.
+Ordinary spaces use Euclidean distance. OKLCH and CIELCH use:
+
+```text
+angle = abs(h1 - h2)
+wrapped = min(angle, 2*pi - angle)
+dh = min(C1, C2) * wrapped
+distance = sqrt((L1-L2)^2 + (C1-C2)^2 + dh^2)
+```
+
+Thus either neutral chroma suppresses the hue term. Forward conversions supply normalized hue and nonnegative chroma.
+This minimum-chroma arc distance is the website's placement metric, not the circular chord metric used for palette matching.
+It extends the existing OKLCH placement rule to CIELCH without mixing either space's units.
+
+Let `ranges` be the three fixed coordinate widths documented below.
+Contrast is `sum(distance)/8/sqrt(ranges[0]^2+ranges[1]^2+ranges[2]^2)*100`.
+Threshold and softness use those normalized contrast percentage points.
+Set `lower=threshold-softness` and `upper=threshold+softness`.
+When lower equals upper, return 1 if contrast is at least upper, otherwise 0.
+Otherwise set `t=clamp((contrast-lower)/(upper-lower),0,1)` and return `t*t*(3-2*t)`.
+Contrast is not clipped separately. The smoothstep alone bounds the mask to `[0,1]`.
+
+Color coordinates and fixed boxes are f32. Distances, accumulation, and smoothstep use f64; the final mask rounds to f32.
+This preserves the website's scalar arithmetic and avoids overflow when valid finite f32 controls add beyond f32's range.
+
+The source is [quantize-shared.ts at the validated join](https://github.com/mia-cx/ditherette/blob/bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e/src/lib/processing/quantize-shared.ts).
+`placementMask` defines sampling, edge handling, percentage scaling, and smoothstep.
+`vectorDistanceValues` defines the minimum-chroma arc metric.
+The [approved resolution](https://github.com/mia-cx/ditherette/issues/40) replaces palette-derived ranges with fixed space domains.
+Weighted matching uses sRGB working coordinates for placement; wrappers select `WorkingSpace::Srgb` without adding a weighted space.
+The [S03 inventory](../contract/inventory.md) records the separate working-space feedback and matching-space roles.
+
+## Fixed domains
+
 `coordinate_domain` defines fixed version-one coordinate boxes. It never reads a source image or palette.
 Widths are `maximum-minimum` in the coordinates' own units, not measured palette extrema.
 These boxes enclose the SDR byte-input gamut; they do not clip source coordinates or inverse perturbations.
