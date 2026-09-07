@@ -151,6 +151,24 @@ All 45 Rust benchmark tests and 20 focused JavaScript tests pass after the uncha
 The independent audit verifies every sample-derived gate, 216 exact outputs, and complete snapshot identities.
 Ready describes the tooling PR, not release performance. S41 retains the confirmed regressions.
 
+## S21 and S22 literal baselines
+
+Both slices start from validated S20 delivery `711c7aec61587b45a91c2e404583161edb1e0de9`.
+Their ancestry contains S19 `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+Their future PRs target `impl/v1-s20-browser-bench`; neither PR exists yet.
+
+| Slice | Branch/worktree suffix | Current task |
+| --- | --- | --- |
+| S21 / #62 | `v1-s21-area-bilinear` | Literal area/bilinear copies and exact native conformance |
+| S22 / #63 | `v1-s22-convolution` | Literal cubic/Lanczos/convolution copies and exact native conformance |
+
+Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
+Each agent preserves inherited optimizations as explicit candidates and records its own verified literal baseline commit.
+Shared coordinate/sample helpers are identical frozen copies in both isolated worktrees. The coordinator reconciles common module/caller wiring.
+Public processor/package and benchmark integration remain incomplete. No optimization or slice-performance claim follows from these baseline tasks.
+The third agent owns the developer-only nearest diagnostic in `impl/v1-s20-nearest-diagnostic`.
+All three agents and their owned build/test processes must exit before that diagnostic can measure anything.
+
 ## S01 inherited port anchor
 
 - Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).
