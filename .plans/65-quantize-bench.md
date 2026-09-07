@@ -19,6 +19,7 @@ Prod, spec, image, freeze policy, and public package files stay unchanged in thi
 - [x] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
 - [x] Prepare immutable accepted/candidate artifacts as attempt 01 and hand off without measurements.
 - [x] Integrate public retained-batch verification, then rebuild affected artifacts before coordinator-authorized measurements.
+- [x] Audit the completed fixed-budget run, retain the noisy public control, and prepare the unmerged S24 delivery.
 
 ## Interface
 
@@ -133,4 +134,4 @@ The installed-package conformance suite now invokes this same observer on each u
 
 [Attempt 02](65-prepared-attempt-02.md) records fresh worker/coordinator binaries, full browser snapshots, and their hashes.
 The actual tarball passes all three engines with the retained-output observer, including every frozen indexed fixture.
-Preparation is complete. Measurement still requires the coordinator's explicit quiet clearance.
+The coordinator subsequently completed the authorized fixed-budget run. [Measurement evidence](65-measurement.md) preserves all cases and the inconclusive Chromium control.

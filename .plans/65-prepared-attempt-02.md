@@ -2,7 +2,8 @@
 
 ## Status and identities
 
-Prepared and unmeasured. The coordinator owns quiet clearance and all 124 possible serial workers.
+The coordinator completed the authorized 124-worker run. [Measurement evidence](65-measurement.md) records results and remaining limits.
+This file preserves the original preparation identities and checks.
 Attempt 01 remains unchanged. Its public snapshots lack retained-batch stability verification and must not provide final S24 evidence.
 
 Paths below are relative to `.worktrees/v1-s24-bench/crates/ditherette-bench/target/s24-quantize-attempt-02/`.
