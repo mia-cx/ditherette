@@ -22,7 +22,29 @@ pub fn prepare(
     candidate: (&Path, &str),
     directory: &Path,
 ) -> io::Result<PreparedPair> {
+    prepare_inner(experiment, accepted, candidate, directory, None)
+}
+
+/// Bind already-snapshotted browser assets to the worker snapshots.
+pub fn prepare_with_browser(
+    experiment: Experiment,
+    accepted: (&Path, &str),
+    candidate: (&Path, &str),
+    directory: &Path,
+    browser: browser::PreparedBrowser,
+) -> io::Result<PreparedPair> {
+    prepare_inner(experiment, accepted, candidate, directory, Some(browser))
+}
+
+fn prepare_inner(
+    experiment: Experiment,
+    accepted: (&Path, &str),
+    candidate: (&Path, &str),
+    directory: &Path,
+    browser: Option<browser::PreparedBrowser>,
+) -> io::Result<PreparedPair> {
     validate_experiment(&experiment)?;
+    validate_browser_preparation(&experiment, browser.as_ref())?;
     for (_, revision) in [accepted, candidate] {
         if ![40, 64].contains(&revision.len()) || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(io::Error::other("prepare requires full source revisions"));
@@ -61,6 +83,7 @@ pub fn prepare(
         accepted: snapshot("accepted", &a, accepted.1)?,
         candidate: snapshot("candidate", &b, candidate.1)?,
         machine: machine()?,
+        browser,
     };
     write_new(&directory.join("prepared.json"), &json(&prepared)?)?;
     Ok(prepared)
@@ -68,8 +91,37 @@ pub fn prepare(
 
 /// Run the fixed budget under one lease. No builds or baseline writes occur here.
 pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> {
+    if prepared.browser.is_some()
+        || prepared
+            .experiment
+            .cases
+            .iter()
+            .any(|case| case.browser.is_some())
+    {
+        return Err(io::Error::other(
+            "browser trials require run_with_browser and filesystem artifact validation",
+        ));
+    }
+    run_inner(prepared, directory, None)
+}
+
+/// Require the browser asset owner's filesystem checks before and after every worker.
+pub fn run_with_browser(
+    prepared: &PreparedPair,
+    directory: &Path,
+    validate: fn(&browser::BrowserTrial) -> io::Result<()>,
+) -> io::Result<PairReport> {
+    run_inner(prepared, directory, Some(validate))
+}
+
+fn run_inner(
+    prepared: &PreparedPair,
+    directory: &Path,
+    validate: Option<fn(&browser::BrowserTrial) -> io::Result<()>>,
+) -> io::Result<PairReport> {
     require_quiet()?;
     validate_experiment(&prepared.experiment)?;
+    validate_browser_preparation(&prepared.experiment, prepared.browser.as_ref())?;
     if prepared.schema != SCHEMA || prepared.machine != machine()? {
         return Err(io::Error::other(
             "prepared schema or machine identity differs",
@@ -99,6 +151,20 @@ pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> 
                     Role::Candidate => &prepared.candidate,
                 };
                 validate_executable(executable)?;
+                let browser = if case.browser.is_some() {
+                    let trial = prepared
+                        .browser
+                        .as_ref()
+                        .expect("validated browser preparation")
+                        .trial(role);
+                    validate
+                        .ok_or_else(|| io::Error::other("missing browser artifact validator"))?(
+                        &trial,
+                    )?;
+                    Some(trial)
+                } else {
+                    None
+                };
                 let stem = format!("pair-{pair:03}-case-{index:03}-{role:?}").to_lowercase();
                 let request_path = directory.join(format!("{stem}.request.json"));
                 let output_path = directory.join(format!("{stem}.result.json"));
@@ -110,6 +176,8 @@ pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> 
                         reference_state: prepared.experiment.reference_state,
                         executable: executable.identity.clone(),
                         case: case.clone(),
+                        browser: browser.clone(),
+                        reference_output: None,
                     })?,
                 )?;
                 let stdout = OpenOptions::new()
@@ -122,7 +190,11 @@ pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> 
                     .open(directory.join(format!("{stem}.stderr")))?;
                 let mut command = Command::new(&executable.path);
                 command
-                    .arg("paired-trial")
+                    .arg(if browser.is_some() {
+                        "paired-browser-trial"
+                    } else {
+                        "paired-trial"
+                    })
                     .arg(&request_path)
                     .stdout(Stdio::from(stdout))
                     .stderr(Stdio::from(stderr));
@@ -131,6 +203,9 @@ pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> 
                 event(&mut journal, &stem, "started", Some(child.id()))?;
                 let status = child.wait()?;
                 event(&mut journal, &stem, "reaped", Some(child.id()))?;
+                if let Some(trial) = &browser {
+                    validate.expect("validated browser callback")(&trial)?;
+                }
                 if !status.success() {
                     return Err(io::Error::other(format!(
                         "{stem} failed ({status}); raw files retained"
@@ -223,6 +298,7 @@ pub fn validate_experiment(experiment: &Experiment) -> io::Result<()> {
     }
     let mut names = std::collections::BTreeSet::new();
     for case in &experiment.cases {
+        browser::validate_case(case)?;
         if case.name.is_empty() || !names.insert(&case.name) {
             return Err(io::Error::other("empty or duplicate case name"));
         }
@@ -245,6 +321,24 @@ pub fn validate_experiment(experiment: &Experiment) -> io::Result<()> {
             return Err(io::Error::other(
                 "measurement requires at least five samples and positive timing/warmup settings",
             ));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate_browser_preparation(
+    experiment: &Experiment,
+    prepared: Option<&browser::PreparedBrowser>,
+) -> io::Result<()> {
+    let needed = experiment.cases.iter().any(|case| case.browser.is_some());
+    if needed != prepared.is_some() {
+        return Err(io::Error::other(
+            "browser cases and prepared assets must both be present",
+        ));
+    }
+    if let Some(prepared) = prepared {
+        for role in [Role::Accepted, Role::Candidate] {
+            browser::validate_trial(&prepared.trial(role))?;
         }
     }
     Ok(())
