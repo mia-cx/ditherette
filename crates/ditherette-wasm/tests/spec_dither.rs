@@ -1,7 +1,7 @@
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, LinearRgb32, PaletteIndex8},
     spec::dither::{
-        blue_noise::{dither_blue_noise_into, BLUE_NOISE_8X8},
+        blue_noise::{dither_blue_noise_into, BLUE_NOISE_32X32},
         error_diffusion::{dither_error_diffusion_into, ErrorDiffusionKernel},
         ordered::{bayer_value, dither_bayer_into, BayerSize},
         random_noise::{dither_random_noise_into, Mulberry32},
@@ -88,10 +88,10 @@ fn random_noise_dither_is_deterministic_for_same_seed() {
 
 #[test]
 fn blue_noise_tile_contains_each_threshold_once() {
-    let mut values = BLUE_NOISE_8X8.to_vec();
+    let mut values = BLUE_NOISE_32X32.to_vec();
     values.sort_unstable();
 
-    assert_eq!(values, (0..64).collect::<Vec<_>>());
+    assert_eq!(values, (0..1024).collect::<Vec<_>>());
 }
 
 #[test]

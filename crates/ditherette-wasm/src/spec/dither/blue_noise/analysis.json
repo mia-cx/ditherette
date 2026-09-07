@@ -1,0 +1,60 @@
+{
+  "side": 32,
+  "seed": 3514754942,
+  "sigma": 1.5,
+  "initial_ones": 128,
+  "relaxation_moves": 45,
+  "spectra": [
+    {
+      "occupied": 128,
+      "low_mean_over_white": 0.04440437544008435,
+      "high_mean_over_low": 28.235357091104515,
+      "peak_fraction": 0.00651951055000805,
+      "angular_coefficient_of_variation": 0.03140279463216925,
+      "parseval_relative_error": 2.5376526277146434e-16,
+      "passes": true
+    },
+    {
+      "occupied": 256,
+      "low_mean_over_white": 0.023796459720970664,
+      "high_mean_over_low": 46.60149387827978,
+      "peak_fraction": 0.007745520798104596,
+      "angular_coefficient_of_variation": 0.09107583040789662,
+      "parseval_relative_error": 4.440892098500626e-16,
+      "passes": true
+    },
+    {
+      "occupied": 512,
+      "low_mean_over_white": 0.017113281496200852,
+      "high_mean_over_low": 65.2827416921698,
+      "peak_fraction": 0.007113875786016421,
+      "angular_coefficient_of_variation": 0.07084973044967346,
+      "parseval_relative_error": 2.220446049250313e-16,
+      "passes": true
+    },
+    {
+      "occupied": 768,
+      "low_mean_over_white": 0.029174509867117185,
+      "high_mean_over_low": 38.6474369711487,
+      "peak_fraction": 0.009087189177422062,
+      "angular_coefficient_of_variation": 0.05365990352160529,
+      "parseval_relative_error": 1.4802973661668755e-15,
+      "passes": true
+    },
+    {
+      "occupied": 896,
+      "low_mean_over_white": 0.04908659162777017,
+      "high_mean_over_low": 25.92943893100698,
+      "peak_fraction": 0.009597110926374107,
+      "angular_coefficient_of_variation": 0.012499339030688493,
+      "parseval_relative_error": 7.61295788314393e-16,
+      "passes": true
+    }
+  ],
+  "passes": true,
+  "rank_encoding": "row-major unsigned 16-bit little-endian",
+  "rank_sha256": "bcd93746b99ef8ad678ad425f21e1890b4248050b1ea1b382800d7da977e5943",
+  "generator_checkpoint": "c70bedc368ec9e6023c89931f961ccfde8c0766c",
+  "toolchain": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "machine": "Linux 6.12.95+deb13-amd64 x86_64"
+}
