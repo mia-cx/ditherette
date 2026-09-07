@@ -121,7 +121,7 @@ fn exact_integer_downscale_steps(
     exact_integer_downscale_steps_for_dimensions(source.dimensions(), output.dimensions())
 }
 
-fn exact_integer_downscale_steps_for_dimensions(
+pub(super) fn exact_integer_downscale_steps_for_dimensions(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
 ) -> Option<(usize, usize)> {
@@ -153,7 +153,7 @@ fn exact_integer_upscale_steps(
     exact_integer_upscale_steps_for_dimensions(source.dimensions(), output.dimensions())
 }
 
-fn exact_integer_upscale_steps_for_dimensions(
+pub(super) fn exact_integer_upscale_steps_for_dimensions(
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
 ) -> Option<(usize, usize)> {
