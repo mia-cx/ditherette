@@ -20,7 +20,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Ready | [#89](https://github.com/mia-cx/ditherette/pull/89) |
 | [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Ready | [#90](https://github.com/mia-cx/ditherette/pull/90) |
 | [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | Ready | [#96](https://github.com/mia-cx/ditherette/pull/96) |
-| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | In progress | - |
+| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | Ready | [#102](https://github.com/mia-cx/ditherette/pull/102) |
 | [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) | Ready | [#91](https://github.com/mia-cx/ditherette/pull/91) |
 | [S08](#s08) | Complete Lab and LCH reference round trips | [S03](#s03) | Ready | [#92](https://github.com/mia-cx/ditherette/pull/92) |
 | [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Ready | [#94](https://github.com/mia-cx/ditherette/pull/94) |
@@ -31,7 +31,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S14](#s14) | Repair the blue-noise reference before freezing | [S12](#s12), [S09](#s09) | Ready | [#99](https://github.com/mia-cx/ditherette/pull/99) |
 | [S15](#s15) | Specify all four error-diffusion recipes | [S10](#s10), [S12](#s12) | Ready | [#101](https://github.com/mia-cx/ditherette/pull/101) |
 | [S16](#s16) | Specify adaptive Yliluoma mixing | [S10](#s10), [S12](#s12) | Ready | [#100](https://github.com/mia-cx/ditherette/pull/100) |
-| [S17](#s17) | Complete the five-method reference processor | [S05](#s05), [S10](#s10), [S11](#s11), [S13](#s13), [S14](#s14), [S15](#s15), [S16](#s16) | Not started | - |
+| [S17](#s17) | Complete the five-method reference processor | [S05](#s05), [S10](#s10), [S11](#s11), [S13](#s13), [S14](#s14), [S15](#s15), [S16](#s16) | Ready | [#103](https://github.com/mia-cx/ditherette/pull/103) |
 | [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) | Not started | - |
 | [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | Not started | - |
 | [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) | Not started | - |

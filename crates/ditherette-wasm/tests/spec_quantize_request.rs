@@ -218,7 +218,7 @@ fn alpha_preparation_precedes_color_conversion_and_matching() {
     }
     for matching in POLICIES {
         let result = quantize(QuantizeRequest {
-            alpha: AlphaPolicy::Premultiplied,
+            alpha: AlphaPolicy::Premultiplied {},
             ..request(&source[..4], &palette, matching)
         })
         .unwrap();
@@ -231,7 +231,7 @@ fn transparent_only_and_darkest_fallback_return_complete_indexed_images() {
     let source = [255, 255, 255, 0, 0, 254, 0, 255];
     for alpha in [
         PRESERVE,
-        AlphaPolicy::Premultiplied,
+        AlphaPolicy::Premultiplied {},
         AlphaPolicy::Matte { rgb: [255; 3] },
     ] {
         let palette = [PaletteEntry::Transparent {}, PaletteEntry::Transparent {}];

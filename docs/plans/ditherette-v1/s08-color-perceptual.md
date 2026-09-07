@@ -16,7 +16,7 @@ S07 proceeds independently in its own modules; this branch has no S07 dependency
 No production code or benchmark measurements belong to this slice.
 
 `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_color_perceptual --test spec_color_spaces` passes 16 focused tests.
-`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet` passes all 134 native tests and zero doctests.
+`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet` passes all 124 native tests and zero doctests.
 `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
 `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` and `git diff --check` pass.
 

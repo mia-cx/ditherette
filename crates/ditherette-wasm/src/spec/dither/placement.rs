@@ -3,7 +3,7 @@
 use crate::{
     image::{ImageView, Rgba8},
     spec::{
-        color::{cielab, cielch, linear, oklab, oklch, srgb, ycbcr},
+        color::rgb8_to_coordinates,
         contract::request::{Placement, WorkingSpace},
     },
 };
@@ -122,13 +122,5 @@ fn source_color(source: ImageView<'_, Rgba8>, x: u32, y: u32, space: WorkingSpac
         .pixel(x, y)
         .expect("source coordinates are in bounds");
     let rgb = [pixel[0], pixel[1], pixel[2]];
-    match space {
-        WorkingSpace::Srgb => srgb::rgb8_to_srgb(rgb),
-        WorkingSpace::LinearRgb => linear::rgb8_to_linear_rgb(rgb),
-        WorkingSpace::Oklab => oklab::rgb8_to_oklab(rgb),
-        WorkingSpace::Oklch => oklch::rgb8_to_oklch(rgb),
-        WorkingSpace::Cielab => cielab::rgb8_to_cielab(rgb),
-        WorkingSpace::Cielch => cielch::rgb8_to_cielch(rgb),
-        WorkingSpace::Ycbcr => ycbcr::rgb8_to_ycbcr(rgb),
-    }
+    rgb8_to_coordinates(rgb, space)
 }

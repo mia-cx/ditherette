@@ -17,7 +17,7 @@ Validated implementation: `0a1ff0f84d599c4f4dbadf9b43e235262319518f`.
 | Command | Result |
 | --- | --- |
 | `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_color_basic --test spec_color_spaces` | Ten new and six inherited color tests pass. |
-| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` | All 134 native tests pass; no doctests. |
+| `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` | All 124 native tests pass; no doctests. |
 | `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` | Passed. |
 | `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` | Passed. |
 | `git diff --check` | Passed. |
