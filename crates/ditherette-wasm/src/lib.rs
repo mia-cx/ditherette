@@ -13,6 +13,10 @@ mod wasm;
 
 #[cfg(feature = "bench-subjects")]
 pub use bench_subjects::bench_subjects;
+pub use wasm::processor::{
+    private_dispose, private_error_path, private_initialize, private_memory_overhead,
+    private_resize,
+};
 pub use wasm::{
     benchmark_color_space, benchmark_resize_rgba8, convert_color_space, hello, process_rgba8,
     resize_rgba8,
