@@ -32,6 +32,11 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
     };
     let request: TrialRequest = serde_json::from_slice(&fs::read(path).map_err(BenchError::io)?)
         .map_err(|error| BenchError::Config(error.to_string()))?;
+    if request.browser.is_some() || request.reference_output.is_some() {
+        return Err(BenchError::Config(
+            "native worker rejects browser assets".into(),
+        ));
+    }
     let build = BuildIdentity {
         revision: env!("DITHERETTE_BENCH_REVISION").into(),
         dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
@@ -117,6 +122,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
         output: record(subject_id.clone(), subject_rgba),
         pid: std::process::id(),
         max_live_benchmark_processes: observer.max_live,
+        browser: None,
     };
     println!(
         "{}",
@@ -126,6 +132,11 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
 }
 
 fn validate_native(case: &PairCase) -> Result<(), BenchError> {
+    if case.browser.is_some() {
+        return Err(BenchError::Config(
+            "native worker rejects browser requests".into(),
+        ));
+    }
     validate_experiment(&Experiment {
         label: "native request".into(),
         reference_state: ReferenceState::PreFreeze,
@@ -243,6 +254,7 @@ mod tests {
             space: None,
         };
         let mut case = PairCase {
+            browser: None,
             name: "fixture".into(),
             source,
             rgba: vec![1, 2, 3, 255],

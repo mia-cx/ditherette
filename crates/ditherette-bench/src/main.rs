@@ -12,6 +12,7 @@ mod error;
 mod fixture;
 mod manifest;
 mod measure;
+mod paired_browser;
 mod paired_native;
 mod registry;
 mod report;
@@ -54,7 +55,13 @@ fn run() -> Result<(), BenchError> {
     let expanded = expand_command(command, args)?;
     if matches!(
         expanded.command.as_str(),
-        "perf" | "comp" | "tile" | "tiling-sweep" | "wasm-resize" | "paired-trial"
+        "perf"
+            | "comp"
+            | "tile"
+            | "tiling-sweep"
+            | "wasm-resize"
+            | "paired-trial"
+            | "paired-browser-trial"
     ) {
         require_quiet().map_err(BenchError::io)?;
     }
@@ -62,6 +69,7 @@ fn run() -> Result<(), BenchError> {
 
     match expanded.command.as_str() {
         "paired-trial" => paired_native::run(&registry, &expanded.args),
+        "paired-browser-trial" => paired_browser::run(&guard.lease, &registry, &expanded.args),
         "list-subjects" => list_subjects(&registry, &expanded.args),
         "describe-subject" => describe_subject(&registry, &expanded.args),
         "perf" => perf_command(&registry, &expanded.args),

@@ -132,6 +132,43 @@ S20 still owns complete browser-call timing; native evidence and browser conform
 Documentation/provenance joins at `db2dbb61c9d6d14723c3f3bfb05a0d3465d6e057`; the crate and package trees match the validated code head.
 The PR's current head is authoritative for subsequent progress-only commits. The issue remains open until a separately authorized merge.
 
+## S20 public browser benchmark implementation
+
+Issue [#61](https://github.com/mia-cx/ditherette/issues/61) starts from validated S19 PR #105 at `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+The immediate PR base is `impl/v1-s19-integration`. The coordinator owns `.worktrees/v1-s20-browser-bench` on `impl/v1-s20-browser-bench`.
+This worktree now owns tracked progress and the ledger; root `slices.md` remains the visible mirror.
+Read [the scoped plan](../../../.plans/61-browser-benchmark.md) and [preflight](../../../.plans/61-browser-preflight.md) before implementation.
+Protocol, script transport, and asset/worker implementation use separate child worktrees. Measurements wait until every agent and build/test exits.
+Trial 02 completes with exact output but performance regressions in every engine. No release-performance readiness claim exists.
+S19's exact delivered head passes CI run `34136269326`; its frozen-reference check and PR status are green.
+The [initial trial budget](../../../.plans/61-initial-trial-budget.md) fixes the case matrix before measurement.
+The [measurement report](../../../.plans/61-public-measurement.md) records actual medians, runtime identities, retained failures, and S41 obligations.
+Both package roles build from clean `e84a55eddb0014f97b64446408bfb5f656deb5d4`; all three engine coordinators complete with regression exit 2.
+No performance candidate is promoted. A developer-only same-kernel comparison investigates the gap from older internal Wasm measurements.
+S20 is delivered in open, non-draft [PR #107](https://github.com/mia-cx/ditherette/pull/107), with creation head `b97e0e5b20b198692fe37944f89ccdfc51734426`.
+Its immediate base remains `impl/v1-s19-integration` at `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+All 45 Rust benchmark tests and 20 focused JavaScript tests pass after the unchanged rebase.
+The independent audit verifies every sample-derived gate, 216 exact outputs, and complete snapshot identities.
+Ready describes the tooling PR, not release performance. S41 retains the confirmed regressions.
+
+## S21 and S22 literal baselines
+
+Both slices start from validated S20 delivery `711c7aec61587b45a91c2e404583161edb1e0de9`.
+Their ancestry contains S19 `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+Their future PRs target `impl/v1-s20-browser-bench`; neither PR exists yet.
+
+| Slice | Branch/worktree suffix | Current task |
+| --- | --- | --- |
+| S21 / #62 | `v1-s21-area-bilinear` | Literal area/bilinear copies and exact native conformance |
+| S22 / #63 | `v1-s22-convolution` | Literal cubic/Lanczos/convolution copies and exact native conformance |
+
+Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
+Each agent preserves inherited optimizations as explicit candidates and records its own verified literal baseline commit.
+Shared coordinate/sample helpers are identical frozen copies in both isolated worktrees. The coordinator reconciles common module/caller wiring.
+Public processor/package and benchmark integration remain incomplete. No optimization or slice-performance claim follows from these baseline tasks.
+The third agent owns the developer-only nearest diagnostic in `impl/v1-s20-nearest-diagnostic`.
+All three agents and their owned build/test processes must exit before that diagnostic can measure anything.
+
 ## S01 inherited port anchor
 
 - Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).
