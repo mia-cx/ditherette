@@ -23,6 +23,8 @@ Both roles receive the same cropped bytes and return independent durable RGBA8 p
 
 For a fresh processing sample, initialize outside its timer and dispose afterward. Initialization has its own measured cases.
 Initialization from bytes includes Wasm compilation; precompiled initialization excludes compilation. Both use already-loaded wrapper modules and local inputs, excluding network transfer.
+Browser-internal compilation caches are not reset. A fresh instance does not claim a cold browser or uncached compiler.
+After each timed initialization, verify a tiny nearest result and dispose outside its timer.
 The two initialization comparisons are repeatability controls, not TypeScript equivalents or optimization claims.
 S19 retains no application cache or content digest. Record cache capability `none`; primed instance state is not a cache hit.
 
