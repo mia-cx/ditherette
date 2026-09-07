@@ -180,10 +180,12 @@ fn match_tags_cover_all_coherent_pairs_and_reject_invalid_pairs() {
         "oklab-euclidean",
         "oklch-euclidean",
         "oklch-circular-hue",
+        "oklch-hue-arc",
         "cielab-euclidean",
         "cielab-ciede2000",
         "cielch-euclidean",
         "cielch-circular-hue",
+        "cielch-hue-arc",
         "ycbcr-euclidean",
     ];
     for tag in tags {
@@ -192,6 +194,7 @@ fn match_tags_cover_all_coherent_pairs_and_reject_invalid_pairs() {
     for tag in [
         "oklab-ciede2000",
         "srgb-circular-hue",
+        "srgb-hue-arc",
         "linear-rgb-rec709",
         "cielch-ciede2000",
     ] {

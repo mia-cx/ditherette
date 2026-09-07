@@ -42,10 +42,12 @@ pub enum MatchPolicy {
     OklabEuclidean,
     OklchEuclidean,
     OklchCircularHue,
+    OklchHueArc,
     CielabEuclidean,
     CielabCiede2000,
     CielchEuclidean,
     CielchCircularHue,
+    CielchHueArc,
     YcbcrEuclidean,
 }
 
@@ -58,9 +60,13 @@ impl MatchPolicy {
             }
             Self::LinearRgbEuclidean => WorkingSpace::LinearRgb,
             Self::OklabEuclidean => WorkingSpace::Oklab,
-            Self::OklchEuclidean | Self::OklchCircularHue => WorkingSpace::Oklch,
+            Self::OklchEuclidean | Self::OklchCircularHue | Self::OklchHueArc => {
+                WorkingSpace::Oklch
+            }
             Self::CielabEuclidean | Self::CielabCiede2000 => WorkingSpace::Cielab,
-            Self::CielchEuclidean | Self::CielchCircularHue => WorkingSpace::Cielch,
+            Self::CielchEuclidean | Self::CielchCircularHue | Self::CielchHueArc => {
+                WorkingSpace::Cielch
+            }
             Self::YcbcrEuclidean => WorkingSpace::Ycbcr,
         }
     }
