@@ -22,6 +22,8 @@ export function resizeRecipe(operation) {
 			return { algorithm: 'area' };
 		case 'resize-bilinear':
 			return { algorithm: 'bilinear', anchor: operation.anchor };
+		case 'resize-trilinear':
+			return { algorithm: 'trilinear', anchor: operation.anchor };
 		case 'resize-bicubic':
 		case 'resize-lanczos2':
 		case 'resize-lanczos3':
@@ -55,8 +57,8 @@ export async function prepareOperation(trial) {
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
-		if (resize.algorithm === 'bicubic')
-			throw new Error('The website has no bicubic implementation.');
+		if (resize.algorithm === 'bicubic' || resize.algorithm === 'trilinear')
+			throw new Error('The website has no bicubic or trilinear implementation.');
 		if ('anchor' in resize && resize.anchor !== 'center')
 			throw new Error('TypeScript non-center resize is unavailable.');
 		if (

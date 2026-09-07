@@ -12,6 +12,7 @@ pub enum PublicOperation {
     ResizeNearest { anchor: Anchor },
     ResizeArea {},
     ResizeBilinear { anchor: Anchor },
+    ResizeTrilinear { anchor: Anchor },
     ResizeBicubic { anchor: Anchor, support: Support },
     ResizeLanczos2 { anchor: Anchor, support: Support },
     ResizeLanczos3 { anchor: Anchor, support: Support },
@@ -68,6 +69,12 @@ impl BrowserCase {
 impl PublicOperation {
     pub fn subject(&self, backend: BrowserBackend) -> &'static str {
         match (self, backend) {
+            (Self::ResizeTrilinear { .. }, BrowserBackend::Package) => {
+                "public:resize:trilinear:package"
+            }
+            (Self::ResizeTrilinear { .. }, BrowserBackend::TypeScript) => {
+                "public:resize:trilinear:typescript"
+            }
             (Self::ResizeNearest { .. }, BrowserBackend::Package) => {
                 "public:resize:nearest:package"
             }
@@ -105,6 +112,7 @@ impl PublicOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::ResizeTrilinear { .. } => "spec:resize:trilinear:mip-area",
             Self::ResizeNearest { .. } => "spec:resize:nearest:scalar",
             Self::ResizeArea {} => "spec:resize:area:scalar",
             Self::ResizeBilinear { .. } => "spec:resize:bilinear:scalar",
@@ -139,6 +147,7 @@ impl PublicOperation {
     pub fn anchor(&self) -> Anchor {
         match *self {
             Self::ResizeNearest { anchor }
+            | Self::ResizeTrilinear { anchor }
             | Self::ResizeBilinear { anchor }
             | Self::ResizeBicubic { anchor, .. }
             | Self::ResizeLanczos2 { anchor, .. }
@@ -158,6 +167,7 @@ impl PublicOperation {
             operation: Operation::Resize,
             recipe: match self {
                 Self::ResizeNearest { .. } => "nearest-public-v1",
+                Self::ResizeTrilinear { .. } => "trilinear-public-v1",
                 Self::ResizeArea {} => "area-public-v1",
                 Self::ResizeBilinear { .. } => "bilinear-public-v1",
                 Self::ResizeBicubic { .. } => "bicubic-public-v1",
@@ -411,9 +421,12 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         }
     }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript) {
-        if matches!(browser.operation, PublicOperation::ResizeBicubic { .. }) {
+        if matches!(
+            browser.operation,
+            PublicOperation::ResizeBicubic { .. } | PublicOperation::ResizeTrilinear { .. }
+        ) {
             return Err(io::Error::other(
-                "The website has no bicubic implementation",
+                "The website has no bicubic or trilinear implementation",
             ));
         }
         if browser.operation.anchor() != Anchor::Center {
