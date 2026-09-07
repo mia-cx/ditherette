@@ -56,9 +56,18 @@ Its explicit integration correction connects S13 field dispatch to S14's correct
 All satisfied native blockers were removed from issue #58 after the validated join existed.
 The original issue dependency list remains unchanged.
 
-Implementation and validation remain active. Follow [the S17 task plan](../../../.plans/58-reference-processor.md) before taking over.
-The strict-request, executable-adapter, and benchmark-registration agents each own a separate worktree.
-The coordinator alone updates the visible root `slices.md` and this tracked integration copy.
+[PR #103](https://github.com/mia-cx/ditherette/pull/103) is open and non-draft, with auto-merge disabled.
+Its creation head is `0fb89b929108b68eb3486e1c6b9834d9351e1a4f`; validated code checkpoint is `4ffbad8f1ae09bc81f316444cd27433a436c35ab`.
+Subsequent handoff commits change documentation only. S18 must record its actual selected parent head before freezing.
+
+All 270 native tests, Wasm compilation with benchmark subjects, and crate formatting checks pass.
+The benchmark crate passes 5 reference-subject, 8 verification, 3 adapter, and 3 binary tests, plus the lease lifecycle fixture.
+That fixture runs the three owned Node transport checks under the required inherited lease.
+Native benchmark binaries and benches compile. No S17 measurements ran.
+
+The required rebase preserved the complete tree and all seven slice prerequisite heads in ancestry.
+Subtask commits were replayed; [the S17 task plan](../../../.plans/58-reference-processor.md) records their source provenance and exact post-rebase checks.
+The coordinator alone updates the visible root `slices.md` and the current tracked integration copy.
 
 
 ## S01 inherited port anchor

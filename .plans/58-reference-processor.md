@@ -15,7 +15,7 @@ The join connects the corrected S14 blue-noise tile to S13's field dispatch.
 - [x] Compose all five typed methods and test both public equalities, metadata, warnings, input preservation, and durable results.
 - [x] Complete strict tagged requests and executable lifecycle, cache/memory, and partition reference models before freeze.
 - [x] Register callable benchmark subjects for every completed reference and reconcile the exhaustive export inventory.
-- [ ] Validate the full join, update the stack ledger, and open an unmerged S17 PR against the verified base.
+- [x] Validate the full join, update the stack ledger, and open an unmerged S17 PR against the verified base.
 
 ## Ownership
 
@@ -49,4 +49,6 @@ All seven required slice heads remain actual ancestors. The 32 focused processor
 Canonical identity fixtures execute actual naive RGBA8 intermediates. They distinguish operation keys from output-content identities.
 The lifecycle, cache, and pool models specify ownership and publication. Physical allocations and browser workers remain production obligations.
 S18 must freeze the shared image source tree alongside spec and bind the reference compiler/dependency inputs.
-PR creation remains the last S17 task.
+Delivered [PR #103](https://github.com/mia-cx/ditherette/pull/103), open and non-draft, against `impl/v1-s17-base`.
+Creation head `0fb89b929108b68eb3486e1c6b9834d9351e1a4f` contains the validated code checkpoint and rebase evidence.
+Auto-merge is disabled and issue #58 remains open. Subsequent handoff commits change documentation only.
