@@ -36,10 +36,10 @@ void area;
 void bilinear;
 // @ts-expect-error Area has no anchor.
 const invalidArea: ResizeRequest['output']['resize'] = { algorithm: 'area', anchor: 'center' };
-// @ts-expect-error Bilinear has no support setting.
 const invalidBilinear: ResizeRequest['output']['resize'] = {
 	algorithm: 'bilinear',
 	anchor: 'center',
+	// @ts-expect-error Bilinear has no support setting.
 	support: 'fixed'
 };
 void invalidArea;
