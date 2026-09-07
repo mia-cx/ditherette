@@ -20,12 +20,16 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 Current integration work continues on `impl/v1-resize-integration` in `.worktrees/v1-resize-integration`.
 It owns the tracked progress table; the root table remains the visible mirror.
 S21 public area/bilinear checkpoint `056a1324` joins at `b52d1c8b`, with native/package/three-engine conformance passing.
-S22 adds public convolution modes on that join, preserving native checkpoint `53eaf013`.
-S23 starts the missing exact trilinear implementation from `b52d1c8b` in `impl/v1-s23-trilinear`.
-S24 native packed-color/direct quantization is validated at `f83e58a4`; public integration and measurements remain pending.
+S22 public convolution checkpoint `f0976601` preserves native checkpoint `53eaf013` and passes all three package engines.
+S23 public trilinear is validated at `0be73eb6`, retaining literal missing-implementation baseline `fba85a94` and prepared checkpoint `830e6739`.
+It passes 299 native, 18 interface, eight private ABI, both builds, and all three installed-package engines.
+S24 native packed-color/direct quantization is validated at `f83e58a4`; public integration and benchmark registration continue separately.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
-The fixed S21/S22 budget is 304 serial workers. No measurement is running.
+S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
+All native production pairs preserve landed bytes, with no slowdown above 10%; no kernel retuning is selected.
+The [S22 measurement record](../../../.plans/63-measurement.md) links artifacts and records each convolution median.
+Public TypeScript differences and complete-call costs remain [S41 work](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5575617483).
 
 ## Delivered S01 through S16
 
@@ -182,16 +186,17 @@ Both branches restore their crate trees to S20 delivery `711c7aec61587b45a91c2e4
 S21 restoration is `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508`; S22 restoration is `55b08b4ad4911fc8aa3d65a86a9b94c801079962`.
 The coordinator verifies both source trees byte-for-byte and joins them into `fix/v1-restore-landed`.
 Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
-Future PRs target `fix/v1-restore-landed`; neither exists yet.
+S21 targets `fix/v1-restore-landed`. S22 stacks on S21 to reuse its validated public integration.
+PR filing follows completed measurements; neither slice grants release-performance readiness.
 
 | Slice | Branch/worktree suffix | Current task |
 | --- | --- | --- |
-| S21 / #62 | `v1-s21-area-bilinear` | Connect landed area/bilinear and shared planning to the package |
-| S22 / #63 | `v1-s22-convolution` | Connect landed cubic/Lanczos and shared convolution to the package |
+| S21 / #62 | `v1-s21-area-bilinear` | File validated, measured public integration PR |
+| S22 / #63 | `v1-s22-convolution` | Stack validated, measured public integration on S21 |
 
 Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
 Existing optimized kernels and shared helpers stay canonical production. Removed replacements remain recoverable in historical commits.
-Public processor/package and benchmark integration remain incomplete. No new optimization or slice-performance claim follows from restoration.
+Public processor/package integration and fresh measurements are complete for S21/S22. No new optimization is selected.
 The interrupted nearest diagnostic in `impl/v1-s20-nearest-diagnostic` stays held and separate.
 
 ## S01 inherited port anchor
