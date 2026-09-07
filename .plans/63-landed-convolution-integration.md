@@ -6,7 +6,7 @@ Mia's #108 direction preserves existing production kernels and shared code. Hist
 ## TODOs
 
 - [x] Add fallible capacity-accounted plans and caller-owned scratch while preserving landed arithmetic and dispatch; prove original-output and failure behavior.
-- [~] Validate native/Wasm compilation and frozen independence, commit/push the native support, then await the S21 public integration checkpoint.
+- [x] Validate native/Wasm compilation and frozen independence, commit/push the native support, then await the S21 public integration checkpoint.
 
 ## Ownership and seam
 
@@ -48,3 +48,25 @@ The four existing independent frozen-oracle and row-range tests also pass.
 The landed separable path already documents bounded frozen-oracle behavior for large downscales.
 Exact agreement with landed output does not approve a new approximation or establish universal frozen equality.
 No benchmark, public package, or browser runtime result is claimed in this native checkpoint.
+
+## Validation
+
+Native implementation checkpoint `e7ec94ec` includes S21 allocation helper changes through `1a92df82`.
+Commands run from this worktree, all exit 0:
+
+```sh
+cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --features bench-subjects --test prod_resize_convolution --test prod_convolution_allocation
+cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown --features bench-subjects
+cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check
+node /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze/tools/spec-freeze/guard.mjs --root /home/mia/mia-cx/ditherette/.worktrees/v1-s22-convolution --trusted-root /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze
+git diff --quiet 467542f49ce3f600e5b03aeef574a97be554ae15 -- crates/ditherette-wasm/src/spec crates/ditherette-wasm/src/image tools/spec-freeze
+git diff --check
+```
+
+Nine tests pass, zero measured. Native and Wasm compilation pass.
+The trusted guard passes all isolation checks and retains frozen revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
+Its content identity remains `sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+
+Next, the coordinator joins this checkpoint with the validated S21 public seam.
+S22 then adds public bicubic/Lanczos dispatch and support settings in that joined tree.
+Public lifecycle/package conformance and native/browser benchmark evidence remain pending integration.
