@@ -10,7 +10,7 @@ The paired protocol owns validation and acceptance. The Rust worker owns referen
 - [x] Add the TypeScript adapter and deterministic timing tests, including zero samples and per-sample preparation.
 - [x] Add the immutable-asset browser transport using the shared trial schema and existing resource cleanup.
 - [x] Verify real TypeScript output and installed-package calls without running measurements; record runtime provenance and handoff.
-- [ ] Add worker-supplied frozen output preflight and preserve structured mismatch output before timing.
+- [x] Add worker-supplied frozen output preflight and preserve structured mismatch output before timing.
 
 ## Constraints
 
@@ -49,7 +49,7 @@ pnpm exec tsc --noEmit --target es2022 --module esnext --moduleResolution bundle
 DITHERETTE_BENCH_TEST_TARBALL=/tmp/ditherette-s20-fixture.qc4Tgh/ditherette-0.1.0.tgz DITHERETTE_TEST_WEBKIT_EXECUTABLE=/tmp/ditherette-webkit-libs.2dS6Yu/webkit node --test scripts/benchmark-public-conformance.test.mjs
 ```
 
-The first command passes 11 fixtures. The browser command passes three engine subtests and its containing test, four reported tests.
+The first command passes 13 fixtures. The browser command passes three engine subtests and its containing test, four reported tests.
 Node is 24.19.0, pnpm 11.13.0, Playwright 1.59.1, and TypeScript 6.0.3.
 The supplied S19 tarball SHA-256 is `bed93cd2085df64a2ca8ba578fd6d72babccc539042e83847e66a691bde59c1d`.
 It comes from validated integration `7de86d799a25a132c8de41ee54696bd8e54bdf76` and serves only as conformance input.
@@ -58,3 +58,17 @@ Actual measurements require fresh clean builds and immutable preparation.
 WebKit uses the task-local launcher and extracted libraries documented in [S19 browser provenance](60-browser-runtime.md).
 The fixture installs the tarball offline into its own temporary consumer and removes that consumer after all owned browsers/servers close.
 No host package installation, website preview, benchmark, or deployment occurs.
+
+### Frozen preflight and integration
+
+The browser worker supplies `TrialRequest.reference_output` using its frozen implementation.
+Before warmup, the page runs one untimed actual operation and compares dimensions, all RGBA bytes, and warnings.
+Mismatch returns the complete actual output with `timing_skipped: "reference-mismatch"`, empty samples, and zero work counts.
+The worker preserves that response for S05 mismatch artifacts. It cannot become performance evidence.
+A fake-operation fixture proves this path executes once without starting warmup. All three real browsers retain the TypeScript witness through this check.
+
+The wire format follows shared protocol commits `011e29586332f6f1a9cd55e36898bf7f55ef693c` and `12e0d04`.
+Node receives one trial JSON file and emits one result JSON object. Diagnostics use stderr.
+The Rust worker validates all asset/runtime hashes before and after Node; this transport enforces the served-path and network allowlist.
+Only the worker/coordinator may invoke measured `runTrial` under the existing shared lease and quiet contract.
+Cold/warm cache tags remain rejected until real application cache controls exist. Future cold preparation belongs in the per-sample `prepare` hook after warmup.
