@@ -22,7 +22,7 @@ The coordinator owns benchmark registration and measurements. No benchmark, opti
 ## Public integration TODOs
 
 - [x] Add native Processor quantize ownership with complete allocation preflight and focused failure fixtures.
-- [ ] Add borrowed private quantize ABI and caught complete indexed-result construction; verify handle cleanup.
+- [x] Add borrowed private quantize ABI and caught complete indexed-result construction; verify handle cleanup.
 - [ ] Expose strict five-space quantize requests and durable indexed results in the package.
 - [ ] Validate both Wasm builds, interface/private fixtures, and installed tarball in three engines; push evidence.
 
@@ -77,3 +77,16 @@ The boundary constructs a complete durable result while Rust retains every tempo
 Three new Processor tests and four existing direct-quantize tests pass. They cover all five spaces/three alpha policies,
 257-entry metadata, the f64 threshold witness, exact/one-under budgets, both image reservation failures, caught copy/completion failures, recovery, and disposal.
 An initial fixture used the wrong owned-image constructor name; it now uses existing `ImageBuf::from_vec_packed`.
+
+## Private Wasm checkpoint
+
+`privateQuantize(input, width, height, paletteCodes, matching, alphaMode, threshold, matteRgb, resultSink)` returns a numeric status.
+Matching codes 0..4 select sRGB, linear RGB, Oklab, CIELAB, and YCbCr Euclidean. Alpha codes 0..2 select preserve, premultiplied, and matte.
+Palette codes are RGB integers or 16777216 for transparent. At most 257 normalized entries preserve truncation semantics.
+The fixed Rust palette temporary is counted in quantize-specific boundary capacity; no original palette/source buffer is retained.
+Caught scalar palette reads and borrowed input/result slices avoid generated owned input allocations and caught owned-return handles.
+The caught void completion helper constructs durable indices, palette, warnings, and the complete sink from authoritative Rust metadata.
+
+Scalar build and two release-Wasm private fixtures pass. Generated privateQuantize contains no malloc/passArray/slice/owned-handle insertion.
+512 cycles each exercise success and input/index/palette copy failures, frozen-sink failure, and throwing palette getters.
+Externref table capacity, live handles, and Wasm pages remain unchanged after warmup; later calls recover.
