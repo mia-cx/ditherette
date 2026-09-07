@@ -51,6 +51,10 @@ memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runti
 ## Direct quantization
 
 Matching tags `0` through `4` select Euclidean sRGB, linear RGB, Oklab, CIELAB, and YCbCr respectively.
+Tags `5`, `6`, and `7` select sRGB CompuPhase, Rec.601, and Rec.709.
+Tags `8`, `9`, and `10` select OKLCH Euclidean, circular hue chord, and hue arc.
+Tag `11` selects CIELAB CIEDE2000.
+Tags `12`, `13`, and `14` select CIELCH Euclidean, circular hue chord, and hue arc.
 Other raw matching values return unsupported-operation at `matching`.
 Alpha mode `0` preserves using the f64 threshold, `1` uses premultiplied RGB, and `2` uses a matte.
 Preserve requires matte zero. Premultiplied requires threshold and matte zero. Matte requires threshold zero.
