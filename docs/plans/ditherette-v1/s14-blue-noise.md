@@ -9,7 +9,7 @@ Both are verified ancestors. Their combined placement/palette tests pass 19 fixt
 
 - [x] Record the defect and a reproducible naive generator with fixed numerical acceptance criteria.
 - [x] Generate and retain the rank tile, digest, and numerical spectral analysis.
-- [ ] Connect the reference field, verify fixed RGBA8 compositions, and file the unmerged PR.
+- [x] Connect the reference field, verify fixed RGBA8 compositions, and file the unmerged PR.
 
 Only blue-noise reference code, its offline generator/asset, tests, and documentation belong to this slice.
 S13 separately owns the shared perturbation loop; S17 joins and certifies complete-method composition.
@@ -52,3 +52,7 @@ The fixed RGBA8 fixture proves quarter-range scaling and byte rounding independe
 Final validation passes all 159 native tests. This count is the sum of the actual `cargo test -- --list` groups.
 Wasm-target compilation, rustfmt, source-array SHA-256 verification, and `git diff --check` pass.
 The tests include offline construction, not benchmark timing. No production code changed.
+
+[PR99](https://github.com/mia-cx/ditherette/pull/99) is open and non-draft against `impl/v1-s13-base`.
+The code checkpoint is `4346fd18`; subsequent commits record evidence only.
+[The test-count audit](test-count-audit.md) corrects inherited prose totals for earlier slices.
