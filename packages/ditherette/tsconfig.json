@@ -8,6 +8,7 @@
 		"verbatimModuleSyntax": true,
 		"declaration": true,
 		"rootDir": "src",
+		"rootDirs": ["src", "dist"],
 		"outDir": "dist",
 		"types": []
 	},
