@@ -70,6 +70,32 @@ Subtask commits were replayed; [the S17 task plan](../../../.plans/58-reference-
 The coordinator alone updates the visible root `slices.md` and the current tracked integration copy.
 
 
+## S18 reference freeze
+
+Issue [#59](https://github.com/mia-cx/ditherette/issues/59) runs in `.worktrees/v1-s18-freeze` on `impl/v1-s18-freeze`.
+Its immediate parent is `impl/v1-s17-processor` at `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
+The prerequisite commit is in ancestry. Its native blocking edge was removed only after this worktree existed.
+Validated implementation and creation head is `e636b3120f566127b5e6b884ff2df3cd24c7c5ca` in [PR #104](https://github.com/mia-cx/ditherette/pull/104).
+The PR is open and non-draft, with auto-merge disabled. Later handoff commits change documentation only.
+The fixed checkpoint remains the S17 parent, retained by branch `reference/ditherette-v1`.
+The guard uses recorded bytes, never that branch's tip or a new parent.
+All 106 reference/shared-image/provenance files match SHA-256 `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+Its full export inventory and blue-noise generator, asset, and analysis belong to this frozen closure.
+
+The complete guard passes compiler/profile checks, four dependency contexts, native/Wasm isolation, and native threaded production isolation.
+All 11 temporary mutation tests pass and restore their temporary trees.
+Independent review corrections cover foreign/linker symbols, procedural expansion, and raw-identifier bypasses.
+Rust formatting, Prettier, and diff checks pass. No benchmark ran.
+The read-only CI workflow executes exact-base policy. Its first S18 bootstrap requires review because no base guard exists yet.
+Repository-required checks and workflow protections are not activated by this unmerged preparation.
+The coordinator owns progress, aggregate integration, and PR filing.
+
+The separate S19 preparation branch `impl/v1-s19-base` now joins S02, S06, and S17 at `ad2410b481d710fb2d739695ec1637d6d08eab79`.
+All three delivered prerequisite SHAs are ancestors; the merges needed no source conflict resolution.
+The joined tree passes native Rust tests, Wasm compilation, formatting, and the combined benchmark verifier/paired/lease fixtures.
+Its `spec/`, `image/`, and both consumer lockfiles exactly match the S17 parent.
+S19 remains unstarted and blocked on S18. This preparation contains no new production implementation.
+
 ## S01 inherited port anchor
 
 - Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).

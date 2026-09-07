@@ -1,0 +1,46 @@
+name: Frozen reference
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-reference:
+    name: Frozen reference
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: candidate
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: trusted
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install reference compiler
+        run: rustup toolchain install 1.97.0 --profile minimal --target wasm32-unknown-unknown
+      - name: Validate with exact base policy
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          if test -f trusted/tools/spec-freeze/guard.mjs; then
+            node trusted/tools/spec-freeze/guard.mjs --root "$GITHUB_WORKSPACE/candidate" --trusted-root "$GITHUB_WORKSPACE/trusted"
+          elif test "$BASE_SHA" = cef2b60a635fd43c3b8e7cb880b5c92fe77d640b; then
+            echo 'S18 bootstrap: candidate policy requires explicit human review.'
+            node candidate/tools/spec-freeze/guard.mjs
+          else
+            echo 'Missing trusted freeze policy; refusing to select a new checkpoint.' >&2
+            exit 1
+          fi
+      - name: Exercise controlled mutations
+        run: node --test candidate/tools/spec-freeze/guard.test.mjs
