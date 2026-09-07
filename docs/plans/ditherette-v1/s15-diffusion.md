@@ -9,7 +9,7 @@ and S12 `01df66826e532d8fb3b522a1564f1121c96f4d1f`.
 
 - [x] Audit all four tap sets and define explicit byte/working-coordinate feedback behavior.
 - [x] Compose validated diffusion requests with alpha, placement, ordered matching, and finite-arithmetic handling.
-- [ ] Verify tiny independent images, full native tests, Wasm compilation, and formatting.
+- [x] Verify tiny independent images, full native tests, Wasm compilation, and formatting.
 - [ ] Rebase onto the latest join and file the unmerged stacked PR.
 
 ## Prerequisite checks
@@ -49,3 +49,20 @@ Existing low-level coordinate adapters keep their signatures and unrounded behav
 Six diffusion tests pass, covering tap definitions, the two-pixel feedback distinction, transparent sinks,
 separate work/score overflow errors, legal maximum-strength success, and zero-strength composition across all kernels and metrics.
 The normative recipe and TypeScript source pointers live in `crates/ditherette-wasm/src/spec/dither/error_diffusion.md`.
+
+## Final correctness evidence
+
+The completed diffusion suite has 13 tests. Hand-calculated 2x2 outputs distinguish raster and serpentine for every kernel.
+A one-column `[64,0,120]` fixture distinguishes two-row taps and verifies discarded edge weights.
+Positive-strength neutral fixtures cover every metric and both feedbacks.
+Adaptive fixtures distinguish unchanged source from error-modified work, and matching-space contrast from byte-feedback coordinates.
+They also verify hidden RGB influences placement while transparent pixels emit no diffusion error.
+
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet`: passes every test group, zero failures.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked -- --list | rg -c ': test$'`: **181 actual native tests**.
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`: passes.
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all -- --check`: passes.
+- `git diff --check`: passes.
+
+The count comes from the executable test listing, not inherited slice prose.
+No benchmark process or browser timing run was started.

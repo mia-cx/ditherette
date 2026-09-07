@@ -280,3 +280,231 @@ fn zero_strength_equals_direct_quantization_for_every_kernel_feedback_and_metric
         }
     }
 }
+
+#[test]
+fn two_by_two_hand_calculation_distinguishes_raster_and_serpentine_scans() {
+    let source = grays(&[100; 4]);
+    for (kernel, raster, serpentine) in [
+        (Diffusion::FloydSteinberg, [0, 1, 0, 0], [0, 1, 1, 0]),
+        (Diffusion::Sierra, [0, 0, 1, 0], [0, 0, 0, 1]),
+        (Diffusion::SierraLite, [0, 1, 0, 0], [0, 1, 1, 0]),
+        (Diffusion::Atkinson, [0, 0, 0, 1], [0, 0, 1, 0]),
+    ] {
+        for (reverse, expected) in [(false, raster), (true, serpentine)] {
+            let mut input = request(&source, 2, 2, kernel, DiffusionFeedback::SrgbBytes);
+            if let DitherPolicy::Diffusion { serpentine, .. } = &mut input.dither {
+                *serpentine = reverse;
+            }
+            // Floyd starts the last row at [110.4375,71.5625]. Reversal changes which residual arrives first.
+            assert_eq!(
+                diffuse(input).unwrap().indices.data(),
+                expected,
+                "{kernel:?} reverse={reverse}"
+            );
+        }
+    }
+}
+
+#[test]
+fn one_column_exposes_two_row_taps_without_edge_renormalization() {
+    let source = grays(&[64, 0, 120]);
+    for (kernel, expected) in [
+        (Diffusion::FloydSteinberg, [0, 0, 0]),
+        (Diffusion::Sierra, [0, 0, 1]),
+        (Diffusion::SierraLite, [0, 0, 0]),
+        (Diffusion::Atkinson, [0, 0, 1]),
+    ] {
+        // Last unrounded byte is 126.25 / 127.5625 / 124 / 129, respectively.
+        assert_eq!(
+            diffuse(request(&source, 1, 3, kernel, DiffusionFeedback::SrgbBytes))
+                .unwrap()
+                .indices
+                .data(),
+            expected,
+            "{kernel:?}"
+        );
+        let single = grays(&[64]);
+        assert_eq!(
+            diffuse(request(&single, 1, 1, kernel, DiffusionFeedback::SrgbBytes))
+                .unwrap()
+                .indices
+                .data(),
+            [0]
+        );
+    }
+}
+
+#[test]
+fn positive_strength_uses_every_metric_and_feedback_coordinate_system() {
+    let source = grays(&[100, 100]);
+    for matching in POLICIES {
+        let expected = match matching {
+            MatchPolicy::LinearRgbEuclidean => [0, 0],
+            MatchPolicy::OklabEuclidean
+            | MatchPolicy::OklchEuclidean
+            | MatchPolicy::OklchCircularHue
+            | MatchPolicy::OklchHueArc => [1, 0],
+            _ => [0, 1],
+        };
+        for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+            let mut input = request(&source, 2, 1, Diffusion::FloydSteinberg, feedback);
+            input.quantize.matching = matching;
+            // Gray100 has linear light≈.1274, Oklab L≈.5032, CIELAB L≈42.375, and encoded Y≈.3922.
+            assert_eq!(
+                diffuse(input).unwrap().indices.data(),
+                expected,
+                "{matching:?} {feedback:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn placement_reads_unchanged_source_and_scales_only_outgoing_error() {
+    for (gray, expected) in [(80, [0, 0, 0, 0]), (100, [0, 0, 1, 0])] {
+        let source = grays(&[0, gray, gray, gray]);
+        let mut input = request(
+            &source,
+            4,
+            1,
+            Diffusion::FloydSteinberg,
+            DiffusionFeedback::SrgbBytes,
+        );
+        if let DitherPolicy::Diffusion { placement, .. } = &mut input.dither {
+            *placement = Placement::Adaptive {
+                radius: 1,
+                threshold: 5.0,
+                softness: 0.0,
+            };
+        }
+        // Source contrast at x=2 is zero despite incoming error. At gray100 that pixel still matches white.
+        assert_eq!(diffuse(input).unwrap().indices.data(), expected);
+    }
+    let source = grays(&[0, 80, 80, 80]);
+    assert_eq!(
+        diffuse(request(
+            &source,
+            4,
+            1,
+            Diffusion::FloydSteinberg,
+            DiffusionFeedback::SrgbBytes
+        ))
+        .unwrap()
+        .indices
+        .data(),
+        [0, 0, 0, 1]
+    );
+}
+
+#[test]
+fn byte_feedback_placement_uses_matching_space_and_includes_hidden_rgb() {
+    let palette = [
+        BW[0],
+        PaletteEntry::Color { rgb: [100; 3] },
+        PaletteEntry::Transparent {},
+    ];
+    for (hidden, expected) in [(0, [2, 1, 1]), (255, [2, 1, 0])] {
+        let source = [hidden, hidden, hidden, 0, 80, 80, 80, 255, 80, 80, 80, 255];
+        let mut input = request(
+            &source,
+            3,
+            1,
+            Diffusion::FloydSteinberg,
+            DiffusionFeedback::SrgbBytes,
+        );
+        input.quantize.palette = &palette;
+        input.quantize.matching = MatchPolicy::LinearRgbEuclidean;
+        if let DitherPolicy::Diffusion { placement, .. } = &mut input.dither {
+            *placement = Placement::Adaptive {
+                radius: 1,
+                threshold: 5.0,
+                softness: 0.0,
+            };
+        }
+        // Hidden black gives linear contrast≈3%, not encoded contrast≈11.76%; hidden white gives≈34.49%.
+        assert_eq!(diffuse(input).unwrap().indices.data(), expected);
+    }
+}
+
+#[test]
+fn compositing_and_transparent_only_metadata_survive_the_complete_call() {
+    let source = [200, 100, 50, 128];
+    let palette = [
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [100, 50, 25] },
+        PaletteEntry::Color {
+            rgb: [100, 50, 152],
+        },
+    ];
+    for (alpha, expected) in [
+        (AlphaPolicy::Premultiplied, [1]),
+        (AlphaPolicy::Matte { rgb: [0, 0, 255] }, [2]),
+    ] {
+        for kernel in KERNELS {
+            for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+                let mut input = request(&source, 1, 1, kernel, feedback);
+                input.quantize.palette = &palette;
+                input.quantize.alpha = alpha;
+                assert_eq!(diffuse(input).unwrap().indices.data(), expected);
+            }
+        }
+    }
+    let palette = vec![PaletteEntry::Transparent {}; 257];
+    let mut input = request(
+        &source,
+        1,
+        1,
+        Diffusion::Atkinson,
+        DiffusionFeedback::Matching,
+    );
+    input.quantize.palette = &palette;
+    let result = diffuse(input).unwrap();
+    assert_eq!(result.indices.data(), [0]);
+    assert_eq!(result.palette.transparent_index, Some(0));
+    assert_eq!(result.palette.rgba, vec![0; 1024]);
+    assert_eq!(
+        result
+            .warnings
+            .iter()
+            .map(|warning| warning.code)
+            .collect::<Vec<_>>(),
+        [WarningCode::PaletteTruncated, WarningCode::TransparentOnly]
+    );
+}
+
+#[test]
+fn complete_diffusion_rejects_wrong_families_and_invalid_settings_without_mutation() {
+    let source = grays(&[100]);
+    let original = source.clone();
+    let mut input = request(
+        &source,
+        1,
+        1,
+        Diffusion::FloydSteinberg,
+        DiffusionFeedback::SrgbBytes,
+    );
+    input.dither = DitherPolicy::None;
+    let error = diffuse(input).unwrap_err();
+    assert_eq!(
+        (error.code, error.path.as_str()),
+        (ErrorCode::UnsupportedOperation, "dither.family")
+    );
+    input = request(
+        &source,
+        1,
+        1,
+        Diffusion::FloydSteinberg,
+        DiffusionFeedback::SrgbBytes,
+    );
+    if let DitherPolicy::Diffusion { strength, .. } = &mut input.dither {
+        *strength = -1.0;
+    }
+    let error = diffuse(input).unwrap_err();
+    assert_eq!(
+        (error.code, error.path.as_str()),
+        (ErrorCode::InvalidSettings, "dither.strength")
+    );
+    input.quantize.version = 2;
+    assert_eq!(diffuse(input).unwrap_err().path, "version");
+    assert_eq!(source, original);
+}
