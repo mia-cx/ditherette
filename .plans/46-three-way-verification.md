@@ -10,7 +10,7 @@ Branch: `impl/v1-s05-verification`. No measurements run in this slice.
 - [x] Extend the existing RGBA verifier to three-way metadata, index, and coordinate comparisons with failure artifacts.
 - [x] Prevent bounded legacy results from promoting accepted baselines.
 - [x] Adapt existing resize subjects and S03 storage, validate deterministic fixtures, and document the S17 handoff.
-- [ ] File an unmerged non-draft PR against the prerequisite join.
+- [x] File an unmerged non-draft PR against the prerequisite join.
 
 ## Acceptance
 
@@ -52,3 +52,7 @@ metadata, and reject a missing production mode without substituting spec.
 No semantic kernel files changed. Combined benchmark tests pass, including the
 guard fixtures. The benchmark Criterion and Wasm bench-subject builds compile;
 all three Rust crates pass formatting. `VERIFICATION.md` records S17's handoff.
+
+Delivered in [PR #96](https://github.com/mia-cx/ditherette/pull/96), non-draft and
+unmerged against `impl/v1-s05-base`. Validated implementation head:
+`1234908aba98383b16dfb0e85ea1c3b38c5f32a2`. This final evidence update changes no code.
