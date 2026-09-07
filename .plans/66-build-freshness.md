@@ -62,3 +62,33 @@ No compiler or Cargo clean command runs in these tests.
 `node --test scripts/prepare-public-benchmark.test.mjs` passes all four tests after the fix.
 `pnpm exec prettier --write scripts/prepare-public-benchmark.mjs scripts/prepare-public-benchmark.test.mjs` formats the two owned scripts.
 `git diff --check` passes. No Rust, Wasm, or public package artifact build ran in this fix worktree.
+
+## Native follow-up
+
+- [x] Add guarded metadata commands and package-scoped native preparation with focused command tests.
+- [x] Document the failed-closed attempt and validate the tooling-only overlay without builds or measurements.
+
+The coordinator reports another shared-target freshness failure after public preparation was fixed.
+Two workers started. Accepted S24 completed 20 samples; the candidate rejected before timing because its embedded revision remained `009b9e37`.
+The candidate checkout was clean at `e218e7a60f5a7d21dcd87f8bea8aab674436254b`.
+Both workers exited, the scoped process audit was empty, and the quiet phase ended.
+The coordinator retains the interrupted attempt and will not reuse its accepted samples.
+This follow-up changes tooling only so identical overlays can apply to accepted and candidate production trees.
+
+`scripts/prepare-native-benchmark.mjs NEW_OUTPUT_DIRECTORY ABSOLUTE_TARGET_DIRECTORY` reads the clean revision and complete source inventory.
+It runs pinned Cargo with package-scoped release cleanup for `ditherette-bench`, `ditherette-bench-api`, and `ditherette-wasm`.
+The following build keeps the recipe `--bins --examples --release --locked` in the same explicit target.
+External dependencies remain cached; no immutable artifact directory is a cleanup target.
+
+Both binaries expose `build-info`, reusing `BuildIdentity::current()` and the existing SHA-256 digest type.
+The command holds `BenchmarkGuard` without requiring quiet attestation and returns before registry or workload initialization.
+Native and browser trial handlers use the same identity constructor without changing timing or processing logic.
+Preparation copies both binaries into a new directory, marks them read-only, and validates their metadata and hashes.
+It checks source bytes again before writing `build-provenance.json`; failure leaves no successful handoff file.
+
+Validation uses injected commands and temporary fake binary files, never a real native build or measurement.
+`node --test scripts/prepare-native-benchmark.test.mjs scripts/prepare-public-benchmark.test.mjs` passes all seven tests.
+Coverage includes exact package/target/build arguments, repeated roles, clean failure, stale revision, dirty status, malformed metadata,
+digest mismatch, executable mutation during probing, existing output refusal, and withheld provenance after failure.
+Rust formatting passes. Rust compilation and actual guarded `build-info` execution remain for the coordinator's fresh artifact builds.
+Pinned compiler and dependency-cache trust still apply; metadata validates observed identity, not arbitrary compiler correctness.
