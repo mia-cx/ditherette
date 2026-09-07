@@ -21,7 +21,7 @@ Untimed conformance covers palette sizes, alpha policies, ties, and error bounda
 Standalone metrics use exact f32 score output, without timed conversions or output allocation.
 Their arithmetic is unchanged, so component timings are coverage rather than an acceleration claim.
 
-Two alternating AB/BA pairs produce at most 276 workers across all cases.
+Two alternating AB/BA pairs produce 276 workers across all cases.
 Each worker uses 20 samples and 50 ms warmup, retaining at least five valid samples.
 The measurement cap is 250 ms, except complete CIEDE2000 calls use 10,000 ms.
 CIEDE2000 scores every palette entry with more arithmetic; its cap allows five valid samples without shrinking the fixture.
@@ -39,4 +39,15 @@ Keep the exact baseline if the candidate loses or has no demonstrated benefit.
 Record raw and compressed Wasm sizes. Any package-size gate still applies.
 One candidate comparison is the target; repeat only noisy or inconclusive evidence within the approved slice budget.
 
-No S25 measurement has run. Score adapters are implemented; final protocol validation precedes artifact preparation.
+## Interrupted preparation and one fresh restart
+
+Attempt 01 started two workers. The accepted S24 worker completed 20 samples.
+The candidate rejected its stale embedded revision before timing; both workers exited and were reaped.
+Those incomplete timings remain in `target/s25-trial-01` and cannot become a fresh baseline.
+
+Shared native build output reused an earlier build-script revision despite the current clean source checkout.
+The restart requires local-package recompilation and an untimed executable identity check before preparing pairs.
+One complete fresh 276-worker comparison is authorized after that infrastructure repair.
+The resulting slice ceiling is 278 launched workers, including the two interrupted workers.
+No algorithm candidate, fixture, sample count, gate, or case matrix changes for this restart.
+If preparation fails again, retain incomplete evidence and investigate before launching another measurement.
