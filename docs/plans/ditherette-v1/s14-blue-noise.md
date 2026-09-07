@@ -43,8 +43,12 @@ The original parameters converge after 45 moves and pass every gate on the first
 Repeated generation returns the exact retained rank array.
 Its little-endian u16 digest is `bcd93746b99ef8ad678ad425f21e1890b4248050b1ea1b382800d7da977e5943`.
 
-Across the five tested occupancies, low-band power is 0.0172..0.0491 of white-noise power.
+Across the five tested occupancies, low-band power is 0.0171..0.0491 of white-noise power.
 High/low mean-power ratios are 25.9..65.3. Peak fractions stay below 0.01; angular coefficients stay below 0.092.
 The raw per-pattern numbers, parameters, and toolchain are retained in `spec/dither/blue_noise/analysis.json`.
 Six focused tests pass, including complete regeneration and negative Bayer/stripe controls; the existing 12 dither fixtures also pass.
 The fixed RGBA8 fixture proves quarter-range scaling and byte rounding independently, including hidden RGB with zero alpha.
+
+Final validation passes all 159 native tests. This count is the sum of the actual `cargo test -- --list` groups.
+Wasm-target compilation, rustfmt, source-array SHA-256 verification, and `git diff --check` pass.
+The tests include offline construction, not benchmark timing. No production code changed.
