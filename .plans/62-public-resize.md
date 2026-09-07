@@ -8,7 +8,7 @@ Historical literal-copy records describe a superseded decision. They do not dire
 - [x] Add reusable fallible capacity reservations for nested plans and scratch. Two focused allocation tests pass.
 - [x] Integrate fallible preparation and caller-owned scratch into landed area/bilinear paths. Six focused tests pass.
 - [x] Expose canonical area/bilinear requests through the bounded Rust processor and private/public package bindings.
-- [ ] Verify original outputs, frozen-reference differences, allocation failures, and public ownership; push the implementation checkpoint.
+- [x] Verify original outputs, frozen-reference differences, allocation failures, and public ownership; push the implementation checkpoint.
 
 ## Boundaries
 
@@ -32,6 +32,8 @@ S22 adds its variants and support discriminator after stacking on this interface
 
 ## Validation
 
+Implementation commit `35169fc0059d53f3166654e7e9a549353f0ac489` is pushed on `impl/v1-s21-area-bilinear`.
+All 287 native tests pass, summed from the actual test-result groups. The restored base remains in ancestry.
 The scalar and pinned threaded package builds pass. The shared budget helper uses the older compiler's supported Option API.
 Fourteen package interface tests, six private ABI tests, and installed-tarball checks in all three engines pass.
 Browsers are Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4. The browser test reports four passing tests including its parent.
