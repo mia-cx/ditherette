@@ -9,7 +9,7 @@ Branch: `impl/v1-s05-verification`. No measurements run in this slice.
 - [x] Add generic typed cases/subjects and one serializable output contract with full identities.
 - [x] Extend the existing RGBA verifier to three-way metadata, index, and coordinate comparisons with failure artifacts.
 - [x] Prevent bounded legacy results from promoting accepted baselines.
-- [ ] Adapt existing resize subjects and S03 storage, validate deterministic fixtures, and document the S17 handoff.
+- [x] Adapt existing resize subjects and S03 storage, validate deterministic fixtures, and document the S17 handoff.
 - [ ] File an unmerged non-draft PR against the prerequisite join.
 
 ## Acceptance
@@ -45,3 +45,10 @@ Every accepted-baseline write or indexed refresh requires complete exact proof;
 all cases validate before replacement. A one-pixel fixture confirms that
 `--allow-correctness-failures` cannot overwrite an accepted artifact with bounded
 non-exact output. Missing verification also fails closed.
+
+Adapter validation: three tests exercise concrete S03 resize requests through
+the existing spec/prod registry, preserve strided indexed storage and complete
+metadata, and reject a missing production mode without substituting spec.
+No semantic kernel files changed. Combined benchmark tests pass, including the
+guard fixtures. The benchmark Criterion and Wasm bench-subject builds compile;
+all three Rust crates pass formatting. `VERIFICATION.md` records S17's handoff.
