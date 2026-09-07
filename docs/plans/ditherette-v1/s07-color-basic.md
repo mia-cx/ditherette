@@ -6,7 +6,7 @@ Branch: `impl/v1-s07-color-basic`. Ownership is limited to the sRGB, linear RGB,
 
 1. [x] Define and test per-pixel forward/inverse equations and RGBA8 reconstruction with unchanged alpha.
 2. [x] Validate inherited color tests, full native tests, Wasm-target compilation, and formatting; record exact evidence.
-3. [ ] File an unmerged stacked PR against S03.
+3. [x] File an unmerged stacked PR against S03.
 
 The per-space pixel helpers accept RGB byte triplets or f32 working triplets. Image inverse adapters accept the working image, corresponding RGBA8 alpha source, and mutable RGBA8 output. Final encoded RGB clips to `[0,1]`; byte ties round upward. Canonical coordinate domains remain unchanged. S08 uses the same reconstruction convention for perceptual spaces; S10 can join dispatch after both dependencies are available.
 
@@ -26,4 +26,4 @@ Tests include primary/neutral vectors, both transfer thresholds, exact byte ties
 
 The f32 references use direct arithmetic and powers. No LUT, approximate conversion, production call, or benchmark process was introduced. Native export smoke tests do not provide performance evidence. Wasm-target compilation is not browser execution; later conformance slices own that coverage.
 
-PR evidence pending.
+PR [#91](https://github.com/mia-cx/ditherette/pull/91) is open and non-draft against S03. Evidence checkpoint: `1ba15ec9d01a0f1ef7d1c8b71124842841a2a439`. The subsequent delivery commit records this PR only. All PRs remain unmerged.
