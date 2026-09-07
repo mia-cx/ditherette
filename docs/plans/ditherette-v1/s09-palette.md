@@ -7,7 +7,7 @@ PR base is `impl/v1-s03-contracts`.
 ## TODOs
 
 - [x] Implement ordered palette preparation, byte-alpha rules, metadata ownership, and focused semantic fixtures.
-- [ ] Validate the complete native suite and Wasm compilation; record the evidence.
+- [x] Validate the complete native suite and Wasm compilation; record the evidence.
 - [ ] Rebase onto the latest S03 branch and file an unmerged, non-draft PR.
 
 ## Semantic evidence
@@ -36,3 +36,12 @@ No production code, benchmarks, aggregate ledger, or root user files change.
 `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_palette --test spec_contract`
 passes all ten palette tests and eight contract tests.
 The first run exposed the transparent unit variant's extra-field acceptance; the strict empty-struct variant fixes it.
+
+Implementation commit `841334cb` passes:
+
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: 134 native tests, zero failures.
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`: passes.
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all -- --check`: passes.
+- `git diff --check`: passes.
+
+These are correctness and compilation checks. No benchmark process or browser timing run was started.
