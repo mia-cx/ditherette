@@ -58,7 +58,7 @@ The native fixtures already cover seven inverse/image adapters, wide reconstruct
 945 field/space/strength/placement/shape combinations with reversed row scheduling, and 630 complete quantize compositions.
 No benchmark, public integration, allocation wrapper, or optimization ran during this phase.
 
-## Proposed next ownership, awaiting assignment
+## Expanded ownership plan
 
 1. Add bounded `prod/pipeline/perturb.rs` and separable composition beside existing quantize ownership.
    Reuse `Allocator`, allocation-free `Failure`, the current field row callback, and `PreparedQuantizer`.
@@ -79,8 +79,8 @@ The coordinator assigned all three ownership items on the existing S25 baseline 
 S01 owns benchmark protocol/adapters separately; the coordinator owns integration and tracking.
 
 - [x] Add bounded native perturb and separable composition with exact budgets, reservation/copy/completion failure recovery, and frozen output checks; commit independently.
-- [ ] Add private caught Wasm bindings and typed public methods, validation, lifecycle/error fixtures; commit the public baseline.
-- [ ] Validate both artifact builds and installed-package Chromium/Firefox/WebKit behavior, then record final evidence.
+- [x] Add private caught Wasm bindings and typed public methods, validation, lifecycle/error fixtures; commit the public baseline.
+- [x] Validate both artifact builds and installed-package Chromium/Firefox/WebKit behavior, then record final evidence.
 
 The bounded/public baseline retains the literal per-pixel packed Converter construction.
 A call-owned Converter is a separate exact preparation candidate after that baseline, never an unrecorded baseline change or assumed speedup.
@@ -93,3 +93,46 @@ The four new ownership fixtures cover 42 perturb requests and 210 separable froz
 exact/one-under budgets, all two/three buffer reservation failures, actual overcapacity, copy/completion failures, recovery, disposal, and unsupported/nonfinite settings.
 Field working-capacity accounting includes one temporary packed Converter and its byte tables in addition to any prepared quantizer.
 The kernel still creates that converter per source-color read. No conversion reuse or mathematical change is included.
+
+### Public baseline validation
+
+The public methods are perturb and ditherAndQuantize with the frozen version-1 field and separable recipe shapes.
+BlueNoise remains unsupported. All fifteen S25 matching tags retain the selected all-mode baseline implementation.
+The rejected S25 metric-dispatch candidate is not an ancestor or an implementation dependency.
+
+The private binding signatures and appended error paths are documented in src/wasm/fields.md.
+Both reuse the existing caught input/result helpers and module-owned lifecycle; direct quantize parsing is extracted without semantic changes.
+The package's test:interface command passes 24 tests, including 91 frozen field vectors and 1,365 complete RGBA8-boundary comparisons.
+The three private test files pass 11 tests, including 512 repeated field success/failure cycles with constant live handles and memory capacity.
+New public fixtures cover exact/one-under budgets, every source/result-copy failure, recovery, canonical tags, reentry, disposal, and durable ownership.
+The first private test run exposed a wrong expected status in the test, not a runtime mismatch. The fixture now uses the existing status table.
+
+Both official scalar and threaded artifacts compiled this worktree during the initial public implementation, and package TypeScript compilation passed.
+Installed-package three-engine validation and final scoped native/guard checks follow this checkpoint; their fixtures are committed with the public baseline.
+The 91-vector fixture comes from generate_field_conformance.rs, which calls only frozen spec functions, never production.
+The assigned shared target data stays intact. This worktree has only scalar/threads child symlinks inside its ignored target directory.
+
+### Final baseline checkpoint and evidence
+
+The bounded native checkpoint is `b87d965dbe6c59fe1679e008245513554f117533`.
+The complete public baseline is `75ffe0f483927d53e4e94f55d3d82938728b4464`, pushed before final browser validation.
+No Converter reuse, matcher specialization, or benchmark measurement is included.
+
+Commands run from this worktree:
+
+- `pnpm --filter ditherette build` passed scalar and threaded compilation, staging, and TypeScript compilation.
+  Both Rust builds explicitly compiled this worktree's crate. The scalar build uses pinned Rust 1.97.0; threaded uses the repository's pinned nightly.
+- `pnpm --filter ditherette test:interface` passed all 24 tests and the compile-time public type fixtures.
+- `node --test crates/ditherette-wasm/tests/private_processor.mjs crates/ditherette-wasm/tests/private_quantize.mjs crates/ditherette-wasm/tests/private_fields.mjs` passed all 11 tests.
+- `CARGO_TARGET_DIR=/home/mia/mia-cx/ditherette/.worktrees/v1-s24-quantize/crates/ditherette-wasm/target cargo test --locked --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_fields --test prod_processor_fields --test prod_processor_quantize` passed all 13 scoped native tests after the public checkpoint changes.
+- `DITHERETTE_TEST_WEBKIT_EXECUTABLE=/tmp/ditherette-webkit-libs.2dS6Yu/webkit pnpm --filter ditherette test:browser` passed all three engine subtests, four reported tests including the container.
+  Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 each passed 91 frozen field vectors, 1,365 explicit RGBA8-boundary compositions, and five caught-copy failures with recovery.
+  The same installed tarball also passed the existing resize/quantize, inert-import, initialization, isolation, and ownership checks.
+
+The separate trusted S18 guard passed native/Wasm/threaded isolation on the final public baseline with the unchanged frozen digest above.
+`cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all --check` and `git diff --check` passed.
+The diff from literal `e156cfbf` through the public baseline is empty for prod/color, prod/dither, spec, and image.
+The 512-cycle private fixture includes both result shapes, every caught copy phase, frozen sink failures, recursive processing/disposal, and successful recovery.
+All validation processes exited and browser fixtures closed their owned browser/server processes.
+
+Benchmark registration remains coordinator-owned. Any call-owned Converter reuse starts from this recorded baseline as a separate candidate.

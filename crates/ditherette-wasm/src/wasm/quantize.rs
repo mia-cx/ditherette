@@ -40,7 +40,7 @@ extern "C" {
     ) -> Result<(), JsValue>;
 }
 
-const PALETTE_SLOTS: usize = 257;
+pub(super) const PALETTE_SLOTS: usize = 257;
 const TRANSPARENT: f64 = 16_777_216.0;
 
 /// Compact palette codes are wrapper-owned RGB integers or the transparent sentinel.
@@ -74,61 +74,15 @@ pub fn private_quantize(
             ErrorCode::InvalidImage,
             ErrorPath::SourceHeight,
         )?;
-        let matching = match matching {
-            0.0 => MatchPolicy::SrgbEuclidean,
-            1.0 => MatchPolicy::LinearRgbEuclidean,
-            2.0 => MatchPolicy::OklabEuclidean,
-            3.0 => MatchPolicy::CielabEuclidean,
-            4.0 => MatchPolicy::YcbcrEuclidean,
-            5.0 => MatchPolicy::SrgbCompuphase,
-            6.0 => MatchPolicy::SrgbRec601,
-            7.0 => MatchPolicy::SrgbRec709,
-            8.0 => MatchPolicy::OklchEuclidean,
-            9.0 => MatchPolicy::OklchCircularHue,
-            10.0 => MatchPolicy::OklchHueArc,
-            11.0 => MatchPolicy::CielabCiede2000,
-            12.0 => MatchPolicy::CielchEuclidean,
-            13.0 => MatchPolicy::CielchCircularHue,
-            14.0 => MatchPolicy::CielchHueArc,
-            _ => {
-                return Err(Failure::new(
-                    ErrorCode::UnsupportedOperation,
-                    ErrorPath::Matching,
-                ))
-            }
-        };
-        let alpha = match alpha_mode {
-            0.0 if matte == 0.0 => AlphaPolicy::Preserve { threshold },
-            1.0 if threshold == 0.0 && matte == 0.0 => AlphaPolicy::Premultiplied {},
-            2.0 if threshold == 0.0 => AlphaPolicy::Matte {
-                rgb: rgb(matte)
-                    .ok_or(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Alpha))?,
-            },
-            _ => return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Alpha)),
-        };
-        let count = palette_length(palette).map_err(|_| invalid_palette())?;
-        if !count.is_finite()
-            || count.fract() != 0.0
-            || !(1.0..=PALETTE_SLOTS as f64).contains(&count)
-        {
-            return Err(invalid_palette());
-        }
+        let matching = parse_matching(matching)?;
+        let alpha = parse_alpha(alpha_mode, threshold, matte)?;
         let mut entries = [PaletteEntry::Transparent {}; PALETTE_SLOTS];
-        for (index, entry) in entries[..count as usize].iter_mut().enumerate() {
-            let value = palette_entry(palette, index as u32).map_err(|_| invalid_palette())?;
-            *entry = if value == TRANSPARENT {
-                PaletteEntry::Transparent {}
-            } else {
-                PaletteEntry::Color {
-                    rgb: rgb(value).ok_or_else(invalid_palette)?,
-                }
-            };
-        }
+        let count = read_palette(palette, &mut entries)?;
         processor.quantize(
             QuantizeRequest {
                 source_width: width,
                 source_height: height,
-                palette: &entries[..count as usize],
+                palette: &entries[..count],
                 alpha,
                 matching,
             },
@@ -139,9 +93,9 @@ pub fn private_quantize(
     result.map_or_else(status, |_| 0)
 }
 
-struct JsQuantizeBoundary<'a> {
-    input: &'a Uint8Array,
-    result_sink: &'a JsValue,
+pub(super) struct JsQuantizeBoundary<'a> {
+    pub(super) input: &'a Uint8Array,
+    pub(super) result_sink: &'a JsValue,
 }
 impl QuantizeBoundary for JsQuantizeBoundary<'_> {
     type Output = ();
@@ -201,4 +155,68 @@ fn rgb(value: f64) -> Option<[u8; 3]> {
     }
     let value = value as u32;
     Some([(value >> 16) as u8, (value >> 8) as u8, value as u8])
+}
+
+/// Shared private numeric matching tags; no public settings or allocation are introduced.
+pub(super) fn parse_matching(matching: f64) -> Result<MatchPolicy, Failure> {
+    Ok(match matching {
+        0.0 => MatchPolicy::SrgbEuclidean,
+        1.0 => MatchPolicy::LinearRgbEuclidean,
+        2.0 => MatchPolicy::OklabEuclidean,
+        3.0 => MatchPolicy::CielabEuclidean,
+        4.0 => MatchPolicy::YcbcrEuclidean,
+        5.0 => MatchPolicy::SrgbCompuphase,
+        6.0 => MatchPolicy::SrgbRec601,
+        7.0 => MatchPolicy::SrgbRec709,
+        8.0 => MatchPolicy::OklchEuclidean,
+        9.0 => MatchPolicy::OklchCircularHue,
+        10.0 => MatchPolicy::OklchHueArc,
+        11.0 => MatchPolicy::CielabCiede2000,
+        12.0 => MatchPolicy::CielchEuclidean,
+        13.0 => MatchPolicy::CielchCircularHue,
+        14.0 => MatchPolicy::CielchHueArc,
+        _ => {
+            return Err(Failure::new(
+                ErrorCode::UnsupportedOperation,
+                ErrorPath::Matching,
+            ))
+        }
+    })
+}
+
+pub(super) fn parse_alpha(
+    alpha_mode: f64,
+    threshold: f64,
+    matte: f64,
+) -> Result<AlphaPolicy, Failure> {
+    Ok(match alpha_mode {
+        0.0 if matte == 0.0 => AlphaPolicy::Preserve { threshold },
+        1.0 if threshold == 0.0 && matte == 0.0 => AlphaPolicy::Premultiplied {},
+        2.0 if threshold == 0.0 => AlphaPolicy::Matte {
+            rgb: rgb(matte).ok_or(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Alpha))?,
+        },
+        _ => return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Alpha)),
+    })
+}
+
+pub(super) fn read_palette(
+    palette: &JsValue,
+    entries: &mut [PaletteEntry; PALETTE_SLOTS],
+) -> Result<usize, Failure> {
+    let count = palette_length(palette).map_err(|_| invalid_palette())?;
+    if !count.is_finite() || count.fract() != 0.0 || !(1.0..=PALETTE_SLOTS as f64).contains(&count)
+    {
+        return Err(invalid_palette());
+    }
+    for (index, entry) in entries[..count as usize].iter_mut().enumerate() {
+        let value = palette_entry(palette, index as u32).map_err(|_| invalid_palette())?;
+        *entry = if value == TRANSPARENT {
+            PaletteEntry::Transparent {}
+        } else {
+            PaletteEntry::Color {
+                rgb: rgb(value).ok_or_else(invalid_palette)?,
+            }
+        };
+    }
+    Ok(count as usize)
 }
