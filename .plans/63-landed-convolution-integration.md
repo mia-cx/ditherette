@@ -78,7 +78,7 @@ The only conflict was S21's earlier helper plan versus its completed record; ret
 
 - [x] Extend prepared dispatch, private ABI, and public validation/types for bicubic, Lanczos2, and Lanczos3; verify native output and allocation failures.
 - [x] Build scalar/threaded package artifacts and verify interface, private ABI, and installed tarball across Chromium, Firefox, and WebKit.
-- [ ] Record checks and frozen identity, push clean checkpoints, and drain all owned processes.
+- [x] Record checks and frozen identity, push clean checkpoints, and drain all owned processes.
 
 Keep algorithm tags 0/1/2 unchanged; append bicubic 3, Lanczos2 4, and Lanczos3 5.
 Add support after anchor in the private ABI. Encode fixed as 0 and scale-aware as 1 for convolution modes.
@@ -133,3 +133,7 @@ The trusted freeze guard retains the revision and content digest recorded above;
 Initial interface validation caught misplaced negative-type-test directives after expanding the union; those directives now sit on the rejected fields.
 The alpha fixture initially assumed 128 for every mode; the legacy check above established the existing Lanczos3 result.
 No unresolved check failure remains. No performance trial ran; the coordinator owns fresh artifacts and comparative acceptance evidence.
+
+Public code `f2a38562` and validation record `89f87985` are pushed on `impl/v1-s22-convolution`.
+All owned build/test/browser sessions exited. A scoped `/proc` working-directory check found no remaining process in this worktree.
+The worktree is clean at handoff. The coordinator can join this branch for fresh native/public comparative trials.
