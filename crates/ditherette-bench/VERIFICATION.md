@@ -58,16 +58,24 @@ every result before replacing any file. `--allow-correctness-failures` permits
 diagnostic runs but cannot promote their failing results. Historical artifacts
 without the new exact proof cannot be promoted through this path.
 
-## S17 adapter handoff
+## Completed reference adapters
+
+S17's [registered reference subjects](REFERENCE-SUBJECTS.md) expose all five
+typed methods and seven f32 color/inverse pairs through the existing registry.
+The references remain pre-freeze until S18 validates the frozen checkpoint.
+
+## Production and freeze handoff
 
 1. Use concrete completed request types as `P`. Bind reference, accepted, and
    candidate adapters to the actual artifact identities and shared case identity.
 2. Reuse `bench_subjects::verification::indexed_output` and `rgba_output` for
-   public storage. `reference_resize` and `production_resize` already call the
-   existing resize registry. An unavailable production mode returns an error.
-3. Add color inverse rendering only through the actual completed inverse recipe.
-   Until then, packed coordinate comparisons retain raw data without invented
-   RGBA previews. Keep each result's explicit working-space identity.
+   public storage. `reference_resize` calls the complete spec resize request;
+   `production_resize` selects the existing production registry. Missing production
+   modes return errors, not substituted references.
+3. Render color reviews through the inverse matching the registered arithmetic.
+   The completed f32 pairs provide their actual inverses. A future adapter with
+   different arithmetic must supply its own matching inverse. Keep explicit space
+   identity and bind every independent stage's space in the settings digest.
 4. Set `ReferenceState::Frozen` only after checking the named reference commit
    and frozen content checkpoint against the tested reference artifact. Run all
    required cases through `verify_and_preserve`; retain every failed bundle.
