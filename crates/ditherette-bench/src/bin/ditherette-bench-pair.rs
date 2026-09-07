@@ -1,6 +1,9 @@
 //! External coordinator. It never owns a benchmark execution slot itself.
 
-use ditherette_bench::paired::{coordinator, Experiment, Gate, PreparedPair};
+use ditherette_bench::{
+    browser_assets::{self, BrowserSources},
+    paired::{coordinator, Experiment, Gate, PreparedPair},
+};
 use std::{env, fs, io, path::Path, process::ExitCode};
 
 fn main() -> ExitCode {
@@ -45,12 +48,33 @@ fn run() -> io::Result<bool> {
             coordinator::prepare(experiment, (Path::new(accepted), accepted_revision), (Path::new(candidate), candidate_revision), Path::new(directory))?;
             Ok(true)
         }
+        [command, install, libraries, directory] if command == "prepare-webkit" => {
+            println!("{}", browser_assets::prepare_webkit(Path::new(install), Path::new(libraries), Path::new(directory))?.display());
+            Ok(true)
+        }
+        [command, source, revision] if command == "check-browser-source" => {
+            let source = serde_json::from_slice(&fs::read(source)?).map_err(io::Error::other)?;
+            browser_assets::validate_source_revision(&source, revision)?;
+            Ok(true)
+        }
+        [command, experiment, accepted, accepted_revision, candidate, candidate_revision, sources, directory] if command == "prepare-browser" => {
+            let experiment: Experiment = serde_json::from_slice(&fs::read(experiment)?).map_err(io::Error::other)?;
+            let sources: BrowserSources = serde_json::from_slice(&fs::read(sources)?).map_err(io::Error::other)?;
+            browser_assets::validate_source_revision(&sources.accepted, accepted_revision)?;
+            browser_assets::validate_source_revision(&sources.candidate, candidate_revision)?;
+            let directory = Path::new(directory);
+            fs::create_dir(directory)?;
+            let browser = browser_assets::prepare_assets(&sources, &directory.join("assets"))?;
+            coordinator::prepare_with_browser(experiment, (Path::new(accepted), accepted_revision), (Path::new(candidate), candidate_revision), &directory.join("pair"), browser)?;
+            println!("{}", directory.join("pair/prepared.json").display());
+            Ok(true)
+        }
         [command, prepared, directory] if command == "run" => {
             let prepared: PreparedPair = serde_json::from_slice(&fs::read(prepared)?).map_err(io::Error::other)?;
-            let report = coordinator::run(&prepared, Path::new(directory))?;
+            let report = coordinator::run_with_browser(&prepared, Path::new(directory), browser_assets::validate_trial_assets)?;
             println!("{}", serde_json::to_string_pretty(&report).map_err(io::Error::other)?);
             Ok(report.gate == Gate::Pass)
         }
-        _ => Err(io::Error::other("usage: ditherette-bench-pair control-plan NEW_JSON HOST_NOTES | prepare EXPERIMENT ACCEPTED FULL_REV CANDIDATE FULL_REV NEW_DIRECTORY | run PREPARED_JSON NEW_RESULTS_DIRECTORY (requires DITHERETTE_BENCH_QUIET=1)")),
+        _ => Err(io::Error::other("usage: ditherette-bench-pair control-plan NEW_JSON HOST_NOTES | prepare EXPERIMENT ACCEPTED FULL_REV CANDIDATE FULL_REV NEW_DIRECTORY | prepare-webkit INSTALL PRIVATE_LIBRARIES NEW_DIRECTORY | prepare-browser EXPERIMENT ACCEPTED FULL_REV CANDIDATE FULL_REV SOURCES_JSON NEW_DIRECTORY | run PREPARED_JSON NEW_RESULTS_DIRECTORY (requires DITHERETTE_BENCH_QUIET=1)")),
     }
 }
