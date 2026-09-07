@@ -1,8 +1,10 @@
 # S25 measurement budget
 
-Measure all-mode baseline `0085972a05a3dbdbbef6d47351d6e37bdd8625d2` against dispatch candidate `230046ff`.
+Measure all-mode baseline `0085972a05a3dbdbbef6d47351d6e37bdd8625d2` against dispatch candidate `230046ff` for new modes.
+For the five existing Euclidean modes, compare the delivered S24 parent against that candidate instead.
+This checks parent regressions directly, rather than treating the unselected all-mode baseline as already accepted for existing modes.
 Resolve the candidate's full SHA from Git before preparing artifacts.
-Both roles must include the same benchmark protocol and retain their respective production bytes.
+Both roles must use compatible verified benchmark protocols and retain their respective production bytes.
 The older S24 literal quantizer is not the accepted role for this experiment.
 
 ## Cases
@@ -12,6 +14,8 @@ The older S24 literal quantizer is not the accepted role for this experiment.
 - Seven native score-batch controls cover Euclidean, chord, arc, CompuPhase, Rec.601, Rec.709, and CIEDE2000.
 
 Complete calls run natively and through the installed package in Chromium, Firefox, and WebKit.
+Prepare separate parent-control and new-mode experiments because their accepted artifacts differ.
+The five parent controls consume 80 workers. Ten new modes, two conversions, and seven metric controls consume 196 workers.
 Use the existing 128×96 fixture and 64-entry palette recipe from S24.
 Untimed conformance covers palette sizes, alpha policies, ties, and error boundaries; do not multiply the timing matrix by them.
 Standalone metrics use exact f32 score output, without timed conversions or output allocation.
