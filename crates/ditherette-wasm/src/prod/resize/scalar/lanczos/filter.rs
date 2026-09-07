@@ -2,7 +2,7 @@
 
 use std::{f64::consts::PI, num::NonZeroU32};
 
-use super::super::convolution_candidate::ReconstructionKernel;
+use super::super::convolution::ReconstructionKernel;
 
 // TODO(perf:micro, rank=35, after perf:layout lanczos-tap-pruning): Test a
 // bounded Lanczos weight approximation for plan construction, such as f32 math

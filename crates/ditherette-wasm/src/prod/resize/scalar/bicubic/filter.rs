@@ -1,6 +1,6 @@
 //! Catmull-Rom bicubic filter weights.
 
-use super::super::convolution_candidate::ReconstructionKernel;
+use super::super::convolution::ReconstructionKernel;
 
 pub(super) const CATMULL_ROM: CatmullRom = CatmullRom;
 

@@ -1,4 +1,3 @@
-//! Inherited optimized candidate. Historical performance notes below are not S22 promotion evidence.
 //! Packed RGBA8 production Lanczos resize.
 //!
 //! Lanczos is represented as a windowed-sinc reconstruction kernel applied
@@ -10,7 +9,7 @@ use std::num::NonZeroU32;
 
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
-use super::convolution_candidate::{
+use super::convolution::{
     resize_convolution_rgba8_into, resize_convolution_rgba8_rows_into,
     resize_convolution_rgba8_rows_with_plan_into, resize_convolution_rgba8_with_plan_into,
     ConvolutionResizePlan, ResizeAnchor, SupportPolicy,

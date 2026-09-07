@@ -1,4 +1,3 @@
-//! Inherited optimized candidate. Historical performance notes below are not S22 promotion evidence.
 //! Packed RGBA8 production convolution resize.
 //!
 //! This is the shared production engine for finite-support separable filters

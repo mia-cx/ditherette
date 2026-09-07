@@ -309,12 +309,12 @@ fn subject_for_filter(filter: &str) -> &str {
         "nearest" => "candidate:resize:nearest:legacy",
         "area" => "prod:resize:area:scalar",
         "bilinear" => "prod:resize:bilinear:scalar",
-        "bicubic" => "candidate:resize:bicubic:catmull-rom",
-        "bicubic-scale-aware" => "candidate:resize:bicubic:catmull-rom-scale-aware",
-        "lanczos2" => "candidate:resize:lanczos2:fixed",
-        "lanczos2-scale-aware" => "candidate:resize:lanczos2:scale-aware",
-        "lanczos3" => "candidate:resize:lanczos3:fixed",
-        "lanczos3-scale-aware" => "candidate:resize:lanczos3:scale-aware",
+        "bicubic" => "prod:resize:bicubic:catmull-rom",
+        "bicubic-scale-aware" => "prod:resize:bicubic:catmull-rom-scale-aware",
+        "lanczos2" => "prod:resize:lanczos2:fixed",
+        "lanczos2-scale-aware" => "prod:resize:lanczos2:scale-aware",
+        "lanczos3" => "prod:resize:lanczos3:fixed",
+        "lanczos3-scale-aware" => "prod:resize:lanczos3:scale-aware",
         other => other,
     }
 }
@@ -630,12 +630,12 @@ fn run_subject_rows(
         image::{ImageView, ImageViewMut, Rgba8, RowStride},
         prod::resize::scalar::{
             area::resize_area_rgba8_rows_into,
-            bicubic_candidate::resize_bicubic_rgba8_rows_into,
+            bicubic::resize_bicubic_rgba8_rows_into,
             bilinear::{
                 alignment::ResizeAnchor as BilinearAnchor, resize_bilinear_rgba8_rows_into,
             },
-            convolution_candidate::{ResizeAnchor as ConvolutionAnchor, SupportPolicy},
-            lanczos_candidate::{resize_lanczos2_rgba8_rows_into, resize_lanczos3_rgba8_rows_into},
+            convolution::{ResizeAnchor as ConvolutionAnchor, SupportPolicy},
+            lanczos::{resize_lanczos2_rgba8_rows_into, resize_lanczos3_rgba8_rows_into},
             nearest_candidate::{
                 alignment::ResizeAnchor as NearestAnchor, resize_nearest_rgba8_rows_into,
             },

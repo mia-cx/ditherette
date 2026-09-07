@@ -98,15 +98,9 @@
 
 pub mod area;
 pub mod bicubic;
-/// Inherited optimization, not the copied S22 production baseline.
-pub mod bicubic_candidate;
 pub mod bilinear;
 pub mod convolution;
-/// Inherited optimization, not the copied S22 production baseline.
-pub mod convolution_candidate;
 pub mod lanczos;
-/// Inherited optimization, not the copied S22 production baseline.
-pub mod lanczos_candidate;
 pub mod nearest;
 /// Inherited optimized implementation, pending fresh baseline comparison.
 pub mod nearest_candidate;
