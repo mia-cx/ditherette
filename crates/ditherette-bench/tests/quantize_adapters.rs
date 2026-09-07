@@ -58,6 +58,16 @@ fn full_native_quantize_call_matches_frozen_indices_palette_alpha_and_warnings()
         MatchPolicy::OklabEuclidean,
         MatchPolicy::CielabEuclidean,
         MatchPolicy::YcbcrEuclidean,
+        MatchPolicy::SrgbCompuphase,
+        MatchPolicy::SrgbRec601,
+        MatchPolicy::SrgbRec709,
+        MatchPolicy::OklchEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::OklchHueArc,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchEuclidean,
+        MatchPolicy::CielchCircularHue,
+        MatchPolicy::CielchHueArc,
     ] {
         for count in [16, 64, 256] {
             for alpha in [
@@ -106,6 +116,8 @@ fn packed_forward_controls_keep_exact_coordinates_and_byte_alpha() {
         WorkingSpace::Oklab,
         WorkingSpace::Cielab,
         WorkingSpace::Ycbcr,
+        WorkingSpace::Oklch,
+        WorkingSpace::Cielch,
     ] {
         let output = compare(
             NativeOperation::ColorForward { space },

@@ -26,11 +26,6 @@ impl NativeOperation {
         match self {
             Self::Quantize { settings } => settings.reference_request(source, rgba),
             Self::ColorForward { space } => {
-                if matches!(space, WorkingSpace::Oklch | WorkingSpace::Cielch) {
-                    return Err(io::Error::other(
-                        "forward controls support five ordinary spaces only",
-                    ));
-                }
                 let request = ReferenceRequest::Color {
                     source: ditherette_wasm::spec::contract::request::Source {
                         width: source.width,

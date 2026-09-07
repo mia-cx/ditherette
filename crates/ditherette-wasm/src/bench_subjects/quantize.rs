@@ -49,11 +49,16 @@ pub fn quantize_request<'a>(
         reference::MatchPolicy::OklabEuclidean => request::MatchPolicy::OklabEuclidean,
         reference::MatchPolicy::CielabEuclidean => request::MatchPolicy::CielabEuclidean,
         reference::MatchPolicy::YcbcrEuclidean => request::MatchPolicy::YcbcrEuclidean,
-        _ => {
-            return Err(BenchSubjectError::new(
-                "quantize adapter supports ordinary Euclidean spaces only",
-            ))
-        }
+        reference::MatchPolicy::SrgbCompuphase => request::MatchPolicy::SrgbCompuphase,
+        reference::MatchPolicy::SrgbRec601 => request::MatchPolicy::SrgbRec601,
+        reference::MatchPolicy::SrgbRec709 => request::MatchPolicy::SrgbRec709,
+        reference::MatchPolicy::OklchEuclidean => request::MatchPolicy::OklchEuclidean,
+        reference::MatchPolicy::OklchCircularHue => request::MatchPolicy::OklchCircularHue,
+        reference::MatchPolicy::OklchHueArc => request::MatchPolicy::OklchHueArc,
+        reference::MatchPolicy::CielabCiede2000 => request::MatchPolicy::CielabCiede2000,
+        reference::MatchPolicy::CielchEuclidean => request::MatchPolicy::CielchEuclidean,
+        reference::MatchPolicy::CielchCircularHue => request::MatchPolicy::CielchCircularHue,
+        reference::MatchPolicy::CielchHueArc => request::MatchPolicy::CielchHueArc,
     };
     Ok(request::QuantizeRequest {
         version: input.version,
@@ -82,9 +87,8 @@ pub fn ordinary_space(space: reference::WorkingSpace) -> Result<OrdinarySpace, B
         Oklab => Ok(OrdinarySpace::Oklab),
         Cielab => Ok(OrdinarySpace::Cielab),
         Ycbcr => Ok(OrdinarySpace::Ycbcr),
-        _ => Err(BenchSubjectError::new(
-            "forward adapter requires an ordinary space",
-        )),
+        Oklch => Ok(OrdinarySpace::Oklch),
+        Cielch => Ok(OrdinarySpace::Cielch),
     }
 }
 
@@ -96,9 +100,8 @@ pub fn color_subject(space: reference::WorkingSpace) -> Result<&'static str, Ben
         Oklab => Ok("prod:color:oklab:packed-forward"),
         Cielab => Ok("prod:color:cielab:packed-forward"),
         Ycbcr => Ok("prod:color:ycbcr:packed-forward"),
-        _ => Err(BenchSubjectError::new(
-            "forward adapter requires an ordinary space",
-        )),
+        Oklch => Ok("prod:color:oklch:packed-forward"),
+        Cielch => Ok("prod:color:cielch:packed-forward"),
     }
 }
 
@@ -112,12 +115,14 @@ pub(super) fn subjects() -> Vec<BenchSubject> {
         |input| Ok(indexed_output(&quantize(quantize_request(input)?)?)),
     )];
     use reference::WorkingSpace::*;
-    let spaces: [(reference::WorkingSpace, &str, super::reference::ReferenceFn); 5] = [
+    let spaces: [(reference::WorkingSpace, &str, super::reference::ReferenceFn); 7] = [
         (Srgb, "srgb", |r| color(r, Srgb)),
         (LinearRgb, "linear-rgb", |r| color(r, LinearRgb)),
         (Oklab, "oklab", |r| color(r, Oklab)),
         (Cielab, "cielab", |r| color(r, Cielab)),
         (Ycbcr, "ycbcr", |r| color(r, Ycbcr)),
+        (Oklch, "oklch", |r| color(r, Oklch)),
+        (Cielch, "cielch", |r| color(r, Cielch)),
     ];
     for (space, name, run) in spaces {
         subjects.push(subject(
