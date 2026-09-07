@@ -13,9 +13,9 @@ Existing kernels and helpers stay production. Only allocation/public integration
 ## TODOs
 
 - [x] Verify restored ancestry and green restoration checks; dispatch isolated owners.
-- [ ] Register public area/bilinear and convolution benchmark recipes using actual TypeScript and frozen Rust.
-- [ ] Join validated slice implementations and verify public ownership, memory failures, and installed package behavior.
-- [ ] Prepare immutable accepted/candidate artifacts and record a bounded filter-specific measurement budget.
+- [x] Register public area/bilinear and convolution benchmark recipes using actual TypeScript and frozen Rust.
+- [x] Join validated slice implementations and verify public ownership, memory failures, and installed package behavior.
+- [x] Prepare immutable accepted/candidate artifacts and record a bounded filter-specific measurement budget.
 - [ ] Drain agents/builds/tests, run exclusive measurements, retain all results, and file unmerged slice PRs.
 
 ## Fixed measurement budget
@@ -43,6 +43,31 @@ Its owner reports 287 native, 14 interface, six private ABI, and all three insta
 Both scalar/threaded builds and the trusted frozen guard pass. Independent allocation/dispatch review found no defects.
 S22 native support `53eaf013` passes nine focused tests, including 378 byte-exact landed-output comparisons.
 S22 public integration follows the S21 join. Actual measurements remain pending.
+
+S22 public checkpoint `f0976601` and diagnostic fixes join at measured candidate `1761705e2c6935544b0232427d48129059d89615`.
+The combined core passes 296 native tests and the trusted frozen guard.
+The public build includes scalar and threaded artifacts. The installed benchmark-adapter fixtures pass all three engines.
+The tarball SHA-256 is `91729b064dc856fa3cac256369e73f98a41b847aed95f568cf32e2a4a544ac5e`.
+Native accepted revision `e64ee3f43d547edd2424c34392e01990c2442c5d` contains restored production unchanged from `467542f4`.
+Its only changes are native benchmark identity validation, shared with the candidate. Both executables were freshly built.
+Immutable native pairs and six browser snapshots are under `target/resize-trial-01`.
+
+Read-only review found two benchmark defects, both fixed before measurement.
+Native support variants now have separate semantic identities and use existing registry oracle mappings.
+An unstable diagnostic result retains both actual images and fails before publishing a trial result.
+Seven library/binary/example tests, nineteen paired/worker integration tests, and thirteen JS fixtures pass.
+
+## Website semantic differences
+
+The untimed adapter checks exposed existing differences, not new production approximations.
+For opaque red values `[0, 64, 128, 192]` reduced from four pixels to three:
+
+- Website area returns `[21, 96, 171]`. Its inclusive box uses equal weights; the package overlap filter returns `[16, 96, 176]`.
+- Website bilinear returns `[11, 96, 181]`. Its two-tap reduction differs from the package's widened triangle result `[17, 96, 175]`.
+
+Website area also switches to bilinear when enlarging both axes. Keep these differences visible in diagnostic artifacts.
+These public comparisons cannot prove equivalent-output speedups or faithful fallback. No website or production kernel was changed.
+The adapter test correction and this evidence follow artifact preparation; the measured runtime code stays at `1761705e`.
 
 ## Constraints
 

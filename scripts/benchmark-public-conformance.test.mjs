@@ -103,7 +103,10 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				const report = await page.evaluate(async (assets) => {
 					const { prepareOperation, preflightOperation } = await import(`/${assets.entries.page}`);
 					const equal = (actual, expected, label) => {
-						if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(label);
+						if (JSON.stringify(actual) !== JSON.stringify(expected))
+							throw new Error(
+								`${label}: actual ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`
+							);
 					};
 					const trial = (backend, preparation = 'primed-instance', width = 4, outputWidth = 3) => ({
 						role: 'candidate',
@@ -156,7 +159,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 					}
 					for (const [filter, expectedRed] of [
 						['area', [16, 96, 176]],
-						['bilinear', [11, 96, 181]]
+						['bilinear', [17, 96, 175]]
 					]) {
 						for (const backend of ['typescript', 'package']) {
 							const request = trial(backend);
@@ -167,11 +170,34 @@ test('installed package and actual TypeScript adapter conformance, without measu
 							};
 							const operation = await prepareOperation(request);
 							try {
+								// Website area is an unweighted inclusive box, not fractional-overlap area.
+								// Website bilinear keeps two taps; frozen/landed triangle support widens on reduction.
+								const actualRed =
+									backend === 'typescript'
+										? filter === 'area'
+											? [21, 96, 171]
+											: [11, 96, 181]
+										: expectedRed;
 								equal(
 									Array.from(operation.call().data),
-									expectedRed.flatMap((red) => [red, 30, 70, 255]),
-									`${backend} ${filter} analytical 4→3`
+									actualRed.flatMap((red) => [red, 30, 70, 255]),
+									`${backend} ${filter} known 4→3`
 								);
+								if (backend === 'typescript') {
+									const mismatch = await preflightOperation(operation, {
+										dimensions: { width: 3, height: 1 },
+										pixels: {
+											format: 'rgba8',
+											data: expectedRed.flatMap((red) => [red, 30, 70, 255])
+										},
+										warnings: []
+									});
+									equal(
+										mismatch.pixels.data,
+										actualRed.flatMap((red) => [red, 30, 70, 255]),
+										`retain website ${filter} semantic difference`
+									);
+								}
 							} finally {
 								operation.close();
 							}
@@ -294,7 +320,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						drift,
 						checked: [
 							'known-vector',
-							'area-bilinear-analytical-vectors',
+							'area-bilinear-known-vectors-and-drift',
 							'convolution-support-recipes',
 							'identity-copy',
 							'fresh-instance',
