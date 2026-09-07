@@ -7,7 +7,7 @@ The PR base is `impl/v1-s03-contracts`.
 ## Work
 
 - [x] Repair naive trilinear mip construction for padded input views, with a failing then passing fixture.
-- [ ] Add the complete typed reference resize call and independently calculated recipe fixtures.
+- [x] Add the complete typed reference resize call and independently calculated recipe fixtures.
 - [ ] Update resize oracle coverage, run focused and integrated checks, and file the unmerged PR.
 
 Only reference resize code, its tests, and its inventory change. No production code or benchmark timings belong here.
@@ -21,3 +21,7 @@ Bilinear is the existing scale-aware triangle filter, including within trilinear
 
 The padded-input fixture first panicked with `BufferLengthMismatch { len: 36, expected: 32 }`.
 After copying logical rows, `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_resize_contract` passes.
+
+The reference call covers every resize recipe and support policy. Fixtures check all nine anchors, nonconstant identity, magnification,
+symmetric averages, cubic support weights, fractional LOD, ceil-halved mips, staged byte rounding, anisotropic LOD, and float samples.
+Lanczos kernel checks use independently known half-angle sine values.
