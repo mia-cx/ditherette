@@ -12,8 +12,14 @@ mod kernel;
 mod plan;
 
 use crate::{
-    image::{ImageView, ImageViewMut, Rgba8},
-    prod::resize::common,
+    image::{rgba8, ImageView, ImageViewMut, Rgba8},
+    prod::{
+        contract::{
+            error::ErrorCode,
+            failure::{ErrorPath, Failure},
+        },
+        resize::common,
+    },
 };
 
 pub use alignment::{AxisAlignment, ResizeAnchor};
@@ -66,7 +72,7 @@ pub fn resize_convolution_rgba8_into<K>(
         &kernel,
         support_policy,
     );
-    kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, &plan);
+    kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, &plan, None);
 }
 
 /// Resize one full-width output row range with a separable convolution kernel.
@@ -100,13 +106,23 @@ pub fn resize_convolution_rgba8_rows_into<K>(
 /// Resize one full-width output row range with cached convolution metadata.
 pub fn resize_convolution_rgba8_rows_with_plan_into(
     source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
     y_start: u32,
 ) {
     common::rgba8::assert_packed_source(source, "convolution");
     common::rgba8::assert_packed_output(&output, "convolution");
     assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    // Fallible identity plans need no taps. Copy only the requested logical row band.
+    if plan.is_identity() && plan.x_taps.is_empty() {
+        assert_eq!(source.dimensions(), plan.source_dimensions());
+        let start = y_start as usize * source.stride().elements();
+        let end = start + output.data().len();
+        output
+            .data_mut()
+            .copy_from_slice(&source.data()[start..end]);
+        return;
+    }
     kernel::resize_packed_rgba8_rows_with_convolution_filter_into(source, output, plan, y_start);
 }
 
@@ -127,7 +143,47 @@ pub fn resize_convolution_rgba8_with_plan_into(
         return;
     }
 
-    kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, plan);
+    kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, plan, None);
+}
+
+/// Execute the landed full-call paths using caller-owned scratch without allocating.
+/// Views must be packed and match the plan. All checks finish before output is modified.
+pub fn resize_convolution_rgba8_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    scratch: &mut [f64],
+) -> Result<(), Failure> {
+    if source.dimensions() != plan.source_dimensions()
+        || !rgba8::is_packed_stride(source.dimensions(), source.stride())
+        || source.dimensions().storage_len::<Rgba8>().ok() != Some(source.data().len())
+    {
+        return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::Source));
+    }
+    if output.dimensions() != plan.output_dimensions()
+        || !rgba8::is_packed_stride(output.dimensions(), output.stride())
+        || output.dimensions().storage_len::<Rgba8>().ok() != Some(output.data().len())
+    {
+        return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::Output));
+    }
+    let required = plan.scratch_elements()?;
+    if scratch.len() < required {
+        return Err(Failure::new(
+            ErrorCode::MemoryLimit,
+            ErrorPath::MemoryLimitBytes,
+        ));
+    }
+    if plan.is_identity() {
+        output.data_mut().copy_from_slice(source.data());
+        return Ok(());
+    }
+    kernel::resize_packed_rgba8_with_convolution_filter_into(
+        source,
+        output,
+        plan,
+        Some(&mut scratch[..required]),
+    );
+    Ok(())
 }
 
 fn assert_row_band_matches_plan(
