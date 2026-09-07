@@ -39,6 +39,21 @@ pub struct RowBandPlan {
 }
 
 impl RowBandPlan {
+    /// Splits the complete output into consecutive bands, shortening the final band.
+    pub fn for_output_height(dimensions: ImageDimensions, target_height: u32) -> Option<Self> {
+        if target_height == 0 {
+            return None;
+        }
+        let mut bands = Vec::new();
+        let mut start = 0;
+        while start < dimensions.height() {
+            let end = start + target_height.min(dimensions.height() - start);
+            bands.push(RowBand::new(start, end)?);
+            start = end;
+        }
+        Self::new(dimensions, bands)
+    }
+
     pub fn new(output_dimensions: ImageDimensions, bands: Vec<RowBand>) -> Option<Self> {
         covers_output_once(output_dimensions, &bands).then_some(Self {
             output_dimensions,
