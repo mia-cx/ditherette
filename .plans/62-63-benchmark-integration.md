@@ -23,5 +23,8 @@ Existing kernels and helpers stay production. Only allocation/public integration
 No frozen spec/image/policy edits. No replacement or repeated optimization of landed kernels.
 Preserve established exact or bounded production behavior. New non-exact changes require Mia's approval.
 Reference drift must remain visible in benchmark artifacts; timing evidence never grants visual acceptance.
+An explicit developer-only `measure_nonexact` browser flag may collect timing despite reference drift.
+It preserves the actual differing output and the incorrect conformance gate. It does not approve an approximation.
+Existing landed-output conformance remains separately checked against the original production entrypoints.
 No measurements during implementation. Never run more than one ditherette-bench process.
 Leave all PRs unmerged. No publishing, tags, deployment, or rollout.

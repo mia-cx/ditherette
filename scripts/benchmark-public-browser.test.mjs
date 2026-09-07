@@ -174,6 +174,19 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		assert.equal(result.warmup_elapsed_ns, 0);
 		assert.deepEqual(result.output.pixels.data, [10, 20, 30, 40]);
 		assert.equal(result.pair, 2);
+		// Explicit developer diagnostics retain the same mismatch while timing the fake operation.
+		// This exercises protocol behavior, not image-processing performance.
+		trial.case.browser.measure_nonexact = true;
+		Object.assign(trial.case.measurement, {
+			warmup_ms: 1,
+			samples: 5,
+			measurement_ms: 1,
+			target_sample_ms: 1
+		});
+		const diagnostic = await runTrial(trial);
+		assert.equal(diagnostic.timing_skipped, undefined);
+		assert.equal(diagnostic.sample_ns.length, 5);
+		assert.deepEqual(diagnostic.output, result.output);
 	} finally {
 		if (previousLocation) Object.defineProperty(globalThis, 'location', previousLocation);
 		else delete globalThis.location;

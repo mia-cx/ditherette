@@ -61,6 +61,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         candidate: BrowserBackend::Package,
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
+        measure_nonexact: false,
     };
     let case = &mut prepared.experiment.cases[0];
     case.identity = browser
@@ -160,6 +161,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
             artifact_identity(&worker.identity, &assets, &runtime).unwrap();
         trial.reference.implementation.artifact = trial.output.implementation.artifact.clone();
         trial.browser = Some(BrowserEvidence {
+            measure_nonexact: false,
             assets: assets.tree.digest,
             runtime: runtime_digest(&runtime).unwrap(),
             backend: browser.backend(trial.role),
@@ -254,6 +256,30 @@ fn typed_browser_calls_share_exact_three_way_gates() {
         data[0] += 1;
     }
     assert_eq!(compare(&prepared, &trials).gate, Gate::Incorrect);
+}
+
+#[test]
+fn timing_nonexact_outputs_never_passes_conformance_and_binds_the_diagnostic_flag() {
+    let (mut prepared, mut trials) = fixture();
+    prepared.experiment.cases[0]
+        .browser
+        .as_mut()
+        .unwrap()
+        .measure_nonexact = true;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    for trial in &mut trials {
+        trial.browser.as_mut().unwrap().measure_nonexact = true;
+        if trial.role == Role::Candidate {
+            if let Pixels::Rgba8 { data } = &mut trial.output.output.pixels {
+                data[0] += 1;
+            }
+        }
+    }
+    let report = compare(&prepared, &trials);
+    assert_eq!(report.gate, Gate::Incorrect);
+    assert!(report.cases[0].accepted_median_ns.is_some());
+    assert!(report.cases[0].candidate_median_ns.is_some());
+    assert!(!report.cases[0].verification[0].release_conformant());
 }
 
 #[test]

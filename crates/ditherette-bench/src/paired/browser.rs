@@ -51,6 +51,9 @@ pub struct BrowserCase {
     pub candidate: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    /// Developer diagnostics only. Differences remain incorrect and retain review artifacts.
+    #[serde(default)]
+    pub measure_nonexact: bool,
 }
 
 impl BrowserCase {
@@ -296,6 +299,8 @@ pub struct BrowserEvidence {
     pub backend: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    #[serde(default)]
+    pub measure_nonexact: bool,
     pub observation: BrowserObservation,
 }
 
@@ -576,6 +581,7 @@ pub(super) fn validate_evidence(
         || evidence.backend != browser_case.backend(result.role)
         || evidence.preparation != browser_case.preparation
         || evidence.cache != browser_case.cache
+        || evidence.measure_nonexact != browser_case.measure_nonexact
     {
         return Err(io::Error::other(
             "browser trial artifact or preparation differs",

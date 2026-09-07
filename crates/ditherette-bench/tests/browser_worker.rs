@@ -25,6 +25,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         candidate: BrowserBackend::Package,
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
+        measure_nonexact: false,
     };
     let identity = browser
         .operation

@@ -170,7 +170,7 @@ export async function runTrial(trial) {
 		const mismatch = await preflightOperation(operation, trial.reference_output);
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes during preflight.');
-		if (mismatch)
+		if (mismatch && trial.case.browser.measure_nonexact !== true)
 			return {
 				...identity,
 				sample_ns: [],
@@ -193,10 +193,13 @@ export async function runTrial(trial) {
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
+		const verified = verificationOutput(output);
+		if (mismatch && JSON.stringify(verified) !== JSON.stringify(mismatch))
+			throw new Error('Diagnostic output changed after its untimed reference mismatch.');
 		return {
 			...identity,
 			...timings,
-			output: verificationOutput(output),
+			output: verified,
 			observation
 		};
 	} finally {

@@ -157,6 +157,7 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
             backend: browser.backend(request.role),
             preparation: browser.preparation,
             cache: browser.cache,
+            measure_nonexact: browser.measure_nonexact,
             observation: measured.observation,
         }),
     };
