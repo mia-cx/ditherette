@@ -55,6 +55,52 @@ test('public calls preserve inputs and durable outputs across growth, later call
 	assert.throws(() => processor.resize(request()), diagnostic('disposed', 'instance'));
 });
 
+test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and recovery', async () => {
+	for (const [algorithm, capacity] of [
+		['area', 12],
+		['bilinear', 116]
+	]) {
+		// Bilinear adds two 12-byte Vec headers and five 16-byte taps in Wasm32.
+		const resize = algorithm === 'area' ? { algorithm } : { algorithm, anchor: 'center' };
+		const backing = new Uint8Array([9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+		const value = {
+			version: 1,
+			source: { width: 2, height: 1, data: backing.subarray(1, 9) },
+			output: { width: 1, height: 1, resize }
+		};
+		const processor = await createDitherette({
+			wasm: module,
+			memoryLimitBytes: overhead + capacity
+		});
+		const output = processor.resize(value);
+		assert.deepEqual([...output.data], [100, 50, 150, 128]);
+		assert.deepEqual([...backing], [9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+		const originalSet = Uint8Array.prototype.set;
+		let calls = 0;
+		try {
+			Uint8Array.prototype.set = function (...args) {
+				if (++calls === 2) throw new RangeError('durable output failure');
+				return Reflect.apply(originalSet, this, args);
+			};
+			assert.throws(() => processor.resize(value), diagnostic('wasm-memory-unavailable', 'output'));
+		} finally {
+			Uint8Array.prototype.set = originalSet;
+		}
+		assert.deepEqual([...processor.resize(value).data], [100, 50, 150, 128]);
+		processor.dispose();
+		assert.deepEqual([...output.data], [100, 50, 150, 128]);
+		const short = await createDitherette({
+			wasm: module,
+			memoryLimitBytes: overhead + capacity - 1
+		});
+		assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
+		const smaller = request();
+		smaller.output.width = 1;
+		assert.deepEqual([...short.resize(smaller).data], [17, 31, 47, 127]);
+		short.dispose();
+	}
+});
+
 test('one exact capacity budget succeeds and one byte less rejects without poisoning the instance', async () => {
 	// 12 pixel bytes plus two Wasm usize x offsets and one u32 y coordinate.
 	const capacity = 12 + 2 * 4 + 4;

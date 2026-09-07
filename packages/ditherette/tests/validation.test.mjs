@@ -14,6 +14,19 @@ const fails = (run, code, path) =>
 		(error) => error instanceof DitheretteError && error.code === code && error.path === path
 	);
 
+test('area and bilinear accept only their frozen fields', () => {
+	const area = request();
+	area.output.resize = { algorithm: 'area' };
+	assert.equal(validateResize(area).algorithm, 1);
+	area.output.resize.anchor = 'center';
+	fails(() => validateResize(area), 'invalid-settings', 'output.resize.anchor');
+	const bilinear = request();
+	bilinear.output.resize.algorithm = 'bilinear';
+	assert.equal(validateResize(bilinear).algorithm, 2);
+	bilinear.output.resize.support = 'fixed';
+	fails(() => validateResize(bilinear), 'invalid-settings', 'output.resize.support');
+});
+
 test('nearest validation preserves byte views and the frozen anchor order', () => {
 	const anchors = [
 		'top-left',
@@ -37,6 +50,7 @@ test('nearest validation preserves byte views and the frozen anchor order', () =
 			sourceHeight: 1,
 			outputWidth: 2,
 			outputHeight: 1,
+			algorithm: 0,
 			anchor
 		});
 		assert.equal(validateResize(value).data.buffer, value.source.data.buffer);
@@ -69,7 +83,7 @@ test('canonical raw request shapes reject coercions, sequence tags, and extra fi
 		[(r) => (r.output.resize.support = 'fixed'), 'invalid-settings', 'output.resize.support'],
 		[(r) => (r.output.resize.other = false), 'invalid-settings', 'output.resize.other'],
 		[
-			(r) => (r.output.resize.algorithm = 'area'),
+			(r) => (r.output.resize.algorithm = 'trilinear'),
 			'unsupported-operation',
 			'output.resize.algorithm'
 		],
