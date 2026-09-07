@@ -37,7 +37,6 @@ use crate::{
             alignment::ResizeAnchor as CandidateNearestResizeAnchor,
             resize_nearest_rgba8_into as resize_candidate_nearest_rgba8_into,
         },
-        nearest_incremental::resize_nearest_into as resize_incremental_nearest_into,
     },
     spec::resize::{
         common::alignment::ResizeAnchor,
@@ -67,12 +66,6 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             "landed packed nearest scalar",
             "crates/ditherette-wasm/src/prod/resize/scalar/nearest/mod.rs",
             resize_candidate_nearest_subject,
-        ),
-        resize_subject(
-            "candidate:resize:nearest:incremental",
-            "S19 incremental nearest experiment",
-            "crates/ditherette-wasm/src/prod/resize/scalar/nearest_incremental.rs",
-            resize_incremental_nearest_subject,
         ),
         resize_subject(
             "candidate:resize:nearest:legacy",
@@ -269,34 +262,6 @@ fn resize_nearest_subject(
     with_views(input, output, |source, output| {
         resize_nearest_into(source, output, anchor(params));
     })
-}
-
-fn resize_incremental_nearest_subject(
-    input: ResizeInputU8Rgba<'_>,
-    output: ResizeOutputU8Rgba<'_>,
-    params: &ResizeParams,
-) -> Result<(), BenchSubjectError> {
-    with_views(input, output, |source, output| {
-        resize_incremental_nearest_into(source, output, copied_nearest_anchor(params));
-    })
-}
-
-fn copied_nearest_anchor(
-    params: &ResizeParams,
-) -> crate::prod::resize::common::alignment::ResizeAnchor {
-    use crate::prod::resize::common::alignment::ResizeAnchor as CopiedAnchor;
-    use ditherette_bench_api::ResizeAnchorParam;
-    match params.anchor {
-        ResizeAnchorParam::TopLeft => CopiedAnchor::TopLeft,
-        ResizeAnchorParam::Top => CopiedAnchor::Top,
-        ResizeAnchorParam::TopRight => CopiedAnchor::TopRight,
-        ResizeAnchorParam::Left => CopiedAnchor::Left,
-        ResizeAnchorParam::Center => CopiedAnchor::Center,
-        ResizeAnchorParam::Right => CopiedAnchor::Right,
-        ResizeAnchorParam::BottomLeft => CopiedAnchor::BottomLeft,
-        ResizeAnchorParam::Bottom => CopiedAnchor::Bottom,
-        ResizeAnchorParam::BottomRight => CopiedAnchor::BottomRight,
-    }
 }
 
 fn resize_candidate_nearest_subject(

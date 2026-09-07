@@ -1,7 +1,7 @@
 # Production resize rules
 
 Canonical `scalar/nearest/` contains the landed optimized implementation and its shared planning helpers.
-The S19 generic incremental experiment remains at `scalar/nearest_incremental.rs`, outside the production default.
+The S19 generic incremental experiment remains in Git history, not compiled production.
 Historical S19 baseline and measurement records remain unchanged.
 
 This directory contains optimized internal resize kernels. These rules are kept

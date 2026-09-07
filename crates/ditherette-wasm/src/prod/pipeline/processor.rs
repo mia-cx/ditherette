@@ -1,4 +1,4 @@
-//! Private nearest-only ownership around the frozen copied kernel.
+//! Private nearest-only ownership around the landed packed kernel.
 //!
 //! Request, initialization, and lifecycle rules follow the copied contract.
 //! Failures use static codes/paths instead of allocating diagnostic strings.
@@ -16,7 +16,10 @@ use crate::prod::{
             MAX_SOURCE_SIDE,
         },
     },
-    resize::{common::alignment::ResizeAnchor, scalar::nearest_incremental::resize_nearest_into},
+    resize::scalar::nearest::{
+        alignment::ResizeAnchor, resize_nearest_rgba8_with_plan_into, NearestResizePlan,
+        PlanAllocationError,
+    },
 };
 
 /// Typed private shape. The package validates recipe version and raw property types.
@@ -90,7 +93,11 @@ impl Processor {
     /// Counts owned control, buffer headers, and plan records, plus adapter-owned capacity.
     /// Compiler stack frames and fixed module overhead are outside this ownership accounting.
     pub const fn bookkeeping_bytes(boundary_capacity: u64) -> u64 {
-        (size_of::<Self>() + size_of::<Buffers>() + size_of::<Plan>()) as u64 + boundary_capacity
+        (size_of::<Self>()
+            + size_of::<Buffers>()
+            + size_of::<Plan>()
+            + size_of::<Option<NearestResizePlan>>()) as u64
+            + boundary_capacity
     }
 
     /// Checks the budget before the adapter primes any boundary allocation.
@@ -164,14 +171,41 @@ impl Processor {
         let plan = Plan::new(request, boundary.input_len()?)?;
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
+        let metadata_bytes = if plan.source == plan.output {
+            0
+        } else {
+            NearestResizePlan::required_capacity_bytes(plan.source, plan.output)
+        };
         let planned = overhead
             .checked_add(plan.source_len as u64)
             .and_then(|bytes| bytes.checked_add(plan.output_len as u64))
+            .and_then(|bytes| bytes.checked_add(metadata_bytes))
             .ok_or_else(memory_limit_failure)?;
         if planned > self.memory_limit {
             return Err(memory_limit_failure());
         }
 
+        let metadata = if plan.source == plan.output {
+            None
+        } else {
+            let budget =
+                self.memory_limit - overhead - plan.source_len as u64 - plan.output_len as u64;
+            Some(
+                NearestResizePlan::try_new(plan.source, plan.output, plan.anchor, budget).map_err(
+                    |error| match error {
+                        PlanAllocationError::MemoryLimit => memory_limit_failure(),
+                        PlanAllocationError::Allocation => {
+                            Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Wasm)
+                        }
+                    },
+                )?,
+            )
+        };
+        let overhead = overhead
+            + metadata
+                .as_ref()
+                .map_or(0, NearestResizePlan::capacity_bytes);
+        self.peak_capacity = overhead;
         let mut buffers = Buffers::default();
         allocator.reserve(&mut buffers.source, plan.source_len)?;
         self.check_capacity(&buffers, overhead, plan.output_len)?;
@@ -185,7 +219,12 @@ impl Processor {
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
         let output = ImageViewMut::<Rgba8>::packed(&mut buffers.output, plan.output)
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-        resize_nearest_into(source, output, plan.anchor);
+        if let Some(metadata) = &metadata {
+            resize_nearest_rgba8_with_plan_into(source, output, metadata);
+        } else {
+            // The landed convenience entrypoint also bypasses planning for identity.
+            buffers.output.copy_from_slice(&buffers.source);
+        }
         // A failed complete helper drops both Vecs. Future callback/cache publication
         // belongs after this complete result exists, never before it.
         boundary.complete(&buffers.output, plan.output)

@@ -102,5 +102,3 @@ pub mod bilinear;
 pub mod convolution;
 pub mod lanczos;
 pub mod nearest;
-/// S19 generic incremental experiment. Not the landed packed production default.
-pub mod nearest_incremental;
