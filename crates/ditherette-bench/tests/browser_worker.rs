@@ -5,6 +5,52 @@ use ditherette_bench::{
 };
 use ditherette_bench_api::verification::*;
 
+#[test]
+fn indexed_transport_preserves_metadata_and_rejects_malformed_indices() {
+    use ditherette_bench::paired::quantize::*;
+    let (mut request, mut result) = fixture();
+    let operation = PublicOperation::Quantize {
+        settings: QuantizeSettings {
+            palette: vec![PaletteEntry::Color { rgb: [1, 2, 3] }],
+            alpha: AlphaPolicy::Premultiplied {},
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+    };
+    let case = &mut request.case;
+    case.identity = operation
+        .identity(case.source, &case.rgba, case.source)
+        .unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    let browser = case.browser.as_mut().unwrap();
+    browser.operation = operation;
+    browser.accepted = BrowserBackend::Package;
+    result.input = case.identity.input;
+    result.settings = case.identity.settings;
+    result.output.pixels = Pixels::Indexed8 {
+        indices: vec![0],
+        palette_rgba: vec![1, 2, 3, 255],
+        transparent_index: None,
+    };
+    request.reference_output = Some(result.output.clone());
+    validate_response(&request, &result).unwrap();
+    result.output.warnings.push(Warning {
+        code: WarningCode::TransparentFallback,
+        message: "fixture".into(),
+    });
+    result.timing_skipped = Some(TimingSkipped::ReferenceMismatch);
+    result.sample_ns.clear();
+    result.iterations_per_sample = 0;
+    result.warmup_iterations = 0;
+    result.warmup_elapsed_ns = 0;
+    validate_response(&request, &result).unwrap();
+    if let Pixels::Indexed8 { indices, .. } = &mut result.output.pixels {
+        indices[0] = 1;
+    }
+    assert!(validate_response(&request, &result).is_err());
+}
+
 fn fixture() -> (TrialRequest, BrowserTransportResult) {
     let dimensions = Dimensions {
         width: 1,
@@ -25,6 +71,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         candidate: BrowserBackend::Package,
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
+        measure_nonexact: false,
     };
     let identity = browser
         .operation
@@ -78,6 +125,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         warmup_iterations: 1,
         warmup_elapsed_ns: 1,
         output: output.clone(),
+        unstable_output: None,
         timing_skipped: None,
         observation: BrowserObservation {
             engine: runtime.engine,
@@ -99,6 +147,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         },
         reference_output: Some(output),
         case: PairCase {
+            native: None,
             name: "fixture".into(),
             identity,
             source: dimensions,
@@ -215,4 +264,47 @@ fn malformed_owned_node_is_terminated_and_reaped_without_a_browser() {
     assert!(!std::path::Path::new("/proc").join(pid).exists());
     drop(lease);
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn unstable_diagnostic_retains_both_images_and_rejects_trial_publication() {
+    let (mut request, mut result) = fixture();
+    let mut preflight = result.output.clone();
+    if let Pixels::Rgba8 { data } = &mut preflight.pixels {
+        data[0] = 99;
+    }
+    result.unstable_output = Some(preflight.clone());
+    assert!(validate_response(&request, &result).is_err()); // Explicit diagnostic opt-in is required.
+    request.case.browser.as_mut().unwrap().measure_nonexact = true;
+    validate_response(&request, &result).unwrap(); // Final output can even return to frozen bytes.
+    let decoded: BrowserTransportResult =
+        serde_json::from_slice(&serde_json::to_vec(&result).unwrap()).unwrap();
+    assert_eq!(decoded.unstable_output, Some(preflight));
+    let directory = std::env::temp_dir().join(format!(
+        "ditherette-browser-unstable-{}",
+        std::process::id()
+    ));
+    let error = reject_unstable_output(&request, &decoded, &directory).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("both actual outputs retained, trial rejected"));
+    let raw: BrowserTransportResult =
+        serde_json::from_slice(&std::fs::read(directory.join("transport.json")).unwrap()).unwrap();
+    assert_eq!(raw.unstable_output, result.unstable_output);
+    assert_eq!(raw.output, result.output);
+    for (phase, first_byte) in [("preflight", 99), ("final", 1)] {
+        let evidence: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(directory.join(phase).join("results.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            evidence["outputs"]["candidate"]["output"]["pixels"]["data"][0],
+            first_byte
+        );
+        assert!(evidence["outputs"]["accepted"].is_null());
+        assert!(directory.join(phase).join("candidate.png").is_file());
+    }
+    std::fs::remove_dir_all(&directory).unwrap();
+    result.unstable_output = Some(result.output.clone());
+    assert!(validate_response(&request, &result).is_err());
 }
