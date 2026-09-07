@@ -10,7 +10,7 @@ Branch: `impl/v1-s06-paired-bench`. PR base: `impl/v1-s05-verification`.
 - [x] Adapt the native measurement loop, bind builds to revisions, and test transport controls without timings.
 - [x] Document preparation, fixed budgets, comparison outcomes, and native measurement limits.
 - [x] Prepare distinct native control revisions, obtain explicit quiet clearance, and retain live paired evidence.
-- [ ] File a non-draft unmerged PR with validation and artifact identities.
+- [x] File a non-draft unmerged PR with validation and artifact identities.
 
 ## Acceptance and holds
 
@@ -99,3 +99,9 @@ These generated files stay ignored; this record binds their retained contents:
 - `report.json`: `44f9464134438271fc0875d1589b70822c3cfa0814fd3ea8daec36397797ee76`.
 - `events.jsonl`: `fcd7897e12708cf646942649e7941a63b02ca68d18187b80d0113e7b30e78ef4`.
 - `prepared.json`: `e1f66044133b9a0632260d57827cfaafcd3a68e878117ee383ebdbe3b7c2e5c8`.
+
+Delivered in [PR #102](https://github.com/mia-cx/ditherette/pull/102), non-draft and
+unmerged against `impl/v1-s05-verification`. Final evidence commits change no
+measured implementation. The control candidate stays rejected for performance;
+this delivery makes the paired measurement tooling available, not that candidate
+accepted production.
