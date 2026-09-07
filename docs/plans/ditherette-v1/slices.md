@@ -32,7 +32,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S15](#s15) | Specify all four error-diffusion recipes | [S10](#s10), [S12](#s12) | Ready | [#101](https://github.com/mia-cx/ditherette/pull/101) |
 | [S16](#s16) | Specify adaptive Yliluoma mixing | [S10](#s10), [S12](#s12) | Ready | [#100](https://github.com/mia-cx/ditherette/pull/100) |
 | [S17](#s17) | Complete the five-method reference processor | [S05](#s05), [S10](#s10), [S11](#s11), [S13](#s13), [S14](#s14), [S15](#s15), [S16](#s16) | Ready | [#103](https://github.com/mia-cx/ditherette/pull/103) |
-| [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) | In progress (CI fixture fix) | [#104](https://github.com/mia-cx/ditherette/pull/104) |
+| [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) | Ready | [#104](https://github.com/mia-cx/ditherette/pull/104) |
 | [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | In progress | - |
 | [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) | Not started | - |
 | [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | Not started | - |

@@ -36,9 +36,9 @@ No actual benchmark measurement ran.
 
 - [x] Merge the delivered S18 head into this join.
 - [x] Run its trusted freeze guard against this resolved dependency/build graph.
-- [ ] Record all prerequisite SHAs, remove only satisfied native blocking edges, and start the S19 implementation worktree.
+- [x] Record all prerequisite SHAs, remove only satisfied native blocking edges, and start the S19 implementation worktree.
 
-All PRs stay unmerged. No production copy or optimization has started.
+All PRs stay unmerged. Literal-copy and private factory work now run in separate S19 child worktrees.
 
 The final delivered S18 head is `eee0b5ddfb600b9ba6517c3dcb755e3566fc7813` in PR #104.
 Its reviewed guard passes against the S19 join at `363324c43556f08ef4e8677d226f5659977bcc66`.
@@ -47,6 +47,12 @@ It validates frozen content, the corrected symbol/macro/raw-identifier checks, f
 The final documentation-only merge is `1f7e7a68803f5af6953ec710c536cbb66a32c1f8`.
 Its crates, guard, and workflow trees are identical to the validated join.
 All three required delivered heads are verified ancestors. S18 is no longer a missing code prerequisite.
+
+S18 later fixes a cold-cache mutation fixture at `c03c3c85f5748b7726cfdae50ea6d41acd8ede64`.
+CI run [34131713248](https://github.com/mia-cx/ditherette/actions/runs/34131713248) passes its guard and all 11 mutation fixtures.
+The documentation delivery `662d6483` joins this base at `1dd8128a8532638ee2a17853e562145bad687e3f`.
+The fixture-only correction leaves all frozen content and guard semantics unchanged.
+The trusted S18 checker passes the updated S19 join, including all four dependency contexts and five isolation compilations.
 
 ## Read-only allocation preflight
 

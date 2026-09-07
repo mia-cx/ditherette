@@ -317,13 +317,13 @@ test('a new procedural macro dependency cannot hide behind an audited attribute 
 			'[dependencies]\nfreeze-inject = { path = "../freeze-inject" }'
 		);
 		mutation(root, path, changed, () => {
+			// Clean runners may need dependencies outside the guard's platform-filtered cache.
 			for (const manifest of [path, 'crates/ditherette-bench/Cargo.toml'])
 				run(
 					'cargo',
 					[
 						'+1.97.0',
 						'metadata',
-						'--offline',
 						'--all-features',
 						'--format-version',
 						'1',
