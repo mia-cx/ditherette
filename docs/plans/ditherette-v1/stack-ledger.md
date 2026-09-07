@@ -28,8 +28,11 @@ S25 adds all fifteen matching tags at `0085972a`, with 309 native tests and thre
 Its exact dispatch candidate `230046ff` is rejected after the fresh 276-worker comparison.
 The run retains 5,133 timing samples and all verified outputs are exact; a required native score control regresses and several controls remain noisy.
 The all-mode baseline remains selected. S25 delivery continues in `impl/v1-s25-delivery`; no further slice measurements are planned.
-S26 literal field baseline `e156cfbf` passes inverse, placement, field, and composition checks. Bounded/public integration continues separately.
+S26 literal field baseline `e156cfbf` reaches validated public checkpoint `089251287e387cb575e22e8993d8989a371a089d`.
+It passes 13 scoped native, 24 interface, 11 private ABI tests, both builds, three browser engines, and the trusted freeze guard.
 S26 benchmark adapters advance in `impl/v1-s26-bench`; production/package work belongs to `impl/v1-s26-fields`.
+S28 starts a literal diffusion baseline in `impl/v1-s28-diffusion` from that validated S26 checkpoint joined with retained S25.
+Its first task copies missing semantics and verifies exact outputs. Ring-buffer optimization and public integration remain later tasks.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.

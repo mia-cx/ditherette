@@ -14,7 +14,7 @@ The rejected dispatch candidate stays outside this ancestry.
 - [x] Pass 23 interface tests and type checks, 10 private ABI tests, and installed-tarball checks in all three engines.
 - [x] Pass both crate formatting checks, whitespace checks, and the trusted frozen-spec guard.
 - [ ] Validate the combined Rust benchmark adapters after their shared target returns from S25 delivery.
-- [ ] Check the actual benchmark adapter against the joined tarball without collecting timings.
+- [x] Check the actual benchmark adapter against the joined tarball without collecting timings.
 
 The first interface check used the previous S24 package artifacts and rejected the new matching tags.
 Both new-tag tests pass after rebuilding the combined package. No implementation change addressed that stale build.
@@ -23,3 +23,6 @@ The trusted guard retains frozen revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d6
 and digest `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
 Browser versions are Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
 These are integration checks, not fresh performance measurements.
+
+The untimed adapter check passes all three engines, including 47 frozen quantize fixtures across all 15 modes in primed and fresh instances.
+Tarball `target/s25-join-validation/ditherette.tgz` has SHA-256 `4f2af995fb4f77ccaa2e35f0b9fd23df7da7a6f9655bc946fa807c454afcd018`.

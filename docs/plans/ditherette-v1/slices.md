@@ -42,7 +42,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | In progress | - |
 | [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | In progress | - |
 | [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Not started | - |
-| [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Not started | - |
+| [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | In progress | - |
 | [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) | Not started | - |
 | [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | Not started | - |
 | [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Not started | - |
