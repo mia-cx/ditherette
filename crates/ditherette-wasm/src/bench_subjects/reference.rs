@@ -2,7 +2,7 @@
 //! Concrete processing requests remain the public contract's borrowed types.
 
 use super::{
-    verification::{color_space, indexed_output, reference_resize},
+    verification::{color_space, indexed_output, rgba_output},
     BenchSubject,
 };
 use crate::spec::{self, contract::request::*};
@@ -148,24 +148,35 @@ pub(super) fn subjects() -> Vec<BenchSubject> {
             Operation::Resize,
             PixelFormat::Rgba8,
             "resize/mod.rs",
-            |request| match request {
-                ReferenceRequest::Processing(Request::Resize(request)) => reference_resize(request),
-                _ => Err(wrong_request("resize")),
-            },
+            |request| processing(request, Operation::Resize),
         ),
         subject(
             "quantize",
             Operation::Quantize,
             PixelFormat::Indexed8,
             "quantize/mod.rs",
-            |request| match request {
-                ReferenceRequest::Processing(Request::Quantize(request)) => {
-                    spec::quantize::quantize(*request)
-                        .map(|image| indexed_output(&image))
-                        .map_err(|error| BenchSubjectError::new(error.to_string()))
-                }
-                _ => Err(wrong_request("quantize")),
-            },
+            |request| processing(request, Operation::Quantize),
+        ),
+        subject(
+            "perturb",
+            Operation::Perturb,
+            PixelFormat::Rgba8,
+            "pipeline/mod.rs",
+            |request| processing(request, Operation::Perturb),
+        ),
+        subject(
+            "dither-and-quantize",
+            Operation::DitherAndQuantize,
+            PixelFormat::Indexed8,
+            "pipeline/mod.rs",
+            |request| processing(request, Operation::DitherAndQuantize),
+        ),
+        subject(
+            "process",
+            Operation::Process,
+            PixelFormat::Indexed8,
+            "pipeline/mod.rs",
+            |request| processing(request, Operation::Process),
         ),
     ];
     macro_rules! color_adapter {
@@ -225,6 +236,24 @@ fn wrong_request(method: &str) -> BenchSubjectError {
     BenchSubjectError::new(format!(
         "reference {method} subject requires its matching typed request"
     ))
+}
+
+fn processing(
+    request: &ReferenceRequest<'_>,
+    expected: Operation,
+) -> Result<VerificationOutput, BenchSubjectError> {
+    if request.semantics().operation != expected {
+        return Err(wrong_request("processing operation"));
+    }
+    let ReferenceRequest::Processing(request) = *request else {
+        return Err(wrong_request("processing"));
+    };
+    spec::pipeline::execute(request)
+        .map(|output| match output {
+            spec::pipeline::ProcessedImage::Rgba8(image) => rgba_output(&image),
+            spec::pipeline::ProcessedImage::Indexed(image) => indexed_output(&image),
+        })
+        .map_err(|error| BenchSubjectError::new(error.to_string()))
 }
 
 fn color(

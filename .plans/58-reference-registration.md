@@ -6,7 +6,7 @@ Branch: `impl/v1-s17-bench`. Main includes these commits in the aggregate S17 PR
 ## TODOs
 
 - [x] Extend the existing registry with typed conformance entries and seven f32 color references.
-- [ ] Join the completed pipeline checkpoint and register all five callable public methods.
+- [x] Join the completed pipeline checkpoint and register all five callable public methods.
 - [ ] Verify mode coverage, composition metadata, identity, and missing-role behavior without timings.
 
 Keep concrete request types outside spec's dependencies. S05 owns output records
@@ -22,3 +22,11 @@ three legacy/S05 adapter fixtures, and three binary unit tests. Binary/benchmark
 compilation passes. Seven color entries round-trip black, white, red, and a mixed
 color through their actual f32 inverses with unchanged alpha. Missing production
 roles remain incomplete, and differing perturb spaces change settings identity.
+
+Joined main's exact pipeline/strict-variant checkpoint
+`b478993bca5dc20bbd9ffef28eee54ca1ee31e54`. The shared registry now contains five
+callable public methods and seven color pairs. Five reference fixtures pass,
+including all nine anchors, both support policies, all matching/alpha tags,
+all field/space combinations, diffusion feedback/scan modes, and Yliluoma sizes.
+Tiny independent Bayer bytes verify the RGBA8 intermediate and exact indices;
+all composition comparisons include complete palette/transparency/warnings.
