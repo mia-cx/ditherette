@@ -9,7 +9,7 @@ use ditherette_wasm::{
 const PIXEL: [u8; 4] = [20, 40, 60, 128];
 const PALETTE: [PaletteEntry; 2] = [
     PaletteEntry::Color { rgb: [0, 0, 0] },
-    PaletteEntry::Transparent,
+    PaletteEntry::Transparent {},
 ];
 
 fn source() -> Source<'static> {
@@ -158,8 +158,8 @@ fn validates_dimension_limits_without_allocating_large_images() {
 
 #[test]
 fn accepts_transparent_only_and_oversize_palettes_for_later_normalization() {
-    let transparent = [PaletteEntry::Transparent];
-    let oversized = [PaletteEntry::Transparent; 257];
+    let transparent = [PaletteEntry::Transparent {}];
+    let oversized = [PaletteEntry::Transparent {}; 257];
     for palette in [&transparent[..], &oversized[..]] {
         let request = QuantizeRequest {
             palette,
@@ -228,7 +228,7 @@ fn malformed_tags_and_unknown_fields_fail_recipe_decoding() {
 
 #[test]
 fn numeric_settings_reject_nan_infinity_and_negative_values() {
-    for threshold in [-1.0, 256.0, f32::NAN, f32::INFINITY] {
+    for threshold in [-1.0, 256.0, f64::NAN, f64::INFINITY] {
         let request = QuantizeRequest {
             alpha: AlphaPolicy::Preserve { threshold },
             ..quantize()
