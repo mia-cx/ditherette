@@ -22,6 +22,10 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
     output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
 ) {
+    if plan.scratch_elements() == 0 {
+        resize_with_scratch_into(source, output, plan, &mut []);
+        return;
+    }
     VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
         vertical_row.resize(plan.scratch_elements(), 0.0);
         resize_with_scratch_into(source, output, plan, vertical_row);

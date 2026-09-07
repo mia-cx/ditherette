@@ -22,7 +22,7 @@ use crate::{
                 MAX_SOURCE_SIDE,
             },
         },
-        pipeline::processor::{Boundary, NearestRequest, Processor},
+        pipeline::processor::{Boundary, Processor, ResizeRequest},
     },
 };
 
@@ -121,6 +121,7 @@ pub fn private_resize(
     source_height: f64,
     output_width: f64,
     output_height: f64,
+    algorithm: f64,
     anchor: f64,
     result_sink: &JsValue,
 ) -> u32 {
@@ -129,7 +130,7 @@ pub fn private_resize(
         Err(error) => return status(error),
     };
     let result = (|| {
-        let request = NearestRequest {
+        let request = ResizeRequest {
             source_width: dimension(
                 source_width,
                 MAX_SOURCE_SIDE,
@@ -155,8 +156,20 @@ pub fn private_resize(
                     ErrorCode::InvalidSettings,
                     ErrorPath::OutputHeight,
                 )?,
-                resize: ResizePolicy::Nearest {
-                    anchor: parse_anchor(anchor)?,
+                resize: match algorithm {
+                    0.0 => ResizePolicy::Nearest {
+                        anchor: parse_anchor(anchor)?,
+                    },
+                    1.0 => ResizePolicy::Area {},
+                    2.0 => ResizePolicy::Bilinear {
+                        anchor: parse_anchor(anchor)?,
+                    },
+                    _ => {
+                        return Err(Failure::new(
+                            ErrorCode::InvalidSettings,
+                            ErrorPath::OutputResize,
+                        ))
+                    }
                 },
             },
         };
