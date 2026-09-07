@@ -223,7 +223,9 @@ pub fn validate_experiment(experiment: &Experiment) -> io::Result<()> {
         if case.name.is_empty() || !names.insert(&case.name) {
             return Err(io::Error::other("empty or duplicate case name"));
         }
-        let expected = u64::from(case.source.width) * u64::from(case.source.height) * 4;
+        let expected = (u64::from(case.source.width) * u64::from(case.source.height))
+            .checked_mul(4)
+            .ok_or_else(|| io::Error::other("fixture dimensions overflow byte length"))?;
         if case.source.width == 0
             || case.source.height == 0
             || expected != case.rgba.len() as u64

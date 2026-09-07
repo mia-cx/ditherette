@@ -135,6 +135,15 @@ fn fresh_pairs_confirm_per_case_regressions_without_promoting_code() {
 #[test]
 fn missing_identity_settings_samples_or_correctness_never_pass() {
     let (prepared, trials) = fixture();
+    let mut malformed = prepared.experiment.clone();
+    malformed.cases[0].source = Dimensions {
+        width: u32::MAX,
+        height: u32::MAX,
+    };
+    assert!(coordinator::validate_experiment(&malformed)
+        .unwrap_err()
+        .to_string()
+        .contains("overflow"));
     assert_eq!(compare(&prepared, &trials[..3]).gate, Gate::Incomplete);
     let mut duplicate = trials.clone();
     duplicate.push(trials[0].clone());
