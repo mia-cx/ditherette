@@ -7,9 +7,10 @@ Read the [execution contract](README.md#execution-contract) before claiming a sl
 Mia directs restoration of the landed optimized kernels and shared helpers in [#108](https://github.com/mia-cx/ditherette/issues/108).
 This supersedes earlier copied-baseline execution instructions for already-landed implementations, not the frozen reference itself.
 The coordinator owns `fix/v1-restore-landed` in `.worktrees/v1-restore-landed`, based on S20 `e19e12c219605138399cabd71b84cd4d9262a678`.
-S21 restores area/bilinear in its existing branch; S22 restores cubic/Lanczos/convolution in its existing branch.
-A separate nearest restoration reconnects the new public API while preserving required bounded/fallible integration.
-S19 readiness is withdrawn until that correction passes. Existing PRs and historical evidence remain open and recoverable.
+S21 restores area/bilinear; S22 restores cubic/Lanczos/convolution. Both restored heads join this correction.
+Nearest restoration `d17e323d2ba6487474c6fa9952e03a86d393a8ba` reconnects the public API with bounded/fallible integration.
+The correction is validated in open, non-draft [PR #109](https://github.com/mia-cx/ditherette/pull/109), targeting `impl/v1-s20-browser-bench`.
+S19 is ready with this correction included. Existing PRs and historical evidence remain open and recoverable.
 S20 tooling evidence remains valid for the artifact it measured; it does not establish performance of the restored implementation.
 The interrupted diagnostic branch stays separate and will not delay restoring landed code.
 All later work reuses landed kernels and shared helpers. Only missing implementations start from literal spec copies.
@@ -168,7 +169,8 @@ Ready describes the tooling PR, not release performance. S41 retains the confirm
 Both branches restore their crate trees to S20 delivery `711c7aec61587b45a91c2e404583161edb1e0de9`.
 S21 restoration is `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508`; S22 restoration is `55b08b4ad4911fc8aa3d65a86a9b94c801079962`.
 The coordinator verifies both source trees byte-for-byte and joins them into `fix/v1-restore-landed`.
-Advance their clean branches to the validated correction before continuing. Future PRs target `fix/v1-restore-landed`; neither exists yet.
+Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
+Future PRs target `fix/v1-restore-landed`; neither exists yet.
 
 | Slice | Branch/worktree suffix | Current task |
 | --- | --- | --- |

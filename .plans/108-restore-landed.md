@@ -9,7 +9,7 @@ The v1 plan covers remaining work. It does not authorize replacing completed imp
 - [x] Restore area/bilinear and cubic/Lanczos/convolution paths and callers in their existing slice worktrees, verifying original bytes.
 - [x] Restore nearest and its shared helpers, then connect the new public wrapper through required bounded/fallible integration.
 - [x] Verify restored content, original correctness checks, public ownership/errors, Wasm builds, and the trusted frozen-reference guard.
-- [ ] Publish corrective commits and an unmerged restoration PR; reconcile current slice branches and progress.
+- [x] Publish corrective commits and an unmerged restoration PR; reconcile current slice branches and progress.
 
 ## Ownership and constraints
 
@@ -69,3 +69,11 @@ Its digest remains `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cdd
 A read-only independent review finds no concrete allocation, cleanup, mapping, or dispatch defect.
 No benchmark runs and no restored-performance claim follows from these correctness checks.
 S21/S22 still need public package integration and their remaining slice evidence.
+
+## Delivery
+
+Open, non-draft [PR #109](https://github.com/mia-cx/ditherette/pull/109) targets `impl/v1-s20-browser-bench`; auto-merge is disabled.
+Its creation head is `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
+Both clean S21/S22 branches fast-forward to that validated correction; their next PRs target `fix/v1-restore-landed`.
+The progress table links the correction beside S19. S21/S22 remain in progress.
+Root visible progress matches the tracked table. The user-owned workspace configuration remains untouched.
