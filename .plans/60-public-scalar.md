@@ -9,7 +9,7 @@ The other S19 owners provide the private Rust processor and nearest optimization
 - [x] Add the nearest request/result types, structured errors, and canonical raw-JS validation with focused fixtures.
 - [x] Connect isolated lazy scalar initialization and guarded synchronous resize/disposal to the agreed private ABI.
 - [x] Verify real public calls, failure boundaries, durable outputs, and installed-tarball browser loading.
-- [ ] Record runtime provenance, rerun the focused checks, and deliver the final clean checkpoint.
+- [x] Record runtime provenance, rerun the focused checks, and deliver the final clean checkpoint.
 
 Public requests preserve version one, `source`, and `output.resize.algorithm` from the frozen contract.
 Only nearest resize and disposal are implemented here. `preferred` threads uses scalar; `required` reports capability until S34.
@@ -43,4 +43,10 @@ The packed-artifact fixture found wasm-pack's generated `.gitignore` excluded al
 Package staging now omits that ignore file; original crate and website artifacts stay unchanged.
 Chromium also rejects DataView directly in WebAssembly.instantiate. Custom views now become offset-preserving Uint8Array views without byte copies.
 WebKit uses private extracted Debian libraries and a task-local launcher because its bundled launcher replaces LD_LIBRARY_PATH.
-No system packages or shared browser binaries changed. Exact provenance follows in the runtime evidence file.
+No system packages or shared browser binaries changed. [Runtime provenance](60-browser-runtime.md) records exact versions, hashes, and the local launcher.
+
+Final focused validation passes after rebuilding both Wasm variants and the package:
+three generator tests, two built-glue tests, two staging tests, twelve validation/public tests, the public TypeScript fixture,
+and all three installed-tarball browser engines. The browser runner counts its enclosing fixture as a fourth passing test.
+Package `check` also passes. The frozen spec, shared image storage, root workspace policy, and website staging script remain unchanged.
+The coordinator separately validates the promoted nearest kernel at its integration join; this wrapper branch does not claim those benchmark results.
