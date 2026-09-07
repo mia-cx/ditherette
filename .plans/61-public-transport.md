@@ -8,7 +8,7 @@ The paired protocol owns validation and acceptance. The Rust worker owns referen
 ## TODOs
 
 - [x] Add the TypeScript adapter and deterministic timing tests, including zero samples and per-sample preparation.
-- [ ] Add the immutable-asset browser transport using the shared trial schema and existing resource cleanup.
+- [x] Add the immutable-asset browser transport using the shared trial schema and existing resource cleanup.
 - [ ] Verify real TypeScript output and installed-package calls without running measurements; record runtime provenance and handoff.
 
 ## Constraints
@@ -25,3 +25,8 @@ TODO 1 passes six deterministic Node fixtures and focused TypeScript checking.
 The offline compiler emits the six real adapter/source modules, with explicit `.js` imports and compiler/input hashes.
 Warmup uses wall time including preparation/disposal, with a bounded stalled-clock failure. Throughput calibration uses operation time only.
 No real operation timing runs during these tests.
+
+TODO 2 passes eleven focused fixtures. The HTTP server and browser routing share one manifest allowlist.
+Undeclared dependencies, external requests, runtime-version drift, and isolation drift fail the trial.
+The existing leased transport still owns browser/server signal and stdin-liveness cleanup.
+Initialization probes and disposal occur after each create timer. Fresh processing creates before each call timer.
