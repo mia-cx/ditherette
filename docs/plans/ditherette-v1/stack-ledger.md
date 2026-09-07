@@ -6,7 +6,7 @@ Read the [execution contract](README.md#execution-contract) before claiming a sl
 
 - Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).
 - Owner: S01 anchor agent. Worktree: `.worktrees/v1-s01-anchor`.
-- Branch: `impl/v1-s01-anchor`. PR base: `main`. PR: pending creation.
+- Branch: `impl/v1-s01-anchor`. PR base: `main`. PR: [#75](https://github.com/mia-cx/ditherette/pull/75), open and non-draft.
 - Main: `edc87f5da2b6958f7d9c892483e08af8149482b4`.
 - Inherited port: `5a5872badbba796f4effe92aba8051b43e30233e` (`origin/feat/rust-wasm-port`).
 - Rebased code checkpoint: `a9928ebe55a2571b4e6bb35fedea80aff5474302`. Dependencies: none.
@@ -36,4 +36,4 @@ No benchmark process ran. Native export tests include their existing benchmark-w
 
 ### Next dependencies
 
-S02, S03, and S04 may prepare from the committed anchor. Mark implementation available only after recording the unmerged PR and final validated head. Child PRs target `impl/v1-s01-anchor` and record its exact SHA.
+S01 implementation is available at validated code/plan head `0f33dbdf123cf367362a8473c2e95bf1223a2c3c`, with evidence at `60bfa968e9541f14e2e1490a7829f91dda490d89`. This subsequent entry only records the PR URL. S02, S03, and S04 can use the delivered PR head, which contains both checkpoints. Child PRs target `impl/v1-s01-anchor` and record its exact SHA. All PRs remain unmerged.
