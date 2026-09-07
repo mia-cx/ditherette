@@ -5,9 +5,9 @@
 //! consume stable subject descriptors without deep-importing internal modules.
 
 pub mod quantize;
-pub mod scores;
 pub mod reference;
 mod resize_budgeted;
+pub mod scores;
 pub mod verification;
 
 /// Existing registry with this crate's concrete, borrowed conformance protocol.
