@@ -6,15 +6,31 @@ pub use ditherette_wasm::prod::contract::request::{Anchor, Support};
 use std::{collections::BTreeSet, io, path::Component};
 
 /// Later method slices extend this operation registry with their concrete typed settings.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PublicOperation {
-    ResizeNearest { anchor: Anchor },
+    ResizeNearest {
+        anchor: Anchor,
+    },
     ResizeArea {},
-    ResizeBilinear { anchor: Anchor },
-    ResizeBicubic { anchor: Anchor, support: Support },
-    ResizeLanczos2 { anchor: Anchor, support: Support },
-    ResizeLanczos3 { anchor: Anchor, support: Support },
+    ResizeBilinear {
+        anchor: Anchor,
+    },
+    ResizeBicubic {
+        anchor: Anchor,
+        support: Support,
+    },
+    ResizeLanczos2 {
+        anchor: Anchor,
+        support: Support,
+    },
+    ResizeLanczos3 {
+        anchor: Anchor,
+        support: Support,
+    },
+    Quantize {
+        settings: super::quantize::QuantizeSettings,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,7 +59,7 @@ pub enum CacheCapability {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
     pub operation: PublicOperation,
@@ -68,6 +84,10 @@ impl BrowserCase {
 impl PublicOperation {
     pub fn subject(&self, backend: BrowserBackend) -> &'static str {
         match (self, backend) {
+            (Self::Quantize { .. }, BrowserBackend::Package) => "public:quantize:request:package",
+            (Self::Quantize { .. }, BrowserBackend::TypeScript) => {
+                "public:quantize:request:typescript"
+            }
             (Self::ResizeNearest { .. }, BrowserBackend::Package) => {
                 "public:resize:nearest:package"
             }
@@ -105,6 +125,7 @@ impl PublicOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Quantize { .. } => "spec:quantize:request:v1",
             Self::ResizeNearest { .. } => "spec:resize:nearest:scalar",
             Self::ResizeArea {} => "spec:resize:area:scalar",
             Self::ResizeBilinear { .. } => "spec:resize:bilinear:scalar",
@@ -143,7 +164,7 @@ impl PublicOperation {
             | Self::ResizeBicubic { anchor, .. }
             | Self::ResizeLanczos2 { anchor, .. }
             | Self::ResizeLanczos3 { anchor, .. } => anchor,
-            Self::ResizeArea {} => Anchor::Center,
+            Self::ResizeArea {} | Self::Quantize { .. } => Anchor::Center,
         }
     }
 
@@ -154,6 +175,14 @@ impl PublicOperation {
         rgba: &[u8],
         output: Dimensions,
     ) -> io::Result<CaseIdentity> {
+        if let Self::Quantize { settings } = self {
+            if output != source {
+                return Err(io::Error::other(
+                    "quantize output dimensions must equal its source",
+                ));
+            }
+            return settings.identity(source, rgba);
+        }
         let semantics = SemanticIdentity {
             operation: Operation::Resize,
             recipe: match self {
@@ -163,6 +192,7 @@ impl PublicOperation {
                 Self::ResizeBicubic { .. } => "bicubic-public-v1",
                 Self::ResizeLanczos2 { .. } => "lanczos2-public-v1",
                 Self::ResizeLanczos3 { .. } => "lanczos3-public-v1",
+                Self::Quantize { .. } => unreachable!("quantize returned above"),
             }
             .into(),
             version: 1,
@@ -324,8 +354,8 @@ pub struct BrowserTransportResult {
     pub warmup_iterations: usize,
     pub warmup_elapsed_ns: u128,
     pub output: VerificationOutput,
-    /// Instability marker containing preflight actual bytes; `output` holds final actual bytes.
-    /// Workers preserve both and reject publication of this trial.
+    /// Instability marker containing the first actual output; `output` holds its first distinct successor.
+    /// Neither field claims to hold the final sample. Workers preserve both and always reject publication.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unstable_output: Option<VerificationOutput>,
     pub observation: BrowserObservation,
@@ -378,6 +408,24 @@ pub fn artifact_identity(
 }
 
 pub fn validate_case(case: &PairCase) -> io::Result<()> {
+    if let Some(native) = &case.native {
+        if case.browser.is_some()
+            || case.measurement.scope != native.scope()
+            || case.measurement.application_cache != ApplicationCache::NotApplicable
+        {
+            return Err(io::Error::other(
+                "native operation requires its declared scope without browser or cache claims",
+            ));
+        }
+        if case.identity != native.identity(case.source, &case.rgba)?
+            || case.reference_subject != native.reference_subject()
+        {
+            return Err(io::Error::other(
+                "native operation settings or reference identity differs",
+            ));
+        }
+        return Ok(());
+    }
     let Some(browser) = &case.browser else {
         return if case.measurement.scope == CallScope::NativeKernel
             && case.measurement.application_cache == ApplicationCache::NotApplicable
@@ -411,6 +459,11 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         }
     }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript) {
+        if matches!(browser.operation, PublicOperation::Quantize { .. }) {
+            return Err(io::Error::other(
+                "no faithful TypeScript indexed quantize adapter is registered",
+            ));
+        }
         if matches!(browser.operation, PublicOperation::ResizeBicubic { .. }) {
             return Err(io::Error::other(
                 "The website has no bicubic implementation",

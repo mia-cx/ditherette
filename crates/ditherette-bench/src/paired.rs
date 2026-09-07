@@ -3,6 +3,7 @@
 pub mod browser;
 pub mod coordinator;
 pub mod native;
+pub mod quantize;
 
 use ditherette_bench_api::verification::*;
 use serde::{Deserialize, Serialize};
@@ -39,6 +40,10 @@ pub enum SampleMode {
 #[serde(rename_all = "kebab-case")]
 pub enum CallScope {
     NativeKernel,
+    /// Complete native operation with borrowed source, including preparation and owned result allocation.
+    NativeCompleteCall,
+    /// Packed forward conversion into caller-owned coordinates; preparation and inverse are untimed.
+    NativeForwardConversion,
     CompleteCall,
     Initialization,
 }
@@ -69,6 +74,8 @@ pub struct PairCase {
     pub measurement: Measurement,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser: Option<browser::BrowserCase>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native: Option<native::NativeOperation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

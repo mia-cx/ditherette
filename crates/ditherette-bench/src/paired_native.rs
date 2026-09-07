@@ -6,8 +6,8 @@ use crate::{
     error::BenchError,
     fixture::Fixture,
     measure::{
-        measure_resize_case, run_resize_once, MeasurementConfig, MeasurementObserver,
-        MeasurementProgress,
+        measure_resize_case, measure_workload, run_resize_once, MeasurementConfig,
+        MeasurementObserver, MeasurementProgress, Workload,
     },
     registry::Registry,
 };
@@ -19,6 +19,11 @@ use ditherette_bench::{
     verification::{content_digest, verify_with_bounds, VerificationBounds},
 };
 use ditherette_bench_api::{verification::*, ResizeParams};
+use ditherette_wasm::{
+    bench_subjects::{quantize as adapters, BenchSubject},
+    image::{ImageDimensions, ImageView, Rgba8},
+    prod::{color::packed::Converter, contract::request::QuantizeRequest},
+};
 use std::{
     fs,
     time::{Duration, Instant},
@@ -52,6 +57,9 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
         return Err(BenchError::Config("paired artifact differs from its embedded clean source revision or complete executable digest".into()));
     }
     validate_native(&request.case, registry, request.role)?;
+    if request.case.native.is_some() {
+        return run_typed(registry, &request, build, std::path::Path::new(path));
+    }
     let case = &request.case;
     let subject_id = match request.role {
         Role::Accepted => &case.accepted_subject,
@@ -145,6 +153,46 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
         cases: vec![case.clone()],
     })
     .map_err(BenchError::io)?;
+    if let Some(operation) = &case.native {
+        let subject_id = match role {
+            Role::Accepted => &case.accepted_subject,
+            Role::Candidate => &case.candidate_subject,
+        };
+        let BenchSubject::Conformance(subject) = registry.subject(subject_id)? else {
+            return Err(BenchError::Config(
+                "typed native operation requires a conformance subject".into(),
+            ));
+        };
+        let BenchSubject::Conformance(reference) = registry.subject(&case.reference_subject)?
+        else {
+            return Err(BenchError::Config(
+                "typed native operation requires its conformance reference".into(),
+            ));
+        };
+        let callable = match operation {
+            native::NativeOperation::Quantize { .. } => {
+                adapters::quantize_function(subject_id).is_some()
+            }
+            native::NativeOperation::ColorForward { space } => {
+                adapters::color_subject(*space).is_ok_and(|id| id == subject_id)
+            }
+        };
+        if !callable
+            || subject.operation != case.identity.semantics.operation
+            || reference.operation != subject.operation
+            || subject
+                .descriptor
+                .default_oracle
+                .as_ref()
+                .map(|id| id.as_str())
+                != Some(case.reference_subject.as_str())
+        {
+            return Err(BenchError::Config(
+                "native callable or oracle differs from its typed operation".into(),
+            ));
+        }
+        return Ok(());
+    }
     let m = &case.measurement;
     if m.scope != CallScope::NativeKernel || m.application_cache != ApplicationCache::NotApplicable
     {
@@ -175,6 +223,152 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
             "native subject or normalized recipe identity differs".into(),
         ));
     }
+    Ok(())
+}
+
+enum TypedWorkload<'a> {
+    Quantize {
+        run: adapters::QuantizeFn,
+        request: QuantizeRequest<'a>,
+    },
+    Color {
+        converter: Converter,
+        source: ImageView<'a, Rgba8>,
+        coordinates: Vec<f32>,
+    },
+}
+
+impl Workload for TypedWorkload<'_> {
+    fn run(&mut self) -> Result<(), BenchError> {
+        match self {
+            Self::Quantize { run, request } => {
+                // Complete result construction and disposal remain inside every call.
+                drop(std::hint::black_box(
+                    run(*request).map_err(|e| BenchError::Runtime(e.to_string()))?,
+                ));
+            }
+            Self::Color {
+                converter,
+                source,
+                coordinates,
+            } => {
+                converter.rgba8_into(*source, coordinates);
+                // Every conversion is observable, including earlier iterations in a throughput batch.
+                std::hint::black_box(&*coordinates);
+            }
+        }
+        Ok(())
+    }
+    fn consume(&self) {
+        if let Self::Color { coordinates, .. } = self {
+            std::hint::black_box(coordinates);
+        }
+    }
+}
+
+fn run_typed(
+    registry: &Registry,
+    request: &TrialRequest,
+    build: BuildIdentity,
+    request_path: &std::path::Path,
+) -> Result<(), BenchError> {
+    let case = &request.case;
+    let operation = case.native.as_ref().expect("validated typed operation");
+    let subject_id = match request.role {
+        Role::Accepted => &case.accepted_subject,
+        Role::Candidate => &case.candidate_subject,
+    };
+    let parameters = operation
+        .reference_request(case.source, &case.rgba)
+        .map_err(BenchError::io)?;
+    let verify = |id: &str| -> Result<VerificationOutput, BenchError> {
+        let BenchSubject::Conformance(subject) = registry.subject(id)? else {
+            unreachable!("validated conformance subject")
+        };
+        (subject.run)(&parameters).map_err(|e| BenchError::Runtime(e.to_string()))
+    };
+    let reference_output = verify(&case.reference_subject)?;
+    let before = verify(subject_id)?;
+    let mut workload = match operation {
+        native::NativeOperation::Quantize { .. } => TypedWorkload::Quantize {
+            run: adapters::quantize_function(subject_id).expect("validated native callable"),
+            request: adapters::quantize_request(&parameters)
+                .map_err(|e| BenchError::Runtime(e.to_string()))?,
+        },
+        native::NativeOperation::ColorForward { space } => TypedWorkload::Color {
+            converter: Converter::new(
+                adapters::ordinary_space(*space).map_err(|e| BenchError::Runtime(e.to_string()))?,
+            ),
+            source: ImageView::packed(
+                &case.rgba,
+                ImageDimensions::new(case.source.width, case.source.height)
+                    .map_err(|e| BenchError::Runtime(e.to_string()))?,
+            )
+            .map_err(|e| BenchError::Runtime(e.to_string()))?,
+            coordinates: vec![0.0; case.rgba.len() / 4 * 3],
+        },
+    };
+    let mut observer = Observer {
+        warmup_iterations: 0,
+        started: Instant::now(),
+        warmup_elapsed_ns: 0,
+        max_live: live_benchmarks().map_err(BenchError::io)?,
+        observation_error: None,
+    };
+    let measured = measure_workload(
+        &mut workload,
+        (case.source.width, case.source.height),
+        &config(&case.measurement)?,
+        &mut observer,
+    )?;
+    if let Some(error) = observer.observation_error {
+        return Err(BenchError::io(error));
+    }
+    let after = verify(subject_id)?;
+    if before != after {
+        // Keep exact concrete evidence, but never publish unstable samples as a valid trial.
+        let evidence = serde_json::to_vec_pretty(&(
+            request,
+            reference_output,
+            before,
+            after,
+            &measured.sample_ns,
+        ))
+        .map_err(|e| BenchError::Runtime(e.to_string()))?;
+        fs::write(request_path.with_extension("unstable.json"), evidence)
+            .map_err(BenchError::io)?;
+        return Err(BenchError::Runtime(
+            "native output changed between untimed preflight and final verification".into(),
+        ));
+    }
+    let record = |subject: String, output| RecordedOutput {
+        case: case.identity.clone(),
+        implementation: ImplementationIdentity {
+            subject,
+            artifact: request.executable.clone(),
+        },
+        output,
+    };
+    let result = TrialResult {
+        role: request.role,
+        pair: request.pair,
+        case_name: case.name.clone(),
+        build,
+        measurement: case.measurement.clone(),
+        warmup_iterations: observer.warmup_iterations,
+        warmup_elapsed_ns: observer.warmup_elapsed_ns,
+        sample_ns: measured.sample_ns,
+        iterations_per_sample: measured.iterations_per_sample,
+        reference: record(case.reference_subject.clone(), reference_output),
+        output: record(subject_id.clone(), after),
+        pid: std::process::id(),
+        max_live_benchmark_processes: observer.max_live,
+        browser: None,
+    };
+    println!(
+        "{}",
+        serde_json::to_string(&result).map_err(|e| BenchError::Runtime(e.to_string()))?
+    );
     Ok(())
 }
 
@@ -252,6 +446,7 @@ mod tests {
             space: None,
         };
         let mut case = PairCase {
+            native: None,
             browser: None,
             name: "fixture".into(),
             source,
@@ -298,6 +493,26 @@ mod tests {
         assert!(validate_native(&case, &registry, Role::Candidate).is_err());
         case.candidate_subject = "prod:resize:bicubic:catmull-rom".into();
         case.identity.settings = content_digest(b"wrong settings");
+        assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+
+        let operation = native::NativeOperation::Quantize {
+            settings: quantize::QuantizeSettings {
+                palette: vec![quantize::PaletteEntry::Color { rgb: [1, 2, 3] }],
+                alpha: quantize::AlphaPolicy::Premultiplied {},
+                matching: quantize::MatchPolicy::SrgbEuclidean,
+            },
+        };
+        case.identity = operation.identity(source, &case.rgba).unwrap();
+        case.reference_subject = operation.reference_subject().into();
+        case.measurement.scope = operation.scope();
+        case.native = Some(operation);
+        case.accepted_subject = adapters::QUANTIZE_SUBJECT.into();
+        case.candidate_subject = "candidate:quantize:request:absent-in-this-artifact".into();
+        validate_native(&case, &registry, Role::Accepted).unwrap();
+        assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+        case.candidate_subject = adapters::QUANTIZE_SUBJECT.into();
+        validate_native(&case, &registry, Role::Candidate).unwrap();
+        case.candidate_subject = "spec:quantize:request:v1".into();
         assert!(validate_native(&case, &registry, Role::Candidate).is_err());
     }
 }

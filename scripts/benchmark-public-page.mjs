@@ -1,4 +1,8 @@
-import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
+import {
+	collectCalls,
+	collectInitializations,
+	retainedOutputSlots
+} from './benchmark-public-timing.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -40,7 +44,8 @@ export async function prepareOperation(trial) {
 	const config = trial.case.browser;
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
-	const resize = resizeRecipe(config.operation);
+	const quantize = config.operation.operation === 'quantize';
+	const resize = quantize ? undefined : resizeRecipe(config.operation);
 	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
 		throw new Error('This package has no application cache.');
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
@@ -48,13 +53,18 @@ export async function prepareOperation(trial) {
 	const request = {
 		version: 1,
 		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
-		output: {
-			...trial.case.identity.output,
-			resize
-		}
+		...(quantize
+			? config.operation.settings
+			: {
+					output: {
+						...trial.case.identity.output,
+						resize
+					}
+				})
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
+		if (quantize) throw new Error('No faithful TypeScript indexed quantize adapter is registered.');
 		if (resize.algorithm === 'bicubic')
 			throw new Error('The website has no bicubic implementation.');
 		if ('anchor' in resize && resize.anchor !== 'center')
@@ -84,10 +94,11 @@ export async function prepareOperation(trial) {
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
 	const create = () => createDitherette({ wasm: compiled ?? bytes });
+	const call = (instance) => (quantize ? instance.quantize(request) : instance.resize(request));
 	if (measurement.scope === 'initialization') {
 		if (!['initialization-bytes', 'initialization-compiled'].includes(config.preparation))
 			throw new Error('Initialization requires an explicit compilation scope.');
-		return { request, create, probe: (instance) => instance.resize(request), close() {} };
+		return { request, create, probe: call, close() {} };
 	}
 	if (measurement.scope !== 'complete-call')
 		throw new Error('Browser processing requires complete-call scope.');
@@ -96,7 +107,7 @@ export async function prepareOperation(trial) {
 			request,
 			prepare: async () => {
 				const instance = await create();
-				return { call: () => instance.resize(request), close: () => instance.dispose() };
+				return { call: () => call(instance), close: () => instance.dispose() };
 			},
 			close() {}
 		};
@@ -105,24 +116,136 @@ export async function prepareOperation(trial) {
 	const instance = await create();
 	return {
 		request,
-		call: () => instance.resize(request),
-		prepare: async () => ({ call: () => instance.resize(request), close() {} }),
+		call: () => call(instance),
+		prepare: async () => ({ call: () => call(instance), close() {} }),
 		close: () => instance.dispose()
 	};
 }
 
-function verificationOutput(output) {
+// Views share the public buffers. Only final evidence serialization copies their bytes.
+function outputView(output) {
+	if ('indices' in output) {
+		return {
+			dimensions: { width: output.width, height: output.height },
+			pixels: {
+				format: 'indexed8',
+				indices: output.indices,
+				palette_rgba: output.palette.rgba,
+				transparent_index: output.palette.transparentIndex
+			},
+			warnings: output.warnings
+		};
+	}
 	return {
 		dimensions: { width: output.width, height: output.height },
-		pixels: { format: 'rgba8', data: Array.from(output.data) },
+		pixels: { format: 'rgba8', data: output.data },
 		warnings: []
 	};
 }
 
+export function verificationOutput(output) {
+	const view = outputView(output);
+	return {
+		...view,
+		pixels:
+			view.pixels.format === 'rgba8'
+				? { ...view.pixels, data: Array.from(view.pixels.data) }
+				: {
+						...view.pixels,
+						indices: Array.from(view.pixels.indices),
+						palette_rgba: Array.from(view.pixels.palette_rgba)
+					},
+		warnings: view.warnings.map(({ code, message }) => ({ code, message }))
+	};
+}
+
+const MAX_PALETTE_BYTES = 256 * 4;
+const MAX_WARNINGS = 3;
+const MAX_WARNING_CHARACTERS = 88;
+const WARNING_CODES = new Set(['palette-truncated', 'transparent-only', 'transparent-fallback']);
+
+/** Require independent records and durable buffers; retain only the first and first distinct result. */
+export function outputStability(outputBytes, format = 'rgba8') {
+	let first;
+	let distinct;
+	const retainedStorage = new Set();
+	return {
+		observe(outputs) {
+			const storage = new Set();
+			for (const output of outputs) {
+				const indexed = format === 'indexed8';
+				const actualIndexed = 'indices' in output;
+				if (indexed !== actualIndexed) throw new Error('Unexpected public output format.');
+				const views = indexed ? [output.indices, output.palette.rgba] : [output.data];
+				const pixels = indexed ? outputBytes - MAX_PALETTE_BYTES : outputBytes;
+				for (const [index, data] of views.entries()) {
+					if (
+						!ArrayBuffer.isView(data) ||
+						data.BYTES_PER_ELEMENT !== 1 ||
+						data.buffer.byteLength !== data.byteLength ||
+						(index === 0
+							? data.byteLength !== pixels
+							: data.byteLength < 4 ||
+								data.byteLength > MAX_PALETTE_BYTES ||
+								data.byteLength % 4 !== 0)
+					)
+						throw new Error('Output storage violates the declared durable byte-result contract.');
+				}
+				if (indexed) {
+					const count = output.palette.rgba.length / 4;
+					const transparent = output.palette.transparentIndex;
+					if (
+						(transparent !== null &&
+							(!Number.isInteger(transparent) || transparent < 0 || transparent >= count)) ||
+						output.indices.some((index) => index >= count) ||
+						!Array.isArray(output.warnings) ||
+						output.warnings.length > MAX_WARNINGS ||
+						output.warnings.some(
+							(warning) =>
+								!WARNING_CODES.has(warning.code) ||
+								typeof warning.message !== 'string' ||
+								warning.message.length > MAX_WARNING_CHARACTERS ||
+								Object.keys(warning).some((key) => !['code', 'message'].includes(key))
+						) ||
+						Object.keys(output).some(
+							(key) => !['width', 'height', 'indices', 'palette', 'warnings'].includes(key)
+						) ||
+						Object.keys(output.palette).some((key) => !['rgba', 'transparentIndex'].includes(key))
+					)
+						throw new Error('Indexed metadata exceeds the declared public result contract.');
+				}
+				const records = indexed
+					? [output, output.palette, output.warnings, ...output.warnings]
+					: [output];
+				const owned = [...records, ...views.map((data) => data.buffer)];
+				for (const value of owned) {
+					if (storage.has(value) || retainedStorage.has(value))
+						throw new Error('Output storage aliases an earlier retained result.');
+					storage.add(value);
+				}
+				if (!first) {
+					first = output;
+					for (const value of owned) retainedStorage.add(value);
+					continue;
+				}
+				if (!distinct && !equalOutput(outputView(output), outputView(first))) {
+					distinct = output;
+					for (const value of owned) retainedStorage.add(value);
+				}
+			}
+		},
+		evidence(finalOutput) {
+			return distinct
+				? { unstable_output: verificationOutput(first), output: verificationOutput(distinct) }
+				: { output: verificationOutput(finalOutput) };
+		}
+	};
+}
+
 /** Compare one untimed actual call with worker-supplied frozen bytes; return concrete mismatch evidence. */
-export async function preflightOperation(operation, reference) {
-	if (!reference || reference.pixels.format !== 'rgba8')
-		throw new Error('Browser trial requires frozen RGBA8 reference_output.');
+export async function preflightOperation(operation, reference, observe = () => {}) {
+	if (!reference || !['rgba8', 'indexed8'].includes(reference.pixels.format))
+		throw new Error('Browser trial requires frozen RGBA8 or indexed reference_output.');
 	let output;
 	if (operation.create) {
 		const instance = await operation.create();
@@ -139,15 +262,34 @@ export async function preflightOperation(operation, reference) {
 			prepared.close();
 		}
 	}
+	observe([output]);
+	const actual = verificationOutput(output);
+	if (equalOutput(actual, reference)) return undefined;
+	return actual;
+}
+
+/** Exact bytes and metadata, independent of JSON object key order. */
+export function equalOutput(actual, expected) {
+	const equalBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
 	if (
-		output.width === reference.dimensions.width &&
-		output.height === reference.dimensions.height &&
-		reference.warnings.length === 0 &&
-		output.data.length === reference.pixels.data.length &&
-		output.data.every((byte, index) => byte === reference.pixels.data[index])
+		actual.dimensions.width !== expected.dimensions.width ||
+		actual.dimensions.height !== expected.dimensions.height ||
+		actual.pixels.format !== expected.pixels.format ||
+		actual.warnings.length !== expected.warnings.length ||
+		actual.warnings.some(
+			(warning, index) =>
+				warning.code !== expected.warnings[index].code ||
+				warning.message !== expected.warnings[index].message
+		)
 	)
-		return undefined;
-	return verificationOutput(output);
+		return false;
+	if (actual.pixels.format === 'rgba8') return equalBytes(actual.pixels.data, expected.pixels.data);
+	if (actual.pixels.format !== 'indexed8') return false;
+	return (
+		equalBytes(actual.pixels.indices, expected.pixels.indices) &&
+		equalBytes(actual.pixels.palette_rgba, expected.pixels.palette_rgba) &&
+		actual.pixels.transparent_index === expected.pixels.transparent_index
+	);
 }
 
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
@@ -167,7 +309,13 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const mismatch = await preflightOperation(operation, trial.reference_output);
+		const format = trial.case.browser.operation.operation === 'quantize' ? 'indexed8' : 'rgba8';
+		const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
+		// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
+		const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
+		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
+		const stability = outputStability(outputBytes, format);
+		const mismatch = await preflightOperation(operation, trial.reference_output, stability.observe);
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes during preflight.');
 		if (mismatch && trial.case.browser.measure_nonexact !== true)
@@ -187,20 +335,26 @@ export async function runTrial(trial) {
 				? await collectInitializations({
 						measurement,
 						create: operation.create,
-						probe: operation.probe
+						probe: operation.probe,
+						observe: stability.observe,
+						outputBytes
 					})
-				: await collectCalls({ measurement, prepare: operation.prepare });
+				: await collectCalls({
+						measurement,
+						prepare: operation.prepare,
+						observe: stability.observe,
+						outputBytes
+					});
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
-		const verified = verificationOutput(output);
+		// Keep the actual timing result separate. Instability evidence is the first distinct pair,
+		// not a claim that the final timed output still differs (A/B/A must also fail).
+		const evidence = stability.evidence(output);
 		return {
 			...identity,
 			...timings,
-			output: verified,
-			...(mismatch && JSON.stringify(verified) !== JSON.stringify(mismatch)
-				? { unstable_output: mismatch }
-				: {}),
+			...evidence,
 			observation
 		};
 	} finally {

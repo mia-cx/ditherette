@@ -137,3 +137,24 @@ No unresolved check failure remains. No performance trial ran; the coordinator o
 Public code `f2a38562` and validation record `89f87985` are pushed on `impl/v1-s22-convolution`.
 All owned build/test/browser sessions exited. A scoped `/proc` working-directory check found no remaining process in this worktree.
 The worktree is clean at handoff. The coordinator can join this branch for fresh native/public comparative trials.
+
+## Final stacked PR validation
+
+Join `d2fabf28364ace91faae84e0794a84bd9ddd2f3d` includes finalized S21 parent `7743c2e5b4a313fa5e7da70b850956b85a880df4`.
+The required rebase onto `origin/impl/v1-s21-area-bilinear` used `--rebase-merges` and preserved the exact tree and original checkpoints.
+Conflict resolution retains the validated S22 extensions, including support tags and fallible execution.
+Compared with coordinator `49157a78`, the join changes only S21's measurement record and its authorized progress row.
+Production, package, benchmark runtime, frozen reference, image infrastructure, and guard bytes remain unchanged.
+
+Checks rerun in the final S22 worktree all pass:
+
+- 293 native tests, plus three feature-gated budgeted adapter tests. All report zero measured tests.
+- Scalar and pinned threaded package builds, including generated private bindings and TypeScript compilation.
+- Sixteen interface tests and seven private ABI tests.
+- Installed-tarball Chromium, Firefox, and WebKit conformance, with four reported tests including the parent.
+- Rust formatting, diff checks, and the separate trusted S18 freeze guard.
+
+The [retained measurement record](63-measurement.md) describes runtime `1761705e`, not a new trial on the PR head.
+Read-only verification confirms all 24 native production pairs are byte-identical and all four S22 reports are complete.
+Their counts and medians match the record. Existing strict-reference failures remain visible; public comparisons remain non-equivalent diagnostics.
+No measurement or kernel change occurs during PR assembly. The PR stacks on S21 and closes issue 63 only when merged.
