@@ -1,7 +1,7 @@
 # S19 prerequisite preparation
 
 Issue [#60](https://github.com/mia-cx/ditherette/issues/60) requires S02, S06, and S18.
-This file records integration preparation only. Production implementation waits for the validated S18 freeze.
+This file records the validated integration base. Production begins in a separate child worktree from this checkpoint.
 
 ## Join
 
@@ -32,13 +32,21 @@ No actual benchmark measurement ran.
 - `cargo check --manifest-path crates/ditherette-bench/Cargo.toml --locked --benches` passed.
 - `cargo fmt --manifest-path crates/ditherette-bench/Cargo.toml --check` passed.
 
-## Remaining prerequisite
+## Completed freeze prerequisite
 
-- [ ] Merge the delivered S18 head into this join.
-- [ ] Run its trusted freeze guard against this resolved dependency/build graph.
+- [x] Merge the delivered S18 head into this join.
+- [x] Run its trusted freeze guard against this resolved dependency/build graph.
 - [ ] Record all prerequisite SHAs, remove only satisfied native blocking edges, and start the S19 implementation worktree.
 
 All PRs stay unmerged. No production copy or optimization has started.
+
+The final delivered S18 head is `eee0b5ddfb600b9ba6517c3dcb755e3566fc7813` in PR #104.
+Its reviewed guard passes against the S19 join at `363324c43556f08ef4e8677d226f5659977bcc66`.
+That run uses the separate S18 trusted checkout, not a guard selected by candidate files.
+It validates frozen content, the corrected symbol/macro/raw-identifier checks, four dependency contexts, and five isolation compilations.
+The final documentation-only merge is `1f7e7a68803f5af6953ec710c536cbb66a32c1f8`.
+Its crates, guard, and workflow trees are identical to the validated join.
+All three required delivered heads are verified ancestors. S18 is no longer a missing code prerequisite.
 
 ## Read-only allocation preflight
 

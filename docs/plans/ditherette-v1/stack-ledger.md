@@ -94,7 +94,10 @@ The separate S19 preparation branch `impl/v1-s19-base` now joins S02, S06, and S
 All three delivered prerequisite SHAs are ancestors; the merges needed no source conflict resolution.
 The joined tree passes native Rust tests, Wasm compilation, formatting, and the combined benchmark verifier/paired/lease fixtures.
 Its `spec/`, `image/`, and both consumer lockfiles exactly match the S17 parent.
-S19 remains unstarted and blocked on S18. This preparation contains no new production implementation.
+The reviewed S18 head `eee0b5ddfb600b9ba6517c3dcb755e3566fc7813` now joins this base.
+Its trusted guard passes the complete resolved tree at `363324c43556f08ef4e8677d226f5659977bcc66`.
+Documentation-only join `1f7e7a68803f5af6953ec710c536cbb66a32c1f8` retains identical crates, guard, and workflow content.
+S19 is ready to start in a child worktree. This prerequisite branch contains no new production implementation.
 
 ## S01 inherited port anchor
 
