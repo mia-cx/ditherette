@@ -183,8 +183,8 @@ test('convolution ABI preserves landed output for every policy and anchor and re
 			}
 		}
 	}
-	for (const algorithm of [0, 1, 2, 3, 4, 5]) {
-		for (const support of [-1, 0.5, 2, NaN, Infinity, ...(algorithm < 3 ? [1] : [])]) {
+	for (const algorithm of [0, 1, 2, 3, 4, 5, 6]) {
+		for (const support of [-1, 0.5, 2, NaN, Infinity, ...(algorithm < 3 || algorithm === 6 ? [1] : [])]) {
 			const sink = {};
 			assert.equal(bindings.privateResize(source(), 2, 1, 1, 1, algorithm, algorithm === 1 ? 0 : 4, support, sink), 4);
 			assert.equal(bindings.privateErrorPath(), 12);
@@ -195,9 +195,43 @@ test('convolution ABI preserves landed output for every policy and anchor and re
 	assert.equal(bindings.privateResize(source(), 2, 1, 1, 1, 1, 4, 0, sink), 4);
 	assert.equal(bindings.privateErrorPath(), 9);
 	assert.equal(sink.value, undefined);
-	for (const algorithm of [-1, 0.5, 6, NaN, Infinity]) {
+	for (const algorithm of [-1, 0.5, 7, NaN, Infinity]) {
 		assert.equal(bindings.privateResize(source(), 2, 1, 1, 1, algorithm, 4, 0, {}), 4);
 	}
 	assert.equal(resize(bindings).data.length, 24);
 	bindings.privateDispose();
+});
+
+test('trilinear exact budget, mip rounding, caught failures, and recovery use the borrowed ABI', async () => {
+	// 4x1→1x1 owns 20 input/output bytes, three 20-byte Wasm MipLevel headers,
+	// 16+8+4 mip bytes, and four f64 accumulators. The inline record is in overhead.
+	const capacity = 20 + 3 * 20 + 16 + 8 + 4 + 32;
+	const initial = await fresh(null);
+	assert.equal(initial.bindings.privateInitialize(initial.overhead + capacity), 0);
+	const { bindings, raw } = initial;
+	const pixels = new Uint8Array(16);
+	pixels.fill(1, 12);
+	const call = (target = bindings) => {
+		const sink = {};
+		const status = target.privateResize(pixels, 4, 1, 1, 1, 6, 4, 0, sink);
+		if (status !== 0) assert.equal(sink.value, undefined);
+		else assert.deepEqual([...sink.value.data], [1, 1, 1, 1]);
+		return status;
+	};
+	assert.equal(call(), 0);
+	const short = await fresh(initial.overhead + capacity - 1);
+	assert.equal(call(short.bindings), 8);
+	const table = Object.values(raw).find(value => value instanceof WebAssembly.Table);
+	const length = table.length;
+	const pages = raw.memory.buffer.byteLength;
+	for (let i = 0; i < 32; i++) {
+		for (const phase of ['input', 'result']) {
+			assert.equal(withCopyFailure(raw, phase, call), 9);
+			assert.equal(call(), 0);
+		}
+	}
+	assert.equal(table.length, length);
+	assert.equal(raw.memory.buffer.byteLength, pages);
+	bindings.privateDispose();
+	short.bindings.privateDispose();
 });
