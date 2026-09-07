@@ -4,13 +4,13 @@ Issue [#43](https://github.com/mia-cx/ditherette/issues/43). Decision [#36](http
 
 - Branch: `impl/v1-s02-builds`, based on `impl/v1-s01-anchor` at `a213effed4b426c5c432c9ccc7062b7016dd5c1b`.
 - Ownership: manifests, build scripts, and inert npm scaffold. Semantic kernels and the benchmark transport remain unchanged.
-- PR and validated delivery head: pending.
+- PR: [#88](https://github.com/mia-cx/ditherette/pull/88), open and non-draft. Validated implementation `1cbe4999c29b9a5e4caf9cf0a4f4836b5e8f4f5c`; evidence `ba7dd082bc4016cead440a4b07e2f7f96c1d77f4`. The subsequent delivery commit only records this PR.
 
 ## Work
 
 1. [x] Establish pinned workspaces, crate-owned builds/tests, inert package distribution, and legacy URL staging.
 2. [x] Build both variants; verify memory maxima, package imports, version alignment, and focused correctness checks.
-3. [ ] Record evidence and file the unmerged PR against the anchor.
+3. [x] Record evidence and file the unmerged PR against the anchor.
 
 The website stays in the root workspace. Generated crate and package `dist/` output remains ignored. The package manifest owns version `0.1.0`; its build and check commands reject a mismatched Cargo version. Publication remains held through `private: true` while the package is a scaffold.
 
