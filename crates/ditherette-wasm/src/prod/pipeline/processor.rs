@@ -16,7 +16,7 @@ use crate::prod::{
             MAX_SOURCE_SIDE,
         },
     },
-    resize::{common::alignment::ResizeAnchor, scalar::nearest::resize_nearest_into},
+    resize::{common::alignment::ResizeAnchor, scalar::nearest_incremental::resize_nearest_into},
 };
 
 /// Typed private shape. The package validates recipe version and raw property types.

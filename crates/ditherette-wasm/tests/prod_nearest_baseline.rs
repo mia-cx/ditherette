@@ -1,8 +1,10 @@
-//! S19 baseline output conformance retained after production promotion.
+//! Historical S19 experiment conformance, separate from landed production nearest.
 
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Oklab32, PaletteIndex8, Rgba8, RowStride},
-    prod::resize::{common::alignment::ResizeAnchor as ProdAnchor, scalar::nearest},
+    prod::resize::{
+        common::alignment::ResizeAnchor as ProdAnchor, scalar::nearest_incremental as nearest,
+    },
     spec::resize::{common::alignment::ResizeAnchor as SpecAnchor, scalar::nearest as oracle},
 };
 
@@ -119,7 +121,7 @@ fn generic_float_bits_and_palette_indices_are_copied_without_arithmetic() {
 
 #[cfg(feature = "bench-subjects")]
 #[test]
-fn registry_calls_reference_promoted_production_and_legacy_candidate() {
+fn registry_calls_reference_restored_production_and_historical_alias() {
     use ditherette_bench_api::{BenchSubject, ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams};
     let subjects = ditherette_wasm::bench_subjects::bench_subjects();
     let ids = [
@@ -129,11 +131,11 @@ fn registry_calls_reference_promoted_production_and_legacy_candidate() {
         ),
         (
             "prod:resize:nearest:scalar",
-            "prod/resize/scalar/nearest.rs",
+            "prod/resize/scalar/nearest/mod.rs",
         ),
         (
             "candidate:resize:nearest:legacy",
-            "prod/resize/scalar/nearest_candidate/mod.rs",
+            "prod/resize/scalar/nearest/mod.rs",
         ),
     ];
     for (id, source_file) in ids {
