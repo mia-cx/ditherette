@@ -7,6 +7,50 @@ use ditherette_bench_api::verification::*;
 #[path = "fixtures/paired_model.rs"]
 mod model;
 
+#[test]
+fn area_and_bilinear_keep_distinct_recipes_and_validate_website_anchors() {
+    for (operation, filter) in [
+        (PublicOperation::ResizeArea {}, "area"),
+        (
+            PublicOperation::ResizeBilinear {
+                anchor: Anchor::Center,
+            },
+            "bilinear",
+        ),
+    ] {
+        let (mut prepared, _) = fixture();
+        let case = &mut prepared.experiment.cases[0];
+        let browser = case.browser.as_mut().unwrap();
+        browser.operation = operation.clone();
+        case.reference_subject = operation.reference_subject().into();
+        case.accepted_subject = operation.subject(browser.accepted).into();
+        case.candidate_subject = operation.subject(browser.candidate).into();
+        case.identity = operation
+            .identity(case.source, &case.rgba, case.identity.output)
+            .unwrap();
+        assert_eq!(
+            case.reference_subject,
+            format!("spec:resize:{filter}:scalar")
+        );
+        assert_eq!(
+            case.identity.semantics.recipe,
+            format!("{filter}-public-v1")
+        );
+        validate_case(case).unwrap();
+        let round_trip: PublicOperation =
+            serde_json::from_str(&serde_json::to_string(&operation).unwrap()).unwrap();
+        assert_eq!(round_trip, operation);
+        case.browser.as_mut().unwrap().operation = PublicOperation::ResizeBilinear {
+            anchor: Anchor::Left,
+        };
+        assert!(validate_case(case).is_err());
+    }
+    assert!(serde_json::from_str::<PublicOperation>(
+        r#"{"operation":"resize-area","anchor":"center"}"#
+    )
+    .is_err());
+}
+
 fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
     let browser = BrowserCase {
@@ -17,6 +61,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         candidate: BrowserBackend::Package,
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
+        measure_nonexact: false,
     };
     let case = &mut prepared.experiment.cases[0];
     case.identity = browser
@@ -116,6 +161,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
             artifact_identity(&worker.identity, &assets, &runtime).unwrap();
         trial.reference.implementation.artifact = trial.output.implementation.artifact.clone();
         trial.browser = Some(BrowserEvidence {
+            measure_nonexact: false,
             assets: assets.tree.digest,
             runtime: runtime_digest(&runtime).unwrap(),
             backend: browser.backend(trial.role),
@@ -136,6 +182,66 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
 }
 
 #[test]
+fn convolution_support_binds_reference_and_recipe_identity() {
+    for support in [Support::Fixed, Support::ScaleAware] {
+        for operation in [
+            PublicOperation::ResizeBicubic {
+                anchor: Anchor::Center,
+                support,
+            },
+            PublicOperation::ResizeLanczos2 {
+                anchor: Anchor::Center,
+                support,
+            },
+            PublicOperation::ResizeLanczos3 {
+                anchor: Anchor::Center,
+                support,
+            },
+        ] {
+            let (mut prepared, _) = fixture();
+            let case = &mut prepared.experiment.cases[0];
+            let browser = case.browser.as_mut().unwrap();
+            browser.operation = operation.clone();
+            if matches!(operation, PublicOperation::ResizeBicubic { .. }) {
+                browser.accepted = BrowserBackend::Package;
+            }
+            case.reference_subject = operation.reference_subject().into();
+            case.accepted_subject = operation.subject(browser.accepted).into();
+            case.candidate_subject = operation.subject(browser.candidate).into();
+            case.identity = operation
+                .identity(case.source, &case.rgba, case.identity.output)
+                .unwrap();
+            assert_eq!(
+                case.reference_subject.ends_with("scale-aware"),
+                support == Support::ScaleAware
+            );
+            validate_case(case).unwrap();
+            if matches!(operation, PublicOperation::ResizeBicubic { .. }) {
+                case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
+                assert!(validate_case(case).is_err());
+            }
+        }
+    }
+    let source = Dimensions {
+        width: 3,
+        height: 2,
+    };
+    let rgba = vec![255; 24];
+    let fixed = PublicOperation::ResizeLanczos2 {
+        anchor: Anchor::Center,
+        support: Support::Fixed,
+    };
+    let scaled = PublicOperation::ResizeLanczos2 {
+        anchor: Anchor::Center,
+        support: Support::ScaleAware,
+    };
+    assert_ne!(
+        fixed.identity(source, &rgba, source).unwrap().settings,
+        scaled.identity(source, &rgba, source).unwrap().settings
+    );
+}
+
+#[test]
 fn typed_browser_calls_share_exact_three_way_gates() {
     let (prepared, mut trials) = fixture();
     coordinator::validate_experiment(&prepared.experiment).unwrap();
@@ -150,6 +256,30 @@ fn typed_browser_calls_share_exact_three_way_gates() {
         data[0] += 1;
     }
     assert_eq!(compare(&prepared, &trials).gate, Gate::Incorrect);
+}
+
+#[test]
+fn timing_nonexact_outputs_never_passes_conformance_and_binds_the_diagnostic_flag() {
+    let (mut prepared, mut trials) = fixture();
+    prepared.experiment.cases[0]
+        .browser
+        .as_mut()
+        .unwrap()
+        .measure_nonexact = true;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    for trial in &mut trials {
+        trial.browser.as_mut().unwrap().measure_nonexact = true;
+        if trial.role == Role::Candidate {
+            if let Pixels::Rgba8 { data } = &mut trial.output.output.pixels {
+                data[0] += 1;
+            }
+        }
+    }
+    let report = compare(&prepared, &trials);
+    assert_eq!(report.gate, Gate::Incorrect);
+    assert!(report.cases[0].accepted_median_ns.is_some());
+    assert!(report.cases[0].candidate_median_ns.is_some());
+    assert!(!report.cases[0].verification[0].release_conformant());
 }
 
 #[test]

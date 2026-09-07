@@ -54,6 +54,7 @@ fn case(
         candidate: BrowserBackend::Package,
         preparation,
         cache: CacheCapability::None,
+        measure_nonexact: false,
     };
     Ok(PairCase {
         name: name.into(),

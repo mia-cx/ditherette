@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::verification::{input_digest, settings_digest};
-pub use ditherette_wasm::prod::contract::request::Anchor;
+pub use ditherette_wasm::prod::contract::request::{Anchor, Support};
 use std::{collections::BTreeSet, io, path::Component};
 
 /// Later method slices extend this operation registry with their concrete typed settings.
@@ -10,6 +10,11 @@ use std::{collections::BTreeSet, io, path::Component};
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PublicOperation {
     ResizeNearest { anchor: Anchor },
+    ResizeArea {},
+    ResizeBilinear { anchor: Anchor },
+    ResizeBicubic { anchor: Anchor, support: Support },
+    ResizeLanczos2 { anchor: Anchor, support: Support },
+    ResizeLanczos3 { anchor: Anchor, support: Support },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +51,9 @@ pub struct BrowserCase {
     pub candidate: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    /// Developer diagnostics only. Differences remain incorrect and retain review artifacts.
+    #[serde(default)]
+    pub measure_nonexact: bool,
 }
 
 impl BrowserCase {
@@ -66,12 +74,76 @@ impl PublicOperation {
             (Self::ResizeNearest { .. }, BrowserBackend::TypeScript) => {
                 "public:resize:nearest:typescript"
             }
+            (Self::ResizeArea {}, BrowserBackend::Package) => "public:resize:area:package",
+            (Self::ResizeArea {}, BrowserBackend::TypeScript) => "public:resize:area:typescript",
+            (Self::ResizeBilinear { .. }, BrowserBackend::Package) => {
+                "public:resize:bilinear:package"
+            }
+            (Self::ResizeBilinear { .. }, BrowserBackend::TypeScript) => {
+                "public:resize:bilinear:typescript"
+            }
+            (Self::ResizeBicubic { .. }, BrowserBackend::Package) => {
+                "public:resize:bicubic:package"
+            }
+            (Self::ResizeBicubic { .. }, BrowserBackend::TypeScript) => {
+                "public:resize:bicubic:typescript"
+            }
+            (Self::ResizeLanczos2 { .. }, BrowserBackend::Package) => {
+                "public:resize:lanczos2:package"
+            }
+            (Self::ResizeLanczos2 { .. }, BrowserBackend::TypeScript) => {
+                "public:resize:lanczos2:typescript"
+            }
+            (Self::ResizeLanczos3 { .. }, BrowserBackend::Package) => {
+                "public:resize:lanczos3:package"
+            }
+            (Self::ResizeLanczos3 { .. }, BrowserBackend::TypeScript) => {
+                "public:resize:lanczos3:typescript"
+            }
         }
     }
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
             Self::ResizeNearest { .. } => "spec:resize:nearest:scalar",
+            Self::ResizeArea {} => "spec:resize:area:scalar",
+            Self::ResizeBilinear { .. } => "spec:resize:bilinear:scalar",
+            Self::ResizeBicubic {
+                support: Support::Fixed,
+                ..
+            } => "spec:resize:bicubic:catmull-rom",
+            Self::ResizeBicubic {
+                support: Support::ScaleAware,
+                ..
+            } => "spec:resize:bicubic:catmull-rom-scale-aware",
+            Self::ResizeLanczos2 {
+                support: Support::Fixed,
+                ..
+            } => "spec:resize:lanczos2:fixed",
+            Self::ResizeLanczos2 {
+                support: Support::ScaleAware,
+                ..
+            } => "spec:resize:lanczos2:scale-aware",
+            Self::ResizeLanczos3 {
+                support: Support::Fixed,
+                ..
+            } => "spec:resize:lanczos3:fixed",
+            Self::ResizeLanczos3 {
+                support: Support::ScaleAware,
+                ..
+            } => "spec:resize:lanczos3:scale-aware",
+        }
+    }
+
+    /// Area has no anchor setting; the registry ignores this placeholder.
+    pub fn anchor(&self) -> Anchor {
+        match *self {
+            Self::ResizeNearest { anchor }
+            | Self::ResizeBilinear { anchor }
+            | Self::ResizeBicubic { anchor, .. }
+            | Self::ResizeLanczos2 { anchor, .. }
+            | Self::ResizeLanczos3 { anchor, .. } => anchor,
+            Self::ResizeArea {} => Anchor::Center,
         }
     }
 
@@ -82,13 +154,19 @@ impl PublicOperation {
         rgba: &[u8],
         output: Dimensions,
     ) -> io::Result<CaseIdentity> {
-        let semantics = match self {
-            Self::ResizeNearest { .. } => SemanticIdentity {
-                operation: Operation::Resize,
-                recipe: "nearest-public-v1".into(),
-                version: 1,
-                space: None,
-            },
+        let semantics = SemanticIdentity {
+            operation: Operation::Resize,
+            recipe: match self {
+                Self::ResizeNearest { .. } => "nearest-public-v1",
+                Self::ResizeArea {} => "area-public-v1",
+                Self::ResizeBilinear { .. } => "bilinear-public-v1",
+                Self::ResizeBicubic { .. } => "bicubic-public-v1",
+                Self::ResizeLanczos2 { .. } => "lanczos2-public-v1",
+                Self::ResizeLanczos3 { .. } => "lanczos3-public-v1",
+            }
+            .into(),
+            version: 1,
+            space: None,
         };
         Ok(CaseIdentity {
             settings: settings_digest(&(self, output)).map_err(io::Error::other)?,
@@ -221,6 +299,8 @@ pub struct BrowserEvidence {
     pub backend: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    #[serde(default)]
+    pub measure_nonexact: bool,
     pub observation: BrowserObservation,
 }
 
@@ -326,13 +406,17 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
             ))
         }
     }
-    let PublicOperation::ResizeNearest { anchor } = browser.operation;
-    if anchor != Anchor::Center
-        && [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript)
-    {
-        return Err(io::Error::other(
-            "TypeScript nearest supports only the center anchor",
-        ));
+    if [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript) {
+        if matches!(browser.operation, PublicOperation::ResizeBicubic { .. }) {
+            return Err(io::Error::other(
+                "The website has no bicubic implementation",
+            ));
+        }
+        if browser.operation.anchor() != Anchor::Center {
+            return Err(io::Error::other(
+                "TypeScript resize supports only the center anchor",
+            ));
+        }
     }
     if case.identity
         != browser
@@ -497,6 +581,7 @@ pub(super) fn validate_evidence(
         || evidence.backend != browser_case.backend(result.role)
         || evidence.preparation != browser_case.preparation
         || evidence.cache != browser_case.cache
+        || evidence.measure_nonexact != browser_case.measure_nonexact
     {
         return Err(io::Error::other(
             "browser trial artifact or preparation differs",

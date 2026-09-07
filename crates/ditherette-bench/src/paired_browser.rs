@@ -73,9 +73,8 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
         height: case.source.height,
         rgba: case.rgba.clone(),
     };
-    let PublicOperation::ResizeNearest { anchor } = browser.operation;
     let params = ResizeParams {
-        anchor: match anchor {
+        anchor: match browser.operation.anchor() {
             Anchor::TopLeft => ResizeAnchorParam::TopLeft,
             Anchor::Top => ResizeAnchorParam::Top,
             Anchor::TopRight => ResizeAnchorParam::TopRight,
@@ -158,6 +157,7 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
             backend: browser.backend(request.role),
             preparation: browser.preparation,
             cache: browser.cache,
+            measure_nonexact: browser.measure_nonexact,
             observation: measured.observation,
         }),
     };
