@@ -1,0 +1,28 @@
+{
+	"name": "ditherette",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Browser image processing with scalar and optional threaded WebAssembly.",
+	"license": "MIT",
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && tsc && node scripts/stage-wasm.mjs",
+		"check": "pnpm check:version && tsc --noEmit",
+		"check:version": "node scripts/check-version.mjs"
+	},
+	"devDependencies": {
+		"typescript": "6.0.3"
+	}
+}
