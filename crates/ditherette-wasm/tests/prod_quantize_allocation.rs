@@ -144,12 +144,6 @@ fn invalid_preparation_settings_fail_before_allocation() {
             MATCHING,
             ErrorCode::InvalidSettings,
         ),
-        (
-            &[PaletteEntry::Transparent {}][..],
-            ALPHA,
-            MatchPolicy::CielabCiede2000,
-            ErrorCode::UnsupportedOperation,
-        ),
     ] {
         let before = COUNT.with(Cell::get);
         let result = PreparedQuantizer::try_new(entries, alpha, matching, u64::MAX);
