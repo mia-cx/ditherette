@@ -14,7 +14,7 @@ Branch: `impl/v1-s04-bench-lock`. PR base: `impl/v1-s01-anchor`.
 ## TODOs
 
 - [x] Add the shared lease and external coordinator, with focused lifecycle tests.
-- [ ] Guard all measuring entry points and close transport resources on every exit.
+- [x] Guard all measuring entry points and close transport resources on every exit.
 - [ ] Document the quiet-phase protocol and record final validation.
 
 ## Decisions
@@ -26,3 +26,5 @@ The coordinator attests quietness; the lock cannot detect unrelated host work.
 No benchmark timings run in this slice.
 
 First TODO validation: `cargo test --manifest-path crates/ditherette-bench/Cargo.toml --locked --test lease` passed the process lifecycle fixture. It covers contention from another working directory, inherited execution rejection, sequential reuse, failed spawn, and SIGTERM cleanup. The ignored test is a subprocess fixture, not a skipped assertion.
+
+Second TODO validation: `cargo test --manifest-path crates/ditherette-bench/Cargo.toml --locked --bins --test lease` passed. The Rust parser fixture proves malformed JSONL reaps its child. Three Node fixtures prove cleanup after success, browser launch failure, and runtime failure. A detached fake browser exits before the interrupted owner releases its lease. Review caught stale child-handle ownership; the A-wait/B-spawn/A-drop fixture now protects it. Unsupported platforms return invocation errors without blocking compilation.

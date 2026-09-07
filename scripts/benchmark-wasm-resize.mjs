@@ -4,6 +4,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { runBrowserTransport } from './benchmark-transport.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -38,10 +39,15 @@ await assertFile(
 );
 
 const fixtures = await benchmarkFixtures(options.fixtures);
-const server = await startBenchmarkServer({ pkgDir, fixtures });
-const browser = await chromium.launch({ headless: true });
 let statusLineActive = false;
 
+await runBrowserTransport({
+	startServer: () => startBenchmarkServer({ pkgDir, fixtures }),
+	launchBrowserServer: () => chromium.launchServer({
+		headless: true, handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false
+	}),
+	run: async ({ server, browserServer }) => {
+const browser = await chromium.connect(browserServer.wsEndpoint());
 try {
 	let browserResult;
 	const runConfigs = sweepRunConfigs(options);
@@ -118,11 +124,9 @@ try {
 	}
 } finally {
 	clearStatusLine();
-	await browser.close();
-	await new Promise((resolve, reject) => {
-		server.instance.close((error) => (error ? reject(error) : resolve()));
-	});
 }
+	}
+});
 
 function sweepRunConfigs(options) {
 	const configs = [];

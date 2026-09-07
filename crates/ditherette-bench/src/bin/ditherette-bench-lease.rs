@@ -29,7 +29,7 @@ fn run() -> io::Result<u8> {
     let lease = Lease::exclusive()?;
     let mut command = Command::new(executable);
     command.args(args).env(QUIET_ENV, "1");
-    let status = lease.spawn(&mut command)?.wait()?;
+    let status = lease.spawn(command)?.wait()?;
     Ok(status
         .code()
         .and_then(|code| u8::try_from(code).ok())

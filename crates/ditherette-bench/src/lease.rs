@@ -37,7 +37,6 @@ mod platform {
         sync::atomic::{AtomicI32, Ordering},
     };
 
-    const CHILD_LEASE_FD: i32 = 198;
     static OWNED_CHILD: AtomicI32 = AtomicI32::new(0);
 
     /// An OS lease that can be lent to sequential child executables.
@@ -88,25 +87,24 @@ mod platform {
 
         /// Start one owned child with an inherited lease and a parent-liveness pipe.
         /// Drop terminates and reaps that child before releasing its lease.
-        pub fn spawn(&self, command: &mut Command) -> io::Result<OwnedChild> {
+        pub fn spawn(&self, mut command: Command) -> io::Result<OwnedChild> {
             if OWNED_CHILD.load(Ordering::SeqCst) != 0 {
                 return Err(io::Error::other(
                     "only one owned benchmark child may run at a time",
                 ));
             }
-            let fd = self.0.as_raw_fd();
+            // Keep a dedicated duplicate alive with the child. This also avoids
+            // replacing an unrelated descriptor through a fixed dup2 target.
+            let inherited = self.0.try_clone()?;
+            let fd = inherited.as_raw_fd();
             command
-                .env(LEASE_FD_ENV, CHILD_LEASE_FD.to_string())
+                .env(LEASE_FD_ENV, fd.to_string())
                 .stdin(Stdio::piped());
             let mask = SignalMask::block()?;
             // SAFETY: this closure only calls async-signal-safe functions after fork.
             unsafe {
                 command.pre_exec(move || {
-                    if libc::dup2(fd, CHILD_LEASE_FD) < 0 {
-                        return Err(io::Error::last_os_error());
-                    }
-                    // dup2 is a no-op when descriptors match, so always clear CLOEXEC.
-                    if libc::fcntl(CHILD_LEASE_FD, libc::F_SETFD, 0) < 0 {
+                    if libc::fcntl(fd, libc::F_SETFD, 0) < 0 {
                         return Err(io::Error::last_os_error());
                     }
                     let mut signals = std::mem::zeroed();
@@ -119,10 +117,16 @@ mod platform {
                     Ok(())
                 });
             }
-            let child = command.spawn()?;
+            let mut child = command.spawn()?;
+            let stdin = child.stdin.take();
             OWNED_CHILD.store(child.id() as i32, Ordering::SeqCst);
             drop(mask);
-            Ok(OwnedChild(child))
+            Ok(OwnedChild {
+                child,
+                status: None,
+                _lease: inherited,
+                _stdin: stdin,
+            })
         }
     }
 
@@ -145,30 +149,44 @@ mod platform {
     }
 
     /// A direct child whose shutdown completes before its owner drops the lease.
-    pub struct OwnedChild(Child);
+    pub struct OwnedChild {
+        child: Child,
+        status: Option<ExitStatus>,
+        _lease: File,
+        _stdin: Option<std::process::ChildStdin>,
+    }
 
     impl OwnedChild {
         /// Take captured transport output while retaining child ownership.
         pub fn take_stdout(&mut self) -> Option<ChildStdout> {
-            self.0.stdout.take()
+            self.child.stdout.take()
         }
 
         /// Wait for the child and its transport cleanup to finish.
         pub fn wait(&mut self) -> io::Result<ExitStatus> {
-            let status = self.0.wait()?;
-            OWNED_CHILD.store(0, Ordering::SeqCst);
+            if let Some(status) = self.status {
+                return Ok(status);
+            }
+            let status = self.child.wait()?;
+            self.status = Some(status);
+            let _ = OWNED_CHILD.compare_exchange(
+                self.child.id() as i32,
+                0,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            );
             Ok(status)
         }
     }
 
     impl Drop for OwnedChild {
         fn drop(&mut self) {
-            if OWNED_CHILD.load(Ordering::SeqCst) == 0 {
+            if self.status.is_some() {
                 return;
             }
             // SAFETY: this PID is our unreaped child, so it cannot be reused.
             unsafe {
-                libc::kill(self.0.id() as i32, libc::SIGTERM);
+                libc::kill(self.child.id() as i32, libc::SIGTERM);
             }
             if let Err(error) = self.wait() {
                 eprintln!("failed to reap owned benchmark child: {error}");
@@ -268,8 +286,44 @@ mod platform {
     }
 }
 
-#[cfg(unix)]
 pub use platform::{BenchmarkGuard, Lease, OwnedChild};
 
 #[cfg(not(unix))]
-compile_error!("exclusive benchmark execution currently requires Unix flock and process signals");
+mod platform {
+    use super::*;
+    use std::process::{ChildStdout, ExitStatus};
+
+    fn unsupported() -> io::Error {
+        io::Error::new(
+            io::ErrorKind::Unsupported,
+            "exclusive benchmark execution currently requires Unix flock and process signals",
+        )
+    }
+
+    pub struct Lease;
+    impl Lease {
+        pub fn exclusive() -> io::Result<Self> {
+            Err(unsupported())
+        }
+        pub fn spawn(&self, _command: Command) -> io::Result<OwnedChild> {
+            Err(unsupported())
+        }
+    }
+    pub struct BenchmarkGuard {
+        pub lease: Lease,
+    }
+    impl BenchmarkGuard {
+        pub fn acquire() -> io::Result<Self> {
+            Err(unsupported())
+        }
+    }
+    pub struct OwnedChild;
+    impl OwnedChild {
+        pub fn take_stdout(&mut self) -> Option<ChildStdout> {
+            None
+        }
+        pub fn wait(&mut self) -> io::Result<ExitStatus> {
+            Err(unsupported())
+        }
+    }
+}

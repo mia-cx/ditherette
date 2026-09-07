@@ -12,6 +12,7 @@ use std::{
     time::Duration,
 };
 
+use ditherette_bench::lease::Lease;
 use serde::Deserialize;
 
 use crate::{
@@ -28,21 +29,30 @@ use crate::{
 const WASM_MANIFEST: &str = "scripts/ditherette-wasm-bench.toml";
 const WASM_HARNESS: &str = "scripts/benchmark-wasm-resize.mjs";
 
-pub(crate) fn wasm_resize_command(args: &[String]) -> Result<(), BenchError> {
+pub(crate) fn wasm_resize_command(lease: &Lease, args: &[String]) -> Result<(), BenchError> {
     let args = strip_leading_separator(args);
     let bench_flags = WasmBenchFlags::parse(args)?;
-    let mut child = Command::new("node")
+    let mut command = Command::new("node");
+    command
         .arg(WASM_HARNESS)
         .args(with_default_config(&bench_flags.harness_args))
         .arg("--jsonl-events")
+        .env("DITHERETTE_BENCH_TRANSPORT", "1")
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|error| {
-            BenchError::Runtime(format!("failed to start browser/Wasm harness: {error}"))
-        })?;
+        .stderr(Stdio::inherit());
+    run_harness(lease, command, &bench_flags)
+}
 
-    let stdout = child.stdout.take().ok_or_else(|| {
+fn run_harness(
+    lease: &Lease,
+    command: Command,
+    bench_flags: &WasmBenchFlags,
+) -> Result<(), BenchError> {
+    let mut child = lease.spawn(command).map_err(|error| {
+        BenchError::Runtime(format!("failed to start browser/Wasm harness: {error}"))
+    })?;
+
+    let stdout = child.take_stdout().ok_or_else(|| {
         BenchError::Runtime("failed to capture browser/Wasm harness stdout".to_owned())
     })?;
     let reader = BufReader::new(stdout);
@@ -813,5 +823,24 @@ fn sanitize_path_component(value: &str) -> String {
         "run".to_owned()
     } else {
         sanitized
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_jsonl_stops_and_reaps_the_transport() {
+        let lease = Lease::exclusive().unwrap();
+        let marker =
+            std::env::temp_dir().join(format!("ditherette-jsonl-cleanup-{}", std::process::id()));
+        let mut command = Command::new("node");
+        command.args(["-e", "process.on('SIGTERM', () => { require('node:fs').writeFileSync(process.env.DITHERETTE_CLEANUP_MARKER, 'closed'); process.exit(0); }); console.log('{bad json'); setInterval(() => {}, 1000);"])
+            .env("DITHERETTE_CLEANUP_MARKER", &marker).stdout(Stdio::piped());
+        let error = run_harness(&lease, command, &WasmBenchFlags::parse(&[]).unwrap()).unwrap_err();
+        assert!(error.to_string().contains("invalid JSONL"));
+        assert_eq!(fs::read_to_string(&marker).unwrap(), "closed");
+        fs::remove_file(marker).unwrap();
     }
 }

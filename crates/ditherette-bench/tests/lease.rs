@@ -33,25 +33,35 @@ fn exclusive_lifecycle_across_processes() {
 
     let mut command = fixture("hold");
     command.stdout(Stdio::piped());
-    let mut borrower = lease.spawn(&mut command).unwrap();
+    let mut borrower = lease.spawn(command).unwrap();
     ready(borrower.take_stdout().unwrap());
     // The borrowed lease cannot authorize a concurrent or nested execution.
-    let inherited_fd = command
-        .get_envs()
-        .find_map(|(name, value)| (name == LEASE_FD_ENV).then_some(value.unwrap()))
-        .unwrap();
-    assert_eq!(inherited_fd, "198");
     drop(borrower);
 
     // The outer lease remains owned between sequential executions.
     assert!(!fixture("try").output().unwrap().status.success());
-    let mut next = fixture("try");
-    assert!(lease.spawn(&mut next).unwrap().wait().unwrap().success());
+    let next = fixture("try");
+    let mut finished = lease.spawn(next).unwrap();
+    assert!(finished.wait().unwrap().success());
+    let mut later = fixture("hold");
+    later.stdout(Stdio::piped());
+    let mut active = lease.spawn(later).unwrap();
+    ready(active.take_stdout().unwrap());
+    drop(finished);
+    assert!(lease.spawn(fixture("try")).is_err());
+    drop(active);
     assert!(lease
-        .spawn(&mut Command::new("/no-such-ditherette-fixture"))
+        .spawn(Command::new("/no-such-ditherette-fixture"))
         .is_err());
     assert!(lease
-        .spawn(&mut fixture("try"))
+        .spawn(fixture("try"))
+        .unwrap()
+        .wait()
+        .unwrap()
+        .success());
+    let browser_tests = browser_fixture();
+    assert!(lease
+        .spawn(browser_tests)
         .unwrap()
         .wait()
         .unwrap()
@@ -72,6 +82,38 @@ fn exclusive_lifecycle_across_processes() {
     );
     assert!(!supervisor.wait().unwrap().success());
     assert!(fixture("try").output().unwrap().status.success());
+
+    let marker = std::env::temp_dir().join(format!("ditherette-cleanup-{}", std::process::id()));
+    let mut supervisor = fixture("browser-supervisor")
+        .env("DITHERETTE_CLEANUP_MARKER", &marker)
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    ready(supervisor.stdout.take().unwrap());
+    // SAFETY: supervisor is our unreaped fixture child.
+    assert_eq!(
+        unsafe { libc::kill(supervisor.id() as i32, libc::SIGTERM) },
+        0
+    );
+    assert!(!supervisor.wait().unwrap().success());
+    assert_eq!(
+        std::fs::read_to_string(&marker).unwrap(),
+        "owned browser exited"
+    );
+    std::fs::remove_file(marker).unwrap();
+    assert!(fixture("try").output().unwrap().status.success());
+}
+
+fn browser_fixture() -> Command {
+    let mut command = Command::new("node");
+    command
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../scripts/benchmark-transport.test.mjs"
+        ))
+        .env("DITHERETTE_BENCH_TRANSPORT", "1")
+        .env(QUIET_ENV, "1");
+    command
 }
 
 #[test]
@@ -98,7 +140,17 @@ fn child_fixture() {
             let mut command = Command::new("node");
             command.args(["-e", "process.on('SIGTERM', () => setTimeout(() => process.exit(0), 100)); console.log('READY'); setInterval(() => {}, 1000);"])
                 .stdout(Stdio::piped());
-            let mut child = guard.lease.spawn(&mut command).unwrap();
+            let mut child = guard.lease.spawn(command).unwrap();
+            ready(child.take_stdout().unwrap());
+            println!("READY");
+            std::io::stdout().flush().unwrap();
+            child.wait().unwrap();
+        }
+        "browser-supervisor" => {
+            let guard = BenchmarkGuard::acquire().unwrap();
+            let mut command = browser_fixture();
+            command.arg("--interrupt-fixture").stdout(Stdio::piped());
+            let mut child = guard.lease.spawn(command).unwrap();
             ready(child.take_stdout().unwrap());
             println!("READY");
             std::io::stdout().flush().unwrap();
