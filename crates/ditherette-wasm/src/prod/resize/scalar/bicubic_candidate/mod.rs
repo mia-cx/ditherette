@@ -1,3 +1,4 @@
+//! Inherited optimized candidate. Historical performance notes below are not S22 promotion evidence.
 //! Packed RGBA8 production bicubic resize.
 //!
 //! Bicubic is represented as a Catmull-Rom cubic reconstruction kernel applied
@@ -7,7 +8,7 @@ mod filter;
 
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
-use super::convolution::{
+use super::convolution_candidate::{
     resize_convolution_rgba8_into, resize_convolution_rgba8_rows_into,
     resize_convolution_rgba8_rows_with_plan_into, resize_convolution_rgba8_with_plan_into,
     ConvolutionResizePlan, ResizeAnchor, SupportPolicy,

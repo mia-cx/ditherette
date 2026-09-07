@@ -21,15 +21,15 @@ use crate::{
         },
         resize::scalar::{
             area::resize_area_rgba8_into,
-            bicubic::{
+            bicubic_candidate::{
                 resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_into,
                 resize_bicubic_rgba8_rows_with_plan_into, BicubicResizePlan,
             },
             bilinear::{
                 alignment::ResizeAnchor as BilinearResizeAnchor, resize_bilinear_rgba8_into,
             },
-            convolution::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},
-            lanczos::{
+            convolution_candidate::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},
+            lanczos_candidate::{
                 resize_lanczos2_rgba8_into, resize_lanczos2_rgba8_rows_into,
                 resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
                 resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,

@@ -1,12 +1,16 @@
+//! Retained conformance for inherited optimized candidates, not S22 baseline acceptance.
+
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::resize::scalar::{
-        bicubic::{
+        bicubic_candidate::{
             resize_bicubic_rgba8_into as resize_prod_bicubic_into,
             resize_bicubic_rgba8_rows_into as resize_prod_bicubic_rows_into,
         },
-        convolution::{ResizeAnchor as ProdResizeAnchor, SupportPolicy as ProdSupportPolicy},
-        lanczos::{
+        convolution_candidate::{
+            ResizeAnchor as ProdResizeAnchor, SupportPolicy as ProdSupportPolicy,
+        },
+        lanczos_candidate::{
             resize_lanczos2_rgba8_into as resize_prod_lanczos2_into,
             resize_lanczos2_rgba8_rows_into as resize_prod_lanczos2_rows_into,
             resize_lanczos3_rgba8_into as resize_prod_lanczos3_into,
@@ -27,7 +31,7 @@ use ditherette_wasm::{
 };
 
 #[test]
-fn prod_bicubic_matches_spec_for_anchor_and_policy_matrix() {
+fn candidate_bicubic_matches_spec_for_anchor_and_policy_matrix() {
     assert_matches_spec(
         |source, spec_output, prod_output, spec_anchor, prod_anchor, spec_policy, prod_policy| {
             resize_spec_bicubic_into(source, spec_output, spec_anchor, spec_policy);
@@ -37,7 +41,7 @@ fn prod_bicubic_matches_spec_for_anchor_and_policy_matrix() {
 }
 
 #[test]
-fn prod_convolution_row_ranges_match_full_output() {
+fn candidate_convolution_row_ranges_match_full_output() {
     let source_dimensions = ImageDimensions::new(128, 80).unwrap();
     let output_dimensions = ImageDimensions::new(64, 73).unwrap();
 
@@ -97,7 +101,7 @@ fn prod_convolution_row_ranges_match_full_output() {
 }
 
 #[test]
-fn prod_lanczos2_matches_spec_for_anchor_and_policy_matrix() {
+fn candidate_lanczos2_matches_spec_for_anchor_and_policy_matrix() {
     assert_matches_spec(
         |source, spec_output, prod_output, spec_anchor, prod_anchor, spec_policy, prod_policy| {
             resize_spec_lanczos2_into(source, spec_output, spec_anchor, spec_policy);
@@ -107,7 +111,7 @@ fn prod_lanczos2_matches_spec_for_anchor_and_policy_matrix() {
 }
 
 #[test]
-fn prod_lanczos3_matches_spec_for_anchor_and_policy_matrix() {
+fn candidate_lanczos3_matches_spec_for_anchor_and_policy_matrix() {
     assert_matches_spec(
         |source, spec_output, prod_output, spec_anchor, prod_anchor, spec_policy, prod_policy| {
             resize_spec_lanczos3_into(source, spec_output, spec_anchor, spec_policy);

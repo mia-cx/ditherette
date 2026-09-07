@@ -4,4 +4,6 @@
 //! does not cross the oracle boundary.
 
 pub mod alignment;
+pub mod coordinates;
 pub mod rgba8;
+pub mod sample;

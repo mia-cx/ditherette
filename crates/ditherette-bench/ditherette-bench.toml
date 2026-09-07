@@ -38,12 +38,12 @@ subjects = [
   "prod:resize:nearest:scalar",
   "prod:resize:area:scalar",
   "prod:resize:bilinear:scalar",
-  "prod:resize:bicubic:catmull-rom",
-  "prod:resize:bicubic:catmull-rom-scale-aware",
-  "prod:resize:lanczos2:fixed",
-  "prod:resize:lanczos2:scale-aware",
-  "prod:resize:lanczos3:fixed",
-  "prod:resize:lanczos3:scale-aware"
+  "candidate:resize:bicubic:catmull-rom",
+  "candidate:resize:bicubic:catmull-rom-scale-aware",
+  "candidate:resize:lanczos2:fixed",
+  "candidate:resize:lanczos2:scale-aware",
+  "candidate:resize:lanczos3:fixed",
+  "candidate:resize:lanczos3:scale-aware"
 ]
 
 [profiles.nearest]
@@ -70,42 +70,42 @@ scale_group = ["partial", "identity", "bilinear-anisotropic"]
 [profiles.bicubic]
 command = "perf"
 domain = "resize"
-subjects = ["prod:resize:bicubic:catmull-rom"]
+subjects = ["candidate:resize:bicubic:catmull-rom"]
 oracle = "spec:resize:bicubic:catmull-rom"
 correctness = "bounded"
 
 [profiles.bicubic-scale-aware]
 command = "perf"
 domain = "resize"
-subjects = ["prod:resize:bicubic:catmull-rom-scale-aware"]
+subjects = ["candidate:resize:bicubic:catmull-rom-scale-aware"]
 oracle = "spec:resize:bicubic:catmull-rom-scale-aware"
 correctness = "bounded"
 
 [profiles.lanczos2]
 command = "perf"
 domain = "resize"
-subjects = ["prod:resize:lanczos2:fixed"]
+subjects = ["candidate:resize:lanczos2:fixed"]
 oracle = "spec:resize:lanczos2:fixed"
 correctness = "bounded"
 
 [profiles.lanczos2-scale-aware]
 command = "perf"
 domain = "resize"
-subjects = ["prod:resize:lanczos2:scale-aware"]
+subjects = ["candidate:resize:lanczos2:scale-aware"]
 oracle = "spec:resize:lanczos2:scale-aware"
 correctness = "bounded"
 
 [profiles.lanczos3]
 command = "perf"
 domain = "resize"
-subjects = ["prod:resize:lanczos3:fixed"]
+subjects = ["candidate:resize:lanczos3:fixed"]
 oracle = "spec:resize:lanczos3:fixed"
 correctness = "bounded"
 
 [profiles.lanczos3-scale-aware]
 command = "perf"
 domain = "resize"
-subjects = ["prod:resize:lanczos3:scale-aware"]
+subjects = ["candidate:resize:lanczos3:scale-aware"]
 oracle = "spec:resize:lanczos3:scale-aware"
 correctness = "bounded"
 

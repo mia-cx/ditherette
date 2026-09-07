@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "issue": 63,
+  "kind": "literal-copy-baseline",
+  "frozenRevision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+  "frozenContentSha256": "17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe",
+  "sourceBase": "711c7aec61587b45a91c2e404583161edb1e0de9",
+  "files": [
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/bicubic.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bicubic.rs",
+      "sourceSha256": "53fb0849eac940cc96bba33f5e9db2c50fece3035face96a8d5f9bcda7d97597",
+      "targetSha256": "af6e3e9b08613cc5a9c19262dd894a17243e4ce1ab1130e843ea7aa07a3a7d84",
+      "substitutions": [
+        {
+          "from": "spec::resize",
+          "to": "prod::resize"
+        }
+      ]
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/lanczos.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/lanczos.rs",
+      "sourceSha256": "3203628ffe33e48396a13b241f2c7fcc4826b52daebbb7248346e7934b7b8cc2",
+      "targetSha256": "22763691b38ed3de79a8e6ff179c86ee7db6324cf024dcce5edb76934025327c",
+      "substitutions": [
+        {
+          "from": "spec::resize",
+          "to": "prod::resize"
+        }
+      ]
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/scalar/convolution.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/convolution.rs",
+      "sourceSha256": "1a752689ca78c7ca8ca739fe4b7fbd6b1b51bc6c8fa32b6825e0a0f82ce5053c",
+      "targetSha256": "89b243bf343c858e97a71c267d7418c5630b1a90d4a1c69a4f1dc8aa216373f1",
+      "substitutions": [
+        {
+          "from": "spec::resize",
+          "to": "prod::resize"
+        }
+      ]
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/coordinates.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/common/coordinates.rs",
+      "sourceSha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f",
+      "targetSha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f",
+      "substitutions": []
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/sample.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/common/sample.rs",
+      "sourceSha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9",
+      "targetSha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9",
+      "substitutions": []
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/resize/common/alignment.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/common/alignment.rs",
+      "sourceSha256": "1805058261679b837adacdb55c34b106f495275494a22e152e8049a47ff533af",
+      "targetSha256": "1805058261679b837adacdb55c34b106f495275494a22e152e8049a47ff533af",
+      "substitutions": []
+    }
+  ],
+  "candidateSubstitutions": [
+    "super::convolution:: -> super::convolution_candidate::",
+    "Add candidate-status module documentation; arithmetic unchanged."
+  ],
+  "candidates": [
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bicubic/filter.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bicubic_candidate/filter.rs",
+      "sourceSha256": "7e9a42c9f4663b42f173371e86d5c6e4f4c34b243ad1c3769c4eed60aeddda30",
+      "targetSha256": "9ebc8132c2b11e891d47c49ef3afa4060db3ca46253ccd1be39854940b998688"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/bicubic/mod.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/bicubic_candidate/mod.rs",
+      "sourceSha256": "d8840ad9eff457509d02694200304d450546dd85623c0e061491c71dc8f531bb",
+      "targetSha256": "567aaa45255322050ea6f57286f938fdc90d0368906a670e006bd6c2e9a637d2"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/lanczos/filter.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/lanczos_candidate/filter.rs",
+      "sourceSha256": "10971dc7a3aa818bd6b7e8355c24af5195c6f89d11ea1d576512003cdd7cace1",
+      "targetSha256": "1366b445fdcafe2dce3749d6742464413e0e72ab08c134b62c7b8eeb01b0560c"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/lanczos/mod.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/lanczos_candidate/mod.rs",
+      "sourceSha256": "0b9c27c91d3836b86984475472165a6a729cc0e96182ce79c8f0e24f303cc362",
+      "targetSha256": "b5390fc31f63d56ff95ee6aa28f58c6087cf53ec94ece3398717a8b4b499997f"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/convolution/alignment.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/convolution_candidate/alignment.rs",
+      "sourceSha256": "716b0afb170fcb42e18905fd197b393d274872b5d3b0f7b75288a2d78d5a79fd",
+      "targetSha256": "716b0afb170fcb42e18905fd197b393d274872b5d3b0f7b75288a2d78d5a79fd"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/convolution/coordinates.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/convolution_candidate/coordinates.rs",
+      "sourceSha256": "4c829cfc06b356ca25207bcfc0647fa8ecc94500ae5dc6b3793ed0e44b0b696b",
+      "targetSha256": "4c829cfc06b356ca25207bcfc0647fa8ecc94500ae5dc6b3793ed0e44b0b696b"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/convolution/filter.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/convolution_candidate/filter.rs",
+      "sourceSha256": "96e6824b871b5fa2195ec7c5b72eab5f27d28ba80635a44399a44dd114fb8295",
+      "targetSha256": "96e6824b871b5fa2195ec7c5b72eab5f27d28ba80635a44399a44dd114fb8295"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/convolution/kernel.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/convolution_candidate/kernel.rs",
+      "sourceSha256": "9d5589bcebe312573e9b436548fe2d0ba2ed9dbb0b7b19e2f92ddd52ac37af50",
+      "targetSha256": "9d5589bcebe312573e9b436548fe2d0ba2ed9dbb0b7b19e2f92ddd52ac37af50"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/convolution/mod.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/convolution_candidate/mod.rs",
+      "sourceSha256": "b1cb1d393e88aa05b5c46c8c119bde0a38ffe74babfe6357be8570f7906f9456",
+      "targetSha256": "a3467dd200176367f2c6b0ae527cdafb514f507da3f20ad5ec5a622ef7d31ce4"
+    },
+    {
+      "source": "crates/ditherette-wasm/src/prod/resize/scalar/convolution/plan.rs",
+      "target": "crates/ditherette-wasm/src/prod/resize/scalar/convolution_candidate/plan.rs",
+      "sourceSha256": "e249bf9384c762e909c1f9efcd0f1b5eb90186cb728761aa6bb2531edbe2c7fa",
+      "targetSha256": "e249bf9384c762e909c1f9efcd0f1b5eb90186cb728761aa6bb2531edbe2c7fa"
+    }
+  ]
+}

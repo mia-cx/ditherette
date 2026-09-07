@@ -11,8 +11,8 @@ Shared coordinates/sample copies must remain byte-identical to the frozen files.
 
 ## TODOs
 
-- [~] Commit literal kernels, preserved candidates, mechanical caller redirects, content manifests, and exact native conformance.
-- [ ] Record final Wasm compilation, formatting, and trusted freeze validation; push the baseline and drain all owned processes.
+- [x] Commit literal kernels, preserved candidates, mechanical caller redirects, content manifests, and exact native conformance.
+- [~] Record final Wasm compilation, formatting, and trusted freeze validation; push the baseline and drain all owned processes.
 
 ## Validation scope
 
@@ -22,3 +22,22 @@ Conformance must not invoke benchmark timing code. A recorded literal commit is 
 
 Public processor/package integration, benchmark registration of canonical baselines, bounded optimization, native/public timing,
 and the complete S22 PR remain coordinator-owned follow-up work. No optimization or measurement is authorized in this phase.
+
+## Literal checkpoint evidence
+
+The JSON manifest records full hashes for six frozen semantic files, including unchanged common alignment, and ten inherited candidate files.
+Validation reads frozen source directly from `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
+Each canonical target equals those bytes after only `spec::resize` to `prod::resize` import substitution.
+Each inherited candidate equals the source-base bytes after convolution-module redirection and the candidate-status doc line only.
+No kernel arithmetic changes. The reference's per-pixel accumulation allocation remains part of this baseline.
+
+`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --features bench-subjects --test prod_convolution_baseline --test prod_resize_convolution` passes eight tests.
+The new tests execute 9,720 exact comparisons across five storage formats, both support policies, nine anchors, nine shape pairs, and four stride combinations.
+Float comparisons include raw bit equality and negative values. A hand-calculated Catmull-Rom step checks negative/overshooting lobes, clipping, and byte rounding.
+Source buffers and output padding remain unchanged. Four inherited candidate conformance tests remain separate from baseline acceptance.
+An initial generic test compilation required an explicit `ImageFormat + Copy` bound; the corrected test passes without changing kernels.
+
+Mechanical integration redirects affect `bench_subjects.rs`, `wasm.rs`, the retained candidate tests, `tiling_sweep.rs`, and `ditherette-bench.toml`.
+Legacy cubic/Lanczos subject prefixes change from `prod:resize:` to `candidate:resize:` with accurate candidate source paths.
+Canonical baseline registry/public adapters remain follow-up work. The legacy Wasm exports still call the explicitly preserved candidates.
+Sibling S21 adds the same byte-identical coordinates/sample files and common module declarations; its shared registry fragments concern only area/bilinear.
