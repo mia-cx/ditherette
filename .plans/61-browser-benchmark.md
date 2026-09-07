@@ -8,6 +8,7 @@ The immediate PR base is `impl/v1-s19-integration`. Preserve all frozen and lite
 
 - [ ] Extend the typed paired protocol and comparison checks for public operations, browser runtime/artifact identity, and truthful cache/init scopes.
 - [ ] Snapshot browser/package/TypeScript assets and dispatch owned browser workers through the existing paired lease protocol.
+- [x] Add clean-source build/pack/install provenance with complete source and output digests.
 - [ ] Implement actual installed-package calls and equivalent TypeScript adapters, with one call per latency sample and separate throughput/init measurements.
 - [ ] Test operation registration, exact output proof, asset tampering, malformed transport, and owned-child cleanup without measurements.
 - [ ] Join the independent deliveries and validate real browser conformance plus existing native protocol compatibility.
@@ -35,3 +36,12 @@ Keep native prepared evidence readable. New public operation tags must be extens
 
 Only preparation and controlled diagnostics run during implementation. The coordinator starts any real benchmark after every agent and owned build/test exits.
 No merges of PRs, publication, tags, deployment, rollout, spec edits, root-user edits, or non-exact acceptance.
+
+## Integration evidence
+
+Transport checkpoints `fe06a927`, `d21352b6`, and `15d1292a` join the coordinator branch.
+Their controlled timing tests preserve zero samples and avoid stalled-clock warmup.
+The actual TypeScript closure compiles offline. All three engines confirm the known 2→49 tie-rounding mismatch without measurements.
+The clean-build preparer owns build/pack/install before the quiet phase and emits the worker's agreed provenance schema.
+Two focused provenance fixtures pass, covering dirty inputs, complete sorted content hashes, and rejected symbolic links.
+Real builder integration remains part of the complete asset/worker validation, not a claim of measured performance.
