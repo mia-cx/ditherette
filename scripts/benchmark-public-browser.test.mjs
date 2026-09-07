@@ -21,14 +21,20 @@ import {
 
 test('indexed preflight checks indices, palette, transparency, and warnings without timing', async () => {
 	const output = {
-		width: 2, height: 1, indices: new Uint8Array([0, 1]),
+		width: 2,
+		height: 1,
+		indices: new Uint8Array([0, 1]),
 		palette: { rgba: new Uint8Array([10, 20, 30, 255, 0, 0, 0, 0]), transparentIndex: 1 },
 		warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
 	};
 	const reference = {
 		dimensions: { width: 2, height: 1 },
-		pixels: { format: 'indexed8', indices: [0, 1],
-			palette_rgba: [10, 20, 30, 255, 0, 0, 0, 0], transparent_index: 1 },
+		pixels: {
+			format: 'indexed8',
+			indices: [0, 1],
+			palette_rgba: [10, 20, 30, 255, 0, 0, 0, 0],
+			transparent_index: 1
+		},
 		warnings: output.warnings
 	};
 	const operation = { prepare: () => ({ call: () => output, close() {} }) };
@@ -36,8 +42,8 @@ test('indexed preflight checks indices, palette, transparency, and warnings with
 	for (const mutate of [
 		(value) => value.pixels.indices.reverse(),
 		(value) => value.pixels.palette_rgba[0]++,
-		(value) => value.pixels.transparent_index = null,
-		(value) => value.warnings[0].message += ' changed'
+		(value) => (value.pixels.transparent_index = null),
+		(value) => (value.warnings[0].message += ' changed')
 	]) {
 		const changed = structuredClone(reference);
 		mutate(changed);
@@ -227,8 +233,7 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		assert.equal(unstable.sample_ns.length, 5);
 		assert.equal(unstable.timing_skipped, undefined);
 	} finally {
-		if (previousPerformance)
-			Object.defineProperty(globalThis, 'performance', previousPerformance);
+		if (previousPerformance) Object.defineProperty(globalThis, 'performance', previousPerformance);
 		else delete globalThis.performance;
 		if (previousLocation) Object.defineProperty(globalThis, 'location', previousLocation);
 		else delete globalThis.location;
@@ -242,18 +247,26 @@ test('mismatch response performs one fake preflight call and never begins warmup
 test('diagnostic HTTP response bound retains two complete actual images', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'ditherette-unstable-body-'));
 	const assets = { tree: { root, files: [{ path: 'entry.js' }] }, entries: { page: 'entry.js' } };
-	const trial = { case: {
-		identity: { output: { width: 10_000, height: 1 } },
-		measurement: { samples: 5 }, browser: { measure_nonexact: true }
-	} };
-	const actual = { dimensions: trial.case.identity.output,
-		pixels: { format: 'rgba8', data: Array(40_000).fill(255) }, warnings: [] };
+	const trial = {
+		case: {
+			identity: { output: { width: 10_000, height: 1 } },
+			measurement: { samples: 5 },
+			browser: { measure_nonexact: true }
+		}
+	};
+	const actual = {
+		dimensions: trial.case.identity.output,
+		pixels: { format: 'rgba8', data: Array(40_000).fill(255) },
+		warnings: []
+	};
 	const body = JSON.stringify({ output: actual, unstable_output: actual });
 	assert.ok(Buffer.byteLength(body) > 10_000 * 16 + 65_536 + 5 * 32);
 	const server = await startAssetServer(assets, false, trial);
 	try {
 		const response = await fetch(server.url + server.resultUrl, {
-			method: 'POST', headers: { 'Content-Type': 'application/json' }, body
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body
 		});
 		assert.equal(response.status, 204);
 		assert.deepEqual(server.result, JSON.parse(body));

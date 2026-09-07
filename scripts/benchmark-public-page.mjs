@@ -49,10 +49,14 @@ export async function prepareOperation(trial) {
 	const request = {
 		version: 1,
 		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
-		...(quantize ? config.operation.settings : { output: {
-			...trial.case.identity.output,
-			resize
-		} })
+		...(quantize
+			? config.operation.settings
+			: {
+					output: {
+						...trial.case.identity.output,
+						resize
+					}
+				})
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
@@ -86,7 +90,7 @@ export async function prepareOperation(trial) {
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
 	const create = () => createDitherette({ wasm: compiled ?? bytes });
-	const call = (instance) => quantize ? instance.quantize(request) : instance.resize(request);
+	const call = (instance) => (quantize ? instance.quantize(request) : instance.resize(request));
 	if (measurement.scope === 'initialization') {
 		if (!['initialization-bytes', 'initialization-compiled'].includes(config.preparation))
 			throw new Error('Initialization requires an explicit compilation scope.');
@@ -118,8 +122,12 @@ export function verificationOutput(output) {
 	if ('indices' in output) {
 		return {
 			dimensions: { width: output.width, height: output.height },
-			pixels: { format: 'indexed8', indices: Array.from(output.indices),
-				palette_rgba: Array.from(output.palette.rgba), transparent_index: output.palette.transparentIndex },
+			pixels: {
+				format: 'indexed8',
+				indices: Array.from(output.indices),
+				palette_rgba: Array.from(output.palette.rgba),
+				transparent_index: output.palette.transparentIndex
+			},
 			warnings: output.warnings.map(({ code, message }) => ({ code, message }))
 		};
 	}
@@ -158,15 +166,25 @@ export async function preflightOperation(operation, reference) {
 /** Exact bytes and metadata, independent of JSON object key order. */
 export function equalOutput(actual, expected) {
 	const equalBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
-	if (actual.dimensions.width !== expected.dimensions.width || actual.dimensions.height !== expected.dimensions.height
-		|| actual.pixels.format !== expected.pixels.format
-		|| actual.warnings.length !== expected.warnings.length
-		|| actual.warnings.some((warning, index) => warning.code !== expected.warnings[index].code || warning.message !== expected.warnings[index].message)) return false;
+	if (
+		actual.dimensions.width !== expected.dimensions.width ||
+		actual.dimensions.height !== expected.dimensions.height ||
+		actual.pixels.format !== expected.pixels.format ||
+		actual.warnings.length !== expected.warnings.length ||
+		actual.warnings.some(
+			(warning, index) =>
+				warning.code !== expected.warnings[index].code ||
+				warning.message !== expected.warnings[index].message
+		)
+	)
+		return false;
 	if (actual.pixels.format === 'rgba8') return equalBytes(actual.pixels.data, expected.pixels.data);
 	if (actual.pixels.format !== 'indexed8') return false;
-	return equalBytes(actual.pixels.indices, expected.pixels.indices)
-		&& equalBytes(actual.pixels.palette_rgba, expected.pixels.palette_rgba)
-		&& actual.pixels.transparent_index === expected.pixels.transparent_index;
+	return (
+		equalBytes(actual.pixels.indices, expected.pixels.indices) &&
+		equalBytes(actual.pixels.palette_rgba, expected.pixels.palette_rgba) &&
+		actual.pixels.transparent_index === expected.pixels.transparent_index
+	);
 }
 
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
@@ -217,9 +235,7 @@ export async function runTrial(trial) {
 			...identity,
 			...timings,
 			output: verified,
-			...(mismatch && !equalOutput(verified, mismatch)
-				? { unstable_output: mismatch }
-				: {}),
+			...(mismatch && !equalOutput(verified, mismatch) ? { unstable_output: mismatch } : {}),
 			observation
 		};
 	} finally {

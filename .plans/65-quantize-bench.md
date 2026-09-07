@@ -15,8 +15,8 @@ Prod, spec, image, freeze policy, and public package files stay unchanged in thi
 - [x] Extend typed native/public operation identity and indexed transport validation using existing request/output models; verify without timing.
 - [x] Register prepared quantize and five forward adapters, reusing the native timing loop and exact three-way verifier.
 - [x] Declare the bounded matrix and validate the native checkpoint without measurements.
-- [ ] Create the literal-baseline worktree with common benchmark protocol and thin old-signature adapter; leave production bytes unchanged.
-- [ ] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
+- [x] Create the literal-baseline worktree with common benchmark protocol and thin old-signature adapter; leave production bytes unchanged.
+- [~] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
 - [ ] Prepare immutable accepted/candidate artifacts, then hand off for coordinator-authorized measurements.
 
 ## Interface
@@ -84,5 +84,12 @@ The registry reference-count fixture now counts only `spec` conformance subjects
 The guard retains frozen revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b` and digest `sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
 Prod, spec, image, and freeze-policy files remain unchanged by benchmark work.
 
-Pause after this checkpoint for the coordinator's S23 quiet phase. Baseline preparation and public adapter conformance remain pending.
-The validated public package is available at `0ae8b95f5355b5f311b474034faf2f2bfb686eb5`; it is not joined here yet.
+The coordinator ended S23's quiet phase before this task resumes. No S24 measurements are authorized.
+Validated public package `0ae8b95f5355b5f311b474034faf2f2bfb686eb5` joins cleanly at `5bba0c25`.
+The separate baseline worktree starts at the exact literal checkpoint and shares only the benchmark protocol.
+Its ten focused tests and trusted guard pass; original production, spec, image, and policy bytes remain identical.
+
+`quantize_conformance` exports 17 small frozen indexed fixtures for the real browser adapter.
+The installed-package test checks all five matching spaces, all alpha policies, palette warnings, fresh/primed instances, and durable results.
+The fixture generator compiles and the ten controlled browser protocol tests pass before package artifact preparation.
+Actual installed-package execution remains pending the fresh build below.
