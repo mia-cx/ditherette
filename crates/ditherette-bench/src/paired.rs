@@ -125,6 +125,9 @@ pub struct TrialRequest {
     pub case: PairCase,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser: Option<browser::BrowserTrial>,
+    /// Browser workers attach the independently computed output before Node can time a call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_output: Option<VerificationOutput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -338,15 +341,17 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                 .copied()
                 .fold(f64::INFINITY, f64::min);
             let max = result.pair_ratios.iter().copied().fold(0.0, f64::max);
+            let nominal_regression = ratio > 1.10 && min > 1.10;
+            let nominal_pass = ratio <= 1.10 && max <= 1.10 && max / min <= 1.10;
             result.gate = if result.resolution_limited {
                 Gate::Inconclusive
-            } else if ratio > 1.10 && min > 1.10 && resolution_allows_regression {
+            } else if nominal_regression && resolution_allows_regression {
                 Gate::Regression
-            } else if ratio <= 1.10 && max <= 1.10 && max / min <= 1.10 && resolution_allows_pass {
+            } else if nominal_pass && resolution_allows_pass {
                 Gate::Pass
             } else {
-                result.resolution_limited =
-                    !resolution_allows_pass && !resolution_allows_regression;
+                result.resolution_limited = (nominal_pass && !resolution_allows_pass)
+                    || (nominal_regression && !resolution_allows_regression);
                 Gate::Inconclusive
             };
         }

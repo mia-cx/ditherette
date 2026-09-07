@@ -221,7 +221,13 @@ pub struct BrowserEvidence {
     pub observation: BrowserObservation,
 }
 
-/// Node returns measured public output; the worker adds its independently executed frozen reference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TimingSkipped {
+    ReferenceMismatch,
+}
+
+/// Node preserves public output even when its untimed reference check prevents timing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserTransportResult {
@@ -236,6 +242,8 @@ pub struct BrowserTransportResult {
     pub warmup_elapsed_ns: u128,
     pub output: VerificationOutput,
     pub observation: BrowserObservation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_skipped: Option<TimingSkipped>,
 }
 
 /// Sorted relative names, sizes, modes, and every byte digest form the tree identity.

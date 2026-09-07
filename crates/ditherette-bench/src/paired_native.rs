@@ -32,7 +32,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
     };
     let request: TrialRequest = serde_json::from_slice(&fs::read(path).map_err(BenchError::io)?)
         .map_err(|error| BenchError::Config(error.to_string()))?;
-    if request.browser.is_some() {
+    if request.browser.is_some() || request.reference_output.is_some() {
         return Err(BenchError::Config(
             "native worker rejects browser assets".into(),
         ));

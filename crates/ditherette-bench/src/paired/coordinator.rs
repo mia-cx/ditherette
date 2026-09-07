@@ -177,6 +177,7 @@ fn run_inner(
                         executable: executable.identity.clone(),
                         case: case.clone(),
                         browser: browser.clone(),
+                        reference_output: None,
                     })?,
                 )?;
                 let stdout = OpenOptions::new()
