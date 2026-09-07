@@ -21,9 +21,10 @@ Current integration work continues on `impl/v1-resize-integration` in `.worktree
 It owns the tracked progress table; the root table remains the visible mirror.
 S21 public area/bilinear checkpoint `056a1324` joins at `b52d1c8b`, with native/package/three-engine conformance passing.
 S22 public convolution checkpoint `f0976601` preserves native checkpoint `53eaf013` and passes all three package engines.
-S23 public trilinear is validated at `0be73eb6`, retaining literal missing-implementation baseline `fba85a94` and prepared checkpoint `830e6739`.
-It passes 299 native, 18 interface, eight private ABI, both builds, and all three installed-package engines.
-S24 native packed-color/direct quantization is validated at `f83e58a4`; public integration and benchmark registration continue separately.
+S23 is delivered in PR112 with exact shared-mip reuse. Its checkpoints and measurements appear below.
+S24 public quantization passes conformance at `0ae8b95f`; benchmark artifacts are prepared, with no measurements yet.
+S25 adds all fifteen matching tags at `0085972a`, with 309 native tests and three-engine package conformance passing.
+Its exact dispatch candidate `230046f` remains unselected until fresh measurements.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -187,8 +188,9 @@ S21 restoration is `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508`; S22 restoration i
 The coordinator verifies both source trees byte-for-byte and joins them into `fix/v1-restore-landed`.
 Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
 S21 targets `fix/v1-restore-landed`. S22 stacks on S21 to reuse its validated public integration.
-S21 is open in [PR #110](https://github.com/mia-cx/ditherette/pull/110) at `7743c2e5b4a313fa5e7da70b850956b85a880df4`.
-S22 is open in [PR #111](https://github.com/mia-cx/ditherette/pull/111) at `2c2c1994b40eb65246b9f434322f1c20b7f260bf`.
+S21 is open in [PR #110](https://github.com/mia-cx/ditherette/pull/110) at `d7c207b1b0ff7d554734edb89bd8d3841a3fc2f8`.
+S22 is open in [PR #111](https://github.com/mia-cx/ditherette/pull/111) at `a66b63554c0d2e946cfb1e18eeabe6e025678ba6`.
+These heads correct private ABI and capacity documentation without changing runtime bytes.
 Both are non-draft and unmerged, with auto-merge disabled. Neither grants release-performance readiness.
 S22's merge-preserving rebase retains original checkpoints and measured runtime bytes.
 Its final branch passes 296 native, 16 interface, seven private ABI, both builds, and three installed-package engines.
@@ -202,6 +204,31 @@ Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
 Existing optimized kernels and shared helpers stay canonical production. Removed replacements remain recoverable in historical commits.
 Public processor/package integration and fresh measurements are complete for S21/S22. No new optimization is selected.
 The interrupted nearest diagnostic in `impl/v1-s20-nearest-diagnostic` stays held and separate.
+
+## S23 exact trilinear
+
+[PR #112](https://github.com/mia-cx/ditherette/pull/112) is open, non-draft, and unmerged, with auto-merge disabled.
+Branch `impl/v1-s23-trilinear` targets S22 at `a66b63554c0d2e946cfb1e18eeabe6e025678ba6`.
+Delivered head `5c0dc4e19e1245593d145b725d9aa46894bf41ab` includes that parent and unchanged measured runtime bytes.
+The coordinator joins it at `9432ddde43ed9b2a43ddbe4182da4c07a34a2c21`.
+
+Literal missing-implementation baseline `fba85a94` precedes prepared baseline `0be73eb6` and shared-mip candidate `07d528a6`.
+The candidate computes common storage-rounded mip levels once, preserving each arithmetic and RGBA8 reconstruction step.
+[Fresh measurement evidence](../../../.plans/64-measurement.md) retains 80 reaped workers and 1,344 samples across native and three browsers.
+All production comparisons are exact; all four runtime gates pass. Fractional call latency falls 27–56%.
+Control cases remain within the 10% gate. The shared-mip candidate is selected; landed resize kernels remain untouched.
+
+Final checks pass 18 focused native, 18 interface, eight private ABI, nine JS protocol fixtures, both builds, and three engines.
+The trusted freeze guard and formatting pass. Earlier candidate validation also passes the complete 300-test native suite.
+
+## Current benchmark verification correction
+
+PR110 review found that browser timing retained only endpoint outputs, missing transient A/B/A changes.
+`fix/v1-benchmark-stability` owns the correction before S24 measurements.
+The planned collector verifies every durable result outside operation timers, with a bounded retained throughput batch.
+It fails closed if the calibrated batch cannot fit the retention bound; it never silently lowers the iteration count.
+Retention changes GC pressure, so new measurements need fresh artifact snapshots for both roles.
+Historical evidence remains tied to its original collector and does not certify every intermediate output.
 
 ## S01 inherited port anchor
 
