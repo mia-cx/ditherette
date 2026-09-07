@@ -9,7 +9,8 @@ The paired protocol owns validation and acceptance. The Rust worker owns referen
 
 - [x] Add the TypeScript adapter and deterministic timing tests, including zero samples and per-sample preparation.
 - [x] Add the immutable-asset browser transport using the shared trial schema and existing resource cleanup.
-- [ ] Verify real TypeScript output and installed-package calls without running measurements; record runtime provenance and handoff.
+- [x] Verify real TypeScript output and installed-package calls without running measurements; record runtime provenance and handoff.
+- [ ] Add worker-supplied frozen output preflight and preserve structured mismatch output before timing.
 
 ## Constraints
 
@@ -30,3 +31,30 @@ TODO 2 passes eleven focused fixtures. The HTTP server and browser routing share
 Undeclared dependencies, external requests, runtime-version drift, and isolation drift fail the trial.
 The existing leased transport still owns browser/server signal and stdin-liveness cleanup.
 Initialization probes and disposal occur after each create timer. Fresh processing creates before each call timer.
+
+TODO 3 passes the installed-tarball fixture in Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+The fixture invokes `prepareOperation` only. It never invokes the measured runner or wraps real operations in clocks.
+Each engine checks independent 4→3 vectors, durable identity copying, fresh instances, both initialization scopes, and missing-import rejection.
+TypeScript remains stateless for the fresh-instance comparison. Its ordinary call prepares plans each time; only the package creates an instance.
+
+All three engines reproduce the inherited TypeScript mismatch at source 2→output 49, x=24.
+Source red channels `[10, 11]` produce TypeScript red 10 and frozen-compatible package red 11 at that position.
+Do not label those dimensions exact or repair the website algorithm in S20.
+
+### Reproducible conformance
+
+```sh
+node --test scripts/benchmark-public-browser.test.mjs scripts/benchmark-public-timing.test.mjs scripts/prepare-benchmark-typescript.test.mjs
+pnpm exec tsc --noEmit --target es2022 --module esnext --moduleResolution bundler --skipLibCheck --ignoreConfig scripts/benchmark-typescript.ts
+DITHERETTE_BENCH_TEST_TARBALL=/tmp/ditherette-s20-fixture.qc4Tgh/ditherette-0.1.0.tgz DITHERETTE_TEST_WEBKIT_EXECUTABLE=/tmp/ditherette-webkit-libs.2dS6Yu/webkit node --test scripts/benchmark-public-conformance.test.mjs
+```
+
+The first command passes 11 fixtures. The browser command passes three engine subtests and its containing test, four reported tests.
+Node is 24.19.0, pnpm 11.13.0, Playwright 1.59.1, and TypeScript 6.0.3.
+The supplied S19 tarball SHA-256 is `bed93cd2085df64a2ca8ba578fd6d72babccc539042e83847e66a691bde59c1d`.
+It comes from validated integration `7de86d799a25a132c8de41ee54696bd8e54bdf76` and serves only as conformance input.
+Actual measurements require fresh clean builds and immutable preparation.
+
+WebKit uses the task-local launcher and extracted libraries documented in [S19 browser provenance](60-browser-runtime.md).
+The fixture installs the tarball offline into its own temporary consumer and removes that consumer after all owned browsers/servers close.
+No host package installation, website preview, benchmark, or deployment occurs.
