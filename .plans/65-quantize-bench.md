@@ -13,8 +13,11 @@ Prod, spec, image, freeze policy, and public package files stay unchanged in thi
 ## TODOs
 
 - [x] Extend typed native/public operation identity and indexed transport validation using existing request/output models; verify without timing.
-- [ ] Register literal-baseline and prepared quantize adapters, reusing the native timing loop and exact three-way verifier.
-- [ ] Declare the bounded matrix, validate protocol/adapter fixtures, commit/push clean checkpoints, and drain.
+- [x] Register prepared quantize and five forward adapters, reusing the native timing loop and exact three-way verifier.
+- [x] Declare the bounded matrix and validate the native checkpoint without measurements.
+- [ ] Create the literal-baseline worktree with common benchmark protocol and thin old-signature adapter; leave production bytes unchanged.
+- [ ] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
+- [ ] Prepare immutable accepted/candidate artifacts, then hand off for coordinator-authorized measurements.
 
 ## Interface
 
@@ -49,3 +52,37 @@ Declare artifacts and settings before the coordinator's quiet phase. This task r
 Focused Rust tests pass with 2 quantize identity/scope, 11 browser protocol, and 5 worker fixtures.
 `node --test scripts/benchmark-public-browser.test.mjs` passes 10 controlled fixtures, including indexed metadata preflight.
 No real browser or benchmark executes in these checks. Native typed operations remain fail-closed until their workload adapter lands.
+
+## Native checkpoint
+
+The existing resize warmup, calibration, measurement, and observer loop now accepts a callable workload.
+Resize keeps its caller-owned RGBA buffer and existing result schema. Quantize creates and drops each actual `IndexedImage` inside timing.
+The full native quantize wrapper borrows source bytes and uses the current convenience API with an unrestricted preparation budget.
+The accepted artifact will call its old one-argument convenience API under the same timing scope.
+Contract mapping, frozen execution, exact output serialization, and final stability checks remain untimed.
+Unstable native output keeps the request, both actual outputs, reference, and raw samples beside the request as `.unstable.json`.
+
+Five forward controls reuse landed `Converter::rgba8_into` with prepared tables and caller-owned f32 triplets.
+Actual packed coordinates and byte alpha use the existing numeric verifier.
+The frozen per-space inverse only renders untimed diagnostics because production exposes no inverse API.
+No production-as-reference adapter or archived production implementation was added.
+
+Validation commands pass:
+
+```sh
+cargo test --manifest-path crates/ditherette-bench/Cargo.toml --locked --tests --example quantize_integration_plan
+cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --features bench-subjects --target wasm32-unknown-unknown
+cargo fmt --manifest-path crates/ditherette-bench/Cargo.toml -- --check
+cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check
+node /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze/tools/spec-freeze/guard.mjs --root /home/mia/mia-cx/ditherette/.worktrees/v1-s24-bench --trusted-root /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze
+```
+
+The Rust suite passes 56 tests, with one subprocess-only fixture ignored in the parent test run.
+Its lease checks separately invoke that fixture twice and run three controlled Node cleanup tests.
+The new adapter fixtures compare 46 quantize combinations and five packed color controls exactly with frozen outputs.
+The registry reference-count fixture now counts only `spec` conformance subjects, allowing real candidate registration.
+The guard retains frozen revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b` and digest `sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+Prod, spec, image, and freeze-policy files remain unchanged by benchmark work.
+
+Pause after this checkpoint for the coordinator's S23 quiet phase. Baseline preparation and public adapter conformance remain pending.
+The validated public package is available at `0ae8b95f5355b5f311b474034faf2f2bfb686eb5`; it is not joined here yet.
