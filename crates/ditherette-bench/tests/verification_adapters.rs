@@ -135,13 +135,13 @@ fn storage_adapter_retains_palette_duplicates_warning_text_and_logical_rows() {
 }
 
 #[test]
-fn unavailable_production_modes_report_missing_evidence_without_using_spec() {
-    let request = ResizeRequest {
+fn joined_trilinear_adapter_matches_frozen_odd_mips_and_anchor_bytes() {
+    let mut request = ResizeRequest {
         version: 1,
         source: Source {
-            width: 1,
+            width: 3,
             height: 1,
-            data: &[10, 20, 30, 255],
+            data: &[0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 0, 255],
         },
         output: Output {
             width: 1,
@@ -151,9 +151,19 @@ fn unavailable_production_modes_report_missing_evidence_without_using_spec() {
             },
         },
     };
-    assert!(reference_resize(&request).is_ok());
-    assert!(production_resize(&request)
-        .unwrap_err()
-        .to_string()
-        .contains("missing required resize implementation"));
+    for (anchor, red) in [
+        (Anchor::Left, 68),
+        (Anchor::Center, 85),
+        (Anchor::Right, 103),
+    ] {
+        request.output.resize = ResizePolicy::Trilinear { anchor };
+        let expected = reference_resize(&request).unwrap();
+        assert_eq!(
+            expected.pixels,
+            Pixels::Rgba8 {
+                data: vec![red, 0, 0, 255]
+            }
+        );
+        assert_eq!(production_resize(&request).unwrap(), expected);
+    }
 }
