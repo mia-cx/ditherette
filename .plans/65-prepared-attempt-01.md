@@ -4,7 +4,8 @@
 
 Prepared, unmeasured, and paused for the timed-output stability review.
 Do not run these artifacts as final S24 evidence. The public retention fix requires fresh artifacts.
-Native endpoint checks also need an explicit assurance policy before measurement.
+Native policy now explicitly accepts checked endpoints only for the fixed deterministic in-process callables.
+It does not claim observation of every timed output or transient A/B/A detection.
 
 All paths below are relative to `.worktrees/v1-s24-bench/crates/ditherette-bench/target/s24-quantize/`.
 The coordinator owns quiet clearance and all future measurements. No result directories exist for this attempt.
@@ -21,6 +22,8 @@ Candidate `candidate:quantize:request:prepared` calls the budgeted convenience f
 Both borrow source bytes and time validation, preparation, conversion, matching, owned output construction, and disposal.
 Five packed-forward controls prepare tables/output storage outside timing and observe each conversion result through the same optimizer barrier.
 Exact numeric verification and diagnostic inverse rendering are untimed.
+Native conformance checks before/after outputs under the documented deterministic-kernel assumption.
+The typed registry cannot certify arbitrary stateful subjects. Result disposal remains inside the full-call scope.
 
 Public accepted and candidate use the identical package-capable candidate artifact.
 These are same-artifact package controls, not optimization evidence or a pre-optimization public baseline.

@@ -18,7 +18,7 @@ Prod, spec, image, freeze policy, and public package files stay unchanged in thi
 - [x] Create the literal-baseline worktree with common benchmark protocol and thin old-signature adapter; leave production bytes unchanged.
 - [x] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
 - [x] Prepare immutable accepted/candidate artifacts as attempt 01 and hand off without measurements.
-- [ ] Resolve timed-output stability assurance, then rebuild affected artifacts before coordinator-authorized measurements.
+- [ ] Integrate public retained-batch verification, then rebuild affected artifacts before coordinator-authorized measurements.
 
 ## Interface
 
@@ -99,6 +99,8 @@ The final 56-test Rust suite, Wasm check, formatting, and trusted guard pass aft
 
 [Attempt 01](65-prepared-attempt-01.md) records immutable artifact paths and complete hashes.
 The coordinator pauses measurements after review finds that endpoint-only checks miss intermediate A/B/A output changes.
-Public retained-batch verification is being fixed separately. Native full-call timing currently drops each output inside the timed call.
-That ownership scope needs an explicit deterministic-kernel assurance policy or a separately declared collection scope.
+Public retained-batch verification is being fixed separately. Native full-call timing drops each output inside the timed call.
+The coordinator accepts the fixed deterministic native callable scope with before/after conformance only, not every timed output.
+This cannot certify arbitrary stateful/nondeterministic callables or transient A/B/A behavior.
+Native disposal and timer boundaries remain unchanged; broader observation requires a separately declared scope or mechanism.
 Attempt 01 remains unmeasured historical preparation, not validated performance evidence.
