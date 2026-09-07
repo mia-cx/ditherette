@@ -24,6 +24,14 @@ import { exchangeTrial, restrictContext, startAssetServer } from './benchmark-pu
 test('installed package and actual TypeScript adapter conformance, without measurements', async (t) => {
 	const tarball = process.env.DITHERETTE_BENCH_TEST_TARBALL;
 	assert.ok(tarball, 'Set DITHERETTE_BENCH_TEST_TARBALL to an already-built package tarball.');
+	const quantizePath = process.env.DITHERETTE_BENCH_QUANTIZE_FIXTURES;
+	assert.ok(
+		quantizePath,
+		'Set DITHERETTE_BENCH_QUANTIZE_FIXTURES to the frozen quantize_conformance output.'
+	);
+	const quantizeFixtures = JSON.parse(await readFile(quantizePath, 'utf8'));
+	assert.equal(quantizeFixtures.length, 47);
+	assert.equal(new Set(quantizeFixtures.map((fixture) => fixture.settings.matching)).size, 15);
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-public-conformance-'));
 	t.after(() => rm(temporary, { recursive: true, force: true }));
 	const consumer = path.join(temporary, 'consumer');
@@ -100,237 +108,290 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				await restrictContext(context, server);
 				const page = await context.newPage();
 				await page.goto(server.url);
-				const report = await page.evaluate(async (assets) => {
-					const { prepareOperation, preflightOperation } = await import(`/${assets.entries.page}`);
-					const equal = (actual, expected, label) => {
-						if (JSON.stringify(actual) !== JSON.stringify(expected))
-							throw new Error(
-								`${label}: actual ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`
-							);
-					};
-					const trial = (backend, preparation = 'primed-instance', width = 4, outputWidth = 3) => ({
-						role: 'candidate',
-						browser: { assets },
-						case: {
-							source: { width, height: 1 },
-							rgba: Array.from({ length: width }, (_, i) => [i + 10, 30, 70, i * 11]).flat(),
-							identity: { output: { width: outputWidth, height: 1 } },
-							measurement: {
-								scope: preparation.startsWith('initialization')
-									? 'initialization'
-									: 'complete-call',
-								mode: 'single-call',
-								application_cache: 'not-applicable'
-							},
-							browser: {
-								operation: { operation: 'resize-nearest', anchor: 'center' },
-								candidate: backend,
-								preparation,
-								cache: 'none'
+				const report = await page.evaluate(
+					async ({ assets, quantizeFixtures }) => {
+						const { prepareOperation, preflightOperation, outputStability } = await import(
+							`/${assets.entries.page}`
+						);
+						const equal = (actual, expected, label) => {
+							if (JSON.stringify(actual) !== JSON.stringify(expected))
+								throw new Error(
+									`${label}: actual ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`
+								);
+						};
+						const trial = (
+							backend,
+							preparation = 'primed-instance',
+							width = 4,
+							outputWidth = 3
+						) => ({
+							role: 'candidate',
+							browser: { assets },
+							case: {
+								source: { width, height: 1 },
+								rgba: Array.from({ length: width }, (_, i) => [i + 10, 30, 70, i * 11]).flat(),
+								identity: { output: { width: outputWidth, height: 1 } },
+								measurement: {
+									scope: preparation.startsWith('initialization')
+										? 'initialization'
+										: 'complete-call',
+									mode: 'single-call',
+									application_cache: 'not-applicable'
+								},
+								browser: {
+									operation: { operation: 'resize-nearest', anchor: 'center' },
+									candidate: backend,
+									preparation,
+									cache: 'none'
+								}
+							}
+						});
+						const expected = [10, 30, 70, 0, 12, 30, 70, 22, 13, 30, 70, 33];
+						const reference = {
+							dimensions: { width: 3, height: 1 },
+							pixels: { format: 'rgba8', data: expected },
+							warnings: []
+						};
+						for (const backend of ['typescript', 'package']) {
+							const operation = await prepareOperation(trial(backend));
+							try {
+								equal(
+									await preflightOperation(operation, reference),
+									undefined,
+									`${backend} reference preflight`
+								);
+								equal(Array.from(operation.call().data), expected, `${backend} known 4→3`);
+							} finally {
+								operation.close();
+							}
+							const identity = await prepareOperation(trial(backend, 'primed-instance', 4, 4));
+							try {
+								const result = identity.call();
+								identity.request.source.data[0] = 255;
+								equal(result.data[0], 10, `${backend} durable identity`);
+							} finally {
+								identity.close();
 							}
 						}
-					});
-					const expected = [10, 30, 70, 0, 12, 30, 70, 22, 13, 30, 70, 33];
-					const reference = {
-						dimensions: { width: 3, height: 1 },
-						pixels: { format: 'rgba8', data: expected },
-						warnings: []
-					};
-					for (const backend of ['typescript', 'package']) {
-						const operation = await prepareOperation(trial(backend));
-						try {
-							equal(
-								await preflightOperation(operation, reference),
-								undefined,
-								`${backend} reference preflight`
-							);
-							equal(Array.from(operation.call().data), expected, `${backend} known 4→3`);
-						} finally {
-							operation.close();
-						}
-						const identity = await prepareOperation(trial(backend, 'primed-instance', 4, 4));
-						try {
-							const result = identity.call();
-							identity.request.source.data[0] = 255;
-							equal(result.data[0], 10, `${backend} durable identity`);
-						} finally {
-							identity.close();
-						}
-					}
-					for (const [filter, expectedRed] of [
-						['area', [16, 96, 176]],
-						['bilinear', [17, 96, 175]]
-					]) {
-						for (const backend of ['typescript', 'package']) {
-							const request = trial(backend);
-							request.case.rgba = [0, 64, 128, 192].flatMap((red) => [red, 30, 70, 255]);
-							request.case.browser.operation = {
-								operation: `resize-${filter}`,
-								...(filter === 'area' ? {} : { anchor: 'center' })
-							};
-							const operation = await prepareOperation(request);
-							try {
-								// Website area is an unweighted inclusive box, not fractional-overlap area.
-								// Website bilinear keeps two taps; frozen/landed triangle support widens on reduction.
-								const actualRed =
-									backend === 'typescript'
-										? filter === 'area'
-											? [21, 96, 171]
-											: [11, 96, 181]
-										: expectedRed;
-								equal(
-									Array.from(operation.call().data),
-									actualRed.flatMap((red) => [red, 30, 70, 255]),
-									`${backend} ${filter} known 4→3`
-								);
-								if (backend === 'typescript') {
-									const mismatch = await preflightOperation(operation, {
-										dimensions: { width: 3, height: 1 },
-										pixels: {
-											format: 'rgba8',
-											data: expectedRed.flatMap((red) => [red, 30, 70, 255])
-										},
-										warnings: []
-									});
+						for (const [filter, expectedRed] of [
+							['area', [16, 96, 176]],
+							['bilinear', [17, 96, 175]]
+						]) {
+							for (const backend of ['typescript', 'package']) {
+								const request = trial(backend);
+								request.case.rgba = [0, 64, 128, 192].flatMap((red) => [red, 30, 70, 255]);
+								request.case.browser.operation = {
+									operation: `resize-${filter}`,
+									...(filter === 'area' ? {} : { anchor: 'center' })
+								};
+								const operation = await prepareOperation(request);
+								try {
+									// Website area is an unweighted inclusive box, not fractional-overlap area.
+									// Website bilinear keeps two taps; frozen/landed triangle support widens on reduction.
+									const actualRed =
+										backend === 'typescript'
+											? filter === 'area'
+												? [21, 96, 171]
+												: [11, 96, 181]
+											: expectedRed;
 									equal(
-										mismatch.pixels.data,
+										Array.from(operation.call().data),
 										actualRed.flatMap((red) => [red, 30, 70, 255]),
-										`retain website ${filter} semantic difference`
+										`${backend} ${filter} known 4→3`
 									);
+									if (backend === 'typescript') {
+										const mismatch = await preflightOperation(operation, {
+											dimensions: { width: 3, height: 1 },
+											pixels: {
+												format: 'rgba8',
+												data: expectedRed.flatMap((red) => [red, 30, 70, 255])
+											},
+											warnings: []
+										});
+										equal(
+											mismatch.pixels.data,
+											actualRed.flatMap((red) => [red, 30, 70, 255]),
+											`retain website ${filter} semantic difference`
+										);
+									}
+								} finally {
+									operation.close();
+								}
+							}
+						}
+						// Nontrivial convolution vectors live in the native and package suites.
+						// This checks every actual benchmark adapter recipe without collecting timings.
+						for (const filter of ['bicubic', 'lanczos2', 'lanczos3']) {
+							for (const support of ['fixed', 'scale-aware']) {
+								for (const backend of filter === 'bicubic'
+									? ['package']
+									: ['typescript', 'package']) {
+									const request = trial(backend, 'primed-instance', 7, 3);
+									request.case.rgba = Array.from({ length: 7 }, () => [83, 147, 219, 255]).flat();
+									request.case.browser.operation = {
+										operation: `resize-${filter}`,
+										anchor: 'center',
+										support
+									};
+									const operation = await prepareOperation(request);
+									try {
+										equal(
+											Array.from(operation.call().data),
+											Array.from({ length: 3 }, () => [83, 147, 219, 255]).flat(),
+											`${backend} ${filter} ${support} adapter`
+										);
+									} finally {
+										operation.close();
+									}
+								}
+							}
+						}
+						const freshTypeScript = await prepareOperation(trial('typescript', 'fresh-instance'));
+						try {
+							const prepared = await freshTypeScript.prepare();
+							try {
+								equal(
+									Array.from(prepared.call().data),
+									expected,
+									'stateless TypeScript per-call preparation'
+								);
+							} finally {
+								prepared.close();
+							}
+						} finally {
+							freshTypeScript.close();
+						}
+						for (const preparation of [
+							'fresh-instance',
+							'initialization-bytes',
+							'initialization-compiled'
+						]) {
+							const operation = await prepareOperation(trial('package', preparation));
+							try {
+								if (operation.create) {
+									const instance = await operation.create();
+									try {
+										equal(Array.from(operation.probe(instance).data), expected, preparation);
+									} finally {
+										instance.dispose();
+									}
+								} else {
+									const one = await operation.prepare();
+									const result = one.call();
+									one.close();
+									const two = await operation.prepare();
+									try {
+										equal(Array.from(two.call().data), expected, preparation);
+										equal(
+											Array.from(result.data),
+											expected,
+											'durable after disposal and later instance'
+										);
+									} finally {
+										two.close();
+									}
 								}
 							} finally {
 								operation.close();
 							}
 						}
-					}
-					// Nontrivial convolution vectors live in the native and package suites.
-					// This checks every actual benchmark adapter recipe without collecting timings.
-					for (const filter of ['bicubic', 'lanczos2', 'lanczos3']) {
-						for (const support of ['fixed', 'scale-aware']) {
-							for (const backend of filter === 'bicubic'
-								? ['package']
-								: ['typescript', 'package']) {
-								const request = trial(backend, 'primed-instance', 7, 3);
-								request.case.rgba = Array.from({ length: 7 }, () => [83, 147, 219, 255]).flat();
+						const drift = [];
+						// Exact center samples the first source pixel 24 times, then the second 25 times.
+						const driftReference = {
+							dimensions: { width: 49, height: 1 },
+							pixels: {
+								format: 'rgba8',
+								data: Array.from({ length: 49 }, (_, x) =>
+									x < 24 ? [10, 30, 70, 0] : [11, 30, 70, 11]
+								).flat()
+							},
+							warnings: []
+						};
+						for (const backend of ['typescript', 'package']) {
+							const operation = await prepareOperation(trial(backend, 'primed-instance', 2, 49));
+							try {
+								drift.push(operation.call().data[24 * 4]);
+								const mismatch = await preflightOperation(operation, driftReference);
+								if (backend === 'package') equal(mismatch, undefined, 'exact package preflight');
+								else {
+									equal(mismatch.pixels.data[24 * 4], 10, 'mismatch retains actual byte');
+									equal(mismatch.pixels.data.length, 49 * 4, 'mismatch retains complete output');
+								}
+							} finally {
+								operation.close();
+							}
+						}
+						equal(drift, [10, 11], 'Retain actual TS 2→49 rounding mismatch at x=24.');
+						for (const fixture of quantizeFixtures) {
+							for (const preparation of ['primed-instance', 'fresh-instance']) {
+								const request = trial('package', preparation);
+								request.case.source = fixture.source;
+								request.case.rgba = fixture.rgba;
+								request.case.identity.output = fixture.source;
 								request.case.browser.operation = {
-									operation: `resize-${filter}`,
-									anchor: 'center',
-									support
+									operation: 'quantize',
+									settings: fixture.settings
 								};
 								const operation = await prepareOperation(request);
 								try {
+									const stability = outputStability(
+										fixture.source.width * fixture.source.height + 1024,
+										'indexed8'
+									);
 									equal(
-										Array.from(operation.call().data),
-										Array.from({ length: 3 }, () => [83, 147, 219, 255]).flat(),
-										`${backend} ${filter} ${support} adapter`
+										await preflightOperation(operation, fixture.reference, stability.observe),
+										undefined,
+										`quantize ${fixture.settings.matching} ${fixture.settings.alpha.mode} ${preparation}`
+									);
+									const one = await operation.prepare();
+									const first = one.call();
+									stability.observe([first]);
+									one.close();
+									const retained = Array.from(first.indices);
+									const two = await operation.prepare();
+									try {
+										stability.observe([two.call()]);
+									} finally {
+										two.close();
+									}
+									equal(
+										Array.from(first.indices),
+										retained,
+										'durable quantize output after later call/disposal'
 									);
 								} finally {
 									operation.close();
 								}
 							}
 						}
-					}
-					const freshTypeScript = await prepareOperation(trial('typescript', 'fresh-instance'));
-					try {
-						const prepared = await freshTypeScript.prepare();
+						const noncenter = trial('typescript');
+						noncenter.case.browser.operation.anchor = 'top-left';
+						let rejected = false;
 						try {
-							equal(
-								Array.from(prepared.call().data),
-								expected,
-								'stateless TypeScript per-call preparation'
-							);
-						} finally {
-							prepared.close();
+							await prepareOperation(noncenter);
+						} catch (error) {
+							rejected = error.message.includes('non-center');
 						}
-					} finally {
-						freshTypeScript.close();
-					}
-					for (const preparation of [
-						'fresh-instance',
-						'initialization-bytes',
-						'initialization-compiled'
-					]) {
-						const operation = await prepareOperation(trial('package', preparation));
-						try {
-							if (operation.create) {
-								const instance = await operation.create();
-								try {
-									equal(Array.from(operation.probe(instance).data), expected, preparation);
-								} finally {
-									instance.dispose();
-								}
-							} else {
-								const one = await operation.prepare();
-								const result = one.call();
-								one.close();
-								const two = await operation.prepare();
-								try {
-									equal(Array.from(two.call().data), expected, preparation);
-									equal(
-										Array.from(result.data),
-										expected,
-										'durable after disposal and later instance'
-									);
-								} finally {
-									two.close();
-								}
-							}
-						} finally {
-							operation.close();
-						}
-					}
-					const drift = [];
-					// Exact center samples the first source pixel 24 times, then the second 25 times.
-					const driftReference = {
-						dimensions: { width: 49, height: 1 },
-						pixels: {
-							format: 'rgba8',
-							data: Array.from({ length: 49 }, (_, x) =>
-								x < 24 ? [10, 30, 70, 0] : [11, 30, 70, 11]
-							).flat()
-						},
-						warnings: []
-					};
-					for (const backend of ['typescript', 'package']) {
-						const operation = await prepareOperation(trial(backend, 'primed-instance', 2, 49));
-						try {
-							drift.push(operation.call().data[24 * 4]);
-							const mismatch = await preflightOperation(operation, driftReference);
-							if (backend === 'package') equal(mismatch, undefined, 'exact package preflight');
-							else {
-								equal(mismatch.pixels.data[24 * 4], 10, 'mismatch retains actual byte');
-								equal(mismatch.pixels.data.length, 49 * 4, 'mismatch retains complete output');
-							}
-						} finally {
-							operation.close();
-						}
-					}
-					equal(drift, [10, 11], 'Retain actual TS 2→49 rounding mismatch at x=24.');
-					const noncenter = trial('typescript');
-					noncenter.case.browser.operation.anchor = 'top-left';
-					let rejected = false;
-					try {
-						await prepareOperation(noncenter);
-					} catch (error) {
-						rejected = error.message.includes('non-center');
-					}
-					if (!rejected) throw new Error('Non-center TS must be unavailable.');
-					return {
-						isolated: crossOriginIsolated,
-						drift,
-						checked: [
-							'known-vector',
-							'area-bilinear-known-vectors-and-drift',
-							'convolution-support-recipes',
-							'identity-copy',
-							'fresh-instance',
-							'initialization-bytes',
-							'initialization-compiled',
-							'typescript-drift',
-							'noncenter-unavailable'
-						]
-					};
-				}, assets);
+						if (!rejected) throw new Error('Non-center TS must be unavailable.');
+						return {
+							isolated: crossOriginIsolated,
+							drift,
+							checked: [
+								'known-vector',
+								'area-bilinear-known-vectors-and-drift',
+								'convolution-support-recipes',
+								'47-frozen-quantize-fixtures-all-15-modes-primed-and-fresh',
+								'identity-copy',
+								'fresh-instance',
+								'initialization-bytes',
+								'initialization-compiled',
+								'typescript-drift',
+								'noncenter-unavailable'
+							]
+						};
+					},
+					{ assets, quantizeFixtures }
+				);
 				assert.equal(report.isolated, true);
 				assert.deepEqual(report.drift, [10, 11]);
 				assert.deepEqual(await exchangeTrial(page, server, 'scripts/ipc-echo.mjs'), {

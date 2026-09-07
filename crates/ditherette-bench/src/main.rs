@@ -52,6 +52,16 @@ fn run() -> Result<(), BenchError> {
     }
 
     let command = args.remove(0);
+    if command == "build-info" {
+        if !args.is_empty() {
+            return Err(BenchError::Config("build-info takes no arguments".into()));
+        }
+        println!(
+            "{}",
+            ditherette_bench::paired::build_info_json().map_err(BenchError::io)?
+        );
+        return Ok(());
+    }
     let expanded = expand_command(command, args)?;
     if matches!(
         expanded.command.as_str(),
