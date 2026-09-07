@@ -1,5 +1,10 @@
 # S21 literal area and bilinear baseline
 
+Historical evidence only. Mia explicitly supersedes this replacement approach in #108.
+Restoration `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508` returns every crate file to the pre-baseline bytes.
+Keep the landed area/bilinear kernels and shared helpers in production. Their package integration remains S21 work.
+The copy manifest below describes the historical baseline commit, not the current source tree.
+
 Base is `711c7aec61587b45a91c2e404583161edb1e0de9`, containing S19 `7de86d799a25a132c8de41ee54696bd8e54bdf76` and S20 PR107.
 This bounded phase establishes the copied baseline only. Main owns full S21 acceptance and its PR.
 

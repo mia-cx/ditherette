@@ -1,5 +1,10 @@
 # S22 literal convolution baseline
 
+Historical evidence only. Mia explicitly supersedes this replacement approach in #108.
+Restoration `55b08b4ad4911fc8aa3d65a86a9b94c801079962` returns every crate file to the pre-baseline bytes.
+Keep the landed cubic/Lanczos kernels and shared convolution helpers in production. Their package integration remains S22 work.
+The copy manifest below describes the historical baseline commit, not the current source tree.
+
 Issue #63 starts from `711c7aec61587b45a91c2e404583161edb1e0de9` on `impl/v1-s22-convolution`.
 The immediate PR base is `impl/v1-s20-browser-bench`; the coordinator owns PR filing and aggregate progress.
 
