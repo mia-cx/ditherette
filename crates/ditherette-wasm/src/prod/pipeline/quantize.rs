@@ -2,12 +2,12 @@
 
 use super::processor::{dimensions, Allocator};
 use crate::{
-    image::{contracts::PaletteEntry, ImageDimensions, ImageView, Rgba8},
+    image::{contracts::PaletteEntry, ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
-            request::{AlphaPolicy, MatchPolicy},
+            request::{AlphaPolicy, MatchPolicy, PerturbPolicy},
         },
         palette::{PreparationError, PreparedPalette},
         quantize::PreparedQuantizer,
@@ -49,6 +49,21 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     overhead: u64,
     peak: &mut u64,
 ) -> Result<B::Output, Failure> {
+    run_with_perturb(request, None, boundary, allocator, limit, overhead, peak)
+}
+
+pub(super) fn run_with_perturb<B: QuantizeBoundary, A: Allocator>(
+    request: QuantizeRequest<'_>,
+    perturb: Option<PerturbPolicy>,
+    boundary: &mut B,
+    allocator: &mut A,
+    limit: u64,
+    overhead: u64,
+    peak: &mut u64,
+) -> Result<B::Output, Failure> {
+    if let Some(policy) = perturb {
+        super::perturb::validate(policy)?;
+    }
     let dimensions = dimensions(request.source_width, request.source_height, true)?;
     let source_len = dimensions
         .storage_len::<Rgba8>()
@@ -63,7 +78,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         request.matching,
     )
     .map_err(preparation_failure)?;
-    let buffers_bytes = source_len as u64 + output_len as u64;
+    let intermediate_len = if perturb.is_some() { source_len } else { 0 };
+    let buffers_bytes = source_len as u64 + output_len as u64 + intermediate_len as u64;
     let needed = overhead
         .checked_add(buffers_bytes)
         .and_then(|n| n.checked_add(prepared_bytes))
@@ -84,20 +100,42 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     let mut indices = Vec::new();
     allocator.reserve(&mut source, source_len)?;
     *peak = owned + source.capacity() as u64;
-    if *peak + output_len as u64 > limit {
+    if *peak + output_len as u64 + intermediate_len as u64 > limit {
         return Err(memory_limit());
     }
     allocator.reserve(&mut indices, output_len)?;
     *peak += indices.capacity() as u64;
-    if *peak > limit {
+    if *peak + intermediate_len as u64 > limit {
         return Err(memory_limit());
     }
+    let mut intermediate = if perturb.is_some() {
+        let mut buffer = Vec::new();
+        allocator.reserve(&mut buffer, intermediate_len)?;
+        *peak += buffer.capacity() as u64;
+        if *peak > limit {
+            return Err(memory_limit());
+        }
+        buffer.resize(intermediate_len, 0);
+        Some(buffer)
+    } else {
+        None
+    };
     source.resize(source_len, 0);
     indices.resize(output_len, 0);
     boundary.copy_input(&mut source)?;
     let source = ImageView::<Rgba8>::packed(&source, dimensions)
         .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-    prepared.quantize_into(source, &mut indices);
+    let quantize_source = if let (Some(policy), Some(buffer)) = (perturb, intermediate.as_mut()) {
+        super::perturb::execute(
+            source,
+            ImageViewMut::packed(buffer, dimensions).expect("reserved intermediate storage"),
+            policy,
+        );
+        ImageView::packed(buffer, dimensions).expect("complete RGBA8 intermediate")
+    } else {
+        source
+    };
+    prepared.quantize_into(quantize_source, &mut indices);
     boundary.complete(&indices, dimensions, prepared.palette())
 }
 
