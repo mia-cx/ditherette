@@ -5,6 +5,52 @@ use ditherette_bench::{
 };
 use ditherette_bench_api::verification::*;
 
+#[test]
+fn indexed_transport_preserves_metadata_and_rejects_malformed_indices() {
+    use ditherette_bench::paired::quantize::*;
+    let (mut request, mut result) = fixture();
+    let operation = PublicOperation::Quantize {
+        settings: QuantizeSettings {
+            palette: vec![PaletteEntry::Color { rgb: [1, 2, 3] }],
+            alpha: AlphaPolicy::Premultiplied {},
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+    };
+    let case = &mut request.case;
+    case.identity = operation
+        .identity(case.source, &case.rgba, case.source)
+        .unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    let browser = case.browser.as_mut().unwrap();
+    browser.operation = operation;
+    browser.accepted = BrowserBackend::Package;
+    result.input = case.identity.input;
+    result.settings = case.identity.settings;
+    result.output.pixels = Pixels::Indexed8 {
+        indices: vec![0],
+        palette_rgba: vec![1, 2, 3, 255],
+        transparent_index: None,
+    };
+    request.reference_output = Some(result.output.clone());
+    validate_response(&request, &result).unwrap();
+    result.output.warnings.push(Warning {
+        code: WarningCode::TransparentFallback,
+        message: "fixture".into(),
+    });
+    result.timing_skipped = Some(TimingSkipped::ReferenceMismatch);
+    result.sample_ns.clear();
+    result.iterations_per_sample = 0;
+    result.warmup_iterations = 0;
+    result.warmup_elapsed_ns = 0;
+    validate_response(&request, &result).unwrap();
+    if let Pixels::Indexed8 { indices, .. } = &mut result.output.pixels {
+        indices[0] = 1;
+    }
+    assert!(validate_response(&request, &result).is_err());
+}
+
 fn fixture() -> (TrialRequest, BrowserTransportResult) {
     let dimensions = Dimensions {
         width: 1,
@@ -101,6 +147,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         },
         reference_output: Some(output),
         case: PairCase {
+            native: None,
             name: "fixture".into(),
             identity,
             source: dimensions,

@@ -19,6 +19,32 @@ import {
 	timerResolution
 } from './benchmark-public-page.mjs';
 
+test('indexed preflight checks indices, palette, transparency, and warnings without timing', async () => {
+	const output = {
+		width: 2, height: 1, indices: new Uint8Array([0, 1]),
+		palette: { rgba: new Uint8Array([10, 20, 30, 255, 0, 0, 0, 0]), transparentIndex: 1 },
+		warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
+	};
+	const reference = {
+		dimensions: { width: 2, height: 1 },
+		pixels: { format: 'indexed8', indices: [0, 1],
+			palette_rgba: [10, 20, 30, 255, 0, 0, 0, 0], transparent_index: 1 },
+		warnings: output.warnings
+	};
+	const operation = { prepare: () => ({ call: () => output, close() {} }) };
+	assert.equal(await preflightOperation(operation, reference), undefined);
+	for (const mutate of [
+		(value) => value.pixels.indices.reverse(),
+		(value) => value.pixels.palette_rgba[0]++,
+		(value) => value.pixels.transparent_index = null,
+		(value) => value.warnings[0].message += ' changed'
+	]) {
+		const changed = structuredClone(reference);
+		mutate(changed);
+		assert.deepEqual(await preflightOperation(operation, changed), reference);
+	}
+});
+
 test('public resize recipes retain mode-specific settings', () => {
 	assert.deepEqual(resizeRecipe({ operation: 'resize-area' }), { algorithm: 'area' });
 	for (const algorithm of ['nearest', 'bilinear'])

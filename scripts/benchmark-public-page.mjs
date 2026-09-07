@@ -40,7 +40,8 @@ export async function prepareOperation(trial) {
 	const config = trial.case.browser;
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
-	const resize = resizeRecipe(config.operation);
+	const quantize = config.operation.operation === 'quantize';
+	const resize = quantize ? undefined : resizeRecipe(config.operation);
 	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
 		throw new Error('This package has no application cache.');
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
@@ -48,13 +49,14 @@ export async function prepareOperation(trial) {
 	const request = {
 		version: 1,
 		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
-		output: {
+		...(quantize ? config.operation.settings : { output: {
 			...trial.case.identity.output,
 			resize
-		}
+		} })
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
+		if (quantize) throw new Error('No faithful TypeScript indexed quantize adapter is registered.');
 		if (resize.algorithm === 'bicubic')
 			throw new Error('The website has no bicubic implementation.');
 		if ('anchor' in resize && resize.anchor !== 'center')
@@ -84,10 +86,11 @@ export async function prepareOperation(trial) {
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
 	const create = () => createDitherette({ wasm: compiled ?? bytes });
+	const call = (instance) => quantize ? instance.quantize(request) : instance.resize(request);
 	if (measurement.scope === 'initialization') {
 		if (!['initialization-bytes', 'initialization-compiled'].includes(config.preparation))
 			throw new Error('Initialization requires an explicit compilation scope.');
-		return { request, create, probe: (instance) => instance.resize(request), close() {} };
+		return { request, create, probe: call, close() {} };
 	}
 	if (measurement.scope !== 'complete-call')
 		throw new Error('Browser processing requires complete-call scope.');
@@ -96,7 +99,7 @@ export async function prepareOperation(trial) {
 			request,
 			prepare: async () => {
 				const instance = await create();
-				return { call: () => instance.resize(request), close: () => instance.dispose() };
+				return { call: () => call(instance), close: () => instance.dispose() };
 			},
 			close() {}
 		};
@@ -105,13 +108,21 @@ export async function prepareOperation(trial) {
 	const instance = await create();
 	return {
 		request,
-		call: () => instance.resize(request),
-		prepare: async () => ({ call: () => instance.resize(request), close() {} }),
+		call: () => call(instance),
+		prepare: async () => ({ call: () => call(instance), close() {} }),
 		close: () => instance.dispose()
 	};
 }
 
-function verificationOutput(output) {
+export function verificationOutput(output) {
+	if ('indices' in output) {
+		return {
+			dimensions: { width: output.width, height: output.height },
+			pixels: { format: 'indexed8', indices: Array.from(output.indices),
+				palette_rgba: Array.from(output.palette.rgba), transparent_index: output.palette.transparentIndex },
+			warnings: output.warnings.map(({ code, message }) => ({ code, message }))
+		};
+	}
 	return {
 		dimensions: { width: output.width, height: output.height },
 		pixels: { format: 'rgba8', data: Array.from(output.data) },
@@ -121,8 +132,8 @@ function verificationOutput(output) {
 
 /** Compare one untimed actual call with worker-supplied frozen bytes; return concrete mismatch evidence. */
 export async function preflightOperation(operation, reference) {
-	if (!reference || reference.pixels.format !== 'rgba8')
-		throw new Error('Browser trial requires frozen RGBA8 reference_output.');
+	if (!reference || !['rgba8', 'indexed8'].includes(reference.pixels.format))
+		throw new Error('Browser trial requires frozen RGBA8 or indexed reference_output.');
 	let output;
 	if (operation.create) {
 		const instance = await operation.create();
@@ -139,15 +150,23 @@ export async function preflightOperation(operation, reference) {
 			prepared.close();
 		}
 	}
-	if (
-		output.width === reference.dimensions.width &&
-		output.height === reference.dimensions.height &&
-		reference.warnings.length === 0 &&
-		output.data.length === reference.pixels.data.length &&
-		output.data.every((byte, index) => byte === reference.pixels.data[index])
-	)
-		return undefined;
-	return verificationOutput(output);
+	const actual = verificationOutput(output);
+	if (equalOutput(actual, reference)) return undefined;
+	return actual;
+}
+
+/** Exact bytes and metadata, independent of JSON object key order. */
+export function equalOutput(actual, expected) {
+	const equalBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
+	if (actual.dimensions.width !== expected.dimensions.width || actual.dimensions.height !== expected.dimensions.height
+		|| actual.pixels.format !== expected.pixels.format
+		|| actual.warnings.length !== expected.warnings.length
+		|| actual.warnings.some((warning, index) => warning.code !== expected.warnings[index].code || warning.message !== expected.warnings[index].message)) return false;
+	if (actual.pixels.format === 'rgba8') return equalBytes(actual.pixels.data, expected.pixels.data);
+	if (actual.pixels.format !== 'indexed8') return false;
+	return equalBytes(actual.pixels.indices, expected.pixels.indices)
+		&& equalBytes(actual.pixels.palette_rgba, expected.pixels.palette_rgba)
+		&& actual.pixels.transparent_index === expected.pixels.transparent_index;
 }
 
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
@@ -198,7 +217,7 @@ export async function runTrial(trial) {
 			...identity,
 			...timings,
 			output: verified,
-			...(mismatch && JSON.stringify(verified) !== JSON.stringify(mismatch)
+			...(mismatch && !equalOutput(verified, mismatch)
 				? { unstable_output: mismatch }
 				: {}),
 			observation

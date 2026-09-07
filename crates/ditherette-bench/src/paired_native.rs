@@ -252,6 +252,7 @@ mod tests {
             space: None,
         };
         let mut case = PairCase {
+            native: None,
             browser: None,
             name: "fixture".into(),
             source,

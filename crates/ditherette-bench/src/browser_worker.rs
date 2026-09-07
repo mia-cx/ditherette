@@ -232,6 +232,27 @@ pub fn validate_response(
             return Err(invalid("invalid diagnostic instability marker"));
         }
     }
+    let indexed = matches!(
+        &case
+            .browser
+            .as_ref()
+            .expect("validated browser recipe")
+            .operation,
+        PublicOperation::Quantize { .. }
+    );
+    for output in std::iter::once(&result.output).chain(result.unstable_output.iter()) {
+        let format_matches = if indexed {
+            matches!(output.pixels, Pixels::Indexed8 { .. })
+        } else {
+            matches!(output.pixels, Pixels::Rgba8 { .. }) && output.warnings.is_empty()
+        };
+        if output.dimensions != case.identity.output || !format_matches {
+            return Err(invalid(
+                "browser result has invalid shape, format, or warning metadata",
+            ));
+        }
+        crate::verification::render_rgba(output).map_err(io::Error::other)?;
+    }
     if result.timing_skipped == Some(TimingSkipped::ReferenceMismatch) {
         if !result.sample_ns.is_empty()
             || result.iterations_per_sample != 0
@@ -258,17 +279,6 @@ pub fn validate_response(
         return Err(invalid(
             "browser response identity or sample evidence differs",
         ));
-    }
-    let bytes = u64::from(case.identity.output.width) * u64::from(case.identity.output.height) * 4;
-    for output in std::iter::once(&result.output).chain(result.unstable_output.iter()) {
-        if output.dimensions != case.identity.output
-            || !output.warnings.is_empty()
-            || !matches!(&output.pixels, Pixels::Rgba8 { data } if data.len() as u64 == bytes)
-        {
-            return Err(invalid(
-                "browser result has invalid shape, format, or warning metadata",
-            ));
-        }
     }
     Ok(())
 }
