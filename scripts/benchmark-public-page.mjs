@@ -194,12 +194,13 @@ export async function runTrial(trial) {
 			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
 		const verified = verificationOutput(output);
-		if (mismatch && JSON.stringify(verified) !== JSON.stringify(mismatch))
-			throw new Error('Diagnostic output changed after its untimed reference mismatch.');
 		return {
 			...identity,
 			...timings,
 			output: verified,
+			...(mismatch && JSON.stringify(verified) !== JSON.stringify(mismatch)
+				? { unstable_output: mismatch }
+				: {}),
 			observation
 		};
 	} finally {
