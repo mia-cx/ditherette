@@ -27,6 +27,12 @@ test('public resize recipes retain mode-specific settings', () => {
 			anchor: 'bottom-left'
 		});
 	assert.throws(() => resizeRecipe({ operation: 'unknown' }), /Unsupported/);
+	for (const algorithm of ['bicubic', 'lanczos2', 'lanczos3'])
+		for (const support of ['fixed', 'scale-aware'])
+			assert.deepEqual(
+				resizeRecipe({ operation: `resize-${algorithm}`, anchor: 'center', support }),
+				{ algorithm, anchor: 'center', support }
+			);
 });
 
 test('manifest rejects traversal and duplicates; routing rejects external and undeclared dependencies', () => {

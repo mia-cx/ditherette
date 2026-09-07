@@ -180,6 +180,66 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
 }
 
 #[test]
+fn convolution_support_binds_reference_and_recipe_identity() {
+    for support in [Support::Fixed, Support::ScaleAware] {
+        for operation in [
+            PublicOperation::ResizeBicubic {
+                anchor: Anchor::Center,
+                support,
+            },
+            PublicOperation::ResizeLanczos2 {
+                anchor: Anchor::Center,
+                support,
+            },
+            PublicOperation::ResizeLanczos3 {
+                anchor: Anchor::Center,
+                support,
+            },
+        ] {
+            let (mut prepared, _) = fixture();
+            let case = &mut prepared.experiment.cases[0];
+            let browser = case.browser.as_mut().unwrap();
+            browser.operation = operation.clone();
+            if matches!(operation, PublicOperation::ResizeBicubic { .. }) {
+                browser.accepted = BrowserBackend::Package;
+            }
+            case.reference_subject = operation.reference_subject().into();
+            case.accepted_subject = operation.subject(browser.accepted).into();
+            case.candidate_subject = operation.subject(browser.candidate).into();
+            case.identity = operation
+                .identity(case.source, &case.rgba, case.identity.output)
+                .unwrap();
+            assert_eq!(
+                case.reference_subject.ends_with("scale-aware"),
+                support == Support::ScaleAware
+            );
+            validate_case(case).unwrap();
+            if matches!(operation, PublicOperation::ResizeBicubic { .. }) {
+                case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
+                assert!(validate_case(case).is_err());
+            }
+        }
+    }
+    let source = Dimensions {
+        width: 3,
+        height: 2,
+    };
+    let rgba = vec![255; 24];
+    let fixed = PublicOperation::ResizeLanczos2 {
+        anchor: Anchor::Center,
+        support: Support::Fixed,
+    };
+    let scaled = PublicOperation::ResizeLanczos2 {
+        anchor: Anchor::Center,
+        support: Support::ScaleAware,
+    };
+    assert_ne!(
+        fixed.identity(source, &rgba, source).unwrap().settings,
+        scaled.identity(source, &rgba, source).unwrap().settings
+    );
+}
+
+#[test]
 fn typed_browser_calls_share_exact_three_way_gates() {
     let (prepared, mut trials) = fixture();
     coordinator::validate_experiment(&prepared.experiment).unwrap();
