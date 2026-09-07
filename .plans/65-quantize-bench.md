@@ -18,7 +18,7 @@ Prod, spec, image, freeze policy, and public package files stay unchanged in thi
 - [x] Create the literal-baseline worktree with common benchmark protocol and thin old-signature adapter; leave production bytes unchanged.
 - [x] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
 - [x] Prepare immutable accepted/candidate artifacts as attempt 01 and hand off without measurements.
-- [~] Integrate public retained-batch verification, then rebuild affected artifacts before coordinator-authorized measurements.
+- [x] Integrate public retained-batch verification, then rebuild affected artifacts before coordinator-authorized measurements.
 
 ## Interface
 
@@ -130,3 +130,7 @@ The merged checkpoint passes 56 Rust tests, 26 controlled JavaScript tests, Wasm
 One Rust fixture is ignored in its parent suite and runs twice as a controlled child; three Node cleanup fixtures also pass.
 Indexed A/B/A fixtures cover indices, palette bytes, transparency, warning code/text, alias rejection, and metadata-only worker evidence.
 The installed-package conformance suite now invokes this same observer on each untimed indexed output.
+
+[Attempt 02](65-prepared-attempt-02.md) records fresh worker/coordinator binaries, full browser snapshots, and their hashes.
+The actual tarball passes all three engines with the retained-output observer, including every frozen indexed fixture.
+Preparation is complete. Measurement still requires the coordinator's explicit quiet clearance.
