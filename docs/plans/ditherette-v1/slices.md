@@ -39,7 +39,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | Ready | [#111](https://github.com/mia-cx/ditherette/pull/111) |
 | [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | In progress | - |
 | [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | In progress | - |
-| [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | Not started | - |
+| [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | In progress | - |
 | [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | Not started | - |
 | [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Not started | - |
 | [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Not started | - |
