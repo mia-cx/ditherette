@@ -7,7 +7,7 @@ Branch: `impl/v1-s06-paired-bench`. PR base: `impl/v1-s05-verification`.
 
 - [x] Define typed paired evidence and per-case regression decisions with deterministic fixtures.
 - [x] Prepare immutable artifacts and run sequential alternating children under the shared lease.
-- [ ] Adapt the native measurement loop, bind builds to revisions, and test transport controls without timings.
+- [x] Adapt the native measurement loop, bind builds to revisions, and test transport controls without timings.
 - [ ] Prepare distinct native control revisions, obtain explicit quiet clearance, and retain live paired evidence.
 - [ ] File a non-draft unmerged PR with validation and artifact identities.
 
@@ -37,3 +37,11 @@ the host lease is held and claims an exclusive overlap marker. Events prove
 AB/BA starts each follow the previous reap. Nonzero exit, malformed JSON,
 existing evidence, writable executables, and changed bytes all fail closed.
 This test neither launches the benchmark executable nor collects timings.
+
+Native adapter validation passes without measurement. It rejects unsupported
+application-cache/full-call claims and mismatched recipe identities. The build
+embeds its source revision, dirty status, and exact compiler version. Runtime
+checks bind those values to the complete executable digest before timing.
+Process observations bracket measurement; each sample uses the existing loop.
+Combined validation passes 4 paired fixtures, 3 binary tests, 11 S05 fixtures,
+and S04 Rust/Node ownership fixtures. Criterion compiles and Rust formatting passes.
