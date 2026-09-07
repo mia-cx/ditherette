@@ -12,7 +12,7 @@ Shared coordinates/sample copies must remain byte-identical to the frozen files.
 ## TODOs
 
 - [x] Commit literal kernels, preserved candidates, mechanical caller redirects, content manifests, and exact native conformance.
-- [~] Record final Wasm compilation, formatting, and trusted freeze validation; push the baseline and drain all owned processes.
+- [x] Record final Wasm compilation, formatting, and trusted freeze validation; push the baseline and drain all owned processes.
 
 ## Validation scope
 
@@ -41,3 +41,18 @@ Mechanical integration redirects affect `bench_subjects.rs`, `wasm.rs`, the reta
 Legacy cubic/Lanczos subject prefixes change from `prod:resize:` to `candidate:resize:` with accurate candidate source paths.
 Canonical baseline registry/public adapters remain follow-up work. The legacy Wasm exports still call the explicitly preserved candidates.
 Sibling S21 adds the same byte-identical coordinates/sample files and common module declarations; its shared registry fragments concern only area/bilinear.
+
+## Final validation
+
+Literal code checkpoint: `97ca0996d67dc0a20a8058cc35bbe1e05515c8a3`.
+The following checks pass without running any benchmark or browser:
+
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --features bench-subjects`.
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown --features bench-subjects`.
+- The eight integration tests above, plus `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --lib prod::resize::scalar::lanczos::tests::lobes_follow_known_sine_values_and_finite_support`.
+- `cargo check --manifest-path crates/ditherette-bench/Cargo.toml --locked --bins` compiles redirected legacy callers without executing them.
+- Both crate `cargo fmt --check` commands and `git diff --check`.
+
+`node /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze/tools/spec-freeze/guard.mjs --root /home/mia/mia-cx/ditherette/.worktrees/v1-s22-convolution --trusted-root /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze` passes native/Wasm isolation and content checks.
+It reports frozen revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b` with artifact `sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+All owned build/test sessions exit before handoff. This completes the bounded baseline phase, not the full S22 acceptance criteria.
