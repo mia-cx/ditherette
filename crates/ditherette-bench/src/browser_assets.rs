@@ -187,7 +187,7 @@ fn snapshot_bundle(source: &BundleSource, directory: &Path) -> io::Result<AssetB
     Ok(bundle)
 }
 
-/// Snapshot complete explicit trees under named prefixes, rejecting links and special files.
+/// Snapshot complete source trees as regular files, retaining alias groups as hardlinks.
 pub fn snapshot_tree(sources: &[(&str, &Path)], destination: &Path) -> io::Result<AssetTree> {
     let mut content = Vec::new();
     for (prefix, source) in sources {
@@ -196,6 +196,7 @@ pub fn snapshot_tree(sources: &[(&str, &Path)], destination: &Path) -> io::Resul
         collect(&source, Path::new(""), prefix, true, &mut content)?;
     }
     content.sort_by(|a, b| a.0.path.cmp(&b.0.path));
+    identify_aliases(&mut content)?;
     if content.is_empty()
         || content
             .windows(2)
@@ -208,11 +209,15 @@ pub fn snapshot_tree(sources: &[(&str, &Path)], destination: &Path) -> io::Resul
     for (file, source) in &content {
         let path = root.join(relative_path(&file.path)?);
         fs::create_dir_all(path.parent().ok_or_else(|| invalid("asset lacks parent"))?)?;
-        let mut output = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)?;
-        io::copy(&mut fs::File::open(source)?, &mut output)?;
+        if let Some(alias) = &file.alias_of {
+            fs::hard_link(root.join(relative_path(alias)?), &path)?;
+        } else {
+            let mut output = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)?;
+            io::copy(&mut fs::File::open(source)?, &mut output)?;
+        }
         set_mode(&path, file.mode)?;
     }
     let files: Vec<_> = content.into_iter().map(|(file, _)| file).collect();
@@ -282,6 +287,7 @@ fn collect(
             bytes: bytes.len() as u64,
             mode: file_mode(&metadata) & !0o222,
             digest: content_digest(&bytes),
+            alias_of: None,
         },
         if relative.is_empty() {
             root.to_owned()
@@ -292,7 +298,7 @@ fn collect(
     Ok(())
 }
 
-/// Verify the complete tree, including absence of extra files and writable replacements.
+/// Verify content, read-only modes, alias groups, and absence of extra files or symlinks.
 pub fn validate_tree(tree: &AssetTree) -> io::Result<()> {
     if !fs::symlink_metadata(&tree.root)?.is_dir() {
         return Err(invalid("snapshot root must be a real directory"));
@@ -300,6 +306,7 @@ pub fn validate_tree(tree: &AssetTree) -> io::Result<()> {
     let mut actual = Vec::new();
     collect(&tree.root, Path::new(""), "", false, &mut actual)?;
     actual.sort_by(|a, b| a.0.path.cmp(&b.0.path));
+    identify_aliases(&mut actual)?;
     let files: Vec<_> = actual.into_iter().map(|(file, _)| file).collect();
     for file in &files {
         let path = tree.root.join(relative_path(&file.path)?);
@@ -311,6 +318,33 @@ pub fn validate_tree(tree: &AssetTree) -> io::Result<()> {
         return Err(invalid("snapshot manifest/content digest differs"));
     }
     Ok(())
+}
+
+/// Preserve source symlink and hardlink identity without retaining snapshot symlinks.
+/// Only canonical relative paths enter the manifest; device/inode numbers stay local.
+fn identify_aliases(files: &mut [(AssetFile, PathBuf)]) -> io::Result<()> {
+    let mut groups = std::collections::BTreeMap::new();
+    for (file, path) in files {
+        let identity = file_identity(path)?;
+        file.alias_of = groups.get(&identity).cloned();
+        groups.entry(identity).or_insert_with(|| file.path.clone());
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn file_identity(path: &Path) -> io::Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = fs::metadata(path)?;
+    Ok((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(not(unix))]
+fn file_identity(_: &Path) -> io::Result<(u64, u64)> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "browser snapshots require Unix file identity",
+    ))
 }
 
 pub fn validate_bundle(bundle: &AssetBundle) -> io::Result<()> {

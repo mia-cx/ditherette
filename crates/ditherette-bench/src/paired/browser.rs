@@ -106,6 +106,9 @@ pub struct AssetFile {
     pub bytes: u64,
     pub mode: u32,
     pub digest: Digest256,
+    /// Other names for the same file point to the first sorted path in their group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias_of: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -373,6 +376,22 @@ fn validate_tree(tree: &AssetTree) -> io::Result<()> {
         return Err(io::Error::other(
             "browser tree manifest is not complete, sorted, immutable, or correctly identified",
         ));
+    }
+    for file in &tree.files {
+        let Some(alias) = &file.alias_of else {
+            continue;
+        };
+        if alias >= &file.path
+            || !tree.files.iter().any(|target| {
+                target.path == *alias
+                    && target.alias_of.is_none()
+                    && target.bytes == file.bytes
+                    && target.mode == file.mode
+                    && target.digest == file.digest
+            })
+        {
+            return Err(io::Error::other("asset alias must identify an earlier canonical file with identical content and mode"));
+        }
     }
     Ok(())
 }
