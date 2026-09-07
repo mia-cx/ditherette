@@ -20,6 +20,8 @@ Enforce content identity, independent compilation, and trusted-base validation.
 - [x] Add trusted-base CI wiring and focused temporary mutation tests.
 - [x] Record final checks and hand off the pushed implementation.
 - [x] Close reviewed foreign-symbol and root-use attribute escapes with focused fixtures.
+- [x] Allow cold-cache mutation setup to fetch dependencies and rerun all 11 local fixtures.
+- [ ] Verify the actual cold-cache CI run after the fixture correction.
 
 ## Notes
 
@@ -56,3 +58,4 @@ Enforce content identity, independent compilation, and trusted-base validation.
 - Implementation uses GPT-6-astra at high reasoning in Codex. The coordinator owns PR creation and aggregate ledger completion.
 - PR #104 is open, non-draft, and based on `impl/v1-s17-processor`; auto-merge is disabled. Its validated creation head is `e636b3120f566127b5e6b884ff2df3cd24c7c5ca`.
 - The coordinator reran the full guard and all 11 mutation fixtures after review corrections. Rebase onto the exact remote parent reported up to date.
+- CI run `34130753680` passes the guard but fails the procedural-macro mutation setup. Its unfiltered Cargo metadata call needs `cc 1.2.62`, absent from the platform-filtered cache. Remove fixture-only offline mode; leave the guard, dependency pins, and checkpoint unchanged.
