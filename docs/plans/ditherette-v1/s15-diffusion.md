@@ -2,6 +2,7 @@
 
 Issue [56](https://github.com/mia-cx/ditherette/issues/56).
 Branch `impl/v1-s15-diffusion`, PR base `impl/v1-s15-base`.
+Review [PR 101](https://github.com/mia-cx/ditherette/pull/101), open and non-draft with auto-merge disabled.
 Join `578d677822d5daa8d4b63e7f2cb709c12fd608d0` contains S10 `47712a500c4079293a06fae4a07ae105a643af8f`
 and S12 `01df66826e532d8fb3b522a1564f1121c96f4d1f`.
 
@@ -10,7 +11,7 @@ and S12 `01df66826e532d8fb3b522a1564f1121c96f4d1f`.
 - [x] Audit all four tap sets and define explicit byte/working-coordinate feedback behavior.
 - [x] Compose validated diffusion requests with alpha, placement, ordered matching, and finite-arithmetic handling.
 - [x] Verify tiny independent images, full native tests, Wasm compilation, and formatting.
-- [ ] Rebase onto the latest join and file the unmerged stacked PR.
+- [x] Rebase onto the latest join and file the unmerged stacked PR.
 
 ## Prerequisite checks
 
@@ -66,3 +67,8 @@ They also verify hidden RGB influences placement while transparent pixels emit n
 
 The count comes from the executable test listing, not inherited slice prose.
 No benchmark process or browser timing run was started.
+
+The final fetch/rebase found the join unchanged at `578d677822d5daa8d4b63e7f2cb709c12fd608d0`.
+All 31 focused diffusion, contract, and placement tests pass again after rebase.
+Validated code and evidence head was `ee963fb48ef945ee9fad3affe4d8a5771768f1ef`.
+The final bookkeeping commit changes only this PR record; the coordinator records its exact SHA in the stack ledger.
