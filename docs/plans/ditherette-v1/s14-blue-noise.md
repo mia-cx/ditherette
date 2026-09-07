@@ -7,8 +7,8 @@ Both are verified ancestors. Their combined placement/palette tests pass 19 fixt
 
 ## Work
 
-- [ ] Record the defect and a reproducible naive generator with fixed numerical acceptance criteria.
-- [ ] Generate and retain the rank tile, digest, and numerical spectral analysis.
+- [x] Record the defect and a reproducible naive generator with fixed numerical acceptance criteria.
+- [x] Generate and retain the rank tile, digest, and numerical spectral analysis.
 - [ ] Connect the reference field, verify fixed RGBA8 compositions, and file the unmerged PR.
 
 Only blue-noise reference code, its offline generator/asset, tests, and documentation belong to this slice.
@@ -35,3 +35,16 @@ Ranks must contain every integer 0..1023 once. At occupancies 1/8, 1/4, 1/2, 3/4
 - A Parseval check verifies the direct DFT's total power against `1024^2*p*(1-p)` within relative error 1e-10.
 
 These construction checks do not claim universal visual quality or approve any non-exact production candidate.
+
+## Construction result
+
+Generator checkpoint `c70bedc368ec9e6023c89931f961ccfde8c0766c` predates the asset.
+The original parameters converge after 45 moves and pass every gate on the first generation.
+Repeated generation returns the exact retained rank array.
+Its little-endian u16 digest is `bcd93746b99ef8ad678ad425f21e1890b4248050b1ea1b382800d7da977e5943`.
+
+Across the five tested occupancies, low-band power is 0.0172..0.0491 of white-noise power.
+High/low mean-power ratios are 25.9..65.3. Peak fractions stay below 0.01; angular coefficients stay below 0.092.
+The raw per-pattern numbers, parameters, and toolchain are retained in `spec/dither/blue_noise/analysis.json`.
+Six focused tests pass, including complete regeneration and negative Bayer/stripe controls; the existing 12 dither fixtures also pass.
+The fixed RGBA8 fixture proves quarter-range scaling and byte rounding independently, including hidden RGB with zero alpha.
