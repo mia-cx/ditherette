@@ -9,7 +9,7 @@ Base branch `impl/v1-s19-base` contains all S02/S06/S18 prerequisites at `1bd175
 - [x] Verify the literal-copy checkpoint and join corrected freeze policy plus private factory generation.
 - [ ] Join the fallible Rust processor and public scalar wrapper after their focused validations.
 - [ ] Verify actual packed-package calls, input/output ownership, bounded memory, errors, isolation, and disposal.
-- [ ] Collect one exclusive native nearest experiment after every agent and build exits; retain exact accepted code if the candidate loses.
+- [x] Collect one exclusive native nearest experiment after every agent and build exits; retain exact accepted code if the candidate loses.
 - [ ] Rebase against the recorded immediate base, run invalidated checks, and open the unmerged S19 PR with exact evidence.
 
 ## Evidence
@@ -18,6 +18,9 @@ Base branch `impl/v1-s19-base` contains all S02/S06/S18 prerequisites at `1bd175
 - Corrected policy join `89b570e0` preserves every baseline Rust byte. Full trusted S18 guard passes.
 - Private factory delivery `8ecdf786` proves separate mutable glue, memories, and externref tables with the same compiled module. It includes seven focused fixtures and scalar/threaded package builds.
 - S18's final documentation head `662d6483` passes CI run `34131890077`; earlier code head `c03c3c85` passes cold-cache run `34131713248`.
+- Native trial `s19-nearest-trial-01` passes all ten cases with exact outputs, 8,000 samples, and 80 sequential children reaped. [The measurement report](60-nearest-measurement.md) records artifact identities and actual medians.
+- Promotion `964683f46a24c248aa91318bd6280ca91bec88f7` keeps the measured arithmetic unchanged. Its 285 native tests, Wasm compilation, and trusted guard pass.
+- Delivery `b48511321f47722fcfb48c51a40a05a825f06a7b` joins the integration branch at `fdef72b5788c3c09fc6439991a01bfc851dc71ce`. Public wrapper/adapter validation remains pending.
 
 ## Ownership
 

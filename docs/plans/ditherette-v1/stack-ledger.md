@@ -118,7 +118,13 @@ This worktree owns the current tracked progress and ledger; the root `slices.md`
 - Native candidate work runs in `impl/v1-s19-nearest-opt`; the accepted binary builds from clean `89b570e0` in `impl/v1-s19-nearest-accepted`.
 
 The baseline has 280 passing native tests. It is not a completed public package call.
-No S19 performance measurement or candidate promotion has occurred. All agents and builds must drain before the exclusive trial.
+The first S19 experiment now passes all ten native cases with exact output, 8,000 samples, and 80 sequential children reaped.
+Accepted artifact `89b570e0` and candidate artifact `f9b51e45` produce about 52% lower resize latency and 96.6% lower identity latency.
+The [measurement report](../../../.plans/60-nearest-measurement.md) records exact revisions, executable hashes, raw artifact locations, and every median.
+All three agents and builds stop for the measurement; every child exits before implementation resumes.
+Promotion `964683f46a24c248aa91318bd6280ca91bec88f7` preserves tested arithmetic and passes 285 native tests, Wasm compilation, and the trusted guard.
+Delivery `b48511321f47722fcfb48c51a40a05a825f06a7b` joins at `fdef72b5788c3c09fc6439991a01bfc851dc71ce`.
+The private Rust adapter and public wrapper remain in progress. S20 still owns complete browser-call timing; native evidence does not replace it.
 
 ## S01 inherited port anchor
 
