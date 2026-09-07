@@ -1,4 +1,4 @@
-//! S19 copied-kernel conformance, separate from inherited candidate tests.
+//! S19 baseline output conformance retained after production promotion.
 
 use ditherette_wasm::{
     image::{ImageDimensions, ImageView, ImageViewMut, Oklab32, PaletteIndex8, Rgba8, RowStride},
@@ -117,44 +117,9 @@ fn generic_float_bits_and_palette_indices_are_copied_without_arithmetic() {
     }
 }
 
-#[test]
-fn baseline_files_are_literal_copies_except_the_one_import() {
-    let pairs = [
-        (
-            include_str!("../src/spec/resize/scalar/nearest.rs"),
-            include_str!("../src/prod/resize/scalar/nearest.rs"),
-        ),
-        (
-            include_str!("../src/spec/resize/common/alignment.rs"),
-            include_str!("../src/prod/resize/common/alignment.rs"),
-        ),
-        (
-            include_str!("../src/spec/contract/request.rs"),
-            include_str!("../src/prod/contract/request.rs"),
-        ),
-        (
-            include_str!("../src/spec/contract/error.rs"),
-            include_str!("../src/prod/contract/error.rs"),
-        ),
-        (
-            include_str!("../src/spec/contract/lifecycle.rs"),
-            include_str!("../src/prod/contract/lifecycle.rs"),
-        ),
-    ];
-    for (reference, copied) in pairs {
-        assert_eq!(
-            reference.replace(
-                "    spec::resize::common::alignment::",
-                "    prod::resize::common::alignment::"
-            ),
-            copied
-        );
-    }
-}
-
 #[cfg(feature = "bench-subjects")]
 #[test]
-fn registry_calls_three_distinct_named_implementations_without_promotion() {
+fn registry_calls_reference_promoted_production_and_legacy_candidate() {
     use ditherette_bench_api::{BenchSubject, ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams};
     let subjects = ditherette_wasm::bench_subjects::bench_subjects();
     let ids = [
