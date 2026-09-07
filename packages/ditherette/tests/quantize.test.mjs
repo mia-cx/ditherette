@@ -18,7 +18,49 @@ const request = () => ({
 const errorIs = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
-test('quantize returns exact five-space indices and durable independent palette metadata', async (t) => {
+test('weighted public tags select independently calculated winners', async () => {
+	const processor = await createDitherette({ wasm: module });
+	try {
+		for (const [matching, rgbs, expected] of [
+			[
+				'srgb-compuphase',
+				[
+					[17, 0, 0],
+					[0, 0, 14]
+				],
+				1
+			],
+			[
+				'srgb-rec601',
+				[
+					[15, 0, 0],
+					[0, 0, 25]
+				],
+				0
+			],
+			[
+				'srgb-rec709',
+				[
+					[15, 0, 0],
+					[0, 0, 25]
+				],
+				1
+			]
+		]) {
+			const output = processor.quantize({
+				...request(),
+				matching,
+				source: { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 255]) },
+				palette: rgbs.map((rgb) => color(...rgb))
+			});
+			assert.deepEqual([...output.indices], [expected]);
+		}
+	} finally {
+		processor.dispose();
+	}
+});
+
+test('quantize returns exact fifteen-pair indices and durable independent palette metadata', async (t) => {
 	const memories = [];
 	const instantiate = WebAssembly.instantiate;
 	t.mock.method(WebAssembly, 'instantiate', async (...args) => {
@@ -41,7 +83,17 @@ test('quantize returns exact five-space indices and durable independent palette 
 		'linear-rgb-euclidean',
 		'oklab-euclidean',
 		'cielab-euclidean',
-		'ycbcr-euclidean'
+		'ycbcr-euclidean',
+		'srgb-compuphase',
+		'srgb-rec601',
+		'srgb-rec709',
+		'oklch-euclidean',
+		'oklch-circular-hue',
+		'oklch-hue-arc',
+		'cielab-ciede2000',
+		'cielch-euclidean',
+		'cielch-circular-hue',
+		'cielch-hue-arc'
 	]) {
 		const output = processor.quantize({ ...value, matching });
 		assert.deepEqual(output, {
@@ -122,7 +174,7 @@ test('quantize rejects malformed settings and tail entries before copying source
 	const processor = await createDitherette({ wasm: module });
 	for (const [change, code, path] of [
 		[{ matching: { 'srgb-euclidean': null } }, 'invalid-settings', 'matching'],
-		[{ matching: 'oklch-hue-arc' }, 'unsupported-operation', 'matching'],
+		[{ matching: 'oklch-ciede2000' }, 'invalid-settings', 'matching'],
 		[{ alpha: { mode: 'preserve', threshold: NaN } }, 'invalid-settings', 'alpha.threshold'],
 		[{ alpha: { mode: 'premultiplied', threshold: 0 } }, 'invalid-settings', 'alpha.threshold'],
 		[{ palette: [{ kind: 'transparent', rgb: [0, 0, 0] }] }, 'invalid-palette', 'palette.0.rgb'],

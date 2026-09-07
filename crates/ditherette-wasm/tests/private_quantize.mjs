@@ -12,8 +12,8 @@ async function fresh(limit = 1_000_000) {
 }
 const input = new Uint8Array([255, 0, 0, 128, 99, 71, 53, 0]);
 const palette = [0xff0000, 0, 0x1000000];
-function invoke(bindings, sink = {}, colors = palette) {
-	const status = bindings.privateQuantize(input, 2, 1, colors, 0, 0, 127.9999999, 0, sink);
+function invoke(bindings, sink = {}, colors = palette, matching = 0) {
+	const status = bindings.privateQuantize(input, 2, 1, colors, matching, 0, 127.9999999, 0, sink);
 	if (status !== 0) assert.equal(sink.value, undefined);
 	return { status, output: sink.value };
 }
@@ -24,6 +24,15 @@ test('private quantize borrows its ABI and returns complete authoritative indexe
 	assert.ok(body);
 	assert.doesNotMatch(body, /__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/);
 	const { bindings } = await fresh();
+	for (let matching = 0; matching < 15; matching++) {
+		const result = invoke(bindings, {}, palette, matching);
+		assert.equal(result.status, 0);
+		assert.deepEqual([...result.output.indices], [0, 2]);
+	}
+	for (const matching of [-1, 15, 0.5, NaN, Infinity]) {
+		assert.equal(invoke(bindings, {}, palette, matching).status, 5);
+		assert.equal(bindings.privateErrorPath(), 16);
+	}
 	assert.deepEqual(invoke(bindings), { status: 0, output: { width: 2, height: 1,
 		indices: new Uint8Array([0, 2]), palette: { rgba: new Uint8Array([255,0,0,255,0,0,0,255,0,0,0,0]), transparentIndex: 2 }, warnings: [] } });
 	const truncated = invoke(bindings, {}, Array(257).fill(0x1000000));
