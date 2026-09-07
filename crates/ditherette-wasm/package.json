@@ -8,6 +8,7 @@
 		"build:threads": "node scripts/build.mjs threads",
 		"test": "cargo test --locked",
 		"test:glue": "node --test scripts/scalar-factory.test.mjs",
+		"test:glue:built": "node --test scripts/scalar-factory-built.test.mjs",
 		"test:wasm": "wasm-pack test --node . --locked",
 		"test:browser": "wasm-pack test --headless --chrome . --locked",
 		"check": "cargo fmt --check && cargo check --locked --target wasm32-unknown-unknown"
