@@ -1,4 +1,8 @@
-import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
+import {
+	collectCalls,
+	collectInitializations,
+	retainedOutputSlots
+} from './benchmark-public-timing.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -121,8 +125,50 @@ function verificationOutput(output) {
 	};
 }
 
+/** Public outputs must own durable storage. Keep only the first and first distinct actual result. */
+export function outputStability(outputBytes) {
+	let first;
+	let distinct;
+	return {
+		observe(outputs) {
+			const buffers = new Set();
+			for (const output of outputs) {
+				const data = output.data;
+				if (
+					!ArrayBuffer.isView(data) ||
+					data.BYTES_PER_ELEMENT !== 1 ||
+					data.byteLength !== outputBytes ||
+					data.buffer.byteLength !== outputBytes
+				)
+					throw new Error('Output storage violates the declared durable byte-result contract.');
+				if (
+					buffers.has(data.buffer) ||
+					first?.data.buffer === data.buffer ||
+					distinct?.data.buffer === data.buffer
+				)
+					throw new Error('Output storage aliases an earlier retained result.');
+				buffers.add(data.buffer);
+				if (!first) {
+					first = output;
+					continue;
+				}
+				const equal =
+					output.width === first.width &&
+					output.height === first.height &&
+					data.every((byte, index) => byte === first.data[index]);
+				if (!equal && !distinct) distinct = output;
+			}
+		},
+		evidence(finalOutput) {
+			return distinct
+				? { unstable_output: verificationOutput(first), output: verificationOutput(distinct) }
+				: { output: verificationOutput(finalOutput) };
+		}
+	};
+}
+
 /** Compare one untimed actual call with worker-supplied frozen bytes; return concrete mismatch evidence. */
-export async function preflightOperation(operation, reference) {
+export async function preflightOperation(operation, reference, observe = () => {}) {
 	if (!reference || reference.pixels.format !== 'rgba8')
 		throw new Error('Browser trial requires frozen RGBA8 reference_output.');
 	let output;
@@ -141,6 +187,7 @@ export async function preflightOperation(operation, reference) {
 			prepared.close();
 		}
 	}
+	observe([output]);
 	if (
 		output.width === reference.dimensions.width &&
 		output.height === reference.dimensions.height &&
@@ -169,7 +216,10 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const mismatch = await preflightOperation(operation, trial.reference_output);
+		const outputBytes = trial.case.identity.output.width * trial.case.identity.output.height * 4;
+		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
+		const stability = outputStability(outputBytes);
+		const mismatch = await preflightOperation(operation, trial.reference_output, stability.observe);
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes during preflight.');
 		if (mismatch && trial.case.browser.measure_nonexact !== true)
@@ -189,20 +239,26 @@ export async function runTrial(trial) {
 				? await collectInitializations({
 						measurement,
 						create: operation.create,
-						probe: operation.probe
+						probe: operation.probe,
+						observe: stability.observe,
+						outputBytes
 					})
-				: await collectCalls({ measurement, prepare: operation.prepare });
+				: await collectCalls({
+						measurement,
+						prepare: operation.prepare,
+						observe: stability.observe,
+						outputBytes
+					});
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
-		const verified = verificationOutput(output);
+		// Keep the actual timing result separate. Instability evidence is the first distinct pair,
+		// not a claim that the final timed output still differs (A/B/A must also fail).
+		const evidence = stability.evidence(output);
 		return {
 			...identity,
 			...timings,
-			output: verified,
-			...(mismatch && JSON.stringify(verified) !== JSON.stringify(mismatch)
-				? { unstable_output: mismatch }
-				: {}),
+			...evidence,
 			observation
 		};
 	} finally {
