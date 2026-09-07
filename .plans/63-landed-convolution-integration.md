@@ -70,3 +70,20 @@ Its content identity remains `sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f
 Next, the coordinator joins this checkpoint with the validated S21 public seam.
 S22 then adds public bicubic/Lanczos dispatch and support settings in that joined tree.
 Public lifecycle/package conformance and native/browser benchmark evidence remain pending integration.
+
+## Public integration join and TODOs
+
+Coordinator-authorized join `04e54c8` merges exact S21/registration checkpoint `b52d1c8b7d67dfa2cc0900c05583a6926b835762`.
+The only conflict was S21's earlier helper plan versus its completed record; retain the completed S21 record.
+
+- [~] Extend prepared dispatch, private ABI, and public validation/types for bicubic, Lanczos2, and Lanczos3; verify native output and allocation failures.
+- [ ] Build scalar/threaded package artifacts and verify interface, private ABI, and installed tarball across Chromium, Firefox, and WebKit.
+- [ ] Record checks and frozen identity, push clean checkpoints, and drain all owned processes.
+
+Keep algorithm tags 0/1/2 unchanged; append bicubic 3, Lanczos2 4, and Lanczos3 5.
+Add support after anchor in the private ABI. Encode fixed as 0 and scale-aware as 1 for convolution modes.
+Other modes require unused support 0; area also requires unused anchor 0 at the raw ABI.
+Public requests require explicit anchor and support for convolution. Area/bilinear/nearest still reject support fields.
+Private invalid support uses existing `output.resize` failure path, preserving the compact ABI table.
+Public validation reports the precise `output.resize.support` path before entering Wasm.
+The coordinator continues to own all benchmark registrations, scripts, and measurements.
