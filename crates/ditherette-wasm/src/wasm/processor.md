@@ -1,9 +1,9 @@
-# Private nearest ABI
+# Private scalar resize ABI
 
 This is crate-owned package wiring, not an additional public method or recipe.
 The package initializes a fresh binding factory and Wasm instance for each processor.
 The copied contracts at `0ede7f6c` and frozen `spec/pipeline/processor.rs` supply request, lifecycle, and composition semantics.
-`prod/pipeline/processor.rs` adds capacity-accounted ownership around the canonical copied nearest kernel.
+`prod/pipeline/processor.rs` adds capacity-accounted ownership around the landed nearest, area, bilinear, bicubic, and Lanczos kernels.
 `Failure` changes error representation only. Its code/path values allocate no Rust strings.
 
 ## Functions
@@ -11,17 +11,27 @@ The copied contracts at `0ede7f6c` and frozen `spec/pipeline/processor.rs` suppl
 | Private export | Contract |
 |---|---|
 | `privateInitialize(limit: number): number` | Return zero or a failure status; preflight before priming fixed boundary storage |
-| `privateResize(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, anchor: number, sink: object): number` | Borrow both JS handles; write `sink.value` only after complete durable result construction |
+| `privateResize(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, algorithm: number, anchor: number, support: number, sink: object): number` | Borrow both JS handles; write `sink.value` only after complete durable result construction |
 | `privateDispose(): number` | Idempotently release processor ownership; reject active-call recursion |
 | `privateErrorPath(): number` | Read immediately after a failure status |
 | `privateMemoryOverhead(): number` | Private fixture/accounting observation, excluded from the public wrapper |
 
 All incoming numbers use f64 before validation, avoiding generated integer truncation.
+Algorithm tags are `0` nearest, `1` area, `2` bilinear, `3` bicubic, `4` Lanczos2, and `5` Lanczos3.
+Other values return invalid-settings at `output.resize`.
 Anchors are top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right, numbered zero through eight.
+Every mode except area validates the anchor. Area requires raw anchor zero; the wrapper rejects public anchor fields.
+Support follows anchor in the ABI: `0` fixed and `1` scale-aware for bicubic/Lanczos.
+Nearest, area, and bilinear require raw support zero and reject public support fields.
+Bicubic/Lanczos public requests require explicit support. Invalid raw support returns invalid-settings at `output.resize`.
+The wrapper reports invalid public support at `output.resize.support` before entering Wasm.
+Area retains fractional-overlap integration and its landed fast paths. Bilinear widens triangle support during minification.
+Convolution keeps fixed radii or widens support during minification according to the selected policy.
+The landed accumulation and clipping/rounding paths remain unchanged, including their documented bounded reference differences.
 The wrapper supplies a new private plain `{value: undefined}` sink. It reads the value only after status zero.
 Success contains `{width, height, data: Uint8Array}`, with JS-owned data independent of Wasm memory.
 Raw request/version/unknown-field validation belongs to the typed package wrapper.
-The Rust boundary independently validates dimensions, anchor, intrinsic byte length, and memory limits.
+The Rust boundary independently validates dimensions, algorithm, anchor, support, intrinsic byte length, and memory limits.
 Supplied progress remains explicitly unsupported until S33.
 
 Status zero means success. Statuses one through thirteen follow the copied error categories:
@@ -38,14 +48,20 @@ memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runti
 
 ## Memory and cleanup
 
-The accounted peak is `privateMemoryOverhead() + input Vec capacity + output Vec capacity`.
-Both Vecs use fallible exact reservation before byte copying. Their actual capacities are checked before processing.
-The metadata term counts Processor, plan, both Vec headers, module state, error-path storage, and borrowed boundary handles.
+The accounted peak is `privateMemoryOverhead() + prepared heap capacity + input Vec capacity + output Vec capacity`.
+Prepared heap capacity includes the selected plan's allocations and any f32 area/bilinear scratch.
+Convolution also counts every nested tap-vector header, tap capacity, and selected f64 full-call scratch.
+The complete planned capacity preflights before allocation. Plan, scratch, and both image Vecs reserve fallibly before source copying.
+Actual vector capacities are checked against the same limit. Execution uses those owned buffers without further allocation.
+Bookkeeping counts Processor, request and prepared-plan records, both image Vec headers, module state, error-path storage, and borrowed boundary handles.
+Inline records count once; nested heap headers and data belong to prepared capacity. Identity calls need no prepared heap storage.
 Borrowed slice helpers create no extra Rust byte buffer. Returned JS bytes and caller JS storage are excluded under decision37.
 
-The wasm32 release build reports 648 bytes of bookkeeping. A 1x1-to-1x1 call needs exactly 656 bytes.
-The 2x1-to-3x2 fixture needs 680 bytes. One byte less fails preflight before any source copy.
-Limits from one through 647 are valid option values but fail initialization with memory-limit before priming.
+Bookkeeping depends on the compiled record layouts. Fixtures read `privateMemoryOverhead()` from their actual Wasm artifact.
+They add the selected plan/scratch and image capacities to derive exact/one-under budgets; do not reuse historical byte totals.
+The 1x1 identity fixture needs that observed overhead plus eight image bytes, with no plan heap.
+See `tests/private_processor.mjs` and `packages/ditherette/tests/public.test.mjs` for mode-specific capacity fixtures.
+Positive limits below the observed overhead are valid option values but fail initialization with memory-limit before priming.
 The default remains 1610612736; the maximum remains 2147483648.
 
 Bookkeeping conservatively includes wasm-bindgen 0.2.121's fixed first 128 usize externref slots, totaling 512 bytes.
@@ -60,7 +76,7 @@ The wrapper drops factory references on disposal; neither Rust nor the wrapper c
 Module state moves the Processor into the active Rust call before invoking JavaScript.
 No RefCell or generated class borrow spans an imported helper.
 Reentrant processing, initialization, and disposal return structured failures without changing the active call.
-Caught input/result failures drop both Rust Vecs and restore the ready state.
+Caught input/result failures drop the prepared plan, scratch, and both image Vecs, then restore the ready state.
 Future cache publication must follow complete result construction and any successful completion callback.
 This slice publishes no cache entries.
 
@@ -83,10 +99,10 @@ Live slots and memory page count remain unchanged. Every failed call leaves its 
 Additional fixtures cover exact/one-under budgets, invalid/tiny limits, detached and offset inputs, hidden RGB,
 durable output after memory growth/disposal, failed sink assignment, independent instances, and recursive calls.
 
-Run after generating web bindings into `dist/private-test`:
+Run from the crate directory; the script builds the scalar bindings in `dist/scalar` before checking them:
 
 ```sh
-node --test tests/private_processor.mjs
+pnpm test:private
 ```
 
 Fresh import URLs isolate singleton generated glue only in these low-level Node fixtures.
