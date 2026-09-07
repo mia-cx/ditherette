@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { collectCalls, timeCalls, timeInitialization } from './benchmark-public-timing.mjs';
+import {
+	collectCalls,
+	collectInitializations,
+	timeCalls,
+	timeInitialization
+} from './benchmark-public-timing.mjs';
 
 test('latency keeps a zero-duration call without retry, batching, or clamping', () => {
 	let calls = 0;
@@ -83,4 +88,58 @@ test('initialization awaits exactly one factory and leaves disposal outside timi
 	assert.deepEqual(events, ['clock', 'create', 'clock']);
 	result.instance.dispose();
 	assert.equal(events.at(-1), 'dispose');
+});
+
+test('initialization collector probes and disposes each successful instance outside its timer', async () => {
+	let clock = 0;
+	let creates = 0;
+	const events = [];
+	const result = await collectInitializations({
+		measurement: { samples: 5, warmup_ms: 1, measurement_ms: 0 },
+		now: () => {
+			events.push('clock');
+			return clock++;
+		},
+		create: async () => {
+			creates++;
+			events.push('create');
+			return { dispose: () => events.push('dispose') };
+		},
+		probe: () => {
+			events.push('probe');
+			return 'durable output';
+		}
+	});
+	assert.equal(creates, 6);
+	assert.equal(result.warmup_iterations, 1);
+	assert.equal(result.output, 'durable output');
+	assert.deepEqual(result.sample_ns, [1e6, 1e6, 1e6, 1e6, 1e6]);
+	for (let index = 0; index < events.length; index++) {
+		if (events[index] === 'create')
+			assert.deepEqual(events.slice(index - 1, index + 4), [
+				'clock',
+				'create',
+				'clock',
+				'probe',
+				'dispose'
+			]);
+	}
+});
+
+test('call failure still closes its prepared instance', async () => {
+	let closed = 0;
+	await assert.rejects(
+		collectCalls({
+			measurement: { warmup_ms: 1 },
+			now: () => 0,
+			prepare: async () => ({
+				call: () => {
+					throw new Error('operation failed');
+				},
+				close: () => closed++
+			})
+		}),
+		/operation failed/
+	);
+	assert.equal(closed, 1);
 });

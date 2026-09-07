@@ -14,6 +14,51 @@ export async function timeInitialization(create, now) {
 	return { instance, elapsed: now() - start };
 }
 
+/** Initialization samples exclude the correctness probe and disposal. */
+export async function collectInitializations({
+	measurement,
+	create,
+	probe,
+	now = () => performance.now(),
+	warmupAttemptLimit = 1_000_000
+}) {
+	const warmupStart = now();
+	let warmupIterations = 0;
+	let warmupElapsed;
+	async function one() {
+		const timed = await timeInitialization(create, now);
+		try {
+			return { elapsed: timed.elapsed, output: probe(timed.instance) };
+		} finally {
+			timed.instance.dispose();
+		}
+	}
+	do {
+		await one();
+		warmupIterations += 1;
+		warmupElapsed = now() - warmupStart;
+		if (warmupIterations >= warmupAttemptLimit && warmupElapsed < measurement.warmup_ms)
+			throw new Error('Insufficient timer resolution to bound warmup.');
+	} while (warmupElapsed < measurement.warmup_ms);
+	const samples = [];
+	let output;
+	let measuredElapsed = 0;
+	for (let index = 0; index < measurement.samples; index += 1) {
+		const timed = await one();
+		output = timed.output;
+		samples.push(timed.elapsed * 1e6);
+		measuredElapsed += timed.elapsed;
+		if (samples.length >= 5 && measuredElapsed >= measurement.measurement_ms) break;
+	}
+	return {
+		output,
+		sample_ns: samples,
+		iterations_per_sample: 1,
+		warmup_iterations: warmupIterations,
+		warmup_elapsed_ns: Math.round(warmupElapsed * 1e6)
+	};
+}
+
 /** Run warmup first, then prepare/reset each sample. Hooks never add hashing to the operation. */
 export async function collectCalls({
 	measurement,
