@@ -16,9 +16,9 @@ use ditherette_bench::{
         coordinator::{live_benchmarks, validate_experiment},
         *,
     },
-    verification::{content_digest, settings_digest, verify_with_bounds, VerificationBounds},
+    verification::{content_digest, verify_with_bounds, VerificationBounds},
 };
-use ditherette_bench_api::{verification::*, ResizeParams, SubjectId};
+use ditherette_bench_api::{verification::*, ResizeParams};
 use std::{
     fs,
     time::{Duration, Instant},
@@ -150,36 +150,7 @@ fn validate_native(case: &PairCase) -> Result<(), BenchError> {
     {
         return Err(BenchError::Config("native resize has no application cache and cannot claim complete-call or initialization measurements".into()));
     }
-    let ids = [
-        &case.reference_subject,
-        &case.accepted_subject,
-        &case.candidate_subject,
-    ]
-    .map(|subject| SubjectId::parse(subject.as_str()));
-    let ids = ids
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| BenchError::Config(error.to_string()))?;
-    if ids
-        .iter()
-        .any(|id| id.domain() != "resize" || id.filter() != ids[0].filter())
-        || case.identity.semantics.operation != Operation::Resize
-        || case.identity.semantics.version != 1
-        || case.identity.semantics.space.is_some()
-        || case.identity.semantics.recipe != format!("{}-center-default", ids[0].filter())
-        || case.identity.settings
-            != settings_digest(&(
-                case.identity.semantics.clone(),
-                case.identity.output,
-                "center-default",
-            ))
-            .map_err(|error| BenchError::Config(error.to_string()))?
-    {
-        return Err(BenchError::Config(
-            "native subjects or normalized center/default recipe identity differ".into(),
-        ));
-    }
-    Ok(())
+    native::validate_case(case).map_err(BenchError::io)
 }
 
 fn config(measurement: &Measurement) -> Result<MeasurementConfig, BenchError> {
@@ -240,6 +211,7 @@ impl MeasurementObserver for Observer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ditherette_bench::verification::settings_digest;
 
     #[test]
     fn native_adapter_rejects_claims_it_cannot_measure_without_timing() {
@@ -290,6 +262,15 @@ mod tests {
         case.measurement.application_cache = ApplicationCache::Cold;
         assert!(validate_native(&case).is_err());
         case.measurement.application_cache = ApplicationCache::NotApplicable;
+        case.reference_subject = "spec:resize:bicubic:catmull-rom".into();
+        case.accepted_subject = "prod:resize:bicubic:catmull-rom".into();
+        case.candidate_subject = "candidate:resize:bicubic:budgeted-fixed".into();
+        case.identity =
+            native::identity(&case.reference_subject, source, &case.rgba, source).unwrap();
+        validate_native(&case).unwrap();
+        case.candidate_subject = "candidate:resize:bicubic:budgeted-scale-aware".into();
+        assert!(validate_native(&case).is_err());
+        case.candidate_subject = "candidate:resize:bicubic:budgeted-fixed".into();
         case.identity.settings = content_digest(b"wrong settings");
         assert!(validate_native(&case).is_err());
     }
