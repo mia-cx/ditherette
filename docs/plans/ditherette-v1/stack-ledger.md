@@ -187,12 +187,16 @@ S21 restoration is `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508`; S22 restoration i
 The coordinator verifies both source trees byte-for-byte and joins them into `fix/v1-restore-landed`.
 Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
 S21 targets `fix/v1-restore-landed`. S22 stacks on S21 to reuse its validated public integration.
-PR filing follows completed measurements; neither slice grants release-performance readiness.
+S21 is open in [PR #110](https://github.com/mia-cx/ditherette/pull/110) at `7743c2e5b4a313fa5e7da70b850956b85a880df4`.
+S22 is open in [PR #111](https://github.com/mia-cx/ditherette/pull/111) at `2c2c1994b40eb65246b9f434322f1c20b7f260bf`.
+Both are non-draft and unmerged, with auto-merge disabled. Neither grants release-performance readiness.
+S22's merge-preserving rebase retains original checkpoints and measured runtime bytes.
+Its final branch passes 296 native, 16 interface, seven private ABI, both builds, and three installed-package engines.
 
 | Slice | Branch/worktree suffix | Current task |
 | --- | --- | --- |
-| S21 / #62 | `v1-s21-area-bilinear` | File validated, measured public integration PR |
-| S22 / #63 | `v1-s22-convolution` | Stack validated, measured public integration on S21 |
+| S21 / #62 | `v1-s21-area-bilinear` | Ready in PR110 |
+| S22 / #63 | `v1-s22-convolution` | Ready in PR111, stacked on PR110 |
 
 Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
 Existing optimized kernels and shared helpers stay canonical production. Removed replacements remain recoverable in historical commits.
