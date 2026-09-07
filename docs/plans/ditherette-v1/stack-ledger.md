@@ -140,6 +140,8 @@ This worktree now owns tracked progress and the ledger; root `slices.md` remains
 Read [the scoped plan](../../../.plans/61-browser-benchmark.md) and [preflight](../../../.plans/61-browser-preflight.md) before implementation.
 Protocol, script transport, and asset/worker implementation use separate child worktrees. Measurements wait until every agent and build/test exits.
 No S20 performance or readiness claim exists yet.
+S19's exact delivered head passes CI run `34136269326`; its frozen-reference check and PR status are green.
+The [initial trial budget](../../../.plans/61-initial-trial-budget.md) fixes the case matrix before measurement. No browser benchmark has run.
 
 ## S01 inherited port anchor
 
