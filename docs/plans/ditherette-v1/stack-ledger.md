@@ -105,6 +105,21 @@ The corrected S18 fixture joins this base at `1dd8128a8532638ee2a17853e562145bad
 The separate trusted S18 guard passes that joined tree.
 This prerequisite branch contains no new production implementation.
 
+## S19 scalar package implementation
+
+Issue [#60](https://github.com/mia-cx/ditherette/issues/60) remains in progress without a PR.
+The final slice joins in `.worktrees/v1-s19-integration` on `impl/v1-s19-integration`, based on `impl/v1-s19-base`.
+This worktree owns the current tracked progress and ledger; the root `slices.md` remains the visible mirror.
+
+- Literal production baseline `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902` has five verified copies and a separate unchanged legacy candidate.
+- Policy join `89b570e0dbb4280352b157bfde5b20c3a7e80a9e` retains the exact baseline and passes the separately trusted S18 guard.
+- Private factory delivery `8ecdf786191a451ad13eb0f65191341101ffdc01` passes seven focused fixtures, actual scalar/threaded builds, declaration checks, and inert-import validation.
+- The coordinator joined both deliveries without conflicts. Private Rust allocation handling and the public TypeScript wrapper continue in their assigned worktrees.
+- Native candidate work runs in `impl/v1-s19-nearest-opt`; the accepted binary builds from clean `89b570e0` in `impl/v1-s19-nearest-accepted`.
+
+The baseline has 280 passing native tests. It is not a completed public package call.
+No S19 performance measurement or candidate promotion has occurred. All agents and builds must drain before the exclusive trial.
+
 ## S01 inherited port anchor
 
 - Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).
