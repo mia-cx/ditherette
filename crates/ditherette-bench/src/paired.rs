@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod coordinator;
+pub mod native;
 
 use ditherette_bench_api::verification::*;
 use serde::{Deserialize, Serialize};
