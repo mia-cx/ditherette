@@ -6,7 +6,7 @@ The prerequisite join preserves the base's completed S21 evidence document.
 ## TODOs
 
 - [x] Register eight per-call budgeted subjects and verify exact correspondence with landed production.
-- [ ] Record native/Wasm compilation and formatting checks; push the clean handoff.
+- [x] Record native/Wasm compilation and formatting checks; push the clean handoff.
 
 ## Timing scope
 
@@ -27,3 +27,8 @@ It includes mixed alpha and hidden RGB, exact integer area paths, identity, odd 
 and scale-aware convolution's large-source x-then-y dispatch. Source bytes remain unchanged.
 Registry checks verify all eight explicit oracle IDs and the real adapter source path.
 Invalid input views return adapter errors without writing output.
+
+`cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --features bench-subjects --target wasm32-unknown-unknown` passes.
+`cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` passes.
+Implementation commit `9350a041` changes only benchmark registration, its private adapter, dedicated tests, and this record.
+The prerequisite merge changes no frozen spec, image, or policy bytes. No production or public binding changes were authored here.
