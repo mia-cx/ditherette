@@ -76,7 +76,9 @@ Issue [#59](https://github.com/mia-cx/ditherette/issues/59) runs in `.worktrees/
 Its immediate parent is `impl/v1-s17-processor` at `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
 The prerequisite commit is in ancestry. Its native blocking edge was removed only after this worktree existed.
 Validated implementation and creation head is `e636b3120f566127b5e6b884ff2df3cd24c7c5ca` in [PR #104](https://github.com/mia-cx/ditherette/pull/104).
-The PR is open and non-draft, with auto-merge disabled. Later handoff commits change documentation only.
+The PR is open and non-draft, with auto-merge disabled.
+CI found a cold-cache fixture setup failure. Fix `c03c3c85f5748b7726cfdae50ea6d41acd8ede64` passes [run 34131713248](https://github.com/mia-cx/ditherette/actions/runs/34131713248), including all 11 mutation fixtures and the guard.
+Its follow-up delivery is `662d6483`; the frozen digest and guard semantics are unchanged.
 The fixed checkpoint remains the S17 parent, retained by branch `reference/ditherette-v1`.
 The guard uses recorded bytes, never that branch's tip or a new parent.
 All 106 reference/shared-image/provenance files match SHA-256 `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
@@ -97,7 +99,11 @@ Its `spec/`, `image/`, and both consumer lockfiles exactly match the S17 parent.
 The reviewed S18 head `eee0b5ddfb600b9ba6517c3dcb755e3566fc7813` now joins this base.
 Its trusted guard passes the complete resolved tree at `363324c43556f08ef4e8677d226f5659977bcc66`.
 Documentation-only join `1f7e7a68803f5af6953ec710c536cbb66a32c1f8` retains identical crates, guard, and workflow content.
-S19 is ready to start in a child worktree. This prerequisite branch contains no new production implementation.
+S19 started in `impl/v1-s19-scalar` for the literal Rust baseline and `impl/v1-s19-package` for private glue generation.
+The coordinator owns progress and joins. Neither child runs benchmarks during implementation.
+The corrected S18 fixture joins this base at `1dd8128a8532638ee2a17853e562145bad687e3f`.
+The separate trusted S18 guard passes that joined tree.
+This prerequisite branch contains no new production implementation.
 
 ## S01 inherited port anchor
 
