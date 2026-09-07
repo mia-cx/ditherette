@@ -12,7 +12,7 @@ The immediate PR base is `impl/v1-s19-integration`. Preserve all frozen and lite
 - [x] Implement actual installed-package calls and equivalent TypeScript adapters, with one call per latency sample and separate throughput/init measurements.
 - [x] Test operation registration, exact output proof, asset tampering, malformed transport, and owned-child cleanup without measurements.
 - [x] Join the independent deliveries and validate real browser conformance plus existing native protocol compatibility.
-- [ ] Declare a bounded initial case/pair budget, prepare clean artifacts, drain implementation, and collect exclusive fresh browser trials.
+- [~] Declare a bounded initial case/pair budget, prepare clean artifacts, drain implementation, and collect exclusive fresh browser trials. First Chromium run is incomplete; see retained failure evidence.
 - [ ] Record raw samples, complete identities, exact output checks, performance outcomes, and cleanup evidence; preserve failures without treating them as accepted optimizations.
 - [ ] Rebase with merge/checkpoint preservation, validate affected checks, and open an unmerged PR with current progress and dependencies.
 
@@ -61,4 +61,7 @@ Controlled fixtures preserve aliases through a second snapshot and reject split 
 The coordinator reruns full installed-tarball conformance with the corrected runtime. Chromium, Firefox, and WebKit pass all four reported tests.
 Retain the failed runtime as diagnostic evidence. Rebuild and prepare both roles after this correction before any measurements.
 Store full trial results on the workspace filesystem because `/tmp` has only 2 GiB free.
-No performance measurement has run in S20.
+The first exclusive Chromium run starts after all implementation processes exit, but its transport fails at worker 62.
+Read [the retained failure evidence](61-trial-01-failure.md) before resuming measurements.
+All 62 workers are reaped; 61 complete results contain 6,100 exact samples. The comparison remains incomplete.
+Fix and verify the bulk-data transport before preparing another fresh experiment. No performance gate or optimization is accepted.
