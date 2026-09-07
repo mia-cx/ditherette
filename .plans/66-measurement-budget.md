@@ -22,7 +22,10 @@ Standalone metrics use exact f32 score output, without timed conversions or outp
 Their arithmetic is unchanged, so component timings are coverage rather than an acceleration claim.
 
 Two alternating AB/BA pairs produce at most 276 workers across all cases.
-Each worker uses 20 samples, 50 ms warmup, and a 250 ms measurement cap, retaining at least five valid samples.
+Each worker uses 20 samples and 50 ms warmup, retaining at least five valid samples.
+The measurement cap is 250 ms, except complete CIEDE2000 calls use 10,000 ms.
+CIEDE2000 scores every palette entry with more arithmetic; its cap allows five valid samples without shrinking the fixture.
+This exception is declared before any measurement. It does not add workers or establish a performance expectation.
 Declare complete fixture and tool identities before starting. Use fresh browser collector snapshots after the stability fix.
 Drain every agent, build, and test before measuring. Run one worker at a time under the shared lease.
 
@@ -36,4 +39,4 @@ Keep the exact baseline if the candidate loses or has no demonstrated benefit.
 Record raw and compressed Wasm sizes. Any package-size gate still applies.
 One candidate comparison is the target; repeat only noisy or inconclusive evidence within the approved slice budget.
 
-No S25 measurement has run. Benchmark score adapters and executable inventory remain to be implemented before artifact preparation.
+No S25 measurement has run. Score adapters are implemented; final protocol validation precedes artifact preparation.
