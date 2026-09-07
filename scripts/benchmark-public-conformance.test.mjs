@@ -30,7 +30,8 @@ test('installed package and actual TypeScript adapter conformance, without measu
 		'Set DITHERETTE_BENCH_QUANTIZE_FIXTURES to the frozen quantize_conformance output.'
 	);
 	const quantizeFixtures = JSON.parse(await readFile(quantizePath, 'utf8'));
-	assert.equal(quantizeFixtures.length, 17);
+	assert.equal(quantizeFixtures.length, 47);
+	assert.equal(new Set(quantizeFixtures.map((fixture) => fixture.settings.matching)).size, 15);
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-public-conformance-'));
 	t.after(() => rm(temporary, { recursive: true, force: true }));
 	const consumer = path.join(temporary, 'consumer');
@@ -379,7 +380,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 								'known-vector',
 								'area-bilinear-known-vectors-and-drift',
 								'convolution-support-recipes',
-								'17-frozen-quantize-fixtures-primed-and-fresh',
+								'47-frozen-quantize-fixtures-all-15-modes-primed-and-fresh',
 								'identity-copy',
 								'fresh-instance',
 								'initialization-bytes',
