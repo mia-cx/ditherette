@@ -7,7 +7,7 @@ Keep every production, reference, image, and freeze-policy byte unchanged.
 
 - [x] Apply only the common benchmark protocol from `312f301ec1fca0b2ffead469527cfaf83c3d00f3` and a thin literal adapter.
 - [x] Verify original production bytes, native callable conformance, and compilation before committing the artifact source.
-- [ ] Build the immutable native accepted executable without running measurements.
+- [x] Build the immutable native accepted executable without running measurements.
 
 The literal wrapper calls `prod::quantize::quantize(request)` and registers `baseline:quantize:request:literal`.
 The candidate wrapper calls the prepared convenience API with a budget and registers its separate candidate ID.
@@ -21,3 +21,9 @@ The tests include 46 full-call quantize cases and five packed-color controls com
 The separately trusted S18 guard passes native/Wasm isolation and retains the frozen checkpoint and content digest.
 Only the quantize subject ID and old one-argument call differ from the candidate's new adapter file.
 No operations run under a measurement timer.
+
+Artifact source is `ccb9bceb28563c562dd5e6c05f68c056c18e3519`, including the per-iteration forward output barrier.
+The copied executable is `.worktrees/v1-s24-bench/crates/ditherette-bench/target/s24-quantize/native-accepted/ditherette-bench`.
+Its SHA-256 is `3a888084f2c9f9bea610eef4909100492816111034b99b826fd6bc4e6a316916`.
+Production tree `d4847ee149dfa346a85a23f8be28e6c9eb1fb768` remains identical to the original literal checkpoint.
+The coordinator pauses this unmeasured attempt for timed-output stability assurance review. No performance claim is made.
