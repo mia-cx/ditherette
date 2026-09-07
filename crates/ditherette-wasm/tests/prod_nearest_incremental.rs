@@ -5,7 +5,9 @@ use ditherette_wasm::{
         ImageDimensions, ImageFormat, ImageView, ImageViewMut, Oklab32, PaletteIndex8, Rgba8,
         RowStride,
     },
-    prod::resize::{common::alignment::ResizeAnchor as ProdAnchor, scalar::nearest},
+    prod::resize::{
+        common::alignment::ResizeAnchor as ProdAnchor, scalar::nearest_incremental as nearest,
+    },
     spec::resize::{common::alignment::ResizeAnchor as SpecAnchor, scalar::nearest as oracle},
 };
 
@@ -140,7 +142,7 @@ fn registry_calls_historical_incremental_alias_with_frozen_oracle() {
     assert!(candidate
         .descriptor
         .source_file
-        .ends_with("prod/resize/scalar/nearest.rs"));
+        .ends_with("prod/resize/scalar/nearest_incremental.rs"));
     let mut output = [0; 8];
     candidate
         .resize_u8_rgba(

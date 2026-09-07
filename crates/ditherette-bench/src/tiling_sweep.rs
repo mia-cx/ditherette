@@ -636,9 +636,7 @@ fn run_subject_rows(
             },
             convolution::{ResizeAnchor as ConvolutionAnchor, SupportPolicy},
             lanczos::{resize_lanczos2_rgba8_rows_into, resize_lanczos3_rgba8_rows_into},
-            nearest_candidate::{
-                alignment::ResizeAnchor as NearestAnchor, resize_nearest_rgba8_rows_into,
-            },
+            nearest::{alignment::ResizeAnchor as NearestAnchor, resize_nearest_rgba8_rows_into},
         },
     };
 
@@ -873,7 +871,7 @@ fn run_nearest_subject_row_bands(
 ) -> Result<(), BenchError> {
     use ditherette_wasm::{
         image::{ImageView, ImageViewMut, Rgba8, RowStride},
-        prod::resize::scalar::nearest_candidate::{
+        prod::resize::scalar::nearest::{
             alignment::ResizeAnchor, resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
         },
     };

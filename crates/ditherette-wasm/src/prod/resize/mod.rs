@@ -1,9 +1,8 @@
 //! Production resize implementations.
 //!
-//! The canonical nearest module uses the measured exact incremental mapper.
-//! It preserves the generic formats and strided views of its literal-copy baseline.
-//! The packed-only rules below describe inherited kernels, including
-//! `scalar::nearest_candidate`, not the canonical nearest implementation.
+//! Canonical nearest uses the landed packed kernel and its reusable plan.
+//! The S19 generic incremental experiment remains separately named and is not
+//! the production default.
 //!
 //! Production resize code is allowed to precompute plans, specialize kernels,
 //! and later add tiling/SIMD paths while staying byte-for-byte compatible with

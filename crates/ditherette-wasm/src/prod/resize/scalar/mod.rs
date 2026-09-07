@@ -102,5 +102,5 @@ pub mod bilinear;
 pub mod convolution;
 pub mod lanczos;
 pub mod nearest;
-/// Inherited optimized implementation, pending fresh baseline comparison.
-pub mod nearest_candidate;
+/// S19 generic incremental experiment. Not the landed packed production default.
+pub mod nearest_incremental;
