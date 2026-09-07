@@ -73,4 +73,23 @@ No benchmark, public integration, allocation wrapper, or optimization ran during
    Validate exact/one-under budgets, each reservation failure, caught copy/result failures, recovery, reentry, disposal, and durable results.
    The coordinator owns common registries, benchmark registration, measurements, and integration with the selected S25 checkpoint.
 
-No expanded implementation starts until the coordinator assigns these overlapping files and the current integration base.
+## Expanded implementation authorized
+
+The coordinator assigned all three ownership items on the existing S25 baseline ancestry.
+S01 owns benchmark protocol/adapters separately; the coordinator owns integration and tracking.
+
+- [x] Add bounded native perturb and separable composition with exact budgets, reservation/copy/completion failure recovery, and frozen output checks; commit independently.
+- [ ] Add private caught Wasm bindings and typed public methods, validation, lifecycle/error fixtures; commit the public baseline.
+- [ ] Validate both artifact builds and installed-package Chromium/Firefox/WebKit behavior, then record final evidence.
+
+The bounded/public baseline retains the literal per-pixel packed Converter construction.
+A call-owned Converter is a separate exact preparation candidate after that baseline, never an unrecorded baseline change or assumed speedup.
+
+### Bounded native validation
+
+`cargo test --locked --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_processor_fields --test prod_processor_quantize --test prod_fields`
+passes 13 tests with the assigned CARGO_TARGET_DIR.
+The four new ownership fixtures cover 42 perturb requests and 210 separable frozen-result comparisons,
+exact/one-under budgets, all two/three buffer reservation failures, actual overcapacity, copy/completion failures, recovery, disposal, and unsupported/nonfinite settings.
+Field working-capacity accounting includes one temporary packed Converter and its byte tables in addition to any prepared quantizer.
+The kernel still creates that converter per source-color read. No conversion reuse or mathematical change is included.

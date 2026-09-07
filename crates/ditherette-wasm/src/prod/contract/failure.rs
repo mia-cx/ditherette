@@ -23,6 +23,15 @@ pub enum ErrorPath {
     Alpha = 14,
     AlphaThreshold = 15,
     Matching = 16,
+    Perturb = 17,
+    PerturbField = 18,
+    PerturbSpace = 19,
+    PerturbStrength = 20,
+    PerturbPlacement = 21,
+    PerturbRadius = 22,
+    PerturbThreshold = 23,
+    PerturbSoftness = 24,
+    Dither = 25,
 }
 
 /// A small value usable even when Rust cannot allocate an error string.
