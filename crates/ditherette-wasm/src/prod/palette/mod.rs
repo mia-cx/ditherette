@@ -3,12 +3,23 @@
 //! Call `Request::validate` before preparing a palette. Standalone perturbation
 //! keeps its source alpha and hidden RGB; it does not use indexed alpha policy.
 
+pub(crate) mod allocation;
+use allocation::Budget;
+pub use allocation::PreparationError;
+use std::mem::size_of;
+
 use crate::image::{
     contracts::{IndexedImage, NormalizedPalette, PaletteEntry, ProcessWarning, WarningCode},
     ImageBuf, PaletteIndex8,
 };
 
+use super::contract::error::ErrorCode;
 use super::contract::request::{AlphaPolicy, MAX_PALETTE_ENTRIES};
+
+const TRUNCATED: &str = "Palette was truncated to 256 entries for indexed PNG export.";
+const TRANSPARENT_ONLY: &str = "Only Transparent is enabled; every output pixel is transparent.";
+const FALLBACK: &str =
+    "Transparent is disabled; alpha-thresholded pixels use the darkest enabled visible color.";
 
 /// A visible RGB entry and its original index in the retained ordered palette.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,9 +47,73 @@ pub struct PreparedPalette {
 }
 
 impl PreparedPalette {
-    /// Prepares a nonempty, request-validated palette and alpha policy.
-    /// At most the first 256 entries survive; their indices never change.
-    pub fn new(entries: &[PaletteEntry], alpha: AlphaPolicy) -> Self {
+    /// Validates palette/alpha settings and reserves all owned capacities fallibly.
+    pub fn try_new(
+        entries: &[PaletteEntry],
+        alpha: AlphaPolicy,
+        memory_limit: u64,
+    ) -> Result<Self, PreparationError> {
+        let required = Self::required_capacity_bytes(entries, alpha)?;
+        if required > memory_limit {
+            return Err(PreparationError::memory());
+        }
+        let mut budget = Budget::new(memory_limit, size_of::<Self>() as u64)?;
+        Self::prepare(entries, alpha, &mut budget)
+    }
+
+    /// Record, Vec capacities and warning strings reserved by `try_new`.
+    pub fn required_capacity_bytes(
+        entries: &[PaletteEntry],
+        alpha: AlphaPolicy,
+    ) -> Result<u64, PreparationError> {
+        if entries.is_empty() {
+            return Err(PreparationError {
+                code: ErrorCode::InvalidPalette,
+                path: "palette",
+            });
+        }
+        if let AlphaPolicy::Preserve { threshold } = alpha {
+            if !threshold.is_finite() || !(0.0..=255.0).contains(&threshold) {
+                return Err(PreparationError {
+                    code: ErrorCode::InvalidSettings,
+                    path: "alpha.threshold",
+                });
+            }
+        }
+        let retained = &entries[..entries.len().min(MAX_PALETTE_ENTRIES)];
+        let visible = retained
+            .iter()
+            .filter(|entry| matches!(entry, PaletteEntry::Color { .. }))
+            .count();
+        let warnings = warning_messages(entries, alpha);
+        Ok((size_of::<Self>()
+            + retained.len() * 4
+            + visible * size_of::<VisibleColor>()
+            + warnings
+                .iter()
+                .flatten()
+                .map(|(_, text)| size_of::<ProcessWarning>() + text.len())
+                .sum::<usize>()) as u64)
+    }
+
+    /// Actual owned record and heap capacities, including warning text.
+    pub fn capacity_bytes(&self) -> u64 {
+        (size_of::<Self>()
+            + self.palette.rgba.capacity()
+            + self.visible.capacity() * size_of::<VisibleColor>()
+            + self.warnings.capacity() * size_of::<ProcessWarning>()
+            + self
+                .warnings
+                .iter()
+                .map(|warning| warning.message.capacity())
+                .sum::<usize>()) as u64
+    }
+
+    pub(crate) fn prepare(
+        entries: &[PaletteEntry],
+        alpha: AlphaPolicy,
+        budget: &mut Budget,
+    ) -> Result<Self, PreparationError> {
         let retained = &entries[..entries.len().min(MAX_PALETTE_ENTRIES)];
         let mut palette = NormalizedPalette {
             rgba: Vec::new(),
@@ -47,10 +122,20 @@ impl PreparedPalette {
         let mut visible = Vec::new();
         let mut darkest: Option<(u16, u8)> = None;
         let mut warnings = Vec::new();
-        if entries.len() > MAX_PALETTE_ENTRIES {
+        let messages = warning_messages(entries, alpha);
+        budget.reserve(&mut palette.rgba, retained.len() * 4)?;
+        budget.reserve(
+            &mut visible,
+            retained
+                .iter()
+                .filter(|entry| matches!(entry, PaletteEntry::Color { .. }))
+                .count(),
+        )?;
+        budget.reserve(&mut warnings, messages.iter().flatten().count())?;
+        for (code, message) in messages.into_iter().flatten() {
             warnings.push(ProcessWarning {
-                code: WarningCode::PaletteTruncated,
-                message: "Palette was truncated to 256 entries for indexed PNG export.".into(),
+                code,
+                message: budget.string(message)?,
             });
         }
 
@@ -77,31 +162,17 @@ impl PreparedPalette {
             }
         }
 
-        if visible.is_empty() {
-            warnings.push(ProcessWarning {
-                code: WarningCode::TransparentOnly,
-                message: "Only Transparent is enabled; every output pixel is transparent.".into(),
-            });
-        } else if matches!(alpha, AlphaPolicy::Preserve { .. })
-            && palette.transparent_index.is_none()
-        {
-            warnings.push(ProcessWarning {
-                code: WarningCode::TransparentFallback,
-                message: "Transparent is disabled; alpha-thresholded pixels use the darkest enabled visible color.".into(),
-            });
-        }
-
         let threshold_index = palette
             .transparent_index
             .or(darkest.map(|(_, index)| index))
             .expect("request validation requires a nonempty palette");
-        Self {
+        Ok(Self {
             palette,
             visible,
             warnings,
             alpha,
             threshold_index,
-        }
+        })
     }
 
     /// Applies the indexed-output alpha policy before color conversion/matching.
@@ -143,4 +214,27 @@ impl PreparedPalette {
             warnings: self.warnings,
         }
     }
+}
+
+fn warning_messages(
+    entries: &[PaletteEntry],
+    alpha: AlphaPolicy,
+) -> [Option<(WarningCode, &'static str)>; 2] {
+    let retained = &entries[..entries.len().min(MAX_PALETTE_ENTRIES)];
+    let visible = retained
+        .iter()
+        .any(|entry| matches!(entry, PaletteEntry::Color { .. }));
+    let transparent = retained
+        .iter()
+        .any(|entry| matches!(entry, PaletteEntry::Transparent {}));
+    [
+        (entries.len() > MAX_PALETTE_ENTRIES).then_some((WarningCode::PaletteTruncated, TRUNCATED)),
+        if !visible {
+            Some((WarningCode::TransparentOnly, TRANSPARENT_ONLY))
+        } else if matches!(alpha, AlphaPolicy::Preserve { .. }) && !transparent {
+            Some((WarningCode::TransparentFallback, FALLBACK))
+        } else {
+            None
+        },
+    ]
 }

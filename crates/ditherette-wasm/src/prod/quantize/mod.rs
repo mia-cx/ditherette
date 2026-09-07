@@ -1,41 +1,65 @@
-//! Native direct quantization baseline. Public processor integration is separate.
+//! Native direct quantization. Public processor integration is separate.
 
 pub mod matcher;
+pub mod prepared;
+pub use prepared::PreparedQuantizer;
 
 use crate::{
     image::{contracts::IndexedImage, ImageBuf, PaletteIndex8},
     prod::{
-        color::packed::{Converter, OrdinarySpace},
         contract::{
-            error::{DitheretteError, ErrorCode},
+            error::DitheretteError,
             request::{QuantizeRequest, Request},
         },
-        palette::{PalettePixel, PreparedPalette},
+        palette::{allocation::Budget, PreparationError},
     },
 };
-use matcher::PaletteMatcher;
+use std::mem::size_of;
 
-/// Validates the complete request before palette preparation or output allocation.
-pub fn quantize(request: QuantizeRequest<'_>) -> Result<IndexedImage, DitheretteError> {
-    let layout = Request::Quantize(request).validate()?;
-    let space = OrdinarySpace::from_matching(request.matching).ok_or_else(|| {
-        DitheretteError::new(
-            ErrorCode::UnsupportedOperation,
-            "matching",
-            "This native slice supports ordinary Euclidean matching only.",
-        )
-    })?;
-    let palette = PreparedPalette::new(request.palette, request.alpha);
-    let converter = Converter::new(space);
-    let matcher = PaletteMatcher::new(&palette, &converter);
-    let mut indices = ImageBuf::<PaletteIndex8>::new_packed(layout.output)
-        .expect("validated RGBA8 dimensions also fit packed palette indices");
-    for (source, output) in request.source.data.chunks_exact(4).zip(indices.data_mut()) {
-        let rgba = [source[0], source[1], source[2], source[3]];
-        *output = match palette.prepare_pixel(rgba) {
-            PalettePixel::Index(index) => index,
-            PalettePixel::Color(rgb) => matcher.nearest(converter.coordinates(rgb)).index,
-        };
-    }
-    Ok(palette.into_indexed(indices))
+/// Request diagnostics retain the existing typed contract; reservation failures allocate no text.
+#[derive(Debug)]
+pub enum QuantizeError {
+    Request(DitheretteError),
+    Preparation(PreparationError),
+}
+
+/// Validates a typed native request, then prepares and allocates within the supplied budget.
+/// The budget counts owned records, tables, palette/warnings/matcher capacity and indices.
+/// Source storage is borrowed. The future public adapter separately counts its owned boundary copy.
+/// Public integration may use PreparedQuantizer directly after allocation-free raw validation.
+pub fn quantize(
+    request: QuantizeRequest<'_>,
+    memory_limit: u64,
+) -> Result<IndexedImage, QuantizeError> {
+    let layout = Request::Quantize(request)
+        .validate()
+        .map_err(QuantizeError::Request)?;
+    let count = layout.output.pixel_count().expect("validated dimensions");
+    PreparedQuantizer::required_capacity_bytes(request.palette, request.alpha, request.matching)
+        .map_err(QuantizeError::Preparation)?;
+    let output_bytes = count as u64 + size_of::<ImageBuf<PaletteIndex8>>() as u64;
+    let preparation_limit = memory_limit
+        .checked_sub(output_bytes)
+        .ok_or(QuantizeError::Preparation(PreparationError::memory()))?;
+    let prepared = PreparedQuantizer::try_new(
+        request.palette,
+        request.alpha,
+        request.matching,
+        preparation_limit,
+    )
+    .map_err(QuantizeError::Preparation)?;
+    let mut budget = Budget::new(
+        memory_limit,
+        prepared.capacity_bytes() + size_of::<ImageBuf<PaletteIndex8>>() as u64,
+    )
+    .map_err(QuantizeError::Preparation)?;
+    let mut indices = Vec::new();
+    budget
+        .reserve(&mut indices, count)
+        .map_err(QuantizeError::Preparation)?;
+    indices.resize(count, 0);
+    prepared.quantize_into(layout.source, &mut indices);
+    let indices = ImageBuf::<PaletteIndex8>::from_vec_packed(indices, layout.output)
+        .expect("validated dimensions and reserved index length");
+    Ok(prepared.into_indexed(indices))
 }

@@ -140,6 +140,7 @@ fn all_ordinary_modes_match_indices_palette_alpha_and_warning_bytes() {
             color([255; 3]),
             PaletteEntry::Transparent {},
         ],
+        oversized[..256].to_vec(),
         oversized,
     ];
     for (matching, ..) in MODES {
@@ -154,7 +155,10 @@ fn all_ordinary_modes_match_indices_palette_alpha_and_warning_bytes() {
                 AlphaPolicy::Premultiplied {},
             ] {
                 let request = request(&source, palette, matching, alpha);
-                assert_eq!(prod::quantize::quantize(request).unwrap(), oracle(request));
+                assert_eq!(
+                    prod::quantize::quantize(request, u64::MAX).unwrap(),
+                    oracle(request)
+                );
             }
         }
     }
@@ -169,14 +173,17 @@ fn exact_ties_and_transparent_threshold_keep_original_indices() {
         PaletteEntry::Color { rgb: [2, 0, 0] },
     ];
     let source = [1, 0, 0, 255, 2, 0, 0, 128, 2, 0, 0, 127];
-    let result = prod::quantize::quantize(request(
-        &source,
-        &palette,
-        MatchPolicy::SrgbEuclidean,
-        AlphaPolicy::Preserve {
-            threshold: 127.9999999,
-        },
-    ))
+    let result = prod::quantize::quantize(
+        request(
+            &source,
+            &palette,
+            MatchPolicy::SrgbEuclidean,
+            AlphaPolicy::Preserve {
+                threshold: 127.9999999,
+            },
+        ),
+        u64::MAX,
+    )
     .unwrap();
     assert_eq!(result.indices.data(), [1, 2, 0]);
     assert_eq!(result.palette.transparent_index, Some(0));
@@ -192,7 +199,11 @@ fn unsupported_matching_is_not_silently_euclidean() {
         MatchPolicy::OklchHueArc,
         AlphaPolicy::Preserve { threshold: 0.0 },
     );
-    let failure = prod::quantize::quantize(request).unwrap_err();
+    let prod::quantize::QuantizeError::Preparation(failure) =
+        prod::quantize::quantize(request, u64::MAX).unwrap_err()
+    else {
+        panic!("unsupported matching must be a preparation failure");
+    };
     assert_eq!(
         failure.code,
         prod::contract::error::ErrorCode::UnsupportedOperation

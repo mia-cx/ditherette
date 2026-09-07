@@ -1,5 +1,6 @@
 //! Frozen direct-scan matching, wired to the landed production converter.
 
+use crate::prod::palette::{allocation::Budget, PreparationError};
 use crate::prod::{color::packed::Converter, palette::PreparedPalette};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -15,17 +16,18 @@ pub struct PaletteMatcher {
 
 impl PaletteMatcher {
     /// Converts visible entries without reordering or removing duplicates.
-    pub fn new(palette: &PreparedPalette, converter: &Converter) -> Self {
-        Self {
-            colors: palette
-                .visible
-                .iter()
-                .map(|entry| PaletteColor {
-                    index: entry.index,
-                    coordinates: converter.coordinates(entry.rgb),
-                })
-                .collect(),
-        }
+    pub(crate) fn prepare(
+        palette: &PreparedPalette,
+        converter: &Converter,
+        budget: &mut Budget,
+    ) -> Result<Self, PreparationError> {
+        let mut colors = Vec::new();
+        budget.reserve(&mut colors, palette.visible.len())?;
+        colors.extend(palette.visible.iter().map(|entry| PaletteColor {
+            index: entry.index,
+            coordinates: converter.coordinates(entry.rgb),
+        }));
+        Ok(Self { colors })
     }
 
     /// Exact score ties keep the first entry. Transparent-only pixels bypass this scan.
