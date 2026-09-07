@@ -3,7 +3,7 @@
 use crate::{
     image::{ImageBuf, ImageLayoutError, ImageView, ImageViewMut, Rgba8},
     spec::{
-        color::{cielab, cielch, linear, oklab, oklch, reconstruct, srgb, ycbcr},
+        color::{reconstruct, rgb8_to_coordinates},
         contract::request::{BayerSize, Field, PerturbPolicy, Placement, WorkingSpace},
         tiling::contract::RowBand,
     },
@@ -121,17 +121,5 @@ fn field_at(field: Field, x: u32, y: u32, index: u64) -> f32 {
         }
         Field::Random { seed } => random_noise::random_noise_at(seed, index),
         Field::BlueNoise {} => blue_noise::blue_noise_at(x, y),
-    }
-}
-
-fn rgb8_to_coordinates(rgb: [u8; 3], space: WorkingSpace) -> [f32; 3] {
-    match space {
-        WorkingSpace::Srgb => srgb::rgb8_to_srgb(rgb),
-        WorkingSpace::LinearRgb => linear::rgb8_to_linear_rgb(rgb),
-        WorkingSpace::Oklab => oklab::rgb8_to_oklab(rgb),
-        WorkingSpace::Oklch => oklch::rgb8_to_oklch(rgb),
-        WorkingSpace::Cielab => cielab::rgb8_to_cielab(rgb),
-        WorkingSpace::Cielch => cielch::rgb8_to_cielch(rgb),
-        WorkingSpace::Ycbcr => ycbcr::rgb8_to_ycbcr(rgb),
     }
 }
