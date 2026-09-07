@@ -188,9 +188,9 @@ S21 restoration is `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508`; S22 restoration i
 The coordinator verifies both source trees byte-for-byte and joins them into `fix/v1-restore-landed`.
 Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
 S21 targets `fix/v1-restore-landed`. S22 stacks on S21 to reuse its validated public integration.
-S21 is open in [PR #110](https://github.com/mia-cx/ditherette/pull/110) at `d7c207b1b0ff7d554734edb89bd8d3841a3fc2f8`.
-S22 is open in [PR #111](https://github.com/mia-cx/ditherette/pull/111) at `a66b63554c0d2e946cfb1e18eeabe6e025678ba6`.
-These heads correct private ABI and capacity documentation without changing runtime bytes.
+S21 is open in [PR #110](https://github.com/mia-cx/ditherette/pull/110) at `2d5412664ccd27b5790db7493f375e3490e42c90`.
+S22 is open in [PR #111](https://github.com/mia-cx/ditherette/pull/111) at `9eecc670d9ff587ff10f8d2f3a8b86bab600c988`.
+These heads correct private ABI documentation and public benchmark stability checks without changing processing bytes.
 Both are non-draft and unmerged, with auto-merge disabled. Neither grants release-performance readiness.
 S22's merge-preserving rebase retains original checkpoints and measured runtime bytes.
 Its final branch passes 296 native, 16 interface, seven private ABI, both builds, and three installed-package engines.
@@ -208,9 +208,9 @@ The interrupted nearest diagnostic in `impl/v1-s20-nearest-diagnostic` stays hel
 ## S23 exact trilinear
 
 [PR #112](https://github.com/mia-cx/ditherette/pull/112) is open, non-draft, and unmerged, with auto-merge disabled.
-Branch `impl/v1-s23-trilinear` targets S22 at `a66b63554c0d2e946cfb1e18eeabe6e025678ba6`.
-Delivered head `5c0dc4e19e1245593d145b725d9aa46894bf41ab` includes that parent and unchanged measured runtime bytes.
-The coordinator joins it at `9432ddde43ed9b2a43ddbe4182da4c07a34a2c21`.
+Branch `impl/v1-s23-trilinear` targets S22 at `9eecc670d9ff587ff10f8d2f3a8b86bab600c988`.
+Delivered head `cd7a0d298755818f86d710bef9f094c815d127de` includes that parent and unchanged measured processing bytes.
+The coordinator includes this complete restack; benchmark snapshots remain bound to their original source revisions.
 
 Literal missing-implementation baseline `fba85a94` precedes prepared baseline `0be73eb6` and shared-mip candidate `07d528a6`.
 The candidate computes common storage-rounded mip levels once, preserving each arithmetic and RGBA8 reconstruction step.
@@ -224,11 +224,13 @@ The trusted freeze guard and formatting pass. Earlier candidate validation also 
 ## Current benchmark verification correction
 
 PR110 review found that browser timing retained only endpoint outputs, missing transient A/B/A changes.
-`fix/v1-benchmark-stability` owns the correction before S24 measurements.
-The planned collector verifies every durable result outside operation timers, with a bounded retained throughput batch.
+Correction `debaa849f9041657ccc9b6942f561213d25d5dbc` is now included in PR110, PR111, and PR112.
+It passes 22 JavaScript and 15 Rust checks; all three restacked trees pass their 22 JavaScript fixtures.
+The collector verifies every durable result outside operation timers, with a bounded retained throughput batch.
 It fails closed if the calibrated batch cannot fit the retention bound; it never silently lowers the iteration count.
 Retention changes GC pressure, so new measurements need fresh artifact snapshots for both roles.
 Historical evidence remains tied to its original collector and does not certify every intermediate output.
+S24 adds exact indexed-result observation before preparing replacement benchmark snapshots.
 
 ## S01 inherited port anchor
 
