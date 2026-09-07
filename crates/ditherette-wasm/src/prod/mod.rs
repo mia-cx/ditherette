@@ -5,5 +5,6 @@
 
 pub mod color;
 pub mod contract;
+pub mod processor;
 pub mod resize;
 pub mod tiling;
