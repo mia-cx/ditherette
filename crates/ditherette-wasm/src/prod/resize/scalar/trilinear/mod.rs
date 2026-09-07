@@ -145,3 +145,5 @@ fn half_rounded_up(value: u32) -> u32 {
 }
 
 mod exact;
+mod prepared;
+pub use prepared::PreparedTrilinear;

@@ -15,8 +15,21 @@ use crate::{
 /// Resizes `source` into `output` with a triangle filter.
 pub fn resize_bilinear_into<F>(
     source: ImageView<'_, F>,
+    output: ImageViewMut<'_, F>,
+    anchor: ResizeAnchor,
+) where
+    F: ImageFormat,
+    F::Storage: ResizeSample,
+{
+    let mut accumulated = vec![0.0; F::CHANNEL_COUNT];
+    resize_bilinear_with_scratch_into(source, output, anchor, &mut accumulated);
+}
+
+pub fn resize_bilinear_with_scratch_into<F>(
+    source: ImageView<'_, F>,
     mut output: ImageViewMut<'_, F>,
     anchor: ResizeAnchor,
+    accumulated: &mut [f64],
 ) where
     F: ImageFormat,
     F::Storage: ResizeSample,
@@ -49,7 +62,7 @@ pub fn resize_bilinear_into<F>(
             );
             let output_start = output_x as usize * F::CHANNEL_COUNT;
             let output_pixel = &mut output_row[output_start..output_start + F::CHANNEL_COUNT];
-            let mut accumulated = vec![0.0; F::CHANNEL_COUNT];
+            accumulated.fill(0.0);
             let mut total_weight = 0.0;
 
             for source_y in support_range(source_y_position, y_scale) {

@@ -11,8 +11,20 @@ use crate::{
 };
 
 /// Resizes `source` into `output` using exact source-area coverage averaging.
-pub fn resize_area_into<F>(source: ImageView<'_, F>, mut output: ImageViewMut<'_, F>)
+pub fn resize_area_into<F>(source: ImageView<'_, F>, output: ImageViewMut<'_, F>)
 where
+    F: ImageFormat,
+    F::Storage: ResizeSample,
+{
+    let mut accumulated = vec![0.0; F::CHANNEL_COUNT];
+    resize_area_with_scratch_into(source, output, &mut accumulated);
+}
+
+pub fn resize_area_with_scratch_into<F>(
+    source: ImageView<'_, F>,
+    mut output: ImageViewMut<'_, F>,
+    accumulated: &mut [f64],
+) where
     F: ImageFormat,
     F::Storage: ResizeSample,
 {
@@ -34,7 +46,7 @@ where
             let source_x_end = f64::from(output_x + 1) * x_scale;
             let output_start = output_x as usize * F::CHANNEL_COUNT;
             let output_pixel = &mut output_row[output_start..output_start + F::CHANNEL_COUNT];
-            let mut accumulated = vec![0.0; F::CHANNEL_COUNT];
+            accumulated.fill(0.0);
 
             for source_y in source_y_start.floor() as i64..source_y_end.ceil() as i64 {
                 let y_overlap = interval_overlap(
