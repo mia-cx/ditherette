@@ -9,6 +9,36 @@ use ditherette_wasm::{
     spec,
 };
 
+#[path = "fixtures/paired_model.rs"]
+mod model;
+
+#[test]
+fn paired_gate_rejects_a_bit_different_score_even_with_faster_fake_samples() {
+    let (mut prepared, mut trials) = model::fixture();
+    prepared.experiment.reference_state = ReferenceState::Frozen;
+    let case = &mut prepared.experiment.cases[0];
+    let metric = MetricFamily::Euclidean;
+    let operation = NativeOperation::MetricScores { metric };
+    case.identity = operation.identity(case.source, &case.rgba).unwrap();
+    case.reference_subject = metric.reference_subject().into();
+    case.accepted_subject = metric.prod_subject().into();
+    case.candidate_subject = metric.prod_subject().into();
+    case.measurement.scope = operation.scope();
+    case.native = Some(operation);
+    for trial in &mut trials {
+        trial.measurement = case.measurement.clone();
+        for record in [&mut trial.reference, &mut trial.output] {
+            record.case = case.identity.clone();
+            record.output.pixels = Pixels::Scores { values: vec![0.0] };
+        }
+        trial.reference.implementation.subject = case.reference_subject.clone();
+        trial.output.implementation.subject = metric.prod_subject().into();
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    trials[1].output.output.pixels = Pixels::Scores { values: vec![-0.0] };
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incorrect);
+}
+
 fn run(
     metric: MetricFamily,
     source: Dimensions,
