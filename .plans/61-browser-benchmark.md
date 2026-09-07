@@ -64,4 +64,8 @@ Store full trial results on the workspace filesystem because `/tmp` has only 2 G
 The first exclusive Chromium run starts after all implementation processes exit, but its transport fails at worker 62.
 Read [the retained failure evidence](61-trial-01-failure.md) before resuming measurements.
 All 62 workers are reaped; 61 complete results contain 6,100 exact samples. The comparison remains incomplete.
-Fix and verify the bulk-data transport before preparing another fresh experiment. No performance gate or optimization is accepted.
+The bulk-data transport correction joins as `b1a86c75`. Read [its bounded-memory evidence](61-ipc-memory-fix.md).
+The coordinator verifies 20 focused checks and all three browser conformance subtests, plus their parent test.
+The large untimed HTTP echo transfers both arrays under a 128 MiB Node heap limit, with maximum Playwright message 1,244 bytes and peak RSS 270,976 KiB.
+An actual renderer-crash test rejects pending transport work. Image timing and the fixed case/pair budget are unchanged.
+All implementation processes exit before rebuilding and preparing fresh trial-02 artifacts. No performance gate or optimization is accepted.
