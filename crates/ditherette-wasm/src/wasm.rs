@@ -5,6 +5,8 @@
 //! `processRgba8` exists, but staged exports are useful for lazy materialization,
 //! memoization, and browser/Wasm benchmarks.
 
+pub mod processor;
+
 use std::{hint::black_box, num::NonZeroU32};
 
 use js_sys::Function;
