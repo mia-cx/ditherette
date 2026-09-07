@@ -220,3 +220,7 @@ Current numbers are from accepted custom-bench baseline. `cur vs old` is speed-r
 | Celeste_box_art | 4x | 46853.405 µs | 26999.089 µs | -42.4% |
 
 Takeaways: current prod is faster than old at `0.9x`; near parity on large `0.95x`/`0.99x`; old remains substantially faster for upscales and `0.75x`.
+# Measurement ownership
+
+Read [exclusive execution](EXECUTION.md) before collecting timings. Prepare builds,
+drain implementation work, then run prebuilt executables under the shared lease.
