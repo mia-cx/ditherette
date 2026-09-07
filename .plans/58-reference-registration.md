@@ -7,7 +7,7 @@ Branch: `impl/v1-s17-bench`. Main includes these commits in the aggregate S17 PR
 
 - [x] Extend the existing registry with typed conformance entries and seven f32 color references.
 - [x] Join the completed pipeline checkpoint and register all five callable public methods.
-- [ ] Verify mode coverage, composition metadata, identity, and missing-role behavior without timings.
+- [x] Verify mode coverage, composition metadata, identity, and missing-role behavior without timings.
 
 Keep concrete request types outside spec's dependencies. S05 owns output records
 and comparisons. Legacy resize timings skip conformance-only entries. Settings
@@ -30,3 +30,10 @@ including all nine anchors, both support policies, all matching/alpha tags,
 all field/space combinations, diffusion feedback/scan modes, and Yliluoma sizes.
 Tiny independent Bayer bytes verify the RGBA8 intermediate and exact indices;
 all composition comparisons include complete palette/transparency/warnings.
+
+Final validation passes five registry/conformance fixtures, eight S05 verifier
+fixtures, three S05 adapter fixtures, and three binary unit tests. Native binaries
+and Criterion compile. Wasm32 with `bench-subjects` compiles. All three affected
+crates pass formatting; diff checks pass. No benchmark or browser measurement ran.
+`REFERENCE-SUBJECTS.md` documents all entries, settings identity, exact f32 inverse
+selection, and the S18 freeze handoff. Main owns later integration revalidation.
