@@ -14,7 +14,7 @@ The immediate PR base is `impl/v1-s19-integration`. Preserve all frozen and lite
 - [x] Join the independent deliveries and validate real browser conformance plus existing native protocol compatibility.
 - [x] Declare a bounded initial case/pair budget, prepare clean artifacts, drain implementation, and collect exclusive fresh browser trials. Trial 02 completes all three engines; trial 01 remains retained separately.
 - [x] Record raw samples, complete identities, exact output checks, performance outcomes, and cleanup evidence; preserve failures without treating them as accepted optimizations.
-- [ ] Rebase with merge/checkpoint preservation, validate affected checks, and open an unmerged PR with current progress and dependencies.
+- [x] Rebase with merge/checkpoint preservation, validate affected checks, and open an unmerged PR with current progress and dependencies.
 
 ## Ownership
 
@@ -76,3 +76,6 @@ A merge-preserving rebase onto the current S19 parent preserves the exact measur
 Post-rebase validation passes 45 top-level Rust benchmark tests and 20 focused JavaScript tests.
 The independent evidence audit verifies 216 exact outputs, 21,481 retained samples, and 2,465 snapshot files.
 All report medians and gates recompute. The 52 WebKit zero samples remain visible and inconclusive.
+Open, non-draft [PR #107](https://github.com/mia-cx/ditherette/pull/107) stacks on S19 without merging.
+Its creation head is `b97e0e5b20b198692fe37944f89ccdfc51734426`; the measured implementation remains `e84a55ed`.
+S20 tooling is ready. Known performance regressions remain tracked in S41, with the focused diagnosis still in progress.

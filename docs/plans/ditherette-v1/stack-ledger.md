@@ -145,6 +145,11 @@ The [initial trial budget](../../../.plans/61-initial-trial-budget.md) fixes the
 The [measurement report](../../../.plans/61-public-measurement.md) records actual medians, runtime identities, retained failures, and S41 obligations.
 Both package roles build from clean `e84a55eddb0014f97b64446408bfb5f656deb5d4`; all three engine coordinators complete with regression exit 2.
 No performance candidate is promoted. A developer-only same-kernel comparison investigates the gap from older internal Wasm measurements.
+S20 is delivered in open, non-draft [PR #107](https://github.com/mia-cx/ditherette/pull/107), with creation head `b97e0e5b20b198692fe37944f89ccdfc51734426`.
+Its immediate base remains `impl/v1-s19-integration` at `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+All 45 Rust benchmark tests and 20 focused JavaScript tests pass after the unchanged rebase.
+The independent audit verifies every sample-derived gate, 216 exact outputs, and complete snapshot identities.
+Ready describes the tooling PR, not release performance. S41 retains the confirmed regressions.
 
 ## S01 inherited port anchor
 
