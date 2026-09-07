@@ -16,6 +16,38 @@ const sorted = (files) =>
 	files.sort((a, b) => Buffer.compare(Buffer.from(a.path), Buffer.from(b.path)));
 const command = (program, args, cwd = root) =>
 	execFileSync(program, args, { cwd, encoding: 'utf8', maxBuffer: 16 * 1024 ** 2 }).trim();
+const runBuildCommand = (program, args, cwd) =>
+	execFileSync(program, args, { cwd, stdio: 'inherit' });
+
+/** Recompile this crate for each role without discarding dependency or other-profile caches. */
+export async function buildFreshPackage(directory, run = runBuildCommand) {
+	const crate = path.join(directory, 'crates/ditherette-wasm');
+	// Shared targets can consider another checkout's crate outputs fresh based on source mtimes.
+	// These paths and channels match the package-owned scripts/build.mjs variant selection.
+	for (const [variant, config] of [
+		['scalar', path.join(directory, 'rust-toolchain.toml')],
+		['threads', path.join(crate, 'rust-toolchain-threads.toml')]
+	]) {
+		const channel = (await readFile(config, 'utf8')).match(/^channel = "([^"]+)"$/m)?.[1];
+		if (!channel) throw new Error(`Missing compiler channel in ${config}`);
+		run(
+			'cargo',
+			[
+				`+${channel}`,
+				'clean',
+				'--package',
+				'ditherette-wasm',
+				'--release',
+				'--target',
+				'wasm32-unknown-unknown',
+				'--target-dir',
+				path.join(crate, 'target', variant)
+			],
+			crate
+		);
+	}
+	run('pnpm', ['--filter', 'ditherette', 'build'], directory);
+}
 
 /** Reject source changes before a build can create apparently revision-bound artifacts. */
 export function cleanRevision(directory) {
@@ -175,7 +207,7 @@ export async function preparePublicBenchmark(destination) {
 	const packageDirectory = path.join(root, 'packages/ditherette');
 	// TypeScript does not remove obsolete emitted modules. This is generated package output only.
 	await rm(path.join(packageDirectory, 'dist'), { recursive: true, force: true });
-	run('pnpm', ['--filter', 'ditherette', 'build']);
+	await buildFreshPackage(root, run);
 	const tarball = path.join(destination, 'ditherette.tgz');
 	run('pnpm', ['pack', '--out', tarball], packageDirectory);
 	const consumer = path.join(destination, 'consumer');
