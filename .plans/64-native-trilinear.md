@@ -13,21 +13,23 @@ Its five-file manifest remains historical copy evidence after the bounded prepar
 
 ## Scope
 
-Production trilinear is missing. Its exact f64 area and bilinear dependencies stay private to its module.
+The literal baseline adds the missing production trilinear. Its exact f64 area and bilinear dependencies stay private to its module.
 Landed fractional resamplers use f32 accumulation and can change rounded mip bytes; they cannot replace these exact steps.
 Reuse the landed bilinear anchor types and shared allocation helper. Existing area/bilinear implementations remain untouched.
 The public continuation joins validated S22 commit `ebbc1c5a32a77f68c2e59595e84a7b227c25c7ee`.
 Benchmark registration and measurements remain coordinator-owned.
 No benchmark, cache, or kernel optimization runs in this task.
 
-Bounded preparation reserves complete lower/upper chains, rounded level outputs, and channel scratch before reading source pixels.
+Prepared baseline `830e6739` reserves separate lower/upper chains, rounded level outputs, and channel scratch before reading source pixels.
 All reserved buffers coexist until preparation is dropped. The budget reports that lifetime explicitly, without assuming future cache reuse.
+Selected implementation `07d528a6` shares one storage-rounded chain between adjacent levels.
+The [measurement record](64-measurement.md) documents its exact output and measured benefit over the prepared baseline.
 
 ## Native integration
 
 `PreparedTrilinear<F>` exposes `required_bytes(source, output)`, `try_new(source, output, anchor, limit)`, `capacity_bytes()`, and `execute(source, output)`.
 Preparation uses dimensions only. Execution validates dimensions before writes and performs no allocations.
-Every execution refills both source chains, including logical rows from strided views.
+Every execution refills the shared chain, including logical rows from strided views. The prepared baseline refills two separate chains.
 
 Required bytes include the prepared record, nested chain metadata, every mip buffer, rounded outputs, and channel scratch.
 Actual capacity uses the allocator-reported vector capacities. Caller-owned source and destination buffers are excluded.
@@ -87,3 +89,22 @@ The corrected independent witness passes against the frozen native oracle and al
 No scalar wrapper signature changed. `privateResize(input, sw, sh, ow, oh, algorithm, anchor, support, sink)` still returns a numeric status.
 Trilinear uses algorithm `6`, anchors `0..8`, and support `0`. Public requests omit `support` entirely.
 Benchmark registration, measurements, and PR filing remain coordinator-owned. No benchmark ran.
+
+## Selected candidate and final PR checks
+
+The completed [paired trial](64-measurement.md) selects exact shared-chain implementation `07d528a6`.
+Join `b649810e400a7ba4d898be9a7c9ae4198512a777` includes accepted registration `2c9bec90` and S22 PR head `2c2c1994`.
+The required `--rebase-merges` onto `origin/impl/v1-s22-convolution` preserves the exact tree and every literal/prepared checkpoint.
+Runtime code remains byte-identical to measured candidate source `180ca47a`; only plan records and package README wording change afterward.
+
+Final checks on the rebased S23 branch pass:
+
+- Six native trilinear tests, eleven Processor tests, and one native adapter test, all with zero measured tests.
+- Both Wasm package builds, eighteen interface tests, and eight private ABI tests.
+- Installed-tarball Chromium, Firefox, and WebKit, with four reported tests including the parent.
+- Nine JS protocol fixtures, Rust formatting, diff checks, and the separate trusted S18 freeze guard.
+
+Read-only artifact verification confirms all six executable/tarball hashes, four report gates, 80 worker results, and 1,344 samples.
+All 40 accepted/candidate production pairs are exact. The recorded medians match the retained reports.
+Frozen reference, shared image storage, guard policy, and landed area/bilinear/common helpers remain unchanged.
+No measurement reruns during assembly. The unmerged PR targets S22; the coordinator records its URL and final SHA.

@@ -42,7 +42,7 @@ These filters retain the landed f64 kernels, including separable large-image dow
 Trilinear uses `{ algorithm: 'trilinear', anchor: 'center' }` without a support setting.
 It builds area mip levels, samples them with bilinear filtering, and blends the adjacent levels selected by minification.
 Mip dimensions round upward when halved. Every intermediate retains RGBA8 rounding, including hidden RGB and alpha.
-The full independent mip chains and temporary outputs reserve capacity before source import and release it after each call.
+The shared mip chain and temporary outputs reserve capacity before source import and release it after each call.
 Plans and scratch count toward the memory limit. Each call releases this transient storage; there is no package cache.
 Requests require version `1`, positive integer dimensions, and canonical object/string tags. Unknown fields are rejected.
 Source sides are at most 32,768 pixels; output sides are at most 16,384. Both images allow at most 67,108,864 pixels.
