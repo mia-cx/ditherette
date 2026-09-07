@@ -5,6 +5,7 @@ edition = "2021"
 description = "Custom image-processing benchmark harness for Ditherette."
 license = "UNLICENSED"
 publish = false
+default-run = "ditherette-bench"
 
 [dependencies]
 ditherette-bench-api = { path = "../ditherette-bench-api" }
