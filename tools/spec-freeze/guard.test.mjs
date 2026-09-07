@@ -128,6 +128,7 @@ test('syntax rejects both directions, aliases, shared/adapter bridges, and sourc
 			['image', 'pub use crate::spec::pipeline as shared;'],
 			['prod', '#[cfg(any())] pub use crate::wasm as bridge;'],
 			['prod', '#[path = "../spec/color/common.rs"] mod stolen;'],
+			['prod', '#[r#path = "../spec/color/common.rs"] mod stolen;'],
 			['prod', 'std::include!("../spec/color/common.rs");'],
 			['prod', 'use std::include as load; load!("../spec/color/common.rs");'],
 			['prod', 'macro_rules! local { () => { #[path = "../spec/color/common.rs"] mod stolen; } }'],
@@ -199,6 +200,141 @@ test('real profile changes and crate-root module redirection cannot hide behind 
 			'#[macro_export] macro_rules! vec { () => {} }\n',
 			() => assert.throws(() => verifySyntax(root, binary))
 		);
+	}));
+
+test('foreign symbol bridges are rejected in semantic roles, not the Wasm adapter boundary', () =>
+	fixture((root) => {
+		const prod = `${CRATE}/src/prod/mod.rs`;
+		const adapter = `${CRATE}/src/wasm.rs`;
+		const bridge =
+			'extern "Rust" { fn oracle_bridge() -> f32; }\npub fn bridged() -> f32 { unsafe { oracle_bridge() } }';
+		mutation(
+			root,
+			adapter,
+			`${readFileSync(join(root, adapter))}\n#[no_mangle] pub extern "Rust" fn oracle_bridge() -> f32 { crate::spec::color::srgb8_to_linear(0) }\n`,
+			() => {
+				mutation(root, prod, `${readFileSync(join(root, prod))}\n${bridge}\n`, () => {
+					// Type-checking succeeds without resolving the adapter-owned symbol.
+					isolatedCheck(root, 'prod', 'x86_64-unknown-linux-gnu');
+					assert.throws(
+						() => verifySyntax(root, binary),
+						(error) => error.stderr.includes('semantic foreign blocks')
+					);
+				});
+			}
+		);
+		for (const role of ['spec', 'prod', 'image']) {
+			for (const addition of [
+				bridge,
+				'#[no_mangle] pub fn bridge() {}',
+				'#[unsafe(export_name = "oracle_bridge")] pub fn bridge() {}',
+				'#[link_name = "oracle_bridge"] pub fn bridge() {}',
+				'macro_rules! foreign { () => { extern "Rust" { fn oracle_bridge(); } }; }'
+			]) {
+				const path = `${CRATE}/src/${role}/mod.rs`;
+				mutation(root, path, `${readFileSync(join(root, path))}\n${addition}\n`, () =>
+					assert.throws(() => verifySyntax(root, binary))
+				);
+			}
+		}
+		mutation(
+			root,
+			adapter,
+			`${readFileSync(join(root, adapter))}\n#[wasm_bindgen] extern "C" { #[wasm_bindgen(catch, js_name = now)] fn host_now() -> Result<f64, JsValue>; }\n`,
+			() => verifySyntax(root, binary)
+		);
+	}));
+
+test('root-use procedural attributes cannot inject code omitted from isolated roots', () =>
+	fixture((root) => {
+		const path = `${CRATE}/src/lib.rs`;
+		const original = readFileSync(join(root, path), 'utf8');
+		for (const attribute of [
+			'#[new_proc_macro::inject]',
+			'#[cfg(any())]',
+			'#[doc = include_str!("arbitrary")]'
+		]) {
+			mutation(
+				root,
+				path,
+				original.replace('pub use wasm::{', `${attribute}\npub use wasm::{`),
+				() =>
+					assert.throws(
+						() => verifySyntax(root, binary),
+						(error) => /root use (attributes|docs)/.test(error.stderr)
+					)
+			);
+		}
+		mutation(
+			root,
+			path,
+			original.replace('pub use wasm::{', '#[doc = "Explicit adapter exports."]\npub use wasm::{'),
+			() => verifySyntax(root, binary)
+		);
+	}));
+
+test('adapter procedural expansion, symbol interposition, and Wasm oracle routes require review', () =>
+	fixture((root) => {
+		const path = `${CRATE}/src/wasm.rs`;
+		for (const addition of [
+			'#[new_proc_macro::inject] fn injected() {}',
+			'#[derive(new_proc_macro::Inject)] struct Injected;',
+			'#[no_mangle] pub extern "C" fn powf(_: f32, _: f32) -> f32 { 0.0 }',
+			'#[unsafe(export_name = "powf")] pub extern "C" fn changed(_: f32, _: f32) -> f32 { 0.0 }',
+			'#[unsafe(r#no_mangle)] pub extern "C" fn powf(_: f32, _: f32) -> f32 { 0.0 }',
+			'#[r#export_name = "powf"] pub extern "C" fn changed(_: f32, _: f32) -> f32 { 0.0 }',
+			'#[r#link_name = "powf"] pub fn changed() {}',
+			'use crate::spec as oracle;',
+			'use crate::bench_subjects as bridge;'
+		]) {
+			mutation(root, path, `${readFileSync(join(root, path))}\n${addition}\n`, () =>
+				assert.throws(() => verifySyntax(root, binary))
+			);
+		}
+		mkdirSync(join(root, CRATE, 'src/wasm'), { recursive: true });
+		mutation(root, `${CRATE}/src/wasm/nested.rs`, 'use crate::spec as oracle;\n', () =>
+			assert.throws(() => verifySyntax(root, binary))
+		);
+	}));
+
+test('a new procedural macro dependency cannot hide behind an audited attribute alias', () =>
+	fixture((root) => {
+		const crate = join(root, 'crates/freeze-inject');
+		mkdirSync(join(crate, 'src'), { recursive: true });
+		writeFileSync(
+			join(crate, 'Cargo.toml'),
+			'[package]\nname = "freeze-inject"\nversion = "0.1.0"\nedition = "2021"\n[lib]\nproc-macro = true\n'
+		);
+		writeFileSync(
+			join(crate, 'src/lib.rs'),
+			'extern crate proc_macro;\n#[proc_macro_attribute] pub fn inject(_: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream { item }\n'
+		);
+		const path = `${CRATE}/Cargo.toml`;
+		const changed = readFileSync(join(root, path), 'utf8').replace(
+			'[dependencies]',
+			'[dependencies]\nfreeze-inject = { path = "../freeze-inject" }'
+		);
+		mutation(root, path, changed, () => {
+			for (const manifest of [path, 'crates/ditherette-bench/Cargo.toml'])
+				run(
+					'cargo',
+					[
+						'+1.97.0',
+						'metadata',
+						'--offline',
+						'--all-features',
+						'--format-version',
+						'1',
+						'--manifest-path',
+						join(root, manifest)
+					],
+					tmpdir()
+				);
+			assert.throws(
+				() => verifyDependencies(root, dependencies),
+				/Unpinned reference dependency.*freeze-inject/
+			);
+		});
 	}));
 
 test('resolved JSON feature changes fail even with unchanged frozen source', () =>

@@ -36,6 +36,9 @@ Reference code uses standard Rust, Serde derives, `serde_json`, and SHA-256 from
 being sorted. Enabling `serde_json/preserve_order` changes that identity without
 editing a reference file. Validation must compare resolved features as well as
 versions and registry checksums, including transitive dependencies.
+The record also binds every resolved procedural-macro implementation and its
+dependencies, including Wasm binding expansion. Attribute names alone do not
+identify the macro behind an imported alias.
 
 Reference validation uses Rust 1.97.0, matching the S02 package branch. The
 inherited root toolchain still says `stable`; that floating selector is not the
@@ -66,6 +69,18 @@ and escaping macro definitions (`macro_export`, `macro_use`) are forbidden.
 Local macros and ordinary optimization attributes remain available. Rust, not a
 custom resolver, handles imported aliases and helper dependencies. The real crate
 root retains its audited module set and permits explicit adapter reexports.
+Root reexports accept only their exact audited feature gates and literal doc
+strings, so procedural attributes cannot inject code outside isolated roots.
+Semantic modules cannot declare foreign blocks or symbol-linking attributes.
+Type-checking alone cannot prove where an external symbol resolves. Wasm adapter
+imports remain allowed at the boundary, including `wasm-bindgen` extern blocks.
+Explicit `no_mangle`, `export_name`, `link_name`, and `link` attributes are forbidden throughout source,
+including adapters, because they can interpose native arithmetic symbols.
+Raw identifier spellings receive the same checks. Wasm binding imports need none
+of these explicit symbol attributes.
+Adapters accept audited procedural attributes and derives; new expanders require
+policy review. `wasm.rs` and its submodules may call production, never spec or
+benchmark subjects. Benchmark adapters retain their two-family comparison role.
 Macros that generate attributes require policy review because they can hide a
 module path behind substituted tokens.
 

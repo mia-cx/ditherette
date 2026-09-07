@@ -112,6 +112,13 @@ export function dependencyContext(root, manifest, target) {
 			throw new Error(`Reference dependency redirected: ${name}`);
 		return dependency.pkg;
 	});
+	// Procedural macros can emit root items even from mutable adapters. Pin all
+	// resolved macro implementations and their dependencies, not only their names.
+	pending.push(
+		...metadata.packages
+			.filter((p) => p.targets.some((t) => t.kind.includes('proc-macro')) && nodes.has(p.id))
+			.map((p) => p.id)
+	);
 	const closure = new Set();
 	while (pending.length) {
 		const id = pending.pop();
@@ -203,7 +210,9 @@ export function verifySyntax(root, binary = syntaxBinary()) {
 			['spec', 'prod', 'image'].some((role) => file.startsWith(`${CRATE}/src/${role}/`))
 		)
 			continue;
-		args.push('adapter', join(root, file));
+		const role =
+			file === `${CRATE}/src/wasm.rs` || file.startsWith(`${CRATE}/src/wasm/`) ? 'wasm' : 'adapter';
+		args.push(role, join(root, file));
 	}
 	run(binary, args, tmpdir());
 }

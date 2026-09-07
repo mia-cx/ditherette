@@ -6,7 +6,19 @@ use syn::{visit::Visit, Attribute, Item, UseTree};
 
 struct Check<'a> {
     forbidden: &'a [&'a str],
+    semantic: bool,
+    adapter: bool,
     errors: Vec<String>,
+}
+
+fn contains_ident(tokens: proc_tokens::TokenStream, names: &[&str]) -> bool {
+    tokens.into_iter().any(|token| match token {
+        proc_tokens::TokenTree::Group(group) => contains_ident(group.stream(), names),
+        proc_tokens::TokenTree::Ident(ident) => {
+            names.contains(&ident.to_string().trim_start_matches("r#"))
+        }
+        _ => false,
+    })
 }
 
 impl<'ast> Visit<'ast> for Check<'_> {
@@ -33,18 +45,112 @@ impl<'ast> Visit<'ast> for Check<'_> {
     }
 
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
-        let name = attr.path().to_token_stream().to_string();
+        let name = attr.path().to_token_stream().to_string().replace("r#", "");
         // Other attributes/derives remain available. Only source redirection and
         // macros escaping a semantic module need this additional restriction.
         if ["path", "cfg_attr", "macro_use", "macro_export"].contains(&name.as_str()) {
             self.errors
                 .push(format!("source-injection attribute: {name}"));
         }
+        if contains_ident(
+            attr.meta.to_token_stream(),
+            &["no_mangle", "export_name", "link_name", "link"],
+        ) {
+            self.errors
+                .push("explicit exported symbols can interpose frozen arithmetic".into());
+        }
+        if self.adapter {
+            // Keep ordinary Rust optimization attributes. New procedural
+            // expansion mechanisms need policy review, not silent root injection.
+            if ![
+                "doc",
+                "cfg",
+                "derive",
+                "serde",
+                "wasm_bindgen",
+                "wasm_bindgen :: prelude :: wasm_bindgen",
+                "wasm_bindgen :: wasm_bindgen",
+                "default",
+                "inline",
+                "cold",
+                "repr",
+                "non_exhaustive",
+                "must_use",
+                "allow",
+                "warn",
+                "deny",
+                "forbid",
+                "expect",
+                "deprecated",
+                "track_caller",
+                "target_feature",
+                "test",
+                "ignore",
+                "should_panic",
+                "unsafe",
+            ]
+            .contains(&name.as_str())
+            {
+                self.errors.push(format!(
+                    "adapter procedural attribute requires policy review: {name}"
+                ));
+            }
+            if name == "derive" {
+                match attr.parse_args_with(
+                    syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+                ) {
+                    Ok(derives) => {
+                        for derive in derives {
+                            let derive = derive.to_token_stream().to_string().replace("r#", "");
+                            if ![
+                                "Debug",
+                                "Clone",
+                                "Copy",
+                                "PartialEq",
+                                "Eq",
+                                "PartialOrd",
+                                "Ord",
+                                "Hash",
+                                "Default",
+                                "Serialize",
+                                "Deserialize",
+                                "serde :: Serialize",
+                                "serde :: Deserialize",
+                            ]
+                            .contains(&derive.as_str())
+                            {
+                                self.errors.push(format!(
+                                    "adapter derive requires policy review: {derive}"
+                                ));
+                            }
+                        }
+                    }
+                    Err(error) => self.errors.push(error.to_string()),
+                }
+            }
+        }
+        if self.semantic
+            && contains_ident(
+                attr.meta.to_token_stream(),
+                &["no_mangle", "export_name", "link_name", "link"],
+            )
+        {
+            self.errors
+                .push("semantic symbol-linking attributes are forbidden".into());
+        }
         syn::visit::visit_attribute(self, attr);
     }
 
+    fn visit_item_foreign_mod(&mut self, item: &'ast syn::ItemForeignMod) {
+        if self.semantic {
+            self.errors
+                .push("semantic foreign blocks bypass dependency isolation".into());
+        }
+        syn::visit::visit_item_foreign_mod(self, item);
+    }
+
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
-        let name = mac.path.to_token_stream().to_string();
+        let name = mac.path.to_token_stream().to_string().replace("r#", "");
         let injection = [
             "include",
             "include_str",
@@ -60,7 +166,7 @@ impl<'ast> Visit<'ast> for Check<'_> {
             .path
             .segments
             .iter()
-            .any(|s| injection.contains(&s.ident.to_string().as_str()))
+            .any(|s| injection.contains(&s.ident.to_string().trim_start_matches("r#")))
         {
             self.errors.push(format!("source-injection macro: {name}"));
         }
@@ -106,6 +212,15 @@ impl<'ast> Visit<'ast> for Check<'_> {
             .collect();
         let forbidden = [self.forbidden, &token_injection].concat();
         inspect(mac.tokens.clone(), &forbidden, &mut self.errors);
+        if self.semantic
+            && contains_ident(
+                mac.tokens.clone(),
+                &["extern", "no_mangle", "export_name", "link_name", "link"],
+            )
+        {
+            self.errors
+                .push("semantic macro cannot generate foreign symbols".into());
+        }
     }
 }
 
@@ -141,6 +256,25 @@ fn root(file: &syn::File) -> Result<(), String> {
                     .contains(&path.ident.to_string().as_str())
                 {
                     return Err("root semantic aliases/reexports are forbidden".into());
+                }
+                let mut attributes = Vec::new();
+                for attr in &import.attrs {
+                    if attr.path().is_ident("doc") {
+                        if !matches!(&attr.meta, syn::Meta::NameValue(value) if matches!(&value.value, syn::Expr::Lit(literal) if matches!(literal.lit, syn::Lit::Str(_))))
+                        {
+                            return Err("root use docs must be literal strings".into());
+                        }
+                    } else {
+                        attributes.push(attr.to_token_stream().to_string());
+                    }
+                }
+                let expected: Vec<String> = match path.ident.to_string().as_str() {
+                    "bench_subjects" => vec!["# [cfg (feature = \"bench-subjects\")]".into()],
+                    "wasm_bindgen_rayon" => vec!["# [cfg (feature = \"threads\")]".into()],
+                    _ => vec![],
+                };
+                if attributes != expected {
+                    return Err("root use attributes must retain audited cfg/doc forms".into());
                 }
                 // Prevent aliasing one of these namespaces to image/spec/serde/etc.
                 fn no_alias(tree: &UseTree) -> bool {
@@ -236,11 +370,14 @@ fn check(path: &Path, role: &str) -> Result<(), String> {
         "spec" => &["prod", "wasm", "bench_subjects"],
         "prod" => &["spec", "wasm", "bench_subjects"],
         "image" => &["spec", "prod", "wasm", "bench_subjects"],
+        "wasm" => &["spec", "bench_subjects"],
         "root" | "adapter" => &[],
         _ => return Err("unknown source role".into()),
     };
     let mut check = Check {
         forbidden,
+        semantic: matches!(role, "spec" | "prod" | "image"),
+        adapter: matches!(role, "adapter" | "wasm"),
         errors: vec![],
     };
     check.visit_file(&file);
