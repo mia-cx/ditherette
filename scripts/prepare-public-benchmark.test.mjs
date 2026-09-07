@@ -4,7 +4,12 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { cleanRevision, fileInventory, sourceInventory } from './prepare-public-benchmark.mjs';
+import {
+	assertBuildEnvironment,
+	cleanRevision,
+	fileInventory,
+	sourceInventory
+} from './prepare-public-benchmark.mjs';
 
 test('source provenance rejects dirty input and records every tracked byte', async (t) => {
 	const directory = await mkdtemp(path.join(tmpdir(), 'ditherette-source-provenance-'));
@@ -30,7 +35,28 @@ test('source provenance rejects dirty input and records every tracked byte', asy
 	assert.equal(before[0].digest.length, 32);
 	await writeFile(path.join(directory, 'input'), 'other');
 	assert.throws(() => cleanRevision(directory), /clean source checkout/);
-	assert.notDeepEqual((await sourceInventory(directory))[0].digest, before[0].digest);
+	await assert.rejects(sourceInventory(directory), /differs from HEAD/);
+	for (const flag of ['--assume-unchanged', '--skip-worktree']) {
+		git('update-index', flag, 'input');
+		assert.match(cleanRevision(directory), /^[0-9a-f]{40,64}$/);
+		await assert.rejects(sourceInventory(directory), /differs from HEAD/);
+		git('update-index', flag.replace('--', '--no-'), 'input');
+	}
+});
+
+test('compiler and profile overrides cannot claim the configured toolchain', () => {
+	for (const name of [
+		'RUSTC',
+		'RUSTC_WRAPPER',
+		'RUSTFLAGS',
+		'CARGO_PROFILE_RELEASE_OPT_LEVEL',
+		'NODE_OPTIONS'
+	]) {
+		assert.throws(() => assertBuildEnvironment({ [name]: 'override' }), /Unset build overrides/);
+	}
+	assert.doesNotThrow(() =>
+		assertBuildEnvironment({ PATH: '/usr/bin', CARGO_HOME: '/cache', RUSTUP_HOME: '/rustup' })
+	);
 });
 
 test('built provenance sorts full trees and rejects symbolic links', async (t) => {
