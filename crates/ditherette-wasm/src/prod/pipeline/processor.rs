@@ -134,6 +134,106 @@ impl Processor {
         self.resize_with_allocator(request, boundary, &mut SystemAllocator)
     }
 
+    /// Materialize palette-free, durable RGBA8 with all owned capacity checked before input copy.
+    pub fn perturb<B: Boundary>(
+        &mut self,
+        request: super::perturb::PerturbRequest,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.perturb_with_allocator(request, boundary, &mut SystemAllocator)
+    }
+
+    /// Injectable reservations preserve the same recoverable lifecycle as resize and quantize.
+    pub fn perturb_with_allocator<B: Boundary, A: Allocator>(
+        &mut self,
+        request: super::perturb::PerturbRequest,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        self.state = State::Running;
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        self.peak_capacity = overhead;
+        let result = super::perturb::run(
+            request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+        );
+        self.state = State::Ready;
+        result
+    }
+
+    /// Separable modes quantize a complete clipped/rounded RGBA8 intermediate; None is direct quantize.
+    pub fn dither_and_quantize<B: super::quantize::QuantizeBoundary>(
+        &mut self,
+        request: super::quantize::QuantizeRequest<'_>,
+        dither: crate::prod::contract::request::DitherPolicy,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.dither_and_quantize_with_allocator(request, dither, boundary, &mut SystemAllocator)
+    }
+
+    /// Reserve the source, optional RGBA8 intermediate, indices, and palette before input copy.
+    pub fn dither_and_quantize_with_allocator<
+        B: super::quantize::QuantizeBoundary,
+        A: Allocator,
+    >(
+        &mut self,
+        request: super::quantize::QuantizeRequest<'_>,
+        dither: crate::prod::contract::request::DitherPolicy,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        use crate::prod::contract::request::DitherPolicy;
+        let perturb = match dither {
+            DitherPolicy::None {} => {
+                return self.quantize_with_allocator(request, boundary, allocator)
+            }
+            DitherPolicy::Separable { perturb } => perturb,
+            _ => {
+                return Err(Failure::new(
+                    ErrorCode::UnsupportedOperation,
+                    ErrorPath::Dither,
+                ))
+            }
+        };
+        self.state = State::Running;
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
+            + size_of::<crate::prod::contract::request::PerturbPolicy>() as u64
+            + size_of::<Vec<u8>>() as u64
+            + super::perturb::working_capacity_bytes()
+            + boundary.capacity_bytes();
+        self.peak_capacity = overhead;
+        let result = super::quantize::run_with_perturb(
+            request,
+            Some(perturb),
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+        );
+        self.state = State::Ready;
+        result
+    }
+
     /// Quantize into durable indexed output after complete call-owned capacity preflight.
     pub fn quantize<B: super::quantize::QuantizeBoundary>(
         &mut self,

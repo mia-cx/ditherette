@@ -7,6 +7,17 @@
 pub mod lab_ciede2000;
 pub mod packed;
 
+pub mod cielab;
+pub mod cielch;
+mod common;
+pub mod inverse;
+pub mod linear;
+pub mod oklab;
+pub mod oklch;
+pub mod reconstruct;
+pub mod srgb;
+pub mod ycbcr;
+
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
 
