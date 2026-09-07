@@ -24,13 +24,13 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) | Ready | [#91](https://github.com/mia-cx/ditherette/pull/91) |
 | [S08](#s08) | Complete Lab and LCH reference round trips | [S03](#s03) | Ready | [#92](https://github.com/mia-cx/ditherette/pull/92) |
 | [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Ready | [#94](https://github.com/mia-cx/ditherette/pull/94) |
-| [S10](#s10) | Specify direct quantization for every valid metric | [S07](#s07), [S08](#s08), [S09](#s09) | In progress | - |
+| [S10](#s10) | Specify direct quantization for every valid metric | [S07](#s07), [S08](#s08), [S09](#s09) | Ready | [#97](https://github.com/mia-cx/ditherette/pull/97) |
 | [S11](#s11) | Audit and complete the reference resize family | [S03](#s03) | Ready | [#93](https://github.com/mia-cx/ditherette/pull/93) |
 | [S12](#s12) | Specify palette-independent adaptive placement | [S07](#s07), [S08](#s08) | Ready | [#95](https://github.com/mia-cx/ditherette/pull/95) |
-| [S13](#s13) | Specify palette-free Bayer and random perturbation | [S12](#s12), [S09](#s09) | In progress | - |
-| [S14](#s14) | Repair the blue-noise reference before freezing | [S12](#s12), [S09](#s09) | In progress | - |
-| [S15](#s15) | Specify all four error-diffusion recipes | [S10](#s10), [S12](#s12) | Not started | - |
-| [S16](#s16) | Specify adaptive Yliluoma mixing | [S10](#s10), [S12](#s12) | Not started | - |
+| [S13](#s13) | Specify palette-free Bayer and random perturbation | [S12](#s12), [S09](#s09) | Ready | [#98](https://github.com/mia-cx/ditherette/pull/98) |
+| [S14](#s14) | Repair the blue-noise reference before freezing | [S12](#s12), [S09](#s09) | Ready | [#99](https://github.com/mia-cx/ditherette/pull/99) |
+| [S15](#s15) | Specify all four error-diffusion recipes | [S10](#s10), [S12](#s12) | In progress | - |
+| [S16](#s16) | Specify adaptive Yliluoma mixing | [S10](#s10), [S12](#s12) | In progress | - |
 | [S17](#s17) | Complete the five-method reference processor | [S05](#s05), [S10](#s10), [S11](#s11), [S13](#s13), [S14](#s14), [S15](#s15), [S16](#s16) | Not started | - |
 | [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) | Not started | - |
 | [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | Not started | - |
