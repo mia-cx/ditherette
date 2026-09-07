@@ -76,13 +76,22 @@ both revisions, warmup settings and observed work, raw per-call samples, and bat
 sizes. S05 verifies all three outputs and both executable-local references.
 Incorrect results preserve raw output and available PNG review bundles.
 
-The protocol separates single-call latency from calibrated throughput. It also
-separates native kernels, complete calls, initialization, and cold/warm application
-caches. The current native adapter only supports kernel calls without an application
-cache. It rejects other combinations. It excludes fixture decoding, input copies,
-hashing, output allocation, and initialization from timing. Future package adapters
-must implement complete-call copies/hashing and actual cold/warm cache semantics;
-CPU cache scrubbing is not an application-cache reset.
+The protocol separates single-call latency from calibrated throughput and keeps each
+operation's timing scope explicit. Native resize uses caller-owned output storage.
+Native complete quantize borrows source bytes and includes preparation, output allocation,
+and result destruction. Packed-forward conversion excludes table construction and output
+allocation. Its per-iteration output barrier prevents dead-store removal. All native
+scopes exclude fixture decoding and verification. Public calls include the actual package
+boundary, with no benchmark-only hashing. Current package caches are absent; fresh/primed
+instances do not imply cold/warm application caches.
+
+Native quantize and color conformance checks the outputs before and after measurement.
+It does not observe every timed output or detect transient A/B/A changes. The typed registry
+binds fixed, deterministic in-process callables, with immutable input and no callbacks.
+The exact S05 gate covers those checked outputs under that deterministic-kernel assumption.
+This mechanism cannot certify arbitrary stateful or nondeterministic subjects. Broader native
+observation needs a separately named scope or mechanism; silently retaining quantize results
+would remove their destruction from the declared full-call cost.
 
 At least two fresh pairs, in alternating order, are required. The fixed even pair
 budget belongs in the experiment before trials. Every required case needs exactly

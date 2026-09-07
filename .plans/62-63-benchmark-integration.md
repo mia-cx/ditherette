@@ -42,7 +42,7 @@ S21 public code `35169fc0`, evidence `056a1324`, joins at `b52d1c8b`.
 Its owner reports 287 native, 14 interface, six private ABI, and all three installed-package engines passing.
 Both scalar/threaded builds and the trusted frozen guard pass. Independent allocation/dispatch review found no defects.
 S22 native support `53eaf013` passes nine focused tests, including 378 byte-exact landed-output comparisons.
-S22 public integration follows the S21 join. Actual measurements remain pending.
+S22 public integration follows the S21 join. The completed measurement record is in [63-measurement.md](63-measurement.md).
 
 S22 public checkpoint `f0976601` and diagnostic fixes join at measured candidate `1761705e2c6935544b0232427d48129059d89615`.
 The combined core passes 296 native tests and the trusted frozen guard.
@@ -79,3 +79,12 @@ It preserves the actual differing output and the incorrect conformance gate. It 
 Existing landed-output conformance remains separately checked against the original production entrypoints.
 No measurements during implementation. Never run more than one ditherette-bench process.
 Leave all PRs unmerged. No publishing, tags, deployment, or rollout.
+
+## Measurement outcome
+
+All 304 workers launched and reaped, retaining 5,760 samples across eight complete reports.
+Native production pairs preserve landed bytes exactly. Existing frozen differences keep strict incorrect gates visible.
+Native overhead stays below 10%; no kernel retuning is justified by this trial.
+Public diagnostics expose complete-call browser costs and non-equivalent TypeScript output, especially poor Firefox performance.
+S41 retains that work. No new approximation is accepted and no release readiness is claimed.
+Implementation resumed only after the last worker exited. Separate S21/S22 PR filing remains the final TODO.
