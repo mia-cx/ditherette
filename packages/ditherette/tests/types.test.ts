@@ -34,6 +34,25 @@ const bilinear: ResizeRequest = {
 };
 void area;
 void bilinear;
+const convolution: ResizeRequest['output']['resize'][] = [
+	{ algorithm: 'bicubic', anchor: 'bottom-right', support: 'fixed' },
+	{ algorithm: 'lanczos2', anchor: 'center', support: 'scale-aware' },
+	{ algorithm: 'lanczos3', anchor: 'top', support: 'fixed' }
+];
+// @ts-expect-error Convolution requires an explicit support policy.
+const missingSupport: ResizeRequest['output']['resize'] = {
+	algorithm: 'bicubic',
+	anchor: 'center'
+};
+const invalidSupport: ResizeRequest['output']['resize'] = {
+	algorithm: 'lanczos2',
+	anchor: 'center',
+	// @ts-expect-error Support uses canonical string tags.
+	support: 'auto'
+};
+void convolution;
+void missingSupport;
+void invalidSupport;
 // @ts-expect-error Area has no anchor.
 const invalidArea: ResizeRequest['output']['resize'] = { algorithm: 'area', anchor: 'center' };
 const invalidBilinear: ResizeRequest['output']['resize'] = {

@@ -35,9 +35,9 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) | Ready | [#104](https://github.com/mia-cx/ditherette/pull/104) |
 | [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | Ready | [#105](https://github.com/mia-cx/ditherette/pull/105), correction [#109](https://github.com/mia-cx/ditherette/pull/109) |
 | [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) | Ready | [#107](https://github.com/mia-cx/ditherette/pull/107) |
-| [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | In progress | - |
+| [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | Ready | [#110](https://github.com/mia-cx/ditherette/pull/110) |
 | [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | In progress | - |
-| [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | Not started | - |
+| [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | In progress | - |
 | [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | In progress | - |
 | [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | Not started | - |
 | [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | Not started | - |
