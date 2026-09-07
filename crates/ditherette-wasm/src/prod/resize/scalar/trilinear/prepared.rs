@@ -1,5 +1,5 @@
 //! Full native preparation before source import. Every buffer stays owned until drop.
-//! Separate lower/upper chains preserve the frozen evaluation order without a reuse policy.
+//! One storage-rounded chain supplies both adjacent levels without duplicate reductions.
 
 use std::mem::size_of;
 
@@ -30,8 +30,8 @@ pub struct PreparedTrilinear<F: ImageFormat> {
     output: ImageDimensions,
     anchor: ResizeAnchor,
     blend: f64,
-    lower: Vec<MipLevel<F>>,
-    upper: Vec<MipLevel<F>>,
+    levels: Vec<MipLevel<F>>,
+    lower_count: usize,
     lower_output: Vec<F::Storage>,
     upper_output: Vec<F::Storage>,
     accumulated: Vec<f64>,
@@ -50,15 +50,14 @@ where
         let (lower, upper, _) = selection(source, output);
         let mut bytes = size_of::<Self>() as u64;
         add(&mut bytes, F::CHANNEL_COUNT, size_of::<f64>())?;
-        for count in [lower, upper] {
-            add(&mut bytes, count, size_of::<MipLevel<F>>())?;
-            for dimensions in chain_dimensions(source, count) {
-                add(
-                    &mut bytes,
-                    storage_len::<F>(dimensions)?,
-                    size_of::<F::Storage>(),
-                )?;
-            }
+        let count = lower.max(upper);
+        add(&mut bytes, count, size_of::<MipLevel<F>>())?;
+        for dimensions in chain_dimensions(source, count) {
+            add(
+                &mut bytes,
+                storage_len::<F>(dimensions)?,
+                size_of::<F::Storage>(),
+            )?;
         }
         if upper != 0 {
             for _ in 0..2 {
@@ -84,8 +83,7 @@ where
         let record = size_of::<Self>() as u64;
         let mut budget = CapacityBudget::new(limit - record);
         let (lower_count, upper_count, blend) = selection(source, output);
-        let lower = reserve_chain(source, lower_count, &mut budget)?;
-        let upper = reserve_chain(source, upper_count, &mut budget)?;
+        let levels = reserve_chain(source, lower_count.max(upper_count), &mut budget)?;
         let output_len = if upper_count == 0 {
             0
         } else {
@@ -102,8 +100,8 @@ where
             output,
             anchor,
             blend,
-            lower,
-            upper,
+            levels,
+            lower_count,
             lower_output,
             upper_output,
             accumulated,
@@ -117,7 +115,7 @@ where
     }
 
     /// Execute without allocations. Every intermediate retains its frozen storage conversion.
-    /// A mismatched view fails before writing output. Repeated execution refills every source chain.
+    /// A mismatched view fails before writing output. Repeated execution refills the shared chain.
     pub fn execute(
         &mut self,
         source: ImageView<'_, F>,
@@ -129,29 +127,24 @@ where
         if output.dimensions() != self.output {
             return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Output));
         }
-        if self.lower.is_empty() {
+        if self.levels.is_empty() {
             resize_bilinear_with_scratch_into(source, output, self.anchor, &mut self.accumulated);
             return Ok(());
         }
-        fill_chain(&source, &mut self.lower, &mut self.accumulated);
-        if self.upper.is_empty() {
-            resize_bilinear_with_scratch_into(
-                self.lower.last().unwrap().view(),
-                output,
-                self.anchor,
-                &mut self.accumulated,
-            );
+        fill_chain(&source, &mut self.levels, &mut self.accumulated);
+        let lower = self.levels[self.lower_count - 1].view();
+        if self.lower_count == self.levels.len() {
+            resize_bilinear_with_scratch_into(lower, output, self.anchor, &mut self.accumulated);
             return Ok(());
         }
-        fill_chain(&source, &mut self.upper, &mut self.accumulated);
         resize_bilinear_with_scratch_into(
-            self.lower.last().unwrap().view(),
+            lower,
             ImageViewMut::<F>::packed(&mut self.lower_output, self.output).unwrap(),
             self.anchor,
             &mut self.accumulated,
         );
         resize_bilinear_with_scratch_into(
-            self.upper.last().unwrap().view(),
+            self.levels.last().unwrap().view(),
             ImageViewMut::<F>::packed(&mut self.upper_output, self.output).unwrap(),
             self.anchor,
             &mut self.accumulated,

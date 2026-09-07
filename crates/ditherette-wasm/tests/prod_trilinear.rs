@@ -35,6 +35,8 @@ fn exact_rgba_mips_lod_anchors_and_strided_rows() {
         (1, 31, 1, 3),
         (31, 3, 2, 17),
         (2, 17, 31, 3),
+        (129, 97, 13, 11),
+        (64, 48, 8, 6),
     ] {
         let source = ImageDimensions::new(sw, sh).unwrap();
         let output = ImageDimensions::new(ow, oh).unwrap();
@@ -146,6 +148,29 @@ fn byte_rounding_happens_at_each_mip_not_only_at_final_output() {
     // First mip rounds [0, 0.5] to [0, 1]. The second rounds 0.5 to 1.
     // A single unrounded 4-pixel average would incorrectly produce zero.
     assert_eq!(actual, [1; 4]);
+}
+
+#[test]
+fn adjacent_levels_share_one_chain_in_the_memory_budget() {
+    let source = ImageDimensions::new(129, 97).unwrap();
+    let output = ImageDimensions::new(13, 11).unwrap();
+    let before = LIVE_BYTES.with(Cell::get);
+    let prepared =
+        PreparedTrilinear::<Rgba8>::try_new(source, output, ProdAnchor::Center, 1_000_000).unwrap();
+    // One chain has 129x97, 65x49, 33x25, 17x13, and 9x7 storage-rounded levels.
+    // The lower level is 17x13. Its prefix is retained, not computed a second time.
+    let pixels = 129 * 97 + 65 * 49 + 33 * 25 + 17 * 13 + 9 * 7;
+    let buffers = (pixels + 2 * 13 * 11) * 4;
+    let heap = (LIVE_BYTES.with(Cell::get) - before) as usize;
+    assert!(heap >= buffers);
+    assert!(
+        heap < buffers + 1024,
+        "unexpected duplicate mip storage: {heap}"
+    );
+    assert_eq!(
+        prepared.capacity_bytes(),
+        (heap + std::mem::size_of_val(&prepared)) as u64
+    );
 }
 
 use std::{
