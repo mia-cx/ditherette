@@ -310,7 +310,7 @@ fn root(file: &syn::File) -> Result<(), String> {
                             "unreachable",
                             "todo",
                         ]
-                        .contains(&name.ident.to_string().as_str()),
+                        .contains(&name.ident.to_string().trim_start_matches("r#")),
                     }
                 }
                 if !no_alias(&import.tree) {

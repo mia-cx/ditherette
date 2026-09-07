@@ -180,9 +180,11 @@ test('real profile changes and crate-root module redirection cannot hide behind 
 		mutation(root, lib, `${readFileSync(join(root, lib))}\npub use spec as bridge;\n`, () =>
 			assert.throws(() => verifySyntax(root, binary))
 		);
-		mutation(root, lib, `${readFileSync(join(root, lib))}\npub use wasm::serde_json;\n`, () =>
-			assert.throws(() => verifySyntax(root, binary))
-		);
+		for (const name of ['serde_json', 'r#serde_json', 'r#vec']) {
+			mutation(root, lib, `${readFileSync(join(root, lib))}\npub use wasm::${name};\n`, () =>
+				assert.throws(() => verifySyntax(root, binary))
+			);
+		}
 		const adapter = `${CRATE}/src/wasm.rs`;
 		mutation(
 			root,

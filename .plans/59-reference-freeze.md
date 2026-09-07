@@ -37,6 +37,7 @@ Enforce content identity, independent compilation, and trusted-base validation.
 - Independent review found that `cargo check` does not resolve foreign symbols and that root-use procedural attributes could inject code outside synthetic roots. Add semantic-role foreign/symbol restrictions and exact root-use cfg/doc validation; preserve adapter-boundary Wasm imports.
 - Review corrections now reject literal/macro foreign blocks in semantic modules; explicit linking/export attributes, including raw names; injected root-use attributes; unaudited adapter procedural expansion; and Wasm-to-spec/benchmark routes. The dependency record includes all resolved procedural-macro implementations and their transitive dependencies.
 - Positive fixtures retain `wasm_bindgen(catch)` extern imports and ordinary local macros/optimization attributes. A foreign-symbol fixture first demonstrates that isolation type-checking alone passes, then verifies the new syntax rejection.
+- Coordinator regression check reproduced a remaining raw root-reexport bypass with `wasm::r#serde_json`. Normalizing reserved root names closes it; fixtures also cover `wasm::r#vec`.
 
 ## Final evidence
 
