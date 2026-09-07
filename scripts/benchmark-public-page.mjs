@@ -88,11 +88,76 @@ export async function prepareOperation(trial) {
 	};
 }
 
+function verificationOutput(output) {
+	return {
+		dimensions: { width: output.width, height: output.height },
+		pixels: { format: 'rgba8', data: Array.from(output.data) },
+		warnings: []
+	};
+}
+
+/** Compare one untimed actual call with worker-supplied frozen bytes; return concrete mismatch evidence. */
+export async function preflightOperation(operation, reference) {
+	if (!reference || reference.pixels.format !== 'rgba8')
+		throw new Error('Browser trial requires frozen RGBA8 reference_output.');
+	let output;
+	if (operation.create) {
+		const instance = await operation.create();
+		try {
+			output = operation.probe(instance);
+		} finally {
+			instance.dispose();
+		}
+	} else {
+		const prepared = await operation.prepare();
+		try {
+			output = prepared.call();
+		} finally {
+			prepared.close();
+		}
+	}
+	if (
+		output.width === reference.dimensions.width &&
+		output.height === reference.dimensions.height &&
+		reference.warnings.length === 0 &&
+		output.data.length === reference.pixels.data.length &&
+		output.data.every((byte, index) => byte === reference.pixels.data[index])
+	)
+		return undefined;
+	return verificationOutput(output);
+}
+
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
 export async function runTrial(trial) {
 	const resolution = timerResolution();
 	const operation = await prepareOperation(trial);
 	try {
+		const identity = {
+			role: trial.role,
+			pair: trial.pair,
+			case_name: trial.case.name,
+			input: trial.case.identity.input,
+			settings: trial.case.identity.settings
+		};
+		const observation = {
+			user_agent: navigator.userAgent,
+			cross_origin_isolated: crossOriginIsolated,
+			timer_resolution_ns: resolution
+		};
+		const mismatch = await preflightOperation(operation, trial.reference_output);
+		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
+			throw new Error('Operation mutated source bytes during preflight.');
+		if (mismatch)
+			return {
+				...identity,
+				sample_ns: [],
+				iterations_per_sample: 0,
+				warmup_iterations: 0,
+				warmup_elapsed_ns: 0,
+				output: mismatch,
+				observation,
+				timing_skipped: 'reference-mismatch'
+			};
 		const measurement = trial.case.measurement;
 		const measured =
 			measurement.scope === 'initialization'
@@ -106,22 +171,10 @@ export async function runTrial(trial) {
 			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
 		return {
-			role: trial.role,
-			pair: trial.pair,
-			case_name: trial.case.name,
-			input: trial.case.identity.input,
-			settings: trial.case.identity.settings,
+			...identity,
 			...timings,
-			output: {
-				dimensions: { width: output.width, height: output.height },
-				pixels: { format: 'rgba8', data: Array.from(output.data) },
-				warnings: []
-			},
-			observation: {
-				user_agent: navigator.userAgent,
-				cross_origin_isolated: crossOriginIsolated,
-				timer_resolution_ns: resolution
-			}
+			output: verificationOutput(output),
+			observation
 		};
 	} finally {
 		operation.close();

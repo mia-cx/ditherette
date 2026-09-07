@@ -93,7 +93,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				const page = await context.newPage();
 				await page.goto(server.url);
 				const report = await page.evaluate(async (assets) => {
-					const { prepareOperation } = await import(`/${assets.entries.page}`);
+					const { prepareOperation, preflightOperation } = await import(`/${assets.entries.page}`);
 					const equal = (actual, expected, label) => {
 						if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(label);
 					};
@@ -120,9 +120,19 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						}
 					});
 					const expected = [10, 30, 70, 0, 12, 30, 70, 22, 13, 30, 70, 33];
+					const reference = {
+						dimensions: { width: 3, height: 1 },
+						pixels: { format: 'rgba8', data: expected },
+						warnings: []
+					};
 					for (const backend of ['typescript', 'package']) {
 						const operation = await prepareOperation(trial(backend));
 						try {
+							equal(
+								await preflightOperation(operation, reference),
+								undefined,
+								`${backend} reference preflight`
+							);
 							equal(Array.from(operation.call().data), expected, `${backend} known 4→3`);
 						} finally {
 							operation.close();
@@ -186,10 +196,27 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						}
 					}
 					const drift = [];
+					// Exact center samples the first source pixel 24 times, then the second 25 times.
+					const driftReference = {
+						dimensions: { width: 49, height: 1 },
+						pixels: {
+							format: 'rgba8',
+							data: Array.from({ length: 49 }, (_, x) =>
+								x < 24 ? [10, 30, 70, 0] : [11, 30, 70, 11]
+							).flat()
+						},
+						warnings: []
+					};
 					for (const backend of ['typescript', 'package']) {
 						const operation = await prepareOperation(trial(backend, 'primed-instance', 2, 49));
 						try {
 							drift.push(operation.call().data[24 * 4]);
+							const mismatch = await preflightOperation(operation, driftReference);
+							if (backend === 'package') equal(mismatch, undefined, 'exact package preflight');
+							else {
+								equal(mismatch.pixels.data[24 * 4], 10, 'mismatch retains actual byte');
+								equal(mismatch.pixels.data.length, 49 * 4, 'mismatch retains complete output');
+							}
 						} finally {
 							operation.close();
 						}
