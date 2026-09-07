@@ -331,3 +331,52 @@ fn copying_an_absolute_external_launcher_does_not_bind_its_dependencies() {
     let error = prepare_assets(&source, &f.0.join("rejected-launcher")).unwrap_err();
     assert!(error.to_string().contains("reviewed relocatable"));
 }
+
+#[cfg(unix)]
+#[test]
+fn snapshot_alias_identity_survives_resnapshot_and_rejects_split_or_merged_groups() {
+    use std::os::unix::fs::{symlink, MetadataExt};
+    let f = Fixture::new();
+    f.file("source/a.so", b"library");
+    symlink("a.so", f.0.join("source/b.so")).unwrap();
+    fs::hard_link(f.0.join("source/a.so"), f.0.join("source/c.so")).unwrap();
+    f.file("source/d.so", b"library"); // Equal bytes do not imply shared loader identity.
+    let first = snapshot_tree(&[("lib", &f.0.join("source"))], &f.0.join("first")).unwrap();
+    let identity = |path: &Path| {
+        let metadata = fs::metadata(path).unwrap();
+        (metadata.dev(), metadata.ino())
+    };
+    for name in ["b.so", "c.so"] {
+        assert_eq!(
+            identity(&first.root.join("lib/a.so")),
+            identity(&first.root.join("lib").join(name))
+        );
+    }
+    assert_ne!(
+        identity(&first.root.join("lib/a.so")),
+        identity(&first.root.join("lib/d.so"))
+    );
+    let second = snapshot_tree(&[("lib", &first.root.join("lib"))], &f.0.join("second")).unwrap();
+    assert_eq!(first.digest, second.digest);
+    let serialized = serde_json::to_value(&first.files).unwrap();
+    assert!(serialized[0].get("alias_of").is_none());
+    assert_eq!(serialized[1]["alias_of"], "lib/a.so");
+    assert_eq!(serialized[2]["alias_of"], "lib/a.so");
+    assert!(serialized[3].get("alias_of").is_none());
+    let mut unbound = first.clone();
+    for file in &mut unbound.files {
+        file.alias_of = None;
+    }
+    unbound.digest = tree_digest(&unbound.files).unwrap();
+    assert_ne!(first.digest, unbound.digest);
+    assert!(validate_tree(&unbound).is_err());
+    let split = first.root.join("lib/b.so");
+    fs::remove_file(&split).unwrap();
+    fs::write(&split, b"library").unwrap();
+    mode(&split, 0o444);
+    assert!(validate_tree(&first).is_err());
+    let merged = second.root.join("lib/d.so");
+    fs::remove_file(&merged).unwrap();
+    fs::hard_link(second.root.join("lib/a.so"), merged).unwrap();
+    assert!(validate_tree(&second).is_err());
+}

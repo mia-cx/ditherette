@@ -38,6 +38,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     ]
     .into_iter()
     .map(|path| AssetFile {
+        alias_of: None,
         path: path.into(),
         bytes: 1,
         mode: 0o444,
@@ -60,6 +61,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         },
     };
     let browser_files = vec![AssetFile {
+        alias_of: None,
         path: "browser".into(),
         bytes: 7,
         mode: 0o555,
