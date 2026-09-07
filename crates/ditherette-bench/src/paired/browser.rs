@@ -324,8 +324,8 @@ pub struct BrowserTransportResult {
     pub warmup_iterations: usize,
     pub warmup_elapsed_ns: u128,
     pub output: VerificationOutput,
-    /// Instability marker containing preflight actual bytes; `output` holds final actual bytes.
-    /// Workers preserve both and reject publication of this trial.
+    /// Instability marker containing the first actual output; `output` holds its first distinct successor.
+    /// Neither field claims to hold the final sample. Workers preserve both and always reject publication.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unstable_output: Option<VerificationOutput>,
     pub observation: BrowserObservation,
