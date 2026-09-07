@@ -7,8 +7,8 @@ The v1 plan covers remaining work. It does not authorize replacing completed imp
 
 - [x] Correct current execution guidance and visible plan copies to preserve landed production and reuse shared code.
 - [x] Restore area/bilinear and cubic/Lanczos/convolution paths and callers in their existing slice worktrees, verifying original bytes.
-- [ ] Restore nearest and its shared helpers, then connect the new public wrapper through required bounded/fallible integration.
-- [ ] Verify restored content, original correctness checks, public ownership/errors, Wasm builds, and the trusted frozen-reference guard.
+- [x] Restore nearest and its shared helpers, then connect the new public wrapper through required bounded/fallible integration.
+- [x] Verify restored content, original correctness checks, public ownership/errors, Wasm builds, and the trusted frozen-reference guard.
 - [ ] Publish corrective commits and an unmerged restoration PR; reconcile current slice branches and progress.
 
 ## Ownership and constraints
@@ -39,3 +39,33 @@ Original kernels, shared plans/helpers, callers, module declarations, benchmark 
 Each agent verifies four original tests, native/Wasm compilation, formatting, and the separately trusted frozen-reference guard.
 Unused replacement kernels, copied helpers, and replacement-only tests are removed. Git history retains them and their copy manifests.
 Both corrected branches join this restoration branch without source conflicts. Their final source trees add no crate changes to S20.
+
+## Nearest restoration and final validation
+
+Exact restoration commit `1f8c8d903642baf7437b87c8a42c292dbece54d8` restores all five original nearest files.
+Boundary commit `2476b4cc` adds fallible, capacity-accounted planning while retaining landed pixel execution.
+Final implementation head `d17e323d2ba6487474c6fa9952e03a86d393a8ba` also restores canonical row-band benchmark dispatch.
+The public processor uses the existing planned packed kernel and its identity bypass.
+Original nearest alignment/packed files, the common helper tree, and all other restored resize families match `2b4bfa8e` byte-for-byte.
+Only nearest allocation integration changes the original plan/module/span helpers. Mapping and span arithmetic remain unchanged.
+The replacement algorithm, unused copied alignment helper, and replacement-only tests are removed; Git retains their history.
+
+The coordinator rebuilds and tests final head `d17e323d` in its prepared worktree.
+The integrated correction matches that head exactly under `crates/`, `packages/`, and `scripts/`, including after the merge-preserving rebase.
+
+| Check | Result |
+| --- | --- |
+| Full native crate tests with bench-subjects | 280 pass, including original resize fixtures and allocation recovery |
+| Scalar and threaded release package builds | Both pass |
+| Public interface/types and Node fixtures | 12 pass |
+| Actual private Wasm fixtures | 6 pass |
+| Installed tarball browser contract | Chromium 147.0.7727.15, Firefox 148.0.2, WebKit 26.4 pass |
+| Row-band registration fixture | Pass, reported by implementation agent |
+| Rust formatting and diff checks | Pass |
+| Independently trusted freeze guard on integrated correction | Pass |
+
+The frozen revision remains `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
+Its digest remains `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+A read-only independent review finds no concrete allocation, cleanup, mapping, or dispatch defect.
+No benchmark runs and no restored-performance claim follows from these correctness checks.
+S21/S22 still need public package integration and their remaining slice evidence.
