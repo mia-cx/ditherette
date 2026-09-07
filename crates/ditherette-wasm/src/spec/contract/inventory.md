@@ -21,8 +21,9 @@ The old process-contract prototype's rejection of palettes above 256 entries is 
 The source remains borrowed and immutable. Successful results own separate storage through `image::ImageBuf`.
 The JS boundary must validate raw property types and copy returned storage into durable JS-owned arrays.
 Rust enum tags reject malformed palette forms and incoherent color/metric combinations.
-`decode_recipe` rejects malformed recipe structure at `recipe`; `parse_match` gives a precise caller-supplied match path.
-The later JS adapter supplies precise paths for raw JS property-type errors before constructing these typed requests.
+`decode_recipe` rejects unsupported typed tags and unknown fields at `recipe`; `parse_match` gives a caller-supplied match path.
+Serde also accepts alternate map/sequence representations for enums. The package boundary rejects those raw JS property types before decoding.
+Settings records must be objects, and scalar enum tags must be strings. The JS adapter supplies precise property-error paths.
 
 | Method | Rust request | Result storage | Required reference composition |
 | --- | --- | --- | --- |
@@ -33,8 +34,8 @@ The later JS adapter supplies precise paths for raw JS property-type errors befo
 | `ditherAndQuantize` | `DitherQuantizeRequest` | `image::contracts::IndexedImage` | `pipeline::dither_and_quantize`; none, separable, diffusion, or Yliluoma |
 
 The Rust fused request nests `QuantizeRequest` to reuse the shared fields. This is an internal representation, not a nested JS requirement.
-The pipeline references and executable processor are implemented on the sibling S17 processor branch through `0d1afb27`.
-Their integration with this adapter branch remains pending. Read `spec/pipeline/README.md` for stage and callback composition.
+The pipeline references and executable processor are integrated with these adapters.
+Read `spec/pipeline/README.md` for stage and callback composition.
 Every processing call may receive an optional `onProgress` callback at execution time.
 `InstanceModel::begin(progress_enabled)` models its presence. Callbacks, thread policy, cache keys, and frontend identifiers are absent from recipes.
 There is no public stage graph, crop operation, or palette generator.
@@ -230,7 +231,7 @@ The earlier half-mixture ties the nearest entry. Zero placement therefore does n
 | `wasm::benchmark_color_space` | `legacy_color_rows_into`, `diagnostic_color_copy_into`, or `diagnostic_noop`; timing remains bookkeeping |
 | `wasm::benchmark_resize_rgba8` | `LegacyResize`, `diagnostic_resize_copy_into`, or `diagnostic_noop`; timing remains bookkeeping |
 | `wasm_bindgen_rayon::init_thread_pool` | `lifecycle::initialize` selection; S17/S34 pool lifecycle model/implementation |
-| `bench_subjects::bench_subjects` | S05 provides resize adapters and typed verification infrastructure; S17 final reference subject registration pending integration |
+| `bench_subjects::bench_subjects` | Five callable typed processing references and seven packed-f32 color/inverse references, plus the inherited resize subjects |
 | `prod/color::rgba8_to_color_space_f32`, `_into`, `_with_policy_into`, `_rows_into`, `_parallel_with_band_height_into` | `adapters::legacy_color_rows_into`; whole output or selected global rows in f32x4 |
 | `prod/color::{ColorSpaceF32::parse, ColorTilingPolicy::for_request}` | `adapters::legacy_color_space` and the same global-row composition; empirical policy does not change reference pixels |
 | `prod/tiling::{RowBand, RowBandPlan}` | `spec/tiling/contract::{RowBand, RowBandPlan}`, including `for_output_height` |
@@ -256,7 +257,10 @@ These diagnostics are not processing recipes and need not be invariant under ban
 Calibration, clocks, sample aggregation, and checksums remain benchmark bookkeeping; their correctness does not establish processing conformance.
 
 The inherited subject registry includes spec/prod nearest, area, bilinear, bicubic fixed/scale-aware, Lanczos2 fixed/scale-aware, and Lanczos3 fixed/scale-aware.
-It also includes spec-only trilinear. This is 19 subjects, all mapped to the resize table above.
+It also includes spec-only trilinear. These 19 inherited subjects map to the resize table above.
+The complete registry adds 12 callable conformance subjects for the five methods and seven color/inverse pairs.
+`bench_subjects/reference.rs` maps each typed request to this inventory and preserves every relevant setting in verification identity.
+Color records retain packed coordinates, byte alpha, and actual inverse-rendered RGBA8.
 Thread counts, row-band sizes, pooled modes, plan scopes, and batch sizes are execution parameters, never new semantic recipe tags.
 
 `lifecycle.rs` is the readable S03 reference for initialization fallback, memory preflight, isolated instance state, disposal, and callback/publication ordering.
@@ -268,7 +272,7 @@ The host owns worker termination and stale-result rejection. Cancellation is not
 
 ## Remaining pre-freeze work
 
-S17 still joins the five-method `pipeline` references and `pipeline::processor::Processor` with these adapter references.
+The five-method `pipeline` references and `pipeline::processor::Processor` are joined with these adapters.
 The processor's focused fixtures cover composition equalities, reentry, disposal, callback failures, and runtime-error recovery.
 The joined validation must retain palette order, transparency, ordered warnings, and the exact 50 ms progress boundary.
 
@@ -277,11 +281,12 @@ It must cover normalized stage identity and digest, private capacity accounting,
 Operation keys and intermediate content identities remain distinct so composed and standalone methods can share actual outputs.
 Color content identities include separate alpha, including when RGB triples match but alpha differs.
 Pending cache entries publish atomically only after successful completion callbacks; failed calls publish none.
-Allocation failure, disposal, retained-capacity limits, and concrete pipeline preflight accounting remain integration checks.
-`InstanceModel::preflight` alone accepts a supplied byte count; it does not prove that an operation counted every allocation.
+Allocation failure, disposal, and retained-capacity limits remain cache-model integration checks.
+`InitOptions::preflight` accepts a supplied byte count; it does not prove that an operation counted every allocation.
+Production slices must demonstrate concrete allocation accounting against the frozen capacity/ownership model as their implementations change.
 
-S17 also joins final reference subjects with S05's verifier and supplies actual inverse-rendered color output.
-Settings identity must distinguish perturb and matching spaces, feedback modes, palette order, and complete recipe settings.
+The final reference subjects now use S05's verifier and actual inverse-rendered color output.
+Settings identity distinguishes perturb and matching spaces, feedback modes, palette order, and complete recipe settings.
 Reference records remain pre-freeze; missing accepted/candidate implementations remain explicit.
 S18 freezes that complete reference, including this mode inventory and semantic shared-storage dependencies.
 These are assigned implementation obligations. They do not authorize production to call spec as its implementation.

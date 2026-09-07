@@ -12,7 +12,7 @@ The join connects the corrected S14 blue-noise tile to S13's field dispatch.
 
 ## TODOs
 
-- [ ] Compose all five typed methods and test both public equalities, metadata, warnings, input preservation, and durable results.
+- [x] Compose all five typed methods and test both public equalities, metadata, warnings, input preservation, and durable results.
 - [ ] Complete strict tagged requests and executable lifecycle, cache/memory, and partition reference models before freeze.
 - [ ] Register callable benchmark subjects for every completed reference and reconcile the exhaustive export inventory.
 - [ ] Validate the full join, update the stack ledger, and open an unmerged S17 PR against the verified base.
@@ -21,7 +21,7 @@ The join connects the corrected S14 blue-noise tile to S13's field dispatch.
 
 The coordinator owns `spec/pipeline/`, its tests, `spec/mod.rs`, integration joins, this plan, `slices.md`, and the ledger.
 The strict-request agent owns existing enum-use corrections and request validation fixtures in its isolated worktree.
-The inventory agent audits executable adapters and partition coverage before receiving a bounded implementation assignment.
+The inventory agent owns executable adapters, partition references, and the remaining thread-pool lifecycle model.
 The benchmark agent owns benchmark subject registration and adapter fixtures in its isolated worktree.
 
 ## Gates
@@ -32,4 +32,8 @@ The first S06 control trial rejected its candidate; it does not establish accept
 
 ## Evidence
 
-Pending S17 implementation and aggregate validation.
+At `7da4d40a935026c19a4cd1191dc088a41eb16b61`, 248 native tests pass from actual result-group counts.
+The Wasm target compiles with `bench-subjects`; formatting and diff checks pass.
+The benchmark crate passes 5 reference-subject, 8 verification, and 3 storage-adapter tests without measurements.
+An independent read-only pipeline/control review found no concrete defects at that checkpoint.
+Cache/content-identity and thread-pool models remain in isolated subtasks before final validation and PR creation.
