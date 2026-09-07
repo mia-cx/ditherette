@@ -19,13 +19,11 @@ use ditherette_bench_api::{
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
     prod::resize::scalar::{
-        area::resize_area_into as resize_copied_area_into,
-        area_candidate::resize_area_rgba8_into as resize_candidate_area_rgba8_into,
+        area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
         bicubic::resize_bicubic_rgba8_into as resize_prod_bicubic_rgba8_into,
-        bilinear::resize_bilinear_into as resize_copied_bilinear_into,
-        bilinear_candidate::{
+        bilinear::{
             alignment::ResizeAnchor as ProdBilinearResizeAnchor,
-            resize_bilinear_rgba8_into as resize_candidate_bilinear_rgba8_into,
+            resize_bilinear_rgba8_into as resize_prod_bilinear_rgba8_into,
         },
         convolution::{
             ResizeAnchor as ProdConvolutionResizeAnchor,
@@ -90,15 +88,9 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
         ),
         resize_subject(
             "prod:resize:area:scalar",
-            "literal copied area scalar",
-            "crates/ditherette-wasm/src/prod/resize/scalar/area.rs",
+            "prod area scalar",
+            "crates/ditherette-wasm/src/prod/resize/scalar/area/mod.rs",
             resize_prod_area_subject,
-        ),
-        resize_subject(
-            "candidate:resize:area:legacy",
-            "legacy area candidate (unpromoted)",
-            "crates/ditherette-wasm/src/prod/resize/scalar/area_candidate/mod.rs",
-            resize_candidate_area_subject,
         ),
         resize_subject(
             "spec:resize:bilinear:scalar",
@@ -108,15 +100,9 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
         ),
         resize_subject(
             "prod:resize:bilinear:scalar",
-            "literal copied bilinear scalar",
-            "crates/ditherette-wasm/src/prod/resize/scalar/bilinear.rs",
+            "prod bilinear scalar",
+            "crates/ditherette-wasm/src/prod/resize/scalar/bilinear/mod.rs",
             resize_prod_bilinear_subject,
-        ),
-        resize_subject(
-            "candidate:resize:bilinear:legacy",
-            "legacy bilinear candidate (unpromoted)",
-            "crates/ditherette-wasm/src/prod/resize/scalar/bilinear_candidate/mod.rs",
-            resize_candidate_bilinear_subject,
         ),
         resize_subject(
             "spec:resize:bicubic:catmull-rom",
@@ -336,15 +322,7 @@ fn resize_prod_area_subject(
     output: ResizeOutputU8Rgba<'_>,
     _params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
-    with_views(input, output, resize_copied_area_into::<Rgba8>)
-}
-
-fn resize_candidate_area_subject(
-    input: ResizeInputU8Rgba<'_>,
-    output: ResizeOutputU8Rgba<'_>,
-    _params: &ResizeParams,
-) -> Result<(), BenchSubjectError> {
-    with_views(input, output, resize_candidate_area_rgba8_into)
+    with_views(input, output, resize_prod_area_rgba8_into)
 }
 
 fn resize_bilinear_subject(
@@ -363,17 +341,7 @@ fn resize_prod_bilinear_subject(
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        resize_copied_bilinear_into(source, output, copied_nearest_anchor(params));
-    })
-}
-
-fn resize_candidate_bilinear_subject(
-    input: ResizeInputU8Rgba<'_>,
-    output: ResizeOutputU8Rgba<'_>,
-    params: &ResizeParams,
-) -> Result<(), BenchSubjectError> {
-    with_views(input, output, |source, output| {
-        resize_candidate_bilinear_rgba8_into(source, output, prod_bilinear_anchor(params));
+        resize_prod_bilinear_rgba8_into(source, output, prod_bilinear_anchor(params));
     })
 }
 

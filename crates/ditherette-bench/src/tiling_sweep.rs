@@ -299,14 +299,6 @@ fn subjects_for_filters(
                     "Nearest row-band sweeps require candidate:resize:nearest:legacy; the copied baseline has no row-band adapter.".to_owned(),
                 ));
             }
-            for filter in ["area", "bilinear"] {
-                if subject.descriptor.id.filter() == filter
-                    && subject.descriptor.id.as_str() != format!("candidate:resize:{filter}:legacy") {
-                    return Err(BenchError::Config(format!(
-                        "{filter} row-band sweeps require candidate:resize:{filter}:legacy; the copied baseline has no row-band adapter."
-                    )));
-                }
-            }
             Ok(subject)
         })
         .collect()
@@ -315,8 +307,8 @@ fn subjects_for_filters(
 fn subject_for_filter(filter: &str) -> &str {
     match filter {
         "nearest" => "candidate:resize:nearest:legacy",
-        "area" => "candidate:resize:area:legacy",
-        "bilinear" => "candidate:resize:bilinear:legacy",
+        "area" => "prod:resize:area:scalar",
+        "bilinear" => "prod:resize:bilinear:scalar",
         "bicubic" => "prod:resize:bicubic:catmull-rom",
         "bicubic-scale-aware" => "prod:resize:bicubic:catmull-rom-scale-aware",
         "lanczos2" => "prod:resize:lanczos2:fixed",
@@ -637,9 +629,9 @@ fn run_subject_rows(
     use ditherette_wasm::{
         image::{ImageView, ImageViewMut, Rgba8, RowStride},
         prod::resize::scalar::{
-            area_candidate::resize_area_rgba8_rows_into,
+            area::resize_area_rgba8_rows_into,
             bicubic::resize_bicubic_rgba8_rows_into,
-            bilinear_candidate::{
+            bilinear::{
                 alignment::ResizeAnchor as BilinearAnchor, resize_bilinear_rgba8_rows_into,
             },
             convolution::{ResizeAnchor as ConvolutionAnchor, SupportPolicy},
