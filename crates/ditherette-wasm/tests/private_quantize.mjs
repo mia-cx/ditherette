@@ -32,6 +32,16 @@ test('private quantize borrows its ABI and returns complete authoritative indexe
 		{ code: 'transparent-only', message: 'Only Transparent is enabled; every output pixel is transparent.' }
 	]);
 	assert.equal(truncated.output.palette.rgba.length, 1024);
+	const length = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'length');
+	let protectedOutput;
+	Object.defineProperty(Uint8Array.prototype, 'length', { configurable: true, get: () => 99 });
+	try { protectedOutput = invoke(bindings); }
+	finally {
+		if (length) Object.defineProperty(Uint8Array.prototype, 'length', length);
+		else delete Uint8Array.prototype.length;
+	}
+	assert.equal(protectedOutput.output.indices.length, 2);
+	assert.equal(protectedOutput.output.palette.rgba.length, 12);
 	bindings.privateDispose();
 });
 
