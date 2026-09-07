@@ -171,6 +171,9 @@ importers:
 
   crates/ditherette-wasm:
     devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
       wasm-pack:
         specifier: 0.15.0
         version: 0.15.0
