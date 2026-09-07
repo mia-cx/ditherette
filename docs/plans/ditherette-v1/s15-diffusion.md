@@ -8,7 +8,7 @@ and S12 `01df66826e532d8fb3b522a1564f1121c96f4d1f`.
 ## TODOs
 
 - [x] Audit all four tap sets and define explicit byte/working-coordinate feedback behavior.
-- [ ] Compose validated diffusion requests with alpha, placement, ordered matching, and finite-arithmetic handling.
+- [x] Compose validated diffusion requests with alpha, placement, ordered matching, and finite-arithmetic handling.
 - [ ] Verify tiny independent images, full native tests, Wasm compilation, and formatting.
 - [ ] Rebase onto the latest join and file the unmerged stacked PR.
 
@@ -38,3 +38,14 @@ The coordinator approved `Runtime` at `dither.arithmetic`, without a strength ce
 The tap audit verifies every offset and fractional weight. Floyd, Sierra, and Sierra Lite sum to 1.
 Atkinson deliberately distributes 6/8; missing edge taps are discarded rather than renormalized.
 Focused tap and contract checks pass ten tests.
+
+## Complete composition
+
+`error_diffusion::diffuse(DitherQuantizeRequest)` returns owned indexed output or a structured error.
+It uses full-image f32 work, unmodified-source placement, and per-scalar f64 scatter arithmetic rounded back to f32.
+Matching retains all 15 f32 metric recipes. Fixed-index alpha pixels discard error before it can enter useful work.
+Existing low-level coordinate adapters keep their signatures and unrounded behavior.
+
+Six diffusion tests pass, covering tap definitions, the two-pixel feedback distinction, transparent sinks,
+separate work/score overflow errors, legal maximum-strength success, and zero-strength composition across all kernels and metrics.
+The normative recipe and TypeScript source pointers live in `crates/ditherette-wasm/src/spec/dither/error_diffusion.md`.
