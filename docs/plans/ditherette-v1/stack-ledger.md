@@ -23,6 +23,7 @@ S21 public area/bilinear checkpoint `056a1324` joins at `b52d1c8b`, with native/
 S22 public convolution checkpoint `f0976601` preserves native checkpoint `53eaf013` and passes all three package engines.
 S23 is delivered in PR112 with exact shared-mip reuse. Its checkpoints and measurements appear below.
 S24 is delivered in PR113. Its 124-worker measurement and remaining browser evidence appear below.
+The S23/S24 join is validated at `1435642fc6b8f923fc4de4b4d1624b814940b5d1`; both delivered kernel families remain unchanged.
 S25 adds all fifteen matching tags at `0085972a`, with 309 native tests and three-engine package conformance passing.
 Its exact dispatch candidate `230046f` remains unselected until fresh measurements.
 S26 literal field baseline `e156cfbf` passes inverse, placement, field, and composition checks. Bounded/public integration continues separately.
@@ -247,6 +248,10 @@ Chromium's linear-RGB control remains inconclusive from pair noise; no retry ext
 [S41](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5576162129) retains that control and Firefox's undiagnosed absolute call cost.
 Processing validation passes 307 native tests, nine private ABI tests, 20 interface tests, both builds, and three installed-package engines.
 Benchmark validation passes 56 Rust and 26 controlled JavaScript tests. The trusted freeze guard passes after restacking.
+
+[Combined-tree validation](../../../.plans/65-s23-join.md) passes 315 native, 59 benchmark, 26 controlled JS, 22 interface, and 10 private ABI tests.
+Both builds, three-engine installed-package checks, and untimed benchmark adapter conformance pass.
+The join only corrects a stale trilinear-unavailable test; it does not change processing or timing implementations.
 
 ## S01 inherited port anchor
 
