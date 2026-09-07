@@ -8,7 +8,8 @@ The other S19 owners provide the private Rust processor and nearest optimization
 
 - [x] Add the nearest request/result types, structured errors, and canonical raw-JS validation with focused fixtures.
 - [x] Connect isolated lazy scalar initialization and guarded synchronous resize/disposal to the agreed private ABI.
-- [ ] Verify real public calls, failure boundaries, durable outputs, and installed-tarball browser loading; document and deliver.
+- [x] Verify real public calls, failure boundaries, durable outputs, and installed-tarball browser loading.
+- [ ] Record runtime provenance, rerun the focused checks, and deliver the final clean checkpoint.
 
 Public requests preserve version one, `source`, and `output.resize.algorithm` from the frozen contract.
 Only nearest resize and disposal are implemented here. `preferred` threads uses scalar; `required` reports capability until S34.
@@ -33,3 +34,13 @@ Coverage includes exact capacity and one-under rejection, offset/detached views,
 durable results, getter/copy-boundary reentry, disposal, repeated caught-copy failure recovery, and bounded externref capacity.
 The built root imports successfully with WebAssembly absent and fetch/Worker replaced by throwing functions.
 Creating afterward returns capability at `wasm`. Public runtime exports are exactly `createDitherette` and `DitheretteError`.
+
+Installed-tarball tests pass in Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 through Playwright 1.59.1.
+Each browser checks all nine known-vector anchors, eight custom initialization inputs, isolated failures, durable output,
+scalar operation without isolation headers, inert root imports, and absence of threaded network requests.
+
+The packed-artifact fixture found wasm-pack's generated `.gitignore` excluded all staged Wasm files from the tarball.
+Package staging now omits that ignore file; original crate and website artifacts stay unchanged.
+Chromium also rejects DataView directly in WebAssembly.instantiate. Custom views now become offset-preserving Uint8Array views without byte copies.
+WebKit uses private extracted Debian libraries and a task-local launcher because its bundled launcher replaces LD_LIBRARY_PATH.
+No system packages or shared browser binaries changed. Exact provenance follows in the runtime evidence file.

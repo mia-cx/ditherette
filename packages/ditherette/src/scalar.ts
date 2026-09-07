@@ -74,6 +74,9 @@ export async function createScalar(options: {
 		let wasm = options.wasm;
 		if (typeof Response !== 'undefined' && wasm instanceof Response) wasm = wasm.clone();
 		if (typeof Request !== 'undefined' && wasm instanceof Request) wasm = wasm.clone();
+		// Chromium rejects DataView at its Wasm boundary. Normalize every view without copying bytes.
+		if (ArrayBuffer.isView(wasm))
+			wasm = new Uint8Array(wasm.buffer, wasm.byteOffset, wasm.byteLength);
 		await bindings.default({ module_or_path: wasm });
 		let status: number;
 		try {

@@ -1,5 +1,6 @@
 import { access, cp, rm } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { basename } from 'node:path';
 
 /** Stage private generated assets and declarations before the wrapper's TypeScript compilation. */
 export async function stageWasm(crate, packageDirectory, license) {
@@ -8,7 +9,11 @@ export async function stageWasm(crate, packageDirectory, license) {
 	for (const variant of ['scalar', 'threads']) {
 		const destination = new URL(`dist/wasm/${variant}/`, packageDirectory);
 		await rm(destination, { recursive: true, force: true });
-		await cp(new URL(`dist/${variant}/`, crate), destination, { recursive: true });
+		// wasm-pack's generated '*' ignore file would remove every asset from the npm tarball.
+		await cp(new URL(`dist/${variant}/`, crate), destination, {
+			recursive: true,
+			filter: (source) => basename(source) !== '.gitignore'
+		});
 	}
 	await cp(license, new URL('LICENSE', packageDirectory));
 }
