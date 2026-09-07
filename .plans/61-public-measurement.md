@@ -1,5 +1,8 @@
 # S20 public browser measurements
 
+Historical evidence for the artifact identified below. [The restoration](108-restore-landed.md) changes its nearest implementation.
+The diagnostic proposal below is held; fresh release measurements must use restored production.
+
 Trial 02 completes the fixed initial matrix in Chromium, Firefox, and WebKit.
 Every output comparison is byte-exact against the frozen reference, including metadata.
 All three performance reports return `regression`. This is benchmark-tooling evidence, not release-performance acceptance.

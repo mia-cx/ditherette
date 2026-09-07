@@ -1,5 +1,8 @@
 # S19 nearest measurement
 
+Historical evidence for the recorded revisions only. [The restoration](108-restore-landed.md) removes this replacement from current production.
+These measurements do not establish restored-kernel performance.
+
 The first bounded native experiment passes every required case with exact frozen-reference output.
 The candidate meets the 20% improvement target. No second candidate or repeated measurement is needed.
 This evidence covers native kernels, not complete browser calls or initialization. Those measurements remain required in S20.

@@ -1,5 +1,8 @@
 # S19 literal nearest baseline
 
+Historical checkpoint only. [The restoration](108-restore-landed.md) reverses this replacement of already-landed production.
+The contract copies remain; missing implementations still follow spec-first development.
+
 Issue [60](https://github.com/mia-cx/ditherette/issues/60). This checkpoint completes only the literal-copy prerequisite.
 The processor, fallible allocations, package boundary, and optimization evidence remain pending.
 
