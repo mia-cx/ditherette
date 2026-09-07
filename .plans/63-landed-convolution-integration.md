@@ -76,7 +76,7 @@ Public lifecycle/package conformance and native/browser benchmark evidence remai
 Coordinator-authorized join `04e54c8` merges exact S21/registration checkpoint `b52d1c8b7d67dfa2cc0900c05583a6926b835762`.
 The only conflict was S21's earlier helper plan versus its completed record; retain the completed S21 record.
 
-- [~] Extend prepared dispatch, private ABI, and public validation/types for bicubic, Lanczos2, and Lanczos3; verify native output and allocation failures.
+- [x] Extend prepared dispatch, private ABI, and public validation/types for bicubic, Lanczos2, and Lanczos3; verify native output and allocation failures.
 - [ ] Build scalar/threaded package artifacts and verify interface, private ABI, and installed tarball across Chromium, Firefox, and WebKit.
 - [ ] Record checks and frozen identity, push clean checkpoints, and drain all owned processes.
 
@@ -87,3 +87,17 @@ Public requests require explicit anchor and support for convolution. Area/biline
 Private invalid support uses existing `output.resize` failure path, preserving the compact ABI table.
 Public validation reports the precise `output.resize.support` path before entering Wasm.
 The coordinator continues to own all benchmark registrations, scripts, and measurements.
+
+Prepared dispatch now owns the fallible f64 plans and scratch for all three convolution modes.
+Execution failures propagate through the existing compact `Failure` path before publishing a result.
+Public types require both anchor and support. Raw tags reject invalid support and unused settings without poisoning the instance.
+No kernel file changed after native checkpoint `53eaf013`.
+
+The native public matrix passes 486 exact comparisons against landed output across nine shapes, all anchors, and both policies.
+It includes the separable threshold branch, alpha extremes, hidden RGB, and maximum supported source/output side lengths.
+Frozen comparison diagnostics found zero differing pixels in this matrix; they do not establish universal exactness.
+The shared processor failure fixture now covers each convolution mode/policy, nested metadata, scratch, image buffers, and copy/result failures.
+Every failed preparation releases all owned bytes; retry succeeds. Exact-capacity requests pass and one byte less rejects before allocation.
+
+The separate 2×1 half-byte alpha fixture yields 127 for scale-aware Lanczos3 in the landed Wasm path; the other modes yield 128.
+Direct legacy `resizeRgba8` confirms this output. The public fixtures preserve it without changing arithmetic or approving a new approximation.

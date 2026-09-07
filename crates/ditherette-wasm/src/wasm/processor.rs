@@ -18,7 +18,7 @@ use crate::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             request::{
-                Anchor, Output, ResizePolicy, MAX_MEMORY_LIMIT_BYTES, MAX_OUTPUT_SIDE,
+                Anchor, Output, ResizePolicy, Support, MAX_MEMORY_LIMIT_BYTES, MAX_OUTPUT_SIDE,
                 MAX_SOURCE_SIDE,
             },
         },
@@ -123,6 +123,7 @@ pub fn private_resize(
     output_height: f64,
     algorithm: f64,
     anchor: f64,
+    support: f64,
     result_sink: &JsValue,
 ) -> u32 {
     let mut processor = match take_ready() {
@@ -130,6 +131,18 @@ pub fn private_resize(
         Err(error) => return status(error),
     };
     let result = (|| {
+        if matches!(algorithm, 0.0 | 1.0 | 2.0) && support != 0.0 {
+            return Err(Failure::new(
+                ErrorCode::InvalidSettings,
+                ErrorPath::OutputResize,
+            ));
+        }
+        if algorithm == 1.0 && anchor != 0.0 {
+            return Err(Failure::new(
+                ErrorCode::InvalidSettings,
+                ErrorPath::OutputAnchor,
+            ));
+        }
         let request = ResizeRequest {
             source_width: dimension(
                 source_width,
@@ -163,6 +176,18 @@ pub fn private_resize(
                     1.0 => ResizePolicy::Area {},
                     2.0 => ResizePolicy::Bilinear {
                         anchor: parse_anchor(anchor)?,
+                    },
+                    3.0 => ResizePolicy::Bicubic {
+                        anchor: parse_anchor(anchor)?,
+                        support: parse_support(support)?,
+                    },
+                    4.0 => ResizePolicy::Lanczos2 {
+                        anchor: parse_anchor(anchor)?,
+                        support: parse_support(support)?,
+                    },
+                    5.0 => ResizePolicy::Lanczos3 {
+                        anchor: parse_anchor(anchor)?,
+                        support: parse_support(support)?,
                     },
                     _ => {
                         return Err(Failure::new(
@@ -269,6 +294,17 @@ fn parse_anchor(value: f64) -> Result<Anchor, Failure> {
         _ => Err(Failure::new(
             ErrorCode::InvalidSettings,
             ErrorPath::OutputAnchor,
+        )),
+    }
+}
+
+fn parse_support(value: f64) -> Result<Support, Failure> {
+    match value {
+        0.0 => Ok(Support::Fixed),
+        1.0 => Ok(Support::ScaleAware),
+        _ => Err(Failure::new(
+            ErrorCode::InvalidSettings,
+            ErrorPath::OutputResize,
         )),
     }
 }
