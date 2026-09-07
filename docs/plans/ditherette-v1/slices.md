@@ -33,7 +33,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S16](#s16) | Specify adaptive Yliluoma mixing | [S10](#s10), [S12](#s12) | Ready | [#100](https://github.com/mia-cx/ditherette/pull/100) |
 | [S17](#s17) | Complete the five-method reference processor | [S05](#s05), [S10](#s10), [S11](#s11), [S13](#s13), [S14](#s14), [S15](#s15), [S16](#s16) | Ready | [#103](https://github.com/mia-cx/ditherette/pull/103) |
 | [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) | Ready | [#104](https://github.com/mia-cx/ditherette/pull/104) |
-| [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | Ready | [#105](https://github.com/mia-cx/ditherette/pull/105) |
+| [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | In progress | [#105](https://github.com/mia-cx/ditherette/pull/105) |
 | [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) | Ready | [#107](https://github.com/mia-cx/ditherette/pull/107) |
 | [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | In progress | - |
 | [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | In progress | - |
@@ -77,7 +77,7 @@ Each GitHub issue will link the new parent PRD, list its user stories and immuta
 
 Every production implementation issue must also include this acceptance criterion:
 
-- [ ] Copy the frozen implementation from `spec/` into mirrored `prod/`, allowing only mechanical import/module changes. Record and verify that baseline before optimization. Keep `spec/` unchanged and attach ditherette-bench evidence for production changes. Existing optimized code is a candidate, not a replacement for the copy step.
+- [ ] Reuse already-landed production kernels and shared helpers. For genuinely missing implementations, copy frozen `spec/` into mirrored `prod/` with only mechanical wiring changes and verify the baseline before optimization. Keep `spec/` unchanged. Do not replace landed implementations or repeat their optimization work.
 
 Benchmark obligations follow the parent PRD's bounded, filter-specific targets. No slice requires endless tuning or an artificial speedup for every scalar kernel. A measured rejected candidate satisfies an experiment obligation; final correctness and regression gates still apply.
 
@@ -516,14 +516,14 @@ Create the immutable spec checkpoint before new production work starts.
 
 **What to build**
 
-Implement createDitherette and a complete nearest-resize call through the public wrapper, production copy, and durable JS output.
+Implement createDitherette and a complete nearest-resize call through the public wrapper, landed optimized nearest kernel, and durable JS output.
 
 **Acceptance criteria**
 
-- [ ] Establish the literal frozen-reference copy as a separate verified production baseline before evaluating any existing optimization.
+- [ ] Reuse the landed nearest kernel and its shared helpers, preserving its production dispatch and validating against the frozen reference.
 - [ ] Implement isolated instance state, preflight/capacity accounting, default memory budget, fallible allocation handling, and idempotent dispose.
 - [ ] Prove input preservation, durable output, structured errors, disposed rejection, and instance isolation.
-- [ ] Register spec/accepted/candidate subjects and attach exclusive benchmark evidence for an exact optimization attempt.
+- [ ] Register reference and landed production subjects, then measure the integrated call. New optimization is optional and must use the landed implementation as its comparison baseline.
 - [ ] Open a reviewable unmerged PR against the correct parent/join; record validated head and dependency SHAs.
 
 **Ownership:** Public wrapper core, private Wasm processor, nearest production path and memory allocator seam.
@@ -565,14 +565,14 @@ Extend ditherette-bench's browser transport from resize kernel batches to actual
 
 **What to build**
 
-Expose bilinear and area through resize and carry their existing optimizations forward only when frozen-reference checks pass.
+Expose the landed optimized bilinear and area implementations through resize. Reuse their plans and shared helpers.
 
 **Acceptance criteria**
 
-- [ ] Each mode has a readable copied baseline and complete public-call coverage.
+- [ ] Each landed mode retains its optimized implementation and gains complete public-call coverage, with recorded frozen-reference checks.
 - [ ] Exercise fractional edges, alpha bytes, identity, anisotropic scaling, and scale extremes.
 - [ ] Measure plans/reuse or loop improvements against freshly measured accepted code and retain exact improvements.
-- [ ] Archive any non-exact candidate separately; keep the exact production path usable AFK.
+- [ ] Preserve landed exact or bounded behavior. Archive new non-exact candidates separately and obtain Mia's approval before selecting them.
 - [ ] Open a reviewable unmerged PR against the correct parent/join; record validated head and dependency SHAs.
 
 **Ownership:** Production bilinear/area modules and mode registration fragments.
@@ -589,13 +589,13 @@ Expose bilinear and area through resize and carry their existing optimizations f
 
 **What to build**
 
-Expose bicubic and Lanczos2/3 with their specified support policies through the package.
+Expose landed bicubic and Lanczos2/3 through the package, reusing their optimized shared convolution engine and support plans.
 
 **Acceptance criteria**
 
 - [ ] Cover all fixed/scale-aware combinations and anchors defined by the frozen reference.
 - [ ] Validate negative lobes, clipping/rounding, odd shapes, and downsampling.
-- [ ] Benchmark contribution plans and scalar loop changes against copied reference-equivalent production baselines.
+- [ ] Measure integrated calls against freshly built landed production. Change contribution plans or loops only for a demonstrated remaining bottleneck.
 - [ ] Preserve exact production behavior unless an existing documented visual approval covers the exact candidate.
 - [ ] Open a reviewable unmerged PR against the correct parent/join; record validated head and dependency SHAs.
 

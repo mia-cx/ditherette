@@ -2,6 +2,18 @@
 
 Read the [execution contract](README.md#execution-contract) before claiming a slice. Each entry records the validated dependency commits and outstanding evidence.
 
+## Current correction: retain landed production
+
+Mia directs restoration of the landed optimized kernels and shared helpers in [#108](https://github.com/mia-cx/ditherette/issues/108).
+This supersedes earlier copied-baseline execution instructions for already-landed implementations, not the frozen reference itself.
+The coordinator owns `fix/v1-restore-landed` in `.worktrees/v1-restore-landed`, based on S20 `e19e12c219605138399cabd71b84cd4d9262a678`.
+S21 restores area/bilinear in its existing branch; S22 restores cubic/Lanczos/convolution in its existing branch.
+A separate nearest restoration reconnects the new public API while preserving required bounded/fallible integration.
+S19 readiness is withdrawn until that correction passes. Existing PRs and historical evidence remain open and recoverable.
+S20 tooling evidence remains valid for the artifact it measured; it does not establish performance of the restored implementation.
+The interrupted diagnostic branch stays separate and will not delay restoring landed code.
+All later work reuses landed kernels and shared helpers. Only missing implementations start from literal spec copies.
+
 ## Delivered S01 through S16
 
 This snapshot comes from the live PR state after S16 delivery. All 16 PRs are open, non-draft, and have auto-merge disabled.
