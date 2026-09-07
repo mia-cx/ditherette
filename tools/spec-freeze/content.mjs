@@ -15,15 +15,20 @@ export function files(root, relative) {
 	if (stat.isSymbolicLink()) throw new Error(`Symlink is forbidden: ${relative}`);
 	if (stat.isFile()) return [relative];
 	if (!stat.isDirectory()) throw new Error(`Unsupported file type: ${relative}`);
-	return readdirSync(path).sort().flatMap((name) => files(root, `${relative}/${name}`));
+	return readdirSync(path)
+		.sort()
+		.flatMap((name) => files(root, `${relative}/${name}`));
 }
 
 export function inventory(root, paths) {
-	return paths.flatMap((path) => files(root, path)).sort().map((path) => ({
-		path,
-		mode: lstatSync(join(root, path)).mode & 0o111 ? '100755' : '100644',
-		sha256: sha256(readFileSync(join(root, path)))
-	}));
+	return paths
+		.flatMap((path) => files(root, path))
+		.sort()
+		.map((path) => ({
+			path,
+			mode: lstatSync(join(root, path)).mode & 0o111 ? '100755' : '100644',
+			sha256: sha256(readFileSync(join(root, path)))
+		}));
 }
 
 export function contentDigest(entries) {
@@ -41,7 +46,8 @@ export function verifyContent(root, checkpoint) {
 		);
 		throw new Error(`Frozen content changed:\n${changed.join('\n')}`);
 	}
-	if (contentDigest(actual) !== checkpoint.contentSha256) throw new Error('Invalid checkpoint content digest');
+	if (contentDigest(actual) !== checkpoint.contentSha256)
+		throw new Error('Invalid checkpoint content digest');
 	return checkpoint.identity;
 }
 

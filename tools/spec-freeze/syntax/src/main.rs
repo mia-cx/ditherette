@@ -11,6 +11,18 @@ struct Check<'a> {
 
 impl<'ast> Visit<'ast> for Check<'_> {
     fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+        if [
+            "include",
+            "include_str",
+            "include_bytes",
+            "env",
+            "option_env",
+        ]
+        .contains(&ident.to_string().trim_start_matches("r#"))
+        {
+            self.errors
+                .push(format!("source-injection identifier: {ident}"));
+        }
         if self
             .forbidden
             .contains(&ident.to_string().trim_start_matches("r#"))
@@ -56,6 +68,11 @@ impl<'ast> Visit<'ast> for Check<'_> {
         fn inspect(tokens: proc_tokens::TokenStream, forbidden: &[&str], errors: &mut Vec<String>) {
             for token in tokens {
                 match token {
+                    proc_tokens::TokenTree::Punct(punct) if punct.as_char() == '#' => {
+                        errors.push(
+                            "macro-generated attributes require explicit policy review".into(),
+                        );
+                    }
                     proc_tokens::TokenTree::Group(group) => {
                         inspect(group.stream(), forbidden, errors)
                     }
@@ -93,6 +110,9 @@ impl<'ast> Visit<'ast> for Check<'_> {
 }
 
 fn root(file: &syn::File) -> Result<(), String> {
+    if file.attrs.iter().any(|attr| !attr.path().is_ident("doc")) {
+        return Err("changed crate-wide reference compilation attributes".into());
+    }
     let mut modules = Vec::new();
     for item in &file.items {
         match item {
@@ -128,7 +148,35 @@ fn root(file: &syn::File) -> Result<(), String> {
                         UseTree::Rename(_) | UseTree::Glob(_) => false,
                         UseTree::Path(p) => no_alias(&p.tree),
                         UseTree::Group(g) => g.items.iter().all(no_alias),
-                        _ => true,
+                        UseTree::Name(name) => ![
+                            "image",
+                            "spec",
+                            "prod",
+                            "serde",
+                            "serde_json",
+                            "sha2",
+                            "std",
+                            "core",
+                            "alloc",
+                            "rayon",
+                            "wasm",
+                            "wasm_bindgen_rayon",
+                            "vec",
+                            "format",
+                            "write",
+                            "writeln",
+                            "assert",
+                            "assert_eq",
+                            "assert_ne",
+                            "debug_assert",
+                            "debug_assert_eq",
+                            "debug_assert_ne",
+                            "matches",
+                            "panic",
+                            "unreachable",
+                            "todo",
+                        ]
+                        .contains(&name.ident.to_string().as_str()),
                     }
                 }
                 if !no_alias(&import.tree) {
@@ -188,7 +236,7 @@ fn check(path: &Path, role: &str) -> Result<(), String> {
         "spec" => &["prod", "wasm", "bench_subjects"],
         "prod" => &["spec", "wasm", "bench_subjects"],
         "image" => &["spec", "prod", "wasm", "bench_subjects"],
-        "root" => &[],
+        "root" | "adapter" => &[],
         _ => return Err("unknown source role".into()),
     };
     let mut check = Check {

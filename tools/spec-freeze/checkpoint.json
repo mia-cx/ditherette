@@ -1,548 +1,548 @@
 {
-  "schema": 1,
-  "name": "ditherette-v1-reference",
-  "revision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
-  "trees": {
-    "crates/ditherette-wasm/src/spec": "f443187b7bf84753d10ca2288242a8787d3c2b42",
-    "crates/ditherette-wasm/src/image": "138cb82ba25b3250ac25f4ac11ee17d02d09f811"
-  },
-  "contentSha256": "17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe",
-  "identity": {
-    "state": "frozen",
-    "revision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
-    "artifact": "sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe"
-  },
-  "inventory": "crates/ditherette-wasm/src/spec/contract/inventory.md",
-  "files": [
-    {
-      "path": "crates/ditherette-wasm/examples/generate_blue_noise.rs",
-      "mode": "100644",
-      "sha256": "84452b4b740ab58014a5eeb7b50210c4961a68ce108bf06b2f842bc9c7886141"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/contracts.rs",
-      "mode": "100644",
-      "sha256": "6738776d62d2f08fd0aa3f1c1d52f208ec87e08144f355f8c180db9d0cef39a7"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/dimensions.rs",
-      "mode": "100644",
-      "sha256": "db5ec3febc279382e12cfa7cf7177c9590566fb9471a166698a61bcf69118748"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/formats.rs",
-      "mode": "100644",
-      "sha256": "b68b12e5a131d7ab393c14d46240eb5e25ff5bcbe97c850e2c7051666b980f05"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/mod.rs",
-      "mode": "100644",
-      "sha256": "483c2d99603a3e6ff714f676b2c81060ee6c5e47886584d79d14063e9af43eb0"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/owned.rs",
-      "mode": "100644",
-      "sha256": "b859862efa1959dd4e80d75c4d0647a861ac952edaf3cb47dc83a66ec69c07ed"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/pixel.rs",
-      "mode": "100644",
-      "sha256": "7c4412b19274ac986986862bd7b40edce514bb62bdcd858c8a30b05edb6c7633"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/rgba8.rs",
-      "mode": "100644",
-      "sha256": "677ca1934bedcb0ef2c5344a53766d2bd2131f44bca17ceb9f8ee577fc0e79b4"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/spec.md",
-      "mode": "100644",
-      "sha256": "728c4e26a76aa8e30134440c6ab8e24f10a20ce96c2233681346942d9bfd479f"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/stride.rs",
-      "mode": "100644",
-      "sha256": "de32f15d55390166e1964adbf3ede1f7205549341ded0ad8233b05e4030cbb63"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/validate.rs",
-      "mode": "100644",
-      "sha256": "37f6e22769ea78c4ee05ea7bb23c3ef864b26613f4cb710260599d5354cbd8d1"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/image/view.rs",
-      "mode": "100644",
-      "sha256": "a216022d06cac438925e1d6faae0c9a32007b6051757064d0a015e860e0918c9"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/adapters.rs",
-      "mode": "100644",
-      "sha256": "e230742a46e6925eb313ea931fb7bd2f472a91a2f5d3e9bfc5875bc7f6f1e935"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/cielab.md",
-      "mode": "100644",
-      "sha256": "2d804c7f39cb0fe0b9dd3b6036f1163f9e0ec535d07af0cdc7f0d21a01e9eefe"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/cielab.rs",
-      "mode": "100644",
-      "sha256": "4a39baa33f57eed00731175b50e9b19a14adc7a67e32040fc6c10998a5d3ed50"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/cielch.md",
-      "mode": "100644",
-      "sha256": "d12ea08849aae2f6a7656cabfae4c633c9ac4069e6dfccf65a689217cf41f5d4"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/cielch.rs",
-      "mode": "100644",
-      "sha256": "b58b027b77050589aa778dd6940d27497bd763c25af60fee728866355f2c8d52"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/common.rs",
-      "mode": "100644",
-      "sha256": "48378e77bd6f1677ae490a47fa6527ec2d8802b8456d5bcd758ef933cdbd8d0f"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/lab_ciede2000.md",
-      "mode": "100644",
-      "sha256": "28ff4e55e96eb794ca300892e5826d7b32eb6fe9cd0dc6fd60f310eb53a7db9f"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/lab_ciede2000.rs",
-      "mode": "100644",
-      "sha256": "006c56bb615458f6ff11ca81d74c92cfa37c7e611f4632763cfb53aa31d40ed0"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/linear.md",
-      "mode": "100644",
-      "sha256": "e8821300345a8a9594130771415bee598cb319c63dd99f32691b24662c92499a"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/linear.rs",
-      "mode": "100644",
-      "sha256": "cb0571ece32caf2f604eaf818465ebb22f9af548484b950da40c284e167f606d"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/mod.rs",
-      "mode": "100644",
-      "sha256": "213affb8359c023c64ca6e57a665c8a589894f41e6f5f5161bbf94ccff7071bb"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/oklab.md",
-      "mode": "100644",
-      "sha256": "531d911dde084e732d982ce30bb920a0daa7bfa7e31122a3fef837d394ad9828"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/oklab.rs",
-      "mode": "100644",
-      "sha256": "4ed1ef3b281ee6e0caf9b4c6e1be89c61f66a75252e9bccae4cee17ee42900ab"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/oklch.md",
-      "mode": "100644",
-      "sha256": "b63a2d938b583d117d0f6b73eb3930c2dded5b729b5e03253f1c617c74fa0653"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/oklch.rs",
-      "mode": "100644",
-      "sha256": "d8700bf1725223d2907c66bafe37fd8f64cac84d9a2784cbc912c035f17d2ba5"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/reconstruct.md",
-      "mode": "100644",
-      "sha256": "bfedb8222c7918bf6caf577923bb0163ca62b8c3c8751927af7e2d4fa86e4925"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/reconstruct.rs",
-      "mode": "100644",
-      "sha256": "b54ea554a05ed783e780d259b44ef610722b1b7d67d222e4ff937521d04eb23d"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/spaces.md",
-      "mode": "100644",
-      "sha256": "fe89e08fe79434355b6b3ba3ad98a8b1b84305da94ba4bf2dadd5d8542a7ff67"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/spaces.rs",
-      "mode": "100644",
-      "sha256": "2277602cf56ef17f1b7fbc9d5ddb46eb545140a79a5f76851ebcc1a646791f50"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/spec.md",
-      "mode": "100644",
-      "sha256": "f9a54b7174f16c5fd2ae24f29c46e4087285c7efda052a08005d5059747d8a91"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/srgb.md",
-      "mode": "100644",
-      "sha256": "233ae16ed3b88b8248e1a27206c5c9a26b2321f43729692a32ee74e16e07e3ce"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/srgb.rs",
-      "mode": "100644",
-      "sha256": "b75f0b7b9e1b1796bf00535968ff7c7490bae3ef1fc4c264cff185e8513005ba"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/ycbcr.md",
-      "mode": "100644",
-      "sha256": "7d67c40714db2d035b19b8d7c763ea652f571da1aedb826bf82c1aa0162135d3"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/color/ycbcr.rs",
-      "mode": "100644",
-      "sha256": "2cedef2c74ad07deae9eb67eb2223c296201d979484ccf68fb2be5af46857043"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/cache.md",
-      "mode": "100644",
-      "sha256": "c0227cad4249a46cce4ee6ec4ddbc6676a676c0f991564b574d3b691afcc0d6d"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/cache.rs",
-      "mode": "100644",
-      "sha256": "69d63817847e96e1ef1aad588ba5adc0f6707a3043f525469d9bb690ab7a436b"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/error.rs",
-      "mode": "100644",
-      "sha256": "35f79187072422227427104cfd983778de3d4f094271b66aa64c4cb67621ffce"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/inventory.md",
-      "mode": "100644",
-      "sha256": "95e176383099c30a7369762648d1e384fb3f1131c7ce397d49f5ce69db7d07c1"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/lifecycle.rs",
-      "mode": "100644",
-      "sha256": "2973527c6da2c0a15394c0751c0dcb5c2f26c1c16128fc6310049ff27eafa259"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/mod.rs",
-      "mode": "100644",
-      "sha256": "156cc5962c8851fbb886d31320e7f609f997babccd5a1d63e748f51e62a1b46f"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/request.rs",
-      "mode": "100644",
-      "sha256": "79f5f236771952bb2188f6a569be4ac70bea01ba833fe682eb9d1dd7d8679061"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/thread_pool.md",
-      "mode": "100644",
-      "sha256": "c74912f0ade65790846593beebbbd026be5b99c0efe7d458557ce12d05638665"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/contract/thread_pool.rs",
-      "mode": "100644",
-      "sha256": "28f2b89b15251cc40ac96356292968738a335eb5381fff1eb3fe1ba470f5f9ca"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/blue_noise.md",
-      "mode": "100644",
-      "sha256": "81ece414571d815de533bb6660851396f16e50a4ecac979a4751f95e221a069e"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/blue_noise.rs",
-      "mode": "100644",
-      "sha256": "30d5caff635f6c562b34dfa850810ce972845eacbfadfcfbc2556c4d1dabc1c4"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/blue_noise/analysis.json",
-      "mode": "100644",
-      "sha256": "36b4e6899888710e9de7db2d5a8796e4351edf61d55bafab158b29631b88d71e"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/blue_noise/generator.rs",
-      "mode": "100644",
-      "sha256": "93146f0557c37b1f2619d54d8b11025692e754461dac76bf821e3dc3546e2ff1"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/blue_noise/tile.rs",
-      "mode": "100644",
-      "sha256": "d4e03f76547d21b51613e0eb981cb24549f375a208c9be923be9f3b92f268830"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/common.rs",
-      "mode": "100644",
-      "sha256": "e834e30a792e5b3fd902fe5c7e51d379a11993dc0f3da12ce9e462da7ec9d47e"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/error_diffusion.md",
-      "mode": "100644",
-      "sha256": "2d0f42172c512fa18edd03373df409d1e89f06f45c8372df61673e4ae6d1338e"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/error_diffusion.rs",
-      "mode": "100644",
-      "sha256": "18c649f3fd211aa64c1a50794607cef1126dbc96eea7bdfb9b1d2d551bceedd6"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/mod.rs",
-      "mode": "100644",
-      "sha256": "122f262ca1a4032f120b160553e975426e4cf258b822be281de8338e33fba680"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/ordered.md",
-      "mode": "100644",
-      "sha256": "c1776c7c793bf703a6516c34c53fa8740437d83d60753bf5e6d7524f34783d38"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/ordered.rs",
-      "mode": "100644",
-      "sha256": "ffead72bc6829d1cecfdf7a4f455429de3432587cca0537acf454a8389a0543c"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/perturb.md",
-      "mode": "100644",
-      "sha256": "094089392e41b4337e081fd99d78cbff88019249b48f9cb4186f99616b152d95"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/perturb.rs",
-      "mode": "100644",
-      "sha256": "b4493bbddb6c9b7a00fe865ed10732b9c4cd268ebe20723afcef2db8f8ba8501"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/placement.md",
-      "mode": "100644",
-      "sha256": "2c88f646ccac74b36c4b289fdffb12a61d8890dd0c5c8cfc1208a4dd2cc157a5"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/placement.rs",
-      "mode": "100644",
-      "sha256": "4f8ab3ac5244f1871e3c8518d1641276b747e1869c6a370932bb2f71ee3453c0"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/random_noise.md",
-      "mode": "100644",
-      "sha256": "f62487af5c91601a6dd0a4c48cde11cfd5850c0eee10af09d4daeff6f6980c29"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/random_noise.rs",
-      "mode": "100644",
-      "sha256": "02f95f37e70d7cb4ab02649f184f60a320f4ce51a9ac28319f7671272529484d"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/spec.md",
-      "mode": "100644",
-      "sha256": "f84eb3def891ca44b1645e2ee04293858b670a0a23586a8e57b8b9ae269b0645"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/yiluoma.md",
-      "mode": "100644",
-      "sha256": "860dc213dcf3aca03ab619750e0e90f5a56796c47334f6affd496b9822afdb41"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/dither/yiluoma.rs",
-      "mode": "100644",
-      "sha256": "bc02e74b12b844ecfe752a099afc05d64d9f15206b8a9ef2b94bf90138fe1676"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/mod.rs",
-      "mode": "100644",
-      "sha256": "9e7b826981d757c97f8da0b7d2c635c86aaeb85fb08f6be4df6303f6b410b80b"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/palette/README.md",
-      "mode": "100644",
-      "sha256": "cff34f8ebc4306f739cff0eb90010d482e2ce919bbd0562264d85d59b071af36"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/palette/mod.rs",
-      "mode": "100644",
-      "sha256": "4ab764ddc1f8b6aa42fef6dec784b470b3432fce11e27bb16bcec741c18ae31e"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/pipeline/README.md",
-      "mode": "100644",
-      "sha256": "3af59f36a2d5cd3bacee905e9cf1496122668e488a6f4c8681fff90fc5bc87cf"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/pipeline/mod.rs",
-      "mode": "100644",
-      "sha256": "f6bb7c9f7cdf4ab05516c735164470b34b60a92c6ad5f0daa33c05e8fec5a1c1"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/pipeline/processor.rs",
-      "mode": "100644",
-      "sha256": "3961e42803eebfdf5acb4991c1ae3ffa9ed6291c742bd867d54ae258daa8b5f1"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/quantize/matcher.rs",
-      "mode": "100644",
-      "sha256": "832e1eccf9c4a4d25f89d2596521c7bd6a7ae9f40cc1826e7d2e679bcdf82f53"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/quantize/metric.md",
-      "mode": "100644",
-      "sha256": "ef87170a93e6e79239c8c9b07c6bf9e33850b0fde73f56b010002f8de220f3f7"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/quantize/metric.rs",
-      "mode": "100644",
-      "sha256": "6cc281e26bf64bb6274151512962e4709d22ab16c5a2380dccbb9f6a187a81c3"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/quantize/mod.rs",
-      "mode": "100644",
-      "sha256": "1fff41e07c59078865d402b0510622be0c0a57a12272298c9d955f820f133175"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/quantize/nearest_color.md",
-      "mode": "100644",
-      "sha256": "b28cd80860eebf142202753cc590c9f2e9bc302501ab15cc8d768e3fae7b62b7"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/quantize/nearest_color.rs",
-      "mode": "100644",
-      "sha256": "9a9b263686e8288fc4fc87041ceb410b3a77f12c0e469411673d88d8cd0c2c29"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/common/alignment.md",
-      "mode": "100644",
-      "sha256": "243b35e95cd92cec3104fd43b4936dcfbd7c081de28764b04cdf50d0f0dac42a"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/common/alignment.rs",
-      "mode": "100644",
-      "sha256": "1805058261679b837adacdb55c34b106f495275494a22e152e8049a47ff533af"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/common/coordinates.md",
-      "mode": "100644",
-      "sha256": "675f4ac664e02ea5a8e6b1d4aba1882af19d0a98e1e9259e9cd4c07ce3d48f8d"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/common/coordinates.rs",
-      "mode": "100644",
-      "sha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/common/mod.rs",
-      "mode": "100644",
-      "sha256": "4cca38ac30714437387304d1ea01467d97dc2dbb912ae2ea054a9eb8d2c29aa0"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/common/sample.md",
-      "mode": "100644",
-      "sha256": "5d51ba02d6497e68a4120c95b6e9c164a93d5c15b0dc245c5094f31e6a79fd39"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/common/sample.rs",
-      "mode": "100644",
-      "sha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/mod.rs",
-      "mode": "100644",
-      "sha256": "75aac1ffd77fdef65f0888698b0b6888b4744457e0d94ce4dfb351a1d4c51ca8"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/area.md",
-      "mode": "100644",
-      "sha256": "774ab06e7d510b09be5e368f75e3eddd25984628d93177b7c753cb19b4a91069"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/area.rs",
-      "mode": "100644",
-      "sha256": "91e3e9596d61946ccd5fc5800bb6b58e116721b744091ce9388af98b881829aa"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/bicubic.md",
-      "mode": "100644",
-      "sha256": "8f88e9a14fa565683e4b9619a4a1d6eed1a323563275005cc569ecd400d8d6b0"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/bicubic.rs",
-      "mode": "100644",
-      "sha256": "53fb0849eac940cc96bba33f5e9db2c50fece3035face96a8d5f9bcda7d97597"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/bilinear.md",
-      "mode": "100644",
-      "sha256": "1875ee8f927f607955c8504f2ff4da08bbaf1e081511bdcdf9aba224d6da3e2c"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/bilinear.rs",
-      "mode": "100644",
-      "sha256": "11635c667051f666d26e6b77905910b6298fd62eb26fb0eb1693412771cf2635"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/convolution.md",
-      "mode": "100644",
-      "sha256": "0dbf0a252fef38a35fc399285c2699f27c17f85bcf222e8bc44a34d2b32a74ea"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/convolution.rs",
-      "mode": "100644",
-      "sha256": "1a752689ca78c7ca8ca739fe4b7fbd6b1b51bc6c8fa32b6825e0a0f82ce5053c"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/lanczos.md",
-      "mode": "100644",
-      "sha256": "ca8d9eeca23cdca23370c7e04812f52577c96a0a6fea01fe439e27e0bac20888"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/lanczos.rs",
-      "mode": "100644",
-      "sha256": "3203628ffe33e48396a13b241f2c7fcc4826b52daebbb7248346e7934b7b8cc2"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/mod.rs",
-      "mode": "100644",
-      "sha256": "5b00cbccda8b7b758418b179613651261d982482405e32fa84ad134d8a172886"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/nearest.md",
-      "mode": "100644",
-      "sha256": "71d2e0b3431edf1749d5f87af7f1dbf3ada3ab2377e7f7ebb3c6a4491e162ee9"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/nearest.rs",
-      "mode": "100644",
-      "sha256": "f373562060b034ce0dbde9f5c230ae06f19955500face15fe8a5c9f9c5604cd1"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/trilinear.md",
-      "mode": "100644",
-      "sha256": "ca539dfb5ef52fc8d8a320b2dbd20de9c65c1a70e499f24b9c51645ff4be31b0"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/scalar/trilinear.rs",
-      "mode": "100644",
-      "sha256": "3e2c45f00d6495a69c27ffe42035889eedb13f7b26ceca496ee2d4103e0908cc"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/resize/spec.md",
-      "mode": "100644",
-      "sha256": "193ff02103d0e6ac3540ddf8c3895a4e6f4247ae68b03f8af5ece6e614545bce"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/tiling/contract.md",
-      "mode": "100644",
-      "sha256": "510b7da6630a28ea6a3b45a9066718afbc9de244d91ad249cb36b41d11dbf0da"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/tiling/contract.rs",
-      "mode": "100644",
-      "sha256": "45d1a6744d7696482955d87eea711c57419974d4f5674c7519690fa49c9197b4"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/tiling/execution.rs",
-      "mode": "100644",
-      "sha256": "7c46a87d91e4db023c58d8b1ce051d22230a1d30bd056c8e12d08002e2a9ba29"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/tiling/mod.rs",
-      "mode": "100644",
-      "sha256": "060fb8624413db518af38a898694a66a137572b6c50b50bf2a0852441efeae6f"
-    },
-    {
-      "path": "crates/ditherette-wasm/src/spec/tiling/spec.md",
-      "mode": "100644",
-      "sha256": "19f2100b27b75765f5e4cb412cc8e3525c18eaaf598e2520770c9bd83c0762e6"
-    }
-  ]
+	"schema": 1,
+	"name": "ditherette-v1-reference",
+	"revision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+	"trees": {
+		"crates/ditherette-wasm/src/spec": "f443187b7bf84753d10ca2288242a8787d3c2b42",
+		"crates/ditherette-wasm/src/image": "138cb82ba25b3250ac25f4ac11ee17d02d09f811"
+	},
+	"contentSha256": "17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe",
+	"identity": {
+		"state": "frozen",
+		"revision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+		"artifact": "sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe"
+	},
+	"inventory": "crates/ditherette-wasm/src/spec/contract/inventory.md",
+	"files": [
+		{
+			"path": "crates/ditherette-wasm/examples/generate_blue_noise.rs",
+			"mode": "100644",
+			"sha256": "84452b4b740ab58014a5eeb7b50210c4961a68ce108bf06b2f842bc9c7886141"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/contracts.rs",
+			"mode": "100644",
+			"sha256": "6738776d62d2f08fd0aa3f1c1d52f208ec87e08144f355f8c180db9d0cef39a7"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/dimensions.rs",
+			"mode": "100644",
+			"sha256": "db5ec3febc279382e12cfa7cf7177c9590566fb9471a166698a61bcf69118748"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/formats.rs",
+			"mode": "100644",
+			"sha256": "b68b12e5a131d7ab393c14d46240eb5e25ff5bcbe97c850e2c7051666b980f05"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/mod.rs",
+			"mode": "100644",
+			"sha256": "483c2d99603a3e6ff714f676b2c81060ee6c5e47886584d79d14063e9af43eb0"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/owned.rs",
+			"mode": "100644",
+			"sha256": "b859862efa1959dd4e80d75c4d0647a861ac952edaf3cb47dc83a66ec69c07ed"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/pixel.rs",
+			"mode": "100644",
+			"sha256": "7c4412b19274ac986986862bd7b40edce514bb62bdcd858c8a30b05edb6c7633"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/rgba8.rs",
+			"mode": "100644",
+			"sha256": "677ca1934bedcb0ef2c5344a53766d2bd2131f44bca17ceb9f8ee577fc0e79b4"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/spec.md",
+			"mode": "100644",
+			"sha256": "728c4e26a76aa8e30134440c6ab8e24f10a20ce96c2233681346942d9bfd479f"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/stride.rs",
+			"mode": "100644",
+			"sha256": "de32f15d55390166e1964adbf3ede1f7205549341ded0ad8233b05e4030cbb63"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/validate.rs",
+			"mode": "100644",
+			"sha256": "37f6e22769ea78c4ee05ea7bb23c3ef864b26613f4cb710260599d5354cbd8d1"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/image/view.rs",
+			"mode": "100644",
+			"sha256": "a216022d06cac438925e1d6faae0c9a32007b6051757064d0a015e860e0918c9"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/adapters.rs",
+			"mode": "100644",
+			"sha256": "e230742a46e6925eb313ea931fb7bd2f472a91a2f5d3e9bfc5875bc7f6f1e935"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/cielab.md",
+			"mode": "100644",
+			"sha256": "2d804c7f39cb0fe0b9dd3b6036f1163f9e0ec535d07af0cdc7f0d21a01e9eefe"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/cielab.rs",
+			"mode": "100644",
+			"sha256": "4a39baa33f57eed00731175b50e9b19a14adc7a67e32040fc6c10998a5d3ed50"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/cielch.md",
+			"mode": "100644",
+			"sha256": "d12ea08849aae2f6a7656cabfae4c633c9ac4069e6dfccf65a689217cf41f5d4"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/cielch.rs",
+			"mode": "100644",
+			"sha256": "b58b027b77050589aa778dd6940d27497bd763c25af60fee728866355f2c8d52"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/common.rs",
+			"mode": "100644",
+			"sha256": "48378e77bd6f1677ae490a47fa6527ec2d8802b8456d5bcd758ef933cdbd8d0f"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/lab_ciede2000.md",
+			"mode": "100644",
+			"sha256": "28ff4e55e96eb794ca300892e5826d7b32eb6fe9cd0dc6fd60f310eb53a7db9f"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/lab_ciede2000.rs",
+			"mode": "100644",
+			"sha256": "006c56bb615458f6ff11ca81d74c92cfa37c7e611f4632763cfb53aa31d40ed0"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/linear.md",
+			"mode": "100644",
+			"sha256": "e8821300345a8a9594130771415bee598cb319c63dd99f32691b24662c92499a"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/linear.rs",
+			"mode": "100644",
+			"sha256": "cb0571ece32caf2f604eaf818465ebb22f9af548484b950da40c284e167f606d"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/mod.rs",
+			"mode": "100644",
+			"sha256": "213affb8359c023c64ca6e57a665c8a589894f41e6f5f5161bbf94ccff7071bb"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/oklab.md",
+			"mode": "100644",
+			"sha256": "531d911dde084e732d982ce30bb920a0daa7bfa7e31122a3fef837d394ad9828"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/oklab.rs",
+			"mode": "100644",
+			"sha256": "4ed1ef3b281ee6e0caf9b4c6e1be89c61f66a75252e9bccae4cee17ee42900ab"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/oklch.md",
+			"mode": "100644",
+			"sha256": "b63a2d938b583d117d0f6b73eb3930c2dded5b729b5e03253f1c617c74fa0653"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/oklch.rs",
+			"mode": "100644",
+			"sha256": "d8700bf1725223d2907c66bafe37fd8f64cac84d9a2784cbc912c035f17d2ba5"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/reconstruct.md",
+			"mode": "100644",
+			"sha256": "bfedb8222c7918bf6caf577923bb0163ca62b8c3c8751927af7e2d4fa86e4925"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/reconstruct.rs",
+			"mode": "100644",
+			"sha256": "b54ea554a05ed783e780d259b44ef610722b1b7d67d222e4ff937521d04eb23d"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/spaces.md",
+			"mode": "100644",
+			"sha256": "fe89e08fe79434355b6b3ba3ad98a8b1b84305da94ba4bf2dadd5d8542a7ff67"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/spaces.rs",
+			"mode": "100644",
+			"sha256": "2277602cf56ef17f1b7fbc9d5ddb46eb545140a79a5f76851ebcc1a646791f50"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/spec.md",
+			"mode": "100644",
+			"sha256": "f9a54b7174f16c5fd2ae24f29c46e4087285c7efda052a08005d5059747d8a91"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/srgb.md",
+			"mode": "100644",
+			"sha256": "233ae16ed3b88b8248e1a27206c5c9a26b2321f43729692a32ee74e16e07e3ce"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/srgb.rs",
+			"mode": "100644",
+			"sha256": "b75f0b7b9e1b1796bf00535968ff7c7490bae3ef1fc4c264cff185e8513005ba"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/ycbcr.md",
+			"mode": "100644",
+			"sha256": "7d67c40714db2d035b19b8d7c763ea652f571da1aedb826bf82c1aa0162135d3"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/color/ycbcr.rs",
+			"mode": "100644",
+			"sha256": "2cedef2c74ad07deae9eb67eb2223c296201d979484ccf68fb2be5af46857043"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/cache.md",
+			"mode": "100644",
+			"sha256": "c0227cad4249a46cce4ee6ec4ddbc6676a676c0f991564b574d3b691afcc0d6d"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/cache.rs",
+			"mode": "100644",
+			"sha256": "69d63817847e96e1ef1aad588ba5adc0f6707a3043f525469d9bb690ab7a436b"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/error.rs",
+			"mode": "100644",
+			"sha256": "35f79187072422227427104cfd983778de3d4f094271b66aa64c4cb67621ffce"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/inventory.md",
+			"mode": "100644",
+			"sha256": "95e176383099c30a7369762648d1e384fb3f1131c7ce397d49f5ce69db7d07c1"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/lifecycle.rs",
+			"mode": "100644",
+			"sha256": "2973527c6da2c0a15394c0751c0dcb5c2f26c1c16128fc6310049ff27eafa259"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/mod.rs",
+			"mode": "100644",
+			"sha256": "156cc5962c8851fbb886d31320e7f609f997babccd5a1d63e748f51e62a1b46f"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/request.rs",
+			"mode": "100644",
+			"sha256": "79f5f236771952bb2188f6a569be4ac70bea01ba833fe682eb9d1dd7d8679061"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/thread_pool.md",
+			"mode": "100644",
+			"sha256": "c74912f0ade65790846593beebbbd026be5b99c0efe7d458557ce12d05638665"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/contract/thread_pool.rs",
+			"mode": "100644",
+			"sha256": "28f2b89b15251cc40ac96356292968738a335eb5381fff1eb3fe1ba470f5f9ca"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/blue_noise.md",
+			"mode": "100644",
+			"sha256": "81ece414571d815de533bb6660851396f16e50a4ecac979a4751f95e221a069e"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/blue_noise.rs",
+			"mode": "100644",
+			"sha256": "30d5caff635f6c562b34dfa850810ce972845eacbfadfcfbc2556c4d1dabc1c4"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/blue_noise/analysis.json",
+			"mode": "100644",
+			"sha256": "36b4e6899888710e9de7db2d5a8796e4351edf61d55bafab158b29631b88d71e"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/blue_noise/generator.rs",
+			"mode": "100644",
+			"sha256": "93146f0557c37b1f2619d54d8b11025692e754461dac76bf821e3dc3546e2ff1"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/blue_noise/tile.rs",
+			"mode": "100644",
+			"sha256": "d4e03f76547d21b51613e0eb981cb24549f375a208c9be923be9f3b92f268830"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/common.rs",
+			"mode": "100644",
+			"sha256": "e834e30a792e5b3fd902fe5c7e51d379a11993dc0f3da12ce9e462da7ec9d47e"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/error_diffusion.md",
+			"mode": "100644",
+			"sha256": "2d0f42172c512fa18edd03373df409d1e89f06f45c8372df61673e4ae6d1338e"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/error_diffusion.rs",
+			"mode": "100644",
+			"sha256": "18c649f3fd211aa64c1a50794607cef1126dbc96eea7bdfb9b1d2d551bceedd6"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/mod.rs",
+			"mode": "100644",
+			"sha256": "122f262ca1a4032f120b160553e975426e4cf258b822be281de8338e33fba680"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/ordered.md",
+			"mode": "100644",
+			"sha256": "c1776c7c793bf703a6516c34c53fa8740437d83d60753bf5e6d7524f34783d38"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/ordered.rs",
+			"mode": "100644",
+			"sha256": "ffead72bc6829d1cecfdf7a4f455429de3432587cca0537acf454a8389a0543c"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/perturb.md",
+			"mode": "100644",
+			"sha256": "094089392e41b4337e081fd99d78cbff88019249b48f9cb4186f99616b152d95"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/perturb.rs",
+			"mode": "100644",
+			"sha256": "b4493bbddb6c9b7a00fe865ed10732b9c4cd268ebe20723afcef2db8f8ba8501"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/placement.md",
+			"mode": "100644",
+			"sha256": "2c88f646ccac74b36c4b289fdffb12a61d8890dd0c5c8cfc1208a4dd2cc157a5"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/placement.rs",
+			"mode": "100644",
+			"sha256": "4f8ab3ac5244f1871e3c8518d1641276b747e1869c6a370932bb2f71ee3453c0"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/random_noise.md",
+			"mode": "100644",
+			"sha256": "f62487af5c91601a6dd0a4c48cde11cfd5850c0eee10af09d4daeff6f6980c29"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/random_noise.rs",
+			"mode": "100644",
+			"sha256": "02f95f37e70d7cb4ab02649f184f60a320f4ce51a9ac28319f7671272529484d"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/spec.md",
+			"mode": "100644",
+			"sha256": "f84eb3def891ca44b1645e2ee04293858b670a0a23586a8e57b8b9ae269b0645"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/yiluoma.md",
+			"mode": "100644",
+			"sha256": "860dc213dcf3aca03ab619750e0e90f5a56796c47334f6affd496b9822afdb41"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/dither/yiluoma.rs",
+			"mode": "100644",
+			"sha256": "bc02e74b12b844ecfe752a099afc05d64d9f15206b8a9ef2b94bf90138fe1676"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/mod.rs",
+			"mode": "100644",
+			"sha256": "9e7b826981d757c97f8da0b7d2c635c86aaeb85fb08f6be4df6303f6b410b80b"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/palette/README.md",
+			"mode": "100644",
+			"sha256": "cff34f8ebc4306f739cff0eb90010d482e2ce919bbd0562264d85d59b071af36"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/palette/mod.rs",
+			"mode": "100644",
+			"sha256": "4ab764ddc1f8b6aa42fef6dec784b470b3432fce11e27bb16bcec741c18ae31e"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/pipeline/README.md",
+			"mode": "100644",
+			"sha256": "3af59f36a2d5cd3bacee905e9cf1496122668e488a6f4c8681fff90fc5bc87cf"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/pipeline/mod.rs",
+			"mode": "100644",
+			"sha256": "f6bb7c9f7cdf4ab05516c735164470b34b60a92c6ad5f0daa33c05e8fec5a1c1"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/pipeline/processor.rs",
+			"mode": "100644",
+			"sha256": "3961e42803eebfdf5acb4991c1ae3ffa9ed6291c742bd867d54ae258daa8b5f1"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/quantize/matcher.rs",
+			"mode": "100644",
+			"sha256": "832e1eccf9c4a4d25f89d2596521c7bd6a7ae9f40cc1826e7d2e679bcdf82f53"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/quantize/metric.md",
+			"mode": "100644",
+			"sha256": "ef87170a93e6e79239c8c9b07c6bf9e33850b0fde73f56b010002f8de220f3f7"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/quantize/metric.rs",
+			"mode": "100644",
+			"sha256": "6cc281e26bf64bb6274151512962e4709d22ab16c5a2380dccbb9f6a187a81c3"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/quantize/mod.rs",
+			"mode": "100644",
+			"sha256": "1fff41e07c59078865d402b0510622be0c0a57a12272298c9d955f820f133175"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/quantize/nearest_color.md",
+			"mode": "100644",
+			"sha256": "b28cd80860eebf142202753cc590c9f2e9bc302501ab15cc8d768e3fae7b62b7"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/quantize/nearest_color.rs",
+			"mode": "100644",
+			"sha256": "9a9b263686e8288fc4fc87041ceb410b3a77f12c0e469411673d88d8cd0c2c29"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/common/alignment.md",
+			"mode": "100644",
+			"sha256": "243b35e95cd92cec3104fd43b4936dcfbd7c081de28764b04cdf50d0f0dac42a"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/common/alignment.rs",
+			"mode": "100644",
+			"sha256": "1805058261679b837adacdb55c34b106f495275494a22e152e8049a47ff533af"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/common/coordinates.md",
+			"mode": "100644",
+			"sha256": "675f4ac664e02ea5a8e6b1d4aba1882af19d0a98e1e9259e9cd4c07ce3d48f8d"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/common/coordinates.rs",
+			"mode": "100644",
+			"sha256": "1868dae6799a598ac02c1008fc14673edec5a0df1ca8843548e1feb508805d6f"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/common/mod.rs",
+			"mode": "100644",
+			"sha256": "4cca38ac30714437387304d1ea01467d97dc2dbb912ae2ea054a9eb8d2c29aa0"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/common/sample.md",
+			"mode": "100644",
+			"sha256": "5d51ba02d6497e68a4120c95b6e9c164a93d5c15b0dc245c5094f31e6a79fd39"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/common/sample.rs",
+			"mode": "100644",
+			"sha256": "c95262113d2ec815dbad88518566ca18ac69fecc0d6a9f0aed8d6421f626e5c9"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/mod.rs",
+			"mode": "100644",
+			"sha256": "75aac1ffd77fdef65f0888698b0b6888b4744457e0d94ce4dfb351a1d4c51ca8"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/area.md",
+			"mode": "100644",
+			"sha256": "774ab06e7d510b09be5e368f75e3eddd25984628d93177b7c753cb19b4a91069"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/area.rs",
+			"mode": "100644",
+			"sha256": "91e3e9596d61946ccd5fc5800bb6b58e116721b744091ce9388af98b881829aa"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/bicubic.md",
+			"mode": "100644",
+			"sha256": "8f88e9a14fa565683e4b9619a4a1d6eed1a323563275005cc569ecd400d8d6b0"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/bicubic.rs",
+			"mode": "100644",
+			"sha256": "53fb0849eac940cc96bba33f5e9db2c50fece3035face96a8d5f9bcda7d97597"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/bilinear.md",
+			"mode": "100644",
+			"sha256": "1875ee8f927f607955c8504f2ff4da08bbaf1e081511bdcdf9aba224d6da3e2c"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/bilinear.rs",
+			"mode": "100644",
+			"sha256": "11635c667051f666d26e6b77905910b6298fd62eb26fb0eb1693412771cf2635"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/convolution.md",
+			"mode": "100644",
+			"sha256": "0dbf0a252fef38a35fc399285c2699f27c17f85bcf222e8bc44a34d2b32a74ea"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/convolution.rs",
+			"mode": "100644",
+			"sha256": "1a752689ca78c7ca8ca739fe4b7fbd6b1b51bc6c8fa32b6825e0a0f82ce5053c"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/lanczos.md",
+			"mode": "100644",
+			"sha256": "ca8d9eeca23cdca23370c7e04812f52577c96a0a6fea01fe439e27e0bac20888"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/lanczos.rs",
+			"mode": "100644",
+			"sha256": "3203628ffe33e48396a13b241f2c7fcc4826b52daebbb7248346e7934b7b8cc2"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/mod.rs",
+			"mode": "100644",
+			"sha256": "5b00cbccda8b7b758418b179613651261d982482405e32fa84ad134d8a172886"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/nearest.md",
+			"mode": "100644",
+			"sha256": "71d2e0b3431edf1749d5f87af7f1dbf3ada3ab2377e7f7ebb3c6a4491e162ee9"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/nearest.rs",
+			"mode": "100644",
+			"sha256": "f373562060b034ce0dbde9f5c230ae06f19955500face15fe8a5c9f9c5604cd1"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/trilinear.md",
+			"mode": "100644",
+			"sha256": "ca539dfb5ef52fc8d8a320b2dbd20de9c65c1a70e499f24b9c51645ff4be31b0"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/scalar/trilinear.rs",
+			"mode": "100644",
+			"sha256": "3e2c45f00d6495a69c27ffe42035889eedb13f7b26ceca496ee2d4103e0908cc"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/resize/spec.md",
+			"mode": "100644",
+			"sha256": "193ff02103d0e6ac3540ddf8c3895a4e6f4247ae68b03f8af5ece6e614545bce"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/tiling/contract.md",
+			"mode": "100644",
+			"sha256": "510b7da6630a28ea6a3b45a9066718afbc9de244d91ad249cb36b41d11dbf0da"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/tiling/contract.rs",
+			"mode": "100644",
+			"sha256": "45d1a6744d7696482955d87eea711c57419974d4f5674c7519690fa49c9197b4"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/tiling/execution.rs",
+			"mode": "100644",
+			"sha256": "7c46a87d91e4db023c58d8b1ce051d22230a1d30bd056c8e12d08002e2a9ba29"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/tiling/mod.rs",
+			"mode": "100644",
+			"sha256": "060fb8624413db518af38a898694a66a137572b6c50b50bf2a0852441efeae6f"
+		},
+		{
+			"path": "crates/ditherette-wasm/src/spec/tiling/spec.md",
+			"mode": "100644",
+			"sha256": "19f2100b27b75765f5e4cb412cc8e3525c18eaaf598e2520770c9bd83c0762e6"
+		}
+	]
 }

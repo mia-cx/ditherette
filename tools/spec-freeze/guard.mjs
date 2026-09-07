@@ -3,7 +3,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { inventory, verifyContent } from './content.mjs';
-import { isolatedCheck, TARGETS, verifyBuildConfiguration, verifyCompiler, verifyDependencies, verifySyntax } from './build.mjs';
+import {
+	isolatedCheck,
+	TARGETS,
+	verifyBuildConfiguration,
+	verifyCompiler,
+	verifyDependencies,
+	verifySyntax
+} from './build.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const POLICY = 'tools/spec-freeze';
@@ -14,14 +21,24 @@ function policyPaths(root, relative = POLICY) {
 	const stat = lstatSync(join(root, relative));
 	if (stat.isSymbolicLink()) throw new Error(`Symlink in guard policy: ${relative}`);
 	if (stat.isFile()) return [relative];
-	return readdirSync(join(root, relative)).sort().flatMap((name) => policyPaths(root, `${relative}/${name}`));
+	return readdirSync(join(root, relative))
+		.sort()
+		.flatMap((name) => policyPaths(root, `${relative}/${name}`));
 }
 
 /** Execute this function from trusted base code, not a candidate-supplied implementation. */
 export function verifyPolicy(root, trustedRoot) {
-	const paths = (directory) => [...policyPaths(directory), ...(existsSync(join(directory, WORKFLOW)) ? [WORKFLOW] : [])];
-	if (JSON.stringify(inventory(root, paths(root))) !== JSON.stringify(inventory(trustedRoot, paths(trustedRoot)))) {
-		throw new Error('Candidate changed trusted freeze policy/checkpoint/workflow; explicit maintainer policy approval is required');
+	const paths = (directory) => [
+		...policyPaths(directory),
+		...(existsSync(join(directory, WORKFLOW)) ? [WORKFLOW] : [])
+	];
+	if (
+		JSON.stringify(inventory(root, paths(root))) !==
+		JSON.stringify(inventory(trustedRoot, paths(trustedRoot)))
+	) {
+		throw new Error(
+			'Candidate changed trusted freeze policy/checkpoint/workflow; explicit maintainer policy approval is required'
+		);
 	}
 }
 
@@ -43,7 +60,9 @@ export function verify(root, trustedRoot) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	try {
-		const { values } = parseArgs({ options: { root: { type: 'string' }, 'trusted-root': { type: 'string' } } });
+		const { values } = parseArgs({
+			options: { root: { type: 'string' }, 'trusted-root': { type: 'string' } }
+		});
 		const trustedRoot = resolve(values['trusted-root'] ?? join(HERE, '../..'));
 		const root = resolve(values.root ?? trustedRoot);
 		console.log(JSON.stringify(verify(root, trustedRoot), null, 2));
