@@ -7,6 +7,7 @@
 //! Yliluoma idea: approximate colors by ordered mixtures of palette colors.
 
 use crate::image::{ImageFormat, ImageView, ImageViewMut, PaletteIndex8};
+use crate::spec::quantize::{matcher::PaletteMatcher, metric::distance_score};
 
 use super::{
     common::{assert_dither_inputs, squared_distance, write_index, Palette3},
@@ -75,38 +76,69 @@ pub fn best_ordered_mix_by_distance(
     levels: u32,
     distance: impl Fn([f32; 3], [f32; 3]) -> f32,
 ) -> PaletteMix {
-    assert!(
-        !palette.is_empty(),
-        "palette must contain at least one color"
-    );
-    assert!(palette.len() <= 256, "palette indices are stored as u8");
+    find_ordered_mix(
+        color,
+        palette.len(),
+        |index| (index as u8, palette[index]),
+        levels,
+        distance,
+    )
+}
+
+/// Exhaustively searches visible palette pairs with the selected matching metric.
+/// Returned indices are original retained palette indices, not compact visible offsets.
+pub fn best_matched_mix(color: [f32; 3], matcher: &PaletteMatcher, levels: u32) -> PaletteMix {
+    find_ordered_mix(
+        color,
+        matcher.colors.len(),
+        |index| {
+            let entry = matcher.colors[index];
+            (entry.index, entry.coordinates)
+        },
+        levels,
+        |left, right| distance_score(left, right, matcher.matching),
+    )
+}
+
+fn find_ordered_mix(
+    color: [f32; 3],
+    palette_len: usize,
+    palette_color: impl Fn(usize) -> (u8, [f32; 3]),
+    levels: u32,
+    distance: impl Fn([f32; 3], [f32; 3]) -> f32,
+) -> PaletteMix {
+    assert!(palette_len > 0, "palette must contain at least one color");
+    assert!(palette_len <= 256, "palette indices are stored as u8");
     assert!(
         levels > 0,
         "ordered mix requires at least one threshold level"
     );
 
+    let (first_index, first_color) = palette_color(0);
     let mut best = PaletteMix {
-        low_index: 0,
-        high_index: 0,
+        low_index: first_index,
+        high_index: first_index,
         high_ratio: 0.0,
     };
-    let mut best_distance = distance(color, palette[0]);
+    let mut best_distance = distance(color, first_color);
 
-    for low_index in 0..palette.len() {
-        for high_index in low_index..palette.len() {
+    for low_offset in 0..palette_len {
+        for high_offset in low_offset..palette_len {
+            let (low_index, low) = palette_color(low_offset);
+            let (high_index, high) = palette_color(high_offset);
             for high_count in 0..=levels {
                 let high_ratio = high_count as f32 / levels as f32;
                 let low_ratio = 1.0 - high_ratio;
                 let mixed = [
-                    palette[low_index][0] * low_ratio + palette[high_index][0] * high_ratio,
-                    palette[low_index][1] * low_ratio + palette[high_index][1] * high_ratio,
-                    palette[low_index][2] * low_ratio + palette[high_index][2] * high_ratio,
+                    low[0] * low_ratio + high[0] * high_ratio,
+                    low[1] * low_ratio + high[1] * high_ratio,
+                    low[2] * low_ratio + high[2] * high_ratio,
                 ];
                 let candidate_distance = distance(color, mixed);
                 if candidate_distance < best_distance {
                     best = PaletteMix {
-                        low_index: low_index as u8,
-                        high_index: high_index as u8,
+                        low_index,
+                        high_index,
                         high_ratio,
                     };
                     best_distance = candidate_distance;
