@@ -36,8 +36,12 @@ export async function prepareOperation(trial) {
 	if (backend === 'typescript') {
 		if (config.operation.anchor !== 'center')
 			throw new Error('TypeScript non-center nearest is unavailable.');
-		if (measurement.scope !== 'complete-call' || config.preparation !== 'primed-instance')
+		if (
+			measurement.scope !== 'complete-call' ||
+			!['primed-instance', 'fresh-instance'].includes(config.preparation)
+		)
 			throw new Error('TypeScript has no Wasm initialization or processor-instance equivalent.');
+		// TypeScript is stateless: both labels execute its ordinary per-call preparation.
 		const { resize } = await import(url(trial.browser.assets.entries.typescript));
 		return {
 			request,

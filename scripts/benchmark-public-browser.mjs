@@ -86,6 +86,17 @@ export async function startAssetServer(assets, isolated) {
 	return { instance, url: origin, paths, failures };
 }
 
+/** Deny external requests and undeclared dependencies, even when browser caches might otherwise satisfy them. */
+export async function restrictContext(context, server) {
+	await context.route('**/*', async (route) => {
+		if (allowedRequest(route.request().url(), server.url, server.paths)) await route.continue();
+		else {
+			server.failures.push(`Blocked external or undeclared request: ${route.request().url()}`);
+			await route.abort();
+		}
+	});
+}
+
 /** Leased CLI transport. Browser/package failures propagate after all owned resources close. */
 export async function runPublicBrowser(trial) {
 	const { runtime, assets } = trial.browser;
@@ -123,16 +134,7 @@ export async function runPublicBrowser(trial) {
 			if (version !== runtime.browser.version) throw new Error('Browser version mismatch.');
 			const context = await browser.newContext({ serviceWorkers: 'block' });
 			try {
-				await context.route('**/*', async (route) => {
-					if (allowedRequest(route.request().url(), server.url, server.paths))
-						await route.continue();
-					else {
-						server.failures.push(
-							`Blocked external or undeclared request: ${route.request().url()}`
-						);
-						await route.abort();
-					}
-				});
+				await restrictContext(context, server);
 				const page = await context.newPage();
 				page.on('console', (message) =>
 					process.stderr.write(`[browser ${message.type()}] ${message.text()}\n`)
