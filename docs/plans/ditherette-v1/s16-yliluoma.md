@@ -8,7 +8,7 @@ Both ancestry checks and all 23 prerequisite matching/request/placement tests pa
 ## Work
 
 - [x] Preserve exhaustive pair/ratio search while adding typed matching and tie/hue fixtures.
-- [ ] Compose validated adaptive Yliluoma requests with alpha, metadata, Bayer recipes, and all matching policies.
+- [x] Compose validated adaptive Yliluoma requests with alpha, metadata, Bayer recipes, and all matching policies.
 
 ## Ownership
 
@@ -27,3 +27,20 @@ Preserving the approved target formula and inherited enumeration requires retain
 
 Four focused pair/ratio/hue fixtures and all 12 inherited dither tests pass after sharing the search.
 The coordinator confirmed the zero-placement witness retains the inherited search result.
+
+Final validation:
+
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet` passes all 179 native tests.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked -- --list` lists 179 test cases; this is a counted total.
+- `spec_dither_yiluoma` passes 12 focused fixtures covering every matching policy and Bayer width.
+- `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check` and `git diff --check` pass.
+
+No benchmark measurement ran. Inherited benchmark-export smoke tests do not provide performance evidence.
+
+## Handoff
+
+S17 can dispatch Yliluoma requests to `spec::dither::yiluoma::dither_yiluoma`.
+It returns `Result<IndexedImage,DitheretteError>` after complete request validation, alpha preparation, target adaptation, and pair selection.
+Read [yiluoma.md](../../../crates/ditherette-wasm/src/spec/dither/yiluoma.md) before changing target or mixture composition.
+The documented zero-mask witness and componentwise hue interpolation are intentional recipe behavior.
