@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize mode, including trilinear.
+An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize mode and direct palette quantization.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -45,7 +45,31 @@ Mip dimensions round upward when halved. Every intermediate retains RGBA8 roundi
 The shared mip chain and temporary outputs reserve capacity before source import and release it after each call.
 Plans and scratch count toward the memory limit. Each call releases this transient storage; there is no package cache.
 Requests require version `1`, positive integer dimensions, and canonical object/string tags. Unknown fields are rejected.
-Source sides are at most 32,768 pixels; output sides are at most 16,384. Both images allow at most 67,108,864 pixels.
+Source sides are at most 32,768 pixels; resize output sides are at most 16,384. Both images allow at most 67,108,864 pixels.
+
+## Direct quantization
+
+```ts
+const indexed = processor.quantize({
+	version: 1,
+	source: { width: 1, height: 1, data: new Uint8Array([255, 0, 0, 128]) },
+	palette: [{ kind: 'color', rgb: [255, 0, 0] }, { kind: 'transparent' }],
+	alpha: { mode: 'preserve', threshold: 127.9999999 },
+	matching: 'srgb-euclidean'
+});
+// indexed.indices[0] is 0. indexed.palette.rgba stores ordered RGBA bytes.
+// indexed.palette.transparentIndex is 1, or null when no transparent entry exists.
+```
+
+Matching supports `srgb-euclidean`, `linear-rgb-euclidean`, `oklab-euclidean`, `cielab-euclidean`, and `ycbcr-euclidean`.
+Palette order and duplicates remain intact; first-index ties win. More than 256 entries produces a truncation warning.
+Every supplied entry is validated, including entries beyond that retained prefix.
+`preserve` thresholds byte alpha using the exact supplied JavaScript number.
+Thresholded pixels use the first transparent entry, or the darkest visible entry with a fallback warning.
+`{ mode: 'premultiplied' }` rounds alpha-scaled RGB bytes; `{ mode: 'matte', rgb: [r, g, b] }` composites onto that RGB matte.
+Transparent-only palettes produce transparent indices with the approved warning.
+The result contains durable `indices`, `palette.rgba`, `palette.transparentIndex`, and `{ code, message }` warnings.
+Quantize does not resize, dither, retain the source, or cache prepared palettes in this checkpoint.
 
 ## Initialization and ownership
 

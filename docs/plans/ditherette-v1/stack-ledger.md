@@ -22,9 +22,10 @@ It owns the tracked progress table; the root table remains the visible mirror.
 S21 public area/bilinear checkpoint `056a1324` joins at `b52d1c8b`, with native/package/three-engine conformance passing.
 S22 public convolution checkpoint `f0976601` preserves native checkpoint `53eaf013` and passes all three package engines.
 S23 is delivered in PR112 with exact shared-mip reuse. Its checkpoints and measurements appear below.
-S24 public quantization passes conformance at `0ae8b95f`; benchmark artifacts are prepared, with no measurements yet.
+S24 is delivered in PR113. Its 124-worker measurement and remaining browser evidence appear below.
 S25 adds all fifteen matching tags at `0085972a`, with 309 native tests and three-engine package conformance passing.
 Its exact dispatch candidate `230046f` remains unselected until fresh measurements.
+S26 literal field baseline `e156cfbf` passes inverse, placement, field, and composition checks. Bounded/public integration continues separately.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -230,7 +231,22 @@ The collector verifies every durable result outside operation timers, with a bou
 It fails closed if the calibrated batch cannot fit the retention bound; it never silently lowers the iteration count.
 Retention changes GC pressure, so new measurements need fresh artifact snapshots for both roles.
 Historical evidence remains tied to its original collector and does not certify every intermediate output.
-S24 adds exact indexed-result observation before preparing replacement benchmark snapshots.
+S24 adds exact indexed-result observation and completes fresh replacement benchmark snapshots.
+
+## S24 packed-color quantization
+
+[PR #113](https://github.com/mia-cx/ditherette/pull/113) is open, non-draft, and unmerged, with auto-merge disabled.
+Branch `impl/v1-s24-bench` targets S22 at `9eecc670d9ff587ff10f8d2f3a8b86bab600c988`.
+Delivered head `884a8868f52e82ae579835eee173c6385a9c9ca2` preserves measured source `f4b90ecfcde63531fb992cf87ebda04d4e373032` code bytes.
+Literal baseline `a23260ed` remains in ancestry. The prepared integration reuses landed forward conversion equations and tables.
+
+[Measurement evidence](../../../.plans/65-measurement.md) records 124 reaped workers, 2,463 samples, and exact recorded comparisons.
+All 13 native cases pass. Full-call latency stays within 3% of the fresh literal baseline; no new kernel speedup is claimed.
+Public accepted and candidate roles use identical artifacts. Firefox and WebKit controls pass.
+Chromium's linear-RGB control remains inconclusive from pair noise; no retry extends the fixed worker budget.
+[S41](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5576162129) retains that control and Firefox's undiagnosed absolute call cost.
+Processing validation passes 307 native tests, nine private ABI tests, 20 interface tests, both builds, and three installed-package engines.
+Benchmark validation passes 56 Rust and 26 controlled JavaScript tests. The trusted freeze guard passes after restacking.
 
 ## S01 inherited port anchor
 

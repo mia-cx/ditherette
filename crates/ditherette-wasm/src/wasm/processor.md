@@ -1,4 +1,4 @@
-# Private scalar resize ABI
+# Private scalar processor ABI
 
 This is crate-owned package wiring, not an additional public method or recipe.
 The package initializes a fresh binding factory and Wasm instance for each processor.
@@ -13,6 +13,7 @@ Trilinear uses its exact production implementation, with one shared storage-roun
 |---|---|
 | `privateInitialize(limit: number): number` | Return zero or a failure status; preflight before priming fixed boundary storage |
 | `privateResize(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, algorithm: number, anchor: number, support: number, sink: object): number` | Borrow both JS handles; write `sink.value` only after complete durable result construction |
+| `privateQuantize(input: Uint8Array, width: number, height: number, palette: number[], matching: number, alphaMode: number, threshold: number, matte: number, sink: object): number` | Borrow input, compact palette, and sink; publish complete JS-owned indexed output after every copy succeeds |
 | `privateDispose(): number` | Idempotently release processor ownership; reject active-call recursion |
 | `privateErrorPath(): number` | Read immediately after a failure status |
 | `privateMemoryOverhead(): number` | Private fixture/accounting observation, excluded from the public wrapper |
@@ -48,10 +49,27 @@ memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runti
 | 2, 3, 4, 5 | source.width, source.height, source.data, source |
 | 6, 7, 8 | output.width, output.height, output |
 | 9, 10, 11, 12 | output.resize.anchor, wasm, control, output.resize |
+| 13, 14, 15, 16 | palette, alpha, alpha.threshold, matching |
+
+## Direct quantization
+
+Matching tags `0` through `4` select Euclidean sRGB, linear RGB, Oklab, CIELAB, and YCbCr respectively.
+Other raw matching values return unsupported-operation at `matching`.
+Alpha mode `0` preserves using the f64 threshold, `1` uses premultiplied RGB, and `2` uses a matte.
+Preserve requires matte zero. Premultiplied requires threshold and matte zero. Matte requires threshold zero.
+RGB integers encode `0xRRGGBB`; `16777216` identifies Transparent in the compact palette only.
+The wrapper validates every caller palette entry, then passes at most 257 codes.
+Rust retains a fixed 257-entry record, preserving the distinction between a full palette and a truncated one.
+The prepared palette retains at most 256 entries, stable indices, and frozen warning text.
+
+Success contains `{width, height, indices: Uint8Array, palette: {rgba: Uint8Array, transparentIndex: number | null}, warnings}`.
+The caught void completion import constructs both durable byte arrays and all warning objects before assigning the sink.
+An exception leaves the sink unpublished, drops call-owned Rust allocations, and restores the shared ready state.
+Dimensions, palette codes, alpha settings, matching tags, and intrinsic input length are independently validated in Rust.
 
 ## Memory and cleanup
 
-The accounted peak is `privateMemoryOverhead() + prepared heap capacity + input Vec capacity + output Vec capacity`.
+The resize peak is `privateMemoryOverhead() + prepared heap capacity + input Vec capacity + output Vec capacity`.
 Prepared heap capacity includes the selected plan's allocations and any f32 area/bilinear scratch.
 Convolution also counts every nested tap-vector header, tap capacity, and selected f64 full-call scratch.
 Trilinear counts shared mip metadata and buffers, storage-rounded level outputs when blending, and f64 channel scratch.
@@ -68,6 +86,13 @@ The 1x1 identity fixture needs that observed overhead plus eight image bytes, wi
 See `tests/private_processor.mjs` and `packages/ditherette/tests/public.test.mjs` for mode-specific capacity fixtures.
 Positive limits below the observed overhead are valid option values but fail initialization with memory-limit before priming.
 The default remains 1610612736; the maximum remains 2147483648.
+
+Quantize adds its request record, fixed palette-entry array, and borrowed boundary record to shared bookkeeping.
+Its peak also counts the full prepared quantizer, source Vec capacity, and index Vec capacity.
+Prepared capacity includes inline conversion tables, visible matching coordinates, normalized palette bytes, and warning-string capacities.
+The complete requirement preflights before preparation or source import. Every heap reservation is fallible and actual capacity is checked.
+Quantization allocates nothing after importing source bytes. No float alpha plane or intermediate RGB image is retained.
+`tests/private_quantize.mjs` and `tests/prod_processor_quantize.rs` cover budget failures, caught copies, and recovery.
 
 Bookkeeping conservatively includes wasm-bindgen 0.2.121's fixed first 128 usize externref slots, totaling 512 bytes.
 Initialization preflights before creating and dropping one numeric JsValue to prime this storage.
@@ -103,6 +128,8 @@ Table capacity remains 1156 after initialization's 1028-to-1156 prime.
 Live slots and memory page count remain unchanged. Every failed call leaves its result sink empty and permits recovery.
 Additional fixtures cover exact/one-under budgets, invalid/tiny limits, detached and offset inputs, hidden RGB,
 durable output after memory growth/disposal, failed sink assignment, independent instances, and recursive calls.
+The indexed boundary also runs 512 success/failure cycles without growing externref capacity, live slots, or memory pages.
+Its borrowed index and palette copy lengths use captured typed-array intrinsics.
 
 Run from the crate directory; the script builds the scalar bindings in `dist/scalar` before checking them:
 

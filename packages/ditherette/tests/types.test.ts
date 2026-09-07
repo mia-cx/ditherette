@@ -1,5 +1,11 @@
 import { createDitherette, DitheretteError } from '../src/index.js';
-import type { Ditherette, ResizeRequest, Rgba8Image } from '../src/index.js';
+import type {
+	Ditherette,
+	ResizeRequest,
+	Rgba8Image,
+	QuantizeRequest,
+	IndexedImage
+} from '../src/index.js';
 
 const request: ResizeRequest = {
 	version: 1,
@@ -19,6 +25,24 @@ processor.then((instance) => {
 	// @ts-expect-error Raw bindings are not public processor state.
 	instance.wasm;
 });
+
+const quantize: QuantizeRequest = {
+	version: 1,
+	source: request.source,
+	palette: [{ kind: 'color', rgb: [255, 0, 0] }, { kind: 'transparent' }],
+	alpha: { mode: 'preserve', threshold: 127.9999999 },
+	matching: 'oklab-euclidean'
+};
+processor.then((instance) => {
+	const image: IndexedImage = instance.quantize(quantize);
+	image.indices[0] = 0;
+	const transparent: number | null = image.palette.transparentIndex;
+	void transparent;
+});
+// @ts-expect-error Future metrics are not advertised before their implementation slice.
+const futureQuantize: QuantizeRequest = { ...quantize, matching: 'cielab-ciede2000' };
+// @ts-expect-error RGB triples require every byte.
+const shortPalette: QuantizeRequest['palette'] = [{ kind: 'color', rgb: [0, 0] }];
 // @ts-expect-error Noncanonical anchor object tags are not accepted.
 const invalidAnchor: Extract<ResizeRequest['output']['resize'], { anchor: unknown }>['anchor'] = {
 	center: null

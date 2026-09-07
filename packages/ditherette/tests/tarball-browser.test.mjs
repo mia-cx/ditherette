@@ -139,6 +139,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					anchors: 9,
 					convolutionCases: 54,
 					trilinearCases: 27,
+					quantizeCases: 5,
 					customInputs: 8,
 					scalarWithoutIsolation: true
 				});

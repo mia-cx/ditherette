@@ -1,7 +1,14 @@
 import { DitheretteError } from './errors.js';
 import type { ErrorCode } from './errors.js';
-import type { Ditherette, InitInput, ResizeRequest, Rgba8Image } from './types.js';
-import { validateResize } from './validation.js';
+import type {
+	Ditherette,
+	InitInput,
+	ResizeRequest,
+	Rgba8Image,
+	QuantizeRequest,
+	IndexedImage
+} from './types.js';
+import { validateResize, validateQuantize } from './validation.js';
 
 type Bindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
@@ -36,7 +43,11 @@ const errorPaths = [
 	'output.resize.anchor',
 	'wasm',
 	'control',
-	'output.resize'
+	'output.resize',
+	'palette',
+	'alpha',
+	'alpha.threshold',
+	'matching'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',
@@ -131,6 +142,35 @@ class ScalarProcessor implements Ditherette {
 			}
 			if (status !== 0) throw failure(bindings, status);
 			// Success guarantees that the caught void helper populated this private result sink.
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
+	quantize(request: QuantizeRequest): IndexedImage {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateQuantize(request);
+			const result: { value?: IndexedImage } = { value: undefined };
+			let status: number;
+			try {
+				status = bindings.privateQuantize(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.palette,
+					input.matching,
+					input.alphaMode,
+					input.threshold,
+					input.matte,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status);
 			return result.value!;
 		} finally {
 			this.#active = false;
