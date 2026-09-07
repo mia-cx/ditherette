@@ -25,3 +25,7 @@ After copying logical rows, `cargo test --manifest-path crates/ditherette-wasm/C
 The reference call covers every resize recipe and support policy. Fixtures check all nine anchors, nonconstant identity, magnification,
 symmetric averages, cubic support weights, fractional LOD, ceil-halved mips, staged byte rounding, anisotropic LOD, and float samples.
 Lanczos kernel checks use independently known half-angle sine values.
+
+Final native validation passes 136 tests, including 11 complete resize fixtures and the Lanczos kernel fixture.
+Wasm-target compilation, rustfmt, and `git diff --check` pass. No production files changed and no benchmark ran.
+The oracle inventory and resize/trilinear documentation now describe the complete request and its stored-intermediate rounding.
