@@ -5,6 +5,8 @@
 //! `processRgba8` exists, but staged exports are useful for lazy materialization,
 //! memoization, and browser/Wasm benchmarks.
 
+pub mod processor;
+
 use std::{hint::black_box, num::NonZeroU32};
 
 use js_sys::Function;
@@ -32,7 +34,7 @@ use crate::{
                 resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
                 resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
             },
-            nearest::{
+            nearest_candidate::{
                 alignment::ResizeAnchor as NearestResizeAnchor, resize_nearest_rgba8_into,
                 resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
             },

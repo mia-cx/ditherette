@@ -105,6 +105,33 @@ The corrected S18 fixture joins this base at `1dd8128a8532638ee2a17853e562145bad
 The separate trusted S18 guard passes that joined tree.
 This prerequisite branch contains no new production implementation.
 
+## S19 scalar package implementation
+
+Issue [#60](https://github.com/mia-cx/ditherette/issues/60) is implemented in open, non-draft [PR #105](https://github.com/mia-cx/ditherette/pull/105), with auto-merge disabled.
+The final slice joins in `.worktrees/v1-s19-integration` on `impl/v1-s19-integration`, based on `impl/v1-s19-base`.
+This worktree owns the current tracked progress and ledger; the root `slices.md` remains the visible mirror.
+
+- Literal production baseline `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902` has five verified copies and a separate unchanged legacy candidate.
+- Policy join `89b570e0dbb4280352b157bfde5b20c3a7e80a9e` retains the exact baseline and passes the separately trusted S18 guard.
+- Private factory delivery `8ecdf786191a451ad13eb0f65191341101ffdc01` passes seven focused fixtures, actual scalar/threaded builds, declaration checks, and inert-import validation.
+- The coordinator joined both deliveries without conflicts. Private Rust allocation handling and the public TypeScript wrapper continue in their assigned worktrees.
+- Native candidate work runs in `impl/v1-s19-nearest-opt`; the accepted binary builds from clean `89b570e0` in `impl/v1-s19-nearest-accepted`.
+
+The baseline has 280 passing native tests. It is not a completed public package call.
+The first S19 experiment now passes all ten native cases with exact output, 8,000 samples, and 80 sequential children reaped.
+Accepted artifact `89b570e0` and candidate artifact `f9b51e45` produce about 52% lower resize latency and 96.6% lower identity latency.
+The [measurement report](../../../.plans/60-nearest-measurement.md) records exact revisions, executable hashes, raw artifact locations, and every median.
+All three agents and builds stop for the measurement; every child exits before implementation resumes.
+Promotion `964683f46a24c248aa91318bd6280ca91bec88f7` preserves tested arithmetic and passes 285 native tests, Wasm compilation, and the trusted guard.
+Delivery `b48511321f47722fcfb48c51a40a05a825f06a7b` joins at `fdef72b5788c3c09fc6439991a01bfc851dc71ce`.
+The final code join is `a9835a97276bfc726590f931caa2af1b4b0b3d9a`, including the private Rust adapter, public wrapper, and corrected tarball staging.
+It passes both Wasm builds, 285 native tests, 12 public/validation fixtures, public type checks, two staging fixtures, five factory fixtures, and six private Wasm fixtures.
+The installed tarball passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 using a task-local WebKit library launcher.
+Trusted freeze enforcement and Rust formatting pass. A merge-preserving rebase keeps the exact code head and all required checkpoint ancestry unchanged.
+S20 still owns complete browser-call timing; native evidence and browser conformance do not replace it.
+Documentation/provenance joins at `db2dbb61c9d6d14723c3f3bfb05a0d3465d6e057`; the crate and package trees match the validated code head.
+The PR's current head is authoritative for subsequent progress-only commits. The issue remains open until a separately authorized merge.
+
 ## S01 inherited port anchor
 
 - Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).

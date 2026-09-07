@@ -102,3 +102,5 @@ pub mod bilinear;
 pub mod convolution;
 pub mod lanczos;
 pub mod nearest;
+/// Inherited optimized implementation, pending fresh baseline comparison.
+pub mod nearest_candidate;

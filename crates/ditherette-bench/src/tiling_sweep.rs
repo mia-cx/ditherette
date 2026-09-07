@@ -290,13 +290,23 @@ fn subjects_for_filters(
 ) -> Result<Vec<ResizeBenchSubject>, BenchError> {
     filters
         .iter()
-        .map(|filter| registry.resize_subject(subject_for_filter(filter)))
+        .map(|filter| {
+            let subject = registry.resize_subject(subject_for_filter(filter))?;
+            if subject.descriptor.id.filter() == "nearest"
+                && subject.descriptor.id.as_str() != "candidate:resize:nearest:legacy"
+            {
+                return Err(BenchError::Config(
+                    "Nearest row-band sweeps require candidate:resize:nearest:legacy; the copied baseline has no row-band adapter.".to_owned(),
+                ));
+            }
+            Ok(subject)
+        })
         .collect()
 }
 
 fn subject_for_filter(filter: &str) -> &str {
     match filter {
-        "nearest" => "prod:resize:nearest:scalar",
+        "nearest" => "candidate:resize:nearest:legacy",
         "area" => "prod:resize:area:scalar",
         "bilinear" => "prod:resize:bilinear:scalar",
         "bicubic" => "prod:resize:bicubic:catmull-rom",
@@ -306,6 +316,27 @@ fn subject_for_filter(filter: &str) -> &str {
         "lanczos3" => "prod:resize:lanczos3:fixed",
         "lanczos3-scale-aware" => "prod:resize:lanczos3:scale-aware",
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod nearest_identity_tests {
+    use super::*;
+
+    #[test]
+    fn inherited_row_band_sweep_names_only_the_legacy_candidate() {
+        let registry = Registry::load();
+        let selected = subjects_for_filters(&registry, &["nearest".into()]).unwrap();
+        assert_eq!(
+            selected[0].descriptor.id.as_str(),
+            "candidate:resize:nearest:legacy"
+        );
+        for id in ["prod:resize:nearest:scalar", "spec:resize:nearest:scalar"] {
+            assert!(
+                subjects_for_filters(&registry, &[id.into()]).is_err(),
+                "{id}"
+            );
+        }
     }
 }
 
@@ -605,7 +636,9 @@ fn run_subject_rows(
             },
             convolution::{ResizeAnchor as ConvolutionAnchor, SupportPolicy},
             lanczos::{resize_lanczos2_rgba8_rows_into, resize_lanczos3_rgba8_rows_into},
-            nearest::{alignment::ResizeAnchor as NearestAnchor, resize_nearest_rgba8_rows_into},
+            nearest_candidate::{
+                alignment::ResizeAnchor as NearestAnchor, resize_nearest_rgba8_rows_into,
+            },
         },
     };
 
@@ -840,7 +873,7 @@ fn run_nearest_subject_row_bands(
 ) -> Result<(), BenchError> {
     use ditherette_wasm::{
         image::{ImageView, ImageViewMut, Rgba8, RowStride},
-        prod::resize::scalar::nearest::{
+        prod::resize::scalar::nearest_candidate::{
             alignment::ResizeAnchor, resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
         },
     };

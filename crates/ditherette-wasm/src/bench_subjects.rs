@@ -33,9 +33,10 @@ use crate::{
             resize_lanczos2_rgba8_into as resize_prod_lanczos2_rgba8_into,
             resize_lanczos3_rgba8_into as resize_prod_lanczos3_rgba8_into,
         },
-        nearest::{
-            alignment::ResizeAnchor as ProdNearestResizeAnchor,
-            resize_nearest_rgba8_into as resize_prod_nearest_rgba8_into,
+        nearest::resize_nearest_into as resize_prod_nearest_into,
+        nearest_candidate::{
+            alignment::ResizeAnchor as CandidateNearestResizeAnchor,
+            resize_nearest_rgba8_into as resize_candidate_nearest_rgba8_into,
         },
     },
     spec::resize::{
@@ -63,9 +64,21 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
         ),
         resize_subject(
             "prod:resize:nearest:scalar",
-            "prod nearest scalar",
+            "promoted incremental nearest scalar",
             "crates/ditherette-wasm/src/prod/resize/scalar/nearest.rs",
             resize_prod_nearest_subject,
+        ),
+        resize_subject(
+            "candidate:resize:nearest:incremental",
+            "incremental nearest (historical ID, promoted implementation alias)",
+            "crates/ditherette-wasm/src/prod/resize/scalar/nearest.rs",
+            resize_prod_nearest_subject,
+        ),
+        resize_subject(
+            "candidate:resize:nearest:legacy",
+            "legacy nearest candidate (unpromoted)",
+            "crates/ditherette-wasm/src/prod/resize/scalar/nearest_candidate/mod.rs",
+            resize_candidate_nearest_subject,
         ),
         resize_subject(
             "spec:resize:area:scalar",
@@ -264,7 +277,35 @@ fn resize_prod_nearest_subject(
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        resize_prod_nearest_rgba8_into(source, output, prod_nearest_anchor(params));
+        resize_prod_nearest_into(source, output, copied_nearest_anchor(params));
+    })
+}
+
+fn copied_nearest_anchor(
+    params: &ResizeParams,
+) -> crate::prod::resize::common::alignment::ResizeAnchor {
+    use crate::prod::resize::common::alignment::ResizeAnchor as CopiedAnchor;
+    use ditherette_bench_api::ResizeAnchorParam;
+    match params.anchor {
+        ResizeAnchorParam::TopLeft => CopiedAnchor::TopLeft,
+        ResizeAnchorParam::Top => CopiedAnchor::Top,
+        ResizeAnchorParam::TopRight => CopiedAnchor::TopRight,
+        ResizeAnchorParam::Left => CopiedAnchor::Left,
+        ResizeAnchorParam::Center => CopiedAnchor::Center,
+        ResizeAnchorParam::Right => CopiedAnchor::Right,
+        ResizeAnchorParam::BottomLeft => CopiedAnchor::BottomLeft,
+        ResizeAnchorParam::Bottom => CopiedAnchor::Bottom,
+        ResizeAnchorParam::BottomRight => CopiedAnchor::BottomRight,
+    }
+}
+
+fn resize_candidate_nearest_subject(
+    input: ResizeInputU8Rgba<'_>,
+    output: ResizeOutputU8Rgba<'_>,
+    params: &ResizeParams,
+) -> Result<(), BenchSubjectError> {
+    with_views(input, output, |source, output| {
+        resize_candidate_nearest_rgba8_into(source, output, candidate_nearest_anchor(params));
     })
 }
 
@@ -492,18 +533,20 @@ fn with_views(
     Ok(())
 }
 
-fn prod_nearest_anchor(params: &ResizeParams) -> ProdNearestResizeAnchor {
+fn candidate_nearest_anchor(params: &ResizeParams) -> CandidateNearestResizeAnchor {
     match params.anchor {
-        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdNearestResizeAnchor::TopLeft,
-        ditherette_bench_api::ResizeAnchorParam::Top => ProdNearestResizeAnchor::Top,
-        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdNearestResizeAnchor::TopRight,
-        ditherette_bench_api::ResizeAnchorParam::Left => ProdNearestResizeAnchor::Left,
-        ditherette_bench_api::ResizeAnchorParam::Center => ProdNearestResizeAnchor::Center,
-        ditherette_bench_api::ResizeAnchorParam::Right => ProdNearestResizeAnchor::Right,
-        ditherette_bench_api::ResizeAnchorParam::BottomLeft => ProdNearestResizeAnchor::BottomLeft,
-        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdNearestResizeAnchor::Bottom,
+        ditherette_bench_api::ResizeAnchorParam::TopLeft => CandidateNearestResizeAnchor::TopLeft,
+        ditherette_bench_api::ResizeAnchorParam::Top => CandidateNearestResizeAnchor::Top,
+        ditherette_bench_api::ResizeAnchorParam::TopRight => CandidateNearestResizeAnchor::TopRight,
+        ditherette_bench_api::ResizeAnchorParam::Left => CandidateNearestResizeAnchor::Left,
+        ditherette_bench_api::ResizeAnchorParam::Center => CandidateNearestResizeAnchor::Center,
+        ditherette_bench_api::ResizeAnchorParam::Right => CandidateNearestResizeAnchor::Right,
+        ditherette_bench_api::ResizeAnchorParam::BottomLeft => {
+            CandidateNearestResizeAnchor::BottomLeft
+        }
+        ditherette_bench_api::ResizeAnchorParam::Bottom => CandidateNearestResizeAnchor::Bottom,
         ditherette_bench_api::ResizeAnchorParam::BottomRight => {
-            ProdNearestResizeAnchor::BottomRight
+            CandidateNearestResizeAnchor::BottomRight
         }
     }
 }

@@ -171,12 +171,18 @@ importers:
 
   crates/ditherette-wasm:
     devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
       wasm-pack:
         specifier: 0.15.0
         version: 0.15.0
 
   packages/ditherette:
     devDependencies:
+      playwright:
+        specifier: 1.59.1
+        version: 1.59.1
       typescript:
         specifier: 6.0.3
         version: 6.0.3

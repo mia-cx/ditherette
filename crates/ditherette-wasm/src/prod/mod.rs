@@ -4,5 +4,7 @@
 //! spec formulas to preserve independence, but it must not import `crate::spec`.
 
 pub mod color;
+pub mod contract;
+pub mod pipeline;
 pub mod resize;
 pub mod tiling;

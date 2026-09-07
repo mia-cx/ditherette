@@ -1,5 +1,11 @@
 # Production resize rules
 
+The S19 canonical `scalar/nearest.rs` starts from a verified literal reference copy.
+It now uses the measured exact incremental mapper and retains generic formats and strided views.
+The rules below describe inherited kernels, including the unpromoted `scalar/nearest_candidate/`.
+See [the baseline record](../../../../../.plans/60-literal-nearest-baseline.md)
+and [promotion evidence](../../../../../.plans/60-nearest-measurement.md).
+
 This directory contains optimized internal resize kernels. These rules are kept
 here so they are visible while grepping or editing prod resize code. See
 [`PERFORMANCE.md`](./PERFORMANCE.md) for the benchmark-driven optimization
