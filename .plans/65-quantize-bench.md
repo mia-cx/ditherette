@@ -16,8 +16,9 @@ Prod, spec, image, freeze policy, and public package files stay unchanged in thi
 - [x] Register prepared quantize and five forward adapters, reusing the native timing loop and exact three-way verifier.
 - [x] Declare the bounded matrix and validate the native checkpoint without measurements.
 - [x] Create the literal-baseline worktree with common benchmark protocol and thin old-signature adapter; leave production bytes unchanged.
-- [~] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
-- [ ] Prepare immutable accepted/candidate artifacts, then hand off for coordinator-authorized measurements.
+- [x] Join validated public quantize and verify the actual installed-package benchmark adapter without timing.
+- [x] Prepare immutable accepted/candidate artifacts as attempt 01 and hand off without measurements.
+- [ ] Resolve timed-output stability assurance, then rebuild affected artifacts before coordinator-authorized measurements.
 
 ## Interface
 
@@ -92,4 +93,12 @@ Its ten focused tests and trusted guard pass; original production, spec, image, 
 `quantize_conformance` exports 17 small frozen indexed fixtures for the real browser adapter.
 The installed-package test checks all five matching spaces, all alpha policies, palette warnings, fresh/primed instances, and durable results.
 The fixture generator compiles and the ten controlled browser protocol tests pass before package artifact preparation.
-Actual installed-package execution remains pending the fresh build below.
+Actual installed-package conformance passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+Each engine checks all 17 frozen fixtures with both primed and fresh instances, without calling the timing loop.
+The final 56-test Rust suite, Wasm check, formatting, and trusted guard pass after the public join.
+
+[Attempt 01](65-prepared-attempt-01.md) records immutable artifact paths and complete hashes.
+The coordinator pauses measurements after review finds that endpoint-only checks miss intermediate A/B/A output changes.
+Public retained-batch verification is being fixed separately. Native full-call timing currently drops each output inside the timed call.
+That ownership scope needs an explicit deterministic-kernel assurance policy or a separately declared collection scope.
+Attempt 01 remains unmeasured historical preparation, not validated performance evidence.
