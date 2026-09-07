@@ -65,3 +65,31 @@ Create output bytes and metadata before the completion callback. Publish cached 
 
 Validation must cover exact budget boundaries, rejected preflight before any source copy, each allocation/copy failure, recovery, reentry, disposal, and durable isolated results.
 The smallest initial candidate is an identity-copy fast path. Inherited planned candidates need fallible metadata allocation first.
+
+## Read-only instance-loading preflight
+
+S02's generated `crates/ditherette-wasm/dist/scalar/ditherette_wasm.js` declares shared `wasmModule`, `wasmInstance`, `wasm`, and cached views.
+Its initializer returns existing `wasm` on later calls, even when callers supply another custom module.
+Concurrent initialization can race before that shared value exists. Separate Rust processor objects alone do not isolate Wasm memory.
+
+Keep normal generated web glue intact for inherited paths. The crate-owned build should emit a private binding factory beside it.
+Use an AST-based export rewrite with a generation invariant/test. Preserve static stateless copy-helper imports at module scope.
+Move mutable glue state, cached views, helpers, exported functions, and classes into each factory invocation.
+Each `createDitherette` call gets fresh binding closures and a fresh Wasm instance/memory.
+Compiled modules may be shared. Initialized glue, import closures, and memories may not.
+Avoid eval, Blob imports, and URL-query cache busting.
+
+The root package import stays inert. Initialization lazily imports only the selected scalar factory and defaults to package-relative Wasm assets.
+Forward custom input through the actual generated `{ module_or_path: input }` initializer shape.
+Its pinned declarations accept RequestInfo/string, URL, Response, BufferSource, and WebAssembly.Module.
+Preserve typed-view offsets. Handle Response consumption deliberately; an earlier create must not poison a later instance.
+Map initialization failures to structured errors and discard that failed factory without changing other instances.
+Disposal releases Rust ownership once and drops wrapper references. It does not claim Wasm pages shrink.
+
+Package staging currently follows typechecking. Stage generated factory declarations before wrapper compilation instead.
+An initial layout candidate uses source/dist `rootDirs`, retaining emitted package-relative `dist/wasm` imports.
+Verify actual packed-package resolution in package-owned browser fixtures; this layout is not yet tested.
+
+The loading owner will cover crate build/factory generation, package index/scalar/types/errors/validation, staging, and initialization fixtures.
+The allocation owner covers the separate Rust processor and caught-copy helpers. The baseline owner covers the five literal copies.
+Only the coordinator reconciles their shared build/export registration changes.
