@@ -222,9 +222,10 @@ fn all_five_registry_methods_preserve_byte_composition_and_warning_metadata() {
     assert_eq!(
         registered
             .iter()
-            .filter(|entry| matches!(entry, BenchSubject::Conformance(_)))
+            .filter(|entry| matches!(entry, BenchSubject::Conformance(_))
+                && entry.descriptor().id.module() == "spec")
             .count(),
-        12
+        19
     );
 
     let rgba = [

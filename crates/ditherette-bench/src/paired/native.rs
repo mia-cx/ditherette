@@ -2,7 +2,94 @@
 
 use crate::verification::{input_digest, settings_digest};
 use ditherette_bench_api::{verification::*, SubjectId};
+use ditherette_wasm::bench_subjects::reference::ReferenceRequest;
+pub use ditherette_wasm::bench_subjects::scores::MetricFamily;
+pub use ditherette_wasm::spec::contract::request::WorkingSpace;
 use std::io;
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum NativeOperation {
+    Quantize {
+        settings: super::quantize::QuantizeSettings,
+    },
+    ColorForward {
+        space: WorkingSpace,
+    },
+    MetricScores {
+        metric: MetricFamily,
+    },
+}
+
+impl NativeOperation {
+    pub fn reference_request<'a>(
+        &'a self,
+        source: Dimensions,
+        rgba: &'a [u8],
+    ) -> io::Result<ReferenceRequest<'a>> {
+        match self {
+            Self::Quantize { settings } => settings.reference_request(source, rgba),
+            Self::MetricScores { metric } => {
+                let request = ReferenceRequest::MetricScores {
+                    source: ditherette_wasm::spec::contract::request::Source {
+                        width: source.width,
+                        height: source.height,
+                        data: rgba,
+                    },
+                    metric: *metric,
+                };
+                request.dimensions().map_err(io::Error::other)?;
+                Ok(request)
+            }
+            Self::ColorForward { space } => {
+                let request = ReferenceRequest::Color {
+                    source: ditherette_wasm::spec::contract::request::Source {
+                        width: source.width,
+                        height: source.height,
+                        data: rgba,
+                    },
+                    space: *space,
+                };
+                request.dimensions().map_err(io::Error::other)?;
+                Ok(request)
+            }
+        }
+    }
+
+    pub fn identity(&self, source: Dimensions, rgba: &[u8]) -> io::Result<CaseIdentity> {
+        let request = self.reference_request(source, rgba)?;
+        Ok(CaseIdentity {
+            semantics: request.semantics(),
+            input: input_digest(source, rgba),
+            settings: settings_digest(&request).map_err(io::Error::other)?,
+            output: source,
+        })
+    }
+
+    pub fn reference_subject(&self) -> &'static str {
+        match self {
+            Self::Quantize { .. } => "spec:quantize:request:v1",
+            Self::MetricScores { metric } => metric.reference_subject(),
+            Self::ColorForward { space } => match space {
+                WorkingSpace::Srgb => "spec:color:srgb:f32-roundtrip-v1",
+                WorkingSpace::LinearRgb => "spec:color:linear-rgb:f32-roundtrip-v1",
+                WorkingSpace::Oklab => "spec:color:oklab:f32-roundtrip-v1",
+                WorkingSpace::Cielab => "spec:color:cielab:f32-roundtrip-v1",
+                WorkingSpace::Ycbcr => "spec:color:ycbcr:f32-roundtrip-v1",
+                WorkingSpace::Oklch => "spec:color:oklch:f32-roundtrip-v1",
+                WorkingSpace::Cielch => "spec:color:cielch:f32-roundtrip-v1",
+            },
+        }
+    }
+
+    pub fn scope(&self) -> super::CallScope {
+        match self {
+            Self::Quantize { .. } => super::CallScope::NativeCompleteCall,
+            Self::ColorForward { .. } => super::CallScope::NativeForwardConversion,
+            Self::MetricScores { .. } => super::CallScope::NativeMetricScores,
+        }
+    }
+}
 
 /// Build a normalized identity from the exact frozen recipe, including support policy.
 pub fn identity(

@@ -1,4 +1,4 @@
-//! External coordinator. It never owns a benchmark execution slot itself.
+//! External coordinator. Only its read-only build-info command owns an execution slot itself.
 
 use ditherette_bench::{
     browser_assets::{self, BrowserSources},
@@ -20,6 +20,11 @@ fn main() -> ExitCode {
 fn run() -> io::Result<bool> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command] if command == "build-info" => {
+            let _guard = ditherette_bench::lease::BenchmarkGuard::acquire()?;
+            println!("{}", ditherette_bench::paired::build_info_json()?);
+            Ok(true)
+        }
         [command, path, notes] if command == "control-plan" => {
             use ditherette_bench::{paired::*, verification::{input_digest, settings_digest}};
             use ditherette_bench_api::verification::*;
@@ -31,6 +36,7 @@ fn run() -> io::Result<bool> {
             let identity = CaseIdentity { settings: settings_digest(&(semantics.clone(), output, "center-default")).map_err(io::Error::other)?,
                 semantics, input: input_digest(source, &rgba), output };
             let cases = [SampleMode::SingleCall, SampleMode::Throughput].into_iter().map(|mode| PairCase {
+            native: None,
                 browser: None,
                 name: match mode { SampleMode::SingleCall => "nearest-latency", SampleMode::Throughput => "nearest-throughput" }.into(),
                 identity: identity.clone(), source, rgba: rgba.clone(), reference_subject: "spec:resize:nearest:scalar".into(),
@@ -75,6 +81,6 @@ fn run() -> io::Result<bool> {
             println!("{}", serde_json::to_string_pretty(&report).map_err(io::Error::other)?);
             Ok(report.gate == Gate::Pass)
         }
-        _ => Err(io::Error::other("usage: ditherette-bench-pair control-plan NEW_JSON HOST_NOTES | prepare EXPERIMENT ACCEPTED FULL_REV CANDIDATE FULL_REV NEW_DIRECTORY | prepare-webkit INSTALL PRIVATE_LIBRARIES NEW_DIRECTORY | prepare-browser EXPERIMENT ACCEPTED FULL_REV CANDIDATE FULL_REV SOURCES_JSON NEW_DIRECTORY | run PREPARED_JSON NEW_RESULTS_DIRECTORY (requires DITHERETTE_BENCH_QUIET=1)")),
+        _ => Err(io::Error::other("usage: ditherette-bench-pair build-info (guarded read-only provenance) | control-plan NEW_JSON HOST_NOTES | prepare EXPERIMENT ACCEPTED FULL_REV CANDIDATE FULL_REV NEW_DIRECTORY | prepare-webkit INSTALL PRIVATE_LIBRARIES NEW_DIRECTORY | prepare-browser EXPERIMENT ACCEPTED FULL_REV CANDIDATE FULL_REV SOURCES_JSON NEW_DIRECTORY | run PREPARED_JSON NEW_RESULTS_DIRECTORY (requires DITHERETTE_BENCH_QUIET=1)")),
     }
 }

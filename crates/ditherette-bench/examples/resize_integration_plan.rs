@@ -143,6 +143,7 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
                 )
             };
             cases.push(PairCase {
+                native: None,
                 name: format!("{filter}-{variant}-{shape}"),
                 identity,
                 source,
