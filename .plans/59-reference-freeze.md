@@ -51,6 +51,8 @@ Enforce content identity, independent compilation, and trusted-base validation.
 - Spec Git tree: `f443187b7bf84753d10ca2288242a8787d3c2b42`.
 - Image Git tree: `138cb82ba25b3250ac25f4ac11ee17d02d09f811`.
 - Retention branch: `reference/ditherette-v1`. Validation never reads its tip as the checkpoint.
-- No benchmarks ran. All build/test sessions exited. Only the coordinator's slice/ledger edits remain outside the implementation commits.
+- No benchmarks ran. All build/test sessions exited. Coordinator handoff edits now record the reviewed delivery.
 - CI execution and required-check activation are not claimed. Initial policy bootstrap and future policy extensions require explicit trusted review; compiler/registry infrastructure remains trusted.
 - Implementation uses GPT-6-astra at high reasoning in Codex. The coordinator owns PR creation and aggregate ledger completion.
+- PR #104 is open, non-draft, and based on `impl/v1-s17-processor`; auto-merge is disabled. Its validated creation head is `e636b3120f566127b5e6b884ff2df3cd24c7c5ca`.
+- The coordinator reran the full guard and all 11 mutation fixtures after review corrections. Rebase onto the exact remote parent reported up to date.
