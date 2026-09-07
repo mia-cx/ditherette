@@ -21,7 +21,7 @@ Enforce content identity, independent compilation, and trusted-base validation.
 - [x] Record final checks and hand off the pushed implementation.
 - [x] Close reviewed foreign-symbol and root-use attribute escapes with focused fixtures.
 - [x] Allow cold-cache mutation setup to fetch dependencies and rerun all 11 local fixtures.
-- [ ] Verify the actual cold-cache CI run after the fixture correction.
+- [x] Verify the actual cold-cache CI run after the fixture correction.
 
 ## Notes
 
@@ -59,3 +59,4 @@ Enforce content identity, independent compilation, and trusted-base validation.
 - PR #104 is open, non-draft, and based on `impl/v1-s17-processor`; auto-merge is disabled. Its validated creation head is `e636b3120f566127b5e6b884ff2df3cd24c7c5ca`.
 - The coordinator reran the full guard and all 11 mutation fixtures after review corrections. Rebase onto the exact remote parent reported up to date.
 - CI run `34130753680` passes the guard but fails the procedural-macro mutation setup. Its unfiltered Cargo metadata call needs `cc 1.2.62`, absent from the platform-filtered cache. Remove fixture-only offline mode; leave the guard, dependency pins, and checkpoint unchanged.
+- CI run [34131713248](https://github.com/mia-cx/ditherette/actions/runs/34131713248) passes at `c03c3c85f5748b7726cfdae50ea6d41acd8ede64`, including the exact-base guard and all 11 mutation fixtures. Local fixtures and formatting also pass. The frozen digest remains unchanged.
