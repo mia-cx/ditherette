@@ -17,7 +17,7 @@ use crate::{
     prod::resize::common,
 };
 
-pub use plan::NearestResizePlan;
+pub use plan::{NearestResizePlan, PlanAllocationError};
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with nearest sampling.
 ///

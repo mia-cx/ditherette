@@ -6,6 +6,8 @@ const distribution = new URL('../dist/scalar/', import.meta.url);
 const glueUrl = new URL('ditherette_wasm.js', distribution);
 const compiled = await WebAssembly.compile(await readFile(new URL('ditherette_wasm_bg.wasm', distribution)));
 let instanceId = 0;
+// 2×1→3×2 owns 32 pixel bytes, three Wasm usize x offsets, and two u32 y coordinates.
+const resizeCapacity = 32 + 3 * 4 + 2 * 4;
 
 // Only this low-level fixture isolates generated singleton glue with fresh import URLs.
 // The shipped wrapper uses the separately tested crate-owned binding factory.
@@ -13,7 +15,7 @@ async function fresh(limit) {
 	const bindings = await import(`${glueUrl.href}?fixture=${instanceId++}`);
 	const raw = await bindings.default({ module_or_path: compiled });
 	const overhead = bindings.privateMemoryOverhead();
-	if (limit !== null) assert.equal(bindings.privateInitialize(limit ?? overhead + 32), 0);
+	if (limit !== null) assert.equal(bindings.privateInitialize(limit ?? overhead + resizeCapacity), 0);
 	return { bindings, raw, overhead };
 }
 
@@ -60,9 +62,9 @@ test('exact capacity, one-under preflight, and tiny initialization have stable e
 		assert.equal(bindings.privateInitialize(invalid), 4);
 		assert.equal(bindings.privateErrorPath(), 1);
 	}
-	assert.equal(bindings.privateInitialize(overhead + 32), 0);
+	assert.equal(bindings.privateInitialize(overhead + resizeCapacity), 0);
 	assert.equal(resize(bindings).data.length, 24);
-	const short = await fresh(overhead + 31);
+	const short = await fresh(overhead + resizeCapacity - 1);
 	let copies = 0;
 	const original = Uint8Array.prototype.set;
 	Uint8Array.prototype.set = function (...args) {

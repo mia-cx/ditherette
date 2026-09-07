@@ -34,7 +34,7 @@ use crate::{
                 resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
                 resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
             },
-            nearest_candidate::{
+            nearest::{
                 alignment::ResizeAnchor as NearestResizeAnchor, resize_nearest_rgba8_into,
                 resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
             },
