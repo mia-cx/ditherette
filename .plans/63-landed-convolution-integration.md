@@ -77,7 +77,7 @@ Coordinator-authorized join `04e54c8` merges exact S21/registration checkpoint `
 The only conflict was S21's earlier helper plan versus its completed record; retain the completed S21 record.
 
 - [x] Extend prepared dispatch, private ABI, and public validation/types for bicubic, Lanczos2, and Lanczos3; verify native output and allocation failures.
-- [ ] Build scalar/threaded package artifacts and verify interface, private ABI, and installed tarball across Chromium, Firefox, and WebKit.
+- [x] Build scalar/threaded package artifacts and verify interface, private ABI, and installed tarball across Chromium, Firefox, and WebKit.
 - [ ] Record checks and frozen identity, push clean checkpoints, and drain all owned processes.
 
 Keep algorithm tags 0/1/2 unchanged; append bicubic 3, Lanczos2 4, and Lanczos3 5.
@@ -101,3 +101,35 @@ Every failed preparation releases all owned bytes; retry succeeds. Exact-capacit
 
 The separate 2×1 half-byte alpha fixture yields 127 for scale-aware Lanczos3 in the landed Wasm path; the other modes yield 128.
 Direct legacy `resizeRgba8` confirms this output. The public fixtures preserve it without changing arithmetic or approving a new approximation.
+
+## Public validation
+
+Implementation checkpoint `f2a385621d53493c717161fd7fc2008ef24fb169` passes:
+
+```sh
+cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --features bench-subjects
+cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown --features bench-subjects
+cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check
+pnpm package:build
+pnpm --filter ditherette test:interface
+node --test crates/ditherette-wasm/tests/private_processor.mjs
+DITHERETTE_TEST_WEBKIT_EXECUTABLE=/tmp/ditherette-webkit-libs.2dS6Yu/webkit pnpm --filter ditherette test:browser
+node /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze/tools/spec-freeze/guard.mjs --root /home/mia/mia-cx/ditherette/.worktrees/v1-s22-convolution --trusted-root /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze
+git diff --quiet 53eaf013 -- crates/ditherette-wasm/src/prod/resize/scalar/bicubic crates/ditherette-wasm/src/prod/resize/scalar/lanczos crates/ditherette-wasm/src/prod/resize/scalar/convolution
+git diff --quiet 467542f4 -- crates/ditherette-wasm/src/spec crates/ditherette-wasm/src/image tools/spec-freeze
+git diff --check
+```
+
+All 293 native tests pass; every group reports zero measured tests.
+The package builds both scalar and pinned threaded variants. The threaded compiler retains its existing atomics warning.
+Sixteen package interface tests and seven private ABI tests pass.
+Private ABI conformance includes 54 exact comparisons against the unchanged legacy Wasm entrypoint.
+Installed-tarball conformance passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+That suite reports four passing tests including its parent, with 54 convolution anchor/support cases per engine.
+Each engine also checks memory-limit recovery, malformed support, alpha output, and durable result ownership without isolation headers.
+Prettier checks pass for all eight changed package TypeScript/JavaScript files.
+The trusted freeze guard retains the revision and content digest recorded above; spec/image/policy bytes are unchanged.
+
+Initial interface validation caught misplaced negative-type-test directives after expanding the union; those directives now sit on the rejected fields.
+The alpha fixture initially assumed 128 for every mode; the legacy check above established the existing Lanczos3 result.
+No unresolved check failure remains. No performance trial ran; the coordinator owns fresh artifacts and comparative acceptance evidence.
