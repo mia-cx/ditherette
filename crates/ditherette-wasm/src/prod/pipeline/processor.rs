@@ -7,7 +7,7 @@ use std::mem::size_of;
 
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
-use super::{
+use crate::prod::{
     contract::{
         error::ErrorCode,
         failure::{ErrorPath, Failure},

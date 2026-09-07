@@ -6,7 +6,7 @@ use ditherette_wasm::{
             failure::{ErrorPath, Failure},
             request::{Anchor, Output, ResizePolicy},
         },
-        processor::{Boundary, NearestRequest, Processor},
+        pipeline::processor::{Boundary, NearestRequest, Processor},
     },
     spec::resize::{common::alignment::ResizeAnchor, scalar::nearest::resize_nearest_into},
 };
