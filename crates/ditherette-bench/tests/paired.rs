@@ -265,6 +265,19 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
         assert!(!directory.join("active").exists());
         drop(Lease::exclusive().unwrap());
     }
+    std::env::set_var("DITHERETTE_PAIR_FIXTURE_FAILURE", "reference");
+    assert_eq!(
+        coordinator::run(&prepared, &directory.join("reference"))
+            .unwrap()
+            .gate,
+        Gate::Incorrect
+    );
+    assert!(directory
+        .join("reference/review-000-000-reference/accepted.png")
+        .exists());
+    assert!(!directory
+        .join("reference/review-000-000-production")
+        .exists());
     std::env::remove_var("DITHERETTE_PAIR_FIXTURE_FAILURE");
     // A permission change or byte replacement fails before another child starts.
     use std::os::unix::fs::PermissionsExt;

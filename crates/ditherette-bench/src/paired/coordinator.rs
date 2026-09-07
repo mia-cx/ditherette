@@ -3,7 +3,7 @@
 use super::*;
 use crate::{
     lease::{require_quiet, Lease},
-    verification::{content_digest, input_digest, write_review_artifacts},
+    verification::{content_digest, input_digest, verify_and_preserve},
 };
 use std::{
     fs::{self, File, OpenOptions},
@@ -168,19 +168,22 @@ pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> 
                 trial.case_name == case.name && trial.pair == pair && trial.role == Role::Candidate
             });
             if let (Some(a), Some(b)) = (accepted, candidate) {
-                let outputs = ThreeWayOutputs {
-                    reference_state: prepared.experiment.reference_state,
-                    reference: Some(a.reference.clone()),
-                    accepted: Some(a.output.clone()),
-                    candidate: Some(b.output.clone()),
-                };
-                let proof = verify_three_way(&case.identity, &outputs, VerificationBounds::exact());
-                write_review_artifacts(
-                    &directory.join(format!("review-{case_index:03}-{pair:03}")),
-                    &case.identity,
-                    &outputs,
-                    &proof,
-                )?;
+                for (kind, accepted_record) in
+                    [("production", &a.output), ("reference", &b.reference)]
+                {
+                    let outputs = ThreeWayOutputs {
+                        reference_state: prepared.experiment.reference_state,
+                        reference: Some(a.reference.clone()),
+                        accepted: Some(accepted_record.clone()),
+                        candidate: Some(b.output.clone()),
+                    };
+                    verify_and_preserve(
+                        &case.identity,
+                        &outputs,
+                        VerificationBounds::exact(),
+                        &directory.join(format!("review-{case_index:03}-{pair:03}-{kind}")),
+                    )?;
+                }
             }
         }
     }

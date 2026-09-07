@@ -22,6 +22,9 @@ const output = { case: request.case.identity,
   output: { dimensions: request.case.identity.output, pixels: { format: 'rgba8', data: request.case.rgba }, warnings: [] } };
 const reference = structuredClone(output);
 reference.implementation.subject = request.case.reference_subject;
+if (process.env.DITHERETTE_PAIR_FIXTURE_FAILURE === 'reference' && request.role === 'candidate') {
+  reference.output.pixels.data[0] += 1;
+}
 process.stdout.write(JSON.stringify({ role: request.role, pair: request.pair, case_name: request.case.name,
   build: { revision: request.executable.revision, dirty: false, rustc: 'fake compiler', tool_version: 'fake' },
   measurement: request.case.measurement, warmup_iterations: 1, warmup_elapsed_ns: 1,
