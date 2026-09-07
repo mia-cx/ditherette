@@ -44,6 +44,11 @@ pub fn run_transport(
     let result = read_owned_transport(lease, command, response_limit(request)?, &mut raw)?;
     validate_trial_assets(trial)?;
     validate_response(request, &result)?;
+    reject_unstable_output(
+        request,
+        &result,
+        &request_path.with_extension("unstable-output"),
+    )?;
     Ok(result)
 }
 
@@ -83,9 +88,19 @@ pub fn read_owned_transport(
 
 fn response_limit(request: &TrialRequest) -> io::Result<u64> {
     // JSON RGBA bytes need at most four characters each, plus structured evidence.
+    let outputs = if request
+        .case
+        .browser
+        .as_ref()
+        .is_some_and(|case| case.measure_nonexact)
+    {
+        2
+    } else {
+        1
+    };
     u64::from(request.case.identity.output.width)
         .checked_mul(u64::from(request.case.identity.output.height))
-        .and_then(|pixels| pixels.checked_mul(16))
+        .and_then(|pixels| pixels.checked_mul(16 * outputs))
         .and_then(|bytes| bytes.checked_add(1024 * 1024))
         .and_then(|bytes| {
             (request.case.measurement.samples as u64)
@@ -105,6 +120,38 @@ pub fn preserve_reference_mismatch(
     if result.timing_skipped != Some(TimingSkipped::ReferenceMismatch) {
         return Err(invalid("expected untimed reference mismatch"));
     }
+    preserve_output(request, result.output.clone(), directory)
+}
+
+/// Preserve both actual images, then fail before a normal paired result can be published.
+/// Raw transport JSON remains available even if writing a review bundle fails.
+pub fn reject_unstable_output(
+    request: &TrialRequest,
+    result: &BrowserTransportResult,
+    directory: &Path,
+) -> io::Result<()> {
+    validate_response(request, result)?;
+    let Some(preflight) = &result.unstable_output else {
+        return Ok(());
+    };
+    fs::create_dir(directory)?;
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(directory.join("transport.json"))?
+        .write_all(&serde_json::to_vec_pretty(result).map_err(io::Error::other)?)?;
+    preserve_output(request, preflight.clone(), &directory.join("preflight"))?;
+    preserve_output(request, result.output.clone(), &directory.join("final"))?;
+    Err(invalid(
+        "diagnostic output changed after preflight; both actual outputs retained, trial rejected",
+    ))
+}
+
+fn preserve_output(
+    request: &TrialRequest,
+    output: ditherette_bench_api::verification::VerificationOutput,
+    directory: &Path,
+) -> io::Result<()> {
     let trial = request
         .browser
         .as_ref()
@@ -125,7 +172,7 @@ pub fn preserve_reference_mismatch(
     };
     let actual = record(
         browser.operation.subject(browser.backend(request.role)),
-        result.output.clone(),
+        output,
     );
     let outputs = ThreeWayOutputs {
         reference_state: request.reference_state,
@@ -173,6 +220,18 @@ pub fn validate_response(
     {
         return Err(invalid("browser response identity differs"));
     }
+    if let Some(preflight) = &result.unstable_output {
+        if !case
+            .browser
+            .as_ref()
+            .is_some_and(|case| case.measure_nonexact)
+            || result.timing_skipped.is_some()
+            || request.reference_output.as_ref() == Some(preflight)
+            || *preflight == result.output
+        {
+            return Err(invalid("invalid diagnostic instability marker"));
+        }
+    }
     if result.timing_skipped == Some(TimingSkipped::ReferenceMismatch) {
         if !result.sample_ns.is_empty()
             || result.iterations_per_sample != 0
@@ -201,13 +260,15 @@ pub fn validate_response(
         ));
     }
     let bytes = u64::from(case.identity.output.width) * u64::from(case.identity.output.height) * 4;
-    if result.output.dimensions != case.identity.output
-        || !result.output.warnings.is_empty()
-        || !matches!(&result.output.pixels, Pixels::Rgba8 { data } if data.len() as u64 == bytes)
-    {
-        return Err(invalid(
-            "nearest browser result has invalid shape, format, or warning metadata",
-        ));
+    for output in std::iter::once(&result.output).chain(result.unstable_output.iter()) {
+        if output.dimensions != case.identity.output
+            || !output.warnings.is_empty()
+            || !matches!(&output.pixels, Pixels::Rgba8 { data } if data.len() as u64 == bytes)
+        {
+            return Err(invalid(
+                "browser result has invalid shape, format, or warning metadata",
+            ));
+        }
     }
     Ok(())
 }

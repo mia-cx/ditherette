@@ -348,6 +348,7 @@ fn preflight_mismatch_preserves_typed_output_without_claiming_timing() {
         warmup_iterations: 0,
         warmup_elapsed_ns: 0,
         output: trial.output.output.clone(),
+        unstable_output: None,
         observation: trial.browser.as_ref().unwrap().observation.clone(),
         timing_skipped: Some(TimingSkipped::ReferenceMismatch),
     };

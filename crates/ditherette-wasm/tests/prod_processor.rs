@@ -4,7 +4,7 @@ use ditherette_wasm::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
-            request::{Anchor, Output, ResizePolicy},
+            request::{Anchor, Output, ResizePolicy, Support},
         },
         pipeline::processor::{Boundary, Processor, ResizeRequest},
     },
@@ -145,14 +145,44 @@ fn public_area_and_bilinear_dispatch_preserves_landed_output() {
 }
 
 #[test]
-fn area_bilinear_reservation_failures_release_every_owned_byte_and_recover() {
+fn resize_reservation_failures_release_every_owned_byte_and_recover() {
     for policy in [
         ResizePolicy::Area {},
         ResizePolicy::Bilinear {
             anchor: Anchor::Center,
         },
+        ResizePolicy::Bicubic {
+            anchor: Anchor::Center,
+            support: Support::Fixed,
+        },
+        ResizePolicy::Bicubic {
+            anchor: Anchor::Center,
+            support: Support::ScaleAware,
+        },
+        ResizePolicy::Lanczos2 {
+            anchor: Anchor::Center,
+            support: Support::Fixed,
+        },
+        ResizePolicy::Lanczos2 {
+            anchor: Anchor::Center,
+            support: Support::ScaleAware,
+        },
+        ResizePolicy::Lanczos3 {
+            anchor: Anchor::Center,
+            support: Support::Fixed,
+        },
+        ResizePolicy::Lanczos3 {
+            anchor: Anchor::Center,
+            support: Support::ScaleAware,
+        },
     ] {
-        for (sw, sh, ow, oh) in [(3, 2, 5, 4), (3, 5, 3, 2), (5, 3, 2, 3), (2, 2, 4, 4)] {
+        for (sw, sh, ow, oh) in [
+            (3, 2, 5, 4),
+            (3, 5, 3, 2),
+            (5, 3, 2, 3),
+            (2, 2, 4, 4),
+            (101, 100, 3, 2),
+        ] {
             let request = ResizeRequest {
                 source_width: sw,
                 source_height: sh,
@@ -205,6 +235,189 @@ fn area_bilinear_reservation_failures_release_every_owned_byte_and_recover() {
             }
         }
     }
+}
+
+#[test]
+fn public_convolution_preserves_landed_bytes_and_reports_frozen_differences() {
+    use ditherette_wasm::{
+        prod::resize::scalar::{bicubic, convolution, lanczos},
+        spec::resize::scalar::{
+            bicubic as oracle_bicubic, convolution as oracle_convolution, lanczos as oracle_lanczos,
+        },
+    };
+    let anchors = [
+        (
+            Anchor::TopLeft,
+            ResizeAnchor::TopLeft,
+            convolution::ResizeAnchor::TopLeft,
+        ),
+        (
+            Anchor::Top,
+            ResizeAnchor::Top,
+            convolution::ResizeAnchor::Top,
+        ),
+        (
+            Anchor::TopRight,
+            ResizeAnchor::TopRight,
+            convolution::ResizeAnchor::TopRight,
+        ),
+        (
+            Anchor::Left,
+            ResizeAnchor::Left,
+            convolution::ResizeAnchor::Left,
+        ),
+        (
+            Anchor::Center,
+            ResizeAnchor::Center,
+            convolution::ResizeAnchor::Center,
+        ),
+        (
+            Anchor::Right,
+            ResizeAnchor::Right,
+            convolution::ResizeAnchor::Right,
+        ),
+        (
+            Anchor::BottomLeft,
+            ResizeAnchor::BottomLeft,
+            convolution::ResizeAnchor::BottomLeft,
+        ),
+        (
+            Anchor::Bottom,
+            ResizeAnchor::Bottom,
+            convolution::ResizeAnchor::Bottom,
+        ),
+        (
+            Anchor::BottomRight,
+            ResizeAnchor::BottomRight,
+            convolution::ResizeAnchor::BottomRight,
+        ),
+    ];
+    let mut maxima = [0_u32; 3];
+    let mut differing = [0_usize; 3];
+    for (sw, sh, ow, oh) in [
+        (1, 1, 9, 7),
+        (7, 5, 7, 5),
+        (7, 5, 3, 2),
+        (3, 2, 7, 5),
+        (9, 1, 1, 9),
+        (1, 9, 9, 1),
+        (101, 100, 31, 47),
+        (32768, 1, 1, 1),
+        (1, 1, 16384, 1),
+    ] {
+        let source_dimensions = ImageDimensions::new(sw, sh).unwrap();
+        let output_dimensions = ImageDimensions::new(ow, oh).unwrap();
+        let bytes: Vec<u8> = (0..sw * sh * 4)
+            .map(|x| {
+                if x % 4 == 3 {
+                    [0, 1, 127, 254, 255][(x / 4) as usize % 5]
+                } else {
+                    (x * 73) as u8
+                }
+            })
+            .collect();
+        for (anchor, oracle_anchor, landed_anchor) in anchors {
+            for (support, oracle_support, landed_support) in [
+                (
+                    Support::Fixed,
+                    oracle_convolution::SupportPolicy::Fixed,
+                    convolution::SupportPolicy::Fixed,
+                ),
+                (
+                    Support::ScaleAware,
+                    oracle_convolution::SupportPolicy::ScaleAware,
+                    convolution::SupportPolicy::ScaleAware,
+                ),
+            ] {
+                for (mode, policy) in [
+                    (0, ResizePolicy::Bicubic { anchor, support }),
+                    (1, ResizePolicy::Lanczos2 { anchor, support }),
+                    (2, ResizePolicy::Lanczos3 { anchor, support }),
+                ] {
+                    let mut landed = vec![0; (ow * oh * 4) as usize];
+                    let mut oracle = landed.clone();
+                    let source = ImageView::<Rgba8>::packed(&bytes, source_dimensions).unwrap();
+                    let target = ImageViewMut::packed(&mut landed, output_dimensions).unwrap();
+                    match mode {
+                        0 => bicubic::resize_bicubic_rgba8_into(
+                            source,
+                            target,
+                            landed_anchor,
+                            landed_support,
+                        ),
+                        1 => lanczos::resize_lanczos2_rgba8_into(
+                            source,
+                            target,
+                            landed_anchor,
+                            landed_support,
+                        ),
+                        _ => lanczos::resize_lanczos3_rgba8_into(
+                            source,
+                            target,
+                            landed_anchor,
+                            landed_support,
+                        ),
+                    }
+                    let target = ImageViewMut::packed(&mut oracle, output_dimensions).unwrap();
+                    match mode {
+                        0 => oracle_bicubic::resize_bicubic_into(
+                            source,
+                            target,
+                            oracle_anchor,
+                            oracle_support,
+                        ),
+                        1 => oracle_lanczos::resize_lanczos2_into(
+                            source,
+                            target,
+                            oracle_anchor,
+                            oracle_support,
+                        ),
+                        _ => oracle_lanczos::resize_lanczos3_into(
+                            source,
+                            target,
+                            oracle_anchor,
+                            oracle_support,
+                        ),
+                    }
+                    let mut io = Io {
+                        input: bytes.clone(),
+                        ..Io::default()
+                    };
+                    let mut processor = Processor::new(20_000_000, 512).unwrap();
+                    let actual = processor
+                        .resize(
+                            ResizeRequest {
+                                source_width: sw,
+                                source_height: sh,
+                                output: Output {
+                                    width: ow,
+                                    height: oh,
+                                    resize: policy,
+                                },
+                            },
+                            &mut io,
+                        )
+                        .unwrap();
+                    assert_eq!(
+                        actual, landed,
+                        "landed output changed for {policy:?} {sw}x{sh}->{ow}x{oh}"
+                    );
+                    assert_eq!(io.input, bytes);
+                    for (actual, oracle) in actual.chunks_exact(4).zip(oracle.chunks_exact(4)) {
+                        let squared = actual
+                            .iter()
+                            .zip(oracle)
+                            .map(|(a, b)| u32::from(a.abs_diff(*b)).pow(2))
+                            .sum();
+                        maxima[mode] = maxima[mode].max(squared);
+                        differing[mode] += usize::from(squared != 0);
+                    }
+                }
+            }
+        }
+    }
+    // Diagnostic only. This test gates exact preservation of landed bytes, not approval of new approximation.
+    println!("bicubic/lanczos2/lanczos3 frozen max squared RGBA distances {maxima:?}; differing pixels {differing:?}");
 }
 
 #[test]

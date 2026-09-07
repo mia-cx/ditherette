@@ -20,7 +20,9 @@ Ship the unscoped browser ESM package `ditherette`, backed by the internal `dith
 - `quantize` returns indexed output.
 - `ditherAndQuantize` returns indexed output for every supported dither family.
 
-Complete readable reference implementations before freezing them. Copy the implementations from `spec/` into mirrored `prod/` modules, then improve only production using measured evidence. Deliver the work as unmerged stacked and parallel PRs.
+Keep landed production kernels and shared helpers. Complete and freeze readable references for the remaining semantics.
+Only missing implementations start as literal copies in mirrored `prod/` modules. Improve production using measured evidence.
+Deliver the remaining work as unmerged stacked and parallel PRs.
 
 Mia authorized end-to-end implementation after reviewing this PRD and its slices. Operational holds below remain in force.
 

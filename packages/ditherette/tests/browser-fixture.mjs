@@ -80,6 +80,56 @@ export async function browserChecks(wasmUrl) {
 		value.output.resize.support = 'fixed';
 		await error(() => processor.resize(value), 'invalid-settings', 'output.resize.support');
 	}
+	let convolutionCases = 0;
+	for (const algorithm of ['bicubic', 'lanczos2', 'lanczos3']) {
+		for (const support of ['fixed', 'scale-aware']) {
+			const value = {
+				version: 1,
+				source: {
+					width: 3,
+					height: 2,
+					data: new Uint8Array(Array.from({ length: 6 }, () => [207, 31, 9, 0]).flat())
+				},
+				output: { width: 5, height: 3, resize: { algorithm, anchor: 'center', support } }
+			};
+			for (const anchor of anchors) {
+				value.output.resize.anchor = anchor;
+				const output = processor.resize(value);
+				equal(
+					Array.from(output.data),
+					Array.from({ length: 15 }, () => [207, 31, 9, 0]).flat(),
+					`${algorithm} ${support} ${anchor}`
+				);
+				convolutionCases++;
+			}
+			value.output.resize.support = { fixed: null };
+			await error(() => processor.resize(value), 'invalid-settings', 'output.resize.support');
+			value.output.resize.support = support;
+			const bounded = await createDitherette({ memoryLimitBytes: 4000 });
+			const oversized = {
+				...value,
+				source: { width: 101, height: 100, data: new Uint8Array(101 * 100 * 4) }
+			};
+			await error(() => bounded.resize(oversized), 'memory-limit', 'memoryLimitBytes');
+			value.source = {
+				width: 2,
+				height: 1,
+				data: new Uint8Array([200, 0, 100, 0, 0, 100, 200, 255])
+			};
+			value.output = { width: 1, height: 1, resize: { algorithm, anchor: 'center', support } };
+			const average = bounded.resize(value);
+			// Fixed fixture from the unchanged landed Wasm path, including its half-byte tie arithmetic.
+			const expected = [
+				100,
+				50,
+				150,
+				algorithm === 'lanczos3' && support === 'scale-aware' ? 127 : 128
+			];
+			equal(Array.from(average.data), expected, `${algorithm} ${support} alpha`);
+			bounded.dispose();
+			equal(Array.from(average.data), expected, 'convolution result durability');
+		}
+	}
 	const saved = processor.resize(request());
 	const savedBytes = Array.from(saved.data);
 	const larger = request();
@@ -141,5 +191,10 @@ export async function browserChecks(wasmUrl) {
 	await error(() => active.resize(progress), 'unsupported-operation', 'onProgress');
 	equal(Array.from(active.resize(request()).data), savedBytes, 'recovery after errors');
 	active.dispose();
-	return { anchors: anchors.length, customInputs: inputs.length, scalarWithoutIsolation: true };
+	return {
+		anchors: anchors.length,
+		convolutionCases,
+		customInputs: inputs.length,
+		scalarWithoutIsolation: true
+	};
 }

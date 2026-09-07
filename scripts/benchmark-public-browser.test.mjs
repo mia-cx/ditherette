@@ -125,11 +125,17 @@ test('mismatch response performs one fake preflight call and never begins warmup
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-mismatch-fixture-'));
 	const previousLocation = Object.getOwnPropertyDescriptor(globalThis, 'location');
 	const previousIsolation = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
+	const previousPerformance = Object.getOwnPropertyDescriptor(globalThis, 'performance');
 	try {
+		let tick = 0;
+		Object.defineProperty(globalThis, 'performance', {
+			configurable: true,
+			value: { now: () => ++tick }
+		});
 		const entry = path.join(temporary, 'fixture.mjs');
 		await writeFile(
 			entry,
-			'export let calls = 0; export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([10,20,30,40]) }; }'
+			'export let calls = 0; let unstable = false; export function changeOutput() { calls = 0; unstable = true; } export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([unstable && calls > 1 ? 12 : 10,20,30,40]) }; }'
 		);
 		Object.defineProperty(globalThis, 'location', {
 			configurable: true,
@@ -187,13 +193,49 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		assert.equal(diagnostic.timing_skipped, undefined);
 		assert.equal(diagnostic.sample_ns.length, 5);
 		assert.deepEqual(diagnostic.output, result.output);
+		assert.equal(diagnostic.unstable_output, undefined);
+		(await import(pathToFileURL(entry))).changeOutput();
+		const unstable = await runTrial(trial);
+		assert.deepEqual(unstable.unstable_output.pixels.data, [10, 20, 30, 40]);
+		assert.deepEqual(unstable.output.pixels.data, [12, 20, 30, 40]);
+		assert.equal(unstable.sample_ns.length, 5);
+		assert.equal(unstable.timing_skipped, undefined);
 	} finally {
+		if (previousPerformance)
+			Object.defineProperty(globalThis, 'performance', previousPerformance);
+		else delete globalThis.performance;
 		if (previousLocation) Object.defineProperty(globalThis, 'location', previousLocation);
 		else delete globalThis.location;
 		if (previousIsolation)
 			Object.defineProperty(globalThis, 'crossOriginIsolated', previousIsolation);
 		else delete globalThis.crossOriginIsolated;
 		await rm(temporary, { recursive: true, force: true });
+	}
+});
+
+test('diagnostic HTTP response bound retains two complete actual images', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'ditherette-unstable-body-'));
+	const assets = { tree: { root, files: [{ path: 'entry.js' }] }, entries: { page: 'entry.js' } };
+	const trial = { case: {
+		identity: { output: { width: 10_000, height: 1 } },
+		measurement: { samples: 5 }, browser: { measure_nonexact: true }
+	} };
+	const actual = { dimensions: trial.case.identity.output,
+		pixels: { format: 'rgba8', data: Array(40_000).fill(255) }, warnings: [] };
+	const body = JSON.stringify({ output: actual, unstable_output: actual });
+	assert.ok(Buffer.byteLength(body) > 10_000 * 16 + 65_536 + 5 * 32);
+	const server = await startAssetServer(assets, false, trial);
+	try {
+		const response = await fetch(server.url + server.resultUrl, {
+			method: 'POST', headers: { 'Content-Type': 'application/json' }, body
+		});
+		assert.equal(response.status, 204);
+		assert.deepEqual(server.result, JSON.parse(body));
+		assert.deepEqual(server.failures, []);
+	} finally {
+		server.instance.closeAllConnections();
+		await new Promise((resolve) => server.instance.close(resolve));
+		await rm(root, { recursive: true, force: true });
 	}
 });
 
