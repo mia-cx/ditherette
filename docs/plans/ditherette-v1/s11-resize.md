@@ -2,13 +2,14 @@
 
 Implements [issue 52](https://github.com/mia-cx/ditherette/issues/52) on `impl/v1-s11-resize`.
 The dependency is S03 PR89 at `fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06`.
-The PR base is `impl/v1-s03-contracts`.
+The PR base is `impl/v1-s03-contracts`. [PR93](https://github.com/mia-cx/ditherette/pull/93) remains unmerged.
+The validated implementation checkpoint is `7f0436658967c45bf36edd32a2e5681cc39bd118`.
 
 ## Work
 
 - [x] Repair naive trilinear mip construction for padded input views, with a failing then passing fixture.
 - [x] Add the complete typed reference resize call and independently calculated recipe fixtures.
-- [ ] Update resize oracle coverage, run focused and integrated checks, and file the unmerged PR.
+- [x] Update resize oracle coverage, run focused and integrated checks, and file the unmerged PR.
 
 Only reference resize code, its tests, and its inventory change. No production code or benchmark timings belong here.
 
