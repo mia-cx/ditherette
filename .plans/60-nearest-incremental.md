@@ -1,5 +1,8 @@
 # S19 nearest promotion
 
+Superseded by [the landed-kernel restoration](108-restore-landed.md). The incremental replacement is removed from current production.
+This document records the old experiment, not an instruction to repeat or promote it.
+
 The experiment's accepted baseline is the literal-copy checkpoint `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902`.
 This worktree starts from its validated policy join `89b570e0dbb4280352b157bfde5b20c3a7e80a9e`.
 The nearest subagent owns the candidate kernel, conformance tests, and implementation evidence in this file.

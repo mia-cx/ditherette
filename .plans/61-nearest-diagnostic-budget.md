@@ -1,5 +1,8 @@
 # Same-kernel diagnostic budget
 
+Held after [the landed-kernel restoration decision](108-restore-landed.md).
+Do not resume this experiment without updating its implementation identities to the restored production code.
+
 This experiment investigates the S20 Firefox regression. It does not select an optimization or replace release gates.
 Read [the public-call report](61-public-measurement.md) for the observed regression and retained evidence.
 

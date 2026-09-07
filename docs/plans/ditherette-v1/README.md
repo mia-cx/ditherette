@@ -71,7 +71,7 @@ Keep `image/` as shared storage infrastructure. Mirror semantic modules under `s
 
 Each semantic kernel and export needs a readable naive reference. Executable adapters and control modules need reference compositions or readable state models where mathematics alone does not describe them. References do the work directly, without optimization shortcuts.
 
-Complete the whole reference contract, record a named commit and content digest, then enforce the freeze. Existing production optimizations are candidates to evaluate after establishing the copied baseline, never substitutes for that step. Every later semantic change requires a versioned recipe or named mode; optimization cannot edit the oracle. Enforce semantic independence in both directions: spec cannot import production, and production cannot call spec as its implementation.
+Complete the whole reference contract, record a named commit and content digest, then enforce the freeze. Already-landed production kernels and shared helpers remain production. Reuse them when integrating the package and implementing missing kernels; do not replace them with naive copies or repeat their optimization work. Every later semantic change requires a versioned recipe or named mode; optimization cannot edit the oracle. Enforce semantic independence in both directions: spec cannot import production, and production cannot call spec as its implementation.
 
 Required equalities include result metadata and warnings:
 
@@ -184,7 +184,9 @@ Record unrelated host load if encountered; thermal variance still requires fresh
 
 ### Optimization inside slices
 
-Each production algorithm slice first copies its frozen `spec/` implementation into the mirrored `prod/` module. Permit only mechanical import/module changes at this step. Record a separate baseline commit and verify exact outputs before optimizing. Extend ditherette-bench subjects before attempting optimizations.
+First identify what is already implemented. Keep landed optimized kernels, plans, and shared helpers in their production paths and reuse their existing call graph. Implement only missing modes and required integration. A genuinely missing semantic implementation starts with its frozen `spec/` copy, with only mechanical import/module changes, before optimization. Record that baseline separately and verify exact outputs. Reuse existing production helpers where their semantics fit; do not rebuild their optimizations. Extend ditherette-bench subjects before attempting new optimizations.
+
+Restoring unchanged landed implementations is not a new optimization candidate. Preserve their established exact or bounded behavior and record actual reference differences. Future changes still require the agreed exactness or visual-approval process. Historical copied-baseline commits remain evidence, not instructions to replace landed production again.
 
 Measure the accepted implementation and candidate on the same machine/browser in paired alternating runs. Include full-call copies, hashing, and preparation where relevant. Keep one-call latency separate from throughput. Report cold/warm application caches separately.
 
@@ -256,4 +258,4 @@ The current GitHub token cannot read Projects. Project assignment is unnecessary
 
 ## Review checkpoint
 
-Mia approved this PRD, the 45 slices, their dependencies, and pre-freeze corrections on 2026-09-07. Her final amendments require literal spec-to-prod copies, bounded filter-specific optimization, and GPT-6-astra agents at high reasoning. This approval does not waive the operational holds.
+Mia approved this PRD, the 45 slices, their dependencies, and pre-freeze corrections on 2026-09-07. She later explicitly directed restoration of landed optimized kernels and shared helpers. The plan covers remaining work, not rebuilding landed implementations. Literal spec-to-prod copies apply to missing implementations; existing production and shared code should be reused. Bounded filter-specific optimization, GPT-6-astra agents at high reasoning, and all operational holds remain in force.

@@ -1,5 +1,8 @@
 # S19 scalar call integration
 
+Historical S19 delivery record. [The restoration](108-restore-landed.md) supersedes its nearest replacement and promotion.
+Keep the package integration and reuse landed production kernels for remaining work.
+
 Read [the approved PRD](../docs/plans/ditherette-v1/README.md) and [S19 acceptance](../docs/plans/ditherette-v1/slices.md#s19).
 The coordinator joins reviewed child commits here, validates the actual public call, and opens one unmerged slice PR.
 Base branch `impl/v1-s19-base` contains all S02/S06/S18 prerequisites at `1bd175127f92d55fb2ddf693a67d99b9fb190667`.
