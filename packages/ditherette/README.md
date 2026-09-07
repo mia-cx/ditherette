@@ -65,4 +65,8 @@ The `0.x` public target is browser ESM and browser bundlers. Node-based tests ar
 
 Run `pnpm package:build` at the repository root to compile both Wasm variants and the wrapper. Generated artifacts stay under this package's ignored `dist/` directory. The crate owns compilation; this package stages the scalar, threaded, and worker files for distribution.
 
+After building, `pnpm --filter ditherette test:interface` checks the public types and boundary behavior.
+`pnpm --filter ditherette test:browser` packs and installs a temporary tarball, then tests Chromium, Firefox, and WebKit.
+Browser fixtures require Playwright's pinned browser binaries and their platform libraries. They do not launch the website preview.
+
 The website remains at the repository root as private workspace `ditherette-web`. Its existing Wasm URLs remain available through the root `wasm:build` commands until package adoption.

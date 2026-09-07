@@ -75,15 +75,16 @@ test('concurrent initialization, custom byte views, and reusable responses remai
 	const padded = new Uint8Array(bytes.length + 10);
 	padded.set(bytes, 5);
 	const response = new Response(bytes, { headers: { 'Content-Type': 'application/wasm' } });
-	const [first, second, third, fourth] = await Promise.all([
+	const [first, second, third, fourth, fifth] = await Promise.all([
 		createDitherette({ wasm: padded.subarray(5, 5 + bytes.length) }),
 		createDitherette({ wasm: module }),
 		createDitherette({ wasm: response }),
-		createDitherette({ wasm: response })
+		createDitherette({ wasm: response }),
+		createDitherette({ wasm: new DataView(padded.buffer, 5, bytes.length) })
 	]);
 	assert.equal(response.bodyUsed, false);
 	first.dispose();
-	for (const processor of [second, third, fourth]) {
+	for (const processor of [second, third, fourth, fifth]) {
 		assert.equal(processor.resize(request()).data[0], 17);
 		processor.dispose();
 	}

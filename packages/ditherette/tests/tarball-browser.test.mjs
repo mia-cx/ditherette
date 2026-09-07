@@ -1,0 +1,149 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { extname, join, relative } from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { chromium, firefox, webkit } from 'playwright';
+import { browserChecks } from './browser-fixture.mjs';
+
+test('installed tarball loads only scalar assets and runs the public contract in browser engines', async (t) => {
+	const directory = await mkdtemp(join(tmpdir(), 'ditherette-tarball-'));
+	t.after(() => rm(directory, { recursive: true, force: true }));
+	const packageDirectory = fileURLToPath(new URL('../', import.meta.url));
+	const manifest = JSON.parse(await readFile(join(packageDirectory, 'package.json'), 'utf8'));
+	const tarball = join(directory, `ditherette-${manifest.version}.tgz`);
+	execFileSync('pnpm', ['pack', '--out', tarball], { cwd: packageDirectory, stdio: 'pipe' });
+	const files = execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8' }).trim().split('\n');
+	for (const file of [
+		'package/dist/index.js',
+		'package/dist/index.d.ts',
+		'package/dist/wasm/scalar/ditherette_wasm.factory.js',
+		'package/dist/wasm/scalar/ditherette_wasm_bg.wasm',
+		'package/dist/wasm/threads/ditherette_wasm_bg.wasm',
+		'package/README.md',
+		'package/LICENSE'
+	])
+		assert.ok(files.includes(file), file);
+	assert.ok(
+		files.some((file) =>
+			/dist\/wasm\/threads\/snippets\/.*workerHelpers\.no-bundler\.js$/.test(file)
+		),
+		'threaded worker helper included'
+	);
+	assert.ok(
+		files.every(
+			(file) => !/\/(src|tests|scripts|target|bench)\//.test(file) || file.includes('/snippets/')
+		),
+		'no source/build/test/benchmark directories'
+	);
+	assert.ok(
+		files.every((file) => !file.endsWith('.rs')),
+		'no Rust source'
+	);
+	const consumer = join(directory, 'consumer');
+	await mkdir(consumer);
+	await writeFile(
+		join(consumer, 'package.json'),
+		JSON.stringify({
+			private: true,
+			type: 'module',
+			dependencies: { ditherette: `file:${tarball}` }
+		})
+	);
+	execFileSync('pnpm', ['install', '--offline', '--ignore-scripts', '--lockfile=false'], {
+		cwd: consumer,
+		stdio: 'pipe'
+	});
+	const resolve = createRequire(join(consumer, 'package.json'));
+	assert.throws(() => resolve.resolve('ditherette/dist/wasm/scalar/ditherette_wasm.js'), {
+		code: 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+	});
+	const requests = [];
+	const server = createServer(async (request, response) => {
+		const pathname = new URL(request.url, 'http://localhost').pathname;
+		requests.push(pathname);
+		if (pathname === '/') {
+			response.writeHead(200, { 'Content-Type': 'text/html' });
+			response.end(
+				'<!doctype html><title>Installed ditherette fixture</title><script type="importmap">{"imports":{"ditherette":"/node_modules/ditherette/dist/index.js"}}</script>'
+			);
+			return;
+		}
+		const file = join(consumer, decodeURIComponent(pathname));
+		if (relative(consumer, file).startsWith('..')) {
+			response.writeHead(404).end();
+			return;
+		}
+		try {
+			const data = await readFile(file);
+			response.writeHead(200, {
+				'Content-Type': extname(file) === '.wasm' ? 'application/wasm' : 'text/javascript'
+			});
+			response.end(data);
+		} catch {
+			response.writeHead(404).end();
+		}
+	});
+	await new Promise((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	t.after(
+		() =>
+			new Promise((resolve) => {
+				server.closeAllConnections();
+				server.close(resolve);
+			})
+	);
+	const origin = `http://127.0.0.1:${server.address().port}`;
+	for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
+		await t.test(name, async () => {
+			const browser = await engine.launch({
+				executablePath:
+					name === 'webkit' ? process.env.DITHERETTE_TEST_WEBKIT_EXECUTABLE : undefined
+			});
+			try {
+				const page = await browser.newPage();
+				await page.goto(origin);
+				requests.length = 0;
+				const exports = await page.evaluate(async () => {
+					const wasm = globalThis.WebAssembly;
+					const fetch = globalThis.fetch;
+					const worker = globalThis.Worker;
+					globalThis.WebAssembly = undefined;
+					globalThis.fetch = globalThis.Worker = () => {
+						throw new Error('Root import has a runtime side effect.');
+					};
+					try {
+						return Object.keys(await import('ditherette')).sort();
+					} finally {
+						globalThis.WebAssembly = wasm;
+						globalThis.fetch = fetch;
+						globalThis.Worker = worker;
+					}
+				});
+				assert.deepEqual(exports, ['DitheretteError', 'createDitherette']);
+				assert.ok(
+					requests.every((path) => !/factory|\.wasm|threads/.test(path)),
+					'inert root import'
+				);
+				const result = await page.evaluate(
+					browserChecks,
+					`${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+				);
+				assert.deepEqual(result, { anchors: 9, customInputs: 8, scalarWithoutIsolation: true });
+				assert.ok(
+					requests.every((path) => !path.includes('/threads/')),
+					'scalar never loads threaded artifacts'
+				);
+				t.diagnostic(`${name} ${browser.version()}: installed-tarball checks pass`);
+			} finally {
+				await browser.close();
+			}
+		});
+	}
+});

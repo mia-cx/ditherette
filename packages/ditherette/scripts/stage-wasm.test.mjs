@@ -17,6 +17,7 @@ test('staged declarations resolve source imports and emitted package-relative as
 	await mkdir(new URL('dist/threads/snippets/', crate), { recursive: true });
 	await mkdir(new URL('src/', packageDirectory), { recursive: true });
 	await writeFile(new URL('LICENSE', root), 'MIT fixture');
+	await writeFile(new URL('dist/scalar/.gitignore', crate), '*');
 	await writeFile(new URL('package.json', packageDirectory), '{"type":"module"}');
 	await writeFile(
 		new URL('dist/scalar/ditherette_wasm.js', crate),
@@ -47,6 +48,9 @@ export function greet(name: string): string { return createScalarBindings().hell
 `
 	);
 	await stageWasm(crate, packageDirectory, new URL('LICENSE', root));
+	await assert.rejects(readFile(new URL('dist/wasm/scalar/.gitignore', packageDirectory)), {
+		code: 'ENOENT'
+	});
 	const config = JSON.parse(await readFile(new URL('../tsconfig.json', import.meta.url), 'utf8'));
 	const parsed = ts.parseJsonConfigFileContent(config, ts.sys, join(directory, 'package'));
 	assert.deepEqual(parsed.errors, []);
