@@ -22,6 +22,21 @@ impl CapacityBudget {
         self.used
     }
 
+    /// Reject a complete preparation requirement before reserving any of its vectors.
+    pub fn check_additional(&self, bytes: u64) -> Result<(), Failure> {
+        if self
+            .used
+            .checked_add(bytes)
+            .is_none_or(|total| total > self.limit)
+        {
+            return Err(Failure::new(
+                ErrorCode::MemoryLimit,
+                ErrorPath::MemoryLimitBytes,
+            ));
+        }
+        Ok(())
+    }
+
     /// Reserve an empty vector. Filling at most `capacity` elements cannot allocate again.
     pub fn vector<T>(&mut self, capacity: usize) -> Result<Vec<T>, Failure> {
         let requested = (capacity as u64).checked_mul(size_of::<T>() as u64);
