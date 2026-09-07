@@ -79,6 +79,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         warmup_iterations: 1,
         warmup_elapsed_ns: 1,
         output: output.clone(),
+        unstable_output: None,
         timing_skipped: None,
         observation: BrowserObservation {
             engine: runtime.engine,
@@ -216,4 +217,47 @@ fn malformed_owned_node_is_terminated_and_reaped_without_a_browser() {
     assert!(!std::path::Path::new("/proc").join(pid).exists());
     drop(lease);
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn unstable_diagnostic_retains_both_images_and_rejects_trial_publication() {
+    let (mut request, mut result) = fixture();
+    let mut preflight = result.output.clone();
+    if let Pixels::Rgba8 { data } = &mut preflight.pixels {
+        data[0] = 99;
+    }
+    result.unstable_output = Some(preflight.clone());
+    assert!(validate_response(&request, &result).is_err()); // Explicit diagnostic opt-in is required.
+    request.case.browser.as_mut().unwrap().measure_nonexact = true;
+    validate_response(&request, &result).unwrap(); // Final output can even return to frozen bytes.
+    let decoded: BrowserTransportResult =
+        serde_json::from_slice(&serde_json::to_vec(&result).unwrap()).unwrap();
+    assert_eq!(decoded.unstable_output, Some(preflight));
+    let directory = std::env::temp_dir().join(format!(
+        "ditherette-browser-unstable-{}",
+        std::process::id()
+    ));
+    let error = reject_unstable_output(&request, &decoded, &directory).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("both actual outputs retained, trial rejected"));
+    let raw: BrowserTransportResult =
+        serde_json::from_slice(&std::fs::read(directory.join("transport.json")).unwrap()).unwrap();
+    assert_eq!(raw.unstable_output, result.unstable_output);
+    assert_eq!(raw.output, result.output);
+    for (phase, first_byte) in [("preflight", 99), ("final", 1)] {
+        let evidence: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(directory.join(phase).join("results.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            evidence["outputs"]["candidate"]["output"]["pixels"]["data"][0],
+            first_byte
+        );
+        assert!(evidence["outputs"]["accepted"].is_null());
+        assert!(directory.join(phase).join("candidate.png").is_file());
+    }
+    std::fs::remove_dir_all(&directory).unwrap();
+    result.unstable_output = Some(result.output.clone());
+    assert!(validate_response(&request, &result).is_err());
 }
