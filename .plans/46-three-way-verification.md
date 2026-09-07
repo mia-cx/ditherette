@@ -7,7 +7,7 @@ Branch: `impl/v1-s05-verification`. No measurements run in this slice.
 ## TODOs
 
 - [x] Add generic typed cases/subjects and one serializable output contract with full identities.
-- [ ] Extend the existing RGBA verifier to three-way metadata, index, and coordinate comparisons with failure artifacts.
+- [x] Extend the existing RGBA verifier to three-way metadata, index, and coordinate comparisons with failure artifacts.
 - [ ] Adapt existing resize subjects and S03 storage, validate deterministic fixtures, and document the S17 handoff.
 - [ ] File an unmerged non-draft PR against the prerequisite join.
 
@@ -31,3 +31,9 @@ ownership/parser fixtures, 3 Node cleanup fixtures, and the Criterion compile ch
 Typed contract validation: bench-api and existing benchmark executables compile.
 Coordinate artifact serialization stores every f32 bit, including invalid values
 that a failed conformance record must preserve rather than turn into JSON null.
+
+Verifier validation: eight deterministic integration tests pass. They cover all
+operation representations, exact/provisional status, required evidence, hard
+metadata failures, indexed RGBA max/mean/RMS, separate coordinate errors,
+non-finite raw preservation, SHA-256/canonical settings, and immutable PNG bundles.
+Existing benchmark executables compile against the extracted shared RGBA engine.
