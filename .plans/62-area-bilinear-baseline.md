@@ -7,7 +7,10 @@ This bounded phase establishes the copied baseline only. Main owns full S21 acce
 
 - [x] Preserve inherited candidates, copy frozen kernels/helpers, and verify exact conformance in a separate baseline commit.
 - [x] Record copy hashes, validation, and shared integration fragments.
-- [ ] Push the clean checkpoint and drain.
+- [x] Push the clean checkpoint and drain.
+
+Literal baseline commit `88b3162900f547837a596b49f0b0199c32b42cda` is pushed to `impl/v1-s21-area-bilinear`.
+All owned validation and push processes exited. No implementation continues during the coordinator's exclusive diagnostic.
 
 ## Boundaries
 
