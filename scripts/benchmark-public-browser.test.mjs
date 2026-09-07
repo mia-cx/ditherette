@@ -16,8 +16,60 @@ import {
 	preflightOperation,
 	resizeRecipe,
 	runTrial,
-	timerResolution
+	timerResolution,
+	outputStability
 } from './benchmark-public-page.mjs';
+import { collectInitializations } from './benchmark-public-timing.mjs';
+
+test('initialization A/B/A preserves the first distinct probe, including warmup, without timing comparisons', async () => {
+	for (const changedAt of [2, 4]) {
+		const tracker = outputStability(4);
+		let calls = 0,
+			clock = 0,
+			closes = 0;
+		const probe = () => ({
+			width: 1,
+			height: 1,
+			data: new Uint8Array([++calls === changedAt ? 99 : 0, 0, 0, 255])
+		});
+		tracker.observe([probe()]);
+		const result = await collectInitializations({
+			measurement: { samples: 5, warmup_ms: 1, measurement_ms: 100 },
+			now: () => clock,
+			outputBytes: 4,
+			create: async () => {
+				clock++;
+				return {
+					dispose() {
+						closes++;
+					}
+				};
+			},
+			probe,
+			observe: (outputs) => {
+				tracker.observe(outputs);
+				clock += 100;
+			}
+		});
+		assert.equal(result.output.data[0], 0);
+		assert.equal(tracker.evidence(result.output).unstable_output.pixels.data[0], 0);
+		assert.equal(tracker.evidence(result.output).output.pixels.data[0], 99);
+		assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+		assert.equal(closes, 6);
+	}
+});
+
+test('output storage aliases fail closed instead of hiding overwritten batch evidence', () => {
+	const tracker = outputStability(4);
+	const output = () => ({ width: 1, height: 1, data: new Uint8Array([0, 0, 0, 255]) });
+	tracker.observe([output()]);
+	const shared = output();
+	assert.throws(() => tracker.observe([shared, { ...shared }]), /aliases/);
+	assert.throws(
+		() => outputStability(4).observe([{ ...output(), data: new Uint8Array(8).subarray(0, 4) }]),
+		/storage/
+	);
+});
 
 test('public resize recipes retain mode-specific settings', () => {
 	assert.deepEqual(resizeRecipe({ operation: 'resize-area' }), { algorithm: 'area' });
@@ -135,7 +187,7 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		const entry = path.join(temporary, 'fixture.mjs');
 		await writeFile(
 			entry,
-			'export let calls = 0; let unstable = false; export function changeOutput() { calls = 0; unstable = true; } export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([unstable && calls > 1 ? 12 : 10,20,30,40]) }; }'
+			'export let calls = 0; let changedAt = Infinity; export function changeOutput(at = 2) { calls = 0; changedAt = at; } export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([calls === changedAt ? 12 : 10,20,30,40]) }; }'
 		);
 		Object.defineProperty(globalThis, 'location', {
 			configurable: true,
@@ -200,6 +252,23 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		assert.deepEqual(unstable.output.pixels.data, [12, 20, 30, 40]);
 		assert.equal(unstable.sample_ns.length, 5);
 		assert.equal(unstable.timing_skipped, undefined);
+		// Transient output changes remain visible even when every endpoint returns A.
+		for (const [mode, changedAt] of [
+			['single-call', 3],
+			['throughput', 4]
+		]) {
+			trial.case.measurement.mode = mode;
+			trial.case.measurement.target_sample_ms = 3;
+			trial.case.browser.measure_nonexact = false;
+			trial.reference_output = result.output; // Exact preflight also requires stability checks.
+			(await import(pathToFileURL(entry))).changeOutput(changedAt);
+			const transient = await runTrial(trial);
+			assert.deepEqual(transient.unstable_output.pixels.data, [10, 20, 30, 40]);
+			assert.deepEqual(transient.output.pixels.data, [12, 20, 30, 40]);
+			assert.equal(transient.iterations_per_sample, mode === 'throughput' ? 3 : 1);
+			assert.equal(transient.sample_ns.length, 5);
+			assert.ok((await import(pathToFileURL(entry))).calls > changedAt);
+		}
 	} finally {
 		if (previousPerformance) Object.defineProperty(globalThis, 'performance', previousPerformance);
 		else delete globalThis.performance;
@@ -212,14 +281,14 @@ test('mismatch response performs one fake preflight call and never begins warmup
 	}
 });
 
-test('diagnostic HTTP response bound retains two complete actual images', async () => {
+test('ordinary HTTP response bound retains two complete actual images after exact preflight', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'ditherette-unstable-body-'));
 	const assets = { tree: { root, files: [{ path: 'entry.js' }] }, entries: { page: 'entry.js' } };
 	const trial = {
 		case: {
 			identity: { output: { width: 10_000, height: 1 } },
 			measurement: { samples: 5 },
-			browser: { measure_nonexact: true }
+			browser: { measure_nonexact: false }
 		}
 	};
 	const actual = {

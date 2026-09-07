@@ -220,16 +220,16 @@ fn malformed_owned_node_is_terminated_and_reaped_without_a_browser() {
 }
 
 #[test]
-fn unstable_diagnostic_retains_both_images_and_rejects_trial_publication() {
+fn unstable_trial_retains_first_distinct_images_and_rejects_publication() {
     let (mut request, mut result) = fixture();
     let mut preflight = result.output.clone();
     if let Pixels::Rgba8 { data } = &mut preflight.pixels {
         data[0] = 99;
     }
     result.unstable_output = Some(preflight.clone());
-    assert!(validate_response(&request, &result).is_err()); // Explicit diagnostic opt-in is required.
+    validate_response(&request, &result).unwrap(); // Instability also invalidates an ordinary exact trial.
     request.case.browser.as_mut().unwrap().measure_nonexact = true;
-    validate_response(&request, &result).unwrap(); // Final output can even return to frozen bytes.
+    validate_response(&request, &result).unwrap(); // The distinct successor can equal frozen bytes.
     let decoded: BrowserTransportResult =
         serde_json::from_slice(&serde_json::to_vec(&result).unwrap()).unwrap();
     assert_eq!(decoded.unstable_output, Some(preflight));
@@ -245,7 +245,7 @@ fn unstable_diagnostic_retains_both_images_and_rejects_trial_publication() {
         serde_json::from_slice(&std::fs::read(directory.join("transport.json")).unwrap()).unwrap();
     assert_eq!(raw.unstable_output, result.unstable_output);
     assert_eq!(raw.output, result.output);
-    for (phase, first_byte) in [("preflight", 99), ("final", 1)] {
+    for (phase, first_byte) in [("first-output", 99), ("first-distinct-output", 1)] {
         let evidence: serde_json::Value = serde_json::from_slice(
             &std::fs::read(directory.join(phase).join("results.json")).unwrap(),
         )
@@ -257,6 +257,16 @@ fn unstable_diagnostic_retains_both_images_and_rejects_trial_publication() {
         assert!(evidence["outputs"]["accepted"].is_null());
         assert!(directory.join(phase).join("candidate.png").is_file());
     }
+    std::fs::remove_dir_all(&directory).unwrap();
+    // The first result can equal the frozen reference and later become unstable without diagnostic opt-in.
+    request.case.browser.as_mut().unwrap().measure_nonexact = false;
+    std::mem::swap(result.unstable_output.as_mut().unwrap(), &mut result.output);
+    validate_response(&request, &result).unwrap();
+    assert!(reject_unstable_output(&request, &result, &directory).is_err());
+    assert!(directory.join("first-output/results.json").is_file());
+    assert!(directory
+        .join("first-distinct-output/results.json")
+        .is_file());
     std::fs::remove_dir_all(&directory).unwrap();
     result.unstable_output = Some(result.output.clone());
     assert!(validate_response(&request, &result).is_err());
