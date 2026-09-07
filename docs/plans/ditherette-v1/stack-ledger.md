@@ -132,6 +132,15 @@ S20 still owns complete browser-call timing; native evidence and browser conform
 Documentation/provenance joins at `db2dbb61c9d6d14723c3f3bfb05a0d3465d6e057`; the crate and package trees match the validated code head.
 The PR's current head is authoritative for subsequent progress-only commits. The issue remains open until a separately authorized merge.
 
+## S20 public browser benchmark implementation
+
+Issue [#61](https://github.com/mia-cx/ditherette/issues/61) starts from validated S19 PR #105 at `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+The immediate PR base is `impl/v1-s19-integration`. The coordinator owns `.worktrees/v1-s20-browser-bench` on `impl/v1-s20-browser-bench`.
+This worktree now owns tracked progress and the ledger; root `slices.md` remains the visible mirror.
+Read [the scoped plan](../../../.plans/61-browser-benchmark.md) and [preflight](../../../.plans/61-browser-preflight.md) before implementation.
+Protocol, script transport, and asset/worker implementation use separate child worktrees. Measurements wait until every agent and build/test exits.
+No S20 performance or readiness claim exists yet.
+
 ## S01 inherited port anchor
 
 - Issue: [#42](https://github.com/mia-cx/ditherette/issues/42), parent PRD [#41](https://github.com/mia-cx/ditherette/issues/41).
