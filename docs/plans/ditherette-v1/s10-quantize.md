@@ -11,7 +11,7 @@ Integration base `af9c0d99dd140f3235968d5f481c5a2c879ce46e` contains:
 ## TODOs
 
 - [x] Complete exhaustive color/metric dispatch and audit inherited metric mathematics with independent vectors.
-- [ ] Compose validated quantize requests with ordered palette matching, alpha handling, and complete-call fixtures.
+- [x] Compose validated quantize requests with ordered palette matching, alpha handling, and complete-call fixtures.
 - [ ] Run native and Wasm validation, then file the unmerged stacked PR.
 
 ## Prerequisite validation
@@ -36,3 +36,17 @@ No CIEDE2000 code correction or precision change was needed.
 
 Focused validation passes 23 tests across `spec_quantize_dispatch`, `spec_quantize_metrics`, and `spec_contract`.
 The complete color dispatcher uses the seven existing forward/inverse helpers directly.
+
+## Complete-call evidence
+
+`quantize::quantize` validates before preparation/allocation, then composes S09 alpha rules with exhaustive matching.
+`matcher::PaletteMatcher` exposes original indices and f32 coordinates for later diffusion and mixing references.
+Its only search is a full ordered scan; exact ties retain the first entry.
+
+Ten request tests cover all 15 pairs, nonzero grayscale distances, byte midpoint ties, transparent-only output,
+darkest fallback, truncation, index 255, fractional threshold precision, compositing, invalid requests, and durable results.
+The unequal-chroma fixture selects index 7 for chord distance and index 3 for website arc distance.
+The CompuPhase black/red-17/blue-14 fixture selects blue; the inherited wrong coefficients selected red.
+Rec.601 and Rec.709 independently calculated red-15/blue-25 fixtures select different indices.
+
+Focused validation passes 25 tests across `spec_quantize_request`, `spec_quantize_dispatch`, and `spec_quantize_metrics`.
