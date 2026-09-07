@@ -6,7 +6,7 @@ Branch: `impl/v1-s06-paired-bench`. PR base: `impl/v1-s05-verification`.
 ## TODOs
 
 - [x] Define typed paired evidence and per-case regression decisions with deterministic fixtures.
-- [ ] Prepare immutable artifacts and run sequential alternating children under the shared lease.
+- [x] Prepare immutable artifacts and run sequential alternating children under the shared lease.
 - [ ] Adapt the native measurement loop, bind builds to revisions, and test transport controls without timings.
 - [ ] Prepare distinct native control revisions, obtain explicit quiet clearance, and retain live paired evidence.
 - [ ] File a non-draft unmerged PR with validation and artifact identities.
@@ -31,3 +31,9 @@ Three deterministic comparison fixtures pass. They cover exact threshold,
 confirmed slowdown, order-sensitive inconclusive outcomes, missing/duplicate
 roles, mismatched identities/settings/toolchains, invalid samples, S05 output
 failures, and separate latency/throughput/cache cases. No timings collected.
+
+Coordinator fixture passes with fixed Node responses. Each fake child confirms
+the host lease is held and claims an exclusive overlap marker. Events prove
+AB/BA starts each follow the previous reap. Nonzero exit, malformed JSON,
+existing evidence, writable executables, and changed bytes all fail closed.
+This test neither launches the benchmark executable nor collects timings.

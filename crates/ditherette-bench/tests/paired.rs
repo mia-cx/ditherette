@@ -185,3 +185,86 @@ fn latency_throughput_and_app_cache_cases_remain_separate() {
     assert_eq!(report.cases[0].accepted_median_ns, Some(100.0));
     assert_eq!(report.cases[1].accepted_median_ns, Some(20.0));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
+    use ditherette_bench::{
+        lease::{Lease, QUIET_ENV},
+        paired::coordinator,
+        verification::input_digest,
+    };
+    use std::{
+        fs,
+        path::Path,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+    let directory = std::env::temp_dir().join(format!(
+        "ditherette-pair-fixture-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&directory).unwrap();
+    std::env::set_var(QUIET_ENV, "1");
+    std::env::set_var("DITHERETTE_PAIR_FIXTURE_DIRECTORY", &directory);
+    let (mut template, _) = fixture();
+    template.experiment.cases[0].identity.input = input_digest(
+        template.experiment.cases[0].source,
+        &template.experiment.cases[0].rgba,
+    );
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/paired-child.mjs");
+    let prepared = coordinator::prepare(
+        template.experiment,
+        (&script, &"a".repeat(40)),
+        (&script, &"b".repeat(40)),
+        &directory.join("prepared"),
+    )
+    .unwrap();
+    let report = coordinator::run(&prepared, &directory.join("success")).unwrap();
+    assert_eq!(report.gate, Gate::Pass);
+    let events = fs::read_to_string(directory.join("success/events.jsonl")).unwrap();
+    let lines: Vec<serde_json::Value> = events
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let starts: Vec<_> = lines
+        .iter()
+        .filter(|line| line["state"] == "started")
+        .map(|line| line["trial"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        starts,
+        [
+            "pair-000-case-000-accepted",
+            "pair-000-case-000-candidate",
+            "pair-001-case-000-candidate",
+            "pair-001-case-000-accepted"
+        ]
+    );
+    for group in lines.chunks_exact(3) {
+        assert_eq!(group[2]["state"], "reaped");
+        assert_eq!(group[1]["pid"], group[2]["pid"]);
+    }
+    assert!(!directory.join("active").exists());
+    assert!(coordinator::run(&prepared, &directory.join("success")).is_err());
+    for failure in ["exit", "json"] {
+        std::env::set_var("DITHERETTE_PAIR_FIXTURE_FAILURE", failure);
+        assert!(coordinator::run(&prepared, &directory.join(failure)).is_err());
+        assert!(!directory.join("active").exists());
+        drop(Lease::exclusive().unwrap());
+    }
+    std::env::remove_var("DITHERETTE_PAIR_FIXTURE_FAILURE");
+    // A permission change or byte replacement fails before another child starts.
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(&prepared.candidate.path, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(coordinator::run(&prepared, &directory.join("mutable")).is_err());
+    fs::write(&prepared.candidate.path, b"replacement").unwrap();
+    fs::set_permissions(&prepared.candidate.path, fs::Permissions::from_mode(0o555)).unwrap();
+    assert!(coordinator::run(&prepared, &directory.join("changed")).is_err());
+    std::env::remove_var(QUIET_ENV);
+    std::env::remove_var("DITHERETTE_PAIR_FIXTURE_DIRECTORY");
+    fs::remove_dir_all(directory).unwrap();
+}
