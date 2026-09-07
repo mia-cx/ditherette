@@ -154,6 +154,56 @@ test('installed package and actual TypeScript adapter conformance, without measu
 							identity.close();
 						}
 					}
+					for (const [filter, expectedRed] of [
+						['area', [16, 96, 176]],
+						['bilinear', [11, 96, 181]]
+					]) {
+						for (const backend of ['typescript', 'package']) {
+							const request = trial(backend);
+							request.case.rgba = [0, 64, 128, 192].flatMap((red) => [red, 30, 70, 255]);
+							request.case.browser.operation = {
+								operation: `resize-${filter}`,
+								...(filter === 'area' ? {} : { anchor: 'center' })
+							};
+							const operation = await prepareOperation(request);
+							try {
+								equal(
+									Array.from(operation.call().data),
+									expectedRed.flatMap((red) => [red, 30, 70, 255]),
+									`${backend} ${filter} analytical 4→3`
+								);
+							} finally {
+								operation.close();
+							}
+						}
+					}
+					// Nontrivial convolution vectors live in the native and package suites.
+					// This checks every actual benchmark adapter recipe without collecting timings.
+					for (const filter of ['bicubic', 'lanczos2', 'lanczos3']) {
+						for (const support of ['fixed', 'scale-aware']) {
+							for (const backend of filter === 'bicubic'
+								? ['package']
+								: ['typescript', 'package']) {
+								const request = trial(backend, 'primed-instance', 7, 3);
+								request.case.rgba = Array.from({ length: 7 }, () => [83, 147, 219, 255]).flat();
+								request.case.browser.operation = {
+									operation: `resize-${filter}`,
+									anchor: 'center',
+									support
+								};
+								const operation = await prepareOperation(request);
+								try {
+									equal(
+										Array.from(operation.call().data),
+										Array.from({ length: 3 }, () => [83, 147, 219, 255]).flat(),
+										`${backend} ${filter} ${support} adapter`
+									);
+								} finally {
+									operation.close();
+								}
+							}
+						}
+					}
 					const freshTypeScript = await prepareOperation(trial('typescript', 'fresh-instance'));
 					try {
 						const prepared = await freshTypeScript.prepare();
@@ -244,6 +294,8 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						drift,
 						checked: [
 							'known-vector',
+							'area-bilinear-analytical-vectors',
+							'convolution-support-recipes',
 							'identity-copy',
 							'fresh-instance',
 							'initialization-bytes',
