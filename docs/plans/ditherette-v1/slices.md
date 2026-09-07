@@ -19,8 +19,8 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) | Ready | [#88](https://github.com/mia-cx/ditherette/pull/88) |
 | [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Ready | [#89](https://github.com/mia-cx/ditherette/pull/89) |
 | [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Ready | [#90](https://github.com/mia-cx/ditherette/pull/90) |
-| [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | In progress | - |
-| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | Not started | - |
+| [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | Ready | [#96](https://github.com/mia-cx/ditherette/pull/96) |
+| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | In progress | - |
 | [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) | Ready | [#91](https://github.com/mia-cx/ditherette/pull/91) |
 | [S08](#s08) | Complete Lab and LCH reference round trips | [S03](#s03) | Ready | [#92](https://github.com/mia-cx/ditherette/pull/92) |
 | [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Ready | [#94](https://github.com/mia-cx/ditherette/pull/94) |
