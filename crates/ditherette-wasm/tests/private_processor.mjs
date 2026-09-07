@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const distribution = new URL('../dist/private-test/', import.meta.url);
+const distribution = new URL('../dist/scalar/', import.meta.url);
 const glueUrl = new URL('ditherette_wasm.js', distribution);
 const compiled = await WebAssembly.compile(await readFile(new URL('ditherette_wasm_bg.wasm', distribution)));
 let instanceId = 0;

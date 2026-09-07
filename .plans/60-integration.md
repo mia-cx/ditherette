@@ -7,6 +7,7 @@ Base branch `impl/v1-s19-base` contains all S02/S06/S18 prerequisites at `1bd175
 ## TODOs
 
 - [x] Verify the literal-copy checkpoint and join corrected freeze policy plus private factory generation.
+- [x] Join the validated private processor and wire its actual Wasm fixtures into the standard scalar build.
 - [ ] Join the fallible Rust processor and public scalar wrapper after their focused validations.
 - [ ] Verify actual packed-package calls, input/output ownership, bounded memory, errors, isolation, and disposal.
 - [x] Collect one exclusive native nearest experiment after every agent and build exits; retain exact accepted code if the candidate loses.
@@ -21,6 +22,9 @@ Base branch `impl/v1-s19-base` contains all S02/S06/S18 prerequisites at `1bd175
 - Native trial `s19-nearest-trial-01` passes all ten cases with exact outputs, 8,000 samples, and 80 sequential children reaped. [The measurement report](60-nearest-measurement.md) records artifact identities and actual medians.
 - Promotion `964683f46a24c248aa91318bd6280ca91bec88f7` keeps the measured arithmetic unchanged. Its 285 native tests, Wasm compilation, and trusted guard pass.
 - Delivery `b48511321f47722fcfb48c51a40a05a825f06a7b` joins the integration branch at `fdef72b5788c3c09fc6439991a01bfc851dc71ce`. Public wrapper/adapter validation remains pending.
+- Private adapter `a1ca26f09aa41dc13c29940bb19731b7845279be` joins at `ef36ada38b7b9d2a034be4f2ad754b6297be93ad`. Its final evidence is in `f4f0e86d430880e886db39f27671472170569e9e`.
+- Integration runs `pnpm --filter ditherette-wasm test:private` against the standard scalar release artifact. All six actual Wasm fixtures pass, including 512 repeated success/failure cycles without handle or memory growth.
+- The trusted S18 checker passes on this integration, including four dependency contexts and five isolation compilations. Frozen content and policy remain unchanged.
 
 ## Ownership
 
