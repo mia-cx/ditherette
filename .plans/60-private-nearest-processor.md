@@ -8,7 +8,7 @@ The copied contracts and frozen reference remain unchanged.
 
 - [x] Add the allocation-free failure contract, capacity-accounted processor, and native failure/conformance fixtures.
 - [x] Add the module-state Wasm adapter and caught stateless copy helpers; verify actual generated ABI and failure recovery.
-- [ ] Validate native/Wasm/JS checks and trusted freeze enforcement; document private ABI and push the integration handoff.
+- [x] Validate native/Wasm/JS checks and trusted freeze enforcement; document private ABI and push the integration handoff.
 
 ## Boundary decisions
 
@@ -37,3 +37,17 @@ The production processor now mirrors `prod/pipeline/processor.rs`.
 The private ABI uses module state and three caught stateless JavaScript helpers.
 Six actual release-Wasm fixtures pass with generated web bindings.
 Read [the private adapter contract](../crates/ditherette-wasm/src/wasm/processor.md) before integrating its bindings or memory accounting.
+
+## Final evidence
+
+The coherent private implementation is `a1ca26f09aa41dc13c29940bb19731b7845279be`, including native checkpoint `342c0c46180c22071101934df6b53255075fb78b`.
+The full native suite passes 285 tests with `--locked --features bench-subjects`.
+Wasm compilation passes with those features. Both scoped rustfmt and crate-wide `cargo fmt --all --check` pass.
+Six Node fixtures pass against the actual release Wasm and generated web bindings.
+The separately trusted S18 guard passes all isolation compilations and preserves frozen digest `17ba3be3`.
+All five literal copied files, frozen image/reference files, and canonical nearest/candidate code remain unchanged by this processor work.
+
+The package agent confirms twelve public/interface fixtures against this final sink ABI.
+That agent owns package/browser verification. The coordinator owns measured nearest promotion and reproducible crate test-script wiring.
+No processor optimization or benchmark measurement runs in this worktree.
+The private call implementation stops at this integration handoff; caches, full progress, and additional methods remain later slices.
