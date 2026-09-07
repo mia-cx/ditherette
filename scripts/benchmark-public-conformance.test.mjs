@@ -103,7 +103,10 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				const report = await page.evaluate(async (assets) => {
 					const { prepareOperation, preflightOperation } = await import(`/${assets.entries.page}`);
 					const equal = (actual, expected, label) => {
-						if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(label);
+						if (JSON.stringify(actual) !== JSON.stringify(expected))
+							throw new Error(
+								`${label}: actual ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`
+							);
 					};
 					const trial = (backend, preparation = 'primed-instance', width = 4, outputWidth = 3) => ({
 						role: 'candidate',
@@ -152,6 +155,79 @@ test('installed package and actual TypeScript adapter conformance, without measu
 							equal(result.data[0], 10, `${backend} durable identity`);
 						} finally {
 							identity.close();
+						}
+					}
+					for (const [filter, expectedRed] of [
+						['area', [16, 96, 176]],
+						['bilinear', [17, 96, 175]]
+					]) {
+						for (const backend of ['typescript', 'package']) {
+							const request = trial(backend);
+							request.case.rgba = [0, 64, 128, 192].flatMap((red) => [red, 30, 70, 255]);
+							request.case.browser.operation = {
+								operation: `resize-${filter}`,
+								...(filter === 'area' ? {} : { anchor: 'center' })
+							};
+							const operation = await prepareOperation(request);
+							try {
+								// Website area is an unweighted inclusive box, not fractional-overlap area.
+								// Website bilinear keeps two taps; frozen/landed triangle support widens on reduction.
+								const actualRed =
+									backend === 'typescript'
+										? filter === 'area'
+											? [21, 96, 171]
+											: [11, 96, 181]
+										: expectedRed;
+								equal(
+									Array.from(operation.call().data),
+									actualRed.flatMap((red) => [red, 30, 70, 255]),
+									`${backend} ${filter} known 4→3`
+								);
+								if (backend === 'typescript') {
+									const mismatch = await preflightOperation(operation, {
+										dimensions: { width: 3, height: 1 },
+										pixels: {
+											format: 'rgba8',
+											data: expectedRed.flatMap((red) => [red, 30, 70, 255])
+										},
+										warnings: []
+									});
+									equal(
+										mismatch.pixels.data,
+										actualRed.flatMap((red) => [red, 30, 70, 255]),
+										`retain website ${filter} semantic difference`
+									);
+								}
+							} finally {
+								operation.close();
+							}
+						}
+					}
+					// Nontrivial convolution vectors live in the native and package suites.
+					// This checks every actual benchmark adapter recipe without collecting timings.
+					for (const filter of ['bicubic', 'lanczos2', 'lanczos3']) {
+						for (const support of ['fixed', 'scale-aware']) {
+							for (const backend of filter === 'bicubic'
+								? ['package']
+								: ['typescript', 'package']) {
+								const request = trial(backend, 'primed-instance', 7, 3);
+								request.case.rgba = Array.from({ length: 7 }, () => [83, 147, 219, 255]).flat();
+								request.case.browser.operation = {
+									operation: `resize-${filter}`,
+									anchor: 'center',
+									support
+								};
+								const operation = await prepareOperation(request);
+								try {
+									equal(
+										Array.from(operation.call().data),
+										Array.from({ length: 3 }, () => [83, 147, 219, 255]).flat(),
+										`${backend} ${filter} ${support} adapter`
+									);
+								} finally {
+									operation.close();
+								}
+							}
 						}
 					}
 					const freshTypeScript = await prepareOperation(trial('typescript', 'fresh-instance'));
@@ -244,6 +320,8 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						drift,
 						checked: [
 							'known-vector',
+							'area-bilinear-known-vectors-and-drift',
+							'convolution-support-recipes',
 							'identity-copy',
 							'fresh-instance',
 							'initialization-bytes',

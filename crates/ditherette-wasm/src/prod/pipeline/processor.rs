@@ -1,4 +1,4 @@
-//! Private nearest-only ownership around the landed packed kernel.
+//! Private resize ownership around landed packed kernels and fallible preparation.
 //!
 //! Request, initialization, and lifecycle rules follow the copied contract.
 //! Failures use static codes/paths instead of allocating diagnostic strings.
@@ -7,24 +7,18 @@ use std::mem::size_of;
 
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
 
-use crate::prod::{
-    contract::{
-        error::ErrorCode,
-        failure::{ErrorPath, Failure},
-        request::{
-            Anchor, Output, ResizePolicy, MAX_MEMORY_LIMIT_BYTES, MAX_OUTPUT_SIDE, MAX_PIXELS,
-            MAX_SOURCE_SIDE,
-        },
-    },
-    resize::scalar::nearest::{
-        alignment::ResizeAnchor, resize_nearest_rgba8_with_plan_into, NearestResizePlan,
-        PlanAllocationError,
+use super::resize::{self, PreparedResize};
+use crate::prod::contract::{
+    error::ErrorCode,
+    failure::{ErrorPath, Failure},
+    request::{
+        Output, ResizePolicy, MAX_MEMORY_LIMIT_BYTES, MAX_OUTPUT_SIDE, MAX_PIXELS, MAX_SOURCE_SIDE,
     },
 };
 
 /// Typed private shape. The package validates recipe version and raw property types.
 #[derive(Debug, Clone, Copy)]
-pub struct NearestRequest {
+pub struct ResizeRequest {
     pub source_width: u32,
     pub source_height: u32,
     pub output: Output,
@@ -86,17 +80,15 @@ struct Plan {
     output: ImageDimensions,
     source_len: usize,
     output_len: usize,
-    anchor: ResizeAnchor,
+    resize: ResizePolicy,
 }
 
 impl Processor {
     /// Counts owned control, buffer headers, and plan records, plus adapter-owned capacity.
     /// Compiler stack frames and fixed module overhead are outside this ownership accounting.
     pub const fn bookkeeping_bytes(boundary_capacity: u64) -> u64 {
-        (size_of::<Self>()
-            + size_of::<Buffers>()
-            + size_of::<Plan>()
-            + size_of::<Option<NearestResizePlan>>()) as u64
+        (size_of::<Self>() + size_of::<Buffers>() + size_of::<Plan>() + size_of::<PreparedResize>())
+            as u64
             + boundary_capacity
     }
 
@@ -136,7 +128,7 @@ impl Processor {
 
     pub fn resize<B: Boundary>(
         &mut self,
-        request: NearestRequest,
+        request: ResizeRequest,
         boundary: &mut B,
     ) -> Result<B::Output, Failure> {
         self.resize_with_allocator(request, boundary, &mut SystemAllocator)
@@ -145,7 +137,7 @@ impl Processor {
     /// Runs a call with injectable reservation failures for independent ownership fixtures.
     pub fn resize_with_allocator<B: Boundary, A: Allocator>(
         &mut self,
-        request: NearestRequest,
+        request: ResizeRequest,
         boundary: &mut B,
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
@@ -164,18 +156,14 @@ impl Processor {
 
     fn run<B: Boundary, A: Allocator>(
         &mut self,
-        request: NearestRequest,
+        request: ResizeRequest,
         boundary: &mut B,
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
         let plan = Plan::new(request, boundary.input_len()?)?;
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
-        let metadata_bytes = if plan.source == plan.output {
-            0
-        } else {
-            NearestResizePlan::required_capacity_bytes(plan.source, plan.output)
-        };
+        let metadata_bytes = PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
         let planned = overhead
             .checked_add(plan.source_len as u64)
             .and_then(|bytes| bytes.checked_add(plan.output_len as u64))
@@ -185,26 +173,9 @@ impl Processor {
             return Err(memory_limit_failure());
         }
 
-        let metadata = if plan.source == plan.output {
-            None
-        } else {
-            let budget =
-                self.memory_limit - overhead - plan.source_len as u64 - plan.output_len as u64;
-            Some(
-                NearestResizePlan::try_new(plan.source, plan.output, plan.anchor, budget).map_err(
-                    |error| match error {
-                        PlanAllocationError::MemoryLimit => memory_limit_failure(),
-                        PlanAllocationError::Allocation => {
-                            Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Wasm)
-                        }
-                    },
-                )?,
-            )
-        };
-        let overhead = overhead
-            + metadata
-                .as_ref()
-                .map_or(0, NearestResizePlan::capacity_bytes);
+        let budget = self.memory_limit - overhead - plan.source_len as u64 - plan.output_len as u64;
+        let mut metadata = PreparedResize::new(plan.source, plan.output, plan.resize, budget)?;
+        let overhead = overhead + metadata.capacity_bytes();
         self.peak_capacity = overhead;
         let mut buffers = Buffers::default();
         allocator.reserve(&mut buffers.source, plan.source_len)?;
@@ -219,12 +190,7 @@ impl Processor {
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
         let output = ImageViewMut::<Rgba8>::packed(&mut buffers.output, plan.output)
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-        if let Some(metadata) = &metadata {
-            resize_nearest_rgba8_with_plan_into(source, output, metadata);
-        } else {
-            // The landed convenience entrypoint also bypasses planning for identity.
-            buffers.output.copy_from_slice(&buffers.source);
-        }
+        metadata.execute(source, output)?;
         // A failed complete helper drops both Vecs. Future callback/cache publication
         // belongs after this complete result exists, never before it.
         boundary.complete(&buffers.output, plan.output)
@@ -246,13 +212,8 @@ impl Processor {
 }
 
 impl Plan {
-    fn new(request: NearestRequest, input_len: usize) -> Result<Self, Failure> {
-        let ResizePolicy::Nearest { anchor } = request.output.resize else {
-            return Err(Failure::new(
-                ErrorCode::UnsupportedOperation,
-                ErrorPath::OutputResize,
-            ));
-        };
+    fn new(request: ResizeRequest, input_len: usize) -> Result<Self, Failure> {
+        resize::supported(request.output.resize)?;
         let source = dimensions(request.source_width, request.source_height, true)?;
         let source_len = source
             .storage_len::<Rgba8>()
@@ -264,23 +225,12 @@ impl Plan {
         let output_len = output
             .storage_len::<Rgba8>()
             .map_err(|_| Failure::new(ErrorCode::InvalidSettings, ErrorPath::Output))?;
-        let anchor = match anchor {
-            Anchor::TopLeft => ResizeAnchor::TopLeft,
-            Anchor::Top => ResizeAnchor::Top,
-            Anchor::TopRight => ResizeAnchor::TopRight,
-            Anchor::Left => ResizeAnchor::Left,
-            Anchor::Center => ResizeAnchor::Center,
-            Anchor::Right => ResizeAnchor::Right,
-            Anchor::BottomLeft => ResizeAnchor::BottomLeft,
-            Anchor::Bottom => ResizeAnchor::Bottom,
-            Anchor::BottomRight => ResizeAnchor::BottomRight,
-        };
         Ok(Self {
             source,
             output,
             source_len,
             output_len,
-            anchor,
+            resize: request.output.resize,
         })
     }
 }

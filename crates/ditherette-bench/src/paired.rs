@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod coordinator;
+pub mod native;
 
 use ditherette_bench_api::verification::*;
 use serde::{Deserialize, Serialize};
@@ -313,6 +314,15 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             }
             accepted_samples.extend_from_slice(&accepted.sample_ns);
             candidate_samples.extend_from_slice(&candidate.sample_ns);
+        }
+        // Keep diagnostic timings visible even when conformance correctly rejects the outputs.
+        // These numbers do not change the correctness or release gate.
+        if !accepted_samples.is_empty() && !candidate_samples.is_empty() {
+            let a = median(&accepted_samples);
+            let b = median(&candidate_samples);
+            result.accepted_median_ns = Some(a);
+            result.candidate_median_ns = Some(b);
+            result.median_ratio = (a > 0.0 && b > 0.0).then_some(b / a);
         }
         if !result.issues.is_empty()
             || complete_pairs != prepared.experiment.pairs

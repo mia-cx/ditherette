@@ -55,6 +55,52 @@ test('public calls preserve inputs and durable outputs across growth, later call
 	assert.throws(() => processor.resize(request()), diagnostic('disposed', 'instance'));
 });
 
+test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and recovery', async () => {
+	for (const [algorithm, capacity] of [
+		['area', 12],
+		['bilinear', 116]
+	]) {
+		// Bilinear adds two 12-byte Vec headers and five 16-byte taps in Wasm32.
+		const resize = algorithm === 'area' ? { algorithm } : { algorithm, anchor: 'center' };
+		const backing = new Uint8Array([9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+		const value = {
+			version: 1,
+			source: { width: 2, height: 1, data: backing.subarray(1, 9) },
+			output: { width: 1, height: 1, resize }
+		};
+		const processor = await createDitherette({
+			wasm: module,
+			memoryLimitBytes: overhead + capacity
+		});
+		const output = processor.resize(value);
+		assert.deepEqual([...output.data], [100, 50, 150, 128]);
+		assert.deepEqual([...backing], [9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+		const originalSet = Uint8Array.prototype.set;
+		let calls = 0;
+		try {
+			Uint8Array.prototype.set = function (...args) {
+				if (++calls === 2) throw new RangeError('durable output failure');
+				return Reflect.apply(originalSet, this, args);
+			};
+			assert.throws(() => processor.resize(value), diagnostic('wasm-memory-unavailable', 'output'));
+		} finally {
+			Uint8Array.prototype.set = originalSet;
+		}
+		assert.deepEqual([...processor.resize(value).data], [100, 50, 150, 128]);
+		processor.dispose();
+		assert.deepEqual([...output.data], [100, 50, 150, 128]);
+		const short = await createDitherette({
+			wasm: module,
+			memoryLimitBytes: overhead + capacity - 1
+		});
+		assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
+		const smaller = request();
+		smaller.output.width = 1;
+		assert.deepEqual([...short.resize(smaller).data], [17, 31, 47, 127]);
+		short.dispose();
+	}
+});
+
 test('one exact capacity budget succeeds and one byte less rejects without poisoning the instance', async () => {
 	// 12 pixel bytes plus two Wasm usize x offsets and one u32 y coordinate.
 	const capacity = 12 + 2 * 4 + 4;
@@ -71,6 +117,65 @@ test('one exact capacity budget succeeds and one byte less rejects without poiso
 		createDitherette({ wasm: module, memoryLimitBytes: overhead - 1 }),
 		diagnostic('memory-limit', 'memoryLimitBytes')
 	);
+});
+
+test('public convolution preserves alpha and output ownership with bounded preparation', async () => {
+	for (const algorithm of ['bicubic', 'lanczos2', 'lanczos3']) {
+		for (const support of ['fixed', 'scale-aware']) {
+			const radius = algorithm === 'lanczos3' ? 3 : 2;
+			// Two Wasm32 Vec headers, 16-byte aligned taps, and 12 input/output bytes.
+			const xTaps = 2 * radius * (support === 'fixed' ? 1 : 2) + 2;
+			const yTaps = 2 * radius + 2;
+			const capacity = 12 + 2 * 12 + (xTaps + yTaps) * 16;
+			const backing = new Uint8Array([9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+			const value = {
+				version: 1,
+				source: { width: 2, height: 1, data: backing.subarray(1, 9) },
+				output: { width: 1, height: 1, resize: { algorithm, anchor: 'center', support } }
+			};
+			const processor = await createDitherette({
+				wasm: module,
+				memoryLimitBytes: overhead + capacity
+			});
+			const output = processor.resize(value);
+			// The landed Wasm Lanczos3 accumulation rounds this half-byte downward for scale-aware support.
+			const expected = [
+				100,
+				50,
+				150,
+				algorithm === 'lanczos3' && support === 'scale-aware' ? 127 : 128
+			];
+			assert.deepEqual([...output.data], expected, `${algorithm} ${support}`);
+			assert.deepEqual([...backing], [9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+			const originalSet = Uint8Array.prototype.set;
+			for (const phase of [1, 2]) {
+				let calls = 0;
+				try {
+					Uint8Array.prototype.set = function (...args) {
+						if (++calls === phase) throw new RangeError('convolution copy failure');
+						return Reflect.apply(originalSet, this, args);
+					};
+					assert.throws(
+						() => processor.resize(value),
+						diagnostic('wasm-memory-unavailable', phase === 1 ? 'source.data' : 'output')
+					);
+				} finally {
+					Uint8Array.prototype.set = originalSet;
+				}
+				assert.deepEqual(processor.resize(value), output);
+			}
+			processor.dispose();
+			assert.deepEqual([...output.data], expected);
+			const short = await createDitherette({
+				wasm: module,
+				memoryLimitBytes: overhead + capacity - 1
+			});
+			assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
+			value.output.width = 2;
+			assert.deepEqual([...short.resize(value).data], [...value.source.data]);
+			short.dispose();
+		}
+	}
 });
 
 test('concurrent initialization, custom byte views, and reusable responses remain independent', async () => {

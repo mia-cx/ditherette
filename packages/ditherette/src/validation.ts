@@ -14,7 +14,8 @@ const anchors = [
 	'bottom',
 	'bottom-right'
 ];
-const laterFilters = ['area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3', 'trilinear'];
+// Private ABI order. Existing algorithm tags remain stable as implementations are added.
+const algorithms = ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3'];
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
 const arrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get!;
 const arrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')!.get!;
@@ -174,25 +175,38 @@ export function validateResize(value: unknown) {
 			'output.resize'
 		);
 		const algorithm = field(resize, 'algorithm');
-		if (algorithm !== 'nearest') {
-			const code =
-				typeof algorithm === 'string' && laterFilters.includes(algorithm)
-					? 'unsupported-operation'
-					: 'invalid-settings';
+		const algorithmIndex = typeof algorithm === 'string' ? algorithms.indexOf(algorithm) : -1;
+		if (algorithmIndex < 0) {
+			const code = algorithm === 'trilinear' ? 'unsupported-operation' : 'invalid-settings';
 			throw new DitheretteError(
 				code,
 				'output.resize.algorithm',
-				'This package checkpoint supports nearest resize only.'
+				'This resize algorithm is not implemented in this package checkpoint.'
 			);
 		}
-		if (Object.hasOwn(resize, 'support'))
+		const convolution = algorithmIndex >= 3;
+		if (!convolution && Object.hasOwn(resize, 'support'))
 			throw new DitheretteError(
 				'invalid-settings',
 				'output.resize.support',
-				'Nearest resize has no support policy.'
+				'This resize algorithm has no support policy.'
+			);
+		const rawSupport = convolution ? field(resize, 'support') : 'fixed';
+		if (rawSupport !== 'fixed' && rawSupport !== 'scale-aware')
+			throw new DitheretteError(
+				'invalid-settings',
+				'output.resize.support',
+				'Expected fixed or scale-aware support.'
+			);
+		if (algorithm === 'area' && Object.hasOwn(resize, 'anchor'))
+			throw new DitheretteError(
+				'invalid-settings',
+				'output.resize.anchor',
+				'Area resize has no anchor.'
 			);
 		const rawAnchor = field(resize, 'anchor');
-		const anchor = typeof rawAnchor === 'string' ? anchors.indexOf(rawAnchor) : -1;
+		const anchor =
+			algorithm === 'area' ? 0 : typeof rawAnchor === 'string' ? anchors.indexOf(rawAnchor) : -1;
 		if (anchor < 0)
 			throw new DitheretteError(
 				'invalid-settings',
@@ -215,7 +229,9 @@ export function validateResize(value: unknown) {
 			sourceHeight: sourceSize.height,
 			outputWidth: outputSize.width,
 			outputHeight: outputSize.height,
-			anchor
+			algorithm: algorithmIndex,
+			anchor,
+			support: rawSupport === 'fixed' ? 0 : 1
 		};
 	} catch (error) {
 		if (error instanceof DitheretteError) throw error;

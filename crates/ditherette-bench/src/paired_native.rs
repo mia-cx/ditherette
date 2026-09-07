@@ -16,9 +16,9 @@ use ditherette_bench::{
         coordinator::{live_benchmarks, validate_experiment},
         *,
     },
-    verification::{content_digest, settings_digest, verify_with_bounds, VerificationBounds},
+    verification::{content_digest, verify_with_bounds, VerificationBounds},
 };
-use ditherette_bench_api::{verification::*, ResizeParams, SubjectId};
+use ditherette_bench_api::{verification::*, ResizeParams};
 use std::{
     fs,
     time::{Duration, Instant},
@@ -51,7 +51,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
     {
         return Err(BenchError::Config("paired artifact differs from its embedded clean source revision or complete executable digest".into()));
     }
-    validate_native(&request.case)?;
+    validate_native(&request.case, registry, request.role)?;
     let case = &request.case;
     let subject_id = match request.role {
         Role::Accepted => &case.accepted_subject,
@@ -131,7 +131,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
     Ok(())
 }
 
-fn validate_native(case: &PairCase) -> Result<(), BenchError> {
+fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(), BenchError> {
     if case.browser.is_some() {
         return Err(BenchError::Config(
             "native worker rejects browser requests".into(),
@@ -150,33 +150,29 @@ fn validate_native(case: &PairCase) -> Result<(), BenchError> {
     {
         return Err(BenchError::Config("native resize has no application cache and cannot claim complete-call or initialization measurements".into()));
     }
-    let ids = [
-        &case.reference_subject,
-        &case.accepted_subject,
-        &case.candidate_subject,
-    ]
-    .map(|subject| SubjectId::parse(subject.as_str()));
-    let ids = ids
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| BenchError::Config(error.to_string()))?;
-    if ids
-        .iter()
-        .any(|id| id.domain() != "resize" || id.filter() != ids[0].filter())
-        || case.identity.semantics.operation != Operation::Resize
-        || case.identity.semantics.version != 1
-        || case.identity.semantics.space.is_some()
-        || case.identity.semantics.recipe != format!("{}-center-default", ids[0].filter())
-        || case.identity.settings
-            != settings_digest(&(
-                case.identity.semantics.clone(),
+    let subject = registry.resize_subject(match role {
+        Role::Accepted => &case.accepted_subject,
+        Role::Candidate => &case.candidate_subject,
+    })?;
+    registry.resize_subject(&case.reference_subject)?;
+    let descriptor = &subject.descriptor;
+    let oracle = if descriptor.id.module() == "spec" {
+        Some(&descriptor.id)
+    } else {
+        descriptor.default_oracle.as_ref()
+    };
+    if oracle.map(|id| id.as_str()) != Some(case.reference_subject.as_str())
+        || case.identity
+            != native::identity(
+                &case.reference_subject,
+                case.source,
+                &case.rgba,
                 case.identity.output,
-                "center-default",
-            ))
-            .map_err(|error| BenchError::Config(error.to_string()))?
+            )
+            .map_err(BenchError::io)?
     {
         return Err(BenchError::Config(
-            "native subjects or normalized center/default recipe identity differ".into(),
+            "native subject or normalized recipe identity differs".into(),
         ));
     }
     Ok(())
@@ -240,9 +236,11 @@ impl MeasurementObserver for Observer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ditherette_bench::verification::settings_digest;
 
     #[test]
     fn native_adapter_rejects_claims_it_cannot_measure_without_timing() {
+        let registry = Registry::load();
         let source = Dimensions {
             width: 1,
             height: 1,
@@ -277,7 +275,7 @@ mod tests {
                 target_sample_ms: 1,
             },
         };
-        validate_native(&case).unwrap();
+        validate_native(&case, &registry, Role::Candidate).unwrap();
         assert_eq!(
             config(&case.measurement).unwrap().sample_mode().as_str(),
             "interactive"
@@ -288,9 +286,18 @@ mod tests {
             "throughput"
         );
         case.measurement.application_cache = ApplicationCache::Cold;
-        assert!(validate_native(&case).is_err());
+        assert!(validate_native(&case, &registry, Role::Candidate).is_err());
         case.measurement.application_cache = ApplicationCache::NotApplicable;
+        case.reference_subject = "spec:resize:bicubic:catmull-rom".into();
+        case.accepted_subject = "prod:resize:bicubic:catmull-rom".into();
+        case.candidate_subject = "prod:resize:bicubic:catmull-rom".into();
+        case.identity =
+            native::identity(&case.reference_subject, source, &case.rgba, source).unwrap();
+        validate_native(&case, &registry, Role::Candidate).unwrap();
+        case.candidate_subject = "prod:resize:bicubic:catmull-rom-scale-aware".into();
+        assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+        case.candidate_subject = "prod:resize:bicubic:catmull-rom".into();
         case.identity.settings = content_digest(b"wrong settings");
-        assert!(validate_native(&case).is_err());
+        assert!(validate_native(&case, &registry, Role::Candidate).is_err());
     }
 }

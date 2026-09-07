@@ -15,6 +15,18 @@ S20 tooling evidence remains valid for the artifact it measured; it does not est
 The interrupted diagnostic branch stays separate and will not delay restoring landed code.
 All later work reuses landed kernels and shared helpers. Only missing implementations start from literal spec copies.
 
+## Current implementation
+
+Current integration work continues on `impl/v1-resize-integration` in `.worktrees/v1-resize-integration`.
+It owns the tracked progress table; the root table remains the visible mirror.
+S21 public area/bilinear checkpoint `056a1324` joins at `b52d1c8b`, with native/package/three-engine conformance passing.
+S22 adds public convolution modes on that join, preserving native checkpoint `53eaf013`.
+S23 starts the missing exact trilinear implementation from `b52d1c8b` in `impl/v1-s23-trilinear`.
+S24 native packed-color/direct quantization is validated at `f83e58a4`; public integration and measurements remain pending.
+The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
+A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
+The fixed S21/S22 budget is 304 serial workers. No measurement is running.
+
 ## Delivered S01 through S16
 
 This snapshot comes from the live PR state after S16 delivery. All 16 PRs are open, non-draft, and have auto-merge disabled.

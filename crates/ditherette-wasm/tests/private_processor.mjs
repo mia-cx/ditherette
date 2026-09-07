@@ -22,7 +22,7 @@ async function fresh(limit) {
 const source = () => new Uint8Array([10, 20, 30, 0, 40, 50, 60, 255]);
 function invoke(bindings, input, ...shape) {
 	const sink = { value: undefined };
-	const status = bindings.privateResize(input, ...shape, sink);
+	const status = bindings.privateResize(input, ...shape.slice(0, 4), 0, shape[4], 0, sink);
 	if (status !== 0) {
 		assert.equal(sink.value, undefined, 'failed calls never publish a result');
 		return status;
@@ -127,7 +127,7 @@ test('caught copy failures and recursive calls recover without mutable glue borr
 		assert.equal(resize(bindings).data.length, 24);
 	}
 	const frozenSink = Object.freeze({});
-	assert.equal(bindings.privateResize(source(), 2, 1, 3, 2, 4, frozenSink), 9);
+	assert.equal(bindings.privateResize(source(), 2, 1, 3, 2, 0, 4, 0, frozenSink), 9);
 	assert.equal(bindings.privateErrorPath(), 8);
 	assert.equal(frozenSink.value, undefined);
 	assert.equal(resize(bindings).data.length, 24);
@@ -167,4 +167,37 @@ test('repeated success and caught failures keep externref capacity and live hand
 	assert.equal(table.length, capacity);
 	assert.equal(live(), initialLive);
 	assert.equal(raw.memory.buffer.byteLength, pages);
+});
+
+test('convolution ABI preserves landed output for every policy and anchor and rejects invalid discriminators', async () => {
+	const { bindings } = await fresh(10_000_000);
+	const input = new Uint8Array(Array.from({ length: 7 * 5 * 4 }, (_, i) => (i * 73) % 256));
+	const anchors = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+	for (const [mode, algorithm] of ['bicubic', 'lanczos2', 'lanczos3'].entries()) {
+		for (const [support, name] of ['fixed', 'scale-aware'].entries()) {
+			for (const [anchor, label] of anchors.entries()) {
+				const sink = {};
+				assert.equal(bindings.privateResize(input, 7, 5, 3, 2, mode + 3, anchor, support, sink), 0);
+				const landed = bindings.resizeRgba8(input, 7, 5, 3, 2, algorithm, label, name, false);
+				assert.deepEqual(sink.value.data, landed, `${algorithm} ${name} ${label}`);
+			}
+		}
+	}
+	for (const algorithm of [0, 1, 2, 3, 4, 5]) {
+		for (const support of [-1, 0.5, 2, NaN, Infinity, ...(algorithm < 3 ? [1] : [])]) {
+			const sink = {};
+			assert.equal(bindings.privateResize(source(), 2, 1, 1, 1, algorithm, algorithm === 1 ? 0 : 4, support, sink), 4);
+			assert.equal(bindings.privateErrorPath(), 12);
+			assert.equal(sink.value, undefined);
+		}
+	}
+	const sink = {};
+	assert.equal(bindings.privateResize(source(), 2, 1, 1, 1, 1, 4, 0, sink), 4);
+	assert.equal(bindings.privateErrorPath(), 9);
+	assert.equal(sink.value, undefined);
+	for (const algorithm of [-1, 0.5, 6, NaN, Infinity]) {
+		assert.equal(bindings.privateResize(source(), 2, 1, 1, 1, algorithm, 4, 0, {}), 4);
+	}
+	assert.equal(resize(bindings).data.length, 24);
+	bindings.privateDispose();
 });

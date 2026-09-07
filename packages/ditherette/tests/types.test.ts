@@ -20,8 +20,49 @@ processor.then((instance) => {
 	instance.wasm;
 });
 // @ts-expect-error Noncanonical anchor object tags are not accepted.
-const invalidAnchor: ResizeRequest['output']['resize']['anchor'] = { center: null };
+const invalidAnchor: Extract<ResizeRequest['output']['resize'], { anchor: unknown }>['anchor'] = {
+	center: null
+};
 void invalidAnchor;
+const area: ResizeRequest = {
+	...request,
+	output: { ...request.output, resize: { algorithm: 'area' } }
+};
+const bilinear: ResizeRequest = {
+	...request,
+	output: { ...request.output, resize: { algorithm: 'bilinear', anchor: 'top-left' } }
+};
+void area;
+void bilinear;
+const convolution: ResizeRequest['output']['resize'][] = [
+	{ algorithm: 'bicubic', anchor: 'bottom-right', support: 'fixed' },
+	{ algorithm: 'lanczos2', anchor: 'center', support: 'scale-aware' },
+	{ algorithm: 'lanczos3', anchor: 'top', support: 'fixed' }
+];
+// @ts-expect-error Convolution requires an explicit support policy.
+const missingSupport: ResizeRequest['output']['resize'] = {
+	algorithm: 'bicubic',
+	anchor: 'center'
+};
+const invalidSupport: ResizeRequest['output']['resize'] = {
+	algorithm: 'lanczos2',
+	anchor: 'center',
+	// @ts-expect-error Support uses canonical string tags.
+	support: 'auto'
+};
+void convolution;
+void missingSupport;
+void invalidSupport;
+// @ts-expect-error Area has no anchor.
+const invalidArea: ResizeRequest['output']['resize'] = { algorithm: 'area', anchor: 'center' };
+const invalidBilinear: ResizeRequest['output']['resize'] = {
+	algorithm: 'bilinear',
+	anchor: 'center',
+	// @ts-expect-error Bilinear has no support setting.
+	support: 'fixed'
+};
+void invalidArea;
+void invalidBilinear;
 // @ts-expect-error No backend-selection option exists.
 createDitherette({ backend: 'scalar' });
 // @ts-expect-error Threads must use the named policy, not a boolean.

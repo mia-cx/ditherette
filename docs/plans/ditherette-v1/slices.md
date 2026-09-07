@@ -37,8 +37,8 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) | Ready | [#107](https://github.com/mia-cx/ditherette/pull/107) |
 | [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | In progress | - |
 | [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | In progress | - |
-| [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | Not started | - |
-| [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | Not started | - |
+| [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | In progress | - |
+| [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | In progress | - |
 | [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | Not started | - |
 | [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | Not started | - |
 | [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Not started | - |
