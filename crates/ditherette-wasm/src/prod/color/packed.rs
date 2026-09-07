@@ -7,6 +7,24 @@ use crate::{
     prod::contract::request::MatchPolicy,
 };
 
+/// Uses the landed packed forward converter for palette-free working coordinates.
+pub fn rgb8_to_coordinates(
+    rgb: [u8; 3],
+    space: crate::prod::contract::request::WorkingSpace,
+) -> [f32; 3] {
+    use crate::prod::contract::request::WorkingSpace;
+    let space = match space {
+        WorkingSpace::Srgb => PackedSpace::Srgb,
+        WorkingSpace::LinearRgb => PackedSpace::LinearRgb,
+        WorkingSpace::Oklab => PackedSpace::Oklab,
+        WorkingSpace::Oklch => PackedSpace::Oklch,
+        WorkingSpace::Cielab => PackedSpace::Cielab,
+        WorkingSpace::Cielch => PackedSpace::Cielch,
+        WorkingSpace::Ycbcr => PackedSpace::Ycbcr,
+    };
+    Converter::new(space).coordinates(rgb)
+}
+
 /// Packed coordinate spaces accepted by direct palette matching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PackedSpace {
