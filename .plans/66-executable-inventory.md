@@ -60,7 +60,7 @@ Any bit difference fails exact conformance, including signed zero. Reports retai
 `matching_integration_plan` accepts `existing-native`, `existing-public`, `new-native`, or `new-public`.
 Every case uses the S24 128×96 varied-RGBA fixture and complete quantize cases retain its 64-entry palette.
 The existing-mode group uses the delivered S24 parent as accepted. The new-mode group uses all-mode baseline `0085972a05a3dbdbbef6d47351d6e37bdd8625d2`.
-Both compare against the selected dispatch candidate in separate prepared experiments.
+Both compare against the proposed dispatch candidate in separate prepared experiments.
 Five existing native/public controls across three browsers consume 80 workers.
 Ten new native/public controls, two native conversions, and seven native score controls consume 196 workers.
 Total ceiling is 276 workers, two AB/BA pairs, 20 samples, 50 ms warmup, and 250 ms measurement cap.
