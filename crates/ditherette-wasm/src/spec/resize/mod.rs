@@ -28,7 +28,7 @@ pub fn resize(request: ResizeRequest<'_>) -> Result<Rgba8Image, DitheretteError>
         ResizePolicy::Nearest { anchor } => {
             scalar::nearest::resize_nearest_into(source, output, reference_anchor(anchor))
         }
-        ResizePolicy::Area => scalar::area::resize_area_into(source, output),
+        ResizePolicy::Area {} => scalar::area::resize_area_into(source, output),
         ResizePolicy::Bilinear { anchor } => {
             scalar::bilinear::resize_bilinear_into(source, output, reference_anchor(anchor))
         }

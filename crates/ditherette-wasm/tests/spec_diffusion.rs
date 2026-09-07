@@ -73,7 +73,7 @@ fn request(
         dither: DitherPolicy::Diffusion {
             kernel,
             strength: 1.0,
-            placement: Placement::Everywhere,
+            placement: Placement::Everywhere {},
             serpentine: false,
             feedback,
         },
@@ -437,7 +437,7 @@ fn compositing_and_transparent_only_metadata_survive_the_complete_call() {
         },
     ];
     for (alpha, expected) in [
-        (AlphaPolicy::Premultiplied, [1]),
+        (AlphaPolicy::Premultiplied {}, [1]),
         (AlphaPolicy::Matte { rgb: [0, 0, 255] }, [2]),
     ] {
         for kernel in KERNELS {
@@ -483,7 +483,7 @@ fn complete_diffusion_rejects_wrong_families_and_invalid_settings_without_mutati
         Diffusion::FloydSteinberg,
         DiffusionFeedback::SrgbBytes,
     );
-    input.dither = DitherPolicy::None;
+    input.dither = DitherPolicy::None {};
     let error = diffuse(input).unwrap_err();
     assert_eq!(
         (error.code, error.path.as_str()),

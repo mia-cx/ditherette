@@ -45,7 +45,7 @@ const ANCHORS: [Anchor; 9] = [
 fn policies(anchor: Anchor) -> Vec<ResizePolicy> {
     let mut policies = vec![
         ResizePolicy::Nearest { anchor },
-        ResizePolicy::Area,
+        ResizePolicy::Area {},
         ResizePolicy::Bilinear { anchor },
         ResizePolicy::Trilinear { anchor },
     ];
@@ -245,7 +245,7 @@ fn reference_call_rejects_malformed_storage_and_output_before_dispatch() {
         output: Output {
             width: 1,
             height: 1,
-            resize: ResizePolicy::Area,
+            resize: ResizePolicy::Area {},
         },
     };
     assert_eq!(resize(request).unwrap_err().code, ErrorCode::InvalidImage);
