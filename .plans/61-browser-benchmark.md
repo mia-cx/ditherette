@@ -7,11 +7,11 @@ The immediate PR base is `impl/v1-s19-integration`. Preserve all frozen and lite
 ## TODOs
 
 - [x] Extend the typed paired protocol and comparison checks for public operations, browser runtime/artifact identity, and truthful cache/init scopes.
-- [~] Snapshot browser/package/TypeScript assets and dispatch owned browser workers through the existing paired lease protocol. Preserve shared-library file aliases before real trials.
+- [x] Snapshot browser/package/TypeScript assets and dispatch owned browser workers through the existing paired lease protocol. Preserve shared-library file aliases before real trials.
 - [x] Add clean-source build/pack/install provenance with complete source and output digests.
 - [x] Implement actual installed-package calls and equivalent TypeScript adapters, with one call per latency sample and separate throughput/init measurements.
 - [x] Test operation registration, exact output proof, asset tampering, malformed transport, and owned-child cleanup without measurements.
-- [~] Join the independent deliveries and validate real browser conformance plus existing native protocol compatibility. Chromium/Firefox pass; copied WebKit runtime needs alias preservation.
+- [x] Join the independent deliveries and validate real browser conformance plus existing native protocol compatibility.
 - [ ] Declare a bounded initial case/pair budget, prepare clean artifacts, drain implementation, and collect exclusive fresh browser trials.
 - [ ] Record raw samples, complete identities, exact output checks, performance outcomes, and cleanup evidence; preserve failures without treating them as accepted optimizations.
 - [ ] Rebase with merge/checkpoint preservation, validate affected checks, and open an unmerged PR with current progress and dependencies.
@@ -55,7 +55,10 @@ The package tarball digest is `bed93cd2085df64a2ca8ba578fd6d72babccc539042e83847
 Fresh installed-package conformance passes Chromium 147.0.7727.15 and Firefox 148.0.2.
 The copied WebKit launcher starts but aborts during page creation; the original launcher passes the same operation.
 All 65 copied installation/library files have identical bytes and read/execute bits.
-Copying symbolic aliases into separate files loses shared-library inode identity. Test a hardlink-preserving snapshot and bind alias groups in its manifest.
-Retain the failed runtime as diagnostic evidence. Rebuild and prepare both roles after the runtime correction, then rerun conformance before any measurements.
+Copying symbolic aliases into separate files loses shared-library inode identity. A fresh hardlink-preserving copy passes the same page test.
+Correction `1d0b7c8fc633ae5a6b4f173f5eef36ed08da7131` joins as `785696fc` and binds canonical alias groups into the content manifest.
+Controlled fixtures preserve aliases through a second snapshot and reject split or falsely merged groups.
+The coordinator reruns full installed-tarball conformance with the corrected runtime. Chromium, Firefox, and WebKit pass all four reported tests.
+Retain the failed runtime as diagnostic evidence. Rebuild and prepare both roles after this correction before any measurements.
 Store full trial results on the workspace filesystem because `/tmp` has only 2 GiB free.
 No performance measurement has run in S20.
