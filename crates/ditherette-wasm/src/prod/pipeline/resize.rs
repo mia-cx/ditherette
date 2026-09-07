@@ -1,6 +1,6 @@
 //! Bounded full-call preparation and dispatch for landed resize kernels.
 
-use std::num::NonZeroU32;
+use std::{mem::size_of, num::NonZeroU32};
 
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
@@ -12,7 +12,10 @@ use crate::{
         },
         resize::{
             common::allocation::CapacityBudget,
-            scalar::{area, bicubic, bilinear, convolution, lanczos, nearest},
+            scalar::{
+                area, bicubic, bilinear, convolution, lanczos, nearest,
+                trilinear::PreparedTrilinear,
+            },
         },
     },
 };
@@ -24,7 +27,11 @@ pub(super) enum PreparedResize {
     Bilinear(bilinear::BilinearResizePlan, Vec<f32>),
     Bicubic(bicubic::BicubicResizePlan, Vec<f64>),
     Lanczos(lanczos::LanczosResizePlan, Vec<f64>),
+    Trilinear(PreparedTrilinear<Rgba8>),
 }
+
+// PreparedResize's inline storage is already counted by Processor::bookkeeping_bytes.
+const TRILINEAR_RECORD_BYTES: u64 = size_of::<PreparedTrilinear<Rgba8>>() as u64;
 
 pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
     match policy {
@@ -33,11 +40,8 @@ pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
         | ResizePolicy::Bilinear { .. }
         | ResizePolicy::Bicubic { .. }
         | ResizePolicy::Lanczos2 { .. }
-        | ResizePolicy::Lanczos3 { .. } => Ok(()),
-        ResizePolicy::Trilinear { .. } => Err(Failure::new(
-            ErrorCode::UnsupportedOperation,
-            ErrorPath::OutputResize,
-        )),
+        | ResizePolicy::Lanczos3 { .. }
+        | ResizePolicy::Trilinear { .. } => Ok(()),
     }
 }
 
@@ -79,7 +83,10 @@ impl PreparedResize {
                     convolution_support(support),
                 )
             }
-            _ => unreachable!("supported policy checked above"),
+            ResizePolicy::Trilinear { .. } => {
+                PreparedTrilinear::<Rgba8>::required_bytes(source, output)
+                    .map(|bytes| bytes - TRILINEAR_RECORD_BYTES)
+            }
         }
     }
 
@@ -156,7 +163,13 @@ impl PreparedResize {
                 scratch.resize(elements, 0.0);
                 Ok(Self::Lanczos(plan, scratch))
             }
-            _ => unreachable!("supported policy checked above"),
+            ResizePolicy::Trilinear { anchor } => PreparedTrilinear::try_new(
+                source,
+                output,
+                bilinear_anchor(anchor),
+                limit + TRILINEAR_RECORD_BYTES,
+            )
+            .map(Self::Trilinear),
         }
     }
 
@@ -168,6 +181,7 @@ impl PreparedResize {
             Self::Bilinear(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 4,
             Self::Bicubic(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 8,
             Self::Lanczos(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 8,
+            Self::Trilinear(plan) => plan.capacity_bytes() - TRILINEAR_RECORD_BYTES,
         }
     }
 
@@ -199,6 +213,7 @@ impl PreparedResize {
                     source, output, plan, scratch,
                 )?
             }
+            Self::Trilinear(plan) => plan.execute(source, output)?,
         }
         Ok(())
     }

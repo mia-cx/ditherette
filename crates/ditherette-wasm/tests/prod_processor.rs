@@ -145,8 +145,113 @@ fn public_area_and_bilinear_dispatch_preserves_landed_output() {
 }
 
 #[test]
+fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
+    use ditherette_wasm::prod::resize::scalar::trilinear::PreparedTrilinear;
+    use ditherette_wasm::spec::resize::scalar::trilinear::resize_trilinear_into;
+    let anchors = [
+        (Anchor::TopLeft, ResizeAnchor::TopLeft),
+        (Anchor::Top, ResizeAnchor::Top),
+        (Anchor::TopRight, ResizeAnchor::TopRight),
+        (Anchor::Left, ResizeAnchor::Left),
+        (Anchor::Center, ResizeAnchor::Center),
+        (Anchor::Right, ResizeAnchor::Right),
+        (Anchor::BottomLeft, ResizeAnchor::BottomLeft),
+        (Anchor::Bottom, ResizeAnchor::Bottom),
+        (Anchor::BottomRight, ResizeAnchor::BottomRight),
+    ];
+    // Independent odd-mip witness: area gives [0,170], bilinear [43,85,128],
+    // then blending against 85 at log2(3)-1 rounds to [68,85,103].
+    for (width, height) in [(3, 1), (1, 3)] {
+        for (index, (_, anchor)) in anchors.iter().enumerate() {
+            let mut output = [0; 4];
+            resize_trilinear_into(
+                ImageView::<Rgba8>::packed(
+                    &[0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255],
+                    ImageDimensions::new(width, height).unwrap(),
+                )
+                .unwrap(),
+                ImageViewMut::packed(&mut output, ImageDimensions::new(1, 1).unwrap()).unwrap(),
+                *anchor,
+            );
+            assert_eq!(
+                output,
+                [[68; 4], [85; 4], [103; 4]][if width == 1 { index / 3 } else { index % 3 }]
+            );
+        }
+    }
+    for (sw, sh, ow, oh) in [
+        (1, 1, 7, 9),
+        (7, 9, 7, 9),
+        (7, 9, 3, 4),
+        (7, 9, 2, 3),
+        (8, 8, 2, 2),
+        (17, 13, 1, 1),
+        (31, 1, 3, 1),
+        (1, 31, 1, 3),
+        (31, 3, 2, 17),
+        (2, 17, 31, 3),
+    ] {
+        let source = ImageDimensions::new(sw, sh).unwrap();
+        let output = ImageDimensions::new(ow, oh).unwrap();
+        let pixels: Vec<u8> = (0..sw * sh * 4)
+            .map(|i| ((i * 73 + i / 7) % 256) as u8)
+            .collect();
+        for (anchor, reference_anchor) in anchors {
+            let mut expected = vec![0; (ow * oh * 4) as usize];
+            resize_trilinear_into(
+                ImageView::<Rgba8>::packed(&pixels, source).unwrap(),
+                ImageViewMut::packed(&mut expected, output).unwrap(),
+                reference_anchor,
+            );
+            let heap = if source == output {
+                0
+            } else {
+                PreparedTrilinear::<Rgba8>::required_bytes(source, output).unwrap()
+                    - std::mem::size_of::<PreparedTrilinear<Rgba8>>() as u64
+            };
+            let required = Processor::bookkeeping_bytes(512)
+                + pixels.len() as u64
+                + expected.len() as u64
+                + heap;
+            let mut processor = Processor::new(required, 512).unwrap();
+            let request = ResizeRequest {
+                source_width: sw,
+                source_height: sh,
+                output: Output {
+                    width: ow,
+                    height: oh,
+                    resize: ResizePolicy::Trilinear { anchor },
+                },
+            };
+            let mut input = Io {
+                input: pixels.clone(),
+                ..Io::default()
+            };
+            let result = processor.resize(request, &mut input).unwrap();
+            assert_eq!(result, expected, "{sw}x{sh}->{ow}x{oh} {anchor:?}");
+            assert_eq!(processor.peak_capacity_bytes(), required);
+            assert_eq!(input.input, pixels);
+            processor.dispose().unwrap();
+            assert_eq!(result, expected);
+            let mut short = Processor::new(required - 1, 512).unwrap();
+            input.copy_calls = 0;
+            let allocations = ALLOCATIONS.with(Cell::get);
+            assert_eq!(
+                short.resize(request, &mut input).unwrap_err().code,
+                ErrorCode::MemoryLimit
+            );
+            assert_eq!(ALLOCATIONS.with(Cell::get), allocations);
+            assert_eq!(input.copy_calls, 0);
+        }
+    }
+}
+
+#[test]
 fn resize_reservation_failures_release_every_owned_byte_and_recover() {
     for policy in [
+        ResizePolicy::Trilinear {
+            anchor: Anchor::Center,
+        },
         ResizePolicy::Area {},
         ResizePolicy::Bilinear {
             anchor: Anchor::Center,
@@ -660,18 +765,6 @@ fn invalid_settings_storage_and_tiny_initialization_are_allocation_free() {
                 ..request()
             },
             ErrorPath::OutputWidth,
-        ),
-        (
-            ResizeRequest {
-                output: Output {
-                    resize: ResizePolicy::Trilinear {
-                        anchor: Anchor::Center,
-                    },
-                    ..request().output
-                },
-                ..request()
-            },
-            ErrorPath::OutputResize,
         ),
     ] {
         let before = ALLOCATIONS.with(Cell::get);

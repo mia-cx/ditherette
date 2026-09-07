@@ -4,6 +4,7 @@ This is crate-owned package wiring, not an additional public method or recipe.
 The package initializes a fresh binding factory and Wasm instance for each processor.
 The copied contracts at `0ede7f6c` and frozen `spec/pipeline/processor.rs` supply request, lifecycle, and composition semantics.
 `prod/pipeline/processor.rs` adds capacity-accounted ownership around the landed nearest, area, bilinear, bicubic, and Lanczos kernels.
+Trilinear uses its exact production implementation, with one shared storage-rounded mip chain.
 `Failure` changes error representation only. Its code/path values allocate no Rust strings.
 
 ## Functions
@@ -17,16 +18,18 @@ The copied contracts at `0ede7f6c` and frozen `spec/pipeline/processor.rs` suppl
 | `privateMemoryOverhead(): number` | Private fixture/accounting observation, excluded from the public wrapper |
 
 All incoming numbers use f64 before validation, avoiding generated integer truncation.
-Algorithm tags are `0` nearest, `1` area, `2` bilinear, `3` bicubic, `4` Lanczos2, and `5` Lanczos3.
+Algorithm tags are `0` nearest, `1` area, `2` bilinear, `3` bicubic, `4` Lanczos2, `5` Lanczos3, and `6` trilinear.
 Other values return invalid-settings at `output.resize`.
 Anchors are top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right, numbered zero through eight.
 Every mode except area validates the anchor. Area requires raw anchor zero; the wrapper rejects public anchor fields.
 Support follows anchor in the ABI: `0` fixed and `1` scale-aware for bicubic/Lanczos.
-Nearest, area, and bilinear require raw support zero and reject public support fields.
+Nearest, area, bilinear, and trilinear require raw support zero and reject public support fields.
 Bicubic/Lanczos public requests require explicit support. Invalid raw support returns invalid-settings at `output.resize`.
 The wrapper reports invalid public support at `output.resize.support` before entering Wasm.
 Area retains fractional-overlap integration and its landed fast paths. Bilinear widens triangle support during minification.
 Convolution keeps fixed radii or widens support during minification according to the selected policy.
+Trilinear halves mip dimensions upward, applies area filtering with RGBA8 rounding at every level, and bilinearly samples adjacent LODs.
+Its final blend also rounds to RGBA8. All nine anchors apply; shared levels change neither arithmetic nor storage conversions.
 The landed accumulation and clipping/rounding paths remain unchanged, including their documented bounded reference differences.
 The wrapper supplies a new private plain `{value: undefined}` sink. It reads the value only after status zero.
 Success contains `{width, height, data: Uint8Array}`, with JS-owned data independent of Wasm memory.
@@ -51,6 +54,8 @@ memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runti
 The accounted peak is `privateMemoryOverhead() + prepared heap capacity + input Vec capacity + output Vec capacity`.
 Prepared heap capacity includes the selected plan's allocations and any f32 area/bilinear scratch.
 Convolution also counts every nested tap-vector header, tap capacity, and selected f64 full-call scratch.
+Trilinear counts shared mip metadata and buffers, storage-rounded level outputs when blending, and f64 channel scratch.
+Its standalone capacity includes the prepared record; Processor subtracts that record because its bookkeeping already counts it.
 The complete planned capacity preflights before allocation. Plan, scratch, and both image Vecs reserve fallibly before source copying.
 Actual vector capacities are checked against the same limit. Execution uses those owned buffers without further allocation.
 Bookkeeping counts Processor, request and prepared-plan records, both image Vec headers, module state, error-path storage, and borrowed boundary handles.
