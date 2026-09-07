@@ -436,6 +436,91 @@ fn invalid_calls_emit_no_progress_and_do_not_poison_the_instance() {
 }
 
 #[test]
+fn measured_stage_counts_obey_the_throttle_but_completion_is_immediate() {
+    for elapsed in [49, 50] {
+        let processor = Processor::default();
+        let mut events = Vec::new();
+        let mut clock = [0, 0, elapsed, elapsed].into_iter();
+        processor
+            .execute(
+                Request::Resize(resize_request()),
+                Some(&mut |progress| {
+                    events.push(progress);
+                    Ok(())
+                }),
+                || clock.next().expect("four reference progress opportunities"),
+            )
+            .unwrap();
+        let resize_events = events
+            .iter()
+            .filter(|event| event.stage == Stage::Resize)
+            .collect::<Vec<_>>();
+        assert_eq!(resize_events.len(), if elapsed == 49 { 1 } else { 2 });
+        assert_eq!(resize_events[0].completed, Some(0));
+        assert!(resize_events.iter().all(|event| event.total == Some(6)));
+        if elapsed == 50 {
+            assert_eq!(resize_events[1].completed, Some(6));
+        }
+        let complete = events.last().unwrap();
+        assert_eq!(
+            (complete.stage, complete.completed, complete.total),
+            (Stage::Complete, Some(6), Some(6))
+        );
+    }
+}
+
+#[test]
+fn kernel_arithmetic_failure_never_completes_or_poisons_the_processor() {
+    let processor = Processor::default();
+    let bytes = [100, 100, 100, 255, 100, 100, 100, 255];
+    let palette = [
+        PaletteEntry::Color { rgb: [0, 0, 0] },
+        PaletteEntry::Color {
+            rgb: [255, 255, 255],
+        },
+    ];
+    for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+        let request = Request::DitherAndQuantize(DitherQuantizeRequest {
+            quantize: QuantizeRequest {
+                source: Source {
+                    width: 2,
+                    height: 1,
+                    data: &bytes,
+                },
+                palette: &palette,
+                ..matching()
+            },
+            dither: DitherPolicy::Diffusion {
+                kernel: Diffusion::FloydSteinberg,
+                strength: f32::MAX,
+                placement: Placement::Everywhere {},
+                serpentine: false,
+                feedback,
+            },
+        });
+        let mut stages = Vec::new();
+        let error = processor
+            .execute(
+                request,
+                Some(&mut |progress| {
+                    stages.push(progress.stage);
+                    Ok(())
+                }),
+                || 0,
+            )
+            .unwrap_err();
+        assert_eq!(
+            (error.code, error.path.as_str()),
+            (ErrorCode::Runtime, "dither.arithmetic")
+        );
+        assert!(!stages.contains(&Stage::Complete));
+        assert!(processor
+            .execute(Request::Quantize(matching()), None, || 0)
+            .is_ok());
+    }
+}
+
+#[test]
 fn returned_bytes_and_metadata_survive_other_calls_input_mutation_and_disposal() {
     let mut source_bytes = DATA;
     let processor = Processor::default();
