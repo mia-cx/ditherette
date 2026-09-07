@@ -62,10 +62,52 @@ export interface ResizeRequest {
 	readonly onProgress?: (progress: Progress) => void;
 }
 
+/** Caller-selected entries retain their input positions, including duplicates. */
+export type PaletteEntry =
+	| { readonly kind: 'color'; readonly rgb: readonly [number, number, number] }
+	| { readonly kind: 'transparent' };
+
+export type AlphaPolicy =
+	| { readonly mode: 'preserve'; readonly threshold: number }
+	| { readonly mode: 'premultiplied' }
+	| { readonly mode: 'matte'; readonly rgb: readonly [number, number, number] };
+
+/** The five implemented ordinary coordinate spaces, each using direct Euclidean matching. */
+export type Matching =
+	| 'srgb-euclidean'
+	| 'linear-rgb-euclidean'
+	| 'oklab-euclidean'
+	| 'cielab-euclidean'
+	| 'ycbcr-euclidean';
+
+export interface QuantizeRequest {
+	readonly version: 1;
+	readonly source: Rgba8Image;
+	readonly palette: readonly PaletteEntry[];
+	readonly alpha: AlphaPolicy;
+	readonly matching: Matching;
+	/** S33 adds progress delivery; supplied callbacks are explicitly rejected for now. */
+	readonly onProgress?: (progress: Progress) => void;
+}
+
+/** Durable index bytes and their exact ordered palette, independent of later calls/disposal. */
+export interface IndexedImage {
+	readonly width: number;
+	readonly height: number;
+	readonly indices: Uint8Array;
+	readonly palette: { readonly rgba: Uint8Array; readonly transparentIndex: number | null };
+	readonly warnings: readonly {
+		readonly code: 'palette-truncated' | 'transparent-only' | 'transparent-fallback';
+		readonly message: string;
+	}[];
+}
+
 /** One isolated scalar processor. Calls are synchronous; hosts choose their execution context. */
 export interface Ditherette {
 	/** Return durable JS-owned RGBA8, independent of later calls and disposal. */
 	resize(request: ResizeRequest): Rgba8Image;
+	/** Match source pixels to the supplied palette without resizing or dithering. */
+	quantize(request: QuantizeRequest): IndexedImage;
 	/** Release instance ownership once. Wasm pages may retain their high-water mark until collection. */
 	dispose(): void;
 }
