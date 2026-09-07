@@ -135,7 +135,12 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					browserChecks,
 					`${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
 				);
-				assert.deepEqual(result, { anchors: 9, customInputs: 8, scalarWithoutIsolation: true });
+				assert.deepEqual(result, {
+					anchors: 9,
+					convolutionCases: 54,
+					customInputs: 8,
+					scalarWithoutIsolation: true
+				});
 				assert.ok(
 					requests.every((path) => !path.includes('/threads/')),
 					'scalar never loads threaded artifacts'
