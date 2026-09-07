@@ -1,6 +1,6 @@
 # Version-one contract and oracle inventory
 
-This inventory includes S07 through S16 and the S17 executable-adapter references.
+This inventory includes the complete S07 through S17 references, compositions, and control models.
 Its integration base is `4f4b48a04c0ccee51222b7e621ff4a566a495613`.
 Paths below are relative to `crates/ditherette-wasm/src/` unless they start with `src/lib/`.
 The inventory records inherited kernels and the references required before the S18 freeze.
@@ -230,7 +230,7 @@ The earlier half-mixture ties the nearest entry. Zero placement therefore does n
 | `wasm::process_rgba8` | `adapters::legacy_process_rgba8`; resize-only app-JSON shell, distinct from the version-one indexed process |
 | `wasm::benchmark_color_space` | `legacy_color_rows_into`, `diagnostic_color_copy_into`, or `diagnostic_noop`; timing remains bookkeeping |
 | `wasm::benchmark_resize_rgba8` | `LegacyResize`, `diagnostic_resize_copy_into`, or `diagnostic_noop`; timing remains bookkeeping |
-| `wasm_bindgen_rayon::init_thread_pool` | `lifecycle::initialize` selection; S17/S34 pool lifecycle model/implementation |
+| `wasm_bindgen_rayon::init_thread_pool` | `lifecycle::initialize` and `thread_pool::ThreadPoolModel`; per-instance selection, partial cleanup, fallback, ownership, disposal, and host teardown |
 | `bench_subjects::bench_subjects` | Five callable typed processing references and seven packed-f32 color/inverse references, plus the inherited resize subjects |
 | `prod/color::rgba8_to_color_space_f32`, `_into`, `_with_policy_into`, `_rows_into`, `_parallel_with_band_height_into` | `adapters::legacy_color_rows_into`; whole output or selected global rows in f32x4 |
 | `prod/color::{ColorSpaceF32::parse, ColorTilingPolicy::for_request}` | `adapters::legacy_color_space` and the same global-row composition; empirical policy does not change reference pixels |
@@ -270,23 +270,29 @@ Callback reentry and disposal fail without disrupting the active operation. Thro
 Disposal releases instance-owned allocations; Wasm pages may remain at their high-water mark until module collection.
 The host owns worker termination and stale-result rejection. Cancellation is not a hidden asynchronous package method.
 
-## Remaining pre-freeze work
+## Completed control references and freeze boundary
 
 The five-method `pipeline` references and `pipeline::processor::Processor` are joined with these adapters.
 The processor's focused fixtures cover composition equalities, reentry, disposal, callback failures, and runtime-error recovery.
-The joined validation must retain palette order, transparency, ordered warnings, and the exact 50 ms progress boundary.
+Joined fixtures retain palette order, transparency, ordered warnings, and the exact 50 ms progress boundary.
 
-`contract/cache.rs` is assigned to the parallel S17 cache-model work and remains pending integration here.
-It must cover normalized stage identity and digest, private capacity accounting, scratch-first eviction, and LRU retention.
+`contract/cache.rs` implements normalized stage identity and digest, private capacity accounting, scratch-first eviction, and LRU retention.
+`request_identity_plan` gives the canonical five-method composition, including logical Alpha and Color stages.
 Operation keys and intermediate content identities remain distinct so composed and standalone methods can share actual outputs.
 Color content identities include separate alpha, including when RGB triples match but alpha differs.
 Pending cache entries publish atomically only after successful completion callbacks; failed calls publish none.
-Allocation failure, disposal, and retained-capacity limits remain cache-model integration checks.
+Executable model fixtures cover allocation failure, disposal, and both retained-capacity limits.
 `InitOptions::preflight` accepts a supplied byte count; it does not prove that an operation counted every allocation.
 Production slices must demonstrate concrete allocation accounting against the frozen capacity/ownership model as their implementations change.
+
+`contract/thread_pool.rs` models per-instance worker and shared-memory ownership.
+Preferred initialization releases partial threaded ownership before scalar fallback. Required initialization preserves capability/init errors.
+Disposal and distinct host termination release the pool once; scalar selection owns no workers or shared memory.
+These are readable ownership transitions, not claims that native tests started browser workers.
 
 The final reference subjects now use S05's verifier and actual inverse-rendered color output.
 Settings identity distinguishes perturb and matching spaces, feedback modes, palette order, and complete recipe settings.
 Reference records remain pre-freeze; missing accepted/candidate implementations remain explicit.
 S18 freezes that complete reference, including this mode inventory and semantic shared-storage dependencies.
-These are assigned implementation obligations. They do not authorize production to call spec as its implementation.
+Physical allocation, browser loading, and production execution remain later implementation obligations.
+Their frozen reference is the named composition or ownership model above. Production cannot call spec as its implementation.

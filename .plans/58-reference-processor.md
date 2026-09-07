@@ -13,8 +13,8 @@ The join connects the corrected S14 blue-noise tile to S13's field dispatch.
 ## TODOs
 
 - [x] Compose all five typed methods and test both public equalities, metadata, warnings, input preservation, and durable results.
-- [ ] Complete strict tagged requests and executable lifecycle, cache/memory, and partition reference models before freeze.
-- [ ] Register callable benchmark subjects for every completed reference and reconcile the exhaustive export inventory.
+- [x] Complete strict tagged requests and executable lifecycle, cache/memory, and partition reference models before freeze.
+- [x] Register callable benchmark subjects for every completed reference and reconcile the exhaustive export inventory.
 - [ ] Validate the full join, update the stack ledger, and open an unmerged S17 PR against the verified base.
 
 ## Ownership
@@ -32,8 +32,18 @@ The first S06 control trial rejected its candidate; it does not establish accept
 
 ## Evidence
 
-At `7da4d40a935026c19a4cd1191dc088a41eb16b61`, 248 native tests pass from actual result-group counts.
-The Wasm target compiles with `bench-subjects`; formatting and diff checks pass.
-The benchmark crate passes 5 reference-subject, 8 verification, and 3 storage-adapter tests without measurements.
-An independent read-only pipeline/control review found no concrete defects at that checkpoint.
-Cache/content-identity and thread-pool models remain in isolated subtasks before final validation and PR creation.
+The completed join passes 270 native tests from actual result-group counts, with no doctests.
+The Wasm target compiles with `bench-subjects`; all three crate formatting checks and diff checks pass.
+The benchmark crate passes 5 reference-subject, 8 verification, 3 storage-adapter, and 3 binary tests without measurements.
+Its Rust lease fixture also passes, including all three owned Node transport cleanup fixtures and controlled subprocess checks.
+Native benchmark binaries and benches compile. An extra direct Node fixture invocation rejects the missing inherited lease as designed.
+The intended Rust lease runner supplies that lease and passes the fixtures; no guard was bypassed or changed.
+
+An independent read-only pipeline/control review found no concrete defects at `7da4d40a935026c19a4cd1191dc088a41eb16b61`.
+The final join also contains strict/cache model `1e04974ed56cb4ec401c49211b7311e8839a04b8`,
+adapter/pool model `b441892b7c5428d1da7b0ffeddbf78afc8ae78a4`, and registration `993bca98ae97cb175b7e8709a626df4dadeed5d0`.
+
+Canonical identity fixtures execute actual naive RGBA8 intermediates. They distinguish operation keys from output-content identities.
+The lifecycle, cache, and pool models specify ownership and publication. Physical allocations and browser workers remain production obligations.
+S18 must freeze the shared image source tree alongside spec and bind the reference compiler/dependency inputs.
+PR creation remains the last S17 task.
