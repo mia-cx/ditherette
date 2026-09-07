@@ -11,7 +11,7 @@ Base branch `impl/v1-s19-base` contains all S02/S06/S18 prerequisites at `1bd175
 - [x] Join the fallible Rust processor and public scalar wrapper after their focused validations.
 - [x] Verify actual packed-package calls, input/output ownership, bounded memory, errors, isolation, and disposal.
 - [x] Collect one exclusive native nearest experiment after every agent and build exits; retain exact accepted code if the candidate loses.
-- [ ] Rebase against the recorded immediate base, run invalidated checks, and open the unmerged S19 PR with exact evidence.
+- [x] Rebase against the recorded immediate base, run invalidated checks, and open the unmerged S19 PR with exact evidence.
 
 ## Evidence
 
@@ -31,6 +31,7 @@ Base branch `impl/v1-s19-base` contains all S02/S06/S18 prerequisites at `1bd175
 - WebKit uses the task-local launcher `/tmp/ditherette-webkit-libs.2dS6Yu/webkit`; no host libraries or existing browser binaries change.
 - A merge-preserving rebase against the latest `origin/impl/v1-s19-base` leaves this exact code head unchanged. Literal baseline, measured promotion, and prerequisite SHAs remain ancestors.
 - Independent review finds no actionable private-processor memory, cleanup, ABI, or canonical-kernel wiring defects. Its focused actual Wasm checks pass without measurements.
+- Open non-draft PR #105 targets `impl/v1-s19-base`, with auto-merge disabled. Final agent delivery `26f6ff34629a4d83f34ca58b1b8be25d5088a2b9` adds only provenance and evidence after the validated package code.
 
 ## Ownership
 

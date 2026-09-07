@@ -107,7 +107,7 @@ This prerequisite branch contains no new production implementation.
 
 ## S19 scalar package implementation
 
-Issue [#60](https://github.com/mia-cx/ditherette/issues/60) remains in progress without a PR.
+Issue [#60](https://github.com/mia-cx/ditherette/issues/60) is implemented in open, non-draft [PR #105](https://github.com/mia-cx/ditherette/pull/105), with auto-merge disabled.
 The final slice joins in `.worktrees/v1-s19-integration` on `impl/v1-s19-integration`, based on `impl/v1-s19-base`.
 This worktree owns the current tracked progress and ledger; the root `slices.md` remains the visible mirror.
 
@@ -129,6 +129,8 @@ It passes both Wasm builds, 285 native tests, 12 public/validation fixtures, pub
 The installed tarball passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 using a task-local WebKit library launcher.
 Trusted freeze enforcement and Rust formatting pass. A merge-preserving rebase keeps the exact code head and all required checkpoint ancestry unchanged.
 S20 still owns complete browser-call timing; native evidence and browser conformance do not replace it.
+Documentation/provenance joins at `db2dbb61c9d6d14723c3f3bfb05a0d3465d6e057`; the crate and package trees match the validated code head.
+The PR's current head is authoritative for subsequent progress-only commits. The issue remains open until a separately authorized merge.
 
 ## S01 inherited port anchor
 
