@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { chromium, firefox, webkit } from 'playwright';
 import { prepareTypeScript } from './prepare-benchmark-typescript.mjs';
-import { restrictContext, startAssetServer } from './benchmark-public-browser.mjs';
+import { exchangeTrial, restrictContext, startAssetServer } from './benchmark-public-browser.mjs';
 
 // No runTrial/collectCalls call occurs here. Real operations have no timer around them.
 test('installed package and actual TypeScript adapter conformance, without measurements', async (t) => {
@@ -43,6 +43,10 @@ test('installed package and actual TypeScript adapter conformance, without measu
 	const installed = await realpath(path.join(consumer, 'node_modules/ditherette'));
 	const root = path.join(temporary, 'assets');
 	const compiled = await prepareTypeScript(root);
+	await writeFile(
+		path.join(root, 'scripts/ipc-echo.mjs'),
+		'export async function runTrial(request) { return { marker: request.marker, data: request.data }; }'
+	);
 	await cp(installed, path.join(root, 'package'), { recursive: true, dereference: true });
 	for (const name of [
 		'benchmark-public-page.mjs',
@@ -81,7 +85,11 @@ test('installed package and actual TypeScript adapter conformance, without measu
 	};
 	for (const [engineName, engine] of Object.entries({ chromium, firefox, webkit })) {
 		await t.test(engineName, async () => {
-			const server = await startAssetServer(assets, true);
+			const server = await startAssetServer(assets, true, {
+				case: { identity: { output: { width: 1, height: 1 } }, measurement: { samples: 1 } },
+				marker: 'untimed-conformance',
+				data: [10, 20, 30, 40]
+			});
 			let browser;
 			try {
 				browser = await engine.launch({
@@ -247,6 +255,10 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				}, assets);
 				assert.equal(report.isolated, true);
 				assert.deepEqual(report.drift, [10, 11]);
+				assert.deepEqual(await exchangeTrial(page, server, 'scripts/ipc-echo.mjs'), {
+					marker: 'untimed-conformance',
+					data: [10, 20, 30, 40]
+				});
 				assert.deepEqual(server.failures, []);
 				await assert.rejects(page.evaluate(() => import('/undeclared.js')));
 				assert.equal(server.failures.length, 1);
