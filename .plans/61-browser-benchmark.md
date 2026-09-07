@@ -12,8 +12,8 @@ The immediate PR base is `impl/v1-s19-integration`. Preserve all frozen and lite
 - [x] Implement actual installed-package calls and equivalent TypeScript adapters, with one call per latency sample and separate throughput/init measurements.
 - [x] Test operation registration, exact output proof, asset tampering, malformed transport, and owned-child cleanup without measurements.
 - [x] Join the independent deliveries and validate real browser conformance plus existing native protocol compatibility.
-- [~] Declare a bounded initial case/pair budget, prepare clean artifacts, drain implementation, and collect exclusive fresh browser trials. First Chromium run is incomplete; see retained failure evidence.
-- [ ] Record raw samples, complete identities, exact output checks, performance outcomes, and cleanup evidence; preserve failures without treating them as accepted optimizations.
+- [x] Declare a bounded initial case/pair budget, prepare clean artifacts, drain implementation, and collect exclusive fresh browser trials. Trial 02 completes all three engines; trial 01 remains retained separately.
+- [x] Record raw samples, complete identities, exact output checks, performance outcomes, and cleanup evidence; preserve failures without treating them as accepted optimizations.
 - [ ] Rebase with merge/checkpoint preservation, validate affected checks, and open an unmerged PR with current progress and dependencies.
 
 ## Ownership
@@ -69,3 +69,10 @@ The coordinator verifies 20 focused checks and all three browser conformance sub
 The large untimed HTTP echo transfers both arrays under a 128 MiB Node heap limit, with maximum Playwright message 1,244 bytes and peak RSS 270,976 KiB.
 An actual renderer-crash test rejects pending transport work. Image timing and the fixed case/pair budget are unchanged.
 All implementation processes exit before rebuilding and preparing fresh trial-02 artifacts. No performance gate or optimization is accepted.
+Trial 02 completes from clean revision `e84a55eddb0014f97b64446408bfb5f656deb5d4`.
+Read [the actual measurement report](61-public-measurement.md) for every engine, case, and gate.
+Every output is exact, but all three engine reports contain regressions. S41 must resolve these before release readiness.
+A merge-preserving rebase onto the current S19 parent preserves the exact measured revision and tree.
+Post-rebase validation passes 45 top-level Rust benchmark tests and 20 focused JavaScript tests.
+The independent evidence audit verifies 216 exact outputs, 21,481 retained samples, and 2,465 snapshot files.
+All report medians and gates recompute. The 52 WebKit zero samples remain visible and inconclusive.

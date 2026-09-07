@@ -139,9 +139,12 @@ The immediate PR base is `impl/v1-s19-integration`. The coordinator owns `.workt
 This worktree now owns tracked progress and the ledger; root `slices.md` remains the visible mirror.
 Read [the scoped plan](../../../.plans/61-browser-benchmark.md) and [preflight](../../../.plans/61-browser-preflight.md) before implementation.
 Protocol, script transport, and asset/worker implementation use separate child worktrees. Measurements wait until every agent and build/test exits.
-No S20 performance or readiness claim exists yet.
+Trial 02 completes with exact output but performance regressions in every engine. No release-performance readiness claim exists.
 S19's exact delivered head passes CI run `34136269326`; its frozen-reference check and PR status are green.
-The [initial trial budget](../../../.plans/61-initial-trial-budget.md) fixes the case matrix before measurement. No browser benchmark has run.
+The [initial trial budget](../../../.plans/61-initial-trial-budget.md) fixes the case matrix before measurement.
+The [measurement report](../../../.plans/61-public-measurement.md) records actual medians, runtime identities, retained failures, and S41 obligations.
+Both package roles build from clean `e84a55eddb0014f97b64446408bfb5f656deb5d4`; all three engine coordinators complete with regression exit 2.
+No performance candidate is promoted. A developer-only same-kernel comparison investigates the gap from older internal Wasm measurements.
 
 ## S01 inherited port anchor
 
