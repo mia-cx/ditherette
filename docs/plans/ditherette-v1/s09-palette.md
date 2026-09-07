@@ -3,12 +3,13 @@
 Issue [50](https://github.com/mia-cx/ditherette/issues/50).
 Branch `impl/v1-s09-palette`, based on S03 `fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06`.
 PR base is `impl/v1-s03-contracts`.
+Review [PR 94](https://github.com/mia-cx/ditherette/pull/94), open and non-draft with auto-merge disabled.
 
 ## TODOs
 
 - [x] Implement ordered palette preparation, byte-alpha rules, metadata ownership, and focused semantic fixtures.
 - [x] Validate the complete native suite and Wasm compilation; record the evidence.
-- [ ] Rebase onto the latest S03 branch and file an unmerged, non-draft PR.
+- [x] Rebase onto the latest S03 branch and file an unmerged, non-draft PR.
 
 ## Semantic evidence
 
@@ -45,3 +46,7 @@ Implementation commit `841334cb` passes:
 - `git diff --check`: passes.
 
 These are correctness and compilation checks. No benchmark process or browser timing run was started.
+
+The final fetch/rebase found S03 unchanged at the recorded dependency SHA.
+Focused tests passed again after rebase. Validated code and evidence head was `33c192d49531adc9e66bebcb1211a19221d8ce36`.
+The final bookkeeping commit changes only this PR record; its exact SHA appears in the coordinator's stack ledger.
