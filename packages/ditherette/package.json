@@ -20,6 +20,7 @@
 	"scripts": {
 		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && node scripts/stage-wasm.mjs && tsc",
 		"check": "pnpm check:version && tsc --noEmit",
+		"test:validation": "tsc && node --test tests/validation.test.mjs",
 		"test:staging": "node --test scripts/stage-wasm.test.mjs",
 		"check:version": "node scripts/check-version.mjs"
 	},
