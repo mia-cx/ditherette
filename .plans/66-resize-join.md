@@ -13,7 +13,7 @@ The rejected dispatch candidate stays outside this ancestry.
 - [x] Rebuild scalar and threaded package artifacts through `buildFreshPackage` before testing their new tags.
 - [x] Pass 23 interface tests and type checks, 10 private ABI tests, and installed-tarball checks in all three engines.
 - [x] Pass both crate formatting checks, whitespace checks, and the trusted frozen-spec guard.
-- [ ] Validate the combined Rust benchmark adapters after their shared target returns from S25 delivery.
+- [x] Validate the combined Rust benchmark adapters after their shared target returns from S25 delivery.
 - [x] Check the actual benchmark adapter against the joined tarball without collecting timings.
 
 The first interface check used the previous S24 package artifacts and rejected the new matching tags.
@@ -26,3 +26,7 @@ These are integration checks, not fresh performance measurements.
 
 The untimed adapter check passes all three engines, including 47 frozen quantize fixtures across all 15 modes in primed and fresh instances.
 Tarball `target/s25-join-validation/ditherette.tgz` has SHA-256 `4f2af995fb4f77ccaa2e35f0b9fd23df7da7a6f9655bc946fa807c454afcd018`.
+
+The combined benchmark suite passes 65 Rust tests, including the resize, quantize, and matching experiment generators.
+The controlled lease fixture also passes its three JavaScript lifecycle checks.
+The outer runner skips its subprocess-only helper and the explicitly opt-in historical S24 wire fixture.

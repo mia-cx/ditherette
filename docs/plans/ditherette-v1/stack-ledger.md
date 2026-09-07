@@ -27,10 +27,13 @@ The S23/S24 join is validated at `1435642fc6b8f923fc4de4b4d1624b814940b5d1`; bot
 S25 adds all fifteen matching tags at `0085972a`, with 309 native tests and three-engine package conformance passing.
 Its exact dispatch candidate `230046ff` is rejected after the fresh 276-worker comparison.
 The run retains 5,133 timing samples and all verified outputs are exact; a required native score control regresses and several controls remain noisy.
-The all-mode baseline remains selected. S25 delivery continues in `impl/v1-s25-delivery`; no further slice measurements are planned.
+The all-mode baseline remains selected. S25 is delivered in [PR114](https://github.com/mia-cx/ditherette/pull/114) at `3a9db011207a44f230ae519edc93c900a747c021`, targeting S24.
+Its [measurement record](../../../.plans/66-measurement.md) retains both attempts, exactness scope, rejected candidate, and artifact identities. No further slice measurements are planned.
 S26 literal field baseline `e156cfbf` reaches validated public checkpoint `089251287e387cb575e22e8993d8989a371a089d`.
 It passes 13 scoped native, 24 interface, 11 private ABI tests, both builds, three browser engines, and the trusted freeze guard.
 S26 benchmark adapters advance in `impl/v1-s26-bench`; production/package work belongs to `impl/v1-s26-fields`.
+Validated S26/S25 integration `bcf123e313290177d47ecb60afcfa0e752ed3d2e` preserves that public baseline's production and package bytes.
+S27 starts the missing blue-noise runtime in `impl/v1-s27-blue-noise` from that integration; it reuses the existing field composition.
 S28 starts a literal diffusion baseline in `impl/v1-s28-diffusion` from that validated S26 checkpoint joined with retained S25.
 Its first task copies missing semantics and verifies exact outputs. Ring-buffer optimization and public integration remain later tasks.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
