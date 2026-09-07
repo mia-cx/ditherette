@@ -58,7 +58,7 @@ The native fixtures already cover seven inverse/image adapters, wide reconstruct
 945 field/space/strength/placement/shape combinations with reversed row scheduling, and 630 complete quantize compositions.
 No benchmark, public integration, allocation wrapper, or optimization ran during this phase.
 
-## Proposed next ownership, awaiting assignment
+## Expanded ownership plan
 
 1. Add bounded `prod/pipeline/perturb.rs` and separable composition beside existing quantize ownership.
    Reuse `Allocator`, allocation-free `Failure`, the current field row callback, and `PreparedQuantizer`.
@@ -79,7 +79,7 @@ The coordinator assigned all three ownership items on the existing S25 baseline 
 S01 owns benchmark protocol/adapters separately; the coordinator owns integration and tracking.
 
 - [x] Add bounded native perturb and separable composition with exact budgets, reservation/copy/completion failure recovery, and frozen output checks; commit independently.
-- [ ] Add private caught Wasm bindings and typed public methods, validation, lifecycle/error fixtures; commit the public baseline.
+- [x] Add private caught Wasm bindings and typed public methods, validation, lifecycle/error fixtures; commit the public baseline.
 - [ ] Validate both artifact builds and installed-package Chromium/Firefox/WebKit behavior, then record final evidence.
 
 The bounded/public baseline retains the literal per-pixel packed Converter construction.
@@ -93,3 +93,21 @@ The four new ownership fixtures cover 42 perturb requests and 210 separable froz
 exact/one-under budgets, all two/three buffer reservation failures, actual overcapacity, copy/completion failures, recovery, disposal, and unsupported/nonfinite settings.
 Field working-capacity accounting includes one temporary packed Converter and its byte tables in addition to any prepared quantizer.
 The kernel still creates that converter per source-color read. No conversion reuse or mathematical change is included.
+
+### Public baseline validation
+
+The public methods are perturb and ditherAndQuantize with the frozen version-1 field and separable recipe shapes.
+BlueNoise remains unsupported. All fifteen S25 matching tags retain the selected all-mode baseline implementation.
+The rejected S25 metric-dispatch candidate is not an ancestor or an implementation dependency.
+
+The private binding signatures and appended error paths are documented in src/wasm/fields.md.
+Both reuse the existing caught input/result helpers and module-owned lifecycle; direct quantize parsing is extracted without semantic changes.
+The package's test:interface command passes 24 tests, including 91 frozen field vectors and 1,365 complete RGBA8-boundary comparisons.
+The three private test files pass 11 tests, including 512 repeated field success/failure cycles with constant live handles and memory capacity.
+New public fixtures cover exact/one-under budgets, every source/result-copy failure, recovery, canonical tags, reentry, disposal, and durable ownership.
+The first private test run exposed a wrong expected status in the test, not a runtime mismatch. The fixture now uses the existing status table.
+
+Both official scalar and threaded artifacts compiled this worktree during the initial public implementation, and package TypeScript compilation passed.
+Installed-package three-engine validation and final scoped native/guard checks follow this checkpoint; their fixtures are committed with the public baseline.
+The 91-vector fixture comes from generate_field_conformance.rs, which calls only frozen spec functions, never production.
+The assigned shared target data stays intact. This worktree has only scalar/threads child symlinks inside its ignored target directory.

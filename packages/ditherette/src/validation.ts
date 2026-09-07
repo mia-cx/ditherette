@@ -22,7 +22,7 @@ const arrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer
 const arrayOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteOffset')!.get!;
 const arrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteLength')!.get!;
 
-function object(
+export function object(
 	value: unknown,
 	keys: readonly string[],
 	code: ErrorCode,
@@ -43,7 +43,7 @@ function object(
 	return value as Record<string, unknown>;
 }
 
-function field(value: Record<string, unknown>, key: string): unknown {
+export function field(value: Record<string, unknown>, key: string): unknown {
 	return Object.hasOwn(value, key) ? value[key] : undefined;
 }
 
@@ -54,7 +54,7 @@ function integer(value: unknown, maximum: number, code: ErrorCode, path: string)
 	return value;
 }
 
-function dimensions(
+export function dimensions(
 	value: Record<string, unknown>,
 	maximum: number,
 	code: ErrorCode,
@@ -116,7 +116,7 @@ function isInitInput(value: unknown): value is InitInput {
 	);
 }
 
-function rgbaBytes(value: unknown, expectedBytes: number): Uint8Array {
+export function rgbaBytes(value: unknown, expectedBytes: number): Uint8Array {
 	if (
 		!ArrayBuffer.isView(value) ||
 		arrayTag.call(value) !== 'Uint8Array' ||
