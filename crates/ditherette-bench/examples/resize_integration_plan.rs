@@ -1,19 +1,14 @@
 //! Prepare bounded S21/S22 comparisons. This program never runs measurements.
 
-use ditherette_bench::{
-    paired::{
-        browser::{
-            Anchor, BrowserBackend, BrowserCase, BrowserPreparation, CacheCapability,
-            PublicOperation, Support,
-        },
-        coordinator::validate_experiment,
-        ApplicationCache, CallScope, Experiment, Measurement, PairCase, SampleMode,
+use ditherette_bench::paired::{
+    browser::{
+        Anchor, BrowserBackend, BrowserCase, BrowserPreparation, CacheCapability, PublicOperation,
+        Support,
     },
-    verification::{input_digest, settings_digest},
+    coordinator::validate_experiment,
+    ApplicationCache, CallScope, Experiment, Measurement, PairCase, SampleMode,
 };
-use ditherette_bench_api::verification::{
-    CaseIdentity, Dimensions, Operation, ReferenceState, SemanticIdentity,
-};
+use ditherette_bench_api::verification::{Dimensions, ReferenceState};
 use std::{env, fs::OpenOptions, io, io::Write};
 
 fn operations(slice: &str) -> io::Result<Vec<PublicOperation>> {
@@ -141,20 +136,8 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
                     operation.subject(browser.candidate).into(),
                 )
             } else {
-                let semantics = SemanticIdentity {
-                    operation: Operation::Resize,
-                    recipe: format!("{filter}-center-default"),
-                    version: 1,
-                    space: None,
-                };
                 (
-                    CaseIdentity {
-                        input: input_digest(source, &rgba),
-                        settings: settings_digest(&(semantics.clone(), output, "center-default"))
-                            .map_err(io::Error::other)?,
-                        semantics,
-                        output,
-                    },
+                    ditherette_bench::paired::native::identity(reference, source, &rgba, output)?,
                     format!("prod:resize:{filter}:{variant}"),
                     format!("candidate:resize:{filter}:{budgeted_variant}"),
                 )
