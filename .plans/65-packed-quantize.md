@@ -15,8 +15,16 @@ Their frozen counterparts provide the baseline. No production algorithm or share
 - [x] Add fallible preparation, capacity accounting, and allocation-free execution for later public integration.
 - [x] Validate native/Wasm independence and hand off the committed native interface.
 
-Public Processor, Wasm bindings, package methods, and benchmark registration belong to the coordinator and later joins.
-No benchmark, optimization experiment, PR, or rollout runs in this subtask.
+Public integration resumes after joining `ebbc1c5a32a77f68c2e59595e84a7b227c25c7ee`.
+This worktree owns quantize-specific Processor, private Wasm, and package methods. S23 owns separate trilinear method sections.
+The coordinator owns benchmark registration and measurements. No benchmark, optimization experiment, PR, or rollout runs here.
+
+## Public integration TODOs
+
+- [x] Add native Processor quantize ownership with complete allocation preflight and focused failure fixtures.
+- [ ] Add borrowed private quantize ABI and caught complete indexed-result construction; verify handle cleanup.
+- [ ] Expose strict five-space quantize requests and durable indexed results in the package.
+- [ ] Validate both Wasm builds, interface/private fixtures, and installed tarball in three engines; push evidence.
 
 ## Native interface
 
@@ -60,3 +68,12 @@ Palette/matcher state can be reused privately. This subtask does not implement c
 
 Native prerequisites are ready. Public quantize registration, durable JS indexed-result construction, browser conformance, benchmark subjects/measurements, and the S24 PR remain outstanding.
 No new optimization was attempted. Existing landed color math and lookup tables are reused unchanged.
+
+## Public native checkpoint
+
+`Processor::quantize` reuses `PreparedQuantizer` and preflights prepared ownership plus source and index capacities before importing source bytes.
+It follows the shared Ready/Running/Disposed lifecycle and restores Ready after ordinary failures.
+The boundary constructs a complete durable result while Rust retains every temporary; no result is published before completion.
+Three new Processor tests and four existing direct-quantize tests pass. They cover all five spaces/three alpha policies,
+257-entry metadata, the f64 threshold witness, exact/one-under budgets, both image reservation failures, caught copy/completion failures, recovery, and disposal.
+An initial fixture used the wrong owned-image constructor name; it now uses existing `ImageBuf::from_vec_packed`.
