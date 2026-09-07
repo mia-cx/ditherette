@@ -44,7 +44,7 @@ fn perturb() -> PerturbPolicy {
         },
         space: WorkingSpace::Srgb,
         strength: 1.0,
-        placement: Placement::Everywhere,
+        placement: Placement::Everywhere {},
     }
 }
 fn recipe() -> RecipeV1 {
@@ -53,7 +53,7 @@ fn recipe() -> RecipeV1 {
         output: output(),
         alpha: quantize().alpha,
         matching: quantize().matching,
-        dither: DitherPolicy::None,
+        dither: DitherPolicy::None {},
     }
 }
 
@@ -81,7 +81,7 @@ fn all_five_requests_borrow_valid_storage_without_changing_it() {
             dither: DitherPolicy::Diffusion {
                 kernel: Diffusion::Atkinson,
                 strength: 1.0,
-                placement: Placement::Everywhere,
+                placement: Placement::Everywhere {},
                 serpentine: true,
                 feedback: DiffusionFeedback::SrgbBytes,
             },
@@ -212,7 +212,7 @@ fn diffusion_feedback_tags_distinguish_bytes_from_matching_coordinates() {
         let policy = DitherPolicy::Diffusion {
             kernel: Diffusion::FloydSteinberg,
             strength: 1.0,
-            placement: Placement::Everywhere,
+            placement: Placement::Everywhere {},
             serpentine: false,
             feedback,
         };
@@ -262,6 +262,55 @@ fn malformed_tags_and_unknown_fields_fail_recipe_decoding() {
     assert!(decode_recipe(&value.to_string()).is_err());
     assert!(serde_json::from_str::<Field>(r#"{"algorithm":"floyd-steinberg"}"#).is_err());
     assert!(serde_json::from_str::<PaletteEntry>(r#"{"kind":"color","rgb":[256,0,0]}"#).is_err());
+}
+
+#[test]
+fn empty_tagged_variants_keep_wire_shapes_and_reject_nested_unknown_fields() {
+    let mut value = serde_json::to_value(recipe()).unwrap();
+    value["output"]["resize"] = serde_json::json!({"algorithm": "area"});
+    value["alpha"] = serde_json::json!({"mode": "premultiplied"});
+    value["dither"] = serde_json::json!({
+        "family": "separable",
+        "perturb": {
+            "field": {"algorithm": "blue-noise"},
+            "space": "srgb",
+            "strength": 1.0,
+            "placement": {"mode": "everywhere"}
+        }
+    });
+    for (path, extra, unwanted) in [
+        ("/output/resize", "anchor", serde_json::json!("center")),
+        ("/alpha", "threshold", serde_json::json!(127)),
+        (
+            "/dither/perturb/placement",
+            "threshold",
+            serde_json::json!(12),
+        ),
+        ("/dither/perturb/field", "seed", serde_json::json!(42)),
+        ("/dither", "strength", serde_json::json!(1)),
+    ] {
+        let mut valid = value.clone();
+        if path == "/dither" {
+            valid["dither"] = serde_json::json!({"family": "none"});
+        }
+        let decoded = decode_recipe(&valid.to_string()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), valid, "{path}");
+        Request::Process(ProcessRequest {
+            source: source(),
+            palette: &PALETTE,
+            recipe: decoded,
+        })
+        .validate()
+        .unwrap();
+
+        valid.pointer_mut(path).unwrap()[extra] = unwanted;
+        let error = decode_recipe(&valid.to_string()).unwrap_err();
+        assert_eq!(
+            (error.code, error.path.as_str()),
+            (ErrorCode::InvalidSettings, "recipe"),
+            "{path}"
+        );
+    }
 }
 
 #[test]

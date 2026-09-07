@@ -56,7 +56,7 @@ fn request<'a>(
         },
         dither: DitherPolicy::Yliluoma {
             size: BayerSize::Two,
-            placement: Placement::Everywhere,
+            placement: Placement::Everywhere {},
         },
     }
 }
@@ -270,7 +270,7 @@ fn all_matching_policies_and_bayer_sizes_keep_stable_visible_and_transparent_ind
             input.quantize.matching = matching;
             input.dither = DitherPolicy::Yliluoma {
                 size,
-                placement: Placement::Everywhere,
+                placement: Placement::Everywhere {},
             };
             let result = dither_yiluoma(input).unwrap();
             assert_eq!(
@@ -307,7 +307,7 @@ fn alpha_preparation_precedes_matching_and_transparent_only_bypasses_search() {
                 0,
             ),
             (AlphaPolicy::Preserve { threshold: 128.0 }, 3),
-            (AlphaPolicy::Premultiplied, 1),
+            (AlphaPolicy::Premultiplied {}, 1),
             (AlphaPolicy::Matte { rgb: [0, 0, 255] }, 2),
         ] {
             let mut input = request(&data, 1, 1, &palette);
@@ -323,7 +323,7 @@ fn alpha_preparation_precedes_matching_and_transparent_only_bypasses_search() {
     let transparent = [PaletteEntry::Transparent {}, PaletteEntry::Transparent {}];
     for alpha in [
         AlphaPolicy::Preserve { threshold: 0.0 },
-        AlphaPolicy::Premultiplied,
+        AlphaPolicy::Premultiplied {},
         AlphaPolicy::Matte { rgb: [255; 3] },
     ] {
         let mut input = request(&data, 1, 1, &transparent);
@@ -362,7 +362,7 @@ fn typed_composition_rejects_invalid_or_wrong_family_requests_without_mutation()
     let palette = [PaletteEntry::Color { rgb: [0; 3] }];
     let base = request(&data, 1, 1, &palette);
     let wrong_family = DitherQuantizeRequest {
-        dither: DitherPolicy::None,
+        dither: DitherPolicy::None {},
         ..base
     };
     let error = dither_yiluoma(wrong_family).unwrap_err();
@@ -409,7 +409,7 @@ fn every_bayer_size_realizes_an_exact_half_mix_with_global_matrix_orientation() 
         let mut input = request(&data, width, width, &palette);
         input.dither = DitherPolicy::Yliluoma {
             size,
-            placement: Placement::Everywhere,
+            placement: Placement::Everywhere {},
         };
         let result = dither_yiluoma(input).unwrap();
         assert_eq!(

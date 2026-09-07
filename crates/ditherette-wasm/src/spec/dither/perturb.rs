@@ -120,7 +120,7 @@ fn field_at(field: Field, x: u32, y: u32, index: u64) -> f32 {
             ordered::bayer_noise_at(x, y, size)
         }
         Field::Random { seed } => random_noise::random_noise_at(seed, index),
-        Field::BlueNoise => blue_noise::blue_noise_at(x, y),
+        Field::BlueNoise {} => blue_noise::blue_noise_at(x, y),
     }
 }
 
