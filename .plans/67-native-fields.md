@@ -16,7 +16,10 @@ The row callback has no palette parameter. Quantization consumes its completed R
 
 - [x] Copy and verify the literal missing closure, record fragment hashes, and test inverse/field/placement/composition output against frozen references.
 - [x] Record native/Wasm/format/guard evidence for the literal checkpoint.
-- [ ] Push the clean literal baseline and return ownership before any expanded implementation.
+- [x] Push the clean literal baseline and return ownership before any expanded implementation.
+
+Literal baseline commit: `e156cfbfe0d3dfb598e2f5746bca1ddc46a5f69a`.
+That commit is pushed and keeps the S25 validated baseline in its ancestry.
 
 ## Copy boundary
 
@@ -54,3 +57,20 @@ Command: `node /home/mia/mia-cx/ditherette/.worktrees/v1-s18-freeze/tools/spec-f
 The native fixtures already cover seven inverse/image adapters, wide reconstruction, all Bayer sizes, wrapping random indices,
 945 field/space/strength/placement/shape combinations with reversed row scheduling, and 630 complete quantize compositions.
 No benchmark, public integration, allocation wrapper, or optimization ran during this phase.
+
+## Proposed next ownership, awaiting assignment
+
+1. Add bounded `prod/pipeline/perturb.rs` and separable composition beside existing quantize ownership.
+   Reuse `Allocator`, allocation-free `Failure`, the current field row callback, and `PreparedQuantizer`.
+   Preflight source/output capacities for perturb; include the RGBA8 intermediate, indices, palette preparation, and owned records for separable quantization.
+   Reserve every required buffer before input copy. Preserve the full original source for adaptive neighborhoods.
+   Quantization reads only the clipped, rounded RGBA8 intermediate. Keep cache/reuse optimization out of the first bounded wrapper.
+2. Extend the shared Processor lifecycle and add private Wasm perturb/separable adapters in new modules.
+   Reuse caught input/result helpers and the private result sink; extract shared quantize parsing only when both paths need it.
+   Append stable error-path IDs without renumbering existing IDs. Keep source/field/working-space validation allocation-free before reservations.
+   Expose Bayer/random only. Reject BlueNoise until S27 rather than adding a stub kernel.
+3. Extend package types, validation, scalar dispatch, and focused private/interface/browser fixtures under one owner.
+   Validate exact/one-under budgets, each reservation failure, caught copy/result failures, recovery, reentry, disposal, and durable results.
+   The coordinator owns common registries, benchmark registration, measurements, and integration with the selected S25 checkpoint.
+
+No expanded implementation starts until the coordinator assigns these overlapping files and the current integration base.
