@@ -147,7 +147,7 @@ The single-color adapters are `nearest_euclidean3_index`, `nearest_circular_hue3
 S10 adds complete typed `spec::quantize::quantize` composition and `matcher::PaletteMatcher` for all 15 valid pairs.
 `metric::distance_score` selects the exact metric recipe, including both chord and arc hue behavior.
 `color::rgb8_to_coordinates` and `color::coordinates_to_rgb8` dispatch the seven per-space byte conversions.
-All retain the first palette entry on an exact distance tie. S09/S10 exclude Transparent while retaining original output indices.
+The matching adapters retain the first palette entry on an exact distance tie. S09/S10 exclude Transparent while retaining original output indices.
 
 `spec/color/common` exports the component formulas `srgb8_to_unit`, `srgb_unit_to_linear`, `linear_to_srgb_unit`, `srgb8_to_linear`, `linear_srgb_to_xyz`, `xyz_to_cielab`, `cartesian_to_cylindrical`, `srgb8_to_oklab`, `linear_srgb_to_oklab`, and `srgb8_to_cielab`.
 S07/S08 complete inverse formulas, neutral hue, coordinate domains, clipping, and byte reconstruction before freeze.

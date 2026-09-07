@@ -2,6 +2,7 @@
 
 Issue [51](https://github.com/mia-cx/ditherette/issues/51).
 Branch `impl/v1-s10-quantize`, PR base `impl/v1-s10-base`.
+Review [PR 97](https://github.com/mia-cx/ditherette/pull/97), open and non-draft with auto-merge disabled.
 Integration base `af9c0d99dd140f3235968d5f481c5a2c879ce46e` contains:
 
 - S07 `7ef52bd2bcaea2774a400875e5c395526bc9b4b9`.
@@ -13,7 +14,7 @@ Integration base `af9c0d99dd140f3235968d5f481c5a2c879ce46e` contains:
 - [x] Complete exhaustive color/metric dispatch and audit inherited metric mathematics with independent vectors.
 - [x] Compose validated quantize requests with ordered palette matching, alpha handling, and complete-call fixtures.
 - [x] Run native and Wasm validation and record the final evidence.
-- [ ] Rebase onto the latest integration base and file the unmerged stacked PR.
+- [x] Rebase onto the latest integration base and file the unmerged stacked PR.
 
 ## Prerequisite validation
 
@@ -63,3 +64,8 @@ Implementation head `6e1e7431` passes:
 
 These checks ran in this isolated worktree. No benchmark process or browser timing run was started.
 The reference still uses f32 working coordinates and metric arithmetic, with S09's f64 byte-alpha threshold/compositing rules unchanged.
+
+The final fetch/rebase found the integration base unchanged at `af9c0d99dd140f3235968d5f481c5a2c879ce46e`.
+The 22 focused request, dispatch, and contract tests pass again after rebase.
+Validated code and evidence head was `233ae8eecdd3ac74cd664870d41b4530eef2fb5d`.
+The final bookkeeping commit changes only documentation; its exact SHA appears in the coordinator's stack ledger.
