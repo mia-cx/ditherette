@@ -57,7 +57,7 @@ Focused validation passes 25 tests across `spec_quantize_request`, `spec_quantiz
 
 Implementation head `6e1e7431` passes:
 
-- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: 168 native tests, zero failures.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: 158 native tests, zero failures.
 - `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`: passes.
 - `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all -- --check`: passes.
 - `git diff --check`: passes.

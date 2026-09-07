@@ -24,7 +24,7 @@ YCbCr chroma bounds include a documented 0.000001 f32 allowance; the approved co
 
 Final validation:
 
-- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 153 native tests.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 143 native tests.
 - `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
 - `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check` and `git diff --check` pass.
 

@@ -34,7 +34,7 @@ The numeric proof bounds valid inverse intermediates below `1e125`; no new publi
 
 Final validation:
 
-- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 178 native tests.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 168 native tests.
 - Focused `spec_dither_perturb` passes 11 tests and `spec_color_reconstruct` passes four.
 - `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
 - `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check` and `git diff --check` pass.

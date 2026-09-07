@@ -24,7 +24,7 @@ S15/S28 must preserve sRGB feedback with perceptual matching and the separate ad
 
 `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_contract` passes all 8 request/storage fixtures.
 `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_contract_lifecycle` passes all 6 control fixtures.
-`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 124 native tests and zero doctests.
+`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 114 native tests and zero doctests.
 `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
 `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` and `git diff --check` pass.
 No benchmark measurements belong to this slice.

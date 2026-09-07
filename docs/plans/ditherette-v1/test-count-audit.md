@@ -17,8 +17,10 @@ It corrects totals, not execution results. The recorded test runs passed; no tes
 | S12 | [95](https://github.com/mia-cx/ditherette/pull/95) | 143 |
 | S13 | [98](https://github.com/mia-cx/ditherette/pull/98) | 168 |
 | S14 | [99](https://github.com/mia-cx/ditherette/pull/99) | 159 |
+| S15 | [101](https://github.com/mia-cx/ditherette/pull/101) | 181 |
+| S16 | [100](https://github.com/mia-cx/ditherette/pull/100) | 179 |
 
 Each total belongs to that slice's own dependency tree, not the eventual full join.
 The PR descriptions now use these totals. This table supersedes older prose totals in ancestor handoff documents and comments.
-When S17 joins those documents, correct their totals from this table without rewriting the validated implementation histories.
+S17 corrects the joined handoff documents from this table without rewriting validated implementation histories.
 Future validation records derive totals from actual output groups, not sums copied from earlier prose.
