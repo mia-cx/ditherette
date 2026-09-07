@@ -8,10 +8,7 @@ use crate::{
     },
     prod::{
         color::packed::{Converter, OrdinarySpace},
-        contract::{
-            error::ErrorCode,
-            request::{AlphaPolicy, MatchPolicy},
-        },
+        contract::request::{AlphaPolicy, MatchPolicy},
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
     },
 };
@@ -31,12 +28,7 @@ impl PreparedQuantizer {
         alpha: AlphaPolicy,
         matching: MatchPolicy,
     ) -> Result<u64, PreparationError> {
-        if OrdinarySpace::from_matching(matching).is_none() {
-            return Err(PreparationError {
-                code: ErrorCode::UnsupportedOperation,
-                path: "matching",
-            });
-        }
+        let _ = matching; // Every typed recipe is supported; capacity depends on visible entries.
         let palette = PreparedPalette::required_capacity_bytes(entries, alpha)?;
         let visible = entries
             .iter()
@@ -63,9 +55,9 @@ impl PreparedQuantizer {
         let mut budget = Budget::new(memory_limit, size_of::<Self>() as u64)?;
         let palette = PreparedPalette::prepare(entries, alpha, &mut budget)?;
         let converter = Converter::new(
-            OrdinarySpace::from_matching(matching).expect("validated ordinary matching"),
+            OrdinarySpace::from_matching(matching).expect("every matching tag has coordinates"),
         );
-        let matcher = PaletteMatcher::prepare(&palette, &converter, &mut budget)?;
+        let matcher = PaletteMatcher::prepare(&palette, &converter, matching, &mut budget)?;
         Ok(Self {
             palette,
             matcher,
