@@ -7,26 +7,40 @@ use crate::{
     prod::contract::request::MatchPolicy,
 };
 
-/// Ordinary coordinate spaces accepted by direct Euclidean quantization.
+/// Packed coordinate spaces accepted by direct palette matching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OrdinarySpace {
+pub enum PackedSpace {
     Srgb,
     LinearRgb,
     Oklab,
+    Oklch,
     Cielab,
+    Cielch,
     Ycbcr,
 }
 
-impl OrdinarySpace {
-    /// Rejects recipes outside this implementation's five Euclidean pairs.
+/// Compatibility name for the original five-space native adapter.
+pub type OrdinarySpace = PackedSpace;
+
+impl PackedSpace {
+    /// Maps every valid tagged matching recipe to its coordinate space.
+    /// The optional return preserves the S24 native adapter interface.
     pub const fn from_matching(matching: MatchPolicy) -> Option<Self> {
         match matching {
-            MatchPolicy::SrgbEuclidean => Some(Self::Srgb),
+            MatchPolicy::SrgbEuclidean
+            | MatchPolicy::SrgbCompuphase
+            | MatchPolicy::SrgbRec601
+            | MatchPolicy::SrgbRec709 => Some(Self::Srgb),
             MatchPolicy::LinearRgbEuclidean => Some(Self::LinearRgb),
             MatchPolicy::OklabEuclidean => Some(Self::Oklab),
-            MatchPolicy::CielabEuclidean => Some(Self::Cielab),
+            MatchPolicy::OklchEuclidean
+            | MatchPolicy::OklchCircularHue
+            | MatchPolicy::OklchHueArc => Some(Self::Oklch),
+            MatchPolicy::CielabEuclidean | MatchPolicy::CielabCiede2000 => Some(Self::Cielab),
+            MatchPolicy::CielchEuclidean
+            | MatchPolicy::CielchCircularHue
+            | MatchPolicy::CielchHueArc => Some(Self::Cielch),
             MatchPolicy::YcbcrEuclidean => Some(Self::Ycbcr),
-            _ => None,
         }
     }
 }
@@ -38,12 +52,14 @@ pub struct Converter {
 }
 
 impl Converter {
-    pub fn new(space: OrdinarySpace) -> Self {
+    pub fn new(space: PackedSpace) -> Self {
         let target = match space {
             OrdinarySpace::Srgb => ColorSpaceF32::Srgb,
             OrdinarySpace::LinearRgb => ColorSpaceF32::LinearSrgb,
             OrdinarySpace::Oklab => ColorSpaceF32::Oklab,
+            OrdinarySpace::Oklch => ColorSpaceF32::Oklch,
             OrdinarySpace::Cielab => ColorSpaceF32::Cielab,
+            OrdinarySpace::Cielch => ColorSpaceF32::Cielch,
             OrdinarySpace::Ycbcr => ColorSpaceF32::YCbCr,
         };
         Self {
@@ -54,7 +70,21 @@ impl Converter {
 
     /// Converts bytes through the unchanged landed forward conversion.
     pub fn coordinates(&self, [r, g, b]: [u8; 3]) -> [f32; 3] {
-        convert_rgb(r, g, b, self.target, &self.tables)
+        let [lightness, chroma, hue] = convert_rgb(r, g, b, self.target, &self.tables);
+        if !matches!(self.target, ColorSpaceF32::Oklch | ColorSpaceF32::Cielch) {
+            return [lightness, chroma, hue];
+        }
+        // Frozen packed semantics canonicalize exact byte grays and the hue endpoint.
+        // The legacy four-channel writer keeps its existing conversion unchanged.
+        if r == g && g == b {
+            return [lightness, 0.0, 0.0];
+        }
+        let hue = if hue == 0.0 || hue == std::f32::consts::TAU {
+            0.0
+        } else {
+            hue
+        };
+        [lightness, chroma, hue]
     }
 
     /// Writes three floats per pixel in row order, leaving the source and alpha untouched.

@@ -61,7 +61,22 @@ const indexed = processor.quantize({
 // indexed.palette.transparentIndex is 1, or null when no transparent entry exists.
 ```
 
-Matching supports `srgb-euclidean`, `linear-rgb-euclidean`, `oklab-euclidean`, `cielab-euclidean`, and `ycbcr-euclidean`.
+Matching supports all fifteen valid color/metric pairs:
+
+| Space      | Matching tags                                                     |
+| ---------- | ----------------------------------------------------------------- |
+| sRGB       | `srgb-euclidean`, `srgb-compuphase`, `srgb-rec601`, `srgb-rec709` |
+| Linear RGB | `linear-rgb-euclidean`                                            |
+| Oklab      | `oklab-euclidean`                                                 |
+| OKLCH      | `oklch-euclidean`, `oklch-circular-hue`, `oklch-hue-arc`          |
+| CIELAB     | `cielab-euclidean`, `cielab-ciede2000`                            |
+| CIELCH     | `cielch-euclidean`, `cielch-circular-hue`, `cielch-hue-arc`       |
+| YCbCr      | `ycbcr-euclidean`                                                 |
+
+Cylindrical Euclidean compares the three coordinates directly, including hue radians.
+`circular-hue` uses the geometric-mean chroma chord; `hue-arc` uses the shorter arc scaled by the smaller chroma.
+These are distinct recipes. Exact byte grays have zero cylindrical chroma and hue.
+CompuPhase and Rec.601/709 weight gamma-encoded sRGB. CIEDE2000 uses D65 CIELAB with unit weighting factors.
 Palette order and duplicates remain intact; first-index ties win. More than 256 entries produces a truncation warning.
 Every supplied entry is validated, including entries beyond that retained prefix.
 `preserve` thresholds byte alpha using the exact supplied JavaScript number.

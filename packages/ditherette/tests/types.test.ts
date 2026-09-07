@@ -39,8 +39,10 @@ processor.then((instance) => {
 	const transparent: number | null = image.palette.transparentIndex;
 	void transparent;
 });
-// @ts-expect-error Future metrics are not advertised before their implementation slice.
-const futureQuantize: QuantizeRequest = { ...quantize, matching: 'cielab-ciede2000' };
+const perceptualQuantize: QuantizeRequest = { ...quantize, matching: 'cielab-ciede2000' };
+// @ts-expect-error CIEDE2000 is a CIELAB metric, not an OKLCH metric.
+const invalidPair: QuantizeRequest = { ...quantize, matching: 'oklch-ciede2000' };
+void perceptualQuantize;
 // @ts-expect-error RGB triples require every byte.
 const shortPalette: QuantizeRequest['palette'] = [{ kind: 'color', rgb: [0, 0] }];
 // @ts-expect-error Noncanonical anchor object tags are not accepted.

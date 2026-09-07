@@ -7,11 +7,29 @@ starts. There is no baseline-writing or candidate-promotion command.
 
 ## Prepare before the quiet phase
 
-Build each requested revision in its own clean worktree with the same toolchain:
+Prepare each requested revision in its own clean worktree with the same toolchain:
 
 ```sh
-cargo build --manifest-path crates/ditherette-bench/Cargo.toml --locked --release --bins
+node scripts/prepare-native-benchmark.mjs /absolute/new-native-artifacts /absolute/owned-native-target
 ```
+
+Preparation cleans only `ditherette-bench`, `ditherette-bench-api`, and `ditherette-wasm`
+release outputs in that explicit target. It then builds `--bins --examples --release --locked`.
+Dependency caches remain. A shared target can reuse stale local outputs across checkouts;
+a clean Git tree alone does not prove that Cargo recompiled the requested source.
+Targets must have one owner, and artifact destinations must sit outside their `release` directory.
+
+Preparation copies both binaries into the new artifact directory and makes them read-only.
+It invokes each copy's `build-info` command, validates the embedded clean revision and complete
+executable SHA-256, and records source inventory and metadata in `build-provenance.json`.
+Only a successful handoff contains that provenance file. Failed directories remain diagnostic evidence.
+Use the copied worker and coordinator binaries for subsequent preparation and trials.
+Examples remain in the build target for untimed experiment generation.
+
+Both binaries support `build-info` under the normal exclusive benchmark execution guard.
+It requires no quiet attestation, initializes no registry, and executes no workload.
+The JSON contains the existing `BuildIdentity` in `build` and the complete SHA-256 byte array in `executable`.
+Preparation still trusts cached external dependencies and the pinned compiler; it is not a hermetic rebuild.
 
 The native executable embeds its full source revision, dirty status, tool version,
 and verbose compiler version. A trial rejects a dirty build, a different requested

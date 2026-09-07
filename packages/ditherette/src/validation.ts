@@ -247,9 +247,7 @@ const matchingModes = [
 	'linear-rgb-euclidean',
 	'oklab-euclidean',
 	'cielab-euclidean',
-	'ycbcr-euclidean'
-];
-const laterMatching = [
+	'ycbcr-euclidean',
 	'srgb-compuphase',
 	'srgb-rec601',
 	'srgb-rec709',
@@ -302,13 +300,7 @@ export function validateQuantize(value: unknown) {
 		const rawMatching = field(request, 'matching');
 		const matching = typeof rawMatching === 'string' ? matchingModes.indexOf(rawMatching) : -1;
 		if (matching < 0)
-			throw new DitheretteError(
-				typeof rawMatching === 'string' && laterMatching.includes(rawMatching)
-					? 'unsupported-operation'
-					: 'invalid-settings',
-				'matching',
-				'Unsupported matching recipe.'
-			);
+			throw new DitheretteError('invalid-settings', 'matching', 'Unsupported matching recipe.');
 		const alpha = object(
 			field(request, 'alpha'),
 			['mode', 'threshold', 'rgb'],

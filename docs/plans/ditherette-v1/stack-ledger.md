@@ -26,7 +26,7 @@ S24 is delivered in PR113. Its 124-worker measurement and remaining browser evid
 The S23/S24 join is validated at `1435642fc6b8f923fc4de4b4d1624b814940b5d1`; both delivered kernel families remain unchanged.
 S25 adds all fifteen matching tags at `0085972a`, with 309 native tests and three-engine package conformance passing.
 Its exact dispatch candidate `230046ff` is rejected after the fresh 276-worker comparison.
-All 5,133 recorded samples preserve exact outputs; a required native score control regresses and several controls remain noisy.
+The run retains 5,133 timing samples and all verified outputs are exact; a required native score control regresses and several controls remain noisy.
 The all-mode baseline remains selected. S25 delivery continues in `impl/v1-s25-delivery`; no further slice measurements are planned.
 S26 literal field baseline `e156cfbf` passes inverse, placement, field, and composition checks. Bounded/public integration continues separately.
 S26 benchmark adapters advance in `impl/v1-s26-bench`; production/package work belongs to `impl/v1-s26-fields`.
