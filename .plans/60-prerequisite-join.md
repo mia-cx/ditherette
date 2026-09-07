@@ -39,3 +39,29 @@ No actual benchmark measurement ran.
 - [ ] Record all prerequisite SHAs, remove only satisfied native blocking edges, and start the S19 implementation worktree.
 
 All PRs stay unmerged. No production copy or optimization has started.
+
+## Read-only allocation preflight
+
+The nearest literal-copy closure is `spec/resize/scalar/nearest.rs`, `spec/resize/common/alignment.rs`, and `spec/contract/{request,error,lifecycle}.rs`.
+Copy these into mirrored `prod/` paths with mechanical wiring changes only, then validate the baseline in its own commit.
+The inherited optimized `prod/resize/scalar/nearest/` directory must move behind an explicit candidate module path.
+It cannot remain the accepted implementation merely because it already exists.
+
+The nearest kernel allocates nothing. Its future production adapter can reserve fallibly and use frozen `ImageBuf::from_vec_packed`.
+Record actual capacity separately because `ImageBuf` exposes length, not capacity.
+Count input/output Wasm capacities and bookkeeping/boundary capacities. Plans and retained entries add their own capacity.
+Keep allocation-failure reporting free of fresh Rust string allocations.
+
+The S02 generated legacy glue copies incoming slices through `__wbindgen_malloc` before Rust preflight.
+Its returned `Vec` passes through `into_boxed_slice`, then JavaScript copies with `.slice()` before freeing.
+That generated sequence has no `finally` for a thrown JS copy. It is unsuitable for the new bounded-memory call.
+
+The audited alternative uses an externref `Uint8Array` input and two private `#[wasm_bindgen(catch)]` imports.
+One helper copies into an already reserved borrowed Rust slice. The other constructs the complete durable JS result.
+Outbound borrowed slices use pointer/length ABI in pinned wasm-bindgen 0.2.121 without another owned allocation.
+Raw js-sys `copy_to` and `copy_from` lack catch declarations, so the new boundary must not use them unguarded.
+Keep Rust buffers owned until each helper returns. Caught failures restore lifecycle state through ordinary Rust cleanup.
+Create output bytes and metadata before the completion callback. Publish cached state only after that callback succeeds.
+
+Validation must cover exact budget boundaries, rejected preflight before any source copy, each allocation/copy failure, recovery, reentry, disposal, and durable isolated results.
+The smallest initial candidate is an identity-copy fast path. Inherited planned candidates need fallible metadata allocation first.
