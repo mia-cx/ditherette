@@ -251,7 +251,11 @@ impl Workload for TypedWorkload<'_> {
                 converter,
                 source,
                 coordinates,
-            } => converter.rgba8_into(*source, coordinates),
+            } => {
+                converter.rgba8_into(*source, coordinates);
+                // Every conversion is observable, including earlier iterations in a throughput batch.
+                std::hint::black_box(&*coordinates);
+            }
         }
         Ok(())
     }
