@@ -1,4 +1,8 @@
-import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
+import {
+	collectCalls,
+	collectInitializations,
+	retainedOutputSlots
+} from './benchmark-public-timing.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -118,28 +122,128 @@ export async function prepareOperation(trial) {
 	};
 }
 
-export function verificationOutput(output) {
+// Views share the public buffers. Only final evidence serialization copies their bytes.
+function outputView(output) {
 	if ('indices' in output) {
 		return {
 			dimensions: { width: output.width, height: output.height },
 			pixels: {
 				format: 'indexed8',
-				indices: Array.from(output.indices),
-				palette_rgba: Array.from(output.palette.rgba),
+				indices: output.indices,
+				palette_rgba: output.palette.rgba,
 				transparent_index: output.palette.transparentIndex
 			},
-			warnings: output.warnings.map(({ code, message }) => ({ code, message }))
+			warnings: output.warnings
 		};
 	}
 	return {
 		dimensions: { width: output.width, height: output.height },
-		pixels: { format: 'rgba8', data: Array.from(output.data) },
+		pixels: { format: 'rgba8', data: output.data },
 		warnings: []
 	};
 }
 
+export function verificationOutput(output) {
+	const view = outputView(output);
+	return {
+		...view,
+		pixels:
+			view.pixels.format === 'rgba8'
+				? { ...view.pixels, data: Array.from(view.pixels.data) }
+				: {
+						...view.pixels,
+						indices: Array.from(view.pixels.indices),
+						palette_rgba: Array.from(view.pixels.palette_rgba)
+					},
+		warnings: view.warnings.map(({ code, message }) => ({ code, message }))
+	};
+}
+
+const MAX_PALETTE_BYTES = 256 * 4;
+const MAX_WARNINGS = 3;
+const MAX_WARNING_CHARACTERS = 88;
+const WARNING_CODES = new Set(['palette-truncated', 'transparent-only', 'transparent-fallback']);
+
+/** Require independent records and durable buffers; retain only the first and first distinct result. */
+export function outputStability(outputBytes, format = 'rgba8') {
+	let first;
+	let distinct;
+	const retainedStorage = new Set();
+	return {
+		observe(outputs) {
+			const storage = new Set();
+			for (const output of outputs) {
+				const indexed = format === 'indexed8';
+				const actualIndexed = 'indices' in output;
+				if (indexed !== actualIndexed) throw new Error('Unexpected public output format.');
+				const views = indexed ? [output.indices, output.palette.rgba] : [output.data];
+				const pixels = indexed ? outputBytes - MAX_PALETTE_BYTES : outputBytes;
+				for (const [index, data] of views.entries()) {
+					if (
+						!ArrayBuffer.isView(data) ||
+						data.BYTES_PER_ELEMENT !== 1 ||
+						data.buffer.byteLength !== data.byteLength ||
+						(index === 0
+							? data.byteLength !== pixels
+							: data.byteLength < 4 ||
+								data.byteLength > MAX_PALETTE_BYTES ||
+								data.byteLength % 4 !== 0)
+					)
+						throw new Error('Output storage violates the declared durable byte-result contract.');
+				}
+				if (indexed) {
+					const count = output.palette.rgba.length / 4;
+					const transparent = output.palette.transparentIndex;
+					if (
+						(transparent !== null &&
+							(!Number.isInteger(transparent) || transparent < 0 || transparent >= count)) ||
+						output.indices.some((index) => index >= count) ||
+						!Array.isArray(output.warnings) ||
+						output.warnings.length > MAX_WARNINGS ||
+						output.warnings.some(
+							(warning) =>
+								!WARNING_CODES.has(warning.code) ||
+								typeof warning.message !== 'string' ||
+								warning.message.length > MAX_WARNING_CHARACTERS ||
+								Object.keys(warning).some((key) => !['code', 'message'].includes(key))
+						) ||
+						Object.keys(output).some(
+							(key) => !['width', 'height', 'indices', 'palette', 'warnings'].includes(key)
+						) ||
+						Object.keys(output.palette).some((key) => !['rgba', 'transparentIndex'].includes(key))
+					)
+						throw new Error('Indexed metadata exceeds the declared public result contract.');
+				}
+				const records = indexed
+					? [output, output.palette, output.warnings, ...output.warnings]
+					: [output];
+				const owned = [...records, ...views.map((data) => data.buffer)];
+				for (const value of owned) {
+					if (storage.has(value) || retainedStorage.has(value))
+						throw new Error('Output storage aliases an earlier retained result.');
+					storage.add(value);
+				}
+				if (!first) {
+					first = output;
+					for (const value of owned) retainedStorage.add(value);
+					continue;
+				}
+				if (!distinct && !equalOutput(outputView(output), outputView(first))) {
+					distinct = output;
+					for (const value of owned) retainedStorage.add(value);
+				}
+			}
+		},
+		evidence(finalOutput) {
+			return distinct
+				? { unstable_output: verificationOutput(first), output: verificationOutput(distinct) }
+				: { output: verificationOutput(finalOutput) };
+		}
+	};
+}
+
 /** Compare one untimed actual call with worker-supplied frozen bytes; return concrete mismatch evidence. */
-export async function preflightOperation(operation, reference) {
+export async function preflightOperation(operation, reference, observe = () => {}) {
 	if (!reference || !['rgba8', 'indexed8'].includes(reference.pixels.format))
 		throw new Error('Browser trial requires frozen RGBA8 or indexed reference_output.');
 	let output;
@@ -158,6 +262,7 @@ export async function preflightOperation(operation, reference) {
 			prepared.close();
 		}
 	}
+	observe([output]);
 	const actual = verificationOutput(output);
 	if (equalOutput(actual, reference)) return undefined;
 	return actual;
@@ -204,7 +309,13 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const mismatch = await preflightOperation(operation, trial.reference_output);
+		const format = trial.case.browser.operation.operation === 'quantize' ? 'indexed8' : 'rgba8';
+		const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
+		// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
+		const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
+		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
+		const stability = outputStability(outputBytes, format);
+		const mismatch = await preflightOperation(operation, trial.reference_output, stability.observe);
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes during preflight.');
 		if (mismatch && trial.case.browser.measure_nonexact !== true)
@@ -224,18 +335,26 @@ export async function runTrial(trial) {
 				? await collectInitializations({
 						measurement,
 						create: operation.create,
-						probe: operation.probe
+						probe: operation.probe,
+						observe: stability.observe,
+						outputBytes
 					})
-				: await collectCalls({ measurement, prepare: operation.prepare });
+				: await collectCalls({
+						measurement,
+						prepare: operation.prepare,
+						observe: stability.observe,
+						outputBytes
+					});
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
-		const verified = verificationOutput(output);
+		// Keep the actual timing result separate. Instability evidence is the first distinct pair,
+		// not a claim that the final timed output still differs (A/B/A must also fail).
+		const evidence = stability.evidence(output);
 		return {
 			...identity,
 			...timings,
-			output: verified,
-			...(mismatch && !equalOutput(verified, mismatch) ? { unstable_output: mismatch } : {}),
+			...evidence,
 			observation
 		};
 	} finally {

@@ -109,7 +109,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				await page.goto(server.url);
 				const report = await page.evaluate(
 					async ({ assets, quantizeFixtures }) => {
-						const { prepareOperation, preflightOperation } = await import(
+						const { prepareOperation, preflightOperation, outputStability } = await import(
 							`/${assets.entries.page}`
 						);
 						const equal = (actual, expected, label) => {
@@ -333,18 +333,23 @@ test('installed package and actual TypeScript adapter conformance, without measu
 								};
 								const operation = await prepareOperation(request);
 								try {
+									const stability = outputStability(
+										fixture.source.width * fixture.source.height + 1024,
+										'indexed8'
+									);
 									equal(
-										await preflightOperation(operation, fixture.reference),
+										await preflightOperation(operation, fixture.reference, stability.observe),
 										undefined,
 										`quantize ${fixture.settings.matching} ${fixture.settings.alpha.mode} ${preparation}`
 									);
 									const one = await operation.prepare();
 									const first = one.call();
+									stability.observe([first]);
 									one.close();
 									const retained = Array.from(first.indices);
 									const two = await operation.prepare();
 									try {
-										two.call();
+										stability.observe([two.call()]);
 									} finally {
 										two.close();
 									}

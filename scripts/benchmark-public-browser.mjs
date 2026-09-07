@@ -55,12 +55,11 @@ export async function startAssetServer(assets, isolated, trial) {
 	let requestJson = trial === undefined ? undefined : JSON.stringify(trial);
 	let result;
 	let resultStarted = false;
-	// Diagnostic instability retains two RGBA8 outputs. Bound timing/metadata separately.
+	// Any trial can discover instability after an exact preflight. Retain both actual outputs.
 	const maxResultBytes =
 		trial === undefined
 			? 0
-			: trial.case.identity.output.width * trial.case.identity.output.height * 16 *
-				(trial.case.browser?.measure_nonexact === true ? 2 : 1) +
+			: trial.case.identity.output.width * trial.case.identity.output.height * 16 * 2 +
 				trial.case.measurement.samples * 32 +
 				65_536;
 	if (trial !== undefined) {

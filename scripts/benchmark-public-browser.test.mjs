@@ -16,8 +16,157 @@ import {
 	preflightOperation,
 	resizeRecipe,
 	runTrial,
-	timerResolution
+	timerResolution,
+	outputStability
 } from './benchmark-public-page.mjs';
+import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
+
+const indexedOutput = () => ({
+	width: 2,
+	height: 1,
+	indices: new Uint8Array([0, 1]),
+	palette: { rgba: new Uint8Array([10, 20, 30, 255, 0, 0, 0, 0]), transparentIndex: 1 },
+	warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
+});
+
+test('indexed A/B/A retains exact indices, palette, transparency, and warnings outside batch timers', async () => {
+	for (const mutate of [
+		(output) => output.indices.reverse(),
+		(output) => output.palette.rgba[0]++,
+		(output) => (output.palette.transparentIndex = null),
+		(output) => (output.warnings[0].code = 'transparent-only'),
+		(output) => (output.warnings[0].message += ' changed')
+	]) {
+		const tracker = outputStability(2 + 1024, 'indexed8');
+		tracker.observe([indexedOutput()]);
+		let calls = 0,
+			clock = 0;
+		const result = await collectCalls({
+			measurement: {
+				mode: 'throughput',
+				samples: 5,
+				warmup_ms: 1,
+				target_sample_ms: 3,
+				measurement_ms: 100
+			},
+			now: () => clock,
+			outputBytes: 2 + 1024,
+			prepare: async () => ({
+				call() {
+					clock++;
+					const output = indexedOutput();
+					if (++calls === 3) mutate(output);
+					return output;
+				},
+				close() {}
+			}),
+			observe(outputs) {
+				tracker.observe(outputs);
+				clock += 100;
+			}
+		});
+		const evidence = tracker.evidence(result.output);
+		assert.deepEqual(result.output, indexedOutput());
+		assert.notDeepEqual(evidence.output, evidence.unstable_output);
+		assert.deepEqual(evidence.unstable_output.pixels.indices, [0, 1]);
+		assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+		assert.equal(result.iterations_per_sample, 3);
+	}
+});
+
+test('indexed retention rejects shared storage, oversized backing buffers, and unbounded metadata', () => {
+	for (const field of ['indices', 'palette', 'warnings']) {
+		const tracker = outputStability(2 + 1024, 'indexed8');
+		const first = indexedOutput();
+		tracker.observe([first]);
+		const next = indexedOutput();
+		next[field] = first[field];
+		assert.throws(() => tracker.observe([next]), /aliases/);
+	}
+	const sharedWarning = indexedOutput().warnings[0];
+	const first = indexedOutput(),
+		next = indexedOutput();
+	first.warnings = [sharedWarning];
+	next.warnings = [sharedWarning];
+	assert.throws(() => outputStability(1026, 'indexed8').observe([first, next]), /aliases/);
+	for (const mutate of [
+		(output) => (output.indices = new Uint8Array(3).subarray(0, 2)),
+		(output) => (output.palette.rgba = new Uint8Array(1028)),
+		(output) => (output.warnings[0].message = 'x'.repeat(89)),
+		(output) => (output.warnings = Array(4).fill(output.warnings[0])),
+		(output) => (output.extra = new Uint8Array(1024)),
+		(output) => (output.indices[0] = 2)
+	]) {
+		const output = indexedOutput();
+		mutate(output);
+		assert.throws(() => outputStability(2 + 1024, 'indexed8').observe([output]), /contract/);
+	}
+});
+
+test('reused result records cannot hide A/B/A by replacing their byte buffers', () => {
+	for (const indexed of [false, true]) {
+		const create = indexed
+			? indexedOutput
+			: () => ({ width: 1, height: 1, data: new Uint8Array(4) });
+		for (const retained of [false, true]) {
+			const tracker = outputStability(indexed ? 1026 : 4, indexed ? 'indexed8' : 'rgba8');
+			const result = create();
+			if (retained) tracker.observe([result]);
+			Object.assign(result, create()); // Fresh buffers do not make a reused mutable result record durable.
+			assert.throws(() => tracker.observe(retained ? [result] : [result, result]), /aliases/);
+		}
+	}
+});
+
+test('initialization A/B/A preserves the first distinct probe, including warmup, without timing comparisons', async () => {
+	for (const changedAt of [2, 4]) {
+		const tracker = outputStability(4);
+		let calls = 0,
+			clock = 0,
+			closes = 0;
+		const probe = () => ({
+			width: 1,
+			height: 1,
+			data: new Uint8Array([++calls === changedAt ? 99 : 0, 0, 0, 255])
+		});
+		tracker.observe([probe()]);
+		const result = await collectInitializations({
+			measurement: { samples: 5, warmup_ms: 1, measurement_ms: 100 },
+			now: () => clock,
+			outputBytes: 4,
+			create: async () => {
+				clock++;
+				return {
+					dispose() {
+						closes++;
+					}
+				};
+			},
+			probe,
+			observe: (outputs) => {
+				tracker.observe(outputs);
+				clock += 100;
+			}
+		});
+		assert.equal(result.output.data[0], 0);
+		assert.equal(tracker.evidence(result.output).unstable_output.pixels.data[0], 0);
+		assert.equal(tracker.evidence(result.output).output.pixels.data[0], 99);
+		assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+		assert.equal(closes, 6);
+	}
+});
+
+test('output storage aliases fail closed instead of hiding overwritten batch evidence', () => {
+	const tracker = outputStability(4);
+	const output = () => ({ width: 1, height: 1, data: new Uint8Array([0, 0, 0, 255]) });
+	tracker.observe([output()]);
+	const shared = output();
+	assert.throws(() => tracker.observe([shared, { ...shared }]), /aliases/);
+	assert.throws(
+		() => outputStability(4).observe([{ ...output(), data: new Uint8Array(8).subarray(0, 4) }]),
+		/storage/
+	);
+});
 
 test('indexed preflight checks indices, palette, transparency, and warnings without timing', async () => {
 	const output = {
@@ -167,7 +316,7 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		const entry = path.join(temporary, 'fixture.mjs');
 		await writeFile(
 			entry,
-			'export let calls = 0; let unstable = false; export function changeOutput() { calls = 0; unstable = true; } export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([unstable && calls > 1 ? 12 : 10,20,30,40]) }; }'
+			'export let calls = 0; let changedAt = Infinity; export function changeOutput(at = 2) { calls = 0; changedAt = at; } export function resize(request) { calls++; return { width: 1, height: 1, data: new Uint8Array([calls === changedAt ? 12 : 10,20,30,40]) }; }'
 		);
 		Object.defineProperty(globalThis, 'location', {
 			configurable: true,
@@ -232,6 +381,23 @@ test('mismatch response performs one fake preflight call and never begins warmup
 		assert.deepEqual(unstable.output.pixels.data, [12, 20, 30, 40]);
 		assert.equal(unstable.sample_ns.length, 5);
 		assert.equal(unstable.timing_skipped, undefined);
+		// Transient output changes remain visible even when every endpoint returns A.
+		for (const [mode, changedAt] of [
+			['single-call', 3],
+			['throughput', 4]
+		]) {
+			trial.case.measurement.mode = mode;
+			trial.case.measurement.target_sample_ms = 3;
+			trial.case.browser.measure_nonexact = false;
+			trial.reference_output = result.output; // Exact preflight also requires stability checks.
+			(await import(pathToFileURL(entry))).changeOutput(changedAt);
+			const transient = await runTrial(trial);
+			assert.deepEqual(transient.unstable_output.pixels.data, [10, 20, 30, 40]);
+			assert.deepEqual(transient.output.pixels.data, [12, 20, 30, 40]);
+			assert.equal(transient.iterations_per_sample, mode === 'throughput' ? 3 : 1);
+			assert.equal(transient.sample_ns.length, 5);
+			assert.ok((await import(pathToFileURL(entry))).calls > changedAt);
+		}
 	} finally {
 		if (previousPerformance) Object.defineProperty(globalThis, 'performance', previousPerformance);
 		else delete globalThis.performance;
@@ -244,14 +410,14 @@ test('mismatch response performs one fake preflight call and never begins warmup
 	}
 });
 
-test('diagnostic HTTP response bound retains two complete actual images', async () => {
+test('ordinary HTTP response bound retains two complete actual images after exact preflight', async () => {
 	const root = await mkdtemp(path.join(tmpdir(), 'ditherette-unstable-body-'));
 	const assets = { tree: { root, files: [{ path: 'entry.js' }] }, entries: { page: 'entry.js' } };
 	const trial = {
 		case: {
 			identity: { output: { width: 10_000, height: 1 } },
 			measurement: { samples: 5 },
-			browser: { measure_nonexact: true }
+			browser: { measure_nonexact: false }
 		}
 	};
 	const actual = {

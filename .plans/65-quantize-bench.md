@@ -114,3 +114,19 @@ Keep calibration, native destruction costs, and native checked-endpoint policy u
 Run controlled protocol tests and untimed installed-package conformance before creating new attempt 02 snapshots.
 Reuse the immutable native accepted worker only after confirming its unchanged wire protocol remains compatible.
 Preserve attempt 01 and the fixed 124-worker budget. The coordinator alone may authorize measurement.
+
+The indexed observer shares `equalOutput` with preflight and serializes only final evidence.
+Each retained record reserves pixel-count index bytes, 1,024 palette bytes, and the collector's 1,024-byte metadata allowance.
+It accepts at most three known warnings, each with at most 88 characters, matching the frozen warning vocabulary.
+It rejects extra indexed metadata, oversized backing buffers, and reused result, palette, warning-array, or warning records.
+Both result formats reject reused result objects even when each call replaces its buffers.
+The public subject contract requires independent records and durable owned buffers. This is not a total JavaScript heap limit.
+Every warmup and measured output reaches the observer after its call or complete batch timer.
+Retention changes allocation lifetime and GC behavior. New artifacts must not be pooled with attempt 01 samples.
+Native protocol and timer source compare byte-identical with accepted `ccb9bceb28563c562dd5e6c05f68c056c18e3519`.
+The accepted immutable executable can therefore be reused without rebuilding its historical source.
+
+The merged checkpoint passes 56 Rust tests, 26 controlled JavaScript tests, Wasm compilation, formatting, and the trusted guard.
+One Rust fixture is ignored in its parent suite and runs twice as a controlled child; three Node cleanup fixtures also pass.
+Indexed A/B/A fixtures cover indices, palette bytes, transparency, warning code/text, alias rejection, and metadata-only worker evidence.
+The installed-package conformance suite now invokes this same observer on each untimed indexed output.

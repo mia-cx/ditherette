@@ -88,16 +88,8 @@ pub fn read_owned_transport(
 
 fn response_limit(request: &TrialRequest) -> io::Result<u64> {
     // JSON RGBA bytes need at most four characters each, plus structured evidence.
-    let outputs = if request
-        .case
-        .browser
-        .as_ref()
-        .is_some_and(|case| case.measure_nonexact)
-    {
-        2
-    } else {
-        1
-    };
+    // An exact preflight does not preclude later instability. Retain two actual results in every trial.
+    let outputs = 2;
     u64::from(request.case.identity.output.width)
         .checked_mul(u64::from(request.case.identity.output.height))
         .and_then(|pixels| pixels.checked_mul(16 * outputs))
@@ -131,7 +123,7 @@ pub fn reject_unstable_output(
     directory: &Path,
 ) -> io::Result<()> {
     validate_response(request, result)?;
-    let Some(preflight) = &result.unstable_output else {
+    let Some(first) = &result.unstable_output else {
         return Ok(());
     };
     fs::create_dir(directory)?;
@@ -140,10 +132,14 @@ pub fn reject_unstable_output(
         .create_new(true)
         .open(directory.join("transport.json"))?
         .write_all(&serde_json::to_vec_pretty(result).map_err(io::Error::other)?)?;
-    preserve_output(request, preflight.clone(), &directory.join("preflight"))?;
-    preserve_output(request, result.output.clone(), &directory.join("final"))?;
+    preserve_output(request, first.clone(), &directory.join("first-output"))?;
+    preserve_output(
+        request,
+        result.output.clone(),
+        &directory.join("first-distinct-output"),
+    )?;
     Err(invalid(
-        "diagnostic output changed after preflight; both actual outputs retained, trial rejected",
+        "output changed during the trial; both actual outputs retained, trial rejected",
     ))
 }
 
@@ -220,16 +216,9 @@ pub fn validate_response(
     {
         return Err(invalid("browser response identity differs"));
     }
-    if let Some(preflight) = &result.unstable_output {
-        if !case
-            .browser
-            .as_ref()
-            .is_some_and(|case| case.measure_nonexact)
-            || result.timing_skipped.is_some()
-            || request.reference_output.as_ref() == Some(preflight)
-            || *preflight == result.output
-        {
-            return Err(invalid("invalid diagnostic instability marker"));
+    if let Some(first) = &result.unstable_output {
+        if result.timing_skipped.is_some() || *first == result.output {
+            return Err(invalid("invalid first-distinct-output instability marker"));
         }
     }
     let indexed = matches!(
