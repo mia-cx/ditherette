@@ -173,9 +173,57 @@ fn zero_and_coarse_timer_samples_remain_raw_and_inconclusive() {
     assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
     trials[0].sample_ns[0] = -1.0;
     assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    let mut mixed = original.clone();
+    for trial in &mut mixed {
+        if trial.role == Role::Candidate {
+            trial
+                .sample_ns
+                .fill(if trial.pair == 0 { 800.0 } else { 1200.0 });
+        }
+    }
+    let report = compare(&prepared, &mixed);
+    assert_eq!(report.gate, Gate::Inconclusive);
+    assert!(!report.cases[0].resolution_limited);
     let (native, mut trials) = model::fixture();
     trials[0].sample_ns[0] = 0.0;
     assert_eq!(compare(&native, &trials).gate, Gate::Incomplete);
+}
+
+#[test]
+fn preflight_mismatch_preserves_typed_output_without_claiming_timing() {
+    let (prepared, trials) = fixture();
+    let trial = &trials[0];
+    let request = TrialRequest {
+        role: trial.role,
+        pair: trial.pair,
+        reference_state: prepared.experiment.reference_state,
+        executable: prepared.accepted.identity.clone(),
+        case: prepared.experiment.cases[0].clone(),
+        browser: Some(prepared.browser.as_ref().unwrap().trial(trial.role)),
+        reference_output: Some(trial.reference.output.clone()),
+    };
+    let json = serde_json::to_vec(&request).unwrap();
+    let decoded: TrialRequest = serde_json::from_slice(&json).unwrap();
+    assert_eq!(decoded.reference_output, request.reference_output);
+    let result = BrowserTransportResult {
+        role: trial.role,
+        pair: trial.pair,
+        case_name: trial.case_name.clone(),
+        input: request.case.identity.input,
+        settings: request.case.identity.settings,
+        sample_ns: vec![],
+        iterations_per_sample: 0,
+        warmup_iterations: 0,
+        warmup_elapsed_ns: 0,
+        output: trial.output.output.clone(),
+        observation: trial.browser.as_ref().unwrap().observation.clone(),
+        timing_skipped: Some(TimingSkipped::ReferenceMismatch),
+    };
+    let json = serde_json::to_string(&result).unwrap();
+    assert!(json.contains("\"timing_skipped\":\"reference-mismatch\""));
+    let decoded: BrowserTransportResult = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.output, result.output);
+    assert!(decoded.sample_ns.is_empty());
 }
 
 #[test]
@@ -301,4 +349,91 @@ fn legacy_native_json_stays_readable_but_cannot_skip_browser_validation() {
         .contains("run_with_browser"));
     browser.browser = None;
     assert!(coordinator::run(&browser, std::path::Path::new("/unused")).is_err());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn browser_coordinator_checks_both_sides_of_each_child_and_preserves_failure_cleanup() {
+    use ditherette_bench::lease::{Lease, QUIET_ENV};
+    use std::{
+        fs, io,
+        path::Path,
+        sync::atomic::{AtomicUsize, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+    static VALIDATIONS: AtomicUsize = AtomicUsize::new(0);
+    static FAIL_AT: AtomicUsize = AtomicUsize::new(usize::MAX);
+    fn validate(trial: &BrowserTrial) -> io::Result<()> {
+        validate_trial(trial)?;
+        let index = VALIDATIONS.fetch_add(1, Ordering::SeqCst);
+        if index == FAIL_AT.load(Ordering::SeqCst) {
+            return Err(io::Error::other("controlled asset mutation"));
+        }
+        Ok(())
+    }
+
+    let directory = std::env::temp_dir().join(format!(
+        "ditherette-browser-pair-fixture-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir(&directory).unwrap();
+    std::env::set_var(QUIET_ENV, "1");
+    std::env::set_var("DITHERETTE_PAIR_FIXTURE_DIRECTORY", &directory);
+    let outcome = std::panic::catch_unwind(|| {
+        let (template, _) = fixture();
+        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/paired-child.mjs");
+        let prepared = coordinator::prepare_with_browser(
+            template.experiment,
+            (&script, &"a".repeat(40)),
+            (&script, &"b".repeat(40)),
+            &directory.join("prepared"),
+            template.browser.unwrap(),
+        )
+        .unwrap();
+        let report =
+            coordinator::run_with_browser(&prepared, &directory.join("missing-proof"), validate)
+                .unwrap();
+        // The short fake child intentionally returns native output without browser evidence.
+        assert_eq!(report.gate, Gate::Incomplete);
+        assert_eq!(VALIDATIONS.load(Ordering::SeqCst), 8);
+        assert!(!directory.join("active").exists());
+        for (name, fail_at, expected_children) in [("before", 0, 0), ("after", 1, 1)] {
+            VALIDATIONS.store(0, Ordering::SeqCst);
+            FAIL_AT.store(fail_at, Ordering::SeqCst);
+            let error = coordinator::run_with_browser(&prepared, &directory.join(name), validate)
+                .unwrap_err();
+            assert!(error.to_string().contains("controlled asset mutation"));
+            let journal = fs::read_to_string(directory.join(name).join("events.jsonl")).unwrap();
+            assert_eq!(
+                journal
+                    .lines()
+                    .filter(|line| line.contains("\"state\":\"reaped\""))
+                    .count(),
+                expected_children
+            );
+            assert!(!directory.join("active").exists());
+            drop(Lease::exclusive().unwrap());
+        }
+        VALIDATIONS.store(0, Ordering::SeqCst);
+        FAIL_AT.store(usize::MAX, Ordering::SeqCst);
+        std::env::set_var("DITHERETTE_PAIR_FIXTURE_FAILURE", "exit");
+        assert!(coordinator::run_with_browser(
+            &prepared,
+            &directory.join("failed-child"),
+            validate
+        )
+        .is_err());
+        assert_eq!(VALIDATIONS.load(Ordering::SeqCst), 2);
+        assert!(!directory.join("active").exists());
+        drop(Lease::exclusive().unwrap());
+    });
+    std::env::remove_var(QUIET_ENV);
+    std::env::remove_var("DITHERETTE_PAIR_FIXTURE_DIRECTORY");
+    std::env::remove_var("DITHERETTE_PAIR_FIXTURE_FAILURE");
+    fs::remove_dir_all(&directory).unwrap();
+    outcome.unwrap();
 }
