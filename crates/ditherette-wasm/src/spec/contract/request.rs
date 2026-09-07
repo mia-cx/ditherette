@@ -187,6 +187,14 @@ pub enum Diffusion {
     Atkinson,
 }
 
+/// Distinguishes byte-rounded sRGB feedback from unrounded matching coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DiffusionFeedback {
+    SrgbBytes,
+    Matching,
+}
+
 /// Palette-free perturbation uses normalized strength (website percentage divided by 100).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -210,7 +218,7 @@ pub enum DitherPolicy {
         strength: f32,
         placement: Placement,
         serpentine: bool,
-        space: WorkingSpace,
+        feedback: DiffusionFeedback,
     },
     Yliluoma {
         size: BayerSize,
@@ -315,11 +323,7 @@ impl<'a> Request<'a> {
                 validate_version(request.recipe.version, "recipe.version")?;
                 validate_palette(request.palette)?;
                 validate_alpha(request.recipe.alpha, "recipe.alpha")?;
-                validate_dither(
-                    request.recipe.dither,
-                    request.recipe.matching,
-                    "recipe.dither",
-                )?;
+                validate_dither(request.recipe.dither, "recipe.dither")?;
                 (request.source, Some(request.recipe.output))
             }
             Self::Resize(request) => {
@@ -337,7 +341,7 @@ impl<'a> Request<'a> {
             }
             Self::DitherAndQuantize(request) => {
                 validate_quantize(request.quantize)?;
-                validate_dither(request.dither, request.quantize.matching, "dither")?;
+                validate_dither(request.dither, "dither")?;
                 (request.quantize.source, None)
             }
         };
@@ -478,11 +482,7 @@ fn validate_perturb(perturb: PerturbPolicy, path: &str) -> Result<(), Ditherette
     validate_placement(perturb.placement, &format!("{path}.placement"))
 }
 
-fn validate_dither(
-    dither: DitherPolicy,
-    matching: MatchPolicy,
-    path: &str,
-) -> Result<(), DitheretteError> {
+fn validate_dither(dither: DitherPolicy, path: &str) -> Result<(), DitheretteError> {
     match dither {
         DitherPolicy::None => Ok(()),
         DitherPolicy::Separable { perturb } => {
@@ -491,17 +491,8 @@ fn validate_dither(
         DitherPolicy::Diffusion {
             strength,
             placement,
-            space,
             ..
         } => {
-            // The website also diffuses sRGB bytes while matching in perceptual coordinates.
-            if space != WorkingSpace::Srgb && space != matching.space() {
-                return Err(DitheretteError::new(
-                    ErrorCode::InvalidSettings,
-                    format!("{path}.space"),
-                    "Diffusion uses sRGB or the matching working space.",
-                ));
-            }
             nonnegative(strength, format!("{path}.strength"))?;
             validate_placement(placement, &format!("{path}.placement"))
         }

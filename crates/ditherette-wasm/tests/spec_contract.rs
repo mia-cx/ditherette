@@ -83,7 +83,7 @@ fn all_five_requests_borrow_valid_storage_without_changing_it() {
                 strength: 1.0,
                 placement: Placement::Everywhere,
                 serpentine: true,
-                space: WorkingSpace::Srgb,
+                feedback: DiffusionFeedback::SrgbBytes,
             },
         }),
     ];
@@ -204,6 +204,41 @@ fn match_tags_cover_all_coherent_pairs_and_reject_invalid_pairs() {
             (ErrorCode::InvalidSettings, "recipe.match")
         );
     }
+}
+
+#[test]
+fn diffusion_feedback_tags_distinguish_bytes_from_matching_coordinates() {
+    for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+        let policy = DitherPolicy::Diffusion {
+            kernel: Diffusion::FloydSteinberg,
+            strength: 1.0,
+            placement: Placement::Everywhere,
+            serpentine: false,
+            feedback,
+        };
+        let value = serde_json::to_value(policy).unwrap();
+        let tag = if feedback == DiffusionFeedback::SrgbBytes {
+            "srgb-bytes"
+        } else {
+            "matching"
+        };
+        assert_eq!(value["feedback"], tag);
+        assert!(value.get("space").is_none());
+        assert_eq!(
+            serde_json::from_value::<DitherPolicy>(value.clone()).unwrap(),
+            policy
+        );
+        let mut invalid = value;
+        invalid["space"] = "srgb".into();
+        assert!(serde_json::from_value::<DitherPolicy>(invalid).is_err());
+        assert!(Request::DitherAndQuantize(DitherQuantizeRequest {
+            quantize: quantize(),
+            dither: policy
+        })
+        .validate()
+        .is_ok());
+    }
+    assert!(serde_json::from_str::<DiffusionFeedback>("\"srgb\"").is_err());
 }
 
 #[test]
