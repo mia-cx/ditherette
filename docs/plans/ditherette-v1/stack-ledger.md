@@ -191,6 +191,8 @@ S33 is delivered in unmerged [PR123](https://github.com/mia-cx/ditherette/pull/1
 The coordinator joins it without conflicts and verifies identical crate, package, and script code against that head.
 Its [report](../../../.plans/74-benchmark-results.md) verifies 120 reaped workers, 2,400 samples, and 60 exact role pairs.
 All 15 callback cases pass. Chromium's disabled Lab76 and Lanczos3 comparisons remain inconclusive for S41.
+Those gaps are recorded in [S41](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5588948095).
+S33 has the availability label. S34's [validated prerequisite handoff](https://github.com/mia-cx/ditherette/issues/76#issuecomment-5588948351) removes its satisfied native blocker while preserving the original dependency record.
 The returned report owner now owns S34 benchmark protocol and startup artifacts in `v1-s34-bench`.
 Its fixed plan has 48 serial workers across scalar regression and threaded same-artifact controls. No measurement is running.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
