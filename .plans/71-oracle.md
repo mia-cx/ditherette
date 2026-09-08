@@ -13,7 +13,7 @@ All builds use this worktree's ordinary `target/compiler` directory. No sibling 
 ## TODOs
 
 - [x] Add failing Process wire/identity tests against the existing frozen native reference, then add typed frozen-only dispatch.
-- [ ] Verify complete recipe identities, changed output dimensions, indexed metadata, invalid inputs, and rejection of caller reference overrides.
+- [x] Verify complete recipe identities, changed output dimensions, indexed metadata, invalid inputs, and rejection of caller reference overrides.
 - [ ] Run focused native tests and isolated Wasm compilation, record limits, commit/push, and drain owned jobs.
 
 ## Contract
@@ -28,6 +28,12 @@ No tolerance changes, frozen changes, production calls, measurement workers, or 
 The first regression fails on the absent `process` enum variant, then passes with typed dispatch.
 The second fails because envelope output was ignored, then passes with a Process-only dimensions check.
 All five focused oracle tests pass after these changes. Every new expected output comes from the existing native frozen adapter.
+
+The expanded suite passes all eight tests. It includes 130 combinations of ten resize recipes and thirteen dither recipes.
+Those cover every resize algorithm, both convolution supports, all separable fields, four diffusion kernels with both feedback modes, and Yliluoma.
+Alpha modes rotate across the matrix; separate 257-entry palettes preserve truncation, transparent-only, and fallback metadata.
+Identity witnesses cover all Process recipe groups, f32 control normalization, f64 alpha precision, complete palette tails, source bytes/dimensions, and output dimensions.
+Invalid settings/source failures retain native frozen error ordering. Caller-supplied reference outputs are rejected, never used as an oracle override.
 
 ## Cleanup
 
