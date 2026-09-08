@@ -74,3 +74,20 @@ Extend actual installed-package conformance and public-call benchmark registrati
 After that baseline exists, one candidate can reuse bounded call-owned conversion or mixture preparation across pixels.
 Any prepared mixture storage needs an explicit capacity limit and a no-table fallback for large palettes.
 Keep this exhaustive implementation when an experiment loses or exactness/public gates remain incomplete.
+
+## Authorized public literal baseline
+
+The coordinator extends S29 from clean `65475193487b9b05a403525e6f36ae25d04a3a21` through public baseline validation.
+Keep literal checkpoints retained; add no optimization or measurements.
+
+- [x] Extract the unchanged pixel loop and wire bounded Processor execution; verify exact output and allocation boundaries.
+- [ ] Add borrowed private/public tagged Yliluoma dispatch and strict controls; build scalar/threaded artifacts and verify ABI/types.
+- [ ] Extend actual public benchmark adapters and installed-package fixtures; verify Chromium, Firefox, WebKit and report clean head.
+
+Family 3 is Yliluoma. Reuse private field slots with matrix width in parameter and all unused controls zero.
+S28 reserves dither error paths 26–35; Yliluoma matrix size uses 36. Shared placement tags match S28.
+
+The allocation-free caller-owned loop preserves the literal math and still uses per-read conversion.
+Processor reuses the existing quantize preflight/caught boundary, with exactly two buffer reservations and no RGBA8 intermediate.
+Mode overhead counts its controls and the existing temporary converter. Separable capacity charges stay unchanged.
+Sixteen focused native tests pass, including 180 full Processor combinations, exact/one-under budgets, both reservation failures, caught copy/completion recovery, and invalid placement before allocation.

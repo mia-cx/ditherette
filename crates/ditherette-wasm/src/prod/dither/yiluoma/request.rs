@@ -60,37 +60,46 @@ pub fn dither_yiluoma(
         .reserve(&mut indices, count)
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
+    dither_yiluoma_into(layout.source, &prepared, &mut indices, size, placement);
+    let indices = ImageBuf::<PaletteIndex8>::from_vec_packed(indices, layout.output)
+        .expect("validated dimensions and reserved index length");
+    Ok(prepared.into_indexed(indices))
+}
+
+/// Writes the literal scalar recipe into validated caller-owned index storage without allocation.
+/// Alpha preparation and adaptive placement retain their distinct source-byte inputs.
+pub fn dither_yiluoma_into(
+    source: crate::image::ImageView<'_, crate::image::Rgba8>,
+    prepared: &PreparedQuantizer,
+    indices: &mut [u8],
+    size: BayerSize,
+    placement: crate::prod::contract::request::Placement,
+) {
+    let dimensions = source.dimensions();
+    assert_eq!(
+        indices.len(),
+        dimensions.pixel_count().expect("valid dimensions")
+    );
+    let matching = prepared.matcher().matching;
     let palette = prepared.palette();
     let matcher = prepared.matcher();
-    for y in 0..layout.output.height() {
-        for x in 0..layout.output.width() {
-            let source = layout
-                .source
-                .pixel(x, y)
-                .expect("source pixel is in bounds");
-            let rgba = [source[0], source[1], source[2], source[3]];
+    for y in 0..dimensions.height() {
+        for x in 0..dimensions.width() {
+            let pixel = source.pixel(x, y).expect("source pixel is in bounds");
+            let rgba = [pixel[0], pixel[1], pixel[2], pixel[3]];
             let index = match palette.prepare_pixel(rgba) {
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
-                    let coordinates = rgb8_to_coordinates(rgb, quantize.matching.space());
+                    let coordinates = rgb8_to_coordinates(rgb, matching.space());
                     let nearest = matcher.nearest(coordinates);
-                    let mask = placement_mask_at(
-                        layout.source,
-                        x,
-                        y,
-                        quantize.matching.space(),
-                        placement,
-                    );
+                    let mask = placement_mask_at(source, x, y, matching.space(), placement);
                     let target = adaptive_target(coordinates, nearest.coordinates, mask);
                     let mix =
                         best_matched_mix(target, matcher, (size.width() * size.width()) as u32);
                     ordered_mix_index(mix, x, y, size)
                 }
             };
-            indices[y as usize * layout.output.width_usize() + x as usize] = index;
+            indices[y as usize * dimensions.width_usize() + x as usize] = index;
         }
     }
-    let indices = ImageBuf::<PaletteIndex8>::from_vec_packed(indices, layout.output)
-        .expect("validated dimensions and reserved index length");
-    Ok(prepared.into_indexed(indices))
 }

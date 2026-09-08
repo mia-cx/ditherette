@@ -2,7 +2,7 @@
 //! Shared palette matching and Bayer ranks remain their existing production implementations.
 
 mod request;
-pub use request::dither_yiluoma;
+pub use request::{dither_yiluoma, dither_yiluoma_into};
 
 use super::ordered::{bayer_value, BayerSize};
 use crate::prod::quantize::{matcher::PaletteMatcher, metric::distance_score};

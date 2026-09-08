@@ -172,7 +172,7 @@ impl Processor {
         result
     }
 
-    /// Separable modes quantize a complete clipped/rounded RGBA8 intermediate; None is direct quantize.
+    /// Separable modes quantize completed RGBA8; Yliluoma searches literal mixtures; None directly quantizes.
     pub fn dither_and_quantize<B: super::quantize::QuantizeBoundary>(
         &mut self,
         request: super::quantize::QuantizeRequest<'_>,
@@ -201,11 +201,15 @@ impl Processor {
             State::Ready => {}
         }
         use crate::prod::contract::request::DitherPolicy;
-        let perturb = match dither {
+        let mode_capacity = match dither {
             DitherPolicy::None {} => {
                 return self.quantize_with_allocator(request, boundary, allocator)
             }
-            DitherPolicy::Separable { perturb } => perturb,
+            DitherPolicy::Separable { .. } => {
+                size_of::<crate::prod::contract::request::PerturbPolicy>() as u64
+                    + size_of::<Vec<u8>>() as u64
+            }
+            DitherPolicy::Yliluoma { .. } => size_of::<DitherPolicy>() as u64,
             _ => {
                 return Err(Failure::new(
                     ErrorCode::UnsupportedOperation,
@@ -216,14 +220,13 @@ impl Processor {
         self.state = State::Running;
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
-            + size_of::<crate::prod::contract::request::PerturbPolicy>() as u64
-            + size_of::<Vec<u8>>() as u64
+            + mode_capacity
             + super::perturb::working_capacity_bytes()
             + boundary.capacity_bytes();
         self.peak_capacity = overhead;
-        let result = super::quantize::run_with_perturb(
+        let result = super::quantize::run_with_dither(
             request,
-            Some(perturb),
+            dither,
             boundary,
             allocator,
             self.memory_limit,

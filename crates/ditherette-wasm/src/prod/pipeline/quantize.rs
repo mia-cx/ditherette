@@ -7,7 +7,7 @@ use crate::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
-            request::{AlphaPolicy, MatchPolicy, PerturbPolicy},
+            request::{AlphaPolicy, BayerSize, DitherPolicy, MatchPolicy, PerturbPolicy},
         },
         palette::{PreparationError, PreparedPalette},
         quantize::PreparedQuantizer,
@@ -61,9 +61,55 @@ pub(super) fn run_with_perturb<B: QuantizeBoundary, A: Allocator>(
     overhead: u64,
     peak: &mut u64,
 ) -> Result<B::Output, Failure> {
-    if let Some(policy) = perturb {
-        super::perturb::validate(policy)?;
-    }
+    run_with_dither(
+        request,
+        perturb.map_or(DitherPolicy::None {}, |perturb| DitherPolicy::Separable {
+            perturb,
+        }),
+        boundary,
+        allocator,
+        limit,
+        overhead,
+        peak,
+    )
+}
+
+pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
+    request: QuantizeRequest<'_>,
+    dither: DitherPolicy,
+    boundary: &mut B,
+    allocator: &mut A,
+    limit: u64,
+    overhead: u64,
+    peak: &mut u64,
+) -> Result<B::Output, Failure> {
+    let perturb = match dither {
+        DitherPolicy::None {} => None,
+        DitherPolicy::Separable { perturb } => {
+            super::perturb::validate(perturb)?;
+            Some(perturb)
+        }
+        DitherPolicy::Yliluoma { placement, .. } => {
+            super::perturb::validate_placement(placement).map_err(|error| {
+                Failure::new(
+                    error.code,
+                    match error.path {
+                        ErrorPath::PerturbRadius => ErrorPath::DitherRadius,
+                        ErrorPath::PerturbThreshold => ErrorPath::DitherThreshold,
+                        ErrorPath::PerturbSoftness => ErrorPath::DitherSoftness,
+                        _ => ErrorPath::DitherPlacement,
+                    },
+                )
+            })?;
+            None
+        }
+        _ => {
+            return Err(Failure::new(
+                ErrorCode::UnsupportedOperation,
+                ErrorPath::Dither,
+            ))
+        }
+    };
     let dimensions = dimensions(request.source_width, request.source_height, true)?;
     let source_len = dimensions
         .storage_len::<Rgba8>()
@@ -135,7 +181,24 @@ pub(super) fn run_with_perturb<B: QuantizeBoundary, A: Allocator>(
     } else {
         source
     };
-    prepared.quantize_into(quantize_source, &mut indices);
+    if let DitherPolicy::Yliluoma { size, placement } = dither {
+        use crate::prod::dither::ordered::BayerSize as Matrix;
+        let size = match size {
+            BayerSize::Two => Matrix::Two,
+            BayerSize::Four => Matrix::Four,
+            BayerSize::Eight => Matrix::Eight,
+            BayerSize::Sixteen => Matrix::Sixteen,
+        };
+        crate::prod::dither::yiluoma::dither_yiluoma_into(
+            source,
+            &prepared,
+            &mut indices,
+            size,
+            placement,
+        );
+    } else {
+        prepared.quantize_into(quantize_source, &mut indices);
+    }
     boundary.complete(&indices, dimensions, prepared.palette())
 }
 
