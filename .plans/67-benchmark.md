@@ -9,7 +9,7 @@ Its sole conflict retained S26's existing `rgb8_to_coordinates` addition verbati
 
 - [x] Register exact native inverse, field, placement, source-conversion, and complete Processor adapters with typed identities and focused untimed tests.
 - [x] Extend the existing public protocol and actual package conformance for perturb/separable outputs after S03's public baseline.
-- [ ] Declare the fixed 208-worker experiment and conformance fixtures, validate without measurements, and hand off clean checkpoints.
+- [x] Declare the fixed 208-worker experiment and conformance fixtures, validate without measurements, and hand off clean checkpoints.
 
 ## Fixed proposed measurement scope
 
@@ -92,3 +92,33 @@ This artifact supports conformance only; measurements require separately prepare
 Validation passed six browser-worker tests, four native field-adapter tests, eleven paired-browser tests,
 and 28 Node browser/timing/IPC tests. Both Rust bins/examples checks pass.
 No production, spec, image, or landed kernel implementation changed.
+
+## Experiment declaration and measurement handoff
+
+`field_integration_plan` writes either the 25-case native experiment or the nine-case public experiment.
+Use the public experiment independently for Chromium, Firefox, and WebKit.
+Each case has two alternating accepted/candidate pairs, giving `(25 + 9 * 3) * 2 * 2 = 208` serial workers.
+The generator test verifies scopes, sample counts, caps, unique settings, and identical native/public complete recipes.
+Declarations and frozen fixtures were generated under `target/s26-protocol-validation/` without collecting samples.
+
+Reproduce declarations with the assigned native benchmark target:
+
+```sh
+cargo run --manifest-path crates/ditherette-bench/Cargo.toml --locked --example field_integration_plan -- native NEW_NATIVE_JSON HOST_LOAD_NOTES
+cargo run --manifest-path crates/ditherette-bench/Cargo.toml --locked --example field_integration_plan -- public NEW_PUBLIC_JSON HOST_LOAD_NOTES
+cargo run --manifest-path crates/ditherette-bench/Cargo.toml --locked --example field_conformance -- NEW_FIXTURE_JSON
+```
+
+All generators refuse to overwrite existing output paths.
+The component SourceConversion control keeps the actual per-pixel `rgb8_to_coordinates` helper unchanged.
+Its per-pixel converter construction remains inside the batch timer on both revisions.
+Only actual perturb/adaptive calculations may use the coordinator's call-owned converter candidate.
+
+The coordinator must prepare accepted/candidate immutable artifacts and supply a separate Wasm build cache before browser preparation.
+This worktree owns only the native benchmark cache at `.worktrees/v1-s24-bench/crates/ditherette-bench/target`.
+Retain its `target/s24-*` evidence. Wait for coordinator clearance before any measurement.
+The coordinator drains agents/builds/tests and holds the shared benchmark lease across all workers and browser children.
+No PR, merge, publishing, deployment, or issue closure belongs to this benchmark checkpoint.
+
+The experiment declaration test passed, bringing the focused Rust total to 22.
+Rust formatting, JavaScript formatting, `git diff --check`, and bins/examples validation pass.
