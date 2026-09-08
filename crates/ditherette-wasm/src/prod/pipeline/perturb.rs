@@ -13,7 +13,7 @@ use crate::{
             request::{BayerSize, Field, PerturbPolicy, Placement},
         },
         dither::{blue_noise, ordered, random_noise},
-        tiling::RowBand,
+        tiling::{RowBand, RowBandBuffers},
     },
 };
 
@@ -85,22 +85,46 @@ pub(super) fn execute_with_progress(
         policy.strength,
         policy.placement,
         RowBand::new(0, source.dimensions().height()).expect("validated dimensions"),
-        |x, y, index| match policy.field {
-            Field::Bayer { size } => ordered::bayer_noise_at(
-                x,
-                y,
-                match size {
-                    BayerSize::Two => ordered::BayerSize::Two,
-                    BayerSize::Four => ordered::BayerSize::Four,
-                    BayerSize::Eight => ordered::BayerSize::Eight,
-                    BayerSize::Sixteen => ordered::BayerSize::Sixteen,
-                },
-            ),
-            Field::Random { seed } => random_noise::random_noise_at(seed, index),
-            Field::BlueNoise {} => blue_noise::blue_noise_at(x, y),
-        },
+        |x, y, index| field_value(policy.field, x, y, index),
         progress,
     )
+}
+
+/// Runs the same field recipe in preflighted bands; progress stays on the caller.
+pub(super) fn execute_bands(
+    source: ImageView<'_, Rgba8>,
+    output: &mut [u8],
+    policy: PerturbPolicy,
+    work: &mut RowBandBuffers<()>,
+    progress: &mut impl FnMut(u64) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    crate::prod::dither::perturb::perturb_by_field_bands_into(
+        source,
+        output,
+        policy.space,
+        policy.strength,
+        policy.placement,
+        work,
+        |x, y, index| field_value(policy.field, x, y, index),
+        progress,
+    )
+}
+
+fn field_value(field: Field, x: u32, y: u32, index: u64) -> f32 {
+    match field {
+        Field::Bayer { size } => ordered::bayer_noise_at(
+            x,
+            y,
+            match size {
+                BayerSize::Two => ordered::BayerSize::Two,
+                BayerSize::Four => ordered::BayerSize::Four,
+                BayerSize::Eight => ordered::BayerSize::Eight,
+                BayerSize::Sixteen => ordered::BayerSize::Sixteen,
+            },
+        ),
+        Field::Random { seed } => random_noise::random_noise_at(seed, index),
+        Field::BlueNoise {} => blue_noise::blue_noise_at(x, y),
+    }
 }
 
 pub(super) fn run<B: Boundary, A: Allocator>(
@@ -112,6 +136,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     peak: &mut u64,
     store: &mut super::preparation::Store,
 ) -> Result<B::Output, Failure> {
+    let execution = store.execution_policy();
     validate(request.perturb)?;
     let dimensions = dimensions(request.source_width, request.source_height, true)?;
     let len = dimensions
@@ -142,28 +167,47 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         let result = boundary.complete(&image.bytes, image.dimensions);
         return call.finish(progress.finish(result, boundary.progress()));
     }
+    let band_plan = execution
+        .indexed
+        .map(|policy| super::row_fields::Plan::new(dimensions, policy, true))
+        .transpose()?;
+    let band_capacity = band_plan
+        .as_ref()
+        .map_or(0, |plan| plan.additional_capacity());
+    call.charge_working_capacity(band_capacity, peak)?;
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
+    let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
     let [source, output, _, _] = &mut call.scratch.buffers;
     let source = ImageView::packed(source, dimensions).expect("validated source storage");
-    let output = ImageViewMut::packed(output, dimensions).expect("reserved output storage");
-    if enabled {
+    if bands.is_some() || enabled {
         progress.report(
             boundary.progress(),
             Stage::Perturb,
             0,
             u64::from(dimensions.height()),
         )?;
-        execute_with_progress(source, output, request.perturb, |completed| {
+        let mut report = |completed| {
             progress.report(
                 boundary.progress(),
                 Stage::Perturb,
-                u64::from(completed),
+                completed,
                 u64::from(dimensions.height()),
             )
-        })?;
+        };
+        if let Some(work) = &mut bands {
+            execute_bands(source, output, request.perturb, work, &mut report)?;
+        } else {
+            let output = ImageViewMut::packed(output, dimensions).expect("reserved output storage");
+            execute_with_progress(source, output, request.perturb, |completed| {
+                report(u64::from(completed))
+            })?;
+        }
     } else {
+        let output = ImageViewMut::packed(output, dimensions).expect("reserved output storage");
         execute(source, output, request.perturb);
     }
+    drop(bands);
+    call.release_working_capacity(band_capacity);
     let content = call.content(1, 1, dimensions);
     call.retain_rgba(1, key, 1, dimensions, content, peak);
     let bytes = call

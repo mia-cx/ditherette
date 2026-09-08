@@ -24,8 +24,14 @@ struct Io {
     ready: bool,
     fail_copy: bool,
     fail_stage: Option<Stage>,
+    fail_after_work: bool,
     time: u64,
     events: Vec<Progress>,
+    caller: std::thread::ThreadId,
+    metadata: Option<(
+        crate::image::contracts::NormalizedPalette,
+        Vec<crate::image::contracts::ProcessWarning>,
+    )>,
 }
 impl Io {
     fn new(enabled: bool) -> Self {
@@ -35,8 +41,11 @@ impl Io {
             ready: false,
             fail_copy: false,
             fail_stage: None,
+            fail_after_work: false,
             time: 0,
             events: Vec::new(),
+            caller: std::thread::current().id(),
+            metadata: None,
         }
     }
     fn reset(&mut self) {
@@ -46,15 +55,18 @@ impl Io {
 }
 impl Callback for Io {
     fn now_ms(&mut self) -> Result<u64, Failure> {
-        self.time += 20;
+        self.time += if self.fail_after_work { 60 } else { 20 };
         Ok(self.time)
     }
     fn report(&mut self, event: Progress) -> Result<(), ()> {
+        assert_eq!(std::thread::current().id(), self.caller);
         if event.stage == Stage::Complete {
             assert!(self.ready, "durable copy must precede completion");
         }
         self.events.push(event);
-        if self.fail_stage == Some(event.stage) {
+        if self.fail_stage == Some(event.stage)
+            && (!self.fail_after_work || event.completed.is_some_and(|completed| completed > 0))
+        {
             Err(())
         } else {
             Ok(())
@@ -104,9 +116,146 @@ impl QuantizeBoundary for Io {
         &mut self,
         bytes: &[u8],
         dimensions: ImageDimensions,
-        _: IndexedMetadataRef<'_>,
+        metadata: IndexedMetadataRef<'_>,
     ) -> Result<Vec<u8>, Failure> {
+        self.metadata = Some((metadata.palette.clone(), metadata.warnings.to_vec()));
         Boundary::complete(self, bytes, dimensions)
+    }
+}
+
+fn band_policy(workers: u32, height: u32) -> crate::prod::pipeline::execution::ExecutionPolicy {
+    use crate::prod::{
+        pipeline::execution::{ExecutionPolicy, RowBandPolicy},
+        tiling::WorkerBudget,
+    };
+    ExecutionPolicy {
+        indexed: Some(RowBandPolicy {
+            height,
+            workers: WorkerBudget::new(workers),
+            active_workers: workers,
+        }),
+        ..ExecutionPolicy::default()
+    }
+}
+
+#[test]
+fn field_band_public_calls_preserve_results_caches_and_callback_transactions() {
+    for method in 1..5 {
+        let mut scalar = Io::new(true);
+        let expected = run(
+            &mut Processor::new(4 << 20, 0).unwrap(),
+            &mut scalar,
+            method,
+        )
+        .unwrap();
+        for workers in [1, 2, 4] {
+            for height in [1, 2, 3] {
+                let mut processor = Processor::new(4 << 20, 0).unwrap();
+                processor
+                    .set_execution_policy(band_policy(workers, height))
+                    .unwrap();
+                let mut io = Io::new(true);
+                assert_eq!(run(&mut processor, &mut io, method).unwrap(), expected);
+                assert_eq!(io.metadata, scalar.metadata);
+                let retained = processor.preparation.stats().0;
+                processor.set_execution_policy(Default::default()).unwrap();
+                io.reset();
+                assert_eq!(run(&mut processor, &mut io, method).unwrap(), expected);
+                assert_eq!(
+                    io.events
+                        .iter()
+                        .map(|event| event.stage)
+                        .collect::<Vec<_>>(),
+                    [Stage::Prepare, Stage::Complete]
+                );
+                assert_eq!(processor.preparation.stats().0, retained);
+                for fail_stage in [Stage::Quantize, Stage::Perturb, Stage::Complete] {
+                    if (method == 1 && fail_stage == Stage::Quantize)
+                        || (method == 2 && fail_stage == Stage::Perturb)
+                    {
+                        continue;
+                    }
+                    let mut processor = Processor::new(4 << 20, 0).unwrap();
+                    processor
+                        .set_execution_policy(band_policy(workers, height))
+                        .unwrap();
+                    io.reset();
+                    io.fail_stage = Some(fail_stage);
+                    assert_eq!(
+                        run(&mut processor, &mut io, method),
+                        Err(Failure::new(ErrorCode::Callback, ErrorPath::OnProgress))
+                    );
+                    assert_eq!(processor.preparation.stats().0, 0);
+                    io.reset();
+                    io.fail_stage = None;
+                    assert_eq!(run(&mut processor, &mut io, method).unwrap(), expected);
+                    assert_eq!(processor.preparation.image_stats().1, 0);
+                }
+                let mut processor = Processor::new(4 << 20, 0).unwrap();
+                processor
+                    .set_execution_policy(band_policy(workers, height))
+                    .unwrap();
+                io.reset();
+                io.fail_stage = Some(if method == 2 {
+                    Stage::Quantize
+                } else {
+                    Stage::Perturb
+                });
+                io.fail_after_work = true;
+                io.time = 0;
+                assert_eq!(
+                    run(&mut processor, &mut io, method),
+                    Err(Failure::new(ErrorCode::Callback, ErrorPath::OnProgress))
+                );
+                assert!(!io.ready);
+                assert_eq!(processor.preparation.stats().0, 0);
+                io.fail_stage = None;
+                io.fail_after_work = false;
+                io.reset();
+                io.fail_copy = true;
+                assert!(run(&mut processor, &mut io, method).is_err());
+                assert_eq!(processor.preparation.stats().0, 0);
+                io.fail_copy = false;
+                io.reset();
+                assert_eq!(run(&mut processor, &mut io, method).unwrap(), expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn field_band_complete_calls_preflight_exact_capacity_before_processing() {
+    for method in 1..5 {
+        let execute = |limit| {
+            let mut processor = Processor::new(limit, 0).unwrap();
+            processor.set_execution_policy(band_policy(4, 1)).unwrap();
+            let mut io = Io::new(true);
+            let result = run(&mut processor, &mut io, method);
+            (processor, io, result)
+        };
+        let mut lower = Processor::bookkeeping_bytes(0);
+        let mut upper = 1 << 20;
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2;
+            if execute(middle).2.is_ok() {
+                upper = middle;
+            } else {
+                lower = middle + 1;
+            }
+        }
+        let (processor, _, result) = execute(upper);
+        assert!(result.is_ok());
+        assert!(processor.peak_capacity_bytes() <= upper);
+        let (processor, io, result) = execute(upper - 1);
+        assert_eq!(
+            result,
+            Err(Failure::new(
+                ErrorCode::MemoryLimit,
+                ErrorPath::MemoryLimitBytes
+            ))
+        );
+        assert!(io.events.iter().all(|event| event.stage == Stage::Prepare));
+        assert_eq!(processor.preparation.stats().0, 0);
     }
 }
 

@@ -11,4 +11,5 @@ pub mod processor;
 pub mod progress;
 pub mod quantize;
 mod resize;
+mod row_fields;
 mod stages;

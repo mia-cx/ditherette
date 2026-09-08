@@ -35,7 +35,7 @@ No public API, execution selector, cache identity, or callback contract changes.
 3. [x] Define S36 recipes through existing complete-call benchmark subjects.
    Reuse typed native/public mappings and verify frozen output without timing.
    Root owns the measured dimensions, trial matrix, and scheduling selection.
-4. [ ] Join the shared pooled executor and integrate candidate row scheduling
+4. [x] Join the shared pooled executor and integrate candidate row scheduling
    through private fragments. Report progress only after joined work on the caller.
 5. [ ] After root quiet clearance, compare fresh complete-call host-worker artifacts.
    Select only measured wins, record scalar winners, and hand off a reviewable PR.
@@ -126,3 +126,27 @@ This fixture does not claim those unwired public behaviors are implemented.
 Validation passes 33 focused scalar tests and three focused threaded tests.
 All jobs have exited. Only this worktree's native `target/compiler` was used.
 No timing, Wasm compilation, threshold selection, or public selector was added.
+
+## Public candidate checkpoint
+
+Joined final S34 report head `d4531667e1158c2068f30614f40c9d39f8c5313e`
+and S35 private policy seam `f437a18578f786be2ed7cd4cba48f7537db54e32`.
+Private indexed policy now schedules complete `perturb`, `quantize`, separable
+`ditherAndQuantize`, and `process` calls. Public defaults remain scalar.
+One row plan serves perturbation and quantization sequentially. Preflight counts
+its assignment ownership and concurrent converters with all other live call data.
+The existing scalar converter charge counts the first field worker only once.
+The call drops execution metadata before cache retention and durable output.
+
+All 34 native threaded library tests and 17 focused scalar integration tests pass.
+New complete-call tests vary 1/2/4 workers and 1/2/3-row bands. They check unchanged
+metadata, policy-independent cache hits, caller-thread callbacks, callback failure
+after joined work, final-copy failure, no failed publication, and successful reuse.
+Exact full-call minimum budgets succeed; one-under fails before processing stages.
+Existing adapter matrices still match frozen bytes and full-source adaptive seams.
+
+S35 identified one shared pressure-order follow-up: capacity charging must let
+`prepare` discard idle scratch before evicting LRU entries. Its owner is applying
+that correction. The final integration joins it before benchmark delivery.
+Root owns host-worker builds and complete-call measurement. No timing or Wasm
+build has run in this worktree.
