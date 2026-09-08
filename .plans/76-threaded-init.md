@@ -269,3 +269,8 @@ The report-only handoff preserves measured source and all runtime bytes.
 Rebase with `--rebase-merges` onto final S33 `b2ca677e` leaves delivery `3863cadc` unchanged.
 Root owns the six S34 compiler directories for cleanup; copied binaries, artifacts, snapshots, and raw evidence remain retained.
 The PR stays non-draft, unmerged, and without auto-merge. Routine review remains deferred until the full stack.
+
+S34 is filed as [PR #124](https://github.com/mia-cx/ditherette/pull/124), based on `impl/v1-s33-progress`.
+Report commit `beaadc2e29097ee12399a194b619b347ed724860` changes documentation only.
+Measured candidate `c01467f9` and accepted protocol `3f2cc41a` remain ancestors of the PR branch.
+The final plan-only commit records this URL; root receives its exact pushed head separately.
