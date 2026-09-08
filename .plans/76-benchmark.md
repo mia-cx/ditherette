@@ -7,7 +7,8 @@ The benchmark owner receives this worktree after S33 handoff and joins final S33
 
 Two initialization cases use a one-pixel nearest probe outside the initialization timer.
 One case supplies already-loaded Wasm bytes. The other supplies an already-compiled module.
-Both exclude package import and asset fetch. Browser compilation caches are not reset.
+Both exclude package import and the initial Wasm fetch. Each new threaded pool can still load worker modules inside initialization.
+Browser compilation caches are not reset.
 Record these scopes rather than claiming cold network or first-ever compilation costs.
 
 Run two comparisons across Chromium, Firefox, and WebKit:
@@ -25,8 +26,8 @@ Threaded and scalar absolute times are different initialization paths, not a cla
 
 - [x] Add optional typed role thread policies to the developer protocol and evidence. Historical declarations retain scalar behavior.
 - [x] Pass the selected public threads option through the actual adapter's preload and measured create call.
-- [ ] Reuse each role's existing Wasm asset entry for its selected scalar or threaded artifact. Bind exact bytes and worker assets through normal provenance.
-- [ ] Add focused protocol, actual adapter, and generator tests without running timing measurements.
+- [x] Reuse each role's existing Wasm asset entry for its selected scalar or threaded artifact. Bind exact bytes and worker assets through normal provenance.
+- [x] Add focused protocol, actual adapter, and generator tests without running timing measurements.
 - [ ] Prepare clean revision-bound accepted and candidate artifacts after runtime validation. Preserve identical benchmark protocol in both.
 - [ ] Drain agents/builds/tests, audit processes, and run the fixed matrix only under root's exclusive clearance.
 - [ ] Record worker reaping, exact probe outputs, browser/tool versions, sample counts, startup medians, and retained artifact hashes.
@@ -48,3 +49,15 @@ The runtime/installed fixture owners supply real required-pool evidence before a
 
 The only compiler target currently claimed is this worktree's new ordinary `target/compiler`.
 No S33 compiler output is reused. No new helper imports or manual browser routes are needed.
+
+`startup_integration_plan regression|threaded NEW_JSON HOST_LOAD_NOTES` reuses the S20 nearest fixture and its two initialization scopes.
+The probe is exactly 1×1 RGBA `[11, 23, 47, 127]`, with 1×1 output and center nearest.
+Both plans retain two pairs, twenty samples, 50 ms warmup, and a 10-second cap, totaling 48 serial workers.
+Two generator fixtures pass, including frozen probe equality and the inherited S20 declaration test.
+All Rust tests/examples compile with the existing stage-example unused-import warning only.
+
+The coordinator selects `package/dist/wasm/scalar/ditherette_wasm_bg.wasm` for each disabled role.
+Each required role selects `package/dist/wasm/threads/ditherette_wasm_bg.wasm` through its existing bundle-source Wasm entry.
+Make selection in new source descriptors before immutable snapshots; preserve the complete package tree, including factory/bootstrap/worker assets.
+Normal snapshot provenance binds every retained file and the selected entrypoint. Do not mutate an existing prepared snapshot.
+Accepted preparation remains final S33 runtime plus this shared protocol, never the S34 implementation.
