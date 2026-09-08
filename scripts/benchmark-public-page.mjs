@@ -228,6 +228,15 @@ export function primeChangedSource(request, call) {
 	}
 }
 
+/** Check every observed call so a later call cannot hide transient input mutation. */
+export function assertMeasuredSource(request, rgba) {
+	if (
+		request.source.data.length !== rgba.length ||
+		!request.source.data.every((byte, index) => byte === rgba[index])
+	)
+		throw new Error('Operation mutated source bytes.');
+}
+
 // Comparison views share buffers. Stability snapshots own separate typed storage.
 function outputView(output) {
 	if ('indices' in output) {
@@ -443,7 +452,11 @@ export async function runTrial(trial) {
 		const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
 		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
 		const stability = outputStability(outputBytes, format);
-		const mismatch = await preflightOperation(operation, trial.reference_output, stability.observe);
+		const observe = (outputs) => {
+			stability.observe(outputs);
+			assertMeasuredSource(operation.request, trial.case.rgba);
+		};
+		const mismatch = await preflightOperation(operation, trial.reference_output, observe);
 		if (trial.case.browser.operation.operation === 'process') {
 			const comparison = await prepareOperation({
 				...trial,
@@ -466,8 +479,6 @@ export async function runTrial(trial) {
 				comparison.close();
 			}
 		}
-		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
-			throw new Error('Operation mutated source bytes during preflight.');
 		if (mismatch && trial.case.browser.measure_nonexact !== true)
 			return {
 				...identity,
@@ -486,17 +497,15 @@ export async function runTrial(trial) {
 						measurement,
 						create: operation.create,
 						probe: operation.probe,
-						observe: stability.observe,
+						observe,
 						outputBytes
 					})
 				: await collectCalls({
 						measurement,
 						prepare: operation.prepare,
-						observe: stability.observe,
+						observe,
 						outputBytes
 					});
-		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
-			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
 		// Keep the actual timing result separate. Instability evidence is the first distinct pair,
 		// not a claim that the final timed output still differs (A/B/A must also fail).

@@ -49,3 +49,12 @@ The matrix validates eight cases and rejects throughput or missing cache-state c
 
 Final checks passed: 25 focused Rust tests, 30 browser protocol/timing tests, all benchmark examples compile, and `git diff --check`.
 The coordinator must join the latest parent corrections before preparing role artifacts.
+
+## Adversarial follow-up
+
+Native verification previously checked only the final result. It now retains the first mismatch from warmup, discarded calls, or samples.
+Warm native calls also check measured input against the frozen result after priming, before timing starts.
+Browser observations now check source bytes after each single call, catching mutation that a later call could hide.
+Focused tests verify failed setup cleanup, transient output evidence, actual cold/warm adapter inputs, and failed browser priming disposal.
+Follow-up validation passed 11 Rust tests and 32 JavaScript tests. Earlier protocol checks remain applicable.
+All support commits include the actual GPT-6-astra co-author trailer. The branch had no remote head before rewriting.
