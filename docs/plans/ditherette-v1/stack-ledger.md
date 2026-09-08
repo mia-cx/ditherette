@@ -38,6 +38,8 @@ Its fresh comparison completes 208 workers and 4,048 samples. Untimed verifier r
 Browser pair-noise gates remain inconclusive, so the original field implementation stays selected. No retry runs.
 S26 is delivered in [PR115](https://github.com/mia-cx/ditherette/pull/115) at `bb36452ca831bad485f924e7ee007f9bbdb1cb0d`, targeting S25.
 The delivery rebase preserves measured runtime bytes. See [the measurement record](../../../.plans/67-measurement.md).
+Combined resize/S26 join `82a7e3e9` passes 327 native, 26 interface, 12 private ABI, and all three installed-package engines.
+Its [join record](../../../.plans/67-resize-join.md) records unchanged kernel bytes, adapter checks, and the validation tarball.
 S27 public blue noise reaches `e4a44b718d49c48902806c0a35726ca1acac06ef` on `impl/v1-s27-blue-noise`.
 Native/private/interface checks, both builds, and all three package engines pass. Benchmark evidence and the PR remain pending.
 S28 literal diffusion reaches `91cd93207e1935c53e04cd7b9678cdae742e6f99` on `impl/v1-s28-diffusion`.
