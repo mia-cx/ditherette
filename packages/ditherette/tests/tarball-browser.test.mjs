@@ -8,7 +8,7 @@ import { extname, join, relative, resolve as resolvePath } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { chromium, firefox, webkit } from 'playwright';
+import { browserEngines, browserLaunchOptions } from './browser-engines.mjs';
 import { browserChecks } from './browser-fixture.mjs';
 import { fieldBrowserChecks } from './field-browser-fixture.mjs';
 import { diffusionBrowserChecks } from './diffusion-browser-fixture.mjs';
@@ -141,12 +141,9 @@ test('installed tarball loads only scalar assets and runs the public contract in
 			})
 	);
 	const origin = `http://127.0.0.1:${server.address().port}`;
-	for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
+	for (const [name, engine] of browserEngines()) {
 		await t.test(name, async () => {
-			const browser = await engine.launch({
-				executablePath:
-					name === 'webkit' ? process.env.DITHERETTE_TEST_WEBKIT_EXECUTABLE : undefined
-			});
+			const browser = await engine.launch(browserLaunchOptions(name));
 			try {
 				const yiluomaReference = await yiluomaOracleChecks(browser, name, oracle, yiluoma, tarball);
 				const page = await browser.newPage();

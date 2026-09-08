@@ -9,8 +9,8 @@ Join the final publication heads before delivery.
 
 ## TODOs
 
-- [ ] Add crate-owned conformance commands and CI using existing installed-package fixtures.
-- [ ] Join focused scalar boundary and repeated-memory browser checks from the isolated memory branch.
+- [x] Add crate-owned conformance commands and CI using existing installed-package fixtures.
+- [x] Join focused scalar boundary and repeated-memory browser checks from the isolated memory branch.
 - [ ] Run the integrated native/interface/browser/website checks and record exact artifact evidence.
 - [ ] Record failed or absent coverage, file an unmerged PR, and return compiler outputs for cleanup.
 
@@ -32,3 +32,14 @@ Pinned WebKit 26.4 retains atomic-wait workers in the independent S34 diagnostic
 Keep its threaded cleanup gate failed until a verified engine fixes it. Scalar WebKit remains required.
 The CI report must distinguish this omitted unsafe threaded execution from passing scalar coverage.
 Performance gates, inherited bilinear reference drift, and noisy comparisons remain S41 work.
+
+## Integrated checkpoint
+
+Final dependency base `5fccb9e6a51c6de49fd0051b204fb16bfde75e22` includes the three published
+row-policy heads and final S39. The memory fixture joins at `e72cbe7b8a8eb56569a9ff76c1101a748999c180`.
+Native release tests pass 424 scalar and 425 threaded checks. Package checks pass 42 interface,
+four generated-factory, 17 private-ownership, two staging, and one engine-selection tests.
+The website passes 68 server and six Chromium tests with the ordinary tarball staged.
+All three scalar memory engines pass; both supported threaded lifecycle engines pass 12 test records.
+The first broad run passes Chromium and Firefox. WebKit cannot load its system woff library.
+Its focused retry uses the existing test-owned library alias, without changing shared browser files.
