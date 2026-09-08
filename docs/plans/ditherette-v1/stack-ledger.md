@@ -132,6 +132,16 @@ Evidence lives at `.worktrees/v1-s31-preparation/target/s31-trial-01`; only `*-p
 The benchmark owner writes the report while the runtime owner prepares its stacked PR. No benchmark remains active.
 This validated-runtime handoff permits S32 to begin on `972d4e9a` while S31's report-only PR handoff finishes.
 The S32 owner rebases its plan checkpoint and owns image-stage identity/store/pipeline integration in its isolated worktree.
+S31 is delivered in [PR121](https://github.com/mia-cx/ditherette/pull/121) at `a3c9629f35280c36e838faa00e9b664b23abcb53`, based on final S30 `f408bc99`.
+Frozen-reference CI passes. A resolved rebase conflict preserves exact tree equality and the measured `972d4e9a` ancestor.
+The [S31 report](../../../.plans/72-benchmark-results.md) verifies 128 matching starts/reaps, maximum live worker count one, 64 exact pairs, and 2,560 samples.
+Its [four inconclusive cases](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5587432141) remain S41 work.
+Raw threaded Wasm grows 10.47%; the [size-review item](https://github.com/mia-cx/ditherette/issues/84#issuecomment-5587431766) remains explicit for S42/S43.
+S32 checkpoint `4e9baaad80d6e590303dcdfed5346f01f259b8ce` includes final S31 ancestry and passes exact stage-identity and owned-metadata tests.
+Issue #73's S31 blocker is removed after verifying that ancestry. Its same-store transaction and pipeline wiring remain in progress.
+The runtime owner uses `.worktrees/v1-s32-stages`; the public-fixture owner uses `.worktrees/v1-s32-public`; the benchmark owner uses `.worktrees/v1-s32-bench`.
+Benchmark checkpoint `64eb3357` declares four cold/warm workloads and verifies per-sample priming helpers. No S32 measurements have run.
+These three owners have disjoint source/test/protocol responsibilities. S31 compiler caches are no longer assigned to any agent.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -151,6 +161,8 @@ Cargo clean refused the missing root `CACHEDIR.TAG`; cleanup instead removed thr
 After PR119 opened, ten returned S24 quantize/S30 benchmark compiler profiles reclaimed another 10.91 GiB. Disk free space is 66 GiB.
 After the S30 review fixes, its returned `target/compiler-review` cache reclaimed another 418 MiB of disk blocks.
 Current S31 builds bring worktrees to 47 GiB with 60 GiB free; active caches remain assigned until PR handoff.
+S31 handoff returns six compiler targets; their cleanup reclaims 6.93 GiB of disk blocks without changing retained artifact/report hashes.
+The returned trusted-checker target reclaims another 369 MiB. Future checks rebuild it when needed.
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
 Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
 Total compiler cleanup reclaims about 70 GiB. New slices own only their explicitly assigned worktree-local compiler outputs.
