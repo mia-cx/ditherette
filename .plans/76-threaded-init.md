@@ -187,7 +187,7 @@ Main JS remains supported through scalar execution. The correction preserves
 preferred fallback and required capability errors, without adding a host worker,
 bootstrap worker, scheduler, browser blacklist, or public option.
 
-1. [ ] Prove main-JS capability rejection and disabled-path inertness with focused tests.
+1. [x] Prove main-JS capability rejection and disabled-path inertness with focused tests.
    Add a zero-timeout `Atomics.wait` check after existing prerequisites, only when
    threads are requested. Worker contexts retain real threaded initialization.
 2. [ ] Replace abandoned-builder Rust consumption with generated glue ownership release.

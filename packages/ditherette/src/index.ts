@@ -35,9 +35,17 @@ export async function createDitherette(options?: InitOptions): Promise<Ditherett
 		throw new DitheretteError('capability', 'wasm', 'WebAssembly is unavailable.');
 	}
 	if (normalized.threads !== 'disabled') {
-		const capable = globalThis.crossOriginIsolated === true &&
+		let capable = globalThis.crossOriginIsolated === true &&
 			typeof Worker === 'function' && typeof SharedArrayBuffer === 'function' &&
-			typeof Atomics === 'object';
+			typeof Atomics === 'object' && typeof Atomics.wait === 'function';
+		if (capable) {
+			try {
+				// Rayon joins synchronously. Main JS cannot wait, even with shared memory.
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);
+			} catch {
+				capable = false;
+			}
+		}
 		if (capable) {
 			try {
 				const { createThreaded } = await import('./threads.js');
