@@ -39,30 +39,37 @@ export async function customThreadedInputs({ moduleUrl, wasmUrl }) {
 	const request = new Request(wasmUrl);
 	const module = await WebAssembly.compile(bytes);
 	const inputs = [
-		wasmUrl,
-		new URL(wasmUrl),
-		request,
-		response,
-		response,
-		bytes,
-		padded.subarray(3, 3 + bytes.byteLength),
-		new DataView(padded.buffer, 3, bytes.byteLength),
-		module
+		['string', wasmUrl],
+		['URL', new URL(wasmUrl)],
+		['Request', request],
+		['Response first use', response],
+		['Response reuse', response],
+		['ArrayBuffer', bytes],
+		['offset Uint8Array', padded.subarray(3, 3 + bytes.byteLength)],
+		['offset DataView', new DataView(padded.buffer, 3, bytes.byteLength)],
+		['WebAssembly.Module', module]
 	];
 	const image = {
 		version: 1,
 		source: { width: 1, height: 1, data: new Uint8Array([19, 83, 127, 255]) },
 		output: { width: 1, height: 1, resize: { algorithm: 'nearest', anchor: 'center' } }
 	};
-	for (const wasm of inputs) {
-		const instance = await createDitherette({ threads: 'required', wasm });
+	for (const [form, wasm] of inputs) {
+		let instance;
 		try {
+			instance = await createDitherette({ threads: 'required', wasm });
 			const output = instance.resize(image);
 			instance.dispose();
 			if (String(output.data) !== '19,83,127,255')
 				throw new Error('Custom input changed durable output.');
+		} catch (error) {
+			if (error instanceof Error) {
+				error.message = `${form}: ${error.message} (code=${error.code}, path=${error.path})`;
+				throw error;
+			}
+			throw new Error(`${form}: ${String(error)}`, { cause: error });
 		} finally {
-			instance.dispose();
+			instance?.dispose();
 		}
 	}
 	if (response.bodyUsed || request.bodyUsed)
