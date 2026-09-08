@@ -147,6 +147,11 @@ S01 establishes the inherited port as the stack anchor. At drafting time, the re
 
 When a parent changes, restack descendants, verify their actual dependency ancestry, and rerun checks invalidated by the change. Preserve the frozen spec content checkpoint through rebases.
 
+After each completed PR implementation, remove its rebuildable Rust compiler outputs. Rebuild them when review needs them.
+Before cleanup, drain owned jobs and resolve target symlinks against the coordinator's active cache assignments.
+Preserve source, benchmark reports, immutable trial snapshots, and other retained evidence, including evidence stored inside a target directory.
+Keep a shared cache only while an active slice owns it; clean it when that ownership ends. Record reclaimed space in the handoff.
+
 ### Dependency availability without merges
 
 Implementation availability means validated prerequisite code is present in the child's ancestry. It does not require a merge.
