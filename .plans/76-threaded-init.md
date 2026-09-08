@@ -170,3 +170,35 @@ All owned builders and browser jobs are drained. Root owns the five immutable
 snapshots and exclusive startup trial. No measurements run in this worktree.
 Artifact source remains `1d1cba89`; this plan-only handoff is a separate delivery
 commit. Keep step 5 pending until root returns measurement/report ownership.
+
+## Blocking-wait capability correction
+
+The exclusive trial stops after 24 scalar workers pass. Its first threaded
+Chromium worker fails during untimed preflight, before collecting samples.
+A tight repeated create(bytes)/dispose loop through the exact snapshot server
+reproduces the failure at calls 2 and 15. Served-only diagnostics show
+`builder.build()` throws `Atomics.wait cannot be called in this context`.
+Cleanup then masks it with `attempted to take ownership of Rust value while
+it was borrowed` from the Rust abandoned-builder adapter.
+
+Root resolves the execution contract against decisions 24/36 and frozen lifecycle.
+Synchronous threaded execution needs a caller context permitting blocking waits.
+Main JS remains supported through scalar execution. The correction preserves
+preferred fallback and required capability errors, without adding a host worker,
+bootstrap worker, scheduler, browser blacklist, or public option.
+
+1. [ ] Prove main-JS capability rejection and disabled-path inertness with focused tests.
+   Add a zero-timeout `Atomics.wait` check after existing prerequisites, only when
+   threads are requested. Worker contexts retain real threaded initialization.
+2. [ ] Replace abandoned-builder Rust consumption with generated glue ownership release.
+   Unregister the builder's JS finalizer without entering possibly poisoned Rust
+   borrow state. Failed attempts still terminate workers and discard module memory.
+   Test a borrowed/trapped builder and successful subsequent independent initialization.
+3. [ ] Move installed ownership/custom-input/partial-start assertions into the existing
+   processing-host worker context. Keep main-JS preferred scalar fallback and
+   required capability assertions, including zero threaded imports or worker starts.
+4. [ ] Record focused validation and a buildable checkpoint. Root owns benchmark
+   host-worker adaptation, artifact refresh, and restarting the exclusive trial.
+
+The earlier custom-input rejection is consistent with this race, but its missing
+raw error prevents attributing that historical failure conclusively.
