@@ -18,6 +18,7 @@ use crate::{
         dither::error_diffusion::prepared::{
             execute_with_progress, execute_with_scratch, DiffusionPolicy,
         },
+        dither::yiluoma::row_bands::YliluomaBands,
     },
 };
 
@@ -99,6 +100,21 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         let result = boundary.complete(bytes, output_dimensions, metadata);
         return call.finish(progress.finish(result, boundary.progress()));
     }
+    let mixing_policy = execution
+        .mixing
+        .filter(|_| matches!(dither, DitherPolicy::Yliluoma { .. }));
+    let mixing_capacity = mixing_policy
+        .map(|policy| {
+            YliluomaBands::required_bytes(
+                output_dimensions,
+                policy.height,
+                policy.workers,
+                policy.active_workers,
+            )
+        })
+        .transpose()?
+        .unwrap_or(0);
+    call.charge_working_capacity(mixing_capacity, peak)?;
     let band_plan = execution
         .indexed
         .filter(|_| {
@@ -149,6 +165,17 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         peak,
         allocator,
     )?;
+    let mut mixing = mixing_policy
+        .map(|policy| {
+            YliluomaBands::try_new(
+                output_dimensions,
+                policy.height,
+                policy.workers,
+                policy.active_workers,
+                mixing_capacity,
+            )
+        })
+        .transpose()?;
     let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
     if resize.is_some() && !resized_hit {
         let (_, prepared, scratch) = call.parts();
@@ -293,7 +320,9 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     BayerSize::Eight => Matrix::Eight,
                     BayerSize::Sixteen => Matrix::Sixteen,
                 };
-                if enabled {
+                if let Some(work) = &mut mixing {
+                    work.execute(view, prepared, indices, matrix, placement, &mut report_row)?;
+                } else if enabled {
                     crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
                         view,
                         prepared,
@@ -320,6 +349,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     }
     drop(bands);
     call.release_working_capacity(band_capacity);
+    drop(mixing);
+    call.release_working_capacity(mixing_capacity);
     if let Some(key) = resize_key {
         call.retain_rgba(0, key, 1, output_dimensions, rgba_content, peak);
     }
