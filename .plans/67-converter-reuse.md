@@ -8,12 +8,12 @@ It changes no conversion equations, lookup table contents, neighborhood order, r
 
 ## TODOs
 
-- [ ] Share one call-owned converter between adaptive placement and source conversion in the production field loop.
-- [ ] Preserve single-pixel conversion as an unchanged construction-inclusive benchmark control.
-- [ ] Verify frozen bytes, masks, alpha, row bands, complete composition, and exact/one-under memory budgets.
-- [ ] Join identical public benchmark adapters into both roles and validate the actual installed packages before timing.
-- [ ] Run one fresh 208-worker comparison under the declared S26 matrix, after all agents/builds/tests drain.
-- [ ] Select only exact output and a passing required-case regression/noise gate; otherwise retain the baseline.
+- [x] Share one call-owned converter between adaptive placement and source conversion in the production field loop.
+- [x] Preserve single-pixel conversion as an unchanged construction-inclusive benchmark control.
+- [x] Verify frozen bytes, masks, alpha, row bands, complete composition, and exact/one-under memory budgets.
+- [x] Join identical public benchmark adapters into both roles and validate the actual installed packages before timing.
+- [x] Run one fresh 208-worker comparison under the declared S26 matrix, after all agents/builds/tests drain.
+- [x] Select only exact output and a passing required-case regression/noise gate; otherwise retain the baseline.
 
 ## Target and limits
 
@@ -31,3 +31,10 @@ No measurements begin before the public protocol and fixtures finish.
 The existing working-capacity charge already includes one temporary Converter.
 The candidate must not retain another converter alongside it or change that bound without updating actual capacity accounting.
 Frozen spec, image storage, landed resize/shared helpers, and quantizer remain unchanged.
+
+## Outcome
+
+The candidate remains on `impl/v1-s26-converter` at `b237b7468fa5fc349760bc0086bd1748113b6d82`.
+It exceeds the complete-call target. Untimed verifier repair establishes exact native controls, but browser noise gates remain incomplete.
+The accepted branch retains the original field implementation. No retry runs.
+See the [measurement record](67-measurement.md) for every median, artifact identity, and limitation.

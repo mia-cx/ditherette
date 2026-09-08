@@ -105,7 +105,12 @@ pub fn verify_three_way(
             .issues
             .push("case requires a named, versioned semantic recipe".into());
     }
-    if expected.semantics.operation != Operation::Resize && expected.semantics.space.is_none() {
+    // Field thresholds depend on global coordinates/seed, independently of color coordinates.
+    if !matches!(
+        expected.semantics.operation,
+        Operation::Resize | Operation::FieldEvaluation
+    ) && expected.semantics.space.is_none()
+    {
         report
             .issues
             .push("operation requires an explicit working-space identity".into());

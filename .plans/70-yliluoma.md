@@ -32,7 +32,7 @@ No request adapter, prepared mixture table, memo, optimization, or benchmark exe
 
 ## Native request checkpoint
 
-Literal math baseline is `9718b168`. The request adapter follows the frozen pixel loop, including original-source adaptive placement after alpha-prepared target conversion.
+Literal math baseline is `9718b16841296c9094e304fe1c4b9d2b6f0e3b85`. The request adapter follows the frozen pixel loop, including original-source adaptive placement after alpha-prepared target conversion.
 It reuses PreparedQuantizer through one crate-private `matcher()` borrow. Source conversion still constructs the existing converter per read.
 Existing Budget reserves output fallibly and counts prepared capacities, the index record, and one temporary converter.
 Mixture search retains constant scratch and no palette cross-product allocation. Source bytes remain borrowed.
@@ -52,6 +52,20 @@ Two untimed adapter tests pass, including 45 metric/palette combinations using 2
 `cargo check --locked --manifest-path crates/ditherette-bench/Cargo.toml --all-targets` passes.
 Two older fixed-scope benchmark plan examples gain explicit unreachable Yliluoma arms for the extended native-operation enum.
 No benchmark collector or measurement process runs.
+
+## Delivered dependency join
+
+Native request checkpoint is `3ef8cdc534072ce4b1fbfc526a4ca3c9c1999fe8`; typed adapter checkpoint is `5e82f83f991759f24b6362464ca83ef2b7ee174b`.
+The branch joins S26 PR #115 head `bb36452ca831bad485f924e7ee007f9bbdb1cb0d`, based on S25 delivery.
+That delivered tree equals the original accepted parent plus measurement records and the field-verifier repair.
+Conflicts from rewritten S26 history retain the S29 additions and the delivered S26 records, verifier, and focused verifier tests.
+The join's diff against delivered S26 contains only this S29 scope.
+The S26 converter candidate remains absent from this branch.
+
+After resolving the join, all benchmark targets typecheck and 19 focused benchmark/verification tests pass.
+The inherited retained-evidence replay stays ignored; it requires the coordinator's immutable trial files and does not run here.
+Both crate format checks pass. Frozen content verification retains revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b` and SHA-256 `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+Frozen spec, shared image storage, and freeze policy have no diff from delivered S26.
 
 ## Next bounded scope
 
