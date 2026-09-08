@@ -20,7 +20,7 @@ use ditherette_bench::{
 };
 use ditherette_bench_api::{verification::*, ResizeParams};
 use ditherette_wasm::{
-    bench_subjects::{quantize as adapters, scores, BenchSubject},
+    bench_subjects::{field_calls, fields, quantize as adapters, scores, BenchSubject},
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
 };
@@ -165,6 +165,13 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
             ));
         };
         let callable = match operation {
+            native::NativeOperation::FieldComponent { component } => {
+                component.prod_subject() == subject_id
+            }
+            native::NativeOperation::Perturb { .. } => field_calls::PERTURB_SUBJECT == subject_id,
+            native::NativeOperation::Separable { .. } => {
+                field_calls::SEPARABLE_SUBJECT == subject_id
+            }
             native::NativeOperation::MetricScores { metric } => metric.prod_subject() == subject_id,
             native::NativeOperation::Quantize { .. } => {
                 adapters::quantize_function(subject_id).is_some()
@@ -223,6 +230,11 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
 }
 
 enum TypedWorkload<'a> {
+    FieldComponent(fields::PreparedComponent<'a>),
+    CompleteField {
+        call: field_calls::CompleteCall<'a>,
+        processor: ditherette_wasm::prod::pipeline::processor::Processor,
+    },
     Scores {
         run: scores::ScoreFn,
         pairs: Vec<scores::ScorePair>,
@@ -242,6 +254,10 @@ enum TypedWorkload<'a> {
 impl Workload for TypedWorkload<'_> {
     fn run(&mut self) -> Result<(), BenchError> {
         match self {
+            Self::FieldComponent(batch) => batch.run_production(),
+            Self::CompleteField { call, processor } => call
+                .run(processor)
+                .map_err(|e| BenchError::Runtime(e.to_string()))?,
             Self::Scores { run, pairs, values } => {
                 scores::score_into(std::hint::black_box(pairs.as_slice()), values, *run);
                 // Every batch writes observable scores, including throughput iterations.
@@ -299,6 +315,18 @@ fn run_typed(
     let reference_output = verify(&case.reference_subject)?;
     let before = verify(subject_id)?;
     let mut workload = match operation {
+        native::NativeOperation::FieldComponent { component } => TypedWorkload::FieldComponent(
+            fields::PreparedComponent::new(*component, parameters.source())
+                .map_err(|e| BenchError::Runtime(e.to_string()))?,
+        ),
+        native::NativeOperation::Perturb { .. } | native::NativeOperation::Separable { .. } => {
+            TypedWorkload::CompleteField {
+                call: field_calls::CompleteCall::new(&parameters)
+                    .map_err(|e| BenchError::Runtime(e.to_string()))?,
+                processor: field_calls::processor()
+                    .map_err(|e| BenchError::Runtime(e.to_string()))?,
+            }
+        }
         native::NativeOperation::MetricScores { metric } => TypedWorkload::Scores {
             run: metric.prod_function(),
             pairs: scores::prepare_pairs(parameters.source(), *metric)
