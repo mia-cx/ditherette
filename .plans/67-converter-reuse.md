@@ -8,9 +8,9 @@ It changes no conversion equations, lookup table contents, neighborhood order, r
 
 ## TODOs
 
-- [ ] Share one call-owned converter between adaptive placement and source conversion in the production field loop.
-- [ ] Preserve single-pixel conversion as an unchanged construction-inclusive benchmark control.
-- [ ] Verify frozen bytes, masks, alpha, row bands, complete composition, and exact/one-under memory budgets.
+- [x] Share one call-owned converter between adaptive placement and source conversion in the production field loop.
+- [x] Preserve single-pixel conversion as an unchanged construction-inclusive benchmark control.
+- [x] Verify frozen bytes, masks, alpha, row bands, complete composition, and exact/one-under memory budgets.
 - [ ] Join identical public benchmark adapters into both roles and validate the actual installed packages before timing.
 - [ ] Run one fresh 208-worker comparison under the declared S26 matrix, after all agents/builds/tests drain.
 - [ ] Select only exact output and a passing required-case regression/noise gate; otherwise retain the baseline.
@@ -31,3 +31,13 @@ No measurements begin before the public protocol and fixtures finish.
 The existing working-capacity charge already includes one temporary Converter.
 The candidate must not retain another converter alongside it or change that bound without updating actual capacity accounting.
 Frozen spec, image storage, landed resize/shared helpers, and quantizer remain unchanged.
+
+## Candidate validation
+
+The four-file candidate passes 13 native field/processor tests and 11 benchmark adapter/metric tests.
+All 24 interface/type tests and 11 private ABI tests pass, including repeated failure and reentry capacity checks.
+Both Wasm variants build. Installed-package checks pass Chromium, Firefox, and WebKit.
+Each engine checks 91 frozen field vectors and 1,365 compositions.
+The trusted frozen guard retains digest `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+Formatting and diff checks pass. An independent read-only review found no actionable issues.
+These checks establish correctness only. The candidate remains unselected until the declared comparison passes.

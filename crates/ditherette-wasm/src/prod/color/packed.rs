@@ -4,25 +4,12 @@
 use super::{convert_rgb, ColorSpaceF32, ColorTables};
 use crate::{
     image::{ImageView, Rgba8},
-    prod::contract::request::MatchPolicy,
+    prod::contract::request::{MatchPolicy, WorkingSpace},
 };
 
 /// Uses the landed packed forward converter for palette-free working coordinates.
-pub fn rgb8_to_coordinates(
-    rgb: [u8; 3],
-    space: crate::prod::contract::request::WorkingSpace,
-) -> [f32; 3] {
-    use crate::prod::contract::request::WorkingSpace;
-    let space = match space {
-        WorkingSpace::Srgb => PackedSpace::Srgb,
-        WorkingSpace::LinearRgb => PackedSpace::LinearRgb,
-        WorkingSpace::Oklab => PackedSpace::Oklab,
-        WorkingSpace::Oklch => PackedSpace::Oklch,
-        WorkingSpace::Cielab => PackedSpace::Cielab,
-        WorkingSpace::Cielch => PackedSpace::Cielch,
-        WorkingSpace::Ycbcr => PackedSpace::Ycbcr,
-    };
-    Converter::new(space).coordinates(rgb)
+pub fn rgb8_to_coordinates(rgb: [u8; 3], space: WorkingSpace) -> [f32; 3] {
+    Converter::new(PackedSpace::from_working(space)).coordinates(rgb)
 }
 
 /// Packed coordinate spaces accepted by direct palette matching.
@@ -41,6 +28,19 @@ pub enum PackedSpace {
 pub type OrdinarySpace = PackedSpace;
 
 impl PackedSpace {
+    /// Maps palette-free working coordinates to the existing packed converter.
+    pub(crate) const fn from_working(space: WorkingSpace) -> Self {
+        match space {
+            WorkingSpace::Srgb => Self::Srgb,
+            WorkingSpace::LinearRgb => Self::LinearRgb,
+            WorkingSpace::Oklab => Self::Oklab,
+            WorkingSpace::Oklch => Self::Oklch,
+            WorkingSpace::Cielab => Self::Cielab,
+            WorkingSpace::Cielch => Self::Cielch,
+            WorkingSpace::Ycbcr => Self::Ycbcr,
+        }
+    }
+
     /// Maps every valid tagged matching recipe to its coordinate space.
     /// The optional return preserves the S24 native adapter interface.
     pub const fn from_matching(matching: MatchPolicy) -> Option<Self> {
