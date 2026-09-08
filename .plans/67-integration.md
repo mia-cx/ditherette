@@ -18,5 +18,7 @@ S26's existing interface/private/both-build/three-browser evidence remains appli
 No new performance evidence or optimization is claimed by this join.
 
 Native benchmark registration `cdbd6e07e98fceb77ebea8bd7b791159b430227d` joins without conflicts.
-All four field adapter tests pass in the combined tree. Public benchmark registration is still in progress.
+All four field adapter tests pass in the combined tree. Public benchmark registration completes at `60516c6a`.
 The [converter candidate plan](67-converter-reuse.md) fixes its target and single-comparison budget before implementation.
+
+The [completed measurement](67-measurement.md) retains the baseline because required candidate gates remain incomplete.
