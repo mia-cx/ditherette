@@ -90,8 +90,9 @@ Private family 2 exposes diffusion through the existing borrowed numeric ABI; th
 The package adds canonical kernel, feedback, serpentine, strength, and placement validation and publishes the same durable indexed result.
 Forty public/private Node tests pass, including 360 generated frozen diffusion vectors, arithmetic distinctions, metadata, exact budgets, copy failures, and recovery.
 Scalar and threads package artifacts build using the assigned S24 target's scalar/threads children. TypeScript and declaration fixtures pass.
-Installed-tarball conformance passes in Chromium 147.0.7727.15 and Firefox 148.0.2, including all 360 diffusion vectors without cross-origin isolation.
-WebKit 2272 cannot launch because the host lacks libwoff2dec.so.1.0.2; its fixture remains registered.
+Installed-tarball conformance passes in Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4, including all 360 diffusion vectors without cross-origin isolation.
+WebKit uses the coordinator's existing launcher through `DITHERETTE_TEST_WEBKIT_EXECUTABLE=/home/mia/mia-cx/ditherette/.worktrees/v1-s20-worker/target/s20-webkit-alias/webkit`.
+Its dependency aliases remain unchanged; no system packages or copied libraries are added.
 The pnpm automatic dependency-install check rejects borrowed node_modules links; build commands use the installed tools directly. Tarball checks disable that automatic installation with `pnpm_config_verify_deps_before_run=false`.
 
 ## Candidate benchmark handoff
@@ -105,3 +106,39 @@ The browser protocol validates identity, complete indexed metadata, and rejects 
 Public complete-call timing remains separate from the borrowed native comparison. There is no equivalent bounded full-image public baseline; initial public evidence can use the same candidate artifact in both roles.
 Six browser protocol tests and 28 JS transport/timing tests pass. Their fixtures perform untimed operations or use fake clocks, never actual performance measurements.
 No ring optimization is selected and no S28 PR is filed. The coordinator owns fresh paired measurements and the selection checkpoint.
+
+## Declared experiment budget and final validation
+
+The public checkpoint is `e5793547d50d37a2dba5f4403086e15ceee14dae`; native/public candidate adapters are `ffe996bf26062b5ade13d4b554ee9e5cea44a562`.
+`crates/ditherette-bench/examples/diffusion_integration_plan.rs` generates typed native or public experiments without measuring them.
+Its CLI takes `native|public`, a new output JSON path, and host-load notes. Existing output files are never overwritten.
+Use the assigned S24 quantize target explicitly when building or running this example.
+
+The fixed declaration has eight recipes at 65 by 33 pixels with sixteen palette entries, including transparency.
+It covers every kernel with both feedback modes. Matching rotates through sRGB Euclidean, Oklab Euclidean, and CIEDE2000.
+Scan direction, all three alpha policies, and everywhere/adaptive placement rotate across those recipes instead of multiplying them.
+Adaptive placement covers radii one and two. Input contains zero, fractional, and opaque alpha.
+Native cases compare the literal full-image subject against the three-row subject with the same borrowed-source scope.
+Public cases self-pair the ring package in primed instances, separately from native results. Both public roles must use the same immutable package artifact.
+
+Before measurement, the coordinator records fresh artifact identities, workload targets, host load, and exclusive clearance.
+The declared budget is two pairs and twenty single-call samples per role, with 50 ms warmup and a 10,000 ms measurement window per worker.
+Eight native cases plus eight public cases in each of three engines declare 128 serial workers and 2,560 retained samples.
+Their nominal warmup/measurement windows total 1,286.4 seconds; startup, verification, and single-call overshoot are additional.
+There are no automatic retries or extra candidate revisions in this declaration. The coordinator must bound process time separately.
+The existing release gate rejects confirmed per-case median regressions above ten percent. Public self-pairs establish evidence, not an optimization comparison.
+
+The generator's focused test passes. It checks identities, round-trip typed validation, control coverage, call scopes, subjects, and fixed counts.
+The final installed-tarball run passes all four test entries, including all three engines.
+The coordinator's full trusted S18 freeze guard also passes, including independent native/Wasm spec and production compilation, dependencies, and syntax.
+The frozen digest remains `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+Temporary task-owned root links now use ignored ordinary directories with borrowed child links; no dependency or cache contents are deleted.
+The assigned scalar and threads caches remain children of the S24 quantize target. Other agents' targets are untouched.
+
+Built package Wasm SHA-256 values:
+
+- Scalar: `a65aa6fbcce15ec8268c0fce3bbbd4da3f96656dca8e0c9c527730e9ffa49d4e`.
+- Threads: `4d02309582a00b46a092df40d7f643535395333bce739fd51d41e33bd6c85afa`.
+
+These files are validated local artifacts, not fresh clean-checkpoint benchmark provenance. The coordinator prepares immutable measurement artifacts after the final commit.
+No measurements, candidate selection, PR filing, or issue changes occur in this checkpoint.
