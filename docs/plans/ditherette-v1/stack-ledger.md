@@ -19,7 +19,7 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ### S35 through S40 handoff, 2026-09-09
 
-Thirty-nine slices have open, unmerged implementation PRs. S40 is in progress.
+Forty slices have open, unmerged implementation PRs. S41 and S42 are in progress.
 
 | Slice | PR | Branch | Immediate base | Head |
 | --- | --- | --- | --- | --- |
@@ -38,6 +38,20 @@ S40 base `5fccb9e6a51c6de49fd0051b204fb16bfde75e22` joins final S37 and S39 `593
 Root owns `impl/v1-s40-conformance`, shared fixtures, CI, and delivery.
 Memory fixture `e72cbe7b8a8eb56569a9ff76c1101a748999c180` joins from its isolated branch.
 The S41 preparation agent only inspected existing matrices and evidence. No benchmark runs during conformance.
+
+S40 is delivered in [PR129](https://github.com/mia-cx/ditherette/pull/129) at `96c281180529c3849823736581daebdcdbd8493e`,
+targeting the explicit `impl/v1-s40-base` join. It adds crate-owned conformance commands and package CI.
+The [report](https://github.com/mia-cx/ditherette/blob/96c281180529c3849823736581daebdcdbd8493e/docs/plans/ditherette-v1/s40-conformance.md)
+records 424 scalar/425 threaded native tests, all three scalar engines, supported Chromium/Firefox pool lifecycle,
+68 server and six website browser tests. Scalar memory stabilizes at 19 pages after warmup and 512 changing calls.
+The local missing-library WebKit launch fails first; its isolated library-alias retry passes. Threaded WebKit remains blocked.
+S35/S36/S37 return about 1.7 GiB of compiler outputs; S40 returns another 326 MiB. Artifacts and logs remain intact.
+
+S41 and S42 start from that final S40 head. Their satisfied native GitHub blockers are removed; every issue remains open.
+S41 matrix/TS adapters belong to `impl/v1-s41-performance`. Its separate cold-cache candidate belongs to `impl/v1-s41-cache-candidate`.
+S42 owns `impl/v1-s42-package`, distribution and publication preparation only. No publication or benchmark is authorized during this phase.
+The root coordinator checks integration ancestry and tracking. All 41 current open implementation PR heads, including the restoration,
+are ancestors of final S40. S43 must repeat that check after S41/S42 delivery.
 
 Current integration work continues on `impl/v1-resize-integration` in `.worktrees/v1-resize-integration`.
 It owns the tracked progress table; the root table remains the visible mirror.
