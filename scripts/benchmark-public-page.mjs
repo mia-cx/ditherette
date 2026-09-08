@@ -4,6 +4,7 @@ import {
 	retainedOutputSlots
 } from './benchmark-public-timing.mjs';
 import { prepareStageSample, stagePrimeRequest } from './benchmark-stage-cache.mjs';
+import { progressProbe } from './benchmark-progress.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -47,6 +48,19 @@ export async function prepareOperation(trial) {
 	const config = trial.case.browser;
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
+	if (
+		config.progress !== undefined &&
+		(!config.progress ||
+			!['disabled', 'enabled'].includes(config.progress.accepted) ||
+			!['disabled', 'enabled'].includes(config.progress.candidate) ||
+			config.accepted !== 'package' ||
+			config.candidate !== 'package' ||
+			config.preparation !== 'fresh-instance' ||
+			measurement.mode !== 'single-call' ||
+			measurement.scope !== 'complete-call' ||
+			measurement.application_cache !== 'cold')
+	)
+		throw new Error('Progress comparisons require cold single ordinary package calls.');
 	const quantize = config.operation.operation === 'quantize';
 	const perturb = config.operation.operation === 'perturb';
 	const separable = config.operation.operation === 'separable';
@@ -124,6 +138,8 @@ export async function prepareOperation(trial) {
 									}
 								})
 			};
+	const progress = config.progress?.[trial.role] === 'enabled' ? progressProbe() : undefined;
+	if (progress) request.onProgress = progress.onProgress;
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
 		if (process) throw new Error('No faithful TypeScript Process adapter is registered.');
@@ -218,8 +234,10 @@ export async function prepareOperation(trial) {
 	if (config.preparation === 'fresh-instance') {
 		return {
 			request,
+			observe: progress?.verify,
 			prepare: async () => {
 				const instance = await create();
+				progress?.reset();
 				return { call: () => call(instance), close: () => instance.dispose() };
 			},
 			close() {}
@@ -487,6 +505,7 @@ export async function runTrial(trial) {
 		const observe = (outputs) => {
 			stability.observe(outputs);
 			assertMeasuredSource(operation.request, trial.case.rgba);
+			operation.observe?.();
 		};
 		const mismatch = await preflightOperation(operation, trial.reference_output, observe);
 		if (trial.case.browser.operation.operation === 'process') {
@@ -497,6 +516,7 @@ export async function runTrial(trial) {
 					browser: {
 						...trial.case.browser,
 						cache: 'none',
+						progress: undefined,
 						preparation:
 							trial.case.browser.preparation === 'primed-sample'
 								? 'fresh-instance'

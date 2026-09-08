@@ -55,6 +55,7 @@ fn case(
         preparation,
         cache: CacheCapability::None,
         measure_nonexact: false,
+        progress: None,
     };
     Ok(PairCase {
         native: None,

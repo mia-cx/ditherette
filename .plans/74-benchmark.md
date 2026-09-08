@@ -36,9 +36,9 @@ Inspect that adapter branch explicitly. Keep callback evidence distinct from out
 
 ## Atomic steps
 
-- [ ] Extend typed development metadata and adapter wiring. Prove omitted historical metadata retains existing behavior.
+- [x] Extend typed development metadata and adapter wiring. Prove omitted historical metadata retains existing behavior.
 - [x] Add the constant-storage callback observer and focused reset/invalid-event checks.
-- [ ] Add focused fake-clock/full-trial tests for actual enabled callbacks, observation reset, and thrown callback propagation.
+- [x] Add focused fake-clock/full-trial tests for actual enabled callbacks, observation reset, and thrown callback propagation.
 - [ ] Generate the fixed matrix from reused fixtures. Validate identities and exact frozen outputs without timing.
 - [ ] Join final runtime and public fixtures, then build fresh accepted/candidate artifacts with the official preparers.
 - [ ] After root quiet clearance, run the fixed comparison and record every per-case gate.
@@ -52,3 +52,22 @@ After PR handoff, return compiler ownership for cleanup while retaining artifact
 The initial observer passes four Node tests. It retains only counters and scalar fields, never an event array.
 Its bounded callback checks are part of enabled-call timing. Reset and verification belong outside timers.
 Full adapter integration and measurements remain pending.
+
+The protocol checkpoint adds optional `browser.progress` accepted/candidate modes,
+each `disabled` or `enabled`. Historical cases and evidence omit the field unchanged.
+Evidence validation binds it independently of image semantics. Progress comparisons
+require cold, fresh-instance, single ordinary package calls.
+
+The adapter creates its constant-storage probe before timing, resets after fresh
+instance creation, and verifies alongside existing untimed output/source observations.
+Only callback dispatch and bounded callback work enter the method timer. The untimed
+Process counterpart clears progress metadata, preserving its semantic comparison.
+Official public snapshots and conformance snapshots both copy the new helper.
+
+Three full-trial fake-clock tests failed before wiring, then pass after it. They cover
+role selection, every-call reset, a transient incomplete callback stream, thrown
+callback work, and processor disposal. All 23 focused Node tests and 25 Rust browser
+protocol/transport tests pass. The metadata test round-trips historical JSON and
+rejects missing role evidence. `cargo check --tests --examples --locked` passes;
+the inherited stage example has one test-only unused-import warning outside tests.
+Rust output ownership is exclusively this worktree's `target/compiler`.

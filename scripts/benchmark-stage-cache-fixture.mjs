@@ -2,11 +2,19 @@ export const events = [];
 let nextId = 0;
 let callCount = 0;
 let mismatchAt = 0;
+let progressCalls = 0;
+let progressFailure;
+
+export function failProgress(failure) {
+	progressFailure = failure;
+}
 
 export function reset(transientMismatchAt = 0) {
 	events.length = 0;
 	nextId = callCount = 0;
 	mismatchAt = transientMismatchAt;
+	progressCalls = 0;
+	progressFailure = undefined;
 }
 
 export async function createDitherette() {
@@ -15,6 +23,21 @@ export async function createDitherette() {
 	const call = (method, request) => {
 		events.push({ type: method, id, source: [...request.source.data] });
 		const mismatch = ++callCount === mismatchAt;
+		if (request.onProgress) {
+			const failure = ++progressCalls === progressFailure?.at ? progressFailure.kind : undefined;
+			events.push({ type: 'callback', id });
+			request.onProgress(
+				failure === 'throw'
+					? {
+							get stage() {
+								throw new Error('injected callback failure');
+							}
+						}
+					: { stage: 'prepare', completed: 0, total: 1 }
+			);
+			if (failure !== 'incomplete')
+				request.onProgress({ stage: 'complete', completed: 1, total: 1 });
+		}
 		if (method === 'resize' || method === 'perturb') {
 			const data = request.source.data.slice();
 			if (mismatch) data[0] = 99;

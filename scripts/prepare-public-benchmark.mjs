@@ -235,6 +235,7 @@ export async function preparePublicBenchmark(destination) {
 		'benchmark-public-page.mjs',
 		'benchmark-public-timing.mjs',
 		'benchmark-stage-cache.mjs',
+		'benchmark-progress.mjs',
 		'benchmark-oracle-page.mjs',
 		'benchmark-transport.mjs'
 	])
