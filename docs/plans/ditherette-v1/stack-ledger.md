@@ -34,12 +34,17 @@ It passes 13 scoped native, 24 interface, 11 private ABI tests, both builds, thr
 S26 benchmark protocol completes at `60516c6a12c62f90080b884df6918c1c287f86f3`, with 22 Rust and 28 Node checks passing.
 Accepted S26 integration `3915f60519995cb9087a18b3bfd6bd7220ae804a` preserves the validated public implementation.
 Converter candidate `b237b7468fa5fc349760bc0086bd1748113b6d82` passes native/public/frozen checks and independent review.
-Its fresh 208-worker comparison remains pending. Neither role changes landed resize kernels or frozen content.
+Its fresh comparison completes 208 workers and 4,048 samples. Untimed verifier repair confirms exact native controls.
+Browser pair-noise gates remain inconclusive, so the original field implementation stays selected. No retry runs.
+S26 is delivered in [PR115](https://github.com/mia-cx/ditherette/pull/115) at `bb36452ca831bad485f924e7ee007f9bbdb1cb0d`, targeting S25.
+The delivery rebase preserves measured runtime bytes. See [the measurement record](../../../.plans/67-measurement.md).
 S27 public blue noise reaches `e4a44b718d49c48902806c0a35726ca1acac06ef` on `impl/v1-s27-blue-noise`.
 Native/private/interface checks, both builds, and all three package engines pass. Benchmark evidence and the PR remain pending.
 S28 literal diffusion reaches `91cd93207e1935c53e04cd7b9678cdae742e6f99` on `impl/v1-s28-diffusion`.
 It passes 8,640 matrix and 240 zero-strength cases, constructor checks, 13 frozen tests, and scalar compilation.
 Three-row scratch, bounded public integration, benchmarks, and the PR remain pending.
+S29 starts the missing literal Yliluoma implementation in `impl/v1-s29-yliluoma` from validated accepted S26 `3915f605`.
+S27 benchmark preparation, S28 bounded/public work, and S29 literal work now run in separate worktrees.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
