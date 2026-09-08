@@ -16,9 +16,10 @@ import { validateResize, validateQuantize } from './validation.js';
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
 import { processErrorPath, validateProcess } from './validation-process.js';
 
-type Bindings = ReturnType<
+export type Bindings = Pick<ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
->;
+>, 'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
+	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize'>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
 
@@ -128,26 +129,8 @@ export async function createScalar(options: {
 	try {
 		const { createScalarBindings } = await import('./wasm/scalar/ditherette_wasm.factory.js');
 		const bindings = createScalarBindings();
-		let wasm = options.wasm;
-		if (typeof Response !== 'undefined' && wasm instanceof Response) wasm = wasm.clone();
-		if (typeof Request !== 'undefined' && wasm instanceof Request) wasm = wasm.clone();
-		// Chromium rejects DataView at its Wasm boundary. Normalize every view without copying bytes.
-		if (ArrayBuffer.isView(wasm))
-			wasm = new Uint8Array(wasm.buffer, wasm.byteOffset, wasm.byteLength);
-		await bindings.default({ module_or_path: wasm });
-		let status: number;
-		try {
-			status = bindings.privateInitialize(options.memoryLimitBytes);
-		} catch {
-			// Pinned private initialization only adds fallible externref bookkeeping after preflight.
-			throw new DitheretteError(
-				'wasm-memory-unavailable',
-				'wasm',
-				errorMessages['wasm-memory-unavailable']
-			);
-		}
-		if (status !== 0) throw failure(bindings, status);
-		return new ScalarProcessor(bindings);
+		await bindings.default({ module_or_path: normalizeWasmInput(options.wasm) });
+		return initializeProcessor(bindings, options.memoryLimitBytes);
 	} catch (error) {
 		if (error instanceof DitheretteError) throw error;
 		const code = error instanceof RangeError ? 'wasm-memory-unavailable' : 'initialization';
@@ -155,12 +138,35 @@ export async function createScalar(options: {
 	}
 }
 
-class ScalarProcessor implements Ditherette {
+/** Clone consumable bodies and preserve views without copying caller bytes. */
+export function normalizeWasmInput(wasm: InitInput | undefined): InitInput | undefined {
+	if (typeof Response !== 'undefined' && wasm instanceof Response) return wasm.clone();
+	if (typeof Request !== 'undefined' && wasm instanceof Request) return wasm.clone();
+	// Chromium rejects DataView at its Wasm boundary.
+	if (ArrayBuffer.isView(wasm)) return new Uint8Array(wasm.buffer, wasm.byteOffset, wasm.byteLength);
+	return wasm;
+}
+
+/** Share the existing processing boundary while keeping artifact resources instance-owned. */
+export function initializeProcessor(bindings: Bindings, memoryLimitBytes: number, release?: () => void): Ditherette {
+	let status: number;
+	try {
+		status = bindings.privateInitialize(memoryLimitBytes);
+	} catch {
+		throw new DitheretteError('wasm-memory-unavailable', 'wasm', errorMessages['wasm-memory-unavailable']);
+	}
+	if (status !== 0) throw failure(bindings, status);
+	return new Processor(bindings, release);
+}
+
+class Processor implements Ditherette {
 	#bindings: Bindings | undefined;
 	#active = false;
+	#release: (() => void) | undefined;
 
-	constructor(bindings: Bindings) {
+	constructor(bindings: Bindings, release?: () => void) {
 		this.#bindings = bindings;
+		this.#release = release;
 	}
 
 	process(request: ProcessRequest): IndexedImage {
@@ -354,6 +360,8 @@ class ScalarProcessor implements Ditherette {
 			}
 			if (status !== 0) throw failure(bindings, status);
 			this.#bindings = undefined;
+			this.#release?.();
+			this.#release = undefined;
 		} finally {
 			this.#active = false;
 		}
@@ -369,6 +377,8 @@ class ScalarProcessor implements Ditherette {
 	#trap(error: unknown): DitheretteError {
 		// An uncaught trap may leave Rust control state incomplete. Discard only this instance.
 		this.#bindings = undefined;
+		this.#release?.();
+		this.#release = undefined;
 		const code = error instanceof RangeError ? 'wasm-memory-unavailable' : 'runtime';
 		return new DitheretteError(code, 'wasm', errorMessages[code]);
 	}

@@ -1,7 +1,7 @@
 /** Browser wasm-bindgen inputs. Views retain their byte offset and length. */
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
-/** Scalar is the default. Required threads are unavailable until the threaded runtime lands. */
+/** Scalar is the default. Preferred threads fall back after failed capability checks or pool initialization. */
 export interface InitOptions {
 	readonly threads?: 'disabled' | 'preferred' | 'required';
 	readonly memoryLimitBytes?: number;
@@ -187,11 +187,11 @@ export interface ProcessRequest {
 	readonly source: Rgba8Image;
 	readonly palette: readonly PaletteEntry[];
 	readonly recipe: RecipeV1;
-	/** S33 adds delivery; supplied callbacks remain explicitly unsupported. */
+	/** Completion follows durable output construction and precedes successful cache publication. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 
-/** One isolated scalar processor. Calls are synchronous; hosts choose their execution context. */
+/** One isolated processor. Calls are synchronous; hosts choose their execution context. */
 export interface Ditherette {
 	/** Apply the full recipe, preserving the same RGBA8 boundaries as staged calls. */
 	process(request: ProcessRequest): IndexedImage;

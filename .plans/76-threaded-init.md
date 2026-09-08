@@ -42,7 +42,7 @@ All three paths are absent at handoff. No old caches or symlinks are reused.
 ## Atomic steps
 
 1. [x] Copy the missing frozen thread-pool contract into production and verify its baseline.
-2. [ ] Extend the existing AST factory and add isolated pool/bootstrap ownership.
+2. [x] Extend the existing AST factory and add isolated pool/bootstrap ownership.
    Prove failed startup releases acquired workers and retains valid builder lifetime.
 3. [ ] Wire typed capability selection, custom inputs, fallback, and guarded teardown.
    Validate real isolated threaded instances while preserving scalar behavior.
@@ -57,3 +57,21 @@ The literal production thread-pool model and its mechanically redirected frozen
 fixtures pass 6/6 each under the declared local native target. Dependency installation
 uses the frozen lockfile. The pool-size calculation will call the existing
 `WorkerBudget::from_available_parallelism`, preserving its `clamp(cpus / 2, 1, 8)` policy.
+
+The existing generator now emits threaded factories with a per-instance worker-start
+callback instead of the stock helper import. The original generated glue remains intact.
+Fresh local scalar and threads builds pass. Generator and built-binding fixtures prove
+independent shared memories, callback ownership, and the existing pool-size calculation.
+
+Workers initialize matching factory bindings before receiving the receiver pointer.
+Successful Rayon priming permits freeing the builder. If dispatch or build throws,
+cleanup terminates acquired workers and a private Rust export forgets the builder.
+Its allocation then belongs to the discarded module memory. This avoids a JS finalizer
+freeing a receiver while a terminating worker can still borrow it. No failed attempt
+reuses that memory. Failures before receiver dispatch free the builder normally.
+
+Twelve factory/pool tests pass, including constructor, readiness, dispatch, and build
+failure ordering. The public interface/type suite passes 35/35. An untimed Chromium
+check creates two actual required-thread pools, processes exact nearest output,
+disposes one twice, and verifies the second remains usable. Installed cross-engine
+cleanup evidence is still assigned to the public-fixture worktree.
