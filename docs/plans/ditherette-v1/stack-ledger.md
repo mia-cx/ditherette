@@ -123,6 +123,15 @@ Restored S30 blockers are removed after descendant ancestry verification. Remain
 Accepted benchmark head `863889e52f1b752b6adfc22a9c775b3823f2997e` retains S30 runtime and adds the shared preparation benchmark protocol.
 Fresh native/public accepted artifacts live in the benchmark worktree under `target/s31-baseline-863889e-native` and `target/s31-baseline-863889e-public`.
 The S31 candidate joins that protocol before its own fresh builds. The trusted frozen guard passes after moving reference comparisons into integration tests.
+S31 validated runtime is `972d4e9a5882b25bca3de5f0786ad1525b5e6329`; fresh native/public artifacts bind that clean source.
+The corrected installed-package suite passes on all three engines. Its bounded fixture now includes cache-control records and still rejects the 40,400-byte source.
+The exclusive trial finishes all four runtimes with exact outputs and no confirmed greater-than-10% slowdown.
+Chromium/Firefox gates pass; native warm Process and WebKit cold/warm Lab plus cold Lanczos3 remain inconclusive.
+Warm Lanczos3 improves across all runtimes. Retain the required preparation baseline without another candidate or retry.
+Evidence lives at `.worktrees/v1-s31-preparation/target/s31-trial-01`; only `*-prepared-v2` snapshots were measured.
+The benchmark owner writes the report while the runtime owner prepares its stacked PR. No benchmark remains active.
+This validated-runtime handoff permits S32 to begin on `972d4e9a` while S31's report-only PR handoff finishes.
+The S32 owner rebases its plan checkpoint and owns image-stage identity/store/pipeline integration in its isolated worktree.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
