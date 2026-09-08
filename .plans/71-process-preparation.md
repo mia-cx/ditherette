@@ -57,7 +57,7 @@ coordinator and reviewed S28/S29 code, not a substitute for the actual join.
   resize-then-dither sequence. Record its baseline before optimizing ownership.
   Keep intermediates in Wasm. Only the final indexed result crosses to JS.
   Preserve the RGBA8 clipping and rounding boundaries between stages.
-- [ ] Register the versioned public process request and private export. Reuse
+- [x] Register the versioned public process request and private export. Reuse
   existing option types and validation. Reject the entire invalid request before
   output work, and count simultaneous prepared data, source, intermediates,
   indices, scratch, and boundary capacity. Test allocation failures and recovery.
@@ -102,7 +102,31 @@ optimization has been attempted.
 The first test failed because the process module and method were absent. It now
 passes against frozen native process output for all four dither families,
 including full palette, transparency, warnings, and dimensions. Whole-call
-failure tests and public/private adapters follow in separate commits.
+failure tests and public/private adapters follow in a separate commit.
+The baseline is `3335bb69acc6762a30a0b6844aef436c2e6b8de6`.
+
+## Public adapter checkpoint
+
+`ProcessRequest` and `RecipeV1` expose the frozen nested recipe with `match`.
+The wrapper guards caller getters before normalization. Both staged validators
+consume each raw property once; their normalized source view remains borrowed.
+The private export shares exact resize/dither parsers and the caught indexed
+sink. Existing staged resize validation order remains unchanged.
+
+Four native process tests pass, including all seven filters, all four dither
+families, one-byte-under preflight, each buffer reservation failure, allocator
+overcapacity, invalid settings before allocation, and recovery. The two new
+private tests cover numeric groups, all families, partial-result rejection,
+reentry, disposal, and 64 repeated failure cycles with stable handles and memory.
+Fresh scalar/threads builds, 33 public interface tests, and 16 private tests pass.
+The public process fixture checks 423 staged compositions, all fifteen matching
+modes, exact budgets, nine invalid request shapes, getter reentry, three caught
+copy phases, and durable results. It also runs in the installed-browser suite.
+
+Next validate the installed tarball in all three engines. The coordinator owns
+the trusted freeze guard. Separate agents own process benchmark registrations
+and the identified frozen-Wasm Process extension. No measurement or optimization
+has run for S30.
 
 The public recipe follows the frozen version-one shape, including its serialized
 `match` key. Processing errors need recipe-relative paths where applicable.

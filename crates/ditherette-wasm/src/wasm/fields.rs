@@ -90,76 +90,9 @@ pub fn private_dither_and_quantize(
     };
     let result = (|| {
         let (source_width, source_height) = source_dimensions(width, height)?;
-        let dither = match family {
-            0.0 if [
-                field, parameter, space, strength, placement, radius, threshold, softness,
-            ]
-            .into_iter()
-            .all(|n| n == 0.0) =>
-            {
-                DitherPolicy::None {}
-            }
-            0.0 => return Err(invalid(ErrorPath::Dither)),
-            1.0 => DitherPolicy::Separable {
-                perturb: parse_policy(
-                    field, parameter, space, strength, placement, radius, threshold, softness,
-                )?,
-            },
-            2.0 => DitherPolicy::Diffusion {
-                kernel: match field {
-                    0.0 => Diffusion::FloydSteinberg,
-                    1.0 => Diffusion::Sierra,
-                    2.0 => Diffusion::SierraLite,
-                    3.0 => Diffusion::Atkinson,
-                    _ => return Err(invalid(ErrorPath::DitherKernel)),
-                },
-                feedback: match parameter {
-                    0.0 => DiffusionFeedback::SrgbBytes,
-                    1.0 => DiffusionFeedback::Matching,
-                    _ => return Err(invalid(ErrorPath::DitherFeedback)),
-                },
-                serpentine: match space {
-                    0.0 => false,
-                    1.0 => true,
-                    _ => return Err(invalid(ErrorPath::DitherSerpentine)),
-                },
-                strength: scalar(strength, ErrorPath::DitherStrength)?,
-                placement: parse_placement(
-                    placement,
-                    radius,
-                    threshold,
-                    softness,
-                    [
-                        ErrorPath::DitherPlacement,
-                        ErrorPath::DitherRadius,
-                        ErrorPath::DitherThreshold,
-                        ErrorPath::DitherSoftness,
-                    ],
-                )?,
-            },
-            3.0 if field == 0.0 && space == 0.0 && strength == 0.0 => DitherPolicy::Yliluoma {
-                size: parse_bayer_size(parameter, ErrorPath::DitherSize)?,
-                placement: parse_placement(
-                    placement,
-                    radius,
-                    threshold,
-                    softness,
-                    [
-                        ErrorPath::DitherPlacement,
-                        ErrorPath::DitherRadius,
-                        ErrorPath::DitherThreshold,
-                        ErrorPath::DitherSoftness,
-                    ],
-                )?,
-            },
-            3.0 => return Err(invalid(ErrorPath::Dither)),
-            _ => {
-                return Err(Failure::new(
-                    ErrorCode::UnsupportedOperation,
-                    ErrorPath::Dither,
-                ))
-            }
-        };
+        let dither = parse_dither(
+            family, field, parameter, space, strength, placement, radius, threshold, softness,
+        )?;
         let matching = parse_matching(matching)?;
         let alpha = parse_alpha(alpha_mode, alpha_threshold, matte)?;
         let mut entries = [PaletteEntry::Transparent {}; PALETTE_SLOTS];
@@ -178,6 +111,90 @@ pub fn private_dither_and_quantize(
     })();
     restore_ready(processor);
     result.map_or_else(status, |_| 0)
+}
+
+/// Decode the shared private dither tags without narrowing caller numbers.
+pub(super) fn parse_dither(
+    family: f64,
+    field: f64,
+    parameter: f64,
+    space: f64,
+    strength: f64,
+    placement: f64,
+    radius: f64,
+    threshold: f64,
+    softness: f64,
+) -> Result<DitherPolicy, Failure> {
+    Ok(match family {
+        0.0 if [
+            field, parameter, space, strength, placement, radius, threshold, softness,
+        ]
+        .into_iter()
+        .all(|n| n == 0.0) =>
+        {
+            DitherPolicy::None {}
+        }
+        0.0 => return Err(invalid(ErrorPath::Dither)),
+        1.0 => DitherPolicy::Separable {
+            perturb: parse_policy(
+                field, parameter, space, strength, placement, radius, threshold, softness,
+            )?,
+        },
+        2.0 => DitherPolicy::Diffusion {
+            kernel: match field {
+                0.0 => Diffusion::FloydSteinberg,
+                1.0 => Diffusion::Sierra,
+                2.0 => Diffusion::SierraLite,
+                3.0 => Diffusion::Atkinson,
+                _ => return Err(invalid(ErrorPath::DitherKernel)),
+            },
+            feedback: match parameter {
+                0.0 => DiffusionFeedback::SrgbBytes,
+                1.0 => DiffusionFeedback::Matching,
+                _ => return Err(invalid(ErrorPath::DitherFeedback)),
+            },
+            serpentine: match space {
+                0.0 => false,
+                1.0 => true,
+                _ => return Err(invalid(ErrorPath::DitherSerpentine)),
+            },
+            strength: scalar(strength, ErrorPath::DitherStrength)?,
+            placement: parse_placement(
+                placement,
+                radius,
+                threshold,
+                softness,
+                [
+                    ErrorPath::DitherPlacement,
+                    ErrorPath::DitherRadius,
+                    ErrorPath::DitherThreshold,
+                    ErrorPath::DitherSoftness,
+                ],
+            )?,
+        },
+        3.0 if field == 0.0 && space == 0.0 && strength == 0.0 => DitherPolicy::Yliluoma {
+            size: parse_bayer_size(parameter, ErrorPath::DitherSize)?,
+            placement: parse_placement(
+                placement,
+                radius,
+                threshold,
+                softness,
+                [
+                    ErrorPath::DitherPlacement,
+                    ErrorPath::DitherRadius,
+                    ErrorPath::DitherThreshold,
+                    ErrorPath::DitherSoftness,
+                ],
+            )?,
+        },
+        3.0 => return Err(invalid(ErrorPath::Dither)),
+        _ => {
+            return Err(Failure::new(
+                ErrorCode::UnsupportedOperation,
+                ErrorPath::Dither,
+            ))
+        }
+    })
 }
 
 fn source_dimensions(width: f64, height: f64) -> Result<(u32, u32), Failure> {
