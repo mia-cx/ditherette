@@ -32,6 +32,17 @@ test('installed package and actual TypeScript adapter conformance, without measu
 	const quantizeFixtures = JSON.parse(await readFile(quantizePath, 'utf8'));
 	assert.equal(quantizeFixtures.length, 47);
 	assert.equal(new Set(quantizeFixtures.map((fixture) => fixture.settings.matching)).size, 15);
+	const fieldPath = process.env.DITHERETTE_BENCH_FIELD_FIXTURES;
+	assert.ok(
+		fieldPath,
+		'Set DITHERETTE_BENCH_FIELD_FIXTURES to the frozen field_conformance output.'
+	);
+	const fieldFixtures = JSON.parse(await readFile(fieldPath, 'utf8'));
+	assert.equal(fieldFixtures.length, 12);
+	assert.equal(
+		fieldFixtures.filter((fixture) => fixture.operation.operation === 'perturb').length,
+		7
+	);
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-public-conformance-'));
 	t.after(() => rm(temporary, { recursive: true, force: true }));
 	const consumer = path.join(temporary, 'consumer');
@@ -109,10 +120,9 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				const page = await context.newPage();
 				await page.goto(server.url);
 				const report = await page.evaluate(
-					async ({ assets, quantizeFixtures }) => {
-						const { prepareOperation, preflightOperation, outputStability } = await import(
-							`/${assets.entries.page}`
-						);
+					async ({ assets, quantizeFixtures, fieldFixtures }) => {
+						const { prepareOperation, preflightOperation, outputStability, verificationOutput } =
+							await import(`/${assets.entries.page}`);
 						const equal = (actual, expected, label) => {
 							if (JSON.stringify(actual) !== JSON.stringify(expected))
 								throw new Error(
@@ -387,6 +397,109 @@ test('installed package and actual TypeScript adapter conformance, without measu
 								}
 							}
 						}
+						for (const fixture of fieldFixtures) {
+							for (const preparation of ['primed-instance', 'fresh-instance']) {
+								const request = trial('package', preparation);
+								request.case.source = fixture.source;
+								request.case.rgba = fixture.rgba;
+								request.case.identity.output = fixture.source;
+								request.case.browser.operation = fixture.operation;
+								const operation = await prepareOperation(request);
+								try {
+									const indexed = fixture.operation.operation === 'separable';
+									const pixels = fixture.source.width * fixture.source.height;
+									const stability = outputStability(
+										indexed ? pixels + 1024 : pixels * 4,
+										indexed ? 'indexed8' : 'rgba8'
+									);
+									equal(
+										await preflightOperation(operation, fixture.reference, stability.observe),
+										undefined,
+										`${fixture.name} ${preparation}`
+									);
+									const one = await operation.prepare();
+									let first;
+									try {
+										first = one.call();
+										stability.observe([first]);
+									} finally {
+										one.close();
+									}
+									const retained = verificationOutput(first);
+									const two = await operation.prepare();
+									try {
+										stability.observe([two.call()]);
+									} finally {
+										two.close();
+									}
+									equal(
+										verificationOutput(first),
+										retained,
+										'durable field output after later call/disposal'
+									);
+									equal(
+										Array.from(operation.request.source.data),
+										fixture.rgba,
+										'field source preservation'
+									);
+									if (!indexed) {
+										equal(
+											Array.from(first.data).filter((_, i) => i % 4 === 3),
+											fixture.rgba.filter((_, i) => i % 4 === 3),
+											'perturb alpha preservation'
+										);
+										continue;
+									}
+									// Both composition steps use actual package adapters, outside every timer.
+									const perturbTrial = structuredClone(request);
+									perturbTrial.case.browser.operation = {
+										operation: 'perturb',
+										settings: fixture.operation.settings.perturb
+									};
+									const perturb = await prepareOperation(perturbTrial);
+									let rgba;
+									try {
+										const prepared = await perturb.prepare();
+										try {
+											rgba = prepared.call();
+										} finally {
+											prepared.close();
+										}
+									} finally {
+										perturb.close();
+									}
+									const quantizeTrial = structuredClone(request);
+									quantizeTrial.case.rgba = Array.from(rgba.data);
+									quantizeTrial.case.browser.operation = {
+										operation: 'quantize',
+										settings: fixture.operation.settings.quantize
+									};
+									const quantize = await prepareOperation(quantizeTrial);
+									try {
+										equal(
+											await preflightOperation(quantize, retained),
+											undefined,
+											`${fixture.name} actual quantize(perturb) metadata and bytes`
+										);
+									} finally {
+										quantize.close();
+									}
+								} finally {
+									operation.close();
+								}
+							}
+						}
+						for (const fixture of [fieldFixtures[0], fieldFixtures[7]]) {
+							const request = trial('typescript');
+							request.case.browser.operation = fixture.operation;
+							let rejected = false;
+							try {
+								await prepareOperation(request);
+							} catch (error) {
+								rejected = error.message.includes('No faithful TypeScript field adapter');
+							}
+							if (!rejected) throw new Error('TypeScript field adapter must be unavailable.');
+						}
 						const noncenter = trial('typescript');
 						noncenter.case.browser.operation.anchor = 'top-left';
 						let rejected = false;
@@ -404,6 +517,8 @@ test('installed package and actual TypeScript adapter conformance, without measu
 								'area-bilinear-known-vectors-and-drift',
 								'convolution-support-recipes',
 								'47-frozen-quantize-fixtures-all-15-modes-primed-and-fresh',
+								'12-frozen-field-fixtures-seven-spaces-primed-and-fresh',
+								'10-actual-quantize-perturb-compositions-including-warning-metadata',
 								'identity-copy',
 								'fresh-instance',
 								'initialization-bytes',
@@ -413,7 +528,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 							]
 						};
 					},
-					{ assets, quantizeFixtures }
+					{ assets, quantizeFixtures, fieldFixtures }
 				);
 				assert.equal(report.isolated, true);
 				assert.deepEqual(report.drift, [10, 11]);

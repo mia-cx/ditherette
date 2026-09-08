@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod coordinator;
+pub mod fields;
 pub mod native;
 pub mod quantize;
 
@@ -46,6 +47,14 @@ pub enum CallScope {
     NativeForwardConversion,
     /// Preconverted cyclic pairs into preallocated scores; no conversion or allocation is timed.
     NativeMetricScores,
+    /// Original f32 inverse image export. Frozen forward input preparation and storage are excluded.
+    NativeInverseConversion,
+    /// Complete global-coordinate field threshold batch into caller-owned f32 storage.
+    NativeFieldEvaluation,
+    /// Source-neighborhood adaptive masks, including actual source conversion work.
+    NativePlacementMask,
+    /// Complete source-conversion batch, including actual Converter construction.
+    NativeSourceConversion,
     CompleteCall,
     Initialization,
 }

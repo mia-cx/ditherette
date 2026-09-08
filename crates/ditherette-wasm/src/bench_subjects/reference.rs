@@ -24,6 +24,10 @@ pub enum ReferenceRequest<'a> {
         source: Source<'a>,
         metric: super::scores::MetricFamily,
     },
+    FieldComponent {
+        source: Source<'a>,
+        component: super::fields::Component,
+    },
 }
 
 /// Callable registry adapter compatible with S05's generic VerificationSubject.
@@ -39,7 +43,9 @@ impl ReferenceRequest<'_> {
             Self::Processing(Request::Perturb(request)) => request.source,
             Self::Processing(Request::Quantize(request)) => request.source,
             Self::Processing(Request::DitherAndQuantize(request)) => request.quantize.source,
-            Self::Color { source, .. } | Self::MetricScores { source, .. } => source,
+            Self::Color { source, .. }
+            | Self::MetricScores { source, .. }
+            | Self::FieldComponent { source, .. } => source,
         }
     }
 
@@ -47,6 +53,13 @@ impl ReferenceRequest<'_> {
     pub fn dimensions(&self) -> Result<Dimensions, BenchSubjectError> {
         let output = match *self {
             Self::Processing(request) => request.validate().map(|layout| layout.output),
+            Self::FieldComponent { source, component } => {
+                component.validate(source)?;
+                return Ok(Dimensions {
+                    width: source.width,
+                    height: source.height,
+                });
+            }
             Self::Color { source, .. } | Self::MetricScores { source, .. } => {
                 Request::Resize(ResizeRequest {
                     version: 1,
@@ -107,6 +120,7 @@ impl ReferenceRequest<'_> {
                 1,
                 Some(metric.space()),
             ),
+            Self::FieldComponent { component, .. } => return component.semantics(),
         };
         SemanticIdentity {
             operation,
@@ -122,6 +136,9 @@ impl ReferenceRequest<'_> {
 impl Serialize for ReferenceRequest<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match *self {
+            Self::FieldComponent { component, .. } => {
+                ("field-component", 1u32, component).serialize(serializer)
+            }
             Self::Processing(Request::Process(request)) => {
                 ("process", request.palette, request.recipe).serialize(serializer)
             }

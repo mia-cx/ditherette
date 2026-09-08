@@ -244,9 +244,9 @@ pub(super) fn take_ready() -> Result<Processor, Failure> {
     })
 }
 
-struct JsBoundary<'a> {
-    input: &'a Uint8Array,
-    result_sink: &'a JsValue,
+pub(super) struct JsBoundary<'a> {
+    pub(super) input: &'a Uint8Array,
+    pub(super) result_sink: &'a JsValue,
 }
 
 impl Boundary for JsBoundary<'_> {

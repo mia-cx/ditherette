@@ -100,6 +100,53 @@ export interface QuantizeRequest {
 	readonly onProgress?: (progress: Progress) => void;
 }
 
+/** Reversible working coordinates are independent of the palette-matching metric. */
+export type WorkingSpace =
+	| 'srgb'
+	| 'linear-rgb'
+	| 'oklab'
+	| 'oklch'
+	| 'cielab'
+	| 'cielch'
+	| 'ycbcr';
+
+/** Palette-free fields supported by this checkpoint. Seeds are unsigned 32-bit integers. */
+export type Field =
+	| { readonly algorithm: 'bayer'; readonly size: '2' | '4' | '8' | '16' }
+	| { readonly algorithm: 'random'; readonly seed: number };
+
+export type Placement =
+	| { readonly mode: 'everywhere' }
+	| {
+			readonly mode: 'adaptive';
+			readonly radius: number;
+			readonly threshold: number;
+			readonly softness: number;
+	  };
+
+/** Finite nonnegative f32 controls. Adaptive radius is an integer from 1 through 32768. */
+export interface PerturbPolicy {
+	readonly field: Field;
+	readonly space: WorkingSpace;
+	readonly strength: number;
+	readonly placement: Placement;
+}
+
+export interface PerturbRequest {
+	readonly version: 1;
+	readonly source: Rgba8Image;
+	readonly perturb: PerturbPolicy;
+	/** S33 adds progress delivery; supplied callbacks are explicitly rejected for now. */
+	readonly onProgress?: (progress: Progress) => void;
+}
+
+/** Separable fields materialize the exact clipped, rounded RGBA8 boundary before matching. */
+export interface DitherAndQuantizeRequest extends QuantizeRequest {
+	readonly dither:
+		| { readonly family: 'none' }
+		| { readonly family: 'separable'; readonly perturb: PerturbPolicy };
+}
+
 /** Durable index bytes and their exact ordered palette, independent of later calls/disposal. */
 export interface IndexedImage {
 	readonly width: number;
@@ -118,6 +165,10 @@ export interface Ditherette {
 	resize(request: ResizeRequest): Rgba8Image;
 	/** Match source pixels to the supplied palette without resizing or dithering. */
 	quantize(request: QuantizeRequest): IndexedImage;
+	/** Perturb RGB without palette influence, preserving every source alpha byte. */
+	perturb(request: PerturbRequest): Rgba8Image;
+	/** Match reconstructed RGBA8 for Bayer/random separable fields, or quantize directly with family none. */
+	ditherAndQuantize(request: DitherAndQuantizeRequest): IndexedImage;
 	/** Release instance ownership once. Wasm pages may retain their high-water mark until collection. */
 	dispose(): void;
 }

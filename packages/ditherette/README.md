@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize mode and direct palette quantization.
+An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize, palette quantization, and Bayer/random perturbation.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -85,6 +85,41 @@ Thresholded pixels use the first transparent entry, or the darkest visible entry
 Transparent-only palettes produce transparent indices with the approved warning.
 The result contains durable `indices`, `palette.rgba`, `palette.transparentIndex`, and `{ code, message }` warnings.
 Quantize does not resize, dither, retain the source, or cache prepared palettes in this checkpoint.
+
+## Bayer and random fields
+
+```ts
+const perturb = {
+	field: { algorithm: 'bayer', size: '4' },
+	space: 'oklch',
+	strength: 0.7,
+	placement: { mode: 'adaptive', radius: 1, threshold: 5, softness: 10 }
+} as const;
+const rgba = processor.perturb({ version: 1, source, perturb });
+const indexed = processor.ditherAndQuantize({
+	version: 1, source, palette, alpha, matching,
+	dither: { family: 'separable', perturb }
+});
+```
+
+Bayer sizes are string tags `2`, `4`, `8`, and `16`.
+Random uses `{ algorithm: 'random', seed: 0 }`, with an unsigned 32-bit integer seed.
+Random values depend on the global pixel index, so row scheduling does not change the sequence.
+Working spaces are `srgb`, `linear-rgb`, `oklab`, `oklch`, `cielab`, `cielch`, and `ycbcr`.
+They are independent of palette matching settings.
+
+`{ mode: 'everywhere' }` has no adaptive controls.
+Adaptive placement uses the original image's eight-neighbor contrast and fixed color-space ranges, without reading the palette.
+Cylindrical placement uses the minimum-chroma hue arc, not matching's circular chord.
+Radius is an integer from 1 through 32,768. Strength, threshold, and softness accept finite nonnegative f32-range numbers.
+The implementation rounds these controls to f32, but reconstructs perturbed coordinates with wide arithmetic before final RGB clipping and byte rounding.
+Zero strength preserves every source byte. Both placement modes preserve alpha and hidden RGB processing.
+
+`ditherAndQuantize` quantizes that completed RGBA8 result, with the same indices, palette, and warnings as `quantize(perturb(...))`.
+`{ family: 'none' }` performs direct quantization and accepts no perturb settings.
+Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are reserved before input copy.
+Results remain durable after later calls and disposal. No field buffers or prepared palettes are cached.
+BlueNoise, diffusion, and Yliluoma are not enabled in this checkpoint.
 
 ## Initialization and ownership
 

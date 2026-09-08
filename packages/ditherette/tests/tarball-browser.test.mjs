@@ -9,11 +9,13 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { chromium, firefox, webkit } from 'playwright';
 import { browserChecks } from './browser-fixture.mjs';
+import { fieldBrowserChecks } from './field-browser-fixture.mjs';
 
 test('installed tarball loads only scalar assets and runs the public contract in browser engines', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-tarball-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	const packageDirectory = fileURLToPath(new URL('../', import.meta.url));
+	const vectors = JSON.parse(await readFile(new URL('./fixtures/fields.json', import.meta.url)));
 	const manifest = JSON.parse(await readFile(join(packageDirectory, 'package.json'), 'utf8'));
 	const tarball = join(directory, `ditherette-${manifest.version}.tgz`);
 	execFileSync('pnpm', ['pack', '--out', tarball], { cwd: packageDirectory, stdio: 'pipe' });
@@ -146,6 +148,13 @@ test('installed tarball loads only scalar assets and runs the public contract in
 				assert.ok(
 					requests.every((path) => !path.includes('/threads/')),
 					'scalar never loads threaded artifacts'
+				);
+				assert.deepEqual(
+					await page.evaluate(fieldBrowserChecks, {
+						vectors,
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+					}),
+					{ fields: 91, compositions: 1365, caughtFailures: 5 }
 				);
 				t.diagnostic(`${name} ${browser.version()}: installed-tarball checks pass`);
 			} finally {
