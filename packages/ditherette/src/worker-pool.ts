@@ -24,7 +24,11 @@ export class WorkerPool {
 				this.#workers.push(worker);
 				ready.push(new Promise<void>((resolve, reject) => {
 					const timeout = setTimeout(() => reject(new Error('Thread startup timed out.')), startupTimeoutMs);
-					const onError = () => reject(new Error('Thread startup failed.'));
+					const onError = (event?: Event) => {
+						// This boundary handles startup failure; do not also report an uncaught host error.
+						event?.preventDefault();
+						reject(new Error('Thread startup failed.'));
+					};
 					const onMessage = ({ data }: MessageEvent) => {
 						if (data?.type === 'ditherette-worker-ready') resolve();
 						if (data?.type === 'ditherette-worker-error') onError();

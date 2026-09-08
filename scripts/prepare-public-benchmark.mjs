@@ -232,6 +232,7 @@ export async function preparePublicBenchmark(destination) {
 	await mkdir(scripts);
 	for (const name of [
 		'benchmark-public-browser.mjs',
+		'benchmark-host-worker.mjs',
 		'benchmark-public-page.mjs',
 		'benchmark-public-timing.mjs',
 		'benchmark-stage-cache.mjs',

@@ -117,6 +117,22 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js', threade
 			ts.factory.createIdentifier(local)
 		)
 	);
+	if (threaded) {
+		const builder = file.statements.find((statement) =>
+			ts.isClassDeclaration(statement) && statement.name?.text === 'wbg_rayon_PoolBuilder');
+		if (!builder?.members.some((member) => ts.isMethodDeclaration(member) &&
+			member.name.getText(file) === '__destroy_into_raw' && member.parameters.length === 0))
+			throw new Error('Generated threaded builder ownership release changed.');
+		// A trapped Rust call can leave its borrow flag set. Release only the JS finalizer;
+		// the failed pool owns the allocation until its discarded shared memory is collected.
+		properties.push(ts.factory.createPropertyAssignment('abandonThreadPool',
+			ts.factory.createArrowFunction(undefined, undefined,
+				[ts.factory.createParameterDeclaration(undefined, undefined, 'builder')], undefined,
+				ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+				ts.factory.createBlock([ts.factory.createExpressionStatement(
+					ts.factory.createCallExpression(ts.factory.createPropertyAccessExpression(
+						ts.factory.createIdentifier('builder'), '__destroy_into_raw'), undefined, []))], true))));
+	}
 	body.push(
 		ts.factory.createReturnStatement(
 			ts.factory.createCallExpression(
@@ -148,7 +164,7 @@ export async function writeScalarFactory(directory, threaded = false) {
 		new URL('ditherette_wasm.factory.d.ts', directory),
 		'/** Creates independent glue state; initialization remains explicit. */\n' +
 			(threaded
-				? 'export declare function createThreadedBindings(startWorkers: (module: WebAssembly.Module, memory: WebAssembly.Memory, builder: import("./ditherette_wasm.js").wbg_rayon_PoolBuilder) => Promise<void>): typeof import("./ditherette_wasm.js");\n'
+				? 'export declare function createThreadedBindings(startWorkers: (module: WebAssembly.Module, memory: WebAssembly.Memory, builder: import("./ditherette_wasm.js").wbg_rayon_PoolBuilder) => Promise<void>): typeof import("./ditherette_wasm.js") & { abandonThreadPool(builder: import("./ditherette_wasm.js").wbg_rayon_PoolBuilder): void };\n'
 				: 'export declare function createScalarBindings(): typeof import("./ditherette_wasm.js");\n')
 	);
 }

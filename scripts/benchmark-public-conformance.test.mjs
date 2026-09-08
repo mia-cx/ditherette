@@ -117,6 +117,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 		'benchmark-stage-cache.mjs',
 		'benchmark-progress.mjs',
 		'benchmark-public-browser.mjs',
+		'benchmark-host-worker.mjs',
 		'benchmark-oracle-page.mjs',
 		'benchmark-transport.mjs'
 	])

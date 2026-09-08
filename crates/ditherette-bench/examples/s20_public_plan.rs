@@ -46,6 +46,7 @@ pub fn case(
         anchor: Anchor::Center,
     };
     let browser = BrowserCase {
+        execution: None,
         operation,
         accepted: if initialization {
             BrowserBackend::Package

@@ -128,9 +128,20 @@ pub struct ThreadRoles {
     pub candidate: Threads,
 }
 
+/// JavaScript context owning the package and its call timers. Historical records use the page.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BrowserExecution {
+    #[default]
+    Page,
+    HostWorker,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<BrowserExecution>,
     pub operation: PublicOperation,
     pub accepted: BrowserBackend,
     pub candidate: BrowserBackend,
@@ -465,6 +476,8 @@ pub struct BrowserTrial {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserObservation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<BrowserExecution>,
     pub engine: BrowserEngine,
     pub browser_version: String,
     pub node_version: String,
@@ -609,6 +622,15 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if browser.execution == Some(BrowserExecution::HostWorker)
+        && (m.scope != CallScope::Initialization
+            || browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package)
+    {
+        return Err(io::Error::other(
+            "host-worker execution requires package initialization",
+        ));
+    }
     if browser.threads.is_some()
         && (browser.accepted != BrowserBackend::Package
             || browser.candidate != BrowserBackend::Package)
@@ -910,6 +932,8 @@ pub(super) fn validate_evidence(
         || evidence.cache != browser_case.cache
         || evidence.progress != browser_case.progress
         || evidence.threads != browser_case.threads
+        || evidence.observation.execution.unwrap_or_default()
+            != browser_case.execution.unwrap_or_default()
         || evidence.measure_nonexact != browser_case.measure_nonexact
     {
         return Err(io::Error::other(

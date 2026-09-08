@@ -190,15 +190,68 @@ bootstrap worker, scheduler, browser blacklist, or public option.
 1. [x] Prove main-JS capability rejection and disabled-path inertness with focused tests.
    Add a zero-timeout `Atomics.wait` check after existing prerequisites, only when
    threads are requested. Worker contexts retain real threaded initialization.
-2. [ ] Replace abandoned-builder Rust consumption with generated glue ownership release.
+2. [x] Replace abandoned-builder Rust consumption with generated glue ownership release.
    Unregister the builder's JS finalizer without entering possibly poisoned Rust
    borrow state. Failed attempts still terminate workers and discard module memory.
    Test a borrowed/trapped builder and successful subsequent independent initialization.
-3. [ ] Move installed ownership/custom-input/partial-start assertions into the existing
+3. [x] Move installed ownership/custom-input/partial-start assertions into the existing
    processing-host worker context. Keep main-JS preferred scalar fallback and
    required capability assertions, including zero threaded imports or worker starts.
-4. [ ] Record focused validation and a buildable checkpoint. Root owns benchmark
+4. [x] Record focused validation and a buildable checkpoint. Root owns benchmark
    host-worker adaptation, artifact refresh, and restarting the exclusive trial.
 
 The earlier custom-input rejection is consistent with this race, but its missing
 raw error prevents attributing that historical failure conclusively.
+
+The current generator adds `abandonThreadPool`, which calls the pinned builder's
+`__destroy_into_raw` JS method. This unregisters its finalizer and clears its
+pointer without consuming a Rust object whose borrow may remain active after a
+trap. It supersedes the earlier Rust forget adapter, which is removed. The scalar
+factory and frozen source remain unchanged. Generator tests prove abandonment
+avoids a poisoned destructor; actual generated-builder tests prove ownership clears.
+
+The corrected real repeated-create diagnostic deliberately bypasses public
+capability validation through the private boundary. Call 5 throws the original
+`RuntimeError: Atomics.wait cannot be called in this context`; cleanup preserves
+that error. Public required then returns `capability` at `threads`, and preferred
+scalar recovery produces exact `[11, 23, 47, 127]`. This untimed diagnostic exits 0.
+An attempted no-receiver synthetic witness stalled instead of reaching the observed
+race. It is removed, its browser processes are drained, and it supplies no evidence.
+
+Installed pool ownership and nine custom forms now run in a processing host.
+Chromium and Firefox pass. WebKit retains the same four-versus-two lock failure.
+Main-JS scalar selection, including isolated preferred fallback and required
+capability rejection before threaded imports, passes all three engines.
+The migrated partial-start test finds handled child-worker errors propagating to
+the host. The startup boundary now cancels that event's default propagation while
+retaining its rejection/fallback behavior. Unit red/green and the real installed
+partial-start rerun pass, including zero pool locks before scalar fallback fetch.
+The installed rerun is 4/4 on development package SHA-256
+`33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d`.
+
+## Corrected candidate handoff
+
+Clean artifact source `c01467f9ed45ba79d855b95421564f2088929693` joins host protocol
+`3f2cc41a`. The trusted guard passes with frozen checkpoint/digest unchanged.
+Official native and public preparers exit 0 under
+`target/s34-candidate-c01467f9-native` and `target/s34-candidate-c01467f9-public`.
+All 2,478 recorded input/output hashes verify before this plan-only update.
+
+The tarball SHA-256 is
+`33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d`,
+byte-identical to the corrected installed partial-start fixture package.
+The native worker SHA-256 is
+`9f1f35b6700edf0832697a8e9d921b7fc304f594815fb05f2bd7e44db82536df`.
+The native pair SHA-256 is
+`857ecf9af5f4bd1f5b00eb8b839bb8d22865eeb30018418967fac99c1d802e70`.
+Host helper, transport, and page hashes match the accepted `3f2cc41a` artifact.
+
+The focused `benchmark-host-worker.test.mjs` installed-package check passes 1/1
+against this exact official package. Both byte and compiled input paths preload,
+then create/dispose three independent required instances with exact output probes.
+Every observed nested worker receives termination. The fixture calls no timing
+collector for the real package. There is no broad rerun or new WebKit acceptance claim.
+
+All owned builders, browsers, and diagnostics are drained. Root owns attempt 02
+snapshots and exclusive measurement. This delivery note does not change artifact
+source `c01467f9` or supersede the retained WebKit release gate.

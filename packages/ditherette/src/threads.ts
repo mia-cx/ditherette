@@ -8,7 +8,7 @@ export async function createThreaded(options: { wasm?: InitInput; memoryLimitByt
 	try {
 		const { createThreadedBindings } = await import('./wasm/threads/ditherette_wasm.factory.js');
 		const bindings = createThreadedBindings((module, memory, builder) =>
-			pool.start(module, memory, builder, (value) => bindings.privateAbandonThreadPool(value)));
+			pool.start(module, memory, builder, (value) => bindings.abandonThreadPool(value)));
 		await bindings.default({ module_or_path: normalizeWasmInput(options.wasm) });
 		const processor = initializeProcessor(bindings, options.memoryLimitBytes, () => pool.dispose());
 		const available = typeof navigator === 'undefined' ? 1 : navigator.hardwareConcurrency;
