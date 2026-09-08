@@ -14,7 +14,7 @@ Retain existing capacity accounting, including temporary placement conversion. A
 
 - [x] Replace only target conversion construction and verify native exactness, budgets, and unchanged shared behavior.
 - [x] Declare a bounded typed native/public benchmark plan; verify its cases and caps without measurements.
-- [ ] Build scalar/threaded artifacts and verify private/interface/installed three-engine conformance; record identities and stop.
+- [x] Build scalar/threaded artifacts and verify private/interface/installed three-engine conformance; record identities and stop.
 
 ## Measurement declaration
 
@@ -23,6 +23,8 @@ Each worker has a declared 10-second measurement cap. Keep complete-call latency
 Use a small explicit case list across palette sizes, working spaces, matrix sizes 2/4, and one tiny size16 control.
 Do not take a Cartesian product or time the 367-case conformance fixtures.
 Only the coordinator runs measurements after all agents drain. No PR, issue, release, or spec writes.
+Seek a lower complete-call median on the conversion-heavy palette2 case; reject confirmed per-case regressions above 10%.
+Keep the literal implementation if gains are absent or required evidence remains incomplete.
 
 Native/scalar/threaded builds use only the assigned S22 cache and its variant children.
 The baseline evidence, independent frozen-Wasm fixtures, and seven target-local differences remain in `70-yliluoma.md`.
@@ -49,3 +51,32 @@ The generator runs only on this candidate branch. The accepted baseline needs no
 A separate review found the literal baseline's Rust browser worker omitted Yliluoma from indexed-output classification.
 The coordinator assigned that benchmark-only repair to S28. Join its verified commit before coordinator measurements.
 Installed package and JavaScript-adapter correctness checks do not by themselves cover that Rust worker path.
+
+## Final validation and retained identities
+
+Literal production/package revision remains `4e0c134d5c846d32af6b253ced0099993122b251`.
+The accepted benchmark baseline is now `092f2dd0499ed0c5c3784e6533d726d25c7e142b`, which only repairs worker classification and records evidence.
+Candidate production revision is `abe8241`; candidate plan revision is `1151c85`.
+The identical worker repair is cherry-picked as `b949d308533dae43299e9a6d9b74d37daaa2a1ef`.
+Accepted and candidate worker code/tests have no diff. All seven worker tests and the generator test pass after joining it.
+The final production diff against accepted contains only the two-file converter borrow/call change.
+
+Both release builds pass. The candidate passes 23 native tests, 12 private tests, and all 25 public interface/type tests.
+All benchmark targets typecheck; both typed Yliluoma adapter tests and the bounded generator test pass.
+Installed Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 each pass 367 frozen-Wasm vectors and 734 untimed actual JavaScript-adapter calls.
+The same runs retain the existing 91 field vectors and 1,365 compositions per engine.
+Exact/one-under budgets, caught failures, ownership, reentry, disposal, alpha, placements, and every accepted metric remain covered.
+
+The full guard executes from trusted S18, including policy/content/compiler/dependency checks and native/Wasm semantic isolation.
+Threaded production isolation also passes. It retains revision `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b` and SHA-256 `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+S18 cache ownership returns to the coordinator after the guard exits.
+
+| Artifact | Literal bytes | Candidate bytes | Candidate SHA-256 |
+|---|---:|---:|---|
+| Scalar Wasm | 241,988 | 241,989 | `6f4e28a14180f64ecbbd1f2e0a30935128fbb7cfa209c2f2a0fc40e26717bf77` |
+| Threaded Wasm | 331,861 | 331,853 | `0ce8329359580fc9f9aae5787d1e03733e2d52b324e30838f6704dfc88621e5d` |
+
+Build artifacts remain in this worktree's ignored `crates/ditherette-wasm/dist` and staged package distribution.
+The literal baseline's artifacts remain untouched. The coordinator separately owns reusable frozen-Wasm oracle protocol integration.
+This candidate is exact in current conformance, not performance-selected. No measurement, PR, issue, or release action runs here.
+Stop and drain after pushing this checkpoint; the coordinator owns the next measurement phase.
