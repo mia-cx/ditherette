@@ -17,7 +17,7 @@ Package, frozen references, and kernels remain unchanged.
 - [x] Reject stale events immediately and replace active workers after the existing debounce. Preserve the last preview.
 - [x] Forward package progress and contain initialization-only fallback at the page-session boundary.
 - [x] Define faithful TypeScript support from existing semantics and verify fallback and visible processing failures.
-- [ ] Join final S34 artifact/report ancestry and validate against its retained package without rebuilding Rust.
+- [x] Join final S34 artifact/report ancestry and validate against its retained package without rebuilding Rust.
 
 ## Validation boundaries
 
@@ -27,7 +27,8 @@ Mock timers and external load failures only where needed. Record red before gree
 
 S34's WebKit atomic.wait cleanup failure remains an engine-specific release gate, recorded in issue #83.
 Held Web Locks observe JS worker lifetime, not proof that a parked Wasm stack can never resume.
-Do not weaken those observers or add capability probes, blacklists, or shutdown redesigns.
+Do not weaken those observers or add termination probes, blacklists, or shutdown redesigns.
+Preserve S34's separate blocking-wait caller capability check.
 
 No Rust compiler outputs or measurements belong to this worktree. Drain all jobs for the coordinator's exclusive startup trial.
 
@@ -73,4 +74,26 @@ Actual package input is S34 `2afd1802c3249948d53b2c2bc69e287c959a30fe`'s retaine
 SHA-256 is `01ad17dcf087d1debd7564de9d34acff94805f2034168687ab24e1431412955d`.
 Only its generated `package/dist` was extracted into this worktree. No Rust build ran.
 `svelte-check` reports zero errors and one existing missing `worker-configuration.d.ts` warning.
-Final S34 report/artifact ancestry and the coordinator's final validation handoff remain pending.
+That historical package check is superseded by the final validation below.
+
+## Final dependency and package validation
+
+The explicit `impl/v1-s39-base` dependency branch contains final S38
+`0305456bc25259a92d46ded245ae09aaf407be07` and final S34 PR #124
+`d4531667e1158c2068f30614f40c9d39f8c5313e`. Both joins are conflict-free.
+S39 includes that base without changing its website implementation.
+
+Final browser validation uses S34 measured source `c01467f9ed45ba79d855b95421564f2088929693`.
+Its retained tarball SHA-256 is `33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d`.
+Only ignored generated package assets were staged. No Rust build or performance measurement ran.
+
+After the final dependency join, all 68 focused server tests and six Chromium browser tests pass.
+Commands use `pnpm exec vitest run --project server` with client, worker-pipeline,
+package-fallback, schemas, and app store fixtures, and `--project client` with
+package-pipeline and package-fallback browser fixtures.
+These checks cover website scheduling and actual scalar package equivalence.
+S34 supplies Chromium/Firefox real pool teardown evidence. Its pinned WebKit teardown
+failure remains a release blocker; this slice does not claim to fix that engine behavior.
+
+The PR remains unmerged on `impl/v1-s39-base`. No website flag, rollout, or deployment is activated.
+This worktree owns no Rust compiler output to clean.
