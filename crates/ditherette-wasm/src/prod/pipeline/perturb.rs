@@ -98,6 +98,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     limit: u64,
     overhead: u64,
     peak: &mut u64,
+    store: &mut super::preparation::Store,
 ) -> Result<B::Output, Failure> {
     validate(request.perturb)?;
     let dimensions = dimensions(request.source_width, request.source_height, true)?;
@@ -112,32 +113,26 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         .checked_add(size_of::<PerturbRequest>() as u64)
         .and_then(|n| n.checked_add(working_capacity_bytes()))
         .ok_or_else(memory_limit)?;
-    let required = owned.checked_add(len as u64 * 2).ok_or_else(memory_limit)?;
-    if required > limit {
-        return Err(memory_limit());
-    }
-    *peak = owned;
-    let mut source = Vec::new();
-    let mut output = Vec::new();
-    allocator.reserve(&mut source, len)?;
-    *peak = owned + source.capacity() as u64;
-    if *peak + len as u64 > limit {
-        return Err(memory_limit());
-    }
-    allocator.reserve(&mut output, len)?;
-    *peak += output.capacity() as u64;
-    if *peak > limit {
-        return Err(memory_limit());
-    }
-    source.resize(len, 0);
-    output.resize(len, 0);
-    boundary.copy_input(&mut source)?;
+    let mut call = super::preparation::Call::new(
+        store,
+        None,
+        None,
+        [len, len, 0, 0],
+        0,
+        owned,
+        limit,
+        peak,
+        allocator,
+    )?;
+    let [source, output, _, _] = &mut call.scratch.buffers;
+    boundary.copy_input(source)?;
     execute(
-        ImageView::packed(&source, dimensions).expect("validated source storage"),
-        ImageViewMut::packed(&mut output, dimensions).expect("reserved output storage"),
+        ImageView::packed(source, dimensions).expect("validated source storage"),
+        ImageViewMut::packed(output, dimensions).expect("reserved output storage"),
         request.perturb,
     );
-    boundary.complete(&output, dimensions)
+    let result = boundary.complete(output, dimensions);
+    call.finish(result)
 }
 
 fn memory_limit() -> Failure {

@@ -218,6 +218,33 @@ impl PreparedDiffusion {
         indices: &mut [u8],
         policy: DiffusionPolicy,
     ) -> Result<(), Failure> {
+        execute_with_scratch(&self.quantizer, &mut self.work, source, indices, policy)
+    }
+}
+
+/// Runs the existing row kernel with separately owned palette preparation and scratch.
+pub(crate) fn execute_with_scratch(
+    quantizer: &PreparedQuantizer,
+    work: &mut [[f32; 3]],
+    source: ImageView<'_, Rgba8>,
+    indices: &mut [u8],
+    policy: DiffusionPolicy,
+) -> Result<(), Failure> {
+    BorrowedDiffusion { quantizer, work }.execute(source, indices, policy)
+}
+
+struct BorrowedDiffusion<'a> {
+    quantizer: &'a PreparedQuantizer,
+    work: &'a mut [[f32; 3]],
+}
+
+impl BorrowedDiffusion<'_> {
+    fn execute(
+        &mut self,
+        source: ImageView<'_, Rgba8>,
+        indices: &mut [u8],
+        policy: DiffusionPolicy,
+    ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
         let height = source.dimensions().height_usize();
         assert_eq!(self.work.len(), width * ROWS);
