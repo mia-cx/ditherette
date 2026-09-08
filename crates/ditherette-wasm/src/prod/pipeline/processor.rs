@@ -541,6 +541,8 @@ fn memory_limit_failure() -> Failure {
 }
 
 #[cfg(test)]
+mod band_tests;
+#[cfg(test)]
 mod preparation_tests;
 #[cfg(test)]
 mod progress_tests;

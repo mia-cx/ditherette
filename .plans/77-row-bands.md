@@ -18,7 +18,7 @@ Public color continues to use packed triplets with byte alpha. Direct quantizati
 - [x] Expose allocation-free area/bilinear caller-scratch row adapters. Check exact split output and reject insufficient scratch before writes.
 - [x] Extend shared convolution with caller-owned support-range scratch, including overlapping support across bands.
 - [x] Add complete worker/support capacity preflight and disjoint execution through existing tiling models.
-- [ ] Integrate those adapters into private complete-call preparation with budget-based scalar fallback.
+- [x] Integrate those adapters into private complete-call preparation with budget-based scalar fallback.
 - [ ] Extend benchmark subjects for the budgeted path and retain caller-thread progress.
 - [ ] Join final S34 and validate actual installed scalar/threaded calls before exclusive crossover evidence.
 - [ ] Select only freshly measured exact configurations, or retain scalar, and prepare the unmerged PR.
@@ -81,3 +81,21 @@ The complete convolution fixture checks native scalar and Rayon output equality,
 Its one-byte-short complete budget fails before any allocation. Every metadata/scratch reservation also has an injected failure check.
 Current checks pass 26 scalar tests and 20 threaded tests, including the direct frozen-assignment fixture.
 No actual Wasm or complete public-call performance claim follows from these native checks.
+
+## Complete-call integration checkpoint
+
+Private execution candidates live in the shared instance store. The normal policy stays scalar.
+`PreparedResize` retains either scalar scratch or complete worker buffers, including metadata and overlapping support.
+Preparation chooses worker buffers within the same full-call budget before output allocation. A budget miss keeps scalar.
+Warm changed-source calls reuse plans and worker capacity. Pressure releases idle scratch before evicting preparation entries.
+Nearest retains the landed whole-call scalar dispatch. Trilinear always retains the shared-chain implementation.
+
+The benchmark-only Wasm control is `privateExecutionPolicy(stage, height, active_workers, pool_size)`.
+Stages 0, 1, and 2 select resize, indexed, and mixing respectively; height zero clears the candidate.
+The benchmark host must initialize a blocking-capable worker pool before choosing row bands.
+No public recipe fields, automatic thresholds, or main-JS threading changes were added.
+
+Native scalar and threaded library suites pass 35 tests each.
+The complete-call fixture checks all seven filters, worker counts 1/2/4, exact scalar bytes,
+caller-thread progress, failed callback publication, warm changed-source reuse, and scalar-budget fallback.
+The capacity-charge fixture confirms complete preparation releases idle scratch before LRU eviction.
