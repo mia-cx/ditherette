@@ -1,7 +1,7 @@
 import { resizeImageData } from '$lib/processing/resize';
 import { quantizeImageWithRowWorkers } from '$lib/processing/quantize-row-workers';
 import { resizeImageDataWithOptionalWasm } from '$lib/wasm/ditherette-wasm';
-import type { Ditherette } from 'ditherette';
+import type { Ditherette, Progress } from 'ditherette';
 import { packageProcessRequest, packageQuantizeResult } from './package-adapter';
 import {
 	quantizeImage,
@@ -38,7 +38,11 @@ type SourceCache = {
 	source: ImageData;
 };
 
-type ProgressSink = (stage: string, progress: number) => void;
+type ProgressSink = (
+	stage: string,
+	progress: number,
+	counts?: Pick<Progress, 'completed' | 'total'>
+) => void;
 
 type TimingSink = {
 	values: ProcessingStageTiming[];
@@ -322,13 +326,19 @@ export class ProcessorWorkerPipeline {
 		this.#package ??= import('ditherette').then(({ createDitherette }) => createDitherette());
 		const processor = await this.#package;
 		if (this.#canceledIds.has(id)) return undefined;
-		progress('Processing image', PROGRESS.resizing);
 		const result = packageQuantizeResult(
-			processor.process(mapped.request),
+			processor.process({
+				...mapped.request,
+				onProgress({ stage, completed, total }) {
+					progress(stage, stage === 'complete' ? 1 : total ? (completed ?? 0) / total : 0, {
+						completed,
+						total
+					});
+				}
+			}),
 			palette,
 			mapped.warnings
 		);
-		progress('Finalizing indexed output', PROGRESS.finalizing);
 		return {
 			id,
 			type: 'complete',

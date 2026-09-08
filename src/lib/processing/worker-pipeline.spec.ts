@@ -358,6 +358,46 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(pipeline.branchCacheSize).toBe(0);
 	});
 
+	it('forwards public work counts and skipped stages without inventing intermediate work', async () => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		vi.mocked(createDitherette).mockResolvedValue({
+			process(request) {
+				request.onProgress?.({ stage: 'quantize', completed: 1, total: 2 });
+				request.onProgress?.({ stage: 'complete' });
+				return {
+					width: 2,
+					height: 1,
+					indices: new Uint8Array([0, 1]),
+					palette: {
+						rgba: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]),
+						transparentIndex: null
+					},
+					warnings: []
+				};
+			},
+			resize: vi.fn(),
+			quantize: vi.fn(),
+			perturb: vi.fn(),
+			ditherAndQuantize: vi.fn(),
+			dispose: vi.fn()
+		});
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const progress = vi.fn();
+		await pipeline.handleAsync(processRequest(), progress);
+		expect(progress.mock.calls).toContainEqual(['quantize', 0.5, { completed: 1, total: 2 }]);
+		expect(progress.mock.calls.at(-1)).toEqual([
+			'complete',
+			1,
+			{ completed: undefined, total: undefined }
+		]);
+		expect(progress.mock.calls.some(([stage]) => stage === 'resize')).toBe(false);
+	});
+
 	it('keeps fractional crops on the disabled TypeScript path', async () => {
 		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
 		const pipeline = new ProcessorWorkerPipeline();

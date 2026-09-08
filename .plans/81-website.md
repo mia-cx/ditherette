@@ -41,3 +41,10 @@ Explicit cancellation keeps the previous preview and clears the worker once.
 
 Command: `pnpm exec vitest run --project server src/lib/processing/client.spec.ts src/lib/stores/app.spec.ts`.
 Fallback and progress forwarding remain pending. Nearest fallback needs request-specific center-tie evidence, including the historical 2-to-49 mismatch.
+
+## Progress checkpoint
+
+The worker pipeline forwards package stages and optional completed/total counts without adding skipped stages.
+The existing progress display uses the current stage's measured fraction, not a whole-call time estimate.
+The transport validates counts before updating the existing store. No UI components change.
+The new package-progress fixture fails before wiring; all 54 focused pipeline/client/schema/store tests pass afterward.

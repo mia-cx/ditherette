@@ -73,7 +73,20 @@ describe('website processing scheduling', () => {
 		const old = ControlledWorker.instances[0];
 		const id = old.messages[0].id;
 		const retained = processedImage.get();
-		old.receive({ id, type: 'progress', stage: 'Working', progress: 0.2 });
+		old.receive({
+			id,
+			type: 'progress',
+			stage: 'quantize',
+			progress: 0.2,
+			completed: 2,
+			total: 10
+		});
+		expect(processingProgress.get()).toEqual({
+			stage: 'quantize',
+			progress: 0.2,
+			completed: 2,
+			total: 10
+		});
 		outputSettings.set({ ...outputSettings.get(), width: 2 });
 		scheduleProcessing(180);
 		old.receive({ id, type: 'progress', stage: 'Stale progress', progress: 0.9 });

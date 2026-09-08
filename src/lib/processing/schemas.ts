@@ -447,6 +447,19 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 		if (typeof value.stage !== 'string' || !Number.isFinite(value.progress)) {
 			throw new Error('Worker progress response is invalid.');
 		}
+		for (const field of ['completed', 'total']) {
+			if (
+				value[field] !== undefined &&
+				(!Number.isSafeInteger(value[field]) || (value[field] as number) < 0)
+			)
+				throw new Error('Worker progress work count is invalid.');
+		}
+		if (
+			typeof value.completed === 'number' &&
+			typeof value.total === 'number' &&
+			value.completed > value.total
+		)
+			throw new Error('Worker progress exceeds total work.');
 		return value as WorkerResponse;
 	}
 	if (value.type === 'error') {

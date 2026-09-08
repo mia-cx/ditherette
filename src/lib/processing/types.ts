@@ -146,6 +146,8 @@ export type WorkerProgress = {
 	type: 'progress';
 	stage: string;
 	progress: number;
+	completed?: number;
+	total?: number;
 };
 
 export type WorkerSourceLoaded = {

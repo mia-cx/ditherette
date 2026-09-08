@@ -191,7 +191,12 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 			}
 			if (message.id !== id || activeRequestId !== id) return;
 			if (message.type === 'progress') {
-				processingProgress.set({ stage: message.stage, progress: message.progress });
+				processingProgress.set({
+					stage: message.stage,
+					progress: message.progress,
+					completed: message.completed,
+					total: message.total
+				});
 				return;
 			}
 			if (message.type === 'source-loaded') {
