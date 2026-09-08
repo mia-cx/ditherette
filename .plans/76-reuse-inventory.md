@@ -29,6 +29,15 @@ It does not expose per-instance teardown or partial-startup error cleanup. Reusi
 The package must own each worker immediately and clean partial starts before preferred fallback or required failure.
 Keep builder lifetime valid until workers start or initialization fails; inspect the pinned Rust builder implementation before changing this boundary.
 
+The pinned builder passes a pointer to its own channel receiver to each worker and uses `build_global()`.
+Its Rust safety comment requires the builder to remain alive until all workers run. Cleanup must respect that lifetime.
+The global Rayon pool is therefore per Wasm memory, not a reusable pool shared by separately budgeted processors.
+
+`builder.mainJS()` resolves `import.meta.url` from generated bindings. A closure-factory file exports a factory, not the original default initializer.
+Do not point the stock worker helper at that file and expect `pkg.default` to exist.
+Use an explicit worker bootstrap that initializes the matching bindings with the supplied module and shared memory.
+The retained S32 threaded glue already accepts object-form `module_or_path`, `memory`, and `thread_stack_size`.
+
 Each processor needs independent glue state and module memory. A shared compiled `WebAssembly.Module` is code, not shared instance state.
 Its pool workers share only that processor's memory. Do not place independently budgeted processors in one shared memory accidentally.
 Private processor state uses `thread_local!`, and the busy slot releases its mutable borrow before JavaScript calls.
