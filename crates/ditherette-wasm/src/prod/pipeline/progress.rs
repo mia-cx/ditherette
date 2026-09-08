@@ -84,7 +84,6 @@ mod kernel_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spec::contract::lifecycle as frozen;
 
     #[derive(Default)]
     struct Clock {
@@ -105,56 +104,6 @@ mod tests {
                 Ok(())
             }
         }
-    }
-
-    #[test]
-    fn progress_schedule_matches_frozen_lifecycle() {
-        let mut control = Control::new(true);
-        let mut reference = frozen::InstanceModel::default();
-        reference.begin(true).unwrap();
-        let mut clock = Clock::default();
-        let mut expected = Vec::new();
-        for (now, stage, completed, total) in [
-            (0, Stage::Prepare, 0, 1),
-            (1, Stage::Prepare, 1, 1),
-            (2, Stage::Resize, 0, 4),
-            (51, Stage::Resize, 1, 4),
-            (52, Stage::Resize, 2, 4),
-            (102, Stage::Resize, 4, 4),
-            (103, Stage::Quantize, 0, 4),
-        ] {
-            clock.now = now;
-            control
-                .report(Some(&mut clock), stage, completed, total)
-                .unwrap();
-            let progress = Progress {
-                stage,
-                completed: Some(completed),
-                total: Some(total),
-            };
-            let reference_event =
-                serde_json::from_value(serde_json::to_value(progress).unwrap()).unwrap();
-            if reference.report(reference_event, now).unwrap() {
-                expected.push(progress);
-                reference.callback_succeeded().unwrap();
-            }
-        }
-        assert_eq!(clock.events, expected);
-        control.complete(Some(&mut clock)).unwrap();
-        reference.output_ready().unwrap();
-        assert!(reference
-            .report(
-                frozen::Progress {
-                    stage: frozen::Stage::Complete,
-                    completed: Some(1),
-                    total: Some(1),
-                },
-                clock.now
-            )
-            .unwrap());
-        reference.callback_succeeded().unwrap();
-        reference.finish().unwrap();
-        assert_eq!(clock.events.last().unwrap().stage, Stage::Complete);
     }
 
     #[test]

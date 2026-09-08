@@ -104,3 +104,9 @@ positive callback coverage, so accepted S32 conformance remains usable separatel
 
 Final S32 PR #122 at `127a0428a0bfdad7ea3e239e6a96f375449815bb` and installed
 fixture head `0bb2552cd3b2797c1560d2de8b96c5c80c48cc15` are joined.
+
+The trusted guard caught a frozen-module reference inside a production unit test.
+The independent comparison now lives in `tests/prod_progress.rs` and observes an
+actual quantize call against the frozen lifecycle. Production behavior and guard
+policy remain unchanged. Initial `20507aa0` artifact preparation had already
+started; its jobs finished before this test-only edit. Those artifacts are superseded.
