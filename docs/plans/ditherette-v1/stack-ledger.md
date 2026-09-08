@@ -73,6 +73,11 @@ The coordinator's full trusted S18 guard passes. Independent native and private/
 Fresh tarball SHA-256 `379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2` passes Chromium, Firefox, and WebKit.
 Each engine verifies 423 actual Process/staged compositions plus inherited field, diffusion, and target-local Yliluoma suites.
 Documentation head `963a80c56a6de8c36617cd08b14244c768b34e38` preserves those runtime bytes. Process-specific frozen browser conformance and measurements remain pending.
+Final measurement source `e5aae7bf0e1761af2f970b6da75d34cf3a813323` joins benchmark head `834e882f95bb042b8356b324ef18343ef0ad1c52` without runtime changes.
+Its full trusted S18 guard passes. Fresh native worker `9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0` and the unchanged validated tarball are prepared.
+The fresh Process oracle hash is `300f61644c4b7757d1ad80b97c515121a5ad241fa0051e9827e448f0067ffb64`.
+Both roles use the same fresh artifact with distinct actual staged/Process calls. The fixed trial allows 128 serial workers and at most 2,560 samples.
+Final 431-fixture browser conformance and immutable browser snapshot validation precede quiet clearance. No measurement has started.
 The enlarged native area fixture has 125 inherited resize-byte differences, each at most one, which become seven indexed differences.
 Frozen post-resize processing of the landed resize bytes equals both actual production call paths. Only that case may opt into diagnostic non-exact measurement.
 Its frozen gate stays non-passing; Process-versus-staged equality remains mandatory. No new non-exact implementation or optimization is selected.
@@ -90,7 +95,9 @@ After S27 preparation and measurement ended, eight returned S24 native/S23 Wasm 
 The disk had 57 GiB free afterward. Source, copied binaries, trial snapshots, reports, and custom target evidence remain intact.
 After S29 delivery, eight returned S22 compiler profiles reclaimed another 5.34 GiB. Disk free space was 60 GiB afterward.
 Three returned freeze-checker profiles reclaim another 0.29 GiB. Their custom evidence and the active trusted checker cache remain intact.
-S30 runtime owns the S24 quantize cache and its scalar/threaded children. S30 oracle and benchmark worktrees own separate `target/compiler` caches.
+S30 runtime owns the S24 quantize cache and its scalar/threaded children. The S30 benchmark worktree owns its private `target/compiler` cache.
+The returned S30 oracle compiler cache reclaimed another 1.29 GiB. Its separately retained Wasm reference artifact is unchanged.
+Cargo clean refused the missing root `CACHEDIR.TAG`; cleanup instead removed three explicit, fingerprint-verified compiler profiles.
 All other completed-slice compiler ownership has ended. [S41 retains the measured release gaps](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5582606062).
 Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
 
