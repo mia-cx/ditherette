@@ -22,7 +22,7 @@ Public color continues to use packed triplets with byte alpha. Direct quantizati
 - [x] Extend benchmark subjects for the budgeted path and retain caller-thread progress.
 - [x] Join final S34 report-only PR head.
 - [x] Validate actual installed scalar/threaded calls before exclusive crossover evidence.
-- [ ] Prepare the unmerged PR after the coordinator joins measured domain policies and validates installed artifacts.
+- [x] Prepare the unmerged PR after the coordinator joins measured domain policies and validates installed artifacts.
 - [x] Separate automatic per-request scheduling from per-stage developer overrides, capped by the actual pool.
 - [x] Select resize policies from Chromium trial02 and Firefox trial03 evidence, preserving scalar outside measured support.
 
@@ -183,3 +183,23 @@ for `bench_resize_budgeted`, `prod_process`, `prod_progress`, `prod_resize_row_s
 The S35-only branch still warns that S36's working-capacity charge/release helpers lack consumers before its integration join.
 No frozen spec, image storage, landed resize kernels, Wasm artifacts, measurements, PRs, or remote branches change here.
 The coordinator owns the final installed-artifact validation and unmerged PR handoff.
+
+## Final delivery disposition
+
+Publication branch `delivery/v1-s35-resize` rebases with merge ancestry preserved onto published S34
+`d4531667e1158c2068f30614f40c9d39f8c5313e`. Its diff contains resize and shared execution/benchmark support;
+S36 fields and S37 mixing remain separate stacked PRs. All implementation TODOs are complete.
+
+The coordinator's ordinary combined package from `dc81818a` passes the trusted frozen guard.
+Tarball SHA-256 is `1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+The installed automatic-policy fixture passes 23 checks, including nine cases per Chromium/Firefox engine.
+Exact invocation and cleanup evidence live in `.plans/77-79-auto-host.md`. These untimed checks confirm correctness,
+not a second performance measurement. Earlier native subset results above remain the S35 branch validation.
+
+The completed paired reports contain 400 serial workers, 7,215 samples, and 200 exact production comparisons across both engines.
+Their paths are recorded under Selected resize evidence. Reference probes retain inherited bilinear frozen drift.
+S41 owns that discrepancy's approval status, inconclusive controls, warm-policy follow-up, and the pinned WebKit threaded cleanup gate.
+No frozen expectations, tolerances, production kernels, or measured artifacts change during PR preparation.
+Delivery checks pass `git diff --check` and 18 focused Node policy, stage-cache, and artifact-preparation tests.
+Resize, shared execution, Wasm wiring, and package build inputs match `dc81818a`; remaining production differences
+are the separate S36/S37 families and S36's test/developer-only getter annotation.
