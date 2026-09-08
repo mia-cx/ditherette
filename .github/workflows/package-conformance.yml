@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: package-conformance-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -31,7 +35,6 @@ jobs:
       - name: Install configured Rust toolchains
         run: |
           rustup show
-          rustup show --active-toolchain
           cd crates/ditherette-wasm
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
       - name: Install pinned browser engines

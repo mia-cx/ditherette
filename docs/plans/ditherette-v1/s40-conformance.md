@@ -102,4 +102,6 @@ Scalar WebKit remains required and passes.
 Full-call performance, equivalent TypeScript comparisons, inherited reference differences,
 and noisy required measurements remain S41 work. Browser heap limits and successful maximum-area processing
 are not established by the bounded-memory fixture. No external consumer project participates.
-The workflow is locally syntax-checked; its first GitHub execution is separate from these local results.
+The first GitHub run fails before building because of an invalid redundant `rustup show` flag.
+The CI correction removes that command and selects Bash explicitly to preserve piped failure statuses.
+Local results remain valid; a subsequent GitHub result is separate evidence.

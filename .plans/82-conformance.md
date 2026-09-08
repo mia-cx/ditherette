@@ -49,3 +49,8 @@ PR [129](https://github.com/mia-cx/ditherette/pull/129) is open, non-draft, and 
 The rebase preserves validated implementation and report head `e677b3ea29f634af5d1d044196217925af79ae48`.
 After all local jobs exit, the explicit worktree-owned `target/compiler` cache is cleaned, reclaiming about 326 MiB.
 Raw logs, generated package assets, source, and the original ordinary artifact remain available.
+
+The first GitHub run fails during setup because `rustup show --active-toolchain` is invalid.
+Remove the redundant command; `rustup show` already reports the active toolchain.
+Select Bash explicitly so piped browser logs retain `pipefail` and cannot hide test failures.
+These CI-only corrections leave all locally validated runtime inputs unchanged.
