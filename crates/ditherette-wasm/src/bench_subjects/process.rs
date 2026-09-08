@@ -65,9 +65,17 @@ impl<'a> CompleteCall<'a> {
     }
 
     pub fn output(&self, processor: &mut Processor) -> Result<IndexedImage, BenchSubjectError> {
+        self.output_with_source(processor, self.source)
+    }
+
+    pub fn output_with_source(
+        &self,
+        processor: &mut Processor,
+        source: &[u8],
+    ) -> Result<IndexedImage, BenchSubjectError> {
         if !self.staged {
             return processor
-                .process(self.request, &mut NativeBoundary(self.source))
+                .process(self.request, &mut NativeBoundary(source))
                 .map_err(error);
         }
         let recipe = self.request.recipe;
@@ -78,7 +86,7 @@ impl<'a> CompleteCall<'a> {
                     source_height: self.request.source_height,
                     output: recipe.output,
                 },
-                &mut NativeBoundary(self.source),
+                &mut NativeBoundary(source),
             )
             .map_err(error)?;
         processor

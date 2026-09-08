@@ -72,11 +72,22 @@ pub enum BrowserPreparation {
     InitializationCompiled,
 }
 
-/// S19 has no content hash or application cache. Later cache implementations extend this tag.
+/// Historical fixtures use `none`; cache comparisons declare each artifact's capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CacheCapability {
     None,
+    Roles {
+        accepted: PreparationCapability,
+        candidate: PreparationCapability,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PreparationCapability {
+    Uncached,
+    Preparation,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -515,11 +526,15 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
     if let Some(native) = &case.native {
         if case.browser.is_some()
             || case.measurement.scope != native.scope()
-            || case.measurement.application_cache != ApplicationCache::NotApplicable
+            || (case.measurement.application_cache != ApplicationCache::NotApplicable
+                && !matches!(native, super::native::NativeOperation::Processor { .. }))
         {
             return Err(io::Error::other(
                 "native operation requires its declared scope without browser or cache claims",
             ));
+        }
+        if let super::native::NativeOperation::Processor { cache, .. } = native {
+            validate_preparation_cache(*cache, &case.measurement)?;
         }
         if case.identity != native.identity(case.source, &case.rgba)?
             || case.reference_subject != native.reference_subject()
@@ -549,10 +564,21 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
             "staged package calls require the Process operation",
         ));
     }
-    if m.application_cache != ApplicationCache::NotApplicable {
-        return Err(io::Error::other(
-            "S19 has no application cache; cold/warm claims are unsupported",
-        ));
+    if browser.cache != CacheCapability::None
+        || m.application_cache != ApplicationCache::NotApplicable
+    {
+        validate_preparation_cache(browser.cache, m)?;
+        let preparation = match m.application_cache {
+            ApplicationCache::Cold => BrowserPreparation::FreshInstance,
+            ApplicationCache::Warm => BrowserPreparation::PrimedInstance,
+            ApplicationCache::NotApplicable => unreachable!("validated cache state"),
+        };
+        if browser.preparation != preparation
+            || browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package
+        {
+            return Err(io::Error::other("preparation cache cases require ordinary package calls and matching instance lifecycle"));
+        }
     }
     match browser.preparation {
         BrowserPreparation::FreshInstance
@@ -607,6 +633,23 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         return Err(io::Error::other(
             "browser operation, subjects, input, or settings identity differs",
         ));
+    }
+    Ok(())
+}
+
+pub fn validate_preparation_cache(
+    cache: CacheCapability,
+    measurement: &Measurement,
+) -> io::Result<()> {
+    if !matches!(cache, CacheCapability::Roles { .. })
+        || measurement.application_cache == ApplicationCache::NotApplicable
+        || measurement.mode != SampleMode::SingleCall
+        || !matches!(
+            measurement.scope,
+            CallScope::NativeCompleteCall | CallScope::CompleteCall
+        )
+    {
+        return Err(io::Error::other("preparation comparison requires explicit role capabilities and cold/warm single complete calls"));
     }
     Ok(())
 }

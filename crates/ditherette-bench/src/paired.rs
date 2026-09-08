@@ -5,6 +5,7 @@ pub mod coordinator;
 pub mod diffusion;
 pub mod fields;
 pub mod native;
+pub mod preparation;
 pub mod process;
 pub mod quantize;
 pub mod yliluoma;
