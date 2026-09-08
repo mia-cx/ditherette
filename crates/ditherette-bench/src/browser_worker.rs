@@ -227,7 +227,7 @@ pub fn validate_response(
             .as_ref()
             .expect("validated browser recipe")
             .operation,
-        PublicOperation::Quantize { .. }
+        PublicOperation::Quantize { .. } | PublicOperation::Separable { .. }
     );
     for output in std::iter::once(&result.output).chain(result.unstable_output.iter()) {
         let format_matches = if indexed {

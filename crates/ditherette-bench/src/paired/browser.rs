@@ -9,6 +9,12 @@ use std::{collections::BTreeSet, io, path::Component};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PublicOperation {
+    Perturb {
+        settings: super::fields::PerturbPolicy,
+    },
+    Separable {
+        settings: super::fields::SeparableSettings,
+    },
     ResizeNearest {
         anchor: Anchor,
     },
@@ -84,6 +90,16 @@ impl BrowserCase {
 impl PublicOperation {
     pub fn subject(&self, backend: BrowserBackend) -> &'static str {
         match (self, backend) {
+            (Self::Perturb { .. }, BrowserBackend::Package) => "public:perturb:request:package",
+            (Self::Perturb { .. }, BrowserBackend::TypeScript) => {
+                "public:perturb:request:typescript"
+            }
+            (Self::Separable { .. }, BrowserBackend::Package) => {
+                "public:dither-and-quantize:request:package"
+            }
+            (Self::Separable { .. }, BrowserBackend::TypeScript) => {
+                "public:dither-and-quantize:request:typescript"
+            }
             (Self::Quantize { .. }, BrowserBackend::Package) => "public:quantize:request:package",
             (Self::Quantize { .. }, BrowserBackend::TypeScript) => {
                 "public:quantize:request:typescript"
@@ -125,6 +141,8 @@ impl PublicOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Perturb { .. } => "spec:perturb:request:v1",
+            Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
             Self::Quantize { .. } => "spec:quantize:request:v1",
             Self::ResizeNearest { .. } => "spec:resize:nearest:scalar",
             Self::ResizeArea {} => "spec:resize:area:scalar",
@@ -164,7 +182,10 @@ impl PublicOperation {
             | Self::ResizeBicubic { anchor, .. }
             | Self::ResizeLanczos2 { anchor, .. }
             | Self::ResizeLanczos3 { anchor, .. } => anchor,
-            Self::ResizeArea {} | Self::Quantize { .. } => Anchor::Center,
+            Self::ResizeArea {}
+            | Self::Quantize { .. }
+            | Self::Perturb { .. }
+            | Self::Separable { .. } => Anchor::Center,
         }
     }
 
@@ -175,13 +196,18 @@ impl PublicOperation {
         rgba: &[u8],
         output: Dimensions,
     ) -> io::Result<CaseIdentity> {
-        if let Self::Quantize { settings } = self {
+        if let Some(request) = self.processing_request(source, rgba)? {
             if output != source {
                 return Err(io::Error::other(
-                    "quantize output dimensions must equal its source",
+                    "non-resize output dimensions must equal its source",
                 ));
             }
-            return settings.identity(source, rgba);
+            return Ok(CaseIdentity {
+                semantics: request.semantics(),
+                input: input_digest(source, rgba),
+                settings: settings_digest(&request).map_err(io::Error::other)?,
+                output,
+            });
         }
         let semantics = SemanticIdentity {
             operation: Operation::Resize,
@@ -192,7 +218,9 @@ impl PublicOperation {
                 Self::ResizeBicubic { .. } => "bicubic-public-v1",
                 Self::ResizeLanczos2 { .. } => "lanczos2-public-v1",
                 Self::ResizeLanczos3 { .. } => "lanczos3-public-v1",
-                Self::Quantize { .. } => unreachable!("quantize returned above"),
+                Self::Quantize { .. } | Self::Perturb { .. } | Self::Separable { .. } => {
+                    unreachable!("processing returned above")
+                }
             }
             .into(),
             version: 1,
@@ -204,6 +232,22 @@ impl PublicOperation {
             input: input_digest(source, rgba),
             output,
         })
+    }
+
+    /// Typed non-resize reference requests reuse the same frozen registry as native calls.
+    pub fn processing_request<'a>(
+        &'a self,
+        source: Dimensions,
+        rgba: &'a [u8],
+    ) -> io::Result<Option<ditherette_wasm::bench_subjects::reference::ReferenceRequest<'a>>> {
+        match self {
+            Self::Quantize { settings } => settings.reference_request(source, rgba).map(Some),
+            Self::Perturb { settings } => {
+                super::fields::perturb_request(*settings, source, rgba).map(Some)
+            }
+            Self::Separable { settings } => settings.reference_request(source, rgba).map(Some),
+            _ => Ok(None),
+        }
     }
 }
 
@@ -459,9 +503,14 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         }
     }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript) {
-        if matches!(browser.operation, PublicOperation::Quantize { .. }) {
+        if matches!(
+            browser.operation,
+            PublicOperation::Quantize { .. }
+                | PublicOperation::Perturb { .. }
+                | PublicOperation::Separable { .. }
+        ) {
             return Err(io::Error::other(
-                "no faithful TypeScript indexed quantize adapter is registered",
+                "no faithful TypeScript quantize or field adapter is registered",
             ));
         }
         if matches!(browser.operation, PublicOperation::ResizeBicubic { .. }) {
