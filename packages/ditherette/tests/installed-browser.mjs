@@ -9,7 +9,7 @@ import { chromium, firefox, webkit } from 'playwright';
 import { startAssetServer, restrictContext } from '../../../scripts/benchmark-public-browser.mjs';
 
 /** Install an explicit tarball and run one caller-visible fixture in each browser engine. */
-export async function installedBrowserChecks(t, check, expected) {
+export async function installedBrowserChecks(t, check, expected, options = {}) {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-stage-ownership-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	const tarball = process.env.DITHERETTE_TEST_TARBALL
@@ -48,7 +48,11 @@ export async function installedBrowserChecks(t, check, expected) {
 	const files = (await readdir(packagePath, { recursive: true, withFileTypes: true }))
 		.filter((entry) => entry.isFile())
 		.map((entry) => ({ path: join(entry.parentPath, entry.name).slice(packagePath.length + 1) }));
-	const server = await startAssetServer({ tree: { root: packagePath, files }, entries: {} }, false);
+	const server = await startAssetServer(
+		{ tree: { root: packagePath, files }, entries: {} },
+		options.isolated ?? false
+	);
+	for (const [route, file] of Object.entries(options.assets ?? {})) server.paths.set(route, file);
 	t.after(
 		() =>
 			new Promise((resolve) => {
@@ -67,13 +71,18 @@ export async function installedBrowserChecks(t, check, expected) {
 				const context = await browser.newContext();
 				await restrictContext(context, server);
 				const page = await context.newPage();
-				await page.goto(server.url);
+				const input = {
+					moduleUrl: `${server.url}/dist/index.js`,
+					wasmUrl: `${server.url}/dist/wasm/scalar/ditherette_wasm_bg.wasm`,
+					vectors
+				};
 				assert.deepEqual(
-					await page.evaluate(check, {
-						moduleUrl: `${server.url}/dist/index.js`,
-						wasmUrl: `${server.url}/dist/wasm/scalar/ditherette_wasm_bg.wasm`,
-						vectors
-					}),
+					options.driver
+						? await options.driver({ page, context, server, input, t })
+						: await (async () => {
+								await page.goto(server.url);
+								return page.evaluate(check, input);
+							})(),
 					expected
 				);
 				t.diagnostic(`${name} ${browser.version()}: installed fixture passes`);
