@@ -4,7 +4,9 @@ import type {
 	ResizeRequest,
 	Rgba8Image,
 	QuantizeRequest,
-	IndexedImage
+	IndexedImage,
+	PerturbRequest,
+	DitherAndQuantizeRequest
 } from '../src/index.js';
 
 const request: ResizeRequest = {
@@ -95,3 +97,32 @@ createDitherette({ backend: 'scalar' });
 createDitherette({ threads: true });
 const error: Error = new DitheretteError('invalid-image', 'source.data', 'Invalid bytes.');
 void error;
+const perturb: PerturbRequest = {
+	version: 1,
+	source: request.source,
+	perturb: {
+		field: { algorithm: 'bayer', size: '4' },
+		space: 'oklch',
+		strength: 0.7,
+		placement: { mode: 'adaptive', radius: 1, threshold: 5, softness: 10 }
+	}
+};
+const dither: DitherAndQuantizeRequest = {
+	...quantize,
+	dither: { family: 'separable', perturb: perturb.perturb }
+};
+processor.then((instance) => {
+	const rgba: Rgba8Image = instance.perturb(perturb);
+	const indexed: IndexedImage = instance.ditherAndQuantize(dither);
+	void rgba;
+	void indexed;
+});
+// @ts-expect-error Bayer matrix sizes are canonical string tags.
+const badSize: PerturbRequest['perturb']['field'] = { algorithm: 'bayer', size: 4 };
+// @ts-expect-error BlueNoise belongs to the next implementation slice.
+const blueNoise: PerturbRequest['perturb']['field'] = { algorithm: 'blue-noise' };
+// @ts-expect-error Matching metrics are not reversible working spaces.
+const badSpace: PerturbRequest['perturb']['space'] = 'srgb-rec709';
+void badSize;
+void blueNoise;
+void badSpace;

@@ -45,7 +45,9 @@ export async function prepareOperation(trial) {
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
 	const quantize = config.operation.operation === 'quantize';
-	const resize = quantize ? undefined : resizeRecipe(config.operation);
+	const perturb = config.operation.operation === 'perturb';
+	const separable = config.operation.operation === 'separable';
+	const resize = quantize || perturb || separable ? undefined : resizeRecipe(config.operation);
 	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
 		throw new Error('This package has no application cache.');
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
@@ -53,17 +55,26 @@ export async function prepareOperation(trial) {
 	const request = {
 		version: 1,
 		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
-		...(quantize
-			? config.operation.settings
-			: {
-					output: {
-						...trial.case.identity.output,
-						resize
+		...(perturb
+			? { perturb: config.operation.settings }
+			: separable
+				? {
+						...config.operation.settings.quantize,
+						dither: { family: 'separable', perturb: config.operation.settings.perturb }
 					}
-				})
+				: quantize
+					? config.operation.settings
+					: {
+							output: {
+								...trial.case.identity.output,
+								resize
+							}
+						})
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
+		if (perturb || separable)
+			throw new Error('No faithful TypeScript field adapter is registered.');
 		if (quantize) throw new Error('No faithful TypeScript indexed quantize adapter is registered.');
 		if (resize.algorithm === 'bicubic')
 			throw new Error('The website has no bicubic implementation.');
@@ -94,7 +105,13 @@ export async function prepareOperation(trial) {
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
 	const create = () => createDitherette({ wasm: compiled ?? bytes });
-	const call = (instance) => (quantize ? instance.quantize(request) : instance.resize(request));
+	const call = perturb
+		? (instance) => instance.perturb(request)
+		: separable
+			? (instance) => instance.ditherAndQuantize(request)
+			: quantize
+				? (instance) => instance.quantize(request)
+				: (instance) => instance.resize(request);
 	if (measurement.scope === 'initialization') {
 		if (!['initialization-bytes', 'initialization-compiled'].includes(config.preparation))
 			throw new Error('Initialization requires an explicit compilation scope.');
@@ -317,7 +334,9 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const format = trial.case.browser.operation.operation === 'quantize' ? 'indexed8' : 'rgba8';
+		const format = ['quantize', 'separable'].includes(trial.case.browser.operation.operation)
+			? 'indexed8'
+			: 'rgba8';
 		const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
 		// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
 		const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
