@@ -538,10 +538,17 @@ impl<'a> Call<'a> {
                 unreachable!()
             };
             let record_bytes = (record.capacity() * size_of::<PreparedResize>()) as u64;
+            let output = ImageDimensions::new(request.output.width, request.output.height).unwrap();
+            let measured = super::resize::measured_row_policy(
+                request.source,
+                output,
+                request.output.resize,
+                super::execution::worker_budget(),
+            );
             record[0].select_bands(
-                ImageDimensions::new(request.output.width, request.output.height).unwrap(),
+                output,
                 call.store
-                    .row_policy(super::execution::ExecutionStage::Resize, None),
+                    .row_policy(super::execution::ExecutionStage::Resize, measured),
                 budget - record_bytes,
             )?;
         }
