@@ -44,8 +44,8 @@ export function resizeRecipe(operation) {
 	}
 }
 
-/** Prepare the actual package or website call outside measurement timers. */
-export async function prepareOperation(trial, onRowPolicy = () => {}) {
+/** Prepare calls outside timers; diagnostic same-call primes also enter the caller's output verifier. */
+export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCallPrime = () => {}) {
 	const config = trial.case.browser;
 	const execution =
 		typeof DedicatedWorkerGlobalScope !== 'undefined' &&
@@ -240,6 +240,7 @@ export async function prepareOperation(trial, onRowPolicy = () => {}) {
 		throw new Error('Browser processing requires complete-call scope.');
 	if (config.preparation === 'primed-sample') {
 		const prime = stagePrimeRequest(config.operation.operation, request, samplePrime);
+		const diagnosticPrime = samplePrime === 'same-call' && config.measure_nonexact === true;
 		if (!trial.prime_reference_output)
 			throw new Error('Stage priming requires a frozen prime output.');
 		return {
@@ -252,11 +253,11 @@ export async function prepareOperation(trial, onRowPolicy = () => {}) {
 					observePrime: (output) => {
 						assertMeasuredSource(request, trial.case.rgba);
 						const actual = verificationOutput(output);
-						if (!equalOutput(actual, trial.prime_reference_output)) {
-							throw new Error(
-								`Stage prime differs from frozen reference: ${JSON.stringify({ expected: trial.prime_reference_output, actual })}`
-							);
-						}
+						if (!equalOutput(actual, trial.prime_reference_output) && !diagnosticPrime)
+							throw new Error('Stage prime differs from frozen reference; actual prime rejected before timing.');
+						// The same operation shares its final oracle and bounded instability evidence.
+						// Different-stage primes cannot use that verifier's dimensions or pixel format.
+						if (diagnosticPrime) onSameCallPrime(output);
 					}
 				}),
 			close() {}
@@ -510,7 +511,21 @@ export async function requireMatchingComposition(operation, current) {
 export async function runTrial(trial) {
 	const resolution = timerResolution();
 	let rowPolicyObservation;
-	const operation = await prepareOperation(trial, (value) => { rowPolicyObservation = value; });
+	const format = ['quantize', 'separable', 'diffusion', 'yliluoma', 'process'].includes(
+		trial.case.browser.operation.operation
+	)
+		? 'indexed8'
+		: 'rgba8';
+	const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
+	// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
+	const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
+	retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
+	const stability = outputStability(outputBytes, format);
+	const operation = await prepareOperation(
+		trial,
+		(value) => { rowPolicyObservation = value; },
+		(output) => stability.observe([output])
+	);
 	try {
 		const identity = {
 			role: trial.role,
@@ -528,16 +543,6 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const format = ['quantize', 'separable', 'diffusion', 'yliluoma', 'process'].includes(
-			trial.case.browser.operation.operation
-		)
-			? 'indexed8'
-			: 'rgba8';
-		const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
-		// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
-		const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
-		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
-		const stability = outputStability(outputBytes, format);
 		const observe = (outputs) => {
 			stability.observe(outputs);
 			assertMeasuredSource(operation.request, trial.case.rgba);
