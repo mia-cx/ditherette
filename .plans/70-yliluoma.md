@@ -141,3 +141,21 @@ Frozen content verification still reports the S18 revision and digest above. Spe
 The complete literal public baseline is ready for coordinator measurement preparation.
 Stop here. A next candidate may reuse the existing prepared converter per call, then consider bounded mixture preparation only after measurements.
 Keep every literal checkpoint and compare against exact target-local frozen output. This checkpoint runs no measurements and opens no PR.
+
+## Browser transport validator correction
+
+Independent review of `4e0c134d5c846d32af6b253ced0099993122b251` found that Rust classified Yliluoma results as RGBA8.
+Installed-package adapter checks bypassed that final transport validator, so they did not expose the missing indexed classification.
+The focused `validate_response` regression fails before the fix with `browser result has invalid shape, format, or warning metadata`.
+Adding Yliluoma to the indexed families makes the regression pass and continues to reject RGBA8 results for that operation.
+All seven `browser_worker` tests pass, including the six existing protocol, instability, and child-reaping tests.
+
+Commands use `CARGO_TARGET_DIR=/home/mia/mia-cx/ditherette/.worktrees/v1-s24-quantize/crates/ditherette-wasm/target`:
+
+- Red: `cargo test --locked --manifest-path crates/ditherette-bench/Cargo.toml --test browser_worker yliluoma_transport_accepts_indexed_output_and_rejects_rgba_output` reports one expected failure.
+- Green: `cargo test --locked --manifest-path crates/ditherette-bench/Cargo.toml --test browser_worker` reports seven passes.
+- Benchmark crate formatting and `git diff --check` pass.
+
+This verifies the Rust transport boundary only. No public artifacts rebuild and no benchmark collector runs.
+The frozen-only fixture probe is independent and its recorded fixture hashes match, but exact dependency/compiler provenance remains incomplete until the shared oracle protocol lands.
+The correction changes no production algorithm, frozen source, fixture bytes, or candidate selection.
