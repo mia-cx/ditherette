@@ -163,7 +163,14 @@ impl Processor {
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::process::ProcessRequest<'_>>() as u64
             + 2 * size_of::<Vec<u8>>() as u64
-            + super::perturb::working_capacity_bytes()
+            + if matches!(
+                request.recipe.dither,
+                crate::prod::contract::request::DitherPolicy::Separable { .. }
+            ) {
+                super::perturb::working_capacity_bytes()
+            } else {
+                0
+            }
             + boundary.capacity_bytes();
         self.peak_capacity = overhead;
         let result = super::process::run(

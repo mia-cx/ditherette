@@ -243,6 +243,25 @@ impl Allocator for Reservation {
 }
 
 #[test]
+fn no_dither_does_not_charge_the_separable_converter() {
+    let separable = request(dithers()[1]);
+    let mut processor = Processor::new(1 << 20, 0).unwrap();
+    processor
+        .process(separable, &mut Boundary::default())
+        .unwrap();
+    let perturb_bytes =
+        u64::from(separable.recipe.output.width) * u64::from(separable.recipe.output.height) * 4;
+    let converter_bytes =
+        std::mem::size_of::<ditherette_wasm::prod::color::packed::Converter>() as u64;
+    let needed = processor.peak_capacity_bytes() - perturb_bytes - converter_bytes;
+    let mut bounded = Processor::new(needed, 0).unwrap();
+    bounded
+        .process(request(DitherPolicy::None {}), &mut Boundary::default())
+        .unwrap();
+    assert_eq!(bounded.peak_capacity_bytes(), needed);
+}
+
+#[test]
 fn whole_call_capacity_reservations_and_caught_failures_precede_publication_and_recover() {
     for dither in dithers() {
         let request = request(dither);
