@@ -110,3 +110,36 @@ The independent comparison now lives in `tests/prod_progress.rs` and observes an
 actual quantize call against the frozen lifecycle. Production behavior and guard
 policy remain unchanged. Initial `20507aa0` artifact preparation had already
 started; its jobs finished before this test-only edit. Those artifacts are superseded.
+
+## Candidate validation before measurements
+
+The assigned benchmark protocol at `ec640c6dfc48afcc8fe95edcf1d2fd16c8e74579`
+is joined. The full native test suite passes after that join. The relocated
+frozen comparison and four remaining progress unit tests also pass.
+The coordinator's trusted guard passes at clean source
+`4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4`, including isolated native/Wasm
+production and frozen builds, plus native threaded production. The frozen digest
+remains `17ba3be3`.
+
+Both official preparers completed successfully with that source held fixed.
+Their manifests record the same clean revision. Retained artifact directories are
+`target/s33-candidate-4a75d479-native` and `target/s33-candidate-4a75d479-public`.
+The installed tarball SHA-256 is
+`f6e62526cc290d8ca1f9fdcb7fcfc9de39790c1982dab7118adb30a4a84173d2`.
+It is byte-identical to the superseded `20507aa0` package. That earlier source
+failed isolation and remains unselected regardless of its passing callback tests.
+
+Tests run from `4a75d479` against the exact replacement tarball pass:
+
+- Installed progress and stage-ownership suites pass 8/8 tests.
+- Broad installed conformance passes 4/4 tests. Each engine checks 367 frozen
+  Wasm Yliluoma vectors and 734 untimed actual benchmark-adapter calls.
+- Engines are Chromium `147.0.7727.15`, Firefox `148.0.2`, and WebKit `26.4`.
+
+The broad suite uses the replacement public oracle and an untimed fixture generated
+by the official native preparer's `yliluoma_conformance` executable. Tests use
+`DITHERETTE_TEST_TARBALL` and its required SHA-256, plus the existing WebKit alias.
+This record is a report-only delivery delta after the artifact source. The
+coordinator retains a clean detached `4a75d479` checkout for trial provenance.
+Build and browser jobs have drained. Exclusive measurements and the child PR remain
+pending; these correctness results make no performance claim.
