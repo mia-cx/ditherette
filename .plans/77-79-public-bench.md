@@ -11,7 +11,7 @@ Read the coordinator execution contract and each slice's recipe fragment before 
 - [x] Bind developer-only row policies to each role and apply them outside method timers through the actual public processor.
 - [x] Prepare explicitly marked benchmark-feature artifacts without changing ordinary package exports or build defaults.
 - [x] Join validated candidates, declare bounded cases and budgets, and check actual installed host calls before measurement.
-- [ ] Drain all agents/builds/tests and run one exclusive paired trial. Retain every result and select only exact complete-call wins.
+- [x] Drain all agents/builds/tests and run exclusive paired trials. Retain every result and select only exact complete-call wins.
 
 ## Constraints
 
@@ -59,3 +59,15 @@ The joined correction passes 29 Node browser, stage-cache, and policy tests. Pro
 Prepare fresh artifacts after the collector correction and compact machine-JSON storage change.
 Retain the first sweep unchanged. Run the same fixed 400-worker matrix once from the corrected artifacts.
 This replaces a broken preflight, not an optimization revision or a retry seeking favorable timings.
+## Completed evidence
+
+The coordinator completes the fixed 50-case matrix on immutable processing source `5d16c568`.
+Reports remain at `v1-s35-37-bench/target/rows-trial-02/chromium-results/report.json` and
+`v1-s35-37-bench/target/rows-trial-03/firefox-results/report.json` under `.worktrees/`.
+The completed trials contain 400 serial workers, 7,215 samples, and 200 exact same-artifact production comparisons.
+All workers exit. Firefox trial02 remains preserved as a failed runtime-snapshot attempt; trial03 uses hash-bound update-disabled configuration.
+
+The ordinary combined artifact from `dc81818a` passes the trusted frozen guard and 23 untimed host checks.
+Its tarball identity, exact invocation, and browser cleanup evidence are in `.plans/77-79-auto-host.md`.
+S41 retains inherited bilinear reference drift, inconclusive controls, warm-policy follow-up, and the pinned WebKit cleanup gate.
+These remain visible release decisions, not new approximations or silently passing gates.
