@@ -96,7 +96,8 @@ test('installed tarball loads only scalar assets and runs the public contract in
 			[
 				'/benchmark/benchmark-public-page.mjs',
 				'/benchmark/benchmark-public-timing.mjs',
-				'/benchmark/benchmark-stage-cache.mjs'
+				'/benchmark/benchmark-stage-cache.mjs',
+				'/benchmark/benchmark-progress.mjs'
 			].includes(pathname)
 		) {
 			response.writeHead(200, { 'Content-Type': 'text/javascript' });
