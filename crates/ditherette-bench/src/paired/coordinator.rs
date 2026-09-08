@@ -229,7 +229,10 @@ fn run_inner(
     }
     // All direct children have exited. Keep the lease while final evidence is written.
     let report = compare(prepared, &trials);
-    write_new(&directory.join("report.json"), &json(&report)?)?;
+    write_new(
+        &directory.join("report.json"),
+        &serde_json::to_vec_pretty(&report).map_err(io::Error::other)?,
+    )?;
     for (case_index, comparison) in report.cases.iter().enumerate() {
         if comparison.gate != Gate::Incorrect {
             continue;
@@ -431,7 +434,7 @@ fn event(file: &mut File, trial: &str, state: &str, pid: Option<u32>) -> io::Res
 }
 
 fn json(value: &impl Serialize) -> io::Result<Vec<u8>> {
-    serde_json::to_vec_pretty(value).map_err(io::Error::other)
+    serde_json::to_vec(value).map_err(io::Error::other)
 }
 fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
     OpenOptions::new()
