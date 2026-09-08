@@ -32,9 +32,9 @@ No public API, execution selector, cache identity, or callback contract changes.
 2. [ ] Define bounded execution capacity using existing worker-budget geometry.
    Count each concurrently live perturb converter and other temporary records;
    share immutable quantizer preparation. Prove exact budget and one-under behavior.
-3. [ ] Extend existing benchmark subjects before selecting a parallel candidate.
-   Reuse complete-call adapters, including copies/preparation, and coordinate
-   shared registration with root. Keep thresholds unselected pending fresh evidence.
+3. [x] Define S36 recipes through existing complete-call benchmark subjects.
+   Reuse typed native/public mappings and verify frozen output without timing.
+   Root owns the measured dimensions, trial matrix, and scheduling selection.
 4. [ ] Join the shared pooled executor and integrate candidate row scheduling
    through private fragments. Report progress only after joined work on the caller.
 5. [ ] After root quiet clearance, compare fresh complete-call host-worker artifacts.
@@ -78,3 +78,18 @@ row work plans. Step 2 joins that helper rather than introducing a competing pla
 This checkpoint proves the domain adapters and existing preparation budgets;
 combined per-worker execution preflight remains pending. Native scoped threads
 here are exactness fixtures only, not benchmark subjects or timing evidence.
+
+## Complete-call recipe checkpoint
+
+`crates/ditherette-bench/examples/support/row_fields.rs` supplies six recipes.
+They cover quantize, perturb, and separable calls with cheap and perceptual matching,
+random and blue-noise fields, and adaptive full-source reads. Palette sizes are
+16 and 64. The fragment chooses no dimensions, workers, thresholds, or trial budget.
+It reuses existing production subject IDs and native/public request types.
+The existing field-call adapters retain input copies, preparation, durable copies,
+and result destruction. The existing native quantize subject includes preparation
+and result allocation; browser evidence will use the actual public Processor call.
+
+The new untimed `row_field_adapters` test passes all six recipe comparisons.
+It checks native/public identity equality, exact frozen output and metadata,
+unique settings identities, and unchanged input. No shared registry changed.
