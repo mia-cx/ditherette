@@ -182,6 +182,7 @@ pub fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 candidate_subject: subject.into(),
                 native: (!public).then_some(native.clone()),
                 browser: public.then_some(BrowserCase {
+                    execution: None,
                     operation: operation.clone(),
                     accepted: BrowserBackend::Package,
                     candidate: BrowserBackend::Package,

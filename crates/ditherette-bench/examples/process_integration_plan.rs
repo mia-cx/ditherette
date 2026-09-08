@@ -223,6 +223,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 target_sample_ms: 2,
             },
             browser: public.then_some(BrowserCase {
+                execution: None,
                 operation,
                 accepted: BrowserBackend::PackageStaged,
                 candidate: BrowserBackend::Package,
