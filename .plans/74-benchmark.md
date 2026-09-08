@@ -37,6 +37,7 @@ Inspect that adapter branch explicitly. Keep callback evidence distinct from out
 ## Atomic steps
 
 - [ ] Extend typed development metadata and adapter wiring. Prove omitted historical metadata retains existing behavior.
+- [x] Add the constant-storage callback observer and focused reset/invalid-event checks.
 - [ ] Add focused fake-clock/full-trial tests for actual enabled callbacks, observation reset, and thrown callback propagation.
 - [ ] Generate the fixed matrix from reused fixtures. Validate identities and exact frozen outputs without timing.
 - [ ] Join final runtime and public fixtures, then build fresh accepted/candidate artifacts with the official preparers.
@@ -47,3 +48,7 @@ One worker and its owned transport may run at a time under the existing shared l
 Confirmed regressions above 10% stay release blockers; inconclusive results stay incomplete.
 Do not retune landed kernels, change frozen files, retry undeclared cases, or run routine PR reviews.
 After PR handoff, return compiler ownership for cleanup while retaining artifacts and results.
+
+The initial observer passes four Node tests. It retains only counters and scalar fields, never an event array.
+Its bounded callback checks are part of enabled-call timing. Reset and verification belong outside timers.
+Full adapter integration and measurements remain pending.
