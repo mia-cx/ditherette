@@ -11,7 +11,7 @@ Join the final publication heads before delivery.
 
 - [x] Add crate-owned conformance commands and CI using existing installed-package fixtures.
 - [x] Join focused scalar boundary and repeated-memory browser checks from the isolated memory branch.
-- [ ] Run the integrated native/interface/browser/website checks and record exact artifact evidence.
+- [x] Run the integrated native/interface/browser/website checks and record exact artifact evidence.
 - [ ] Record failed or absent coverage, file an unmerged PR, and return compiler outputs for cleanup.
 
 ## Ownership
@@ -43,3 +43,5 @@ The website passes 68 server and six Chromium tests with the ordinary tarball st
 All three scalar memory engines pass; both supported threaded lifecycle engines pass 12 test records.
 The first broad run passes Chromium and Firefox. WebKit cannot load its system woff library.
 Its focused retry uses the existing test-owned library alias, without changing shared browser files.
+The WebKit-only retry passes all six test records. No runtime correction is needed.
+The final report is `docs/plans/ditherette-v1/s40-conformance.md`.
