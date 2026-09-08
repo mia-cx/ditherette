@@ -20,7 +20,7 @@ not prove private cache publication; the runtime owner supplies that evidence.
 
 ## Work
 
-- [ ] Share the existing standalone installed browser setup without changing its ownership checks.
+- [x] Share the existing standalone installed browser setup without changing its ownership checks.
 - [ ] Add callback behavior across five methods, cold/repeated calls, caught failures,
   output durability, reentry/disposal, and observable completion/copy ordering.
 - [ ] Check syntax and run an explicitly failing S32 callback probe, then hand off
@@ -30,3 +30,8 @@ No compiler targets or build ownership. No measurements, PR creation, or public 
 Baseline tarball lives at the S32 worktree's
 `target/s32-candidate-d638f87c-public/ditherette.tgz`, SHA-256
 `8a51e04d08cfdf73bd022ccef1167fed36c74f8267ea1615e19e46df7636fc80`.
+
+The extracted `installed-browser.mjs` keeps tarball digest checks, offline install,
+restricted asset serving, three engines, and cleanup. Unchanged stage ownership
+assertions pass all four tests on the retained S32 tarball in 2.51 seconds.
+Local dependency installation used the frozen lockfile, offline mode, and disabled scripts.
