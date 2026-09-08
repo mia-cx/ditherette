@@ -37,6 +37,7 @@ function fixture(operation) {
 			CRATE,
 			'crates/ditherette-bench',
 			'crates/ditherette-bench-api',
+			'crates/ditherette-bench-oracle',
 			POLICY,
 			'.github/workflows'
 		]) {
