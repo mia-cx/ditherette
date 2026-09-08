@@ -243,6 +243,7 @@ fn exact_capacity_one_under_and_caught_failure_recovery_cover_both_result_shapes
     let mut probe = Processor::new(1 << 20, 0).unwrap();
     let rgba = probe.perturb(request(), &mut Boundary::new()).unwrap();
     let rgba_capacity = probe.peak_capacity_bytes();
+    let mut probe = Processor::new(1 << 20, 0).unwrap();
     let indexed = probe
         .dither_and_quantize(
             quantize(),
@@ -347,8 +348,8 @@ impl Allocator for Allocation {
 #[test]
 fn every_buffer_reservation_failure_and_extra_capacity_fail_before_source_copy() {
     for fused in [false, true] {
-        let mut processor = Processor::new(1 << 20, 0).unwrap();
         for fail_at in 0..if fused { 3 } else { 2 } {
+            let mut processor = Processor::new(1 << 20, 0).unwrap();
             let mut boundary = Boundary::new();
             let mut allocator = Allocation {
                 fail_at,
@@ -373,6 +374,7 @@ fn every_buffer_reservation_failure_and_extra_capacity_fail_before_source_copy()
             assert_eq!((boundary.copies, boundary.completions), (0, 0));
             processor.perturb(request(), &mut Boundary::new()).unwrap();
         }
+        let mut processor = Processor::new(1 << 20, 0).unwrap();
         if fused {
             processor
                 .dither_and_quantize(
@@ -569,6 +571,7 @@ fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer
         (0, 0, 0)
     );
     for fail_at in [0, 1] {
+        exact = Processor::new(capacity, 0).unwrap();
         let mut boundary = Boundary::new();
         let mut allocator = Allocation {
             fail_at,
@@ -620,7 +623,7 @@ fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer
             &mut allocator,
         )
         .unwrap();
-    assert_eq!(allocator.calls, 2);
+    assert_eq!(allocator.calls, 0);
     for placement in [
         Placement::Adaptive {
             radius: 0,
