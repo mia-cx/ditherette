@@ -67,6 +67,30 @@ afterEach(() => {
 });
 
 describe('website processing scheduling', () => {
+	it('retains initialization fallback across worker replacement but ignores stale activation', async () => {
+		const first = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		const load = worker.messages[0];
+		if (load.type !== 'load-source') throw new Error('Expected source load.');
+		worker.receive({ id: load.id, type: 'source-loaded', sourceId: load.sourceId });
+		worker.receive({ id: load.id - 1, type: 'fallback', message: 'Stale initialization failure' });
+		expect(worker.messages.at(-1)).not.toHaveProperty('typeScriptFallback', true);
+		worker.receive({ id: load.id, type: 'fallback', message: 'Using page-session fallback' });
+		expect(worker.messages.at(-1)).toHaveProperty('typeScriptFallback', true);
+		expect(processingProgress.get()?.stage).toBe('Using page-session fallback');
+		cancelProcessing();
+		await first;
+		const second = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		const replacement = ControlledWorker.instances[1];
+		const nextLoad = replacement.messages[0];
+		if (nextLoad.type !== 'load-source') throw new Error('Expected new source load.');
+		replacement.receive({ id: nextLoad.id, type: 'source-loaded', sourceId: nextLoad.sourceId });
+		expect(replacement.messages.at(-1)).toHaveProperty('typeScriptFallback', true);
+		cancelProcessing();
+		await second;
+	});
 	it('invalidates stale events immediately and replaces active work after the slider debounce', async () => {
 		const pending = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);

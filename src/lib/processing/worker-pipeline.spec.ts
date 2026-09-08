@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createDitherette } from 'ditherette';
+import { createDitherette, DitheretteError } from 'ditherette';
 import { ProcessorWorkerPipeline, transferablesForWorkerResponse } from './worker-pipeline';
 import type {
 	DitherSettings,
@@ -25,7 +25,18 @@ class TestImageData implements ImageData {
 
 Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configurable: true });
 
-vi.mock('ditherette', () => ({ createDitherette: vi.fn() }));
+vi.mock('ditherette', () => ({
+	createDitherette: vi.fn(),
+	DitheretteError: class extends Error {
+		constructor(
+			public code: string,
+			public path: string,
+			message: string
+		) {
+			super(message);
+		}
+	}
+}));
 afterEach(() => {
 	vi.unstubAllEnvs();
 	vi.resetAllMocks();
@@ -77,6 +88,66 @@ function processRequest(overrides: Partial<Extract<WorkerRequest, { type: 'proce
 }
 
 describe('ProcessorWorkerPipeline', () => {
+	it.each(['initialization', 'capability'] as const)(
+		'requests page-session fallback for %s, then executes only faithful TypeScript',
+		async (code) => {
+			vi.stubEnv('DEV', true);
+			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+			vi.mocked(createDitherette).mockRejectedValue(
+				new DitheretteError(code, 'wasm', 'Load failed')
+			);
+			const pipeline = new ProcessorWorkerPipeline();
+			pipeline.handle(
+				{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+				() => undefined
+			);
+			expect(await pipeline.handleAsync(processRequest(), () => undefined)).toMatchObject({
+				id: 2,
+				type: 'fallback'
+			});
+			const response = await pipeline.handleAsync(
+				{ ...processRequest(), typeScriptFallback: true },
+				() => undefined
+			);
+			expect(response).toMatchObject({
+				type: 'complete',
+				image: {
+					indices: new Uint8Array([0, 1]),
+					warnings: expect.arrayContaining([expect.stringContaining('page session')])
+				}
+			});
+			expect(createDitherette).toHaveBeenCalledOnce();
+			await expect(
+				pipeline.handleAsync(
+					{
+						...processRequest(),
+						typeScriptFallback: true,
+						settings: { output: { ...output, resize: 'area' }, dither, colorSpace: 'srgb' }
+					},
+					() => undefined
+				)
+			).rejects.toThrow(/faithfully/);
+		}
+	);
+
+	it.each([
+		'invalid-request',
+		'memory-limit',
+		'wasm-memory-unavailable',
+		'callback',
+		'runtime'
+	] as const)('keeps %s initialization-boundary errors visible', async (code) => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		const error = new DitheretteError(code, 'wasm', 'Visible failure');
+		vi.mocked(createDitherette).mockRejectedValue(error);
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toBe(error);
+	});
 	it('loads a source before processing', () => {
 		const pipeline = new ProcessorWorkerPipeline();
 
@@ -422,12 +493,15 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(createDitherette).not.toHaveBeenCalled();
 	});
 
-	it.each(['initialization', 'process'])(
+	it.each(['initialization', 'process', 'processing-initialization'])(
 		'keeps %s failures visible without invoking TypeScript',
 		async (failure) => {
 			vi.stubEnv('DEV', true);
 			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
-			const error = new Error(`${failure} failed`);
+			const error =
+				failure === 'processing-initialization'
+					? new DitheretteError('initialization', 'wasm', 'Processing failed')
+					: new Error(`${failure} failed`);
 			if (failure === 'initialization') vi.mocked(createDitherette).mockRejectedValue(error);
 			else
 				vi.mocked(createDitherette).mockResolvedValue({
