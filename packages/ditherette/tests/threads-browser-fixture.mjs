@@ -1,12 +1,15 @@
 /** Exercise selected artifacts only through the installed public factory and processing methods. */
-export async function scalarSelectionChecks({ moduleUrl }) {
+export async function scalarSelectionChecks({ moduleUrl, capabilityUnavailable = true }) {
 	const { createDitherette, DitheretteError } = await import(moduleUrl);
 	const request = {
 		version: 1,
 		source: { width: 1, height: 1, data: new Uint8Array([19, 83, 127, 255]) },
 		output: { width: 1, height: 1, resize: { algorithm: 'nearest', anchor: 'center' } }
 	};
-	for (const threads of [undefined, 'disabled', 'preferred']) {
+	const selections = capabilityUnavailable
+		? [undefined, 'disabled', 'preferred']
+		: [undefined, 'disabled'];
+	for (const threads of selections) {
 		const instance = await createDitherette({ threads });
 		try {
 			if (String(instance.resize(request).data) !== '19,83,127,255')
@@ -15,6 +18,7 @@ export async function scalarSelectionChecks({ moduleUrl }) {
 			instance.dispose();
 		}
 	}
+	if (!capabilityUnavailable) return { scalarSelections: 2, requiredCapabilityError: false };
 	try {
 		await createDitherette({ threads: 'required' });
 	} catch (error) {
@@ -85,6 +89,7 @@ export async function initializeThreadedPair({ moduleUrl, wasmUrl, vectors }) {
 	});
 	const wasm = await WebAssembly.compile(await (await fetch(wasmUrl)).arrayBuffer());
 	const instances = [];
+	let reference;
 	try {
 		instances.push(
 			await createDitherette({ threads: 'required', wasm, memoryLimitBytes: 100_000 })
@@ -98,9 +103,18 @@ export async function initializeThreadedPair({ moduleUrl, wasmUrl, vectors }) {
 		const shared = memories.filter((memory) => memory.buffer instanceof SharedArrayBuffer);
 		if (shared.length !== 2 || shared[0] === shared[1] || shared[0].buffer === shared[1].buffer)
 			throw new Error('Compiled code reuse must allocate separate shared memories.');
-		globalThis.threadPair = { instances, observed, DitheretteError, vectors, firstWorkers };
+		reference = await createDitherette({ threads: 'disabled' });
+		globalThis.threadPair = {
+			instances,
+			reference,
+			observed,
+			DitheretteError,
+			vectors,
+			firstWorkers
+		};
 		return { firstWorkers, totalWorkers: observed.workers.length };
 	} catch (error) {
+		reference?.dispose();
 		for (const instance of instances) instance.dispose();
 		for (const worker of observed.workers) worker.terminate();
 		observed.restore();
@@ -114,6 +128,7 @@ export function exerciseThreadedPair() {
 	const {
 		instances: [first, second],
 		DitheretteError,
+		reference,
 		vectors
 	} = globalThis.threadPair;
 	const same = (a, b, message) => {
@@ -150,7 +165,8 @@ export function exerciseThreadedPair() {
 	];
 	const saved = [];
 	for (const [method, request] of requests) {
-		const expected = second[method](request);
+		const expected = reference[method](request);
+		same(second[method](request), expected, 'Threaded output matches the scalar artifact.');
 		for (let repeat = 0; repeat < 2; repeat++) {
 			const stages = [];
 			const result = first[method]({

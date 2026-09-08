@@ -11,3 +11,15 @@ test('installed scalar selection stays thread-free and required reports missing 
 			driver: scalarSelectionDriver
 		}
 	));
+
+test('disabled selection stays thread-free even when isolated', (t) =>
+	installedBrowserChecks(
+		t,
+		undefined,
+		{ scalarSelections: 2, requiredCapabilityError: false },
+		{
+			isolated: true,
+			driver: (args) =>
+				scalarSelectionDriver({ ...args, input: { ...args.input, capabilityUnavailable: false } })
+		}
+	));

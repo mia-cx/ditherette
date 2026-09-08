@@ -13,7 +13,7 @@ Runtime implementation belongs to `v1-s34-threads`. This branch owns new browser
 - [x] Validate the real-worker lifetime observer in Chromium, Firefox, and WebKit.
 - [x] Add scalar selection, capability fallback, required errors, and custom Wasm checks.
 - [x] Add real pool ownership, partial startup cleanup, disposal, and host termination checks.
-- [ ] Run syntax checks and baseline checks, then hand off a clean fixture checkpoint for candidate validation.
+- [x] Run syntax checks and baseline checks, then hand off a clean fixture checkpoint for candidate validation.
 
 ## Evidence rules
 
@@ -49,3 +49,12 @@ The coordinator and runtime owner are investigating the WebKit engine behavior. 
 The opt-in `thread-atomic-wait.diagnostic.mjs` reproduces the same failure without Ditherette or Rayon imports.
 It uses the exact upstream WebKit bug 289686 module bytes. Chromium and Firefox release its lock; WebKit retains it.
 The installed runner closes each browser in `finally`, including diagnostic failures.
+
+Final focused checks pass all 12 selection and partial-failure tests. This includes isolated disabled loading.
+The failure fixture verifies zero held worker locks at the scalar fallback fetch, and no scalar fetch for required.
+Ownership now compares all five threaded methods with an independently initialized scalar artifact.
+Its Chromium/Firefox checks pass; WebKit still reaches the same disposal witness. The observer's 4 tests also pass.
+Syntax checks and `git diff --check` pass. No compiler targets were created. All test/browser jobs are drained.
+
+The runtime owner will register the five regular browser test entrypoints and run fresh revision-bound package validation.
+The atomic-wait diagnostic remains opt-in. Final WebKit acceptance stays with the coordinator's engine investigation.
