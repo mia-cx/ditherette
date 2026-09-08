@@ -12,10 +12,12 @@ import { browserChecks } from './browser-fixture.mjs';
 import { fieldBrowserChecks } from './field-browser-fixture.mjs';
 import { yiluomaBrowserChecks } from './yiluoma-browser-fixture.mjs';
 import { yiluomaBenchmarkChecks } from './yiluoma-benchmark-fixture.mjs';
+import { prepareYliluomaOracle, yiluomaOracleChecks } from './yiluoma-oracle-fixture.mjs';
 
 test('installed tarball loads only scalar assets and runs the public contract in browser engines', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-tarball-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
+	const oracle = await prepareYliluomaOracle(directory);
 	const packageDirectory = fileURLToPath(new URL('../', import.meta.url));
 	const vectors = JSON.parse(await readFile(new URL('./fixtures/fields.json', import.meta.url)));
 	const yiluoma = JSON.parse(
@@ -125,6 +127,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					name === 'webkit' ? process.env.DITHERETTE_TEST_WEBKIT_EXECUTABLE : undefined
 			});
 			try {
+				const yiluomaReference = await yiluomaOracleChecks(browser, name, oracle, yiluoma, tarball);
 				const page = await browser.newPage();
 				await page.goto(origin);
 				requests.length = 0;
@@ -174,12 +177,15 @@ test('installed tarball loads only scalar assets and runs the public contract in
 				t.diagnostic(`${name} ${browser.version()}: installed-tarball checks pass`);
 				assert.deepEqual(
 					await page.evaluate(yiluomaBrowserChecks, {
-						vectors: yiluoma,
+						vectors: yiluomaReference,
 						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
 					}),
 					{ vectors: 367, caughtFailures: 3, strictControls: 8, exactBudget: true }
 				);
-				assert.equal(await page.evaluate(yiluomaBenchmarkChecks, { vectors: yiluoma }), 734);
+				assert.equal(
+					await page.evaluate(yiluomaBenchmarkChecks, { vectors: yiluomaReference }),
+					734
+				);
 				t.diagnostic(
 					`${name}: 367 frozen Wasm Yliluoma vectors and 734 untimed actual benchmark-adapter calls pass`
 				);

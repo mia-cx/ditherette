@@ -30,6 +30,25 @@ const indexedOutput = () => ({
 	warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
 });
 
+test('shared backing stores fail before the collector can retain mutable snapshots', () => {
+	for (const field of ['data', 'indices', 'palette']) {
+		const output =
+			field === 'data'
+				? { width: 1, height: 1, data: new Uint8Array([10, 20, 30, 255]) }
+				: indexedOutput();
+		const record = field === 'palette' ? output.palette : output;
+		const key = field === 'palette' ? 'rgba' : field;
+		const shared = new Uint8Array(new SharedArrayBuffer(record[key].byteLength));
+		shared.set(record[key]);
+		record[key] = shared;
+		const tracker = outputStability(
+			field === 'data' ? 4 : 1026,
+			field === 'data' ? 'rgba8' : 'indexed8'
+		);
+		assert.throws(() => tracker.observe([output]), /durable byte-result contract/);
+	}
+});
+
 test('later calls cannot rewrite the first or distinct stability evidence through retained results', () => {
 	for (const indexed of [false, true]) {
 		const create = indexed
