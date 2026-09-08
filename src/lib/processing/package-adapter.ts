@@ -57,6 +57,7 @@ const RESIZE = {
 
 // Match the current website byte scale to the public normalized field's 255 / 4.
 const BYTE_FIELD_STRENGTH_RATIO = RGB_DITHER_NOISE_SCALE / 63.75;
+const MAX_ADAPTIVE_RADIUS = 32768;
 
 function croppedSource(
 	source: Pick<ImageData, 'width' | 'height' | 'data'>,
@@ -84,7 +85,7 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 			? { mode: 'everywhere' }
 			: {
 					mode: 'adaptive',
-					radius: Math.max(1, Math.round(dither.placementRadius)),
+					radius: Math.min(MAX_ADAPTIVE_RADIUS, Math.max(1, Math.round(dither.placementRadius))),
 					threshold: dither.placementThreshold,
 					softness: dither.placementSoftness
 				};
