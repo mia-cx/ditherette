@@ -16,7 +16,7 @@ Link only its `scalar` and `threads` children for package builds. The coordinato
 ## TODOs
 
 - [x] Copy literal lookup and tile; verify threshold bits, digest, global rows, and shared perturb output; commit baseline.
-- [ ] Connect bounded native and private/public mode cases; verify alpha, composition, strict errors, and memory behavior.
+- [x] Connect bounded native and private/public mode cases; verify alpha, composition, strict errors, and memory behavior.
 - [ ] Build both variants and validate installed-package behavior in three engines; record clean handoff.
 
 No optimization or benchmark runs in this subtask. Subject registration and measurement follow separately before S27 PR readiness.
@@ -36,3 +36,16 @@ The first checks exact tile-file bytes, canonical rank digest, and 9,801 complet
 The second checks widths 1/31/32/33/65, tile row wrap, reverse row scheduling, seven spaces, three strengths, and adaptive placement.
 Every output matches the frozen RGBA8 oracle, including padding, byte alpha, and hidden RGB at zero strength.
 This checkpoint adds no pipeline/public dispatch or optimized lookup.
+
+## Public mode validation
+
+The native pipeline dispatches blue noise through the existing field, placement, reconstruction, and quantization flow.
+Private tag 2 requires parameter zero. Public `{ algorithm: 'blue-noise' }` rejects size and seed controls.
+The fixed rank tile is the only additional runtime asset; generator and provenance code remain outside published modules.
+
+Focused native tests pass all 12 cases across `prod_blue_noise`, `prod_fields`, and `prod_processor_fields`.
+The complete private Node suite passes 11 tests, including strict numeric controls and repeated failure recovery.
+`pnpm --filter ditherette test:interface` passes both TypeScript checks and all 24 Node tests.
+The fixtures contain 110 frozen vectors, including blue noise in seven spaces and widths 1/31/32/33/65.
+All 1,650 field/matching compositions preserve the explicit RGBA8 boundary and complete indexed metadata.
+Memory limit, capacity failure, copy recovery, disposal, input ownership, and durable output checks include the new mode.

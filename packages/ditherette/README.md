@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, and Bayer/random perturbation.
+An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, and Bayer/random/blue-noise perturbation.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -82,7 +82,7 @@ Transparent-only palettes produce transparent indices with the approved warning.
 The result contains durable `indices`, `palette.rgba`, `palette.transparentIndex`, and `{ code, message }` warnings.
 Quantize does not resize, dither, retain the source, or cache prepared palettes in this checkpoint.
 
-## Bayer and random fields
+## Palette-free fields
 
 ```ts
 const perturb = {
@@ -93,13 +93,18 @@ const perturb = {
 } as const;
 const rgba = processor.perturb({ version: 1, source, perturb });
 const indexed = processor.ditherAndQuantize({
-	version: 1, source, palette, alpha, matching,
+	version: 1,
+	source,
+	palette,
+	alpha,
+	matching,
 	dither: { family: 'separable', perturb }
 });
 ```
 
 Bayer sizes are string tags `2`, `4`, `8`, and `16`.
 Random uses `{ algorithm: 'random', seed: 0 }`, with an unsigned 32-bit integer seed.
+Blue noise uses `{ algorithm: 'blue-noise' }`, with a fixed 32×32 tile and no size or seed controls.
 Random values depend on the global pixel index, so row scheduling does not change the sequence.
 Working spaces are `srgb`, `linear-rgb`, `oklab`, `oklch`, `cielab`, `cielch`, and `ycbcr`.
 They are independent of palette matching settings.
@@ -115,7 +120,7 @@ Zero strength preserves every source byte. Both placement modes preserve alpha a
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
 Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are reserved before input copy.
 Results remain durable after later calls and disposal. No field buffers or prepared palettes are cached.
-BlueNoise, diffusion, and Yliluoma are not enabled in this checkpoint.
+Diffusion and Yliluoma are not enabled in this checkpoint.
 
 ## Initialization and ownership
 

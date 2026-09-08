@@ -15,7 +15,7 @@ privateDitherAndQuantize(input, width, height,
 ```
 
 Field 0 is Bayer, with parameter 2, 4, 8, or 16. Field 1 is random, with a u32 seed parameter.
-Field 2 is reserved for BlueNoise and returns unsupported-operation before copying input.
+Field 2 is blue noise and requires parameter zero for the frozen 32×32 rank tile.
 Spaces 0 through 6 are sRGB, linear RGB, Oklab, OKLCH, CIELAB, CIELCH, and YCbCr, respectively.
 Placement 0 is everywhere and requires zero unused controls. Placement 1 is adaptive.
 Family 0 is direct quantization and requires all eight field controls to be zero. Family 1 is separable perturbation.
