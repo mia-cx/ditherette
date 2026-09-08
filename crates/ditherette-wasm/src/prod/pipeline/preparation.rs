@@ -245,6 +245,15 @@ impl Store {
             > cap
             || self.entries.iter().all(Option::is_some)
         {
+            if entry.used != 0
+                && self
+                    .entries
+                    .iter()
+                    .flatten()
+                    .all(|stored| entry.used < stored.used)
+            {
+                return;
+            }
             self.evict();
         }
         if entry.used == 0 {
@@ -996,6 +1005,68 @@ mod tests {
                 .flatten()
                 .any(|entry| entry.key == image_key));
         }
+    }
+
+    #[test]
+    fn publication_drops_an_older_incoming_hit_before_a_newer_preparation() {
+        use crate::{
+            image::contracts::PaletteEntry,
+            prod::contract::request::{AlphaPolicy, MatchPolicy},
+        };
+        let mut store = Store::default();
+        let limit = 64 * 1024;
+        let image_key = Identity([7; 32]);
+        let mut call = image_call(&mut store, 16_000, limit);
+        let image = candidate(&mut call, 1, 7);
+        assert!(call.stage_image(0, image_key, image, &mut 0).is_ok());
+        call.finish(Ok(())).unwrap();
+        let mut call = Call::snapshot(
+            &mut store,
+            4,
+            size_of::<Store>() as u64 + Call::record_bytes(),
+            limit,
+            &mut 0,
+            &mut SystemAllocator,
+        )
+        .unwrap();
+        assert!(call.take_image(0, image_key));
+        let palette = [
+            PaletteEntry::Color { rgb: [0; 3] },
+            PaletteEntry::Color { rgb: [255; 3] },
+        ];
+        call.prepare(
+            Some(QuantizeRequest {
+                source_width: 1,
+                source_height: 1,
+                palette: &palette,
+                alpha: AlphaPolicy::Premultiplied {},
+                matching: MatchPolicy::SrgbEuclidean,
+            }),
+            None,
+            [4, 0, 0, 0],
+            0,
+            &mut 0,
+            &mut SystemAllocator,
+        )
+        .unwrap();
+        let prepared = call.palette.as_ref().unwrap();
+        let preparation_key = prepared.key;
+        let image_bytes = call.images[0].as_ref().unwrap().retained();
+        let preparation_bytes = prepared.retained();
+        assert!(image_bytes.max(preparation_bytes) <= limit / 4);
+        assert!(image_bytes + preparation_bytes > limit / 4);
+        assert!(call.active_capacity() + call.store.capacity() <= limit);
+        call.finish(Ok(())).unwrap();
+        assert!(store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == preparation_key));
+        assert!(!store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == image_key));
     }
 
     fn prepare(store: &mut Store, width: u32, limit: u64) {

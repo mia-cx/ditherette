@@ -212,3 +212,10 @@ all 5 untimed native/frozen composition tests, and all 5 focused Node protocol
 tests pass. Candidate preparation uses the official native/public preparers once
 this clean joined revision is validated. The coordinator owns the trusted guard,
 quiet clearance, actual paired measurements, and final performance decision.
+
+Publication pressure also compares an incoming prior hit with stored victims.
+A red/green fixture pins a 16,000-byte image, prepares a newer palette, and sets
+the quarter cap below their sum while both individually fit. The older incoming
+image now drops instead of evicting the newer palette. All 26 native library
+tests pass. The complete native `--tests` suite passed at the preceding joined
+revision; final focused validation covers this publication-only correction.
