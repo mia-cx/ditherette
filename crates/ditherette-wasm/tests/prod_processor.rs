@@ -20,12 +20,19 @@ thread_local! {
     static ALLOCATION_FAILURE: Cell<Option<usize>> = const { Cell::new(None) };
     static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
     static LIVE_BYTES: Cell<isize> = const { Cell::new(0) };
+    static WATCH_ALLOCATION: Cell<usize> = const { Cell::new(0) };
+    static WATCHED_LIVE_BYTES: Cell<isize> = const { Cell::new(0) };
 }
 #[global_allocator]
 static ALLOCATOR: TestAllocator = TestAllocator;
 
 unsafe impl GlobalAlloc for TestAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        WATCH_ALLOCATION.with(|size| {
+            if size.get() == layout.size() {
+                WATCHED_LIVE_BYTES.with(|observed| observed.set(LIVE_BYTES.with(Cell::get)));
+            }
+        });
         ALLOCATIONS.with(|count| count.set(count.get() + 1));
         let fail = ALLOCATION_FAILURE.with(|remaining| match remaining.get() {
             Some(0) => {
@@ -115,6 +122,73 @@ fn budget() -> u64 {
     let mut probe = Processor::new(1_000_000, 512).unwrap();
     probe.resize(request(), &mut io()).unwrap();
     probe.peak_capacity_bytes()
+}
+
+#[test]
+fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
+    use ditherette_wasm::{
+        image::contracts::PaletteEntry,
+        prod::{
+            contract::request::{
+                AlphaPolicy, Diffusion, DiffusionFeedback, DitherPolicy, MatchPolicy, Placement,
+            },
+            palette::PreparedPalette,
+            pipeline::quantize::{QuantizeBoundary, QuantizeRequest},
+        },
+    };
+    struct Input(usize);
+    impl QuantizeBoundary for Input {
+        type Output = ();
+        fn input_len(&mut self) -> Result<usize, Failure> {
+            Ok(self.0 * 4)
+        }
+        fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
+            destination.fill(255);
+            Ok(())
+        }
+        fn complete(
+            &mut self,
+            _: &[u8],
+            _: ImageDimensions,
+            _: &PreparedPalette,
+        ) -> Result<(), Failure> {
+            Ok(())
+        }
+    }
+    let palette = [PaletteEntry::Color { rgb: [255; 3] }];
+    let request = |width| QuantizeRequest {
+        source_width: width,
+        source_height: 1,
+        palette: &palette,
+        alpha: AlphaPolicy::Premultiplied {},
+        matching: MatchPolicy::SrgbEuclidean,
+    };
+    let dither = DitherPolicy::Diffusion {
+        kernel: Diffusion::Sierra,
+        feedback: DiffusionFeedback::Matching,
+        strength: 1.0,
+        serpentine: true,
+        placement: Placement::Everywhere {},
+    };
+    let mut probe = Processor::new(1 << 20, 0).unwrap();
+    probe
+        .dither_and_quantize(request(20), dither, &mut Input(20))
+        .unwrap();
+    let limit = probe.peak_capacity_bytes();
+    probe.dispose().unwrap();
+    let mut processor = Processor::new(limit, 0).unwrap();
+    processor
+        .dither_and_quantize(request(10), dither, &mut Input(10))
+        .unwrap();
+    let before = LIVE_BYTES.with(Cell::get);
+    WATCH_ALLOCATION.with(|size| size.set(20 * 3 * 12));
+    processor
+        .dither_and_quantize(request(20), dither, &mut Input(20))
+        .unwrap();
+    WATCH_ALLOCATION.with(|size| size.set(0));
+    // Source and indices grow by 50 bytes. The old three rows release 360 bytes.
+    assert_eq!(WATCHED_LIVE_BYTES.with(Cell::get), before + 50 - 360);
+    assert_eq!(processor.peak_capacity_bytes(), limit);
 }
 
 #[test]
