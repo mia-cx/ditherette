@@ -54,3 +54,5 @@ The first GitHub run fails during setup because `rustup show --active-toolchain`
 Remove the redundant command; `rustup show` already reports the active toolchain.
 Select Bash explicitly so piped browser logs retain `pipefail` and cannot hide test failures.
 These CI-only corrections leave all locally validated runtime inputs unchanged.
+The next clean runner reaches the fresh package but lacks dependencies for the deliberately offline oracle build.
+Fetch the three locked syntax-checker/oracle/benchmark manifests before preparation. Keep offline oracle checks unchanged.

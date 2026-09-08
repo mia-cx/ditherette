@@ -39,6 +39,11 @@ jobs:
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
       - name: Install pinned browser engines
         run: pnpm --filter ditherette exec playwright install --with-deps chromium firefox webkit
+      - name: Fetch locked dependencies for offline oracle preparation
+        run: |
+          cargo fetch --locked --manifest-path tools/spec-freeze/syntax/Cargo.toml
+          cargo fetch --locked --manifest-path crates/ditherette-bench-oracle/Cargo.toml
+          cargo fetch --locked --manifest-path crates/ditherette-bench/Cargo.toml
       - name: Build fresh ordinary package and frozen oracle
         run: |
           mkdir -p target
