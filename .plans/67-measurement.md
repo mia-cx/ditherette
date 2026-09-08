@@ -4,7 +4,7 @@
 
 Retain accepted baseline `3915f60519995cb9087a18b3bfd6bd7220ae804a`.
 Candidate `b237b7468fa5fc349760bc0086bd1748113b6d82` remains separate and unselected.
-The candidate exceeds the 20% complete-call target, but required verification and noise gates do not all pass.
+The candidate exceeds the 20% complete-call target, but required browser noise gates do not all pass.
 No retry or further candidate revision runs in this slice.
 
 ## Run and artifacts
@@ -30,7 +30,7 @@ Quiet-clearance load averages are 0.78, 1.42, and 0.88. Unrelated host work is n
 
 Five native threshold controls receive `incorrect` because the verifier demands an explicit working-space identity.
 These are palette-independent scalar thresholds. Their reports say `incomplete`; they do not report a numeric mismatch.
-Preserve that defect and its original reports. A separate verifier repair must establish their output verification.
+The original reports remain unchanged. The verifier repair below establishes their exact output verification.
 Every other native case passes. All browser output checks are exact.
 Native verification checks deterministic callable endpoints; browser verification checks every measured and warmup output outside timing.
 
@@ -39,6 +39,20 @@ Firefox marks sRGB/Bayer2 perturbation inconclusive.
 WebKit marks sRGB/Bayer2 and YCbCr/Bayer16 perturbation inconclusive.
 These are pair-noise failures, not confirmed regressions. They still prevent selecting the candidate under the declared gate.
 The original gate remains unchanged. Strong median gains do not silently override incomplete evidence.
+
+### Untimed verifier repair
+
+Repair `1f9df7875c4bdc4a8c80dd4e193c5c55867589e4` exempts only palette-free FieldEvaluation alongside Resize from the space requirement.
+Seventeen focused checks pass, including full verification and one-bit mismatch rejection.
+An explicit read-only replay feeds the original 100 worker results into the unchanged paired comparison.
+All 25 native cases now pass. The twenty unaffected case reports remain identical.
+No processing call, worker, measurement, or noise-gate change occurs during replay.
+The original 102 input digests remain unchanged.
+
+Derived report `.worktrees/v1-s26-bench/target/s26-protocol-validation/native-reverified.json`
+has SHA-256 `89064e2f3f6c1defe88a31022a1d8f3f271c1420c3f394cd3890643850546992`.
+It records input, verifier, comparison, and replay-source digests. See [the reproducible replay command](67-benchmark.md#post-measurement-threshold-verifier-repair).
+The tables below retain original reported gates for provenance. Browser noise failures still require retaining the baseline.
 
 ## Median complete-call and component results
 
