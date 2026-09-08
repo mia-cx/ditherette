@@ -9,7 +9,7 @@ Only host fixture scripts and this plan belong to this task.
 - [x] Reuse existing asset staging, host exchange, restrictions, package loading, and complete-call adapters.
 - [x] Add ordinary scalar/required-threaded comparisons for the nine selected S35/S36/S37 recipe classes.
 - [x] Run Node syntax and controlled fixture checks, then commit for the coordinator's installed-artifact run.
-- [ ] Run the coordinator-authorized ordinary-package Chromium/Firefox fixture once and report cleanup.
+- [x] Run the coordinator-authorized ordinary-package Chromium/Firefox fixture once and report cleanup.
 
 Both Wasm variants must come from an ordinary `build_mode: public` bundle and lack the developer override export.
 The fixture uses real blocking-capable host workers and no private execution-policy calls or timing collector.
@@ -41,3 +41,23 @@ and disposal through the existing package fixture. Syntax checks pass for all fi
 The old forced-row fixture keeps every assertion; only its asset-copy setup moves to the shared staging helper.
 Initial `pnpm exec prettier` stopped on the system Node 24.18 engine mismatch before installation.
 Formatting then succeeds with the existing Prettier CLI under pinned Node 24.19.0.
+
+## Actual ordinary-package result
+
+Fixture checkpoint `b016ac1a` passes all nine cases in Chromium and all nine in Firefox.
+Node reports 23/23 passing checks, zero failures, zero skips. The suite collects no call timings.
+Every role confirms exact output dimensions/bytes/metadata, required progress stages, source preservation,
+and balanced initialized/terminated pool workers. Oklab also matches actual quantize(perturb) composition.
+The ordinary scalar and threaded binaries both lack the developer execution-policy export.
+
+The immutable package source is `dc81818a`; tarball SHA-256 is
+`1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+Actual invocation from this worktree:
+
+```sh
+DITHERETTE_BENCH_AUTO_BUNDLE=/home/mia/mia-cx/ditherette/.worktrees/v1-rows-auto-validation/target/rows-auto-dc81818a-public/bundle-source.json DITHERETTE_BENCH_AUTO_FIREFOX_EXECUTABLE=/home/mia/mia-cx/ditherette/.worktrees/v1-s35-37-bench/target/rows-trial-03/runtime-source/firefox /home/mia/.nvm/versions/node/v24.19.0/bin/node --test scripts/benchmark-auto-host.test.mjs
+```
+
+After completion, the process audit finds no Chromium/Firefox processes. The retained Firefox runtime still
+contains neither `.parentlock` nor `updates/`. Temporary fixture assets are removed by the existing test cleanup.
+No Wasm build, benchmark, WebKit launch, package installation, source-checkout change, PR, or push occurs.
