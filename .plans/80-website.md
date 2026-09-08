@@ -116,8 +116,12 @@ The root build now builds the public package, then stages its existing scalar
 artifacts for the historical resize path. README records the one-time development
 build prerequisite; each dev start does not rebuild the package.
 
-Restacked onto actual S30 parent `d2356a502501b38ab4f3b476956fc90f1fbfec4a`.
-The parent changes only the approved CI mutation fixture and preserves package bytes.
+Restacked onto actual S30 parent `aa4f78d1d89b43e35e9a390b4102693c7519a535`,
+including the approved CI repair `d2356a502501b38ab4f3b476956fc90f1fbfec4a`.
+The later parent fix charges field-converter capacity only for separable recipes.
+The retained tarball predates that accounting change; S38's tiny default-budget
+fixtures validate website mapping and indexed outputs, not revised allocation limits.
+The parent fix changes no processing bytes, public types, or website mapping.
 Final focused mapper/worker run passes 47 cases; Chromium passes four fixtures.
 Svelte checking passes with zero errors and one missing-generated-types warning.
 New adapter, worker, browser test, resize, and config files pass ESLint.
