@@ -177,6 +177,16 @@ Runtime checkpoint `5a832320` reuses the copied lifecycle model and passes two f
 Kernel checkpoint `0acb7842` passes the full native suite and five progress fixtures. Existing arithmetic, traversal, and scratch ownership remain unchanged.
 Installed fixture checkpoint `0bb2552c` passes shared-runner checks on S32 and intentionally fails at its unsupported callback guard. Actual S33 validation remains pending.
 The separate `v1-s33-bench` plan fixes five public workloads and separates disabled-support cost from callback-delivery cost.
+S33 delivery checkpoint `06d9ad0730669dac3008baf848b5eb463689c584` validates the complete callback contract.
+Measured candidate `4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4` passes focused 8/8 and broad 4/4 installed suites in all three browsers.
+The trusted frozen guard passes after moving a reference-comparison test outside production. Frozen content and policy remain unchanged.
+Six serial trials finish under `v1-s33-bench/target/s33-trial-01`; every recorded comparison is exact.
+Callback overhead passes all three browsers. Disabled-support comparisons pass Firefox and WebKit; Chromium Lab76 and Lanczos3 remain inconclusive.
+The report owner now owns `v1-s33-progress` for evidence and the stacked PR. No runtime edits or repeat measurements are planned.
+S34 runtime and public fixtures start from validated `06d9ad07` in separate `v1-s34-threads` and `v1-s34-public` worktrees.
+The runtime owner has package/glue/pool implementation and native/private tests. The fixture owner has installed browser tests and test-server support.
+They coordinate shared fixture routes before editing. Root owns tracking, joins, and startup benchmark preparation.
+Only the new S34 runtime compiler targets are assigned. S33 targets return for cleanup after its PR handoff.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.

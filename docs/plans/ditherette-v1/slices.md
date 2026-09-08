@@ -48,7 +48,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Ready | [#121](https://github.com/mia-cx/ditherette/pull/121) |
 | [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Ready | [#122](https://github.com/mia-cx/ditherette/pull/122) |
 | [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | In progress | - |
-| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Not started | - |
+| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | In progress | - |
 | [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Not started | - |
 | [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Not started | - |
 | [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Not started | - |
