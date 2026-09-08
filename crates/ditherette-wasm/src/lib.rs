@@ -23,5 +23,3 @@ pub use wasm::{
 };
 #[cfg(feature = "threads")]
 pub use wasm_bindgen_rayon::init_thread_pool;
-#[cfg(feature = "threads")]
-pub use wasm::threads::{private_abandon_thread_pool, private_thread_count};
