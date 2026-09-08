@@ -465,5 +465,4 @@ fn memory_limit_failure() -> Failure {
 }
 
 #[cfg(test)]
-#[path = "preparation_tests.rs"]
 mod preparation_tests;
