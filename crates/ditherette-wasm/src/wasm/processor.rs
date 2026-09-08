@@ -131,18 +131,7 @@ pub fn private_resize(
         Err(error) => return status(error),
     };
     let result = (|| {
-        if matches!(algorithm, 0.0 | 1.0 | 2.0 | 6.0) && support != 0.0 {
-            return Err(Failure::new(
-                ErrorCode::InvalidSettings,
-                ErrorPath::OutputResize,
-            ));
-        }
-        if algorithm == 1.0 && anchor != 0.0 {
-            return Err(Failure::new(
-                ErrorCode::InvalidSettings,
-                ErrorPath::OutputAnchor,
-            ));
-        }
+        validate_resize_controls(algorithm, anchor, support)?;
         let request = ResizeRequest {
             source_width: dimension(
                 source_width,
@@ -169,36 +158,7 @@ pub fn private_resize(
                     ErrorCode::InvalidSettings,
                     ErrorPath::OutputHeight,
                 )?,
-                resize: match algorithm {
-                    0.0 => ResizePolicy::Nearest {
-                        anchor: parse_anchor(anchor)?,
-                    },
-                    1.0 => ResizePolicy::Area {},
-                    2.0 => ResizePolicy::Bilinear {
-                        anchor: parse_anchor(anchor)?,
-                    },
-                    3.0 => ResizePolicy::Bicubic {
-                        anchor: parse_anchor(anchor)?,
-                        support: parse_support(support)?,
-                    },
-                    4.0 => ResizePolicy::Lanczos2 {
-                        anchor: parse_anchor(anchor)?,
-                        support: parse_support(support)?,
-                    },
-                    5.0 => ResizePolicy::Lanczos3 {
-                        anchor: parse_anchor(anchor)?,
-                        support: parse_support(support)?,
-                    },
-                    6.0 => ResizePolicy::Trilinear {
-                        anchor: parse_anchor(anchor)?,
-                    },
-                    _ => {
-                        return Err(Failure::new(
-                            ErrorCode::InvalidSettings,
-                            ErrorPath::OutputResize,
-                        ))
-                    }
-                },
+                resize: parse_resize(algorithm, anchor, support)?,
             },
         };
         processor.resize(request, &mut JsBoundary { input, result_sink })
@@ -290,6 +250,65 @@ pub(super) fn dimension(
         return Err(Failure::new(code, path));
     }
     Ok(value as u32)
+}
+
+/// Preserve the staged boundary's unused-control checks before dimension decoding.
+pub(super) fn validate_resize_controls(
+    algorithm: f64,
+    anchor: f64,
+    support: f64,
+) -> Result<(), Failure> {
+    if matches!(algorithm, 0.0 | 1.0 | 2.0 | 6.0) && support != 0.0 {
+        return Err(Failure::new(
+            ErrorCode::InvalidSettings,
+            ErrorPath::OutputResize,
+        ));
+    }
+    if algorithm == 1.0 && anchor != 0.0 {
+        return Err(Failure::new(
+            ErrorCode::InvalidSettings,
+            ErrorPath::OutputAnchor,
+        ));
+    }
+    Ok(())
+}
+
+/// Shared exact numeric resize tags after unused controls have been checked.
+pub(super) fn parse_resize(
+    algorithm: f64,
+    anchor: f64,
+    support: f64,
+) -> Result<ResizePolicy, Failure> {
+    Ok(match algorithm {
+        0.0 => ResizePolicy::Nearest {
+            anchor: parse_anchor(anchor)?,
+        },
+        1.0 => ResizePolicy::Area {},
+        2.0 => ResizePolicy::Bilinear {
+            anchor: parse_anchor(anchor)?,
+        },
+        3.0 => ResizePolicy::Bicubic {
+            anchor: parse_anchor(anchor)?,
+            support: parse_support(support)?,
+        },
+        4.0 => ResizePolicy::Lanczos2 {
+            anchor: parse_anchor(anchor)?,
+            support: parse_support(support)?,
+        },
+        5.0 => ResizePolicy::Lanczos3 {
+            anchor: parse_anchor(anchor)?,
+            support: parse_support(support)?,
+        },
+        6.0 => ResizePolicy::Trilinear {
+            anchor: parse_anchor(anchor)?,
+        },
+        _ => {
+            return Err(Failure::new(
+                ErrorCode::InvalidSettings,
+                ErrorPath::OutputResize,
+            ))
+        }
+    })
 }
 
 fn parse_anchor(value: f64) -> Result<Anchor, Failure> {

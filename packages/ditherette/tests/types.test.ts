@@ -6,7 +6,8 @@ import type {
 	QuantizeRequest,
 	IndexedImage,
 	PerturbRequest,
-	DitherAndQuantizeRequest
+	DitherAndQuantizeRequest,
+	ProcessRequest
 } from '../src/index.js';
 
 const request: ResizeRequest = {
@@ -22,7 +23,7 @@ processor.then((instance) => {
 	const image: Rgba8Image = instance.resize(request);
 	image.data[0] = 255;
 	instance.dispose();
-	// @ts-expect-error The complete pipeline is not exposed before its implementation slice.
+	// @ts-expect-error Process settings belong inside the versioned recipe.
 	instance.process(request);
 	// @ts-expect-error Raw bindings are not public processor state.
 	instance.wasm;
@@ -35,6 +36,21 @@ const quantize: QuantizeRequest = {
 	alpha: { mode: 'preserve', threshold: 127.9999999 },
 	matching: 'oklab-euclidean'
 };
+const complete: ProcessRequest = {
+	source: request.source,
+	palette: quantize.palette,
+	recipe: {
+		version: 1,
+		output: request.output,
+		alpha: quantize.alpha,
+		match: quantize.matching,
+		dither: { family: 'none' }
+	}
+};
+processor.then((instance) => {
+	const image: IndexedImage = instance.process(complete);
+	void image;
+});
 processor.then((instance) => {
 	const image: IndexedImage = instance.quantize(quantize);
 	image.indices[0] = 0;
