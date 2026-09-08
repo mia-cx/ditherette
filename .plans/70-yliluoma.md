@@ -1,5 +1,9 @@
 # S29 literal Yliluoma checkpoint
 
+Delivery results and held performance work are in [70-benchmark-results.md](70-benchmark-results.md).
+The completed 128-worker experiment retains the literal baseline because all four overall timing gates remain inconclusive.
+Earlier scope holds and validation counts below describe their original checkpoints.
+
 Issue #70. Branch `impl/v1-s29-yliluoma` starts at accepted S26 `3915f60519995cb9087a18b3bfd6bd7220ae804a`.
 S27 remains untouched. The unselected S26 converter candidate is outside this ancestry.
 

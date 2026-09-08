@@ -10,8 +10,11 @@ S28 diffusion production remains a separate branch. Its future oracle discrimina
 
 - [x] Join the permanent identified oracle, snapshot protocol, and settled S27 dependency in both roles.
 - [x] Export complete identities for all 367 retained requests and verify independently executed native oracle output.
-- [ ] Run all 367 permanent frozen-Wasm identities and package calls in each browser for both roles.
-- [ ] Join the coordinator's shared-output rejection, prepare clean fresh paired roles, record evidence, and drain.
+- [x] Run all 367 permanent frozen-Wasm identities and package calls in each browser for both roles.
+- [x] Join the coordinator's shared-output rejection, prepare clean fresh paired roles, record evidence, and drain.
+
+Completed validation, actual measurement results, selected literal source, and held candidate are in [70-benchmark-results.md](70-benchmark-results.md).
+The earlier preparation revisions below remain historical checkpoints. Final measured roles are literal `50cd96d1` and candidate `fdb3921a`.
 
 ## Exactness and provenance
 
