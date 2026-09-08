@@ -247,7 +247,7 @@ fn complete_processor_calls_preserve_byte_boundary_palette_warnings_and_cross_sp
 }
 
 #[test]
-fn identities_reject_missing_inputs_unsupported_fields_and_bind_every_policy_setting() {
+fn identities_reject_missing_inputs_and_bind_every_policy_setting() {
     let settings = PerturbPolicy {
         space: WorkingSpace::Srgb,
         strength: 0.7,
@@ -310,21 +310,18 @@ fn identities_reject_missing_inputs_unsupported_fields_and_bind_every_policy_set
     assert!(NativeOperation::Perturb { settings }
         .identity(SOURCE, &RGBA[..4])
         .is_err());
-    assert!(NativeOperation::Perturb {
-        settings: PerturbPolicy {
-            field: Field::BlueNoise {},
-            ..settings
+    assert_ne!(
+        identity.settings,
+        NativeOperation::Perturb {
+            settings: PerturbPolicy {
+                field: Field::BlueNoise {},
+                ..settings
+            }
         }
-    }
-    .identity(SOURCE, &RGBA)
-    .is_err());
-    assert!(NativeOperation::FieldComponent {
-        component: Component::Field {
-            field: Field::BlueNoise {}
-        }
-    }
-    .identity(SOURCE, &RGBA)
-    .is_err());
+        .identity(SOURCE, &RGBA)
+        .unwrap()
+        .settings
+    );
 }
 
 /// Replays retained evidence only. No worker, operation, or collector runs here.
