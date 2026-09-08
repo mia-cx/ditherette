@@ -70,3 +70,9 @@ These width and height lower bounds are conservative selected thresholds, not pr
 Reject four/16 for tiny because Chromium is inconclusive and Firefox is slower. Keep two/4 for small and Process because four/16 offers no consistent material improvement and uses only two bands. Keep the previous S29 converter experiment unselected; the literal landed converter and ordered mixture arithmetic remain unchanged.
 
 Row scheduling retains shared palette preparation and full-source adaptive reads. Its capacity preflight includes assignment metadata and one live temporary converter per active worker. Joined callbacks stay on the caller, failed calls publish no entries, and content identities exclude execution policy.
+
+## Native selection validation
+
+The joined automatic selector passes complete-call tests in native pools of one, two, three, and four workers. Tests compare direct medium and nearest/OKLCH Process results with frozen indices and metadata. They check the measured joined-progress configurations, independent stage overrides, explicit scalar overrides, and unchanged cache identity. Existing budget and callback-failure checks still pass.
+
+Release validation passes 16 tests with `bench-subjects`, eight with `threads,bench-subjects`, and three focused selector tests in each build. The frozen spec, shared image infrastructure, and guard have no source changes. These are correctness checks; final installed-package validation and S41's warm-control evidence remain separate.

@@ -325,3 +325,146 @@ fn complete_capacity_boundary_rejects_one_byte_under_before_mixing_and_recovers(
         );
     }
 }
+
+#[test]
+fn automatic_calls_keep_frozen_output_measured_pool_fallbacks_and_explicit_scalar_override() {
+    use ditherette_wasm::prod::pipeline::execution::ExecutionStage;
+
+    let bytes: Vec<_> = (0..65 * 49)
+        .flat_map(|i| [(i * 17) as u8, (i * 31) as u8, (i * 73) as u8, 255])
+        .collect();
+    for process in [false, true] {
+        let palette: Vec<_> = (0..if process { 4 } else { 8 })
+            .map(|i| PaletteEntry::Color {
+                rgb: [(i * 31) as u8, (i * 53) as u8, (i * 71) as u8],
+            })
+            .collect();
+        let recipe = RecipeV1 {
+            alpha: AlphaPolicy::Premultiplied {},
+            matching: if process {
+                MatchPolicy::OklchCircularHue
+            } else {
+                MatchPolicy::SrgbEuclidean
+            },
+            output: Output {
+                width: 33,
+                height: 25,
+                resize: ResizePolicy::Nearest {
+                    anchor: Anchor::Center,
+                },
+            },
+            // Placement values differ from the benchmark fixture; they do not select policy.
+            dither: DitherPolicy::Yliluoma {
+                size: BayerSize::Four,
+                placement: Placement::Adaptive {
+                    radius: 1,
+                    threshold: 4.0,
+                    softness: 6.0,
+                },
+            },
+            ..recipe()
+        };
+        let frozen_recipe: spec::contract::request::RecipeV1 =
+            serde_json::from_value(serde_json::to_value(recipe).unwrap()).unwrap();
+        let frozen_source = spec::contract::request::Source {
+            width: 65,
+            height: 49,
+            data: &bytes,
+        };
+        let expected = if process {
+            spec::pipeline::process(spec::contract::request::ProcessRequest {
+                source: frozen_source,
+                palette: &palette,
+                recipe: frozen_recipe,
+            })
+            .unwrap()
+        } else {
+            spec::pipeline::dither_and_quantize(spec::contract::request::DitherQuantizeRequest {
+                quantize: spec::contract::request::QuantizeRequest {
+                    version: 1,
+                    source: frozen_source,
+                    palette: &palette,
+                    alpha: frozen_recipe.alpha,
+                    matching: frozen_recipe.matching,
+                },
+                dither: frozen_recipe.dither,
+            })
+            .unwrap()
+        };
+        let call = |processor: &mut Processor, io: &mut Boundary<'_>| {
+            if process {
+                processor.process(
+                    ProcessRequest {
+                        source_width: 65,
+                        source_height: 49,
+                        palette: &palette,
+                        recipe,
+                    },
+                    io,
+                )
+            } else {
+                processor.dither_and_quantize(
+                    QuantizeRequest {
+                        source_width: 65,
+                        source_height: 49,
+                        palette: &palette,
+                        alpha: recipe.alpha,
+                        matching: recipe.matching,
+                    },
+                    recipe.dither,
+                    io,
+                )
+            }
+        };
+        let first_mixing_progress = |io: &Boundary<'_>| {
+            io.events
+                .iter()
+                .find(|event| {
+                    event.stage == Stage::DitherAndQuantize && event.completed.unwrap_or(0) > 0
+                })
+                .and_then(|event| event.completed)
+        };
+        for workers in 1..=if cfg!(feature = "threads") { 4 } else { 1 } {
+            let check = || {
+                let mut automatic = Processor::new(1 << 20, 0).unwrap();
+                // An explicit setting for another stage must not disable automatic mixing.
+                automatic
+                    .set_execution_stage(ExecutionStage::Indexed, None)
+                    .unwrap();
+                let mut io = boundary(&bytes);
+                assert_eq!(call(&mut automatic, &mut io).unwrap(), expected);
+                let first = if workers == 1 {
+                    1
+                } else if process || workers < 4 {
+                    8
+                } else {
+                    49
+                };
+                assert_eq!(first_mixing_progress(&io), Some(first));
+
+                let mut scalar = Processor::new(1 << 20, 0).unwrap();
+                scalar
+                    .set_execution_stage(ExecutionStage::Mixing, None)
+                    .unwrap();
+                let mut scalar_io = boundary(&bytes);
+                assert_eq!(call(&mut scalar, &mut scalar_io).unwrap(), expected);
+                assert_eq!(first_mixing_progress(&scalar_io), Some(1));
+
+                automatic
+                    .set_execution_stage(ExecutionStage::Mixing, None)
+                    .unwrap();
+                let mut cached = boundary(&bytes);
+                assert_eq!(call(&mut automatic, &mut cached).unwrap(), expected);
+                assert_eq!(first_mixing_progress(&cached), None);
+            };
+            #[cfg(feature = "threads")]
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(workers as usize)
+                .build()
+                .unwrap()
+                .install(check);
+            #[cfg(not(feature = "threads"))]
+            check();
+        }
+    }
+}

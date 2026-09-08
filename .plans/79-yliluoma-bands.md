@@ -18,7 +18,7 @@ Evaluate exact row bands around the landed scalar Yliluoma loop. Share palette p
 - [x] Validate joined public mixing dispatch, failure publication, and complete-call memory boundaries.
 - [x] Record coordinated browser measurements and candidate disposition.
 - [x] Implement conservative mixing recipe-class selection with measured pool fallbacks.
-- [~] Join S36's shared indexed callsite and validate automatic complete-call dispatch.
+- [x] Join S36's shared indexed callsite and validate automatic complete-call dispatch.
 
 ## Notes
 
@@ -47,4 +47,7 @@ Evaluate exact row bands around the landed scalar Yliluoma loop. Share palette p
 - `yiluoma::policy::measured` chooses two workers/4 rows for the small classes. Medium chooses four/16 with at least four pool workers, otherwise two/4. One-worker pools remain scalar; three-worker pools use two/4.
 - Focused selector tests pass in release scalar and threaded builds (three each). They exercise measured boundaries, pool fallbacks, unmeasured-class rejection, and palette-content independence.
 - Native compiler ownership is this delivery worktree's `target/compiler`. No new Wasm builds or measurements ran here.
-- S36 owns `indexed.rs` and receives the minimal `Store::row_policy(ExecutionStage::Mixing, measured(...))` callsite. Automatic full-call validation follows that join.
+- S36's `indexed.rs` callsite joins from 21f7b6da, preserving S35/S36 delivery ancestry. It resolves mixing policy through `Store::row_policy` and keeps existing cache-hit, capacity, progress, and publication boundaries.
+- Automatic full-call tests pass with native pools of one, two, three, and four workers. Direct medium and nearest/OKLCH Process calls match frozen indices and metadata with non-fixture adaptive masks. Tests verify measured joined progress, unrelated-stage override preservation, explicit scalar overrides, and policy-independent cache hits.
+- Final release checks pass 16 scalar tests (`bench-subjects`) and eight threaded tests (`threads,bench-subjects`), plus the three selector tests per build recorded above. Formatting and the frozen spec/image/guard source diff pass. No compiler or test process remains active at handoff.
+- Delivery target ownership returns to root at `target/compiler` (166 MiB, native compiler outputs only). This worktree ran no Wasm build or benchmark.
