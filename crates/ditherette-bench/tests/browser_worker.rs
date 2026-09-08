@@ -6,6 +6,112 @@ use ditherette_bench::{
 use ditherette_bench_api::verification::*;
 
 #[test]
+fn field_protocol_binds_native_identity_and_requires_the_correct_public_output() {
+    use ditherette_bench::paired::{fields::*, native::NativeOperation, quantize::*};
+    use ditherette_wasm::bench_subjects::{self, BenchSubject};
+    let perturb = PerturbPolicy {
+        field: Field::Random { seed: 0x12345678 },
+        space: WorkingSpace::Oklab,
+        strength: 0.7,
+        placement: Placement::Adaptive {
+            radius: 1,
+            threshold: 10.0,
+            softness: 5.0,
+        },
+    };
+    let separable = SeparableSettings {
+        perturb,
+        quantize: QuantizeSettings {
+            palette: vec![
+                PaletteEntry::Color { rgb: [1, 2, 3] },
+                PaletteEntry::Transparent {},
+            ],
+            alpha: AlphaPolicy::Preserve { threshold: 0.5 },
+            matching: MatchPolicy::OklchHueArc,
+        },
+    };
+    for (operation, native) in [
+        (
+            PublicOperation::Perturb { settings: perturb },
+            NativeOperation::Perturb { settings: perturb },
+        ),
+        (
+            PublicOperation::Separable {
+                settings: separable.clone(),
+            },
+            NativeOperation::Separable {
+                settings: separable,
+            },
+        ),
+    ] {
+        let (mut request, mut result) = fixture();
+        let case = &mut request.case;
+        case.identity = operation
+            .identity(case.source, &case.rgba, case.source)
+            .unwrap();
+        assert_eq!(
+            case.identity,
+            native.identity(case.source, &case.rgba).unwrap()
+        );
+        assert!(operation
+            .identity(
+                case.source,
+                &case.rgba,
+                Dimensions {
+                    width: 2,
+                    height: 1
+                }
+            )
+            .is_err());
+        case.reference_subject = operation.reference_subject().into();
+        case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+        case.candidate_subject = case.accepted_subject.clone();
+        case.browser.as_mut().unwrap().accepted = BrowserBackend::Package;
+        case.browser.as_mut().unwrap().operation = operation.clone();
+        validate_case(case).unwrap();
+        let registry = bench_subjects::bench_subjects();
+        let BenchSubject::Conformance(reference) = registry
+            .iter()
+            .find(|subject| subject.descriptor().id.as_str() == operation.reference_subject())
+            .unwrap()
+        else {
+            panic!("typed reference")
+        };
+        let reference_request = operation
+            .processing_request(case.source, &case.rgba)
+            .unwrap()
+            .unwrap();
+        result.output = (reference.run)(&reference_request).unwrap();
+        result.input = case.identity.input;
+        result.settings = case.identity.settings;
+        request.reference_output = Some(result.output.clone());
+        validate_response(&request, &result).unwrap();
+        let restored: TrialRequest =
+            serde_json::from_slice(&serde_json::to_vec(&request).unwrap()).unwrap();
+        assert_eq!(restored.case.identity, request.case.identity);
+        assert_eq!(restored.case.browser, request.case.browser);
+        result.output.pixels = match result.output.pixels {
+            Pixels::Rgba8 { .. } => Pixels::Indexed8 {
+                indices: vec![0],
+                palette_rgba: vec![1, 2, 3, 255],
+                transparent_index: None,
+            },
+            Pixels::Indexed8 { .. } => Pixels::Rgba8 {
+                data: vec![1, 2, 3, 4],
+            },
+            _ => unreachable!(),
+        };
+        assert!(validate_response(&request, &result).is_err());
+        request.case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
+        request.case.accepted_subject = operation.subject(BrowserBackend::TypeScript).into();
+        assert!(validate_case(&request.case)
+            .unwrap_err()
+            .to_string()
+            .contains("no faithful TypeScript"));
+    }
+}
+
+#[test]
 fn indexed_transport_preserves_metadata_and_rejects_malformed_indices() {
     use ditherette_bench::paired::quantize::*;
     let (mut request, mut result) = fixture();
