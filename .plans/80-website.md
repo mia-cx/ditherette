@@ -63,9 +63,9 @@ decode/crop-to-preview/export interfaces as the test boundaries.
   then cover existing mode tags, crop refusal, and ordered palette metadata.
 - [x] Integrate one off-default developer flag into the worker path. Test enabled
   public Process and unchanged disabled behavior, with processing failures visible.
-- [ ] Exercise project-owned decoded-upload/crop/settings fixtures through the
+- [x] Exercise project-owned decoded-upload/crop/settings fixtures through the
   actual installed package, existing render/PNG code, and persistence schemas.
-- [ ] Send a clean mapping/baseline checkpoint for review before final PR work.
+- [x] Send a clean mapping/baseline checkpoint for review before final PR work.
 - [ ] Complete focused checks, rebase onto the actual S30 parent, and file a real
   unmerged, non-draft PR with auto-merge off. Return generated targets after drain.
 
@@ -93,6 +93,22 @@ Flagged responses omit optional TS timing/cache/memory metrics because those
 estimates describe the TS implementation. Existing coarse progress remains.
 Initialization failure remains visible and memoized until the worker is replaced;
 S39 owns faithful initialization fallback. No progress callback is passed to S30.
+
+Browser checks pass three fixtures, including all 72 color/dither combinations,
+decoded PNG upload, integer crop packing, Lanczos cropped-edge clamping, indexed
+preview, PNG round trip, matte settings changes, duplicate metadata, and persisted
+source/output schemas. `pnpm exec vitest run --project client
+src/lib/processing/package-pipeline.browser.spec.ts` runs these Chromium fixtures.
+The mapper and inherited resize/quantize/schema/PNG suites pass 94 Node tests.
+The disabled-path fractional crop fixture still uses the existing TS implementation.
+`pnpm exec vite build` passes with the approved package artifacts. No timing result
+is performance evidence. Runtime checkpoint `00040ee` is with the coordinator.
+
+Finalization findings under review: current TS `RGB_DITHER_NOISE_SCALE` is 96,
+whereas frozen S13 prose describes historical 64. The package field scale is
+63.75. Resolve the adapter factor using the actual website without editing the
+frozen reference. Clean website builds also need public-package artifacts, so the
+root build workflow must build its workspace dependency before Vite.
 
 ## Scope limits
 

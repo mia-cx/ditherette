@@ -15,10 +15,11 @@ class TestImageData implements ImageData {
 	readonly height: number;
 	readonly colorSpace: PredefinedColorSpace = 'srgb';
 
-	constructor(data: Uint8ClampedArray<ArrayBuffer>, width: number, height: number) {
-		this.data = data;
-		this.width = width;
-		this.height = height;
+	constructor(data: Uint8ClampedArray<ArrayBuffer> | number, width: number, height?: number) {
+		this.width = typeof data === 'number' ? data : width;
+		this.height = typeof data === 'number' ? width : height!;
+		this.data =
+			typeof data === 'number' ? new Uint8ClampedArray(this.width * this.height * 4) : data;
 	}
 }
 
@@ -355,6 +356,30 @@ describe('ProcessorWorkerPipeline', () => {
 			})
 		);
 		expect(pipeline.branchCacheSize).toBe(0);
+	});
+
+	it('keeps fractional crops on the disabled TypeScript path', async () => {
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = await pipeline.handleAsync(
+			processRequest({
+				settings: {
+					output: { ...output, crop: { x: 0.5, y: 0, width: 1, height: 1 } },
+					dither,
+					colorSpace: 'srgb'
+				}
+			}),
+			() => undefined
+		);
+		expect(response).toMatchObject({
+			type: 'complete',
+			image: { indices: new Uint8Array([0, 1]) }
+		});
+		expect(createDitherette).not.toHaveBeenCalled();
 	});
 
 	it.each(['initialization', 'process'])(
