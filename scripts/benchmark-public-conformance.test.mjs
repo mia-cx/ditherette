@@ -18,11 +18,18 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { chromium, firefox, webkit } from 'playwright';
 import { prepareTypeScript } from './prepare-benchmark-typescript.mjs';
-import { exchangeTrial, restrictContext, startAssetServer } from './benchmark-public-browser.mjs';
+import {
+	exchangeTrial,
+	frozenBrowserReference,
+	restrictContext,
+	startAssetServer
+} from './benchmark-public-browser.mjs';
 
 // No runTrial/collectCalls call occurs here. Real operations have no timer around them.
 test('installed package and actual TypeScript adapter conformance, without measurements', async (t) => {
 	const tarball = process.env.DITHERETTE_BENCH_TEST_TARBALL;
+	const oracle = process.env.DITHERETTE_BENCH_ORACLE;
+	assert.ok(oracle, 'Set DITHERETTE_BENCH_ORACLE to a built frozen-only oracle directory.');
 	assert.ok(tarball, 'Set DITHERETTE_BENCH_TEST_TARBALL to an already-built package tarball.');
 	const quantizePath = process.env.DITHERETTE_BENCH_QUANTIZE_FIXTURES;
 	assert.ok(
@@ -71,9 +78,11 @@ test('installed package and actual TypeScript adapter conformance, without measu
 		'benchmark-public-page.mjs',
 		'benchmark-public-timing.mjs',
 		'benchmark-public-browser.mjs',
+		'benchmark-oracle-page.mjs',
 		'benchmark-transport.mjs'
 	])
 		await cp(fileURLToPath(new URL(name, import.meta.url)), path.join(root, 'scripts', name));
+	await cp(oracle, path.join(root, 'scripts/oracle'), { recursive: true });
 	const files = [];
 	async function walk(relative = '') {
 		for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
@@ -115,6 +124,62 @@ test('installed package and actual TypeScript adapter conformance, without measu
 					executablePath:
 						engineName === 'webkit' ? process.env.DITHERETTE_TEST_WEBKIT_EXECUTABLE : undefined
 				});
+				const references = [];
+				for (const fixture of [...quantizeFixtures, ...fieldFixtures]) {
+					assert.ok(
+						fixture.identity,
+						'Generate full-identity conformance fixtures with the current exporter.'
+					);
+					const reference = await frozenBrowserReference(browser, {
+						browser: { assets, runtime: { cross_origin_isolated: true } },
+						case: {
+							source: fixture.source,
+							rgba: fixture.rgba,
+							identity: fixture.identity,
+							browser: {
+								operation: fixture.operation ?? {
+									operation: 'quantize',
+									settings: fixture.settings
+								}
+							},
+							measurement: { samples: 1 }
+						}
+					});
+					assert.equal(
+						browser.contexts().length,
+						0,
+						'Oracle context closes before any package initialization.'
+					);
+					assert.deepEqual(reference.case, fixture.identity);
+					references.push({
+						...fixture,
+						native_reference: fixture.reference,
+						reference: reference.output
+					});
+				}
+				if (process.env.DITHERETTE_BENCH_ORACLE_EVIDENCE)
+					await writeFile(
+						path.join(
+							process.env.DITHERETTE_BENCH_ORACLE_EVIDENCE,
+							`${engineName}-references.json`
+						),
+						JSON.stringify(
+							{
+								engine: engineName,
+								version: browser.version(),
+								oracle_manifest: JSON.parse(
+									await readFile(path.join(oracle, 'manifest.json'), 'utf8')
+								),
+								tarball_sha256: createHash('sha256')
+									.update(await readFile(tarball))
+									.digest('hex'),
+								references
+							},
+							null,
+							2
+						),
+						{ flag: 'wx' }
+					);
 				const context = await browser.newContext({ serviceWorkers: 'block' });
 				await restrictContext(context, server);
 				const page = await context.newPage();
@@ -505,7 +570,11 @@ test('installed package and actual TypeScript adapter conformance, without measu
 							]
 						};
 					},
-					{ assets, quantizeFixtures, fieldFixtures }
+					{
+						assets,
+						quantizeFixtures: references.slice(0, quantizeFixtures.length),
+						fieldFixtures: references.slice(quantizeFixtures.length)
+					}
 				);
 				assert.equal(report.isolated, true);
 				assert.deepEqual(report.drift, [10, 11]);

@@ -16,7 +16,9 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+mod oracle;
 mod provenance;
+pub use oracle::validate_oracle;
 pub use provenance::{validate_source_revision, BuildFile, BuildProvenance, BuildTool};
 const WEBKIT_LAUNCHER: &[u8] = include_bytes!("browser_assets/webkit-launcher.sh");
 
@@ -184,6 +186,8 @@ fn snapshot_bundle(source: &BundleSource, directory: &Path) -> io::Result<AssetB
         entries: source.entries.clone(),
     };
     validate_bundle(&bundle)?;
+    // Legacy snapshots remain readable. New preparation requires same-target oracle evidence.
+    validate_oracle(&bundle)?;
     Ok(bundle)
 }
 
