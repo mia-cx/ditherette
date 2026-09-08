@@ -41,7 +41,10 @@ fn yliluoma_transport_accepts_indexed_output_and_rejects_rgba_output() {
         transparent_index: None,
     };
     request.reference_output = Some(result.output.clone());
-    result.reference = Some(OracleOutput {case: case.identity.clone(),output: result.output.clone()});
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
     validate_response(&request, &result).unwrap();
     result.output.pixels = Pixels::Rgba8 {
         data: vec![1, 2, 3, 255],
