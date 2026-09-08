@@ -20,11 +20,32 @@ const request = (data = new Uint8Array([17, 31, 47, 127])) => ({
 const diagnostic = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
+// An identity resize owns only its preparation record and eight pixel bytes.
+// Probe that compiled record layout; the per-filter heap formulas remain independent below.
+const resizeOverhead = await (async () => {
+	let low = overhead;
+	let high = overhead + 1024;
+	while (low < high) {
+		const limit = Math.floor((low + high) / 2);
+		const processor = await createDitherette({ wasm: module, memoryLimitBytes: limit });
+		try {
+			const value = request();
+			value.output.width = 1;
+			processor.resize(value);
+			high = limit;
+		} catch (error) {
+			assert.ok(diagnostic('memory-limit', 'memoryLimitBytes')(error));
+			low = limit + 1;
+		} finally { processor.dispose(); }
+	}
+	return low - 8;
+})();
+
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
 	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.
 	const capacity = 3 * 20 + 16 + 8 + 4 + 32 + 16 + 4;
-	const processor = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity });
-	const short = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity - 1 });
+	const processor = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity });
+	const short = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity - 1 });
 	const backing = new Uint8Array([99, ...new Uint8Array(12), 1, 1, 1, 1, 98]);
 	const value = {
 		version: 1,
@@ -110,7 +131,7 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 		};
 		const processor = await createDitherette({
 			wasm: module,
-			memoryLimitBytes: overhead + capacity
+			memoryLimitBytes: resizeOverhead + capacity
 		});
 		const output = processor.resize(value);
 		assert.deepEqual([...output.data], [100, 50, 150, 128]);
@@ -131,7 +152,7 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 		assert.deepEqual([...output.data], [100, 50, 150, 128]);
 		const short = await createDitherette({
 			wasm: module,
-			memoryLimitBytes: overhead + capacity - 1
+			memoryLimitBytes: resizeOverhead + capacity - 1
 		});
 		assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
 		const smaller = request();
@@ -144,10 +165,10 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 test('one exact capacity budget succeeds and one byte less rejects without poisoning the instance', async () => {
 	// 12 pixel bytes plus two Wasm usize x offsets and one u32 y coordinate.
 	const capacity = 12 + 2 * 4 + 4;
-	const exact = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity });
+	const exact = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity });
 	assert.equal(exact.resize(request()).data.length, 8);
 	exact.dispose();
-	const short = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity - 1 });
+	const short = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity - 1 });
 	assert.throws(() => short.resize(request()), diagnostic('memory-limit', 'memoryLimitBytes'));
 	const smaller = request();
 	smaller.output.width = 1;
@@ -175,7 +196,7 @@ test('public convolution preserves alpha and output ownership with bounded prepa
 			};
 			const processor = await createDitherette({
 				wasm: module,
-				memoryLimitBytes: overhead + capacity
+				memoryLimitBytes: resizeOverhead + capacity
 			});
 			const output = processor.resize(value);
 			// The landed Wasm Lanczos3 accumulation rounds this half-byte downward for scale-aware support.
@@ -208,7 +229,7 @@ test('public convolution preserves alpha and output ownership with bounded prepa
 			assert.deepEqual([...output.data], expected);
 			const short = await createDitherette({
 				wasm: module,
-				memoryLimitBytes: overhead + capacity - 1
+				memoryLimitBytes: resizeOverhead + capacity - 1
 			});
 			assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
 			value.output.width = 2;

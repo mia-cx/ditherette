@@ -467,6 +467,7 @@ fn complete_call_preflights_capacity_and_recovers_without_publishing_failed_outp
     let mut exact = Processor::new(capacity, 0).unwrap();
     assert_eq!(run(&mut exact, &mut Boundary::new(&data)).unwrap(), stable);
     for fail_at in [0, 1, usize::MAX] {
+        exact = Processor::new(capacity, 0).unwrap();
         let mut boundary = Boundary::new(&data);
         let mut allocator = Allocation {
             fail_at,
