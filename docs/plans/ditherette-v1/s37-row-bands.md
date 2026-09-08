@@ -76,3 +76,17 @@ Row scheduling retains shared palette preparation and full-source adaptive reads
 The joined automatic selector passes complete-call tests in native pools of one, two, three, and four workers. Tests compare direct medium and nearest/OKLCH Process results with frozen indices and metadata. They check the measured joined-progress configurations, independent stage overrides, explicit scalar overrides, and unchanged cache identity. Existing budget and callback-failure checks still pass.
 
 Release validation passes 16 tests with `bench-subjects`, eight with `threads,bench-subjects`, and three focused selector tests in each build. The frozen spec, shared image infrastructure, and guard have no source changes. These are correctness checks; final installed-package validation and S41's warm-control evidence remain separate.
+
+## Final installed-package disposition
+
+The publication branch joins S36 PR 127 head `b542bd94a5dbc724de73815ae0008a22985147fd` and rebases onto its published branch.
+All production and package build inputs are byte-identical to combined tested source `dc81818a`.
+The ordinary tarball SHA-256 is `1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+
+The trusted frozen guard passes. The untimed automatic host fixture passes 23 checks, including nine cases per Chromium/Firefox engine.
+Medium mixing and nearest/OKLCH Process match ordinary scalar output exactly, including public metadata.
+The fixture verifies progress and worker disposal; both ordinary binaries exclude the developer policy export.
+Exact invocation and completed browser cleanup live in `.plans/77-79-auto-host.md`.
+
+Installed correctness is complete. S41 still owns warm-control uncertainty, automatic-policy timing follow-up, unmeasured classes, and WebKit cleanup.
+No new measurement, approximation, frozen expectation, or processing change accompanies this PR.
