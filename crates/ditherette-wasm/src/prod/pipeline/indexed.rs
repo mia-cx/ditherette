@@ -35,7 +35,18 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     peak: &mut u64,
     store: &mut Store,
 ) -> Result<B::Output, Failure> {
-    let execution = store.execution_policy();
+    // Process has no measured S36 complete-call class; explicit developer bands still apply.
+    let measured = if resize.is_none() {
+        super::row_fields::measured_indexed(
+            output_dimensions,
+            request,
+            dither,
+            super::execution::worker_budget(),
+        )
+    } else {
+        None
+    };
+    let row_policy = store.row_policy(super::execution::ExecutionStage::Indexed, measured);
     let enabled = boundary.progress().is_some();
     let mut progress = super::progress::Control::new(enabled);
     progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
@@ -99,8 +110,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         let result = boundary.complete(bytes, output_dimensions, metadata);
         return call.finish(progress.finish(result, boundary.progress()));
     }
-    let band_plan = execution
-        .indexed
+    let band_plan = row_policy
         .filter(|_| {
             matches!(
                 dither,

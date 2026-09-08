@@ -37,8 +37,8 @@ No public API, execution selector, cache identity, or callback contract changes.
    Root owns the measured dimensions, trial matrix, and scheduling selection.
 4. [x] Join the shared pooled executor and integrate candidate row scheduling
    through private fragments. Report progress only after joined work on the caller.
-5. [ ] After root quiet clearance, compare fresh complete-call host-worker artifacts.
-   Select only measured wins, record scalar winners, and hand off a reviewable PR.
+5. [x] Compare fresh complete-call host-worker artifacts and select measured cost classes.
+6. [ ] Hand the validated delivery checkpoint to root for its reviewable stacked PR.
 
 ## Validation and budget
 
@@ -150,3 +150,51 @@ S35 identified one shared pressure-order follow-up: capacity charging must let
 that correction. The final integration joins it before benchmark delivery.
 Root owns host-worker builds and complete-call measurement. No timing or Wasm
 build has run in this worktree.
+
+## Measured selection checkpoint
+
+Delivery continues on `delivery/v1-s36-fields` in `.worktrees/v1-s36-delivery`.
+The shared stage-override seam is joined with ancestry at `bcffc184`.
+Root ran Chromium trial 02 and Firefox trial 03 in `.worktrees/v1-s35-37-bench`.
+Their retained `target/rows-trial-03/combined-analysis.{json,md}` records exact
+report hashes, identities, per-pair counts, medians, and all inconclusive cases.
+Each engine completed 200 serial workers and 100 exact scalar/row pairs.
+Separate reference probes are not additional scalar/row pairs.
+
+The accepted role forces scalar inside the same threaded developer artifact.
+This evidence does not compare the ordinary scalar package against threading.
+Cold complete calls include boundary copies, preparation, and durable results.
+Warm final hits remain overhead controls, not kernel acceleration evidence.
+
+Automatic S36 scheduling uses conservative cost-class heuristics:
+
+- At least 769 by 513 pixels: sRGB random/everywhere fields and preserve-alpha
+  sRGB Euclidean quantization with 15 visible entries plus trailing Transparent.
+  Four available workers select height 128. Pools of two or three select two
+  workers at height 32. Both configurations have common-engine passing gains.
+- At least 65 by 49 pixels: Oklab blue-noise/adaptive-radius-two perturbation.
+  Separable matching additionally requires Oklab Euclidean preserve-alpha and
+  63 visible entries plus trailing Transparent. Select two workers, height 32.
+- Keep small inputs, zero strength, other recipes, direct Oklab quantization,
+  Process field scheduling, and one-worker pools scalar. Diffusion stays scalar.
+
+Seed and palette RGB values remain independent. Nonzero strength and adaptive
+threshold/softness retain the same structural loop class. These heuristics use
+representative measurements; they do not predict every image or control value.
+S36 sRGB field samples were 5/7 per pair in Chromium and 5/5 in Firefox.
+Oklab field samples were 20/20 in Chromium and 5-6/8 in Firefox.
+The existing minimum-five collection rule passed; requested 20 is not a new gate.
+Genuine noisy gates remain incomplete and do not select automatic execution.
+
+Private forced scalar/row overrides remain independent per stage. Normal scalar
+builds select scalar. Existing preflight charges actual worker ownership before
+dispatch; callback handling and success-only cache publication stay unchanged.
+
+Focused tests cover measured boundaries, pool capacities 1/2/3/4/8, cost-class
+exclusions, actual automatic public calls, scalar bytes and metadata, caller
+progress, callback failure/retry, and policy-independent final-cache hits.
+Native validation uses only this delivery worktree's `target/compiler`.
+Both release library suites pass 42 tests, with and without `threads`.
+Nine focused threaded integration tests pass across `prod_quantize_row_bands`,
+`prod_field_row_bands`, `prod_field_band_allocation`, and `prod_processor_fields`.
+No Wasm build, measurement, push, or PR operation is authorized in this task.

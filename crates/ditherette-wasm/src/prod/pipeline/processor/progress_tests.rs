@@ -139,6 +139,123 @@ fn band_policy(workers: u32, height: u32) -> crate::prod::pipeline::execution::E
 }
 
 #[test]
+fn automatic_field_calls_preserve_scalar_bytes_metadata_and_cache_identity() {
+    let check = || {
+        let mut palette: Vec<_> = (0..63)
+            .map(|n| PaletteEntry::Color {
+                rgb: [(n * 73) as u8, (n * 31 + 19) as u8, (n * 17 + 113) as u8],
+            })
+            .collect();
+        palette.push(PaletteEntry::Transparent {});
+        let request = QuantizeRequest {
+            source_width: 65,
+            source_height: 49,
+            palette: &palette,
+            alpha: AlphaPolicy::Preserve { threshold: 127.5 },
+            matching: MatchPolicy::OklabEuclidean,
+        };
+        let field = PerturbPolicy {
+            space: WorkingSpace::Oklab,
+            strength: 0.7,
+            field: Field::BlueNoise {},
+            placement: Placement::Adaptive {
+                radius: 2,
+                threshold: 0.05,
+                softness: 0.025,
+            },
+        };
+        for method in 0..3 {
+            let request = if method == 2 {
+                QuantizeRequest {
+                    source_width: 769,
+                    source_height: 513,
+                    palette: &palette[48..],
+                    matching: MatchPolicy::SrgbEuclidean,
+                    ..request
+                }
+            } else {
+                request
+            };
+            let mut io = Io::new(true);
+            io.input = (0..request.source_width * request.source_height * 4)
+                .map(|n| (n * 73 + 17) as u8)
+                .collect();
+            io.fail_after_work = true;
+            let run = |processor: &mut Processor, io: &mut Io| {
+                if method == 2 {
+                    processor.quantize(request, io)
+                } else if method == 1 {
+                    processor.dither_and_quantize(
+                        request,
+                        DitherPolicy::Separable { perturb: field },
+                        io,
+                    )
+                } else {
+                    processor.perturb(
+                        PerturbRequest {
+                            source_width: 65,
+                            source_height: 49,
+                            perturb: field,
+                        },
+                        io,
+                    )
+                }
+            };
+            let mut scalar = Processor::new(32 << 20, 0).unwrap();
+            scalar.set_execution_policy(Default::default()).unwrap();
+            let expected = run(&mut scalar, &mut io).unwrap();
+            let metadata = io.metadata.clone();
+            let scalar_peak = scalar.peak_capacity_bytes();
+            let mut candidate = Processor::new(32 << 20, 0).unwrap();
+            io.reset();
+            assert_eq!(run(&mut candidate, &mut io).unwrap(), expected);
+            assert_eq!(io.metadata, metadata);
+            #[cfg(feature = "threads")]
+            assert!(
+                candidate.peak_capacity_bytes() > scalar_peak,
+                "automatic worker ownership is charged"
+            );
+            #[cfg(not(feature = "threads"))]
+            assert_eq!(candidate.peak_capacity_bytes(), scalar_peak);
+            let retained = candidate.preparation.stats().0;
+            candidate.set_execution_policy(Default::default()).unwrap();
+            io.reset();
+            assert_eq!(run(&mut candidate, &mut io).unwrap(), expected);
+            assert_eq!(candidate.preparation.stats().0, retained);
+            assert_eq!(
+                io.events
+                    .iter()
+                    .map(|event| event.stage)
+                    .collect::<Vec<_>>(),
+                [Stage::Prepare, Stage::Complete]
+            );
+
+            let mut failed = Processor::new(32 << 20, 0).unwrap();
+            io.reset();
+            io.fail_stage = Some(if method == 2 {
+                Stage::Quantize
+            } else {
+                Stage::Perturb
+            });
+            assert!(run(&mut failed, &mut io).is_err());
+            assert_eq!(failed.preparation.stats().0, 0);
+            assert!(!io.ready);
+            io.fail_stage = None;
+            io.reset();
+            assert_eq!(run(&mut failed, &mut io).unwrap(), expected);
+        }
+    };
+    #[cfg(feature = "threads")]
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .unwrap()
+        .install(check);
+    #[cfg(not(feature = "threads"))]
+    check();
+}
+
+#[test]
 fn field_band_public_calls_preserve_results_caches_and_callback_transactions() {
     for method in 1..5 {
         let mut scalar = Io::new(true);

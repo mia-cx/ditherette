@@ -136,9 +136,16 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     peak: &mut u64,
     store: &mut super::preparation::Store,
 ) -> Result<B::Output, Failure> {
-    let execution = store.execution_policy();
     validate(request.perturb)?;
     let dimensions = dimensions(request.source_width, request.source_height, true)?;
+    let row_policy = store.row_policy(
+        super::execution::ExecutionStage::Indexed,
+        super::row_fields::measured_field(
+            dimensions,
+            request.perturb,
+            super::execution::worker_budget(),
+        ),
+    );
     let len = dimensions
         .storage_len::<Rgba8>()
         .map_err(|_| Failure::new(ErrorCode::InvalidImage, ErrorPath::Source))?;
@@ -167,8 +174,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         let result = boundary.complete(&image.bytes, image.dimensions);
         return call.finish(progress.finish(result, boundary.progress()));
     }
-    let band_plan = execution
-        .indexed
+    let band_plan = row_policy
         .map(|policy| super::row_fields::Plan::new(dimensions, policy, true))
         .transpose()?;
     let band_capacity = band_plan
