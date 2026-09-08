@@ -230,6 +230,13 @@ S37 starts at final S34 `d4531667` in `v1-s37-yliluoma`, owning Yliluoma adapter
 All three agents use GPT-6-astra at high reasoning in separate worktrees and own only their local `target/compiler`.
 S36 coordinates Yliluoma indexed callsites with S37. Root owns final joins, tracking, package artifacts, and exclusive measurements.
 The browser/native performance discussion is an aside. Keep same-kernel timing and compilation-warmup diagnosis in S41; continue slice implementation.
+Combined row-band candidate `b6522e2f` in `impl/v1-s35-37-bench` includes S35 `87d69cc6`, S36 `fef1eafe`, and S37 `be989cc5`.
+The join preserves S35's scratch-before-LRU pressure ordering and multi-stage private policy updates, plus both indexed adapters.
+Its 39 library and ten focused threaded integration tests pass, including combined resize/indexed Process and mixing failure recovery.
+The trusted frozen guard passes with unchanged checkpoint/digest. Developer-only policy metadata binds actual public host calls; 27 protocol and 24 timing/policy tests pass.
+Explicit benchmark-feature build preparation passes six Node and ten native provenance tests. Normal package build defaults and exports remain unchanged.
+Separate `v1-row-band-host` and `v1-row-band-matrix` owners prepare untimed actual-browser fixtures and the fixed 400-worker first matrix.
+No performance measurements or new Wasm artifacts have run yet. Root owns the final clean source, artifact builds, and exclusive phase.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
@@ -260,6 +267,9 @@ The completed S32 trusted check returns its compiler target. Cleanup reclaims 28
 Its exact realpath and compiler-only contents were checked; no active process owned that target. Frozen source and benchmark evidence remain intact.
 After PR122 handoff, six returned S32 compiler targets reclaim another 6.18 GiB of disk blocks.
 After PR123 handoff, six returned S33 compiler targets reclaim 5.51 GiB of disk blocks.
+After PR124 handoff, root cleans six returned S34 compiler targets and the idle trusted-checker target.
+Cargo reports approximately 6.4 GiB of logical file sizes removed. Both final retained package and worker hashes remain unchanged.
+The joined row-band guard later recreates the checker target. Active row-band compiler directories remain assigned and untouched.
 The returned trusted-checker target reclaims another 289 MiB. Both reports and both package hashes remain unchanged.
 Copied binaries, oracles, trial snapshots, and raw results remain retained. Compiler outputs can be rebuilt for review.
 Current S34 runtime and benchmark owners use only their new worktree-local targets; public fixtures own no compiler cache.
