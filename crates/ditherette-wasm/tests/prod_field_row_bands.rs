@@ -3,7 +3,7 @@ use ditherette_wasm::{
     prod::{
         self,
         contract::request::{Placement, WorkingSpace},
-        tiling::{RowBandBuffers, WorkerBudget},
+        tiling::WorkerBudget,
     },
     spec,
 };
@@ -71,13 +71,12 @@ fn disjoint_field_outputs_keep_global_draws_and_full_source_adaptive_neighbors()
                         let counts: Vec<_> = (0..35).map(|_| AtomicUsize::new(0)).collect();
                         let mut guarded = vec![211; 142];
                         let output = &mut guarded[1..141];
-                        let mut work = RowBandBuffers::<()>::try_new(
+                        let mut work = prod::dither::perturb::try_band_buffers(
                             dimensions,
                             band_height,
                             WorkerBudget::new(workers),
                             workers,
                             u64::MAX,
-                            &|_| Ok(0),
                         )
                         .unwrap();
                         let caller = std::thread::current().id();

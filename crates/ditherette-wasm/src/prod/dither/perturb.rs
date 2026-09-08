@@ -8,7 +8,8 @@ use crate::{
             failure::Failure,
             request::{Placement, WorkingSpace},
         },
-        tiling::{RowBand, RowBandBuffers},
+        resize::common::allocation::CapacityBudget,
+        tiling::{bands_for_output_height, RowBand, RowBandBuffers, WorkerBudget},
     },
 };
 
@@ -20,6 +21,49 @@ const FIELD_SCALE: f64 = 0.25;
 /// The enclosing call charges this in addition to row metadata, source, and output.
 pub const fn band_working_capacity_bytes(active_workers: u32) -> u64 {
     std::mem::size_of::<crate::prod::color::packed::Converter>() as u64 * active_workers as u64
+}
+
+/// Counts assignment ownership and each concurrently live converter before allocation.
+pub fn required_band_capacity_bytes(
+    dimensions: ImageDimensions,
+    band_height: u32,
+    workers: WorkerBudget,
+    requested_workers: u32,
+) -> Result<u64, Failure> {
+    let metadata = RowBandBuffers::<()>::required_bytes(
+        dimensions,
+        band_height,
+        workers,
+        requested_workers,
+        &|_| Ok(0),
+    )?;
+    let bands = bands_for_output_height(dimensions, band_height).expect("validated band height");
+    let active = workers.active_workers(requested_workers, bands.len() as u32);
+    Ok(metadata + band_working_capacity_bytes(active))
+}
+
+/// Reserves row metadata only after the complete field working set fits.
+/// Temporary converters stay on worker stacks; callers keep their charge until execution joins.
+pub fn try_band_buffers(
+    dimensions: ImageDimensions,
+    band_height: u32,
+    workers: WorkerBudget,
+    requested_workers: u32,
+    limit: u64,
+) -> Result<RowBandBuffers<()>, Failure> {
+    let required =
+        required_band_capacity_bytes(dimensions, band_height, workers, requested_workers)?;
+    CapacityBudget::new(limit).check_additional(required)?;
+    let bands = bands_for_output_height(dimensions, band_height).expect("validated band height");
+    let active = workers.active_workers(requested_workers, bands.len() as u32);
+    RowBandBuffers::try_new(
+        dimensions,
+        band_height,
+        workers,
+        requested_workers,
+        limit - band_working_capacity_bytes(active),
+        &|_| Ok(0),
+    )
 }
 
 /// Executes preflighted disjoint bands while preserving the full immutable source.

@@ -29,7 +29,7 @@ No public API, execution selector, cache identity, or callback contract changes.
 
 1. [x] Add safe band-local kernel adapters and prove exact bytes across disjoint
    output bands, worker counts, strides, alpha/ties, field identities, and adaptive seams.
-2. [ ] Define bounded execution capacity using existing worker-budget geometry.
+2. [x] Define bounded execution capacity using existing worker-budget geometry.
    Count each concurrently live perturb converter and other temporary records;
    share immutable quantizer preparation. Prove exact budget and one-under behavior.
 3. [x] Define S36 recipes through existing complete-call benchmark subjects.
@@ -105,3 +105,24 @@ The full native exactness matrices now exercise this actual executor instead of
 test-owned scoped threads. Both tests pass in scalar and `threads` builds.
 They also prove callbacks stay on the caller and reach the full output height.
 Combined capacity preflight and allocation-failure witnesses are the next checkpoint.
+
+## Worker-capacity checkpoint
+
+Joined S35's allocation-free band iterator at `20fc297b9bd376883206007cd6a26bb5f139a626`.
+Field preflight now reserves shared row metadata plus one existing converter per
+active worker. It uses the existing iterator and `WorkerBudget::active_workers`.
+`try_band_buffers` checks that combined requirement before the first reservation.
+Temporary converter capacity remains charged until every worker joins; no unused
+scratch allocation stands in for that stack storage. Quantization reuses the same
+row metadata with its one shared `PreparedQuantizer` and no worker converter copy.
+
+The allocation fixture checks 1/2/4 active workers, exact and one-under budgets,
+every metadata reservation failure, callback failure after the first joined batch,
+untouched later bands, and successful reuse for perturb then quantize. It checks
+the independent caller-owned source/RGBA8/indexed/preparation charge separately.
+Public pipeline preflight and transactional publication still await root integration.
+This fixture does not claim those unwired public behaviors are implemented.
+
+Validation passes 33 focused scalar tests and three focused threaded tests.
+All jobs have exited. Only this worktree's native `target/compiler` was used.
+No timing, Wasm compilation, threshold selection, or public selector was added.
