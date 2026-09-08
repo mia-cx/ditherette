@@ -194,7 +194,12 @@ All 15 callback cases pass. Chromium's disabled Lab76 and Lanczos3 comparisons r
 Those gaps are recorded in [S41](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5588948095).
 S33 has the availability label. S34's [validated prerequisite handoff](https://github.com/mia-cx/ditherette/issues/76#issuecomment-5588948351) removes its satisfied native blocker while preserving the original dependency record.
 The returned report owner now owns S34 benchmark protocol and startup artifacts in `v1-s34-bench`.
-Its fixed plan has 48 serial workers across scalar regression and threaded same-artifact controls. No measurement is running.
+Its amended fixed plan has 40 serial workers across scalar regression and threaded same-artifact controls. No measurement is running.
+S34 fixtures at `1b4bc28cd185b4987e1b251c1ac72dcbdbc16837` pass selection and partial-start cleanup in all three engines.
+Chromium and Firefox pass actual disposal and host termination. Pinned WebKit 26.4 retains atomic-wait workers.
+The independent upstream Wasm reproduction fails without Ditherette or Rayon. WebKit fix `319508@main` needs verification in a recorded engine.
+Keep this unresolved release gate and the failing lifecycle assertions. Unreliable capability probes are discarded, not shipped.
+WebKit threaded startup is blocked and unmeasured because retained pools invalidate trial isolation. Scalar startup still covers all engines.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
