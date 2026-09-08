@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createDitherette } from 'ditherette';
 import { ProcessorWorkerPipeline, transferablesForWorkerResponse } from './worker-pipeline';
 import type {
 	DitherSettings,
@@ -14,14 +15,21 @@ class TestImageData implements ImageData {
 	readonly height: number;
 	readonly colorSpace: PredefinedColorSpace = 'srgb';
 
-	constructor(data: Uint8ClampedArray<ArrayBuffer>, width: number, height: number) {
-		this.data = data;
-		this.width = width;
-		this.height = height;
+	constructor(data: Uint8ClampedArray<ArrayBuffer> | number, width: number, height?: number) {
+		this.width = typeof data === 'number' ? data : width;
+		this.height = typeof data === 'number' ? width : height!;
+		this.data =
+			typeof data === 'number' ? new Uint8ClampedArray(this.width * this.height * 4) : data;
 	}
 }
 
 Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configurable: true });
+
+vi.mock('ditherette', () => ({ createDitherette: vi.fn() }));
+afterEach(() => {
+	vi.unstubAllEnvs();
+	vi.resetAllMocks();
+});
 
 const palette: EnabledPaletteColor[] = [
 	{ name: 'Black', key: '#000000', rgb: { r: 0, g: 0, b: 0 }, kind: 'free', enabled: true },
@@ -284,6 +292,123 @@ describe('ProcessorWorkerPipeline', () => {
 
 		expect(response?.type).toBe('complete');
 	});
+
+	it.each([
+		[true, undefined],
+		[true, 'false'],
+		[false, 'true']
+	])('retains TypeScript with DEV=%s and package flag=%s', async (dev, flag) => {
+		vi.stubEnv('DEV', dev);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', flag);
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = await pipeline.handleAsync(processRequest(), () => undefined);
+		expect(response).toMatchObject({
+			type: 'complete',
+			image: { indices: new Uint8Array([0, 1]), settingsHash: 'hash' }
+		});
+		expect(createDitherette).not.toHaveBeenCalled();
+		expect(pipeline.branchCacheSize).toBe(1);
+	});
+
+	it('uses one initialized public processor for the complete flagged path', async () => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		const process = vi.fn(() => ({
+			width: 2,
+			height: 1,
+			indices: new Uint8Array([1, 0]),
+			palette: { rgba: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]), transparentIndex: null },
+			warnings: []
+		}));
+		vi.mocked(createDitherette).mockResolvedValue({
+			process,
+			resize: vi.fn(),
+			quantize: vi.fn(),
+			perturb: vi.fn(),
+			ditherAndQuantize: vi.fn(),
+			dispose: vi.fn()
+		});
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = await pipeline.handleAsync(processRequest(), () => undefined);
+		await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined);
+		expect(response).toMatchObject({
+			type: 'complete',
+			image: {
+				indices: new Uint8Array([1, 0]),
+				palette,
+				transparentIndex: -1,
+				settingsHash: 'hash'
+			}
+		});
+		expect(createDitherette).toHaveBeenCalledTimes(1);
+		expect(process).toHaveBeenCalledTimes(2);
+		expect(process).toHaveBeenCalledWith(
+			expect.objectContaining({
+				recipe: expect.objectContaining({ version: 1, match: 'srgb-euclidean' })
+			})
+		);
+		expect(pipeline.branchCacheSize).toBe(0);
+	});
+
+	it('keeps fractional crops on the disabled TypeScript path', async () => {
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = await pipeline.handleAsync(
+			processRequest({
+				settings: {
+					output: { ...output, crop: { x: 0.5, y: 0, width: 1, height: 1 } },
+					dither,
+					colorSpace: 'srgb'
+				}
+			}),
+			() => undefined
+		);
+		expect(response).toMatchObject({
+			type: 'complete',
+			image: { indices: new Uint8Array([0, 1]) }
+		});
+		expect(createDitherette).not.toHaveBeenCalled();
+	});
+
+	it.each(['initialization', 'process'])(
+		'keeps %s failures visible without invoking TypeScript',
+		async (failure) => {
+			vi.stubEnv('DEV', true);
+			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+			const error = new Error(`${failure} failed`);
+			if (failure === 'initialization') vi.mocked(createDitherette).mockRejectedValue(error);
+			else
+				vi.mocked(createDitherette).mockResolvedValue({
+					process: () => {
+						throw error;
+					},
+					resize: vi.fn(),
+					quantize: vi.fn(),
+					perturb: vi.fn(),
+					ditherAndQuantize: vi.fn(),
+					dispose: vi.fn()
+				});
+			const pipeline = new ProcessorWorkerPipeline();
+			pipeline.handle(
+				{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+				() => undefined
+			);
+			await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toBe(error);
+			expect(pipeline.branchCacheSize).toBe(0);
+		}
+	);
 
 	it('returns transferred index buffers for complete responses', () => {
 		const pipeline = new ProcessorWorkerPipeline();

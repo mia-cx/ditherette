@@ -1318,7 +1318,8 @@ export function recordMatcherMemoStats(
 	caches?.recordCount?.('distance table bytes', stats.distanceTableBytes);
 }
 
-function resolveMatteRgb(
+/** Resolve the selected matte against a normalized palette containing visible colors. */
+export function resolveMatteRgb(
 	palette: EnabledPaletteColor[],
 	visible: EnabledPaletteColor[],
 	matteKey: string
