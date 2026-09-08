@@ -249,6 +249,12 @@ Fresh native/public artifacts and the seven host fixtures pass again. `target/ro
 Three clean delivery branches preserve separate slice ownership and immediate-parent ancestry:
 `delivery/v1-s35-resize` at `2bd25aed`, `delivery/v1-s36-fields` at `4c4ea884`, and `delivery/v1-s37-yliluoma` at `d8834596`.
 The complete S37 delivery tree equals corrected measurement source `5d16c568`. Policy selection and PR reports await complete evidence.
+Trial 02 completes all 200 Chromium workers. Its 50 case gates are 37 pass, nine inconclusive, three inherited bilinear mismatches, and one small-nearest regression.
+The complete-call large four-worker results show about 26% lower Lanczos3 latency, 49% lower sRGB field latency, and 67% lower adaptive Yliluoma latency.
+These compare forced policies within the same threaded artifact, not threaded Wasm against the ordinary scalar build.
+Firefox stops after 15 reaped workers when the browser creates writable `.parentlock` and `updates/` inside its immutable runtime snapshot.
+The files are absent from the source snapshot; the normal Playwright profile is separate. Root preserves the failed snapshot unchanged.
+No benchmark is running. One agent diagnoses the runtime write; another prepares the completed Chromium report. Firefox evidence remains incomplete.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
