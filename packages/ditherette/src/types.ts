@@ -3,6 +3,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 /** Scalar is the default. Preferred threads fall back after failed capability checks or pool initialization. */
 export interface InitOptions {
+	/** Threaded synchronous calls require a worker context permitting blocking waits. */
 	readonly threads?: 'disabled' | 'preferred' | 'required';
 	readonly memoryLimitBytes?: number;
 	readonly wasm?: InitInput;

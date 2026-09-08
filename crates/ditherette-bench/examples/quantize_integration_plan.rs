@@ -94,6 +94,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 subject.clone(),
                 subject,
                 Some(BrowserCase {
+                    execution: None,
                     operation,
                     accepted: BrowserBackend::Package,
                     candidate: BrowserBackend::Package,

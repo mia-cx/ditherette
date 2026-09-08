@@ -46,8 +46,9 @@ All three paths are absent at handoff. No old caches or symlinks are reused.
    Prove failed startup releases acquired workers and retains valid builder lifetime.
 3. [x] Wire typed capability selection, custom inputs, fallback, and guarded teardown.
    Validate real isolated threaded instances while preserving scalar behavior.
-4. [ ] Join installed fixtures and S33 report ancestry. Build exact artifacts once coordinated.
-   Verify actual browser cleanup, errors, imports, custom inputs, and callback recovery.
+4. [x] Join installed fixtures and S33 report ancestry. Build exact artifacts once coordinated.
+   Record browser cleanup, errors, imports, custom inputs, and callback recovery results.
+   Acceptance retains the failures below; completing evidence collection does not waive them.
 5. [ ] Record exclusive startup evidence and file the unmerged child PR after root handoff.
 
 No measurements run during implementation. Routine reviews remain deferred until
@@ -109,3 +110,148 @@ enters production. Experimental browser jobs have drained.
 The trusted guard requires private functions under the existing Wasm adapter tree.
 Sizing and abandoned-builder functions now live in `wasm/threads.rs`, without
 unnecessary crate-root reexports. Frozen source and guard policy remain unchanged.
+
+## Candidate artifact and validation handoff
+
+The trusted guard passes `29bccaa5f60d5aa0172453e0dce9ec2a5ead0c9d` with frozen
+checkpoint `cef2b60a` and digest `17ba3be3` unchanged. Interface/type and pool tests
+pass 40/40. Generator and built-binding tests pass 7/7. Focused native threaded
+contract/progress tests pass 7/7. Subsequent changes are benchmark protocol,
+fixture diagnostics, and documentation only.
+
+Official native and public preparation both exit 0 at clean artifact source
+`1d1cba8950ab3ffc4064a0a920343e6f92e6a901`. Outputs remain under this worktree:
+
+- `target/s34-candidate-1d1cba89-native`
+- `target/s34-candidate-1d1cba89-public`
+
+The preparers verify unchanged source throughout each build. A separate check
+verifies all 2,471 recorded input/output hashes before this plan-only update.
+The native worker SHA-256 is `36c612d00f3d9636a07a617a88fb50093d80762fac36404239c5cb5e562848fa`.
+The native pair executable SHA-256 is `f9689938f14bd4e28d1b783783b25508ea47ea69aa2cde86e3984a8d982ee4c0`.
+The public tarball SHA-256 is `01ad17dcf087d1debd7564de9d34acff94805f2034168687ab24e1431412955d`.
+The corrected browser transport SHA-256 is `db43e10f603da2cae6a4761b82e96c80f8ebd83e882027a2013ecd1c569d0772`.
+
+The package is byte-identical to the prior official `2afd1802` tarball. The new
+source joins benchmark CSP fix `f55f100f` and labels each custom input failure.
+The CSP fix permits the existing blob worker bootstrap. Its owner proves actual
+required startup fails before the fix and passes afterward against the installed
+package. No runtime code changes between these two artifact sources.
+
+Installed validation uses the exact tarball and SHA above, the official public
+oracle, and generated frozen Yliluoma vectors. Broad, progress, and stage-cache
+suites pass 12/12 on Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+Each broad engine check includes 367 frozen vectors and 734 untimed adapter calls.
+
+The final threaded suite reports 24 tests, 19 passes, and 5 failures, including
+two failed parent tests. Three engine checks fail:
+
+- WebKit disposal retains all four observed pool locks instead of the remaining two.
+- WebKit processing-host termination retains its host lock and both pool locks.
+- Chromium rejects initialization during one of nine custom input forms. The
+  error is `initialization` at `threads`, with message "Required threaded
+  initialization is unavailable." The original fixture does not retain the form.
+
+The isolated Chromium ownership/custom-input diagnostic passes all nine forms
+against the same installed package. It logs input constructors and raw failures
+through a served-only diagnostic substitution; no runtime or artifact file changes.
+It does not reproduce a raw failure or establish a cause. The earlier rejection
+remains unexplained, not diagnosed or waived. The final source labels future
+custom-input failures with their form, code, and path while rethrowing the original
+structured error. Syntax and diff checks pass for this test-only change.
+
+Scalar selection, disabled imports, partial startup cleanup, and ordinary nested
+worker cleanup pass in all three engines. Firefox passes ownership and custom
+inputs. Chromium and Firefox pass processing-host termination. Both known WebKit
+assertions remain enabled. Package-byte equality carries these results to the
+replacement artifact; no further broad rerun follows the CSP/test-only join.
+
+All owned builders and browser jobs are drained. Root owns the five immutable
+snapshots and exclusive startup trial. No measurements run in this worktree.
+Artifact source remains `1d1cba89`; this plan-only handoff is a separate delivery
+commit. Keep step 5 pending until root returns measurement/report ownership.
+
+## Blocking-wait capability correction
+
+The exclusive trial stops after 24 scalar workers pass. Its first threaded
+Chromium worker fails during untimed preflight, before collecting samples.
+A tight repeated create(bytes)/dispose loop through the exact snapshot server
+reproduces the failure at calls 2 and 15. Served-only diagnostics show
+`builder.build()` throws `Atomics.wait cannot be called in this context`.
+Cleanup then masks it with `attempted to take ownership of Rust value while
+it was borrowed` from the Rust abandoned-builder adapter.
+
+Root resolves the execution contract against decisions 24/36 and frozen lifecycle.
+Synchronous threaded execution needs a caller context permitting blocking waits.
+Main JS remains supported through scalar execution. The correction preserves
+preferred fallback and required capability errors, without adding a host worker,
+bootstrap worker, scheduler, browser blacklist, or public option.
+
+1. [x] Prove main-JS capability rejection and disabled-path inertness with focused tests.
+   Add a zero-timeout `Atomics.wait` check after existing prerequisites, only when
+   threads are requested. Worker contexts retain real threaded initialization.
+2. [x] Replace abandoned-builder Rust consumption with generated glue ownership release.
+   Unregister the builder's JS finalizer without entering possibly poisoned Rust
+   borrow state. Failed attempts still terminate workers and discard module memory.
+   Test a borrowed/trapped builder and successful subsequent independent initialization.
+3. [x] Move installed ownership/custom-input/partial-start assertions into the existing
+   processing-host worker context. Keep main-JS preferred scalar fallback and
+   required capability assertions, including zero threaded imports or worker starts.
+4. [x] Record focused validation and a buildable checkpoint. Root owns benchmark
+   host-worker adaptation, artifact refresh, and restarting the exclusive trial.
+
+The earlier custom-input rejection is consistent with this race, but its missing
+raw error prevents attributing that historical failure conclusively.
+
+The current generator adds `abandonThreadPool`, which calls the pinned builder's
+`__destroy_into_raw` JS method. This unregisters its finalizer and clears its
+pointer without consuming a Rust object whose borrow may remain active after a
+trap. It supersedes the earlier Rust forget adapter, which is removed. The scalar
+factory and frozen source remain unchanged. Generator tests prove abandonment
+avoids a poisoned destructor; actual generated-builder tests prove ownership clears.
+
+The corrected real repeated-create diagnostic deliberately bypasses public
+capability validation through the private boundary. Call 5 throws the original
+`RuntimeError: Atomics.wait cannot be called in this context`; cleanup preserves
+that error. Public required then returns `capability` at `threads`, and preferred
+scalar recovery produces exact `[11, 23, 47, 127]`. This untimed diagnostic exits 0.
+An attempted no-receiver synthetic witness stalled instead of reaching the observed
+race. It is removed, its browser processes are drained, and it supplies no evidence.
+
+Installed pool ownership and nine custom forms now run in a processing host.
+Chromium and Firefox pass. WebKit retains the same four-versus-two lock failure.
+Main-JS scalar selection, including isolated preferred fallback and required
+capability rejection before threaded imports, passes all three engines.
+The migrated partial-start test finds handled child-worker errors propagating to
+the host. The startup boundary now cancels that event's default propagation while
+retaining its rejection/fallback behavior. Unit red/green and the real installed
+partial-start rerun pass, including zero pool locks before scalar fallback fetch.
+The installed rerun is 4/4 on development package SHA-256
+`33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d`.
+
+## Corrected candidate handoff
+
+Clean artifact source `c01467f9ed45ba79d855b95421564f2088929693` joins host protocol
+`3f2cc41a`. The trusted guard passes with frozen checkpoint/digest unchanged.
+Official native and public preparers exit 0 under
+`target/s34-candidate-c01467f9-native` and `target/s34-candidate-c01467f9-public`.
+All 2,478 recorded input/output hashes verify before this plan-only update.
+
+The tarball SHA-256 is
+`33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d`,
+byte-identical to the corrected installed partial-start fixture package.
+The native worker SHA-256 is
+`9f1f35b6700edf0832697a8e9d921b7fc304f594815fb05f2bd7e44db82536df`.
+The native pair SHA-256 is
+`857ecf9af5f4bd1f5b00eb8b839bb8d22865eeb30018418967fac99c1d802e70`.
+Host helper, transport, and page hashes match the accepted `3f2cc41a` artifact.
+
+The focused `benchmark-host-worker.test.mjs` installed-package check passes 1/1
+against this exact official package. Both byte and compiled input paths preload,
+then create/dispose three independent required instances with exact output probes.
+Every observed nested worker receives termination. The fixture calls no timing
+collector for the real package. There is no broad rerun or new WebKit acceptance claim.
+
+All owned builders, browsers, and diagnostics are drained. Root owns attempt 02
+snapshots and exclusive measurement. This delivery note does not change artifact
+source `c01467f9` or supersede the retained WebKit release gate.

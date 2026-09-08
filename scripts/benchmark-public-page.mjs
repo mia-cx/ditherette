@@ -46,6 +46,13 @@ export function resizeRecipe(operation) {
 /** Prepare the actual package or website call outside measurement timers. */
 export async function prepareOperation(trial) {
 	const config = trial.case.browser;
+	const execution =
+		typeof DedicatedWorkerGlobalScope !== 'undefined' &&
+		globalThis instanceof DedicatedWorkerGlobalScope
+			? 'host-worker'
+			: 'page';
+	if ((config.execution ?? 'page') !== execution)
+		throw new Error('Browser execution context differs from the declaration.');
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
 	if (
@@ -53,7 +60,8 @@ export async function prepareOperation(trial) {
 		(!config.threads ||
 			!['disabled', 'preferred', 'required'].includes(config.threads.accepted) ||
 			!['disabled', 'preferred', 'required'].includes(config.threads.candidate) ||
-			config.accepted !== 'package' || config.candidate !== 'package')
+			config.accepted !== 'package' ||
+			config.candidate !== 'package')
 	)
 		throw new Error('Thread policies require ordinary package calls and valid role policies.');
 	const threads = config.threads?.[trial.role] ?? 'disabled';
@@ -497,6 +505,9 @@ export async function runTrial(trial) {
 			settings: trial.case.identity.settings
 		};
 		const observation = {
+			...(trial.case.browser.execution === undefined
+				? {}
+				: { execution: trial.case.browser.execution }),
 			user_agent: navigator.userAgent,
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution

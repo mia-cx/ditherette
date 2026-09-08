@@ -54,3 +54,14 @@ test('historical initialization stays explicitly scalar and invalid role policie
 		await assert.rejects(startupTrial('initialization-compiled', 'candidate', threads), /Thread policies/);
 	}
 });
+
+test('host declarations cannot silently run the package in the page context', async () => {
+	await assert.rejects(
+		warmProcessTrial({
+			configure(trial) {
+				trial.case.browser.execution = 'host-worker';
+			}
+		}),
+		/execution context differs/
+	);
+});

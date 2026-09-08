@@ -1,11 +1,15 @@
 import { observeWorkers } from './thread-worker-observer.mjs';
+import { threadedHostCheck } from './threads-browser-fixture.mjs';
 
-Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4 });
+Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
 let processor;
 let observed;
 self.onmessage = async ({ data }) => {
 	try {
-		if (data.kind === 'initialize') {
+		if (data.kind === 'check') {
+			const result = await threadedHostCheck(data);
+			self.postMessage({ kind: 'checked', id: data.id, result });
+		} else if (data.kind === 'initialize') {
 			observed = observeWorkers('host-pool', { failAt: data.starting ? 1 : undefined });
 			const { createDitherette } = await import(data.moduleUrl);
 			processor = await createDitherette({ threads: 'required' });
@@ -24,6 +28,6 @@ self.onmessage = async ({ data }) => {
 			self.postMessage({ kind: 'unexpected-result' });
 		}
 	} catch (error) {
-		self.postMessage({ kind: 'error', message: String(error), code: error.code, path: error.path });
+		self.postMessage({ kind: 'error', id: data.id, message: String(error), code: error.code, path: error.path });
 	}
 };

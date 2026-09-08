@@ -4,7 +4,7 @@
 mod public_plan;
 
 use ditherette_bench::paired::{
-    browser::{BrowserPreparation, ThreadRoles, Threads},
+    browser::{BrowserExecution, BrowserPreparation, ThreadRoles, Threads},
     coordinator::validate_experiment,
     Experiment, SampleMode,
 };
@@ -31,6 +31,7 @@ fn experiment(threaded: bool, host_load_notes: String) -> io::Result<Experiment>
     .map(|(name, preparation)| {
         let mut case =
             public_plan::case(name, (1, 1), (1, 1), SampleMode::SingleCall, preparation)?;
+        case.browser.as_mut().unwrap().execution = threaded.then_some(BrowserExecution::HostWorker);
         case.browser.as_mut().unwrap().threads = Some(ThreadRoles {
             accepted: policy,
             candidate: policy,
@@ -111,6 +112,10 @@ mod tests {
             assert_eq!(off.measurement.measurement_ms, 10_000);
             for (case, policy) in [(off, Threads::Disabled), (on, Threads::Required)] {
                 let browser = case.browser.as_ref().unwrap();
+                assert_eq!(
+                    browser.execution,
+                    (policy == Threads::Required).then_some(BrowserExecution::HostWorker)
+                );
                 assert_eq!(
                     browser.threads,
                     Some(ThreadRoles {

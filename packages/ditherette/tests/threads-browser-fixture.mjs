@@ -39,30 +39,37 @@ export async function customThreadedInputs({ moduleUrl, wasmUrl }) {
 	const request = new Request(wasmUrl);
 	const module = await WebAssembly.compile(bytes);
 	const inputs = [
-		wasmUrl,
-		new URL(wasmUrl),
-		request,
-		response,
-		response,
-		bytes,
-		padded.subarray(3, 3 + bytes.byteLength),
-		new DataView(padded.buffer, 3, bytes.byteLength),
-		module
+		['string', wasmUrl],
+		['URL', new URL(wasmUrl)],
+		['Request', request],
+		['Response first use', response],
+		['Response reuse', response],
+		['ArrayBuffer', bytes],
+		['offset Uint8Array', padded.subarray(3, 3 + bytes.byteLength)],
+		['offset DataView', new DataView(padded.buffer, 3, bytes.byteLength)],
+		['WebAssembly.Module', module]
 	];
 	const image = {
 		version: 1,
 		source: { width: 1, height: 1, data: new Uint8Array([19, 83, 127, 255]) },
 		output: { width: 1, height: 1, resize: { algorithm: 'nearest', anchor: 'center' } }
 	};
-	for (const wasm of inputs) {
-		const instance = await createDitherette({ threads: 'required', wasm });
+	for (const [form, wasm] of inputs) {
+		let instance;
 		try {
+			instance = await createDitherette({ threads: 'required', wasm });
 			const output = instance.resize(image);
 			instance.dispose();
 			if (String(output.data) !== '19,83,127,255')
 				throw new Error('Custom input changed durable output.');
+		} catch (error) {
+			if (error instanceof Error) {
+				error.message = `${form}: ${error.message} (code=${error.code}, path=${error.path})`;
+				throw error;
+			}
+			throw new Error(`${form}: ${String(error)}`, { cause: error });
 		} finally {
-			instance.dispose();
+			instance?.dispose();
 		}
 	}
 	if (response.bodyUsed || request.bodyUsed)
@@ -70,6 +77,66 @@ export async function customThreadedInputs({ moduleUrl, wasmUrl }) {
 	if (padded[0] !== 0 || padded[padded.length - 1] !== 0)
 		throw new Error('Wasm view guards changed.');
 	return { customInputs: inputs.length };
+}
+
+/** Commands run in a caller context that permits synchronous Rayon waits. */
+export async function threadedHostCheck({ operation, input }) {
+	if (operation === 'initializePair') return initializeThreadedPair(input);
+	if (operation === 'exercisePair') return exerciseThreadedPair();
+	if (operation === 'customInputs') return customThreadedInputs(input);
+	if (operation === 'disposeSecond') return threadPair.instances[1].dispose();
+	if (operation === 'cleanupPair') {
+		threadPair.reference.dispose();
+		for (const instance of threadPair.instances) instance.dispose();
+		for (const worker of threadPair.observed.workers) worker.terminate();
+		threadPair.observed.restore();
+		return;
+	}
+	if (operation === 'initializePartial') {
+		const { observeWorkers } = await import('/__tests__/thread-worker-observer.mjs');
+		globalThis.partialWorkers = observeWorkers('partial', { failAt: 2 });
+		const fetch = globalThis.fetch.bind(globalThis);
+		globalThis.scalarFetches = [];
+		globalThis.fetch = async (input, init) => {
+			const url = input instanceof Request ? input.url : String(input);
+			if (url.includes('/wasm/scalar/')) {
+				const { held } = await navigator.locks.query();
+				globalThis.scalarFetches.push(held.filter(({ name }) =>
+					name.startsWith('ditherette-test-')).map(({ name }) => name));
+			}
+			return fetch(input, init);
+		};
+		const { createDitherette, DitheretteError } = await import(input.moduleUrl);
+		globalThis.partialOutcome = undefined;
+		globalThis.partialCompletion = createDitherette({ threads: input.threads }).then(
+			(instance) => {
+				globalThis.fallback = instance;
+				globalThis.partialOutcome = { kind: 'scalar' };
+			},
+			(error) => {
+				globalThis.partialOutcome = { kind: 'error', structured: error instanceof DitheretteError,
+					code: error.code, path: error.path };
+			}
+		);
+		return;
+	}
+	if (operation === 'partialOutcome') return globalThis.partialOutcome;
+	if (operation === 'completePartial') {
+		await partialCompletion;
+		const output = globalThis.fallback?.resize({
+			version: 1,
+			source: { width: 1, height: 1, data: new Uint8Array([19, 83, 127, 255]) },
+			output: { width: 1, height: 1, resize: { algorithm: 'nearest', anchor: 'center' } }
+		});
+		return { outcome: partialOutcome, scalarFetches, output: output && [...output.data] };
+	}
+	if (operation === 'cleanupPartial') {
+		globalThis.fallback?.dispose();
+		for (const worker of partialWorkers.workers) worker.terminate();
+		partialWorkers.restore();
+		return;
+	}
+	throw new Error(`Unknown threaded fixture command: ${operation}`);
 }
 
 /** Keep two real pools live while exercising per-instance memory and callback guards. */

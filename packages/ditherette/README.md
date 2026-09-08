@@ -198,12 +198,15 @@ Exact outputs follow the frozen Wasm reference; native floating-point math can s
 
 - `memoryLimitBytes` defaults to 1.5 GiB and accepts integers from 1 byte through 2 GiB. Insufficient capacity fails with `memory-limit`.
 - `threads` defaults to `disabled`, which loads only scalar assets. `preferred` tries threads when capable and falls back after failed initialization cleanup.
-  `required` reports `capability` at `threads` when shared memory or workers are unavailable, or `initialization` when startup fails.
+  `required` reports `capability` at `threads` when shared memory, workers, or blocking waits are unavailable, or `initialization` when startup fails.
 - `wasm` accepts bytes, an offset byte view, a URL/string, a Request, a Response, or a compiled `WebAssembly.Module`.
   Caller Response/Request bodies are cloned before initialization. Default assets resolve relative to the package.
   Custom inputs must match the selected variant. Preferred fallback retries the supplied input with scalar bindings; incompatible bytes remain an initialization error.
 
-Threads require cross-origin isolation, shared Wasm memory, and module workers. Hosts must allow the package's worker script and `blob:` bootstrap.
+Threads require cross-origin isolation, shared Wasm memory, module workers, and a caller context that permits blocking waits.
+Synchronous threaded methods run in a processing worker. Browser main JS supports scalar execution;
+`preferred` selects scalar there and `required` returns a capability error before loading threaded assets.
+Hosts must allow the package's worker script and `blob:` bootstrap.
 Each processor owns independent module memory and its pool. Workers within that pool share only that processor's memory.
 The existing policy uses `clamp(logical CPUs / 2, 1, 8)` pool workers. Pool size is not a public option.
 Initialization creates the pool; this checkpoint still runs all five methods through the landed scalar kernels.
