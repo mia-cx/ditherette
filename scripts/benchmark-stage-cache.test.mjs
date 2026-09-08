@@ -5,6 +5,29 @@ import { collectCalls } from './benchmark-public-timing.mjs';
 import { prepareOperation } from './benchmark-public-page.mjs';
 import { events, reset } from './benchmark-stage-cache-fixture.mjs';
 import { fileURLToPath } from 'node:url';
+import { warmProcessTrial } from './benchmark-stage-trial-fixture.mjs';
+
+test('warm Process completes its staged preflight and every primed sample through runTrial', async () => {
+	const { result, events, trial } = await warmProcessTrial();
+	assert.equal(result.sample_ns.length, 5);
+	assert.equal(result.warmup_iterations, 1);
+	assert.deepEqual(result.output, trial.reference_output);
+	assert.equal(result.timing_skipped, undefined);
+	assert.equal(events.filter((event) => event.type === 'ditherAndQuantize').length, 1);
+	const processes = events.filter((event) => event.type === 'process');
+	assert.equal(processes.length, 7); // One preflight, one warmup, five samples.
+	assert.equal(new Set(processes.map((event) => event.id)).size, 7);
+	for (const process of processes) {
+		assert.equal(
+			events.filter((event) => event.id === process.id && event.type === 'resize').length,
+			1
+		);
+	}
+	assert.deepEqual(
+		events.filter((event) => event.type === 'create').map((event) => event.id),
+		events.filter((event) => event.type === 'dispose').map((event) => event.id)
+	);
+});
 
 test('cross-method prime requests preserve the measured source and relevant settings', () => {
 	const source = { width: 1, height: 1, data: new Uint8Array([1, 2, 3, 255]) };

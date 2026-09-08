@@ -497,6 +497,10 @@ export async function runTrial(trial) {
 					browser: {
 						...trial.case.browser,
 						cache: 'none',
+						preparation:
+							trial.case.browser.preparation === 'primed-sample'
+								? 'fresh-instance'
+								: trial.case.browser.preparation,
 						accepted: 'package-staged',
 						candidate: 'package'
 					},

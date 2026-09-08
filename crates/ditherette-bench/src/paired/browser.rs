@@ -473,6 +473,9 @@ pub struct BrowserTransportResult {
     /// Newly executed browser trials require an independently identified Wasm reference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<OracleOutput>,
+    /// Frozen output checked after every declared stage prime; absent from historical trials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prime_reference_output: Option<VerificationOutput>,
     pub role: Role,
     pub pair: usize,
     pub case_name: String,

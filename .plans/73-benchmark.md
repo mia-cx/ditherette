@@ -68,6 +68,7 @@ No measurement runs before coordinator quiet clearance and the shared exclusive 
 - [x] Add reusable per-sample priming fixtures and lifecycle tests.
 - [x] Extend typed protocol and actual native/public adapters, preserving historical records.
 - [x] Add the declared matrix generator and focused frozen exactness checks; hand off for review.
+- [x] Fix reviewed warm Process preflight and prime-output transport failures with red/green regressions.
 
 No measurements or artifact preparations have run. Focused Rust checks use only this worktree's `target/compiler`.
 No evidence report is copied from S31. Both roles must join the coordinator's corrected S31 parent before artifact preparation.
@@ -84,3 +85,10 @@ The matrix generator reuses the S31 source/palette helpers and comparable Lab76,
 Five untimed example tests pass, including every native prime/measured output and the isolated oracle's prime derivation.
 The protocol guide documents per-sample ownership, timing scope, and historical compatibility.
 Artifact preparation, real browser execution, cache-hit evidence, and measurements remain coordinator-owned follow-up work.
+
+Independent review found two full-worker protocol failures after the corrected S31 parent joined.
+The untimed Process counterpart now changes `primed-sample` to `fresh-instance` when removing cache metadata.
+The strict Rust transport explicitly retains optional frozen prime output, while historical records remain readable.
+Both regressions failed before their fixes. Full `runTrial` uses a fake package and clock, without performance measurements.
+Its emitted JavaScript record passes Rust deserialization and preserves prime evidence on serialization.
+Focused checks pass 41 Node tests and 24 Rust browser-protocol/worker tests. All jobs drained; no artifact builds ran.
