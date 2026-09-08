@@ -1,7 +1,7 @@
 # S30 end-to-end process preparation
 
-Issue #71 completes the fifth public method. The prerequisite join is ready;
-process implementation and its benchmark handoff remain separate work.
+Issue #71 completes the fifth public method. The runtime implementation is
+validated; its benchmark handoff and eventual PR remain separate work.
 
 ## Start condition and authority
 
@@ -61,7 +61,7 @@ coordinator and reviewed S28/S29 code, not a substitute for the actual join.
   existing option types and validation. Reject the entire invalid request before
   output work, and count simultaneous prepared data, source, intermediates,
   indices, scratch, and boundary capacity. Test allocation failures and recovery.
-- [ ] Verify process equals the actual staged production calls for each family,
+- [x] Verify process equals the actual staged production calls for each family,
   including indices, ordered palette, transparency, warnings, and durable output.
   Retain independent frozen comparisons and any inherited resize differences.
   Do not change a landed kernel or the frozen oracle to erase those differences.
@@ -123,10 +123,54 @@ The public process fixture checks 423 staged compositions, all fifteen matching
 modes, exact budgets, nine invalid request shapes, getter reentry, three caught
 copy phases, and durable results. It also runs in the installed-browser suite.
 
-Next validate the installed tarball in all three engines. The coordinator owns
-the trusted freeze guard. Separate agents own process benchmark registrations
-and the identified frozen-Wasm Process extension. No measurement or optimization
-has run for S30.
+## Installed validation and handoff
+
+Runtime source `587339793cf70429b673e888a89d86a332541693` passes fresh package
+preparation, 42 focused native tests, 33 public interface tests, and 16 private
+tests. The coordinator's trusted S18 guard passes compiler, dependency, syntax,
+content, and independent native/Wasm/spec/prod/threaded isolation checks.
+The frozen 106-file digest remains
+`17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+
+The installed-tarball suite passes Chromium `147.0.7727.15`, Firefox `148.0.2`,
+and WebKit `26.4`. Each engine runs 423 exact actual process/staged compositions,
+nine strict request failures, three caught copy phases, exact-budget recovery,
+getter reentry, and durable-output checks. Existing coverage also passes 110
+field fixtures, 1,650 separable compositions, 360 diffusion vectors, 367 frozen
+Wasm Yliluoma vectors, and 734 actual untimed Yliluoma adapter calls per engine.
+
+Retained preparation is under this worktree's `target/s30-validation-01/`:
+
+| Artifact | SHA-256 |
+|---|---|
+| `public/ditherette.tgz` | `379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2` |
+| Scalar Wasm | `170b1ad5a9a13290b0d2e07db141f35895abf3d51cb237b999b86f93122fa739` |
+| Threads Wasm | `9731aad8eb95ad8aeb9dad59f13711202e3818a69b81cb14624f147f39089e71` |
+| Inherited Yliluoma oracle Wasm | `8103c0f7604ca6e6c1d5d124100eec0807c32a771f0847623f5a0d0714743c3b` |
+
+`public/build-provenance.json` binds the clean runtime revision, 1,116 tracked
+inputs, 38 installed package files, build tools, and the frozen-only oracle.
+`oracle-evidence/{chromium,firefox,webkit}-yiluoma-references.json` retains each
+full native/Wasm output pair, oracle manifest, browser version, and tarball hash.
+The seven inherited Yliluoma target differences remain at fixture indices
+236, 248, 251, 254, 257, 260, and 263. No expected output or tolerance changed.
+
+Preparation uses `node scripts/prepare-public-benchmark.mjs
+target/s30-validation-01/public`. The `yliluoma_conformance` example writes
+`target/s30-validation-01/yliluoma.json` using the assigned native target.
+The browser command is `node --test packages/ditherette/tests/tarball-browser.test.mjs`
+with `DITHERETTE_BENCH_ORACLE` pointing to `public/scripts/oracle`,
+`DITHERETTE_BENCH_YLILUOMA_FIXTURES` to that JSON, and
+`DITHERETTE_BENCH_ORACLE_EVIDENCE` to `oracle-evidence`, all absolute paths.
+WebKit uses the retained executable at
+`.worktrees/v1-s20-worker/target/s20-webkit-alias/webkit` via
+`DITHERETTE_TEST_WEBKIT_EXECUTABLE`.
+
+Separate agents own process benchmark registrations and the identified
+frozen-Wasm Process extension. This runtime suite proves staged browser equality;
+Process-specific frozen browser evidence belongs to that benchmark handoff.
+No S30 measurement or optimization has run in this worktree. Return the assigned
+S24 compiler caches to the coordinator after jobs drain; preserve every artifact.
 
 The public recipe follows the frozen version-one shape, including its serialized
 `match` key. Processing errors need recipe-relative paths where applicable.
