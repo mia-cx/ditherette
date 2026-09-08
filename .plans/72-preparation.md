@@ -13,9 +13,9 @@ Decision #37 and frozen `spec/contract/cache.rs` plus `cache.md` define the cont
 ## TODOs
 
 - [x] Copy the missing frozen cache control baseline literally and verify preparation identities and capacity/lifecycle fixtures.
-- [ ] Implement actual-capacity preparation ownership, fallible identities, one LRU, pinning, and commit-on-success publication.
-- [ ] Reuse palette preparation across quantize, ditherAndQuantize, and Process without changing execution kernels.
-- [ ] Reuse resize plans and typed idle scratch, preserving trilinear overwrite and diffusion row initialization.
+- [x] Implement actual-capacity preparation ownership, allocation-free identities, one LRU, pinning, and commit-on-success publication.
+- [x] Reuse palette preparation across quantize, ditherAndQuantize, and Process without changing execution kernels.
+- [x] Reuse resize plans and typed idle scratch, preserving trilinear overwrite and diffusion row initialization.
 - [ ] Verify native/public cold-warm equality, budget pressure, failure recovery, isolation, and durable results.
 - [ ] Join benchmark support and prepare cold/warm artifacts for coordinator-owned exclusive trials before filing the PR.
 
@@ -54,3 +54,17 @@ The additional test compares 450 prepared-palette keys and 126 resize-plan keys 
 It covers all 15 matching policies, alpha threshold precision/signed zero, palette order/duplicates/truncation, seven filters, and nine anchors.
 The existing frozen cache suite passes all 16 tests in the same native run.
 These results establish modeled behavior only, not actual allocation enforcement or live cache reuse.
+
+## Runtime checkpoint
+
+All five methods now use one preparation transaction and isolated store. Keys stream canonical JSON directly into SHA-256.
+The store reserves 128 inline optional entry records; each populated value owns a fallibly reserved single-record Vec.
+Accounting includes those Vec capacities, prepared heap capacity, active records, and idle scratch without double counting.
+Published resize entries separate mutable scratch accounting from deterministic plans. Pressure releases scratch before plans.
+Diffusion borrows the same prepared quantizer and separately owned rows through the unchanged execution loop.
+
+Seven private tests pass, including direct frozen-key agreement, cross-method hits, two Process pins, both retention caps,
+LRU refresh, scratch-first pressure, failed final-copy publication, and trilinear overwrite after failure.
+The native resize (11), field (6), quantize (3), and process (4) suites pass after cold allocation-fixture updates.
+Public Wasm fixtures, wider conformance, independent review, and required exclusive cold/warm measurements remain pending.
+Joined the approved S30 guard-fixture parent `d2356a502501b38ab4f3b476956fc90f1fbfec4a` without changing frozen files.

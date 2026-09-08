@@ -69,7 +69,7 @@ Dimensions, palette codes, alpha settings, matching tags, and intrinsic input le
 
 ## Memory and cleanup
 
-The resize peak is `privateMemoryOverhead() + prepared heap capacity + input Vec capacity + output Vec capacity`.
+The cold resize peak is `privateMemoryOverhead() + prepared record and heap capacity + input Vec capacity + output Vec capacity`.
 Prepared heap capacity includes the selected plan's allocations and any f32 area/bilinear scratch.
 Convolution also counts every nested tap-vector header, tap capacity, and selected f64 full-call scratch.
 Trilinear counts shared mip metadata and buffers, storage-rounded level outputs when blending, and f64 channel scratch.
