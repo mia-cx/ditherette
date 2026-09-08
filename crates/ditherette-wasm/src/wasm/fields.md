@@ -19,20 +19,26 @@ Field 2 is blue noise and requires parameter zero for the frozen 32×32 rank til
 Spaces 0 through 6 are sRGB, linear RGB, Oklab, OKLCH, CIELAB, CIELCH, and YCbCr, respectively.
 Placement 0 is everywhere and requires zero unused controls. Placement 1 is adaptive.
 Family 0 is direct quantization and requires all eight field controls to be zero. Family 1 is separable perturbation.
+Family 2 is scalar diffusion. It uses field for kernel 0 Floyd-Steinberg, 1 Sierra, 2 Sierra Lite, or 3 Atkinson.
+For family 2, parameter selects feedback 0 sRGB bytes or 1 matching coordinates, and space selects serpentine 0 false or 1 true.
+Strength and placement retain their existing positions. Numeric tags require exact integer values before narrowing.
 Palette, matching, alpha mode, alpha threshold, and matte retain the existing privateQuantize encodings.
 
 Status zero guarantees complete publication into the private plain resultSink.value.
 Nonzero status uses the existing allocation-free status table and privateErrorPath read immediately afterward.
 Paths 17 through 25 append perturb, field, space, strength, placement, radius, threshold, softness, and dither.
+Paths 26 through 33 append dither strength, placement, radius, threshold, softness, kernel, feedback, and serpentine.
+Paths 34 and 35 both map publicly to dither.arithmetic, distinguishing non-finite work from non-finite matching distance.
 The public adapter prefixes perturb paths with dither for the combined method.
 No earlier error code or path changes.
 
 Capacity checks include source/output buffers, owned records, and one temporary existing Converter with its tables.
 Separable calls also count the RGBA8 intermediate and the existing prepared quantizer capacities.
+Diffusion calls count the existing prepared quantizer, three source-initialized f32 work rows, and scalar scan controls.
 All processing buffers are reserved before the caught source import. Failure drops temporary ownership and restores Ready.
 The final caught void helpers construct the complete durable JS result before assigning the sink.
 No cache or callback publication is added here.
 
 Private fixtures derive exact budgets from the current artifact, not a hardcoded structure size.
 The repeated-failure fixture verifies constant externref slots, live handles, and Wasm memory high-water capacity across 512 cycles.
-The literal baseline still constructs Converter for each source-color read. Call-owned reuse is a separate candidate.
+The separable literal baseline still constructs Converter for each source-color read. Its call-owned reuse remains a separate candidate.

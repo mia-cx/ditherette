@@ -1,6 +1,7 @@
-//! Palette-free native field baseline. Request dispatch and bounded preparation follow separately.
+//! Native separable fields and literal full-image diffusion baseline.
 
 pub mod blue_noise;
+pub mod error_diffusion;
 pub mod ordered;
 pub mod perturb;
 pub mod placement;

@@ -9,6 +9,9 @@ use std::{collections::BTreeSet, io, path::Component};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PublicOperation {
+    Diffusion {
+        settings: super::diffusion::DiffusionSettings,
+    },
     Perturb {
         settings: super::fields::PerturbPolicy,
     },
@@ -90,6 +93,12 @@ impl BrowserCase {
 impl PublicOperation {
     pub fn subject(&self, backend: BrowserBackend) -> &'static str {
         match (self, backend) {
+            (Self::Diffusion { .. }, BrowserBackend::Package) => {
+                "public:dither-and-quantize:diffusion:package"
+            }
+            (Self::Diffusion { .. }, BrowserBackend::TypeScript) => {
+                "public:dither-and-quantize:diffusion:typescript"
+            }
             (Self::Perturb { .. }, BrowserBackend::Package) => "public:perturb:request:package",
             (Self::Perturb { .. }, BrowserBackend::TypeScript) => {
                 "public:perturb:request:typescript"
@@ -141,6 +150,7 @@ impl PublicOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
             Self::Perturb { .. } => "spec:perturb:request:v1",
             Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
             Self::Quantize { .. } => "spec:quantize:request:v1",
@@ -183,6 +193,7 @@ impl PublicOperation {
             | Self::ResizeLanczos2 { anchor, .. }
             | Self::ResizeLanczos3 { anchor, .. } => anchor,
             Self::ResizeArea {}
+            | Self::Diffusion { .. }
             | Self::Quantize { .. }
             | Self::Perturb { .. }
             | Self::Separable { .. } => Anchor::Center,
@@ -218,7 +229,10 @@ impl PublicOperation {
                 Self::ResizeBicubic { .. } => "bicubic-public-v1",
                 Self::ResizeLanczos2 { .. } => "lanczos2-public-v1",
                 Self::ResizeLanczos3 { .. } => "lanczos3-public-v1",
-                Self::Quantize { .. } | Self::Perturb { .. } | Self::Separable { .. } => {
+                Self::Quantize { .. }
+                | Self::Perturb { .. }
+                | Self::Separable { .. }
+                | Self::Diffusion { .. } => {
                     unreachable!("processing returned above")
                 }
             }
@@ -241,6 +255,7 @@ impl PublicOperation {
         rgba: &'a [u8],
     ) -> io::Result<Option<ditherette_wasm::bench_subjects::reference::ReferenceRequest<'a>>> {
         match self {
+            Self::Diffusion { settings } => settings.reference_request(source, rgba).map(Some),
             Self::Quantize { settings } => settings.reference_request(source, rgba).map(Some),
             Self::Perturb { settings } => {
                 super::fields::perturb_request(*settings, source, rgba).map(Some)
@@ -510,6 +525,7 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         if matches!(
             browser.operation,
             PublicOperation::Quantize { .. }
+                | PublicOperation::Diffusion { .. }
                 | PublicOperation::Perturb { .. }
                 | PublicOperation::Separable { .. }
         ) {
