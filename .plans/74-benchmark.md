@@ -39,7 +39,7 @@ Inspect that adapter branch explicitly. Keep callback evidence distinct from out
 - [x] Extend typed development metadata and adapter wiring. Prove omitted historical metadata retains existing behavior.
 - [x] Add the constant-storage callback observer and focused reset/invalid-event checks.
 - [x] Add focused fake-clock/full-trial tests for actual enabled callbacks, observation reset, and thrown callback propagation.
-- [ ] Generate the fixed matrix from reused fixtures. Validate identities and exact frozen outputs without timing.
+- [x] Generate the fixed matrix from reused fixtures. Validate identities and exact frozen outputs without timing.
 - [ ] Join final runtime and public fixtures, then build fresh accepted/candidate artifacts with the official preparers.
 - [ ] After root quiet clearance, run the fixed comparison and record every per-case gate.
 
@@ -51,7 +51,7 @@ After PR handoff, return compiler ownership for cleanup while retaining artifact
 
 The initial observer passes four Node tests. It retains only counters and scalar fields, never an event array.
 Its bounded callback checks are part of enabled-call timing. Reset and verification belong outside timers.
-Full adapter integration and measurements remain pending.
+At that initial checkpoint, adapter integration and measurements remained pending.
 
 The protocol checkpoint adds optional `browser.progress` accepted/candidate modes,
 each `disabled` or `enabled`. Historical cases and evidence omit the field unchanged.
@@ -71,3 +71,12 @@ protocol/transport tests pass. The metadata test round-trips historical JSON and
 rejects missing role evidence. `cargo check --tests --examples --locked` passes;
 the inherited stage example has one test-only unused-import warning outside tests.
 Rust output ownership is exclusively this worktree's `target/compiler`.
+
+`progress_integration_plan regression|callbacks DESTINATION HOST_LOAD_NOTES`
+declares two separate five-case public plans. Four cold cases retain the exact S32
+source bytes, settings, dimensions, and output identity. Standalone perturb reuses
+the separable case's source and field. Both plans keep two pairs, 20 single-call
+samples, 50 ms warmup, and the 10-second cap. Across three engines they total 120
+serial workers. The callbacks plan uses the same S33 artifact in both roles.
+Seven generator tests pass, including inherited S32 cases and fresh native calls
+against all five target-local frozen outputs. These tests do not time operations.
