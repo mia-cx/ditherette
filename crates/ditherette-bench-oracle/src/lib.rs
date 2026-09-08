@@ -264,16 +264,59 @@ impl OracleRequest {
         if case != self.identity {
             return Err("Wasm oracle case identity differs".into());
         }
-        let output = match spec::pipeline::execute(self.request()).map_err(|e| e.to_string())? {
+        let output = self.execute_request(self.request())?;
+        Ok(OracleOutput { case, output })
+    }
+
+    /// Derive the declared prime from a validated measured request, using frozen methods only.
+    pub fn prime_output(&self, prime: &str) -> Result<VerificationOutput, String> {
+        if self.case_identity()? != self.identity {
+            return Err("Wasm oracle case identity differs".into());
+        }
+        let request = match (prime, self.request()) {
+            ("same-call", request) => request,
+            ("resize", Request::Process(input)) => Request::Resize(ResizeRequest {
+                version: 1,
+                source: input.source,
+                output: input.recipe.output,
+            }),
+            ("perturb", Request::DitherAndQuantize(input)) => {
+                let DitherPolicy::Separable { perturb } = input.dither else {
+                    return Err("prime requires separable settings".into());
+                };
+                Request::Perturb(PerturbRequest {
+                    version: 1,
+                    source: input.quantize.source,
+                    perturb,
+                })
+            }
+            ("no-dither", Request::Quantize(quantize)) => {
+                Request::DitherAndQuantize(DitherQuantizeRequest {
+                    quantize,
+                    dither: DitherPolicy::None {},
+                })
+            }
+            _ => return Err("stage prime does not match the measured operation".into()),
+        };
+        self.execute_request(request)
+    }
+
+    fn execute_request(&self, request: Request<'_>) -> Result<VerificationOutput, String> {
+        let dimensions = request.validate().map_err(|e| e.to_string())?.output;
+        let dimensions = Dimensions {
+            width: dimensions.width(),
+            height: dimensions.height(),
+        };
+        let output = match spec::pipeline::execute(request).map_err(|e| e.to_string())? {
             spec::pipeline::ProcessedImage::Rgba8(image) => VerificationOutput {
-                dimensions: case.output,
+                dimensions,
                 pixels: Pixels::Rgba8 {
                     data: image.into_vec(),
                 },
                 warnings: Vec::new(),
             },
             spec::pipeline::ProcessedImage::Indexed(image) => VerificationOutput {
-                dimensions: case.output,
+                dimensions,
                 pixels: Pixels::Indexed8 {
                     indices: image.indices.into_vec(),
                     palette_rgba: image.palette.rgba,
@@ -299,7 +342,7 @@ impl OracleRequest {
                     .collect(),
             },
         };
-        Ok(OracleOutput { case, output })
+        Ok(output)
     }
 }
 
@@ -308,5 +351,13 @@ impl OracleRequest {
 pub fn evaluate(request: &str) -> Result<String, JsError> {
     let request: OracleRequest = serde_json::from_str(request)?;
     let output = request.execute().map_err(|e| JsError::new(&e))?;
+    Ok(serde_json::to_string(&output)?)
+}
+
+/// Untimed same-target frozen prime output; never executes production or benchmark timers.
+#[wasm_bindgen]
+pub fn evaluate_prime(request: &str, prime: &str) -> Result<String, JsError> {
+    let request: OracleRequest = serde_json::from_str(request)?;
+    let output = request.prime_output(prime).map_err(|e| JsError::new(&e))?;
     Ok(serde_json::to_string(&output)?)
 }

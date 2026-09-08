@@ -7,6 +7,13 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runBrowserTransport } from './benchmark-transport.mjs';
 
+/** Bind isolated oracle outputs to the emitted transport record without changing measured evidence. */
+export function attachOracleReference(result, reference) {
+	const { prime_output, ...measuredReference } = reference;
+	result.reference = measuredReference;
+	if (prime_output) result.prime_reference_output = prime_output;
+}
+
 /** Resolve only canonical relative artifact paths. The Rust worker checks full hashes before/after trials. */
 export function assetPaths(tree) {
 	const paths = new Map();
@@ -166,7 +173,11 @@ export async function startAssetServer(assets, isolated, trial) {
 		setReference(reference) {
 			if (requestJson === undefined || resultStarted)
 				throw new Error('Reference arrived after trial execution.');
-			requestJson = JSON.stringify({ ...trial, reference_output: reference.output });
+			requestJson = JSON.stringify({
+				...trial,
+				reference_output: reference.output,
+				prime_reference_output: reference.prime_output
+			});
 		},
 		get result() {
 			return result;
@@ -320,7 +331,7 @@ export async function runPublicBrowser(trial) {
 				page.on('pageerror', (error) => server.failures.push(String(error)));
 				await page.goto(server.url);
 				result = await exchangeTrial(page, server, assets.entries.page);
-				result.reference = reference;
+				attachOracleReference(result, reference);
 				if (server.failures.length) throw new Error(server.failures.join('\n'));
 				if (result.observation.cross_origin_isolated !== runtime.cross_origin_isolated)
 					throw new Error('Browser isolation mismatch.');
