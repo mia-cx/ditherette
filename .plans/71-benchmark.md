@@ -18,7 +18,8 @@ No TypeScript equivalence claim or new optimization is part of this checkpoint.
 - [x] Extend public Process/staged adapters, indexed bounds, and protocol tests without package builds.
 - [x] Declare a bounded representative full-pipeline matrix with filter-specific targets and fixed budget; commit and report requirements.
 - [x] Join the independent runtime and frozen oracle checkpoints; validate their unchanged production bytes and Process wire.
-- [ ] Validate target-local frozen attribution and actual installed-package adapters in three engines after fresh preparation is assigned.
+- [x] Validate target-local frozen attribution and actual installed-package adapters in three engines after fresh preparation is assigned.
+- [x] Record the fixed measured comparison, raw pair equality, inherited frozen failures, artifact hashes, and held evidence gaps.
 
 Runtime/package code belongs to the runtime agent. Frozen oracle files belong to the oracle agent.
 This worktree alone uses `target/compiler`; no shared compiler cache is assigned.
@@ -97,3 +98,18 @@ Use `prepare-native-benchmark.mjs` and `prepare-public-benchmark.mjs` to avoid s
 Only this worktree's `target/compiler` is currently owned; assign variant paths before public preparation.
 Native/public fixture exporters, final three-engine attribution, snapshots, and source hashes precede quiet clearance.
 No timing results, optimization selection, TypeScript equivalence, or full S41 palette/matching coverage are claimed here.
+
+## Final measured handoff
+
+The earlier preparation notes describe their untimed checkpoint, not the final state.
+Final source `e5aae7bf0e1761af2f970b6da75d34cf3a813323` completed fresh artifact preparation and three-engine adapter conformance.
+Each engine verifies 431 main frozen references, two identified area probes, and 16 exact Process/staged compositions.
+The coordinator then runs and reaps all 128 serial workers, collecting 2,504 samples within the declared stopping policy.
+All 64 actual pairs have exact case identity and output equality. Implementation identities intentionally differ.
+All four aggregate gates remain `Incorrect` solely because area retains its inherited frozen difference.
+No new candidate is selected, no confirmed greater-than-10% regression is reported, and inconclusive timing cases remain held.
+
+The [measurement report](71-benchmark-results.md) records timings, proof contexts, size limits, and held S41/S42 work.
+Its [machine-readable summary](71-benchmark-results.json) binds raw results, prepared artifacts, events, and conformance evidence.
+The retained artifact root is `.worktrees/v1-s30-process/target/s30-trial-01/`.
+The report changes documentation only. The coordinator owns compiler cleanup and ledger updates; the runtime owner files the unmerged PR.
