@@ -146,6 +146,7 @@ impl Store {
         )
     }
 
+    #[cfg(any(test, feature = "bench-subjects"))]
     pub(super) fn execution_policy(&self) -> super::execution::ExecutionPolicy {
         self.execution
     }
