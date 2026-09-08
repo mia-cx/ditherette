@@ -73,7 +73,8 @@ impl RowBandPlan {
     }
 }
 
-pub(super) fn bands_for_output_height(
+/// Iterate complete output bands without allocating. The exact iterator length supports worker preflight.
+pub fn bands_for_output_height(
     output: ImageDimensions,
     target_height: u32,
 ) -> Option<impl ExactSizeIterator<Item = RowBand>> {

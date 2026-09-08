@@ -17,6 +17,6 @@ pub use buffers::RowBandBuffers;
 pub use executor::{execute_row_band_work, for_each_row_band, for_each_tile};
 pub use grid::TileGrid;
 pub use policy::{WorkerBudget, MAX_WORKER_BUDGET};
-pub use row_band::{RowBand, RowBandPlan};
+pub use row_band::{bands_for_output_height, RowBand, RowBandPlan};
 pub use tile::Tile;
 pub use work::{RowBandWorkAssignment, RowBandWorkPlan};
