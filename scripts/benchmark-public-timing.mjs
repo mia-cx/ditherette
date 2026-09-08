@@ -14,9 +14,10 @@ export function timeCalls(call, iterations, now, outputs) {
 // inside the existing timer; validation and slot allocation stay outside. Fresh artifacts are required.
 export const RETAINED_OUTPUT_LIMIT = 64 * 1024 * 1024;
 export const RESULT_BOOKKEEPING_BYTES = 1024; // Output records, typed-array wrappers, slots, and validation sets.
+export const STABILITY_EVIDENCE_SLOTS = 4; // First/distinct originals plus their private typed snapshots.
 export function retainedOutputSlots(iterations, outputBytes) {
-	// Reserve two additional results for the first/distinct stability evidence.
-	const required = (iterations + 2) * (outputBytes + RESULT_BOOKKEEPING_BYTES);
+	const required =
+		(iterations + STABILITY_EVIDENCE_SLOTS) * (outputBytes + RESULT_BOOKKEEPING_BYTES);
 	if (
 		!Number.isSafeInteger(iterations) ||
 		iterations < 1 ||
