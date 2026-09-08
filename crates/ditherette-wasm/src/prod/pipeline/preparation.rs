@@ -247,8 +247,10 @@ impl Store {
         {
             self.evict();
         }
-        self.clock += 1;
-        entry.used = self.clock;
+        if entry.used == 0 {
+            self.clock += 1;
+            entry.used = self.clock;
+        }
         *self.entries.iter_mut().find(|slot| slot.is_none()).unwrap() = Some(entry);
     }
 }
@@ -955,6 +957,45 @@ mod tests {
             .is_ok());
         call.finish(Ok(())).unwrap();
         assert!(store.stats().3 <= cap);
+    }
+
+    #[test]
+    fn publication_preserves_lookup_recency_across_entry_kinds() {
+        for success in [true, false] {
+            let mut store = Store::default();
+            let limit = 1 << 20;
+            prepare(&mut store, 17, limit);
+            let preparation_key = store.entries.iter().flatten().next().unwrap().key;
+            let image_key = Identity([5; 32]);
+            let mut call = image_call(&mut store, 4, limit);
+            let image = candidate(&mut call, 1, 5);
+            assert!(call.stage_image(0, image_key, image, &mut 0).is_ok());
+            call.finish(Ok(())).unwrap();
+            let mut call = image_call(&mut store, 0, limit);
+            assert!(call.take_image(0, image_key));
+            call.resize = call.store.take(preparation_key);
+            call.resize_hit = true;
+            assert_eq!(
+                call.finish(if success { Ok(()) } else { Err(memory_limit()) })
+                    .is_ok(),
+                success
+            );
+            store.scratch = Scratch::default();
+            for entry in store.entries.iter_mut().flatten() {
+                entry.drop_scratch();
+            }
+            store.room(limit - store.capacity() + 1, limit).unwrap();
+            assert!(store
+                .entries
+                .iter()
+                .flatten()
+                .any(|entry| entry.key == preparation_key));
+            assert!(!store
+                .entries
+                .iter()
+                .flatten()
+                .any(|entry| entry.key == image_key));
+        }
     }
 
     fn prepare(store: &mut Store, width: u32, limit: u64) {

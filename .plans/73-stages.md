@@ -199,3 +199,9 @@ survive matcher eviction, returned metadata mutation, and disposal. Public fixtu
 `8bd9208138322776433cb0eb3e9dcf0f4d15de52` is joined. Source-only staging (2)
 and scalar glue (3) tests pass. Interface tests await generated scalar declarations.
 Final artifact builds wait for the coordinator's benchmark-protocol review clearance.
+
+A focused mixed-entry pressure witness reproduced lookup recency reversal during
+publication. Existing hits now retain their `take()` timestamp; only new entries
+receive publication timestamps. The witness passes for success and failure paths.
+All 25 native library tests pass after this fix. The coordinator cleared the
+benchmark protocol at `d51a70a2daf054357d16ea66b235da3733c02888` for the final join.
