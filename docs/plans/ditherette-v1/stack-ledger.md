@@ -211,6 +211,11 @@ The first threaded worker fails untimed preflight; all 25 started workers are re
 An isolated reproduction proves main-thread `Atomics.wait` is forbidden and failed cleanup masks that error.
 Runtime capability checks and real threaded fixtures now target blocking-capable host workers. The benchmark owner adapts the same collector's host context.
 S39 resumes faithful initialization-only fallback while both S34 fixes proceed. Measurements remain stopped.
+S39 `fa43ab4b` commits page-session faithful fallback. Its focused tests and six actual-package Chromium checks pass.
+Final S34 ancestry and exact final-package validation remain before S39 delivery.
+The returned S39 owner starts S35 native row-band adapters in `v1-s35-resize` from capability checkpoint `6296c66b`.
+This owner changes only resize/color adapters, focused native tests, S35 subjects, and its plan. Its sole new compiler assignment is local `target/compiler`.
+S34 retains loading/lifecycle ownership. Final S34 loader fixes and host-worker benchmark protocol must join before S35 artifacts or delivery.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
