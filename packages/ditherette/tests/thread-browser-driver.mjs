@@ -4,18 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workerLifetimePrelude, workerLifetimeEpilogue } from './thread-worker-observer.mjs';
-import {
-	scalarSelectionChecks,
-	initializeThreadedPair,
-	exerciseThreadedPair,
-	customThreadedInputs
-} from './threads-browser-fixture.mjs';
+import { scalarSelectionChecks } from './threads-browser-fixture.mjs';
 
 export const threadTestAssets = Object.fromEntries(
 	[
 		'thread-worker-observer.mjs',
 		'thread-lifetime-worker.mjs',
 		'thread-processing-host.mjs',
+		'threads-browser-fixture.mjs',
 		'thread-atomic-wait-worker.mjs'
 	].map((name) => [`__tests__/${name}`, fileURLToPath(new URL(name, import.meta.url))])
 );
@@ -155,70 +151,63 @@ export async function scalarSelectionDriver({ page, server, input }) {
 export async function threadedOwnershipDriver({ page, server, input, t, context }) {
 	await prepareThreadServer(server, t, context);
 	await page.goto(server.url);
+	await startCheckHost(page);
 	const threadedInput = { ...input, wasmUrl: input.wasmUrl.replace('/scalar/', '/threads/') };
-	const { firstWorkers, totalWorkers } = await page.evaluate(initializeThreadedPair, threadedInput);
+	const { firstWorkers, totalWorkers } = await hostCheck(page, 'initializePair', threadedInput);
 	try {
 		await waitForWorkers(page, totalWorkers);
-		const result = await page.evaluate(exerciseThreadedPair);
+		const result = await hostCheck(page, 'exercisePair');
 		await waitForWorkers(page, totalWorkers - firstWorkers);
-		await page.evaluate(() => threadPair.instances[1].dispose());
+		await hostCheck(page, 'disposeSecond');
 		await waitForWorkers(page, 0);
-		const custom = await page.evaluate(customThreadedInputs, threadedInput);
+		const custom = await hostCheck(page, 'customInputs', threadedInput);
 		await waitForWorkers(page, 0);
 		return { ...result, ...custom, independentMemories: 2, cleanup: true };
 	} finally {
-		await page.evaluate(() => {
-			threadPair.reference.dispose();
-			for (const instance of threadPair.instances) instance.dispose();
-			for (const worker of threadPair.observed.workers) worker.terminate();
-			threadPair.observed.restore();
-		});
+		await hostCheck(page, 'cleanupPair');
+		await page.evaluate(() => checkHost.terminate());
 	}
+}
+
+async function startCheckHost(page) {
+	await page.evaluate(() => {
+		globalThis.checkHost = new Worker('/__tests__/thread-processing-host.mjs', { type: 'module', name: 'fixture-host' });
+		let id = 0;
+		globalThis.hostCheck = (command) => new Promise((resolve, reject) => {
+			const request = ++id;
+			const onMessage = ({ data }) => {
+				if (data.id !== request) return;
+				cleanup();
+				if (data.kind === 'error') reject(new Error(`${data.message} (code=${data.code}, path=${data.path})`));
+				else resolve(data.result);
+			};
+			const onError = (event) => { cleanup(); reject(new Error(event.message)); };
+			const timeout = setTimeout(() => { cleanup(); reject(new Error('Thread fixture command timed out.')); }, 20_000);
+			const cleanup = () => {
+				clearTimeout(timeout);
+				checkHost.removeEventListener('message', onMessage);
+				checkHost.removeEventListener('error', onError);
+			};
+			checkHost.addEventListener('message', onMessage);
+			checkHost.addEventListener('error', onError);
+			checkHost.postMessage({ ...command, kind: 'check', id: request });
+		});
+	});
+}
+
+function hostCheck(page, operation, input) {
+	return page.evaluate((command) => globalThis.hostCheck(command), { operation, input });
 }
 
 export async function threadedFailureDriver({ page, server, input, t, context }) {
 	await prepareThreadServer(server, t, context);
 	for (const threads of ['preferred', 'required']) {
 		await page.goto(server.url);
-		await page.evaluate(
-			async ({ moduleUrl, threads }) => {
-				Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4 });
-				const { observeWorkers } = await import('/__tests__/thread-worker-observer.mjs');
-				globalThis.partialWorkers = observeWorkers('partial', { failAt: 2 });
-				const fetch = globalThis.fetch.bind(globalThis);
-				globalThis.scalarFetches = [];
-				globalThis.fetch = async (input, init) => {
-					const url = input instanceof Request ? input.url : String(input);
-					if (url.includes('/wasm/scalar/')) {
-						const { held } = await navigator.locks.query();
-						globalThis.scalarFetches.push(
-							held.filter(({ name }) => name.startsWith('ditherette-test-')).map(({ name }) => name)
-						);
-					}
-					return fetch(input, init);
-				};
-				const { createDitherette, DitheretteError } = await import(moduleUrl);
-				globalThis.partialOutcome = undefined;
-				globalThis.partialCompletion = createDitherette({ threads }).then(
-					(instance) => {
-						globalThis.fallback = instance;
-						globalThis.partialOutcome = { kind: 'scalar' };
-					},
-					(error) => {
-						globalThis.partialOutcome = {
-							kind: 'error',
-							structured: error instanceof DitheretteError,
-							code: error.code,
-							path: error.path
-						};
-					}
-				);
-			},
-			{ ...input, threads }
-		);
+		await startCheckHost(page);
+		await hostCheck(page, 'initializePartial', { ...input, threads });
 		try {
 			const names = await waitForWorkers(page, 2);
-			assert.equal(await page.evaluate(() => globalThis.partialOutcome), undefined);
+			assert.equal(await hostCheck(page, 'partialOutcome'), undefined);
 			await page.evaluate(
 				(name) => {
 					const gate = new BroadcastChannel(name);
@@ -227,37 +216,28 @@ export async function threadedFailureDriver({ page, server, input, t, context })
 				},
 				names.find((name) => name.includes('-fail-'))
 			);
-			await page.waitForFunction(() => globalThis.partialOutcome, undefined, { timeout: 15_000 });
+			const result = await hostCheck(page, 'completePartial');
 			assert.deepEqual(
-				await page.evaluate(() => globalThis.partialOutcome),
+				result.outcome,
 				threads === 'preferred'
 					? { kind: 'scalar' }
 					: { kind: 'error', structured: true, code: 'initialization', path: 'threads' }
 			);
 			await waitForWorkers(page, 0);
 			assert.deepEqual(
-				await page.evaluate(() => globalThis.scalarFetches),
+				result.scalarFetches,
 				threads === 'preferred' ? [[]] : [],
 				'Partial workers are gone before scalar Wasm fetching, and required never falls back.'
 			);
 			if (threads === 'preferred') {
 				assert.deepEqual(
-					await page.evaluate(() => [
-						...fallback.resize({
-							version: 1,
-							source: { width: 1, height: 1, data: new Uint8Array([19, 83, 127, 255]) },
-							output: { width: 1, height: 1, resize: { algorithm: 'nearest', anchor: 'center' } }
-						}).data
-					]),
+					result.output,
 					[19, 83, 127, 255]
 				);
 			}
 		} finally {
-			await page.evaluate(() => {
-				globalThis.fallback?.dispose();
-				for (const worker of partialWorkers.workers) worker.terminate();
-				partialWorkers.restore();
-			});
+			await hostCheck(page, 'cleanupPartial');
+			await page.evaluate(() => checkHost.terminate());
 		}
 	}
 	return { partialWorkersObserved: 4, preferredFallback: true, requiredInitializationError: true };
