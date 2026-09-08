@@ -216,7 +216,7 @@ test('quantize rejects malformed settings and tail entries before copying source
 			'invalid-palette',
 			'palette.256.kind'
 		],
-		[{ onProgress: () => {} }, 'unsupported-operation', 'onProgress']
+		[{ onProgress: 1 }, 'invalid-settings', 'onProgress']
 	])
 		assert.throws(() => processor.quantize({ ...request(), ...change }), errorIs(code, path));
 	const detached = request();

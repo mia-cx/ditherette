@@ -9,7 +9,8 @@ import type {
 	IndexedImage,
 	PerturbRequest,
 	DitherAndQuantizeRequest,
-	ProcessRequest
+	ProcessRequest,
+	Progress
 } from './types.js';
 import { validateResize, validateQuantize } from './validation.js';
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
@@ -18,6 +19,8 @@ import { processErrorPath, validateProcess } from './validation-process.js';
 type Bindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
 >;
+
+type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
 
 // Private numeric ABI. Keep these aligned with the crate's allocation-free error table.
 const errorCodes: readonly ErrorCode[] = [
@@ -73,7 +76,8 @@ const errorPaths = [
 	'dither.arithmetic',
 	'dither.arithmetic',
 	'dither.size',
-	'recipe.version'
+	'recipe.version',
+	'onProgress'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',
@@ -165,7 +169,7 @@ class ScalarProcessor implements Ditherette {
 		try {
 			const input = validateProcess(request);
 			const policy = input.dither;
-			const result: { value?: IndexedImage } = { value: undefined };
+			const result: ResultSink<IndexedImage> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateProcess(
@@ -210,7 +214,7 @@ class ScalarProcessor implements Ditherette {
 		this.#active = true;
 		try {
 			const input = validateResize(request);
-			const result: { value?: Rgba8Image } = { value: undefined };
+			const result: ResultSink<Rgba8Image> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateResize(
@@ -240,7 +244,7 @@ class ScalarProcessor implements Ditherette {
 		this.#active = true;
 		try {
 			const input = validateQuantize(request);
-			const result: { value?: IndexedImage } = { value: undefined };
+			const result: ResultSink<IndexedImage> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateQuantize(
@@ -269,7 +273,7 @@ class ScalarProcessor implements Ditherette {
 		this.#active = true;
 		try {
 			const input = validatePerturb(request);
-			const result: { value?: Rgba8Image } = { value: undefined };
+			const result: ResultSink<Rgba8Image> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privatePerturb(
@@ -302,7 +306,7 @@ class ScalarProcessor implements Ditherette {
 		try {
 			const input = validateDitherAndQuantize(request);
 			const policy = input.dither;
-			const result: { value?: IndexedImage } = { value: undefined };
+			const result: ResultSink<IndexedImage> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateDitherAndQuantize(

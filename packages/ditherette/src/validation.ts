@@ -1,6 +1,6 @@
 import { DitheretteError } from './errors.js';
 import type { ErrorCode } from './errors.js';
-import type { InitInput, InitOptions } from './types.js';
+import type { InitInput, InitOptions, Progress } from './types.js';
 
 const maxPixels = 67_108_864;
 const anchors = [
@@ -45,6 +45,14 @@ export function object(
 
 export function field(value: Record<string, unknown>, key: string): unknown {
 	return Object.hasOwn(value, key) ? value[key] : undefined;
+}
+
+/** Read the optional function once; invocation and thrown errors belong to the caught boundary. */
+export function progressCallback(value: unknown): ((progress: Progress) => void) | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== 'function')
+		throw new DitheretteError('invalid-settings', 'onProgress', 'Expected a progress callback.');
+	return value as (progress: Progress) => void;
 }
 
 function integer(value: unknown, maximum: number, code: ErrorCode, path: string): number {
@@ -148,20 +156,7 @@ export function validateResize(value: unknown) {
 		);
 		if (field(request, 'version') !== 1)
 			throw new DitheretteError('invalid-request', 'version', 'Unsupported recipe version.');
-		const onProgress = field(request, 'onProgress');
-		if (onProgress !== undefined) {
-			if (typeof onProgress !== 'function')
-				throw new DitheretteError(
-					'invalid-settings',
-					'onProgress',
-					'Expected a progress callback.'
-				);
-			throw new DitheretteError(
-				'unsupported-operation',
-				'onProgress',
-				'Progress callbacks are not implemented in this package checkpoint.'
-			);
-		}
+		const onProgress = progressCallback(field(request, 'onProgress'));
 		const output = object(
 			field(request, 'output'),
 			['width', 'height', 'resize'],
@@ -224,6 +219,7 @@ export function validateResize(value: unknown) {
 		const data = rgbaBytes(rawData, sourceSize.width * sourceSize.height * 4);
 		return {
 			data,
+			onProgress,
 			sourceWidth: sourceSize.width,
 			sourceHeight: sourceSize.height,
 			outputWidth: outputSize.width,
@@ -290,13 +286,7 @@ export function validateQuantize(value: unknown) {
 		);
 		if (field(request, 'version') !== 1)
 			throw new DitheretteError('invalid-request', 'version', 'Unsupported recipe version.');
-		const onProgress = field(request, 'onProgress');
-		if (onProgress !== undefined)
-			throw new DitheretteError(
-				typeof onProgress === 'function' ? 'unsupported-operation' : 'invalid-settings',
-				'onProgress',
-				'Progress callbacks are not implemented in this package checkpoint.'
-			);
+		const onProgress = progressCallback(field(request, 'onProgress'));
 		const rawMatching = field(request, 'matching');
 		const matching = typeof rawMatching === 'string' ? matchingModes.indexOf(rawMatching) : -1;
 		if (matching < 0)
@@ -387,6 +377,7 @@ export function validateQuantize(value: unknown) {
 			sourceHeight: size.height,
 			palette,
 			matching,
+			onProgress,
 			alphaMode,
 			threshold,
 			matte

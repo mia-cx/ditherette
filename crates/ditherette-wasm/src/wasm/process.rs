@@ -106,7 +106,7 @@ pub fn private_process(
                 palette: &entries[..count],
                 recipe,
             },
-            &mut JsQuantizeBoundary { input, result_sink },
+            &mut JsQuantizeBoundary::new(input, result_sink)?,
         )
     })();
     restore_ready(processor);

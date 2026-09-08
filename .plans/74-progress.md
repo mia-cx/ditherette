@@ -51,7 +51,7 @@ until the full implementation stack exists.
    Prove callback-disabled equality and abort behavior with focused native tests.
 3. [x] Connect all five pipelines and success-only completion, including image hits.
    Prove no new publication after intermediate/completion failure and successful recovery.
-4. [ ] Enable typed request callbacks through the caught Wasm boundary.
+4. [x] Enable typed request callbacks through the caught Wasm boundary.
    Verify callback errors, getters/reentry/disposal, result readiness, and private handle recovery.
 5. [ ] Join installed fixtures and the assigned overhead protocol; validate fresh artifacts.
    Record exact source/artifact identities, await exclusive measurements, and file an unmerged child PR.
@@ -88,3 +88,19 @@ inside completion, zero retained entries after prepare/intermediate/completion
 failure, no image hits from failed calls, recovery, warm-hit completion failure,
 and no completion after final-copy rejection. Existing processor (14), Process (6),
 and diffusion (10) tests also pass, retaining the physical allocation witnesses.
+
+The wrapper checkpoint enables the existing typed `onProgress` field across all
+methods. Validators preserve one raw property read, including Process's composed
+validators. The private sink carries a borrowed callback. Caught void delivery
+clears failed completion output and maps thrown callbacks to status 12/path 38.
+Both active guards remain in force while getters and callbacks run.
+
+Fresh local scalar and threads builds pass. Interface/type tests pass 35/35;
+private Wasm tests pass 17/17, including 512 progress failure/recovery cycles with
+stable externref live slots, capacity, and Wasm pages. Factory/staging tests pass 7/7.
+Existing shared browser fixtures now test malformed callback types instead of the
+obsolete unsupported-function expectation. The new installed progress suite owns
+positive callback coverage, so accepted S32 conformance remains usable separately.
+
+Final S32 PR #122 at `127a0428a0bfdad7ea3e239e6a96f375449815bb` and installed
+fixture head `0bb2552cd3b2797c1560d2de8b96c5c80c48cc15` are joined.

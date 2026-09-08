@@ -53,7 +53,7 @@ pub fn private_perturb(
                 source_height,
                 perturb,
             },
-            &mut JsBoundary { input, result_sink },
+            &mut JsBoundary::new(input, result_sink)?,
         )
     })();
     restore_ready(processor);
@@ -106,7 +106,7 @@ pub fn private_dither_and_quantize(
                 alpha,
             },
             dither,
-            &mut JsQuantizeBoundary { input, result_sink },
+            &mut JsQuantizeBoundary::new(input, result_sink)?,
         )
     })();
     restore_ready(processor);
