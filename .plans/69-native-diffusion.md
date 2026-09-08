@@ -22,7 +22,7 @@ The final S25 join includes its benchmark-module formatting correction.
 - [x] Join accepted S26 `3915f60519995cb9087a18b3bfd6bd7220ae804a` and register the full-image native benchmark before optimization.
 - [x] Implement fallible three-row scratch with exact arithmetic and width-based capacity checks.
 - [x] Expose all four diffusion kernels through the private processor and public package; verify public calls and memory failures.
-- [ ] Prepare candidate benchmark subjects for the coordinator's exclusive comparisons.
+- [x] Prepare candidate benchmark subjects for the coordinator's exclusive comparisons.
 
 ## Copy boundary
 
@@ -66,7 +66,7 @@ The registered subject and timed callable match frozen results for 120 kernel/fe
 
 ## Deferred scope
 
-Candidate benchmark protocol completion, exclusive measurements, selection, and the S28 PR remain unfinished.
+Exclusive measurements, selection, and the S28 PR remain unfinished.
 The literal baseline and native benchmark registration are recorded before optimization starts.
 The coordinator owns integration/tracking and exclusive measurement clearance. S26 source and artifacts stay untouched.
 
@@ -93,3 +93,15 @@ Scalar and threads package artifacts build using the assigned S24 target's scala
 Installed-tarball conformance passes in Chromium 147.0.7727.15 and Firefox 148.0.2, including all 360 diffusion vectors without cross-origin isolation.
 WebKit 2272 cannot launch because the host lacks libwoff2dec.so.1.0.2; its fixture remains registered.
 The pnpm automatic dependency-install check rejects borrowed node_modules links; build commands use the installed tools directly. Tarball checks disable that automatic installation with `pnpm_config_verify_deps_before_run=false`.
+
+## Candidate benchmark handoff
+
+The native worker accepts `NativeOperation::Diffusion` with complete typed `DiffusionSettings`.
+Its accepted subject is `prod:dither-and-quantize:diffusion:full-image-v1`; its candidate is `candidate:dither-and-quantize:diffusion:three-row-v1`.
+Both native subjects borrow source and include all preparation, work/output allocation, and result destruction. The candidate wrapper also enforces its stated capacity limit.
+The registered native subjects and timed callables pass 120 frozen kernel/feedback/matching comparisons before measurement.
+Actual public browser cases use `PublicOperation::Diffusion` and `public:dither-and-quantize:diffusion:package`, calling the package's `ditherAndQuantize`.
+The browser protocol validates identity, complete indexed metadata, and rejects unsupported TypeScript claims.
+Public complete-call timing remains separate from the borrowed native comparison. There is no equivalent bounded full-image public baseline; initial public evidence can use the same candidate artifact in both roles.
+Six browser protocol tests and 28 JS transport/timing tests pass. Their fixtures perform untimed operations or use fake clocks, never actual performance measurements.
+No ring optimization is selected and no S28 PR is filed. The coordinator owns fresh paired measurements and the selection checkpoint.

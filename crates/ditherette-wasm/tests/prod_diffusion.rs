@@ -136,6 +136,7 @@ fn native_benchmark_subject_executes_all_diffusion_recipes() {
             .unwrap()
     };
     let production = subject(diffusion::SUBJECT);
+    let candidate = subject(diffusion::CANDIDATE_SUBJECT);
     let frozen = subject("spec:dither-and-quantize:request:v1");
     assert_eq!(production.operation, frozen.operation);
     let data = [
@@ -174,6 +175,10 @@ fn native_benchmark_subject_executes_all_diffusion_recipes() {
                 );
                 assert_eq!(
                     (production.run)(&input).unwrap(),
+                    (frozen.run)(&input).unwrap()
+                );
+                assert_eq!(
+                    (candidate.run)(&input).unwrap(),
                     (frozen.run)(&input).unwrap()
                 );
                 let direct = diffusion::function(diffusion::SUBJECT).unwrap()(
@@ -538,6 +543,38 @@ fn complete_call_height_growth_counts_only_owned_source_and_indices() {
         capacities.push(processor.peak_capacity_bytes());
     }
     assert_eq!(capacities[1] - capacities[0], 7 * (19 - 1) * 5);
+}
+
+#[test]
+fn borrowed_native_candidate_counts_output_and_temporary_conversion_capacity() {
+    use ditherette_wasm::prod::color::packed::Converter;
+    use production::prepared::{diffuse, DiffusionError, DiffusionPolicy, PreparedDiffusion};
+    use std::mem::size_of;
+    let data = [100, 100, 100, 255, 100, 100, 100, 255];
+    let input = request(&data, 2, 1);
+    let prepared = PreparedDiffusion::required_capacity_bytes(
+        2,
+        &BW,
+        input.quantize.alpha,
+        input.quantize.matching,
+    )
+    .unwrap();
+    let capacity = prepared
+        + 2
+        + (size_of::<ImageBuf<PaletteIndex8>>()
+            + size_of::<DiffusionPolicy>()
+            + size_of::<Converter>()) as u64;
+    assert_eq!(diffuse(input, capacity).unwrap(), oracle(input).unwrap());
+    let DiffusionError::Preparation(failure) = diffuse(input, capacity - 1).unwrap_err() else {
+        panic!("expected preflight capacity failure");
+    };
+    assert_eq!(failure.code, ErrorCode::MemoryLimit);
+    let mut malformed = input;
+    malformed.quantize.version = 2;
+    assert!(matches!(
+        diffuse(malformed, 0),
+        Err(DiffusionError::Request(_))
+    ));
 }
 
 #[test]

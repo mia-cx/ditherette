@@ -29,6 +29,54 @@ use crate::{
 
 const ROWS: usize = 3;
 
+/// Native request diagnostics and allocation-free execution/preparation failures.
+#[derive(Debug)]
+pub enum DiffusionError {
+    Request(crate::prod::contract::error::DitheretteError),
+    Preparation(PreparationError),
+    Execution(Failure),
+}
+
+/// Executes a borrowed native request with bounded work and fallibly reserved owned output.
+pub fn diffuse(
+    request: crate::prod::contract::request::DitherQuantizeRequest<'_>,
+    memory_limit: u64,
+) -> Result<IndexedImage, DiffusionError> {
+    use crate::prod::{color::packed::Converter, contract::request::Request};
+    let layout = Request::DitherAndQuantize(request)
+        .validate()
+        .map_err(DiffusionError::Request)?;
+    let policy = DiffusionPolicy::new(request.dither).map_err(DiffusionError::Execution)?;
+    let count = layout.output.pixel_count().expect("validated dimensions");
+    let fixed = (size_of::<ImageBuf<PaletteIndex8>>()
+        + size_of::<DiffusionPolicy>()
+        + size_of::<Converter>()) as u64;
+    let preparation_limit = memory_limit
+        .checked_sub(fixed + count as u64)
+        .ok_or(DiffusionError::Preparation(PreparationError::memory()))?;
+    let mut prepared = PreparedDiffusion::try_new(
+        layout.source.dimensions().width(),
+        request.quantize.palette,
+        request.quantize.alpha,
+        request.quantize.matching,
+        preparation_limit,
+    )
+    .map_err(DiffusionError::Preparation)?;
+    let mut budget = Budget::new(memory_limit, fixed + prepared.capacity_bytes())
+        .map_err(DiffusionError::Preparation)?;
+    let mut indices = Vec::new();
+    budget
+        .reserve(&mut indices, count)
+        .map_err(DiffusionError::Preparation)?;
+    indices.resize(count, 0);
+    prepared
+        .execute(layout.source, &mut indices, policy)
+        .map_err(DiffusionError::Execution)?;
+    Ok(prepared.into_indexed(
+        ImageBuf::from_vec_packed(indices, layout.output).expect("reserved output storage"),
+    ))
+}
+
 /// Validated scalar scan controls. Matching and palette ownership stay in PreparedQuantizer.
 #[derive(Clone, Copy)]
 pub struct DiffusionPolicy {
