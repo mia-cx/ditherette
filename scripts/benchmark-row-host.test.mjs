@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { chromium, firefox } from 'playwright';
 import { exchangeTrial, restrictContext, startAssetServer } from './benchmark-public-browser.mjs';
+import { stageHostAssets } from './benchmark-host-assets.mjs';
 
 const bundlePath = process.env.DITHERETTE_BENCH_ROW_BUNDLE;
 const source = { width: 11, height: 9 };
@@ -148,34 +149,7 @@ test(
 			);
 		const root = await mkdtemp(path.join(tmpdir(), 'ditherette-row-host-'));
 		t.after(() => rm(root, { recursive: true, force: true }));
-		await cp(bundle.package, path.join(root, 'package'), { recursive: true, dereference: true });
-		await mkdir(path.join(root, 'scripts'));
-		for (const name of [
-			'benchmark-host-worker',
-			'benchmark-public-page',
-			'benchmark-public-timing',
-			'benchmark-stage-cache',
-			'benchmark-progress',
-			'benchmark-row-policy'
-		])
-			await cp(path.join(bundle.scripts, `${name}.mjs`), path.join(root, `scripts/${name}.mjs`));
-		await cp(
-			new URL('./benchmark-row-host-fixture.mjs', import.meta.url),
-			path.join(root, 'scripts/benchmark-row-host-fixture.mjs')
-		);
-		const files = [];
-		async function walk(relative = '') {
-			for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
-				const name = path.posix.join(relative, entry.name);
-				if (entry.isDirectory()) await walk(name);
-				else files.push({ path: name });
-			}
-		}
-		await walk();
-		const assets = {
-			tree: { root, files },
-			entries: { package: 'package/dist/index.js', wasm: wasmEntry }
-		};
+		const assets = await stageHostAssets(bundle, root, 'benchmark-row-host-fixture.mjs', wasmEntry);
 		for (const [engineName, engine] of Object.entries({ chromium, firefox })) {
 			await t.test(engineName, async () => {
 				const browser = await engine.launch({ headless: true });
