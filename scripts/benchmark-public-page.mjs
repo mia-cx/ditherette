@@ -17,7 +17,7 @@ export function timerResolution(now = () => performance.now()) {
 	return quantum * 1e6;
 }
 
-/** Prepare only existing public operations. No private glue, synthetic hashing, or application caches. */
+/** Prepare only existing public operations. */
 export function resizeRecipe(operation) {
 	switch (operation.operation) {
 		case 'resize-nearest':
@@ -56,8 +56,25 @@ export async function prepareOperation(trial) {
 		process || quantize || perturb || separable || diffusion || yliluoma
 			? undefined
 			: resizeRecipe(config.operation);
-	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
-		throw new Error('This package has no application cache.');
+	const cacheComparison = config.cache !== 'none';
+	if (cacheComparison) {
+		const roles = config.cache?.roles;
+		if (
+			!roles ||
+			!['uncached', 'preparation'].includes(roles.accepted) ||
+			!['uncached', 'preparation'].includes(roles.candidate) ||
+			measurement.mode !== 'single-call' ||
+			measurement.scope !== 'complete-call' ||
+			!['cold', 'warm'].includes(measurement.application_cache) ||
+			config.preparation !==
+				(measurement.application_cache === 'cold' ? 'fresh-instance' : 'primed-instance') ||
+			config.accepted !== 'package' ||
+			config.candidate !== 'package'
+		)
+			throw new Error('Invalid preparation-cache comparison.');
+	} else if (measurement.application_cache !== 'not-applicable') {
+		throw new Error('Application cache claims require role capabilities.');
+	}
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
 		throw new Error('Throughput requires a primed instance.');
 	const request = process
@@ -178,12 +195,37 @@ export async function prepareOperation(trial) {
 	}
 	if (config.preparation !== 'primed-instance') throw new Error('Unknown processing preparation.');
 	const instance = await create();
+	if (cacheComparison) {
+		try {
+			primeChangedSource(request, () => call(instance));
+		} catch (error) {
+			instance.dispose();
+			throw error;
+		}
+	}
 	return {
 		request,
 		call: () => call(instance),
 		prepare: async () => ({ call: () => call(instance), close() {} }),
 		close: () => instance.dispose()
 	};
+}
+
+/** Prime preparation with different source bytes, then restore the measured request. */
+export function primeChangedSource(request, call) {
+	const measured = request.source.data;
+	const prime = measured.slice();
+	for (let index = 0; index < prime.length; index += 4) prime[index] ^= 0xff;
+	request.source.data = prime;
+	try {
+		const output = call();
+		const indexed = 'indices' in output;
+		const bytes =
+			output.width * output.height * (indexed ? 1 : 4) + (indexed ? MAX_PALETTE_BYTES : 0);
+		outputStability(bytes, indexed ? 'indexed8' : 'rgba8').observe([output]);
+	} finally {
+		request.source.data = measured;
+	}
 }
 
 // Comparison views share buffers. Stability snapshots own separate typed storage.
@@ -323,6 +365,7 @@ export async function preflightOperation(operation, reference, observe = () => {
 		const instance = await operation.create();
 		try {
 			output = operation.probe(instance);
+			observe([output]);
 		} finally {
 			instance.dispose();
 		}
@@ -330,11 +373,11 @@ export async function preflightOperation(operation, reference, observe = () => {
 		const prepared = await operation.prepare();
 		try {
 			output = prepared.call();
+			observe([output]);
 		} finally {
 			prepared.close();
 		}
 	}
-	observe([output]);
 	const actual = verificationOutput(output);
 	if (equalOutput(actual, reference)) return undefined;
 	return actual;
@@ -406,7 +449,13 @@ export async function runTrial(trial) {
 				...trial,
 				case: {
 					...trial.case,
-					browser: { ...trial.case.browser, accepted: 'package-staged', candidate: 'package' }
+					browser: {
+						...trial.case.browser,
+						cache: 'none',
+						accepted: 'package-staged',
+						candidate: 'package'
+					},
+					measurement: { ...trial.case.measurement, application_cache: 'not-applicable' }
 				},
 				role: trial.case.browser[trial.role] === 'package' ? 'accepted' : 'candidate'
 			});

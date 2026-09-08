@@ -21,8 +21,8 @@ use ditherette_bench::{
 use ditherette_bench_api::{verification::*, ResizeParams};
 use ditherette_wasm::{
     bench_subjects::{
-        diffusion, field_calls, fields, process, quantize as adapters, scores, yiluoma,
-        BenchSubject,
+        diffusion, field_calls, fields, preparation, process, quantize as adapters, scores,
+        yiluoma, BenchSubject,
     },
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
@@ -168,6 +168,7 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
             ));
         };
         let callable = match operation {
+            native::NativeOperation::Processor { settings, .. } => settings.subject() == subject_id,
             native::NativeOperation::Process { .. } => process::callable(subject_id),
             native::NativeOperation::Diffusion { .. } => diffusion::function(subject_id).is_some(),
             native::NativeOperation::Yliluoma { .. } => {
@@ -238,6 +239,13 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
 }
 
 enum TypedWorkload<'a> {
+    Processor {
+        call: preparation::CompleteCall<'a>,
+        source: &'a [u8],
+        processor: Option<ditherette_wasm::prod::pipeline::processor::Processor>,
+        cold: bool,
+        output: Option<preparation::Output>,
+    },
     Process {
         call: process::CompleteCall<'a>,
         processor: ditherette_wasm::prod::pipeline::processor::Processor,
@@ -272,8 +280,49 @@ enum TypedWorkload<'a> {
 }
 
 impl Workload for TypedWorkload<'_> {
+    fn prepare_sample(&mut self) -> Result<(), BenchError> {
+        if let Self::Processor {
+            processor,
+            cold,
+            output,
+            ..
+        } = self
+        {
+            *output = None;
+            if *cold {
+                *processor =
+                    Some(field_calls::processor().map_err(|e| BenchError::Runtime(e.to_string()))?);
+            }
+        }
+        Ok(())
+    }
+
+    fn finish_sample(&mut self) {
+        if let Self::Processor {
+            processor,
+            cold: true,
+            ..
+        } = self
+        {
+            // Dropping the owned instance releases it even when the call failed.
+            *processor = None;
+        }
+    }
+
     fn run(&mut self) -> Result<(), BenchError> {
         match self {
+            Self::Processor {
+                call,
+                source,
+                processor,
+                output,
+                ..
+            } => {
+                *output = Some(
+                    call.output(processor.as_mut().expect("prepared processor"), source)
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?,
+                );
+            }
             Self::Process { call, processor } => call
                 .run(processor)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
@@ -310,6 +359,9 @@ impl Workload for TypedWorkload<'_> {
         Ok(())
     }
     fn consume(&self) {
+        if let Self::Processor { output, .. } = self {
+            std::hint::black_box(output);
+        }
         if let Self::Scores { values, .. } = self {
             std::hint::black_box(values);
         }
@@ -342,6 +394,19 @@ fn run_typed(
     };
     let reference_output = verify(&case.reference_subject)?;
     let before = verify(subject_id)?;
+    if matches!(operation, native::NativeOperation::Processor { .. }) && before != reference_output
+    {
+        let evidence = serde_json::to_vec_pretty(&(request, &reference_output, &before))
+            .map_err(|e| BenchError::Runtime(e.to_string()))?;
+        fs::write(
+            request_path.with_extension("preflight-mismatch.json"),
+            evidence,
+        )
+        .map_err(BenchError::io)?;
+        return Err(BenchError::Runtime(
+            "Processor differs from frozen reference before timing".into(),
+        ));
+    }
     if matches!(operation, native::NativeOperation::Process { .. }) {
         let counterpart = verify(if subject_id == process::PROCESS_SUBJECT {
             process::STAGED_SUBJECT
@@ -363,6 +428,33 @@ fn run_typed(
         }
     }
     let mut workload = match operation {
+        native::NativeOperation::Processor { .. } => {
+            let call = preparation::CompleteCall::new(&parameters)
+                .map_err(|e| BenchError::Runtime(e.to_string()))?;
+            let cold = case.measurement.application_cache == ApplicationCache::Cold;
+            let processor = if cold {
+                None
+            } else {
+                let mut processor =
+                    field_calls::processor().map_err(|e| BenchError::Runtime(e.to_string()))?;
+                let mut prime = case.rgba.clone();
+                for pixel in prime.chunks_exact_mut(4) {
+                    pixel[0] ^= 0xff;
+                }
+                drop(std::hint::black_box(
+                    call.output(&mut processor, &prime)
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?,
+                ));
+                Some(processor)
+            };
+            TypedWorkload::Processor {
+                call,
+                source: &case.rgba,
+                processor,
+                cold,
+                output: None,
+            }
+        }
         native::NativeOperation::Process { .. } => TypedWorkload::Process {
             call: process::CompleteCall::new(&parameters, subject_id)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
@@ -430,7 +522,11 @@ fn run_typed(
     if let Some(error) = observer.observation_error {
         return Err(BenchError::io(error));
     }
-    let after = verify(subject_id)?;
+    let after = if let TypedWorkload::Processor { output, .. } = &workload {
+        output.as_ref().expect("measured output").verification()
+    } else {
+        verify(subject_id)?
+    };
     if before != after {
         // Keep exact concrete evidence, but never publish unstable samples as a valid trial.
         let evidence = serde_json::to_vec_pretty(&(
