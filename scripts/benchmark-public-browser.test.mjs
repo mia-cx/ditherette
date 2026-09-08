@@ -17,7 +17,8 @@ import {
 	resizeRecipe,
 	runTrial,
 	timerResolution,
-	outputStability
+	outputStability,
+	verificationOutput
 } from './benchmark-public-page.mjs';
 import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
 
@@ -27,6 +28,57 @@ const indexedOutput = () => ({
 	indices: new Uint8Array([0, 1]),
 	palette: { rgba: new Uint8Array([10, 20, 30, 255, 0, 0, 0, 0]), transparentIndex: 1 },
 	warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
+});
+
+test('shared backing stores fail before the collector can retain mutable snapshots', () => {
+	for (const field of ['data', 'indices', 'palette']) {
+		const output =
+			field === 'data'
+				? { width: 1, height: 1, data: new Uint8Array([10, 20, 30, 255]) }
+				: indexedOutput();
+		const record = field === 'palette' ? output.palette : output;
+		const key = field === 'palette' ? 'rgba' : field;
+		const shared = new Uint8Array(new SharedArrayBuffer(record[key].byteLength));
+		shared.set(record[key]);
+		record[key] = shared;
+		const tracker = outputStability(
+			field === 'data' ? 4 : 1026,
+			field === 'data' ? 'rgba8' : 'indexed8'
+		);
+		assert.throws(() => tracker.observe([output]), /durable byte-result contract/);
+	}
+});
+
+test('later calls cannot rewrite the first or distinct stability evidence through retained results', () => {
+	for (const indexed of [false, true]) {
+		const create = indexed
+			? indexedOutput
+			: () => ({ width: 1, height: 1, data: new Uint8Array([10, 20, 30, 255]) });
+		const mutate = indexed
+			? (output) => {
+					output.indices.reverse();
+					output.palette.rgba[0]++;
+					output.warnings[0].message += ' changed';
+				}
+			: (output) => output.data[0]++;
+		for (const changeNext of [false, true]) {
+			const tracker = outputStability(indexed ? 1026 : 4, indexed ? 'indexed8' : 'rgba8');
+			const first = create();
+			const expectedFirst = verificationOutput(first);
+			tracker.observe([first]);
+			mutate(first);
+			const next = create();
+			if (changeNext) mutate(next);
+			tracker.observe([next]);
+			const evidence = tracker.evidence(next);
+			assert.deepEqual(evidence.unstable_output, expectedFirst);
+			assert.notDeepEqual(evidence.unstable_output, evidence.output);
+			const retained = structuredClone(evidence);
+			mutate(first);
+			mutate(next);
+			assert.deepEqual(tracker.evidence(create()), retained);
+		}
+	}
 });
 
 test('indexed A/B/A retains exact indices, palette, transparency, and warnings outside batch timers', async () => {

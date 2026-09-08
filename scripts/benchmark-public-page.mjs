@@ -139,7 +139,7 @@ export async function prepareOperation(trial) {
 	};
 }
 
-// Views share the public buffers. Only final evidence serialization copies their bytes.
+// Comparison views share buffers. Stability snapshots own separate typed storage.
 function outputView(output) {
 	if ('indices' in output) {
 		return {
@@ -184,6 +184,7 @@ const WARNING_CODES = new Set(['palette-truncated', 'transparent-only', 'transpa
 /** Require independent records and durable buffers; retain only the first and first distinct result. */
 export function outputStability(outputBytes, format = 'rgba8') {
 	let first;
+	let firstSnapshot;
 	let distinct;
 	const retainedStorage = new Set();
 	return {
@@ -198,6 +199,7 @@ export function outputStability(outputBytes, format = 'rgba8') {
 				for (const [index, data] of views.entries()) {
 					if (
 						!ArrayBuffer.isView(data) ||
+						!(data.buffer instanceof ArrayBuffer) || // Cloning shared storage does not copy its bytes.
 						data.BYTES_PER_ELEMENT !== 1 ||
 						data.buffer.byteLength !== data.byteLength ||
 						(index === 0
@@ -242,18 +244,24 @@ export function outputStability(outputBytes, format = 'rgba8') {
 				}
 				if (!first) {
 					first = output;
+					firstSnapshot = structuredClone(output);
 					for (const value of owned) retainedStorage.add(value);
 					continue;
 				}
-				if (!distinct && !equalOutput(outputView(output), outputView(first))) {
-					distinct = output;
+				if (!distinct && !equalOutput(outputView(first), outputView(firstSnapshot)))
+					distinct = structuredClone(first);
+				if (!distinct && !equalOutput(outputView(output), outputView(firstSnapshot))) {
+					distinct = structuredClone(output);
 					for (const value of owned) retainedStorage.add(value);
 				}
 			}
 		},
 		evidence(finalOutput) {
 			return distinct
-				? { unstable_output: verificationOutput(first), output: verificationOutput(distinct) }
+				? {
+						unstable_output: verificationOutput(firstSnapshot),
+						output: verificationOutput(distinct)
+					}
 				: { output: verificationOutput(finalOutput) };
 		}
 	};
