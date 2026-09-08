@@ -130,6 +130,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                     target_sample_ms: 2,
                 },
                 browser: public.then_some(BrowserCase {
+                    execution: None,
                     operation,
                     accepted: BrowserBackend::Package,
                     candidate: BrowserBackend::Package,
@@ -137,6 +138,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                     cache: CacheCapability::None,
                     measure_nonexact: false,
                     progress: None,
+                    threads: None,
                 }),
                 native: (!public).then_some(native),
             });

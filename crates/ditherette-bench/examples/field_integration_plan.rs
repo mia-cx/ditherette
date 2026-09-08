@@ -120,6 +120,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             _ => unreachable!("S26 complete recipe"),
         };
         let browser = public.then_some(BrowserCase {
+            execution: None,
             operation,
             accepted: BrowserBackend::Package,
             candidate: BrowserBackend::Package,
@@ -127,6 +128,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             cache: CacheCapability::None,
             measure_nonexact: false,
             progress: None,
+            threads: None,
         });
         operations.push((name, native, browser));
     }

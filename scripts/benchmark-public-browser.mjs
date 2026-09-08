@@ -93,7 +93,7 @@ export async function startAssetServer(assets, isolated, trial) {
 			}
 			response.setHeader(
 				'Content-Security-Policy',
-				"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'"
+				"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self' blob:"
 			);
 			response.setHeader('Cache-Control', 'no-store');
 			const relative = decodeURIComponent(url.pathname).slice(1);
@@ -236,24 +236,41 @@ export async function rejectOnPageFailure(page, run) {
 }
 
 /** Bulk JSON travels over bounded loopback HTTP. Playwright receives only URLs and a small acknowledgement. */
-export async function exchangeTrial(page, server, pageEntry) {
+export async function exchangeTrial(page, server, pageEntry, execution = 'page') {
 	const ack = await rejectOnPageFailure(page, () =>
 		page.evaluate(
-			async ({ requestUrl, resultUrl, pageEntry }) => {
-				const response = await fetch(requestUrl);
-				if (!response.ok) throw new Error(`Trial input failed: ${response.status}`);
-				const request = await response.json();
-				const { runTrial } = await import(`/${pageEntry}`);
-				const result = await runTrial(request);
-				const uploaded = await fetch(resultUrl, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(result)
-				});
-				if (!uploaded.ok) throw new Error(`Trial output failed: ${uploaded.status}`);
-				return { posted: true };
+			async ({ execution, ...data }) => {
+				const entry = '/scripts/benchmark-host-worker.mjs';
+				if (execution === 'page') {
+					const response = await fetch(data.requestUrl);
+					if (!response.ok) throw new Error(`Trial input failed: ${response.status}`);
+					const request = await response.json();
+					const { runTrial } = await import(`/${data.pageEntry}`);
+					const result = await runTrial(request);
+					const uploaded = await fetch(data.resultUrl, {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(result)
+					});
+					if (!uploaded.ok) throw new Error(`Trial output failed: ${uploaded.status}`);
+					return { posted: true };
+				}
+				if (execution !== 'host-worker') throw new Error('Unknown browser execution context.');
+				const worker = new Worker(entry, { type: 'module' });
+				try {
+					return await new Promise((resolve, reject) => {
+						worker.onmessage = ({ data }) =>
+							data.error ? reject(new Error(data.error)) : resolve(data);
+						worker.onerror = (event) => reject(new Error(event.message));
+						worker.onmessageerror = () =>
+							reject(new Error('Host worker result could not be decoded.'));
+						worker.postMessage(data);
+					});
+				} finally {
+					worker.terminate();
+				}
 			},
-			{ requestUrl: server.requestUrl, resultUrl: server.resultUrl, pageEntry }
+			{ requestUrl: server.requestUrl, resultUrl: server.resultUrl, pageEntry, execution }
 		)
 	);
 	if (!ack?.posted || server.result === undefined)
@@ -330,7 +347,12 @@ export async function runPublicBrowser(trial) {
 				);
 				page.on('pageerror', (error) => server.failures.push(String(error)));
 				await page.goto(server.url);
-				result = await exchangeTrial(page, server, assets.entries.page);
+				result = await exchangeTrial(
+					page,
+					server,
+					assets.entries.page,
+					trial.case.browser.execution
+				);
 				attachOracleReference(result, reference);
 				if (server.failures.length) throw new Error(server.failures.join('\n'));
 				if (result.observation.cross_origin_isolated !== runtime.cross_origin_isolated)

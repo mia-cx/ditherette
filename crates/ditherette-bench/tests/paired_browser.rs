@@ -132,6 +132,7 @@ fn area_and_bilinear_keep_distinct_recipes_and_validate_website_anchors() {
 fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
     let browser = BrowserCase {
+        execution: None,
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
         },
@@ -141,6 +142,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         cache: CacheCapability::None,
         measure_nonexact: false,
         progress: None,
+        threads: None,
     };
     let case = &mut prepared.experiment.cases[0];
     case.identity = browser
@@ -242,12 +244,14 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         trial.browser = Some(BrowserEvidence {
             measure_nonexact: false,
             progress: None,
+            threads: None,
             assets: assets.tree.digest,
             runtime: runtime_digest(&runtime).unwrap(),
             backend: browser.backend(trial.role),
             preparation: browser.preparation,
             cache: browser.cache,
             observation: BrowserObservation {
+                execution: None,
                 engine: runtime.engine,
                 browser_version: runtime.browser.version.clone(),
                 node_version: runtime.node.version.clone(),
@@ -381,6 +385,62 @@ fn progress_roles_preserve_historical_json_and_bind_trial_evidence() {
     assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
     let case = &mut prepared.experiment.cases[0];
     case.measurement.application_cache = ApplicationCache::Warm;
+    assert!(validate_case(case).is_err());
+}
+
+#[test]
+fn thread_roles_preserve_historical_json_and_bind_initialization_evidence() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let browser = case.browser.as_mut().unwrap();
+    let historical = serde_json::to_value(&*browser).unwrap();
+    assert!(historical.get("threads").is_none());
+    assert!(historical.get("execution").is_none());
+    let decoded: BrowserCase = serde_json::from_value(historical.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+    let roles = ThreadRoles {
+        accepted: Threads::Disabled,
+        candidate: Threads::Required,
+    };
+    browser.threads = Some(roles);
+    browser.execution = Some(BrowserExecution::HostWorker);
+    browser.accepted = BrowserBackend::Package;
+    browser.preparation = BrowserPreparation::InitializationCompiled;
+    case.accepted_subject = browser.operation.subject(BrowserBackend::Package).into();
+    case.measurement.mode = SampleMode::SingleCall;
+    case.measurement.scope = CallScope::Initialization;
+    validate_case(case).unwrap();
+    let mut unsupported = case.clone();
+    unsupported.measurement.scope = CallScope::CompleteCall;
+    assert!(validate_case(&unsupported).is_err());
+    for trial in &mut trials {
+        trial.measurement = case.measurement.clone();
+        trial.output.implementation.subject = case.accepted_subject.clone();
+        let evidence = trial.browser.as_mut().unwrap();
+        let historical = serde_json::to_value(&*evidence).unwrap();
+        assert!(historical.get("threads").is_none());
+        let decoded: BrowserEvidence = serde_json::from_value(historical.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+        evidence.backend = BrowserBackend::Package;
+        evidence.preparation = BrowserPreparation::InitializationCompiled;
+        evidence.threads = Some(roles);
+        evidence.observation.execution = Some(BrowserExecution::HostWorker);
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    trials[0].browser.as_mut().unwrap().observation.execution = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().observation.execution = Some(BrowserExecution::Page);
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().observation.execution = Some(BrowserExecution::HostWorker);
+    trials[0].browser.as_mut().unwrap().threads = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().threads = Some(ThreadRoles {
+        accepted: Threads::Disabled,
+        candidate: Threads::Preferred,
+    });
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    let case = &mut prepared.experiment.cases[0];
+    case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
     assert!(validate_case(case).is_err());
 }
 

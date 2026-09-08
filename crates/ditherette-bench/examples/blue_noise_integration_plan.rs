@@ -32,6 +32,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
     let mut cases = Vec::new();
     for (name, native) in recipes {
         let browser = public.then(|| BrowserCase {
+            execution: None,
             operation: blue_noise::public(&native),
             accepted: BrowserBackend::Package,
             candidate: BrowserBackend::Package,
@@ -39,6 +40,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             cache: CacheCapability::None,
             measure_nonexact: false,
             progress: None,
+            threads: None,
         });
         let subject = match &browser {
             Some(browser) => browser.operation.subject(BrowserBackend::Package),

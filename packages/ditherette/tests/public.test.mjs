@@ -353,6 +353,34 @@ test('unsupported capabilities and invalid options do not silently select anothe
 	preferred.dispose();
 });
 
+test('thread selection checks blocking-wait permission without probing disabled calls', async (t) => {
+	for (const [name, value] of [['crossOriginIsolated', true], ['Worker', class {
+		constructor() { assert.fail('Incapable contexts must not create workers.'); }
+	}]]) {
+		const previous = Object.getOwnPropertyDescriptor(globalThis, name);
+		Object.defineProperty(globalThis, name, { configurable: true, value });
+		t.after(() => {
+			if (previous) Object.defineProperty(globalThis, name, previous);
+			else delete globalThis[name];
+		});
+	}
+	let probes = 0;
+	t.mock.method(Atomics, 'wait', (view, index, expected, timeout) => {
+		probes++;
+		assert.ok(view.buffer instanceof SharedArrayBuffer);
+		assert.deepEqual([view.length, index, expected, timeout], [1, 0, 0, 0]);
+		throw new TypeError('Atomics.wait cannot be called in this context');
+	});
+	const disabled = await createDitherette({ wasm: module, threads: 'disabled' });
+	disabled.dispose();
+	assert.equal(probes, 0);
+	await assert.rejects(createDitherette({ wasm: module, threads: 'required' }), diagnostic('capability', 'threads'));
+	const preferred = await createDitherette({ wasm: module, threads: 'preferred' });
+	assert.equal(preferred.resize(request()).data[0], 17);
+	preferred.dispose();
+	assert.equal(probes, 2);
+});
+
 test('unexpected initialization allocation failures are structured and do not poison later creates', async (t) => {
 	const allocation = t.mock.method(WebAssembly, 'instantiate', async () => {
 		throw new RangeError('injected browser allocation failure');

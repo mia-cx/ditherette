@@ -31,15 +31,34 @@ export type {
 /** Initialize one isolated browser processor. Importing the package itself loads no Wasm or workers. */
 export async function createDitherette(options?: InitOptions): Promise<Ditherette> {
 	const normalized = validateOptions(options);
-	if (normalized.threads === 'required') {
-		throw new DitheretteError(
-			'capability',
-			'threads',
-			'The threaded runtime is not implemented in this package checkpoint.'
-		);
-	}
 	if (typeof WebAssembly === 'undefined' || typeof WebAssembly.instantiate !== 'function') {
 		throw new DitheretteError('capability', 'wasm', 'WebAssembly is unavailable.');
+	}
+	if (normalized.threads !== 'disabled') {
+		let capable = globalThis.crossOriginIsolated === true &&
+			typeof Worker === 'function' && typeof SharedArrayBuffer === 'function' &&
+			typeof Atomics === 'object' && typeof Atomics.wait === 'function';
+		if (capable) {
+			try {
+				// Rayon joins synchronously. Main JS cannot wait, even with shared memory.
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0);
+			} catch {
+				capable = false;
+			}
+		}
+		if (capable) {
+			try {
+				const { createThreaded } = await import('./threads.js');
+				return await createThreaded(normalized);
+			} catch (error) {
+				if (error instanceof DitheretteError && error.code === 'memory-limit') throw error;
+				if (normalized.threads === 'required') {
+					throw new DitheretteError('initialization', 'threads', 'Required threaded initialization is unavailable.');
+				}
+			}
+		} else if (normalized.threads === 'required') {
+			throw new DitheretteError('capability', 'threads', 'Required threaded initialization is unavailable.');
+		}
 	}
 	return createScalar(normalized);
 }

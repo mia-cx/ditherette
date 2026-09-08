@@ -21,8 +21,9 @@
 		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && node scripts/stage-wasm.mjs && tsc",
 		"check": "pnpm check:version && tsc --noEmit",
 		"test:validation": "tsc && node --test tests/validation.test.mjs",
-		"test:interface": "tsc && tsc -p tests/tsconfig.json && node --test tests/validation.test.mjs tests/public.test.mjs tests/quantize.test.mjs tests/fields.test.mjs tests/diffusion.test.mjs tests/yiluoma.test.mjs tests/process.test.mjs",
+		"test:interface": "tsc && tsc -p tests/tsconfig.json && node --test tests/validation.test.mjs tests/public.test.mjs tests/quantize.test.mjs tests/fields.test.mjs tests/diffusion.test.mjs tests/yiluoma.test.mjs tests/process.test.mjs tests/worker-pool.test.mjs",
 		"test:browser": "node --test tests/tarball-browser.test.mjs",
+		"test:threads-browser": "node --test --test-concurrency=1 tests/thread-observer-browser.test.mjs tests/threads-selection-browser.test.mjs tests/threads-ownership-browser.test.mjs tests/threads-failure-browser.test.mjs tests/threads-host-browser.test.mjs",
 		"test:staging": "node --test scripts/stage-wasm.test.mjs",
 		"check:version": "node scripts/check-version.mjs"
 	},

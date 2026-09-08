@@ -46,8 +46,25 @@ export function resizeRecipe(operation) {
 /** Prepare the actual package or website call outside measurement timers. */
 export async function prepareOperation(trial) {
 	const config = trial.case.browser;
+	const execution =
+		typeof DedicatedWorkerGlobalScope !== 'undefined' &&
+		globalThis instanceof DedicatedWorkerGlobalScope
+			? 'host-worker'
+			: 'page';
+	if ((config.execution ?? 'page') !== execution)
+		throw new Error('Browser execution context differs from the declaration.');
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
+	if (
+		config.threads !== undefined &&
+		(!config.threads ||
+			!['disabled', 'preferred', 'required'].includes(config.threads.accepted) ||
+			!['disabled', 'preferred', 'required'].includes(config.threads.candidate) ||
+			config.accepted !== 'package' ||
+			config.candidate !== 'package')
+	)
+		throw new Error('Thread policies require ordinary package calls and valid role policies.');
+	const threads = config.threads?.[trial.role] ?? 'disabled';
 	if (
 		config.progress !== undefined &&
 		(!config.progress ||
@@ -172,11 +189,11 @@ export async function prepareOperation(trial) {
 	if (!response.ok) throw new Error(`Wasm fetch failed: ${response.status}`);
 	const bytes = await response.arrayBuffer();
 	// Load the real lazy factory module before timing. Browser compilation caches are not reset.
-	const preload = await createDitherette({ wasm: bytes });
+	const preload = await createDitherette({ wasm: bytes, threads });
 	preload.dispose();
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
-	const create = () => createDitherette({ wasm: compiled ?? bytes });
+	const create = () => createDitherette({ wasm: compiled ?? bytes, threads });
 	const call = process
 		? (instance) =>
 				backend === 'package-staged'
@@ -488,6 +505,9 @@ export async function runTrial(trial) {
 			settings: trial.case.identity.settings
 		};
 		const observation = {
+			...(trial.case.browser.execution === undefined
+				? {}
+				: { execution: trial.case.browser.execution }),
 			user_agent: navigator.userAgent,
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution

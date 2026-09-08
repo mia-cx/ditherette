@@ -379,6 +379,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         warnings: vec![],
     };
     let browser = BrowserCase {
+        execution: None,
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
         },
@@ -388,6 +389,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         cache: CacheCapability::None,
         measure_nonexact: false,
         progress: None,
+        threads: None,
     };
     let identity = browser
         .operation
@@ -449,6 +451,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         unstable_output: None,
         timing_skipped: None,
         observation: BrowserObservation {
+            execution: None,
             engine: runtime.engine,
             browser_version: runtime.browser.version.clone(),
             node_version: runtime.node.version.clone(),
