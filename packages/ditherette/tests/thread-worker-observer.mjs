@@ -1,10 +1,14 @@
 /** Name real Worker instances so a test-only bootstrap prelude can report their lifetime. */
-export function observeWorkers(group) {
+export function observeWorkers(group, { failAt } = {}) {
 	const OriginalWorker = globalThis.Worker;
 	const workers = [];
 	globalThis.Worker = class extends OriginalWorker {
 		constructor(url, options) {
-			super(url, { ...options, name: `ditherette-test-${group}-${workers.length + 1}` });
+			const ordinal = workers.length + 1;
+			super(url, {
+				...options,
+				name: `ditherette-test-${group}-${ordinal}${ordinal === failAt ? '-fail-' : ''}`
+			});
 			workers.push(this);
 		}
 	};
