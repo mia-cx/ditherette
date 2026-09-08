@@ -127,6 +127,7 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
                     preparation: BrowserPreparation::PrimedInstance,
                     cache: CacheCapability::None,
                     measure_nonexact: false,
+                    progress: None,
                 }),
             )
         } else {

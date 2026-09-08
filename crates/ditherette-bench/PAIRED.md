@@ -117,6 +117,28 @@ Machine identity contains architecture, CPU model, logical CPU count, hostname,
 OS, and kernel. This native coordinator currently requires Linux for host evidence.
 It does not certify unrelated host quiescence or stop other projects' processes.
 
+## Public callback comparisons
+
+Optional `browser.progress` metadata declares each role as `disabled` or `enabled`.
+Omitted metadata preserves historical requests and evidence. This development setting
+is separate from image identity and is never a public package option.
+
+These comparisons require cold, fresh-instance, single complete package calls.
+The enabled role attaches one constant-storage observer before timing. Instance setup,
+observer reset, output/source verification, progress verification, and disposal stay
+outside the timer. Public callback dispatch and the observer's bounded work stay inside.
+Every preflight, warmup, and measured call must finish with valid completion evidence.
+A transient invalid stream or thrown callback fails the trial even if a later call could recover.
+The untimed Process composition clears callback metadata and checks only output semantics.
+
+`progress_integration_plan regression|callbacks DESTINATION HOST_LOAD_NOTES` writes
+the approved S33 plans without running measurements. `regression` compares S32/S33
+with callbacks disabled. `callbacks` compares the same S33 artifact with callbacks
+disabled/enabled. Each plan contains five reused cold workloads, two role pairs,
+20 single-call samples, 50 ms warmup, and a 10-second cap. Three browser engines
+across both plans require 120 serial workers. Artifact preparation and exclusive
+measurement follow the existing controls above.
+
 ## Evidence and decisions
 
 Required cases retain full fixture/settings/artifact digests, dimensions, recipe,

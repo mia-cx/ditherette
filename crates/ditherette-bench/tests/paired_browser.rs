@@ -140,6 +140,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
         measure_nonexact: false,
+        progress: None,
     };
     let case = &mut prepared.experiment.cases[0];
     case.identity = browser
@@ -240,6 +241,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         trial.reference.implementation.artifact = trial.output.implementation.artifact.clone();
         trial.browser = Some(BrowserEvidence {
             measure_nonexact: false,
+            progress: None,
             assets: assets.tree.digest,
             runtime: runtime_digest(&runtime).unwrap(),
             backend: browser.backend(trial.role),
@@ -334,6 +336,52 @@ fn typed_browser_calls_share_exact_three_way_gates() {
         data[0] += 1;
     }
     assert_eq!(compare(&prepared, &trials).gate, Gate::Incorrect);
+}
+
+#[test]
+fn progress_roles_preserve_historical_json_and_bind_trial_evidence() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let browser = case.browser.as_mut().unwrap();
+    let historical = serde_json::to_value(&*browser).unwrap();
+    assert!(historical.get("progress").is_none());
+    let decoded: BrowserCase = serde_json::from_value(historical.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+    let roles = ProgressRoles {
+        accepted: ProgressMode::Disabled,
+        candidate: ProgressMode::Enabled,
+    };
+    browser.progress = Some(roles);
+    browser.accepted = BrowserBackend::Package;
+    browser.preparation = BrowserPreparation::FreshInstance;
+    browser.cache = CacheCapability::Roles {
+        accepted: PreparationCapability::ImageStages,
+        candidate: PreparationCapability::ImageStages,
+        sample_prime: None,
+    };
+    case.accepted_subject = browser.operation.subject(BrowserBackend::Package).into();
+    case.measurement.mode = SampleMode::SingleCall;
+    case.measurement.application_cache = ApplicationCache::Cold;
+    validate_case(case).unwrap();
+    for trial in &mut trials {
+        trial.measurement = case.measurement.clone();
+        trial.output.implementation.subject = case.accepted_subject.clone();
+        let evidence = trial.browser.as_mut().unwrap();
+        let historical = serde_json::to_value(&*evidence).unwrap();
+        assert!(historical.get("progress").is_none());
+        let decoded: BrowserEvidence = serde_json::from_value(historical.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+        evidence.backend = BrowserBackend::Package;
+        evidence.preparation = BrowserPreparation::FreshInstance;
+        evidence.cache = case.browser.as_ref().unwrap().cache;
+        evidence.progress = Some(roles);
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    trials[0].browser.as_mut().unwrap().progress = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    let case = &mut prepared.experiment.cases[0];
+    case.measurement.application_cache = ApplicationCache::Warm;
+    assert!(validate_case(case).is_err());
 }
 
 #[test]

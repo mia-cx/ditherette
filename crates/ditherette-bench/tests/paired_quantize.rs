@@ -120,6 +120,7 @@ fn native_and_public_quantize_scopes_fail_closed() {
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
         measure_nonexact: false,
+        progress: None,
     });
     assert!(validate_case(case).is_err());
     case.native = None;

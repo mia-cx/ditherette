@@ -228,6 +228,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 candidate: BrowserBackend::Package,
                 preparation: BrowserPreparation::PrimedInstance,
                 cache: CacheCapability::None,
+                progress: None,
                 // Approved inherited area rounding diagnostic. The frozen gate remains nonexact.
                 measure_nonexact: matches!(resize, ResizePolicy::Area {}),
             }),

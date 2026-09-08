@@ -136,6 +136,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                     preparation: BrowserPreparation::PrimedInstance,
                     cache: CacheCapability::None,
                     measure_nonexact: false,
+                    progress: None,
                 }),
                 native: (!public).then_some(native),
             });
