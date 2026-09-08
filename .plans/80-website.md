@@ -143,6 +143,11 @@ source/test evidence remain intact. Local installed dependencies remain availabl
 Recreate package artifacts with the documented build, or extract the retained
 approved tarball's `package/dist` into `packages/ditherette` for the same website checks.
 
+Final parent restack: S30 is `f408bc99a80d3c83b6caee0b5c1d19868f0db876`.
+The remaining parent diff after `aa4f78d1` contains conformance tests and provenance
+notes only. Website content and prior validation remain unchanged. The rebased
+implementation checkpoint is `fe05d444e11df8b2bdb79944e1124fdd2a9cb1b8`.
+
 ## Scope limits
 
 S39 owns supersession, faithful fallback, and progress forwarding. S31 owns runtime
