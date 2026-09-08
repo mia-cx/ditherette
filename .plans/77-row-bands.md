@@ -7,7 +7,7 @@ Initial parent is S34 capability checkpoint `6296c66babdbef8967f7681089888999943
 The coordinator explicitly authorizes this bounded start while S34 finishes loader error handling and cleanup.
 Join its final validated head before S35 delivery or artifact preparation.
 Join `92768069fe1a4cbdecdfd79795f12cd08b930a11` includes validated S34 delivery `3863cadce82b4d272a1730f3ebad828b18ac4434`.
-Its report-only PR head remains pending.
+Final S34 report-only head `d4531667e1158c2068f30614f40c9d39f8c5313e` joins through `d137603a88ac0e061c99cefc316728baffd918e1`.
 
 Own production resize/color row adapters and policies, focused native tests, and S35 benchmark subjects.
 Preserve scalar kernels, packed nearest, exact integer area, accepted fractional arithmetic, and shared convolution and mip plans.
@@ -19,8 +19,9 @@ Public color continues to use packed triplets with byte alpha. Direct quantizati
 - [x] Extend shared convolution with caller-owned support-range scratch, including overlapping support across bands.
 - [x] Add complete worker/support capacity preflight and disjoint execution through existing tiling models.
 - [x] Integrate those adapters into private complete-call preparation with budget-based scalar fallback.
-- [ ] Extend benchmark subjects for the budgeted path and retain caller-thread progress.
-- [ ] Join final S34 and validate actual installed scalar/threaded calls before exclusive crossover evidence.
+- [x] Extend benchmark subjects for the budgeted path and retain caller-thread progress.
+- [x] Join final S34 report-only PR head.
+- [ ] Validate actual installed scalar/threaded calls before exclusive crossover evidence.
 - [ ] Select only freshly measured exact configurations, or retain scalar, and prepare the unmerged PR.
 
 ## Test seams and evidence
@@ -99,3 +100,20 @@ Native scalar and threaded library suites pass 35 tests each.
 The complete-call fixture checks all seven filters, worker counts 1/2/4, exact scalar bytes,
 caller-thread progress, failed callback publication, warm changed-source reuse, and scalar-budget fallback.
 The capacity-charge fixture confirms complete preparation releases idle scratch before LRU eviction.
+
+## Benchmark candidate handoff
+
+Nine `candidate:resize:<filter>:complete-call` subjects cover nearest, area, bilinear, and both convolution support policies.
+They use the actual private Processor call with cold application state, source snapshot, hashing, full preparation, and output copy.
+Optional existing `tile_policy` height/count parameters select bounded bands. The same subject without those parameters remains scalar.
+These native adapters do not claim installed-browser boundary or warm-cache evidence.
+
+The benchmark-only `privateExecutionPolicy` control preserves other stage selections.
+Sequential stage 0 and stage 1 calls can therefore configure combined resize/indexed candidates.
+A complete-process fixture sets both; rerun it after the coordinator joins S36 to exercise both accelerated stages.
+
+Focused native threaded validation passes 37 library tests plus 31 integration tests.
+Integration targets cover budgeted benchmark registration, complete process, progress, convolution reference equality,
+caller scratch, fallible preparation, and tiling. Scalar and threaded complete-call results are exact in all nine benchmark subjects.
+Only `target/compiler` was used. No Wasm builds or benchmark measurements ran.
+The coordinator owns artifact builds, exclusive host-worker crossover evidence, policy acceptance, and PR handoff.

@@ -84,6 +84,12 @@ struct Plan {
 }
 
 impl Processor {
+    /// Observe the private candidate without changing other stage selections.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn execution_policy(&self) -> super::execution::ExecutionPolicy {
+        self.preparation.execution_policy()
+    }
+
     /// Development-only scheduling override. Public package settings never expose execution policy.
     #[cfg(any(test, feature = "bench-subjects"))]
     pub fn set_execution_policy(

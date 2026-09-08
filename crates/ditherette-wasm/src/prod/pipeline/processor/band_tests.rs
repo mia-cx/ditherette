@@ -54,6 +54,79 @@ impl Boundary for Io {
     }
 }
 
+impl crate::prod::pipeline::quantize::QuantizeBoundary for Io {
+    type Output = Vec<u8>;
+    fn progress(&mut self) -> Option<&mut dyn Callback> {
+        Boundary::progress(self)
+    }
+    fn input_len(&mut self) -> Result<usize, Failure> {
+        Boundary::input_len(self)
+    }
+    fn copy_input(&mut self, output: &mut [u8]) -> Result<(), Failure> {
+        Boundary::copy_input(self, output)
+    }
+    fn complete(
+        &mut self,
+        output: &[u8],
+        dimensions: ImageDimensions,
+        _: crate::prod::pipeline::quantize::IndexedMetadataRef<'_>,
+    ) -> Result<Vec<u8>, Failure> {
+        Boundary::complete(self, output, dimensions)
+    }
+}
+
+#[test]
+fn combined_resize_and_indexed_candidates_preserve_complete_process() {
+    use crate::{image::contracts::PaletteEntry, prod::pipeline::process::ProcessRequest};
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+    ];
+    let request = ProcessRequest {
+        source_width: 71,
+        source_height: 53,
+        palette: &palette,
+        recipe: RecipeV1 {
+            version: 1,
+            output: Output {
+                width: 19,
+                height: 17,
+                resize: ResizePolicy::Lanczos3 {
+                    anchor: Anchor::Center,
+                    support: Support::ScaleAware,
+                },
+            },
+            alpha: AlphaPolicy::Premultiplied {},
+            matching: MatchPolicy::SrgbEuclidean,
+            dither: DitherPolicy::None {},
+        },
+    };
+    let mut io = Io {
+        input: (0..71 * 53 * 4).map(|n| (n * 73) as u8).collect(),
+        events: Vec::new(),
+        caller: std::thread::current().id(),
+        fail: false,
+    };
+    let expected = Processor::new(1 << 20, 0)
+        .unwrap()
+        .process(request, &mut io)
+        .unwrap();
+    let mut candidate = Processor::new(1 << 20, 0).unwrap();
+    let mut execution = policy(3, 4);
+    execution.indexed = execution.resize;
+    candidate.set_execution_policy(execution).unwrap();
+    io.events.clear();
+    assert_eq!(candidate.process(request, &mut io).unwrap(), expected);
+    assert_eq!(
+        io.events
+            .iter()
+            .filter(|event| event.stage == Stage::Resize)
+            .count(),
+        3
+    );
+    assert!(candidate.peak_capacity_bytes() <= 1 << 20);
+}
+
 fn policy(height: u32, workers: u32) -> ExecutionPolicy {
     ExecutionPolicy {
         resize: Some(RowBandPolicy {

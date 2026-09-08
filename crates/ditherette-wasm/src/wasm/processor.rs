@@ -83,10 +83,7 @@ pub fn private_execution_policy(
     active_workers: u32,
     pool_size: u32,
 ) -> u32 {
-    use crate::prod::{
-        pipeline::execution::{ExecutionPolicy, RowBandPolicy},
-        tiling::WorkerBudget,
-    };
+    use crate::prod::{pipeline::execution::RowBandPolicy, tiling::WorkerBudget};
     let mut processor = match take_ready() {
         Ok(processor) => processor,
         Err(error) => return status(error),
@@ -96,7 +93,7 @@ pub fn private_execution_policy(
         workers: WorkerBudget::new(pool_size),
         active_workers,
     });
-    let mut policy = ExecutionPolicy::default();
+    let mut policy = processor.execution_policy();
     let result = match stage {
         0 => {
             policy.resize = band;

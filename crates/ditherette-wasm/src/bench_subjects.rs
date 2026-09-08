@@ -12,6 +12,7 @@ pub mod process;
 pub mod quantize;
 pub mod reference;
 mod resize_budgeted;
+mod resize_calls;
 pub mod scores;
 mod trilinear;
 pub mod verification;
@@ -194,6 +195,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
         ),
     ];
     subjects.extend(resize_budgeted::subjects());
+    subjects.extend(resize_calls::subjects());
     subjects.extend(reference::subjects());
     subjects.extend(quantize::subjects());
     subjects.extend(scores::subjects());
