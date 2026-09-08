@@ -21,7 +21,7 @@ use crate::{
 use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
 
-/// Private field tags: Bayer 0, random 1. The field parameter is matrix width or the u32 seed.
+/// Private field tags: Bayer 0, random 1, blue noise 2. The parameter is width, seed, or zero.
 /// All raw numbers enter as f64 so validation precedes any truncation or f32 narrowing.
 #[wasm_bindgen(js_name = privatePerturb)]
 pub fn private_perturb(
@@ -187,12 +187,7 @@ fn parse_policy(
             }
         }
         1.0 => return Err(invalid(ErrorPath::PerturbField)),
-        2.0 => {
-            return Err(Failure::new(
-                ErrorCode::UnsupportedOperation,
-                ErrorPath::PerturbField,
-            ))
-        }
+        2.0 if parameter == 0.0 => Field::BlueNoise {},
         _ => return Err(invalid(ErrorPath::PerturbField)),
     };
     let space = match space {

@@ -113,7 +113,8 @@ export type WorkingSpace =
 /** Palette-free fields supported by this checkpoint. Seeds are unsigned 32-bit integers. */
 export type Field =
 	| { readonly algorithm: 'bayer'; readonly size: '2' | '4' | '8' | '16' }
-	| { readonly algorithm: 'random'; readonly seed: number };
+	| { readonly algorithm: 'random'; readonly seed: number }
+	| { readonly algorithm: 'blue-noise' };
 
 export type Placement =
 	| { readonly mode: 'everywhere' }

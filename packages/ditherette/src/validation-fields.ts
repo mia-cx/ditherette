@@ -55,9 +55,19 @@ function normalizePolicy(value: unknown, path: string) {
 			);
 		fieldTag = 1;
 		parameter = seed;
+	} else if (algorithm === 'blue-noise') {
+		for (const key of ['size', 'seed'])
+			if (Object.hasOwn(inputField, key))
+				throw new DitheretteError(
+					'invalid-settings',
+					`${path}.field.${key}`,
+					'Blue noise has no size or seed control.'
+				);
+		fieldTag = 2;
+		parameter = 0;
 	} else
 		throw new DitheretteError(
-			algorithm === 'blue-noise' ? 'unsupported-operation' : 'invalid-settings',
+			'invalid-settings',
 			`${path}.field.algorithm`,
 			'This field is not implemented in this package checkpoint.'
 		);
