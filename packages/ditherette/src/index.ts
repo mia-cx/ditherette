@@ -6,6 +6,11 @@ import type { Ditherette, InitOptions } from './types.js';
 export { DitheretteError } from './errors.js';
 export type { ErrorCode } from './errors.js';
 export type {
+	AlphaPolicy,
+	IndexedImage,
+	Matching,
+	PaletteEntry,
+	QuantizeRequest,
 	Ditherette,
 	InitInput,
 	InitOptions,

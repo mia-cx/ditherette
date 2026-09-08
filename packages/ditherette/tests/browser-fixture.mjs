@@ -130,6 +130,79 @@ export async function browserChecks(wasmUrl) {
 			equal(Array.from(average.data), expected, 'convolution result durability');
 		}
 	}
+	const quantizeRequest = {
+		version: 1,
+		source: { width: 2, height: 1, data: new Uint8Array([255, 0, 0, 128, 17, 31, 53, 0]) },
+		palette: [
+			{ kind: 'color', rgb: [255, 0, 0] },
+			{ kind: 'color', rgb: [0, 0, 0] },
+			{ kind: 'transparent' }
+		],
+		alpha: { mode: 'preserve', threshold: 127.9999999 },
+		matching: 'srgb-euclidean'
+	};
+	let quantizeCases = 0;
+	let savedIndexed;
+	for (const matching of [
+		'srgb-euclidean',
+		'linear-rgb-euclidean',
+		'oklab-euclidean',
+		'cielab-euclidean',
+		'ycbcr-euclidean'
+	]) {
+		const indexed = processor.quantize({ ...quantizeRequest, matching });
+		equal([...indexed.indices], [0, 2], `${matching} indices`);
+		equal(
+			[...indexed.palette.rgba],
+			[255, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 0],
+			`${matching} palette`
+		);
+		equal(indexed.palette.transparentIndex, 2, 'transparent index');
+		equal(indexed.warnings, [], 'quantize warnings');
+		savedIndexed = indexed;
+		quantizeCases++;
+	}
+	const transparent = processor.quantize({
+		...quantizeRequest,
+		palette: Array.from({ length: 257 }, () => ({ kind: 'transparent' }))
+	});
+	equal(
+		transparent.warnings,
+		[
+			{
+				code: 'palette-truncated',
+				message: 'Palette was truncated to 256 entries for indexed PNG export.'
+			},
+			{
+				code: 'transparent-only',
+				message: 'Only Transparent is enabled; every output pixel is transparent.'
+			}
+		],
+		'authoritative indexed warnings'
+	);
+	await error(
+		() => processor.quantize({ ...quantizeRequest, matching: 'oklch-hue-arc' }),
+		'unsupported-operation',
+		'matching'
+	);
+	await error(
+		() =>
+			processor.quantize({ ...quantizeRequest, alpha: { mode: 'premultiplied', threshold: 0 } }),
+		'invalid-settings',
+		'alpha.threshold'
+	);
+	const set = Uint8Array.prototype.set;
+	let copies = 0;
+	try {
+		Uint8Array.prototype.set = function (...args) {
+			if (++copies === 3) throw new RangeError('indexed palette copy failure');
+			return Reflect.apply(set, this, args);
+		};
+		await error(() => processor.quantize(quantizeRequest), 'wasm-memory-unavailable', 'output');
+	} finally {
+		Uint8Array.prototype.set = set;
+	}
+	equal([...processor.quantize(quantizeRequest).indices], [0, 2], 'quantize recovery');
 	const saved = processor.resize(request());
 	const savedBytes = Array.from(saved.data);
 	const larger = request();
@@ -139,6 +212,9 @@ export async function browserChecks(wasmUrl) {
 	processor.dispose();
 	processor.dispose();
 	equal(Array.from(saved.data), savedBytes, 'durability after reuse/disposal');
+	equal([...savedIndexed.indices], [0, 2], 'indexed durability after resize growth/disposal');
+	equal(savedIndexed.palette.rgba[0], 255, 'indexed palette durability');
+	await error(() => processor.quantize(quantizeRequest), 'disposed', 'instance');
 	await error(() => processor.resize(request()), 'disposed', 'instance');
 	await error(() => createDitherette({ threads: 'required' }), 'capability', 'threads');
 	await error(() => createDitherette({ memoryLimitBytes: 1 }), 'memory-limit', 'memoryLimitBytes');
@@ -194,6 +270,7 @@ export async function browserChecks(wasmUrl) {
 	return {
 		anchors: anchors.length,
 		convolutionCases,
+		quantizeCases,
 		customInputs: inputs.length,
 		scalarWithoutIsolation: true
 	};
