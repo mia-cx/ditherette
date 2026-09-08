@@ -11,7 +11,8 @@ S26 contributes its benchmark adapters, repaired field verifier, and completed b
 - [x] Register the actual fixed blue-noise lookup and complete Processor/public adapters; verify exact frozen outputs through the full verifier.
 - [x] Declare 68 serial workers and export matching installed-package fixtures; pass untimed native checks.
 - [x] Commit clean code and prepare independent fresh native/public role builds with all jobs drained.
-- [ ] Resolve the cross-target frozen-reference assumption below before passing public conformance or preparing immutable pair snapshots.
+- [x] Use an independently identified frozen-only Wasm oracle for browser preflight; pass exact public conformance while retaining native diagnostics.
+- [ ] Coordinator rebuilds fresh role artifacts with this protocol and prepares immutable pairs after joining the remaining slices.
 
 ## Fixed scope
 
@@ -92,6 +93,59 @@ from `94.50003118629185` to `94.49999517762998`, which explains the final-byte d
 This localizes the observed mismatch to shared forward color math, without changing the blue-noise lookup.
 
 Keep the native-frozen fixtures and all mismatches intact. No tolerance, fixture replacement, or production fix has been applied.
-The coordinator is independently testing the unchanged frozen oracle compiled to Wasm before choosing the reference protocol.
+The coordinator independently confirmed that the unchanged frozen Wasm oracle matches the complete actual 8580-byte frame.
 Immutable pair snapshots and all 68 measurement workers remain unstarted.
-All preparation/diagnostic jobs are drained; the S23 scalar/threaded caches have returned to coordinator ownership.
+
+## Same-target reference protocol
+
+`crates/ditherette-bench-oracle` is a standalone, unpublished test crate.
+Its semantic modules reference only the frozen spec and image trees, with no core/production crate dependency.
+Its typed adapter covers resize, quantize, perturb, separable, and the S28/S29 diffusion/Yliluoma wire settings.
+Algorithms remain in the unchanged frozen modules.
+The adapter independently validates the source and settings and computes the existing complete `CaseIdentity`.
+Native benchmark references and identity serialization remain unchanged.
+
+Fresh public preparation builds the oracle into the existing `scripts/oracle/` asset closure, outside the npm tarball.
+The existing build provenance binds every tracked input and emitted script/Wasm byte.
+An oracle manifest uses the same `BuildFile` records to bind its exact inputs to that complete provenance.
+Preparation checks frozen content, resolved dependency versions/features/checksums, compiler/binding-tool hashes, standard-library hashes, and emitted files.
+The trusted manifest checker requires the exact release profile and rejects profile overrides, patches, workspaces, and build scripts.
+Oracle-local Cargo configuration and toolchain redirects fail before metadata.
+Both local oracle/API crates rebuild; registry caches remain intact.
+The explicit `frozen-build` feature reproduces the approved core-Wasm Serde JSON features without changing the separately frozen native benchmark feature closure.
+
+The browser evaluates the oracle in a separate disposable context.
+That context closes before actual package initialization, preflight, warmup, or sample timers.
+The transport retains the oracle's full case identity and exact output alongside actual output.
+Rust rejects identity drift and uses the verified same-target reference for exact bytes, indices, palette, transparency, and warning metadata.
+Mismatch/instability bundles use that same reference. The response bound reserves three full outputs for reference plus both unstable actual outputs.
+Each new transport also writes `reference-diagnostics.json` with native and Wasm references and the bound artifact identity.
+No expected-output override or numeric tolerance was added.
+
+## Protocol validation and handoff
+
+Protocol code checkpoint is `aee348cb4e088127a3780bbca66760ed3370cf25`.
+The missing-Wasm-reference regression failed on the old protocol before implementation.
+Focused checks cover native identity/output parity, all current resize identities, diffusion/Yliluoma typed mapping,
+source/settings/semantic identity mutation, one-byte mismatch preservation, three-output size bounds,
+frozen/source/binary substitution, local build redirects, profile overrides, and scoped fresh-build cleanup.
+
+Thirty-two focused Rust tests and 29 Node protocol/preparation tests pass, including the enabled profile-mutation test.
+Rust bins/examples checks and formatting pass. Frozen content/compiler/dependency/syntax checks pass with unchanged trusted policy.
+Three engines pass 47 quantize and 16 field fixtures through primed/fresh actual installed-package adapters,
+including 12 actual `quantize(perturb(...))` compositions per engine.
+The suite asserts every oracle context is closed before creating the package context.
+
+Untimed validation artifacts remain under `target/s27-preparation/`:
+
+- `oracle-validation-03/` contains the frozen-only JS/Wasm and manifest; Wasm SHA-256 is `e3049543fbfefee45608e4893ebd98e2e3d0647f1187e41683d0aad2b91279df`.
+- `oracle-browser-evidence-03/{chromium,firefox,webkit}-references.json` retains full native/target references, engine versions, oracle manifest, and installed tarball digest.
+- `*-identified.json` fixtures add full native identities without replacing the original fixture files or outputs.
+
+These checks use the unchanged retained S27 installed package. They are untimed validation, not fresh measurement provenance.
+The earlier `e395b162` role artifacts predate this protocol and must be rebuilt before new trials.
+No immutable pair snapshot or measurement starts here; the coordinator owns fresh role preparation and the eventual quiet phase.
+When joining S28/S29, preserve their indexed-output classification for both Diffusion and Yliluoma.
+Their full fixture suites and fresh joined-role provenance remain integration checks, beyond the typed mapping tests here.
+All build and browser jobs are drained; S23 scalar/threaded caches have returned to the coordinator.
+The coordinator also holds new snapshots for a separate output-stability evidence fix from PR #113.
