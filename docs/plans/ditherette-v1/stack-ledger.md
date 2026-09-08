@@ -160,6 +160,14 @@ S31 availability is restored. S32 removes its blocker after joining and validati
 S38 fix `0305456bc25259a92d46ded245ae09aaf407be07` caps persisted adaptive radii at the package maximum.
 All 51 mapper/worker tests, focused lint, and CI pass. Its review thread is resolved; no package, kernel, or UI changes occur.
 These three owners have disjoint source/test/protocol responsibilities. S31 compiler caches are no longer assigned to any agent.
+S32 runtime `d638f87c3a16824ef52964bbb611ef91b173f2ee` joins corrected S31 and benchmark protocol `d51a70a2daf054357d16ea66b235da3733c02888`.
+Full native tests and the trusted frozen guard pass. Image-stage entries reuse the existing shared store and landed kernels.
+Fresh accepted artifacts bind `d51a70a2`; candidate artifacts bind `d638f87c`. Test-only follow-ups do not change those identities.
+Accepted installed conformance passes Chromium, Firefox, and WebKit. Candidate final installed conformance is completing.
+Four immutable trial snapshots are prepared under `v1-s32-stages/target/s32-trial-01`; no measurements have started.
+Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
+Issue #73's corrected S31 blocker is removed after ancestry and native validation.
+Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.

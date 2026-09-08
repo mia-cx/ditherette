@@ -147,6 +147,8 @@ S01 establishes the inherited port as the stack anchor. At drafting time, the re
 
 When a parent changes, restack descendants, verify their actual dependency ancestry, and rerun checks invalidated by the change. Preserve the frozen spec content checkpoint through rebases.
 
+Complete the implementation stack before routine PR review or babysitting. During implementation, fix blockers, correctness failures, and architectural issues that would propagate through descendants. Defer other review findings to the later review pass.
+
 After each completed PR implementation, remove its rebuildable Rust compiler outputs. Rebuild them when review needs them.
 Before cleanup, drain owned jobs and resolve target symlinks against the coordinator's active cache assignments.
 Preserve source, benchmark reports, immutable trial snapshots, and other retained evidence, including evidence stored inside a target directory.
