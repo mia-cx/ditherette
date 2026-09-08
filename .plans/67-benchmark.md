@@ -122,3 +122,36 @@ No PR, merge, publishing, deployment, or issue closure belongs to this benchmark
 
 The experiment declaration test passed, bringing the focused Rust total to 22.
 Rust formatting, JavaScript formatting, `git diff --check`, and bins/examples validation pass.
+
+## Post-measurement threshold verifier repair
+
+The coordinator completed S26 trial 01 and reaped all 208 workers before authorizing this repair.
+Its native report rejected five threshold cases because the verifier required a working space for every non-resize operation.
+Palette-independent `FieldEvaluation` has no working space. The adapter's identity was correct.
+The verifier now exempts that operation alongside resize. Every color-dependent operation still requires its explicit space.
+
+The field adapter test reproduced the exact failure through `verify_three_way` before the fix.
+It now verifies all five field grids and both adaptive masks, and rejects a one-bit score difference.
+The shared verifier test confirms the space requirement for all eight color-dependent operation tags.
+Validation passed 17 focused field-adapter, verification, and metric-score tests.
+
+The opt-in `retained_s26_native_results_reverify_without_running_workers` test reads the original prepared manifest,
+report, and 100 native result files. It calls the unchanged paired comparison on retained outputs and samples.
+An explicit replay passed. All five threshold gates become `Pass`; all 25 native cases pass.
+The other twenty case reports remain unchanged. Sample arrays, medians, ratios, and noise gates remain unchanged.
+Browser outcomes and candidate selection remain the coordinator's responsibility.
+
+The derived report is `target/s26-protocol-validation/native-reverified.json` in this worktree.
+Its SHA256 is `89064e2f3f6c1defe88a31022a1d8f3f271c1420c3f394cd3890643850546992`.
+It includes the original 102 input-file digests and verifier/comparison/replay source digests.
+The replay refuses to overwrite a report or write inside the immutable trial root.
+All retained input digests matched after replay. No worker, processing call, or collector ran.
+
+For read-only replay, set `DITHERETTE_S26_RETAINED_ROOT` to the coordinator's `target/s26-trial-01` directory and run:
+
+```sh
+cargo test --manifest-path crates/ditherette-bench/Cargo.toml --locked --test field_adapters retained_s26_native_results_reverify_without_running_workers -- --ignored --exact --nocapture
+```
+
+Set `DITHERETTE_S26_REVERIFIED_REPORT` only to save a new derived report outside that root.
+Use the assigned native benchmark target. Preserve the original report and all measurement provenance.
