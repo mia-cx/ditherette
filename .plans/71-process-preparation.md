@@ -1,7 +1,9 @@
 # S30 end-to-end process preparation
 
-Issue #71 completes the fifth public method. The runtime implementation is
-validated; its benchmark handoff and eventual PR remain separate work.
+Issue #71 completes the fifth public method. Runtime, adapters, final installed
+conformance, and the bounded measurement trial are complete. The implementation
+retains exact staged-production behavior, including inherited resize differences.
+The [measurement report](71-benchmark-results.md) owns timings and release limitations.
 
 ## Start condition and authority
 
@@ -65,12 +67,12 @@ coordinator and reviewed S28/S29 code, not a substitute for the actual join.
   including indices, ordered palette, transparency, warnings, and durable output.
   Retain independent frozen comparisons and any inherited resize differences.
   Do not change a landed kernel or the frozen oracle to erase those differences.
-- [ ] Add complete-call native/public benchmark adapters and extend the existing
+- [x] Add complete-call native/public benchmark adapters and extend the existing
   identified frozen-Wasm oracle with the frozen process composition. Declare a
   bounded, filter-specific trial before changing the baseline. Measure serially
   only after all agents, builds, and tests drain. Keep exact wins only.
-- [ ] Run focused integrated native, private-boundary, installed-tarball, and
-  three-engine checks. Open an unmerged PR against the documented parent/join.
+- [x] Run focused integrated native, private-boundary, installed-tarball, and
+  three-engine checks. Prepare the unmerged PR against the documented parent/join.
   Record dependency ancestry, artifact identities, measurements, and outstanding
   gates. The coordinator owns the slice table, ledger, and cache cleanup.
 
@@ -166,15 +168,59 @@ WebKit uses the retained executable at
 `.worktrees/v1-s20-worker/target/s20-webkit-alias/webkit` via
 `DITHERETTE_TEST_WEBKIT_EXECUTABLE`.
 
-Separate agents own process benchmark registrations and the identified
-frozen-Wasm Process extension. This runtime suite proves staged browser equality;
-Process-specific frozen browser evidence belongs to that benchmark handoff.
-No S30 measurement or optimization has run in this worktree. Return the assigned
-S24 compiler caches to the coordinator after jobs drain; preserve every artifact.
+That initial validation predates the joined benchmark and Process oracle.
+The final evidence below supplements it without replacing its artifacts.
 
-The public recipe follows the frozen version-one shape, including its serialized
-`match` key. Processing errors need recipe-relative paths where applicable.
-Check caller getters and reentry before raw settings access, as current methods do.
+## Final integrated evidence
+
+Measured source is `e5aae7bf0e1761af2f970b6da75d34cf3a813323`.
+It joins benchmark/oracle checkpoint `834e882f95bb042b8356b324ef18343ef0ad1c52`
+without changing runtime, private/public, spec/image, or freeze-policy bytes from
+`587339793cf70429b673e888a89d86a332541693`. The immediate PR base is
+`impl/v1-s30-base` at `22b6dd78a6e552596c34aa9e693ad74850426b23`.
+The required merge-preserving rebase keeps all six delivered prerequisites.
+Changes after measured source are documentation only; prior runtime checks remain valid.
+
+The fresh final tarball and scalar/threads hashes equal the initial artifacts above.
+The final Process oracle hash is
+`300f61644c4b7757d1ad80b97c515121a5ad241fa0051e9827e448f0067ffb64`.
+`target/s30-trial-01/public/build-provenance.json` binds 1,122 tracked inputs,
+the package, oracle, tools, and complete artifact inventories to measured source.
+The full trusted S18 guard passes that source with the unchanged frozen digest.
+
+Final installed conformance retains 431 independently identified frozen references
+and two area-attribution probes per browser. Both fresh and primed instances
+produce exact Process/staged output for all eight declared pipelines in each engine.
+The area case differs from frozen Process at seven indices. Its landed resize
+differs in 125 RGBA bytes, each by one; frozen processing on those actual resized
+bytes explains the entire indexed difference. Native/Wasm frozen references agree
+for these Process fixtures. The separate blue-noise Oklab target difference remains
+in diagnostics. No frozen output, tolerance, or production kernel changed.
+
+The coordinator ran 128 serial workers and retained 2,504 samples, with maximum
+live workers equal to one and all children reaped. All concrete Process/staged
+paired outputs are exact. All four aggregate gates remain `Incorrect` because of
+the inherited area difference. Five other case/runtime timing gates are inconclusive;
+none confirms a slowdown above 10%. This is composition-overhead evidence, not
+TypeScript parity, a new optimization selection, or full release acceptance.
+S41 owns unresolved timing evidence and broader release comparisons.
+
+The final runtime snapshots retain Chromium 147.0.7727.15, Firefox 148.0.2,
+WebKit 26.4, Node 24.19.0, and Playwright 1.59.1. All runtime inventories,
+permissions, executable digests, and aliases were revalidated before and after
+copying. Firefox uses the retained S26 closure, never the live locked installation.
+WebKit retains 18 hardlink aliases. `browser-sources/` records provenance and the
+exact-f32 serialization receipt; complete case identities remain unchanged.
+
+## Compiler cleanup handoff
+
+All owned jobs are drained. The coordinator owns cleanup after PR filing.
+Return `/home/mia/mia-cx/ditherette/.worktrees/v1-s24-quantize/crates/ditherette-wasm/target`
+and its `scalar` and `threads` children. The public helper also builds the independent
+oracle, its API dependency, and profile checker inside that same `scalar` target.
+The S30 worktree's ordinary ignored core target contains only variant links to
+these assigned directories. Preserve all `target/s30-validation-01` and
+`target/s30-trial-01` artifacts, snapshots, reports, and copied binaries.
 
 ## Scope limits
 
