@@ -84,7 +84,7 @@ Rust tests/examples also pass a locked compilation check. Historical role JSON o
 The matrix generator reuses the S31 source/palette helpers and comparable Lab76, Lanczos3, and Process cases.
 Five untimed example tests pass, including every native prime/measured output and the isolated oracle's prime derivation.
 The protocol guide documents per-sample ownership, timing scope, and historical compatibility.
-Artifact preparation, real browser execution, cache-hit evidence, and measurements remain coordinator-owned follow-up work.
+Artifact preparation, real browser execution, cache-hit evidence, and measurements were coordinator-owned follow-up work.
 
 Independent review found two full-worker protocol failures after the corrected S31 parent joined.
 The untimed Process counterpart now changes `primed-sample` to `fresh-instance` when removing cache metadata.
@@ -92,3 +92,11 @@ The strict Rust transport explicitly retains optional frozen prime output, while
 Both regressions failed before their fixes. Full `runTrial` uses a fake package and clock, without performance measurements.
 Its emitted JavaScript record passes Rust deserialization and preserves prime evidence on serialization.
 Focused checks pass 41 Node tests and 24 Rust browser-protocol/worker tests. All jobs drained; no artifact builds ran.
+
+## Final bounded trial
+
+The coordinator completed the declared 128-worker matrix. Read [the results](73-benchmark-results.md) before planning any follow-up.
+All 64 role pairs are exact, but all four overall performance gates regress.
+The report preserves seven confirmed cold regressions as S41 release blockers and five inconclusive cases.
+No retry, optimization loop, or promotion follows this required-functionality slice.
+Accepted and candidate measured sources, full ratios, provenance hashes, and cleanup exclusions are in the report.

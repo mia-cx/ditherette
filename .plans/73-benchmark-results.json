@@ -1,0 +1,988 @@
+{
+  "schema": "ditherette-s32-measurement-report-v1",
+  "measured_revisions": {
+    "accepted": "d51a70a2daf054357d16ea66b235da3733c02888",
+    "candidate": "d638f87c3a16824ef52964bbb611ef91b173f2ee"
+  },
+  "delivery_conformance_head": "59b5a004c98c4cff255b30f51025d8ec8143786d",
+  "required_functionality": true,
+  "promoted": false,
+  "release_status": "blocked-until-S41-cold-regressions-resolved",
+  "evidence_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s32-stages/target/s32-trial-01",
+  "engines": [
+    {
+      "engine": "native",
+      "gate": "regression",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "started": 32,
+      "reaped": 32,
+      "max_live_workers": 1,
+      "worker_samples": 640,
+      "warmup_calls": 3243,
+      "start_unix_ns": "1788883074602821491",
+      "end_unix_ns": "1788883078055859791",
+      "results_inventory_sha256": "c3d8be89535841743ca492511fe1e38dceba164f18d02421b9198a5148220d32",
+      "evidence": [
+        {
+          "path": "target/s32-trial-01/native-prepared/prepared.json",
+          "bytes": 3538439,
+          "sha256": "a78ee2236ee0d34e92ec9ea2b46b5bc96965bc94386e2cfc0f72e66b9f93f9a5"
+        },
+        {
+          "path": "target/s32-trial-01/native-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "3d22e9ee7d283b984f688e4af9e7a2c9f4a83f2a706125d7ba648f5c6eb1d405"
+        },
+        {
+          "path": "target/s32-trial-01/native-results/prepared.json",
+          "bytes": 3538439,
+          "sha256": "a78ee2236ee0d34e92ec9ea2b46b5bc96965bc94386e2cfc0f72e66b9f93f9a5"
+        },
+        {
+          "path": "target/s32-trial-01/native-results/report.json",
+          "bytes": 75854,
+          "sha256": "7d1b544a6e69416bfc1bc7b736143297286e0a0da8908807b8c444cb8682c136"
+        }
+      ],
+      "cases": [
+        {
+          "case": "quantize-lab76-p256-32x24-cold",
+          "state": "cold",
+          "accepted_median_ns": 500467,
+          "candidate_median_ns": 519422.5,
+          "ratio": 1.037875624167028,
+          "change_percent": 3.7875624167027944,
+          "pair_ratios": [
+            1.0386962630178456,
+            1.0376313888315525
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "quantize-lab76-p256-32x24-warm",
+          "state": "warm",
+          "accepted_median_ns": 492278.5,
+          "candidate_median_ns": 12995.5,
+          "ratio": 0.026398674733915863,
+          "change_percent": -97.36013252660841,
+          "pair_ratios": [
+            0.02581275798323584,
+            0.02876605460557084
+          ],
+          "gate": "inconclusive",
+          "resolution_limited": false,
+          "inconclusive_reason": "alternating pair-ratio spread exceeds 10%",
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 169807.5,
+          "candidate_median_ns": 189852.5,
+          "ratio": 1.1180454338000383,
+          "change_percent": 11.804543380003828,
+          "pair_ratios": [
+            1.1278313055650697,
+            1.1114468128625068
+          ],
+          "gate": "regression",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 142033,
+          "candidate_median_ns": 20869.5,
+          "ratio": 0.14693416318742827,
+          "change_percent": -85.30658368125718,
+          "pair_ratios": [
+            0.14678699728379918,
+            0.14698155325083842
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-cold",
+          "state": "cold",
+          "accepted_median_ns": 4283921,
+          "candidate_median_ns": 4174409,
+          "ratio": 0.974436503380898,
+          "change_percent": -2.5563496619101955,
+          "pair_ratios": [
+            0.9346099247227867,
+            1.0031122371463934
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-warm",
+          "state": "warm",
+          "accepted_median_ns": 4184738,
+          "candidate_median_ns": 179339,
+          "ratio": 0.04285549059463221,
+          "change_percent": -95.71445094053678,
+          "pair_ratios": [
+            0.04244301608936455,
+            0.043163794278443156
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 493618,
+          "candidate_median_ns": 520432.5,
+          "ratio": 1.054322370740127,
+          "change_percent": 5.432237074012702,
+          "pair_ratios": [
+            1.0513831501161308,
+            1.0581521728151142
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 472861.5,
+          "candidate_median_ns": 394586,
+          "ratio": 0.8344642141515011,
+          "change_percent": -16.553578584849895,
+          "pair_ratios": [
+            0.8309740913358653,
+            0.8450143083083401
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        }
+      ],
+      "timer_resolution_ns_range": null
+    },
+    {
+      "engine": "chromium",
+      "gate": "regression",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": {
+        "engine": "chromium",
+        "browser_version": "147.0.7727.15",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.7727.15 Safari/537.36",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 4999.995231628418
+      },
+      "started": 32,
+      "reaped": 32,
+      "max_live_workers": 1,
+      "worker_samples": 640,
+      "warmup_calls": 658,
+      "start_unix_ns": "1788883085628778716",
+      "end_unix_ns": "1788883157514970733",
+      "results_inventory_sha256": "d7c99de27235a823c6971c8595b41598f675dcfb83a936de99385fba2c9d4057",
+      "evidence": [
+        {
+          "path": "target/s32-trial-01/chromium-prepared/pair/prepared.json",
+          "bytes": 4373479,
+          "sha256": "81aed7f7dc099c5a6f180eb01d50a00b28f1fc72989d2779a9ecc729d1a01407"
+        },
+        {
+          "path": "target/s32-trial-01/chromium-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "3103b9f9f5fe20ba77142d741f89bce3b5210803120963800def5840c7e83a01"
+        },
+        {
+          "path": "target/s32-trial-01/chromium-results/prepared.json",
+          "bytes": 4373479,
+          "sha256": "81aed7f7dc099c5a6f180eb01d50a00b28f1fc72989d2779a9ecc729d1a01407"
+        },
+        {
+          "path": "target/s32-trial-01/chromium-results/report.json",
+          "bytes": 75992,
+          "sha256": "2aa85f23b30e48b0bd9a1e4f7231976beeb857833b026d0fcd68da7e79712bae"
+        }
+      ],
+      "cases": [
+        {
+          "case": "quantize-lab76-p256-32x24-cold",
+          "state": "cold",
+          "accepted_median_ns": 1119999.997317791,
+          "candidate_median_ns": 1232499.998062849,
+          "ratio": 1.100446429477211,
+          "change_percent": 10.044642947721094,
+          "pair_ratios": [
+            0.9999999968496488,
+            1.3103448266412263
+          ],
+          "gate": "inconclusive",
+          "resolution_limited": false,
+          "inconclusive_reason": "alternating pairs disagree at the 10% threshold",
+          "exact_pairs": 2
+        },
+        {
+          "case": "quantize-lab76-p256-32x24-warm",
+          "state": "warm",
+          "accepted_median_ns": 1052499.9983608723,
+          "candidate_median_ns": 197499.99791383743,
+          "ratio": 0.18764845436714225,
+          "change_percent": -81.23515456328577,
+          "pair_ratios": [
+            0.18912529109444784,
+            0.18138424959352548
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 515000.0005960465,
+          "candidate_median_ns": 837499.9985098839,
+          "ratio": 1.6262135874574466,
+          "change_percent": 62.62135874574466,
+          "pair_ratios": [
+            1.6165048443964327,
+            1.6553397949397681
+          ],
+          "gate": "regression",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 370000.0010430813,
+          "candidate_median_ns": 265000.00059604645,
+          "ratio": 0.7162162158080397,
+          "change_percent": -28.378378419196025,
+          "pair_ratios": [
+            0.7210884375808096,
+            0.7066666682561239
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-cold",
+          "state": "cold",
+          "accepted_median_ns": 23070000.000298023,
+          "candidate_median_ns": 23132499.996572733,
+          "ratio": 1.0027091459156439,
+          "change_percent": 0.27091459156438624,
+          "pair_ratios": [
+            1.0078448463599416,
+            0.9981671157233208
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-warm",
+          "state": "warm",
+          "accepted_median_ns": 23000000,
+          "candidate_median_ns": 500000,
+          "ratio": 0.021739130434782608,
+          "change_percent": -97.82608695652173,
+          "pair_ratios": [
+            0.02155453956221612,
+            0.02192316052082796
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 1222499.9964237213,
+          "candidate_median_ns": 1540000.0028312206,
+          "ratio": 1.2597137074325626,
+          "change_percent": 25.971370743256262,
+          "pair_ratios": [
+            1.25102880330378,
+            1.3699187047765282
+          ],
+          "gate": "regression",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 1112499.9970197678,
+          "candidate_median_ns": 1059999.9949336052,
+          "ratio": 0.9528089867624245,
+          "change_percent": -4.719101323757546,
+          "pair_ratios": [
+            0.9637188248995593,
+            0.9315673284100203
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        }
+      ],
+      "timer_resolution_ns_range": [
+        4999.995231628418,
+        4999.995231628418
+      ]
+    },
+    {
+      "engine": "firefox",
+      "gate": "regression",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": {
+        "engine": "firefox",
+        "browser_version": "148.0.2",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 19999.99999999602
+      },
+      "started": 32,
+      "reaped": 32,
+      "max_live_workers": 1,
+      "worker_samples": 640,
+      "warmup_calls": 164,
+      "start_unix_ns": "1788883169213039625",
+      "end_unix_ns": "1788883304682053129",
+      "results_inventory_sha256": "75492143a2bff496ee20a73f08bc4510f3182e2d03d340bb672ebe47e90c9849",
+      "evidence": [
+        {
+          "path": "target/s32-trial-01/firefox-prepared/pair/prepared.json",
+          "bytes": 4183332,
+          "sha256": "9097d2c4b8f42c2c66b4866c8d016386eb350fd253861b301ce2f69b32e43c70"
+        },
+        {
+          "path": "target/s32-trial-01/firefox-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "a717229253ca5b5d573306a15d9200ab45aead2f5cd5184feb26eb1d7f635763"
+        },
+        {
+          "path": "target/s32-trial-01/firefox-results/prepared.json",
+          "bytes": 4183332,
+          "sha256": "9097d2c4b8f42c2c66b4866c8d016386eb350fd253861b301ce2f69b32e43c70"
+        },
+        {
+          "path": "target/s32-trial-01/firefox-results/report.json",
+          "bytes": 75993,
+          "sha256": "30da8f065ade3a55eebe8de1b05d8f93f6f5c7f3a37652e3831029bb693d0b72"
+        }
+      ],
+      "cases": [
+        {
+          "case": "quantize-lab76-p256-32x24-cold",
+          "state": "cold",
+          "accepted_median_ns": 6480000.000000019,
+          "candidate_median_ns": 7149999.999999991,
+          "ratio": 1.1033950617283905,
+          "change_percent": 10.339506172839052,
+          "pair_ratios": [
+            1.1035548686244183,
+            1.1063174114021568
+          ],
+          "gate": "inconclusive",
+          "resolution_limited": true,
+          "inconclusive_reason": "timer resolution cannot establish the 10% threshold",
+          "exact_pairs": 2
+        },
+        {
+          "case": "quantize-lab76-p256-32x24-warm",
+          "state": "warm",
+          "accepted_median_ns": 6430000.000000007,
+          "candidate_median_ns": 600000.0000000227,
+          "ratio": 0.0933125972006255,
+          "change_percent": -90.66874027993745,
+          "pair_ratios": [
+            0.0933125972006255,
+            0.0933125972006255
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 3740000.00000001,
+          "candidate_median_ns": 5479999.99999999,
+          "ratio": 1.4652406417112234,
+          "change_percent": 46.52406417112233,
+          "pair_ratios": [
+            1.4572192513368956,
+            1.4652406417112271
+          ],
+          "gate": "regression",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 3439999.9999999977,
+          "candidate_median_ns": 1319999.9999999932,
+          "ratio": 0.38372093023255643,
+          "change_percent": -61.62790697674436,
+          "pair_ratios": [
+            0.3866279069767433,
+            0.3882352941176412
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-cold",
+          "state": "cold",
+          "accepted_median_ns": 203339999.9999999,
+          "candidate_median_ns": 204410000.0000001,
+          "ratio": 1.0052621225533598,
+          "change_percent": 0.5262122553359783,
+          "pair_ratios": [
+            1.0125363999802586,
+            0.9918480913794784
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-warm",
+          "state": "warm",
+          "accepted_median_ns": 203910000.00000012,
+          "candidate_median_ns": 2649999.999999921,
+          "ratio": 0.01299592957677367,
+          "change_percent": -98.70040704232264,
+          "pair_ratios": [
+            0.013049450549450108,
+            0.012943079864685635
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 7629999.999999981,
+          "candidate_median_ns": 9269999.999999996,
+          "ratio": 1.2149410222804744,
+          "change_percent": 21.49410222804744,
+          "pair_ratios": [
+            1.227696404793609,
+            1.2294871794871804
+          ],
+          "gate": "regression",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 7239999.9999999665,
+          "candidate_median_ns": 6250000,
+          "ratio": 0.8632596685082913,
+          "change_percent": -13.674033149170873,
+          "pair_ratios": [
+            0.8591160220994444,
+            0.8696255201109521
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        }
+      ],
+      "timer_resolution_ns_range": [
+        19999.99999999602,
+        19999.99999999602
+      ]
+    },
+    {
+      "engine": "webkit",
+      "gate": "regression",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": {
+        "engine": "webkit",
+        "browser_version": "26.4",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 19999.99999999602
+      },
+      "started": 32,
+      "reaped": 32,
+      "max_live_workers": 1,
+      "worker_samples": 640,
+      "warmup_calls": 490,
+      "start_unix_ns": "1788883314021488808",
+      "end_unix_ns": "1788883401947619528",
+      "results_inventory_sha256": "db940eaeb7c2aea0e8d7fdecdc02bc9bace454008adc349e8c23dc5af6719a63",
+      "evidence": [
+        {
+          "path": "target/s32-trial-01/webkit-prepared/pair/prepared.json",
+          "bytes": 4198513,
+          "sha256": "9f1a263b16a2090efe3412bfd2260f9829266c8d45fc4e5a185e5d000ac88011"
+        },
+        {
+          "path": "target/s32-trial-01/webkit-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "e4611758b023a11373a6b42ad7a5783913591ae951e34f817ce2c4d18630e867"
+        },
+        {
+          "path": "target/s32-trial-01/webkit-results/prepared.json",
+          "bytes": 4198513,
+          "sha256": "9f1a263b16a2090efe3412bfd2260f9829266c8d45fc4e5a185e5d000ac88011"
+        },
+        {
+          "path": "target/s32-trial-01/webkit-results/report.json",
+          "bytes": 76007,
+          "sha256": "58789f11a65d12423610d1c58b3b6218c78e0f6d06320b723760ab9ae26af851"
+        }
+      ],
+      "cases": [
+        {
+          "case": "quantize-lab76-p256-32x24-cold",
+          "state": "cold",
+          "accepted_median_ns": 1359999.999999985,
+          "candidate_median_ns": 1460000.000000008,
+          "ratio": 1.0735294117647234,
+          "change_percent": 7.3529411764723385,
+          "pair_ratios": [
+            1.0656934306569368,
+            1.0888888888888812
+          ],
+          "gate": "inconclusive",
+          "resolution_limited": true,
+          "inconclusive_reason": "timer resolution cannot establish the 10% threshold",
+          "exact_pairs": 2
+        },
+        {
+          "case": "quantize-lab76-p256-32x24-warm",
+          "state": "warm",
+          "accepted_median_ns": 1340000.0000000177,
+          "candidate_median_ns": 200000.00000001703,
+          "ratio": 0.1492537313432943,
+          "change_percent": -85.07462686567057,
+          "pair_ratios": [
+            0.14285714285714288,
+            0.1692307692307706
+          ],
+          "gate": "inconclusive",
+          "resolution_limited": false,
+          "inconclusive_reason": "alternating pair-ratio spread exceeds 10%",
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 500000,
+          "candidate_median_ns": 840000.0000000034,
+          "ratio": 1.6800000000000068,
+          "change_percent": 68.00000000000068,
+          "pair_ratios": [
+            1.7199999999999847,
+            1.5384615384615585
+          ],
+          "gate": "regression",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "resize-lanczos3-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 359999.9999999852,
+          "candidate_median_ns": 259999.99999999802,
+          "ratio": 0.7222222222222464,
+          "change_percent": -27.77777777777536,
+          "pair_ratios": [
+            0.7222222222222124,
+            0.7647058823529375
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-cold",
+          "state": "cold",
+          "accepted_median_ns": 22629999.999999996,
+          "candidate_median_ns": 23260000.000000007,
+          "ratio": 1.0278391515687146,
+          "change_percent": 2.7839151568714637,
+          "pair_ratios": [
+            0.987548303993133,
+            1.0648232094288286
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "separable-bayer4-oklab-p16-65x49-warm",
+          "state": "warm",
+          "accepted_median_ns": 22609999.999999955,
+          "candidate_median_ns": 630000.0000000239,
+          "ratio": 0.02786377708978439,
+          "change_percent": -97.21362229102157,
+          "pair_ratios": [
+            0.026521739130436598,
+            0.028725314183123227
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "state": "cold",
+          "accepted_median_ns": 1280000.0000000012,
+          "candidate_median_ns": 1599999.9999999944,
+          "ratio": 1.2499999999999944,
+          "change_percent": 24.999999999999446,
+          "pair_ratios": [
+            1.2539682539682337,
+            1.2656249999999913
+          ],
+          "gate": "regression",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        },
+        {
+          "case": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "state": "warm",
+          "accepted_median_ns": 1100000.0000000228,
+          "candidate_median_ns": 1140000.000000015,
+          "ratio": 1.0363636363636284,
+          "change_percent": 3.636363636362838,
+          "pair_ratios": [
+            1.0454545454545288,
+            1.0178571428571648
+          ],
+          "gate": "pass",
+          "resolution_limited": false,
+          "inconclusive_reason": null,
+          "exact_pairs": 2
+        }
+      ],
+      "timer_resolution_ns_range": [
+        19999.99999999602,
+        19999.99999999602
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "role": "accepted",
+      "source_revision": "d51a70a2daf054357d16ea66b235da3733c02888",
+      "native_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s32-bench/target/s32-accepted-d51a70a2-native",
+      "public_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s32-bench/target/s32-accepted-d51a70a2-public",
+      "products": [
+        {
+          "name": "dist/wasm/scalar/ditherette_wasm_bg.wasm",
+          "bytes": 290207,
+          "gzip_bytes": 131682,
+          "sha256": "536e1b44aec8ca78cd1ed0e1259d9c2024ed0c51859bef54c1a636ca0b41c57a"
+        },
+        {
+          "name": "dist/wasm/threads/ditherette_wasm_bg.wasm",
+          "bytes": 396244,
+          "gzip_bytes": 164161,
+          "sha256": "c80294edb64f46d491730d28f0e7d69d49721b0b6844f1448b3231530c6b662a"
+        },
+        {
+          "name": "tarball",
+          "path": "../v1-s32-bench/target/s32-accepted-d51a70a2-public/ditherette.tgz",
+          "bytes": 327828,
+          "sha256": "83a07b5a9bc7f0f04ba1bcb4c6db13f8daa6101bf4b656651aa06be9f1cf59eb"
+        },
+        {
+          "name": "worker",
+          "path": "../v1-s32-bench/target/s32-accepted-d51a70a2-native/ditherette-bench",
+          "bytes": 6046104,
+          "sha256": "c0498434d41f774cc076d9d587a6944669b73140a4cb123e7bfbb35ac47bc715"
+        },
+        {
+          "name": "coordinator",
+          "path": "../v1-s32-bench/target/s32-accepted-d51a70a2-native/ditherette-bench-pair",
+          "bytes": 3393920,
+          "sha256": "36ddb6fe53ca2aa170349f4a8422db4012b5f74a057126cc446fea0ad90bfe69"
+        },
+        {
+          "name": "native_provenance",
+          "path": "../v1-s32-bench/target/s32-accepted-d51a70a2-native/build-provenance.json",
+          "bytes": 605077,
+          "sha256": "6d2f0d441c906913de0e2aa7f11d8a22901233ae1343e7ccac4df4e24218e014"
+        },
+        {
+          "name": "public_provenance",
+          "path": "../v1-s32-bench/target/s32-accepted-d51a70a2-public/build-provenance.json",
+          "bytes": 638006,
+          "sha256": "c261e6c901b1c8b598dd58be4b165fe3a0c771cf97a3e0725237fb44109d0393"
+        },
+        {
+          "name": "oracle_wasm",
+          "path": "../v1-s32-bench/target/s32-accepted-d51a70a2-public/scripts/oracle/ditherette_bench_oracle_bg.wasm",
+          "bytes": 785376,
+          "sha256": "01806623964d4722b47b837dd52fdbfc04a7e46b419b5f764d948d97be026445"
+        },
+        {
+          "name": "oracle_manifest",
+          "path": "../v1-s32-bench/target/s32-accepted-d51a70a2-public/scripts/oracle/manifest.json",
+          "bytes": 103035,
+          "sha256": "7be4e71844cf4951bc9a80b42cf690703dc8a638dbb5526f659dbcbfaa617df6"
+        }
+      ]
+    },
+    {
+      "role": "candidate",
+      "source_revision": "d638f87c3a16824ef52964bbb611ef91b173f2ee",
+      "native_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s32-stages/target/s32-candidate-d638f87c-native",
+      "public_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s32-stages/target/s32-candidate-d638f87c-public",
+      "products": [
+        {
+          "name": "dist/wasm/scalar/ditherette_wasm_bg.wasm",
+          "bytes": 306335,
+          "gzip_bytes": 139079,
+          "sha256": "f1ed82692f0b2f0f04b51693de02438bda41c7c950ba81881ff0a2d00bd6a6c7"
+        },
+        {
+          "name": "dist/wasm/threads/ditherette_wasm_bg.wasm",
+          "bytes": 413917,
+          "gzip_bytes": 171470,
+          "sha256": "4f0d2226f0c40710ca277e0c911335daf04a39f3aff7b01230add5abbea66235"
+        },
+        {
+          "name": "tarball",
+          "path": "target/s32-candidate-d638f87c-public/ditherette.tgz",
+          "bytes": 342373,
+          "sha256": "8a51e04d08cfdf73bd022ccef1167fed36c74f8267ea1615e19e46df7636fc80"
+        },
+        {
+          "name": "worker",
+          "path": "target/s32-candidate-d638f87c-native/ditherette-bench",
+          "bytes": 6107920,
+          "sha256": "b0568d0f2207e3664c71c388aabbbe4371c946eca3400753cff77a62dc249fdf"
+        },
+        {
+          "name": "coordinator",
+          "path": "target/s32-candidate-d638f87c-native/ditherette-bench-pair",
+          "bytes": 3405328,
+          "sha256": "e7639c52fdc2bab80ba369025546f58c69329356b9ac71ec82254b7bb1062df7"
+        },
+        {
+          "name": "native_provenance",
+          "path": "target/s32-candidate-d638f87c-native/build-provenance.json",
+          "bytes": 609255,
+          "sha256": "e34fea0aa3ccef1e55bad3ba81203d0d2da23b374fc4e94a1945ad6521dc4e87"
+        },
+        {
+          "name": "public_provenance",
+          "path": "target/s32-candidate-d638f87c-public/build-provenance.json",
+          "bytes": 642185,
+          "sha256": "e3b97fab16e7be2bc847b97903a4567d17134369dfcf3e8ca8e0021fa68db564"
+        },
+        {
+          "name": "oracle_wasm",
+          "path": "target/s32-candidate-d638f87c-public/scripts/oracle/ditherette_bench_oracle_bg.wasm",
+          "bytes": 785376,
+          "sha256": "26df67995d3bb4fa1f1301ccdf256d8aff332b5920288ea3cda1d33df76d4b80"
+        },
+        {
+          "name": "oracle_manifest",
+          "path": "target/s32-candidate-d638f87c-public/scripts/oracle/manifest.json",
+          "bytes": 103037,
+          "sha256": "bfecb16937c327b9c2ed6f7b132bfcd7151e87ccf80680aa274c2e3bc82e6a74"
+        }
+      ]
+    }
+  ],
+  "audit": {
+    "workers_started": 128,
+    "workers_reaped": 128,
+    "max_live_workers": 1,
+    "samples": 2560,
+    "warmup_calls": 4555,
+    "actual_role_pairs": 64,
+    "target_local_three_way_records": 128,
+    "exact_component_comparisons": 384,
+    "raw_workers_exact": true,
+    "all_gates_recomputed": true
+  },
+  "quiet_start": {
+    "path": "target/s32-trial-01/quiet-start.md",
+    "bytes": 616,
+    "sha256": "32c74e4feb110c948569b9409f3a9b2fc3ee08ec859b647b8123bca391f18122"
+  },
+  "methodology": {
+    "workloads": 4,
+    "states": [
+      "cold",
+      "warm"
+    ],
+    "role_pairs_per_case": 2,
+    "role_order": [
+      "accepted-candidate",
+      "candidate-accepted"
+    ],
+    "samples_per_worker": 20,
+    "warmup_ms": 50,
+    "measurement_cap_ms": 10000,
+    "scope": "ordinary single-call methods including production input copy/hash and durable result copies",
+    "warm_lifecycle": "fresh processor and declared same-input stage prime before every preflight, warmup, discard and sample; prime and verification untimed",
+    "cold_lifecycle": "fresh empty processor before every call; disposal and native owned-output destruction untimed",
+    "capabilities": {
+      "accepted": "preparation",
+      "candidate": "image-stages"
+    },
+    "verification": "each role against its own target-local frozen output, plus accepted/candidate exactness; no cross-engine exactness claim",
+    "raw_inventory_hash": "SHA-256 of compact JSON array of all lexically sorted result-directory files as {path,bytes,sha256}; paths relative to S32 stages worktree",
+    "timestamp_encoding": "exact decimal strings copied from raw JSONL"
+  },
+  "release_blockers": [
+    {
+      "engine": "native",
+      "case": "resize-lanczos3-129x97-cold",
+      "ratio": 1.1180454338000383,
+      "change_percent": 11.804543380003828,
+      "handoff": "S41"
+    },
+    {
+      "engine": "chromium",
+      "case": "resize-lanczos3-129x97-cold",
+      "ratio": 1.6262135874574466,
+      "change_percent": 62.62135874574466,
+      "handoff": "S41"
+    },
+    {
+      "engine": "chromium",
+      "case": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+      "ratio": 1.2597137074325626,
+      "change_percent": 25.971370743256262,
+      "handoff": "S41"
+    },
+    {
+      "engine": "firefox",
+      "case": "resize-lanczos3-129x97-cold",
+      "ratio": 1.4652406417112234,
+      "change_percent": 46.52406417112233,
+      "handoff": "S41"
+    },
+    {
+      "engine": "firefox",
+      "case": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+      "ratio": 1.2149410222804744,
+      "change_percent": 21.49410222804744,
+      "handoff": "S41"
+    },
+    {
+      "engine": "webkit",
+      "case": "resize-lanczos3-129x97-cold",
+      "ratio": 1.6800000000000068,
+      "change_percent": 68.00000000000068,
+      "handoff": "S41"
+    },
+    {
+      "engine": "webkit",
+      "case": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+      "ratio": 1.2499999999999944,
+      "change_percent": 24.999999999999446,
+      "handoff": "S41"
+    }
+  ],
+  "inconclusive": [
+    {
+      "engine": "native",
+      "case": "quantize-lab76-p256-32x24-warm",
+      "reason": "alternating pair-ratio spread exceeds 10%"
+    },
+    {
+      "engine": "chromium",
+      "case": "quantize-lab76-p256-32x24-cold",
+      "reason": "alternating pairs disagree at the 10% threshold"
+    },
+    {
+      "engine": "firefox",
+      "case": "quantize-lab76-p256-32x24-cold",
+      "reason": "timer resolution cannot establish the 10% threshold"
+    },
+    {
+      "engine": "webkit",
+      "case": "quantize-lab76-p256-32x24-cold",
+      "reason": "timer resolution cannot establish the 10% threshold"
+    },
+    {
+      "engine": "webkit",
+      "case": "quantize-lab76-p256-32x24-warm",
+      "reason": "alternating pair-ratio spread exceeds 10%"
+    }
+  ]
+}
