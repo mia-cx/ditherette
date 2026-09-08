@@ -127,6 +127,8 @@ pub fn resize_convolution_rgba8_rows_with_plan_into(
 }
 
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached convolution metadata.
+///
+/// See the caller-scratch row adapter when the full output is split between workers.
 pub fn resize_convolution_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
@@ -144,6 +146,44 @@ pub fn resize_convolution_rgba8_with_plan_into(
     }
 
     kernel::resize_packed_rgba8_with_convolution_filter_into(source, output, plan, None);
+}
+
+/// Execute an absolute full-width band without allocating. Scratch includes its source support.
+/// The caller reserves every simultaneously live band's capacity before dispatch.
+pub fn resize_convolution_rgba8_rows_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    y_start: u32,
+    scratch: &mut [f64],
+) -> Result<(), Failure> {
+    assert_eq!(source.dimensions(), plan.source_dimensions());
+    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    common::rgba8::assert_packed_source(source, "convolution");
+    common::rgba8::assert_packed_output(&output, "convolution");
+    let required = plan.row_scratch_elements(y_start, output.dimensions().height())?;
+    if scratch.len() < required {
+        return Err(Failure::new(
+            ErrorCode::MemoryLimit,
+            ErrorPath::MemoryLimitBytes,
+        ));
+    }
+    if plan.is_identity() {
+        let start = y_start as usize * source.stride().elements();
+        let end = start + output.data().len();
+        output
+            .data_mut()
+            .copy_from_slice(&source.data()[start..end]);
+        return Ok(());
+    }
+    kernel::resize_rows_with_scratch_into(
+        source,
+        output,
+        plan,
+        y_start,
+        Some(&mut scratch[..required]),
+    );
+    Ok(())
 }
 
 /// Execute the landed full-call paths using caller-owned scratch without allocating.

@@ -110,6 +110,11 @@ impl LanczosResizePlan {
         self.inner.scratch_elements()
     }
 
+    /// Required f64 elements for one band, including its complete source support.
+    pub fn row_scratch_elements(&self, y_start: u32, height: u32) -> Result<usize, Failure> {
+        self.inner.row_scratch_elements(y_start, height)
+    }
+
     /// Builds reusable coordinate metadata for packed RGBA8 Lanczos resize.
     pub fn new(
         source_dimensions: ImageDimensions,
@@ -142,6 +147,23 @@ pub fn resize_lanczos_rgba8_with_plan_and_scratch_into(
         source,
         output,
         &plan.inner,
+        scratch,
+    )
+}
+
+/// Execute one absolute Lanczos band using preallocated support scratch, without allocating.
+pub fn resize_lanczos_rgba8_rows_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &LanczosResizePlan,
+    y_start: u32,
+    scratch: &mut [f64],
+) -> Result<(), Failure> {
+    super::convolution::resize_convolution_rgba8_rows_with_plan_and_scratch_into(
+        source,
+        output,
+        &plan.inner,
+        y_start,
         scratch,
     )
 }
