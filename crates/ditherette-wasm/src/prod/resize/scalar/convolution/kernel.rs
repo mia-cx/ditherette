@@ -133,9 +133,19 @@ pub(super) fn resize_with_progress(
 
 pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    y_start: u32,
+) {
+    resize_rows_with_scratch_into(source, output, plan, y_start, None);
+}
+
+pub(super) fn resize_rows_with_scratch_into(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
     y_start: u32,
+    scratch: Option<&mut [f64]>,
 ) {
     let source_width = source.dimensions().width_usize();
     let output_width = plan.output_dimensions().width_usize();
@@ -183,6 +193,7 @@ pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
             output_row_byte_len,
             &plan.x_taps,
             y_taps,
+            scratch,
         );
         return;
     }
@@ -278,21 +289,21 @@ fn resize_x_then_y_rows_into(
     output_row_byte_len: usize,
     x_taps_by_output: &[Vec<AxisTap>],
     y_taps_by_output: &[Vec<AxisTap>],
+    scratch: Option<&mut [f64]>,
 ) {
     let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
     let scratch_row_len = output_row_byte_len;
-    let first_source_y = y_taps_by_output
-        .iter()
-        .flat_map(|taps| taps.iter().map(|tap| tap.index))
-        .min()
-        .unwrap_or(0);
-    let last_source_y = y_taps_by_output
-        .iter()
-        .flat_map(|taps| taps.iter().map(|tap| tap.index))
-        .max()
-        .unwrap_or(first_source_y);
-    let scratch_height = last_source_y - first_source_y + 1;
-    let mut scratch = vec![0.0; scratch_height * scratch_row_len];
+    let support = source_rows(y_taps_by_output);
+    let first_source_y = support.start;
+    let scratch_height = support.len();
+    let mut owned_scratch;
+    let scratch = match scratch {
+        Some(scratch) => scratch,
+        None => {
+            owned_scratch = vec![0.0; scratch_height * scratch_row_len];
+            &mut owned_scratch
+        }
+    };
 
     for (source_row, scratch_row) in source
         .chunks_exact(source_row_byte_len)
@@ -324,6 +335,21 @@ fn resize_x_then_y_rows_into(
             );
         }
     }
+}
+
+/// The existing x-then-y band kernel filters this complete contiguous support interval.
+pub(super) fn source_rows(y_taps_by_output: &[Vec<AxisTap>]) -> std::ops::Range<usize> {
+    let first = y_taps_by_output
+        .iter()
+        .flat_map(|taps| taps.iter().map(|tap| tap.index))
+        .min()
+        .unwrap_or(0);
+    let last = y_taps_by_output
+        .iter()
+        .flat_map(|taps| taps.iter().map(|tap| tap.index))
+        .max()
+        .unwrap_or(first);
+    first..last + 1
 }
 
 fn write_horizontal_scratch_pixel(output_pixel: &mut [f64], source_row: &[u8], x_taps: &[AxisTap]) {

@@ -106,14 +106,24 @@ pub(super) fn resize_with_progress(
 
 pub(super) fn resize_rows_with_plan_into(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+    y_start: u32,
+) {
+    let mut vertical_row = vec![0.0; source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS];
+    resize_rows_with_scratch_into(source, output, plan, y_start, &mut vertical_row);
+}
+
+pub(super) fn resize_rows_with_scratch_into(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &AreaResizePlan,
     y_start: u32,
+    vertical_row: &mut [f32],
 ) {
     let source_row_byte_len = source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
     let output_row_byte_len = plan.output_dimensions.width_usize() * rgba8::RGBA8_CHANNELS;
     let source_data = source.data();
-    let mut vertical_row = vec![0.0; source_row_byte_len];
 
     for (local_y, output_row) in output
         .data_mut()
@@ -148,7 +158,7 @@ pub(super) fn resize_rows_with_plan_into(
         accumulate_vertical_row(
             source_data,
             source_row_byte_len,
-            &mut vertical_row,
+            vertical_row,
             &plan.y_spans[output_y],
         );
 
@@ -156,7 +166,7 @@ pub(super) fn resize_rows_with_plan_into(
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
             .zip(&plan.x_spans)
         {
-            write_horizontal_pixel(output_pixel, &vertical_row, x_spans, plan.area);
+            write_horizontal_pixel(output_pixel, vertical_row, x_spans, plan.area);
         }
     }
 }

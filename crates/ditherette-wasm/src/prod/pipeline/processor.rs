@@ -84,6 +84,61 @@ struct Plan {
 }
 
 impl Processor {
+    /// Observe the private candidate without changing other stage selections.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn execution_policy(&self) -> super::execution::ExecutionPolicy {
+        self.preparation.execution_policy()
+    }
+
+    /// Development-only scheduling override. Public package settings never expose execution policy.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn set_execution_policy(
+        &mut self,
+        policy: super::execution::ExecutionPolicy,
+    ) -> Result<(), Failure> {
+        self.validate_execution_policy(policy)?;
+        self.preparation.execution = policy;
+        self.preparation.execution_overrides = 0b111;
+        Ok(())
+    }
+
+    /// Override only this stage; None explicitly forces its scalar path.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn set_execution_stage(
+        &mut self,
+        stage: super::execution::ExecutionStage,
+        band: Option<super::execution::RowBandPolicy>,
+    ) -> Result<(), Failure> {
+        let mut policy = self.preparation.execution;
+        policy.set_stage(stage, band);
+        self.validate_execution_policy(policy)?;
+        self.preparation.execution = policy;
+        self.preparation.execution_overrides |= stage.mask();
+        Ok(())
+    }
+
+    #[cfg(any(test, feature = "bench-subjects"))]
+    fn validate_execution_policy(
+        &self,
+        policy: super::execution::ExecutionPolicy,
+    ) -> Result<(), Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        if [policy.resize, policy.indexed, policy.mixing]
+            .into_iter()
+            .flatten()
+            .any(|band| band.height == 0)
+        {
+            return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control));
+        }
+        Ok(())
+    }
+
     /// Counts owned control, buffer headers, and plan records, plus adapter-owned capacity.
     /// Compiler stack frames and fixed module overhead are outside this ownership accounting.
     pub const fn bookkeeping_bytes(boundary_capacity: u64) -> u64 {
@@ -516,6 +571,8 @@ fn memory_limit_failure() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
 }
 
+#[cfg(test)]
+mod band_tests;
 #[cfg(test)]
 mod preparation_tests;
 #[cfg(test)]

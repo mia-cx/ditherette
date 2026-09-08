@@ -84,6 +84,42 @@ pub fn resize_area_rgba8_rows_with_plan_into(
     planned::resize_rows_with_plan_into(source, output, plan, y_start);
 }
 
+/// Execute a full-width row band without allocating. The source and plan stay shared.
+/// Insufficient caller-owned scratch fails before any output bytes change.
+pub fn resize_area_rgba8_rows_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+    y_start: u32,
+    scratch: &mut [f32],
+) -> Result<(), crate::prod::contract::failure::Failure> {
+    use crate::prod::contract::{
+        error::ErrorCode,
+        failure::{ErrorPath, Failure},
+    };
+    assert_eq!(source.dimensions(), plan.source_dimensions);
+    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions, y_start);
+    common::rgba8::assert_packed_source(source, "area");
+    common::rgba8::assert_packed_output(&output, "area");
+    let required = plan.scratch_elements();
+    if scratch.len() < required {
+        return Err(Failure::new(
+            ErrorCode::MemoryLimit,
+            ErrorPath::MemoryLimitBytes,
+        ));
+    }
+    if !resize_area_rows_fast_path_into(source, &mut output, plan.output_dimensions, y_start) {
+        planned::resize_rows_with_scratch_into(
+            source,
+            output,
+            plan,
+            y_start,
+            &mut scratch[..required],
+        );
+    }
+    Ok(())
+}
+
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached area metadata.
 ///
 /// The plan must match the input and output dimensions. Packed-row assertions

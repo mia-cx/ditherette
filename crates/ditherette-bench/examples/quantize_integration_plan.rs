@@ -95,6 +95,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 subject,
                 Some(BrowserCase {
                     execution: None,
+                    row_policy: None,
                     operation,
                     accepted: BrowserBackend::Package,
                     candidate: BrowserBackend::Package,

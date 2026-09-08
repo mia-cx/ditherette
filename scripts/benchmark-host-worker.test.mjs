@@ -24,6 +24,7 @@ async function hostFixture(fake, check) {
 			'benchmark-public-timing',
 			'benchmark-stage-cache',
 			'benchmark-progress',
+			'benchmark-row-policy',
 			'benchmark-stage-cache-fixture'
 		])
 			await cp(new URL(`./${name}.mjs`, import.meta.url), path.join(root, `scripts/${name}.mjs`));

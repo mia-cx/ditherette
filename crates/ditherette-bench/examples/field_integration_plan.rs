@@ -121,6 +121,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
         };
         let browser = public.then_some(BrowserCase {
             execution: None,
+            row_policy: None,
             operation,
             accepted: BrowserBackend::Package,
             candidate: BrowserBackend::Package,

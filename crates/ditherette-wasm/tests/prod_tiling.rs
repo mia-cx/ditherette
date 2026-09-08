@@ -7,6 +7,135 @@ use ditherette_wasm::{
 };
 
 #[test]
+fn budgeted_work_matches_existing_assignment_and_reports_only_on_caller() {
+    use ditherette_wasm::prod::{
+        contract::error::ErrorCode, resize::common::allocation::CapacityBudget,
+        tiling::execute_row_band_work,
+    };
+    let dimensions = ImageDimensions::new(3, 19).unwrap();
+    let pool = WorkerBudget::new(4);
+    let mut insufficient = CapacityBudget::new(0);
+    assert_eq!(
+        RowBandWorkPlan::try_for_output_height(dimensions, 3, pool, 3, &mut insufficient)
+            .unwrap_err()
+            .code,
+        ErrorCode::MemoryLimit
+    );
+    assert_eq!(insufficient.used(), 0);
+    let mut budget = CapacityBudget::new(8192);
+    let work = RowBandWorkPlan::try_for_output_height(dimensions, 3, pool, 3, &mut budget).unwrap();
+    let bands = RowBandPlan::for_output_height(dimensions, 3).unwrap();
+    assert_eq!(work, RowBandWorkPlan::new(&bands, pool, 3).unwrap());
+    assert!(work.capacity_bytes() <= budget.used());
+    let mut output = [0u8; 3 * 19];
+    let mut scratch = [0usize; 3];
+    let caller = std::thread::current().id();
+    let mut reports = Vec::new();
+    execute_row_band_work(
+        &work,
+        &mut output,
+        3,
+        &mut scratch,
+        &|band, output, calls| {
+            *calls += 1;
+            for (local, row) in output.chunks_exact_mut(3).enumerate() {
+                row.fill((band.y_start() as usize + local) as u8);
+            }
+            Ok::<u64, ()>(u64::from(band.height()))
+        },
+        &mut |completed| {
+            assert_eq!(std::thread::current().id(), caller);
+            reports.push(completed);
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        output.as_slice(),
+        (0u8..19).flat_map(|y| [y; 3]).collect::<Vec<_>>()
+    );
+    assert_eq!(scratch, [3, 2, 2]);
+    assert_eq!(reports, [9, 16, 19]);
+    scratch.fill(0);
+    let error = execute_row_band_work(
+        &work,
+        &mut output,
+        3,
+        &mut scratch,
+        &|band, _, calls| {
+            *calls += 1;
+            if band.y_start() == 9 {
+                Err(9)
+            } else {
+                Ok(u64::from(band.height()))
+            }
+        },
+        &mut |_| panic!("a failed batch cannot report success"),
+    )
+    .unwrap_err();
+    assert_eq!(error, 9);
+    assert_eq!(
+        scratch,
+        [1, 1, 1],
+        "every worker in the failed batch joins before return; no later batch starts"
+    );
+}
+
+#[test]
+fn fallible_assignments_match_frozen_worker_caps_and_band_order() {
+    use ditherette_wasm::{
+        prod::resize::common::allocation::CapacityBudget, spec::tiling as frozen,
+    };
+    let dimensions = ImageDimensions::new(3, 19).unwrap();
+    for height in [1, 2, 3, 7, 19] {
+        for pool in [1, 4, 8] {
+            for requested in [0, 1, 2, 4, 9] {
+                let required = RowBandWorkPlan::required_bytes(
+                    dimensions,
+                    height,
+                    WorkerBudget::new(pool),
+                    requested,
+                )
+                .unwrap();
+                let mut budget = CapacityBudget::new(required);
+                let actual = RowBandWorkPlan::try_for_output_height(
+                    dimensions,
+                    height,
+                    WorkerBudget::new(pool),
+                    requested,
+                    &mut budget,
+                )
+                .unwrap();
+                let bands = frozen::RowBandPlan::for_output_height(dimensions, height).unwrap();
+                let expected = frozen::RowBandWorkPlan::new(
+                    &bands,
+                    frozen::WorkerBudget::new(pool),
+                    requested,
+                )
+                .unwrap();
+                assert_eq!(actual.active_workers(), expected.active_workers());
+                assert_eq!(actual.capacity_bytes(), budget.used());
+                for (actual, expected) in actual.assignments().iter().zip(expected.assignments()) {
+                    assert_eq!(actual.worker_index(), expected.worker_index());
+                    assert_eq!(
+                        actual
+                            .bands()
+                            .iter()
+                            .map(|band| (band.y_start(), band.y_end()))
+                            .collect::<Vec<_>>(),
+                        expected
+                            .bands()
+                            .iter()
+                            .map(|band| (band.y_start(), band.y_end()))
+                            .collect::<Vec<_>>()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn row_band_is_half_open_and_non_empty() {
     let band = RowBand::new(2, 5).unwrap();
 

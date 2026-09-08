@@ -73,6 +73,39 @@ pub fn private_error_path() -> u32 {
     ERROR_PATH.with(|path| path.get() as u32)
 }
 
+/// Forced complete-call candidate for internal browser benchmarks only.
+/// The benchmark host initializes its blocking-capable worker pool before selecting bands.
+#[cfg(feature = "bench-subjects")]
+#[wasm_bindgen(js_name = privateExecutionPolicy)]
+pub fn private_execution_policy(
+    stage: u32,
+    height: u32,
+    active_workers: u32,
+    pool_size: u32,
+) -> u32 {
+    use crate::prod::{
+        pipeline::execution::{ExecutionStage, RowBandPolicy},
+        tiling::WorkerBudget,
+    };
+    let mut processor = match take_ready() {
+        Ok(processor) => processor,
+        Err(error) => return status(error),
+    };
+    let band = (height != 0).then_some(RowBandPolicy {
+        height,
+        workers: WorkerBudget::new(pool_size),
+        active_workers,
+    });
+    let result = match stage {
+        0 => processor.set_execution_stage(ExecutionStage::Resize, band),
+        1 => processor.set_execution_stage(ExecutionStage::Indexed, band),
+        2 => processor.set_execution_stage(ExecutionStage::Mixing, band),
+        _ => Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control)),
+    };
+    restore_ready(processor);
+    result.map_or_else(status, |()| 0)
+}
+
 /// Validates and preflights before priming boundary handles.
 /// A trap in this function discards the isolated factory during package initialization.
 #[wasm_bindgen(js_name = privateInitialize)]

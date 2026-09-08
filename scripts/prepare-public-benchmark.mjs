@@ -20,7 +20,7 @@ const runBuildCommand = (program, args, cwd) =>
 	execFileSync(program, args, { cwd, stdio: 'inherit' });
 
 /** Recompile this crate for each role without discarding dependency or other-profile caches. */
-export async function buildFreshPackage(directory, run = runBuildCommand) {
+export async function buildFreshPackage(directory, run = runBuildCommand, benchSubjects = false) {
 	const crate = path.join(directory, 'crates/ditherette-wasm');
 	// Shared targets can consider another checkout's crate outputs fresh based on source mtimes.
 	// These paths and channels match the package-owned scripts/build.mjs variant selection.
@@ -46,7 +46,44 @@ export async function buildFreshPackage(directory, run = runBuildCommand) {
 			crate
 		);
 	}
-	run('pnpm', ['--filter', 'ditherette', 'build'], directory);
+	if (!benchSubjects) {
+		run('pnpm', ['--filter', 'ditherette', 'build'], directory);
+		return;
+	}
+	const packageDirectory = path.join(directory, 'packages/ditherette');
+	run('pnpm', ['check:version'], packageDirectory);
+	for (const variant of ['scalar', 'threads'])
+		run('pnpm', ['--filter', 'ditherette-wasm', `build:${variant}`, '--bench-subjects'], directory);
+	run('node', ['scripts/stage-wasm.mjs'], packageDirectory);
+	run('pnpm', ['exec', 'tsc'], packageDirectory);
+}
+
+/** Reject a stale or mislabeled developer artifact before packing either build variant. */
+export async function verifyPackageBuildMode(packageDirectory, benchSubjects) {
+	for (const variant of ['scalar', 'threads']) {
+		const directory = path.join(packageDirectory, 'dist/wasm', variant);
+		const wasm = new WebAssembly.Module(
+			await readFile(path.join(directory, 'ditherette_wasm_bg.wasm'))
+		);
+		const policy = WebAssembly.Module.exports(wasm).some(
+			({ name }) => name === 'privateExecutionPolicy'
+		);
+		if (policy !== benchSubjects)
+			throw new Error(`${variant} Wasm build mode does not match privateExecutionPolicy export.`);
+		const marker = await readFile(path.join(directory, 'build-mode.json'), 'utf8').catch(
+			(error) => {
+				if (error.code === 'ENOENT') return null;
+				throw error;
+			}
+		);
+		if (!benchSubjects && marker !== null)
+			throw new Error(`${variant} public artifact has a developer build marker.`);
+		if (
+			benchSubjects &&
+			marker !== `${JSON.stringify({ schema: 1, mode: 'bench-subjects', variant })}\n`
+		)
+			throw new Error(`${variant} developer artifact requires its benchmark build marker.`);
+	}
 }
 
 /** Reject source changes before a build can create apparently revision-bound artifacts. */
@@ -194,7 +231,7 @@ async function buildTools() {
 }
 
 /** Build, pack, and install fresh artifacts before the benchmark lease or quiet phase. */
-export async function preparePublicBenchmark(destination) {
+export async function preparePublicBenchmark(destination, { benchSubjects = false } = {}) {
 	if (process.env.DITHERETTE_BENCH_QUIET === '1') {
 		throw new Error('Build preparation must finish before the benchmark quiet phase.');
 	}
@@ -207,7 +244,8 @@ export async function preparePublicBenchmark(destination) {
 	const packageDirectory = path.join(root, 'packages/ditherette');
 	// TypeScript does not remove obsolete emitted modules. This is generated package output only.
 	await rm(path.join(packageDirectory, 'dist'), { recursive: true, force: true });
-	await buildFreshPackage(root, run);
+	await buildFreshPackage(root, run, benchSubjects);
+	await verifyPackageBuildMode(packageDirectory, benchSubjects);
 	const tarball = path.join(destination, 'ditherette.tgz');
 	run('pnpm', ['pack', '--out', tarball], packageDirectory);
 	const consumer = path.join(destination, 'consumer');
@@ -234,6 +272,7 @@ export async function preparePublicBenchmark(destination) {
 		'benchmark-public-browser.mjs',
 		'benchmark-host-worker.mjs',
 		'benchmark-public-page.mjs',
+		'benchmark-row-policy.mjs',
 		'benchmark-public-timing.mjs',
 		'benchmark-stage-cache.mjs',
 		'benchmark-progress.mjs',
@@ -257,6 +296,7 @@ export async function preparePublicBenchmark(destination) {
 			{
 				schema: 1,
 				source_revision: revision,
+				build_mode: benchSubjects ? 'bench-subjects' : 'public',
 				tools,
 				inputs,
 				package: await fileInventory(packagePath),
@@ -289,7 +329,18 @@ export async function preparePublicBenchmark(destination) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	if (process.argv.length !== 3)
-		throw new Error('Usage: prepare-public-benchmark.mjs NEW_OUTPUT_DIRECTORY');
-	console.log(JSON.stringify(await preparePublicBenchmark(path.resolve(process.argv[2]))));
+	const [destination, ...options] = process.argv.slice(2);
+	if (
+		!destination ||
+		options.length > 1 ||
+		(options.length === 1 && options[0] !== '--bench-subjects')
+	)
+		throw new Error('Usage: prepare-public-benchmark.mjs NEW_OUTPUT_DIRECTORY [--bench-subjects]');
+	console.log(
+		JSON.stringify(
+			await preparePublicBenchmark(path.resolve(destination), {
+				benchSubjects: options.length === 1
+			})
+		)
+	);
 }

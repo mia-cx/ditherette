@@ -117,6 +117,14 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
     std::env::set_var(QUIET_ENV, "1");
     std::env::set_var("DITHERETTE_PAIR_FIXTURE_DIRECTORY", &directory);
     let (mut template, _) = fixture();
+    // Per-byte indentation dominates actual image requests. Keep that shape in this fixture.
+    let dimensions = Dimensions {
+        width: 64,
+        height: 64,
+    };
+    template.experiment.cases[0].source = dimensions;
+    template.experiment.cases[0].identity.output = dimensions;
+    template.experiment.cases[0].rgba = (0..64 * 64 * 4).map(|n| n as u8).collect();
     template.experiment.cases[0].identity.input = input_digest(
         template.experiment.cases[0].source,
         &template.experiment.cases[0].rgba,
@@ -129,8 +137,26 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
         &directory.join("prepared"),
     )
     .unwrap();
+    let read_compact = |path: &Path| {
+        let bytes = fs::read(path).unwrap();
+        assert!(!bytes.contains(&b'\n'));
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(bytes.len() * 2 < serde_json::to_vec_pretty(&value).unwrap().len());
+        value
+    };
+    assert_eq!(
+        read_compact(&directory.join("prepared/prepared.json")),
+        serde_json::to_value(&prepared).unwrap()
+    );
     let report = coordinator::run(&prepared, &directory.join("success")).unwrap();
     assert_eq!(report.gate, Gate::Pass);
+    assert_eq!(
+        read_compact(&directory.join("success/prepared.json")),
+        serde_json::to_value(&prepared).unwrap()
+    );
+    assert!(fs::read(directory.join("success/report.json"))
+        .unwrap()
+        .contains(&b'\n'));
     let events = fs::read_to_string(directory.join("success/events.jsonl")).unwrap();
     let lines: Vec<serde_json::Value> = events
         .lines()
@@ -150,6 +176,15 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
             "pair-001-case-000-accepted"
         ]
     );
+    for stem in &starts {
+        let value = read_compact(&directory.join(format!("success/{stem}.request.json")));
+        assert_eq!(
+            value["case"],
+            serde_json::to_value(&prepared.experiment.cases[0]).unwrap()
+        );
+        let request: TrialRequest = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(request).unwrap(), value);
+    }
     for group in lines.chunks_exact(3) {
         assert_eq!(group[2]["state"], "reaped");
         assert_eq!(group[1]["pid"], group[2]["pid"]);

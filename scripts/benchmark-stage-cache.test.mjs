@@ -29,6 +29,81 @@ test('warm Process completes its staged preflight and every primed sample throug
 	);
 });
 
+test('explicit same-call diagnostics retain frozen drift through the ordinary verifier', async () => {
+	for (const role of ['accepted', 'candidate']) {
+		const { result, trial } = await warmProcessTrial({
+			configure(trial) {
+				trial.role = role;
+				trial.case.browser.operation = { operation: 'resize-bilinear', anchor: 'center' };
+				trial.case.browser.cache.roles.sample_prime = 'same-call';
+				trial.case.browser.measure_nonexact = true;
+				trial.reference_output = structuredClone(trial.prime_reference_output);
+				trial.reference_output.pixels.data[0] = 9;
+				trial.prime_reference_output = trial.reference_output;
+			}
+		});
+		assert.equal(result.sample_ns.length, 5);
+		assert.deepEqual(result.output.pixels.data, [1, 2, 3, 255]);
+		assert.notDeepEqual(result.output, trial.reference_output);
+		assert.equal(result.unstable_output, undefined);
+	}
+});
+
+test('same-call diagnostics retain a transient prime mismatch even when every measured call is exact', async () => {
+	for (const mismatchAt of [1, 3, 7]) {
+		const { result, trial } = await warmProcessTrial({
+			configure(trial) {
+				trial.case.browser.operation = { operation: 'resize-bilinear', anchor: 'center' };
+				trial.case.browser.cache.roles.sample_prime = 'same-call';
+				trial.case.browser.measure_nonexact = true;
+				trial.reference_output = trial.prime_reference_output;
+			},
+			configureFixture() {
+				reset(mismatchAt);
+			}
+		});
+		assert.equal(result.sample_ns.length, 5);
+		const differing = mismatchAt === 1 ? result.unstable_output : result.output;
+		const original = mismatchAt === 1 ? result.output : result.unstable_output;
+		assert.deepEqual(original, trial.reference_output);
+		assert.deepEqual(differing.pixels.data, [99, 2, 3, 255]);
+	}
+});
+
+test('strict same-call and diagnostic different-stage primes reject before calls with bounded errors', async () => {
+	for (const [prime, diagnostic] of [
+		['same-call', false],
+		['same-call', 'true'],
+		['resize', true]
+	]) {
+		await assert.rejects(
+			warmProcessTrial({
+				configure(trial) {
+					trial.case.browser.measure_nonexact = diagnostic;
+					if (prime === 'same-call') {
+						trial.case.browser.operation = { operation: 'resize-bilinear', anchor: 'center' };
+						trial.case.browser.cache.roles.sample_prime = prime;
+					}
+					// Error size must not grow with the frozen image's byte array.
+					trial.prime_reference_output.pixels.data = Array(4096).fill(9);
+				}
+			}),
+			(error) => {
+				assert.match(error.message, /Stage prime differs from frozen reference/);
+				assert.ok(error.message.length < 160);
+				assert.ok(!error.message.includes('"data"'));
+				return true;
+			}
+		);
+		assert.equal(events.filter((event) => event.type === 'resize').length, 1);
+		assert.equal(events.filter((event) => event.type === 'process').length, 0);
+		assert.equal(
+			events.filter((event) => event.type === 'create').length,
+			events.filter((event) => event.type === 'dispose').length
+		);
+	}
+});
+
 test('cross-method prime requests preserve the measured source and relevant settings', () => {
 	const source = { width: 1, height: 1, data: new Uint8Array([1, 2, 3, 255]) };
 	const output = { width: 2, height: 1, resize: { algorithm: 'area' } };

@@ -197,6 +197,24 @@ impl ConvolutionResizePlan {
             .ok_or_else(memory_limit)
     }
 
+    /// f64 capacity for one absolute output band, including all of its source support.
+    /// Adjacent bands can overlap in source rows; each live scratch owner counts that overlap.
+    pub fn row_scratch_elements(&self, y_start: u32, height: u32) -> Result<usize, Failure> {
+        let end = y_start
+            .checked_add(height)
+            .filter(|&end| height > 0 && end <= self.output_dimensions.height())
+            .ok_or_else(|| Failure::new(ErrorCode::InvalidImage, ErrorPath::Output))?;
+        if self.same_height() || self.same_width() || !super::kernel::should_use_x_then_y(self) {
+            return Ok(0);
+        }
+        let support = super::kernel::source_rows(&self.y_taps[y_start as usize..end as usize]);
+        support
+            .len()
+            .checked_mul(self.output_dimensions.width_usize())
+            .and_then(|n| n.checked_mul(crate::image::rgba8::RGBA8_CHANNELS))
+            .ok_or_else(memory_limit)
+    }
+
     /// Builds reusable coordinate metadata for packed RGBA8 convolution resize.
     pub fn new<K>(
         source_dimensions: ImageDimensions,

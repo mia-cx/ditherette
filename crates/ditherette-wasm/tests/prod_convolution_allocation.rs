@@ -126,6 +126,231 @@ impl Plan {
             }
         }
     }
+
+    fn row_scratch_elements(&self, y_start: u32, height: u32) -> usize {
+        match self {
+            Self::Bicubic(plan) => plan.row_scratch_elements(y_start, height),
+            Self::Lanczos(plan) => plan.row_scratch_elements(y_start, height),
+        }
+        .unwrap()
+    }
+
+    fn execute_rows(
+        &self,
+        source: ImageView<Rgba8>,
+        output: ImageViewMut<Rgba8>,
+        y_start: u32,
+        scratch: &mut [f64],
+    ) -> Result<(), Failure> {
+        use ditherette_wasm::prod::resize::scalar::{bicubic, lanczos};
+        match self {
+            Self::Bicubic(plan) => bicubic::resize_bicubic_rgba8_rows_with_plan_and_scratch_into(
+                source, output, plan, y_start, scratch,
+            ),
+            Self::Lanczos(plan) => lanczos::resize_lanczos_rgba8_rows_with_plan_and_scratch_into(
+                source, output, plan, y_start, scratch,
+            ),
+        }
+    }
+}
+
+#[test]
+fn caller_scratch_convolution_bands_count_support_overlap_and_preserve_scalar_bytes() {
+    use ditherette_wasm::prod::tiling::RowBandPlan;
+    for (sw, sh, ow, oh) in [
+        (101, 100, 31, 47),
+        (11, 9, 3, 2),
+        (7, 5, 11, 9),
+        (11, 9, 11, 3),
+        (11, 9, 3, 9),
+        (5, 7, 5, 7),
+    ] {
+        let input = dimensions(sw, sh);
+        let output = dimensions(ow, oh);
+        let bytes = source_bytes(input);
+        let source = ImageView::packed(&bytes, input).unwrap();
+        for mode in [0, 2, 3] {
+            for policy in [SupportPolicy::Fixed, SupportPolicy::ScaleAware] {
+                for anchor in [
+                    ResizeAnchor::TopLeft,
+                    ResizeAnchor::Center,
+                    ResizeAnchor::BottomRight,
+                ] {
+                    let mut budget =
+                        CapacityBudget::new(Plan::required(mode, input, output, policy).unwrap());
+                    let plan = Plan::new(mode, input, output, anchor, policy, &mut budget).unwrap();
+                    let mut expected = vec![0; output.storage_len::<Rgba8>().unwrap()];
+                    let mut full_scratch = vec![0.0; plan.scratch_elements()];
+                    plan.execute(
+                        source,
+                        ImageViewMut::packed(&mut expected, output).unwrap(),
+                        &mut full_scratch,
+                    )
+                    .unwrap();
+                    for band_height in [1, 3, oh] {
+                        let bands = RowBandPlan::for_output_height(output, band_height).unwrap();
+                        let total: usize = bands
+                            .bands()
+                            .iter()
+                            .map(|band| plan.row_scratch_elements(band.y_start(), band.height()))
+                            .sum();
+                        if sw == 101 && policy == SupportPolicy::ScaleAware && band_height == 1 {
+                            assert!(
+                                total > plan.scratch_elements(),
+                                "overlapping support must be charged for each live worker"
+                            );
+                        }
+                        let mut actual = vec![213; expected.len()];
+                        for band in bands.bands() {
+                            let len = plan.row_scratch_elements(band.y_start(), band.height());
+                            let mut scratch_budget = CapacityBudget::new(len as u64 * 8);
+                            let mut scratch = scratch_budget.vector::<f64>(len).unwrap();
+                            scratch.resize(len, f64::NAN);
+                            let start = (band.y_start() * ow * 4) as usize;
+                            let end = (band.y_end() * ow * 4) as usize;
+                            let dimensions = dimensions(ow, band.height());
+                            if len > 0 {
+                                let error = plan
+                                    .execute_rows(
+                                        source,
+                                        ImageViewMut::packed(&mut actual[start..end], dimensions)
+                                            .unwrap(),
+                                        band.y_start(),
+                                        &mut scratch[..len - 1],
+                                    )
+                                    .unwrap_err();
+                                assert_eq!(error.code, ErrorCode::MemoryLimit);
+                                assert!(actual[start..end].iter().all(|&byte| byte == 213));
+                            }
+                            let before = ALLOCATIONS.with(Cell::get);
+                            plan.execute_rows(
+                                source,
+                                ImageViewMut::packed(&mut actual[start..end], dimensions).unwrap(),
+                                band.y_start(),
+                                &mut scratch,
+                            )
+                            .unwrap();
+                            assert_eq!(ALLOCATIONS.with(Cell::get), before);
+                            assert!(scratch.iter().all(|value| value.is_finite()));
+                        }
+                        assert_eq!(actual, expected, "mode {mode}, {input:?}->{output:?}, {anchor:?}, {policy:?}, band {band_height}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn budgeted_convolution_workers_preflight_all_support_and_stop_at_callback_failure() {
+    use ditherette_wasm::prod::tiling::{RowBandBuffers, WorkerBudget};
+    let input = dimensions(101, 100);
+    let output = dimensions(31, 47);
+    let bytes = source_bytes(input);
+    let source = ImageView::packed(&bytes, input).unwrap();
+    let mut plan_budget =
+        CapacityBudget::new(Plan::required(3, input, output, SupportPolicy::ScaleAware).unwrap());
+    let plan = Plan::new(
+        3,
+        input,
+        output,
+        ResizeAnchor::Center,
+        SupportPolicy::ScaleAware,
+        &mut plan_budget,
+    )
+    .unwrap();
+    let pool = WorkerBudget::new(4);
+    let lengths = |band: ditherette_wasm::prod::tiling::RowBand| {
+        Ok(plan.row_scratch_elements(band.y_start(), band.height()))
+    };
+    let required = RowBandBuffers::<f64>::required_bytes(output, 4, pool, 4, &lengths).unwrap();
+    let before = ALLOCATIONS.with(Cell::get);
+    let error = RowBandBuffers::<f64>::try_new(output, 4, pool, 4, required - 1, &lengths)
+        .err()
+        .unwrap();
+    assert_eq!(error.code, ErrorCode::MemoryLimit);
+    assert_eq!(
+        ALLOCATIONS.with(Cell::get),
+        before,
+        "complete worker preflight must precede allocation"
+    );
+    let before = ALLOCATIONS.with(Cell::get);
+    let mut execution =
+        RowBandBuffers::<f64>::try_new(output, 4, pool, 4, required, &lengths).unwrap();
+    let reservations = ALLOCATIONS.with(Cell::get) - before;
+    assert_eq!(execution.capacity_bytes(), required);
+    for reservation in 0..reservations {
+        FAIL_AFTER.with(|remaining| remaining.set(Some(reservation)));
+        let result = RowBandBuffers::<f64>::try_new(output, 4, pool, 4, required, &lengths);
+        FAIL_AFTER.with(|remaining| remaining.set(None));
+        assert_eq!(
+            result.err().unwrap().code,
+            ErrorCode::WasmMemoryUnavailable,
+            "reservation {reservation}"
+        );
+    }
+    let mut expected = vec![0; output.storage_len::<Rgba8>().unwrap()];
+    let mut full_scratch = vec![0.0; plan.scratch_elements()];
+    plan.execute(
+        source,
+        ImageViewMut::packed(&mut expected, output).unwrap(),
+        &mut full_scratch,
+    )
+    .unwrap();
+    let mut actual = vec![0; expected.len()];
+    let caller = std::thread::current().id();
+    let render =
+        |band: ditherette_wasm::prod::tiling::RowBand, bytes: &mut [u8], scratch: &mut [f64]| {
+            let before = ALLOCATIONS.with(Cell::get);
+            let result = plan.execute_rows(
+                source,
+                ImageViewMut::packed(bytes, dimensions(output.width(), band.height())).unwrap(),
+                band.y_start(),
+                scratch,
+            );
+            assert_eq!(
+                ALLOCATIONS.with(Cell::get),
+                before,
+                "worker kernel must not allocate"
+            );
+            result.map(|_| u64::from(band.height()))
+        };
+    let mut completed = 0;
+    execution
+        .execute(
+            &mut actual,
+            output.width_usize() * 4,
+            &render,
+            &mut |count| {
+                assert_eq!(std::thread::current().id(), caller);
+                completed = count;
+                Ok(())
+            },
+        )
+        .unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(completed, u64::from(output.height()));
+    actual.fill(213);
+    let mut callbacks = 0;
+    let error = execution
+        .execute(&mut actual, output.width_usize() * 4, &render, &mut |_| {
+            callbacks += 1;
+            Err(Failure::new(
+                ErrorCode::Callback,
+                ditherette_wasm::prod::contract::failure::ErrorPath::OnProgress,
+            ))
+        })
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Callback);
+    assert_eq!(callbacks, 1);
+    for assignment in execution.work().assignments() {
+        for band in &assignment.bands()[1..] {
+            assert!(actual[(band.y_start() * output.width() * 4) as usize
+                ..(band.y_end() * output.width() * 4) as usize]
+                .iter()
+                .all(|&byte| byte == 213));
+        }
+    }
 }
 
 fn dimensions(width: u32, height: u32) -> ImageDimensions {

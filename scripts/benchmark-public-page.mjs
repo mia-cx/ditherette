@@ -5,6 +5,7 @@ import {
 } from './benchmark-public-timing.mjs';
 import { prepareStageSample, stagePrimeRequest } from './benchmark-stage-cache.mjs';
 import { progressProbe } from './benchmark-progress.mjs';
+import { createRowBandProcessor } from './benchmark-row-policy.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -43,8 +44,8 @@ export function resizeRecipe(operation) {
 	}
 }
 
-/** Prepare the actual package or website call outside measurement timers. */
-export async function prepareOperation(trial) {
+/** Prepare calls outside timers; diagnostic same-call primes also enter the caller's output verifier. */
+export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCallPrime = () => {}) {
 	const config = trial.case.browser;
 	const execution =
 		typeof DedicatedWorkerGlobalScope !== 'undefined' &&
@@ -55,16 +56,23 @@ export async function prepareOperation(trial) {
 		throw new Error('Browser execution context differs from the declaration.');
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
+	const packageBackend = (value) => value === 'package' || (value === 'package-staged' && config.operation.operation === 'process');
 	if (
 		config.threads !== undefined &&
 		(!config.threads ||
 			!['disabled', 'preferred', 'required'].includes(config.threads.accepted) ||
 			!['disabled', 'preferred', 'required'].includes(config.threads.candidate) ||
-			config.accepted !== 'package' ||
-			config.candidate !== 'package')
+			!packageBackend(config.accepted) ||
+			!packageBackend(config.candidate))
 	)
 		throw new Error('Thread policies require ordinary package calls and valid role policies.');
 	const threads = config.threads?.[trial.role] ?? 'disabled';
+	const selectedRowPolicy = config.row_policy === undefined ? undefined : {
+		stage: config.row_policy.stage,
+		parameters: config.row_policy[trial.role]
+	};
+	if (selectedRowPolicy && (execution !== 'host-worker' || threads !== 'required' || measurement.scope !== 'complete-call'))
+		throw new Error('Row policies require complete calls in a required-thread host.');
 	if (
 		config.progress !== undefined &&
 		(!config.progress ||
@@ -193,7 +201,13 @@ export async function prepareOperation(trial) {
 	preload.dispose();
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
-	const create = () => createDitherette({ wasm: compiled ?? bytes, threads });
+	const create = async () => {
+		const initialize = () => createDitherette({ wasm: compiled ?? bytes, threads });
+		if (!selectedRowPolicy) return initialize();
+		const result = await createRowBandProcessor(initialize, selectedRowPolicy, navigator.hardwareConcurrency);
+		onRowPolicy(result.observation);
+		return result.processor;
+	};
 	const call = process
 		? (instance) =>
 				backend === 'package-staged'
@@ -226,6 +240,7 @@ export async function prepareOperation(trial) {
 		throw new Error('Browser processing requires complete-call scope.');
 	if (config.preparation === 'primed-sample') {
 		const prime = stagePrimeRequest(config.operation.operation, request, samplePrime);
+		const diagnosticPrime = samplePrime === 'same-call' && config.measure_nonexact === true;
 		if (!trial.prime_reference_output)
 			throw new Error('Stage priming requires a frozen prime output.');
 		return {
@@ -238,11 +253,11 @@ export async function prepareOperation(trial) {
 					observePrime: (output) => {
 						assertMeasuredSource(request, trial.case.rgba);
 						const actual = verificationOutput(output);
-						if (!equalOutput(actual, trial.prime_reference_output)) {
-							throw new Error(
-								`Stage prime differs from frozen reference: ${JSON.stringify({ expected: trial.prime_reference_output, actual })}`
-							);
-						}
+						if (!equalOutput(actual, trial.prime_reference_output) && !diagnosticPrime)
+							throw new Error('Stage prime differs from frozen reference; actual prime rejected before timing.');
+						// The same operation shares its final oracle and bounded instability evidence.
+						// Different-stage primes cannot use that verifier's dimensions or pixel format.
+						if (diagnosticPrime) onSameCallPrime(output);
 					}
 				}),
 			close() {}
@@ -495,7 +510,22 @@ export async function requireMatchingComposition(operation, current) {
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
 export async function runTrial(trial) {
 	const resolution = timerResolution();
-	const operation = await prepareOperation(trial);
+	let rowPolicyObservation;
+	const format = ['quantize', 'separable', 'diffusion', 'yliluoma', 'process'].includes(
+		trial.case.browser.operation.operation
+	)
+		? 'indexed8'
+		: 'rgba8';
+	const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
+	// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
+	const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
+	retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
+	const stability = outputStability(outputBytes, format);
+	const operation = await prepareOperation(
+		trial,
+		(value) => { rowPolicyObservation = value; },
+		(output) => stability.observe([output])
+	);
 	try {
 		const identity = {
 			role: trial.role,
@@ -505,6 +535,7 @@ export async function runTrial(trial) {
 			settings: trial.case.identity.settings
 		};
 		const observation = {
+			get row_policy() { return rowPolicyObservation; },
 			...(trial.case.browser.execution === undefined
 				? {}
 				: { execution: trial.case.browser.execution }),
@@ -512,16 +543,6 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const format = ['quantize', 'separable', 'diffusion', 'yliluoma', 'process'].includes(
-			trial.case.browser.operation.operation
-		)
-			? 'indexed8'
-			: 'rgba8';
-		const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
-		// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
-		const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
-		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
-		const stability = outputStability(outputBytes, format);
 		const observe = (outputs) => {
 			stability.observe(outputs);
 			assertMeasuredSource(operation.request, trial.case.rgba);

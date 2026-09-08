@@ -98,6 +98,8 @@ impl Scratch {
 }
 
 pub(super) struct Store {
+    pub(super) execution: super::execution::ExecutionPolicy,
+    pub(super) execution_overrides: u8,
     entries: [Option<Entry>; MAX_CACHE_ENTRIES],
     scratch: Scratch,
     clock: u64,
@@ -110,6 +112,8 @@ pub(super) struct Store {
 impl Default for Store {
     fn default() -> Self {
         Self {
+            execution: super::execution::ExecutionPolicy::default(),
+            execution_overrides: 0,
             entries: std::array::from_fn(|_| None),
             scratch: Scratch::default(),
             clock: 0,
@@ -130,6 +134,22 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
+    /// Resolve one request stage without changing semantic preparation or image identities.
+    pub(super) fn row_policy(
+        &self,
+        stage: super::execution::ExecutionStage,
+        measured: Option<super::execution::RowBandPolicy>,
+    ) -> Option<super::execution::RowBandPolicy> {
+        super::execution::resolve(
+            measured,
+            (self.execution_overrides & stage.mask() != 0).then(|| self.execution.stage(stage)),
+        )
+    }
+
+    pub(super) fn execution_policy(&self) -> super::execution::ExecutionPolicy {
+        self.execution
+    }
+
     #[cfg(test)]
     pub(super) fn image_stats(&self) -> (usize, u64, u64) {
         (
@@ -285,6 +305,25 @@ pub(super) struct Call<'a> {
 }
 
 impl<'a> Call<'a> {
+    /// Charge domain-owned temporary capacity before complete-call preparation.
+    /// The caller releases the charge only after dropping every charged allocation.
+    pub(super) fn charge_working_capacity(
+        &mut self,
+        bytes: u64,
+        _peak: &mut u64,
+    ) -> Result<(), Failure> {
+        let overhead = self.overhead.checked_add(bytes).ok_or_else(memory_limit)?;
+        CapacityBudget::new(self.limit).check_additional(overhead)?;
+        // prepare() releases idle scratch before LRU eviction and records the full peak.
+        // Domain allocations must wait until that complete preflight succeeds.
+        self.overhead = overhead;
+        Ok(())
+    }
+
+    pub(super) fn release_working_capacity(&mut self, bytes: u64) {
+        self.overhead -= bytes;
+    }
+
     pub(super) const fn record_bytes() -> u64 {
         size_of::<Self>() as u64
     }
@@ -495,6 +534,23 @@ impl<'a> Call<'a> {
                     value: Value::Resize(record),
                 });
             }
+            let Value::Resize(record) = &mut call.resize.as_mut().unwrap().value else {
+                unreachable!()
+            };
+            let record_bytes = (record.capacity() * size_of::<PreparedResize>()) as u64;
+            let output = ImageDimensions::new(request.output.width, request.output.height).unwrap();
+            let measured = super::resize::measured_row_policy(
+                request.source,
+                output,
+                request.output.resize,
+                super::execution::worker_budget(),
+            );
+            record[0].select_bands(
+                output,
+                call.store
+                    .row_policy(super::execution::ExecutionStage::Resize, measured),
+                budget - record_bytes,
+            )?;
         }
         let owned = overhead
             + call.store.capacity()
@@ -1111,6 +1167,31 @@ mod tests {
         let heap = store.capacity();
         store.room(limit - heap + 1, limit).unwrap();
         assert_eq!(store.stats().0, 1);
+    }
+
+    #[test]
+    fn temporary_work_charge_defers_pressure_until_idle_scratch_can_drop() {
+        let mut store = Store::default();
+        let limit = 1 << 20;
+        prepare(&mut store, 17, limit);
+        let retained = store.stats().3;
+        let mut call = image_call(&mut store, 16_000, limit);
+        let entries = call.store.stats().0;
+        // Keep the already-snapshotted source capacity; only output scratch is idle.
+        let charge =
+            limit - call.overhead - retained - call.scratch.buffers[0].capacity() as u64 - 128;
+        call.charge_working_capacity(charge, &mut 0).unwrap();
+        assert_eq!(
+            call.store.stats().0,
+            entries,
+            "charging does not evict plans before scratch"
+        );
+        call.prepare(None, None, [4, 0, 0, 0], 0, &mut 0, &mut SystemAllocator)
+            .unwrap();
+        assert_eq!(call.store.stats().0, entries, "unused scratch drops first");
+        assert!(call.active_capacity() + call.store.capacity() <= limit);
+        call.release_working_capacity(charge);
+        call.finish(Ok(())).unwrap();
     }
 
     #[test]

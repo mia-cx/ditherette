@@ -2,6 +2,11 @@
 
 use std::{mem::size_of, num::NonZeroU32};
 
+mod bands;
+mod policy;
+use bands::ResizeScratch;
+pub(super) use policy::measured as measured_row_policy;
+
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::{
@@ -22,11 +27,11 @@ use crate::{
 
 pub(super) enum PreparedResize {
     Identity,
-    Nearest(nearest::NearestResizePlan),
-    Area(area::AreaResizePlan, Vec<f32>),
-    Bilinear(bilinear::BilinearResizePlan, Vec<f32>),
-    Bicubic(bicubic::BicubicResizePlan, Vec<f64>),
-    Lanczos(lanczos::LanczosResizePlan, Vec<f64>),
+    Nearest(nearest::NearestResizePlan, ResizeScratch<u8>),
+    Area(area::AreaResizePlan, ResizeScratch<f32>),
+    Bilinear(bilinear::BilinearResizePlan, ResizeScratch<f32>),
+    Bicubic(bicubic::BicubicResizePlan, ResizeScratch<f64>),
+    Lanczos(lanczos::LanczosResizePlan, ResizeScratch<f64>),
     Trilinear {
         scratch: Option<PreparedTrilinear<Rgba8>>,
         source: ImageDimensions,
@@ -109,7 +114,7 @@ impl PreparedResize {
         match policy {
             ResizePolicy::Nearest { anchor } => {
                 nearest::NearestResizePlan::try_new(source, output, nearest_anchor(anchor), limit)
-                    .map(Self::Nearest)
+                    .map(|plan| Self::Nearest(plan, Vec::new().into()))
                     .map_err(|error| match error {
                         nearest::PlanAllocationError::MemoryLimit => {
                             Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
@@ -123,7 +128,7 @@ impl PreparedResize {
                 let plan = area::AreaResizePlan::try_new(source, output, &mut budget)?;
                 let mut scratch = budget.vector(plan.scratch_elements())?;
                 scratch.resize(plan.scratch_elements(), 0.0);
-                Ok(Self::Area(plan, scratch))
+                Ok(Self::Area(plan, scratch.into()))
             }
             ResizePolicy::Bilinear { anchor } => {
                 let plan = bilinear::BilinearResizePlan::try_new(
@@ -134,7 +139,7 @@ impl PreparedResize {
                 )?;
                 let mut scratch = budget.vector(plan.scratch_elements())?;
                 scratch.resize(plan.scratch_elements(), 0.0);
-                Ok(Self::Bilinear(plan, scratch))
+                Ok(Self::Bilinear(plan, scratch.into()))
             }
             ResizePolicy::Bicubic { anchor, support } => {
                 let plan = bicubic::BicubicResizePlan::try_new(
@@ -147,7 +152,7 @@ impl PreparedResize {
                 let elements = plan.scratch_elements()?;
                 let mut scratch = budget.vector(elements)?;
                 scratch.resize(elements, 0.0);
-                Ok(Self::Bicubic(plan, scratch))
+                Ok(Self::Bicubic(plan, scratch.into()))
             }
             ResizePolicy::Lanczos2 { anchor, support }
             | ResizePolicy::Lanczos3 { anchor, support } => {
@@ -166,7 +171,7 @@ impl PreparedResize {
                 let elements = plan.scratch_elements()?;
                 let mut scratch = budget.vector(elements)?;
                 scratch.resize(elements, 0.0);
-                Ok(Self::Lanczos(plan, scratch))
+                Ok(Self::Lanczos(plan, scratch.into()))
             }
             ResizePolicy::Trilinear { anchor } => PreparedTrilinear::try_new(
                 source,
@@ -186,11 +191,11 @@ impl PreparedResize {
     pub(super) fn capacity_bytes(&self) -> u64 {
         match self {
             Self::Identity => 0,
-            Self::Nearest(plan) => plan.capacity_bytes(),
-            Self::Area(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 4,
-            Self::Bilinear(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 4,
-            Self::Bicubic(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 8,
-            Self::Lanczos(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 8,
+            Self::Nearest(plan, scratch) => plan.capacity_bytes() + scratch.capacity_bytes(),
+            Self::Area(plan, scratch) => plan.capacity_bytes() + scratch.capacity_bytes(),
+            Self::Bilinear(plan, scratch) => plan.capacity_bytes() + scratch.capacity_bytes(),
+            Self::Bicubic(plan, scratch) => plan.capacity_bytes() + scratch.capacity_bytes(),
+            Self::Lanczos(plan, scratch) => plan.capacity_bytes() + scratch.capacity_bytes(),
             Self::Trilinear { scratch, .. } => scratch
                 .as_ref()
                 .map_or(0, |plan| plan.capacity_bytes() - TRILINEAR_RECORD_BYTES),
@@ -200,8 +205,9 @@ impl PreparedResize {
     /// Mutable storage is outside the retained preparation cap and is evicted first.
     pub(super) fn scratch_capacity_bytes(&self) -> u64 {
         match self {
-            Self::Area(_, scratch) | Self::Bilinear(_, scratch) => scratch.capacity() as u64 * 4,
-            Self::Bicubic(_, scratch) | Self::Lanczos(_, scratch) => scratch.capacity() as u64 * 8,
+            Self::Nearest(_, scratch) => scratch.capacity_bytes(),
+            Self::Area(_, scratch) | Self::Bilinear(_, scratch) => scratch.capacity_bytes(),
+            Self::Bicubic(_, scratch) | Self::Lanczos(_, scratch) => scratch.capacity_bytes(),
             Self::Trilinear { .. } => self.capacity_bytes(),
             _ => 0,
         }
@@ -223,8 +229,9 @@ impl PreparedResize {
 
     pub(super) fn drop_scratch(&mut self) {
         match self {
-            Self::Area(_, scratch) | Self::Bilinear(_, scratch) => *scratch = Vec::new(),
-            Self::Bicubic(_, scratch) | Self::Lanczos(_, scratch) => *scratch = Vec::new(),
+            Self::Nearest(_, scratch) => scratch.clear(),
+            Self::Area(_, scratch) | Self::Bilinear(_, scratch) => scratch.clear(),
+            Self::Bicubic(_, scratch) | Self::Lanczos(_, scratch) => scratch.clear(),
             Self::Trilinear { scratch, .. } => *scratch = None,
             _ => {}
         }
@@ -238,17 +245,15 @@ impl PreparedResize {
                 Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
             })?);
         match self {
-            Self::Area(plan, scratch) => {
-                restore_vector(scratch, plan.scratch_elements(), &mut budget)?
-            }
+            Self::Area(plan, scratch) => scratch.restore(plan.scratch_elements(), &mut budget)?,
             Self::Bilinear(plan, scratch) => {
-                restore_vector(scratch, plan.scratch_elements(), &mut budget)?
+                scratch.restore(plan.scratch_elements(), &mut budget)?
             }
             Self::Bicubic(plan, scratch) => {
-                restore_vector(scratch, plan.scratch_elements()?, &mut budget)?
+                scratch.restore(plan.scratch_elements()?, &mut budget)?
             }
             Self::Lanczos(plan, scratch) => {
-                restore_vector(scratch, plan.scratch_elements()?, &mut budget)?
+                scratch.restore(plan.scratch_elements()?, &mut budget)?
             }
             Self::Trilinear {
                 scratch,
@@ -266,6 +271,43 @@ impl PreparedResize {
             _ => {}
         }
         Ok(())
+    }
+
+    /// Shares existing plans and keeps only the selected scratch owner. Trilinear retains one mip chain.
+    pub(super) fn select_bands(
+        &mut self,
+        output: ImageDimensions,
+        policy: Option<super::execution::RowBandPolicy>,
+        limit: u64,
+    ) -> Result<(), Failure> {
+        let retained = self.capacity_bytes() - self.scratch_capacity_bytes();
+        let limit = limit
+            .checked_sub(retained)
+            .ok_or_else(|| Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes))?;
+        match self {
+            Self::Nearest(_, scratch) => scratch.select(output, policy, 0, limit, &|_| Ok(0)),
+            Self::Area(plan, scratch) => {
+                scratch.select(output, policy, plan.scratch_elements(), limit, &|_| {
+                    Ok(plan.scratch_elements())
+                })
+            }
+            Self::Bilinear(plan, scratch) => {
+                scratch.select(output, policy, plan.scratch_elements(), limit, &|_| {
+                    Ok(plan.scratch_elements())
+                })
+            }
+            Self::Bicubic(plan, scratch) => {
+                scratch.select(output, policy, plan.scratch_elements()?, limit, &|band| {
+                    plan.row_scratch_elements(band.y_start(), band.height())
+                })
+            }
+            Self::Lanczos(plan, scratch) => {
+                scratch.select(output, policy, plan.scratch_elements()?, limit, &|band| {
+                    plan.row_scratch_elements(band.y_start(), band.height())
+                })
+            }
+            _ => Ok(()),
+        }
     }
 
     pub(super) fn execute(
@@ -290,33 +332,124 @@ impl PreparedResize {
                 output.data_mut().copy_from_slice(source.data());
                 progress(height, height)?;
             }
-            Self::Nearest(plan) => {
+            Self::Nearest(plan, scratch) => {
+                if let Some(result) = scratch.execute(
+                    &mut output,
+                    &|band, output, _| {
+                        nearest::resize_nearest_rgba8_rows_with_plan_into(
+                            source,
+                            output,
+                            plan,
+                            band.y_start(),
+                        );
+                        Ok(())
+                    },
+                    progress,
+                ) {
+                    return result;
+                }
                 // Keep its optimized repeat/copy dispatch intact; this whole call is one work batch.
                 progress(0, height)?;
                 nearest::resize_nearest_rgba8_with_plan_into(source, output, plan);
                 progress(height, height)?;
             }
             Self::Area(plan, scratch) => {
+                if let Some(result) = scratch.execute(
+                    &mut output,
+                    &|band, output, scratch| {
+                        area::resize_area_rgba8_rows_with_plan_and_scratch_into(
+                            source,
+                            output,
+                            plan,
+                            band.y_start(),
+                            scratch,
+                        )
+                    },
+                    progress,
+                ) {
+                    return result;
+                }
                 progress(0, height)?;
-                area::resize_area_with_progress(source, output, plan, scratch, &mut |rows| {
-                    progress(rows, height)
-                })?;
+                area::resize_area_with_progress(
+                    source,
+                    output,
+                    plan,
+                    scratch.scalar(),
+                    &mut |rows| progress(rows, height),
+                )?;
             }
             Self::Bilinear(plan, scratch) => {
+                if let Some(result) = scratch.execute(
+                    &mut output,
+                    &|band, output, scratch| {
+                        bilinear::resize_bilinear_rgba8_rows_with_plan_and_scratch_into(
+                            source,
+                            output,
+                            plan,
+                            band.y_start(),
+                            scratch,
+                        )
+                    },
+                    progress,
+                ) {
+                    return result;
+                }
                 progress(0, height)?;
                 bilinear::resize_bilinear_with_progress(
                     source,
                     output,
                     plan,
-                    scratch,
+                    scratch.scalar(),
                     &mut |rows| progress(rows, height),
                 )?;
             }
             Self::Bicubic(plan, scratch) => {
-                bicubic::resize_bicubic_with_progress(source, output, plan, scratch, progress)?
+                if let Some(result) = scratch.execute(
+                    &mut output,
+                    &|band, output, scratch| {
+                        bicubic::resize_bicubic_rgba8_rows_with_plan_and_scratch_into(
+                            source,
+                            output,
+                            plan,
+                            band.y_start(),
+                            scratch,
+                        )
+                    },
+                    progress,
+                ) {
+                    return result;
+                }
+                bicubic::resize_bicubic_with_progress(
+                    source,
+                    output,
+                    plan,
+                    scratch.scalar(),
+                    progress,
+                )?
             }
             Self::Lanczos(plan, scratch) => {
-                lanczos::resize_lanczos_with_progress(source, output, plan, scratch, progress)?
+                if let Some(result) = scratch.execute(
+                    &mut output,
+                    &|band, output, scratch| {
+                        lanczos::resize_lanczos_rgba8_rows_with_plan_and_scratch_into(
+                            source,
+                            output,
+                            plan,
+                            band.y_start(),
+                            scratch,
+                        )
+                    },
+                    progress,
+                ) {
+                    return result;
+                }
+                lanczos::resize_lanczos_with_progress(
+                    source,
+                    output,
+                    plan,
+                    scratch.scalar(),
+                    progress,
+                )?
             }
             Self::Trilinear { scratch, .. } => scratch
                 .as_mut()
