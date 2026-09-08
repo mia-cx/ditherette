@@ -6,6 +6,53 @@ use ditherette_bench::{
 use ditherette_bench_api::verification::*;
 
 #[test]
+fn yliluoma_transport_accepts_indexed_output_and_rejects_rgba_output() {
+    use ditherette_bench::paired::{quantize::*, yliluoma::YliluomaSettings};
+    use ditherette_wasm::spec::contract::request::{BayerSize, Placement};
+
+    let (mut request, mut result) = fixture();
+    let operation = PublicOperation::Yliluoma {
+        settings: YliluomaSettings {
+            quantize: QuantizeSettings {
+                palette: vec![PaletteEntry::Color { rgb: [1, 2, 3] }],
+                alpha: AlphaPolicy::Premultiplied {},
+                matching: MatchPolicy::SrgbEuclidean,
+            },
+            size: BayerSize::Two,
+            placement: Placement::Everywhere {},
+        },
+    };
+    let case = &mut request.case;
+    case.identity = operation
+        .identity(case.source, &case.rgba, case.source)
+        .unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    let browser = case.browser.as_mut().unwrap();
+    browser.operation = operation;
+    browser.accepted = BrowserBackend::Package;
+    result.input = case.identity.input;
+    result.settings = case.identity.settings;
+    // A single opaque palette entry always emits its original index.
+    result.output.pixels = Pixels::Indexed8 {
+        indices: vec![0],
+        palette_rgba: vec![1, 2, 3, 255],
+        transparent_index: None,
+    };
+    request.reference_output = Some(result.output.clone());
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
+    validate_response(&request, &result).unwrap();
+    result.output.pixels = Pixels::Rgba8 {
+        data: vec![1, 2, 3, 255],
+    };
+    assert!(validate_response(&request, &result).is_err());
+}
+
+#[test]
 fn browser_transport_requires_an_independently_identified_target_reference() {
     let (request, mut result) = fixture();
     result.reference = None;

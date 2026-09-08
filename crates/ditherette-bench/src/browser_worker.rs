@@ -258,7 +258,9 @@ pub fn validate_response(
             .as_ref()
             .expect("validated browser recipe")
             .operation,
-        PublicOperation::Quantize { .. } | PublicOperation::Separable { .. }
+        PublicOperation::Quantize { .. }
+            | PublicOperation::Separable { .. }
+            | PublicOperation::Yliluoma { .. }
     );
     for output in std::iter::once(&result.output)
         .chain(result.unstable_output.iter())

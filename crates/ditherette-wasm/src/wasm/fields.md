@@ -19,6 +19,8 @@ Field 2 is blue noise and requires parameter zero for the frozen 32×32 rank til
 Spaces 0 through 6 are sRGB, linear RGB, Oklab, OKLCH, CIELAB, CIELCH, and YCbCr, respectively.
 Placement 0 is everywhere and requires zero unused controls. Placement 1 is adaptive.
 Family 0 is direct quantization and requires all eight field controls to be zero. Family 1 is separable perturbation.
+Family 3 is Yliluoma. Its parameter is matrix width 2, 4, 8, or 16; field, space, and strength must be zero.
+Its placement controls use the same encoding. Family 2 remains reserved for diffusion.
 Palette, matching, alpha mode, alpha threshold, and matte retain the existing privateQuantize encodings.
 
 Status zero guarantees complete publication into the private plain resultSink.value.
@@ -26,9 +28,11 @@ Nonzero status uses the existing allocation-free status table and privateErrorPa
 Paths 17 through 25 append perturb, field, space, strength, placement, radius, threshold, softness, and dither.
 The public adapter prefixes perturb paths with dither for the combined method.
 No earlier error code or path changes.
+Yliluoma placement paths are 27 through 30. Matrix size uses path 36; the intervening tags belong to diffusion.
 
 Capacity checks include source/output buffers, owned records, and one temporary existing Converter with its tables.
 Separable calls also count the RGBA8 intermediate and the existing prepared quantizer capacities.
+Yliluoma counts prepared quantizer capacities but needs no intermediate or mixture table.
 All processing buffers are reserved before the caught source import. Failure drops temporary ownership and restores Ready.
 The final caught void helpers construct the complete durable JS result before assigning the sink.
 No cache or callback publication is added here.

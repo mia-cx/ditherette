@@ -128,3 +128,24 @@ void badSize;
 void blueNoise;
 void seededBlueNoise;
 void badSpace;
+const yliluoma: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	size: '16',
+	placement: { mode: 'everywhere' }
+};
+const numericMix: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	// @ts-expect-error Yliluoma size is a canonical string tag.
+	size: 4,
+	placement: { mode: 'everywhere' }
+};
+const strengthMix: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	size: '4',
+	placement: { mode: 'everywhere' },
+	// @ts-expect-error Yliluoma has no strength control.
+	strength: 1
+};
+void yliluoma;
+void numericMix;
+void strengthMix;

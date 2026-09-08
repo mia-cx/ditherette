@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, and Bayer/random/blue-noise perturbation.
+An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, Bayer/random/blue-noise perturbation, and Yliluoma dithering.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -120,7 +120,24 @@ Zero strength preserves every source byte. Both placement modes preserve alpha a
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
 Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are reserved before input copy.
 Results remain durable after later calls and disposal. No field buffers or prepared palettes are cached.
-Diffusion and Yliluoma are not enabled in this checkpoint.
+Yliluoma uses the same palette, matching, and alpha controls:
+
+```ts
+const indexed = processor.ditherAndQuantize({
+	version: 1,
+	source,
+	palette,
+	matching: 'srgb-euclidean',
+	alpha: { mode: 'preserve', threshold: 128 },
+	dither: { family: 'yliluoma', size: '4', placement: { mode: 'everywhere' } }
+});
+```
+
+Matrix sizes are `'2'`, `'4'`, `'8'`, and `'16'`. Adaptive placement uses the controls shown above.
+Yliluoma searches every ordered palette pair and matrix ratio. A zero adaptive mask still searches mixtures of the nearest color.
+It allocates source and index storage without an RGBA8 intermediate or mixture table.
+Exact outputs follow the frozen Wasm reference; native floating-point math can select different mixtures near ties.
+Diffusion is not enabled in this checkpoint.
 
 ## Initialization and ownership
 

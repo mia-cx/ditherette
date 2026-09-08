@@ -32,6 +32,11 @@ pub enum ErrorPath {
     PerturbThreshold = 23,
     PerturbSoftness = 24,
     Dither = 25,
+    DitherPlacement = 27,
+    DitherRadius = 28,
+    DitherThreshold = 29,
+    DitherSoftness = 30,
+    DitherSize = 36,
 }
 
 /// A small value usable even when Rust cannot allocate an error string.

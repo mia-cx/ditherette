@@ -31,11 +31,15 @@ pub(super) const fn working_capacity_bytes() -> u64 {
 
 pub(super) fn validate(policy: PerturbPolicy) -> Result<(), Failure> {
     nonnegative(policy.strength, ErrorPath::PerturbStrength)?;
+    validate_placement(policy.placement)
+}
+
+pub(super) fn validate_placement(placement: Placement) -> Result<(), Failure> {
     if let Placement::Adaptive {
         radius,
         threshold,
         softness,
-    } = policy.placement
+    } = placement
     {
         if !(1..=32768).contains(&radius) {
             return Err(Failure::new(

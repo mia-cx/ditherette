@@ -60,7 +60,7 @@ pub fn private_perturb(
     result.map_or_else(status, |_| 0)
 }
 
-/// Family 0 is direct matching with zero unused field controls; family 1 is a separable field.
+/// Family 0 is direct matching, 1 is separable fields, and 3 is literal Yliluoma.
 /// The completed indexed result uses the same caught void sink helper as direct quantize.
 #[wasm_bindgen(js_name = privateDitherAndQuantize)]
 pub fn private_dither_and_quantize(
@@ -104,6 +104,22 @@ pub fn private_dither_and_quantize(
                     field, parameter, space, strength, placement, radius, threshold, softness,
                 )?,
             },
+            3.0 if field == 0.0 && space == 0.0 && strength == 0.0 => DitherPolicy::Yliluoma {
+                size: parse_bayer_size(parameter, ErrorPath::DitherSize)?,
+                placement: parse_placement(
+                    placement,
+                    radius,
+                    threshold,
+                    softness,
+                    [
+                        ErrorPath::DitherPlacement,
+                        ErrorPath::DitherRadius,
+                        ErrorPath::DitherThreshold,
+                        ErrorPath::DitherSoftness,
+                    ],
+                )?,
+            },
+            3.0 => return Err(invalid(ErrorPath::Dither)),
             _ => {
                 return Err(Failure::new(
                     ErrorCode::UnsupportedOperation,
@@ -160,13 +176,7 @@ fn parse_policy(
 ) -> Result<PerturbPolicy, Failure> {
     let field = match field {
         0.0 => Field::Bayer {
-            size: match parameter {
-                2.0 => BayerSize::Two,
-                4.0 => BayerSize::Four,
-                8.0 => BayerSize::Eight,
-                16.0 => BayerSize::Sixteen,
-                _ => return Err(invalid(ErrorPath::PerturbField)),
-            },
+            size: parse_bayer_size(parameter, ErrorPath::PerturbField)?,
         },
         1.0 if parameter.is_finite()
             && parameter.fract() == 0.0
@@ -191,26 +201,57 @@ fn parse_policy(
         _ => return Err(invalid(ErrorPath::PerturbSpace)),
     };
     let strength = scalar(strength, ErrorPath::PerturbStrength)?;
-    let placement = match placement {
-        0.0 if radius == 0.0 && threshold == 0.0 && softness == 0.0 => Placement::Everywhere {},
-        0.0 => return Err(invalid(ErrorPath::PerturbPlacement)),
-        1.0 => Placement::Adaptive {
-            radius: dimension(
-                radius,
-                MAX_SOURCE_SIDE,
-                ErrorCode::InvalidSettings,
-                ErrorPath::PerturbRadius,
-            )?,
-            threshold: scalar(threshold, ErrorPath::PerturbThreshold)?,
-            softness: scalar(softness, ErrorPath::PerturbSoftness)?,
-        },
-        _ => return Err(invalid(ErrorPath::PerturbPlacement)),
-    };
+    let placement = parse_placement(
+        placement,
+        radius,
+        threshold,
+        softness,
+        [
+            ErrorPath::PerturbPlacement,
+            ErrorPath::PerturbRadius,
+            ErrorPath::PerturbThreshold,
+            ErrorPath::PerturbSoftness,
+        ],
+    )?;
     Ok(PerturbPolicy {
         field,
         space,
         strength,
         placement,
+    })
+}
+
+fn parse_bayer_size(value: f64, path: ErrorPath) -> Result<BayerSize, Failure> {
+    match value {
+        2.0 => Ok(BayerSize::Two),
+        4.0 => Ok(BayerSize::Four),
+        8.0 => Ok(BayerSize::Eight),
+        16.0 => Ok(BayerSize::Sixteen),
+        _ => Err(invalid(path)),
+    }
+}
+
+fn parse_placement(
+    placement: f64,
+    radius: f64,
+    threshold: f64,
+    softness: f64,
+    paths: [ErrorPath; 4],
+) -> Result<Placement, Failure> {
+    Ok(match placement {
+        0.0 if radius == 0.0 && threshold == 0.0 && softness == 0.0 => Placement::Everywhere {},
+        0.0 => return Err(invalid(paths[0])),
+        1.0 => Placement::Adaptive {
+            radius: dimension(
+                radius,
+                MAX_SOURCE_SIDE,
+                ErrorCode::InvalidSettings,
+                paths[1],
+            )?,
+            threshold: scalar(threshold, paths[2])?,
+            softness: scalar(softness, paths[3])?,
+        },
+        _ => return Err(invalid(paths[0])),
     })
 }
 
