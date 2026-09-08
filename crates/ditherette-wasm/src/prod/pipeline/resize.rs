@@ -27,10 +27,15 @@ pub(super) enum PreparedResize {
     Bilinear(bilinear::BilinearResizePlan, Vec<f32>),
     Bicubic(bicubic::BicubicResizePlan, Vec<f64>),
     Lanczos(lanczos::LanczosResizePlan, Vec<f64>),
-    Trilinear(PreparedTrilinear<Rgba8>),
+    Trilinear {
+        scratch: Option<PreparedTrilinear<Rgba8>>,
+        source: ImageDimensions,
+        output: ImageDimensions,
+        anchor: Anchor,
+    },
 }
 
-// PreparedResize's inline storage is already counted by Processor::bookkeeping_bytes.
+// PreparedResize's inline storage belongs to the preparation entry's reserved Vec.
 const TRILINEAR_RECORD_BYTES: u64 = size_of::<PreparedTrilinear<Rgba8>>() as u64;
 
 pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
@@ -169,7 +174,12 @@ impl PreparedResize {
                 bilinear_anchor(anchor),
                 limit + TRILINEAR_RECORD_BYTES,
             )
-            .map(Self::Trilinear),
+            .map(|scratch| Self::Trilinear {
+                scratch: Some(scratch),
+                source,
+                output,
+                anchor,
+            }),
         }
     }
 
@@ -181,8 +191,81 @@ impl PreparedResize {
             Self::Bilinear(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 4,
             Self::Bicubic(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 8,
             Self::Lanczos(plan, scratch) => plan.capacity_bytes() + scratch.capacity() as u64 * 8,
-            Self::Trilinear(plan) => plan.capacity_bytes() - TRILINEAR_RECORD_BYTES,
+            Self::Trilinear { scratch, .. } => scratch
+                .as_ref()
+                .map_or(0, |plan| plan.capacity_bytes() - TRILINEAR_RECORD_BYTES),
         }
+    }
+
+    /// Mutable storage is outside the retained preparation cap and is evicted first.
+    pub(super) fn scratch_capacity_bytes(&self) -> u64 {
+        match self {
+            Self::Area(_, scratch) | Self::Bilinear(_, scratch) => scratch.capacity() as u64 * 4,
+            Self::Bicubic(_, scratch) | Self::Lanczos(_, scratch) => scratch.capacity() as u64 * 8,
+            Self::Trilinear { .. } => self.capacity_bytes(),
+            _ => 0,
+        }
+    }
+
+    pub(super) fn required_scratch_bytes(&self) -> Result<u64, Failure> {
+        Ok(match self {
+            Self::Area(plan, _) => plan.scratch_elements() as u64 * 4,
+            Self::Bilinear(plan, _) => plan.scratch_elements() as u64 * 4,
+            Self::Bicubic(plan, _) => plan.scratch_elements()? as u64 * 8,
+            Self::Lanczos(plan, _) => plan.scratch_elements()? as u64 * 8,
+            Self::Trilinear { source, output, .. } => {
+                PreparedTrilinear::<Rgba8>::required_bytes(*source, *output)?
+                    - TRILINEAR_RECORD_BYTES
+            }
+            _ => 0,
+        })
+    }
+
+    pub(super) fn drop_scratch(&mut self) {
+        match self {
+            Self::Area(_, scratch) | Self::Bilinear(_, scratch) => *scratch = Vec::new(),
+            Self::Bicubic(_, scratch) | Self::Lanczos(_, scratch) => *scratch = Vec::new(),
+            Self::Trilinear { scratch, .. } => *scratch = None,
+            _ => {}
+        }
+    }
+
+    /// Rebuild released scratch with the landed fallible helpers, before source import.
+    pub(super) fn restore_scratch(&mut self, limit: u64) -> Result<(), Failure> {
+        let retained = self.capacity_bytes() - self.scratch_capacity_bytes();
+        let mut budget =
+            CapacityBudget::new(limit.checked_sub(retained).ok_or_else(|| {
+                Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
+            })?);
+        match self {
+            Self::Area(plan, scratch) => {
+                restore_vector(scratch, plan.scratch_elements(), &mut budget)?
+            }
+            Self::Bilinear(plan, scratch) => {
+                restore_vector(scratch, plan.scratch_elements(), &mut budget)?
+            }
+            Self::Bicubic(plan, scratch) => {
+                restore_vector(scratch, plan.scratch_elements()?, &mut budget)?
+            }
+            Self::Lanczos(plan, scratch) => {
+                restore_vector(scratch, plan.scratch_elements()?, &mut budget)?
+            }
+            Self::Trilinear {
+                scratch,
+                source,
+                output,
+                anchor,
+            } if scratch.is_none() => {
+                *scratch = Some(PreparedTrilinear::try_new(
+                    *source,
+                    *output,
+                    bilinear_anchor(*anchor),
+                    limit + TRILINEAR_RECORD_BYTES,
+                )?);
+            }
+            _ => {}
+        }
+        Ok(())
     }
 
     pub(super) fn execute(
@@ -213,10 +296,27 @@ impl PreparedResize {
                     source, output, plan, scratch,
                 )?
             }
-            Self::Trilinear(plan) => plan.execute(source, output)?,
+            Self::Trilinear { scratch, .. } => scratch
+                .as_mut()
+                .expect("reserved trilinear scratch")
+                .execute(source, output)?,
         }
         Ok(())
     }
+}
+
+fn restore_vector<T: Default + Clone>(
+    scratch: &mut Vec<T>,
+    length: usize,
+    budget: &mut CapacityBudget,
+) -> Result<(), Failure> {
+    if scratch.capacity() < length {
+        *scratch = budget.vector(length)?;
+    } else {
+        budget.check_additional((scratch.capacity() * size_of::<T>()) as u64)?;
+    }
+    scratch.resize(length, T::default());
+    Ok(())
 }
 
 fn nearest_anchor(anchor: Anchor) -> nearest::alignment::ResizeAnchor {
