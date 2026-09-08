@@ -117,6 +117,24 @@ Machine identity contains architecture, CPU model, logical CPU count, hostname,
 OS, and kernel. This native coordinator currently requires Linux for host evidence.
 It does not certify unrelated host quiescence or stop other projects' processes.
 
+## Public initialization policies
+
+Optional `browser.threads` declares each role's existing public initialization policy:
+`disabled`, `preferred`, or `required`. Historical declarations omit it and stay scalar.
+The worker binds matching policy evidence separately from image identity. Both preload
+and measured factory calls receive the selected policy; failed required startup never retries as scalar.
+Each role's existing `AssetEntries.wasm` must point to the selected scalar or threaded bytes.
+The normal package asset tree retains factory, bootstrap, and pool-worker modules with their hashes.
+
+`startup_integration_plan regression|threaded NEW_JSON HOST_LOAD_NOTES` declares S34's
+two one-pixel nearest probes. Both use existing initialization bytes/compiled scopes,
+two role pairs, 20 single-call samples, 50 ms warmup, and a 10-second cap. Across both
+comparisons and three browsers this is 48 workers. `regression` compares S33/S34 with
+threads disabled; `threaded` uses the same S34 artifact in both roles with threads required.
+Package import and initial Wasm fetch stay untimed. Browser compilation caches are not
+reset, and each new threaded pool may still load its worker modules during initialization.
+The exact output probe and disposal remain outside every initialization timer.
+
 ## Public callback comparisons
 
 Optional `browser.progress` metadata declares each role as `disabled` or `enabled`.

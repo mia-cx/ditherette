@@ -137,6 +137,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                     cache: CacheCapability::None,
                     measure_nonexact: false,
                     progress: None,
+                    threads: None,
                 }),
                 native: (!public).then_some(native),
             });

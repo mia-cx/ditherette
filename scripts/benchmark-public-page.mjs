@@ -49,6 +49,15 @@ export async function prepareOperation(trial) {
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
 	if (
+		config.threads !== undefined &&
+		(!config.threads ||
+			!['disabled', 'preferred', 'required'].includes(config.threads.accepted) ||
+			!['disabled', 'preferred', 'required'].includes(config.threads.candidate) ||
+			config.accepted !== 'package' || config.candidate !== 'package')
+	)
+		throw new Error('Thread policies require ordinary package calls and valid role policies.');
+	const threads = config.threads?.[trial.role] ?? 'disabled';
+	if (
 		config.progress !== undefined &&
 		(!config.progress ||
 			!['disabled', 'enabled'].includes(config.progress.accepted) ||
@@ -172,11 +181,11 @@ export async function prepareOperation(trial) {
 	if (!response.ok) throw new Error(`Wasm fetch failed: ${response.status}`);
 	const bytes = await response.arrayBuffer();
 	// Load the real lazy factory module before timing. Browser compilation caches are not reset.
-	const preload = await createDitherette({ wasm: bytes });
+	const preload = await createDitherette({ wasm: bytes, threads });
 	preload.dispose();
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
-	const create = () => createDitherette({ wasm: compiled ?? bytes });
+	const create = () => createDitherette({ wasm: compiled ?? bytes, threads });
 	const call = process
 		? (instance) =>
 				backend === 'package-staged'

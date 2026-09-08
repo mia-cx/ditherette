@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::verification::{input_digest, settings_digest};
+pub use ditherette_wasm::prod::contract::lifecycle::Threads;
 pub use ditherette_wasm::prod::contract::request::{Anchor, Support};
 use std::{collections::BTreeSet, io, path::Component};
 
@@ -119,6 +120,14 @@ pub struct ProgressRoles {
     pub candidate: ProgressMode,
 }
 
+/// Public initialization policy for each measured role; omitted historical metadata stays scalar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ThreadRoles {
+    pub accepted: Threads,
+    pub candidate: Threads,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
@@ -129,6 +138,8 @@ pub struct BrowserCase {
     pub cache: CacheCapability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<ProgressRoles>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threads: Option<ThreadRoles>,
     /// Developer diagnostics only. Differences remain incorrect and retain review artifacts.
     #[serde(default)]
     pub measure_nonexact: bool,
@@ -473,6 +484,8 @@ pub struct BrowserEvidence {
     pub cache: CacheCapability,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<ProgressRoles>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threads: Option<ThreadRoles>,
     #[serde(default)]
     pub measure_nonexact: bool,
     pub observation: BrowserObservation,
@@ -596,6 +609,14 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if browser.threads.is_some()
+        && (browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package)
+    {
+        return Err(io::Error::other(
+            "thread policies require ordinary package calls",
+        ));
+    }
     if browser.progress.is_some()
         && (browser.preparation != BrowserPreparation::FreshInstance
             || m.scope != CallScope::CompleteCall
@@ -888,6 +909,7 @@ pub(super) fn validate_evidence(
         || evidence.preparation != browser_case.preparation
         || evidence.cache != browser_case.cache
         || evidence.progress != browser_case.progress
+        || evidence.threads != browser_case.threads
         || evidence.measure_nonexact != browser_case.measure_nonexact
     {
         return Err(io::Error::other(

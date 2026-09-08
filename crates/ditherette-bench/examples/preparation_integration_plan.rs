@@ -193,6 +193,7 @@ pub fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                     cache,
                     measure_nonexact: false,
                     progress: None,
+                    threads: None,
                 }),
                 measurement: Measurement {
                     mode: SampleMode::SingleCall,

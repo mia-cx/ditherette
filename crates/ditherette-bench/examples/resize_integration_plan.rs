@@ -157,6 +157,7 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
                 },
                 cache: CacheCapability::None,
                 progress: None,
+                threads: None,
                 measure_nonexact: slice != "s23",
             });
             let (identity, accepted_subject, candidate_subject) = if let Some(browser) = &browser {
