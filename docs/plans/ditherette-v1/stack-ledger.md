@@ -66,21 +66,33 @@ The fresh builds resolve the coordinator's stale S26 artifact failures. The coor
 The runtime agent owns `.worktrees/v1-s30-process` and only the missing process composition, private ABI, and public wiring.
 Readable native baseline `3335bb69acc6762a30a0b6844aef436c2e6b8de6` passes its initial all-family composition test, including metadata and one final output copy.
 The frozen-only Process oracle is complete at `61d338431b5bd7039fa3d1fae4dd44200abdcfc5` in `.worktrees/v1-s30-oracle`.
-Eight focused checks cover 130 resize/dither combinations, normalized identity, and output dimensions. Its isolated Wasm build passes; same-browser Process conformance is still pending.
+Eight focused checks cover 130 resize/dither combinations, normalized identity, and output dimensions. Its isolated Wasm build passes.
 The benchmark agent owns `.worktrees/v1-s30-bench`, complete-call adapters, and the fixed eight-case comparison against actual staged production calls.
 Public runtime checkpoint `587339793cf70429b673e888a89d86a332541693` passes both builds, 42 scoped native, 33 public, and 16 private checks.
 The coordinator's full trusted S18 guard passes. Independent native and private/public reviews find no actionable issues.
 Fresh tarball SHA-256 `379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2` passes Chromium, Firefox, and WebKit.
 Each engine verifies 423 actual Process/staged compositions plus inherited field, diffusion, and target-local Yliluoma suites.
-Documentation head `963a80c56a6de8c36617cd08b14244c768b34e38` preserves those runtime bytes. Process-specific frozen browser conformance and measurements remain pending.
+Documentation head `963a80c56a6de8c36617cd08b14244c768b34e38` preserves those runtime bytes.
 Final measurement source `e5aae7bf0e1761af2f970b6da75d34cf3a813323` joins benchmark head `834e882f95bb042b8356b324ef18343ef0ad1c52` without runtime changes.
 Its full trusted S18 guard passes. Fresh native worker `9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0` and the unchanged validated tarball are prepared.
 The fresh Process oracle hash is `300f61644c4b7757d1ad80b97c515121a5ad241fa0051e9827e448f0067ffb64`.
-Both roles use the same fresh artifact with distinct actual staged/Process calls. The fixed trial allows 128 serial workers and at most 2,560 samples.
-Final 431-fixture browser conformance and immutable browser snapshot validation precede quiet clearance. No measurement has started.
+Both roles use the same fresh artifact with distinct actual staged/Process calls.
+Final conformance passes 431 identified fixtures and two area probes in each of Chromium, Firefox, and WebKit.
+The fixed trial completes 128 serial workers and 2,504 samples. All 64 actual staged/Process output pairs match exactly.
+All four aggregate gates remain `Incorrect` solely from inherited area reference differences. Five other timing cases remain inconclusive.
+No confirmed greater-than-10% slowdown appears. No source optimization candidate is selected or implied.
 The enlarged native area fixture has 125 inherited resize-byte differences, each at most one, which become seven indexed differences.
 Frozen post-resize processing of the landed resize bytes equals both actual production call paths. Only that case may opt into diagnostic non-exact measurement.
 Its frozen gate stays non-passing; Process-versus-staged equality remains mandatory. No new non-exact implementation or optimization is selected.
+S30 is delivered in [PR119](https://github.com/mia-cx/ditherette/pull/119) at `88eb79fc129662fcfc6d4554d3109855348d0316`, targeting `impl/v1-s30-base` at `22b6dd78a6e552596c34aa9e693ad74850426b23`.
+Only four plan/report files differ from measured source `e5aae7bf`; all six prerequisite heads remain ancestors.
+The [S30 report](../../../.plans/71-benchmark-results.md) binds raw evidence, conformance, artifact sizes, and timing limitations.
+S41 retains the timing/reference gaps. No complete pre-S30 tarball exists for a valid size comparison; S41/S42 retain that missing evidence.
+S31 and S38 start from the actual S30 PR head in separate worktrees. Both keep `impl/v1-s30-process` as their immediate PR base.
+The preparation owner has `.worktrees/v1-s31-preparation` and private cache/scratch/accounting changes plus focused tests.
+The website owner has `.worktrees/v1-s38-website` and website adapter/worker mapping plus project-owned integration tests.
+The benchmark owner has `.worktrees/v1-s31-bench` and cold/warm protocol, fixtures, and report only. It does not edit production or measure independently.
+The coordinator owns this ledger, the slice table, issue availability, joins, and exclusive measurements. No benchmark is running.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -95,9 +107,12 @@ After S27 preparation and measurement ended, eight returned S24 native/S23 Wasm 
 The disk had 57 GiB free afterward. Source, copied binaries, trial snapshots, reports, and custom target evidence remain intact.
 After S29 delivery, eight returned S22 compiler profiles reclaimed another 5.34 GiB. Disk free space was 60 GiB afterward.
 Three returned freeze-checker profiles reclaim another 0.29 GiB. Their custom evidence and the active trusted checker cache remain intact.
-S30 runtime owns the S24 quantize cache and its scalar/threaded children. The S30 benchmark worktree owns its private `target/compiler` cache.
 The returned S30 oracle compiler cache reclaimed another 1.29 GiB. Its separately retained Wasm reference artifact is unchanged.
 Cargo clean refused the missing root `CACHEDIR.TAG`; cleanup instead removed three explicit, fingerprint-verified compiler profiles.
+After PR119 opened, ten returned S24 quantize/S30 benchmark compiler profiles reclaimed another 10.91 GiB. Disk free space is 66 GiB.
+Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
+Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
+Total compiler cleanup reclaims about 70 GiB. New slices own only their explicitly assigned worktree-local compiler outputs.
 All other completed-slice compiler ownership has ended. [S41 retains the measured release gaps](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5582606062).
 Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
 
