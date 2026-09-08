@@ -10,6 +10,7 @@ use crate::{
         color::packed::{Converter, OrdinarySpace},
         contract::request::{AlphaPolicy, MatchPolicy},
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
+        tiling::RowBand,
     },
 };
 use std::mem::size_of;
@@ -92,6 +93,39 @@ impl PreparedQuantizer {
             .expect("disabled progress cannot fail");
     }
 
+    /// Writes a disjoint packed output band from absolute rows of the full source.
+    /// All workers share this immutable preparation; no per-band allocation occurs.
+    pub fn quantize_rows_into(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        rows: RowBand,
+        output: &mut [u8],
+    ) {
+        let dimensions = source.dimensions();
+        assert!(rows.y_end() <= dimensions.height());
+        assert_eq!(
+            output.len(),
+            dimensions.width_usize() * rows.height() as usize
+        );
+        for (y, output) in
+            (rows.y_start()..rows.y_end()).zip(output.chunks_exact_mut(dimensions.width_usize()))
+        {
+            self.quantize_row_into(source.row(y).expect("valid source row"), output);
+        }
+    }
+
+    fn quantize_row_into(&self, source: &[u8], output: &mut [u8]) {
+        for (source, output) in source.chunks_exact(4).zip(output) {
+            let rgba = [source[0], source[1], source[2], source[3]];
+            *output = match self.palette.prepare_pixel(rgba) {
+                PalettePixel::Index(index) => index,
+                PalettePixel::Color(rgb) => {
+                    self.matcher.nearest(self.converter.coordinates(rgb)).index
+                }
+            };
+        }
+    }
+
     /// Reports each completed row without changing per-pixel traversal or arithmetic.
     pub(crate) fn quantize_with_progress(
         &self,
@@ -108,15 +142,7 @@ impl PreparedQuantizer {
             let source = source.row(y).expect("valid source row");
             let row_start = y as usize * dimensions.width_usize();
             let output = &mut output[row_start..row_start + dimensions.width_usize()];
-            for (source, output) in source.chunks_exact(4).zip(output) {
-                let rgba = [source[0], source[1], source[2], source[3]];
-                *output = match self.palette.prepare_pixel(rgba) {
-                    PalettePixel::Index(index) => index,
-                    PalettePixel::Color(rgb) => {
-                        self.matcher.nearest(self.converter.coordinates(rgb)).index
-                    }
-                };
-            }
+            self.quantize_row_into(source, output);
             progress(y + 1)?;
         }
         Ok(())

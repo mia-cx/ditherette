@@ -40,21 +40,66 @@ pub fn perturb_by_field_rows_into(
 /// Keeps global field indices and full-source adaptive neighbors while reporting completed rows.
 pub(crate) fn perturb_by_field_with_progress(
     source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
     space: WorkingSpace,
     strength: f32,
     placement: Placement,
     rows: RowBand,
     field: impl Fn(u32, u32, u64) -> f32,
+    progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+) -> Result<(), crate::prod::contract::failure::Failure> {
+    assert_eq!(source.dimensions(), output.dimensions());
+    perturb_rows(
+        source, output, space, strength, placement, rows, 0, field, progress,
+    )
+}
+
+/// Writes only a band-local output view while retaining full-source adaptive reads.
+/// Output row zero corresponds to `rows.y_start()`; field coordinates remain absolute.
+pub fn perturb_by_field_band_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    rows: RowBand,
+    field: impl Fn(u32, u32, u64) -> f32,
+) {
+    assert_eq!(source.dimensions().width(), output.dimensions().width());
+    assert_eq!(rows.height(), output.dimensions().height());
+    perturb_rows(
+        source,
+        output,
+        space,
+        strength,
+        placement,
+        rows,
+        rows.y_start(),
+        field,
+        |_| Ok(()),
+    )
+    .expect("disabled progress cannot fail");
+}
+
+fn perturb_rows(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    rows: RowBand,
+    output_y_start: u32,
+    field: impl Fn(u32, u32, u64) -> f32,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
     let dimensions = source.dimensions();
-    assert_eq!(dimensions, output.dimensions());
     assert!(rows.y_end() <= dimensions.height());
     let ranges = coordinate_domain(space).ranges().map(f64::from);
     for y in rows.y_start()..rows.y_end() {
         let source_row = source.row(y).expect("source row is in bounds");
-        let output_row = output.row_mut(y).expect("output row is in bounds");
+        let output_row = output
+            .row_mut(y - output_y_start)
+            .expect("output row is in bounds");
         for x in 0..dimensions.width() {
             let global_index = u64::from(y) * u64::from(dimensions.width()) + u64::from(x);
             let threshold = field(x, y, global_index);

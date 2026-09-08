@@ -27,7 +27,7 @@ No public API, execution selector, cache identity, or callback contract changes.
 
 ## Steps
 
-1. [ ] Add safe band-local kernel adapters and prove exact bytes across disjoint
+1. [x] Add safe band-local kernel adapters and prove exact bytes across disjoint
    output bands, worker counts, strides, alpha/ties, field identities, and adaptive seams.
 2. [ ] Define bounded execution capacity using existing worker-budget geometry.
    Count each concurrently live perturb converter and other temporary records;
@@ -57,3 +57,24 @@ Measured crossover policy is deferred. Root predeclares experiment targets and
 budget before exclusive runs; at most two candidate revisions follow the contract.
 Main-JS preferred remains scalar, and required remains a capability error there.
 Real threaded public calls run in a blocking-capable processing host worker.
+
+## First native checkpoint
+
+Band-local quantization and perturbation now call the same landed pixel loops
+as their full-image adapters. The new methods accept only their disjoint output
+storage and retain the full immutable source view. No scheduler or selection
+threshold is active. Shared preparation stays borrowed across all workers.
+
+Focused native validation passes 19 tests. It includes all 15 matching tags and
+three alpha modes, exact prepared-capacity and one-under failure, immutable
+metadata, six fields, seven spaces, two strengths, and adaptive radii 2 and 8.
+Worker counts 1/2/4 and band heights 1/2/3/11 preserve exact frozen bytes.
+Every field pixel draws once, including zero strength, and source/output guards
+remain intact. Existing scalar, allocation, and progress tests stay green.
+The allocation witness also exercises the new quantize row adapter directly.
+
+S35 owns the shared allocation-free pooled executor and fallible capacity-accounted
+row work plans. Step 2 joins that helper rather than introducing a competing plan.
+This checkpoint proves the domain adapters and existing preparation budgets;
+combined per-worker execution preflight remains pending. Native scoped threads
+here are exactness fixtures only, not benchmark subjects or timing evidence.
