@@ -262,6 +262,8 @@ S32 delivers required cache functionality with its measured costs; those costs r
 The PR stacks on `impl/v1-s31-preparation` at `59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76`.
 The required ancestry-preserving rebase leaves conformance head `59b5a004c98c4cff255b30f51025d8ec8143786d` unchanged.
 Report-only changes follow that head. Measured runtime and all retained artifacts stay unchanged.
+The real non-draft [PR 122](https://github.com/mia-cx/ditherette/pull/122) is open and remains unmerged.
+Report commit `cbd0003c8e0ef4bc1f6a751280bcee4a9ee8596f` contains the audited evidence summary.
 After the real unmerged PR is filed, return the six worktree-local compiler targets in S32 stages/benchmark to the coordinator.
 Copied binaries, native/public artifacts, oracle evidence, prepared snapshots, and result folders stay retained.
 The coordinator owns S41 issue recording and audited compiler cleanup; the report owner performs neither.
