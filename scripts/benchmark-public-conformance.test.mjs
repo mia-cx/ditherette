@@ -43,6 +43,17 @@ test('installed package and actual TypeScript adapter conformance, without measu
 		fieldFixtures.filter((fixture) => fixture.operation.operation === 'perturb').length,
 		7
 	);
+	const blueNoisePath = process.env.DITHERETTE_BENCH_BLUE_NOISE_FIXTURES;
+	if (blueNoisePath) {
+		const blueNoiseFixtures = JSON.parse(await readFile(blueNoisePath, 'utf8'));
+		assert.equal(blueNoiseFixtures.length, 4);
+		for (const fixture of blueNoiseFixtures) {
+			assert.deepEqual(fixture.source, { width: 65, height: 33 });
+			const settings = fixture.operation.settings;
+			assert.deepEqual((settings.perturb ?? settings).field, { algorithm: 'blue-noise' });
+		}
+		fieldFixtures.push(...blueNoiseFixtures);
+	}
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-public-conformance-'));
 	t.after(() => rm(temporary, { recursive: true, force: true }));
 	const consumer = path.join(temporary, 'consumer');
@@ -494,8 +505,11 @@ test('installed package and actual TypeScript adapter conformance, without measu
 								'area-bilinear-known-vectors-and-drift',
 								'convolution-support-recipes',
 								'47-frozen-quantize-fixtures-all-15-modes-primed-and-fresh',
-								'12-frozen-field-fixtures-seven-spaces-primed-and-fresh',
-								'10-actual-quantize-perturb-compositions-including-warning-metadata',
+								`${fieldFixtures.length}-frozen-field-fixtures-seven-spaces-primed-and-fresh`,
+								`${fieldFixtures.filter((fixture) => fixture.operation.operation === 'separable').length * 2}-actual-quantize-perturb-compositions-including-warning-metadata`,
+								...(fieldFixtures.some((fixture) => fixture.name.startsWith('blue-noise'))
+									? ['blue-noise-65x33-tile-boundaries']
+									: []),
 								'identity-copy',
 								'fresh-instance',
 								'initialization-bytes',
