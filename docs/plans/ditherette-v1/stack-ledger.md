@@ -235,8 +235,14 @@ The join preserves S35's scratch-before-LRU pressure ordering and multi-stage pr
 Its 39 library and ten focused threaded integration tests pass, including combined resize/indexed Process and mixing failure recovery.
 The trusted frozen guard passes with unchanged checkpoint/digest. Developer-only policy metadata binds actual public host calls; 27 protocol and 24 timing/policy tests pass.
 Explicit benchmark-feature build preparation passes six Node and ten native provenance tests. Normal package build defaults and exports remain unchanged.
-Separate `v1-row-band-host` and `v1-row-band-matrix` owners prepare untimed actual-browser fixtures and the fixed 400-worker first matrix.
-No performance measurements or new Wasm artifacts have run yet. Root owns the final clean source, artifact builds, and exclusive phase.
+The host fixture `dcfd5d72` and fixed 400-worker matrix `37b8bf59` join at clean source `2b6edc9c91307799e3f5ae16194ee0dfd3e5db38`.
+Fresh native and benchmark-feature public builds pass. Tarball SHA-256 is `f58b0949f93486c0e69b4e956e70f4a6e3381299a08cc47f9ca18fde23d069a8`.
+Seven actual host-worker fixtures pass in Chromium and Firefox, covering both row policies, progress, callback recovery, and durable outputs.
+The fixed first sweep stops at Chromium warm bilinear's cache-prime check after 28 successful workers; all 29 started children exit.
+Its strict prime check rejects inherited frozen-reference drift despite explicit diagnostic mode. No new production difference is established.
+Raw evidence remains in `v1-s35-37-bench/target/rows-trial-01`; Firefox has not started. No configuration is selected from this incomplete run.
+The resize owner fixes only same-call prime diagnostics and bounded error text. The fields owner summarizes completed pairs read-only.
+Root owns fresh artifact preparation and exclusive measurements after that fix. All three slice implementations remain in progress.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
