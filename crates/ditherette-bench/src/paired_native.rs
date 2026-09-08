@@ -20,7 +20,7 @@ use ditherette_bench::{
 };
 use ditherette_bench_api::{verification::*, ResizeParams};
 use ditherette_wasm::{
-    bench_subjects::{field_calls, fields, quantize as adapters, scores, BenchSubject},
+    bench_subjects::{field_calls, fields, quantize as adapters, scores, yiluoma, BenchSubject},
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
 };
@@ -165,6 +165,9 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
             ));
         };
         let callable = match operation {
+            native::NativeOperation::Yliluoma { .. } => {
+                yiluoma::yiluoma_function(subject_id).is_some()
+            }
             native::NativeOperation::FieldComponent { component } => {
                 component.prod_subject() == subject_id
             }
@@ -230,6 +233,10 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
 }
 
 enum TypedWorkload<'a> {
+    Yliluoma {
+        run: yiluoma::YliluomaFn,
+        request: ditherette_wasm::prod::contract::request::DitherQuantizeRequest<'a>,
+    },
     FieldComponent(fields::PreparedComponent<'a>),
     CompleteField {
         call: field_calls::CompleteCall<'a>,
@@ -254,6 +261,11 @@ enum TypedWorkload<'a> {
 impl Workload for TypedWorkload<'_> {
     fn run(&mut self) -> Result<(), BenchError> {
         match self {
+            Self::Yliluoma { run, request } => {
+                drop(std::hint::black_box(
+                    run(*request).map_err(|e| BenchError::Runtime(e.to_string()))?,
+                ));
+            }
             Self::FieldComponent(batch) => batch.run_production(),
             Self::CompleteField { call, processor } => call
                 .run(processor)
@@ -315,6 +327,11 @@ fn run_typed(
     let reference_output = verify(&case.reference_subject)?;
     let before = verify(subject_id)?;
     let mut workload = match operation {
+        native::NativeOperation::Yliluoma { .. } => TypedWorkload::Yliluoma {
+            run: yiluoma::yiluoma_function(subject_id).expect("validated native callable"),
+            request: yiluoma::yiluoma_request(&parameters)
+                .map_err(|e| BenchError::Runtime(e.to_string()))?,
+        },
         native::NativeOperation::FieldComponent { component } => TypedWorkload::FieldComponent(
             fields::PreparedComponent::new(*component, parameters.source())
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,

@@ -17,7 +17,7 @@ The frozen recipe remains the oracle; generated code changes only production and
 
 - [x] Copy missing literal math and verify all metrics, ratios, ties, target endpoints, and global thresholds; commit baseline.
 - [x] Adapt the frozen scalar request loop to existing bounded palette preparation; verify complete output, alpha, placement, and budgets.
-- [ ] Register typed native benchmark adapters and verify oracle equivalence; commit and report the next bounded scope.
+- [x] Register typed native benchmark adapters and verify oracle equivalence; commit and report the next bounded scope.
 
 No optimization, measurements, public Processor/Wasm/TypeScript dispatch, or PR/issue writes in this checkpoint.
 Native tests use exclusive `CARGO_TARGET_DIR=/home/mia/mia-cx/ditherette/.worktrees/v1-s22-convolution/crates/ditherette-wasm/target`.
@@ -39,3 +39,24 @@ Mixture search retains constant scratch and no palette cross-product allocation.
 Seven Yliluoma tests pass, including 540 full request combinations over all fifteen metrics, all matrix sizes, three alpha modes, and three placements.
 Transparent-only, single-entry, 257-entry truncation, exact/one-under budgets, and validation precedence pass.
 The six existing `prod_quantize` tests also pass after the shared accessor addition.
+
+## Typed benchmark checkpoint
+
+`prod:dither-and-quantize:yliluoma:literal-v1` uses the existing frozen `spec:dither-and-quantize:request:v1` oracle.
+The native paired worker accepts typed `YliluomaSettings` and calls the actual bounded native routine.
+Request mapping and verification serialization happen before samples. Each invocation includes validation, preparation, output allocation, and result destruction.
+This scope borrows source bytes. It is not the future public call with JS/Wasm boundary copies.
+Normalized settings bind palette order, alpha, matching, matrix size, and every placement control. Wrong families and invalid source/settings fail before invocation.
+
+Two untimed adapter tests pass, including 45 metric/palette combinations using 2-, 16-, and 256-entry palettes.
+`cargo check --locked --manifest-path crates/ditherette-bench/Cargo.toml --all-targets` passes.
+Two older fixed-scope benchmark plan examples gain explicit unreachable Yliluoma arms for the extended native-operation enum.
+No benchmark collector or measurement process runs.
+
+## Next bounded scope
+
+Add the Yliluoma branch to bounded Processor execution and private/public tagged dispatch, using this literal search unchanged.
+Extend actual installed-package conformance and public-call benchmark registration before measuring.
+After that baseline exists, one candidate can reuse bounded call-owned conversion or mixture preparation across pixels.
+Any prepared mixture storage needs an explicit capacity limit and a no-table fallback for large palettes.
+Keep this exhaustive implementation when an experiment loses or exactness/public gates remain incomplete.
