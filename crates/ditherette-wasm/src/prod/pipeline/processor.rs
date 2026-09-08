@@ -163,6 +163,11 @@ impl Processor {
                 crate::prod::contract::request::DitherPolicy::Separable { .. }
             ) {
                 super::perturb::working_capacity_bytes()
+            } else if matches!(
+                request.recipe.dither,
+                crate::prod::contract::request::DitherPolicy::Diffusion { .. }
+            ) {
+                size_of::<crate::prod::dither::error_diffusion::prepared::DiffusionPolicy>() as u64
             } else {
                 0
             }

@@ -125,6 +125,60 @@ fn budget() -> u64 {
 }
 
 #[test]
+fn wider_quantize_drops_idle_bytes_before_reserving_their_replacement() {
+    use ditherette_wasm::{
+        image::contracts::PaletteEntry,
+        prod::{
+            contract::request::{AlphaPolicy, MatchPolicy},
+            palette::PreparedPalette,
+            pipeline::quantize::{QuantizeBoundary, QuantizeRequest},
+        },
+    };
+    struct Input(usize);
+    impl QuantizeBoundary for Input {
+        type Output = ();
+        fn input_len(&mut self) -> Result<usize, Failure> {
+            Ok(self.0 * 4)
+        }
+        fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
+            destination.fill(255);
+            Ok(())
+        }
+        fn complete(
+            &mut self,
+            _: &[u8],
+            _: ImageDimensions,
+            _: &PreparedPalette,
+        ) -> Result<(), Failure> {
+            Ok(())
+        }
+    }
+    let palette = [PaletteEntry::Color { rgb: [255; 3] }];
+    let request = |width| QuantizeRequest {
+        source_width: width,
+        source_height: 1,
+        palette: &palette,
+        alpha: AlphaPolicy::Premultiplied {},
+        matching: MatchPolicy::SrgbEuclidean,
+    };
+    let mut probe = Processor::new(1 << 20, 0).unwrap();
+    probe.quantize(request(20), &mut Input(20)).unwrap();
+    let limit = probe.peak_capacity_bytes();
+    probe.dispose().unwrap();
+    let mut processor = Processor::new(limit, 0).unwrap();
+    processor.quantize(request(10), &mut Input(10)).unwrap();
+    let before = LIVE_BYTES.with(Cell::get);
+    WATCH_ALLOCATION.with(|size| size.set(80));
+    processor.quantize(request(20), &mut Input(20)).unwrap();
+    WATCH_ALLOCATION.with(|size| size.set(0));
+    // The old 40-byte source must be gone when its 80-byte replacement allocates.
+    // Otherwise that allocation alone exceeds the final 50-byte net growth budget.
+    assert_eq!(WATCHED_LIVE_BYTES.with(Cell::get), before - 40);
+    assert_eq!(LIVE_BYTES.with(Cell::get), before + 50);
+    assert_eq!(processor.peak_capacity_bytes(), limit);
+}
+
+#[test]
 fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
     use ditherette_wasm::{
         image::contracts::PaletteEntry,
