@@ -197,6 +197,8 @@ S31 handoff returns six compiler targets; their cleanup reclaims 6.93 GiB of dis
 The returned trusted-checker target reclaims another 369 MiB. Future checks rebuild it when needed.
 The completed S31 review target reclaims another 516 MiB. Its retained package digest stays unchanged.
 The S38 review recreates and then removes 100 KiB of generated SvelteKit files; no Rust outputs are created.
+The completed S32 trusted check returns its compiler target. Cleanup reclaims 287 MiB of disk blocks from 695 rebuildable files.
+Its exact realpath and compiler-only contents were checked; no active process owned that target. Frozen source and benchmark evidence remain intact.
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
 Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
 The entries above record each cleanup separately. New slices own only their explicitly assigned worktree-local compiler outputs.
