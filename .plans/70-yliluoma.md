@@ -81,7 +81,7 @@ The coordinator extends S29 from clean `65475193487b9b05a403525e6f36ae25d04a3a21
 Keep literal checkpoints retained; add no optimization or measurements.
 
 - [x] Extract the unchanged pixel loop and wire bounded Processor execution; verify exact output and allocation boundaries.
-- [ ] Add borrowed private/public tagged Yliluoma dispatch and strict controls; build scalar/threaded artifacts and verify ABI/types.
+- [x] Add borrowed private/public tagged Yliluoma dispatch and strict controls; build scalar/threaded artifacts and verify ABI/types.
 - [ ] Extend actual public benchmark adapters and installed-package fixtures; verify Chromium, Firefox, WebKit and report clean head.
 
 Family 3 is Yliluoma. Reuse private field slots with matrix width in parameter and all unused controls zero.
@@ -91,3 +91,29 @@ The allocation-free caller-owned loop preserves the literal math and still uses 
 Processor reuses the existing quantize preflight/caught boundary, with exactly two buffer reservations and no RGBA8 intermediate.
 Mode overhead counts its controls and the existing temporary converter. Separable capacity charges stay unchanged.
 Sixteen focused native tests pass, including 180 full Processor combinations, exact/one-under budgets, both reservation failures, caught copy/completion recovery, and invalid placement before allocation.
+
+## Public dispatch and target-local exactness
+
+Processor checkpoint is `114d9e53`. Both scalar and threaded release builds pass with the unchanged literal pixel search.
+The private ABI keeps its existing arity and borrowed/caught helpers. All 12 private tests pass.
+Public tags expose all accepted matrix and placement controls, with strict unknown-field and f64-to-f32 checks.
+All 25 interface/type tests pass. Exact budget, one-under before copy, output ownership, reentry, and caught failures pass.
+Native coverage now includes all 367 public requests; 17 focused native tests pass.
+
+The 367-case native fixture remains `packages/ditherette/tests/fixtures/yiluoma.json`.
+SHA-256 is `5ecd3b20bfde622d76c1534ef3cb5b91be10ec42f2763b6aa00cf45497e455d7`.
+The public fixture is `yiluoma-wasm.json`, generated independently by unchanged S18 frozen spec/image compiled to Wasm.
+Its SHA-256 is `6dfd78cf6cc063bb53744003168160261f7204f4802c0ffbb785a04e825b50ca`.
+The proof crate remains `/tmp/ditherette-s29-oracle.37ehus`; its complete frozen-only source is retained in `70-wasm-oracle-probe.rs`.
+It uses serde 1, serde_json 1, sha2 0.10, wasm-bindgen 0.2.121, and release opt-level `s`.
+Generated oracle Wasm SHA-256 is `ddc39f83f778eb4556fd71df858871f53ffff8fed85b3f066f821f564e9df663`.
+No production code participates in fixture generation. The coordinator is adding the reusable frozen-only benchmark oracle separately.
+
+Seven target differences occur at zero-based cases 236, 248, 251, 254, 257, 260, and 263.
+All use matte alpha and CIELAB or CIEDE2000 matching with a gray palette.
+For gray64, frozen native CIELAB a/b are zero; frozen Wasm gives approximately -0.000014901161 and 0.0000059604645.
+Both production and spec share those coordinates within each target. Exhaustive mixture ties expose inherited target math rounding.
+The minimized size4/CIEDE2000 case returns native `[2,2,1,1]` and frozen/public Wasm `[2,2,1,2]`.
+The coordinator explicitly accepts exact target-local conformance, not universal cross-target parity.
+Tests retain and check the seven differences. No tolerance, arithmetic repair, or spec change hides them.
+Temporary production probe exports were removed before rebuilding both release variants.

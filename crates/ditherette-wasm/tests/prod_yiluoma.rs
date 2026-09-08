@@ -23,6 +23,35 @@ const POLICIES: [MatchPolicy; 15] = [
     MatchPolicy::YcbcrEuclidean,
 ];
 
+#[test]
+fn public_fixture_requests_match_native_literal() {
+    let fixtures: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../packages/ditherette/tests/fixtures/yiluoma.json"
+    ))
+    .unwrap();
+    for (index, case) in fixtures["cases"].as_array().unwrap().iter().enumerate() {
+        let raw = &case["request"];
+        let data: Vec<u8> = serde_json::from_value(raw["source"]["data"].clone()).unwrap();
+        let palette =
+            serde_json::from_value::<Vec<ditherette_wasm::image::contracts::PaletteEntry>>(
+                raw["palette"].clone(),
+            )
+            .unwrap();
+        let mut request = request(
+            &data,
+            raw["source"]["width"].as_u64().unwrap() as u32,
+            raw["source"]["height"].as_u64().unwrap() as u32,
+            &palette,
+        );
+        request.quantize.alpha = serde_json::from_value(raw["alpha"].clone()).unwrap();
+        request.quantize.matching = serde_json::from_value(raw["matching"].clone()).unwrap();
+        request.dither = serde_json::from_value(raw["dither"].clone()).unwrap();
+        let actual = yiluoma::dither_yiluoma(request, 1 << 24).unwrap();
+        let expected: Vec<u8> = serde_json::from_value(case["output"]["indices"].clone()).unwrap();
+        assert_eq!(actual.indices.data(), expected, "fixture {index}: {raw}");
+    }
+}
+
 fn request<'a>(
     data: &'a [u8],
     width: u32,

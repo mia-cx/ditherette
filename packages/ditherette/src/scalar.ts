@@ -59,7 +59,18 @@ const errorPaths = [
 	'perturb.placement.radius',
 	'perturb.placement.threshold',
 	'perturb.placement.softness',
-	'dither'
+	'dither',
+	'dither.strength',
+	'dither.placement',
+	'dither.placement.radius',
+	'dither.placement.threshold',
+	'dither.placement.softness',
+	'dither.kernel',
+	'dither.feedback',
+	'dither.serpentine',
+	'dither.work',
+	'dither.distance',
+	'dither.size'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',

@@ -70,8 +70,18 @@ function normalizePolicy(value: unknown, path: string) {
 			'Unknown reversible working space.'
 		);
 	const strength = scalar(field(policy, 'strength'), `${path}.strength`);
+	return {
+		field: fieldTag,
+		parameter,
+		space,
+		strength,
+		...normalizePlacement(field(policy, 'placement'), path)
+	};
+}
+
+function normalizePlacement(value: unknown, path: string) {
 	const inputPlacement = object(
-		field(policy, 'placement'),
+		value,
 		['mode', 'radius', 'threshold', 'softness'],
 		'invalid-settings',
 		`${path}.placement`
@@ -108,7 +118,7 @@ function normalizePolicy(value: unknown, path: string) {
 			`${path}.placement.mode`,
 			'Unknown placement mode.'
 		);
-	return { field: fieldTag, parameter, space, strength, placement, radius, threshold, softness };
+	return { placement, radius, threshold, softness };
 }
 
 function normalizationFailure(error: unknown): never {
@@ -168,19 +178,20 @@ export function validateDitherAndQuantize(value: unknown) {
 		);
 		const dither = object(
 			field(request, 'dither'),
-			['family', 'perturb'],
+			['family', 'perturb', 'size', 'placement'],
 			'invalid-settings',
 			'dither'
 		);
 		const family = field(dither, 'family');
 		let normalized;
 		if (family === 'none') {
-			if (Object.hasOwn(dither, 'perturb'))
-				throw new DitheretteError(
-					'invalid-settings',
-					'dither.perturb',
-					'None has no perturb policy.'
-				);
+			for (const key of ['perturb', 'size', 'placement'])
+				if (Object.hasOwn(dither, key))
+					throw new DitheretteError(
+						'invalid-settings',
+						`dither.${key}`,
+						'None has no dither controls.'
+					);
 			normalized = {
 				family: 0,
 				field: 0,
@@ -192,13 +203,40 @@ export function validateDitherAndQuantize(value: unknown) {
 				threshold: 0,
 				softness: 0
 			};
-		} else if (family === 'separable')
+		} else if (family === 'separable') {
+			for (const key of ['size', 'placement'])
+				if (Object.hasOwn(dither, key))
+					throw new DitheretteError(
+						'invalid-settings',
+						`dither.${key}`,
+						'Separable settings belong inside perturb.'
+					);
 			normalized = { family: 1, ...normalizePolicy(field(dither, 'perturb'), 'dither.perturb') };
-		else
+		} else if (family === 'yliluoma') {
+			if (Object.hasOwn(dither, 'perturb'))
+				throw new DitheretteError(
+					'invalid-settings',
+					'dither.perturb',
+					'Yliluoma has no perturb policy.'
+				);
+			const size = field(dither, 'size');
+			if (typeof size !== 'string' || !sizes.includes(size))
+				throw new DitheretteError(
+					'invalid-settings',
+					'dither.size',
+					'Expected matrix size 2, 4, 8, or 16 as a string tag.'
+				);
+			normalized = {
+				family: 3,
+				field: 0,
+				parameter: Number(size),
+				space: 0,
+				strength: 0,
+				...normalizePlacement(field(dither, 'placement'), 'dither')
+			};
+		} else
 			throw new DitheretteError(
-				family === 'diffusion' || family === 'yliluoma'
-					? 'unsupported-operation'
-					: 'invalid-settings',
+				family === 'diffusion' ? 'unsupported-operation' : 'invalid-settings',
 				'dither.family',
 				'This dither family is not implemented in this package checkpoint.'
 			);
