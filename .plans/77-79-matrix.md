@@ -76,7 +76,11 @@ Further candidate revisions or measurements require coordinator scheduling.
 - [x] Focused example tests check all nine plans, exact worker counts, subject and
   identity reuse, policy roles, warm control uniqueness, required shapes, and
   bounded perceptual dimensions.
-- [ ] Root generates final plans from the fixed joined revision and runs measurements.
+- [x] Root generates final plans from the fixed joined revision and runs measurements.
 
 Only this worktree's fresh native `target/compiler` is used for example tests.
 No runtime, frozen guard, Wasm artifact, or public backend control changes here.
+
+The completed trials use processing source `5d16c568` and retain all 400 serial workers with 7,215 achieved samples.
+All 200 actual production comparisons are exact. `.plans/77-79-public-bench.md` records the report paths and interrupted attempts.
+Actual time-capped counts remain valid under the existing minimum-five rule. Inherited bilinear frozen drift and noisy controls stay in S41.

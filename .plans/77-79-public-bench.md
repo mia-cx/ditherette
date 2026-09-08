@@ -59,6 +59,7 @@ The joined correction passes 29 Node browser, stage-cache, and policy tests. Pro
 Prepare fresh artifacts after the collector correction and compact machine-JSON storage change.
 Retain the first sweep unchanged. Run the same fixed 400-worker matrix once from the corrected artifacts.
 This replaces a broken preflight, not an optimization revision or a retry seeking favorable timings.
+
 ## Completed evidence
 
 The coordinator completes the fixed 50-case matrix on immutable processing source `5d16c568`.

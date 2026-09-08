@@ -9,7 +9,7 @@ Evaluate exact row bands around the landed scalar Yliluoma loop. Share palette p
 - [x] Scalar and row bands agree across worker counts, palettes, Bayer sizes, and adaptive placement in native tests.
 - [x] Preflight covers assignment capacity and every live temporary converter; palette preparation stays shared.
 - [x] Complete Chromium/Firefox host-worker measurements identify common exact cold winners. S41 retains inconclusive warm controls.
-- [ ] Record candidate disposition and validated ancestry in the coordinator's unmerged PR.
+- [x] Record candidate disposition and validated ancestry for the unmerged stacked PR.
 
 ## TODOs
 
@@ -51,3 +51,22 @@ Evaluate exact row bands around the landed scalar Yliluoma loop. Share palette p
 - Automatic full-call tests pass with native pools of one, two, three, and four workers. Direct medium and nearest/OKLCH Process calls match frozen indices and metadata with non-fixture adaptive masks. Tests verify measured joined progress, unrelated-stage override preservation, explicit scalar overrides, and policy-independent cache hits.
 - Final release checks pass 16 scalar tests (`bench-subjects`) and eight threaded tests (`threads,bench-subjects`), plus the three selector tests per build recorded above. Formatting and the frozen spec/image/guard source diff pass. No compiler or test process remains active at handoff.
 - Delivery target ownership returns to root at `target/compiler` (166 MiB, native compiler outputs only). This worktree ran no Wasm build or benchmark.
+
+## Final delivery disposition
+
+Publication branch `delivery/v1-s37-yliluoma` joins S36 PR 127 head `b542bd94a5dbc724de73815ae0008a22985147fd`.
+It rebases with merge ancestry preserved onto published `delivery/v1-s36-fields-final`.
+The shared plan conflict keeps both the interrupted first sweep and completed trials. Runtime code needs no conflict resolution.
+All production, package, and build inputs match the combined tested source `dc81818a`; only untimed fixture scripts differ.
+
+The coordinator's ordinary package passes the trusted frozen guard. Tarball SHA-256 is
+`1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+The actual automatic host suite passes 23 checks, including nine cases per Chromium/Firefox engine and medium/Process mixing.
+Its exact invocation and browser cleanup are in `.plans/77-79-auto-host.md`. No browser or benchmark repeats during delivery.
+
+All acceptance criteria are complete or explicitly retained as S41 release gates in the measurement report.
+S41 owns inconclusive warm controls, automatic-selector overhead follow-up, unmeasured recipe classes, and pinned WebKit threaded cleanup.
+The overall paired evidence contains 400 serial workers, 7,215 samples, and 200 exact production comparisons.
+Inherited bilinear drift belongs to separate frozen-reference probes, not S37 or same-artifact production drift.
+Delivery checks pass `git diff --check`, exact production/build input comparison, and 14 focused Node checks.
+The browser-gated test skips without its bundle environment; the previously completed 23-check installed run is not repeated.
