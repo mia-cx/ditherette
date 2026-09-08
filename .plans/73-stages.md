@@ -5,11 +5,12 @@ Issue [#73](https://github.com/mia-cx/ditherette/issues/73). Preparation branch
 `4aad1dbe5f3eea46d7e5d04572ac5dffae23fba9` in `.worktrees/v1-s32-stages`.
 The coordinator authorized implementation after S31 runtime
 `972d4e9a5882b25bca3de5f0786ad1525b5e6329` passed its exclusive trial.
-The plan commit is restacked onto that runtime. Final S31 report/PR joins follow
-at the next clean checkpoint. S32 now owns its assigned runtime files and tests.
+The branch joins final S31 PR #121 at
+`a3c9629f35280c36e838faa00e9b664b23abcb53`, which retains that validated runtime.
+S32 now owns its assigned runtime files and tests.
 
 The validated S31 handoff advances the dependency gate. The inventory below still
-matches its actual preparation owners; final provenance joins remain pending.
+matches its actual preparation owners; final provenance is joined.
 The eventual PR base is the delivered S31 branch, currently `impl/v1-s31-preparation`.
 Only `target/compiler` inside this S32 worktree is assigned for compiler outputs.
 Build/test jobs may run here; measurements require coordinator clearance.
@@ -102,12 +103,12 @@ point; S32 supplies the transaction without inventing callback behavior early.
 
 ## Atomic implementation steps
 
-Step 1 complete. Next is shared store/transaction ownership, before pipeline wiring.
+Steps 1 and 2 complete. Next is hit-aware pipeline wiring.
 
 1. [x] **Prove identities.** Extend the existing identity helper and replay frozen
    request-plan fixtures for every method and dither family. Done when production
    keys match the frozen model, including actual RGBA output-content transitions.
-2. **Add owned stage entries.** Extend the store/transaction with typed image values,
+2. [x] **Add owned stage entries.** Extend the store/transaction with typed image values,
    shared caps, pinning, capacity transfers, and private hit counters. Done when
    isolated budget, oversized-entry, LRU, and two-entry rollback fixtures pass.
 3. **Connect existing pipelines.** Add hit-aware planning and completed-buffer
@@ -162,3 +163,11 @@ It changes no pipeline behavior or frozen files. Native validation passes
 3 stage-identity tests, 1 preparation-identity test, 16 frozen cache fixtures,
 and 1 owned-metadata budget/mutation test. Unwired stage owners currently emit
 dead-code warnings; step 2 connects those owners. No measurements ran.
+
+The shared-store checkpoint adds image values to the existing entry enum and
+pins up to three image stages in the same call transaction. Record reservations
+are fallible. Optional retention returns the materialized owner unchanged when
+its cap or reservation prevents caching. Native preparation tests pass 9/9,
+including mixed image/preparation caps and LRU, capacity transfer without pixel
+copying, two-entry rollback, pinned-hit survival, and oversized-owner return.
+Pipelines still use preparation-only behavior until step 3.

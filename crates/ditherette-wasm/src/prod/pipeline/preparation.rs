@@ -1,4 +1,4 @@
-//! One instance's preparation LRU and success-only scratch publication.
+//! One instance's shared preparation/image LRU and success-only publication.
 
 use std::mem::size_of;
 
@@ -7,6 +7,7 @@ use super::{
     processor::Allocator,
     quantize::{preparation_failure, QuantizeRequest},
     resize::PreparedResize,
+    stages::ImageStage,
 };
 use crate::{
     image::ImageDimensions,
@@ -26,6 +27,7 @@ use crate::{
 enum Value {
     Palette(Vec<PreparedQuantizer>),
     Resize(Vec<PreparedResize>),
+    Image(Vec<ImageStage>),
 }
 
 struct Entry {
@@ -44,6 +46,9 @@ impl Entry {
             Value::Resize(value) => {
                 value[0].capacity_bytes()
                     + value.capacity() as u64 * size_of::<PreparedResize>() as u64
+            }
+            Value::Image(value) => {
+                value[0].capacity_bytes() + value.capacity() as u64 * size_of::<ImageStage>() as u64
             }
         }
     }
@@ -232,9 +237,12 @@ pub(super) struct Call<'a> {
     resize: Option<Entry>,
     palette_hit: bool,
     resize_hit: bool,
+    images: [Option<Entry>; 3],
+    image_hits: [bool; 3],
     pub scratch: Scratch,
     success: bool,
     limit: u64,
+    overhead: u64,
 }
 
 impl<'a> Call<'a> {
@@ -274,10 +282,13 @@ impl<'a> Call<'a> {
             resize_hit: resize_entry.is_some(),
             palette: palette_entry,
             resize: resize_entry,
+            images: std::array::from_fn(|_| None),
+            image_hits: [false; 3],
             scratch: std::mem::take(&mut store.scratch),
             store,
             success: false,
             limit,
+            overhead,
         };
         let palette_required = palette
             .map(|request| {
@@ -444,6 +455,91 @@ impl<'a> Call<'a> {
         (palette, resize, &mut self.scratch)
     }
 
+    fn active_capacity(&self) -> u64 {
+        self.overhead
+            + self.scratch.capacity()
+            + self.palette.as_ref().map_or(0, Entry::capacity)
+            + self.resize.as_ref().map_or(0, Entry::capacity)
+            + self
+                .images
+                .iter()
+                .flatten()
+                .map(Entry::capacity)
+                .sum::<u64>()
+    }
+
+    /// Pin a published materialized stage. Pending candidates are never lookup sources.
+    pub(super) fn take_image(&mut self, slot: usize, key: Identity) -> bool {
+        assert!(self.images[slot].is_none());
+        self.images[slot] = self.store.take(key);
+        self.image_hits[slot] = self.images[slot].is_some();
+        self.image_hits[slot]
+    }
+
+    pub(super) fn image(&self, slot: usize) -> Option<&ImageStage> {
+        self.images[slot].as_ref().map(|entry| match &entry.value {
+            Value::Image(value) => &value[0],
+            _ => unreachable!("typed image-stage identity"),
+        })
+    }
+
+    /// Transfer completed work without copying its pixels. Optional retention returns
+    /// the original owner unchanged when either cap or the record reservation prevents it.
+    pub(super) fn stage_image(
+        &mut self,
+        slot: usize,
+        key: Identity,
+        image: ImageStage,
+        peak: &mut u64,
+    ) -> Result<(), ImageStage> {
+        assert!(self.images[slot].is_none());
+        if self
+            .images
+            .iter()
+            .chain(self.store.entries.iter())
+            .flatten()
+            .any(|entry| entry.key == key)
+        {
+            return Err(image);
+        }
+        let required = image.capacity_bytes() + size_of::<ImageStage>() as u64;
+        let retained = required + size_of::<Entry>() as u64;
+        if retained > MAX_CACHE_BYTES.min(self.limit / 4) {
+            return Err(image);
+        }
+        let owned = self.active_capacity() + image.capacity_bytes();
+        if self
+            .store
+            .room(owned + size_of::<ImageStage>() as u64, self.limit)
+            .is_err()
+        {
+            return Err(image);
+        }
+        let budget = self.limit - owned - self.store.capacity();
+        let Ok(mut record) = CapacityBudget::new(budget).vector::<ImageStage>(1) else {
+            return Err(image);
+        };
+        if image.capacity_bytes()
+            + record.capacity() as u64 * size_of::<ImageStage>() as u64
+            + size_of::<Entry>() as u64
+            > MAX_CACHE_BYTES.min(self.limit / 4)
+        {
+            return Err(image);
+        }
+        *peak = (*peak).max(
+            owned
+                + self.store.capacity()
+                + record.capacity() as u64 * size_of::<ImageStage>() as u64,
+        );
+        record.push(image);
+        self.images[slot] = Some(Entry {
+            key,
+            used: 0,
+            value: Value::Image(record),
+        });
+        Ok(())
+    }
+
     pub(super) fn finish<T>(mut self, result: Result<T, Failure>) -> Result<T, Failure> {
         self.success = result.is_ok();
         result
@@ -470,6 +566,13 @@ impl Drop for Call<'_> {
                 }
             }
         }
+        for (entry, hit) in self.images.iter_mut().zip(self.image_hits) {
+            if let Some(entry) = entry.take() {
+                if self.success || hit {
+                    self.store.publish(entry, self.limit);
+                }
+            }
+        }
         if self.success {
             for buffer in &mut self.scratch.buffers {
                 buffer.clear();
@@ -489,6 +592,137 @@ mod tests {
     use super::*;
     use crate::prod::contract::request::{Anchor, ResizePolicy};
     use crate::prod::pipeline::processor::SystemAllocator;
+    use crate::prod::pipeline::stages::Metadata;
+
+    fn image_call(store: &mut Store, length: usize, limit: u64) -> Call<'_> {
+        Call::new(
+            store,
+            None,
+            None,
+            [4, length, length, 0],
+            0,
+            size_of::<Store>() as u64 + Call::record_bytes(),
+            limit,
+            &mut 0,
+            &mut SystemAllocator,
+        )
+        .unwrap()
+    }
+
+    fn candidate(call: &mut Call<'_>, buffer: usize, byte: u8) -> ImageStage {
+        let mut bytes = std::mem::take(&mut call.scratch.buffers[buffer]);
+        bytes.fill(byte);
+        ImageStage {
+            dimensions: ImageDimensions::new((bytes.len() / 4) as u32, 1).unwrap(),
+            bytes,
+            metadata: Metadata::Rgba {
+                content: Identity([byte; 32]),
+            },
+        }
+    }
+
+    #[test]
+    fn two_pending_images_publish_only_after_success_and_hits_remain_pinned() {
+        let mut store = Store::default();
+        let limit = 1 << 20;
+        for success in [false, true] {
+            let mut call = image_call(&mut store, 16, limit);
+            for slot in 0..2 {
+                let before = call.active_capacity();
+                let image = candidate(&mut call, slot + 1, slot as u8 + 1);
+                assert!(call
+                    .stage_image(slot, Identity([slot as u8; 32]), image, &mut 0)
+                    .is_ok());
+                assert_eq!(
+                    call.active_capacity(),
+                    before + size_of::<ImageStage>() as u64
+                );
+            }
+            assert!(call.store.entries.iter().all(Option::is_none));
+            let result = if success { Ok(()) } else { Err(memory_limit()) };
+            assert_eq!(call.finish(result).is_ok(), success);
+            assert_eq!(store.stats().0, if success { 2 } else { 0 });
+        }
+        let mut call = image_call(&mut store, 0, limit);
+        assert!(call.take_image(0, Identity([0; 32])));
+        let image = call.image(0).unwrap();
+        assert_eq!(image.bytes, [1; 16]);
+        assert_eq!(image.dimensions.width(), 4);
+        assert!(matches!(
+            image.metadata,
+            Metadata::Rgba {
+                content: Identity([1, ..])
+            }
+        ));
+        call.store.room(limit, limit).unwrap();
+        assert_eq!(call.store.stats().0, 0);
+        assert_eq!(call.image(0).unwrap().bytes, [1; 16]);
+        assert!(call.finish::<()>(Err(memory_limit())).is_err());
+        assert_eq!(store.stats().0, 1);
+    }
+
+    #[test]
+    fn oversized_image_keeps_its_owner_and_success_does_not_publish_it() {
+        let mut store = Store::default();
+        let limit = 64 * 1024;
+        let mut call = image_call(&mut store, 18 * 1024, limit);
+        let image = candidate(&mut call, 1, 7);
+        let returned = call
+            .stage_image(0, Identity([3; 32]), image, &mut 0)
+            .err()
+            .unwrap();
+        assert_eq!(returned.bytes, vec![7; 18 * 1024]);
+        call.finish(Ok(())).unwrap();
+        assert_eq!(store.stats().0, 0);
+    }
+
+    #[test]
+    fn image_and_preparation_entries_share_count_byte_caps_and_lru() {
+        let mut store = Store::default();
+        let limit = 1 << 20;
+        prepare(&mut store, 17, limit);
+        let preparation_key = store.entries.iter().flatten().next().unwrap().key;
+        for byte in 0..MAX_CACHE_ENTRIES as u8 {
+            let mut call = image_call(&mut store, 4, limit);
+            let image = candidate(&mut call, 1, byte);
+            assert!(call
+                .stage_image(0, Identity([byte; 32]), image, &mut 0)
+                .is_ok());
+            call.finish(Ok(())).unwrap();
+            assert!(store.stats().3 <= limit / 4);
+        }
+        assert_eq!(store.stats().0, MAX_CACHE_ENTRIES);
+        assert!(!store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == preparation_key));
+        let mut call = image_call(&mut store, 4, limit);
+        assert!(call.take_image(0, Identity([0; 32])));
+        let image = candidate(&mut call, 1, 200);
+        assert!(call
+            .stage_image(1, Identity([200; 32]), image, &mut 0)
+            .is_ok());
+        call.finish(Ok(())).unwrap();
+        assert!(store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == Identity([0; 32])));
+        assert!(!store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == Identity([1; 32])));
+        let cap = store.stats().3 - 1;
+        let mut call = image_call(&mut store, 4, cap * 4);
+        let image = candidate(&mut call, 1, 201);
+        assert!(call
+            .stage_image(0, Identity([201; 32]), image, &mut 0)
+            .is_ok());
+        call.finish(Ok(())).unwrap();
+        assert!(store.stats().3 <= cap);
+    }
 
     fn prepare(store: &mut Store, width: u32, limit: u64) {
         let source = ImageDimensions::new(31, 9).unwrap();
