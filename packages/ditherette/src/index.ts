@@ -17,6 +17,8 @@ export type {
 	PerturbPolicy,
 	PerturbRequest,
 	DitherAndQuantizeRequest,
+	RecipeV1,
+	ProcessRequest,
 	Ditherette,
 	InitInput,
 	InitOptions,

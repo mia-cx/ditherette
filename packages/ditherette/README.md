@@ -47,6 +47,35 @@ Plans and scratch count toward the memory limit. Each call releases this transie
 Requests require version `1`, positive integer dimensions, and canonical object/string tags. Unknown fields are rejected.
 Source sides are at most 32,768 pixels; resize output sides are at most 16,384. Both images allow at most 67,108,864 pixels.
 
+## Complete processing
+
+```ts
+const indexed = processor.process({
+	source,
+	palette,
+	recipe: {
+		version: 1,
+		output: { width: 320, height: 240, resize: { algorithm: 'trilinear', anchor: 'center' } },
+		alpha: { mode: 'preserve', threshold: 128 },
+		match: 'oklab-euclidean',
+		dither: { family: 'none' }
+	}
+});
+```
+
+The recipe uses `match`; staged quantization methods use `matching`.
+Every resize and dither family works in this composition. Process equals actual
+`resize` followed by `ditherAndQuantize`, including palette metadata and warnings.
+Resized and perturbed RGBA8 intermediates stay in Wasm with their rounding intact.
+Only the final indexed result crosses back to JS. The complete call reserves
+plans, prepared palettes, scratch, source, intermediates, and indices before input copy.
+No intermediate or prepared data survives the call in this checkpoint.
+
+Recipe settings errors use paths such as `recipe.match` and `recipe.dither.size`.
+Input, palette, memory, and result-copy errors keep their existing paths.
+The landed resize kernels retain their documented frozen-reference differences;
+process does not claim to remove them.
+
 ## Direct quantization
 
 ```ts
@@ -182,7 +211,8 @@ Recursive processing or disposal fails with `reentrant-call`, including calls fr
 
 ## Checkpoint scope
 
-The other processing methods arrive in later implementation slices.
+All five synchronous processing methods are available. Caches, progress delivery,
+and threaded execution arrive in later implementation slices.
 Supplying `onProgress` currently fails explicitly with `unsupported-operation`; S33 adds progress delivery.
 S34 adds the optional threaded runtime. These are temporary slice limits, not permanent API restrictions.
 The package exports no raw bindings, backend selection, cache controls, or processor counters.
