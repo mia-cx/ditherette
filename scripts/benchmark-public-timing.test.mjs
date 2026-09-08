@@ -7,11 +7,13 @@ import {
 	timeInitialization,
 	retainedOutputSlots,
 	RETAINED_OUTPUT_LIMIT,
-	RESULT_BOOKKEEPING_BYTES
+	RESULT_BOOKKEEPING_BYTES,
+	STABILITY_EVIDENCE_SLOTS
 } from './benchmark-public-timing.mjs';
 
 test('retained output budget includes evidence and fails before oversized samples without reducing their count', async () => {
-	const bytes = RETAINED_OUTPUT_LIMIT / 4 - RESULT_BOOKKEEPING_BYTES;
+	const bytes =
+		Math.floor(RETAINED_OUTPUT_LIMIT / (2 + STABILITY_EVIDENCE_SLOTS)) - RESULT_BOOKKEEPING_BYTES;
 	assert.equal(retainedOutputSlots(2, bytes).length, 2);
 	assert.throws(() => retainedOutputSlots(2, bytes + 1), /64 MiB/);
 	let calls = 0,
