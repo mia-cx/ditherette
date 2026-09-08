@@ -26,3 +26,12 @@ Pinned WebKit 26.4 fails actual atomic-wait worker cleanup in S34, independently
 Keep [the recorded release gate](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5589175119) visible.
 Verify a recorded engine containing the upstream fix before claiming threaded cleanup passes there.
 Report absent or failed coverage explicitly. No external consumer project is required.
+
+Long Firefox 148.0.2 runs expose another test-runtime issue. Its updater creates
+`.parentlock` and `updates/` in the installation despite the bundled test-disable preference.
+Playwright's policy provider reads only `browser.policies.alternatePath`, bypassing ordinary distribution discovery.
+Use the retained update-disabled runtime under `v1-s35-37-bench/target/rows-trial-03/runtime-source` for immutable benchmark snapshots.
+Its `playwright.cfg` binds that preference to its own `GreD/distribution/policies.json`; the policy disables app updates.
+Both configuration files enter the normal snapshot digest. Compiled browser files remain unchanged.
+The 55-second control reproduces writes; the corrected copy preserves all runtime bytes and modes.
+Keep snapshot validation strict. Do not modify the shared browser cache or historical trial snapshots.
