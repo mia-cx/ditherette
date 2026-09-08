@@ -86,17 +86,33 @@ pub(crate) fn dither_yiluoma_with_progress(
     indices: &mut [u8],
     size: BayerSize,
     placement: crate::prod::contract::request::Placement,
+    progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+) -> Result<(), crate::prod::contract::failure::Failure> {
+    let band = crate::prod::tiling::RowBand::new(0, source.dimensions().height())
+        .expect("validated source height");
+    dither_yiluoma_band_with_progress(source, prepared, indices, size, placement, band, progress)
+}
+
+/// Writes one disjoint output band while retaining absolute coordinates and full-source reads.
+pub(super) fn dither_yiluoma_band_with_progress(
+    source: crate::image::ImageView<'_, crate::image::Rgba8>,
+    prepared: &PreparedQuantizer,
+    indices: &mut [u8],
+    size: BayerSize,
+    placement: crate::prod::contract::request::Placement,
+    band: crate::prod::tiling::RowBand,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
     let dimensions = source.dimensions();
+    assert!(band.y_end() <= dimensions.height());
     assert_eq!(
         indices.len(),
-        dimensions.pixel_count().expect("valid dimensions")
+        band.height() as usize * dimensions.width_usize()
     );
     let matching = prepared.matcher().matching;
     let palette = prepared.palette();
     let matcher = prepared.matcher();
-    for y in 0..dimensions.height() {
+    for y in band.y_start()..band.y_end() {
         for x in 0..dimensions.width() {
             let pixel = source.pixel(x, y).expect("source pixel is in bounds");
             let rgba = [pixel[0], pixel[1], pixel[2], pixel[3]];
@@ -112,7 +128,7 @@ pub(crate) fn dither_yiluoma_with_progress(
                     ordered_mix_index(mix, x, y, size)
                 }
             };
-            indices[y as usize * dimensions.width_usize() + x as usize] = index;
+            indices[(y - band.y_start()) as usize * dimensions.width_usize() + x as usize] = index;
         }
         progress(y + 1)?;
     }
