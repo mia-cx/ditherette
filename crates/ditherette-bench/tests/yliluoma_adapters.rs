@@ -114,6 +114,27 @@ fn normalized_identity_binds_every_mix_control_and_rejects_invalid_requests() {
             .unwrap()
     };
     let expected = identity(original.clone());
+    let public = ditherette_bench::paired::browser::PublicOperation::Yliluoma {
+        settings: original.clone(),
+    };
+    assert_eq!(
+        public.identity(dimensions, &rgba, dimensions).unwrap(),
+        expected
+    );
+    assert_eq!(
+        public.reference_subject(),
+        "spec:dither-and-quantize:request:v1"
+    );
+    assert_eq!(
+        public.subject(ditherette_bench::paired::browser::BrowserBackend::Package),
+        "public:dither-and-quantize:yliluoma:package"
+    );
+    let encoded = serde_json::to_value(&public).unwrap();
+    assert_eq!(
+        serde_json::from_value::<ditherette_bench::paired::browser::PublicOperation>(encoded)
+            .unwrap(),
+        public
+    );
     let mut changes = Vec::new();
     let mut changed = original.clone();
     changed.size = BayerSize::Sixteen;

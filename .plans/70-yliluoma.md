@@ -82,7 +82,7 @@ Keep literal checkpoints retained; add no optimization or measurements.
 
 - [x] Extract the unchanged pixel loop and wire bounded Processor execution; verify exact output and allocation boundaries.
 - [x] Add borrowed private/public tagged Yliluoma dispatch and strict controls; build scalar/threaded artifacts and verify ABI/types.
-- [ ] Extend actual public benchmark adapters and installed-package fixtures; verify Chromium, Firefox, WebKit and report clean head.
+- [x] Extend actual public benchmark adapters and installed-package fixtures; verify Chromium, Firefox, WebKit and report clean head.
 
 Family 3 is Yliluoma. Reuse private field slots with matrix width in parameter and all unused controls zero.
 S28 reserves dither error paths 26–35; Yliluoma matrix size uses 36. Shared placement tags match S28.
@@ -117,3 +117,27 @@ The minimized size4/CIEDE2000 case returns native `[2,2,1,1]` and frozen/public 
 The coordinator explicitly accepts exact target-local conformance, not universal cross-target parity.
 Tests retain and check the seven differences. No tolerance, arithmetic repair, or spec change hides them.
 Temporary production probe exports were removed before rebuilding both release variants.
+
+## Public benchmark and installed-package checkpoint
+
+Public implementation checkpoint is `158f76d4`. The typed public operation is `yliluoma` with `YliluomaSettings`.
+Its subject is `public:dither-and-quantize:yliluoma:package`; the reference remains `spec:dither-and-quantize:request:v1`.
+Native and public operations share the full normalized settings/input identity.
+The real browser adapter constructs the accepted public request and calls `instance.ditherAndQuantize` for primed and fresh instances.
+The unavailable TypeScript implementation rejects explicitly. No substitute algorithm or collector runs.
+All benchmark targets typecheck and both focused adapter tests pass, retaining 45 metric/palette-size combinations.
+
+An installed tarball passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+Each engine verifies 367 frozen Wasm Yliluoma vectors plus 734 untimed calls through the actual benchmark adapter.
+Coverage includes all 15 matching policies, all four matrix sizes, all alpha policies, both placements, odd dimensions, transparent-only/single-visible/truncated palettes, and the explicit zero-mask tie.
+Each engine also checks strict controls, source/result ownership, exact/one-under budgets, caught copy recovery, reentry, and disposal.
+The existing 91 field vectors, 1,365 compositions, and prior installed-package checks still pass in each engine.
+The retained WebKit launcher is `/home/mia/mia-cx/ditherette/.worktrees/v1-s20-worker/target/s20-webkit-alias/webkit`.
+
+Final scalar Wasm is 241,988 bytes, SHA-256 `3377430ae4369a5b22b24ee04235f2eab700ffcb0c1a9555ba51e7bdc10d8f25`.
+Threaded Wasm is 331,861 bytes, SHA-256 `122cbbc9e3cc2f643f5a0ea76f9d8d7943a675239a137ee5123ad4ccf8cd39d6`.
+Frozen content verification still reports the S18 revision and digest above. Spec, image storage, and freeze policy remain unchanged.
+
+The complete literal public baseline is ready for coordinator measurement preparation.
+Stop here. A next candidate may reuse the existing prepared converter per call, then consider bounded mixture preparation only after measurements.
+Keep every literal checkpoint and compare against exact target-local frozen output. This checkpoint runs no measurements and opens no PR.

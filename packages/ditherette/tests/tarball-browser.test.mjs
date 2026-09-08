@@ -10,12 +10,17 @@ import test from 'node:test';
 import { chromium, firefox, webkit } from 'playwright';
 import { browserChecks } from './browser-fixture.mjs';
 import { fieldBrowserChecks } from './field-browser-fixture.mjs';
+import { yiluomaBrowserChecks } from './yiluoma-browser-fixture.mjs';
+import { yiluomaBenchmarkChecks } from './yiluoma-benchmark-fixture.mjs';
 
 test('installed tarball loads only scalar assets and runs the public contract in browser engines', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-tarball-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
 	const packageDirectory = fileURLToPath(new URL('../', import.meta.url));
 	const vectors = JSON.parse(await readFile(new URL('./fixtures/fields.json', import.meta.url)));
+	const yiluoma = JSON.parse(
+		await readFile(new URL('./fixtures/yiluoma-wasm.json', import.meta.url))
+	);
 	const manifest = JSON.parse(await readFile(join(packageDirectory, 'package.json'), 'utf8'));
 	const tarball = join(directory, `ditherette-${manifest.version}.tgz`);
 	execFileSync('pnpm', ['pack', '--out', tarball], { cwd: packageDirectory, stdio: 'pipe' });
@@ -68,6 +73,17 @@ test('installed tarball loads only scalar assets and runs the public contract in
 	const server = createServer(async (request, response) => {
 		const pathname = new URL(request.url, 'http://localhost').pathname;
 		requests.push(pathname);
+		if (
+			['/benchmark/benchmark-public-page.mjs', '/benchmark/benchmark-public-timing.mjs'].includes(
+				pathname
+			)
+		) {
+			response.writeHead(200, { 'Content-Type': 'text/javascript' });
+			response.end(
+				await readFile(new URL(`../../../scripts/${pathname.split('/').at(-1)}`, import.meta.url))
+			);
+			return;
+		}
 		if (pathname === '/') {
 			response.writeHead(200, { 'Content-Type': 'text/html' });
 			response.end(
@@ -156,6 +172,17 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					{ fields: 91, compositions: 1365, caughtFailures: 5 }
 				);
 				t.diagnostic(`${name} ${browser.version()}: installed-tarball checks pass`);
+				assert.deepEqual(
+					await page.evaluate(yiluomaBrowserChecks, {
+						vectors: yiluoma,
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+					}),
+					{ vectors: 367, caughtFailures: 3, strictControls: 8, exactBudget: true }
+				);
+				assert.equal(await page.evaluate(yiluomaBenchmarkChecks, { vectors: yiluoma }), 734);
+				t.diagnostic(
+					`${name}: 367 frozen Wasm Yliluoma vectors and 734 untimed actual benchmark-adapter calls pass`
+				);
 			} finally {
 				await browser.close();
 			}

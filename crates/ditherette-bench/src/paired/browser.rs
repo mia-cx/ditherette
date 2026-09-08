@@ -15,6 +15,9 @@ pub enum PublicOperation {
     Separable {
         settings: super::fields::SeparableSettings,
     },
+    Yliluoma {
+        settings: super::yliluoma::YliluomaSettings,
+    },
     ResizeNearest {
         anchor: Anchor,
     },
@@ -90,6 +93,12 @@ impl BrowserCase {
 impl PublicOperation {
     pub fn subject(&self, backend: BrowserBackend) -> &'static str {
         match (self, backend) {
+            (Self::Yliluoma { .. }, BrowserBackend::Package) => {
+                "public:dither-and-quantize:yliluoma:package"
+            }
+            (Self::Yliluoma { .. }, BrowserBackend::TypeScript) => {
+                "public:dither-and-quantize:yliluoma:typescript"
+            }
             (Self::Perturb { .. }, BrowserBackend::Package) => "public:perturb:request:package",
             (Self::Perturb { .. }, BrowserBackend::TypeScript) => {
                 "public:perturb:request:typescript"
@@ -142,7 +151,7 @@ impl PublicOperation {
     pub fn reference_subject(&self) -> &'static str {
         match self {
             Self::Perturb { .. } => "spec:perturb:request:v1",
-            Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
+            Self::Separable { .. } | Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
             Self::Quantize { .. } => "spec:quantize:request:v1",
             Self::ResizeNearest { .. } => "spec:resize:nearest:scalar",
             Self::ResizeArea {} => "spec:resize:area:scalar",
@@ -185,7 +194,8 @@ impl PublicOperation {
             Self::ResizeArea {}
             | Self::Quantize { .. }
             | Self::Perturb { .. }
-            | Self::Separable { .. } => Anchor::Center,
+            | Self::Separable { .. }
+            | Self::Yliluoma { .. } => Anchor::Center,
         }
     }
 
@@ -218,7 +228,10 @@ impl PublicOperation {
                 Self::ResizeBicubic { .. } => "bicubic-public-v1",
                 Self::ResizeLanczos2 { .. } => "lanczos2-public-v1",
                 Self::ResizeLanczos3 { .. } => "lanczos3-public-v1",
-                Self::Quantize { .. } | Self::Perturb { .. } | Self::Separable { .. } => {
+                Self::Quantize { .. }
+                | Self::Perturb { .. }
+                | Self::Separable { .. }
+                | Self::Yliluoma { .. } => {
                     unreachable!("processing returned above")
                 }
             }
@@ -246,6 +259,7 @@ impl PublicOperation {
                 super::fields::perturb_request(*settings, source, rgba).map(Some)
             }
             Self::Separable { settings } => settings.reference_request(source, rgba).map(Some),
+            Self::Yliluoma { settings } => settings.reference_request(source, rgba).map(Some),
             _ => Ok(None),
         }
     }
