@@ -78,6 +78,9 @@ test('installed package and actual TypeScript adapter conformance, without measu
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-public-conformance-'));
 	const processPath = process.env.DITHERETTE_BENCH_PROCESS_FIXTURES;
 	const processFixtures = processPath ? JSON.parse(await readFile(processPath, 'utf8')) : [];
+	const originalProcessFixtures = createHash('sha256')
+		.update(JSON.stringify(processFixtures))
+		.digest('hex');
 	if (processPath) {
 		assert.equal(processFixtures.length, 8);
 		for (const fixture of processFixtures) {
@@ -187,6 +190,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 					assert.deepEqual(reference.case, fixture.identity);
 					references.push({
 						...fixture,
+						resize_attribution: structuredClone(fixture.resize_attribution),
 						native_reference: fixture.reference,
 						reference: reference.output
 					});
@@ -210,6 +214,11 @@ test('installed package and actual TypeScript adapter conformance, without measu
 					}
 					assert.equal(browser.contexts().length, 0);
 				}
+				assert.equal(
+					createHash('sha256').update(JSON.stringify(processFixtures)).digest('hex'),
+					originalProcessFixtures,
+					'Each engine leaves native attribution fixtures unchanged.'
+				);
 				if (process.env.DITHERETTE_BENCH_ORACLE_EVIDENCE)
 					await writeFile(
 						path.join(
