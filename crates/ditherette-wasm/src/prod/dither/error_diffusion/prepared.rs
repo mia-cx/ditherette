@@ -230,7 +230,19 @@ pub(crate) fn execute_with_scratch(
     indices: &mut [u8],
     policy: DiffusionPolicy,
 ) -> Result<(), Failure> {
-    BorrowedDiffusion { quantizer, work }.execute(source, indices, policy)
+    execute_with_progress(quantizer, work, source, indices, policy, |_| Ok(()))
+}
+
+/// Reports completed rows without resetting or replaying the continuous feedback traversal.
+pub(crate) fn execute_with_progress(
+    quantizer: &PreparedQuantizer,
+    work: &mut [[f32; 3]],
+    source: ImageView<'_, Rgba8>,
+    indices: &mut [u8],
+    policy: DiffusionPolicy,
+    progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    BorrowedDiffusion { quantizer, work }.execute(source, indices, policy, progress)
 }
 
 struct BorrowedDiffusion<'a> {
@@ -244,6 +256,7 @@ impl BorrowedDiffusion<'_> {
         source: ImageView<'_, Rgba8>,
         indices: &mut [u8],
         policy: DiffusionPolicy,
+        mut progress: impl FnMut(u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
         let height = source.dimensions().height_usize();
@@ -330,6 +343,7 @@ impl BorrowedDiffusion<'_> {
             if y + ROWS < height {
                 self.fill_row(source, y + ROWS, policy.feedback);
             }
+            progress(y as u32 + 1)?;
         }
         Ok(())
     }

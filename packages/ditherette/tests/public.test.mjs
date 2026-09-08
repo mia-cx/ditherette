@@ -304,12 +304,36 @@ test('raw request failures and property-triggered recursion are structured befor
 	structuredClone(detached.source.data.buffer, { transfer: [detached.source.data.buffer] });
 	assert.throws(() => processor.resize(detached), diagnostic('invalid-image', 'source.data'));
 	const callback = request();
-	callback.onProgress = () => assert.fail('unsupported callback must not run');
+	callback.onProgress = () => { throw new Error('fixture callback failure'); };
 	assert.throws(
 		() => processor.resize(callback),
-		diagnostic('unsupported-operation', 'onProgress')
+		diagnostic('callback', 'onProgress')
 	);
 	assert.equal(processor.resize(request()).data[0], 17);
+	processor.dispose();
+});
+
+test('validated callbacks are read once and reject reentry while allowing recovery', async () => {
+	const processor = await createDitherette({ wasm: module });
+	const value = request();
+	let reads = 0;
+	const events = [];
+	Object.defineProperty(value, 'onProgress', { enumerable: true, get() {
+		reads++;
+		return (event) => {
+			events.push(event);
+			assert.throws(() => processor.resize(request()), diagnostic('reentrant-call', 'instance'));
+			assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
+		};
+	} });
+	assert.equal(processor.resize(value).data.length, 8);
+	assert.equal(reads, 1);
+	assert.equal(events.at(-1).stage, 'complete');
+	assert.deepEqual(events.at(-1), { stage: 'complete', completed: 1, total: 1 });
+	assert.throws(() => processor.resize({ ...request(), onProgress(event) {
+		if (event.stage === 'complete') throw new Error('completion failure');
+	} }), diagnostic('callback', 'onProgress'));
+	assert.equal(processor.resize(request()).data.length, 8);
 	processor.dispose();
 });
 

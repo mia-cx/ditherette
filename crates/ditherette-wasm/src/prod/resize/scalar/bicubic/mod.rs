@@ -93,6 +93,23 @@ pub fn resize_bicubic_rgba8_with_plan_and_scratch_into(
     )
 }
 
+/// Reports actual row work from the shared convolution kernel using caller-owned scratch.
+pub(crate) fn resize_bicubic_with_progress(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &BicubicResizePlan,
+    scratch: &mut [f64],
+    progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    super::convolution::resize_convolution_with_progress(
+        source,
+        output,
+        &plan.inner,
+        scratch,
+        progress,
+    )
+}
+
 /// Resizes packed RGBA8 `source` into packed RGBA8 `output` with Catmull-Rom bicubic filtering.
 pub fn resize_bicubic_rgba8_into(
     source: ImageView<'_, Rgba8>,

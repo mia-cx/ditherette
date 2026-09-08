@@ -88,6 +88,17 @@ impl PreparedQuantizer {
     /// Writes one index per source pixel. The caller supplies validated output storage.
     /// Alpha comes from the corresponding source byte; no allocation occurs in this method.
     pub fn quantize_into(&self, source: ImageView<'_, Rgba8>, output: &mut [u8]) {
+        self.quantize_with_progress(source, output, |_| Ok(()))
+            .expect("disabled progress cannot fail");
+    }
+
+    /// Reports each completed row without changing per-pixel traversal or arithmetic.
+    pub(crate) fn quantize_with_progress(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        output: &mut [u8],
+        mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+    ) -> Result<(), crate::prod::contract::failure::Failure> {
         let dimensions = source.dimensions();
         assert_eq!(
             output.len(),
@@ -106,7 +117,9 @@ impl PreparedQuantizer {
                     }
                 };
             }
+            progress(y + 1)?;
         }
+        Ok(())
     }
 
     /// Moves palette metadata into a complete native result; no copies or allocations occur.

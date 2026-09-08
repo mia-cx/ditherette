@@ -387,6 +387,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
         measure_nonexact: false,
+        progress: None,
     };
     let identity = browser
         .operation

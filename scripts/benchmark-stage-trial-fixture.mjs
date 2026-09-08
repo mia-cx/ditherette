@@ -3,7 +3,7 @@ import { runTrial } from './benchmark-public-page.mjs';
 import { events, reset } from './benchmark-stage-cache-fixture.mjs';
 
 /** Exercise the complete warm Process protocol with a fake package and clock, never performance measurements. */
-export async function warmProcessTrial() {
+export async function warmProcessTrial({ configure = () => {}, configureFixture = () => {} } = {}) {
 	const globals = ['location', 'crossOriginIsolated', 'performance', 'fetch'];
 	const previous = globals.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
 	let tick = 0;
@@ -84,6 +84,8 @@ export async function warmProcessTrial() {
 	};
 	try {
 		reset();
+		configureFixture();
+		configure(trial);
 		const result = await runTrial(trial);
 		return { result, events: structuredClone(events), trial };
 	} finally {

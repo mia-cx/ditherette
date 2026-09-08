@@ -86,7 +86,7 @@ pub fn private_quantize(
                 alpha,
                 matching,
             },
-            &mut JsQuantizeBoundary { input, result_sink },
+            &mut JsQuantizeBoundary::new(input, result_sink)?,
         )
     })();
     restore_ready(processor);
@@ -96,9 +96,24 @@ pub fn private_quantize(
 pub(super) struct JsQuantizeBoundary<'a> {
     pub(super) input: &'a Uint8Array,
     pub(super) result_sink: &'a JsValue,
+    progress: Option<super::progress::JsProgress<'a>>,
+}
+impl<'a> JsQuantizeBoundary<'a> {
+    pub(super) fn new(input: &'a Uint8Array, result_sink: &'a JsValue) -> Result<Self, Failure> {
+        Ok(Self {
+            input,
+            result_sink,
+            progress: super::progress::JsProgress::new(result_sink)?,
+        })
+    }
 }
 impl QuantizeBoundary for JsQuantizeBoundary<'_> {
     type Output = ();
+    fn progress(&mut self) -> Option<&mut dyn crate::prod::pipeline::progress::Callback> {
+        self.progress
+            .as_mut()
+            .map(|progress| progress as &mut dyn crate::prod::pipeline::progress::Callback)
+    }
     fn capacity_bytes(&self) -> u64 {
         (std::mem::size_of::<[PaletteEntry; PALETTE_SLOTS]>() + std::mem::size_of::<Self>()) as u64
     }

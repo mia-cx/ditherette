@@ -12,9 +12,12 @@ use crate::{
         contract::{
             cache::{Identity, StageOptions},
             failure::Failure,
+            lifecycle::Stage,
             request::{BayerSize, DitherPolicy, Output},
         },
-        dither::error_diffusion::prepared::{execute_with_scratch, DiffusionPolicy},
+        dither::error_diffusion::prepared::{
+            execute_with_progress, execute_with_scratch, DiffusionPolicy,
+        },
     },
 };
 
@@ -32,6 +35,9 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     peak: &mut u64,
     store: &mut Store,
 ) -> Result<B::Output, Failure> {
+    let enabled = boundary.progress().is_some();
+    let mut progress = super::progress::Control::new(enabled);
+    progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
     let source_len = source_dimensions
         .storage_len::<Rgba8>()
         .expect("validated source");
@@ -90,7 +96,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     if final_key.is_some_and(|key| call.take_image(2, key)) {
         let (bytes, metadata) = call.indexed_result(3);
         let result = boundary.complete(bytes, output_dimensions, metadata);
-        return call.finish(result);
+        return call.finish(progress.finish(result, boundary.progress()));
     }
     call.prepare(
         Some(request),
@@ -125,10 +131,26 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     if resize.is_some() && !resized_hit {
         let (_, prepared, scratch) = call.parts();
         let [source, resized, _, _] = &mut scratch.buffers;
-        prepared.expect("requested resize").execute(
-            ImageView::packed(source, source_dimensions).expect("owned source"),
-            ImageViewMut::packed(resized, output_dimensions).expect("reserved resize"),
-        )?;
+        let source = ImageView::packed(source, source_dimensions).expect("owned source");
+        let output = ImageViewMut::packed(resized, output_dimensions).expect("reserved resize");
+        if enabled {
+            prepared.expect("requested resize").execute_with_progress(
+                source,
+                output,
+                &mut |completed, total| {
+                    progress.report(
+                        boundary.progress(),
+                        Stage::Resize,
+                        u64::from(completed),
+                        u64::from(total),
+                    )
+                },
+            )?;
+        } else {
+            prepared
+                .expect("requested resize")
+                .execute(source, output)?;
+        }
         rgba_content = Some(call.content(0, 1, output_dimensions));
     }
     let rgba_content = rgba_content.expect("resized or original content");
@@ -151,11 +173,27 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 },
                 |image| image.bytes.as_slice(),
             );
-            perturb::execute(
-                ImageView::packed(rgba, output_dimensions).expect("complete RGBA"),
-                ImageViewMut::packed(perturbed, output_dimensions).expect("reserved perturb"),
-                perturb,
-            );
+            let source = ImageView::packed(rgba, output_dimensions).expect("complete RGBA");
+            let output =
+                ImageViewMut::packed(perturbed, output_dimensions).expect("reserved perturb");
+            if enabled {
+                progress.report(
+                    boundary.progress(),
+                    Stage::Perturb,
+                    0,
+                    u64::from(output_dimensions.height()),
+                )?;
+                perturb::execute_with_progress(source, output, perturb, |completed| {
+                    progress.report(
+                        boundary.progress(),
+                        Stage::Perturb,
+                        u64::from(completed),
+                        u64::from(output_dimensions.height()),
+                    )
+                })?;
+            } else {
+                perturb::execute(source, output, perturb);
+            }
         }
         match_content = Some(call.content(1, 2, output_dimensions));
     } else {
@@ -178,7 +216,37 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             source.as_slice()
         };
         let view = ImageView::packed(rgba, output_dimensions).expect("complete RGBA");
+        let stage = if matches!(
+            dither,
+            DitherPolicy::Diffusion { .. } | DitherPolicy::Yliluoma { .. }
+        ) {
+            Stage::DitherAndQuantize
+        } else {
+            Stage::Quantize
+        };
+        progress.report(
+            boundary.progress(),
+            stage,
+            0,
+            u64::from(output_dimensions.height()),
+        )?;
+        let mut report_row = |completed| {
+            progress.report(
+                boundary.progress(),
+                stage,
+                u64::from(completed),
+                u64::from(output_dimensions.height()),
+            )
+        };
         match dither {
+            DitherPolicy::Diffusion { .. } if enabled => execute_with_progress(
+                prepared,
+                &mut scratch.diffusion,
+                view,
+                indices,
+                DiffusionPolicy::new(dither)?,
+                &mut report_row,
+            )?,
             DitherPolicy::Diffusion { .. } => execute_with_scratch(
                 prepared,
                 &mut scratch.diffusion,
@@ -194,10 +262,22 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     BayerSize::Eight => Matrix::Eight,
                     BayerSize::Sixteen => Matrix::Sixteen,
                 };
-                crate::prod::dither::yiluoma::dither_yiluoma_into(
-                    view, prepared, indices, matrix, placement,
-                );
+                if enabled {
+                    crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
+                        view,
+                        prepared,
+                        indices,
+                        matrix,
+                        placement,
+                        &mut report_row,
+                    )?;
+                } else {
+                    crate::prod::dither::yiluoma::dither_yiluoma_into(
+                        view, prepared, indices, matrix, placement,
+                    );
+                }
             }
+            _ if enabled => prepared.quantize_with_progress(view, indices, &mut report_row)?,
             _ => prepared.quantize_into(view, indices),
         }
     }
@@ -210,5 +290,5 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     call.retain_indexed(final_key.unwrap(), 3, output_dimensions, peak);
     let (bytes, metadata) = call.indexed_result(3);
     let result = boundary.complete(bytes, output_dimensions, metadata);
-    call.finish(result)
+    call.finish(progress.finish(result, boundary.progress()))
 }

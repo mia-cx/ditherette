@@ -9,6 +9,7 @@ use crate::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
+            lifecycle::Stage,
             request::{BayerSize, Field, PerturbPolicy, Placement},
         },
         dither::{blue_noise, ordered, random_noise},
@@ -67,7 +68,17 @@ pub(super) fn execute(
     output: ImageViewMut<'_, Rgba8>,
     policy: PerturbPolicy,
 ) {
-    crate::prod::dither::perturb::perturb_by_field_rows_into(
+    execute_with_progress(source, output, policy, |_| Ok(()))
+        .expect("disabled progress cannot fail");
+}
+
+pub(super) fn execute_with_progress(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    policy: PerturbPolicy,
+    progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    crate::prod::dither::perturb::perturb_by_field_with_progress(
         source,
         output,
         policy.space,
@@ -88,7 +99,8 @@ pub(super) fn execute(
             Field::Random { seed } => random_noise::random_noise_at(seed, index),
             Field::BlueNoise {} => blue_noise::blue_noise_at(x, y),
         },
-    );
+        progress,
+    )
 }
 
 pub(super) fn run<B: Boundary, A: Allocator>(
@@ -108,6 +120,9 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     if boundary.input_len()? != len {
         return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
     }
+    let enabled = boundary.progress().is_some();
+    let mut progress = super::progress::Control::new(enabled);
+    progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
     // Shared Processor bookkeeping already covers two owned Vec headers.
     let owned = overhead
         .checked_add(size_of::<PerturbRequest>() as u64)
@@ -125,22 +140,37 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     if call.take_image(1, key) {
         let image = call.image(1).unwrap();
         let result = boundary.complete(&image.bytes, image.dimensions);
-        return call.finish(result);
+        return call.finish(progress.finish(result, boundary.progress()));
     }
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
     let [source, output, _, _] = &mut call.scratch.buffers;
-    execute(
-        ImageView::packed(source, dimensions).expect("validated source storage"),
-        ImageViewMut::packed(output, dimensions).expect("reserved output storage"),
-        request.perturb,
-    );
+    let source = ImageView::packed(source, dimensions).expect("validated source storage");
+    let output = ImageViewMut::packed(output, dimensions).expect("reserved output storage");
+    if enabled {
+        progress.report(
+            boundary.progress(),
+            Stage::Perturb,
+            0,
+            u64::from(dimensions.height()),
+        )?;
+        execute_with_progress(source, output, request.perturb, |completed| {
+            progress.report(
+                boundary.progress(),
+                Stage::Perturb,
+                u64::from(completed),
+                u64::from(dimensions.height()),
+            )
+        })?;
+    } else {
+        execute(source, output, request.perturb);
+    }
     let content = call.content(1, 1, dimensions);
     call.retain_rgba(1, key, 1, dimensions, content, peak);
     let bytes = call
         .image(1)
         .map_or(call.scratch.buffers[1].as_slice(), |image| &image.bytes);
     let result = boundary.complete(bytes, dimensions);
-    call.finish(result)
+    call.finish(progress.finish(result, boundary.progress()))
 }
 
 fn memory_limit() -> Failure {

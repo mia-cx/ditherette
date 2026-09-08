@@ -50,7 +50,8 @@ export function validateProcess(value: unknown) {
 			palette: field(request, 'palette'),
 			alpha: field(recipe, 'alpha'),
 			matching: field(recipe, 'match'),
-			dither: field(recipe, 'dither')
+			dither: field(recipe, 'dither'),
+			onProgress: resized.onProgress
 		});
 		return { ...resized, ...quantize };
 	} catch (error) {

@@ -190,7 +190,7 @@ export async function processBrowserChecks({
 				'recipe.dither.size'
 			],
 			[{ ...value, palette: [] }, 'invalid-palette', 'palette'],
-			[{ ...value, onProgress() {} }, 'unsupported-operation', 'onProgress']
+			[{ ...value, onProgress: 1 }, 'invalid-settings', 'onProgress']
 		])
 			rejects(() => processor.process(change), code, path);
 		const reads = new Map();

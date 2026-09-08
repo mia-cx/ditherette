@@ -161,7 +161,7 @@ pub fn private_resize(
                 resize: parse_resize(algorithm, anchor, support)?,
             },
         };
-        processor.resize(request, &mut JsBoundary { input, result_sink })
+        processor.resize(request, &mut JsBoundary::new(input, result_sink)?)
     })();
     // No RefCell borrow or generated &mut self borrow spans a JavaScript call.
     INSTANCE.with(|instance| *instance.borrow_mut() = Slot::Ready(processor));
@@ -207,10 +207,26 @@ pub(super) fn take_ready() -> Result<Processor, Failure> {
 pub(super) struct JsBoundary<'a> {
     pub(super) input: &'a Uint8Array,
     pub(super) result_sink: &'a JsValue,
+    progress: Option<super::progress::JsProgress<'a>>,
+}
+
+impl<'a> JsBoundary<'a> {
+    pub(super) fn new(input: &'a Uint8Array, result_sink: &'a JsValue) -> Result<Self, Failure> {
+        Ok(Self {
+            input,
+            result_sink,
+            progress: super::progress::JsProgress::new(result_sink)?,
+        })
+    }
 }
 
 impl Boundary for JsBoundary<'_> {
     type Output = ();
+    fn progress(&mut self) -> Option<&mut dyn crate::prod::pipeline::progress::Callback> {
+        self.progress
+            .as_mut()
+            .map(|progress| progress as &mut dyn crate::prod::pipeline::progress::Callback)
+    }
     fn input_len(&mut self) -> Result<usize, Failure> {
         input_length(self.input)
             .map(|length| length as usize)

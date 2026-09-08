@@ -119,7 +119,17 @@ where
     pub fn execute(
         &mut self,
         source: ImageView<'_, F>,
+        output: ImageViewMut<'_, F>,
+    ) -> Result<(), Failure> {
+        self.execute_with_progress(source, output, &mut |_, _| Ok(()))
+    }
+
+    /// Counts completed chain, sampling, and blending rows without replaying reductions.
+    pub(crate) fn execute_with_progress(
+        &mut self,
+        source: ImageView<'_, F>,
         mut output: ImageViewMut<'_, F>,
+        progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         if source.dimensions() != self.source {
             return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::Source));
@@ -127,15 +137,33 @@ where
         if output.dimensions() != self.output {
             return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Output));
         }
+        let chain_rows: u32 = self
+            .levels
+            .iter()
+            .map(|level| level.dimensions.height())
+            .sum();
+        let total = chain_rows
+            + self.output.height()
+                * if self.lower_count < self.levels.len() {
+                    3
+                } else {
+                    1
+                };
+        progress(0, total)?;
         if self.levels.is_empty() {
             resize_bilinear_with_scratch_into(source, output, self.anchor, &mut self.accumulated);
-            return Ok(());
+            return progress(total, total);
         }
-        fill_chain(&source, &mut self.levels, &mut self.accumulated);
+        fill_chain(
+            &source,
+            &mut self.levels,
+            &mut self.accumulated,
+            &mut |completed| progress(completed, total),
+        )?;
         let lower = self.levels[self.lower_count - 1].view();
         if self.lower_count == self.levels.len() {
             resize_bilinear_with_scratch_into(lower, output, self.anchor, &mut self.accumulated);
-            return Ok(());
+            return progress(total, total);
         }
         resize_bilinear_with_scratch_into(
             lower,
@@ -143,12 +171,14 @@ where
             self.anchor,
             &mut self.accumulated,
         );
+        progress(chain_rows + self.output.height(), total)?;
         resize_bilinear_with_scratch_into(
             self.levels.last().unwrap().view(),
             ImageViewMut::<F>::packed(&mut self.upper_output, self.output).unwrap(),
             self.anchor,
             &mut self.accumulated,
         );
+        progress(chain_rows + self.output.height() * 2, total)?;
         let row_len = self.output.width_usize() * F::CHANNEL_COUNT;
         for y in 0..self.output.height() {
             let start = y as usize * row_len;
@@ -162,6 +192,7 @@ where
                 let blended = lower.to_f64() * (1.0 - self.blend) + upper.to_f64() * self.blend;
                 *target = F::Storage::from_f64(blended);
             }
+            progress(chain_rows + self.output.height() * 2 + y + 1, total)?;
         }
         Ok(())
     }
@@ -228,14 +259,18 @@ fn fill_chain<F: ImageFormat>(
     source: &ImageView<'_, F>,
     chain: &mut [MipLevel<F>],
     accumulated: &mut [f64],
-) where
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure>
+where
     F::Storage: ResizeSample,
 {
     let row_len = source.dimensions().width_usize() * F::CHANNEL_COUNT;
     for y in 0..source.dimensions().height() {
         let start = y as usize * row_len;
         chain[0].data[start..start + row_len].copy_from_slice(source.row(y).unwrap());
+        progress(y + 1)?;
     }
+    let mut completed = source.dimensions().height();
     for index in 1..chain.len() {
         let (previous, next) = chain.split_at_mut(index);
         resize_area_with_scratch_into(
@@ -243,7 +278,10 @@ fn fill_chain<F: ImageFormat>(
             ImageViewMut::<F>::packed(&mut next[0].data, next[0].dimensions).unwrap(),
             accumulated,
         );
+        completed += next[0].dimensions.height();
+        progress(completed)?;
     }
+    Ok(())
 }
 
 fn storage_len<F: ImageFormat>(dimensions: ImageDimensions) -> Result<usize, Failure> {
