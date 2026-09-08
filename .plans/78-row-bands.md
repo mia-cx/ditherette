@@ -39,7 +39,7 @@ No public API, execution selector, cache identity, or callback contract changes.
    through private fragments. Report progress only after joined work on the caller.
 5. [x] Compare fresh complete-call host-worker artifacts and select measured cost classes.
 6. [x] Prepare the S36-only publication branch, measurement report, and exact native validation for root.
-7. [ ] Root validates the ordinary package and files the reviewable stacked PR.
+7. [x] Validate the ordinary package and prepare the reviewable stacked PR.
 
 ## Validation and budget
 
@@ -212,7 +212,7 @@ The S36-only measurement report is
 `docs/plans/ditherette-v1/s36-row-bands.md`. It retains every cold and warm cell,
 actual sample counts, all noisy controls, source identities, and report hashes.
 Time-capped passing cells remain valid under the predeclared minimum-five rule.
-Ordinary-package browser validation remains pending root.
+Ordinary-package browser validation completes against combined source `dc81818a`; see the final disposition below.
 
 Fresh publication-worktree validation passes 44 scalar and 45 threaded release
 library tests. Both configurations also pass nine focused integration tests:
@@ -223,3 +223,20 @@ All owned native jobs have exited.
 The returned `.worktrees/v1-s36-delivery/target/compiler` was a real directory
 with no symlinks, active jobs, or custom evidence. Removing its rebuildable
 contents reclaimed 171 MiB. Source and all retained trial evidence stay intact.
+
+## Final delivery disposition
+
+Publication joins S35 PR 126 head `6bbe113b99a08f2a11ade6296ddf7f25e32e041b`, then rebases with merge ancestry preserved
+onto published `delivery/v1-s35-resize`. Only the S36 runtime family remains in its PR diff.
+Production field/quantize and shared build inputs match tested `dc81818a`; the remaining differences belong to S37 mixing.
+No runtime or build input changes after the exact native subset checks above.
+
+The coordinator's combined ordinary package passes the trusted frozen guard. Tarball SHA-256 is
+`1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+Its automatic host fixture passes 23 checks, including nine cases per Chromium/Firefox engine and actual Oklab staged composition.
+`.plans/77-79-auto-host.md` records the exact invocation and completed browser cleanup.
+
+All slice TODOs are complete. S41 retains inconclusive small/warm controls, unmeasured recipe classes, automatic-policy overhead follow-up,
+and the pinned WebKit threaded cleanup gate. Untimed package equality does not turn those performance gates into passes.
+The shared paired evidence contains 400 serial workers, 7,215 samples, and 200 exact production comparisons across both engines.
+S36's complete subset, actual time-capped counts, and report hashes remain in its measurement report.

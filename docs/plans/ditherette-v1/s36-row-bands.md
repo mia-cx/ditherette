@@ -117,7 +117,7 @@ The S36-only publication branch starts at `16136471`, including selector `151315
 and final S35 parent `a8418904`. It adds developer-getter cleanup `ddcd7477`.
 The combined branch remains unchanged at `5933ae55`; none of its S37 files or callsite enters this branch.
 
-Ordinary-package browser validation is pending root.
+Ordinary-package browser validation completes against combined source `dc81818a`, as recorded below.
 No new Wasm build, browser run, measurement, push, or PR operation occurs in this separation task.
 
 Fresh native validation on this exact S36-only branch passes 44 scalar library tests and 45 threaded library tests.
@@ -131,3 +131,17 @@ cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --release --feature
 
 All owned native jobs exited. The returned old delivery compiler cache was removed after checking jobs, symlinks, and contents.
 That reclaimed 171 MiB of rebuildable files. Source, joined ancestry, and every trial artifact remain intact.
+
+## Final installed-package disposition
+
+The publication branch joins S35 PR 126 head `6bbe113b99a08f2a11ade6296ddf7f25e32e041b` and rebases onto its published branch.
+Its diff remains S36-only. Field/quantize production and shared build inputs match the combined tested source `dc81818a`.
+The pure S36 native checks above remain applicable because delivery changes only ancestry and evidence documents.
+
+The ordinary tarball SHA-256 is `1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+The trusted frozen guard passes. The untimed automatic host suite passes 23 checks, including nine cases per engine.
+It verifies ordinary scalar/required-threaded exact bytes and metadata, Oklab quantize(perturb) composition, progress, and worker disposal.
+Both ordinary binaries exclude the developer policy export. Exact invocation and cleanup are in `.plans/77-79-auto-host.md`.
+
+S41 retains noisy small/warm controls, unmeasured classes, automatic-selector overhead follow-up, and WebKit threaded cleanup.
+No new performance measurement or change to frozen expectations accompanies this delivery.
