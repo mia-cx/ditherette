@@ -141,6 +141,12 @@ S32 checkpoint `4e9baaad80d6e590303dcdfed5346f01f259b8ce` includes final S31 anc
 Issue #73's S31 blocker is removed after verifying that ancestry. Its same-store transaction and pipeline wiring remain in progress.
 The runtime owner uses `.worktrees/v1-s32-stages`; the public-fixture owner uses `.worktrees/v1-s32-public`; the benchmark owner uses `.worktrees/v1-s32-bench`.
 Benchmark checkpoint `64eb3357` declares four cold/warm workloads and verifies per-sample priming helpers. No S32 measurements have run.
+Store checkpoint `b6193dd3f14aaabdd4077e7170ad8b5282c8e98d` passes 22 native library tests and an independent read-only review.
+It shares preparation/image caps, LRU, pinned transactions, and success-only publication. Processing-path wiring remains in progress.
+Public fixture checkpoint `8bd9208138322776433cb0eb3e9dcf0f4d15de52` passes the actual installed S31 package in all three engines.
+It covers five methods, 18 compositions, mutation, metadata ownership, disposal, and failed final-copy recovery.
+Those checks establish observable behavior on the recorded S31 tarball, not private cache hits or S32 artifact conformance.
+The public-fixture owner returns its completed checkpoint and independently reviews runtime checkpoints without editing the runtime worktree.
 These three owners have disjoint source/test/protocol responsibilities. S31 compiler caches are no longer assigned to any agent.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
@@ -165,7 +171,7 @@ S31 handoff returns six compiler targets; their cleanup reclaims 6.93 GiB of dis
 The returned trusted-checker target reclaims another 369 MiB. Future checks rebuild it when needed.
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
 Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
-Total compiler cleanup reclaims about 70 GiB. New slices own only their explicitly assigned worktree-local compiler outputs.
+The entries above record each cleanup separately. New slices own only their explicitly assigned worktree-local compiler outputs.
 The coordinator also removes the 98 MiB syntax-checker profile created by the CI reproduction after its jobs drain.
 All other completed-slice compiler ownership has ended. [S41 retains the measured release gaps](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5582606062).
 Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
