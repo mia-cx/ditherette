@@ -254,7 +254,23 @@ The complete-call large four-worker results show about 26% lower Lanczos3 latenc
 These compare forced policies within the same threaded artifact, not threaded Wasm against the ordinary scalar build.
 Firefox stops after 15 reaped workers when the browser creates writable `.parentlock` and `updates/` inside its immutable runtime snapshot.
 The files are absent from the source snapshot; the normal Playwright profile is separate. Root preserves the failed snapshot unchanged.
-No benchmark is running. One agent diagnoses the runtime write; another prepares the completed Chromium report. Firefox evidence remains incomplete.
+The Firefox updater caused that runtime write. A fresh runtime copy binds its own update-disabled policy through Playwright's alternate policy path.
+Compiled browser files remain unchanged; the configuration files enter the normal immutable snapshot digest. Historical snapshots remain untouched.
+Replacement trial 03 finishes all 200 Firefox workers with maximum live count one and no owned processes remaining.
+All 100 actual scalar/row pairs in each engine match byte-for-byte, including metadata. The separate reference probes retain inherited differences.
+The two completed engines collect 7,215 of 8,000 requested samples. Their declared time cap shortens 64 workers across 17 engine-cases after the existing minimum sample count.
+Its 50 case gates are 43 pass, four inconclusive, and three inherited bilinear mismatches. The coordinator exits 2 for those gates, not a worker failure.
+Firefox's large four-worker latency falls about 37% for Lanczos3, 50% for sRGB fields, and 67% for medium adaptive Yliluoma.
+The Chromium report digest is `160255130439e20dbbcd46a224f4911bed8fc5c10cc3840f46627a09e2148642`.
+The Firefox report digest is `77af173eb9b0c2203d8ad43a75181a68e90d57cf2a8388c1e7b1784603594e73`.
+Both reports compare forced scalar and row policies in the same threaded tarball; ordinary scalar-build comparisons remain S41 work.
+All three agents resume in the clean delivery worktrees. S35 owns the shared automatic-policy seam and resize selection.
+S36 owns combined evidence and field selection; S37 owns mixing selection. Only common-engine measured configurations can become automatic.
+Small or unmeasured classes remain scalar. Noisy cache-hit controls stay visible as incomplete S41 evidence.
+The completed benchmark and compact-JSON build caches return to the coordinator. Cleaning their two audited compiler directories reclaims about 4.3 GiB of disk blocks.
+Native executables, the tarball, both report digests, and all historical trial snapshots remain unchanged. Review can rebuild the compiler outputs.
+Future predeclared sweep budgets must include untimed per-sample priming. Large Firefox scalar cache-hit controls took about nine minutes each.
+Wait for benchmark exit without repeated progress-counter polling. Resume implementation only after the benchmark and its children exit.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
