@@ -26,7 +26,7 @@ fn main() -> io::Result<()> {
             unreachable!()
         };
         let reference = (subject.run)(&request).map_err(io::Error::other)?;
-        fixtures.push(serde_json::json!({ "name": name, "operation": blue_noise::public(&native), "source": source, "rgba": rgba, "reference": reference }));
+        fixtures.push(serde_json::json!({ "name": name, "operation": blue_noise::public(&native), "source": source, "rgba": rgba, "reference": reference, "identity": native.identity(source, &rgba)? }));
     }
     OpenOptions::new()
         .write(true)

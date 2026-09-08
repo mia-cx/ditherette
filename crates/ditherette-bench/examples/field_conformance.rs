@@ -14,6 +14,7 @@ use std::{
 
 #[derive(Serialize)]
 struct Fixture {
+    identity: ditherette_bench_api::verification::CaseIdentity,
     name: String,
     operation: PublicOperation,
     source: Dimensions,
@@ -72,6 +73,7 @@ fn main() -> io::Result<()> {
         };
         let reference = (subject.run)(&request).map_err(io::Error::other)?;
         fixtures.push(Fixture {
+            identity: operation.identity(source, &rgba, source)?,
             name,
             operation,
             source,
