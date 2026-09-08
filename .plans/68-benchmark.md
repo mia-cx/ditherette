@@ -1,5 +1,8 @@
 # S27 blue-noise benchmark baseline
 
+Completed trial results and delivery status are in [68-benchmark-results.md](68-benchmark-results.md).
+The preparation checkpoints below retain their original holds and artifact identities as history.
+
 Issue #68. Validated blue-noise parent `e4a44b718d49c48902806c0a35726ca1acac06ef`
 joins accepted S26 delivery `eeb0ba13ec452a26780400b6b7f569c3f7730578` at `28c745a0`.
 Documentation-only join `d99ee390` also includes delivered S26 PR #115 head `bb36452ca831bad485f924e7ee007f9bbdb1cb0d`.
@@ -12,13 +15,14 @@ S26 contributes its benchmark adapters, repaired field verifier, and completed b
 - [x] Declare 68 serial workers and export matching installed-package fixtures; pass untimed native checks.
 - [x] Commit clean code and prepare independent fresh native/public role builds with all jobs drained.
 - [x] Use an independently identified frozen-only Wasm oracle for browser preflight; pass exact public conformance while retaining native diagnostics.
-- [ ] Prepare fresh independent S27 roles and immutable pairs after rebasing onto the actual updated S26 base; leave all workers unstarted.
+- [x] Prepare fresh independent S27 roles and immutable pairs after rebasing onto the actual updated S26 base; hand off unstarted workers.
+- [x] Audit the coordinator's completed 68-worker trial and record exact verification, actual samples, medians, and limitations.
 
 ## Fixed scope
 
 The accepted implementation already uses an O(1) 32×32 lookup. No new optimization candidate is proposed.
 Both roles independently rebuild the same clean revision to establish the exact baseline and check integration stability.
-Measurements remain held for the coordinator; preparation never launches a measurement worker.
+The coordinator owns measurements; preparation never launches a measurement worker.
 
 Use a varied 65×33 RGBA image to cross two tile column boundaries and one tile row boundary.
 Register one native threshold-grid component and four complete recipes:
@@ -47,7 +51,9 @@ For both public role builds, link only local Wasm target `scalar` and `threads` 
 `.worktrees/v1-s23-trilinear/crates/ditherette-wasm/target/{scalar,threads}`.
 Return those exclusive caches to the coordinator after preparation and validation finish.
 Fresh preparation uses existing source-inventory and build-provenance checks.
-No measurement, PR/issue write, merge of a PR, publishing, deployment, or candidate selection occurs in this task.
+The original preparation task excludes measurements and external writes.
+The final delivery task records the coordinator's completed trial and files the unmerged S27 PR.
+PR merging, publishing, deployment, and candidate selection remain outside its scope.
 
 ## Code validation checkpoint
 
