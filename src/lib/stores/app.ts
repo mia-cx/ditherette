@@ -114,7 +114,15 @@ export const sourceMeta = atom<SourceMeta | undefined>();
 export const sourceObjectUrl = atom<string | undefined>();
 export const sourceImageData = atom<ImageData | undefined>();
 export const processedImage = atom<ProcessedImage | undefined>();
-export const processingProgress = atom<{ stage: string; progress: number } | undefined>();
+export const processingProgress = atom<
+	| {
+			stage: string;
+			progress: number;
+			completed?: number;
+			total?: number;
+	  }
+	| undefined
+>();
 export const processingError = atom<string | undefined>();
 export const currentProcessingMetrics = atom<ProcessingMetricsSample | undefined>();
 export const processingMetricsHistory = atom<ProcessingMetricsSample[]>([]);
