@@ -12,6 +12,9 @@ pub struct Digest256(pub [u8; 32]);
 #[serde(rename_all = "kebab-case")]
 pub enum Operation {
     MetricScores,
+    FieldEvaluation,
+    PlacementMask,
+    ColorInverse,
     Resize,
     Color,
     Perturb,
