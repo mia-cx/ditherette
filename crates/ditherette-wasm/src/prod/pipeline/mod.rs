@@ -2,6 +2,7 @@
 
 mod diffusion;
 pub mod identity;
+mod indexed;
 pub mod perturb;
 mod preparation;
 pub mod process;

@@ -5,19 +5,19 @@ use std::mem::size_of;
 use super::{
     identity,
     processor::Allocator,
-    quantize::{preparation_failure, QuantizeRequest},
+    quantize::{preparation_failure, IndexedMetadataRef, QuantizeRequest},
     resize::PreparedResize,
-    stages::ImageStage,
+    stages::{ImageStage, IndexedMetadata, Metadata},
 };
 use crate::{
     image::ImageDimensions,
     prod::{
         contract::{
-            cache::Identity,
+            cache::{source_identity, Identity},
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             lifecycle::{MAX_CACHE_BYTES, MAX_CACHE_ENTRIES},
-            request::Output,
+            request::{Output, Source},
         },
         quantize::PreparedQuantizer,
         resize::common::allocation::CapacityBudget,
@@ -103,6 +103,8 @@ pub(super) struct Store {
     clock: u64,
     hits: u64,
     misses: u64,
+    image_hits: u64,
+    image_misses: u64,
 }
 
 impl Default for Store {
@@ -113,6 +115,8 @@ impl Default for Store {
             clock: 0,
             hits: 0,
             misses: 0,
+            image_hits: 0,
+            image_misses: 0,
         }
     }
 }
@@ -126,6 +130,30 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
+    #[cfg(test)]
+    pub(super) fn image_stats(&self) -> (usize, u64, u64) {
+        (
+            self.entries
+                .iter()
+                .flatten()
+                .filter(|entry| matches!(entry.value, Value::Image(_)))
+                .count(),
+            self.image_hits,
+            self.image_misses,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn evict_preparation(&mut self) {
+        for entry in &mut self.entries {
+            if entry
+                .as_ref()
+                .is_some_and(|entry| !matches!(entry.value, Value::Image(_)))
+            {
+                *entry = None;
+            }
+        }
+    }
     #[cfg(test)]
     pub(super) fn stats(&self) -> (usize, u64, u64, u64, u64) {
         (
@@ -263,6 +291,64 @@ impl<'a> Call<'a> {
         peak: &mut u64,
         allocator: &mut A,
     ) -> Result<Self, Failure> {
+        let mut call = Self {
+            palette_hit: false,
+            resize_hit: false,
+            palette: None,
+            resize: None,
+            images: std::array::from_fn(|_| None),
+            image_hits: [false; 3],
+            scratch: std::mem::take(&mut store.scratch),
+            store,
+            success: false,
+            limit,
+            overhead,
+        };
+        call.prepare(palette, resize, lengths, diffusion_len, peak, allocator)?;
+        Ok(call)
+    }
+
+    /// Reserve only the owned input snapshot before content-key lookup.
+    pub(super) fn snapshot<A: Allocator>(
+        store: &'a mut Store,
+        source_len: usize,
+        overhead: u64,
+        limit: u64,
+        peak: &mut u64,
+        allocator: &mut A,
+    ) -> Result<Self, Failure> {
+        Self::new(
+            store,
+            None,
+            None,
+            [source_len, 0, 0, 0],
+            0,
+            overhead,
+            limit,
+            peak,
+            allocator,
+        )
+    }
+
+    /// After source hashing and available image hits, reserve the remaining execution.
+    pub(super) fn prepare<A: Allocator>(
+        &mut self,
+        palette: Option<QuantizeRequest<'_>>,
+        resize: Option<ResizePreparation>,
+        lengths: [usize; 4],
+        diffusion_len: usize,
+        peak: &mut u64,
+        allocator: &mut A,
+    ) -> Result<(), Failure> {
+        let call = self;
+        let limit = call.limit;
+        let overhead = call.overhead
+            + call
+                .images
+                .iter()
+                .flatten()
+                .map(Entry::capacity)
+                .sum::<u64>();
         let palette_key = palette
             .map(|request| identity::palette(request.palette, request.alpha, request.matching))
             .transpose()?;
@@ -275,21 +361,10 @@ impl<'a> Call<'a> {
                 )
             })
             .transpose()?;
-        let palette_entry = palette_key.and_then(|key| store.take(key));
-        let resize_entry = resize_key.and_then(|key| store.take(key));
-        let mut call = Self {
-            palette_hit: palette_entry.is_some(),
-            resize_hit: resize_entry.is_some(),
-            palette: palette_entry,
-            resize: resize_entry,
-            images: std::array::from_fn(|_| None),
-            image_hits: [false; 3],
-            scratch: std::mem::take(&mut store.scratch),
-            store,
-            success: false,
-            limit,
-            overhead,
-        };
+        call.palette = palette_key.and_then(|key| call.store.take(key));
+        call.resize = resize_key.and_then(|key| call.store.take(key));
+        call.palette_hit = call.palette.is_some();
+        call.resize_hit = call.resize.is_some();
         let palette_required = palette
             .map(|request| {
                 PreparedQuantizer::required_capacity_bytes(
@@ -332,13 +407,20 @@ impl<'a> Call<'a> {
                     * size_of::<[f32; 3]>() as u64)
         };
         // These buffers were idle on entry. Release excess capacity before evicting any plan.
-        if planned(&call)? + call.store.capacity() > limit {
-            call.scratch = Scratch::default();
+        if planned(call)? + call.store.capacity() > limit {
+            // The first buffer may already hold the hashed input snapshot.
+            for buffer in &mut call.scratch.buffers[1..] {
+                *buffer = Vec::new();
+            }
+            call.scratch.diffusion = Vec::new();
+            if call.scratch.buffers[0].is_empty() {
+                call.scratch.buffers[0] = Vec::new();
+            }
             if let Some(entry) = &mut call.resize {
                 entry.drop_scratch();
             }
         }
-        call.store.room(planned(&call)?, limit)?;
+        call.store.room(planned(call)?, limit)?;
         let buffers_required = lengths
             .iter()
             .zip(&call.scratch.buffers)
@@ -411,7 +493,6 @@ impl<'a> Call<'a> {
         let mut actual = owned;
         for (buffer, length) in call.scratch.buffers.iter_mut().zip(lengths) {
             let planned_capacity = length.max(buffer.capacity()) as u64;
-            buffer.clear();
             if buffer.capacity() < length {
                 *buffer = Vec::new();
                 allocator.reserve(buffer, length)?;
@@ -434,7 +515,7 @@ impl<'a> Call<'a> {
             return Err(memory_limit());
         }
         call.scratch.diffusion.resize(diffusion_len, [0.0; 3]);
-        Ok(call)
+        Ok(())
     }
 
     pub(super) fn parts(
@@ -455,6 +536,145 @@ impl<'a> Call<'a> {
         (palette, resize, &mut self.scratch)
     }
 
+    pub(super) fn image_parts(
+        &mut self,
+    ) -> (
+        Option<&PreparedQuantizer>,
+        Option<&mut PreparedResize>,
+        [Option<&ImageStage>; 3],
+        &mut Scratch,
+    ) {
+        let palette = self.palette.as_ref().map(|entry| match &entry.value {
+            Value::Palette(value) => &value[0],
+            _ => unreachable!(),
+        });
+        let resize = self.resize.as_mut().map(|entry| match &mut entry.value {
+            Value::Resize(value) => &mut value[0],
+            _ => unreachable!(),
+        });
+        let images = self.images.each_ref().map(|entry| {
+            entry.as_ref().map(|entry| match &entry.value {
+                Value::Image(value) => &value[0],
+                _ => unreachable!(),
+            })
+        });
+        (palette, resize, images, &mut self.scratch)
+    }
+
+    pub(super) fn content(
+        &self,
+        slot: usize,
+        buffer: usize,
+        dimensions: ImageDimensions,
+    ) -> Identity {
+        if let Some(image) = self.image(slot) {
+            let Metadata::Rgba { content } = image.metadata else {
+                unreachable!()
+            };
+            return content;
+        }
+        source_identity(Source {
+            width: dimensions.width(),
+            height: dimensions.height(),
+            data: &self.scratch.buffers[buffer],
+        })
+    }
+
+    pub(super) fn retain_rgba(
+        &mut self,
+        slot: usize,
+        key: Identity,
+        buffer: usize,
+        dimensions: ImageDimensions,
+        content: Identity,
+        peak: &mut u64,
+    ) {
+        if self.image(slot).is_some() {
+            return;
+        }
+        let image = ImageStage {
+            dimensions,
+            bytes: std::mem::take(&mut self.scratch.buffers[buffer]),
+            metadata: Metadata::Rgba { content },
+        };
+        if let Err(image) = self.stage_image(slot, key, image, peak) {
+            self.scratch.buffers[buffer] = image.bytes;
+        }
+    }
+
+    /// Reserve optional durable metadata before final output construction. A retention
+    /// budget/allocation miss keeps the completed work and its prepared metadata usable.
+    pub(super) fn retain_indexed(
+        &mut self,
+        key: Identity,
+        buffer: usize,
+        dimensions: ImageDimensions,
+        peak: &mut u64,
+    ) {
+        if self.image(2).is_some() {
+            return;
+        }
+        let Value::Palette(prepared) = &self.palette.as_ref().expect("requested palette").value
+        else {
+            unreachable!()
+        };
+        let palette = prepared[0].palette();
+        let needed = IndexedMetadata::required_bytes(&palette.palette, &palette.warnings);
+        let retained = needed
+            + self.scratch.buffers[buffer].capacity() as u64
+            + size_of::<ImageStage>() as u64
+            + size_of::<Entry>() as u64;
+        if retained > MAX_CACHE_BYTES.min(self.limit / 4) {
+            return;
+        }
+        let owned = self.active_capacity();
+        if self
+            .store
+            .room(owned + needed + size_of::<ImageStage>() as u64, self.limit)
+            .is_err()
+        {
+            return;
+        }
+        let Value::Palette(prepared) = &self.palette.as_ref().unwrap().value else {
+            unreachable!()
+        };
+        let palette = prepared[0].palette();
+        let budget = self.limit - owned - self.store.capacity() - size_of::<ImageStage>() as u64;
+        let Ok(metadata) = IndexedMetadata::try_copy(&palette.palette, &palette.warnings, budget)
+        else {
+            return;
+        };
+        *peak = (*peak).max(owned + self.store.capacity() + metadata.capacity_bytes());
+        let image = ImageStage {
+            dimensions,
+            bytes: std::mem::take(&mut self.scratch.buffers[buffer]),
+            metadata: Metadata::Indexed(metadata),
+        };
+        if let Err(image) = self.stage_image(2, key, image, peak) {
+            self.scratch.buffers[buffer] = image.bytes;
+        }
+    }
+
+    pub(super) fn indexed_result(&self, buffer: usize) -> (&[u8], IndexedMetadataRef<'_>) {
+        if let Some(image) = self.image(2) {
+            let Metadata::Indexed(metadata) = &image.metadata else {
+                unreachable!()
+            };
+            return (
+                &image.bytes,
+                IndexedMetadataRef {
+                    palette: &metadata.palette,
+                    warnings: &metadata.warnings,
+                },
+            );
+        }
+        let Value::Palette(prepared) = &self.palette.as_ref().expect("requested palette").value
+        else {
+            unreachable!()
+        };
+        (&self.scratch.buffers[buffer], prepared[0].palette().into())
+    }
+
     fn active_capacity(&self) -> u64 {
         self.overhead
             + self.scratch.capacity()
@@ -473,6 +693,11 @@ impl<'a> Call<'a> {
         assert!(self.images[slot].is_none());
         self.images[slot] = self.store.take(key);
         self.image_hits[slot] = self.images[slot].is_some();
+        if self.image_hits[slot] {
+            self.store.image_hits += 1;
+        } else {
+            self.store.image_misses += 1;
+        }
         self.image_hits[slot]
     }
 
@@ -585,6 +810,14 @@ impl Drop for Call<'_> {
 
 fn memory_limit() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
+}
+
+pub(super) fn source_key(bytes: &[u8], dimensions: ImageDimensions) -> Identity {
+    source_identity(Source {
+        width: dimensions.width(),
+        height: dimensions.height(),
+        data: bytes,
+    })
 }
 
 #[cfg(test)]

@@ -103,7 +103,7 @@ point; S32 supplies the transaction without inventing callback behavior early.
 
 ## Atomic implementation steps
 
-Steps 1 and 2 complete. Next is hit-aware pipeline wiring.
+Steps 1 through 3 complete. Next is corrected-parent join and public ownership validation.
 
 1. [x] **Prove identities.** Extend the existing identity helper and replay frozen
    request-plan fixtures for every method and dither family. Done when production
@@ -111,7 +111,7 @@ Steps 1 and 2 complete. Next is hit-aware pipeline wiring.
 2. [x] **Add owned stage entries.** Extend the store/transaction with typed image values,
    shared caps, pinning, capacity transfers, and private hit counters. Done when
    isolated budget, oversized-entry, LRU, and two-entry rollback fixtures pass.
-3. **Connect existing pipelines.** Add hit-aware planning and completed-buffer
+3. [x] **Connect existing pipelines.** Add hit-aware planning and completed-buffer
    publication to all five methods. Done when cross-method calls demonstrably hit
    shared stages and produce identical bytes, palette metadata, and warnings.
 4. **Verify public ownership.** Run focused native and installed-package fixtures
@@ -171,3 +171,18 @@ its cap or reservation prevents caching. Native preparation tests pass 9/9,
 including mixed image/preparation caps and LRU, capacity transfer without pixel
 copying, two-entry rollback, pinned-hit survival, and oversized-owner return.
 Pipelines still use preparation-only behavior until step 3.
+
+The pipeline checkpoint snapshots and hashes current input before image lookup.
+Resize and perturb reuse their RGBA stages. Process, quantize, and fused calls
+share one indexed-stage coordinator around the unchanged kernels. Native tests
+prove cross-method hits for all four families, including after matcher eviction.
+The completion adapter now borrows normalized metadata independently of preparation.
+
+Production budget fixtures now locate the mandatory cold execution limit with
+fresh-instance capacity searches. One byte below that limit copies only the
+input snapshot and runs no image kernel or completion. Optional retention may
+succeed at a lower capacity than the full retained cold peak. Physical allocator
+fixtures still prove release after every mandatory allocation failure. A new
+fixture injects optional image-record failure and proves successful durable output
+and full release on disposal. The diffusion-row witness observes deallocation
+before replacement; image eviction may reduce its live-byte total further.
