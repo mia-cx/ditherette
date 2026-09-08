@@ -10,6 +10,10 @@ use std::io;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum NativeOperation {
+    Processor {
+        settings: super::preparation::ProcessorSettings,
+        cache: super::browser::CacheCapability,
+    },
     Process {
         settings: super::process::ProcessSettings,
     },
@@ -46,6 +50,7 @@ impl NativeOperation {
         rgba: &'a [u8],
     ) -> io::Result<ReferenceRequest<'a>> {
         match self {
+            Self::Processor { settings, .. } => settings.reference_request(source, rgba),
             Self::Process { settings } => settings.reference_request(source, rgba),
             Self::Diffusion { settings } => settings.reference_request(source, rgba),
             Self::Yliluoma { settings } => settings.reference_request(source, rgba),
@@ -103,6 +108,7 @@ impl NativeOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Processor { settings, .. } => settings.reference_subject(),
             Self::Process { .. } => "spec:process:request:v1",
             Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
             Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
@@ -125,6 +131,7 @@ impl NativeOperation {
 
     pub fn scope(&self) -> super::CallScope {
         match self {
+            Self::Processor { .. } => super::CallScope::NativeCompleteCall,
             Self::Process { .. } => super::CallScope::NativeCompleteCall,
             Self::Diffusion { .. } => super::CallScope::NativeCompleteCall,
             Self::Yliluoma { .. } => super::CallScope::NativeCompleteCall,

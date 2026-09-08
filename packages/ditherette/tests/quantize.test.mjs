@@ -18,6 +18,37 @@ const request = () => ({
 const errorIs = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
+test('warm preparation validates palette tails and preserves order, thresholds, and durable metadata', async () => {
+	const processor = await createDitherette({ wasm: module });
+	try {
+		const value = request();
+		value.palette = [...Array.from({ length: 256 }, () => color(0, 0, 0)), color(255, 255, 255)];
+		const first = processor.quantize(value);
+		value.palette[256] = { kind: 'color', rgb: [256, 0, 0] };
+		assert.throws(() => processor.quantize(value), errorIs('invalid-palette', 'palette.256.rgb.0'));
+		value.palette[256] = { kind: 'transparent' };
+		assert.deepEqual(processor.quantize(value), first);
+		value.palette = value.palette.slice(0, 256);
+		assert.equal(
+			processor.quantize(value).warnings.some(({ code }) => code === 'palette-truncated'),
+			false
+		);
+		const precise = request();
+		assert.deepEqual([...processor.quantize(precise).indices], [0, 2]);
+		precise.alpha.threshold = 128.0000001;
+		assert.deepEqual([...processor.quantize(precise).indices], [2, 2]);
+		precise.alpha.threshold = -0;
+		const zero = processor.quantize(precise);
+		precise.alpha.threshold = 0;
+		assert.deepEqual(processor.quantize(precise), zero);
+		precise.palette = [...precise.palette].reverse();
+		assert.deepEqual([...processor.quantize(precise).indices], [2, 0]);
+		assert.equal(first.warnings[0].code, 'palette-truncated');
+	} finally {
+		processor.dispose();
+	}
+});
+
 test('weighted public tags select independently calculated winners', async () => {
 	const processor = await createDitherette({ wasm: module });
 	try {

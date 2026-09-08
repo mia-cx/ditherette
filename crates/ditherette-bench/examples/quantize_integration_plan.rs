@@ -104,6 +104,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             )
         } else {
             match &native {
+                NativeOperation::Processor { .. } => unreachable!("quantize integration cases"),
                 NativeOperation::Diffusion { .. }
                 | NativeOperation::Process { .. }
                 | NativeOperation::MetricScores { .. }

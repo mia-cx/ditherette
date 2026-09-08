@@ -65,6 +65,21 @@ Existing preparation and result directories cannot be overwritten.
 
 ## Run after explicit clearance
 
+Preparation reuse cases use `preparation_integration_plan native|public DESTINATION HOST_LOAD_NOTES`.
+The helper declares four workloads in both cold and warm states, with two alternating role pairs.
+Each worker takes 20 single-call samples, 50 ms warmup, and a 10-second measurement cap.
+Running native plus Chromium, Firefox, and WebKit requires 128 serial workers.
+
+Cache metadata declares each role, for example
+`{"roles":{"accepted":"uncached","candidate":"preparation"}}`.
+Both artifacts must use the same protocol and their declared production implementation.
+Cold creates an empty processor before every call timer and disposes it after observing the output.
+Warm primes once with every red source byte XOR 255, then restores the measured input.
+The retained processor reuses preparation across ordinary calls with unchanged geometry, settings, and palette.
+Identity binds measured input bytes. Key preparation and boundary copies remain timed.
+Source-content hashing is absent until its production implementation exists.
+Cache cases reject throughput and initialization scopes. Historical `"none"` metadata remains supported.
+
 Follow [exclusive execution](EXECUTION.md). Drain agents, compilers, builds, and
 tests before setting the quiet attestation. Do not invoke Cargo during trials.
 

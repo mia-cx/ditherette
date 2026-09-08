@@ -306,6 +306,7 @@ fn whole_call_capacity_reservations_and_caught_failures_precede_publication_and_
         } else {
             3
         } {
+            exact = Processor::new(needed, 0).unwrap();
             let mut boundary = Boundary::default();
             let mut allocator = Reservation {
                 fail_at,
@@ -328,6 +329,7 @@ fn whole_call_capacity_reservations_and_caught_failures_precede_publication_and_
             extra: 4096,
             ..Reservation::default()
         };
+        exact = Processor::new(needed, 0).unwrap();
         let mut boundary = Boundary::default();
         assert_eq!(
             exact

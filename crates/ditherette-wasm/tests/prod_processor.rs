@@ -20,12 +20,19 @@ thread_local! {
     static ALLOCATION_FAILURE: Cell<Option<usize>> = const { Cell::new(None) };
     static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
     static LIVE_BYTES: Cell<isize> = const { Cell::new(0) };
+    static WATCH_ALLOCATION: Cell<usize> = const { Cell::new(0) };
+    static WATCHED_LIVE_BYTES: Cell<isize> = const { Cell::new(0) };
 }
 #[global_allocator]
 static ALLOCATOR: TestAllocator = TestAllocator;
 
 unsafe impl GlobalAlloc for TestAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        WATCH_ALLOCATION.with(|size| {
+            if size.get() == layout.size() {
+                WATCHED_LIVE_BYTES.with(|observed| observed.set(LIVE_BYTES.with(Cell::get)));
+            }
+        });
         ALLOCATIONS.with(|count| count.set(count.get() + 1));
         let fail = ALLOCATION_FAILURE.with(|remaining| match remaining.get() {
             Some(0) => {
@@ -112,7 +119,76 @@ fn io() -> Io {
     }
 }
 fn budget() -> u64 {
-    Processor::bookkeeping_bytes(512) + 8 + 24 + (3 * std::mem::size_of::<usize>() + 2 * 4) as u64
+    let mut probe = Processor::new(1_000_000, 512).unwrap();
+    probe.resize(request(), &mut io()).unwrap();
+    probe.peak_capacity_bytes()
+}
+
+#[test]
+fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
+    use ditherette_wasm::{
+        image::contracts::PaletteEntry,
+        prod::{
+            contract::request::{
+                AlphaPolicy, Diffusion, DiffusionFeedback, DitherPolicy, MatchPolicy, Placement,
+            },
+            palette::PreparedPalette,
+            pipeline::quantize::{QuantizeBoundary, QuantizeRequest},
+        },
+    };
+    struct Input(usize);
+    impl QuantizeBoundary for Input {
+        type Output = ();
+        fn input_len(&mut self) -> Result<usize, Failure> {
+            Ok(self.0 * 4)
+        }
+        fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
+            destination.fill(255);
+            Ok(())
+        }
+        fn complete(
+            &mut self,
+            _: &[u8],
+            _: ImageDimensions,
+            _: &PreparedPalette,
+        ) -> Result<(), Failure> {
+            Ok(())
+        }
+    }
+    let palette = [PaletteEntry::Color { rgb: [255; 3] }];
+    let request = |width| QuantizeRequest {
+        source_width: width,
+        source_height: 1,
+        palette: &palette,
+        alpha: AlphaPolicy::Premultiplied {},
+        matching: MatchPolicy::SrgbEuclidean,
+    };
+    let dither = DitherPolicy::Diffusion {
+        kernel: Diffusion::Sierra,
+        feedback: DiffusionFeedback::Matching,
+        strength: 1.0,
+        serpentine: true,
+        placement: Placement::Everywhere {},
+    };
+    let mut probe = Processor::new(1 << 20, 0).unwrap();
+    probe
+        .dither_and_quantize(request(20), dither, &mut Input(20))
+        .unwrap();
+    let limit = probe.peak_capacity_bytes();
+    probe.dispose().unwrap();
+    let mut processor = Processor::new(limit, 0).unwrap();
+    processor
+        .dither_and_quantize(request(10), dither, &mut Input(10))
+        .unwrap();
+    let before = LIVE_BYTES.with(Cell::get);
+    WATCH_ALLOCATION.with(|size| size.set(20 * 3 * 12));
+    processor
+        .dither_and_quantize(request(20), dither, &mut Input(20))
+        .unwrap();
+    WATCH_ALLOCATION.with(|size| size.set(0));
+    // Source and indices grow by 50 bytes. The old three rows release 360 bytes.
+    assert_eq!(WATCHED_LIVE_BYTES.with(Cell::get), before + 50 - 360);
+    assert_eq!(processor.peak_capacity_bytes(), limit);
 }
 
 #[test]
@@ -209,11 +285,7 @@ fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
                 PreparedTrilinear::<Rgba8>::required_bytes(source, output).unwrap()
                     - std::mem::size_of::<PreparedTrilinear<Rgba8>>() as u64
             };
-            let required = Processor::bookkeeping_bytes(512)
-                + pixels.len() as u64
-                + expected.len() as u64
-                + heap;
-            let mut processor = Processor::new(required, 512).unwrap();
+            let mut processor = Processor::new(1_000_000, 512).unwrap();
             let request = ResizeRequest {
                 source_width: sw,
                 source_height: sh,
@@ -228,6 +300,14 @@ fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
                 ..Io::default()
             };
             let result = processor.resize(request, &mut input).unwrap();
+            let required = processor.peak_capacity_bytes();
+            let heap_without_record = Processor::bookkeeping_bytes(512)
+                + pixels.len() as u64
+                + expected.len() as u64
+                + heap;
+            assert!(required > heap_without_record);
+            let mut exact = Processor::new(required, 512).unwrap();
+            assert_eq!(exact.resize(request, &mut input).unwrap(), expected);
             assert_eq!(result, expected, "{sw}x{sh}->{ow}x{oh} {anchor:?}");
             assert_eq!(processor.peak_capacity_bytes(), required);
             assert_eq!(input.input, pixels);
@@ -316,6 +396,7 @@ fn resize_reservation_failures_release_every_owned_byte_and_recover() {
             );
             assert_eq!(ALLOCATIONS.with(Cell::get), before);
             for fail_after in 0..reservations {
+                processor = Processor::new(peak, 512).unwrap();
                 input.copy_calls = 0;
                 input.complete_calls = 0;
                 let live = LIVE_BYTES.with(Cell::get);
@@ -332,6 +413,7 @@ fn resize_reservation_failures_release_every_owned_byte_and_recover() {
                 assert_eq!(processor.resize(request, &mut input).unwrap(), expected);
             }
             for complete in [false, true] {
+                processor = Processor::new(peak, 512).unwrap();
                 input.fail_copy = !complete;
                 input.fail_complete = complete;
                 let live = LIVE_BYTES.with(Cell::get);
@@ -648,8 +730,8 @@ fn exact_capacity_budget_passes_and_one_under_preflights_before_allocation_or_co
 
 #[test]
 fn each_real_reservation_failure_reports_without_allocating_an_error_and_recovers() {
-    // Two coordinate maps, then the owned source and output buffers.
-    for successful_allocations in 0..4 {
+    // One preparation record, two coordinate maps, then source and output buffers.
+    for successful_allocations in 0..5 {
         let mut processor = Processor::new(budget(), 512).unwrap();
         let mut input = io();
         let before = ALLOCATIONS.with(Cell::get);
@@ -683,7 +765,7 @@ fn near_identity_span_reservation_is_fallible_and_recovers_before_copy() {
         },
     };
     // The near-identity path additionally reserves the copy-span Vec.
-    for successful_allocations in 0..5 {
+    for successful_allocations in 0..6 {
         let mut processor = Processor::new(1_000_000, 512).unwrap();
         let mut input = Io {
             input: vec![73; 21 * 21 * 4],
