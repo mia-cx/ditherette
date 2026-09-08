@@ -12,6 +12,9 @@
 		"test:wasm": "wasm-pack test --node . --locked",
 		"test:private": "pnpm build:scalar && node --test tests/private_processor.mjs tests/private_quantize.mjs tests/private_fields.mjs tests/private_diffusion.mjs tests/private_yiluoma.mjs tests/private_process.mjs",
 		"test:browser": "wasm-pack test --headless --chrome . --locked",
+		"test:conformance": "node --test --test-concurrency=1 ../../packages/ditherette/tests/browser-engines.test.mjs ../../packages/ditherette/tests/tarball-browser.test.mjs ../../packages/ditherette/tests/memory-browser.test.mjs ../../packages/ditherette/tests/threads-selection-browser.test.mjs",
+		"test:conformance:threads": "node --test --test-concurrency=1 ../../packages/ditherette/tests/thread-observer-browser.test.mjs ../../packages/ditherette/tests/threads-ownership-browser.test.mjs ../../packages/ditherette/tests/threads-failure-browser.test.mjs ../../packages/ditherette/tests/threads-host-browser.test.mjs",
+		"test:conformance:automatic": "node --test ../../scripts/benchmark-auto-host.test.mjs",
 		"check": "cargo fmt --check && cargo check --locked --target wasm32-unknown-unknown"
 	},
 	"devDependencies": {

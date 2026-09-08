@@ -1,0 +1,100 @@
+name: Package conformance
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: package-conformance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - name: Install pinned package manager and dependencies
+        run: |
+          npm install --global pnpm@11.13.0
+          pnpm install --frozen-lockfile
+      - name: Install configured Rust toolchains
+        run: |
+          rustup show
+          cd crates/ditherette-wasm
+          rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
+      - name: Install pinned browser engines
+        run: pnpm --filter ditherette exec playwright install --with-deps chromium firefox webkit
+      - name: Fetch locked dependencies for offline oracle preparation
+        run: |
+          cargo fetch --locked --manifest-path tools/spec-freeze/syntax/Cargo.toml
+          cargo fetch --locked --manifest-path crates/ditherette-bench-oracle/Cargo.toml
+          cargo fetch --locked --manifest-path crates/ditherette-bench/Cargo.toml
+      - name: Build fresh ordinary package and frozen oracle
+        run: |
+          mkdir -p target
+          node scripts/prepare-public-benchmark.mjs "$GITHUB_WORKSPACE/target/conformance-public" | tee target/conformance-build.log
+          cargo run --locked --release --manifest-path crates/ditherette-bench/Cargo.toml --example yliluoma_conformance -- "$GITHUB_WORKSPACE/target/yliluoma-conformance.json"
+          node --input-type=module <<'JS' >> "$GITHUB_ENV"
+          import { readFile } from 'node:fs/promises';
+          import { createHash } from 'node:crypto';
+          const root = process.env.GITHUB_WORKSPACE;
+          const bundle = `${root}/target/conformance-public`;
+          const tarball = `${bundle}/ditherette.tgz`;
+          console.log(`DITHERETTE_TEST_TARBALL=${tarball}`);
+          console.log(`DITHERETTE_TEST_TARBALL_SHA256=${createHash('sha256').update(await readFile(tarball)).digest('hex')}`);
+          console.log(`DITHERETTE_BENCH_ORACLE=${bundle}/scripts/oracle`);
+          console.log(`DITHERETTE_BENCH_YLILUOMA_FIXTURES=${root}/target/yliluoma-conformance.json`);
+          console.log(`DITHERETTE_BENCH_AUTO_BUNDLE=${bundle}/bundle-source.json`);
+          JS
+      - name: Native scalar and threaded conformance
+        run: |
+          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml
+          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml --features threads
+      - name: Public types, interface, and private ownership
+        run: |
+          pnpm --filter ditherette test:interface
+          pnpm --filter ditherette test:staging
+          pnpm --filter ditherette-wasm test:glue:built
+          node --test --test-concurrency=1 crates/ditherette-wasm/tests/private_processor.mjs crates/ditherette-wasm/tests/private_quantize.mjs crates/ditherette-wasm/tests/private_fields.mjs crates/ditherette-wasm/tests/private_diffusion.mjs crates/ditherette-wasm/tests/private_yiluoma.mjs crates/ditherette-wasm/tests/private_process.mjs
+      - name: Scalar Chromium, Firefox, and WebKit matrix
+        run: pnpm --filter ditherette-wasm test:conformance | tee target/conformance-scalar.log
+      - name: Threaded Chromium and Firefox lifecycle
+        env:
+          DITHERETTE_TEST_ENGINES: chromium,firefox
+        run: pnpm --filter ditherette-wasm test:conformance:threads | tee target/conformance-threads.log
+      - name: Actual automatic policies in Chromium and Firefox
+        run: pnpm --filter ditherette-wasm test:conformance:automatic | tee target/conformance-automatic.log
+      - name: Website cancellation and faithful fallback
+        run: |
+          pnpm exec svelte-kit sync
+          pnpm exec vitest run --project server src/lib/processing/client.spec.ts src/lib/processing/worker-pipeline.spec.ts src/lib/processing/package-fallback.spec.ts src/lib/processing/schemas.spec.ts src/lib/stores/app.spec.ts
+          pnpm exec vitest run --project client src/lib/processing/package-pipeline.browser.spec.ts src/lib/processing/package-fallback.browser.spec.ts
+      - name: Report coverage limits
+        if: always()
+        run: |
+          echo '::warning::Pinned WebKit 26.4 threaded atomic-wait cleanup remains blocked. This job requires scalar WebKit, but does not certify threaded WebKit or performance release gates.'
+          echo 'See docs/plans/ditherette-v1/s40-conformance.md for exact coverage and retained release blockers.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conformance-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/conformance-*.log
+            target/conformance-public/ditherette.tgz
+            target/conformance-public/build-provenance.json
+          retention-days: 14
