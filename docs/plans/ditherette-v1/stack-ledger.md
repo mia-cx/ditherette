@@ -163,8 +163,14 @@ These three owners have disjoint source/test/protocol responsibilities. S31 comp
 S32 runtime `d638f87c3a16824ef52964bbb611ef91b173f2ee` joins corrected S31 and benchmark protocol `d51a70a2daf054357d16ea66b235da3733c02888`.
 Full native tests and the trusted frozen guard pass. Image-stage entries reuse the existing shared store and landed kernels.
 Fresh accepted artifacts bind `d51a70a2`; candidate artifacts bind `d638f87c`. Test-only follow-ups do not change those identities.
-Accepted installed conformance passes Chromium, Firefox, and WebKit. Candidate final installed conformance is completing.
-Four immutable trial snapshots are prepared under `v1-s32-stages/target/s32-trial-01`; no measurements have started.
+Both installed packages pass Chromium, Firefox, and WebKit, including focused ownership and broad conformance suites.
+The four completed trials remain under `v1-s32-stages/target/s32-trial-01`. Every recorded comparison is exact.
+Cold resize regresses 11.8-68%; browser cold Process regresses 21.5-26%. These confirmed release blockers remain S41 work.
+Warm paths improve substantially, but inconclusive cases remain explicit. No extra tuning or retry is selected.
+The S32 report owner files its unmerged PR from validated handoff `59b5a004c98c4cff255b30f51025d8ec8143786d`.
+S33 runtime and installed fixtures branch from that same validated handoff in `v1-s33-progress` and `v1-s33-public`.
+Runtime checkpoint `5a832320` reuses the copied lifecycle model and passes two focused controller tests.
+The separate `v1-s33-bench` plan fixes five public workloads and separates disabled-support cost from callback-delivery cost.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
