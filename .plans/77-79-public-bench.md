@@ -38,7 +38,27 @@ Missing exports, insufficient pool capacity, and setter errors fail before timin
 Normal package methods and request types remain unchanged.
 
 Focused validation passes 27 Rust browser/protocol tests and 24 Node timing/policy tests.
-Actual benchmark-feature host validation remains required after the runtime join and fresh build.
+At `2b6edc9c`, both fresh builds and seven actual host fixtures pass in Chromium and Firefox.
+The native worker digest is `f5d6bc9156df6d93068df7a287f54833e84abd80effc8b44bced4543615ae6a6`.
+The installed tarball digest is `f58b0949f93486c0e69b4e956e70f4a6e3381299a08cc47f9ca18fde23d069a8`.
+
+## Interrupted first sweep
+
+`target/rows-trial-01` retains 29 started/reaped Chromium workers and 560 samples.
+Fourteen completed scalar/row pairs match byte-for-byte. Only the first order ran;
+reverse-order pairs and Firefox are missing. No policy is selected from these data.
+
+Warm bilinear fails before timing because stage priming ignores the declared diagnostic mode.
+Both earlier large bilinear pairs preserve the same 33 frozen-reference differences, each at most one byte value.
+This is inherited landed-kernel drift, not a new approximation. The error also embeds oversized pixel arrays.
+
+Correction `d1917dbe` permits only explicit same-call diagnostics and observes every prime through existing instability evidence.
+Different-stage and exact-mode primes remain strict. Errors use bounded text; frozen gates remain unchanged.
+The joined correction passes 29 Node browser, stage-cache, and policy tests. Production files are unchanged.
+
+Prepare fresh artifacts after the collector correction and compact machine-JSON storage change.
+Retain the first sweep unchanged. Run the same fixed 400-worker matrix once from the corrected artifacts.
+This replaces a broken preflight, not an optimization revision or a retry seeking favorable timings.
 
 ## Completed evidence
 

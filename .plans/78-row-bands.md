@@ -200,6 +200,21 @@ Nine focused threaded integration tests pass across `prod_quantize_row_bands`,
 `prod_field_row_bands`, `prod_field_band_allocation`, and `prod_processor_fields`.
 No Wasm build, measurement, push, or PR operation is authorized in this task.
 
+## Combined delivery validation
+
+S36 selection is committed at `1513153d`. Final S35 selection `a8418904` and S37
+helper `cfdbdfbe` are joined with ancestry. Shared indexed conflict resolution
+preserves each adapter's existing preflight and publication order. The separate
+S37 automatic mixing callsite is `21f7b6da`; its owner supplies further automatic
+complete-call tests independently.
+
+The combined head passes 47 ordinary scalar library tests, 48 ordinary threaded
+library tests, and nine focused threaded field integration tests. Developer
+threaded validation passes 49 library tests and three complete mixing tests.
+The same three mixing tests pass with scalar `bench-subjects`.
+All native jobs have exited. Root owns final ordinary-package browser validation
+and PR preparation; no additional timing is required for these selection changes.
+
 ## S36-only publication checkpoint
 
 The publication branch is `delivery/v1-s36-fields-final` in
