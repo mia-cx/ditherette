@@ -53,7 +53,7 @@ coordinator and reviewed S28/S29 code, not a substitute for the actual join.
 
 - [x] Materialize and validate the prerequisite join. Check each retained resize,
   color, palette, and dither implementation against its delivered source tree.
-- [ ] Add only the missing process composition, following the readable frozen
+- [x] Add only the missing native process composition, following the readable frozen
   resize-then-dither sequence. Record its baseline before optimizing ownership.
   Keep intermediates in Wasm. Only the final indexed result crosses to JS.
   Preserve the RGBA8 clipping and rounding boundaries between stages.
@@ -88,6 +88,21 @@ differences. Byte comparisons preserve the delivered diffusion ring and literal
 Yliluoma modules. The only quantize runner difference from S29 is the sibling
 visibility needed by S28. Browser installation checks follow with the complete
 process implementation; no measurements run during this join.
+
+## Native composition baseline
+
+`Processor::process` accepts the typed pipeline `ProcessRequest` and the existing
+`QuantizeBoundary`. `process_with_allocator` exposes the existing failure-test
+boundary. The implementation prepares resize and matching once, reserves source,
+resized RGBA8, optional perturb RGBA8, and indices, then copies input once.
+Only final indexed completion crosses the external boundary. All allocations
+remain live until completion in this readable baseline. No fusion or ownership
+optimization has been attempted.
+
+The first test failed because the process module and method were absent. It now
+passes against frozen native process output for all four dither families,
+including full palette, transparency, warnings, and dimensions. Whole-call
+failure tests and public/private adapters follow in separate commits.
 
 The public recipe follows the frozen version-one shape, including its serialized
 `match` key. Processing errors need recipe-relative paths where applicable.

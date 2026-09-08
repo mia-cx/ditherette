@@ -134,6 +134,50 @@ impl Processor {
         self.resize_with_allocator(request, boundary, &mut SystemAllocator)
     }
 
+    /// Resize then dither into one durable indexed result, retaining both RGBA8 barriers.
+    pub fn process<B: super::quantize::QuantizeBoundary>(
+        &mut self,
+        request: super::process::ProcessRequest<'_>,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.process_with_allocator(request, boundary, &mut SystemAllocator)
+    }
+
+    /// Reserve the complete call before input copying, with recoverable boundary failures.
+    pub fn process_with_allocator<B: super::quantize::QuantizeBoundary, A: Allocator>(
+        &mut self,
+        request: super::process::ProcessRequest<'_>,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        self.state = State::Running;
+        // Shared bookkeeping includes resize preparation and two Vec records.
+        // Process owns two more records for perturb RGBA8 and indexed output.
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + size_of::<super::process::ProcessRequest<'_>>() as u64
+            + 2 * size_of::<Vec<u8>>() as u64
+            + super::perturb::working_capacity_bytes()
+            + boundary.capacity_bytes();
+        self.peak_capacity = overhead;
+        let result = super::process::run(
+            request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+        );
+        self.state = State::Ready;
+        result
+    }
+
     /// Materialize palette-free, durable RGBA8 with all owned capacity checked before input copy.
     pub fn perturb<B: Boundary>(
         &mut self,
