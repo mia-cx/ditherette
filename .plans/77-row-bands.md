@@ -21,10 +21,10 @@ Public color continues to use packed triplets with byte alpha. Direct quantizati
 - [x] Integrate those adapters into private complete-call preparation with budget-based scalar fallback.
 - [x] Extend benchmark subjects for the budgeted path and retain caller-thread progress.
 - [x] Join final S34 report-only PR head.
-- [ ] Validate actual installed scalar/threaded calls before exclusive crossover evidence.
-- [ ] Select only freshly measured exact configurations, or retain scalar, and prepare the unmerged PR.
+- [x] Validate actual installed scalar/threaded calls before exclusive crossover evidence.
+- [ ] Prepare the unmerged PR after the coordinator joins measured domain policies and validates installed artifacts.
 - [x] Separate automatic per-request scheduling from per-stage developer overrides, capped by the actual pool.
-- [ ] Select resize policies from Chromium trial02 and Firefox trial03 evidence, preserving scalar outside measured support.
+- [x] Select resize policies from Chromium trial02 and Firefox trial03 evidence, preserving scalar outside measured support.
 
 ## Test seams and evidence
 
@@ -134,3 +134,52 @@ Automatic domains use `execution::worker_budget()` to choose measured worker cou
 automatic requests instead of inventing an unmeasured count; explicit overrides retain actual-capacity clamping.
 Native library checks pass 37 tests with threads and 37 without, including isolated two-worker-pool resolution,
 per-stage preservation, explicit scalar, complete-call equality, callback recovery, and memory-pressure fallback.
+
+### Selected resize evidence
+
+The immutable combined measurement source is `5d16c5682f354fecd75ca7f761802d9e2ea75ab5`.
+Reports are under `v1-s35-37-bench/target/rows-trial-02/chromium-results/report.json` and
+`v1-s35-37-bench/target/rows-trial-03/firefox-results/report.json`.
+The coordinator completed both 50-case, two-pair trials and reaped all workers before implementation resumed.
+Firefox trial03 uses a hash-bound, update-disabled browser configuration after the updater mutated trial02's runtime.
+This runtime correction changes no processing kernels or package artifact.
+
+Cold candidate/scalar median ratios from complete host-worker calls:
+
+| Measured class | Workers / rows | Chromium | Firefox | Samples per accepted/candidate role in each pair |
+|---|---|---|---|---|
+| Area 1537×1025 → 769×513 | 2 / 32 | 0.9163 | 0.8484 | 20/20 in both engines |
+| Area, same shape | 4 / 128 | 0.9027 | 0.8152 | 20/20 in both engines |
+| Center bilinear, same shape | 2 / 32 | 0.9152 | 0.8495 | 20/20 in both engines |
+| Center bilinear, same shape | 4 / 128 | 0.9004 | 0.8292 | 20/20 in both engines |
+| Center scale-aware Lanczos3 2048×1536 → 512×384 | 2 / 32 | 0.8522 | 0.7448 | Chromium 20/20; Firefox 10/13 |
+| Lanczos3, same shape | 4 / 128 | 0.7387 | 0.6287 | Chromium 20/20; Firefox 10/15 |
+
+Firefox Lanczos3 reaches the declared 10-second sampling cap. Its actual counts satisfy the existing minimum-five protocol;
+the coordinator explicitly accepts those results without inventing a mandatory-20 gate.
+Final-image-hit four-worker ratios remain within the regression gate: area 0.9946/0.9950, bilinear 0.9916/1.0009,
+Lanczos3 1.0011/1.0156 (Chromium/Firefox). Every final-hit role records 20 samples.
+
+`paired.rs` emits each production comparison followed by a reference probe. Production records 0 and 2 show exact
+same-artifact scalar/row bytes and metadata for all selected cases. Bilinear's reference probes retain 33 one-byte
+frozen differences in 1,577,988 output bytes. Its gate remains `incorrect`; row scheduling introduces no new approximation.
+S41 must preserve this inherited discrepancy and its approval status. Do not classify reference probes as production-pair drift.
+
+Automatic area/center-bilinear scheduling requires each source axis to equal twice its output axis minus one,
+with output width ≥769 and height ≥513. Automatic center/scale-aware Lanczos3 requires exact fourfold downscaling,
+with output width ≥512 and height ≥384. These conservative lower bounds retain the measured scale classes.
+The initialized pool selects four workers/128 rows when capacity is at least four, two/32 when capacity is two or three,
+and scalar otherwise. Explicit developer overrides still force a selected path within actual capacity and memory limits.
+Nearest, small inputs, other filters, other anchors/support, identity, upscale, and other scale classes stay scalar.
+
+The focused automatic complete-call fixture compares all three selected filters with forced scalar output.
+It verifies caller-thread callbacks, failed-publication recovery, warm changed-source preparation reuse, and bounded capacity.
+Policy fixtures cover both size boundaries, pool capacities one through eight, and rejected filter/scale/anchor classes.
+
+Native validation for this delivery passes 40 threaded library tests, 39 scalar library tests, and 27 focused
+threaded/benchmark integration tests. Commands use `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml
+--target-dir target/compiler`, with `--lib` (scalar and `--features threads`) and `--features threads,bench-subjects`
+for `bench_resize_budgeted`, `prod_process`, `prod_progress`, `prod_resize_row_scratch`, `prod_resize_preparation`, and `prod_tiling`.
+The S35-only branch still warns that S36's working-capacity charge/release helpers lack consumers before its integration join.
+No frozen spec, image storage, landed resize kernels, Wasm artifacts, measurements, PRs, or remote branches change here.
+The coordinator owns the final installed-artifact validation and unmerged PR handoff.

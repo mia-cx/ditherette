@@ -346,3 +346,77 @@ fn complete_resize_falls_back_under_scalar_budget_and_recovers_after_pressure() 
         scalar.resize(request, &mut io).unwrap()
     );
 }
+
+#[cfg(feature = "threads")]
+#[test]
+fn automatic_measured_resize_calls_preserve_bytes_progress_and_recovery() {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap()
+        .install(|| {
+            for (resize, source, output) in [
+                (ResizePolicy::Area {}, (1537, 1025), (769, 513)),
+                (
+                    ResizePolicy::Bilinear {
+                        anchor: Anchor::Center,
+                    },
+                    (1537, 1025),
+                    (769, 513),
+                ),
+                (
+                    ResizePolicy::Lanczos3 {
+                        anchor: Anchor::Center,
+                        support: Support::ScaleAware,
+                    },
+                    (2048, 1536),
+                    (512, 384),
+                ),
+            ] {
+                let request = ResizeRequest {
+                    source_width: source.0,
+                    source_height: source.1,
+                    output: Output {
+                        width: output.0,
+                        height: output.1,
+                        resize,
+                    },
+                };
+                let mut io = Io {
+                    input: (0..source.0 as usize * source.1 as usize * 4)
+                        .map(|n| (n * 73 + n / 11) as u8)
+                        .collect(),
+                    events: Vec::new(),
+                    caller: std::thread::current().id(),
+                    fail: false,
+                };
+                let mut scalar = Processor::new(64 << 20, 0).unwrap();
+                scalar
+                    .set_execution_policy(ExecutionPolicy::default())
+                    .unwrap();
+                let expected = scalar.resize(request, &mut io).unwrap();
+                let mut automatic = Processor::new(64 << 20, 0).unwrap();
+                io.events.clear();
+                io.fail = true;
+                assert!(automatic.resize(request, &mut io).is_err());
+                assert_eq!(automatic.preparation.stats().0, 0);
+                io.fail = false;
+                io.events.clear();
+                assert_eq!(automatic.resize(request, &mut io).unwrap(), expected);
+                assert_eq!(
+                    io.events
+                        .iter()
+                        .filter(|event| event.stage == Stage::Resize)
+                        .count(),
+                    1 + (output.1 as usize).div_ceil(4 * 128)
+                );
+                assert!(automatic.peak_capacity_bytes() <= 64 << 20);
+                io.input[0] ^= 93;
+                assert_eq!(
+                    automatic.resize(request, &mut io).unwrap(),
+                    scalar.resize(request, &mut io).unwrap()
+                );
+                assert!(automatic.preparation.stats().1 > 0);
+            }
+        });
+}
