@@ -23,6 +23,175 @@ const POLICIES: [MatchPolicy; 15] = [
     MatchPolicy::YcbcrEuclidean,
 ];
 
+fn request<'a>(
+    data: &'a [u8],
+    width: u32,
+    height: u32,
+    palette: &'a [ditherette_wasm::image::contracts::PaletteEntry],
+) -> prod::contract::request::DitherQuantizeRequest<'a> {
+    use prod::contract::request::*;
+    DitherQuantizeRequest {
+        quantize: QuantizeRequest {
+            version: 1,
+            source: Source {
+                width,
+                height,
+                data,
+            },
+            palette,
+            alpha: AlphaPolicy::Preserve {
+                threshold: 127.9999999,
+            },
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+        dither: DitherPolicy::Yliluoma {
+            size: prod::contract::request::BayerSize::Two,
+            placement: Placement::Everywhere {},
+        },
+    }
+}
+
+fn oracle(
+    request: prod::contract::request::DitherQuantizeRequest<'_>,
+) -> ditherette_wasm::image::contracts::IndexedImage {
+    use spec::contract::request::*;
+    spec::dither::yiluoma::dither_yiluoma(DitherQuantizeRequest {
+        quantize: QuantizeRequest {
+            version: request.quantize.version,
+            source: Source {
+                width: request.quantize.source.width,
+                height: request.quantize.source.height,
+                data: request.quantize.source.data,
+            },
+            palette: request.quantize.palette,
+            alpha: serde_json::from_value(serde_json::to_value(request.quantize.alpha).unwrap())
+                .unwrap(),
+            matching: serde_json::from_value(
+                serde_json::to_value(request.quantize.matching).unwrap(),
+            )
+            .unwrap(),
+        },
+        dither: serde_json::from_value(serde_json::to_value(request.dither).unwrap()).unwrap(),
+    })
+    .unwrap()
+}
+
+#[test]
+fn scalar_request_matches_frozen_alpha_placement_and_complete_metadata_for_every_metric() {
+    use ditherette_wasm::image::contracts::PaletteEntry;
+    use prod::contract::request::{AlphaPolicy, BayerSize, DitherPolicy, Placement};
+    let data = [
+        255, 0, 0, 0, 17, 33, 71, 127, 128, 128, 128, 128, 0, 0, 255, 255, 0, 255, 0, 1, 128, 17,
+        255, 254,
+    ];
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [255, 3, 0] },
+        PaletteEntry::Color { rgb: [255, 0, 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+    ];
+    for matching in POLICIES {
+        for size in [
+            BayerSize::Two,
+            BayerSize::Four,
+            BayerSize::Eight,
+            BayerSize::Sixteen,
+        ] {
+            for alpha in [
+                AlphaPolicy::Preserve {
+                    threshold: 127.9999999,
+                },
+                AlphaPolicy::Premultiplied {},
+                AlphaPolicy::Matte { rgb: [29, 71, 211] },
+            ] {
+                for placement in [
+                    Placement::Everywhere {},
+                    Placement::Adaptive {
+                        radius: 1,
+                        threshold: 5.0,
+                        softness: 10.0,
+                    },
+                    Placement::Adaptive {
+                        radius: 32768,
+                        threshold: 100.0,
+                        softness: 0.0,
+                    },
+                ] {
+                    let mut input = request(&data, 3, 2, &palette);
+                    input.quantize.matching = matching;
+                    input.quantize.alpha = alpha;
+                    input.dither = DitherPolicy::Yliluoma { size, placement };
+                    assert_eq!(
+                        yiluoma::dither_yiluoma(input, u64::MAX).unwrap(),
+                        oracle(input),
+                        "{matching:?}/{size:?}/{alpha:?}/{placement:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn request_alpha_bypass_truncation_and_exact_budget_reuse_bounded_palette_storage() {
+    use ditherette_wasm::image::{contracts::PaletteEntry, ImageBuf, PaletteIndex8};
+    use prod::{
+        color::packed::Converter,
+        contract::error::ErrorCode,
+        quantize::{PreparedQuantizer, QuantizeError},
+    };
+    let source = [64, 64, 64, 255];
+    for palette in [
+        vec![PaletteEntry::Transparent {}],
+        vec![PaletteEntry::Color { rgb: [0; 3] }],
+        (0..257)
+            .map(|i| PaletteEntry::Color { rgb: [i as u8; 3] })
+            .collect(),
+    ] {
+        let input = request(&source, 1, 1, &palette);
+        let prepared = PreparedQuantizer::required_capacity_bytes(
+            &palette,
+            input.quantize.alpha,
+            input.quantize.matching,
+        )
+        .unwrap();
+        let limit = prepared
+            + std::mem::size_of::<Converter>() as u64
+            + std::mem::size_of::<ImageBuf<PaletteIndex8>>() as u64
+            + 1;
+        assert_eq!(
+            yiluoma::dither_yiluoma(input, limit).unwrap(),
+            oracle(input)
+        );
+        let error = yiluoma::dither_yiluoma(input, limit - 1).unwrap_err();
+        assert!(
+            matches!(error, QuantizeError::Preparation(error) if error.code == ErrorCode::MemoryLimit)
+        );
+        assert!(yiluoma::dither_yiluoma(input, limit).is_ok());
+    }
+}
+
+#[test]
+fn request_validation_precedes_preparation_and_unsupported_families() {
+    use ditherette_wasm::image::contracts::PaletteEntry;
+    use prod::{
+        contract::{error::ErrorCode, request::DitherPolicy},
+        quantize::QuantizeError,
+    };
+    let palette = [PaletteEntry::Color { rgb: [0; 3] }];
+    let mut input = request(&[0; 4], 1, 1, &palette);
+    input.dither = DitherPolicy::None {};
+    assert!(
+        matches!(yiluoma::dither_yiluoma(input, 0), Err(QuantizeError::Request(error)) if error.code == ErrorCode::UnsupportedOperation && error.path == "dither.family")
+    );
+    input.quantize.source.width = 2;
+    assert!(
+        matches!(yiluoma::dither_yiluoma(input, 0), Err(QuantizeError::Request(error)) if error.code == ErrorCode::InvalidImage)
+    );
+}
+
 #[test]
 fn literal_search_matches_every_metric_and_matrix_with_original_indices_and_duplicates() {
     let colors = [

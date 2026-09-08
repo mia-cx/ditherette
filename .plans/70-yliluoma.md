@@ -16,7 +16,7 @@ The frozen recipe remains the oracle; generated code changes only production and
 ## TODOs
 
 - [x] Copy missing literal math and verify all metrics, ratios, ties, target endpoints, and global thresholds; commit baseline.
-- [ ] Adapt the frozen scalar request loop to existing bounded palette preparation; verify complete output, alpha, placement, and budgets.
+- [x] Adapt the frozen scalar request loop to existing bounded palette preparation; verify complete output, alpha, placement, and budgets.
 - [ ] Register typed native benchmark adapters and verify oracle equivalence; commit and report the next bounded scope.
 
 No optimization, measurements, public Processor/Wasm/TypeScript dispatch, or PR/issue writes in this checkpoint.
@@ -29,3 +29,13 @@ The production fragments are literal copies with imports redirected to existing 
 `cargo test --locked --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_yiluoma` passes four tests.
 Coverage includes 360 target/metric/matrix searches, original palette index gaps and duplicates, all 344 supported ratios over 1,156 global coordinate pairs, endpoint bits, hue interpolation, and explicit zero-mask/ratio ties.
 No request adapter, prepared mixture table, memo, optimization, or benchmark execution exists in this baseline.
+
+## Native request checkpoint
+
+Literal math baseline is `9718b168`. The request adapter follows the frozen pixel loop, including original-source adaptive placement after alpha-prepared target conversion.
+It reuses PreparedQuantizer through one crate-private `matcher()` borrow. Source conversion still constructs the existing converter per read.
+Existing Budget reserves output fallibly and counts prepared capacities, the index record, and one temporary converter.
+Mixture search retains constant scratch and no palette cross-product allocation. Source bytes remain borrowed.
+Seven Yliluoma tests pass, including 540 full request combinations over all fifteen metrics, all matrix sizes, three alpha modes, and three placements.
+Transparent-only, single-entry, 257-entry truncation, exact/one-under budgets, and validation precedence pass.
+The six existing `prod_quantize` tests also pass after the shared accessor addition.
