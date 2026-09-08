@@ -47,7 +47,7 @@ until the full implementation stack exists.
 
 1. [x] Add the allocation-free callback boundary and copied-model progress controller.
    Compare fake-clock schedules and completion permission with frozen lifecycle fixtures.
-2. [ ] Add countable, fallible hooks to existing kernel loops without changing their outputs or allocations.
+2. [x] Add countable, fallible hooks to existing kernel loops without changing their outputs or allocations.
    Prove callback-disabled equality and abort behavior with focused native tests.
 3. [ ] Connect all five pipelines and success-only completion, including image hits.
    Prove no new publication after intermediate/completion failure and successful recovery.
@@ -64,3 +64,15 @@ boundaries and reuses `InstanceModel` for gating. Two native tests pass, includi
 fake-clock event equality against the frozen lifecycle and thrown completion/recovery.
 The callback error uses the static failure record instead of allocating diagnostic text.
 Pipeline behavior remains unchanged until the later wiring step.
+
+The kernel checkpoint adds row hooks to quantize, perturb, Yliluoma, diffusion,
+fractional area, bilinear, and shared convolution. Trilinear counts chain rows,
+whole existing sampling/reduction batches, and blend rows. Nearest and exact area
+retain their optimized whole-call batches. The 50 ms rule bounds event frequency;
+it does not require splitting these optimized batches or impose callback latency.
+Convolution counts both source filtering and output rows on x-then-y paths.
+
+All 5 progress fixtures pass. They cover all seven resize policies, one-axis and
+integer paths, scale-aware convolution, mip blending, abort, recovery, and unchanged
+prepared capacity. The full native `cargo test --locked --tests` suite passes,
+including existing independent frozen comparisons. No measurements ran.

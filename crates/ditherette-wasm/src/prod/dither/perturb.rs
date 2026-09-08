@@ -17,13 +17,37 @@ const FIELD_SCALE: f64 = 0.25;
 /// It runs once per written pixel even when alpha, strength, or placement would suppress an effect.
 pub fn perturb_by_field_rows_into(
     source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
     space: WorkingSpace,
     strength: f32,
     placement: Placement,
     rows: RowBand,
     field: impl Fn(u32, u32, u64) -> f32,
 ) {
+    perturb_by_field_with_progress(
+        source,
+        output,
+        space,
+        strength,
+        placement,
+        rows,
+        field,
+        |_| Ok(()),
+    )
+    .expect("disabled progress cannot fail");
+}
+
+/// Keeps global field indices and full-source adaptive neighbors while reporting completed rows.
+pub(crate) fn perturb_by_field_with_progress(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    rows: RowBand,
+    field: impl Fn(u32, u32, u64) -> f32,
+    mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+) -> Result<(), crate::prod::contract::failure::Failure> {
     let dimensions = source.dimensions();
     assert_eq!(dimensions, output.dimensions());
     assert!(rows.y_end() <= dimensions.height());
@@ -51,5 +75,7 @@ pub fn perturb_by_field_rows_into(
             output_row[offset..offset + 3].copy_from_slice(&result);
             output_row[offset + 3] = pixel[3];
         }
+        progress(y + 1)?;
     }
+    Ok(())
 }

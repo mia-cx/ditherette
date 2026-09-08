@@ -4,6 +4,7 @@
 //! coverage plan with f32 accumulation for accepted bounded visual drift.
 
 use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
+use crate::prod::contract::failure::Failure;
 
 use super::AreaResizePlan;
 
@@ -52,18 +53,27 @@ pub(super) fn resize_with_plan_into(
 
 pub(super) fn resize_with_scratch_into(
     source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
     plan: &AreaResizePlan,
     vertical_row: &mut [f32],
 ) {
+    resize_with_progress(source, output, plan, vertical_row, &mut |_| Ok(()))
+        .expect("disabled progress cannot fail");
+}
+
+pub(super) fn resize_with_progress(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &AreaResizePlan,
+    vertical_row: &mut [f32],
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     if plan.same_width() {
-        resize_vertical_only_into(source, output, plan);
-        return;
+        return resize_vertical_only_into(source, output, plan, progress);
     }
 
     if plan.same_height() {
-        resize_horizontal_only_into(source, output, plan);
-        return;
+        return resize_horizontal_only_into(source, output, plan, progress);
     }
 
     let source_row_byte_len = source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
@@ -89,7 +99,9 @@ pub(super) fn resize_with_scratch_into(
         {
             write_horizontal_pixel(output_pixel, vertical_row, x_spans, plan.area);
         }
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 pub(super) fn resize_rows_with_plan_into(
@@ -153,7 +165,8 @@ fn resize_vertical_only_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &AreaResizePlan,
-) {
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let row_byte_len = source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
     let source_data = source.data();
 
@@ -165,21 +178,25 @@ fn resize_vertical_only_into(
             &plan.y_spans[output_y],
             plan.area,
         );
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 fn resize_horizontal_only_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &AreaResizePlan,
-) {
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let source_row_byte_len = source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
     let output_row_byte_len = plan.output_dimensions.width_usize() * rgba8::RGBA8_CHANNELS;
 
-    for (source_row, output_row) in source
+    for (y, (source_row, output_row)) in source
         .data()
         .chunks_exact(source_row_byte_len)
         .zip(output.data_mut().chunks_exact_mut(output_row_byte_len))
+        .enumerate()
     {
         for (output_pixel, x_spans) in output_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
@@ -187,7 +204,9 @@ fn resize_horizontal_only_into(
         {
             write_horizontal_source_pixel(output_pixel, source_row, x_spans, plan.area);
         }
+        progress(y as u32 + 1)?;
     }
+    Ok(())
 }
 
 // REJECT(perf): Flattening y spans into `{ first_source_index, overlaps }`
