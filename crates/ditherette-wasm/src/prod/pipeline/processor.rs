@@ -84,6 +84,30 @@ struct Plan {
 }
 
 impl Processor {
+    /// Development-only scheduling override. Public package settings never expose execution policy.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn set_execution_policy(
+        &mut self,
+        policy: super::execution::ExecutionPolicy,
+    ) -> Result<(), Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        if [policy.resize, policy.indexed, policy.mixing]
+            .into_iter()
+            .flatten()
+            .any(|band| band.height == 0)
+        {
+            return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control));
+        }
+        self.preparation.execution = policy;
+        Ok(())
+    }
+
     /// Counts owned control, buffer headers, and plan records, plus adapter-owned capacity.
     /// Compiler stack frames and fixed module overhead are outside this ownership accounting.
     pub const fn bookkeeping_bytes(boundary_capacity: u64) -> u64 {

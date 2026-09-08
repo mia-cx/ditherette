@@ -1,6 +1,7 @@
 //! Production pipeline composition, mirroring the frozen pipeline modules.
 
 mod diffusion;
+pub mod execution;
 pub mod identity;
 mod indexed;
 pub mod perturb;

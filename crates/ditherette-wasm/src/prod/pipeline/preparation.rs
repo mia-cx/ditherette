@@ -98,6 +98,7 @@ impl Scratch {
 }
 
 pub(super) struct Store {
+    pub(super) execution: super::execution::ExecutionPolicy,
     entries: [Option<Entry>; MAX_CACHE_ENTRIES],
     scratch: Scratch,
     clock: u64,
@@ -110,6 +111,7 @@ pub(super) struct Store {
 impl Default for Store {
     fn default() -> Self {
         Self {
+            execution: super::execution::ExecutionPolicy::default(),
             entries: std::array::from_fn(|_| None),
             scratch: Scratch::default(),
             clock: 0,
@@ -130,6 +132,10 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
+    pub(super) fn execution_policy(&self) -> super::execution::ExecutionPolicy {
+        self.execution
+    }
+
     #[cfg(test)]
     pub(super) fn image_stats(&self) -> (usize, u64, u64) {
         (
@@ -285,6 +291,27 @@ pub(super) struct Call<'a> {
 }
 
 impl<'a> Call<'a> {
+    /// Charge domain-owned temporary capacity before complete-call preparation.
+    /// The caller releases the charge only after dropping every charged allocation.
+    pub(super) fn charge_working_capacity(
+        &mut self,
+        bytes: u64,
+        peak: &mut u64,
+    ) -> Result<(), Failure> {
+        let needed = self
+            .active_capacity()
+            .checked_add(bytes)
+            .ok_or_else(memory_limit)?;
+        self.store.room(needed, self.limit)?;
+        self.overhead += bytes;
+        *peak = (*peak).max(needed + self.store.capacity());
+        Ok(())
+    }
+
+    pub(super) fn release_working_capacity(&mut self, bytes: u64) {
+        self.overhead -= bytes;
+    }
+
     pub(super) const fn record_bytes() -> u64 {
         size_of::<Self>() as u64
     }
