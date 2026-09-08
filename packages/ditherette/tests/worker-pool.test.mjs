@@ -13,6 +13,12 @@ function setup(t, failure) {
 		}
 		postMessage(message) {
 			if (message.type === 'ditherette-worker-init') queueMicrotask(() => {
+				if (failure === 'error') {
+					const error = new Event('error', { cancelable: true });
+					this.dispatchEvent(error);
+					events.push(error.defaultPrevented ? 'handled-error' : 'unhandled-error');
+					return;
+				}
 				this.dispatchEvent(new MessageEvent('message', { data: {
 					type: failure === 'ready' ? 'ditherette-worker-error' : 'ditherette-worker-ready'
 				} }));
@@ -46,7 +52,7 @@ test('pool frees the borrowed receiver only after successful priming and release
 	assert.deepEqual(events, ['build', 'free', 'terminate', 'terminate']);
 });
 
-for (const failure of ['constructor', 'ready', 'dispatch', 'build']) {
+for (const failure of ['constructor', 'ready', 'error', 'dispatch', 'build']) {
 	test(`pool owns partial workers and preserves receiver lifetime after ${failure} failure`, async (t) => {
 		const { events, builder, abandon } = setup(t, failure);
 		const pool = new WorkerPool();
@@ -54,6 +60,7 @@ for (const failure of ['constructor', 'ready', 'dispatch', 'build']) {
 		const count = failure === 'constructor' ? 1 : 2;
 		assert.equal(events.filter((event) => event === 'terminate').length, count);
 		assert.equal(events.at(-1), failure === 'dispatch' || failure === 'build' ? 'abandon' : 'free');
+		assert.equal(events.includes('unhandled-error'), false, 'Caught worker errors must not propagate to the host.');
 		const before = [...events];
 		pool.dispose();
 		assert.deepEqual(events, before);

@@ -111,6 +111,11 @@ test('threaded factory replaces only the pinned worker import with instance-owne
 function initSync() {}
 async function __wbg_init() {}
 export function initThreadPool(...args) { return start(...args); }
+export class wbg_rayon_PoolBuilder {
+  constructor() { this.registered = true; }
+  __destroy_into_raw() { this.registered = false; return 123; }
+  free() { throw new Error('attempted to take ownership of Rust value while it was borrowed'); }
+}
 export { initSync, __wbg_init as default };`;
 	const output = scalarFactory(threaded, undefined, true);
 	assert.doesNotMatch(output, /workerHelpers/);
@@ -121,6 +126,9 @@ export { initSync, __wbg_init as default };`;
 	await first.initThreadPool(1);
 	await second.initThreadPool(2);
 	assert.deepEqual(calls, [['first', 1], ['second', 2]]);
+	const borrowed = new first.wbg_rayon_PoolBuilder();
+	first.abandonThreadPool(borrowed);
+	assert.equal(borrowed.registered, false, 'Abandonment unregisters without consuming borrowed Rust.');
 	assert.throws(() => scalarFactory(glue, undefined, true), /worker import changed/);
 	assert.throws(() => scalarFactory(threaded.replace('startWorkers as start', 'other as start'), undefined, true), /Unsupported/);
 });

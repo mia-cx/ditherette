@@ -33,3 +33,19 @@ test('threaded factories isolate actual shared memories and receive their own pi
 	assert.equal(first.privateDispose(), 0);
 	assert.equal(second.privateDispose(), 0);
 });
+
+test('abandonment invalidates an actual generated builder without consuming its Rust owner', async () => {
+	const directory = new URL('../dist/threads/', import.meta.url);
+	const { createThreadedBindings } = await import(new URL('ditherette_wasm.factory.js', directory));
+	const module = await WebAssembly.compile(await readFile(new URL('ditherette_wasm_bg.wasm', directory)));
+	let released;
+	const bindings = createThreadedBindings(async (_module, _memory, builder) => {
+		assert.ok(builder.__wbg_ptr > 0);
+		builder.free = () => assert.fail('Abandonment must not enter the Rust destructor.');
+		bindings.abandonThreadPool(builder);
+		released = builder.__wbg_ptr;
+	});
+	await bindings.default({ module_or_path: module });
+	await bindings.initThreadPool(1);
+	assert.equal(released, 0);
+});
