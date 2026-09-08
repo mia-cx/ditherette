@@ -80,6 +80,16 @@ pub fn private_quantize(
             2.0 => MatchPolicy::OklabEuclidean,
             3.0 => MatchPolicy::CielabEuclidean,
             4.0 => MatchPolicy::YcbcrEuclidean,
+            5.0 => MatchPolicy::SrgbCompuphase,
+            6.0 => MatchPolicy::SrgbRec601,
+            7.0 => MatchPolicy::SrgbRec709,
+            8.0 => MatchPolicy::OklchEuclidean,
+            9.0 => MatchPolicy::OklchCircularHue,
+            10.0 => MatchPolicy::OklchHueArc,
+            11.0 => MatchPolicy::CielabCiede2000,
+            12.0 => MatchPolicy::CielchEuclidean,
+            13.0 => MatchPolicy::CielchCircularHue,
+            14.0 => MatchPolicy::CielchHueArc,
             _ => {
                 return Err(Failure::new(
                     ErrorCode::UnsupportedOperation,

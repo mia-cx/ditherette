@@ -58,6 +58,16 @@ fn full_native_quantize_call_matches_frozen_indices_palette_alpha_and_warnings()
         MatchPolicy::OklabEuclidean,
         MatchPolicy::CielabEuclidean,
         MatchPolicy::YcbcrEuclidean,
+        MatchPolicy::SrgbCompuphase,
+        MatchPolicy::SrgbRec601,
+        MatchPolicy::SrgbRec709,
+        MatchPolicy::OklchEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::OklchHueArc,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchEuclidean,
+        MatchPolicy::CielchCircularHue,
+        MatchPolicy::CielchHueArc,
     ] {
         for count in [16, 64, 256] {
             for alpha in [
@@ -106,6 +116,8 @@ fn packed_forward_controls_keep_exact_coordinates_and_byte_alpha() {
         WorkingSpace::Oklab,
         WorkingSpace::Cielab,
         WorkingSpace::Ycbcr,
+        WorkingSpace::Oklch,
+        WorkingSpace::Cielch,
     ] {
         let output = compare(
             NativeOperation::ColorForward { space },
@@ -123,5 +135,57 @@ fn packed_forward_controls_keep_exact_coordinates_and_byte_alpha() {
         assert_eq!(coordinates.len(), 119 * 3);
         assert_eq!(alpha.len(), 119);
         assert_eq!(rendered_rgba.unwrap().len(), 119 * 4);
+    }
+}
+
+#[test]
+fn executable_inventory_resolves_every_matching_component_and_frozen_oracle() {
+    let registry = bench_subjects::bench_subjects();
+    let mut entries = vec![(adapters::QUANTIZE_SUBJECT, "spec:quantize:request:v1")];
+    for (space, oracle) in [
+        (WorkingSpace::Srgb, "spec:color:srgb:f32-roundtrip-v1"),
+        (
+            WorkingSpace::LinearRgb,
+            "spec:color:linear-rgb:f32-roundtrip-v1",
+        ),
+        (WorkingSpace::Oklab, "spec:color:oklab:f32-roundtrip-v1"),
+        (WorkingSpace::Oklch, "spec:color:oklch:f32-roundtrip-v1"),
+        (WorkingSpace::Cielab, "spec:color:cielab:f32-roundtrip-v1"),
+        (WorkingSpace::Cielch, "spec:color:cielch:f32-roundtrip-v1"),
+        (WorkingSpace::Ycbcr, "spec:color:ycbcr:f32-roundtrip-v1"),
+    ] {
+        entries.push((adapters::color_subject(space).unwrap(), oracle));
+    }
+    for metric in bench_subjects::scores::MetricFamily::ALL {
+        entries.push((metric.prod_subject(), metric.reference_subject()));
+    }
+    for (id, oracle) in entries {
+        let subject = registry
+            .iter()
+            .find(|s| s.descriptor().id.as_str() == id)
+            .unwrap();
+        assert_eq!(
+            subject
+                .descriptor()
+                .default_oracle
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            oracle
+        );
+        let expected = registry
+            .iter()
+            .find(|s| s.descriptor().id.as_str() == oracle)
+            .unwrap();
+        assert_eq!(
+            subject.descriptor().capabilities.pixel_formats,
+            expected.descriptor().capabilities.pixel_formats
+        );
+        for entry in [subject, expected] {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(&entry.descriptor().source_file);
+            assert!(path.is_file(), "{}", path.display());
+        }
     }
 }

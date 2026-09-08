@@ -1,6 +1,7 @@
 //! Native direct quantization. Public processor integration is separate.
 
 pub mod matcher;
+pub mod metric;
 pub mod prepared;
 pub use prepared::PreparedQuantizer;
 

@@ -7,6 +7,7 @@
 pub mod quantize;
 pub mod reference;
 mod resize_budgeted;
+pub mod scores;
 pub mod verification;
 
 /// Existing registry with this crate's concrete, borrowed conformance protocol.
@@ -187,6 +188,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(resize_budgeted::subjects());
     subjects.extend(reference::subjects());
     subjects.extend(quantize::subjects());
+    subjects.extend(scores::subjects());
     subjects
 }
 
