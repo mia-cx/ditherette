@@ -38,7 +38,8 @@ No public API, execution selector, cache identity, or callback contract changes.
 4. [x] Join the shared pooled executor and integrate candidate row scheduling
    through private fragments. Report progress only after joined work on the caller.
 5. [x] Compare fresh complete-call host-worker artifacts and select measured cost classes.
-6. [ ] Hand the validated delivery checkpoint to root for its reviewable stacked PR.
+6. [x] Prepare the S36-only publication branch, measurement report, and exact native validation for root.
+7. [ ] Root validates the ordinary package and files the reviewable stacked PR.
 
 ## Validation and budget
 
@@ -213,3 +214,27 @@ threaded validation passes 49 library tests and three complete mixing tests.
 The same three mixing tests pass with scalar `bench-subjects`.
 All native jobs have exited. Root owns final ordinary-package browser validation
 and PR preparation; no additional timing is required for these selection changes.
+
+## S36-only publication checkpoint
+
+The publication branch is `delivery/v1-s36-fields-final` in
+`.worktrees/v1-s36-publication`. Its base `16136471` contains S36 selector
+`1513153d` and final S35 `a8418904`. It adds the isolated developer-getter
+cleanup as `ddcd7477`. The joined branch remains unchanged at `5933ae55`.
+This publication diff adds no S37 implementation, helper, tests, or callsite.
+
+The S36-only measurement report is
+`docs/plans/ditherette-v1/s36-row-bands.md`. It retains every cold and warm cell,
+actual sample counts, all noisy controls, source identities, and report hashes.
+Time-capped passing cells remain valid under the predeclared minimum-five rule.
+Ordinary-package browser validation remains pending root.
+
+Fresh publication-worktree validation passes 44 scalar and 45 threaded release
+library tests. Both configurations also pass nine focused integration tests:
+`prod_quantize_row_bands`, `prod_field_row_bands`, `prod_field_band_allocation`,
+and `prod_processor_fields`. Only this worktree's new `target/compiler` is used.
+All owned native jobs have exited.
+
+The returned `.worktrees/v1-s36-delivery/target/compiler` was a real directory
+with no symlinks, active jobs, or custom evidence. Removing its rebuildable
+contents reclaimed 171 MiB. Source and all retained trial evidence stay intact.
