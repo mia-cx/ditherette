@@ -46,8 +46,9 @@ All three paths are absent at handoff. No old caches or symlinks are reused.
    Prove failed startup releases acquired workers and retains valid builder lifetime.
 3. [x] Wire typed capability selection, custom inputs, fallback, and guarded teardown.
    Validate real isolated threaded instances while preserving scalar behavior.
-4. [ ] Join installed fixtures and S33 report ancestry. Build exact artifacts once coordinated.
-   Verify actual browser cleanup, errors, imports, custom inputs, and callback recovery.
+4. [x] Join installed fixtures and S33 report ancestry. Build exact artifacts once coordinated.
+   Record browser cleanup, errors, imports, custom inputs, and callback recovery results.
+   Acceptance retains the failures below; completing evidence collection does not waive them.
 5. [ ] Record exclusive startup evidence and file the unmerged child PR after root handoff.
 
 No measurements run during implementation. Routine reviews remain deferred until
@@ -109,3 +110,63 @@ enters production. Experimental browser jobs have drained.
 The trusted guard requires private functions under the existing Wasm adapter tree.
 Sizing and abandoned-builder functions now live in `wasm/threads.rs`, without
 unnecessary crate-root reexports. Frozen source and guard policy remain unchanged.
+
+## Candidate artifact and validation handoff
+
+The trusted guard passes `29bccaa5f60d5aa0172453e0dce9ec2a5ead0c9d` with frozen
+checkpoint `cef2b60a` and digest `17ba3be3` unchanged. Interface/type and pool tests
+pass 40/40. Generator and built-binding tests pass 7/7. Focused native threaded
+contract/progress tests pass 7/7. Subsequent changes are benchmark protocol,
+fixture diagnostics, and documentation only.
+
+Official native and public preparation both exit 0 at clean artifact source
+`1d1cba8950ab3ffc4064a0a920343e6f92e6a901`. Outputs remain under this worktree:
+
+- `target/s34-candidate-1d1cba89-native`
+- `target/s34-candidate-1d1cba89-public`
+
+The preparers verify unchanged source throughout each build. A separate check
+verifies all 2,471 recorded input/output hashes before this plan-only update.
+The native worker SHA-256 is `36c612d00f3d9636a07a617a88fb50093d80762fac36404239c5cb5e562848fa`.
+The native pair executable SHA-256 is `f9689938f14bd4e28d1b783783b25508ea47ea69aa2cde86e3984a8d982ee4c0`.
+The public tarball SHA-256 is `01ad17dcf087d1debd7564de9d34acff94805f2034168687ab24e1431412955d`.
+The corrected browser transport SHA-256 is `db43e10f603da2cae6a4761b82e96c80f8ebd83e882027a2013ecd1c569d0772`.
+
+The package is byte-identical to the prior official `2afd1802` tarball. The new
+source joins benchmark CSP fix `f55f100f` and labels each custom input failure.
+The CSP fix permits the existing blob worker bootstrap. Its owner proves actual
+required startup fails before the fix and passes afterward against the installed
+package. No runtime code changes between these two artifact sources.
+
+Installed validation uses the exact tarball and SHA above, the official public
+oracle, and generated frozen Yliluoma vectors. Broad, progress, and stage-cache
+suites pass 12/12 on Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+Each broad engine check includes 367 frozen vectors and 734 untimed adapter calls.
+
+The final threaded suite reports 24 tests, 19 passes, and 5 failures, including
+two failed parent tests. Three engine checks fail:
+
+- WebKit disposal retains all four observed pool locks instead of the remaining two.
+- WebKit processing-host termination retains its host lock and both pool locks.
+- Chromium rejects initialization during one of nine custom input forms. The
+  error is `initialization` at `threads`, with message "Required threaded
+  initialization is unavailable." The original fixture does not retain the form.
+
+The isolated Chromium ownership/custom-input diagnostic passes all nine forms
+against the same installed package. It logs input constructors and raw failures
+through a served-only diagnostic substitution; no runtime or artifact file changes.
+It does not reproduce a raw failure or establish a cause. The earlier rejection
+remains unexplained, not diagnosed or waived. The final source labels future
+custom-input failures with their form, code, and path while rethrowing the original
+structured error. Syntax and diff checks pass for this test-only change.
+
+Scalar selection, disabled imports, partial startup cleanup, and ordinary nested
+worker cleanup pass in all three engines. Firefox passes ownership and custom
+inputs. Chromium and Firefox pass processing-host termination. Both known WebKit
+assertions remain enabled. Package-byte equality carries these results to the
+replacement artifact; no further broad rerun follows the CSP/test-only join.
+
+All owned builders and browser jobs are drained. Root owns the five immutable
+snapshots and exclusive startup trial. No measurements run in this worktree.
+Artifact source remains `1d1cba89`; this plan-only handoff is a separate delivery
+commit. Keep step 5 pending until root returns measurement/report ownership.
