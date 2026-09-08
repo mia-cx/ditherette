@@ -43,14 +43,17 @@ export async function fieldBrowserChecks({ vectors, wasmUrl }) {
 	let compositions = 0;
 	try {
 		for (const vector of vectors.cases) {
-			const rgba = processor.perturb({ version: 1, source, perturb: vector.policy });
+			const vectorSource = vector.source
+				? { ...vector.source, data: new Uint8Array(vector.source.data) }
+				: source;
+			const rgba = processor.perturb({ version: 1, source: vectorSource, perturb: vector.policy });
 			equal([...rgba.data], vector.rgba, JSON.stringify(vector.policy));
 			if (rgba.data.buffer === source.data.buffer || rgba.data.buffer === previous?.data.buffer)
 				throw new Error('borrowed result');
 			for (const matching of modes) {
 				const value = {
 					version: 1,
-					source,
+					source: vectorSource,
 					palette,
 					matching,
 					alpha: { mode: 'preserve', threshold: 127.9999999 }

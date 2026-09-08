@@ -26,6 +26,7 @@ fn main() {
         WorkingSpace::Ycbcr,
     ] {
         for field in [
+            Field::BlueNoise {},
             Field::Bayer {
                 size: BayerSize::Two,
             },
@@ -67,6 +68,36 @@ fn main() {
         cases.push(
             serde_json::json!({"policy": policy, "rgba": perturb(source, policy).unwrap().data()}),
         );
+    }
+    for (width, height) in [(1, 33), (31, 2), (32, 2), (33, 33), (65, 2)] {
+        let bytes: Vec<u8> = (0..width * height)
+            .flat_map(|i| {
+                [
+                    (i * 73) as u8,
+                    (i * 31 + 127) as u8,
+                    (i * 17 + 255) as u8,
+                    [0, 1, 127, 128, 254, 255][i as usize % 6],
+                ]
+            })
+            .collect();
+        let image =
+            ImageView::<Rgba8>::packed(&bytes, ImageDimensions::new(width, height).unwrap())
+                .unwrap();
+        let policy = PerturbPolicy {
+            field: Field::BlueNoise {},
+            space: WorkingSpace::Srgb,
+            strength: 0.7,
+            placement: Placement::Adaptive {
+                radius: 2,
+                threshold: 5.0,
+                softness: 10.0,
+            },
+        };
+        cases.push(serde_json::json!({
+            "source": {"width": width, "height": height, "data": bytes},
+            "policy": policy,
+            "rgba": perturb(image, policy).unwrap().data(),
+        }));
     }
     println!(
         "{}",

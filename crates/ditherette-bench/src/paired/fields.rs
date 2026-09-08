@@ -19,7 +19,6 @@ pub fn perturb_request<'a>(
     source: Dimensions,
     rgba: &'a [u8],
 ) -> io::Result<ReferenceRequest<'a>> {
-    validate_field(settings)?;
     let request = ReferenceRequest::Processing(spec::Request::Perturb(spec::PerturbRequest {
         version: 1,
         source: spec::Source {
@@ -39,7 +38,6 @@ impl SeparableSettings {
         source: Dimensions,
         rgba: &'a [u8],
     ) -> io::Result<ReferenceRequest<'a>> {
-        validate_field(self.perturb)?;
         let ReferenceRequest::Processing(spec::Request::Quantize(quantize)) =
             self.quantize.reference_request(source, rgba)?
         else {
@@ -56,13 +54,4 @@ impl SeparableSettings {
         request.dimensions().map_err(io::Error::other)?;
         Ok(request)
     }
-}
-
-fn validate_field(settings: PerturbPolicy) -> io::Result<()> {
-    if matches!(settings.field, Field::BlueNoise {}) {
-        return Err(io::Error::other(
-            "S26 cannot benchmark blue-noise production",
-        ));
-    }
-    Ok(())
 }

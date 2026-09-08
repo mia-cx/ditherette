@@ -1,0 +1,21 @@
+[package]
+name = "ditherette-bench-oracle"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+frozen-build = ["serde_json/alloc"]
+
+[dependencies]
+ditherette-bench-api = { path = "../ditherette-bench-api" }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
+sha2 = "=0.10.9"
+wasm-bindgen = "=0.2.121"
+
+[profile.release]
+opt-level = "s"

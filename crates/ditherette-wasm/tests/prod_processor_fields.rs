@@ -109,7 +109,7 @@ impl QuantizeBoundary for Boundary {
 
 fn policy() -> PerturbPolicy {
     PerturbPolicy {
-        field: Field::Random { seed: u32::MAX },
+        field: Field::BlueNoise {},
         space: WorkingSpace::Oklch,
         strength: 0.7,
         placement: Placement::Adaptive {
@@ -151,6 +151,7 @@ fn bounded_calls_match_frozen_bytes_and_complete_separable_results() {
         WorkingSpace::Ycbcr,
     ] {
         for field in [
+            Field::BlueNoise {},
             Field::Random { seed: 0 },
             Field::Random { seed: u32::MAX },
             Field::Bayer {
@@ -410,13 +411,9 @@ fn every_buffer_reservation_failure_and_extra_capacity_fail_before_source_copy()
 }
 
 #[test]
-fn unsupported_and_nonfinite_policies_fail_without_allocating_or_copying() {
+fn invalid_policies_fail_without_allocating_or_copying() {
     let mut processor = Processor::new(1 << 20, 0).unwrap();
     for perturb in [
-        PerturbPolicy {
-            field: Field::BlueNoise {},
-            ..policy()
-        },
         PerturbPolicy {
             strength: f32::NAN,
             ..policy()
@@ -450,10 +447,7 @@ fn unsupported_and_nonfinite_policies_fail_without_allocating_or_copying() {
                 &mut allocator,
             )
             .unwrap_err();
-        assert!(matches!(
-            error.code,
-            ErrorCode::InvalidSettings | ErrorCode::UnsupportedOperation
-        ));
+        assert_eq!(error.code, ErrorCode::InvalidSettings);
         assert_eq!(
             (allocator.calls, boundary.copies, boundary.completions),
             (0, 0, 0)

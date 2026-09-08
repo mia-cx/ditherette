@@ -113,7 +113,8 @@ export type WorkingSpace =
 /** Palette-free fields supported by this checkpoint. Seeds are unsigned 32-bit integers. */
 export type Field =
 	| { readonly algorithm: 'bayer'; readonly size: '2' | '4' | '8' | '16' }
-	| { readonly algorithm: 'random'; readonly seed: number };
+	| { readonly algorithm: 'random'; readonly seed: number }
+	| { readonly algorithm: 'blue-noise' };
 
 export type Placement =
 	| { readonly mode: 'everywhere' }
@@ -167,7 +168,7 @@ export interface Ditherette {
 	quantize(request: QuantizeRequest): IndexedImage;
 	/** Perturb RGB without palette influence, preserving every source alpha byte. */
 	perturb(request: PerturbRequest): Rgba8Image;
-	/** Match reconstructed RGBA8 for Bayer/random separable fields, or quantize directly with family none. */
+	/** Match reconstructed RGBA8 for separable fields, or quantize directly with family none. */
 	ditherAndQuantize(request: DitherAndQuantizeRequest): IndexedImage;
 	/** Release instance ownership once. Wasm pages may retain their high-water mark until collection. */
 	dispose(): void;
