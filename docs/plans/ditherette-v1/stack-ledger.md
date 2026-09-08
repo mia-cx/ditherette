@@ -187,6 +187,12 @@ S34 runtime and public fixtures start from validated `06d9ad07` in separate `v1-
 The runtime owner has package/glue/pool implementation and native/private tests. The fixture owner has installed browser tests and test-server support.
 They coordinate shared fixture routes before editing. Root owns tracking, joins, and startup benchmark preparation.
 Only the new S34 runtime compiler targets are assigned. S33 targets return for cleanup after its PR handoff.
+S33 is delivered in unmerged [PR123](https://github.com/mia-cx/ditherette/pull/123) at `b2ca677ed9927165a1010f5c52646a989d8a02ca`, based on S32 `127a0428`.
+The coordinator joins it without conflicts and verifies identical crate, package, and script code against that head.
+Its [report](../../../.plans/74-benchmark-results.md) verifies 120 reaped workers, 2,400 samples, and 60 exact role pairs.
+All 15 callback cases pass. Chromium's disabled Lab76 and Lanczos3 comparisons remain inconclusive for S41.
+The returned report owner now owns S34 benchmark protocol and startup artifacts in `v1-s34-bench`.
+Its fixed plan has 48 serial workers across scalar regression and threaded same-artifact controls. No measurement is running.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
@@ -216,6 +222,10 @@ The S38 review recreates and then removes 100 KiB of generated SvelteKit files; 
 The completed S32 trusted check returns its compiler target. Cleanup reclaims 287 MiB of disk blocks from 695 rebuildable files.
 Its exact realpath and compiler-only contents were checked; no active process owned that target. Frozen source and benchmark evidence remain intact.
 After PR122 handoff, six returned S32 compiler targets reclaim another 6.18 GiB of disk blocks.
+After PR123 handoff, six returned S33 compiler targets reclaim 5.51 GiB of disk blocks.
+The returned trusted-checker target reclaims another 289 MiB. Both reports and both package hashes remain unchanged.
+Copied binaries, oracles, trial snapshots, and raw results remain retained. Compiler outputs can be rebuilt for review.
+Current S34 runtime and benchmark owners use only their new worktree-local targets; public fixtures own no compiler cache.
 Both retained package hashes and both report hashes stay unchanged. Copied binaries, oracles, trial snapshots, and raw results remain available.
 S33 owns only its new worktree-local caches. The old S32 compiler assignments have ended.
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
