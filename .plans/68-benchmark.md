@@ -165,3 +165,19 @@ Use the unchanged 68-worker declaration and existing immutable native/browser pr
 Preparation may snapshot all three engines but must not launch measurement workers.
 The S24 native cache and S23 scalar/threaded caches are exclusive to this preparation until the final drain handoff.
 Preserve every earlier preparation, diagnostic, and trial artifact.
+
+### Shared-backing guard and final preparation
+
+The collector now rejects shared output backing before retaining immutable comparison snapshots.
+Fix `f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395` joined through updated S26 parent `59036e1aef87943e462b4cce6b371e5edd082979`.
+The branch rebased with merges preserved. Rebased `625ff0867f77d4d0f65a5301c89833d2d96c2a87` exactly matches the prior joined tracked tree.
+Twenty-eight focused browser/timing tests pass with the shared RGBA, indices, and palette regressions.
+
+Retain `target/s27-trial-01/` as superseded preparation evidence from source `518a4f6d6c40f76928a13dc38f71866605e671bc`.
+Its four independent role builds and both roles' three-engine exact conformance passed.
+Each engine retains 63 native/Wasm references, including the unchanged Oklab byte 6792 difference of native 95 versus Wasm 94.
+Only its native snapshot was prepared. No browser snapshot or measurement worker started before the shared-backing hold.
+
+Prepare final roles and immutable snapshots under new `target/s27-trial-02/` from the clean revision containing this declaration.
+Keep that source fixed through both independent role builds, provenance checks, untimed conformance, and all four snapshots.
+Use the same 68-worker matrix. Leave all measurement workers unstarted for the coordinator's quiet-phase clearance.
