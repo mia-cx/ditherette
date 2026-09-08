@@ -2,6 +2,7 @@
 
 Issue #72. Implementation and bounded measurements are complete.
 Branch `impl/v1-s31-preparation` targets S30 PR #119, `impl/v1-s30-process`.
+Reviewable unmerged PR: https://github.com/mia-cx/ditherette/pull/121.
 The joined parent is `f408bc99a80d3c83b6caee0b5c1d19868f0db876`.
 Both benchmark roles use protocol `863889e52f1b752b6adfc22a9c775b3823f2997e`.
 The measured preparation baseline is `972d4e9a5882b25bca3de5f0786ad1525b5e6329`.
@@ -22,7 +23,7 @@ Decision #37 and frozen `spec/contract/cache.rs` plus `cache.md` define the cont
 - [x] Reuse resize plans and typed idle scratch, preserving trilinear overwrite and diffusion row initialization.
 - [x] Verify native/public cold-warm equality, budget pressure, failure recovery, isolation, and durable results.
 - [x] Join benchmark support, prepare fresh artifacts, and complete coordinator-owned exclusive cold/warm trials.
-- [ ] Join the report-only commit and file the reviewable stacked PR; retain compiler caches through validation and handoff.
+- [x] Join the report-only commit and file reviewable stacked PR #121; retain compiler caches through validation and handoff.
 
 ## Accounting design
 
@@ -97,3 +98,7 @@ Chromium and Firefox pass overall. Native warm Process and three WebKit cases re
 Warm Lanczos3 improves across native (12.5%), Chromium (5.0%), Firefox (6.3%), and WebKit (10.5%).
 The coordinator retains the required preparation baseline without retry or extra tuning.
 Read the joined `.plans/72-benchmark-results.md` for per-case results and uncertainty before citing performance.
+Report commit `d5d085dcd9c433e553de14d9087ae04d52fcce02` joins here as `680ec7f0`.
+PR preparation rebased onto the latest S30 parent, resolving only the previously fixed duplicate Vec-record charge.
+Full-tree equality against `a59d299f` passed after reconciliation; a no-code merge preserves the measured candidate's ancestry.
+All five focused Process tests pass after reconciliation, including the independent separable-converter budget check.
