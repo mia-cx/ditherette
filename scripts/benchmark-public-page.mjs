@@ -5,6 +5,7 @@ import {
 } from './benchmark-public-timing.mjs';
 import { prepareStageSample, stagePrimeRequest } from './benchmark-stage-cache.mjs';
 import { progressProbe } from './benchmark-progress.mjs';
+import { createRowBandProcessor } from './benchmark-row-policy.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -44,7 +45,7 @@ export function resizeRecipe(operation) {
 }
 
 /** Prepare the actual package or website call outside measurement timers. */
-export async function prepareOperation(trial) {
+export async function prepareOperation(trial, onRowPolicy = () => {}) {
 	const config = trial.case.browser;
 	const execution =
 		typeof DedicatedWorkerGlobalScope !== 'undefined' &&
@@ -55,16 +56,23 @@ export async function prepareOperation(trial) {
 		throw new Error('Browser execution context differs from the declaration.');
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
+	const packageBackend = (value) => value === 'package' || (value === 'package-staged' && config.operation.operation === 'process');
 	if (
 		config.threads !== undefined &&
 		(!config.threads ||
 			!['disabled', 'preferred', 'required'].includes(config.threads.accepted) ||
 			!['disabled', 'preferred', 'required'].includes(config.threads.candidate) ||
-			config.accepted !== 'package' ||
-			config.candidate !== 'package')
+			!packageBackend(config.accepted) ||
+			!packageBackend(config.candidate))
 	)
 		throw new Error('Thread policies require ordinary package calls and valid role policies.');
 	const threads = config.threads?.[trial.role] ?? 'disabled';
+	const selectedRowPolicy = config.row_policy === undefined ? undefined : {
+		stage: config.row_policy.stage,
+		parameters: config.row_policy[trial.role]
+	};
+	if (selectedRowPolicy && (execution !== 'host-worker' || threads !== 'required' || measurement.scope !== 'complete-call'))
+		throw new Error('Row policies require complete calls in a required-thread host.');
 	if (
 		config.progress !== undefined &&
 		(!config.progress ||
@@ -193,7 +201,13 @@ export async function prepareOperation(trial) {
 	preload.dispose();
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
-	const create = () => createDitherette({ wasm: compiled ?? bytes, threads });
+	const create = async () => {
+		const initialize = () => createDitherette({ wasm: compiled ?? bytes, threads });
+		if (!selectedRowPolicy) return initialize();
+		const result = await createRowBandProcessor(initialize, selectedRowPolicy, navigator.hardwareConcurrency);
+		onRowPolicy(result.observation);
+		return result.processor;
+	};
 	const call = process
 		? (instance) =>
 				backend === 'package-staged'
@@ -495,7 +509,8 @@ export async function requireMatchingComposition(operation, current) {
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
 export async function runTrial(trial) {
 	const resolution = timerResolution();
-	const operation = await prepareOperation(trial);
+	let rowPolicyObservation;
+	const operation = await prepareOperation(trial, (value) => { rowPolicyObservation = value; });
 	try {
 		const identity = {
 			role: trial.role,
@@ -505,6 +520,7 @@ export async function runTrial(trial) {
 			settings: trial.case.identity.settings
 		};
 		const observation = {
+			get row_policy() { return rowPolicyObservation; },
 			...(trial.case.browser.execution === undefined
 				? {}
 				: { execution: trial.case.browser.execution }),

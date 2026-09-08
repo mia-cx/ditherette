@@ -380,6 +380,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
     };
     let browser = BrowserCase {
         execution: None,
+        row_policy: None,
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
         },
@@ -452,6 +453,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         timing_skipped: None,
         observation: BrowserObservation {
             execution: None,
+            row_policy: None,
             engine: runtime.engine,
             browser_version: runtime.browser.version.clone(),
             node_version: runtime.node.version.clone(),

@@ -128,6 +128,40 @@ pub struct ThreadRoles {
     pub candidate: Threads,
 }
 
+/// Developer-only selector. It never changes the public request or cache identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RowStage {
+    Resize,
+    Indexed,
+    Mixing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowBandParameters {
+    /// Zero keeps this stage scalar; positive values choose an absolute output band height.
+    pub height: u32,
+    pub active_workers: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowPolicyRoles {
+    pub stage: RowStage,
+    pub accepted: RowBandParameters,
+    pub candidate: RowBandParameters,
+}
+
+/// Recorded only after the real instance accepts its private policy setter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowPolicyObservation {
+    pub stage: RowStage,
+    pub parameters: RowBandParameters,
+    pub pool_size: u32,
+}
+
 /// JavaScript context owning the package and its call timers. Historical records use the page.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -140,6 +174,8 @@ pub enum BrowserExecution {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_policy: Option<RowPolicyRoles>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<BrowserExecution>,
     pub operation: PublicOperation,
@@ -477,6 +513,8 @@ pub struct BrowserTrial {
 #[serde(deny_unknown_fields)]
 pub struct BrowserObservation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_policy: Option<RowPolicyObservation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<BrowserExecution>,
     pub engine: BrowserEngine,
     pub browser_version: String,
@@ -623,21 +661,63 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
     };
     let m = &case.measurement;
     if browser.execution == Some(BrowserExecution::HostWorker)
-        && (m.scope != CallScope::Initialization
-            || browser.accepted != BrowserBackend::Package
-            || browser.candidate != BrowserBackend::Package)
+        && (!matches!(m.scope, CallScope::Initialization | CallScope::CompleteCall)
+            || !matches!(
+                browser.accepted,
+                BrowserBackend::Package | BrowserBackend::PackageStaged
+            )
+            || !matches!(
+                browser.candidate,
+                BrowserBackend::Package | BrowserBackend::PackageStaged
+            ))
     {
         return Err(io::Error::other(
-            "host-worker execution requires package initialization",
+            "host-worker execution requires package initialization or complete calls",
         ));
     }
     if browser.threads.is_some()
-        && (browser.accepted != BrowserBackend::Package
-            || browser.candidate != BrowserBackend::Package)
+        && (!matches!(
+            browser.accepted,
+            BrowserBackend::Package | BrowserBackend::PackageStaged
+        ) || !matches!(
+            browser.candidate,
+            BrowserBackend::Package | BrowserBackend::PackageStaged
+        ))
     {
         return Err(io::Error::other(
             "thread policies require ordinary package calls",
         ));
+    }
+    if let Some(policy) = browser.row_policy {
+        if browser.execution != Some(BrowserExecution::HostWorker)
+            || m.scope != CallScope::CompleteCall
+            || browser.threads
+                != Some(ThreadRoles {
+                    accepted: Threads::Required,
+                    candidate: Threads::Required,
+                })
+            || [policy.accepted, policy.candidate]
+                .iter()
+                .any(|p| p.height > 32_768 || !(1..=8).contains(&p.active_workers))
+        {
+            return Err(io::Error::other(
+                "row policies require bounded complete calls in a required-thread host",
+            ));
+        }
+        let stage_matches = match browser.operation {
+            PublicOperation::Process { .. } => true,
+            PublicOperation::Quantize { .. }
+            | PublicOperation::Perturb { .. }
+            | PublicOperation::Separable { .. } => policy.stage == RowStage::Indexed,
+            PublicOperation::Yliluoma { .. } => policy.stage == RowStage::Mixing,
+            PublicOperation::Diffusion { .. } => false,
+            _ => policy.stage == RowStage::Resize,
+        };
+        if !stage_matches {
+            return Err(io::Error::other(
+                "row policy stage differs from the measured operation",
+            ));
+        }
     }
     if browser.progress.is_some()
         && (browser.preparation != BrowserPreparation::FreshInstance
@@ -925,6 +1005,29 @@ pub(super) fn validate_evidence(
         .as_ref()
         .ok_or_else(|| io::Error::other("missing browser runtime evidence"))?;
     validate_observation(&trial.runtime, &evidence.observation)?;
+    match (browser_case.row_policy, evidence.observation.row_policy) {
+        (None, None) => {}
+        (Some(policy), Some(observed)) => {
+            let expected = match result.role {
+                Role::Accepted => policy.accepted,
+                Role::Candidate => policy.candidate,
+            };
+            if observed.stage != policy.stage
+                || observed.parameters != expected
+                || !(1..=8).contains(&observed.pool_size)
+                || expected.active_workers > observed.pool_size
+            {
+                return Err(io::Error::other(
+                    "observed row policy differs from the measured role",
+                ));
+            }
+        }
+        _ => {
+            return Err(io::Error::other(
+                "missing or unexpected row-policy observation",
+            ))
+        }
+    }
     if evidence.assets != trial.assets.tree.digest
         || evidence.runtime != runtime_digest(&trial.runtime)?
         || evidence.backend != browser_case.backend(result.role)

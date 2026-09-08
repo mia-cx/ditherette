@@ -224,6 +224,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             },
             browser: public.then_some(BrowserCase {
                 execution: None,
+                row_policy: None,
                 operation,
                 accepted: BrowserBackend::PackageStaged,
                 candidate: BrowserBackend::Package,
