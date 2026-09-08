@@ -12,9 +12,12 @@ import {
 } from './threads-browser-fixture.mjs';
 
 export const threadTestAssets = Object.fromEntries(
-	['thread-worker-observer.mjs', 'thread-lifetime-worker.mjs', 'thread-processing-host.mjs'].map(
-		(name) => [`__tests__/${name}`, fileURLToPath(new URL(name, import.meta.url))]
-	)
+	[
+		'thread-worker-observer.mjs',
+		'thread-lifetime-worker.mjs',
+		'thread-processing-host.mjs',
+		'thread-atomic-wait-worker.mjs'
+	].map((name) => [`__tests__/${name}`, fileURLToPath(new URL(name, import.meta.url))])
 );
 
 const observedServers = new WeakSet();
@@ -39,7 +42,8 @@ export async function prepareThreadServer(server, t, context) {
 	for (const path of [
 		'dist/thread-worker.js',
 		'__tests__/thread-lifetime-worker.mjs',
-		'__tests__/thread-processing-host.mjs'
+		'__tests__/thread-processing-host.mjs',
+		'__tests__/thread-atomic-wait-worker.mjs'
 	]) {
 		if (!server.paths.has(path)) continue;
 		const original = await readFile(server.paths.get(path), 'utf8');
@@ -284,4 +288,35 @@ export async function processingHostDriver({ page, server, input, t, context }) 
 		}
 	}
 	return { hostTerminationDuringCall: true, hostTerminationDuringStartup: true };
+}
+
+/** Opt-in engine diagnostic, independent of the package and Rayon. */
+export async function atomicWaitDriver({ page, server, t, context }) {
+	await prepareThreadServer(server, t, context);
+	await page.goto(server.url);
+	await page.evaluate(() => {
+		globalThis.atomicWorker = new Worker('/__tests__/thread-atomic-wait-worker.mjs', {
+			type: 'module',
+			name: 'ditherette-test-atomic-wait'
+		});
+		atomicWorker.onmessage = () => {
+			globalThis.atomicReady = true;
+		};
+		atomicWorker.onerror = (event) => {
+			globalThis.atomicError = event.message;
+		};
+		atomicWorker.postMessage('start');
+	});
+	try {
+		await page.waitForFunction(() => globalThis.atomicReady || globalThis.atomicError, undefined, {
+			timeout: 10_000
+		});
+		assert.equal(await page.evaluate(() => globalThis.atomicError), undefined);
+		await waitForWorkers(page, 1);
+		await page.evaluate(() => atomicWorker.terminate());
+		await waitForWorkers(page, 0);
+		return { wasmWaitWorkerTerminated: true };
+	} finally {
+		await page.evaluate(() => atomicWorker.terminate());
+	}
 }

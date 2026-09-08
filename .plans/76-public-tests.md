@@ -45,3 +45,7 @@ This uses the runtime owner's existing generated dist, not a fresh revision-boun
 - The WebKit processing-host witness retains the host lock and its two pool locks. Ordinary nested-worker termination passes.
 
 The coordinator and runtime owner are investigating the WebKit engine behavior. Keep these assertions intact pending resolution.
+
+The opt-in `thread-atomic-wait.diagnostic.mjs` reproduces the same failure without Ditherette or Rayon imports.
+It uses the exact upstream WebKit bug 289686 module bytes. Chromium and Firefox release its lock; WebKit retains it.
+The installed runner closes each browser in `finally`, including diagnostic failures.
