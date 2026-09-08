@@ -133,6 +133,9 @@ Its actual package output matches the target-local frozen Wasm reference; no uni
 
 ## Validation and provenance
 
+The [review follow-up](71-review-followup.md) corrects the Firefox/WebKit native-probe provenance.
+Original trial files and measurements remain unchanged. Use the refreshed reports for attribution evidence.
+
 Fresh installed-package adapter conformance passes in Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
 Each engine retains 431 identified main references, two separately identified area probes, and 16 Process/staged compositions.
 The main fixtures cover 47 quantize, 12 field, four blue-noise, 360 diffusion, and eight Process cases.

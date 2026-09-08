@@ -1,5 +1,6 @@
 {
   "schema": 1,
+  "review_followup": "71-review-followup.md supersedes original Firefox/WebKit native-probe provenance; original artifact records below remain historical.",
   "source_revision": "e5aae7bf0e1761af2f970b6da75d34cf3a813323",
   "artifact_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s30-process/target/s30-trial-01",
   "comparison": "same-artifact actual staged production versus complete Process",
