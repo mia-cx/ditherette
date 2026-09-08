@@ -48,8 +48,11 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     limit: u64,
     overhead: u64,
     peak: &mut u64,
+    store: &mut super::preparation::Store,
 ) -> Result<B::Output, Failure> {
-    run_with_perturb(request, None, boundary, allocator, limit, overhead, peak)
+    run_with_perturb(
+        request, None, boundary, allocator, limit, overhead, peak, store,
+    )
 }
 
 pub(super) fn run_with_perturb<B: QuantizeBoundary, A: Allocator>(
@@ -60,6 +63,7 @@ pub(super) fn run_with_perturb<B: QuantizeBoundary, A: Allocator>(
     limit: u64,
     overhead: u64,
     peak: &mut u64,
+    store: &mut super::preparation::Store,
 ) -> Result<B::Output, Failure> {
     run_with_dither(
         request,
@@ -71,6 +75,7 @@ pub(super) fn run_with_perturb<B: QuantizeBoundary, A: Allocator>(
         limit,
         overhead,
         peak,
+        store,
     )
 }
 
@@ -82,6 +87,7 @@ pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
     limit: u64,
     overhead: u64,
     peak: &mut u64,
+    store: &mut super::preparation::Store,
 ) -> Result<B::Output, Failure> {
     let perturb = match dither {
         DitherPolicy::None {} => None,
@@ -118,66 +124,33 @@ pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
         return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
     }
     let output_len = source_len / 4;
-    let prepared_bytes = PreparedQuantizer::required_capacity_bytes(
-        request.palette,
-        request.alpha,
-        request.matching,
-    )
-    .map_err(preparation_failure)?;
+    PreparedQuantizer::required_capacity_bytes(request.palette, request.alpha, request.matching)
+        .map_err(preparation_failure)?;
     let intermediate_len = if perturb.is_some() { source_len } else { 0 };
-    let buffers_bytes = source_len as u64 + output_len as u64 + intermediate_len as u64;
-    let needed = overhead
-        .checked_add(buffers_bytes)
-        .and_then(|n| n.checked_add(prepared_bytes))
-        .ok_or_else(memory_limit)?;
-    if needed > limit {
-        return Err(memory_limit());
-    }
-    let prepared = PreparedQuantizer::try_new(
-        request.palette,
-        request.alpha,
-        request.matching,
-        limit - overhead - buffers_bytes,
-    )
-    .map_err(preparation_failure)?;
-    let owned = overhead + prepared.capacity_bytes();
-    *peak = owned;
-    let mut source = Vec::new();
-    let mut indices = Vec::new();
-    allocator.reserve(&mut source, source_len)?;
-    *peak = owned + source.capacity() as u64;
-    if *peak + output_len as u64 + intermediate_len as u64 > limit {
-        return Err(memory_limit());
-    }
-    allocator.reserve(&mut indices, output_len)?;
-    *peak += indices.capacity() as u64;
-    if *peak + intermediate_len as u64 > limit {
-        return Err(memory_limit());
-    }
-    let mut intermediate = if perturb.is_some() {
-        let mut buffer = Vec::new();
-        allocator.reserve(&mut buffer, intermediate_len)?;
-        *peak += buffer.capacity() as u64;
-        if *peak > limit {
-            return Err(memory_limit());
-        }
-        buffer.resize(intermediate_len, 0);
-        Some(buffer)
-    } else {
-        None
-    };
-    source.resize(source_len, 0);
-    indices.resize(output_len, 0);
-    boundary.copy_input(&mut source)?;
-    let source = ImageView::<Rgba8>::packed(&source, dimensions)
+    let mut call = super::preparation::Call::new(
+        store,
+        Some(request),
+        None,
+        [source_len, output_len, intermediate_len, 0],
+        0,
+        overhead,
+        limit,
+        peak,
+        allocator,
+    )?;
+    let (prepared, _, scratch) = call.parts();
+    let prepared = prepared.expect("requested palette");
+    let [source, indices, intermediate, _] = &mut scratch.buffers;
+    boundary.copy_input(source)?;
+    let source = ImageView::<Rgba8>::packed(source, dimensions)
         .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-    let quantize_source = if let (Some(policy), Some(buffer)) = (perturb, intermediate.as_mut()) {
+    let quantize_source = if let Some(policy) = perturb {
         super::perturb::execute(
             source,
-            ImageViewMut::packed(buffer, dimensions).expect("reserved intermediate storage"),
+            ImageViewMut::packed(intermediate, dimensions).expect("reserved intermediate storage"),
             policy,
         );
-        ImageView::packed(buffer, dimensions).expect("complete RGBA8 intermediate")
+        ImageView::packed(intermediate, dimensions).expect("complete RGBA8 intermediate")
     } else {
         source
     };
@@ -190,20 +163,13 @@ pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
             BayerSize::Sixteen => Matrix::Sixteen,
         };
         crate::prod::dither::yiluoma::dither_yiluoma_into(
-            source,
-            &prepared,
-            &mut indices,
-            size,
-            placement,
+            source, prepared, indices, size, placement,
         );
     } else {
-        prepared.quantize_into(quantize_source, &mut indices);
+        prepared.quantize_into(quantize_source, indices);
     }
-    boundary.complete(&indices, dimensions, prepared.palette())
-}
-
-fn memory_limit() -> Failure {
-    Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
+    let result = boundary.complete(indices, dimensions, prepared.palette());
+    call.finish(result)
 }
 
 pub(super) fn preparation_failure(error: PreparationError) -> Failure {

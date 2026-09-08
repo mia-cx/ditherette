@@ -132,6 +132,7 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
         } else {
             (
                 match &native {
+                    NativeOperation::Processor { .. } => unreachable!("matching integration cases"),
                     NativeOperation::Quantize { .. } => {
                         ditherette_wasm::bench_subjects::quantize::QUANTIZE_SUBJECT.into()
                     }
