@@ -12,7 +12,7 @@ Join the final publication heads before delivery.
 - [x] Add crate-owned conformance commands and CI using existing installed-package fixtures.
 - [x] Join focused scalar boundary and repeated-memory browser checks from the isolated memory branch.
 - [x] Run the integrated native/interface/browser/website checks and record exact artifact evidence.
-- [ ] Record failed or absent coverage, file an unmerged PR, and return compiler outputs for cleanup.
+- [x] Record failed or absent coverage, file an unmerged PR, and return compiler outputs for cleanup.
 
 ## Ownership
 
@@ -45,3 +45,7 @@ The first broad run passes Chromium and Firefox. WebKit cannot load its system w
 Its focused retry uses the existing test-owned library alias, without changing shared browser files.
 The WebKit-only retry passes all six test records. No runtime correction is needed.
 The final report is `docs/plans/ditherette-v1/s40-conformance.md`.
+PR [129](https://github.com/mia-cx/ditherette/pull/129) is open, non-draft, and unmerged on `impl/v1-s40-base`.
+The rebase preserves validated implementation and report head `e677b3ea29f634af5d1d044196217925af79ae48`.
+After all local jobs exit, the explicit worktree-owned `target/compiler` cache is cleaned, reclaiming about 326 MiB.
+Raw logs, generated package assets, source, and the original ordinary artifact remain available.
