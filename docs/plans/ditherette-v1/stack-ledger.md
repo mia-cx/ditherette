@@ -200,6 +200,11 @@ Chromium and Firefox pass actual disposal and host termination. Pinned WebKit 26
 The independent upstream Wasm reproduction fails without Ditherette or Rayon. WebKit fix `319508@main` needs verification in a recorded engine.
 Keep this unresolved release gate and the failing lifecycle assertions. Unreliable capability probes are discarded, not shipped.
 WebKit threaded startup is blocked and unmeasured because retained pools invalidate trial isolation. Scalar startup still covers all engines.
+The [release gate](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5589175119) retains the exact fixture checkpoint and upstream reference.
+S34 `29bccaa5` passes the trusted guard. Build source `2afd1802` adds only the startup-plan amendment.
+Detached `v1-s34-accepted-source` at `bf7912db` and `v1-s34-measured-source` at `2afd1802` preserve exact build provenance.
+S39 starts in `v1-s39-website` from the explicit S34 `29bccaa5` and S38 `0305456b` join `6230326d`.
+Its owner changes website scheduling/fallback and focused tests only. Final S34 ancestry and artifact validation remain required before delivery.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
