@@ -791,16 +791,41 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         }
     }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript) {
+        // Runtime admission also checks source colors and the actual nearest coordinate map.
+        let indexed_supported = match &browser.operation {
+            PublicOperation::Quantize { settings } => {
+                settings.matching == super::quantize::MatchPolicy::SrgbEuclidean
+                    && matches!(
+                        settings.alpha,
+                        super::quantize::AlphaPolicy::Preserve { .. }
+                    )
+            }
+            PublicOperation::Process { settings } => {
+                use ditherette_wasm::spec::contract::request as spec;
+                settings.recipe.matching == spec::MatchPolicy::SrgbEuclidean
+                    && matches!(settings.recipe.alpha, spec::AlphaPolicy::Preserve { .. })
+                    && matches!(settings.recipe.dither, spec::DitherPolicy::None {})
+                    && matches!(
+                        settings.recipe.output.resize,
+                        spec::ResizePolicy::Nearest {
+                            anchor: spec::Anchor::Center
+                        }
+                    )
+            }
+            _ => true,
+        };
+        if !indexed_supported {
+            return Err(io::Error::other("no faithful TypeScript indexed comparison outside nearest/no-dither/sRGB/preserve alpha"));
+        }
         if matches!(
             browser.operation,
-            PublicOperation::Quantize { .. }
-                | PublicOperation::Process { .. }
+            PublicOperation::Yliluoma { .. }
                 | PublicOperation::Diffusion { .. }
                 | PublicOperation::Perturb { .. }
                 | PublicOperation::Separable { .. }
         ) {
             return Err(io::Error::other(
-                "no faithful TypeScript quantize or field adapter is registered",
+                "no faithful TypeScript field, diffusion, or mixing adapter is registered",
             ));
         }
         if matches!(

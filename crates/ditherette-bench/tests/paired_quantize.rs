@@ -132,6 +132,14 @@ fn native_and_public_quantize_scopes_fail_closed() {
     case.candidate_subject = case.accepted_subject.clone();
     validate_case(case).unwrap();
     case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
+    // Registration admits the structural S39 subset. The JS adapter checks source/palette eligibility.
+    case.accepted_subject = operation.subject(BrowserBackend::TypeScript).into();
+    validate_case(case).unwrap();
+    let PublicOperation::Quantize { settings } = &mut case.browser.as_mut().unwrap().operation
+    else {
+        unreachable!()
+    };
+    settings.matching = MatchPolicy::OklabEuclidean;
     assert!(validate_case(case)
         .unwrap_err()
         .to_string()
