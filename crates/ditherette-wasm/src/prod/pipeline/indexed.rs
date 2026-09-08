@@ -35,6 +35,18 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     peak: &mut u64,
     store: &mut Store,
 ) -> Result<B::Output, Failure> {
+    // Process has no measured S36 complete-call class; explicit developer bands still apply.
+    let measured = if resize.is_none() {
+        super::row_fields::measured_indexed(
+            output_dimensions,
+            request,
+            dither,
+            super::execution::worker_budget(),
+        )
+    } else {
+        None
+    };
+    let row_policy = store.row_policy(super::execution::ExecutionStage::Indexed, measured);
     let enabled = boundary.progress().is_some();
     let mut progress = super::progress::Control::new(enabled);
     progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
@@ -98,6 +110,25 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         let result = boundary.complete(bytes, output_dimensions, metadata);
         return call.finish(progress.finish(result, boundary.progress()));
     }
+    let band_plan = row_policy
+        .filter(|_| {
+            matches!(
+                dither,
+                DitherPolicy::None {} | DitherPolicy::Separable { .. }
+            )
+        })
+        .map(|row_policy| {
+            super::row_fields::Plan::new(
+                output_dimensions,
+                row_policy,
+                policy.is_some() && !perturbed_hit,
+            )
+        })
+        .transpose()?;
+    let band_capacity = band_plan
+        .as_ref()
+        .map_or(0, |plan| plan.additional_capacity());
+    call.charge_working_capacity(band_capacity, peak)?;
     call.prepare(
         Some(request),
         resize
@@ -128,6 +159,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         peak,
         allocator,
     )?;
+    let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
     if resize.is_some() && !resized_hit {
         let (_, prepared, scratch) = call.parts();
         let [source, resized, _, _] = &mut scratch.buffers;
@@ -174,24 +206,33 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 |image| image.bytes.as_slice(),
             );
             let source = ImageView::packed(rgba, output_dimensions).expect("complete RGBA");
-            let output =
-                ImageViewMut::packed(perturbed, output_dimensions).expect("reserved perturb");
-            if enabled {
+            if bands.is_some() || enabled {
                 progress.report(
                     boundary.progress(),
                     Stage::Perturb,
                     0,
                     u64::from(output_dimensions.height()),
                 )?;
-                perturb::execute_with_progress(source, output, perturb, |completed| {
+                let mut report = |completed| {
                     progress.report(
                         boundary.progress(),
                         Stage::Perturb,
-                        u64::from(completed),
+                        completed,
                         u64::from(output_dimensions.height()),
                     )
-                })?;
+                };
+                if let Some(work) = &mut bands {
+                    perturb::execute_bands(source, perturbed, perturb, work, &mut report)?;
+                } else {
+                    let output = ImageViewMut::packed(perturbed, output_dimensions)
+                        .expect("reserved perturb");
+                    perturb::execute_with_progress(source, output, perturb, |completed| {
+                        report(u64::from(completed))
+                    })?;
+                }
             } else {
+                let output =
+                    ImageViewMut::packed(perturbed, output_dimensions).expect("reserved perturb");
                 perturb::execute(source, output, perturb);
             }
         }
@@ -277,10 +318,18 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     );
                 }
             }
+            _ if bands.is_some() => prepared.quantize_bands_into(
+                view,
+                indices,
+                bands.as_mut().unwrap(),
+                &mut |completed| report_row(completed as u32),
+            )?,
             _ if enabled => prepared.quantize_with_progress(view, indices, &mut report_row)?,
             _ => prepared.quantize_into(view, indices),
         }
     }
+    drop(bands);
+    call.release_working_capacity(band_capacity);
     if let Some(key) = resize_key {
         call.retain_rgba(0, key, 1, output_dimensions, rgba_content, peak);
     }
