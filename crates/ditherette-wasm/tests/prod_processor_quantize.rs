@@ -204,8 +204,8 @@ fn source_and_index_reservation_failures_never_import_input_or_publish_output() 
         }
     }
     let palette = [PaletteEntry::Transparent {}];
-    let mut processor = Processor::new(1 << 20, 0).unwrap();
     for remaining in 0..2 {
+        let mut processor = Processor::new(1 << 20, 0).unwrap();
         let mut input = boundary(&[0; 8]);
         assert_eq!(
             processor
