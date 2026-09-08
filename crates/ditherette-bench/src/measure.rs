@@ -411,8 +411,27 @@ pub(crate) fn measure_resize_case(
 
 /// One iteration's owned work. Consumption runs outside every timed batch.
 pub(crate) trait Workload {
+    /// Interactive sample setup, outside its timer. Throughput keeps its existing batch lifecycle.
+    fn prepare_sample(&mut self) -> Result<(), BenchError> {
+        Ok(())
+    }
     fn run(&mut self) -> Result<(), BenchError>;
     fn consume(&self);
+    /// Runs after observation, including when the call fails.
+    fn finish_sample(&mut self) {}
+}
+
+fn interactive_sample(workload: &mut impl Workload) -> Result<Duration, BenchError> {
+    if let Err(error) = workload.prepare_sample() {
+        workload.finish_sample();
+        return Err(error);
+    }
+    let start = Instant::now();
+    let result = workload.run();
+    let elapsed = start.elapsed();
+    workload.consume();
+    workload.finish_sample();
+    result.map(|()| elapsed)
 }
 
 pub(crate) struct MeasuredSamples {
@@ -480,8 +499,12 @@ pub(crate) fn measure_workload(
         let batch_iterations = iterations_per_sample;
         if std::mem::take(&mut discard_next_batch) {
             cache_scrubber.prepare();
-            for _ in 0..batch_iterations {
-                workload.run()?;
+            if config.sample_mode == SampleMode::Interactive {
+                interactive_sample(workload)?;
+            } else {
+                for _ in 0..batch_iterations {
+                    workload.run()?;
+                }
             }
         }
         if !config.inter_sample_delay.is_zero() {
@@ -489,11 +512,15 @@ pub(crate) fn measure_workload(
         }
         cache_scrubber.prepare();
 
-        let start = Instant::now();
-        for _ in 0..batch_iterations {
-            workload.run()?;
-        }
-        let elapsed = start.elapsed();
+        let elapsed = if config.sample_mode == SampleMode::Interactive {
+            interactive_sample(workload)?
+        } else {
+            let start = Instant::now();
+            for _ in 0..batch_iterations {
+                workload.run()?;
+            }
+            start.elapsed()
+        };
         measured_iterations += batch_iterations;
         measured_elapsed += elapsed;
         sample_ns.push(elapsed.as_nanos() as f64 / batch_iterations as f64);
@@ -545,12 +572,9 @@ fn warm_up_interactive(
             return Ok(());
         }
 
-        let start = Instant::now();
-        workload.run()?;
-        let elapsed = start.elapsed();
+        let elapsed = interactive_sample(workload)?;
         warmup_iterations += 1;
         observer.warmup_batch(1, elapsed);
-        workload.consume();
 
         let hit_iteration_target = config
             .warmup_iterations
@@ -866,4 +890,88 @@ fn parse_f64_flag(value: &str) -> Result<f64, BenchError> {
     value
         .parse()
         .map_err(|error| BenchError::Config(format!("invalid duration {value:?}: {error}")))
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    struct Tracked {
+        events: RefCell<Vec<&'static str>>,
+        fail: bool,
+    }
+    impl Workload for Tracked {
+        fn prepare_sample(&mut self) -> Result<(), BenchError> {
+            self.events.borrow_mut().push("prepare");
+            Ok(())
+        }
+        fn run(&mut self) -> Result<(), BenchError> {
+            self.events.borrow_mut().push("run");
+            if self.fail {
+                Err(BenchError::Runtime("fixture".into()))
+            } else {
+                Ok(())
+            }
+        }
+        fn consume(&self) {
+            self.events.borrow_mut().push("observe");
+        }
+        fn finish_sample(&mut self) {
+            self.events.borrow_mut().push("finish");
+        }
+    }
+
+    #[test]
+    fn interactive_failure_observes_before_cleanup() {
+        let mut workload = Tracked {
+            events: RefCell::default(),
+            fail: true,
+        };
+        assert!(interactive_sample(&mut workload).is_err());
+        assert_eq!(
+            *workload.events.borrow(),
+            ["prepare", "run", "observe", "finish"]
+        );
+    }
+
+    #[test]
+    fn interactive_warmup_discard_and_samples_share_lifecycle() {
+        struct Discard;
+        impl MeasurementObserver for Discard {
+            fn measurement_progress(
+                &mut self,
+                progress: MeasurementProgress,
+                _: &[f64],
+                _: (u32, u32),
+            ) -> bool {
+                progress.samples_done == 0
+            }
+        }
+        let flags = Flags::parse(
+            &[
+                "--sample-mode",
+                "interactive",
+                "--sample-size",
+                "2",
+                "--warmup-iterations",
+                "1",
+            ]
+            .map(str::to_owned),
+        )
+        .unwrap();
+        let config = MeasurementConfig::from_flags(&flags).unwrap();
+        let mut workload = Tracked {
+            events: RefCell::default(),
+            fail: false,
+        };
+        let result = measure_workload(&mut workload, (1, 1), &config, &mut Discard).unwrap();
+        assert_eq!(result.sample_ns.len(), 2);
+        assert_eq!(result.iterations_per_sample, 1);
+        let events = workload.events.borrow();
+        assert_eq!(events.len(), 17); // Warmup, discard, two samples, final observation.
+        for sample in events[..16].chunks_exact(4) {
+            assert_eq!(sample, ["prepare", "run", "observe", "finish"]);
+        }
+    }
 }
