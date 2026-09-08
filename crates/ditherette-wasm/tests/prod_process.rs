@@ -9,7 +9,7 @@ use ditherette_wasm::{
             failure::{ErrorPath, Failure},
             request::*,
         },
-        palette::PreparedPalette,
+        pipeline::quantize::IndexedMetadataRef,
         pipeline::{
             process::ProcessRequest,
             processor::{Allocator, Processor},
@@ -56,7 +56,7 @@ impl QuantizeBoundary for Boundary<'_> {
         &mut self,
         indices: &[u8],
         dimensions: ImageDimensions,
-        palette: &PreparedPalette,
+        palette: IndexedMetadataRef<'_>,
     ) -> Result<IndexedImage, Failure> {
         self.completions += 1;
         if self.failure == 2 {
@@ -69,7 +69,7 @@ impl QuantizeBoundary for Boundary<'_> {
             indices: ImageBuf::<PaletteIndex8>::from_vec_packed(indices.to_vec(), dimensions)
                 .unwrap(),
             palette: palette.palette.clone(),
-            warnings: palette.warnings.clone(),
+            warnings: palette.warnings.to_vec(),
         })
     }
 }
@@ -253,7 +253,12 @@ fn no_dither_does_not_charge_the_separable_converter() {
         u64::from(separable.recipe.output.width) * u64::from(separable.recipe.output.height) * 4;
     let converter_bytes =
         std::mem::size_of::<ditherette_wasm::prod::color::packed::Converter>() as u64;
-    let needed = processor.peak_capacity_bytes() - perturb_bytes - converter_bytes;
+    let execution = budget_support::minimum(processor.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| processor.process(separable, &mut Boundary::default()))
+            .is_ok()
+    });
+    let needed = execution - perturb_bytes - converter_bytes;
     let mut bounded = Processor::new(needed, 0).unwrap();
     bounded
         .process(request(DitherPolicy::None {}), &mut Boundary::default())
@@ -272,8 +277,14 @@ fn process_diffusion_counts_its_parsed_policy_before_reservations() {
     // Preparation and all image buffers match no-dither Process. Diffusion adds
     // three packed work rows and a parsed policy distinct from the recipe record.
     let row_bytes = u64::from(diffusion.recipe.output.width) * 3 * 3 * 4;
-    let needed =
-        plain.peak_capacity_bytes() + row_bytes + std::mem::size_of::<DiffusionPolicy>() as u64;
+    let execution = budget_support::minimum(plain.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| {
+                processor.process(request(DitherPolicy::None {}), &mut Boundary::default())
+            })
+            .is_ok()
+    });
+    let needed = execution + row_bytes + std::mem::size_of::<DiffusionPolicy>() as u64;
     let mut short = Processor::new(needed - 1, 0).unwrap();
     let mut boundary = Boundary::default();
     let mut allocations = Reservation::default();
@@ -285,7 +296,7 @@ fn process_diffusion_counts_its_parsed_policy_before_reservations() {
     );
     assert_eq!(
         (allocations.calls, boundary.copies, boundary.completions),
-        (0, 0, 0)
+        (1, 1, 0)
     );
     let mut exact = Processor::new(needed, 0).unwrap();
     exact.process(diffusion, &mut Boundary::default()).unwrap();
@@ -293,7 +304,8 @@ fn process_diffusion_counts_its_parsed_policy_before_reservations() {
     short
         .process(request(DitherPolicy::None {}), &mut boundary)
         .unwrap();
-    assert_eq!(short.peak_capacity_bytes(), plain.peak_capacity_bytes());
+    assert!(short.peak_capacity_bytes() >= execution);
+    assert!(short.peak_capacity_bytes() <= needed - 1);
 }
 
 #[test]
@@ -304,7 +316,11 @@ fn whole_call_capacity_reservations_and_caught_failures_precede_publication_and_
         let expected = processor
             .process(request, &mut Boundary::default())
             .unwrap();
-        let needed = processor.peak_capacity_bytes();
+        let needed = budget_support::minimum(processor.peak_capacity_bytes(), |limit| {
+            Processor::new(limit, 0)
+                .and_then(|mut processor| processor.process(request, &mut Boundary::default()))
+                .is_ok()
+        });
         let mut exact = Processor::new(needed, 0).unwrap();
         assert_eq!(
             exact.process(request, &mut Boundary::default()).unwrap(),
@@ -322,7 +338,7 @@ fn whole_call_capacity_reservations_and_caught_failures_precede_publication_and_
         );
         assert_eq!(
             (allocations.calls, boundary.copies, boundary.completions),
-            (0, 0, 0)
+            (1, 1, 0)
         );
         let smaller = ProcessRequest {
             recipe: RecipeV1 {
@@ -356,7 +372,7 @@ fn whole_call_capacity_reservations_and_caught_failures_precede_publication_and_
             );
             assert_eq!(
                 (allocator.calls, boundary.copies, boundary.completions),
-                (fail_at, 0, 0)
+                (fail_at, usize::from(fail_at > 1), 0)
             );
             assert_eq!(exact.process(request, &mut boundary).unwrap(), expected);
         }
@@ -463,3 +479,5 @@ fn invalid_complete_settings_never_reserve_or_copy_even_with_a_large_resize() {
         processor.process(valid, &mut boundary).unwrap();
     }
 }
+#[path = "support/budget.rs"]
+mod budget_support;

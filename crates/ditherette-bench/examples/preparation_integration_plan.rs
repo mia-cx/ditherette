@@ -19,10 +19,25 @@ use std::{
     io::{self, Write},
 };
 
-fn palette(count: u16) -> Vec<PaletteEntry> {
+pub fn palette(count: u16) -> Vec<PaletteEntry> {
     (0..count)
         .map(|n| PaletteEntry::Color {
             rgb: [n as u8, n.wrapping_mul(73) as u8, n.wrapping_mul(151) as u8],
+        })
+        .collect()
+}
+
+pub fn source_rgba(source: Dimensions) -> Vec<u8> {
+    (0..source.width * source.height)
+        .flat_map(|n| {
+            let x = n % source.width;
+            let y = n / source.width;
+            [
+                (x * 17 + y * 31) as u8,
+                (x * 43 + y * 7) as u8,
+                (x * 11 + y * 53) as u8,
+                255,
+            ]
         })
         .collect()
 }
@@ -105,21 +120,11 @@ pub fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
     let cache = CacheCapability::Roles {
         accepted: PreparationCapability::Uncached,
         candidate: PreparationCapability::Preparation,
+        sample_prime: None,
     };
     let mut matrix = Vec::new();
     for (name, source, settings) in cases {
-        let rgba: Vec<u8> = (0..source.width * source.height)
-            .flat_map(|n| {
-                let x = n % source.width;
-                let y = n / source.width;
-                [
-                    (x * 17 + y * 31) as u8,
-                    (x * 43 + y * 7) as u8,
-                    (x * 11 + y * 53) as u8,
-                    255,
-                ]
-            })
-            .collect();
+        let rgba = source_rgba(source);
         let native = NativeOperation::Processor {
             settings: settings.clone(),
             cache,
@@ -129,6 +134,9 @@ pub fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 settings: settings.clone(),
             },
             ProcessorSettings::Process { settings } => PublicOperation::Process {
+                settings: settings.clone(),
+            },
+            ProcessorSettings::Separable { settings } => PublicOperation::Separable {
                 settings: settings.clone(),
             },
             ProcessorSettings::Resize { output } => match output.resize {

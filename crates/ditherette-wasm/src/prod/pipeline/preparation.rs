@@ -1,22 +1,23 @@
-//! One instance's preparation LRU and success-only scratch publication.
+//! One instance's shared preparation/image LRU and success-only publication.
 
 use std::mem::size_of;
 
 use super::{
     identity,
     processor::Allocator,
-    quantize::{preparation_failure, QuantizeRequest},
+    quantize::{preparation_failure, IndexedMetadataRef, QuantizeRequest},
     resize::PreparedResize,
+    stages::{ImageStage, IndexedMetadata, Metadata},
 };
 use crate::{
     image::ImageDimensions,
     prod::{
         contract::{
-            cache::Identity,
+            cache::{source_identity, Identity},
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             lifecycle::{MAX_CACHE_BYTES, MAX_CACHE_ENTRIES},
-            request::Output,
+            request::{Output, Source},
         },
         quantize::PreparedQuantizer,
         resize::common::allocation::CapacityBudget,
@@ -26,6 +27,7 @@ use crate::{
 enum Value {
     Palette(Vec<PreparedQuantizer>),
     Resize(Vec<PreparedResize>),
+    Image(Vec<ImageStage>),
 }
 
 struct Entry {
@@ -44,6 +46,9 @@ impl Entry {
             Value::Resize(value) => {
                 value[0].capacity_bytes()
                     + value.capacity() as u64 * size_of::<PreparedResize>() as u64
+            }
+            Value::Image(value) => {
+                value[0].capacity_bytes() + value.capacity() as u64 * size_of::<ImageStage>() as u64
             }
         }
     }
@@ -98,6 +103,8 @@ pub(super) struct Store {
     clock: u64,
     hits: u64,
     misses: u64,
+    image_hits: u64,
+    image_misses: u64,
 }
 
 impl Default for Store {
@@ -108,6 +115,8 @@ impl Default for Store {
             clock: 0,
             hits: 0,
             misses: 0,
+            image_hits: 0,
+            image_misses: 0,
         }
     }
 }
@@ -121,6 +130,30 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
+    #[cfg(test)]
+    pub(super) fn image_stats(&self) -> (usize, u64, u64) {
+        (
+            self.entries
+                .iter()
+                .flatten()
+                .filter(|entry| matches!(entry.value, Value::Image(_)))
+                .count(),
+            self.image_hits,
+            self.image_misses,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn evict_preparation(&mut self) {
+        for entry in &mut self.entries {
+            if entry
+                .as_ref()
+                .is_some_and(|entry| !matches!(entry.value, Value::Image(_)))
+            {
+                *entry = None;
+            }
+        }
+    }
     #[cfg(test)]
     pub(super) fn stats(&self) -> (usize, u64, u64, u64, u64) {
         (
@@ -212,10 +245,21 @@ impl Store {
             > cap
             || self.entries.iter().all(Option::is_some)
         {
+            if entry.used != 0
+                && self
+                    .entries
+                    .iter()
+                    .flatten()
+                    .all(|stored| entry.used < stored.used)
+            {
+                return;
+            }
             self.evict();
         }
-        self.clock += 1;
-        entry.used = self.clock;
+        if entry.used == 0 {
+            self.clock += 1;
+            entry.used = self.clock;
+        }
         *self.entries.iter_mut().find(|slot| slot.is_none()).unwrap() = Some(entry);
     }
 }
@@ -232,9 +276,12 @@ pub(super) struct Call<'a> {
     resize: Option<Entry>,
     palette_hit: bool,
     resize_hit: bool,
+    images: [Option<Entry>; 3],
+    image_hits: [bool; 3],
     pub scratch: Scratch,
     success: bool,
     limit: u64,
+    overhead: u64,
 }
 
 impl<'a> Call<'a> {
@@ -255,6 +302,64 @@ impl<'a> Call<'a> {
         peak: &mut u64,
         allocator: &mut A,
     ) -> Result<Self, Failure> {
+        let mut call = Self {
+            palette_hit: false,
+            resize_hit: false,
+            palette: None,
+            resize: None,
+            images: std::array::from_fn(|_| None),
+            image_hits: [false; 3],
+            scratch: std::mem::take(&mut store.scratch),
+            store,
+            success: false,
+            limit,
+            overhead,
+        };
+        call.prepare(palette, resize, lengths, diffusion_len, peak, allocator)?;
+        Ok(call)
+    }
+
+    /// Reserve only the owned input snapshot before content-key lookup.
+    pub(super) fn snapshot<A: Allocator>(
+        store: &'a mut Store,
+        source_len: usize,
+        overhead: u64,
+        limit: u64,
+        peak: &mut u64,
+        allocator: &mut A,
+    ) -> Result<Self, Failure> {
+        Self::new(
+            store,
+            None,
+            None,
+            [source_len, 0, 0, 0],
+            0,
+            overhead,
+            limit,
+            peak,
+            allocator,
+        )
+    }
+
+    /// After source hashing and available image hits, reserve the remaining execution.
+    pub(super) fn prepare<A: Allocator>(
+        &mut self,
+        palette: Option<QuantizeRequest<'_>>,
+        resize: Option<ResizePreparation>,
+        lengths: [usize; 4],
+        diffusion_len: usize,
+        peak: &mut u64,
+        allocator: &mut A,
+    ) -> Result<(), Failure> {
+        let call = self;
+        let limit = call.limit;
+        let overhead = call.overhead
+            + call
+                .images
+                .iter()
+                .flatten()
+                .map(Entry::capacity)
+                .sum::<u64>();
         let palette_key = palette
             .map(|request| identity::palette(request.palette, request.alpha, request.matching))
             .transpose()?;
@@ -267,18 +372,10 @@ impl<'a> Call<'a> {
                 )
             })
             .transpose()?;
-        let palette_entry = palette_key.and_then(|key| store.take(key));
-        let resize_entry = resize_key.and_then(|key| store.take(key));
-        let mut call = Self {
-            palette_hit: palette_entry.is_some(),
-            resize_hit: resize_entry.is_some(),
-            palette: palette_entry,
-            resize: resize_entry,
-            scratch: std::mem::take(&mut store.scratch),
-            store,
-            success: false,
-            limit,
-        };
+        call.palette = palette_key.and_then(|key| call.store.take(key));
+        call.resize = resize_key.and_then(|key| call.store.take(key));
+        call.palette_hit = call.palette.is_some();
+        call.resize_hit = call.resize.is_some();
         let palette_required = palette
             .map(|request| {
                 PreparedQuantizer::required_capacity_bytes(
@@ -321,13 +418,20 @@ impl<'a> Call<'a> {
                     * size_of::<[f32; 3]>() as u64)
         };
         // These buffers were idle on entry. Release excess capacity before evicting any plan.
-        if planned(&call)? + call.store.capacity() > limit {
-            call.scratch = Scratch::default();
+        if planned(call)? + call.store.capacity() > limit {
+            // The first buffer may already hold the hashed input snapshot.
+            for buffer in &mut call.scratch.buffers[1..] {
+                *buffer = Vec::new();
+            }
+            call.scratch.diffusion = Vec::new();
+            if call.scratch.buffers[0].is_empty() {
+                call.scratch.buffers[0] = Vec::new();
+            }
             if let Some(entry) = &mut call.resize {
                 entry.drop_scratch();
             }
         }
-        call.store.room(planned(&call)?, limit)?;
+        call.store.room(planned(call)?, limit)?;
         let buffers_required = lengths
             .iter()
             .zip(&call.scratch.buffers)
@@ -400,7 +504,6 @@ impl<'a> Call<'a> {
         let mut actual = owned;
         for (buffer, length) in call.scratch.buffers.iter_mut().zip(lengths) {
             let planned_capacity = length.max(buffer.capacity()) as u64;
-            buffer.clear();
             if buffer.capacity() < length {
                 *buffer = Vec::new();
                 allocator.reserve(buffer, length)?;
@@ -423,7 +526,7 @@ impl<'a> Call<'a> {
             return Err(memory_limit());
         }
         call.scratch.diffusion.resize(diffusion_len, [0.0; 3]);
-        Ok(call)
+        Ok(())
     }
 
     pub(super) fn parts(
@@ -442,6 +545,235 @@ impl<'a> Call<'a> {
             _ => unreachable!(),
         });
         (palette, resize, &mut self.scratch)
+    }
+
+    pub(super) fn image_parts(
+        &mut self,
+    ) -> (
+        Option<&PreparedQuantizer>,
+        Option<&mut PreparedResize>,
+        [Option<&ImageStage>; 3],
+        &mut Scratch,
+    ) {
+        let palette = self.palette.as_ref().map(|entry| match &entry.value {
+            Value::Palette(value) => &value[0],
+            _ => unreachable!(),
+        });
+        let resize = self.resize.as_mut().map(|entry| match &mut entry.value {
+            Value::Resize(value) => &mut value[0],
+            _ => unreachable!(),
+        });
+        let images = self.images.each_ref().map(|entry| {
+            entry.as_ref().map(|entry| match &entry.value {
+                Value::Image(value) => &value[0],
+                _ => unreachable!(),
+            })
+        });
+        (palette, resize, images, &mut self.scratch)
+    }
+
+    pub(super) fn content(
+        &self,
+        slot: usize,
+        buffer: usize,
+        dimensions: ImageDimensions,
+    ) -> Identity {
+        if let Some(image) = self.image(slot) {
+            let Metadata::Rgba { content } = image.metadata else {
+                unreachable!()
+            };
+            return content;
+        }
+        source_identity(Source {
+            width: dimensions.width(),
+            height: dimensions.height(),
+            data: &self.scratch.buffers[buffer],
+        })
+    }
+
+    pub(super) fn retain_rgba(
+        &mut self,
+        slot: usize,
+        key: Identity,
+        buffer: usize,
+        dimensions: ImageDimensions,
+        content: Identity,
+        peak: &mut u64,
+    ) {
+        if self.image(slot).is_some() {
+            return;
+        }
+        let image = ImageStage {
+            dimensions,
+            bytes: std::mem::take(&mut self.scratch.buffers[buffer]),
+            metadata: Metadata::Rgba { content },
+        };
+        if let Err(image) = self.stage_image(slot, key, image, peak) {
+            self.scratch.buffers[buffer] = image.bytes;
+        }
+    }
+
+    /// Reserve optional durable metadata before final output construction. A retention
+    /// budget/allocation miss keeps the completed work and its prepared metadata usable.
+    pub(super) fn retain_indexed(
+        &mut self,
+        key: Identity,
+        buffer: usize,
+        dimensions: ImageDimensions,
+        peak: &mut u64,
+    ) {
+        if self.image(2).is_some() {
+            return;
+        }
+        let Value::Palette(prepared) = &self.palette.as_ref().expect("requested palette").value
+        else {
+            unreachable!()
+        };
+        let palette = prepared[0].palette();
+        let needed = IndexedMetadata::required_bytes(&palette.palette, &palette.warnings);
+        let retained = needed
+            + self.scratch.buffers[buffer].capacity() as u64
+            + size_of::<ImageStage>() as u64
+            + size_of::<Entry>() as u64;
+        if retained > MAX_CACHE_BYTES.min(self.limit / 4) {
+            return;
+        }
+        let owned = self.active_capacity();
+        if self
+            .store
+            .room(owned + needed + size_of::<ImageStage>() as u64, self.limit)
+            .is_err()
+        {
+            return;
+        }
+        let Value::Palette(prepared) = &self.palette.as_ref().unwrap().value else {
+            unreachable!()
+        };
+        let palette = prepared[0].palette();
+        let budget = self.limit - owned - self.store.capacity() - size_of::<ImageStage>() as u64;
+        let Ok(metadata) = IndexedMetadata::try_copy(&palette.palette, &palette.warnings, budget)
+        else {
+            return;
+        };
+        *peak = (*peak).max(owned + self.store.capacity() + metadata.capacity_bytes());
+        let image = ImageStage {
+            dimensions,
+            bytes: std::mem::take(&mut self.scratch.buffers[buffer]),
+            metadata: Metadata::Indexed(metadata),
+        };
+        if let Err(image) = self.stage_image(2, key, image, peak) {
+            self.scratch.buffers[buffer] = image.bytes;
+        }
+    }
+
+    pub(super) fn indexed_result(&self, buffer: usize) -> (&[u8], IndexedMetadataRef<'_>) {
+        if let Some(image) = self.image(2) {
+            let Metadata::Indexed(metadata) = &image.metadata else {
+                unreachable!()
+            };
+            return (
+                &image.bytes,
+                IndexedMetadataRef {
+                    palette: &metadata.palette,
+                    warnings: &metadata.warnings,
+                },
+            );
+        }
+        let Value::Palette(prepared) = &self.palette.as_ref().expect("requested palette").value
+        else {
+            unreachable!()
+        };
+        (&self.scratch.buffers[buffer], prepared[0].palette().into())
+    }
+
+    fn active_capacity(&self) -> u64 {
+        self.overhead
+            + self.scratch.capacity()
+            + self.palette.as_ref().map_or(0, Entry::capacity)
+            + self.resize.as_ref().map_or(0, Entry::capacity)
+            + self
+                .images
+                .iter()
+                .flatten()
+                .map(Entry::capacity)
+                .sum::<u64>()
+    }
+
+    /// Pin a published materialized stage. Pending candidates are never lookup sources.
+    pub(super) fn take_image(&mut self, slot: usize, key: Identity) -> bool {
+        assert!(self.images[slot].is_none());
+        self.images[slot] = self.store.take(key);
+        self.image_hits[slot] = self.images[slot].is_some();
+        if self.image_hits[slot] {
+            self.store.image_hits += 1;
+        } else {
+            self.store.image_misses += 1;
+        }
+        self.image_hits[slot]
+    }
+
+    pub(super) fn image(&self, slot: usize) -> Option<&ImageStage> {
+        self.images[slot].as_ref().map(|entry| match &entry.value {
+            Value::Image(value) => &value[0],
+            _ => unreachable!("typed image-stage identity"),
+        })
+    }
+
+    /// Transfer completed work without copying its pixels. Optional retention returns
+    /// the original owner unchanged when either cap or the record reservation prevents it.
+    pub(super) fn stage_image(
+        &mut self,
+        slot: usize,
+        key: Identity,
+        image: ImageStage,
+        peak: &mut u64,
+    ) -> Result<(), ImageStage> {
+        assert!(self.images[slot].is_none());
+        if self
+            .images
+            .iter()
+            .chain(self.store.entries.iter())
+            .flatten()
+            .any(|entry| entry.key == key)
+        {
+            return Err(image);
+        }
+        let required = image.capacity_bytes() + size_of::<ImageStage>() as u64;
+        let retained = required + size_of::<Entry>() as u64;
+        if retained > MAX_CACHE_BYTES.min(self.limit / 4) {
+            return Err(image);
+        }
+        let owned = self.active_capacity() + image.capacity_bytes();
+        if self
+            .store
+            .room(owned + size_of::<ImageStage>() as u64, self.limit)
+            .is_err()
+        {
+            return Err(image);
+        }
+        let budget = self.limit - owned - self.store.capacity();
+        let Ok(mut record) = CapacityBudget::new(budget).vector::<ImageStage>(1) else {
+            return Err(image);
+        };
+        if image.capacity_bytes()
+            + record.capacity() as u64 * size_of::<ImageStage>() as u64
+            + size_of::<Entry>() as u64
+            > MAX_CACHE_BYTES.min(self.limit / 4)
+        {
+            return Err(image);
+        }
+        *peak = (*peak).max(
+            owned
+                + self.store.capacity()
+                + record.capacity() as u64 * size_of::<ImageStage>() as u64,
+        );
+        record.push(image);
+        self.images[slot] = Some(Entry {
+            key,
+            used: 0,
+            value: Value::Image(record),
+        });
+        Ok(())
     }
 
     pub(super) fn finish<T>(mut self, result: Result<T, Failure>) -> Result<T, Failure> {
@@ -470,6 +802,13 @@ impl Drop for Call<'_> {
                 }
             }
         }
+        for (entry, hit) in self.images.iter_mut().zip(self.image_hits) {
+            if let Some(entry) = entry.take() {
+                if self.success || hit {
+                    self.store.publish(entry, self.limit);
+                }
+            }
+        }
         if self.success {
             for buffer in &mut self.scratch.buffers {
                 buffer.clear();
@@ -484,11 +823,251 @@ fn memory_limit() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
 }
 
+pub(super) fn source_key(bytes: &[u8], dimensions: ImageDimensions) -> Identity {
+    source_identity(Source {
+        width: dimensions.width(),
+        height: dimensions.height(),
+        data: bytes,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::prod::contract::request::{Anchor, ResizePolicy};
     use crate::prod::pipeline::processor::SystemAllocator;
+    use crate::prod::pipeline::stages::Metadata;
+
+    fn image_call(store: &mut Store, length: usize, limit: u64) -> Call<'_> {
+        Call::new(
+            store,
+            None,
+            None,
+            [4, length, length, 0],
+            0,
+            size_of::<Store>() as u64 + Call::record_bytes(),
+            limit,
+            &mut 0,
+            &mut SystemAllocator,
+        )
+        .unwrap()
+    }
+
+    fn candidate(call: &mut Call<'_>, buffer: usize, byte: u8) -> ImageStage {
+        let mut bytes = std::mem::take(&mut call.scratch.buffers[buffer]);
+        bytes.fill(byte);
+        ImageStage {
+            dimensions: ImageDimensions::new((bytes.len() / 4) as u32, 1).unwrap(),
+            bytes,
+            metadata: Metadata::Rgba {
+                content: Identity([byte; 32]),
+            },
+        }
+    }
+
+    #[test]
+    fn two_pending_images_publish_only_after_success_and_hits_remain_pinned() {
+        let mut store = Store::default();
+        let limit = 1 << 20;
+        for success in [false, true] {
+            let mut call = image_call(&mut store, 16, limit);
+            for slot in 0..2 {
+                let before = call.active_capacity();
+                let image = candidate(&mut call, slot + 1, slot as u8 + 1);
+                assert!(call
+                    .stage_image(slot, Identity([slot as u8; 32]), image, &mut 0)
+                    .is_ok());
+                assert_eq!(
+                    call.active_capacity(),
+                    before + size_of::<ImageStage>() as u64
+                );
+            }
+            assert!(call.store.entries.iter().all(Option::is_none));
+            let result = if success { Ok(()) } else { Err(memory_limit()) };
+            assert_eq!(call.finish(result).is_ok(), success);
+            assert_eq!(store.stats().0, if success { 2 } else { 0 });
+        }
+        let mut call = image_call(&mut store, 0, limit);
+        assert!(call.take_image(0, Identity([0; 32])));
+        let image = call.image(0).unwrap();
+        assert_eq!(image.bytes, [1; 16]);
+        assert_eq!(image.dimensions.width(), 4);
+        assert!(matches!(
+            image.metadata,
+            Metadata::Rgba {
+                content: Identity([1, ..])
+            }
+        ));
+        call.store.room(limit, limit).unwrap();
+        assert_eq!(call.store.stats().0, 0);
+        assert_eq!(call.image(0).unwrap().bytes, [1; 16]);
+        assert!(call.finish::<()>(Err(memory_limit())).is_err());
+        assert_eq!(store.stats().0, 1);
+    }
+
+    #[test]
+    fn oversized_image_keeps_its_owner_and_success_does_not_publish_it() {
+        let mut store = Store::default();
+        let limit = 64 * 1024;
+        let mut call = image_call(&mut store, 18 * 1024, limit);
+        let image = candidate(&mut call, 1, 7);
+        let returned = call
+            .stage_image(0, Identity([3; 32]), image, &mut 0)
+            .err()
+            .unwrap();
+        assert_eq!(returned.bytes, vec![7; 18 * 1024]);
+        call.finish(Ok(())).unwrap();
+        assert_eq!(store.stats().0, 0);
+    }
+
+    #[test]
+    fn image_and_preparation_entries_share_count_byte_caps_and_lru() {
+        let mut store = Store::default();
+        let limit = 1 << 20;
+        prepare(&mut store, 17, limit);
+        let preparation_key = store.entries.iter().flatten().next().unwrap().key;
+        for byte in 0..MAX_CACHE_ENTRIES as u8 {
+            let mut call = image_call(&mut store, 4, limit);
+            let image = candidate(&mut call, 1, byte);
+            assert!(call
+                .stage_image(0, Identity([byte; 32]), image, &mut 0)
+                .is_ok());
+            call.finish(Ok(())).unwrap();
+            assert!(store.stats().3 <= limit / 4);
+        }
+        assert_eq!(store.stats().0, MAX_CACHE_ENTRIES);
+        assert!(!store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == preparation_key));
+        let mut call = image_call(&mut store, 4, limit);
+        assert!(call.take_image(0, Identity([0; 32])));
+        let image = candidate(&mut call, 1, 200);
+        assert!(call
+            .stage_image(1, Identity([200; 32]), image, &mut 0)
+            .is_ok());
+        call.finish(Ok(())).unwrap();
+        assert!(store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == Identity([0; 32])));
+        assert!(!store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == Identity([1; 32])));
+        let cap = store.stats().3 - 1;
+        let mut call = image_call(&mut store, 4, cap * 4);
+        let image = candidate(&mut call, 1, 201);
+        assert!(call
+            .stage_image(0, Identity([201; 32]), image, &mut 0)
+            .is_ok());
+        call.finish(Ok(())).unwrap();
+        assert!(store.stats().3 <= cap);
+    }
+
+    #[test]
+    fn publication_preserves_lookup_recency_across_entry_kinds() {
+        for success in [true, false] {
+            let mut store = Store::default();
+            let limit = 1 << 20;
+            prepare(&mut store, 17, limit);
+            let preparation_key = store.entries.iter().flatten().next().unwrap().key;
+            let image_key = Identity([5; 32]);
+            let mut call = image_call(&mut store, 4, limit);
+            let image = candidate(&mut call, 1, 5);
+            assert!(call.stage_image(0, image_key, image, &mut 0).is_ok());
+            call.finish(Ok(())).unwrap();
+            let mut call = image_call(&mut store, 0, limit);
+            assert!(call.take_image(0, image_key));
+            call.resize = call.store.take(preparation_key);
+            call.resize_hit = true;
+            assert_eq!(
+                call.finish(if success { Ok(()) } else { Err(memory_limit()) })
+                    .is_ok(),
+                success
+            );
+            store.scratch = Scratch::default();
+            for entry in store.entries.iter_mut().flatten() {
+                entry.drop_scratch();
+            }
+            store.room(limit - store.capacity() + 1, limit).unwrap();
+            assert!(store
+                .entries
+                .iter()
+                .flatten()
+                .any(|entry| entry.key == preparation_key));
+            assert!(!store
+                .entries
+                .iter()
+                .flatten()
+                .any(|entry| entry.key == image_key));
+        }
+    }
+
+    #[test]
+    fn publication_drops_an_older_incoming_hit_before_a_newer_preparation() {
+        use crate::{
+            image::contracts::PaletteEntry,
+            prod::contract::request::{AlphaPolicy, MatchPolicy},
+        };
+        let mut store = Store::default();
+        let limit = 64 * 1024;
+        let image_key = Identity([7; 32]);
+        let mut call = image_call(&mut store, 16_000, limit);
+        let image = candidate(&mut call, 1, 7);
+        assert!(call.stage_image(0, image_key, image, &mut 0).is_ok());
+        call.finish(Ok(())).unwrap();
+        let mut call = Call::snapshot(
+            &mut store,
+            4,
+            size_of::<Store>() as u64 + Call::record_bytes(),
+            limit,
+            &mut 0,
+            &mut SystemAllocator,
+        )
+        .unwrap();
+        assert!(call.take_image(0, image_key));
+        let palette = [
+            PaletteEntry::Color { rgb: [0; 3] },
+            PaletteEntry::Color { rgb: [255; 3] },
+        ];
+        call.prepare(
+            Some(QuantizeRequest {
+                source_width: 1,
+                source_height: 1,
+                palette: &palette,
+                alpha: AlphaPolicy::Premultiplied {},
+                matching: MatchPolicy::SrgbEuclidean,
+            }),
+            None,
+            [4, 0, 0, 0],
+            0,
+            &mut 0,
+            &mut SystemAllocator,
+        )
+        .unwrap();
+        let prepared = call.palette.as_ref().unwrap();
+        let preparation_key = prepared.key;
+        let image_bytes = call.images[0].as_ref().unwrap().retained();
+        let preparation_bytes = prepared.retained();
+        assert!(image_bytes.max(preparation_bytes) <= limit / 4);
+        assert!(image_bytes + preparation_bytes > limit / 4);
+        assert!(call.active_capacity() + call.store.capacity() <= limit);
+        call.finish(Ok(())).unwrap();
+        assert!(store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == preparation_key));
+        assert!(!store
+            .entries
+            .iter()
+            .flatten()
+            .any(|entry| entry.key == image_key));
+    }
 
     fn prepare(store: &mut Store, width: u32, limit: u64) {
         let source = ImageDimensions::new(31, 9).unwrap();

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { extname, join, relative } from 'node:path';
+import { extname, join, relative, resolve as resolvePath } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -15,6 +16,7 @@ import { processBrowserChecks } from './process-browser-fixture.mjs';
 import { yiluomaBrowserChecks } from './yiluoma-browser-fixture.mjs';
 import { yiluomaBenchmarkChecks } from './yiluoma-benchmark-fixture.mjs';
 import { prepareYliluomaOracle, yiluomaOracleChecks } from './yiluoma-oracle-fixture.mjs';
+import { stageCacheBrowserChecks } from './stage-cache-browser-fixture.mjs';
 
 test('installed tarball loads only scalar assets and runs the public contract in browser engines', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-tarball-'));
@@ -29,8 +31,17 @@ test('installed tarball loads only scalar assets and runs the public contract in
 		await readFile(new URL('./fixtures/yiluoma-wasm.json', import.meta.url))
 	);
 	const manifest = JSON.parse(await readFile(join(packageDirectory, 'package.json'), 'utf8'));
-	const tarball = join(directory, `ditherette-${manifest.version}.tgz`);
-	execFileSync('pnpm', ['pack', '--out', tarball], { cwd: packageDirectory, stdio: 'pipe' });
+	const tarball = process.env.DITHERETTE_TEST_TARBALL
+		? resolvePath(process.env.DITHERETTE_TEST_TARBALL)
+		: join(directory, `ditherette-${manifest.version}.tgz`);
+	if (!process.env.DITHERETTE_TEST_TARBALL)
+		execFileSync('pnpm', ['pack', '--out', tarball], { cwd: packageDirectory, stdio: 'pipe' });
+	const digest = createHash('sha256')
+		.update(await readFile(tarball))
+		.digest('hex');
+	if (process.env.DITHERETTE_TEST_TARBALL_SHA256)
+		assert.equal(digest, process.env.DITHERETTE_TEST_TARBALL_SHA256);
+	t.diagnostic(`Installed tarball SHA-256 ${digest}`);
 	const files = execFileSync('tar', ['-tzf', tarball], { encoding: 'utf8' }).trim().split('\n');
 	for (const file of [
 		'package/dist/index.js',
@@ -81,9 +92,11 @@ test('installed tarball loads only scalar assets and runs the public contract in
 		const pathname = new URL(request.url, 'http://localhost').pathname;
 		requests.push(pathname);
 		if (
-			['/benchmark/benchmark-public-page.mjs', '/benchmark/benchmark-public-timing.mjs'].includes(
-				pathname
-			)
+			[
+				'/benchmark/benchmark-public-page.mjs',
+				'/benchmark/benchmark-public-timing.mjs',
+				'/benchmark/benchmark-stage-cache.mjs'
+			].includes(pathname)
 		) {
 			response.writeHead(200, { 'Content-Type': 'text/javascript' });
 			response.end(
@@ -169,6 +182,19 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					customInputs: 8,
 					scalarWithoutIsolation: true
 				});
+				assert.deepEqual(
+					await page.evaluate(stageCacheBrowserChecks, {
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`,
+						vectors
+					}),
+					{
+						methods: 5,
+						compositions: 18,
+						settingsChanges: 4,
+						caughtCopies: 1,
+						isolatedInstances: 2
+					}
+				);
 				assert.ok(
 					requests.every((path) => !path.includes('/threads/')),
 					'scalar never loads threaded artifacts'

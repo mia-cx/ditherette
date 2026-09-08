@@ -9,7 +9,7 @@ use ditherette_wasm::{
             failure::{ErrorPath, Failure},
             request::{AlphaPolicy, MatchPolicy},
         },
-        palette::PreparedPalette,
+        pipeline::quantize::IndexedMetadataRef,
         pipeline::{
             processor::{Allocator, Processor},
             quantize::{QuantizeBoundary, QuantizeRequest},
@@ -44,7 +44,7 @@ impl QuantizeBoundary for Boundary<'_> {
         &mut self,
         indices: &[u8],
         dimensions: ImageDimensions,
-        palette: &PreparedPalette,
+        palette: IndexedMetadataRef<'_>,
     ) -> Result<IndexedImage, Failure> {
         if self.fail_complete {
             return Err(Failure::new(
@@ -56,7 +56,7 @@ impl QuantizeBoundary for Boundary<'_> {
             indices: ImageBuf::<PaletteIndex8>::from_vec_packed(indices.to_vec(), dimensions)
                 .unwrap(),
             palette: palette.palette.clone(),
-            warnings: palette.warnings.clone(),
+            warnings: palette.warnings.to_vec(),
         })
     }
 }
@@ -130,14 +130,18 @@ fn five_spaces_and_alpha_policies_match_complete_frozen_results() {
 }
 
 #[test]
-fn exact_capacity_succeeds_one_under_fails_before_copy_and_instance_recovers() {
+fn mandatory_capacity_succeeds_one_under_stops_after_snapshot_and_recovers() {
     let source = [255, 2, 3, 128, 17, 31, 53, 0];
     let palette = [PaletteEntry::Color { rgb: [0, 0, 0] }; 257];
     let mut processor = Processor::new(1 << 20, 0).unwrap();
     let expected = processor
         .quantize(request(&palette), &mut boundary(&source))
         .unwrap();
-    let capacity = processor.peak_capacity_bytes();
+    let capacity = budget_support::minimum(processor.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| processor.quantize(request(&palette), &mut boundary(&source)))
+            .is_ok()
+    });
     let mut exact = Processor::new(capacity, 0).unwrap();
     assert_eq!(
         exact
@@ -154,7 +158,7 @@ fn exact_capacity_succeeds_one_under_fails_before_copy_and_instance_recovers() {
             .code,
         ErrorCode::MemoryLimit
     );
-    assert_eq!(input.copies, 0);
+    assert_eq!(input.copies, 1);
     for (fail_copy, fail_complete) in [(true, false), (false, true)] {
         let mut input = Boundary {
             fail_copy,
@@ -186,7 +190,7 @@ fn exact_capacity_succeeds_one_under_fails_before_copy_and_instance_recovers() {
 }
 
 #[test]
-fn source_and_index_reservation_failures_never_import_input_or_publish_output() {
+fn source_and_index_reservation_failures_respect_snapshot_and_never_publish() {
     struct FailAt {
         remaining: usize,
     }
@@ -214,7 +218,9 @@ fn source_and_index_reservation_failures_never_import_input_or_publish_output() 
                 .code,
             ErrorCode::WasmMemoryUnavailable
         );
-        assert_eq!(input.copies, 0);
+        assert_eq!(input.copies, usize::from(remaining > 0));
         processor.quantize(request(&palette), &mut input).unwrap();
     }
 }
+#[path = "support/budget.rs"]
+mod budget_support;

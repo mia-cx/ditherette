@@ -2,12 +2,15 @@
 
 use super::processor::{dimensions, Allocator};
 use crate::{
-    image::{contracts::PaletteEntry, ImageDimensions, ImageView, ImageViewMut, Rgba8},
+    image::{
+        contracts::{NormalizedPalette, PaletteEntry, ProcessWarning},
+        ImageDimensions, Rgba8,
+    },
     prod::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
-            request::{AlphaPolicy, BayerSize, DitherPolicy, MatchPolicy, PerturbPolicy},
+            request::{AlphaPolicy, DitherPolicy, MatchPolicy, PerturbPolicy},
         },
         palette::{PreparationError, PreparedPalette},
         quantize::PreparedQuantizer,
@@ -24,6 +27,22 @@ pub struct QuantizeRequest<'a> {
     pub matching: MatchPolicy,
 }
 
+/// Borrowed result metadata independent of the prepared matching implementation.
+#[derive(Clone, Copy)]
+pub struct IndexedMetadataRef<'a> {
+    pub palette: &'a NormalizedPalette,
+    pub warnings: &'a [ProcessWarning],
+}
+
+impl<'a> From<&'a PreparedPalette> for IndexedMetadataRef<'a> {
+    fn from(value: &'a PreparedPalette) -> Self {
+        Self {
+            palette: &value.palette,
+            warnings: &value.warnings,
+        }
+    }
+}
+
 /// Every external read/copy/result construction is caught by the private Wasm adapter.
 pub trait QuantizeBoundary {
     type Output;
@@ -37,7 +56,7 @@ pub trait QuantizeBoundary {
         &mut self,
         indices: &[u8],
         dimensions: ImageDimensions,
-        palette: &PreparedPalette,
+        palette: IndexedMetadataRef<'_>,
     ) -> Result<Self::Output, Failure>;
 }
 
@@ -89,11 +108,10 @@ pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
     peak: &mut u64,
     store: &mut super::preparation::Store,
 ) -> Result<B::Output, Failure> {
-    let perturb = match dither {
-        DitherPolicy::None {} => None,
+    match dither {
+        DitherPolicy::None {} => {}
         DitherPolicy::Separable { perturb } => {
             super::perturb::validate(perturb)?;
-            Some(perturb)
         }
         DitherPolicy::Yliluoma { placement, .. } => {
             super::perturb::validate_placement(placement).map_err(|error| {
@@ -107,7 +125,6 @@ pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
                     },
                 )
             })?;
-            None
         }
         _ => {
             return Err(Failure::new(
@@ -123,53 +140,12 @@ pub(super) fn run_with_dither<B: QuantizeBoundary, A: Allocator>(
     if boundary.input_len()? != source_len {
         return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
     }
-    let output_len = source_len / 4;
     PreparedQuantizer::required_capacity_bytes(request.palette, request.alpha, request.matching)
         .map_err(preparation_failure)?;
-    let intermediate_len = if perturb.is_some() { source_len } else { 0 };
-    let mut call = super::preparation::Call::new(
+    super::indexed::run(
+        request, dimensions, dimensions, None, dither, boundary, allocator, limit, overhead, peak,
         store,
-        Some(request),
-        None,
-        [source_len, output_len, intermediate_len, 0],
-        0,
-        overhead,
-        limit,
-        peak,
-        allocator,
-    )?;
-    let (prepared, _, scratch) = call.parts();
-    let prepared = prepared.expect("requested palette");
-    let [source, indices, intermediate, _] = &mut scratch.buffers;
-    boundary.copy_input(source)?;
-    let source = ImageView::<Rgba8>::packed(source, dimensions)
-        .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-    let quantize_source = if let Some(policy) = perturb {
-        super::perturb::execute(
-            source,
-            ImageViewMut::packed(intermediate, dimensions).expect("reserved intermediate storage"),
-            policy,
-        );
-        ImageView::packed(intermediate, dimensions).expect("complete RGBA8 intermediate")
-    } else {
-        source
-    };
-    if let DitherPolicy::Yliluoma { size, placement } = dither {
-        use crate::prod::dither::ordered::BayerSize as Matrix;
-        let size = match size {
-            BayerSize::Two => Matrix::Two,
-            BayerSize::Four => Matrix::Four,
-            BayerSize::Eight => Matrix::Eight,
-            BayerSize::Sixteen => Matrix::Sixteen,
-        };
-        crate::prod::dither::yiluoma::dither_yiluoma_into(
-            source, prepared, indices, size, placement,
-        );
-    } else {
-        prepared.quantize_into(quantize_source, indices);
-    }
-    let result = boundary.complete(indices, dimensions, prepared.palette());
-    call.finish(result)
+    )
 }
 
 pub(super) fn preparation_failure(error: PreparationError) -> Failure {

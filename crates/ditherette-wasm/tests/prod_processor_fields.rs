@@ -12,7 +12,7 @@ use ditherette_wasm::{
                 WorkingSpace,
             },
         },
-        palette::PreparedPalette,
+        pipeline::quantize::IndexedMetadataRef,
         pipeline::{
             perturb::PerturbRequest,
             processor::{Allocator, Boundary as RgbaBoundary, Processor},
@@ -95,14 +95,14 @@ impl QuantizeBoundary for Boundary {
         &mut self,
         indices: &[u8],
         dimensions: ImageDimensions,
-        palette: &PreparedPalette,
+        palette: IndexedMetadataRef<'_>,
     ) -> Result<IndexedImage, Failure> {
         self.finish()?;
         Ok(IndexedImage {
             indices: ImageBuf::<PaletteIndex8>::from_vec_packed(indices.to_vec(), dimensions)
                 .unwrap(),
             palette: palette.palette.clone(),
-            warnings: palette.warnings.clone(),
+            warnings: palette.warnings.to_vec(),
         })
     }
 }
@@ -242,7 +242,7 @@ fn bounded_calls_match_frozen_bytes_and_complete_separable_results() {
 fn exact_capacity_one_under_and_caught_failure_recovery_cover_both_result_shapes() {
     let mut probe = Processor::new(1 << 20, 0).unwrap();
     let rgba = probe.perturb(request(), &mut Boundary::new()).unwrap();
-    let rgba_capacity = probe.peak_capacity_bytes();
+    let rgba_capacity = minimum_capacity(false, probe.peak_capacity_bytes());
     let mut probe = Processor::new(1 << 20, 0).unwrap();
     let indexed = probe
         .dither_and_quantize(
@@ -251,7 +251,7 @@ fn exact_capacity_one_under_and_caught_failure_recovery_cover_both_result_shapes
             &mut Boundary::new(),
         )
         .unwrap();
-    let indexed_capacity = probe.peak_capacity_bytes();
+    let indexed_capacity = minimum_capacity(true, probe.peak_capacity_bytes());
     for (fused, capacity) in [(false, rgba_capacity), (true, indexed_capacity)] {
         let mut exact = Processor::new(capacity, 0).unwrap();
         let mut under = Processor::new(capacity - 1, 0).unwrap();
@@ -268,7 +268,7 @@ fn exact_capacity_one_under_and_caught_failure_recovery_cover_both_result_shapes
             under.perturb(request(), &mut boundary).unwrap_err()
         };
         assert_eq!(error.code, ErrorCode::MemoryLimit);
-        assert_eq!((boundary.copies, boundary.completions), (0, 0));
+        assert_eq!((boundary.copies, boundary.completions), (1, 0));
         for (fail_copy, fail_complete) in [(true, false), (false, true)] {
             let mut boundary = Boundary {
                 fail_copy,
@@ -325,6 +325,28 @@ fn exact_capacity_one_under_and_caught_failure_recovery_cover_both_result_shapes
     }
 }
 
+fn minimum_capacity(fused: bool, upper: u64) -> u64 {
+    budget_support::minimum(upper, |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| {
+                if fused {
+                    processor
+                        .dither_and_quantize(
+                            quantize(),
+                            DitherPolicy::Separable { perturb: policy() },
+                            &mut Boundary::new(),
+                        )
+                        .map(|_| ())
+                } else {
+                    processor
+                        .perturb(request(), &mut Boundary::new())
+                        .map(|_| ())
+                }
+            })
+            .is_ok()
+    })
+}
+
 struct Allocation {
     fail_at: usize,
     calls: usize,
@@ -346,7 +368,7 @@ impl Allocator for Allocation {
 }
 
 #[test]
-fn every_buffer_reservation_failure_and_extra_capacity_fail_before_source_copy() {
+fn buffer_reservation_failures_respect_snapshot_and_extra_capacity_is_charged() {
     for fused in [false, true] {
         for fail_at in 0..if fused { 3 } else { 2 } {
             let mut processor = Processor::new(1 << 20, 0).unwrap();
@@ -371,7 +393,10 @@ fn every_buffer_reservation_failure_and_extra_capacity_fail_before_source_copy()
                     .unwrap_err()
             };
             assert_eq!(error.code, ErrorCode::WasmMemoryUnavailable);
-            assert_eq!((boundary.copies, boundary.completions), (0, 0));
+            assert_eq!(
+                (boundary.copies, boundary.completions),
+                (usize::from(fail_at > 0), 0)
+            );
             processor.perturb(request(), &mut Boundary::new()).unwrap();
         }
         let mut processor = Processor::new(1 << 20, 0).unwrap();
@@ -386,7 +411,8 @@ fn every_buffer_reservation_failure_and_extra_capacity_fail_before_source_copy()
         } else {
             processor.perturb(request(), &mut Boundary::new()).unwrap();
         }
-        let mut exact = Processor::new(processor.peak_capacity_bytes(), 0).unwrap();
+        let mut exact =
+            Processor::new(minimum_capacity(fused, processor.peak_capacity_bytes()), 0).unwrap();
         let mut allocator = Allocation {
             fail_at: usize::MAX,
             calls: 0,
@@ -408,7 +434,10 @@ fn every_buffer_reservation_failure_and_extra_capacity_fail_before_source_copy()
                 .unwrap_err()
         };
         assert_eq!(error.code, ErrorCode::MemoryLimit);
-        assert_eq!((boundary.copies, boundary.completions), (0, 0));
+        assert_eq!(
+            (boundary.copies, boundary.completions),
+            (usize::from(fused), 0)
+        );
     }
 }
 
@@ -544,7 +573,13 @@ fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer
     let expected = probe
         .dither_and_quantize(quantize(), dither, &mut Boundary::new())
         .unwrap();
-    let capacity = probe.peak_capacity_bytes();
+    let capacity = budget_support::minimum(probe.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| {
+                processor.dither_and_quantize(quantize(), dither, &mut Boundary::new())
+            })
+            .is_ok()
+    });
     let mut exact = Processor::new(capacity, 0).unwrap();
     assert_eq!(
         exact
@@ -568,7 +603,7 @@ fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer
     );
     assert_eq!(
         (boundary.copies, boundary.completions, allocator.calls),
-        (0, 0, 0)
+        (1, 0, 1)
     );
     for fail_at in [0, 1] {
         exact = Processor::new(capacity, 0).unwrap();
@@ -590,7 +625,10 @@ fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer
                 .code,
             ErrorCode::WasmMemoryUnavailable
         );
-        assert_eq!((boundary.copies, boundary.completions), (0, 0));
+        assert_eq!(
+            (boundary.copies, boundary.completions),
+            (usize::from(fail_at > 0), 0)
+        );
     }
     for (copy, complete) in [(true, false), (false, true)] {
         let mut boundary = Boundary::new();
@@ -668,3 +706,5 @@ fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer
         );
     }
 }
+#[path = "support/budget.rs"]
+mod budget_support;

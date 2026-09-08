@@ -5,7 +5,7 @@ use ditherette_wasm::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
         },
-        palette::PreparedPalette,
+        pipeline::quantize::IndexedMetadataRef,
         pipeline::{
             processor::{Allocator, Processor},
             quantize::{QuantizeBoundary, QuantizeRequest as ProcessorRequest},
@@ -62,7 +62,7 @@ impl QuantizeBoundary for Boundary<'_> {
         &mut self,
         indices: &[u8],
         dimensions: ImageDimensions,
-        palette: &PreparedPalette,
+        palette: IndexedMetadataRef<'_>,
     ) -> Result<IndexedImage, Failure> {
         self.completions += 1;
         if self.fail_complete {
@@ -74,7 +74,7 @@ impl QuantizeBoundary for Boundary<'_> {
         Ok(IndexedImage {
             indices: ImageBuf::from_vec_packed(indices.to_vec(), dimensions).unwrap(),
             palette: palette.palette.clone(),
-            warnings: palette.warnings.clone(),
+            warnings: palette.warnings.to_vec(),
         })
     }
 }
@@ -456,14 +456,18 @@ fn complete_call_preflights_capacity_and_recovers_without_publishing_failed_outp
     };
     let mut probe = Processor::new(1 << 20, 0).unwrap();
     let stable = run(&mut probe, &mut Boundary::new(&data)).unwrap();
-    let capacity = probe.peak_capacity_bytes();
+    let capacity = budget_support::minimum(probe.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| run(&mut processor, &mut Boundary::new(&data)))
+            .is_ok()
+    });
     let mut under = Processor::new(capacity - 1, 0).unwrap();
     let mut boundary = Boundary::new(&data);
     assert_eq!(
         run(&mut under, &mut boundary).unwrap_err().code,
         ErrorCode::MemoryLimit
     );
-    assert_eq!((boundary.copies, boundary.completions), (0, 0));
+    assert_eq!((boundary.copies, boundary.completions), (1, 0));
     let mut exact = Processor::new(capacity, 0).unwrap();
     assert_eq!(run(&mut exact, &mut Boundary::new(&data)).unwrap(), stable);
     for fail_at in [0, 1, usize::MAX] {
@@ -490,7 +494,10 @@ fn complete_call_preflights_capacity_and_recovers_without_publishing_failed_outp
                 ErrorCode::WasmMemoryUnavailable
             }
         );
-        assert_eq!((boundary.copies, boundary.completions), (0, 0));
+        assert_eq!(
+            (boundary.copies, boundary.completions),
+            (usize::from(fail_at != 0), 0)
+        );
         assert_eq!(run(&mut exact, &mut Boundary::new(&data)).unwrap(), stable);
     }
     for (fail_copy, fail_complete) in [(true, false), (false, true)] {
@@ -887,3 +894,5 @@ fn legacy_coordinate_exports_preserve_taps_strides_padding_and_three_or_four_cha
     coordinate_rows::<ditherette_wasm::image::Srgb32>();
     coordinate_rows::<ditherette_wasm::image::LinearRgba32>();
 }
+#[path = "support/budget.rs"]
+mod budget_support;

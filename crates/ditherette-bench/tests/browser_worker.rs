@@ -430,6 +430,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         cross_origin_isolated: true,
     };
     let result = BrowserTransportResult {
+        prime_reference_output: None,
         reference: Some(OracleOutput {
             case: identity.clone(),
             output: output.clone(),

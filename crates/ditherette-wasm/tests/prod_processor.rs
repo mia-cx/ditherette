@@ -22,6 +22,9 @@ thread_local! {
     static LIVE_BYTES: Cell<isize> = const { Cell::new(0) };
     static WATCH_ALLOCATION: Cell<usize> = const { Cell::new(0) };
     static WATCHED_LIVE_BYTES: Cell<isize> = const { Cell::new(0) };
+    static WATCH_RELEASE: Cell<usize> = const { Cell::new(0) };
+    static RELEASED: Cell<bool> = const { Cell::new(false) };
+    static WATCHED_RELEASED: Cell<bool> = const { Cell::new(false) };
 }
 #[global_allocator]
 static ALLOCATOR: TestAllocator = TestAllocator;
@@ -31,6 +34,7 @@ unsafe impl GlobalAlloc for TestAllocator {
         WATCH_ALLOCATION.with(|size| {
             if size.get() == layout.size() {
                 WATCHED_LIVE_BYTES.with(|observed| observed.set(LIVE_BYTES.with(Cell::get)));
+                WATCHED_RELEASED.with(|observed| observed.set(RELEASED.with(Cell::get)));
             }
         });
         ALLOCATIONS.with(|count| count.set(count.get() + 1));
@@ -57,6 +61,11 @@ unsafe impl GlobalAlloc for TestAllocator {
         }
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        WATCH_RELEASE.with(|size| {
+            if size.get() == layout.size() {
+                RELEASED.with(|released| released.set(true));
+            }
+        });
         LIVE_BYTES.with(|bytes| bytes.set(bytes.get().wrapping_sub(layout.size() as isize)));
         System.dealloc(ptr, layout);
     }
@@ -121,7 +130,11 @@ fn io() -> Io {
 fn budget() -> u64 {
     let mut probe = Processor::new(1_000_000, 512).unwrap();
     probe.resize(request(), &mut io()).unwrap();
-    probe.peak_capacity_bytes()
+    budget_support::minimum(probe.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 512)
+            .and_then(|mut processor| processor.resize(request(), &mut io()))
+            .is_ok()
+    })
 }
 
 #[test]
@@ -130,7 +143,7 @@ fn wider_quantize_drops_idle_bytes_before_reserving_their_replacement() {
         image::contracts::PaletteEntry,
         prod::{
             contract::request::{AlphaPolicy, MatchPolicy},
-            palette::PreparedPalette,
+            pipeline::quantize::IndexedMetadataRef,
             pipeline::quantize::{QuantizeBoundary, QuantizeRequest},
         },
     };
@@ -148,7 +161,7 @@ fn wider_quantize_drops_idle_bytes_before_reserving_their_replacement() {
             &mut self,
             _: &[u8],
             _: ImageDimensions,
-            _: &PreparedPalette,
+            _: IndexedMetadataRef<'_>,
         ) -> Result<(), Failure> {
             Ok(())
         }
@@ -186,7 +199,7 @@ fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
             contract::request::{
                 AlphaPolicy, Diffusion, DiffusionFeedback, DitherPolicy, MatchPolicy, Placement,
             },
-            palette::PreparedPalette,
+            pipeline::quantize::IndexedMetadataRef,
             pipeline::quantize::{QuantizeBoundary, QuantizeRequest},
         },
     };
@@ -204,7 +217,7 @@ fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
             &mut self,
             _: &[u8],
             _: ImageDimensions,
-            _: &PreparedPalette,
+            _: IndexedMetadataRef<'_>,
         ) -> Result<(), Failure> {
             Ok(())
         }
@@ -236,13 +249,18 @@ fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
         .unwrap();
     let before = LIVE_BYTES.with(Cell::get);
     WATCH_ALLOCATION.with(|size| size.set(20 * 3 * 12));
+    WATCH_RELEASE.with(|size| size.set(10 * 3 * 12));
+    RELEASED.with(|released| released.set(false));
     processor
         .dither_and_quantize(request(20), dither, &mut Input(20))
         .unwrap();
     WATCH_ALLOCATION.with(|size| size.set(0));
+    WATCH_RELEASE.with(|size| size.set(0));
     // Source and indices grow by 50 bytes. The old three rows release 360 bytes.
-    assert_eq!(WATCHED_LIVE_BYTES.with(Cell::get), before + 50 - 360);
-    assert_eq!(processor.peak_capacity_bytes(), limit);
+    // Image entries may also be evicted; observe the old row allocation's release directly.
+    assert!(WATCHED_RELEASED.with(Cell::get));
+    assert!(WATCHED_LIVE_BYTES.with(Cell::get) <= before + 50 - 360);
+    assert!(processor.peak_capacity_bytes() <= limit);
 }
 
 #[test]
@@ -354,7 +372,11 @@ fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
                 ..Io::default()
             };
             let result = processor.resize(request, &mut input).unwrap();
-            let required = processor.peak_capacity_bytes();
+            let required = budget_support::minimum(processor.peak_capacity_bytes(), |limit| {
+                Processor::new(limit, 512)
+                    .and_then(|mut processor| processor.resize(request, &mut input))
+                    .is_ok()
+            });
             let heap_without_record = Processor::bookkeeping_bytes(512)
                 + pixels.len() as u64
                 + expected.len() as u64
@@ -363,7 +385,7 @@ fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
             let mut exact = Processor::new(required, 512).unwrap();
             assert_eq!(exact.resize(request, &mut input).unwrap(), expected);
             assert_eq!(result, expected, "{sw}x{sh}->{ow}x{oh} {anchor:?}");
-            assert_eq!(processor.peak_capacity_bytes(), required);
+            assert_eq!(exact.peak_capacity_bytes(), required);
             assert_eq!(input.input, pixels);
             processor.dispose().unwrap();
             assert_eq!(result, expected);
@@ -374,8 +396,8 @@ fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
                 short.resize(request, &mut input).unwrap_err().code,
                 ErrorCode::MemoryLimit
             );
-            assert_eq!(ALLOCATIONS.with(Cell::get), allocations);
-            assert_eq!(input.copy_calls, 0);
+            assert_eq!(ALLOCATIONS.with(Cell::get), allocations + 1);
+            assert_eq!(input.copy_calls, 1);
         }
     }
 }
@@ -436,19 +458,23 @@ fn resize_reservation_failures_release_every_owned_byte_and_recover() {
                 ..Io::default()
             };
             let mut processor = Processor::new(1_000_000, 512).unwrap();
-            let before = ALLOCATIONS.with(Cell::get);
             let expected = processor.resize(request, &mut input).unwrap();
-            let reservations = ALLOCATIONS.with(Cell::get) - before - 1; // Durable fixture output is caller-owned.
-            let peak = processor.peak_capacity_bytes();
+            let peak = budget_support::minimum(processor.peak_capacity_bytes(), |limit| {
+                Processor::new(limit, 512)
+                    .and_then(|mut processor| processor.resize(request, &mut input))
+                    .is_ok()
+            });
             let mut exact = Processor::new(peak, 512).unwrap();
+            let before = ALLOCATIONS.with(Cell::get);
             assert_eq!(exact.resize(request, &mut input).unwrap(), expected);
+            let reservations = ALLOCATIONS.with(Cell::get) - before - 1; // Durable fixture output is caller-owned.
             let mut short = Processor::new(peak - 1, 512).unwrap();
             let before = ALLOCATIONS.with(Cell::get);
             assert_eq!(
                 short.resize(request, &mut input).unwrap_err().code,
                 ErrorCode::MemoryLimit
             );
-            assert_eq!(ALLOCATIONS.with(Cell::get), before);
+            assert_eq!(ALLOCATIONS.with(Cell::get), before + 1);
             for fail_after in 0..reservations {
                 processor = Processor::new(peak, 512).unwrap();
                 input.copy_calls = 0;
@@ -463,7 +489,10 @@ fn resize_reservation_failures_release_every_owned_byte_and_recover() {
                     live,
                     "partial preparation leaked at allocation {fail_after}"
                 );
-                assert_eq!((input.copy_calls, input.complete_calls), (0, 0));
+                assert_eq!(
+                    (input.copy_calls, input.complete_calls),
+                    (usize::from(fail_after > 0), 0)
+                );
                 assert_eq!(processor.resize(request, &mut input).unwrap(), expected);
             }
             for complete in [false, true] {
@@ -754,7 +783,7 @@ fn public_filters_keep_frozen_reference_bounds_across_alpha_anchors_and_extremes
 }
 
 #[test]
-fn exact_capacity_budget_passes_and_one_under_preflights_before_allocation_or_copy() {
+fn mandatory_capacity_passes_and_one_under_stops_after_the_input_snapshot() {
     let mut input = io();
     let original = input.input.clone();
     let mut exact = Processor::new(budget(), 512).unwrap();
@@ -774,17 +803,17 @@ fn exact_capacity_budget_passes_and_one_under_preflights_before_allocation_or_co
     input.complete_calls = 0;
     let before = ALLOCATIONS.with(Cell::get);
     let failure = too_small.resize(request(), &mut input).unwrap_err();
-    assert_eq!(ALLOCATIONS.with(Cell::get), before);
+    assert_eq!(ALLOCATIONS.with(Cell::get), before + 1);
     assert_eq!(
         failure,
         Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
     );
-    assert_eq!((input.copy_calls, input.complete_calls), (0, 0));
+    assert_eq!((input.copy_calls, input.complete_calls), (1, 0));
 }
 
 #[test]
 fn each_real_reservation_failure_reports_without_allocating_an_error_and_recovers() {
-    // One preparation record, two coordinate maps, then source and output buffers.
+    // Source snapshot, one preparation record, two coordinate maps, then output.
     for successful_allocations in 0..5 {
         let mut processor = Processor::new(budget(), 512).unwrap();
         let mut input = io();
@@ -800,13 +829,35 @@ fn each_real_reservation_failure_reports_without_allocating_an_error_and_recover
             failure,
             Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Wasm)
         );
-        assert_eq!((input.copy_calls, input.complete_calls), (0, 0));
+        assert_eq!(
+            (input.copy_calls, input.complete_calls),
+            (usize::from(successful_allocations > 0), 0)
+        );
         assert_eq!(processor.resize(request(), &mut input).unwrap().len(), 24);
     }
 }
 
 #[test]
-fn near_identity_span_reservation_is_fallible_and_recovers_before_copy() {
+fn optional_image_record_allocation_failure_preserves_success_and_releases_ownership() {
+    let mut processor = Processor::new(1_000_000, 512).unwrap();
+    let mut input = io();
+    let live = LIVE_BYTES.with(Cell::get);
+    // Five mandatory nearest allocations precede its optional image record.
+    ALLOCATION_FAILURE.with(|remaining| remaining.set(Some(5)));
+    let mut result = processor.resize(request(), &mut input).unwrap();
+    ALLOCATION_FAILURE.with(|remaining| remaining.set(None));
+    assert_eq!((input.copy_calls, input.complete_calls), (1, 1));
+    let original = result.clone();
+    result.fill(99);
+    assert_eq!(processor.resize(request(), &mut input).unwrap(), original);
+    drop(result);
+    drop(original);
+    processor.dispose().unwrap();
+    assert_eq!(LIVE_BYTES.with(Cell::get), live);
+}
+
+#[test]
+fn near_identity_span_reservation_is_fallible_and_recovers_after_snapshot() {
     let request = ResizeRequest {
         source_width: 21,
         source_height: 21,
@@ -832,7 +883,10 @@ fn near_identity_span_reservation_is_fallible_and_recovers_before_copy() {
             failure,
             Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Wasm)
         );
-        assert_eq!((input.copy_calls, input.complete_calls), (0, 0));
+        assert_eq!(
+            (input.copy_calls, input.complete_calls),
+            (usize::from(successful_allocations > 0), 0)
+        );
         assert_eq!(
             processor.resize(request, &mut input).unwrap(),
             vec![73; 20 * 20 * 4]
@@ -979,3 +1033,5 @@ fn processor_bytes_match_frozen_nearest_across_all_anchors_and_shapes() {
         }
     }
 }
+#[path = "support/budget.rs"]
+mod budget_support;
