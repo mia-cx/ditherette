@@ -59,9 +59,16 @@ Both pass 367 frozen-Wasm fixtures per engine. The trial retains 128 reaped work
 The candidate has observed gains, not a confirmed regression. Its declared selection rule retains the baseline until required evidence passes.
 Fresh public packages match their tested tarballs. S29 oracle executable sections also match; only candidate symbol metadata differs. Fresh-role conformance was not rerun.
 All benchmark workers exited before implementation resumed. The [integration checkpoint](../../../.plans/68-70-checkpoint.md) retains validation and cross-target diagnostics.
-S30 now owns `.worktrees/v1-s30-process`, starting from coordinator `246297c94dda86b33b678d11eb194530c0b513a8` and both delivered sibling heads.
-The agent first validates `impl/v1-s30-base`, then implements only the missing process composition on `impl/v1-s30-process`.
-The coordinator's S27 join passes TypeScript and 28 protocol checks. Its three new field failures load the old S26 staged Wasm; the combined package must rebuild before validation.
+S30's prerequisite join is validated at `22b6dd78a6e552596c34aa9e693ad74850426b23` on `impl/v1-s30-base`.
+All six delivered prerequisite heads are ancestors. Both fresh builds, 38 native, 31 public, 14 private, 10 transport, and 28 protocol checks pass.
+The fresh builds resolve the coordinator's stale S26 artifact failures. The coordinator joins this base at `cdef9f75`; its older staged artifacts remain historical.
+[Issue #71](https://github.com/mia-cx/ditherette/issues/71#issuecomment-5582676111) records the exact dependency heads. Its six satisfied native blockers are removed; the issue stays open.
+The runtime agent owns `.worktrees/v1-s30-process` and only the missing process composition, private ABI, and public wiring.
+Readable native baseline `3335bb69acc6762a30a0b6844aef436c2e6b8de6` passes its initial all-family composition test, including metadata and one final output copy.
+The frozen-only Process oracle is complete at `61d338431b5bd7039fa3d1fae4dd44200abdcfc5` in `.worktrees/v1-s30-oracle`.
+Eight focused checks cover 130 resize/dither combinations, normalized identity, and output dimensions. Its isolated Wasm build passes; same-browser Process conformance is still pending.
+The benchmark agent owns `.worktrees/v1-s30-bench`, complete-call adapters, and the fixed eight-case comparison against actual staged production calls.
+Public wiring, integrated conformance, and exclusive measurements remain in progress. No new optimization is selected.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -75,7 +82,9 @@ The first inactive-worktree cleanup reclaimed about 46 GiB from 124 compiler pro
 After S27 preparation and measurement ended, eight returned S24 native/S23 Wasm profiles reclaimed another 6.55 GiB.
 The disk had 57 GiB free afterward. Source, copied binaries, trial snapshots, reports, and custom target evidence remain intact.
 After S29 delivery, eight returned S22 compiler profiles reclaimed another 5.34 GiB. Disk free space was 60 GiB afterward.
-S30 now owns the S24 quantize cache and its scalar/threaded children. All other completed-slice compiler ownership has ended.
+Three returned freeze-checker profiles reclaim another 0.29 GiB. Their custom evidence and the active trusted checker cache remain intact.
+S30 runtime owns the S24 quantize cache and its scalar/threaded children. S30 oracle and benchmark worktrees own separate `target/compiler` caches.
+All other completed-slice compiler ownership has ended. [S41 retains the measured release gaps](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5582606062).
 Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
 
 ## Delivered S01 through S16

@@ -1,8 +1,8 @@
 # S27 through S29 integration checkpoint
 
 S27, S28, and S29 are delivered in open, unmerged PRs #116, #118, and #117.
-Coordinator `246297c9` contains accepted S26, all restored resize families,
-both benchmark snapshot fixes, and delivered S27. S30 now joins the two siblings.
+Coordinator `cdef9f75` contains validated S30 base `22b6dd78`, accepted S26,
+all restored resize families, both benchmark snapshot fixes, and delivered S27–S29.
 The stack ledger records exact delivered heads and selected implementations.
 
 ## Same-target frozen reference
@@ -80,14 +80,19 @@ afterward. No actual measurements used the incorrect classifier.
 
 ## Next checkpoints
 
-- Validate S30's prerequisite join from all delivered heads before runtime edits.
-- Rebuild the combined package. Coordinator field tests still load S26 Wasm with
+- S30 prerequisite join `22b6dd78` includes all six delivered heads. Both fresh
+  builds and the native/public/private/transport/protocol checks pass.
+- Preserve the stale-artifact diagnosis. Coordinator field tests loaded S26 Wasm with
   SHA-256 `6c000fa7691f3aa2e6aa36537983d688aafd5c0eb726fa3bf2d5f1d159ffee0f`,
   identical to its retained S26 tarball. Three blue-noise field checks therefore
-  fail as unsupported; TypeScript and 28 protocol checks pass.
-- Implement only the missing full process composition, with existing kernels,
-  complete memory preflight, recipe paths, and exact RGBA8 boundaries.
-- Preserve reports and snapshots after compiler-output cleanup. S30 alone owns
-  the active S24 quantize cache; returned S22/S23/S24-bench profiles are removed.
+  failed as unsupported; the fresh S30 base has 31 passing public checks.
+- Native process baseline `3335bb69` passes its first all-family composition test.
+  Public wiring, complete failure coverage, and installed-package validation remain.
+- Frozen-only Process oracle `61d33843` passes eight tests, including 130 composed
+  modes, and an isolated Wasm build. Same-browser Process conformance remains.
+- Benchmark adapters compare actual staged production calls against process.
+  Eight fixed cases cover all seven resize filters; measurement has not started.
+- Preserve reports and snapshots after compiler-output cleanup. S30 runtime owns
+  S24 quantize; oracle and benchmark agents have private compiler caches.
 
 No PR merges, releases, publication, deployment, or rollout are authorized.
