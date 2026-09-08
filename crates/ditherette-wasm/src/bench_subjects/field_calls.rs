@@ -143,7 +143,7 @@ pub fn processor() -> Result<Processor, BenchSubjectError> {
     Processor::new(2 * 1024 * 1024 * 1024, 0).map_err(failure)
 }
 
-struct NativeBoundary<'a>(&'a [u8]);
+pub(super) struct NativeBoundary<'a>(pub(super) &'a [u8]);
 impl Boundary for NativeBoundary<'_> {
     type Output = ImageBuf<Rgba8>;
     fn input_len(&mut self) -> Result<usize, Failure> {

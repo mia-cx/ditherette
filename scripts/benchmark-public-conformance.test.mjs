@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { requireMatchingComposition } from './benchmark-public-page.mjs';
 import { chromium, firefox, webkit } from 'playwright';
 import { prepareTypeScript } from './prepare-benchmark-typescript.mjs';
 import {
@@ -75,6 +76,15 @@ test('installed package and actual TypeScript adapter conformance, without measu
 		fieldFixtures.push(...fixtures);
 	}
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-public-conformance-'));
+	const processPath = process.env.DITHERETTE_BENCH_PROCESS_FIXTURES;
+	const processFixtures = processPath ? JSON.parse(await readFile(processPath, 'utf8')) : [];
+	if (processPath) {
+		assert.equal(processFixtures.length, 8);
+		for (const fixture of processFixtures) {
+			assert.equal(fixture.operation.operation, 'process');
+			assert.deepEqual(fixture.production, fixture.staged);
+		}
+	}
 	t.after(() => rm(temporary, { recursive: true, force: true }));
 	const consumer = path.join(temporary, 'consumer');
 	await mkdir(consumer);
@@ -149,7 +159,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						engineName === 'webkit' ? process.env.DITHERETTE_TEST_WEBKIT_EXECUTABLE : undefined
 				});
 				const references = [];
-				for (const fixture of [...quantizeFixtures, ...fieldFixtures]) {
+				for (const fixture of [...quantizeFixtures, ...fieldFixtures, ...processFixtures]) {
 					assert.ok(
 						fixture.identity,
 						'Generate full-identity conformance fixtures with the current exporter.'
@@ -181,6 +191,25 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						reference: reference.output
 					});
 				}
+				for (const fixture of references.filter((fixture) => fixture.resize_attribution)) {
+					for (const key of ['resize_probe', 'post_resize_probe']) {
+						const probe = fixture.resize_attribution[key];
+						const reference = await frozenBrowserReference(browser, {
+							browser: { assets, runtime: { cross_origin_isolated: true } },
+							case: {
+								source: probe.source,
+								rgba: probe.rgba,
+								identity: probe.identity,
+								browser: { operation: probe.operation },
+								measurement: { samples: 1 }
+							}
+						});
+						assert.deepEqual(reference.case, probe.identity);
+						probe.native_reference = probe.reference;
+						probe.reference = reference.output;
+					}
+					assert.equal(browser.contexts().length, 0);
+				}
 				if (process.env.DITHERETTE_BENCH_ORACLE_EVIDENCE)
 					await writeFile(
 						path.join(
@@ -209,7 +238,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 				const page = await context.newPage();
 				await page.goto(server.url);
 				const report = await page.evaluate(
-					async ({ assets, quantizeFixtures, fieldFixtures }) => {
+					async ({ assets, quantizeFixtures, fieldFixtures, processFixtures }) => {
 						const { prepareOperation, preflightOperation, outputStability, verificationOutput } =
 							await import(`/${assets.entries.page}`);
 						const equal = (actual, expected, label) => {
@@ -590,6 +619,64 @@ test('installed package and actual TypeScript adapter conformance, without measu
 							}
 							if (!rejected) throw new Error('TypeScript field adapter must be unavailable.');
 						}
+						const processDiagnostics = [];
+						for (const fixture of processFixtures) {
+							let resized;
+							if (fixture.resize_attribution) {
+								const probe = fixture.resize_attribution.resize_probe;
+								const request = trial('package', 'primed-instance');
+								Object.assign(request.case, {
+									source: probe.source,
+									rgba: probe.rgba,
+									identity: probe.identity
+								});
+								request.case.browser.operation = probe.operation;
+								const operation = await prepareOperation(request);
+								try {
+									const call = await operation.prepare();
+									try {
+										resized = verificationOutput(call.call());
+									} finally {
+										call.close();
+									}
+								} finally {
+									operation.close();
+								}
+							}
+							for (const preparation of ['primed-instance', 'fresh-instance']) {
+								const outputs = [];
+								for (const backend of ['package-staged', 'package']) {
+									const request = trial(backend, preparation);
+									request.case.source = fixture.source;
+									request.case.rgba = fixture.rgba;
+									request.case.identity = fixture.identity;
+									request.case.browser.operation = fixture.operation;
+									const operation = await prepareOperation(request);
+									try {
+										const call = await operation.prepare();
+										try {
+											outputs.push(verificationOutput(call.call()));
+										} finally {
+											call.close();
+										}
+									} finally {
+										operation.close();
+									}
+								}
+								processDiagnostics.push({
+									name: fixture.name,
+									preparation,
+									identity: fixture.identity,
+									frozen: fixture.reference,
+									native_frozen: fixture.native_reference,
+									resize_attribution: fixture.resize_attribution
+										? { ...fixture.resize_attribution, browser_resize: resized }
+										: null,
+									staged: outputs[0],
+									process: outputs[1]
+								});
+							}
+						}
 						const noncenter = trial('typescript');
 						noncenter.case.browser.operation.anchor = 'top-left';
 						let rejected = false;
@@ -601,6 +688,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 						if (!rejected) throw new Error('Non-center TS must be unavailable.');
 						return {
 							isolated: crossOriginIsolated,
+							processDiagnostics,
 							drift,
 							checked: [
 								'known-vector',
@@ -624,10 +712,59 @@ test('installed package and actual TypeScript adapter conformance, without measu
 					{
 						assets,
 						quantizeFixtures: references.slice(0, quantizeFixtures.length),
-						fieldFixtures: references.slice(quantizeFixtures.length)
+						fieldFixtures: references.slice(
+							quantizeFixtures.length,
+							quantizeFixtures.length + fieldFixtures.length
+						),
+						processFixtures: references.slice(quantizeFixtures.length + fieldFixtures.length)
 					}
 				);
 				assert.equal(report.isolated, true);
+				if (processPath) {
+					assert.ok(
+						process.env.DITHERETTE_BENCH_ORACLE_EVIDENCE,
+						'Retain Process composition and frozen diagnostics before checking equality.'
+					);
+					await writeFile(
+						path.join(
+							process.env.DITHERETTE_BENCH_ORACLE_EVIDENCE,
+							`${engineName}-process-composition.json`
+						),
+						JSON.stringify(report.processDiagnostics, null, 2),
+						{ flag: 'wx' }
+					);
+					for (const result of report.processDiagnostics) {
+						assert.deepEqual(
+							result.process,
+							result.staged,
+							`${result.name}: Process must equal actual staged production`
+						);
+						if (result.resize_attribution) {
+							assert.equal(
+								result.name,
+								'area-bayer',
+								'Only area has diagnostic measurement approval.'
+							);
+							const attribution = result.resize_attribution;
+							assert.deepEqual(
+								attribution.browser_resize,
+								attribution.production_resize,
+								'Browser resize must match the independently identified post-resize oracle input. Otherwise retain and stop.'
+							);
+							assert.deepEqual(
+								result.process,
+								attribution.post_resize_probe.reference,
+								'Target-local frozen processing on actual resized bytes must explain every output difference.'
+							);
+						} else {
+							assert.deepEqual(
+								result.process,
+								result.frozen,
+								`${result.name}: unapproved frozen drift`
+							);
+						}
+					}
+				}
 				assert.deepEqual(report.drift, [10, 11]);
 				assert.deepEqual(await exchangeTrial(page, server, 'scripts/ipc-echo.mjs'), {
 					marker: 'untimed-conformance',
@@ -651,4 +788,30 @@ test('installed package and actual TypeScript adapter conformance, without measu
 			.update(await readFile(tarball))
 			.digest('hex')}`
 	);
+});
+
+test('Process composition preflight rejects differing actual outputs before timing', async () => {
+	let closed = 0;
+	const operation = {
+		prepare: async () => ({
+			call: () => ({ width: 1, height: 1, data: new Uint8Array([1, 2, 3, 255]) }),
+			close: () => {
+				closed++;
+			}
+		})
+	};
+	const output = {
+		dimensions: { width: 1, height: 1 },
+		pixels: { format: 'rgba8', data: [1, 2, 3, 255] },
+		warnings: []
+	};
+	await requireMatchingComposition(operation, output);
+	await assert.rejects(
+		requireMatchingComposition(operation, {
+			...output,
+			pixels: { format: 'rgba8', data: [0, 2, 3, 255] }
+		}),
+		/Process differs from staged production before timing.*current.*counterpart/
+	);
+	assert.equal(closed, 2);
 });
