@@ -23,6 +23,8 @@ Public color continues to use packed triplets with byte alpha. Direct quantizati
 - [x] Join final S34 report-only PR head.
 - [ ] Validate actual installed scalar/threaded calls before exclusive crossover evidence.
 - [ ] Select only freshly measured exact configurations, or retain scalar, and prepare the unmerged PR.
+- [x] Separate automatic per-request scheduling from per-stage developer overrides, capped by the actual pool.
+- [ ] Select resize policies from Chromium trial02 and Firefox trial03 evidence, preserving scalar outside measured support.
 
 ## Test seams and evidence
 
@@ -117,3 +119,18 @@ Integration targets cover budgeted benchmark registration, complete process, pro
 caller scratch, fallible preparation, and tiling. Scalar and threaded complete-call results are exact in all nine benchmark subjects.
 Only `target/compiler` was used. No Wasm builds or benchmark measurements ran.
 The coordinator owns artifact builds, exclusive host-worker crossover evidence, policy acceptance, and PR handoff.
+
+## Measured-policy delivery
+
+Resume on `delivery/v1-s35-resize` in `v1-s35-delivery`, based on `2bd25aeddb3fb999c8daab4c516855f8f961233d`.
+The coordinator has ended the measurement quiet phase and confirmed all 200 Firefox trial03 workers exited.
+Only this worktree's `target/compiler` may compile native checks. Wasm builds, measurements, PRs, and pushes remain coordinator-held.
+
+Each domain supplies a measured request candidate to `Store::row_policy(stage, measured)`.
+Explicit scalar is distinct from absent override. The private Wasm setter changes one stage only.
+Override presence stays outside semantic cache keys. Threaded policies cap the actual initialized Rayon pool.
+Normal scalar builds remain scalar; native developer fixtures may still force sequential row-band execution.
+Automatic domains use `execution::worker_budget()` to choose measured worker counts. The resolver rejects oversized
+automatic requests instead of inventing an unmeasured count; explicit overrides retain actual-capacity clamping.
+Native library checks pass 37 tests with threads and 37 without, including isolated two-worker-pool resolution,
+per-stage preservation, explicit scalar, complete-call equality, callback recovery, and memory-pressure fallback.
