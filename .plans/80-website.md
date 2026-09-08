@@ -61,7 +61,7 @@ decode/crop-to-preview/export interfaces as the test boundaries.
 
 - [x] Add one failing typed request-mapping test, implement its minimal mapping,
   then cover existing mode tags, crop refusal, and ordered palette metadata.
-- [ ] Integrate one off-default developer flag into the worker path. Test enabled
+- [x] Integrate one off-default developer flag into the worker path. Test enabled
   public Process and unchanged disabled behavior, with processing failures visible.
 - [ ] Exercise project-owned decoded-upload/crop/settings fixtures through the
   actual installed package, existing render/PNG code, and persistence schemas.
@@ -84,6 +84,15 @@ OKLCH maps to `oklch-hue-arc`. Raw RGB separable strength includes the S13
 Adaptive thresholds and softness retain percentage points; radius rounds with
 the existing minimum of one. Fixed-domain package placement remains the approved
 replacement for the historical palette-dependent TS normalization.
+
+Runtime checkpoint: 46 mapper/worker cases pass. The flag is
+`VITE_DITHERETTE_WASM_PROCESS=true`, honored only when Vite's `DEV` is true.
+One worker pipeline lazily owns one package instance. Processing exceptions reach
+the existing worker error response; no package-to-TS fallback occurs here.
+Flagged responses omit optional TS timing/cache/memory metrics because those
+estimates describe the TS implementation. Existing coarse progress remains.
+Initialization failure remains visible and memoized until the worker is replaced;
+S39 owns faithful initialization fallback. No progress callback is passed to S30.
 
 ## Scope limits
 
