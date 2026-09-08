@@ -173,8 +173,28 @@ export interface IndexedImage {
 	}[];
 }
 
+/** Complete version-one composition. The serialized matching key is match, not matching. */
+export interface RecipeV1 {
+	readonly version: 1;
+	readonly output: ResizeRequest['output'];
+	readonly alpha: AlphaPolicy;
+	readonly match: Matching;
+	readonly dither: DitherAndQuantizeRequest['dither'];
+}
+
+/** Resize and dither in Wasm, copying only the final durable indexed result back. */
+export interface ProcessRequest {
+	readonly source: Rgba8Image;
+	readonly palette: readonly PaletteEntry[];
+	readonly recipe: RecipeV1;
+	/** S33 adds delivery; supplied callbacks remain explicitly unsupported. */
+	readonly onProgress?: (progress: Progress) => void;
+}
+
 /** One isolated scalar processor. Calls are synchronous; hosts choose their execution context. */
 export interface Ditherette {
+	/** Apply the full recipe, preserving the same RGBA8 boundaries as staged calls. */
+	process(request: ProcessRequest): IndexedImage;
 	/** Return durable JS-owned RGBA8, independent of later calls and disposal. */
 	resize(request: ResizeRequest): Rgba8Image;
 	/** Match source pixels to the supplied palette without resizing or dithering. */

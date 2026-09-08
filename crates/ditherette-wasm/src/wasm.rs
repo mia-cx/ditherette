@@ -6,6 +6,7 @@
 //! memoization, and browser/Wasm benchmarks.
 
 pub mod fields;
+pub mod process;
 pub mod processor;
 pub mod quantize;
 

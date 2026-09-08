@@ -11,6 +11,7 @@ import { chromium, firefox, webkit } from 'playwright';
 import { browserChecks } from './browser-fixture.mjs';
 import { fieldBrowserChecks } from './field-browser-fixture.mjs';
 import { diffusionBrowserChecks } from './diffusion-browser-fixture.mjs';
+import { processBrowserChecks } from './process-browser-fixture.mjs';
 import { yiluomaBrowserChecks } from './yiluoma-browser-fixture.mjs';
 import { yiluomaBenchmarkChecks } from './yiluoma-benchmark-fixture.mjs';
 import { prepareYliluomaOracle, yiluomaOracleChecks } from './yiluoma-oracle-fixture.mjs';
@@ -180,6 +181,18 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					{ fields: 110, compositions: 1650, caughtFailures: 5 }
 				);
 				t.diagnostic(`${name} ${browser.version()}: installed-tarball checks pass`);
+				assert.deepEqual(
+					await page.evaluate(processBrowserChecks, {
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+					}),
+					{
+						compositions: 423,
+						strictRequests: 9,
+						caughtCopies: 3,
+						exactBudget: true,
+						scalarWithoutIsolation: true
+					}
+				);
 				assert.deepEqual(
 					await page.evaluate(diffusionBrowserChecks, {
 						vectors: diffusionVectors,
