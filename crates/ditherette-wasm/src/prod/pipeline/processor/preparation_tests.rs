@@ -159,6 +159,26 @@ fn warm_calls_share_palettes_and_plans_without_retaining_source_results() {
             [0; 4]
         );
     }
+    let perturb = crate::prod::pipeline::perturb::PerturbRequest {
+        source_width: 4,
+        source_height: 1,
+        perturb: PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Two,
+            },
+            space: WorkingSpace::Srgb,
+            strength: 0.0,
+            placement: Placement::Everywhere {},
+        },
+    };
+    processor.perturb(perturb, &mut io).unwrap();
+    io.pixels.fill(255);
+    assert_eq!(
+        processor
+            .perturb_with_allocator(perturb, &mut io, &mut NoAllocation)
+            .unwrap(),
+        [255; 16]
+    );
     assert_eq!(processor.preparation.stats().0, 2);
     assert_eq!(durable, [1; 3]);
     let other = Processor::new(4 << 20, 0).unwrap();

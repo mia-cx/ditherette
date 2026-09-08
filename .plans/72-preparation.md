@@ -16,7 +16,7 @@ Decision #37 and frozen `spec/contract/cache.rs` plus `cache.md` define the cont
 - [x] Implement actual-capacity preparation ownership, allocation-free identities, one LRU, pinning, and commit-on-success publication.
 - [x] Reuse palette preparation across quantize, ditherAndQuantize, and Process without changing execution kernels.
 - [x] Reuse resize plans and typed idle scratch, preserving trilinear overwrite and diffusion row initialization.
-- [ ] Verify native/public cold-warm equality, budget pressure, failure recovery, isolation, and durable results.
+- [x] Verify native/public cold-warm equality, budget pressure, failure recovery, isolation, and durable results.
 - [ ] Join benchmark support and prepare cold/warm artifacts for coordinator-owned exclusive trials before filing the PR.
 
 ## Accounting design
@@ -66,5 +66,10 @@ Diffusion borrows the same prepared quantizer and separately owned rows through 
 Seven private tests pass, including direct frozen-key agreement, cross-method hits, two Process pins, both retention caps,
 LRU refresh, scratch-first pressure, failed final-copy publication, and trilinear overwrite after failure.
 The native resize (11), field (6), quantize (3), and process (4) suites pass after cold allocation-fixture updates.
-Public Wasm fixtures, wider conformance, independent review, and required exclusive cold/warm measurements remain pending.
+Full native tests, 34 public interface tests, 16 private Wasm tests, and four benchmark preparation protocol tests pass.
+Trusted frozen guard passes native, Wasm, and threaded production isolation against the approved S30-base policy.
+Independent review found one diffusion scratch growth overlap. Dropping old rows before reservation fixes it;
+a native allocator witness verifies live bytes during the exact-budget replacement allocation.
+Required exclusive cold/warm measurements remain pending.
 Joined the approved S30 guard-fixture parent `d2356a502501b38ab4f3b476956fc90f1fbfec4a` without changing frozen files.
+The final parent `f408bc99a80d3c83b6caee0b5c1d19868f0db876` and shared benchmark protocol `863889e52f1b752b6adfc22a9c775b3823f2997e` are joined.

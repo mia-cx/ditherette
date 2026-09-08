@@ -29,7 +29,10 @@ test('warm preparation validates palette tails and preserves order, thresholds, 
 		value.palette[256] = { kind: 'transparent' };
 		assert.deepEqual(processor.quantize(value), first);
 		value.palette = value.palette.slice(0, 256);
-		assert.equal(processor.quantize(value).warnings.some(({ code }) => code === 'palette-truncated'), false);
+		assert.equal(
+			processor.quantize(value).warnings.some(({ code }) => code === 'palette-truncated'),
+			false
+		);
 		const precise = request();
 		assert.deepEqual([...processor.quantize(precise).indices], [0, 2]);
 		precise.alpha.threshold = 128.0000001;
@@ -41,7 +44,9 @@ test('warm preparation validates palette tails and preserves order, thresholds, 
 		precise.palette = [...precise.palette].reverse();
 		assert.deepEqual([...processor.quantize(precise).indices], [2, 0]);
 		assert.equal(first.warnings[0].code, 'palette-truncated');
-	} finally { processor.dispose(); }
+	} finally {
+		processor.dispose();
+	}
 });
 
 test('weighted public tags select independently calculated winners', async () => {

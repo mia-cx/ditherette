@@ -36,7 +36,9 @@ const resizeOverhead = await (async () => {
 		} catch (error) {
 			assert.ok(diagnostic('memory-limit', 'memoryLimitBytes')(error));
 			low = limit + 1;
-		} finally { processor.dispose(); }
+		} finally {
+			processor.dispose();
+		}
 	}
 	return low - 8;
 })();
@@ -44,8 +46,14 @@ const resizeOverhead = await (async () => {
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
 	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.
 	const capacity = 3 * 20 + 16 + 8 + 4 + 32 + 16 + 4;
-	const processor = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity });
-	const short = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity - 1 });
+	const processor = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity
+	});
+	const short = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity - 1
+	});
 	const backing = new Uint8Array([99, ...new Uint8Array(12), 1, 1, 1, 1, 98]);
 	const value = {
 		version: 1,
@@ -165,10 +173,16 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 test('one exact capacity budget succeeds and one byte less rejects without poisoning the instance', async () => {
 	// 12 pixel bytes plus two Wasm usize x offsets and one u32 y coordinate.
 	const capacity = 12 + 2 * 4 + 4;
-	const exact = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity });
+	const exact = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity
+	});
 	assert.equal(exact.resize(request()).data.length, 8);
 	exact.dispose();
-	const short = await createDitherette({ wasm: module, memoryLimitBytes: resizeOverhead + capacity - 1 });
+	const short = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity - 1
+	});
 	assert.throws(() => short.resize(request()), diagnostic('memory-limit', 'memoryLimitBytes'));
 	const smaller = request();
 	smaller.output.width = 1;
