@@ -67,7 +67,7 @@ No measurement runs before coordinator quiet clearance and the shared exclusive 
 
 - [x] Add reusable per-sample priming fixtures and lifecycle tests.
 - [x] Extend typed protocol and actual native/public adapters, preserving historical records.
-- [ ] Add the declared matrix generator and focused frozen exactness checks; hand off for review.
+- [x] Add the declared matrix generator and focused frozen exactness checks; hand off for review.
 
 No measurements or artifact preparations have run. Focused Rust checks use only this worktree's `target/compiler`.
 No evidence report is copied from S31. Both roles must join the coordinator's corrected S31 parent before artifact preparation.
@@ -79,3 +79,8 @@ The second checkpoint wires those helpers into native/public calls with explicit
 The isolated oracle derives and checks each prime without changing frozen specification files.
 Focused validation passes 40 Node tests, three native observation/cleanup tests, eight frozen-oracle tests, and 12 browser-protocol tests.
 Rust tests/examples also pass a locked compilation check. Historical role JSON omits the new optional prime field.
+
+The matrix generator reuses the S31 source/palette helpers and comparable Lab76, Lanczos3, and Process cases.
+Five untimed example tests pass, including every native prime/measured output and the isolated oracle's prime derivation.
+The protocol guide documents per-sample ownership, timing scope, and historical compatibility.
+Artifact preparation, real browser execution, cache-hit evidence, and measurements remain coordinator-owned follow-up work.
