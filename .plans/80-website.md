@@ -12,10 +12,8 @@ The approved [PRD execution contract](../docs/plans/ditherette-v1/README.md#exec
 govern this integration. The coordinator's `.plans/80-reuse-inventory.md` records
 the initial read-only inventory. No website implementation or test has run yet.
 
-Work is paused at the coordinator's request. S30 PR #119 CI has a fixture omission
-in protected freeze-policy tooling. Mia's authorization is required before that
-separate repair. S38 must not change the policy or work around the omission.
-Resume implementation only after the coordinator releases this hold.
+The coordinator released the hold after Mia explicitly approved the separate S30
+CI fixture repair. S38 resumes implementation without changing protected policy.
 
 ## Existing path and intended mapping
 
@@ -61,7 +59,7 @@ and test the approved cropped-input contract without claiming universal TS parit
 The coordinator confirmed the typed website mapper, `handleAsync`, and existing
 decode/crop-to-preview/export interfaces as the test boundaries.
 
-- [ ] Add one failing typed request-mapping test, implement its minimal mapping,
+- [x] Add one failing typed request-mapping test, implement its minimal mapping,
   then cover existing mode tags, crop refusal, and ordered palette metadata.
 - [ ] Integrate one off-default developer flag into the worker path. Test enabled
   public Process and unchanged disabled behavior, with processing failures visible.
@@ -76,6 +74,16 @@ The retained S30 tarball is approved for website-only tests:
 `379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2`.
 Any needed generated outputs must remain local to this worktree. No compiler
 target is currently created or owned. No build, test, or browser job is running.
+
+Mapper checkpoint: 29 focused cases pass after the initial missing-module failure.
+Svelte checking reports zero errors; generated Cloudflare type declarations are
+not present yet. The installed workspace package resolves generated `dist` copied
+from the approved S30 tarball; its digest matches the retained evidence.
+OKLCH maps to `oklch-hue-arc`. Raw RGB separable strength includes the S13
+`64/63.75` correction; vector fields and diffusion use percentage divided by 100.
+Adaptive thresholds and softness retain percentage points; radius rounds with
+the existing minimum of one. Fixed-domain package placement remains the approved
+replacement for the historical palette-dependent TS normalization.
 
 ## Scope limits
 
