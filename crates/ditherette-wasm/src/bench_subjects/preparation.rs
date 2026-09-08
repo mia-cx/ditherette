@@ -12,6 +12,7 @@ use crate::{
     prod::{
         contract::request as prod,
         pipeline::{
+            perturb::PerturbRequest,
             processor::{Processor, ResizeRequest},
             quantize::QuantizeRequest,
         },
@@ -30,6 +31,8 @@ pub enum CompleteCall<'a> {
     Resize(ResizeRequest),
     Quantize(QuantizeRequest<'a>),
     Process(process::CompleteCall<'a>),
+    Perturb(PerturbRequest),
+    Dither(QuantizeRequest<'a>, prod::DitherPolicy),
 }
 
 pub enum Output {
@@ -74,8 +77,33 @@ impl<'a> CompleteCall<'a> {
             ReferenceRequest::Processing(spec::Request::Process(_)) => Ok(Self::Process(
                 process::CompleteCall::new(request, process::PROCESS_SUBJECT)?,
             )),
+            ReferenceRequest::Processing(spec::Request::Perturb(input)) => {
+                Ok(Self::Perturb(PerturbRequest {
+                    source_width: input.source.width,
+                    source_height: input.source.height,
+                    perturb: super::fields::prod_policy(input.perturb),
+                }))
+            }
+            ReferenceRequest::Processing(spec::Request::DitherAndQuantize(input)) => {
+                let mapped = quantize::quantize_request(&ReferenceRequest::Processing(
+                    spec::Request::Quantize(input.quantize),
+                ))?;
+                let dither =
+                    serde_json::from_value(serde_json::to_value(input.dither).map_err(error)?)
+                        .map_err(error)?;
+                Ok(Self::Dither(
+                    QuantizeRequest {
+                        source_width: mapped.source.width,
+                        source_height: mapped.source.height,
+                        palette: mapped.palette,
+                        alpha: mapped.alpha,
+                        matching: mapped.matching,
+                    },
+                    dither,
+                ))
+            }
             _ => Err(BenchSubjectError::new(
-                "preparation subject requires resize, quantize, or process",
+                "processor subject requires a typed processing request",
             )),
         }
     }
@@ -98,6 +126,14 @@ impl<'a> CompleteCall<'a> {
             Self::Process(call) => call
                 .output_with_source(processor, source)
                 .map(Output::Indexed),
+            Self::Perturb(request) => processor
+                .perturb(*request, &mut NativeBoundary(source))
+                .map(Output::Rgba)
+                .map_err(error),
+            Self::Dither(request, dither) => processor
+                .dither_and_quantize(*request, *dither, &mut NativeBoundary(source))
+                .map(Output::Indexed)
+                .map_err(error),
         }
     }
 }

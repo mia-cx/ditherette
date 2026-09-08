@@ -59,7 +59,7 @@ enum State {
     Disposed,
 }
 
-/// Per-instance control, bounded preparation reuse, and capacity-accounted idle scratch.
+/// Per-instance control, shared preparation/image reuse, and capacity-accounted idle scratch.
 #[derive(Debug)]
 pub struct Processor {
     memory_limit: u64,
@@ -113,7 +113,7 @@ impl Processor {
         self.peak_capacity
     }
 
-    /// Releases retained preparation and scratch idempotently.
+    /// Releases retained preparation, image stages, and scratch idempotently.
     pub fn dispose(&mut self) -> Result<(), Failure> {
         if self.state == State::Running {
             return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance));
@@ -140,7 +140,7 @@ impl Processor {
         self.process_with_allocator(request, boundary, &mut SystemAllocator)
     }
 
-    /// Reserve the complete call before input copying, with recoverable boundary failures.
+    /// Snapshot current input, then preflight hit-aware execution with recoverable failures.
     pub fn process_with_allocator<B: super::quantize::QuantizeBoundary, A: Allocator>(
         &mut self,
         request: super::process::ProcessRequest<'_>,
@@ -186,7 +186,7 @@ impl Processor {
         result
     }
 
-    /// Materialize palette-free, durable RGBA8 with all owned capacity checked before input copy.
+    /// Snapshot current input and materialize palette-free, durable RGBA8 within the budget.
     pub fn perturb<B: Boundary>(
         &mut self,
         request: super::perturb::PerturbRequest,
@@ -237,7 +237,7 @@ impl Processor {
         self.dither_and_quantize_with_allocator(request, dither, boundary, &mut SystemAllocator)
     }
 
-    /// Reserve the source, mode-specific scratch, indices, and palette before input copy.
+    /// Snapshot current input before reserving mode-specific work not supplied by image hits.
     pub fn dither_and_quantize_with_allocator<
         B: super::quantize::QuantizeBoundary,
         A: Allocator,
@@ -379,8 +379,28 @@ impl Processor {
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
-        let mut call = super::preparation::Call::new(
+        let mut call = super::preparation::Call::snapshot(
             &mut self.preparation,
+            plan.source_len,
+            overhead,
+            self.memory_limit,
+            &mut self.peak_capacity,
+            allocator,
+        )?;
+        boundary.copy_input(&mut call.scratch.buffers[0])?;
+        let parent = super::preparation::source_key(&call.scratch.buffers[0], plan.source);
+        let key = super::identity::stage(
+            Some(parent),
+            crate::prod::contract::cache::StageOptions::Resize {
+                output: request.output,
+            },
+        )?;
+        if call.take_image(0, key) {
+            let image = call.image(0).unwrap();
+            let result = boundary.complete(&image.bytes, image.dimensions);
+            return call.finish(result);
+        }
+        call.prepare(
             None,
             Some(super::preparation::ResizePreparation {
                 source: plan.source,
@@ -388,21 +408,23 @@ impl Processor {
             }),
             [plan.source_len, plan.output_len, 0, 0],
             0,
-            overhead,
-            self.memory_limit,
             &mut self.peak_capacity,
             allocator,
         )?;
         let (_, metadata, scratch) = call.parts();
         let [source, output, _, _] = &mut scratch.buffers;
-        boundary.copy_input(source)?;
         metadata.expect("requested resize").execute(
             ImageView::<Rgba8>::packed(source, plan.source)
                 .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?,
             ImageViewMut::<Rgba8>::packed(output, plan.output)
                 .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?,
         )?;
-        let result = boundary.complete(output, plan.output);
+        let content = call.content(0, 1, plan.output);
+        call.retain_rgba(0, key, 1, plan.output, content, &mut self.peak_capacity);
+        let bytes = call
+            .image(0)
+            .map_or(call.scratch.buffers[1].as_slice(), |image| &image.bytes);
+        let result = boundary.complete(bytes, plan.output);
         call.finish(result)
     }
 }

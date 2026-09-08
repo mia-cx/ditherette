@@ -113,25 +113,33 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         .checked_add(size_of::<PerturbRequest>() as u64)
         .and_then(|n| n.checked_add(working_capacity_bytes()))
         .ok_or_else(memory_limit)?;
-    let mut call = super::preparation::Call::new(
-        store,
-        None,
-        None,
-        [len, len, 0, 0],
-        0,
-        owned,
-        limit,
-        peak,
-        allocator,
+    let mut call = super::preparation::Call::snapshot(store, len, owned, limit, peak, allocator)?;
+    boundary.copy_input(&mut call.scratch.buffers[0])?;
+    let parent = super::preparation::source_key(&call.scratch.buffers[0], dimensions);
+    let key = super::identity::stage(
+        Some(parent),
+        crate::prod::contract::cache::StageOptions::Perturb {
+            perturb: request.perturb,
+        },
     )?;
+    if call.take_image(1, key) {
+        let image = call.image(1).unwrap();
+        let result = boundary.complete(&image.bytes, image.dimensions);
+        return call.finish(result);
+    }
+    call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
     let [source, output, _, _] = &mut call.scratch.buffers;
-    boundary.copy_input(source)?;
     execute(
         ImageView::packed(source, dimensions).expect("validated source storage"),
         ImageViewMut::packed(output, dimensions).expect("reserved output storage"),
         request.perturb,
     );
-    let result = boundary.complete(output, dimensions);
+    let content = call.content(1, 1, dimensions);
+    call.retain_rgba(1, key, 1, dimensions, content, peak);
+    let bytes = call
+        .image(1)
+        .map_or(call.scratch.buffers[1].as_slice(), |image| &image.bytes);
+    let result = boundary.complete(bytes, dimensions);
     call.finish(result)
 }
 

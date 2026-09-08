@@ -153,6 +153,6 @@ export async function yiluomaBrowserChecks({ vectors, wasm, wasmUrl }) {
 		Uint8Array.prototype.set = set;
 		under.dispose();
 	}
-	if (copies !== 0) throw new Error('budget failure copied input');
+	if (copies > 1) throw new Error('budget failure copied beyond its input snapshot');
 	return { vectors: vectors.cases.length, caughtFailures: 3, strictControls: 8, exactBudget: true };
 }

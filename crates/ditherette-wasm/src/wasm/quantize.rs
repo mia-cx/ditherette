@@ -12,7 +12,7 @@ use crate::{
             failure::{ErrorPath, Failure},
             request::{AlphaPolicy, MatchPolicy, MAX_SOURCE_SIDE},
         },
-        palette::PreparedPalette,
+        pipeline::quantize::IndexedMetadataRef,
         pipeline::quantize::{QuantizeBoundary, QuantizeRequest},
     },
 };
@@ -115,7 +115,7 @@ impl QuantizeBoundary for JsQuantizeBoundary<'_> {
         &mut self,
         indices: &[u8],
         dimensions: ImageDimensions,
-        prepared: &PreparedPalette,
+        prepared: IndexedMetadataRef<'_>,
     ) -> Result<(), Failure> {
         let warning = |index: usize| {
             prepared.warnings.get(index).map_or((0, ""), |warning| {

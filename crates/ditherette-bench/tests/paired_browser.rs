@@ -8,6 +8,50 @@ use ditherette_bench_api::verification::*;
 mod model;
 
 #[test]
+fn javascript_warm_trial_payload_preserves_prime_evidence_in_strict_transport() {
+    let script = r#"
+import { warmProcessTrial } from './scripts/benchmark-stage-trial-fixture.mjs';
+import { attachOracleReference } from './scripts/benchmark-public-browser.mjs';
+const { result, trial } = await warmProcessTrial();
+const oracle = JSON.parse(process.env.ORACLE_FIXTURE);
+attachOracleReference(result, { ...oracle, prime_output: trial.prime_reference_output });
+Object.assign(result.observation, {
+    engine: 'chromium', browser_version: 'fixture', node_version: process.version,
+    playwright_version: 'fixture'
+});
+console.log(JSON.stringify(result));
+"#;
+    let (_, trials) = fixture();
+    let oracle = OracleOutput {
+        case: trials[0].reference.case.clone(),
+        output: trials[0].reference.output.clone(),
+    };
+    let output = std::process::Command::new("node")
+        .args(["--input-type=module", "-e", script])
+        .env("ORACLE_FIXTURE", serde_json::to_string(&oracle).unwrap())
+        .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        payload["prime_reference_output"]["pixels"]["data"],
+        serde_json::json!([1, 2, 3, 255])
+    );
+    let parsed: BrowserTransportResult = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed.sample_ns.len(), 5);
+    let encoded = serde_json::to_value(parsed).unwrap();
+    assert_eq!(
+        encoded["prime_reference_output"],
+        payload["prime_reference_output"]
+    );
+}
+
+#[test]
 fn trilinear_binds_anchors_and_rejects_nonexistent_website_operation() {
     let (mut prepared, _) = fixture();
     let case = &mut prepared.experiment.cases[0];
@@ -373,6 +417,7 @@ fn preflight_mismatch_preserves_typed_output_without_claiming_timing() {
     assert_eq!(decoded.reference_output, request.reference_output);
     let result = BrowserTransportResult {
         reference: None,
+        prime_reference_output: None,
         role: trial.role,
         pair: trial.pair,
         case_name: trial.case_name.clone(),

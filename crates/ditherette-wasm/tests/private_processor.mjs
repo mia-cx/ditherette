@@ -90,7 +90,7 @@ test('exact capacity, one-under preflight, and tiny initialization have stable e
 	try {
 		assert.equal(resize(short.bindings), 8);
 		assert.equal(short.bindings.privateErrorPath(), 1);
-		assert.equal(copies, 0);
+		assert.equal(copies, 1); // Hash the owned snapshot before remaining execution preflight.
 	} finally { Uint8Array.prototype.set = original; }
 	assert.equal(invoke(short.bindings, source(), 2, 1, 1, 1, 4).data.length, 4);
 });

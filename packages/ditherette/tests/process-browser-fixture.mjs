@@ -278,7 +278,7 @@ export async function processBrowserChecks({
 			return Reflect.apply(set, this, args);
 		};
 		rejects(() => under.process(value), 'memory-limit', 'memoryLimitBytes');
-		if (copies !== 0) throw new Error('Under-budget process copied bytes');
+		if (copies > 1) throw new Error('Under-budget process copied beyond its input snapshot');
 	} finally {
 		Uint8Array.prototype.set = set;
 	}
