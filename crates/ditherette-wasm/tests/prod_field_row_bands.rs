@@ -3,7 +3,7 @@ use ditherette_wasm::{
     prod::{
         self,
         contract::request::{Placement, WorkingSpace},
-        tiling::RowBand,
+        tiling::{RowBandBuffers, WorkerBudget},
     },
     spec,
 };
@@ -71,40 +71,38 @@ fn disjoint_field_outputs_keep_global_draws_and_full_source_adaptive_neighbors()
                         let counts: Vec<_> = (0..35).map(|_| AtomicUsize::new(0)).collect();
                         let mut guarded = vec![211; 142];
                         let output = &mut guarded[1..141];
-                        let worker_rows = 7usize.div_ceil(workers);
-                        std::thread::scope(|scope| {
-                            for (worker, output) in output.chunks_mut(20 * worker_rows).enumerate()
-                            {
-                                let counts = &counts;
-                                scope.spawn(move || {
-                                    for (band, output) in
-                                        output.chunks_mut(20 * band_height).enumerate()
-                                    {
-                                        let start = worker * worker_rows + band * band_height;
-                                        let height = output.len() / 20;
-                                        prod::dither::perturb::perturb_by_field_band_into(
-                                            source,
-                                            ImageViewMut::packed(
-                                                output,
-                                                ImageDimensions::new(5, height as u32).unwrap(),
-                                            )
-                                            .unwrap(),
-                                            space,
-                                            strength,
-                                            placement,
-                                            RowBand::new(start as u32, (start + height) as u32)
-                                                .unwrap(),
-                                            |x, y, index| {
-                                                assert_eq!(index, u64::from(y) * 5 + u64::from(x));
-                                                counts[index as usize]
-                                                    .fetch_add(1, Ordering::Relaxed);
-                                                noise(x, y, index)
-                                            },
-                                        );
-                                    }
-                                });
-                            }
-                        });
+                        let mut work = RowBandBuffers::<()>::try_new(
+                            dimensions,
+                            band_height,
+                            WorkerBudget::new(workers),
+                            workers,
+                            u64::MAX,
+                            &|_| Ok(0),
+                        )
+                        .unwrap();
+                        let caller = std::thread::current().id();
+                        let mut completed = 0;
+                        prod::dither::perturb::perturb_by_field_bands_into(
+                            source,
+                            output,
+                            space,
+                            strength,
+                            placement,
+                            &mut work,
+                            |x, y, index| {
+                                assert_eq!(index, u64::from(y) * 5 + u64::from(x));
+                                counts[index as usize].fetch_add(1, Ordering::Relaxed);
+                                noise(x, y, index)
+                            },
+                            &mut |rows| {
+                                assert_eq!(std::thread::current().id(), caller);
+                                assert!(rows > completed);
+                                completed = rows;
+                                Ok(())
+                            },
+                        )
+                        .unwrap();
+                        assert_eq!(completed, 7);
                         assert_eq!(&guarded[1..141], expected);
                         assert_eq!([guarded[0], guarded[141]], [211, 211]);
                         assert!(counts

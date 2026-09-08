@@ -10,7 +10,7 @@ use crate::{
         color::packed::{Converter, OrdinarySpace},
         contract::request::{AlphaPolicy, MatchPolicy},
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
-        tiling::RowBand,
+        tiling::{RowBand, RowBandBuffers},
     },
 };
 use std::mem::size_of;
@@ -112,6 +112,26 @@ impl PreparedQuantizer {
         {
             self.quantize_row_into(source.row(y).expect("valid source row"), output);
         }
+    }
+
+    /// Executes preflighted row work with shared preparation and no worker scratch.
+    /// Completed-row callbacks run on the caller after each joined batch.
+    pub fn quantize_bands_into(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        output: &mut [u8],
+        work: &mut RowBandBuffers<()>,
+        progress: &mut impl FnMut(u64) -> Result<(), crate::prod::contract::failure::Failure>,
+    ) -> Result<(), crate::prod::contract::failure::Failure> {
+        work.execute(
+            output,
+            source.dimensions().width_usize(),
+            &|band, output, _| {
+                self.quantize_rows_into(source, band, output);
+                Ok(u64::from(band.height()))
+            },
+            progress,
+        )
     }
 
     fn quantize_row_into(&self, source: &[u8], output: &mut [u8]) {

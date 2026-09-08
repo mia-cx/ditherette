@@ -1,17 +1,59 @@
 //! Literal field-to-RGBA8 row composition with caller-owned output.
 
 use crate::{
-    image::{ImageView, ImageViewMut, Rgba8},
+    image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::{
         color::{packed::rgb8_to_coordinates, reconstruct},
-        contract::request::{Placement, WorkingSpace},
-        tiling::RowBand,
+        contract::{
+            failure::Failure,
+            request::{Placement, WorkingSpace},
+        },
+        tiling::{RowBand, RowBandBuffers},
     },
 };
 
 use super::placement::{coordinate_domain, placement_mask_at};
 
 const FIELD_SCALE: f64 = 0.25;
+
+/// Each active field worker can own one temporary converter, including its byte tables.
+/// The enclosing call charges this in addition to row metadata, source, and output.
+pub const fn band_working_capacity_bytes(active_workers: u32) -> u64 {
+    std::mem::size_of::<crate::prod::color::packed::Converter>() as u64 * active_workers as u64
+}
+
+/// Executes preflighted disjoint bands while preserving the full immutable source.
+/// Field evaluation stays on workers; completed-row callbacks run only after joining.
+pub fn perturb_by_field_bands_into(
+    source: ImageView<'_, Rgba8>,
+    output: &mut [u8],
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    work: &mut RowBandBuffers<()>,
+    field: impl Fn(u32, u32, u64) -> f32 + Sync,
+    progress: &mut impl FnMut(u64) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let width = source.dimensions().width();
+    work.execute(
+        output,
+        width as usize * 4,
+        &|band, output, _| {
+            let dimensions = ImageDimensions::new(width, band.height()).expect("validated band");
+            perturb_by_field_band_into(
+                source,
+                ImageViewMut::packed(output, dimensions).expect("disjoint packed output"),
+                space,
+                strength,
+                placement,
+                band,
+                &field,
+            );
+            Ok(u64::from(band.height()))
+        },
+        progress,
+    )
+}
 
 /// Shared field composition. The callback returns one threshold in [-0.5,0.5] per global pixel.
 /// It runs once per written pixel even when alpha, strength, or placement would suppress an effect.

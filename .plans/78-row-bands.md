@@ -93,3 +93,15 @@ and result allocation; browser evidence will use the actual public Processor cal
 The new untimed `row_field_adapters` test passes all six recipe comparisons.
 It checks native/public identity equality, exact frozen output and metadata,
 unique settings identities, and unchanged input. No shared registry changed.
+
+## Shared execution checkpoint
+
+Joined S35 helper `d0af42d46d3d2726345ea8b7be281724fb07d00d` without conflicts.
+The quantize and field adapters now accept caller-preflighted `RowBandBuffers<()>`.
+They share preparation/source, write disjoint output, and report only joined rows.
+Field workers retain the landed converter construction and charge one converter
+record per active worker. No per-worker heap scratch or image color plane exists.
+The full native exactness matrices now exercise this actual executor instead of
+test-owned scoped threads. Both tests pass in scalar and `threads` builds.
+They also prove callbacks stay on the caller and reach the full output height.
+Combined capacity preflight and allocation-failure witnesses are the next checkpoint.

@@ -6,7 +6,7 @@ use ditherette_wasm::{
     prod::{
         contract::request::{AlphaPolicy, MatchPolicy},
         quantize::PreparedQuantizer,
-        tiling::RowBand,
+        tiling::{RowBandBuffers, WorkerBudget},
     },
     spec,
 };
@@ -83,21 +83,26 @@ fn disjoint_bands_share_preparation_and_preserve_all_matching_alpha_and_metadata
             for (workers, band_height) in [(1, 1), (2, 2), (4, 3), (4, 11)] {
                 let mut guarded = vec![211; 65];
                 let output = &mut guarded[1..64];
-                let worker_rows = dimensions.height_usize().div_ceil(workers);
-                std::thread::scope(|scope| {
-                    for (worker, output) in output.chunks_mut(7 * worker_rows).enumerate() {
-                        let prepared = &prepared;
-                        scope.spawn(move || {
-                            for (band, output) in output.chunks_mut(7 * band_height).enumerate() {
-                                let start = worker * worker_rows + band * band_height;
-                                let rows =
-                                    RowBand::new(start as u32, (start + output.len() / 7) as u32)
-                                        .unwrap();
-                                prepared.quantize_rows_into(source, rows, output);
-                            }
-                        });
-                    }
-                });
+                let mut work = RowBandBuffers::<()>::try_new(
+                    dimensions,
+                    band_height,
+                    WorkerBudget::new(workers),
+                    workers,
+                    u64::MAX,
+                    &|_| Ok(0),
+                )
+                .unwrap();
+                let caller = std::thread::current().id();
+                let mut completed = 0;
+                prepared
+                    .quantize_bands_into(source, output, &mut work, &mut |rows| {
+                        assert_eq!(std::thread::current().id(), caller);
+                        assert!(rows > completed);
+                        completed = rows;
+                        Ok(())
+                    })
+                    .unwrap();
+                assert_eq!(completed, 9);
                 assert_eq!(&guarded[1..64], oracle.indices.data());
                 assert_eq!([guarded[0], guarded[64]], [211, 211]);
                 last = guarded[1..64].to_vec();
