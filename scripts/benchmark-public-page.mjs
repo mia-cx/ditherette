@@ -201,6 +201,7 @@ export function outputStability(outputBytes, format = 'rgba8') {
 				for (const [index, data] of views.entries()) {
 					if (
 						!ArrayBuffer.isView(data) ||
+						!(data.buffer instanceof ArrayBuffer) || // Cloning shared storage does not copy its bytes.
 						data.BYTES_PER_ELEMENT !== 1 ||
 						data.buffer.byteLength !== data.byteLength ||
 						(index === 0
