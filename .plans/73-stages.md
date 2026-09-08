@@ -3,13 +3,16 @@
 Issue [#73](https://github.com/mia-cx/ditherette/issues/73). Preparation branch
 `impl/v1-s32-stages` starts at S31 checkpoint
 `4aad1dbe5f3eea46d7e5d04572ac5dffae23fba9` in `.worktrees/v1-s32-stages`.
-This checkpoint contains S31 work, not its final validated delivery. This task
-owns only this plan. No runtime implementation, build, or benchmark has started.
+The coordinator authorized implementation after S31 runtime
+`972d4e9a5882b25bca3de5f0786ad1525b5e6329` passed its exclusive trial.
+The plan commit is restacked onto that runtime. Final S31 report/PR joins follow
+at the next clean checkpoint. S32 now owns its assigned runtime files and tests.
 
-Before implementation, the coordinator must supply the final validated S31 head
-and benchmark join. Restack onto that dependency and recheck the inventory below.
+The validated S31 handoff advances the dependency gate. The inventory below still
+matches its actual preparation owners; final provenance joins remain pending.
 The eventual PR base is the delivered S31 branch, currently `impl/v1-s31-preparation`.
-S31's active owner keeps its runtime files until that handoff.
+Only `target/compiler` inside this S32 worktree is assigned for compiler outputs.
+Build/test jobs may run here; measurements require coordinator clearance.
 
 ## Authority and reuse
 
@@ -99,7 +102,9 @@ point; S32 supplies the transaction without inventing callback behavior early.
 
 ## Atomic implementation steps
 
-1. **Prove identities.** Extend the existing identity helper and replay frozen
+Step 1 complete. Next is shared store/transaction ownership, before pipeline wiring.
+
+1. [x] **Prove identities.** Extend the existing identity helper and replay frozen
    request-plan fixtures for every method and dither family. Done when production
    keys match the frozen model, including actual RGBA output-content transitions.
 2. **Add owned stage entries.** Extend the store/transaction with typed image values,
@@ -151,5 +156,9 @@ the shared preparation/image budget are explicit in the frozen contract. Physica
 entry layout and the private borrowed metadata view are implementation choices.
 Reconcile them with the final S31 owner after its validated handoff.
 
-This commit changes only `.plans/73-stages.md`. No runtime file, public API,
-frozen file, package artifact, build directory, or benchmark result changes.
+The initial preparation commit changed only this plan. The identity checkpoint
+adds canonical streaming stage keys and fallible owned image/metadata values.
+It changes no pipeline behavior or frozen files. Native validation passes
+3 stage-identity tests, 1 preparation-identity test, 16 frozen cache fixtures,
+and 1 owned-metadata budget/mutation test. Unwired stage owners currently emit
+dead-code warnings; step 2 connects those owners. No measurements ran.

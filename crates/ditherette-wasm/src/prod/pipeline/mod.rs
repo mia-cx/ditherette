@@ -8,3 +8,4 @@ pub mod process;
 pub mod processor;
 pub mod quantize;
 mod resize;
+mod stages;
