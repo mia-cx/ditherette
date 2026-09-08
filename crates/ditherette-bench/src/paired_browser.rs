@@ -59,17 +59,18 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
         .as_ref()
         .ok_or_else(|| BenchError::Config("missing browser assets".into()))?;
     validate_trial(trial).map_err(BenchError::io)?;
-    let reference_output = if let PublicOperation::Quantize { settings } = &browser.operation {
+    let reference_output = if let Some(reference_request) = browser
+        .operation
+        .processing_request(case.source, &case.rgba)
+        .map_err(BenchError::io)?
+    {
         let ditherette_wasm::bench_subjects::BenchSubject::Conformance(subject) =
             registry.subject(&case.reference_subject)?
         else {
             return Err(BenchError::Config(
-                "quantize requires its callable typed reference".into(),
+                "processing requires its callable typed reference".into(),
             ));
         };
-        let reference_request = settings
-            .reference_request(case.source, &case.rgba)
-            .map_err(BenchError::io)?;
         (subject.run)(&reference_request).map_err(|error| BenchError::Runtime(error.to_string()))?
     } else {
         let reference = registry.resize_subject(&case.reference_subject)?;

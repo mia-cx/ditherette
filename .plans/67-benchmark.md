@@ -8,8 +8,8 @@ Its sole conflict retained S26's existing `rgb8_to_coordinates` addition verbati
 ## TODOs
 
 - [x] Register exact native inverse, field, placement, source-conversion, and complete Processor adapters with typed identities and focused untimed tests.
-- [ ] Extend the existing public protocol and actual package conformance for perturb/separable outputs after S03's public baseline.
-- [ ] Declare the fixed 208-worker experiment and conformance fixtures, validate without measurements, and hand off clean checkpoints.
+- [x] Extend the existing public protocol and actual package conformance for perturb/separable outputs after S03's public baseline.
+- [x] Declare the fixed 208-worker experiment and conformance fixtures, validate without measurements, and hand off clean checkpoints.
 
 ## Fixed proposed measurement scope
 
@@ -68,3 +68,57 @@ New fixtures check seven inverse/conversion spaces, five fields, two placement s
 Both crate formatting checks and `git diff --check` pass.
 Production/spec/image bytes still match native baseline `b87d965d`; no mathematical implementation changed.
 No measurement or benchmark artifact preparation ran.
+
+## Public protocol checkpoint
+
+The public protocol now calls actual package `perturb` and `ditherAndQuantize` methods.
+Their typed identities equal the native complete-call identities, including every field and matching setting.
+Perturb responses require RGBA8; separable responses require indexed bytes and complete palette/warning metadata.
+Unsupported TypeScript field recipes fail validation before running a worker.
+
+`field_conformance` exports twelve small frozen fixtures through the shared reference registry.
+They cover the nine complete benchmark recipes and three palette warning cases.
+The existing public conformance suite requires `DITHERETTE_BENCH_FIELD_FIXTURES` alongside its quantize fixtures.
+For each engine, it checks every field fixture with primed and fresh instances.
+Ten actual `quantize(perturb(...))` compositions verify bytes, palette metadata, transparency, and warnings outside all timers.
+Retained outputs survive later calls/disposal, inputs stay unchanged, and perturb preserves alpha.
+
+Untimed conformance passed Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+The package tarball came from the already-validated S26 public baseline.
+Its SHA256 is `aa7befbef890f47f83831a7f9f735a9d1a9c5067895620cd36d60f369eab29f2`.
+The suite also retained all 47 frozen quantize fixtures across fifteen matching modes.
+This artifact supports conformance only; measurements require separately prepared revision-bound artifacts.
+
+Validation passed six browser-worker tests, four native field-adapter tests, eleven paired-browser tests,
+and 28 Node browser/timing/IPC tests. Both Rust bins/examples checks pass.
+No production, spec, image, or landed kernel implementation changed.
+
+## Experiment declaration and measurement handoff
+
+`field_integration_plan` writes either the 25-case native experiment or the nine-case public experiment.
+Use the public experiment independently for Chromium, Firefox, and WebKit.
+Each case has two alternating accepted/candidate pairs, giving `(25 + 9 * 3) * 2 * 2 = 208` serial workers.
+The generator test verifies scopes, sample counts, caps, unique settings, and identical native/public complete recipes.
+Declarations and frozen fixtures were generated under `target/s26-protocol-validation/` without collecting samples.
+
+Reproduce declarations with the assigned native benchmark target:
+
+```sh
+cargo run --manifest-path crates/ditherette-bench/Cargo.toml --locked --example field_integration_plan -- native NEW_NATIVE_JSON HOST_LOAD_NOTES
+cargo run --manifest-path crates/ditherette-bench/Cargo.toml --locked --example field_integration_plan -- public NEW_PUBLIC_JSON HOST_LOAD_NOTES
+cargo run --manifest-path crates/ditherette-bench/Cargo.toml --locked --example field_conformance -- NEW_FIXTURE_JSON
+```
+
+All generators refuse to overwrite existing output paths.
+The component SourceConversion control keeps the actual per-pixel `rgb8_to_coordinates` helper unchanged.
+Its per-pixel converter construction remains inside the batch timer on both revisions.
+Only actual perturb/adaptive calculations may use the coordinator's call-owned converter candidate.
+
+The coordinator must prepare accepted/candidate immutable artifacts and supply a separate Wasm build cache before browser preparation.
+This worktree owns only the native benchmark cache at `.worktrees/v1-s24-bench/crates/ditherette-bench/target`.
+Retain its `target/s24-*` evidence. Wait for coordinator clearance before any measurement.
+The coordinator drains agents/builds/tests and holds the shared benchmark lease across all workers and browser children.
+No PR, merge, publishing, deployment, or issue closure belongs to this benchmark checkpoint.
+
+The experiment declaration test passed, bringing the focused Rust total to 22.
+Rust formatting, JavaScript formatting, `git diff --check`, and bins/examples validation pass.
