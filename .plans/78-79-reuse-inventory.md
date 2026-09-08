@@ -3,6 +3,8 @@
 Read each slice and the current execution contract. Start from validated S34, not the earlier scalar package.
 S36 owns quantization and separable fields. S37 owns Yliluoma. Diffusion stays scalar.
 Each owner uses an isolated worktree. Root reconciles shared pipeline registration at the integration join.
+S34 checks whether the caller permits blocking waits. Real threaded conformance and complete-call benchmarks run in a declared host worker.
+Main-thread Preferred selects scalar and Required returns a capability error. Preserve this distinction when adding synchronous Rayon joins.
 
 ## Existing semantic paths
 

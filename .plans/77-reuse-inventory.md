@@ -2,6 +2,9 @@
 
 Read S35 and the current execution contract before implementation. Start only after validated S34 is present in ancestry.
 This inventory records existing code at the validated S33 base. Recheck the relevant call graph after joining S34.
+S34's actual-thread caller must permit blocking waits. Main-thread Required returns a capability error; Preferred selects scalar.
+Run threaded complete-call evidence in the declared host-worker context, including its normal synchronous Rayon joins.
+Do not add a main-thread spin loop or initialization-only bootstrap workaround.
 
 ## Reuse before adding adapters
 
