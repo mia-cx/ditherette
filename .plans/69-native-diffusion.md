@@ -123,7 +123,8 @@ Public cases self-pair the ring package in primed instances, separately from nat
 
 Before measurement, the coordinator records fresh artifact identities, workload targets, host load, and exclusive clearance.
 The declared budget is two pairs and twenty single-call samples per role, with 50 ms warmup and a 10,000 ms measurement window per worker.
-Eight native cases plus eight public cases in each of three engines declare 128 serial workers and 2,560 retained samples.
+Eight native cases plus eight public cases in each of three engines declare 128 serial workers and at most 2,560 samples.
+Collectors can stop after at least five samples when the measurement window expires; twenty is the requested maximum, not a guaranteed count.
 Their nominal warmup/measurement windows total 1,286.4 seconds; startup, verification, and single-call overshoot are additional.
 There are no automatic retries or extra candidate revisions in this declaration. The coordinator must bound process time separately.
 The existing release gate rejects confirmed per-case median regressions above ten percent. Public self-pairs establish evidence, not an optimization comparison.
