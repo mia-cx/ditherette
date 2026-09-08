@@ -12,7 +12,7 @@ All builds use this worktree's ordinary `target/compiler` directory. No sibling 
 
 ## TODOs
 
-- [~] Add failing Process wire/identity tests against the existing frozen native reference, then add typed frozen-only dispatch.
+- [x] Add failing Process wire/identity tests against the existing frozen native reference, then add typed frozen-only dispatch.
 - [ ] Verify complete recipe identities, changed output dimensions, indexed metadata, invalid inputs, and rejection of caller reference overrides.
 - [ ] Run focused native tests and isolated Wasm compilation, record limits, commit/push, and drain owned jobs.
 
@@ -24,6 +24,10 @@ Identity reuses the established native tuple `("process", palette, recipe)` and 
 Tests obtain expected output from the frozen native Process adapter, not hand-written pixel bytes.
 Same-browser conformance and retained cross-target diagnostics remain the later integration's obligation.
 No tolerance changes, frozen changes, production calls, measurement workers, or PR/issue writes occur here.
+
+The first regression fails on the absent `process` enum variant, then passes with typed dispatch.
+The second fails because envelope output was ignored, then passes with a Process-only dimensions check.
+All five focused oracle tests pass after these changes. Every new expected output comes from the existing native frozen adapter.
 
 ## Cleanup
 

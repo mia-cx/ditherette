@@ -151,3 +151,96 @@ fn diffusion_and_yliluoma_wire_settings_match_the_shared_typed_reference() {
         );
     }
 }
+
+fn process_wire() -> serde_json::Value {
+    json!({
+        "source": {"width": 2, "height": 2},
+        "rgba": [73,85,65,0,120,40,190,255,9,210,51,127,250,240,230,255],
+        "output": {"width": 3, "height": 2},
+        "operation": {"operation": "process", "settings": {
+            "palette": [{"kind":"color","rgb":[255,255,255]},
+                {"kind":"color","rgb":[0,0,0]}, {"kind":"transparent"},
+                {"kind":"color","rgb":[255,255,255]}],
+            "recipe": {"version":1,
+                "output":{"width":3,"height":2,"resize":{"algorithm":"bicubic","anchor":"center","support":"scale-aware"}},
+                "alpha":{"mode":"preserve","threshold":127.5},
+                "match":"cielab-ciede2000",
+                "dither":{"family":"diffusion","kernel":"floyd-steinberg","feedback":"matching",
+                    "strength":0.7,"serpentine":true,
+                    "placement":{"mode":"adaptive","radius":1,"threshold":5,"softness":10}}
+            }
+        }}
+    })
+}
+
+/// Expected identities and bytes come from the existing native frozen Process adapter.
+fn frozen_process(wire: &serde_json::Value) -> Result<(CaseIdentity, VerificationOutput), String> {
+    use ditherette_bench::verification::{input_digest, settings_digest};
+    use ditherette_wasm::{
+        bench_subjects::reference::ReferenceRequest, spec::contract::request as s,
+    };
+    let source: Dimensions = serde_json::from_value(wire["source"].clone()).unwrap();
+    let rgba: Vec<u8> = serde_json::from_value(wire["rgba"].clone()).unwrap();
+    let settings = &wire["operation"]["settings"];
+    let palette = serde_json::from_value::<Vec<_>>(settings["palette"].clone()).unwrap();
+    let request = ReferenceRequest::Processing(s::Request::Process(s::ProcessRequest {
+        source: s::Source {
+            width: source.width,
+            height: source.height,
+            data: &rgba,
+        },
+        palette: &palette,
+        recipe: serde_json::from_value(settings["recipe"].clone()).unwrap(),
+    }));
+    let identity = CaseIdentity {
+        semantics: request.semantics(),
+        input: input_digest(source, &rgba),
+        settings: settings_digest(&request).unwrap(),
+        output: request.dimensions().map_err(|e| e.to_string())?,
+    };
+    let registry = bench_subjects();
+    let BenchSubject::Conformance(reference) = registry
+        .iter()
+        .find(|s| s.descriptor().id.as_str() == "spec:process:request:v1")
+        .unwrap()
+    else {
+        panic!("typed frozen Process reference")
+    };
+    Ok((
+        identity,
+        (reference.run)(&request).map_err(|e| e.to_string())?,
+    ))
+}
+
+#[test]
+fn process_wire_matches_frozen_identity_resized_output_and_indexed_metadata() {
+    let mut wire = process_wire();
+    let (identity, expected) = frozen_process(&wire).unwrap();
+    wire["identity"] = serde_json::to_value(&identity).unwrap();
+    let request: OracleRequest = serde_json::from_value(wire).unwrap();
+    assert_eq!(request.case_identity().unwrap(), identity);
+    let actual = request.execute().unwrap();
+    assert_ne!(actual.case.output, request.source);
+    assert_eq!(actual.output, expected);
+    let Pixels::Indexed8 {
+        indices,
+        palette_rgba,
+        transparent_index,
+    } = actual.output.pixels
+    else {
+        panic!("Process must publish indexed output")
+    };
+    assert_eq!(indices.len(), 6);
+    assert_eq!(palette_rgba.len(), 16);
+    assert_eq!(transparent_index, Some(2));
+}
+
+#[test]
+fn process_rejects_declared_output_that_disagrees_with_its_recipe() {
+    let mut wire = process_wire();
+    wire["identity"] = serde_json::to_value(frozen_process(&wire).unwrap().0).unwrap();
+    wire["output"] = wire["source"].clone();
+    let request: OracleRequest = serde_json::from_value(wire).unwrap();
+    assert!(request.case_identity().is_err());
+    assert!(request.execute().is_err());
+}
