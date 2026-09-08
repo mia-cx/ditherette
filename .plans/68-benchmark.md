@@ -12,7 +12,7 @@ S26 contributes its benchmark adapters, repaired field verifier, and completed b
 - [x] Declare 68 serial workers and export matching installed-package fixtures; pass untimed native checks.
 - [x] Commit clean code and prepare independent fresh native/public role builds with all jobs drained.
 - [x] Use an independently identified frozen-only Wasm oracle for browser preflight; pass exact public conformance while retaining native diagnostics.
-- [ ] Coordinator rebuilds fresh role artifacts with this protocol and prepares immutable pairs after joining the remaining slices.
+- [ ] Prepare fresh independent S27 roles and immutable pairs after rebasing onto the actual updated S26 base; leave all workers unstarted.
 
 ## Fixed scope
 
@@ -149,3 +149,19 @@ When joining S28/S29, preserve their indexed-output classification for both Diff
 Their full fixture suites and fresh joined-role provenance remain integration checks, beyond the typed mapping tests here.
 All build and browser jobs are drained; S23 scalar/threaded caches have returned to the coordinator.
 The coordinator also holds new snapshots for a separate output-stability evidence fix from PR #113.
+
+## Rebased S27 paired preparation
+
+The immutable comparison-evidence fix `eb1725ef8bf8eadaf703d3e0a93576c2bf9a70eb` joined as `a9327c68560b654b912977102e9fb8036f5f9eeb`.
+Twenty-seven browser/timing protocol tests pass after that join.
+The branch then rebased with `--rebase-merges` onto actual updated S26 base `68f058e93dce025ba87fa728f0b960a09dc96948`.
+Rebased head `d27df659335774456532a207772b5c6afb8520cf` retains the complete pre-rebase tracked tree byte-for-byte, including merge-only documentation.
+The duplicate snapshot-fix cherry-pick dropped because its patch is now in S26 ancestry.
+
+Prepare `target/s27-trial-01/` with two independent native builds and two independent public builds from the same clean final source revision.
+The public builds include the separate frozen-only oracle and immutable output-stability protocol.
+Validate both installed roles with the original four S27 recipes and retain full native/Wasm reference diagnostics.
+Use the unchanged 68-worker declaration and existing immutable native/browser preparation commands.
+Preparation may snapshot all three engines but must not launch measurement workers.
+The S24 native cache and S23 scalar/threaded caches are exclusive to this preparation until the final drain handoff.
+Preserve every earlier preparation, diagnostic, and trial artifact.
