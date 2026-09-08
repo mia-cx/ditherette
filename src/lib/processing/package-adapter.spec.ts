@@ -94,14 +94,14 @@ describe('website package request', () => {
 				perturb: {
 					field: { algorithm: 'bayer', size: '4' },
 					space,
-					strength: colorSpace === 'weighted-rgb' ? (0.5 * 64) / 63.75 : 0.5,
+					strength: colorSpace === 'weighted-rgb' ? (0.5 * 96) / 63.75 : 0.5,
 					placement: { mode: 'everywhere' }
 				}
 			});
 		}
 	);
 	it.each(['bayer-2', 'bayer-4', 'bayer-8', 'bayer-16'] as const)(
-		'converts the historical 64-byte field scale for %s',
+		'converts the current 96-byte field scale for %s',
 		(algorithm) => {
 			const { recipe } = packageProcessRequest(
 				source,
@@ -114,7 +114,7 @@ describe('website package request', () => {
 				perturb: {
 					field: { algorithm: 'bayer', size: algorithm.slice(6) },
 					space: 'srgb',
-					strength: (0.25 * 64) / 63.75,
+					strength: (0.25 * 96) / 63.75,
 					placement: { mode: 'everywhere' }
 				}
 			});
@@ -141,7 +141,7 @@ describe('website package request', () => {
 			perturb: {
 				field: { algorithm: 'random', seed: 4294967295 },
 				space: 'srgb',
-				strength: 64 / 63.75,
+				strength: 96 / 63.75,
 				placement: { mode: 'adaptive', radius: 1, threshold: 12, softness: 8 }
 			}
 		});

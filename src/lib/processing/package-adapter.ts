@@ -8,7 +8,12 @@ import type {
 	WorkingSpace
 } from 'ditherette';
 import { bayerSizeForAlgorithm } from './bayer';
-import { resolveMatteRgb, supportsVectorDither, type QuantizeResult } from './quantize-shared';
+import {
+	RGB_DITHER_NOISE_SCALE,
+	resolveMatteRgb,
+	supportsVectorDither,
+	type QuantizeResult
+} from './quantize-shared';
 import { clampCrop } from './resize';
 import type {
 	ColorSpaceId,
@@ -50,8 +55,8 @@ const RESIZE = {
 	area: { algorithm: 'area' }
 } as const satisfies Record<ResizeId, RecipeV1['output']['resize']>;
 
-// The historical byte-space field uses 64; the public normalized field uses 255 / 4.
-const BYTE_FIELD_STRENGTH_RATIO = 64 / 63.75;
+// Match the current website byte scale to the public normalized field's 255 / 4.
+const BYTE_FIELD_STRENGTH_RATIO = RGB_DITHER_NOISE_SCALE / 63.75;
 
 function croppedSource(
 	source: Pick<ImageData, 'width' | 'height' | 'data'>,

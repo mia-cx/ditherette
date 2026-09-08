@@ -10,7 +10,7 @@ required workspace dependencies, and this plan belong to S38.
 The approved [PRD execution contract](../docs/plans/ditherette-v1/README.md#execution-contract),
 [S38 slice](../docs/plans/ditherette-v1/slices.md#s38), and issue #39 resolution
 govern this integration. The coordinator's `.plans/80-reuse-inventory.md` records
-the initial read-only inventory. No website implementation or test has run yet.
+the initial read-only inventory. Implementation and focused verification are complete.
 
 The coordinator released the hold after Mia explicitly approved the separate S30
 CI fixture repair. S38 resumes implementation without changing protected policy.
@@ -66,6 +66,10 @@ decode/crop-to-preview/export interfaces as the test boundaries.
 - [x] Exercise project-owned decoded-upload/crop/settings fixtures through the
   actual installed package, existing render/PNG code, and persistence schemas.
 - [x] Send a clean mapping/baseline checkpoint for review before final PR work.
+- [x] Correct byte-field strength against current website behavior and verify a
+  palette decision boundary through the installed package.
+- [x] Build the consumed workspace package before website builds and document
+  its one-time development prerequisite.
 - [ ] Complete focused checks, rebase onto the actual S30 parent, and file a real
   unmerged, non-draft PR with auto-merge off. Return generated targets after drain.
 
@@ -79,8 +83,8 @@ Mapper checkpoint: 29 focused cases pass after the initial missing-module failur
 Svelte checking reports zero errors; generated Cloudflare type declarations are
 not present yet. The installed workspace package resolves generated `dist` copied
 from the approved S30 tarball; its digest matches the retained evidence.
-OKLCH maps to `oklch-hue-arc`. Raw RGB separable strength includes the S13
-`64/63.75` correction; vector fields and diffusion use percentage divided by 100.
+OKLCH maps to `oklch-hue-arc`. Raw RGB separable strength uses the website's current
+byte-field scale divided by `63.75`; vector fields and diffusion use percentage divided by 100.
 Adaptive thresholds and softness retain percentage points; radius rounds with
 the existing minimum of one. Fixed-domain package placement remains the approved
 replacement for the historical palette-dependent TS normalization.
@@ -94,7 +98,7 @@ estimates describe the TS implementation. Existing coarse progress remains.
 Initialization failure remains visible and memoized until the worker is replaced;
 S39 owns faithful initialization fallback. No progress callback is passed to S30.
 
-Browser checks pass three fixtures, including all 72 color/dither combinations,
+Browser checks pass four fixtures, including all 72 color/dither combinations,
 decoded PNG upload, integer crop packing, Lanczos cropped-edge clamping, indexed
 preview, PNG round trip, matte settings changes, duplicate metadata, and persisted
 source/output schemas. `pnpm exec vitest run --project client
@@ -104,11 +108,21 @@ The disabled-path fractional crop fixture still uses the existing TS implementat
 `pnpm exec vite build` passes with the approved package artifacts. No timing result
 is performance evidence. Runtime checkpoint `00040ee` is with the coordinator.
 
-Finalization findings under review: current TS `RGB_DITHER_NOISE_SCALE` is 96,
-whereas frozen S13 prose describes historical 64. The package field scale is
-63.75. Resolve the adapter factor using the actual website without editing the
-frozen reference. Clean website builds also need public-package artifacts, so the
-root build workflow must build its workspace dependency before Vite.
+The coordinator confirmed the current TS `RGB_DITHER_NOISE_SCALE` of 96 governs
+the adapter. Frozen S13 prose describes historical 64 and remains untouched.
+An independent Bayer fixture at byte 154 fails with 64/63.75 and passes with the
+approved 96/63.75 ratio, checking both 100% and 50% strength.
+The root build now builds the public package, then stages its existing scalar
+artifacts for the historical resize path. README records the one-time development
+build prerequisite; each dev start does not rebuild the package.
+
+Restacked onto actual S30 parent `d2356a502501b38ab4f3b476956fc90f1fbfec4a`.
+The parent changes only the approved CI mutation fixture and preserves package bytes.
+Final focused mapper/worker run passes 47 cases; Chromium passes four fixtures.
+Svelte checking passes with zero errors and one missing-generated-types warning.
+New adapter, worker, browser test, resize, and config files pass ESLint.
+`quantize-shared.ts` has three pre-existing unused imports at the parent; exporting
+the existing matte helper leaves those inherited diagnostics unchanged.
 
 ## Scope limits
 

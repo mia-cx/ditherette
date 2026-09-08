@@ -75,6 +75,45 @@ const settings: ProcessingSettings = {
 };
 
 describe('installed package website integration', () => {
+	it('preserves the website byte-field strength at a palette decision boundary', async () => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{
+				id: 1,
+				type: 'load-source',
+				sourceId: 'strength',
+				source: new ImageData(new Uint8ClampedArray([154, 154, 154, 255]), 1, 1)
+			},
+			() => undefined
+		);
+		for (const [strength, expected] of [
+			[100, 0],
+			[50, 1]
+		]) {
+			const modeSettings = {
+				...settings,
+				output: { ...settings.output, width: 1, height: 1, crop: undefined },
+				dither: { ...settings.dither, algorithm: 'bayer-2', strength }
+			} satisfies ProcessingSettings;
+			const response = await pipeline.handleAsync(
+				{
+					id: 2,
+					type: 'process',
+					sourceId: 'strength',
+					settings: modeSettings,
+					palette: uploaded.palette.slice(0, 2),
+					settingsHash: `strength-${strength}`
+				},
+				() => undefined
+			);
+			if (response?.type !== 'complete') throw new Error('Expected field output.');
+			// Bayer(0,0) is -3/8. The website's scale 96 gives 118 at 100%, 136 at 50%.
+			expect(response.image.indices).toEqual(new Uint8Array([expected]));
+		}
+	});
+
 	it('accepts every website color and dither combination through the public package', async () => {
 		vi.stubEnv('DEV', true);
 		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
