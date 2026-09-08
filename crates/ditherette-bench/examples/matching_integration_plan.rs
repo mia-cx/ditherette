@@ -128,6 +128,7 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
                     cache: CacheCapability::None,
                     measure_nonexact: false,
                     progress: None,
+                    threads: None,
                 }),
             )
         } else {

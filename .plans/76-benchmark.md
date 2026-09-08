@@ -1,7 +1,7 @@
 # S34 startup evidence
 
 Issue #76 adds optional threaded initialization and teardown. Reuse the existing initialization collector and paired browser protocol.
-Root owns this worktree until the S33 report owner returns and receives an explicit handoff.
+The benchmark owner receives this worktree after S33 handoff and joins final S33 `b2ca677ed9927165a1010f5c52646a989d8a02ca`.
 
 ## Fixed experiment
 
@@ -23,8 +23,8 @@ Threaded and scalar absolute times are different initialization paths, not a cla
 
 ## Implementation TODOs
 
-- [ ] Add optional typed role thread policies to the developer protocol and evidence. Historical declarations retain scalar behavior.
-- [ ] Pass the selected public threads option through the actual adapter's preload and measured create call.
+- [x] Add optional typed role thread policies to the developer protocol and evidence. Historical declarations retain scalar behavior.
+- [x] Pass the selected public threads option through the actual adapter's preload and measured create call.
 - [ ] Reuse each role's existing Wasm asset entry for its selected scalar or threaded artifact. Bind exact bytes and worker assets through normal provenance.
 - [ ] Add focused protocol, actual adapter, and generator tests without running timing measurements.
 - [ ] Prepare clean revision-bound accepted and candidate artifacts after runtime validation. Preserve identical benchmark protocol in both.
@@ -35,3 +35,16 @@ The runtime owner has `v1-s34-threads`; installed fixtures belong to `v1-s34-pub
 This worktree owns benchmark sources and tests only. Preserve frozen specs, production kernels, and package API policy.
 Lifecycle tests prove real pool startup, partial cleanup, disposal, and host termination. Timing evidence does not replace those tests.
 No public backend or worker-count control is added. No publishing, merging, rollout, or routine review occurs here.
+
+## Protocol checkpoint
+
+Optional `browser.threads` declares accepted/candidate policies using the existing typed `Threads` enum.
+Historical cases and evidence omit the field unchanged; the actual adapter explicitly uses `disabled` when omitted.
+Evidence must match both declared role policies. The package receives the selected policy during untimed preload and every factory call.
+Eleven focused Node fixtures pass, including full initialization trials for bytes/compiled input, historical scalar defaults,
+exact probes, disposal, and required failure without fallback. Twenty-six Rust browser protocol/worker fixtures pass.
+These use fake clocks/packages for protocol behavior, not actual startup timing or proof of real worker pools.
+The runtime/installed fixture owners supply real required-pool evidence before artifacts enter the fixed trial.
+
+The only compiler target currently claimed is this worktree's new ordinary `target/compiler`.
+No S33 compiler output is reused. No new helper imports or manual browser routes are needed.

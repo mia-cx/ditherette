@@ -39,6 +39,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             cache: CacheCapability::None,
             measure_nonexact: false,
             progress: None,
+            threads: None,
         });
         let subject = match &browser {
             Some(browser) => browser.operation.subject(BrowserBackend::Package),

@@ -4,6 +4,11 @@ let callCount = 0;
 let mismatchAt = 0;
 let progressCalls = 0;
 let progressFailure;
+let initializationFailure = 0;
+
+export function failInitialization(at) {
+	initializationFailure = at;
+}
 
 export function failProgress(failure) {
 	progressFailure = failure;
@@ -15,10 +20,14 @@ export function reset(transientMismatchAt = 0) {
 	mismatchAt = transientMismatchAt;
 	progressCalls = 0;
 	progressFailure = undefined;
+	initializationFailure = 0;
 }
 
-export async function createDitherette() {
+export async function createDitherette(options) {
 	const id = ++nextId;
+	events.push({ type: 'initialize', id, threads: options.threads,
+		wasm: options.wasm instanceof WebAssembly.Module ? 'compiled' : 'bytes' });
+	if (id === initializationFailure) throw new Error('injected required startup failure');
 	events.push({ type: 'create', id });
 	const call = (method, request) => {
 		events.push({ type: method, id, source: [...request.source.data] });

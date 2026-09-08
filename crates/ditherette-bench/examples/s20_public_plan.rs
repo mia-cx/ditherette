@@ -56,6 +56,7 @@ fn case(
         cache: CacheCapability::None,
         measure_nonexact: false,
         progress: None,
+        threads: None,
     };
     Ok(PairCase {
         native: None,
