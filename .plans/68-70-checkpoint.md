@@ -1,8 +1,8 @@
 # S27 through S29 integration checkpoint
 
-S26 PR #115 is open and unmerged. Coordinator `6d1e3827` contains its accepted
-implementation, all restored resize families, and the benchmark snapshot fix.
-S25 and S26 carry that fix at `ff2d1232` and `68f058e9`. The three dependent slices
+S26 PR #115 is open and unmerged. Coordinator `9a9cdfb7` contains its accepted
+implementation, all restored resize families, and both benchmark snapshot fixes.
+S25 and S26 carry those fixes at `af8259ac` and `59036e1a`. The three dependent slices
 remain in progress until their conformance and measurement obligations finish.
 
 ## Same-target frozen reference
@@ -37,8 +37,9 @@ dependency, and syntax checks pass. This changes benchmark tooling, not
 production arithmetic, frozen files, tolerances, or expected bytes by hand.
 
 PR #113 snapshot fix `eb1725ef` keeps private first/distinct evidence outside
-timers, so later producer calls cannot rewrite it. All 29 relevant browser,
-timing, and Chromium IPC tests pass. Both review threads are resolved. Palette
+timers. Follow-up `f8a2cc11` rejects shared backing stores before retention,
+because structured cloning preserves SharedArrayBuffer sharing. All 30 relevant
+browser, timing, and Chromium IPC tests pass. Three review threads are resolved. Palette
 validation keeps its approved oversized-input behavior and documented tail
 checks. Earlier trial records remain historical, not reruns of this protocol.
 

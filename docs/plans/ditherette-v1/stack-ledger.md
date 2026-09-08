@@ -28,7 +28,7 @@ S25 adds all fifteen matching tags at `0085972a`, with 309 native tests and thre
 Its exact dispatch candidate `230046ff` is rejected after the fresh 276-worker comparison.
 The run retains 5,133 timing samples and all verified outputs are exact; a required native score control regresses and several controls remain noisy.
 The all-mode baseline remains selected. S25 is delivered in [PR114](https://github.com/mia-cx/ditherette/pull/114), targeting S24.
-Current head `ff2d1232d0be89ca512edadc271f4f800261c844` carries the immutable benchmark snapshot fix without changing package code.
+Current head `af8259ac766268e78690a569c10494c62cdb7ce2` carries both benchmark snapshot fixes without changing package code.
 Its [measurement record](../../../.plans/66-measurement.md) retains both attempts, exactness scope, rejected candidate, and artifact identities. No further slice measurements are planned.
 S26 literal field baseline `e156cfbf` reaches validated public checkpoint `089251287e387cb575e22e8993d8989a371a089d`.
 It passes 13 scoped native, 24 interface, 11 private ABI tests, both builds, three browser engines, and the trusted freeze guard.
@@ -38,12 +38,12 @@ Converter candidate `b237b7468fa5fc349760bc0086bd1748113b6d82` passes native/pub
 Its fresh comparison completes 208 workers and 4,048 samples. Untimed verifier repair confirms exact native controls.
 Browser pair-noise gates remain inconclusive, so the original field implementation stays selected. No retry runs.
 S26 is delivered in [PR115](https://github.com/mia-cx/ditherette/pull/115), targeting S25.
-Current head `68f058e93dce025ba87fa728f0b960a09dc96948` includes the updated S25 parent and unchanged package code.
+Current head `59036e1aef87943e462b4cce6b371e5edd082979` includes the updated S25 parent and unchanged package code.
 The delivery rebase preserves measured runtime bytes. See [the measurement record](../../../.plans/67-measurement.md).
 Combined resize/S26 join `82a7e3e9` passes 327 native, 26 interface, 12 private ABI, and all three installed-package engines.
 Its [join record](../../../.plans/67-resize-join.md) records unchanged kernel bytes, adapter checks, and the validation tarball.
 S27 public blue noise passes native/private/interface checks, both builds, and all three package engines.
-Its benchmark branch `impl/v1-s27-bench` reaches `518a4f6d6c40f76928a13dc38f71866605e671bc` on the current S26 parent.
+Its benchmark branch `impl/v1-s27-bench` reaches `44cbe43546e739f3d11f7b0bd08d7453afb83da1` on the current S26 parent.
 The independent frozen-Wasm oracle and immutable evidence collector are included; fresh paired artifacts are being prepared.
 S28 three-row diffusion reaches validated public checkpoint `8df7b48396aec85bf9c1a289d63973b615e31018`.
 It passes 360 frozen public vectors in all three engines and the trusted freeze guard.
@@ -263,8 +263,9 @@ S24 adds exact indexed-result observation and completes fresh replacement benchm
 
 [PR #113](https://github.com/mia-cx/ditherette/pull/113) is open, non-draft, and unmerged, with auto-merge disabled.
 Branch `impl/v1-s24-bench` targets S22 at `9eecc670d9ff587ff10f8d2f3a8b86bab600c988`.
-Current head `eb1725ef8bf8eadaf703d3e0a93576c2bf9a70eb` preserves measured source `f4b90ecfcde63531fb992cf87ebda04d4e373032` processing bytes.
-It fixes mutable first/distinct benchmark evidence outside timers; 29 relevant Node checks pass and both review threads are resolved.
+Current head `f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395` preserves measured source `f4b90ecfcde63531fb992cf87ebda04d4e373032` processing bytes.
+It snapshots first/distinct evidence outside timers and rejects shared result backing; 30 relevant Node checks pass.
+All three addressed review threads are resolved; the new automated review remains pending.
 Fresh trials must include this collector. Historical measurements below are not reruns of the corrected protocol.
 Literal baseline `a23260ed` remains in ancestry. The prepared integration reuses landed forward conversion equations and tables.
 
