@@ -58,10 +58,19 @@ pub struct DiffusionSettings {
     pub placement: Placement,
 }
 
+/// Complete frozen recipe; output dimensions belong to the recipe, not the source.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessSettings {
+    pub palette: Vec<image::contracts::PaletteEntry>,
+    pub recipe: RecipeV1,
+}
+
 /// Wire tags mirror the benchmark protocol; settings use only frozen contract types.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PublicOperation {
+    Process { settings: ProcessSettings },
     Perturb { settings: PerturbPolicy },
     Separable { settings: SeparableSettings },
     Quantize { settings: QuantizeSettings },
@@ -94,6 +103,13 @@ impl OracleRequest {
             data: &self.rgba,
         };
         let resize = match &self.operation {
+            PublicOperation::Process { settings } => {
+                return Request::Process(ProcessRequest {
+                    source,
+                    palette: &settings.palette,
+                    recipe: settings.recipe,
+                })
+            }
             PublicOperation::Perturb { settings } => {
                 return Request::Perturb(PerturbRequest {
                     version: 1,
@@ -169,6 +185,12 @@ impl OracleRequest {
     pub fn case_identity(&self) -> Result<CaseIdentity, String> {
         let request = self.request();
         let dimensions = request.validate().map_err(|e| e.to_string())?.output;
+        if matches!(request, Request::Process(_))
+            && (self.output.width != dimensions.width()
+                || self.output.height != dimensions.height())
+        {
+            return Err("Wasm oracle Process output differs from recipe dimensions".into());
+        }
         let (operation, recipe, space, settings) = match request {
             Request::Perturb(p) => (
                 Operation::Perturb,
@@ -209,7 +231,12 @@ impl OracleRequest {
                 None,
                 settings_digest(&(&self.operation, self.output)),
             ),
-            Request::Process(_) => unreachable!("public operation registry excludes process"),
+            Request::Process(p) => (
+                Operation::Process,
+                "public-process",
+                Some(p.recipe.matching.space()),
+                settings_digest(&("process", p.palette, p.recipe)),
+            ),
         };
         let space = space.map(|value| {
             serde_json::from_value(serde_json::to_value(value).expect("space tag"))
