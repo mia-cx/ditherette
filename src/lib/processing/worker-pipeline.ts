@@ -1,6 +1,8 @@
 import { resizeImageData } from '$lib/processing/resize';
 import { quantizeImageWithRowWorkers } from '$lib/processing/quantize-row-workers';
 import { resizeImageDataWithOptionalWasm } from '$lib/wasm/ditherette-wasm';
+import type { Ditherette } from 'ditherette';
+import { packageProcessRequest, packageQuantizeResult } from './package-adapter';
 import {
 	quantizeImage,
 	type PaletteVectorSpace,
@@ -50,6 +52,7 @@ export class ProcessorWorkerPipeline {
 	#branchCache = new PipelineBranchCache();
 	#paletteVectorCache = new PaletteVectorCache<PaletteVectorSpace>();
 	#canceledIds = new Set<number>();
+	#package: Promise<Ditherette> | undefined;
 
 	get branchCacheSize() {
 		return this.#branchCache.size;
@@ -187,6 +190,9 @@ export class ProcessorWorkerPipeline {
 	): Promise<WorkerResponse | undefined> {
 		if (request.type !== 'process') return this.handle(request, progress);
 		if (this.#canceledIds.has(request.id)) return undefined;
+		if (import.meta.env.DEV && import.meta.env.VITE_DITHERETTE_WASM_PROCESS === 'true') {
+			return this.processWithPackage(request, progress);
+		}
 
 		const startedAt = performance.now();
 		const timings = timingSink();
@@ -300,6 +306,39 @@ export class ProcessorWorkerPipeline {
 				dither: settings.dither.algorithm,
 				resize: settings.output.resize,
 				warnings
+			}
+		};
+	}
+
+	private async processWithPackage(
+		request: Extract<WorkerRequest, { type: 'process' }>,
+		progress: ProgressSink
+	): Promise<WorkerResponse | undefined> {
+		const { id, sourceId, settings, palette, settingsHash } = request;
+		const source = this.sourceFor(sourceId);
+		progress('Sizing output', PROGRESS.queued);
+		const size = clampOutputSize(settings.output.width, settings.output.height);
+		const mapped = packageProcessRequest(source, palette, settings, size);
+		this.#package ??= import('ditherette').then(({ createDitherette }) => createDitherette());
+		const processor = await this.#package;
+		if (this.#canceledIds.has(id)) return undefined;
+		progress('Processing image', PROGRESS.resizing);
+		const result = packageQuantizeResult(
+			processor.process(mapped.request),
+			palette,
+			mapped.warnings
+		);
+		progress('Finalizing indexed output', PROGRESS.finalizing);
+		return {
+			id,
+			type: 'complete',
+			image: {
+				...result,
+				width: size.width,
+				height: size.height,
+				warnings: size.warning ? [size.warning, ...result.warnings] : result.warnings,
+				settingsHash,
+				updatedAt: Date.now()
 			}
 		};
 	}
