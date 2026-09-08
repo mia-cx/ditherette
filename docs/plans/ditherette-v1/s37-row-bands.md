@@ -6,7 +6,7 @@ The cold calls support exact row bands in four measured recipe classes. Two work
 
 Both roles use the same threaded package from source `5d16c5682f354fecd75ca7f761802d9e2ea75ab5`. Accepted forces scalar mixing; candidate changes only the mixing row policy. Calls run through the ordinary package in a blocking-capable, cross-origin-isolated host Worker. Pool initialization and policy setup remain outside method timing. Input/output copies, hashing, preparation, and the complete method remain inside it.
 
-The fixed matrix uses two alternating pairs, 20 requested single-call samples per worker, 50 ms warmup, and a 10-second worker measurement budget. S37 contributes 12 cases and 96 browser workers across both engines. The full sweeps completed and reaped their 200 workers per engine. Their overall `incorrect` status includes other slices' retained frozen-reference drift; it does not describe S37's outputs.
+The fixed matrix uses two alternating pairs, 20 requested single-call samples per worker, 50 ms warmup, and a 10-second worker measurement budget. After at least five samples, a worker stops when its accumulated measured time reaches that budget. Twenty samples are the requested maximum, not a mandatory completion condition. S37 contributes 12 cases and 96 browser workers across both engines. The full sweeps completed and reaped their 200 workers per engine. Their overall `incorrect` status includes other slices' retained frozen-reference drift; it does not describe S37's outputs.
 
 | Engine | Report under `.worktrees/v1-s35-37-bench/target/` | Report SHA-256 |
 |---|---|---|
@@ -14,6 +14,15 @@ The fixed matrix uses two alternating pairs, 20 requested single-call samples pe
 | Firefox 148.0.2 | `rows-trial-03/firefox-results/report.json` | `77af173eb9b0c2203d8ad43a75181a68e90d57cf2a8388c1e7b1784603594e73` |
 
 Every S37 case has four exact verification records per engine. All 96 records retain zero differing indices and matching metadata against both frozen reference and accepted scalar output. No S37 reference tolerance changed.
+
+S36's compact `rows-trial-03/combined-analysis.json` records 960 achieved Chromium samples and 864 Firefox samples for S37. Chromium reaches 20 samples in every S37 worker. Firefox's capped cases are below; each pair lists scalar / candidate samples. All other Firefox S37 workers reach 20, including every warm control.
+
+| Firefox case | Pair 0 samples | Pair 1 samples |
+|---|---|---|
+| Medium, two/4 | 5 / 9 | 5 / 9 |
+| Process, two/4 | 19 / 20 | 19 / 20 |
+| Medium, four/16 | 5 / 15 | 5 / 15 |
+| Process, four/16 | 19 / 20 | 19 / 20 |
 
 ## Cold complete calls
 
