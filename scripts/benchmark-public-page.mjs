@@ -3,6 +3,7 @@ import {
 	collectInitializations,
 	retainedOutputSlots
 } from './benchmark-public-timing.mjs';
+import { prepareStageSample, stagePrimeRequest } from './benchmark-stage-cache.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -57,17 +58,24 @@ export async function prepareOperation(trial) {
 			? undefined
 			: resizeRecipe(config.operation);
 	const cacheComparison = config.cache !== 'none';
+	const samplePrime = config.cache?.roles?.sample_prime;
 	if (cacheComparison) {
 		const roles = config.cache?.roles;
+		const stages = [roles?.accepted, roles?.candidate].includes('image-stages');
 		if (
 			!roles ||
-			!['uncached', 'preparation'].includes(roles.accepted) ||
-			!['uncached', 'preparation'].includes(roles.candidate) ||
+			!['uncached', 'preparation', 'image-stages'].includes(roles.accepted) ||
+			!['uncached', 'preparation', 'image-stages'].includes(roles.candidate) ||
+			Boolean(samplePrime) !== (stages && measurement.application_cache === 'warm') ||
 			measurement.mode !== 'single-call' ||
 			measurement.scope !== 'complete-call' ||
 			!['cold', 'warm'].includes(measurement.application_cache) ||
 			config.preparation !==
-				(measurement.application_cache === 'cold' ? 'fresh-instance' : 'primed-instance') ||
+				(measurement.application_cache === 'cold'
+					? 'fresh-instance'
+					: samplePrime
+						? 'primed-sample'
+						: 'primed-instance') ||
 			config.accepted !== 'package' ||
 			config.candidate !== 'package'
 		)
@@ -183,6 +191,30 @@ export async function prepareOperation(trial) {
 	}
 	if (measurement.scope !== 'complete-call')
 		throw new Error('Browser processing requires complete-call scope.');
+	if (config.preparation === 'primed-sample') {
+		const prime = stagePrimeRequest(config.operation.operation, request, samplePrime);
+		if (!trial.prime_reference_output)
+			throw new Error('Stage priming requires a frozen prime output.');
+		return {
+			request,
+			prepare: () =>
+				prepareStageSample({
+					create,
+					prime: (instance) => (prime ? instance[prime.method](prime.request) : call(instance)),
+					call,
+					observePrime: (output) => {
+						assertMeasuredSource(request, trial.case.rgba);
+						const actual = verificationOutput(output);
+						if (!equalOutput(actual, trial.prime_reference_output)) {
+							throw new Error(
+								`Stage prime differs from frozen reference: ${JSON.stringify({ expected: trial.prime_reference_output, actual })}`
+							);
+						}
+					}
+				}),
+			close() {}
+		};
+	}
 	if (config.preparation === 'fresh-instance') {
 		return {
 			request,

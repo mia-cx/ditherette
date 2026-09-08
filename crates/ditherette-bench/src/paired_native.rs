@@ -21,11 +21,12 @@ use ditherette_bench::{
 use ditherette_bench_api::{verification::*, ResizeParams};
 use ditherette_wasm::{
     bench_subjects::{
-        diffusion, field_calls, fields, preparation, process, quantize as adapters, scores,
-        yiluoma, BenchSubject,
+        diffusion, field_calls, fields, preparation, process, quantize as adapters,
+        reference::ReferenceRequest, scores, yiluoma, BenchSubject,
     },
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
+    spec::contract::request as spec,
 };
 use std::{
     cell::RefCell,
@@ -244,7 +245,8 @@ enum TypedWorkload<'a> {
         call: preparation::CompleteCall<'a>,
         source: &'a [u8],
         processor: Option<ditherette_wasm::prod::pipeline::processor::Processor>,
-        cold: bool,
+        reset_each_sample: bool,
+        sample_prime: Option<(preparation::CompleteCall<'a>, VerificationOutput)>,
         output: Option<preparation::Output>,
         audit: OutputAudit,
     },
@@ -298,15 +300,30 @@ impl Workload for TypedWorkload<'_> {
     fn prepare_sample(&mut self) -> Result<(), BenchError> {
         if let Self::Processor {
             processor,
-            cold,
+            reset_each_sample,
             output,
+            sample_prime,
+            source,
             ..
         } = self
         {
             *output = None;
-            if *cold {
+            if *reset_each_sample {
                 *processor =
                     Some(field_calls::processor().map_err(|e| BenchError::Runtime(e.to_string()))?);
+                if let Some((prime, expected)) = sample_prime {
+                    let actual = prime
+                        .output(processor.as_mut().expect("new processor"), source)
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?
+                        .verification();
+                    if actual != *expected {
+                        return Err(BenchError::Runtime(format!(
+                            "stage prime differs from frozen reference: {}",
+                            serde_json::to_string(&(expected, actual))
+                                .map_err(|e| BenchError::Runtime(e.to_string()))?
+                        )));
+                    }
+                }
             }
         }
         Ok(())
@@ -315,7 +332,7 @@ impl Workload for TypedWorkload<'_> {
     fn finish_sample(&mut self) {
         if let Self::Processor {
             processor,
-            cold: true,
+            reset_each_sample: true,
             ..
         } = self
         {
@@ -446,11 +463,46 @@ fn run_typed(
         }
     }
     let mut workload = match operation {
-        native::NativeOperation::Processor { .. } => {
+        native::NativeOperation::Processor { settings, cache } => {
             let call = preparation::CompleteCall::new(&parameters)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?;
-            let cold = case.measurement.application_cache == ApplicationCache::Cold;
-            let processor = if cold {
+            let sample_prime = cache
+                .sample_prime()
+                .map(|prime| {
+                    let parameters = settings
+                        .prime_request(prime, case.source, &case.rgba)
+                        .map_err(BenchError::io)?;
+                    let subject = match parameters {
+                        ReferenceRequest::Processing(spec::Request::Resize(_)) => {
+                            "spec:resize:request:v1"
+                        }
+                        ReferenceRequest::Processing(spec::Request::Perturb(_)) => {
+                            "spec:perturb:request:v1"
+                        }
+                        ReferenceRequest::Processing(spec::Request::DitherAndQuantize(_)) => {
+                            "spec:dither-and-quantize:request:v1"
+                        }
+                        ReferenceRequest::Processing(spec::Request::Quantize(_)) => {
+                            "spec:quantize:request:v1"
+                        }
+                        ReferenceRequest::Processing(spec::Request::Process(_)) => {
+                            "spec:process:request:v1"
+                        }
+                        _ => unreachable!("prime processing request"),
+                    };
+                    let BenchSubject::Conformance(subject) = registry.subject(subject)? else {
+                        unreachable!("frozen prime")
+                    };
+                    let expected = (subject.run)(&parameters)
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?;
+                    let call = preparation::CompleteCall::new(&parameters)
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?;
+                    Ok::<_, BenchError>((call, expected))
+                })
+                .transpose()?;
+            let reset_each_sample = case.measurement.application_cache == ApplicationCache::Cold
+                || sample_prime.is_some();
+            let processor = if reset_each_sample {
                 None
             } else {
                 let mut processor =
@@ -485,7 +537,8 @@ fn run_typed(
                 call,
                 source: &case.rgba,
                 processor,
-                cold,
+                reset_each_sample,
+                sample_prime,
                 output: None,
                 audit: OutputAudit {
                     expected: before.clone(),
@@ -675,6 +728,67 @@ impl MeasurementObserver for Observer {
 mod tests {
     use super::*;
     use ditherette_bench::verification::settings_digest;
+
+    #[test]
+    fn stage_prime_mismatch_is_concrete_and_failed_setup_releases_processor() {
+        let source = [1, 2, 3, 255];
+        let settings = ditherette_bench::paired::preparation::ProcessorSettings::Resize {
+            output: spec::Output {
+                width: 1,
+                height: 1,
+                resize: spec::ResizePolicy::Nearest {
+                    anchor: spec::Anchor::Center,
+                },
+            },
+        };
+        let request = settings
+            .reference_request(
+                Dimensions {
+                    width: 1,
+                    height: 1,
+                },
+                &source,
+            )
+            .unwrap();
+        let expected = VerificationOutput {
+            dimensions: Dimensions {
+                width: 1,
+                height: 1,
+            },
+            pixels: Pixels::Rgba8 {
+                data: vec![99, 2, 3, 255],
+            },
+            warnings: vec![],
+        };
+        let mut workload = TypedWorkload::Processor {
+            call: preparation::CompleteCall::new(&request).unwrap(),
+            source: &source,
+            processor: None,
+            reset_each_sample: true,
+            sample_prime: Some((
+                preparation::CompleteCall::new(&request).unwrap(),
+                expected.clone(),
+            )),
+            output: None,
+            audit: OutputAudit {
+                expected,
+                first_mismatch: RefCell::new(None),
+            },
+        };
+        let failure = workload.prepare_sample().unwrap_err().to_string();
+        assert!(failure.contains("stage prime differs"));
+        assert!(failure.contains("99,2,3,255"));
+        assert!(failure.contains("1,2,3,255"));
+        workload.finish_sample();
+        assert!(matches!(
+            workload,
+            TypedWorkload::Processor {
+                processor: None,
+                output: None,
+                ..
+            }
+        ));
+    }
 
     #[test]
     fn processor_observation_retains_first_transient_mismatch() {

@@ -66,12 +66,16 @@ No measurement runs before coordinator quiet clearance and the shared exclusive 
 ## Atomic steps
 
 - [x] Add reusable per-sample priming fixtures and lifecycle tests.
-- [ ] Extend typed protocol and actual native/public adapters, preserving historical records.
+- [x] Extend typed protocol and actual native/public adapters, preserving historical records.
 - [ ] Add the declared matrix generator and focused frozen exactness checks; hand off for review.
 
-No builds or measurements have run in this worktree. No evidence report is copied from S31.
+No measurements or artifact preparations have run. Focused Rust checks use only this worktree's `target/compiler`.
+No evidence report is copied from S31. Both roles must join the coordinator's corrected S31 parent before artifact preparation.
 
 First checkpoint adds the shared public prime-request mapper and fresh-sample owner.
 Three focused Node tests pass. They cover all declared prime mappings, timing boundaries,
 fresh ownership for every warmup/sample, and concrete failure propagation with disposal.
-These helpers are not yet wired into the measurement protocol; that is the next step.
+The second checkpoint wires those helpers into native/public calls with explicit `primed-sample` metadata.
+The isolated oracle derives and checks each prime without changing frozen specification files.
+Focused validation passes 40 Node tests, three native observation/cleanup tests, eight frozen-oracle tests, and 12 browser-protocol tests.
+Rust tests/examples also pass a locked compilation check. Historical role JSON omits the new optional prime field.

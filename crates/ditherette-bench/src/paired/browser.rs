@@ -66,6 +66,8 @@ pub enum BrowserBackend {
 pub enum BrowserPreparation {
     FreshInstance,
     PrimedInstance,
+    /// A fresh instance and declared stage prime precede every single-call sample.
+    PrimedSample,
     /// Time createDitherette with already-loaded bytes; package import/fetch is excluded.
     InitializationBytes,
     /// Time createDitherette with an already-compiled module.
@@ -80,6 +82,8 @@ pub enum CacheCapability {
     Roles {
         accepted: PreparationCapability,
         candidate: PreparationCapability,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sample_prime: Option<super::preparation::SamplePrime>,
     },
 }
 
@@ -88,6 +92,16 @@ pub enum CacheCapability {
 pub enum PreparationCapability {
     Uncached,
     Preparation,
+    ImageStages,
+}
+
+impl CacheCapability {
+    pub fn sample_prime(self) -> Option<super::preparation::SamplePrime> {
+        match self {
+            Self::Roles { sample_prime, .. } => sample_prime,
+            Self::None => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -533,8 +547,11 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
                 "native operation requires its declared scope without browser or cache claims",
             ));
         }
-        if let super::native::NativeOperation::Processor { cache, .. } = native {
+        if let super::native::NativeOperation::Processor { cache, settings } = native {
             validate_preparation_cache(*cache, &case.measurement)?;
+            if let Some(prime) = cache.sample_prime() {
+                settings.prime_request(prime, case.source, &case.rgba)?;
+            }
         }
         if case.identity != native.identity(case.source, &case.rgba)?
             || case.reference_subject != native.reference_subject()
@@ -570,6 +587,9 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         validate_preparation_cache(browser.cache, m)?;
         let preparation = match m.application_cache {
             ApplicationCache::Cold => BrowserPreparation::FreshInstance,
+            ApplicationCache::Warm if browser.cache.sample_prime().is_some() => {
+                BrowserPreparation::PrimedSample
+            }
             ApplicationCache::Warm => BrowserPreparation::PrimedInstance,
             ApplicationCache::NotApplicable => unreachable!("validated cache state"),
         };
@@ -579,10 +599,28 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         {
             return Err(io::Error::other("preparation cache cases require ordinary package calls and matching instance lifecycle"));
         }
+        if let Some(prime) = browser.cache.sample_prime() {
+            use super::preparation::SamplePrime;
+            if !matches!(
+                (prime, &browser.operation),
+                (SamplePrime::SameCall, _)
+                    | (SamplePrime::Resize, PublicOperation::Process { .. })
+                    | (SamplePrime::Perturb, PublicOperation::Separable { .. })
+                    | (SamplePrime::NoDither, PublicOperation::Quantize { .. })
+            ) {
+                return Err(io::Error::other(
+                    "stage prime does not match the measured operation",
+                ));
+            }
+        }
     }
     match browser.preparation {
         BrowserPreparation::FreshInstance
             if m.scope == CallScope::CompleteCall && m.mode == SampleMode::SingleCall => {}
+        BrowserPreparation::PrimedSample
+            if m.scope == CallScope::CompleteCall
+                && m.mode == SampleMode::SingleCall
+                && browser.cache.sample_prime().is_some() => {}
         BrowserPreparation::PrimedInstance if m.scope == CallScope::CompleteCall => {}
         BrowserPreparation::InitializationBytes | BrowserPreparation::InitializationCompiled
             if m.scope == CallScope::Initialization
@@ -650,6 +688,19 @@ pub fn validate_preparation_cache(
         )
     {
         return Err(io::Error::other("preparation comparison requires explicit role capabilities and cold/warm single complete calls"));
+    }
+    if let CacheCapability::Roles {
+        accepted,
+        candidate,
+        sample_prime,
+    } = cache
+    {
+        let stages = [accepted, candidate].contains(&PreparationCapability::ImageStages);
+        if sample_prime.is_some()
+            != (stages && measurement.application_cache == ApplicationCache::Warm)
+        {
+            return Err(io::Error::other("image-stage warmth requires an explicit per-sample prime; cold and preparation-only cases have none"));
+        }
     }
     Ok(())
 }
