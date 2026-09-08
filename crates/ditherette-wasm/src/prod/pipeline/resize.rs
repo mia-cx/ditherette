@@ -3,7 +3,9 @@
 use std::{mem::size_of, num::NonZeroU32};
 
 mod bands;
+mod policy;
 use bands::ResizeScratch;
+pub(super) use policy::measured as measured_row_policy;
 
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
