@@ -15,6 +15,7 @@ Public equality can pass on uncached S31 and does not prove reuse or atomic publ
 - [x] Add bounded actual-package checks for mutable inputs/results, cross-method composition, settings changes, disposal, and copy-failure recovery.
 - [x] Run the fixture against the retained installed S31 package in Chromium, Firefox, and WebKit; record its digest.
 - [x] Prepare the clean test-only checkpoint for the runtime owner; require candidate validation after the S32 package exists.
+- [x] Let the broad browser driver verify an existing tarball without packing and serve the stage-cache helper.
 
 Reuse the existing frozen field vectors, actual public request shapes, browser asset server, and installed tarball runner.
 The baseline tarball is `v1-s31-preparation/target/s31-candidate-972d4e9a-public/ditherette.tgz`.
@@ -43,3 +44,11 @@ After an S32 artifact exists, run this command with its tarball path and actual 
 Then run the ordinary full installed-package suite in the joined runtime worktree.
 The runtime owner confirms separate native hit and atomic-publication assertions are in scope.
 The public failure fixture proves caught final-copy failure and recovery, not invisible pending-entry state.
+
+## Supplied artifact driver
+
+The broad runner accepts `DITHERETTE_TEST_TARBALL` and checks optional `DITHERETTE_TEST_TARBALL_SHA256` before installation.
+Without a supplied tarball, it retains the normal package-and-test workflow.
+Its local HTTP route now serves `benchmark-stage-cache.mjs` alongside the existing benchmark modules.
+Syntax and formatting checks pass. Broad accepted validation follows after the test checkout matches the oracle's declared source inputs.
+Use the existing accepted oracle and retained 367-case Yliluoma fixtures; no compilation or measurement is authorized.
