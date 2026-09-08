@@ -42,22 +42,36 @@ Current head `59036e1aef87943e462b4cce6b371e5edd082979` includes the updated S25
 The delivery rebase preserves measured runtime bytes. See [the measurement record](../../../.plans/67-measurement.md).
 Combined resize/S26 join `82a7e3e9` passes 327 native, 26 interface, 12 private ABI, and all three installed-package engines.
 Its [join record](../../../.plans/67-resize-join.md) records unchanged kernel bytes, adapter checks, and the validation tarball.
-S27 public blue noise passes native/private/interface checks, both builds, and all three package engines.
-Its benchmark branch `impl/v1-s27-bench` reaches `44cbe43546e739f3d11f7b0bd08d7453afb83da1` on the current S26 parent.
-The independent frozen-Wasm oracle and immutable evidence collector are included; fresh paired artifacts are being prepared.
+S27 public blue noise is delivered in [PR116](https://github.com/mia-cx/ditherette/pull/116), targeting S26 at `59036e1aef87943e462b4cce6b371e5edd082979`.
+Its head is `c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7` on `impl/v1-s27-bench`.
+It passes native/private/interface checks, both builds, and all three package engines.
+The [measurement report](https://github.com/mia-cx/ditherette/blob/c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7/.plans/68-benchmark-results.md) records 68 reaped workers and 1,264 samples, all exact against the target-local frozen oracle.
+All four runtime gates pass. Both roles rebuild measured source `44cbe43546e739f3d11f7b0bd08d7453afb83da1`; this establishes a baseline, not a speedup.
+Native/Wasm rounding diagnostics remain intact. S41 still owns full-call bottlenecks and equivalent TypeScript comparisons.
 S28 three-row diffusion reaches validated public checkpoint `8df7b48396aec85bf9c1a289d63973b615e31018`.
 It passes 360 frozen public vectors in all three engines and the trusted freeze guard.
 The literal full-image native baseline remains callable; the ring candidate awaits its bounded comparison.
-S29 literal baseline `092f2dd0499ed0c5c3784e6533d726d25c7e142b` and converter candidate `3b11261fce342495b3e286d5dd36ee1c8aac4e64` pass 367 frozen-Wasm fixtures per engine.
+S29 literal baseline `50cd96d17535ee7f81b1d7a63288751afab50e89` and converter candidate `fdb3921ae1cb7cc3834e42c204d61bb0a63c7cea` pass 367 frozen-Wasm fixtures per engine.
 The candidate only reuses the prepared converter and remains unselected.
-S27 preparation and S28/S29 permanent-oracle integration run in separate worktrees and caches.
-Their benchmarks and PRs remain pending. The [integration checkpoint](../../../.plans/68-70-checkpoint.md) records validation and cross-target diagnostics.
+S28 source `058f276d2bf18e1207b74f1a743b5e91f13816e4` and both S29 sources have complete fresh roles and four immutable snapshots each.
+Their benchmarks and PRs remain pending. Both declarations allow 128 serial workers and at most 2,560 samples.
+Fresh public packages match their tested tarballs. S29 oracle executable sections also match; only candidate symbol metadata differs.
+Fresh-role conformance was not rerun. The [integration checkpoint](../../../.plans/68-70-checkpoint.md) retains earlier validation and cross-target diagnostics.
+All three agents are drained before the coordinator's next exclusive measurement phase.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
 All native production pairs preserve landed bytes, with no slowdown above 10%; no kernel retuning is selected.
 The [S22 measurement record](../../../.plans/63-measurement.md) links artifacts and records each convolution median.
 Public TypeScript differences and complete-call costs remain [S41 work](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5575617483).
+
+## Compiler-output cleanup
+
+The first inactive-worktree cleanup reclaimed about 46 GiB from 124 compiler profile directories.
+After S27 preparation and measurement ended, eight returned S24 native/S23 Wasm profiles reclaimed another 6.55 GiB.
+The disk had 57 GiB free afterward. Source, copied binaries, trial snapshots, reports, and custom target evidence remain intact.
+S28 owns the S24 quantize cache; S29 owns the S22 convolution cache until their implementations finish.
+Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
 
 ## Delivered S01 through S16
 
@@ -265,7 +279,7 @@ S24 adds exact indexed-result observation and completes fresh replacement benchm
 Branch `impl/v1-s24-bench` targets S22 at `9eecc670d9ff587ff10f8d2f3a8b86bab600c988`.
 Current head `f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395` preserves measured source `f4b90ecfcde63531fb992cf87ebda04d4e373032` processing bytes.
 It snapshots first/distinct evidence outside timers and rejects shared result backing; 30 relevant Node checks pass.
-All three addressed review threads are resolved; the new automated review remains pending.
+All three addressed review threads are resolved. The current head is approved and all reported checks pass.
 Fresh trials must include this collector. Historical measurements below are not reruns of the corrected protocol.
 Literal baseline `a23260ed` remains in ancestry. The prepared integration reuses landed forward conversion equations and tables.
 
