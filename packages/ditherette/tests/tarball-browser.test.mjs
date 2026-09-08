@@ -154,7 +154,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 						vectors,
 						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
 					}),
-					{ fields: 91, compositions: 1365, caughtFailures: 5 }
+					{ fields: 110, compositions: 1650, caughtFailures: 5 }
 				);
 				t.diagnostic(`${name} ${browser.version()}: installed-tarball checks pass`);
 			} finally {

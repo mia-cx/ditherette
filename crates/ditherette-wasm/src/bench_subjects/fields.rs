@@ -105,11 +105,6 @@ impl Component {
                 (Field::Random { seed: 0 }, space, Placement::Everywhere {})
             }
         };
-        if matches!(field, Field::BlueNoise {}) {
-            return Err(BenchSubjectError::new(
-                "S26 has no blue-noise production component",
-            ));
-        }
         spec::contract::request::Request::Perturb(spec::contract::request::PerturbRequest {
             version: 1,
             source,
@@ -290,7 +285,13 @@ fn threshold(field: Field, x: u32, y: u32, index: u64, production: bool) -> f32 
                 )
             }
         }
-        Field::BlueNoise {} => unreachable!("validated S26 field"),
+        Field::BlueNoise {} => {
+            if production {
+                prod::dither::blue_noise::blue_noise_at(x, y)
+            } else {
+                spec::dither::blue_noise::blue_noise_at(x, y)
+            }
+        }
     }
 }
 

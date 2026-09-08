@@ -154,7 +154,15 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
         warmup_elapsed_ns: measured.warmup_elapsed_ns,
         sample_ns: measured.sample_ns,
         iterations_per_sample: measured.iterations_per_sample,
-        reference: record(&case.reference_subject, reference_output),
+        reference: record(
+            &case.reference_subject,
+            measured
+                .reference
+                .as_ref()
+                .expect("validated Wasm oracle")
+                .output
+                .clone(),
+        ),
         output: record(
             browser.operation.subject(browser.backend(request.role)),
             measured.output,

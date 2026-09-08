@@ -78,7 +78,13 @@ test('private field ABI borrows inputs, validates f64 controls and preserves the
 				assert.equal(bindings.privateErrorPath(), path);
 			}
 		}
-		assert.equal(invoke(bindings, false, {}, [2, 0, 0, 1, 0, 0, 0, 0]).status, 5);
+		for (const fused of [false, true]) {
+			assert.equal(invoke(bindings, fused, {}, [2, 0, 0, 1, 0, 0, 0, 0]).status, 0);
+			for (const parameter of [1, -1, 0.5, NaN, Infinity]) {
+				assert.equal(invoke(bindings, fused, {}, [2, parameter, 0, 1, 0, 0, 0, 0]).status, 4);
+				assert.equal(bindings.privateErrorPath(), 18);
+			}
+		}
 		assert.equal(invoke(bindings).status, 0);
 	} finally {
 		bindings.privateDispose();
