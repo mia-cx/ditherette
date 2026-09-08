@@ -7,6 +7,7 @@
 pub mod diffusion;
 pub mod field_calls;
 pub mod fields;
+pub mod preparation;
 pub mod process;
 pub mod quantize;
 pub mod reference;
@@ -201,6 +202,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(diffusion::subjects());
     subjects.extend(yiluoma::subjects());
     subjects.extend(process::subjects());
+    subjects.extend(preparation::subjects());
     subjects
 }
 
