@@ -20,7 +20,7 @@ The final S25 join includes its benchmark-module formatting correction.
 - [x] Copy frozen diffusion and missing coordinate helpers, with explicit mechanical constructor/import substitutions.
 - [x] Compare all four kernels, both feedback modes, all fifteen metrics, scan orders, alpha policies, placement, failures, and complete metadata against frozen references; commit the literal baseline.
 - [x] Join accepted S26 `3915f60519995cb9087a18b3bfd6bd7220ae804a` and register the full-image native benchmark before optimization.
-- [ ] Implement fallible three-row scratch with exact arithmetic and width-based capacity checks.
+- [x] Implement fallible three-row scratch with exact arithmetic and width-based capacity checks.
 - [ ] Expose all four diffusion kernels through the private processor and public package; verify public calls and memory failures.
 - [ ] Prepare candidate benchmark subjects for the coordinator's exclusive comparisons.
 
@@ -69,3 +69,15 @@ The registered subject and timed callable match frozen results for 120 kernel/fe
 Three-row scratch, capacity-accounted preparation, public methods, benchmark registrations, measurements, and the S28 PR remain unfinished.
 The literal baseline and native benchmark registration are recorded before optimization starts.
 The coordinator owns integration/tracking and exclusive measurement clearance. S26 source and artifacts stay untouched.
+
+## Bounded candidate checkpoint
+
+The native baseline adapter is `c47419e4`. The candidate retains its literal full-image callable for comparison.
+`PreparedDiffusion` reuses the landed `PreparedQuantizer` through crate-private matcher/converter accessors.
+Three rows start with source coordinates. Each contribution keeps the frozen tap, axis, f64 calculation, and f32-store order.
+Scratch owns exactly `width * 3 * 12` bytes with the current allocator; actual capacity is counted after every fallible reservation.
+The private `Processor::dither_and_quantize` dispatches diffusion with source/index preflight and complete-result publication only after successful execution.
+The candidate's nine native tests pass, including 10,800 frozen comparisons for the ring and complete processor call, exact-limit/one-under checks, allocation/copy/completion/arithmetic failures, recovery, and disposal.
+Height growth adds only owned source and index bytes. Work-row capacity remains unchanged across heights 1, 2, 3, 7, and 19.
+Four existing field processor tests, scalar Wasm check, full crate formatting, and diff checks pass.
+Public package wiring and candidate benchmark registration follow next. No candidate is selected without the coordinator's measurements.

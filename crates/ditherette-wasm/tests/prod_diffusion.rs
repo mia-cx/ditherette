@@ -1,4 +1,18 @@
 use ditherette_wasm::{
+    image::{contracts::IndexedImage, ImageBuf},
+    prod::{
+        contract::{
+            error::ErrorCode,
+            failure::{ErrorPath, Failure},
+        },
+        palette::PreparedPalette,
+        pipeline::{
+            processor::{Allocator, Processor},
+            quantize::{QuantizeBoundary, QuantizeRequest as ProcessorRequest},
+        },
+    },
+};
+use ditherette_wasm::{
     image::{
         contracts::PaletteEntry, ImageDimensions, ImageFormat, ImageView, ImageViewMut,
         PaletteIndex8, RowStride,
@@ -7,6 +21,73 @@ use ditherette_wasm::{
     spec::{self, dither::error_diffusion as reference},
 };
 use serde::{de::DeserializeOwned, Serialize};
+
+struct Boundary<'a> {
+    data: &'a [u8],
+    copies: usize,
+    completions: usize,
+    fail_copy: bool,
+    fail_complete: bool,
+}
+
+impl<'a> Boundary<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        Self {
+            data,
+            copies: 0,
+            completions: 0,
+            fail_copy: false,
+            fail_complete: false,
+        }
+    }
+}
+
+impl QuantizeBoundary for Boundary<'_> {
+    type Output = IndexedImage;
+    fn input_len(&mut self) -> Result<usize, Failure> {
+        Ok(self.data.len())
+    }
+    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
+        self.copies += 1;
+        if self.fail_copy {
+            return Err(Failure::new(
+                ErrorCode::WasmMemoryUnavailable,
+                ErrorPath::SourceData,
+            ));
+        }
+        destination.copy_from_slice(self.data);
+        Ok(())
+    }
+    fn complete(
+        &mut self,
+        indices: &[u8],
+        dimensions: ImageDimensions,
+        palette: &PreparedPalette,
+    ) -> Result<IndexedImage, Failure> {
+        self.completions += 1;
+        if self.fail_complete {
+            return Err(Failure::new(
+                ErrorCode::WasmMemoryUnavailable,
+                ErrorPath::Output,
+            ));
+        }
+        Ok(IndexedImage {
+            indices: ImageBuf::from_vec_packed(indices.to_vec(), dimensions).unwrap(),
+            palette: palette.palette.clone(),
+            warnings: palette.warnings.clone(),
+        })
+    }
+}
+
+fn processor_request(input: DitherQuantizeRequest<'_>) -> ProcessorRequest<'_> {
+    ProcessorRequest {
+        source_width: input.quantize.source.width,
+        source_height: input.quantize.source.height,
+        palette: input.quantize.palette,
+        alpha: input.quantize.alpha,
+        matching: input.quantize.matching,
+    }
+}
 
 const KERNELS: [Diffusion; 4] = [
     Diffusion::FloydSteinberg,
@@ -163,6 +244,55 @@ fn oracle(
 }
 
 fn compare(input: DitherQuantizeRequest<'_>) {
+    use production::prepared::{DiffusionPolicy, PreparedDiffusion};
+    if let (Ok(layout), Ok(policy)) = (
+        Request::DitherAndQuantize(input).validate(),
+        DiffusionPolicy::new(input.dither),
+    ) {
+        let mut prepared = PreparedDiffusion::try_new(
+            input.quantize.source.width,
+            input.quantize.palette,
+            input.quantize.alpha,
+            input.quantize.matching,
+            u64::MAX,
+        )
+        .unwrap();
+        let mut indices =
+            ditherette_wasm::image::ImageBuf::<PaletteIndex8>::new_packed(layout.output).unwrap();
+        let ring = prepared
+            .execute(layout.source, indices.data_mut(), policy)
+            .map(|()| prepared.into_indexed(indices));
+        let complete = Processor::new(1 << 20, 0).unwrap().dither_and_quantize(
+            processor_request(input),
+            input.dither,
+            &mut Boundary::new(input.quantize.source.data),
+        );
+        for result in [ring, complete] {
+            match (result, oracle(input)) {
+                (Ok(actual), Ok(expected)) => {
+                    assert_eq!(actual, expected, "ring {:?}", input.dither)
+                }
+                (Err(actual), Err(expected)) => {
+                    use ditherette_wasm::prod::contract::failure::ErrorPath;
+                    assert_eq!(
+                        serde_json::to_value(actual.code).unwrap(),
+                        serde_json::to_value(expected.code).unwrap()
+                    );
+                    assert_eq!(expected.path, "dither.arithmetic");
+                    assert_eq!(
+                        expected.message,
+                        match actual.path {
+                            ErrorPath::DiffusionWork => "Diffusion work exceeded finite f32 range.",
+                            ErrorPath::DiffusionDistance =>
+                                "Diffusion matching produced a non-finite distance.",
+                            path => panic!("unexpected ring error {path:?}"),
+                        }
+                    );
+                }
+                (actual, expected) => panic!("ring {actual:?}, reference {expected:?}"),
+            }
+        }
+    }
     match (production::diffuse(input), oracle(input)) {
         (Ok(actual), Ok(expected)) => assert_eq!(actual, expected, "{:?}", input.dither),
         (Err(actual), Err(expected)) => assert_eq!(
@@ -183,7 +313,7 @@ fn complete_diffusion_matches_all_kernels_feedbacks_metrics_scans_alpha_and_plac
         PaletteEntry::Transparent {},
     ];
     let mut cases = 0;
-    for (width, height) in [(1, 1), (1, 4), (4, 1), (3, 3)] {
+    for (width, height) in [(1, 1), (1, 4), (4, 1), (3, 3), (5, 7)] {
         let data: Vec<u8> = (0..width * height)
             .flat_map(|i| {
                 [
@@ -240,7 +370,174 @@ fn complete_diffusion_matches_all_kernels_feedbacks_metrics_scans_alpha_and_plac
         }
         assert_eq!(data, original);
     }
-    assert_eq!(cases, 8640);
+    assert_eq!(cases, 10800);
+}
+
+#[test]
+fn ring_capacity_is_three_rows_and_reuse_clears_prior_work() {
+    use production::prepared::{DiffusionPolicy, PreparedDiffusion};
+    let alpha = AlphaPolicy::Preserve { threshold: 0.0 };
+    for width in [1, 7, 1024] {
+        let required = PreparedDiffusion::required_capacity_bytes(
+            width,
+            &BW,
+            alpha,
+            MatchPolicy::SrgbEuclidean,
+        )
+        .unwrap();
+        assert!(PreparedDiffusion::try_new(
+            width,
+            &BW,
+            alpha,
+            MatchPolicy::SrgbEuclidean,
+            required - 1
+        )
+        .is_err());
+        let mut prepared =
+            PreparedDiffusion::try_new(width, &BW, alpha, MatchPolicy::SrgbEuclidean, required)
+                .unwrap();
+        assert_eq!(prepared.capacity_bytes(), required);
+        assert_eq!(
+            prepared.scratch_capacity_bytes(),
+            u64::from(width) * 3 * 3 * 4
+        );
+        for height in [1, 2, 3, 7, 19] {
+            let data: Vec<_> = (0..width * height)
+                .flat_map(|i| [(i * 73) as u8, (i * 31) as u8, (i * 117) as u8, 255])
+                .collect();
+            let input = request(&data, width, height);
+            let source =
+                ImageView::packed(&data, ImageDimensions::new(width, height).unwrap()).unwrap();
+            let mut indices = vec![0; width as usize * height as usize];
+            prepared
+                .execute(
+                    source,
+                    &mut indices,
+                    DiffusionPolicy::new(input.dither).unwrap(),
+                )
+                .unwrap();
+            assert_eq!(indices, oracle(input).unwrap().indices.data());
+            assert_eq!(prepared.capacity_bytes(), required);
+        }
+    }
+}
+
+struct Allocation {
+    fail_at: usize,
+    extra: usize,
+    calls: usize,
+}
+impl Allocator for Allocation {
+    fn reserve(&mut self, buffer: &mut Vec<u8>, additional: usize) -> Result<(), Failure> {
+        let call = self.calls;
+        self.calls += 1;
+        if call == self.fail_at {
+            return Err(Failure::new(
+                ErrorCode::WasmMemoryUnavailable,
+                ErrorPath::Wasm,
+            ));
+        }
+        buffer.try_reserve_exact(additional + self.extra).unwrap();
+        Ok(())
+    }
+}
+
+#[test]
+fn complete_call_preflights_capacity_and_recovers_without_publishing_failed_output() {
+    let data = [100, 100, 100, 255, 100, 100, 100, 255];
+    let input = request(&data, 2, 1);
+    let run = |processor: &mut Processor, boundary: &mut Boundary<'_>| {
+        processor.dither_and_quantize(processor_request(input), input.dither, boundary)
+    };
+    let mut probe = Processor::new(1 << 20, 0).unwrap();
+    let stable = run(&mut probe, &mut Boundary::new(&data)).unwrap();
+    let capacity = probe.peak_capacity_bytes();
+    let mut under = Processor::new(capacity - 1, 0).unwrap();
+    let mut boundary = Boundary::new(&data);
+    assert_eq!(
+        run(&mut under, &mut boundary).unwrap_err().code,
+        ErrorCode::MemoryLimit
+    );
+    assert_eq!((boundary.copies, boundary.completions), (0, 0));
+    let mut exact = Processor::new(capacity, 0).unwrap();
+    assert_eq!(run(&mut exact, &mut Boundary::new(&data)).unwrap(), stable);
+    for fail_at in [0, 1, usize::MAX] {
+        let mut boundary = Boundary::new(&data);
+        let mut allocator = Allocation {
+            fail_at,
+            extra: if fail_at == usize::MAX { 1 } else { 0 },
+            calls: 0,
+        };
+        let failure = exact
+            .dither_and_quantize_with_allocator(
+                processor_request(input),
+                input.dither,
+                &mut boundary,
+                &mut allocator,
+            )
+            .unwrap_err();
+        assert_eq!(
+            failure.code,
+            if fail_at == usize::MAX {
+                ErrorCode::MemoryLimit
+            } else {
+                ErrorCode::WasmMemoryUnavailable
+            }
+        );
+        assert_eq!((boundary.copies, boundary.completions), (0, 0));
+        assert_eq!(run(&mut exact, &mut Boundary::new(&data)).unwrap(), stable);
+    }
+    for (fail_copy, fail_complete) in [(true, false), (false, true)] {
+        let mut boundary = Boundary {
+            fail_copy,
+            fail_complete,
+            ..Boundary::new(&data)
+        };
+        assert_eq!(
+            run(&mut exact, &mut boundary).unwrap_err().code,
+            ErrorCode::WasmMemoryUnavailable
+        );
+        assert_eq!(run(&mut exact, &mut Boundary::new(&data)).unwrap(), stable);
+    }
+    let mut overflow = input.dither;
+    if let DitherPolicy::Diffusion { strength, .. } = &mut overflow {
+        *strength = f32::MAX;
+    }
+    let mut boundary = Boundary::new(&data);
+    assert_eq!(
+        exact
+            .dither_and_quantize(processor_request(input), overflow, &mut boundary)
+            .unwrap_err()
+            .path,
+        ErrorPath::DiffusionWork
+    );
+    assert_eq!((boundary.copies, boundary.completions), (1, 0));
+    assert_eq!(run(&mut exact, &mut Boundary::new(&data)).unwrap(), stable);
+    exact.dispose().unwrap();
+    exact.dispose().unwrap();
+    assert_eq!(
+        run(&mut exact, &mut Boundary::new(&data)).unwrap_err().code,
+        ErrorCode::Disposed
+    );
+}
+
+#[test]
+fn complete_call_height_growth_counts_only_owned_source_and_indices() {
+    let mut capacities = Vec::new();
+    for height in [1, 19] {
+        let data = vec![100; 7 * height as usize * 4];
+        let input = request(&data, 7, height);
+        let mut processor = Processor::new(1 << 20, 0).unwrap();
+        processor
+            .dither_and_quantize(
+                processor_request(input),
+                input.dither,
+                &mut Boundary::new(&data),
+            )
+            .unwrap();
+        capacities.push(processor.peak_capacity_bytes());
+    }
+    assert_eq!(capacities[1] - capacities[0], 7 * (19 - 1) * 5);
 }
 
 #[test]

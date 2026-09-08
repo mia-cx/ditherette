@@ -76,6 +76,14 @@ impl PreparedQuantizer {
         &self.palette
     }
 
+    pub(crate) fn matcher(&self) -> &PaletteMatcher {
+        &self.matcher
+    }
+
+    pub(crate) fn converter(&self) -> &Converter {
+        &self.converter
+    }
+
     /// Writes one index per source pixel. The caller supplies validated output storage.
     /// Alpha comes from the corresponding source byte; no allocation occurs in this method.
     pub fn quantize_into(&self, source: ImageView<'_, Rgba8>, output: &mut [u8]) {

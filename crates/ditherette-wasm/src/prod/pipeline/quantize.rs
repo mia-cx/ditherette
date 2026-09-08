@@ -143,7 +143,7 @@ fn memory_limit() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
 }
 
-fn preparation_failure(error: PreparationError) -> Failure {
+pub(super) fn preparation_failure(error: PreparationError) -> Failure {
     let path = match error.path {
         "palette" => ErrorPath::Palette,
         "alpha.threshold" => ErrorPath::AlphaThreshold,

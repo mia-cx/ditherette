@@ -3,6 +3,7 @@
 use crate::image::{ImageFormat, ImageView, ImageViewMut, PaletteIndex8};
 
 mod common;
+pub mod prepared;
 #[cfg(test)]
 mod tests;
 
