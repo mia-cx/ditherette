@@ -1,14 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import ts from 'typescript';
 
-const factoryName = 'createScalarBindings';
-
 /**
  * Wrap generated web bindings in a fresh closure while retaining static imports.
  * Only wasm-bindgen's named functions/classes and local export lists are supported.
  * New export syntax fails generation instead of silently producing shared bindings.
  */
-export function scalarFactory(source, sourceName = 'ditherette_wasm.js') {
+export function scalarFactory(source, sourceName = 'ditherette_wasm.js', threaded = false) {
 	const file = ts.createSourceFile(
 		sourceName,
 		source,
@@ -25,6 +23,7 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js') {
 	const body = [];
 	const exported = new Map();
 	const declared = new Set();
+	let workerImport;
 	const unsupported = () => {
 		throw new Error('Unsupported generated scalar export shape; review the factory generator.');
 	};
@@ -34,6 +33,15 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js') {
 	};
 	for (const statement of file.statements) {
 		if (ts.isImportDeclaration(statement)) {
+			if (threaded && statement.moduleSpecifier.text.endsWith('/workerHelpers.no-bundler.js')) {
+				const bindings = statement.importClause?.namedBindings;
+				if (workerImport || !bindings || !ts.isNamedImports(bindings) ||
+					bindings.elements.length !== 1 || statement.importClause.name ||
+					(bindings.elements[0].propertyName ?? bindings.elements[0].name).text !== 'startWorkers')
+					unsupported();
+				workerImport = bindings.elements[0].name.text;
+				continue;
+			}
 			imports.push(statement);
 			continue;
 		}
@@ -102,6 +110,7 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js') {
 	for (const local of exported.values()) {
 		if (!declared.has(local)) unsupported();
 	}
+	if (threaded && !workerImport) throw new Error('Generated threaded worker import changed.');
 	const properties = [...exported].map(([name, local]) =>
 		ts.factory.createPropertyAssignment(
 			ts.factory.createStringLiteral(name),
@@ -120,9 +129,9 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js') {
 	const factory = ts.factory.createFunctionDeclaration(
 		[ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
 		undefined,
-		factoryName,
+		threaded ? 'createThreadedBindings' : 'createScalarBindings',
 		undefined,
-		[],
+		workerImport ? [ts.factory.createParameterDeclaration(undefined, undefined, workerImport)] : [],
 		undefined,
 		ts.factory.createBlock(body, true)
 	);
@@ -132,12 +141,14 @@ export function scalarFactory(source, sourceName = 'ditherette_wasm.js') {
 }
 
 /** Generate the factory beside scalar web glue so import.meta URLs and snippet imports stay relative. */
-export async function writeScalarFactory(directory) {
+export async function writeScalarFactory(directory, threaded = false) {
 	const source = await readFile(new URL('ditherette_wasm.js', directory), 'utf8');
-	await writeFile(new URL('ditherette_wasm.factory.js', directory), scalarFactory(source));
+	await writeFile(new URL('ditherette_wasm.factory.js', directory), scalarFactory(source, undefined, threaded));
 	await writeFile(
 		new URL('ditherette_wasm.factory.d.ts', directory),
-		'/** Creates independent scalar glue state; initialization remains explicit. */\n' +
-			'export declare function createScalarBindings(): typeof import("./ditherette_wasm.js");\n'
+		'/** Creates independent glue state; initialization remains explicit. */\n' +
+			(threaded
+				? 'export declare function createThreadedBindings(startWorkers: (module: WebAssembly.Module, memory: WebAssembly.Memory, builder: import("./ditherette_wasm.js").wbg_rayon_PoolBuilder) => Promise<void>): typeof import("./ditherette_wasm.js");\n'
+				: 'export declare function createScalarBindings(): typeof import("./ditherette_wasm.js");\n')
 	);
 }

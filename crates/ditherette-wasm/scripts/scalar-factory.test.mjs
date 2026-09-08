@@ -105,3 +105,22 @@ test('generation keeps normal glue intact and emits sibling factory declarations
 		/typeof import\("\.\/ditherette_wasm\.js"\)/
 	);
 });
+
+test('threaded factory replaces only the pinned worker import with instance-owned startup', async () => {
+	const threaded = `import { startWorkers as start } from './snippets/wasm-bindgen-rayon-id/src/workerHelpers.no-bundler.js';
+function initSync() {}
+async function __wbg_init() {}
+export function initThreadPool(...args) { return start(...args); }
+export { initSync, __wbg_init as default };`;
+	const output = scalarFactory(threaded, undefined, true);
+	assert.doesNotMatch(output, /workerHelpers/);
+	const { createThreadedBindings } = await import(`data:text/javascript,${encodeURIComponent(output)}`);
+	const calls = [];
+	const first = createThreadedBindings(async (...args) => calls.push(['first', ...args]));
+	const second = createThreadedBindings(async (...args) => calls.push(['second', ...args]));
+	await first.initThreadPool(1);
+	await second.initThreadPool(2);
+	assert.deepEqual(calls, [['first', 1], ['second', 2]]);
+	assert.throws(() => scalarFactory(glue, undefined, true), /worker import changed/);
+	assert.throws(() => scalarFactory(threaded.replace('startWorkers as start', 'other as start'), undefined, true), /Unsupported/);
+});
