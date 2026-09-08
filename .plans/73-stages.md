@@ -108,7 +108,7 @@ point; S32 supplies the transaction without inventing callback behavior early.
 
 ## Atomic implementation steps
 
-Steps 1 through 3 complete. Next is corrected-parent join and public ownership validation.
+Steps 1 through 4 complete. The coordinator owns the exclusive measurement gate.
 
 1. [x] **Prove identities.** Extend the existing identity helper and replay frozen
    request-plan fixtures for every method and dither family. Done when production
@@ -119,7 +119,7 @@ Steps 1 through 3 complete. Next is corrected-parent join and public ownership v
 3. [x] **Connect existing pipelines.** Add hit-aware planning and completed-buffer
    publication to all five methods. Done when cross-method calls demonstrably hit
    shared stages and produce identical bytes, palette metadata, and warnings.
-4. **Verify public ownership.** Run focused native and installed-package fixtures
+4. [x] **Verify public ownership.** Run focused native and installed-package fixtures
    for input/output mutation, final-copy failure, recovery, eviction, and disposal.
    Done when cold/warm equality and retained allocation accounting both pass.
 5. **Measure and deliver.** Add hashing/copy-inclusive cold/warm stage-cache cases to
@@ -219,3 +219,32 @@ the quarter cap below their sum while both individually fit. The older incoming
 image now drops instead of evicting the newer palette. All 26 native library
 tests pass. The complete native `--tests` suite passed at the preceding joined
 revision; final focused validation covers this publication-only correction.
+
+## Candidate artifacts and installed conformance
+
+Both official preparers built clean runtime revision
+`d638f87c3a16824ef52964bbb611ef91b173f2ee`. Native binaries and provenance remain
+in `target/s32-candidate-d638f87c-native`. The installed public bundle and provenance
+remain in `target/s32-candidate-d638f87c-public`.
+Its `ditherette.tgz` SHA-256 is
+`8a51e04d08cfdf73bd022ccef1167fed36c74f8267ea1615e19e46df7636fc80`.
+Compiler targets are the worktree-local paths declared above. No measurements ran.
+
+Test-only delivery head `dbf739595724d7ac6d963cc85123d2c211b68b7d` joins the corrected
+external-tarball driver and updates obsolete preflight-copy assertions. Native/private
+candidate fixtures require exactly one snapshot before remaining-budget rejection.
+Cross-revision public fixtures allow zero or one only for total-budget failures.
+Malformed requests and input-only budget failures retain their exact zero-copy checks.
+Error code/path, no returned output, and recovery assertions remain intact.
+Runtime, package implementation, and frozen files are unchanged after the artifact revision.
+
+Final conformance passes interface tests (34), private Wasm ABI tests (16), and
+focused installed stage-ownership tests (4). The broad installed suite also passes
+all 4 tests against the exact candidate tarball and its prepared frozen oracle.
+Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 each pass 367 frozen
+Yliluoma vectors and 734 untimed actual benchmark-adapter calls. The semantic input
+fixture remains at `target/s32-d638f87c-yliluoma-fixtures.json`.
+
+Browser session 76291 exited successfully. All candidate build/test jobs are drained.
+Retain artifacts and compiler outputs for the coordinator's exclusive trial.
+Further builds, tests, edits, and reviews wait for its measurement-complete handoff.
