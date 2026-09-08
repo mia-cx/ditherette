@@ -147,6 +147,11 @@ Public fixture checkpoint `8bd9208138322776433cb0eb3e9dcf0f4d15de52` passes the 
 It covers five methods, 18 compositions, mutation, metadata ownership, disposal, and failed final-copy recovery.
 Those checks establish observable behavior on the recorded S31 tarball, not private cache hits or S32 artifact conformance.
 The public-fixture owner returns its completed checkpoint and independently reviews runtime checkpoints without editing the runtime worktree.
+PR121's later review finds retained byte scratch can overlap its replacement allocation. It also flags parsed Process diffusion-policy accounting.
+The public-fixture owner switches to targeted fixes and physical-allocation tests in `.worktrees/v1-s31-preparation`.
+Only its new `target/compiler-review` belongs to this review task. Historical benchmark artifacts remain unchanged.
+S31 availability is temporarily withdrawn and #73's blocker restored until the corrected parent joins and validates in S32.
+S32 runtime/protocol work continues in isolation; neither prepares measurement artifacts against the outdated parent.
 These three owners have disjoint source/test/protocol responsibilities. S31 compiler caches are no longer assigned to any agent.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
