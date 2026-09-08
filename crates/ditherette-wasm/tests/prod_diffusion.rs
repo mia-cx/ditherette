@@ -36,6 +36,85 @@ const BW: [PaletteEntry; 2] = [
     PaletteEntry::Color { rgb: [255; 3] },
 ];
 
+#[cfg(feature = "bench-subjects")]
+#[test]
+fn native_benchmark_subject_executes_all_diffusion_recipes() {
+    use ditherette_wasm::bench_subjects::{
+        self, diffusion, reference::ReferenceRequest, BenchSubject,
+    };
+    let registry = bench_subjects::bench_subjects();
+    let subject = |id: &str| {
+        registry
+            .iter()
+            .find_map(|subject| match subject {
+                BenchSubject::Conformance(subject) if subject.descriptor.id.as_str() == id => {
+                    Some(subject)
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    let production = subject(diffusion::SUBJECT);
+    let frozen = subject("spec:dither-and-quantize:request:v1");
+    assert_eq!(production.operation, frozen.operation);
+    let data = [
+        100, 100, 100, 255, 190, 41, 23, 128, 12, 211, 18, 0, 43, 71, 111, 255,
+    ];
+    for kernel in KERNELS {
+        for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+            for matching in MODES {
+                let input = ReferenceRequest::Processing(
+                    spec::contract::request::Request::DitherAndQuantize(
+                        spec::contract::request::DitherQuantizeRequest {
+                            quantize: spec::contract::request::QuantizeRequest {
+                                version: 1,
+                                source: spec::contract::request::Source {
+                                    width: 2,
+                                    height: 2,
+                                    data: &data,
+                                },
+                                palette: &BW,
+                                alpha: same_tag(AlphaPolicy::Preserve { threshold: 0.0 }),
+                                matching: same_tag(matching),
+                            },
+                            dither: same_tag(DitherPolicy::Diffusion {
+                                kernel,
+                                feedback,
+                                strength: 0.75,
+                                serpentine: true,
+                                placement: Placement::Adaptive {
+                                    radius: 1,
+                                    threshold: 5.0,
+                                    softness: 10.0,
+                                },
+                            }),
+                        },
+                    ),
+                );
+                assert_eq!(
+                    (production.run)(&input).unwrap(),
+                    (frozen.run)(&input).unwrap()
+                );
+                let direct = diffusion::function(diffusion::SUBJECT).unwrap()(
+                    diffusion::request(&input).unwrap(),
+                )
+                .unwrap();
+                assert_eq!(
+                    direct,
+                    reference::diffuse(match input {
+                        ReferenceRequest::Processing(
+                            spec::contract::request::Request::DitherAndQuantize(input),
+                        ) => input,
+                        _ => unreachable!(),
+                    })
+                    .unwrap()
+                );
+            }
+        }
+    }
+    assert!(diffusion::function("spec:dither-and-quantize:request:v1").is_none());
+}
+
 fn same_tag<T: Serialize, U: DeserializeOwned>(value: T) -> U {
     serde_json::from_value(serde_json::to_value(value).unwrap()).unwrap()
 }

@@ -4,6 +4,7 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
+pub mod diffusion;
 pub mod field_calls;
 pub mod fields;
 pub mod quantize;
@@ -193,6 +194,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(scores::subjects());
     subjects.extend(fields::subjects());
     subjects.extend(field_calls::subjects());
+    subjects.extend(diffusion::subjects());
     subjects
 }
 

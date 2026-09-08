@@ -1,6 +1,6 @@
 # S28 literal native diffusion baseline
 
-Issue #69. This bounded phase copies missing diffusion semantics before any ring-buffer optimization or public integration.
+Issue #69. The literal baseline precedes benchmark registration, bounded scratch, and public integration.
 
 ## Prerequisites
 
@@ -19,6 +19,10 @@ The final S25 join includes its benchmark-module formatting correction.
 - [x] Inspect existing production helpers, resolve and validate the prerequisite join, and record ownership.
 - [x] Copy frozen diffusion and missing coordinate helpers, with explicit mechanical constructor/import substitutions.
 - [x] Compare all four kernels, both feedback modes, all fifteen metrics, scan orders, alpha policies, placement, failures, and complete metadata against frozen references; commit the literal baseline.
+- [x] Join accepted S26 `3915f60519995cb9087a18b3bfd6bd7220ae804a` and register the full-image native benchmark before optimization.
+- [ ] Implement fallible three-row scratch with exact arithmetic and width-based capacity checks.
+- [ ] Expose all four diffusion kernels through the private processor and public package; verify public calls and memory failures.
+- [ ] Prepare candidate benchmark subjects for the coordinator's exclusive comparisons.
 
 ## Copy boundary
 
@@ -51,8 +55,17 @@ Commands use `CARGO_TARGET_DIR=/home/mia/mia-cx/ditherette/.worktrees/v1-s24-qua
 
 No benchmark measurements run in this phase.
 
+## Native benchmark baseline
+
+Literal implementation checkpoint: `91cd93207e1935c53e04cd7b9678cdae742e6f99`.
+The accepted S26 join excludes unselected converter candidate `b237b746`.
+`prod:dither-and-quantize:diffusion:full-image-v1` calls the literal implementation and retains result allocation/destruction inside timing.
+The actual paired native worker accepts typed diffusion settings. Request mapping stays outside timing; identity includes all diffusion, matching, palette, alpha, and placement fields.
+The registered subject and timed callable match frozen results for 120 kernel/feedback/matching combinations.
+`cargo check --manifest-path crates/ditherette-bench/Cargo.toml --bin ditherette-bench` passes using the assigned target cache.
+
 ## Deferred scope
 
 Three-row scratch, capacity-accounted preparation, public methods, benchmark registrations, measurements, and the S28 PR remain unfinished.
-The literal baseline must be recorded and benchmark subjects registered before optimization starts.
+The literal baseline and native benchmark registration are recorded before optimization starts.
 The coordinator owns integration/tracking and exclusive measurement clearance. S26 source and artifacts stay untouched.
