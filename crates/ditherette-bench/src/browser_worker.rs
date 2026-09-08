@@ -1,7 +1,7 @@
 //! One owned Node transport per benchmark worker, with checked response identities.
 
 use crate::{
-    browser_assets::{validate_bundle_revision, validate_trial_assets},
+    browser_assets::{validate_bundle_revision, validate_oracle, validate_trial_assets},
     lease::Lease,
     paired::{browser::*, *},
 };
@@ -28,6 +28,7 @@ pub fn run_transport(
         .ok_or_else(|| invalid("browser request lacks prepared assets"))?;
     validate_trial_assets(trial)?;
     validate_bundle_revision(&trial.assets, &request.executable.revision)?;
+    validate_oracle(&trial.assets)?;
     let request_path = fs::canonicalize(request_path)?;
     let raw_path = request_path.with_extension("transport.json");
     let mut raw = OpenOptions::new()
@@ -44,6 +45,19 @@ pub fn run_transport(
     let result = read_owned_transport(lease, command, response_limit(request)?, &mut raw)?;
     validate_trial_assets(trial)?;
     validate_response(request, &result)?;
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(request_path.with_extension("reference-diagnostics.json"))?
+        .write_all(
+            &serde_json::to_vec_pretty(&serde_json::json!({
+                "case": request.case.identity,
+                "native_reference": request.reference_output,
+                "wasm_reference": result.reference,
+                "artifact": artifact_identity(&request.executable, &trial.assets, &trial.runtime)?,
+            }))
+            .map_err(io::Error::other)?,
+        )?;
     reject_unstable_output(
         request,
         &result,
@@ -86,10 +100,11 @@ pub fn read_owned_transport(
     Ok(result)
 }
 
-fn response_limit(request: &TrialRequest) -> io::Result<u64> {
+/// Bound the complete Node response, including its independently computed target reference.
+pub fn response_limit(request: &TrialRequest) -> io::Result<u64> {
     // JSON RGBA bytes need at most four characters each, plus structured evidence.
     // An exact preflight does not preclude later instability. Retain two actual results in every trial.
-    let outputs = 2;
+    let outputs = 3;
     u64::from(request.case.identity.output.width)
         .checked_mul(u64::from(request.case.identity.output.height))
         .and_then(|pixels| pixels.checked_mul(16 * outputs))
@@ -112,7 +127,12 @@ pub fn preserve_reference_mismatch(
     if result.timing_skipped != Some(TimingSkipped::ReferenceMismatch) {
         return Err(invalid("expected untimed reference mismatch"));
     }
-    preserve_output(request, result.output.clone(), directory)
+    preserve_output(
+        request,
+        result.reference.as_ref().expect("validated oracle"),
+        result.output.clone(),
+        directory,
+    )
 }
 
 /// Preserve both actual images, then fail before a normal paired result can be published.
@@ -132,9 +152,15 @@ pub fn reject_unstable_output(
         .create_new(true)
         .open(directory.join("transport.json"))?
         .write_all(&serde_json::to_vec_pretty(result).map_err(io::Error::other)?)?;
-    preserve_output(request, first.clone(), &directory.join("first-output"))?;
     preserve_output(
         request,
+        result.reference.as_ref().expect("validated oracle"),
+        first.clone(),
+        &directory.join("first-output"),
+    )?;
+    preserve_output(
+        request,
+        result.reference.as_ref().expect("validated oracle"),
         result.output.clone(),
         &directory.join("first-distinct-output"),
     )?;
@@ -145,6 +171,7 @@ pub fn reject_unstable_output(
 
 fn preserve_output(
     request: &TrialRequest,
+    reference: &ditherette_bench_api::verification::OracleOutput,
     output: ditherette_bench_api::verification::VerificationOutput,
     directory: &Path,
 ) -> io::Result<()> {
@@ -174,10 +201,7 @@ fn preserve_output(
         reference_state: request.reference_state,
         reference: Some(record(
             &request.case.reference_subject,
-            request
-                .reference_output
-                .clone()
-                .ok_or_else(|| invalid("missing frozen output"))?,
+            reference.output.clone(),
         )),
         accepted: (request.role == Role::Accepted).then(|| actual.clone()),
         candidate: (request.role == Role::Candidate).then_some(actual),
@@ -201,6 +225,13 @@ pub fn validate_response(
         .as_ref()
         .ok_or_else(|| invalid("missing browser trial"))?;
     let case = &request.case;
+    let reference = result
+        .reference
+        .as_ref()
+        .ok_or_else(|| invalid("missing Wasm oracle reference"))?;
+    if reference.case != case.identity {
+        return Err(invalid("Wasm oracle case identity differs"));
+    }
     if request.reference_output.is_none() {
         return Err(invalid(
             "browser transport requires untimed frozen reference output",
@@ -231,7 +262,10 @@ pub fn validate_response(
             | PublicOperation::Separable { .. }
             | PublicOperation::Diffusion { .. }
     );
-    for output in std::iter::once(&result.output).chain(result.unstable_output.iter()) {
+    for output in std::iter::once(&result.output)
+        .chain(result.unstable_output.iter())
+        .chain(std::iter::once(&reference.output))
+    {
         let format_matches = if indexed {
             matches!(output.pixels, Pixels::Indexed8 { .. })
         } else {
@@ -249,7 +283,7 @@ pub fn validate_response(
             || result.iterations_per_sample != 0
             || result.warmup_iterations != 0
             || result.warmup_elapsed_ns != 0
-            || request.reference_output.as_ref() == Some(&result.output)
+            || reference.output == result.output
         {
             return Err(invalid(
                 "reference mismatch claims measured work or equal output",

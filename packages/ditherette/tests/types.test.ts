@@ -131,10 +131,12 @@ processor.then((instance) => {
 });
 // @ts-expect-error Bayer matrix sizes are canonical string tags.
 const badSize: PerturbRequest['perturb']['field'] = { algorithm: 'bayer', size: 4 };
-// @ts-expect-error BlueNoise belongs to the next implementation slice.
 const blueNoise: PerturbRequest['perturb']['field'] = { algorithm: 'blue-noise' };
+// @ts-expect-error Blue noise uses the fixed tile without a seed control.
+const seededBlueNoise: PerturbRequest['perturb']['field'] = { algorithm: 'blue-noise', seed: 0 };
 // @ts-expect-error Matching metrics are not reversible working spaces.
 const badSpace: PerturbRequest['perturb']['space'] = 'srgb-rec709';
 void badSize;
 void blueNoise;
+void seededBlueNoise;
 void badSpace;

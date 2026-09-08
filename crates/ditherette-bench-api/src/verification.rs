@@ -157,6 +157,14 @@ pub struct VerificationOutput {
     pub warnings: Vec<Warning>,
 }
 
+/// Independently computed case and exact output from the isolated frozen oracle.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OracleOutput {
+    pub case: CaseIdentity,
+    pub output: VerificationOutput,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RecordedOutput {
     pub case: CaseIdentity,

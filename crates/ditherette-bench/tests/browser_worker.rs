@@ -6,6 +6,78 @@ use ditherette_bench::{
 use ditherette_bench_api::verification::*;
 
 #[test]
+fn browser_transport_requires_an_independently_identified_target_reference() {
+    let (request, mut result) = fixture();
+    result.reference = None;
+    assert!(validate_response(&request, &result)
+        .unwrap_err()
+        .to_string()
+        .contains("Wasm oracle"));
+}
+
+#[test]
+fn transport_bound_retains_reference_and_both_large_unstable_outputs() {
+    let (mut request, mut result) = fixture();
+    let dimensions = Dimensions {
+        width: 400,
+        height: 400,
+    };
+    let output = VerificationOutput {
+        dimensions,
+        pixels: Pixels::Rgba8 {
+            data: vec![255; 400 * 400 * 4],
+        },
+        warnings: vec![],
+    };
+    request.case.identity.output = dimensions;
+    result.output = output.clone();
+    result.unstable_output = Some(output.clone());
+    result.reference.as_mut().unwrap().output = output;
+    assert!(
+        serde_json::to_vec(&result).unwrap().len() as u64 + 1 <= response_limit(&request).unwrap()
+    );
+}
+
+#[test]
+fn wasm_reference_identity_and_exact_mismatch_evidence_are_not_native_overrides() {
+    let (request, mut result) = fixture();
+    if let Pixels::Rgba8 { data } = &mut result.reference.as_mut().unwrap().output.pixels {
+        data[0] = 94;
+    }
+    result.output = result.reference.as_ref().unwrap().output.clone();
+    validate_response(&request, &result).unwrap();
+    for mutate in [
+        |v: &mut OracleOutput| v.case.input.0[0] ^= 1,
+        |v: &mut OracleOutput| v.case.settings.0[0] ^= 1,
+        |v: &mut OracleOutput| v.case.semantics.recipe.push('x'),
+        |v: &mut OracleOutput| v.case.output.width += 1,
+    ] {
+        let mut changed = result.clone();
+        mutate(changed.reference.as_mut().unwrap());
+        assert!(validate_response(&request, &changed).is_err());
+    }
+    if let Pixels::Rgba8 { data } = &mut result.output.pixels {
+        data[0] += 1;
+    }
+    result.timing_skipped = Some(TimingSkipped::ReferenceMismatch);
+    result.sample_ns.clear();
+    result.iterations_per_sample = 0;
+    result.warmup_iterations = 0;
+    result.warmup_elapsed_ns = 0;
+    let directory =
+        std::env::temp_dir().join(format!("wasm-reference-mismatch-{}", std::process::id()));
+    preserve_reference_mismatch(&request, &result, &directory).unwrap();
+    let retained: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("results.json")).unwrap()).unwrap();
+    let outputs: ThreeWayOutputs = serde_json::from_value(retained["outputs"].clone()).unwrap();
+    assert_eq!(
+        outputs.reference.unwrap().output,
+        result.reference.unwrap().output
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn field_and_diffusion_protocol_bind_native_identity_and_require_the_correct_public_output() {
     use ditherette_bench::paired::{fields::*, native::NativeOperation, quantize::*};
     use ditherette_wasm::bench_subjects::{self, BenchSubject};
@@ -101,6 +173,10 @@ fn field_and_diffusion_protocol_bind_native_identity_and_require_the_correct_pub
         result.input = case.identity.input;
         result.settings = case.identity.settings;
         request.reference_output = Some(result.output.clone());
+        result.reference = Some(OracleOutput {
+            case: case.identity.clone(),
+            output: result.output.clone(),
+        });
         validate_response(&request, &result).unwrap();
         let restored: TrialRequest =
             serde_json::from_slice(&serde_json::to_vec(&request).unwrap()).unwrap();
@@ -156,6 +232,10 @@ fn indexed_transport_preserves_metadata_and_rejects_malformed_indices() {
         transparent_index: None,
     };
     request.reference_output = Some(result.output.clone());
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
     validate_response(&request, &result).unwrap();
     result.output.warnings.push(Warning {
         code: WarningCode::TransparentFallback,
@@ -251,6 +331,10 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         cross_origin_isolated: true,
     };
     let result = BrowserTransportResult {
+        reference: Some(OracleOutput {
+            case: identity.clone(),
+            output: output.clone(),
+        }),
         role: Role::Candidate,
         pair: 0,
         case_name: "fixture".into(),

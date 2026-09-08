@@ -31,7 +31,7 @@ const fused = () => ({
 const errorIs = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
-test('public fields match 91 frozen vectors and all matching pairs consume the RGBA8 boundary', async () => {
+test('public fields match frozen vectors and all matching pairs consume the RGBA8 boundary', async () => {
 	const processor = await createDitherette({ wasm: module });
 	const backing = new Uint8Array([99, ...vectors.source.data, 99]);
 	const source = { ...vectors.source, data: backing.subarray(1, 17) };
@@ -55,12 +55,15 @@ test('public fields match 91 frozen vectors and all matching pairs consume the R
 	let previous;
 	try {
 		for (const vector of vectors.cases) {
-			const rgba = processor.perturb({ version: 1, source, perturb: vector.policy });
+			const vectorSource = vector.source
+				? { ...vector.source, data: new Uint8Array(vector.source.data) }
+				: source;
+			const rgba = processor.perturb({ version: 1, source: vectorSource, perturb: vector.policy });
 			assert.deepEqual([...rgba.data], vector.rgba, JSON.stringify(vector.policy));
 			assert.notEqual(rgba.data.buffer, source.data.buffer);
 			if (previous) assert.notEqual(rgba.data.buffer, previous.data.buffer);
 			for (const matching of modes) {
-				const value = { ...quantize(), source, matching };
+				const value = { ...quantize(), source: vectorSource, matching };
 				assert.deepEqual(
 					processor.ditherAndQuantize({
 						...value,
@@ -100,7 +103,8 @@ test('field validation retains canonical tags, nested paths, shared reentry and 
 			[{ field: { algorithm: 'bayer', size: 2 } }, 'invalid-settings', 'field.size'],
 			[{ field: { algorithm: 'bayer', size: '2', seed: 0 } }, 'invalid-settings', 'field.seed'],
 			[{ field: { algorithm: 'random', seed: -1 } }, 'invalid-settings', 'field.seed'],
-			[{ field: { algorithm: 'blue-noise' } }, 'unsupported-operation', 'field.algorithm'],
+			[{ field: { algorithm: 'blue-noise', seed: 0 } }, 'invalid-settings', 'field.seed'],
+			[{ field: { algorithm: 'blue-noise', size: '32' } }, 'invalid-settings', 'field.size'],
 			[{ space: 'srgb-rec709' }, 'invalid-settings', 'space'],
 			[{ strength: Infinity }, 'invalid-settings', 'strength'],
 			[{ strength: 3.5e38 }, 'invalid-settings', 'strength'],
