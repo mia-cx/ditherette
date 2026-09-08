@@ -48,16 +48,20 @@ It passes native/private/interface checks, both builds, and all three package en
 The [measurement report](https://github.com/mia-cx/ditherette/blob/c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7/.plans/68-benchmark-results.md) records 68 reaped workers and 1,264 samples, all exact against the target-local frozen oracle.
 All four runtime gates pass. Both roles rebuild measured source `44cbe43546e739f3d11f7b0bd08d7453afb83da1`; this establishes a baseline, not a speedup.
 Native/Wasm rounding diagnostics remain intact. S41 still owns full-call bottlenecks and equivalent TypeScript comparisons.
-S28 three-row diffusion reaches validated public checkpoint `8df7b48396aec85bf9c1a289d63973b615e31018`.
-It passes 360 frozen public vectors in all three engines and the trusted freeze guard.
-The literal full-image native baseline remains callable; the ring candidate awaits its bounded comparison.
-S29 literal baseline `50cd96d17535ee7f81b1d7a63288751afab50e89` and converter candidate `fdb3921ae1cb7cc3834e42c204d61bb0a63c7cea` pass 367 frozen-Wasm fixtures per engine.
-The candidate only reuses the prepared converter and remains unselected.
-S28 source `058f276d2bf18e1207b74f1a743b5e91f13816e4` and both S29 sources have complete fresh roles and four immutable snapshots each.
-Their benchmarks and PRs remain pending. Both declarations allow 128 serial workers and at most 2,560 samples.
-Fresh public packages match their tested tarballs. S29 oracle executable sections also match; only candidate symbol metadata differs.
-Fresh-role conformance was not rerun. The [integration checkpoint](../../../.plans/68-70-checkpoint.md) retains earlier validation and cross-target diagnostics.
-All three agents are drained before the coordinator's next exclusive measurement phase.
+S28 is delivered in [PR118](https://github.com/mia-cx/ditherette/pull/118) at `f4dfef7401d5474ac7318302d117ee0345449793`, targeting S27 `c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7`.
+The selected three-row diffusion path passes 360 frozen vectors in all three engines and the trusted freeze guard.
+Its trial retains 128 reaped workers and 2,356 exact samples. All eight native comparisons pass with medians 8–91% lower than the literal full-image baseline.
+Chromium and Firefox self-comparisons pass. Two WebKit self-controls remain inconclusive from noise or timer resolution, tracked for S41.
+The [S28 report](https://github.com/mia-cx/ditherette/blob/f4dfef7401d5474ac7318302d117ee0345449793/.plans/69-measurement.md) distinguishes that release-evidence gap from the exact native optimization result.
+S29 is delivered in [PR117](https://github.com/mia-cx/ditherette/pull/117) at `6eb9e00fd3191fc8bbd03559e89c67c762abfc25`, targeting the same S27 parent.
+It retains measured literal `50cd96d17535ee7f81b1d7a63288751afab50e89`; converter candidate `fdb3921ae1cb7cc3834e42c204d61bb0a63c7cea` stays separate and unselected.
+Both pass 367 frozen-Wasm fixtures per engine. The trial retains 128 reaped workers and 2,560 exact samples, but all four runtime gates remain inconclusive from paired noise.
+The candidate has observed gains, not a confirmed regression. Its declared selection rule retains the baseline until required evidence passes.
+Fresh public packages match their tested tarballs. S29 oracle executable sections also match; only candidate symbol metadata differs. Fresh-role conformance was not rerun.
+All benchmark workers exited before implementation resumed. The [integration checkpoint](../../../.plans/68-70-checkpoint.md) retains validation and cross-target diagnostics.
+S30 now owns `.worktrees/v1-s30-process`, starting from coordinator `246297c94dda86b33b678d11eb194530c0b513a8` and both delivered sibling heads.
+The agent first validates `impl/v1-s30-base`, then implements only the missing process composition on `impl/v1-s30-process`.
+The coordinator's S27 join passes TypeScript and 28 protocol checks. Its three new field failures load the old S26 staged Wasm; the combined package must rebuild before validation.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -70,7 +74,8 @@ Public TypeScript differences and complete-call costs remain [S41 work](https://
 The first inactive-worktree cleanup reclaimed about 46 GiB from 124 compiler profile directories.
 After S27 preparation and measurement ended, eight returned S24 native/S23 Wasm profiles reclaimed another 6.55 GiB.
 The disk had 57 GiB free afterward. Source, copied binaries, trial snapshots, reports, and custom target evidence remain intact.
-S28 owns the S24 quantize cache; S29 owns the S22 convolution cache until their implementations finish.
+After S29 delivery, eight returned S22 compiler profiles reclaimed another 5.34 GiB. Disk free space was 60 GiB afterward.
+S30 now owns the S24 quantize cache and its scalar/threaded children. All other completed-slice compiler ownership has ended.
 Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
 
 ## Delivered S01 through S16
