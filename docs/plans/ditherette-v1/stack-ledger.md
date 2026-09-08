@@ -205,6 +205,12 @@ S34 `29bccaa5` passes the trusted guard. Build source `2afd1802` adds only the s
 Detached `v1-s34-accepted-source` at `bf7912db` and `v1-s34-measured-source` at `2afd1802` preserve exact build provenance.
 S39 starts in `v1-s39-website` from the explicit S34 `29bccaa5` and S38 `0305456b` join `6230326d`.
 Its owner changes website scheduling/fallback and focused tests only. Final S34 ancestry and artifact validation remain required before delivery.
+S39 checkpoint `45947d96` adds immediate stale rejection, debounced replacement, and real progress forwarding; 54 focused tests pass.
+S34 [startup attempt 01](../../../.plans/76-attempt01.md) retains 480 exact scalar samples from 24 completed workers.
+The first threaded worker fails untimed preflight; all 25 started workers are reaped. No threaded samples exist.
+An isolated reproduction proves main-thread `Atomics.wait` is forbidden and failed cleanup masks that error.
+Runtime capability checks and real threaded fixtures now target blocking-capable host workers. The benchmark owner adapts the same collector's host context.
+S39 resumes faithful initialization-only fallback while both S34 fixes proceed. Measurements remain stopped.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
