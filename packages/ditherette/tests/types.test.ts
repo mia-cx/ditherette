@@ -120,9 +120,21 @@ const dither: DitherAndQuantizeRequest = {
 	...quantize,
 	dither: { family: 'separable', perturb: perturb.perturb }
 };
+const diffusion: DitherAndQuantizeRequest = {
+	...quantize,
+	dither: {
+		family: 'diffusion',
+		kernel: 'atkinson',
+		feedback: 'matching',
+		strength: 1,
+		serpentine: true,
+		placement: { mode: 'everywhere' }
+	}
+};
 processor.then((instance) => {
 	const rgba: Rgba8Image = instance.perturb(perturb);
 	const indexed: IndexedImage = instance.ditherAndQuantize(dither);
+	instance.ditherAndQuantize(diffusion);
 	void rgba;
 	void indexed;
 });

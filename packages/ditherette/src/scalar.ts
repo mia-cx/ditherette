@@ -59,7 +59,17 @@ const errorPaths = [
 	'perturb.placement.radius',
 	'perturb.placement.threshold',
 	'perturb.placement.softness',
-	'dither'
+	'dither',
+	'dither.strength',
+	'dither.placement',
+	'dither.placement.radius',
+	'dither.placement.threshold',
+	'dither.placement.softness',
+	'dither.kernel',
+	'dither.feedback',
+	'dither.serpentine',
+	'dither.arithmetic',
+	'dither.arithmetic'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',
@@ -79,11 +89,18 @@ const errorMessages: Record<ErrorCode, string> = {
 
 function failure(bindings: Bindings, status: number, fused = false): DitheretteError {
 	const code = errorCodes[status - 1] ?? 'runtime';
-	const path = errorPaths[bindings.privateErrorPath()] ?? 'wasm';
+	const pathTag = bindings.privateErrorPath();
+	const path = errorPaths[pathTag] ?? 'wasm';
+	const message =
+		pathTag === 34
+			? 'Diffusion work exceeded finite f32 range.'
+			: pathTag === 35
+				? 'Diffusion matching produced a non-finite distance.'
+				: errorMessages[code];
 	return new DitheretteError(
 		code,
 		fused && path.startsWith('perturb') ? `dither.${path}` : path,
-		errorMessages[code]
+		message
 	);
 }
 

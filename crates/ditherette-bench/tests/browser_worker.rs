@@ -78,7 +78,7 @@ fn wasm_reference_identity_and_exact_mismatch_evidence_are_not_native_overrides(
 }
 
 #[test]
-fn field_protocol_binds_native_identity_and_requires_the_correct_public_output() {
+fn field_and_diffusion_protocol_bind_native_identity_and_require_the_correct_public_output() {
     use ditherette_bench::paired::{fields::*, native::NativeOperation, quantize::*};
     use ditherette_wasm::bench_subjects::{self, BenchSubject};
     let perturb = PerturbPolicy {
@@ -102,7 +102,23 @@ fn field_protocol_binds_native_identity_and_requires_the_correct_public_output()
             matching: MatchPolicy::OklchHueArc,
         },
     };
+    let diffusion = ditherette_bench::paired::diffusion::DiffusionSettings {
+        quantize: separable.quantize.clone(),
+        kernel: ditherette_wasm::spec::contract::request::Diffusion::Atkinson,
+        feedback: ditherette_wasm::spec::contract::request::DiffusionFeedback::Matching,
+        strength: 0.75,
+        serpentine: true,
+        placement: perturb.placement,
+    };
     for (operation, native) in [
+        (
+            PublicOperation::Diffusion {
+                settings: diffusion.clone(),
+            },
+            NativeOperation::Diffusion {
+                settings: diffusion,
+            },
+        ),
         (
             PublicOperation::Perturb { settings: perturb },
             NativeOperation::Perturb { settings: perturb },

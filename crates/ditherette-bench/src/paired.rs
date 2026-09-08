@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod coordinator;
+pub mod diffusion;
 pub mod fields;
 pub mod native;
 pub mod quantize;
