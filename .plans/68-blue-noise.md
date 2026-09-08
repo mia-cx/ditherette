@@ -17,7 +17,7 @@ Link only its `scalar` and `threads` children for package builds. The coordinato
 
 - [x] Copy literal lookup and tile; verify threshold bits, digest, global rows, and shared perturb output; commit baseline.
 - [x] Connect bounded native and private/public mode cases; verify alpha, composition, strict errors, and memory behavior.
-- [ ] Build both variants and validate installed-package behavior in three engines; record clean handoff.
+- [x] Build both variants and validate installed-package behavior in three engines; record clean handoff.
 
 No optimization or benchmark runs in this subtask. Subject registration and measurement follow separately before S27 PR readiness.
 Frozen spec/image/policy and landed resize helpers remain unchanged.
@@ -49,3 +49,35 @@ The complete private Node suite passes 11 tests, including strict numeric contro
 The fixtures contain 110 frozen vectors, including blue noise in seven spaces and widths 1/31/32/33/65.
 All 1,650 field/matching compositions preserve the explicit RGBA8 boundary and complete indexed metadata.
 Memory limit, capacity failure, copy recovery, disposal, input ownership, and durable output checks include the new mode.
+
+## Validated package checkpoint
+
+Code head `3debdca0df68625195619dee5f460ac135baa446` follows literal baseline `ea47c9a8d16f2d6638530c54dfe29990da13e699`.
+Branch `impl/v1-s27-blue-noise` starts at join `bcf123e313290177d47ecb60afcfa0e752ed3d2e`.
+The join contains S26 public head `089251287e387cb575e22e8993d8989a371a089d` and S25 PR #114 head `3a9db011207a44f230ae519edc93c900a747c021`.
+Both dependency ancestry checks pass. Later evidence-only commits do not change the validated code.
+
+Both `pnpm --filter ditherette-wasm build:scalar` and `build:threads` pass using individual target links.
+`node packages/ditherette/scripts/stage-wasm.mjs` stages the generated artifacts before interface and browser tests.
+`pnpm --filter ditherette check`, Rust formatting, and `git diff --check` pass.
+Frozen spec, shared image storage, and guard policy have no diff against the literal baseline.
+
+The installed tarball passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+Each engine checks 110 frozen vectors, 1,650 exact compositions, and five caught field-copy failures.
+The existing resize, quantize, inert-import, scalar-only loading, isolated-instance, and artifact-layout checks also pass.
+The tarball contains no Rust sources or generation/build/test directories.
+
+Browser command:
+
+```sh
+DITHERETTE_TEST_WEBKIT_EXECUTABLE=/home/mia/mia-cx/ditherette/.worktrees/v1-s20-worker/target/s20-webkit-alias/webkit pnpm --filter ditherette test:browser
+```
+
+The retained WebKit launcher replaces the deleted historical `/tmp` launcher without changing its hardlinked library aliases.
+Scalar Wasm is 241,203 bytes, SHA-256 `899de90823e7a85662df70385b35c8e248b03beeb050e674f219fb00f98a83fb`.
+Threaded Wasm is 329,487 bytes, SHA-256 `e61644a537efd65670c943926e6d69e7cc926a92de633da97fd71de860e50fcd`.
+These builds validate package artifacts; S27 adds no threaded field scheduler.
+
+No benchmark or optimization runs occur in this handoff. S27 still needs field/public-call measurements before a PR.
+The coordinator owns the parent update, any required restack, measurement lease, benchmark evidence, and PR readiness.
+No merge, package publication, deployment, release tag, or issue closure occurs.
