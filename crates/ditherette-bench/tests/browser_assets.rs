@@ -7,6 +7,35 @@ use std::{
 };
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+#[test]
+fn build_provenance_keeps_legacy_records_and_rejects_unknown_modes() {
+    let legacy = serde_json::json!({
+        "schema": 1,
+        "source_revision": "fixture",
+        "tools": [], "inputs": [], "package": [], "typescript": [], "scripts": []
+    });
+    let parsed: BuildProvenance = serde_json::from_value(legacy.clone()).unwrap();
+    assert_eq!(parsed.build_mode, None);
+    assert_eq!(serde_json::to_value(parsed).unwrap(), legacy);
+    for (mode, expected) in [
+        ("public", BuildMode::Public),
+        ("bench-subjects", BuildMode::BenchSubjects),
+    ] {
+        let mut record = legacy.clone();
+        record["build_mode"] = serde_json::json!(mode);
+        let parsed: BuildProvenance = serde_json::from_value(record.clone()).unwrap();
+        assert_eq!(parsed.build_mode, Some(expected));
+        assert_eq!(serde_json::to_value(parsed).unwrap(), record);
+    }
+    let mut invalid = legacy.clone();
+    invalid["build_mode"] = serde_json::json!("untracked-optimization");
+    assert!(serde_json::from_value::<BuildProvenance>(invalid).is_err());
+    let mut invalid = legacy;
+    invalid["untracked_option"] = serde_json::json!(true);
+    assert!(serde_json::from_value::<BuildProvenance>(invalid).is_err());
+}
+
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
@@ -114,6 +143,7 @@ impl Fixture {
         let provenance = BuildProvenance {
             schema: 1,
             source_revision: self.git(&["rev-parse", "HEAD"]),
+            build_mode: None,
             tools: vec![BuildTool {
                 name: "fixture compiler".into(),
                 version: "1".into(),
