@@ -99,6 +99,7 @@ impl Scratch {
 
 pub(super) struct Store {
     pub(super) execution: super::execution::ExecutionPolicy,
+    pub(super) execution_overrides: u8,
     entries: [Option<Entry>; MAX_CACHE_ENTRIES],
     scratch: Scratch,
     clock: u64,
@@ -112,6 +113,7 @@ impl Default for Store {
     fn default() -> Self {
         Self {
             execution: super::execution::ExecutionPolicy::default(),
+            execution_overrides: 0,
             entries: std::array::from_fn(|_| None),
             scratch: Scratch::default(),
             clock: 0,
@@ -132,6 +134,18 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
+    /// Resolve one request stage without changing semantic preparation or image identities.
+    pub(super) fn row_policy(
+        &self,
+        stage: super::execution::ExecutionStage,
+        measured: Option<super::execution::RowBandPolicy>,
+    ) -> Option<super::execution::RowBandPolicy> {
+        super::execution::resolve(
+            measured,
+            (self.execution_overrides & stage.mask() != 0).then(|| self.execution.stage(stage)),
+        )
+    }
+
     pub(super) fn execution_policy(&self) -> super::execution::ExecutionPolicy {
         self.execution
     }
@@ -526,7 +540,8 @@ impl<'a> Call<'a> {
             let record_bytes = (record.capacity() * size_of::<PreparedResize>()) as u64;
             record[0].select_bands(
                 ImageDimensions::new(request.output.width, request.output.height).unwrap(),
-                call.store.execution_policy().resize,
+                call.store
+                    .row_policy(super::execution::ExecutionStage::Resize, None),
                 budget - record_bytes,
             )?;
         }
