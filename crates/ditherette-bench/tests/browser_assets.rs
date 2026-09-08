@@ -40,8 +40,12 @@ impl Fixture {
     }
     fn sources(&self) -> BrowserSources {
         self.file("checkout/source.rs", b"source");
+        self.file(
+            "checkout/crates/ditherette-bench-oracle/src/lib.rs",
+            b"oracle source",
+        );
         self.git(&["init", "-q"]);
-        self.git(&["add", "source.rs"]);
+        self.git(&["add", "."]);
         self.git(&[
             "-c",
             "user.name=Fixture",
@@ -62,6 +66,12 @@ impl Fixture {
             ("typescript/main.js", b"export const resize = 1;"),
             ("scripts/transport.mjs", b"transport"),
             ("scripts/page.mjs", b"page"),
+            ("scripts/benchmark-oracle-page.mjs", b"oracle page"),
+            ("scripts/oracle/ditherette_bench_oracle.js", b"oracle js"),
+            (
+                "scripts/oracle/ditherette_bench_oracle_bg.wasm",
+                b"oracle wasm",
+            ),
             (
                 "playwright/package.json",
                 br#"{"name":"playwright","version":"1.0"}"#,
@@ -77,6 +87,30 @@ impl Fixture {
         ] {
             self.file(path, bytes);
         }
+        let oracle_inputs = vec![BuildFile {
+            path: "crates/ditherette-bench-oracle/src/lib.rs".into(),
+            bytes: 13,
+            digest: content_digest(b"oracle source"),
+        }];
+        let oracle = serde_json::json!({
+            "schema":1,
+            "frozen":{"state":"frozen","revision":"cef2b60a635fd43c3b8e7cb880b5c92fe77d640b","artifact":"sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe"},
+            "target":"wasm32-unknown-unknown", "profile":{"release":true,"opt_level":"s","wasm_opt":false,"features":["frozen-build"]},
+            "tools": (["rustc","cargo","wasm-bindgen"].map(|name| serde_json::json!({"name":name,"version":"fixture","digest":content_digest(b"tool")}))),
+            "standard_library":[{"path":"std.rlib","bytes":3,"digest":content_digest(b"std")}],
+            "dependencies":[{"name":"serde","version":"1.0.228","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"a".repeat(64),"features":[]}],
+            "inputs":oracle_inputs, "files":manifest(&self.0.join("scripts/oracle")),
+        });
+        self.file(
+            "scripts/oracle/manifest.json",
+            &serde_json::to_vec(&oracle).unwrap(),
+        );
+        let mut inputs = oracle_inputs;
+        inputs.push(BuildFile {
+            path: "source.rs".into(),
+            bytes: 6,
+            digest: content_digest(b"source"),
+        });
         let provenance = BuildProvenance {
             schema: 1,
             source_revision: self.git(&["rev-parse", "HEAD"]),
@@ -85,11 +119,7 @@ impl Fixture {
                 version: "1".into(),
                 digest: content_digest(b"compiler"),
             }],
-            inputs: vec![BuildFile {
-                path: "source.rs".into(),
-                bytes: 6,
-                digest: content_digest(b"source"),
-            }],
+            inputs,
             package: manifest(&self.0.join("package")),
             typescript: manifest(&self.0.join("typescript")),
             scripts: manifest(&self.0.join("scripts")),
@@ -271,6 +301,33 @@ fn provenance_rejects_wrong_revision_dirty_source_and_stale_built_bytes() {
     f.file("checkout/source.rs", b"source");
     f.file("package/dist/helper.js", b"stale");
     assert!(prepare_assets(&source, &f.0.join("stale")).is_err());
+}
+
+#[test]
+fn oracle_manifest_rejects_frozen_source_and_binary_substitution_even_after_outer_inventory_refresh(
+) {
+    for mutate in [
+        |v: &mut serde_json::Value| v["frozen"]["artifact"] = serde_json::json!("sha256:wrong"),
+        |v: &mut serde_json::Value| v["inputs"][0]["digest"][0] = serde_json::json!(0),
+        |v: &mut serde_json::Value| v["files"][0]["digest"][0] = serde_json::json!(0),
+        |v: &mut serde_json::Value| v["target"] = serde_json::json!("x86_64-unknown-linux-gnu"),
+    ] {
+        let f = Fixture::new();
+        let source = f.sources();
+        let file = f.0.join("scripts/oracle/manifest.json");
+        let mut value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+        mutate(&mut value);
+        fs::write(file, serde_json::to_vec(&value).unwrap()).unwrap();
+        let mut provenance: BuildProvenance =
+            serde_json::from_slice(&fs::read(&source.accepted.provenance).unwrap()).unwrap();
+        provenance.scripts = manifest(&f.0.join("scripts"));
+        fs::write(
+            &source.accepted.provenance,
+            serde_json::to_vec(&provenance).unwrap(),
+        )
+        .unwrap();
+        assert!(prepare_assets(&source, &f.0.join("rejected")).is_err());
+    }
 }
 
 #[test]
