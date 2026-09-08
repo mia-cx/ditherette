@@ -205,3 +205,10 @@ publication. Existing hits now retain their `take()` timestamp; only new entries
 receive publication timestamps. The witness passes for success and failure paths.
 All 25 native library tests pass after this fix. The coordinator cleared the
 benchmark protocol at `d51a70a2daf054357d16ea66b235da3733c02888` for the final join.
+
+That protocol is joined. Its native complete-call adapter now borrows the same
+normalized result metadata as the Wasm adapter. The declared stage matrix passes
+all 5 untimed native/frozen composition tests, and all 5 focused Node protocol
+tests pass. Candidate preparation uses the official native/public preparers once
+this clean joined revision is validated. The coordinator owns the trusted guard,
+quiet clearance, actual paired measurements, and final performance decision.
