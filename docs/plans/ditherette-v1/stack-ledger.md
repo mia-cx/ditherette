@@ -167,9 +167,15 @@ Both installed packages pass Chromium, Firefox, and WebKit, including focused ow
 The four completed trials remain under `v1-s32-stages/target/s32-trial-01`. Every recorded comparison is exact.
 Cold resize regresses 11.8-68%; browser cold Process regresses 21.5-26%. These confirmed release blockers remain S41 work.
 Warm paths improve substantially, but inconclusive cases remain explicit. No extra tuning or retry is selected.
-The S32 report owner files its unmerged PR from validated handoff `59b5a004c98c4cff255b30f51025d8ec8143786d`.
+S32 is delivered in unmerged [PR122](https://github.com/mia-cx/ditherette/pull/122) at `127a0428a0bfdad7ea3e239e6a96f375449815bb`, based on corrected S31 `59b1fe3a`.
+The coordinator join preserves exact code equality; its only conflict replaces the old S32 planning text with the completed delivery plan.
+The [report](../../../.plans/73-benchmark-results.md) verifies 128 reaped workers, 2,560 samples, and 64 exact role pairs.
+Seven regressions and five inconclusive cases remain [explicit S41 work](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5588316158).
+S32 availability is recorded and S33's blocking edge removed. No issue or PR is closed or merged.
 S33 runtime and installed fixtures branch from that same validated handoff in `v1-s33-progress` and `v1-s33-public`.
 Runtime checkpoint `5a832320` reuses the copied lifecycle model and passes two focused controller tests.
+Kernel checkpoint `0acb7842` passes the full native suite and five progress fixtures. Existing arithmetic, traversal, and scratch ownership remain unchanged.
+Installed fixture checkpoint `0bb2552c` passes shared-runner checks on S32 and intentionally fails at its unsupported callback guard. Actual S33 validation remains pending.
 The separate `v1-s33-bench` plan fixes five public workloads and separates disabled-support cost from callback-delivery cost.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
@@ -199,6 +205,9 @@ The completed S31 review target reclaims another 516 MiB. Its retained package d
 The S38 review recreates and then removes 100 KiB of generated SvelteKit files; no Rust outputs are created.
 The completed S32 trusted check returns its compiler target. Cleanup reclaims 287 MiB of disk blocks from 695 rebuildable files.
 Its exact realpath and compiler-only contents were checked; no active process owned that target. Frozen source and benchmark evidence remain intact.
+After PR122 handoff, six returned S32 compiler targets reclaim another 6.18 GiB of disk blocks.
+Both retained package hashes and both report hashes stay unchanged. Copied binaries, oracles, trial snapshots, and raw results remain available.
+S33 owns only its new worktree-local caches. The old S32 compiler assignments have ended.
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
 Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
 The entries above record each cleanup separately. New slices own only their explicitly assigned worktree-local compiler outputs.
