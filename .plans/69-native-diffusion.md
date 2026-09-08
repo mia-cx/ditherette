@@ -1,5 +1,9 @@
 # S28 literal native diffusion baseline
 
+Current selection and completed trial evidence are in [69-measurement.md](69-measurement.md).
+The coordinator selects the exact three-row implementation. Historical holds below describe their original checkpoints.
+WebKit's public self-pair remains inconclusive; S41 retains those baseline gaps without a retry or public release claim.
+
 Issue #69. The literal baseline precedes benchmark registration, bounded scratch, and public integration.
 
 ## Prerequisites
@@ -23,6 +27,8 @@ The final S25 join includes its benchmark-module formatting correction.
 - [x] Implement fallible three-row scratch with exact arithmetic and width-based capacity checks.
 - [x] Expose all four diffusion kernels through the private processor and public package; verify public calls and memory failures.
 - [x] Prepare candidate benchmark subjects for the coordinator's exclusive comparisons.
+- [x] Prepare four immutable pairs, audit all 128 completed workers, and record the coordinator's native candidate selection.
+- [x] Rebase onto delivered S27 with merges preserved and verify all measured processing bytes remain unchanged.
 
 ## Copy boundary
 
