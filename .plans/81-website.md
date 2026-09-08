@@ -14,7 +14,7 @@ Package, frozen references, and kernels remain unchanged.
 
 ## TODOs
 
-- [ ] Reject stale events immediately and replace active workers after the existing debounce. Preserve the last preview.
+- [x] Reject stale events immediately and replace active workers after the existing debounce. Preserve the last preview.
 - [ ] Forward package progress and contain initialization-only fallback at the page-session boundary.
 - [ ] Define faithful TypeScript support from existing semantics and verify fallback and visible processing failures.
 - [ ] Join final S34 artifact/report ancestry and validate against its retained package without rebuilding Rust.
@@ -30,3 +30,14 @@ Held Web Locks observe JS worker lifetime, not proof that a parked Wasm stack ca
 Do not weaken those observers or add capability probes, blacklists, or shutdown redesigns.
 
 No Rust compiler outputs or measurements belong to this worktree. Drain all jobs for the coordinator's exclusive startup trial.
+
+## Scheduling checkpoint
+
+The new client fixture fails before implementation on stale progress and malformed old response IDs.
+After the fix, all 4 client tests and 12 existing store tests pass.
+The host invalidates request authority before waiting for the debounce. It terminates unfinished work when replacement starts.
+Old worker errors and malformed responses cannot alter current progress or error state.
+Explicit cancellation keeps the previous preview and clears the worker once.
+
+Command: `pnpm exec vitest run --project server src/lib/processing/client.spec.ts src/lib/stores/app.spec.ts`.
+Fallback and progress forwarding remain pending. Nearest fallback needs request-specific center-tie evidence, including the historical 2-to-49 mismatch.
