@@ -1,6 +1,7 @@
 //! Literal frozen Yliluoma mix search, target adaptation, and ordered selection.
 //! Shared palette matching and Bayer ranks remain their existing production implementations.
 
+pub(crate) mod policy;
 mod request;
 pub mod row_bands;
 pub(crate) use request::dither_yiluoma_with_progress;

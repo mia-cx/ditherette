@@ -8,7 +8,7 @@ Evaluate exact row bands around the landed scalar Yliluoma loop. Share palette p
 
 - [x] Scalar and row bands agree across worker counts, palettes, Bayer sizes, and adaptive placement in native tests.
 - [x] Preflight covers assignment capacity and every live temporary converter; palette preparation stays shared.
-- [ ] Complete public host-worker measurements decide selection. Scalar remains selected until evidence exists.
+- [x] Complete Chromium/Firefox host-worker measurements identify common exact cold winners. S41 retains inconclusive warm controls.
 - [ ] Record candidate disposition and validated ancestry in the coordinator's unmerged PR.
 
 ## TODOs
@@ -16,7 +16,9 @@ Evaluate exact row bands around the landed scalar Yliluoma loop. Share palette p
 - [x] Add a bounded row-band adapter and focused native conformance and memory checks.
 - [x] Add bounded complete-call benchmark subjects and public integration instructions.
 - [x] Validate joined public mixing dispatch, failure publication, and complete-call memory boundaries.
-- [ ] Record coordinated browser measurements and candidate disposition.
+- [x] Record coordinated browser measurements and candidate disposition.
+- [x] Implement conservative mixing recipe-class selection with measured pool fallbacks.
+- [~] Join S36's shared indexed callsite and validate automatic complete-call dispatch.
 
 ## Notes
 
@@ -36,4 +38,13 @@ Evaluate exact row bands around the landed scalar Yliluoma loop. Share palette p
 - Shared policy seam joins from f437a18578f786be2ed7cd4cba48f7537db54e32. Commit 7b8ebe0f adapts S36's fef1eafe mixing integration without depending on S36 field code.
 - New `prod_processor_yiluoma_bands` tests pass with and without native threads (both enable `bench-subjects` for the private policy setter). They cover frozen complete metadata for both methods, 1/2/4/8 workers, three band heights, policy-independent cache hits, durable outputs, failed input/output copies, joined-worker and Complete callback failures, retry without publication, and one-byte-under preflight rejection with scalar recovery.
 - Joined scalar release validation passes 17 tests across `prod_process`, `prod_processor_quantize`, `prod_processor_yiluoma_bands`, `prod_progress`, and `prod_yiluoma_row_bands`. Threaded joined validation passes seven adapter/public tests. Earlier literal scalar-oracle tests pass in both builds.
-- Remaining TODO belongs to the coordinator's exclusive browser phase. No crossover threshold or speed claim is selected; candidate remains a private override and all defaults remain scalar.
+- Initial candidate checkpoints above kept automatic selection scalar. The measured follow-up below supersedes that hold for the selected recipe classes only.
+
+## Measured follow-up
+
+- [S37 report](../docs/plans/ditherette-v1/s37-row-bands.md) records all twelve cases from Chromium trial 02 and complete Firefox trial 03, source/report identities, exactness, and the unresolved warm controls. Shared S41 validation retains those gaps and WebKit's threaded cleanup gate.
+- Shared automatic/explicit policy support joins from bcffc184. Root accepted the report's four recipe-class gates. Smaller/skinny images and unmeasured classes remain scalar. Palette bytes and image contents never select a policy.
+- `yiluoma::policy::measured` chooses two workers/4 rows for the small classes. Medium chooses four/16 with at least four pool workers, otherwise two/4. One-worker pools remain scalar; three-worker pools use two/4.
+- Focused selector tests pass in release scalar and threaded builds (three each). They exercise measured boundaries, pool fallbacks, unmeasured-class rejection, and palette-content independence.
+- Native compiler ownership is this delivery worktree's `target/compiler`. No new Wasm builds or measurements ran here.
+- S36 owns `indexed.rs` and receives the minimal `Store::row_policy(ExecutionStage::Mixing, measured(...))` callsite. Automatic full-call validation follows that join.
