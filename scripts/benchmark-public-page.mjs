@@ -51,50 +51,57 @@ export async function prepareOperation(trial) {
 	const separable = config.operation.operation === 'separable';
 	const yliluoma = config.operation.operation === 'yliluoma';
 	const diffusion = config.operation.operation === 'diffusion';
+	const process = config.operation.operation === 'process';
 	const resize =
-		quantize || perturb || separable || diffusion || yliluoma
+		process || quantize || perturb || separable || diffusion || yliluoma
 			? undefined
 			: resizeRecipe(config.operation);
 	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
 		throw new Error('This package has no application cache.');
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
 		throw new Error('Throughput requires a primed instance.');
-	const request = {
-		version: 1,
-		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
-		...(perturb
-			? { perturb: config.operation.settings }
-			: separable || diffusion || yliluoma
-				? {
-						...config.operation.settings.quantize,
-						dither: diffusion
-							? {
-									family: 'diffusion',
-									kernel: config.operation.settings.kernel,
-									feedback: config.operation.settings.feedback,
-									strength: config.operation.settings.strength,
-									serpentine: config.operation.settings.serpentine,
-									placement: config.operation.settings.placement
-								}
-							: yliluoma
-								? {
-										family: 'yliluoma',
-										size: config.operation.settings.size,
-										placement: config.operation.settings.placement
-									}
-								: { family: 'separable', perturb: config.operation.settings.perturb }
-					}
-				: quantize
-					? config.operation.settings
-					: {
-							output: {
-								...trial.case.identity.output,
-								resize
+	const request = process
+		? {
+				source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
+				...config.operation.settings
+			}
+		: {
+				version: 1,
+				source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
+				...(perturb
+					? { perturb: config.operation.settings }
+					: separable || diffusion || yliluoma
+						? {
+								...config.operation.settings.quantize,
+								dither: diffusion
+									? {
+											family: 'diffusion',
+											kernel: config.operation.settings.kernel,
+											feedback: config.operation.settings.feedback,
+											strength: config.operation.settings.strength,
+											serpentine: config.operation.settings.serpentine,
+											placement: config.operation.settings.placement
+										}
+									: yliluoma
+										? {
+												family: 'yliluoma',
+												size: config.operation.settings.size,
+												placement: config.operation.settings.placement
+											}
+										: { family: 'separable', perturb: config.operation.settings.perturb }
 							}
-						})
-	};
+						: quantize
+							? config.operation.settings
+							: {
+									output: {
+										...trial.case.identity.output,
+										resize
+									}
+								})
+			};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
+		if (process) throw new Error('No faithful TypeScript Process adapter is registered.');
 		if (yliluoma) throw new Error('No faithful TypeScript Yliluoma adapter is registered.');
 		if (perturb || separable || diffusion)
 			throw new Error('No faithful TypeScript field adapter is registered.');
@@ -117,7 +124,8 @@ export async function prepareOperation(trial) {
 			close() {}
 		};
 	}
-	if (backend !== 'package') throw new Error('Unknown browser backend.');
+	if (backend !== 'package' && !(backend === 'package-staged' && process))
+		throw new Error('Unknown browser backend.');
 	const { createDitherette } = await import(url(trial.browser.assets.entries.package));
 	const response = await fetch(url(trial.browser.assets.entries.wasm));
 	if (!response.ok) throw new Error(`Wasm fetch failed: ${response.status}`);
@@ -128,13 +136,29 @@ export async function prepareOperation(trial) {
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
 	const create = () => createDitherette({ wasm: compiled ?? bytes });
-	const call = perturb
-		? (instance) => instance.perturb(request)
-		: separable || diffusion || yliluoma
-			? (instance) => instance.ditherAndQuantize(request)
-			: quantize
-				? (instance) => instance.quantize(request)
-				: (instance) => instance.resize(request);
+	const call = process
+		? (instance) =>
+				backend === 'package-staged'
+					? instance.ditherAndQuantize({
+							version: 1,
+							source: instance.resize({
+								version: 1,
+								source: request.source,
+								output: request.recipe.output
+							}),
+							palette: request.palette,
+							alpha: request.recipe.alpha,
+							matching: request.recipe.match,
+							dither: request.recipe.dither
+						})
+					: instance.process(request)
+		: perturb
+			? (instance) => instance.perturb(request)
+			: separable || diffusion || yliluoma
+				? (instance) => instance.ditherAndQuantize(request)
+				: quantize
+					? (instance) => instance.quantize(request)
+					: (instance) => instance.resize(request);
 	if (measurement.scope === 'initialization') {
 		if (!['initialization-bytes', 'initialization-compiled'].includes(config.preparation))
 			throw new Error('Initialization requires an explicit compilation scope.');
@@ -340,6 +364,15 @@ export function equalOutput(actual, expected) {
 	);
 }
 
+/** Fail before timing when the equivalent production composition differs; retain both concrete outputs. */
+export async function requireMatchingComposition(operation, current) {
+	const counterpart = await preflightOperation(operation, current);
+	if (counterpart)
+		throw new Error(
+			`Process differs from staged production before timing: ${JSON.stringify({ current, counterpart })}`
+		);
+}
+
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
 export async function runTrial(trial) {
 	const resolution = timerResolution();
@@ -357,7 +390,7 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const format = ['quantize', 'separable', 'diffusion', 'yliluoma'].includes(
+		const format = ['quantize', 'separable', 'diffusion', 'yliluoma', 'process'].includes(
 			trial.case.browser.operation.operation
 		)
 			? 'indexed8'
@@ -368,6 +401,22 @@ export async function runTrial(trial) {
 		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
 		const stability = outputStability(outputBytes, format);
 		const mismatch = await preflightOperation(operation, trial.reference_output, stability.observe);
+		if (trial.case.browser.operation.operation === 'process') {
+			const comparison = await prepareOperation({
+				...trial,
+				case: {
+					...trial.case,
+					browser: { ...trial.case.browser, accepted: 'package-staged', candidate: 'package' }
+				},
+				role: trial.case.browser[trial.role] === 'package' ? 'accepted' : 'candidate'
+			});
+			try {
+				const current = mismatch ?? trial.reference_output;
+				await requireMatchingComposition(comparison, current);
+			} finally {
+				comparison.close();
+			}
+		}
 		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
 			throw new Error('Operation mutated source bytes during preflight.');
 		if (mismatch && trial.case.browser.measure_nonexact !== true)

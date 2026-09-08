@@ -10,6 +10,9 @@ use std::io;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum NativeOperation {
+    Process {
+        settings: super::process::ProcessSettings,
+    },
     Diffusion {
         settings: super::diffusion::DiffusionSettings,
     },
@@ -43,6 +46,7 @@ impl NativeOperation {
         rgba: &'a [u8],
     ) -> io::Result<ReferenceRequest<'a>> {
         match self {
+            Self::Process { settings } => settings.reference_request(source, rgba),
             Self::Diffusion { settings } => settings.reference_request(source, rgba),
             Self::Yliluoma { settings } => settings.reference_request(source, rgba),
             Self::Perturb { settings } => super::fields::perturb_request(*settings, source, rgba),
@@ -93,12 +97,13 @@ impl NativeOperation {
             semantics: request.semantics(),
             input: input_digest(source, rgba),
             settings: settings_digest(&request).map_err(io::Error::other)?,
-            output: source,
+            output: request.dimensions().map_err(io::Error::other)?,
         })
     }
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Process { .. } => "spec:process:request:v1",
             Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
             Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
             Self::Perturb { .. } => "spec:perturb:request:v1",
@@ -120,6 +125,7 @@ impl NativeOperation {
 
     pub fn scope(&self) -> super::CallScope {
         match self {
+            Self::Process { .. } => super::CallScope::NativeCompleteCall,
             Self::Diffusion { .. } => super::CallScope::NativeCompleteCall,
             Self::Yliluoma { .. } => super::CallScope::NativeCompleteCall,
             Self::Perturb { .. } | Self::Separable { .. } => super::CallScope::NativeCompleteCall,

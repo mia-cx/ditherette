@@ -9,6 +9,9 @@ use std::{collections::BTreeSet, io, path::Component};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PublicOperation {
+    Process {
+        settings: super::process::ProcessSettings,
+    },
     Diffusion {
         settings: super::diffusion::DiffusionSettings,
     },
@@ -52,6 +55,8 @@ pub enum PublicOperation {
 #[serde(rename_all = "kebab-case")]
 pub enum BrowserBackend {
     Package,
+    /// Actual resize plus ditherAndQuantize calls from the same package.
+    PackageStaged,
     #[serde(rename = "typescript")]
     TypeScript,
 }
@@ -99,6 +104,14 @@ impl BrowserCase {
 impl PublicOperation {
     pub fn subject(&self, backend: BrowserBackend) -> &'static str {
         match (self, backend) {
+            (Self::Process { .. }, BrowserBackend::Package) => "public:process:request:package",
+            (Self::Process { .. }, BrowserBackend::PackageStaged) => {
+                "public:process:request:package-staged"
+            }
+            (Self::Process { .. }, BrowserBackend::TypeScript) => {
+                "public:process:request:typescript"
+            }
+            (_, BrowserBackend::PackageStaged) => "public:unsupported:request:package-staged",
             (Self::ResizeTrilinear { .. }, BrowserBackend::Package) => {
                 "public:resize:trilinear:package"
             }
@@ -168,6 +181,7 @@ impl PublicOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Process { .. } => "spec:process:request:v1",
             Self::ResizeTrilinear { .. } => "spec:resize:trilinear:mip-area",
             Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
             Self::Perturb { .. } => "spec:perturb:request:v1",
@@ -213,6 +227,7 @@ impl PublicOperation {
             | Self::ResizeLanczos2 { anchor, .. }
             | Self::ResizeLanczos3 { anchor, .. } => anchor,
             Self::ResizeArea {}
+            | Self::Process { .. }
             | Self::Diffusion { .. }
             | Self::Quantize { .. }
             | Self::Perturb { .. }
@@ -229,9 +244,9 @@ impl PublicOperation {
         output: Dimensions,
     ) -> io::Result<CaseIdentity> {
         if let Some(request) = self.processing_request(source, rgba)? {
-            if output != source {
+            if output != request.dimensions().map_err(io::Error::other)? {
                 return Err(io::Error::other(
-                    "non-resize output dimensions must equal its source",
+                    "processing output dimensions differ from the validated recipe",
                 ));
             }
             return Ok(CaseIdentity {
@@ -252,6 +267,7 @@ impl PublicOperation {
                 Self::ResizeLanczos2 { .. } => "lanczos2-public-v1",
                 Self::ResizeLanczos3 { .. } => "lanczos3-public-v1",
                 Self::Quantize { .. }
+                | Self::Process { .. }
                 | Self::Perturb { .. }
                 | Self::Separable { .. }
                 | Self::Diffusion { .. }
@@ -278,6 +294,7 @@ impl PublicOperation {
         rgba: &'a [u8],
     ) -> io::Result<Option<ditherette_wasm::bench_subjects::reference::ReferenceRequest<'a>>> {
         match self {
+            Self::Process { settings } => settings.reference_request(source, rgba).map(Some),
             Self::Diffusion { settings } => settings.reference_request(source, rgba).map(Some),
             Self::Quantize { settings } => settings.reference_request(source, rgba).map(Some),
             Self::Perturb { settings } => {
@@ -525,6 +542,13 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if [browser.accepted, browser.candidate].contains(&BrowserBackend::PackageStaged)
+        && !matches!(browser.operation, PublicOperation::Process { .. })
+    {
+        return Err(io::Error::other(
+            "staged package calls require the Process operation",
+        ));
+    }
     if m.application_cache != ApplicationCache::NotApplicable {
         return Err(io::Error::other(
             "S19 has no application cache; cold/warm claims are unsupported",
@@ -549,6 +573,7 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         if matches!(
             browser.operation,
             PublicOperation::Quantize { .. }
+                | PublicOperation::Process { .. }
                 | PublicOperation::Diffusion { .. }
                 | PublicOperation::Perturb { .. }
                 | PublicOperation::Separable { .. }
