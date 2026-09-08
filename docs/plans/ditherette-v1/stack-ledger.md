@@ -243,6 +243,12 @@ Its strict prime check rejects inherited frozen-reference drift despite explicit
 Raw evidence remains in `v1-s35-37-bench/target/rows-trial-01`; Firefox has not started. No configuration is selected from this incomplete run.
 The resize owner fixes only same-call prime diagnostics and bounded error text. The fields owner summarizes completed pairs read-only.
 Root owns fresh artifact preparation and exclusive measurements after that fix. All three slice implementations remain in progress.
+Corrected source `5d16c5682f354fecd75ca7f761802d9e2ea75ab5` preserves every production file and the same tarball digest.
+Same-call prime diagnostics retain unstable outputs; strict and different-stage checks remain unchanged. New machine JSON omits indentation.
+Fresh native/public artifacts and the seven host fixtures pass again. `target/rows-trial-02` prepares the unchanged 400-worker matrix.
+Three clean delivery branches preserve separate slice ownership and immediate-parent ancestry:
+`delivery/v1-s35-resize` at `2bd25aed`, `delivery/v1-s36-fields` at `4c4ea884`, and `delivery/v1-s37-yliluoma` at `d8834596`.
+The complete S37 delivery tree equals corrected measurement source `5d16c568`. Policy selection and PR reports await complete evidence.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
@@ -276,6 +282,9 @@ After PR123 handoff, six returned S33 compiler targets reclaim 5.51 GiB of disk 
 After PR124 handoff, root cleans six returned S34 compiler targets and the idle trusted-checker target.
 Cargo reports approximately 6.4 GiB of logical file sizes removed. Both final retained package and worker hashes remain unchanged.
 The joined row-band guard later recreates the checker target. Active row-band compiler directories remain assigned and untouched.
+After their native tasks finish, four returned S35/S36/build/matrix compiler targets reclaim about 7 GiB of disk blocks.
+Their paths contain only compiler profiles, have no symlinks or active owners, and are cleaned with explicit Cargo target paths.
+All candidate source, installed artifacts, and partial-trial evidence remain intact. Future review rebuilds those returned targets.
 The returned trusted-checker target reclaims another 289 MiB. Both reports and both package hashes remain unchanged.
 Copied binaries, oracles, trial snapshots, and raw results remain retained. Compiler outputs can be rebuilt for review.
 Current S34 runtime and benchmark owners use only their new worktree-local targets; public fixtures own no compiler cache.
