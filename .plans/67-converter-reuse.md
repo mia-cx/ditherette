@@ -35,6 +35,6 @@ Frozen spec, image storage, landed resize/shared helpers, and quantizer remain u
 ## Outcome
 
 The candidate remains on `impl/v1-s26-converter` at `b237b7468fa5fc349760bc0086bd1748113b6d82`.
-It exceeds the complete-call target, but required verification and noise gates are incomplete.
+It exceeds the complete-call target. Untimed verifier repair establishes exact native controls, but browser noise gates remain incomplete.
 The accepted branch retains the original field implementation. No retry runs.
 See the [measurement record](67-measurement.md) for every median, artifact identity, and limitation.
