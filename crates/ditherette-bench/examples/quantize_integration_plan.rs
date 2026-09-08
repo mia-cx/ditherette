@@ -104,7 +104,12 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             )
         } else {
             match &native {
-                NativeOperation::MetricScores { .. } => unreachable!("S24 has no metric controls"),
+                NativeOperation::MetricScores { .. }
+                | NativeOperation::FieldComponent { .. }
+                | NativeOperation::Perturb { .. }
+                | NativeOperation::Separable { .. } => {
+                    unreachable!("S24 has no metric or field controls")
+                }
                 NativeOperation::Quantize { .. } => (
                     "baseline:quantize:request:literal".into(),
                     "candidate:quantize:request:prepared".into(),

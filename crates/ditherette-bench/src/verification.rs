@@ -208,13 +208,18 @@ fn roles(outputs: &ThreeWayOutputs) -> [(&str, Option<&RecordedOutput>); 3] {
 fn operation_matches(operation: Operation, pixels: &Pixels) -> bool {
     matches!(
         (operation, pixels),
-        (Operation::Resize | Operation::Perturb, Pixels::Rgba8 { .. })
-            | (
-                Operation::Quantize | Operation::DitherAndQuantize | Operation::Process,
-                Pixels::Indexed8 { .. }
-            )
-            | (Operation::Color, Pixels::Color { .. })
+        (
+            Operation::Resize | Operation::Perturb | Operation::ColorInverse,
+            Pixels::Rgba8 { .. }
+        ) | (
+            Operation::Quantize | Operation::DitherAndQuantize | Operation::Process,
+            Pixels::Indexed8 { .. }
+        ) | (Operation::Color, Pixels::Color { .. })
             | (Operation::MetricScores, Pixels::Scores { .. })
+            | (
+                Operation::FieldEvaluation | Operation::PlacementMask,
+                Pixels::Scores { .. }
+            )
     )
 }
 
