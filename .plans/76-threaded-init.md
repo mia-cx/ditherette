@@ -49,7 +49,7 @@ All three paths are absent at handoff. No old caches or symlinks are reused.
 4. [x] Join installed fixtures and S33 report ancestry. Build exact artifacts once coordinated.
    Record browser cleanup, errors, imports, custom inputs, and callback recovery results.
    Acceptance retains the failures below; completing evidence collection does not waive them.
-5. [ ] Record exclusive startup evidence and file the unmerged child PR after root handoff.
+5. [x] Record exclusive startup evidence. File the unmerged child PR after root handoff.
 
 No measurements run during implementation. Routine reviews remain deferred until
 the complete stack exists. Frozen specs and landed image arithmetic stay unchanged.
@@ -255,3 +255,22 @@ collector for the real package. There is no broad rerun or new WebKit acceptance
 All owned builders, browsers, and diagnostics are drained. Root owns attempt 02
 snapshots and exclusive measurement. This delivery note does not change artifact
 source `c01467f9` or supersede the retained WebKit release gate.
+
+## Final measurement handoff
+
+[Trial 02 results](76-benchmark-results.md) supersede historical artifact handoffs above without replacing their evidence.
+The machine-readable companion binds accepted `3f2cc41a` and candidate `c01467f9` artifacts and all five completed result folders.
+Forty workers start and reap with maximum concurrency one, producing 800 samples and 2,453 warmup calls.
+Every retained output and all twenty actual role pairs are exact. Four case gates pass and six are inconclusive.
+No case confirms a slowdown above 10%. WebKit required-thread cleanup remains blocked and unmeasured.
+This completes bounded evidence collection, not S41 release acceptance or promotion.
+
+The report-only handoff preserves measured source and all runtime bytes.
+Rebase with `--rebase-merges` onto final S33 `b2ca677e` leaves delivery `3863cadc` unchanged.
+Root owns the six S34 compiler directories for cleanup; copied binaries, artifacts, snapshots, and raw evidence remain retained.
+The PR stays non-draft, unmerged, and without auto-merge. Routine review remains deferred until the full stack.
+
+S34 is filed as [PR #124](https://github.com/mia-cx/ditherette/pull/124), based on `impl/v1-s33-progress`.
+Report commit `beaadc2e29097ee12399a194b619b347ed724860` changes documentation only.
+Measured candidate `c01467f9` and accepted protocol `3f2cc41a` remain ancestors of the PR branch.
+The final plan-only commit records this URL; root receives its exact pushed head separately.

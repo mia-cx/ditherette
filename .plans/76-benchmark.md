@@ -44,9 +44,9 @@ That correction is not evidence that the pinned engine contains the fix.
 - [x] Add focused protocol, actual adapter, and generator tests without running timing measurements.
 - [x] Declare host-worker execution and reuse the existing collector there. Preserve historical page execution.
 - [x] Prove repeated real required initialization and exact probes in the host without timing installed calls.
-- [ ] Prepare clean revision-bound accepted and candidate artifacts after runtime validation. Preserve identical benchmark protocol in both.
-- [ ] Drain agents/builds/tests, audit processes, and run the fixed matrix only under root's exclusive clearance.
-- [ ] Record worker reaping, exact probe outputs, browser/tool versions, sample counts, startup medians, and retained artifact hashes.
+- [x] Prepare clean revision-bound accepted and candidate artifacts after runtime validation. Preserve identical benchmark protocol in both.
+- [x] Drain agents/builds/tests, audit processes, and run the fixed matrix only under root's exclusive clearance.
+- [x] Record worker reaping, exact probe outputs, browser/tool versions, sample counts, startup medians, and retained artifact hashes.
 
 The runtime owner has `v1-s34-threads`; installed fixtures belong to `v1-s34-public`.
 This worktree owns benchmark sources and tests only. Preserve frozen specs, production kernels, and package API policy.
@@ -160,3 +160,12 @@ The command shape above remains unchanged; replace historical coordinator and wo
 The amended matrix has three regression snapshots and two threaded snapshots, subject to root's explicit new budget approval.
 Record WebKit threaded as blocked without fabricating a snapshot or result.
 Root alone grants quiet clearance and runs measurements after all builders and tests drain.
+
+## Completed trial 02
+
+The [final report](76-benchmark-results.md) and its JSON companion supersede the historical artifact paths above.
+Accepted artifacts use `3f2cc41a`; measured candidate artifacts use `c01467f9`.
+Root completes all forty scheduled workers with 800 samples, then audits zero owned processes at 18:13:34 UTC.
+All recorded outputs are exact. Four case gates pass and six remain inconclusive; none confirms a slowdown above 10%.
+WebKit threaded remains blocked and unmeasured. Attempt 01 and every earlier artifact remain retained.
+No further trial, tuning, or promotion is authorized by this completion note.
