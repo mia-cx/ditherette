@@ -42,6 +42,7 @@ pub enum ErrorPath {
     DitherSerpentine = 33,
     DiffusionWork = 34,
     DiffusionDistance = 35,
+    DitherSize = 36,
 }
 
 /// A small value usable even when Rust cannot allocate an error string.

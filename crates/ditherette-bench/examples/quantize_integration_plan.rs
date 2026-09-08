@@ -106,6 +106,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
             match &native {
                 NativeOperation::Diffusion { .. }
                 | NativeOperation::MetricScores { .. }
+                | NativeOperation::Yliluoma { .. }
                 | NativeOperation::FieldComponent { .. }
                 | NativeOperation::Perturb { .. }
                 | NativeOperation::Separable { .. } => {

@@ -455,3 +455,213 @@ fn invalid_policies_fail_without_allocating_or_copying() {
         processor.perturb(request(), &mut Boundary::new()).unwrap();
     }
 }
+
+#[test]
+fn bounded_yliluoma_preserves_frozen_mixtures_alpha_and_complete_metadata() {
+    for size in [
+        BayerSize::Two,
+        BayerSize::Four,
+        BayerSize::Eight,
+        BayerSize::Sixteen,
+    ] {
+        for placement in [
+            Placement::Everywhere {},
+            Placement::Adaptive {
+                radius: 1,
+                threshold: 5.0,
+                softness: 10.0,
+            },
+            Placement::Adaptive {
+                radius: 32768,
+                threshold: 100.0,
+                softness: 0.0,
+            },
+        ] {
+            for matching in [
+                MatchPolicy::SrgbEuclidean,
+                MatchPolicy::SrgbCompuphase,
+                MatchPolicy::OklchEuclidean,
+                MatchPolicy::OklchHueArc,
+                MatchPolicy::CielabCiede2000,
+            ] {
+                for alpha in [
+                    AlphaPolicy::Preserve {
+                        threshold: 127.9999999,
+                    },
+                    AlphaPolicy::Premultiplied {},
+                    AlphaPolicy::Matte { rgb: [29, 71, 211] },
+                ] {
+                    let request = QuantizeRequest {
+                        matching,
+                        alpha,
+                        ..quantize()
+                    };
+                    let dither = DitherPolicy::Yliluoma { size, placement };
+                    let expected = spec::dither::yiluoma::dither_yiluoma(
+                        spec::contract::request::DitherQuantizeRequest {
+                            quantize: spec::contract::request::QuantizeRequest {
+                                version: 1,
+                                source: spec::contract::request::Source {
+                                    width: 2,
+                                    height: 2,
+                                    data: &SOURCE,
+                                },
+                                palette: &PALETTE,
+                                matching: serde_json::from_value(
+                                    serde_json::to_value(matching).unwrap(),
+                                )
+                                .unwrap(),
+                                alpha: serde_json::from_value(serde_json::to_value(alpha).unwrap())
+                                    .unwrap(),
+                            },
+                            dither: serde_json::from_value(serde_json::to_value(dither).unwrap())
+                                .unwrap(),
+                        },
+                    )
+                    .unwrap();
+                    let mut processor = Processor::new(1 << 20, 0).unwrap();
+                    assert_eq!(
+                        processor
+                            .dither_and_quantize(request, dither, &mut Boundary::new())
+                            .unwrap(),
+                        expected
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer() {
+    let dither = DitherPolicy::Yliluoma {
+        size: BayerSize::Four,
+        placement: policy().placement,
+    };
+    let mut probe = Processor::new(1 << 20, 0).unwrap();
+    let expected = probe
+        .dither_and_quantize(quantize(), dither, &mut Boundary::new())
+        .unwrap();
+    let capacity = probe.peak_capacity_bytes();
+    let mut exact = Processor::new(capacity, 0).unwrap();
+    assert_eq!(
+        exact
+            .dither_and_quantize(quantize(), dither, &mut Boundary::new())
+            .unwrap(),
+        expected
+    );
+    let mut under = Processor::new(capacity - 1, 0).unwrap();
+    let mut boundary = Boundary::new();
+    let mut allocator = Allocation {
+        fail_at: usize::MAX,
+        calls: 0,
+        extra: 0,
+    };
+    assert_eq!(
+        under
+            .dither_and_quantize_with_allocator(quantize(), dither, &mut boundary, &mut allocator)
+            .unwrap_err()
+            .code,
+        ErrorCode::MemoryLimit
+    );
+    assert_eq!(
+        (boundary.copies, boundary.completions, allocator.calls),
+        (0, 0, 0)
+    );
+    for fail_at in [0, 1] {
+        let mut boundary = Boundary::new();
+        let mut allocator = Allocation {
+            fail_at,
+            calls: 0,
+            extra: 0,
+        };
+        assert_eq!(
+            exact
+                .dither_and_quantize_with_allocator(
+                    quantize(),
+                    dither,
+                    &mut boundary,
+                    &mut allocator
+                )
+                .unwrap_err()
+                .code,
+            ErrorCode::WasmMemoryUnavailable
+        );
+        assert_eq!((boundary.copies, boundary.completions), (0, 0));
+    }
+    for (copy, complete) in [(true, false), (false, true)] {
+        let mut boundary = Boundary::new();
+        boundary.fail_copy = copy;
+        boundary.fail_complete = complete;
+        assert_eq!(
+            exact
+                .dither_and_quantize(quantize(), dither, &mut boundary)
+                .unwrap_err()
+                .code,
+            ErrorCode::WasmMemoryUnavailable
+        );
+        assert_eq!(
+            exact
+                .dither_and_quantize(quantize(), dither, &mut Boundary::new())
+                .unwrap(),
+            expected
+        );
+    }
+    let mut allocator = Allocation {
+        fail_at: usize::MAX,
+        calls: 0,
+        extra: 0,
+    };
+    exact
+        .dither_and_quantize_with_allocator(
+            quantize(),
+            dither,
+            &mut Boundary::new(),
+            &mut allocator,
+        )
+        .unwrap();
+    assert_eq!(allocator.calls, 2);
+    for placement in [
+        Placement::Adaptive {
+            radius: 0,
+            threshold: 0.0,
+            softness: 0.0,
+        },
+        Placement::Adaptive {
+            radius: 1,
+            threshold: f32::NAN,
+            softness: 0.0,
+        },
+        Placement::Adaptive {
+            radius: 1,
+            threshold: 0.0,
+            softness: -1.0,
+        },
+    ] {
+        let mut boundary = Boundary::new();
+        let mut allocator = Allocation {
+            fail_at: usize::MAX,
+            calls: 0,
+            extra: 0,
+        };
+        assert_eq!(
+            exact
+                .dither_and_quantize_with_allocator(
+                    quantize(),
+                    DitherPolicy::Yliluoma {
+                        size: BayerSize::Two,
+                        placement
+                    },
+                    &mut boundary,
+                    &mut allocator
+                )
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidSettings
+        );
+        assert_eq!(
+            (boundary.copies, boundary.completions, allocator.calls),
+            (0, 0, 0)
+        );
+    }
+}

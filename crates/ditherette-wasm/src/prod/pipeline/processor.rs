@@ -174,6 +174,7 @@ impl Processor {
 
     /// Separable modes quantize a complete RGBA8 intermediate; diffusion uses three work rows.
     /// None delegates to direct quantization.
+    /// Yliluoma searches literal ordered mixtures.
     pub fn dither_and_quantize<B: super::quantize::QuantizeBoundary>(
         &mut self,
         request: super::quantize::QuantizeRequest<'_>,
@@ -202,22 +203,15 @@ impl Processor {
             State::Ready => {}
         }
         use crate::prod::contract::request::DitherPolicy;
-        match dither {
-            DitherPolicy::None {} => {
-                return self.quantize_with_allocator(request, boundary, allocator)
-            }
-            DitherPolicy::Separable { .. } | DitherPolicy::Diffusion { .. } => {}
-            _ => {
-                return Err(Failure::new(
-                    ErrorCode::UnsupportedOperation,
-                    ErrorPath::Dither,
-                ))
-            }
+        if matches!(dither, DitherPolicy::None {}) {
+            return self.quantize_with_allocator(request, boundary, allocator);
         }
         self.state = State::Running;
         let mode_capacity = if matches!(dither, DitherPolicy::Diffusion { .. }) {
             size_of::<crate::prod::dither::error_diffusion::prepared::DiffusionPolicy>() as u64
                 + size_of::<DitherPolicy>() as u64
+        } else if matches!(dither, DitherPolicy::Yliluoma { .. }) {
+            size_of::<DitherPolicy>() as u64
         } else {
             (size_of::<crate::prod::contract::request::PerturbPolicy>() + size_of::<Vec<u8>>())
                 as u64
@@ -238,15 +232,17 @@ impl Processor {
                 overhead,
                 &mut self.peak_capacity,
             ),
-            DitherPolicy::Separable { perturb } => super::quantize::run_with_perturb(
-                request,
-                Some(perturb),
-                boundary,
-                allocator,
-                self.memory_limit,
-                overhead,
-                &mut self.peak_capacity,
-            ),
+            DitherPolicy::Separable { .. } | DitherPolicy::Yliluoma { .. } => {
+                super::quantize::run_with_dither(
+                    request,
+                    dither,
+                    boundary,
+                    allocator,
+                    self.memory_limit,
+                    overhead,
+                    &mut self.peak_capacity,
+                )
+            }
             _ => unreachable!("supported family checked before entering running state"),
         };
         self.state = State::Ready;

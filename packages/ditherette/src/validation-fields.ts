@@ -188,7 +188,7 @@ export function validateDitherAndQuantize(value: unknown) {
 		);
 		const dither = object(
 			field(request, 'dither'),
-			['family', 'perturb', 'kernel', 'feedback', 'strength', 'serpentine', 'placement'],
+			['family', 'perturb', 'kernel', 'feedback', 'strength', 'serpentine', 'placement', 'size'],
 			'invalid-settings',
 			'dither'
 		);
@@ -246,9 +246,26 @@ export function validateDitherAndQuantize(value: unknown) {
 				strength: scalar(field(dither, 'strength'), 'dither.strength'),
 				...normalizePlacement(field(dither, 'placement'), 'dither')
 			};
+		} else if (family === 'yliluoma') {
+			object(dither, ['family', 'size', 'placement'], 'invalid-settings', 'dither');
+			const size = field(dither, 'size');
+			if (typeof size !== 'string' || !sizes.includes(size))
+				throw new DitheretteError(
+					'invalid-settings',
+					'dither.size',
+					'Expected matrix size 2, 4, 8, or 16 as a string tag.'
+				);
+			normalized = {
+				family: 3,
+				field: 0,
+				parameter: Number(size),
+				space: 0,
+				strength: 0,
+				...normalizePlacement(field(dither, 'placement'), 'dither')
+			};
 		} else
 			throw new DitheretteError(
-				family === 'yliluoma' ? 'unsupported-operation' : 'invalid-settings',
+				'invalid-settings',
 				'dither.family',
 				'This dither family is not implemented in this package checkpoint.'
 			);

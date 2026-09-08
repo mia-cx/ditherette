@@ -76,6 +76,7 @@ impl PreparedQuantizer {
         &self.palette
     }
 
+    /// Borrow the ordered visible coordinates for palette-mixing kernels.
     pub(crate) fn matcher(&self) -> &PaletteMatcher {
         &self.matcher
     }

@@ -153,6 +153,11 @@ export interface DitherAndQuantizeRequest extends QuantizeRequest {
 				readonly strength: number;
 				readonly serpentine: boolean;
 				readonly placement: Placement;
+		  }
+		| {
+				readonly family: 'yliluoma';
+				readonly size: '2' | '4' | '8' | '16';
+				readonly placement: Placement;
 		  };
 }
 
@@ -176,7 +181,7 @@ export interface Ditherette {
 	quantize(request: QuantizeRequest): IndexedImage;
 	/** Perturb RGB without palette influence, preserving every source alpha byte. */
 	perturb(request: PerturbRequest): Rgba8Image;
-	/** Apply separable fields or scalar error diffusion, or quantize directly with family none. */
+	/** Quantize directly or apply separable fields, scalar diffusion, or literal Yliluoma mixtures. */
 	ditherAndQuantize(request: DitherAndQuantizeRequest): IndexedImage;
 	/** Release instance ownership once. Wasm pages may retain their high-water mark until collection. */
 	dispose(): void;

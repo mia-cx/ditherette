@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize, palette quantization, Bayer/random/blue-noise perturbation, and error diffusion.
+An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize, palette quantization, Bayer/random/blue-noise perturbation, error diffusion, and Yliluoma dithering.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -124,8 +124,6 @@ Zero strength preserves every source byte. Both placement modes preserve alpha a
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
 Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are reserved before input copy.
 Results remain durable after later calls and disposal. No field buffers or prepared palettes are cached.
-Yliluoma is not enabled in this checkpoint.
-
 ## Error diffusion
 
 ```ts
@@ -144,6 +142,26 @@ Serpentine scanning reverses alternate rows. Adaptive placement uses the unchang
 Preserved transparent pixels discard incoming error and emit none. Palette order, duplicates, and warnings follow direct quantization.
 Diffusion stays scalar and reserves three work rows. Scratch capacity scales with width; owned source and index buffers also count toward the limit.
 An arithmetic overflow returns `runtime` at `dither.arithmetic`, publishes no result, and leaves the instance usable.
+
+## Yliluoma
+
+Yliluoma uses the same palette, matching, and alpha controls:
+
+```ts
+const indexed = processor.ditherAndQuantize({
+	version: 1,
+	source,
+	palette,
+	matching: 'srgb-euclidean',
+	alpha: { mode: 'preserve', threshold: 128 },
+	dither: { family: 'yliluoma', size: '4', placement: { mode: 'everywhere' } }
+});
+```
+
+Matrix sizes are `'2'`, `'4'`, `'8'`, and `'16'`. Adaptive placement uses the controls shown above.
+Yliluoma searches every ordered palette pair and matrix ratio. A zero adaptive mask still searches mixtures of the nearest color.
+It allocates source and index storage without an RGBA8 intermediate or mixture table.
+Exact outputs follow the frozen Wasm reference; native floating-point math can select different mixtures near ties.
 
 ## Initialization and ownership
 

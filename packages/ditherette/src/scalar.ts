@@ -69,7 +69,8 @@ const errorPaths = [
 	'dither.feedback',
 	'dither.serpentine',
 	'dither.arithmetic',
-	'dither.arithmetic'
+	'dither.arithmetic',
+	'dither.size'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',

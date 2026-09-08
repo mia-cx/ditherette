@@ -18,6 +18,9 @@ pub enum PublicOperation {
     Separable {
         settings: super::fields::SeparableSettings,
     },
+    Yliluoma {
+        settings: super::yliluoma::YliluomaSettings,
+    },
     ResizeNearest {
         anchor: Anchor,
     },
@@ -108,6 +111,12 @@ impl PublicOperation {
             (Self::Diffusion { .. }, BrowserBackend::TypeScript) => {
                 "public:dither-and-quantize:diffusion:typescript"
             }
+            (Self::Yliluoma { .. }, BrowserBackend::Package) => {
+                "public:dither-and-quantize:yliluoma:package"
+            }
+            (Self::Yliluoma { .. }, BrowserBackend::TypeScript) => {
+                "public:dither-and-quantize:yliluoma:typescript"
+            }
             (Self::Perturb { .. }, BrowserBackend::Package) => "public:perturb:request:package",
             (Self::Perturb { .. }, BrowserBackend::TypeScript) => {
                 "public:perturb:request:typescript"
@@ -162,7 +171,7 @@ impl PublicOperation {
             Self::ResizeTrilinear { .. } => "spec:resize:trilinear:mip-area",
             Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
             Self::Perturb { .. } => "spec:perturb:request:v1",
-            Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
+            Self::Separable { .. } | Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
             Self::Quantize { .. } => "spec:quantize:request:v1",
             Self::ResizeNearest { .. } => "spec:resize:nearest:scalar",
             Self::ResizeArea {} => "spec:resize:area:scalar",
@@ -207,7 +216,8 @@ impl PublicOperation {
             | Self::Diffusion { .. }
             | Self::Quantize { .. }
             | Self::Perturb { .. }
-            | Self::Separable { .. } => Anchor::Center,
+            | Self::Separable { .. }
+            | Self::Yliluoma { .. } => Anchor::Center,
         }
     }
 
@@ -244,7 +254,8 @@ impl PublicOperation {
                 Self::Quantize { .. }
                 | Self::Perturb { .. }
                 | Self::Separable { .. }
-                | Self::Diffusion { .. } => {
+                | Self::Diffusion { .. }
+                | Self::Yliluoma { .. } => {
                     unreachable!("processing returned above")
                 }
             }
@@ -273,6 +284,7 @@ impl PublicOperation {
                 super::fields::perturb_request(*settings, source, rgba).map(Some)
             }
             Self::Separable { settings } => settings.reference_request(source, rgba).map(Some),
+            Self::Yliluoma { settings } => settings.reference_request(source, rgba).map(Some),
             _ => Ok(None),
         }
     }

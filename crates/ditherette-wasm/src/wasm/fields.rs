@@ -61,6 +61,7 @@ pub fn private_perturb(
 }
 
 /// Families 0/1 select direct/separable matching. Family 2 uses field/parameter/space for kernel/feedback/serpentine.
+/// Family 3 selects literal Yliluoma mixtures.
 /// The completed indexed result uses the same caught void sink helper as direct quantize.
 #[wasm_bindgen(js_name = privateDitherAndQuantize)]
 pub fn private_dither_and_quantize(
@@ -136,6 +137,22 @@ pub fn private_dither_and_quantize(
                     ],
                 )?,
             },
+            3.0 if field == 0.0 && space == 0.0 && strength == 0.0 => DitherPolicy::Yliluoma {
+                size: parse_bayer_size(parameter, ErrorPath::DitherSize)?,
+                placement: parse_placement(
+                    placement,
+                    radius,
+                    threshold,
+                    softness,
+                    [
+                        ErrorPath::DitherPlacement,
+                        ErrorPath::DitherRadius,
+                        ErrorPath::DitherThreshold,
+                        ErrorPath::DitherSoftness,
+                    ],
+                )?,
+            },
+            3.0 => return Err(invalid(ErrorPath::Dither)),
             _ => {
                 return Err(Failure::new(
                     ErrorCode::UnsupportedOperation,
@@ -192,13 +209,7 @@ fn parse_policy(
 ) -> Result<PerturbPolicy, Failure> {
     let field = match field {
         0.0 => Field::Bayer {
-            size: match parameter {
-                2.0 => BayerSize::Two,
-                4.0 => BayerSize::Four,
-                8.0 => BayerSize::Eight,
-                16.0 => BayerSize::Sixteen,
-                _ => return Err(invalid(ErrorPath::PerturbField)),
-            },
+            size: parse_bayer_size(parameter, ErrorPath::PerturbField)?,
         },
         1.0 if parameter.is_finite()
             && parameter.fract() == 0.0
@@ -243,6 +254,15 @@ fn parse_policy(
     })
 }
 
+fn parse_bayer_size(value: f64, path: ErrorPath) -> Result<BayerSize, Failure> {
+    match value {
+        2.0 => Ok(BayerSize::Two),
+        4.0 => Ok(BayerSize::Four),
+        8.0 => Ok(BayerSize::Eight),
+        16.0 => Ok(BayerSize::Sixteen),
+        _ => Err(invalid(path)),
+    }
+}
 fn parse_placement(
     placement: f64,
     radius: f64,

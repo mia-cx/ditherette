@@ -13,6 +13,7 @@ mod resize_budgeted;
 pub mod scores;
 mod trilinear;
 pub mod verification;
+pub mod yiluoma;
 
 /// Existing registry with this crate's concrete, borrowed conformance protocol.
 pub type BenchSubject = ditherette_bench_api::BenchSubject<reference::ReferenceFn>;
@@ -197,6 +198,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(fields::subjects());
     subjects.extend(field_calls::subjects());
     subjects.extend(diffusion::subjects());
+    subjects.extend(yiluoma::subjects());
     subjects
 }
 

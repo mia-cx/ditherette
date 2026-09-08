@@ -49,9 +49,12 @@ export async function prepareOperation(trial) {
 	const quantize = config.operation.operation === 'quantize';
 	const perturb = config.operation.operation === 'perturb';
 	const separable = config.operation.operation === 'separable';
+	const yliluoma = config.operation.operation === 'yliluoma';
 	const diffusion = config.operation.operation === 'diffusion';
 	const resize =
-		quantize || perturb || separable || diffusion ? undefined : resizeRecipe(config.operation);
+		quantize || perturb || separable || diffusion || yliluoma
+			? undefined
+			: resizeRecipe(config.operation);
 	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
 		throw new Error('This package has no application cache.');
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
@@ -61,7 +64,7 @@ export async function prepareOperation(trial) {
 		source: { ...trial.case.source, data: new Uint8Array(trial.case.rgba) },
 		...(perturb
 			? { perturb: config.operation.settings }
-			: separable || diffusion
+			: separable || diffusion || yliluoma
 				? {
 						...config.operation.settings.quantize,
 						dither: diffusion
@@ -73,7 +76,13 @@ export async function prepareOperation(trial) {
 									serpentine: config.operation.settings.serpentine,
 									placement: config.operation.settings.placement
 								}
-							: { family: 'separable', perturb: config.operation.settings.perturb }
+							: yliluoma
+								? {
+										family: 'yliluoma',
+										size: config.operation.settings.size,
+										placement: config.operation.settings.placement
+									}
+								: { family: 'separable', perturb: config.operation.settings.perturb }
 					}
 				: quantize
 					? config.operation.settings
@@ -86,6 +95,7 @@ export async function prepareOperation(trial) {
 	};
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
+		if (yliluoma) throw new Error('No faithful TypeScript Yliluoma adapter is registered.');
 		if (perturb || separable || diffusion)
 			throw new Error('No faithful TypeScript field adapter is registered.');
 		if (quantize) throw new Error('No faithful TypeScript indexed quantize adapter is registered.');
@@ -120,7 +130,7 @@ export async function prepareOperation(trial) {
 	const create = () => createDitherette({ wasm: compiled ?? bytes });
 	const call = perturb
 		? (instance) => instance.perturb(request)
-		: separable || diffusion
+		: separable || diffusion || yliluoma
 			? (instance) => instance.ditherAndQuantize(request)
 			: quantize
 				? (instance) => instance.quantize(request)
@@ -347,7 +357,7 @@ export async function runTrial(trial) {
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const format = ['quantize', 'separable', 'diffusion'].includes(
+		const format = ['quantize', 'separable', 'diffusion', 'yliluoma'].includes(
 			trial.case.browser.operation.operation
 		)
 			? 'indexed8'

@@ -6,6 +6,7 @@ pub mod diffusion;
 pub mod fields;
 pub mod native;
 pub mod quantize;
+pub mod yliluoma;
 
 use ditherette_bench_api::verification::*;
 use serde::{Deserialize, Serialize};

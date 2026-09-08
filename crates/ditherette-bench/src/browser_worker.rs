@@ -261,6 +261,7 @@ pub fn validate_response(
         PublicOperation::Quantize { .. }
             | PublicOperation::Separable { .. }
             | PublicOperation::Diffusion { .. }
+            | PublicOperation::Yliluoma { .. }
     );
     for output in std::iter::once(&result.output)
         .chain(result.unstable_output.iter())

@@ -130,8 +130,8 @@ test('field validation retains canonical tags, nested paths, shared reentry and 
 			errorIs('unsupported-operation', 'onProgress')
 		);
 		assert.throws(
-			() => processor.ditherAndQuantize({ ...fused(), dither: { family: 'yliluoma' } }),
-			errorIs('unsupported-operation', 'dither.family')
+			() => processor.ditherAndQuantize({ ...fused(), dither: { family: 'unknown' } }),
+			errorIs('invalid-settings', 'dither.family')
 		);
 		const recursive = request();
 		Object.defineProperty(recursive, 'perturb', {
