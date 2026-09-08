@@ -17,7 +17,7 @@ No TypeScript equivalence claim or new optimization is part of this checkpoint.
 - [x] Add native subjects, typed settings, and worker registration; verify identity, composition, and invalid requests without measurements.
 - [x] Extend public Process/staged adapters, indexed bounds, and protocol tests without package builds.
 - [x] Declare a bounded representative full-pipeline matrix with filter-specific targets and fixed budget; commit and report requirements.
-- [ ] Join the independent runtime and frozen oracle checkpoints; validate their unchanged production bytes and Process wire.
+- [x] Join the independent runtime and frozen oracle checkpoints; validate their unchanged production bytes and Process wire.
 - [ ] Validate target-local frozen attribution and actual installed-package adapters in three engines after fresh preparation is assigned.
 
 Runtime/package code belongs to the runtime agent. Frozen oracle files belong to the oracle agent.
@@ -73,3 +73,27 @@ Eleven browser-worker tests pass, including indexed Process output bounds and re
 The generator test passes with the fixed 128-worker budget and area-only diagnostic opt-in.
 The focused Node Process preflight test passes, including differing-output rejection and resource disposal.
 Earlier existing Node timing/public tests pass (28). No measurement worker ran.
+
+## Joined checkpoint
+
+The branch joins oracle `61d338431b5bd7039fa3d1fae4dd44200abdcfc5` and runtime `587339793cf70429b673e888a89d86a332541693`.
+Production, private Wasm, public package source, frozen spec, and image files match that validated runtime byte-for-byte.
+Only the benchmark subject registration, shared boundary visibility, and new benchmark Process module differ within core source.
+The joined checks pass: 11 browser-worker tests, eight frozen-oracle tests, two Process adapter tests, and one generator test.
+The Process adapter test also compares all 49 complete identities and native frozen results with the independent oracle.
+`cargo check --all-targets` passes for the benchmark manifest. Both modified browser scripts pass syntax checks.
+
+`target/process-oracle-fixtures.json` adds independently identified area resize and post-resize oracle probes.
+Its SHA-256 is `63ac50059dfe6fd4681d9afdbe9a1dca8394c19ae561b0d0bf2e3a3d986b6488`.
+All original eight fixture identities, inputs, operations, and reference/production/staged outputs remain unchanged.
+The installed-browser check writes full references, oracle manifest, package hash, and composition/resize diagnostics before assertions.
+Browser Process frozen comparisons and attribution have not run yet. Fresh preparation belongs to the coordinator's next assignment.
+The runtime owner's separate 423 process/staged cases per engine are not claimed as benchmark-adapter frozen validation.
+
+Preparation requires one freshly built native executable and one fresh scalar/thread package plus frozen oracle closure.
+Both roles may use those same artifacts with their different actual subjects/backends.
+Each runtime still receives separate immutable accepted/candidate snapshots and ordinary source/provenance validation.
+Use `prepare-native-benchmark.mjs` and `prepare-public-benchmark.mjs` to avoid stale cross-worktree Cargo outputs.
+Only this worktree's `target/compiler` is currently owned; assign variant paths before public preparation.
+Native/public fixture exporters, final three-engine attribution, snapshots, and source hashes precede quiet clearance.
+No timing results, optimization selection, TypeScript equivalence, or full S41 palette/matching coverage are claimed here.

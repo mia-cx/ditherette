@@ -117,6 +117,11 @@ fn complete_and_staged_subjects_preserve_all_resize_dither_compositions() {
             );
             assert!(public.identity(source, &rgba, source).is_err());
             let request = native.reference_request(source, &rgba).unwrap();
+            let oracle: ditherette_bench_oracle::OracleRequest = serde_json::from_value(
+                serde_json::json!({"source":source,"rgba":rgba,"output":identity.output,"operation":public,"identity":identity}),
+            ).unwrap();
+            let reference = oracle.execute().unwrap();
+            assert_eq!(reference.case, identity);
             let a = CompleteCall::new(&request, PROCESS_SUBJECT)
                 .unwrap()
                 .output(&mut field_calls::processor().unwrap())
@@ -136,6 +141,9 @@ fn complete_and_staged_subjects_preserve_all_resize_dither_compositions() {
                     .unwrap();
                 let output = (subject.run)(&request).unwrap();
                 assert_eq!(output.dimensions, identity.output);
+                if id == "spec:process:request:v1" {
+                    assert_eq!(output, reference.output);
+                }
             }
             CompleteCall::new(&request, PROCESS_SUBJECT)
                 .unwrap()
