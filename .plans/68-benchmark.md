@@ -9,8 +9,9 @@ S26 contributes its benchmark adapters, repaired field verifier, and completed b
 ## TODOs
 
 - [x] Register the actual fixed blue-noise lookup and complete Processor/public adapters; verify exact frozen outputs through the full verifier.
-- [ ] Declare 68 serial workers and export matching installed-package fixtures; pass untimed native and three-engine adapter checks.
-- [ ] Commit clean code, prepare independent fresh native/public role artifacts, and hand off immutable paths with all jobs drained.
+- [x] Declare 68 serial workers and export matching installed-package fixtures; pass untimed native checks.
+- [x] Commit clean code and prepare independent fresh native/public role builds with all jobs drained.
+- [ ] Resolve the cross-target frozen-reference assumption below before passing public conformance or preparing immutable pair snapshots.
 
 ## Fixed scope
 
@@ -61,3 +62,36 @@ Twenty-six Node browser/timing protocol tests pass. Rust bins/examples checks an
 Declarations and four frozen installed-package fixtures were generated in `target/s27-preparation/` without timing.
 Set `DITHERETTE_BENCH_BLUE_NOISE_FIXTURES` to its `blue-noise.json` for the existing public conformance suite.
 That suite checks all four new recipes with primed/fresh instances, including actual separable composition and durability.
+
+## Prepared builds and exact-conformance hold
+
+Clean code checkpoint `e395b16241f26443a43a049a0fbefb7166215fb8` independently rebuilt both roles.
+Retained paths are relative to `.worktrees/v1-s27-bench/target/s27-preparation/`:
+
+- `accepted-native/` and `candidate-native/` contain fresh worker/coordinator binaries and build provenance.
+- `accepted-public/` and `candidate-public/` contain fresh scalar/threaded packages, installed consumers, bundle sources, and build provenance.
+- Both `ditherette.tgz` files have SHA-256 `32a844782798e87c8e561fd2ca9dc2fd5d653db94ff65648c14702b92f5ecfe1`.
+- `native.json`, `public.json`, and `blue-noise.json` retain the fixed declarations and four native-frozen fixtures.
+
+Untimed public checks expose one native/Wasm difference in the Oklab adaptive2 recipe.
+At pixel `(8,26)`, RGBA offset 6792, native frozen and actual release-native Processor produce red 95; both public roles produce 94.
+The other 8579 bytes and all three other complete recipes match exactly.
+Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 show the same result.
+The existing smaller S26/quantize checks passed before this larger S27 fixture failed.
+This failure does not invalidate that smaller scope, nor does it establish exact conformance for this larger scope.
+
+`{accepted,candidate}-{chromium,firefox,webkit}-diagnostic.json` preserve every full actual/reference output and nine forward-coordinate bit patterns.
+`native-diagnostic.json` preserves all four release-native actual outputs and the focal stage comparison.
+The diagnostic scripts remain beside these ignored artifacts.
+Only the focal pixel's forward Oklab coordinates differ; its eight adaptive neighbors match bitwise.
+Input RGBA is `[73,85,65,70]`.
+Native coordinate bits are `[1054713084,3167088128,1020538528]`; Wasm bits are `[1054713084,3167088160,1020538512]`.
+The adaptive mask remains bit-identical at `1056450327`.
+Substituting only Wasm forward coordinates into unchanged native placement/reconstruction moves unrounded red
+from `94.50003118629185` to `94.49999517762998`, which explains the final-byte difference.
+This localizes the observed mismatch to shared forward color math, without changing the blue-noise lookup.
+
+Keep the native-frozen fixtures and all mismatches intact. No tolerance, fixture replacement, or production fix has been applied.
+The coordinator is independently testing the unchanged frozen oracle compiled to Wasm before choosing the reference protocol.
+Immutable pair snapshots and all 68 measurement workers remain unstarted.
+All preparation/diagnostic jobs are drained; the S23 scalar/threaded caches have returned to coordinator ownership.
