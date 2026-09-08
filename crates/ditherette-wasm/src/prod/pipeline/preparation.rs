@@ -413,6 +413,7 @@ impl<'a> Call<'a> {
             buffer.resize(length, 0);
         }
         if call.scratch.diffusion.capacity() < diffusion_len {
+            call.scratch.diffusion = Vec::new();
             call.scratch.diffusion = CapacityBudget::new(limit - actual).vector(diffusion_len)?;
         }
         actual += (call.scratch.diffusion.capacity() * size_of::<[f32; 3]>()) as u64;
