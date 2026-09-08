@@ -17,7 +17,8 @@ Public color continues to use packed triplets with byte alpha. Direct quantizati
 
 - [x] Expose allocation-free area/bilinear caller-scratch row adapters. Check exact split output and reject insufficient scratch before writes.
 - [x] Extend shared convolution with caller-owned support-range scratch, including overlapping support across bands.
-- [ ] Integrate complete worker/support capacity preflight and disjoint execution through existing tiling models.
+- [x] Add complete worker/support capacity preflight and disjoint execution through existing tiling models.
+- [ ] Integrate those adapters into private complete-call preparation with budget-based scalar fallback.
 - [ ] Extend benchmark subjects for the budgeted path and retain caller-thread progress.
 - [ ] Join final S34 and validate actual installed scalar/threaded calls before exclusive crossover evidence.
 - [ ] Select only freshly measured exact configurations, or retain scalar, and prepare the unmerged PR.
@@ -62,3 +63,21 @@ The new fixture first fails on absent row-scratch APIs. It then passes bicubic/L
 three anchors, identity axes, direct filtering, and large x-then-y downscales with band heights 1, 3, and full output.
 It proves overlapping bands need more aggregate support scratch than one full-call owner.
 Physical allocation counters stay unchanged during execution; short scratch leaves output sentinels intact.
+
+## Budgeted executor checkpoint
+
+`RowBandBuffers<T>` reserves the entire assignment metadata and maximum scratch needed by each active worker.
+The enclosing call must also charge borrowed source, kernel plans, and final output. Public integration is still pending.
+The builder checks the complete requirement before allocation and checks each actual vector capacity through `CapacityBudget`.
+It shares existing band generation and balanced assignment logic; direct frozen comparisons cover worker caps and order.
+
+`execute_row_band_work` splits mutable output slices along existing assignments and uses recursive `rayon::join` when compiled with threads.
+The initialized pool is a prerequisite. Scalar builds execute the same assignments without threads.
+Each batch processes at most one band per worker. Progress executes on the caller only after all workers join.
+A rendering failure joins the whole batch before returning. A progress failure prevents the next batch.
+No default selection or threshold is added.
+
+The complete convolution fixture checks native scalar and Rayon output equality, overlap capacity, and allocation-free worker kernels.
+Its one-byte-short complete budget fails before any allocation. Every metadata/scratch reservation also has an injected failure check.
+Current checks pass 26 scalar tests and 20 threaded tests, including the direct frozen-assignment fixture.
+No actual Wasm or complete public-call performance claim follows from these native checks.
