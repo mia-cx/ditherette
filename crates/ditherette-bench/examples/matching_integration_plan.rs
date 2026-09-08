@@ -142,6 +142,7 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
                     }
                     NativeOperation::MetricScores { metric } => metric.prod_subject().into(),
                     NativeOperation::Diffusion { .. }
+                    | NativeOperation::Process { .. }
                     | NativeOperation::FieldComponent { .. }
                     | NativeOperation::Yliluoma { .. }
                     | NativeOperation::Perturb { .. }

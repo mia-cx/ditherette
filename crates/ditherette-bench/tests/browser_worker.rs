@@ -6,6 +6,58 @@ use ditherette_bench::{
 use ditherette_bench_api::verification::*;
 
 #[test]
+fn process_transport_uses_recipe_output_dimensions_and_indexed_bounds() {
+    use ditherette_bench::paired::process::ProcessSettings;
+    use ditherette_wasm::{image::contracts::PaletteEntry, spec::contract::request as spec};
+    let (mut request, mut result) = fixture();
+    let output = Dimensions {
+        width: 2,
+        height: 3,
+    };
+    let operation = PublicOperation::Process {
+        settings: ProcessSettings {
+            palette: vec![PaletteEntry::Color { rgb: [1, 2, 3] }],
+            recipe: spec::RecipeV1 {
+                version: 1,
+                output: spec::Output {
+                    width: 2,
+                    height: 3,
+                    resize: spec::ResizePolicy::Nearest {
+                        anchor: spec::Anchor::Center,
+                    },
+                },
+                alpha: spec::AlphaPolicy::Premultiplied {},
+                matching: spec::MatchPolicy::SrgbEuclidean,
+                dither: spec::DitherPolicy::None {},
+            },
+        },
+    };
+    let case = &mut request.case;
+    case.identity = operation.identity(case.source, &case.rgba, output).unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    case.browser.as_mut().unwrap().operation = operation;
+    case.browser.as_mut().unwrap().accepted = BrowserBackend::Package;
+    result.input = case.identity.input;
+    result.settings = case.identity.settings;
+    result.output.dimensions = output;
+    result.output.pixels = Pixels::Indexed8 {
+        indices: vec![0; 6],
+        palette_rgba: vec![1, 2, 3, 255],
+        transparent_index: None,
+    };
+    request.reference_output = Some(result.output.clone());
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
+    validate_response(&request, &result).unwrap();
+    result.output.dimensions = request.case.source;
+    assert!(validate_response(&request, &result).is_err());
+}
+
+#[test]
 fn yliluoma_transport_accepts_indexed_output_and_rejects_rgba_output() {
     use ditherette_bench::paired::{quantize::*, yliluoma::YliluomaSettings};
     use ditherette_wasm::spec::contract::request::{BayerSize, Placement};
