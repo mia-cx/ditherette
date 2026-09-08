@@ -45,24 +45,20 @@ impl<'a> CompleteCall<'a> {
     pub fn new(request: &ReferenceRequest<'a>) -> Result<Self, BenchSubjectError> {
         request.dimensions()?;
         match *request {
-            ReferenceRequest::Processing(spec::Request::Perturb(input)) => {
-                reject_field(input.perturb)?;
-                Ok(Self::Perturb {
-                    source: input.source.data,
-                    request: PerturbRequest {
-                        source_width: input.source.width,
-                        source_height: input.source.height,
-                        perturb: prod_policy(input.perturb),
-                    },
-                })
-            }
+            ReferenceRequest::Processing(spec::Request::Perturb(input)) => Ok(Self::Perturb {
+                source: input.source.data,
+                request: PerturbRequest {
+                    source_width: input.source.width,
+                    source_height: input.source.height,
+                    perturb: prod_policy(input.perturb),
+                },
+            }),
             ReferenceRequest::Processing(spec::Request::DitherAndQuantize(input)) => {
                 let spec::DitherPolicy::Separable { perturb } = input.dither else {
                     return Err(BenchSubjectError::new(
-                        "S26 benchmark requires a separable dither request",
+                        "field benchmark requires a separable dither request",
                     ));
                 };
-                reject_field(perturb)?;
                 let mapped = quantize_request(&ReferenceRequest::Processing(
                     spec::Request::Quantize(input.quantize),
                 ))?;
@@ -145,15 +141,6 @@ fn failure(error: Failure) -> BenchSubjectError {
 
 pub fn processor() -> Result<Processor, BenchSubjectError> {
     Processor::new(2 * 1024 * 1024 * 1024, 0).map_err(failure)
-}
-
-fn reject_field(policy: spec::PerturbPolicy) -> Result<(), BenchSubjectError> {
-    if matches!(policy.field, spec::Field::BlueNoise {}) {
-        return Err(BenchSubjectError::new(
-            "S26 has no blue-noise production request",
-        ));
-    }
-    Ok(())
 }
 
 struct NativeBoundary<'a>(&'a [u8]);
