@@ -1,0 +1,82 @@
+# S33 public progress overhead
+
+Issue #74. Start from validated S32 `59b5a004c98c4cff255b30f51025d8ec8143786d` in `impl/v1-s33-bench`.
+Read the approved execution contract and S33 slice before implementation.
+Runtime ownership belongs to `impl/v1-s33-progress`; installed callback fixtures belong to `impl/v1-s33-public`.
+This worktree owns development benchmark protocol, adapters, generator, focused protocol tests, and this plan.
+
+## Reuse and comparison
+
+Use the existing complete-call browser adapter, fresh-instance lifecycle, target-local frozen oracle, and paired coordinator.
+The public request already declares `onProgress`. Functions cannot appear in benchmark JSON.
+Add explicit optional development metadata that selects callback-disabled or callback-enabled execution for each role.
+Historical records omit that metadata and keep their existing behavior. It is not a public backend or cache option.
+
+Run two comparisons for all five methods in Chromium, Firefox, and WebKit:
+
+1. Fresh S32 versus S33, both callbacks disabled. This measures the cost of adding progress support.
+2. The same fresh S33 artifact in both roles, callbacks disabled versus enabled. This measures callback delivery overhead.
+
+Reuse S32's cold Lanczos3 resize, Lab76 quantize, separable Bayer4 fused call, and resized diffusion Process workloads.
+Add standalone perturb using the exact separable workload's field, input, and dimensions.
+Use two alternating role pairs, 20 single-call samples, 50 ms warmup, and a 10-second cap.
+The fixed matrix totals 120 serial workers. No warm-cache timing is added; functional fixtures cover callback behavior on hits.
+
+## Callback observation
+
+The enabled callback does constant bounded work, such as updating a count and last event.
+Create it before timing. Actual callback dispatch and this ordinary callback work stay inside the timed public method.
+Reset observation before each measured call without leaking state from warmup or preflight.
+Check event validity and final completion outside timing. Preserve concrete failure evidence if any call violates the protocol.
+Keep all existing output, input-identity, and frozen-reference verification outside timers.
+Both roles must return identical output bytes and metadata.
+
+The untimed staged Process comparison must not accidentally change the declared callback role or compare combined progress sequences.
+Inspect that adapter branch explicitly. Keep callback evidence distinct from output semantic identity.
+
+## Atomic steps
+
+- [x] Extend typed development metadata and adapter wiring. Prove omitted historical metadata retains existing behavior.
+- [x] Add the constant-storage callback observer and focused reset/invalid-event checks.
+- [x] Add focused fake-clock/full-trial tests for actual enabled callbacks, observation reset, and thrown callback propagation.
+- [x] Generate the fixed matrix from reused fixtures. Validate identities and exact frozen outputs without timing.
+- [ ] Join final runtime and public fixtures, then build fresh accepted/candidate artifacts with the official preparers.
+- [ ] After root quiet clearance, run the fixed comparison and record every per-case gate.
+
+Only root runs measurements. All agents, builds, and tests must be drained first.
+One worker and its owned transport may run at a time under the existing shared lease.
+Confirmed regressions above 10% stay release blockers; inconclusive results stay incomplete.
+Do not retune landed kernels, change frozen files, retry undeclared cases, or run routine PR reviews.
+After PR handoff, return compiler ownership for cleanup while retaining artifacts and results.
+
+The initial observer passes four Node tests. It retains only counters and scalar fields, never an event array.
+Its bounded callback checks are part of enabled-call timing. Reset and verification belong outside timers.
+At that initial checkpoint, adapter integration and measurements remained pending.
+
+The protocol checkpoint adds optional `browser.progress` accepted/candidate modes,
+each `disabled` or `enabled`. Historical cases and evidence omit the field unchanged.
+Evidence validation binds it independently of image semantics. Progress comparisons
+require cold, fresh-instance, single ordinary package calls.
+
+The adapter creates its constant-storage probe before timing, resets after fresh
+instance creation, and verifies alongside existing untimed output/source observations.
+Only callback dispatch and bounded callback work enter the method timer. The untimed
+Process counterpart clears progress metadata, preserving its semantic comparison.
+Official public snapshots and conformance snapshots both copy the new helper.
+
+Three full-trial fake-clock tests failed before wiring, then pass after it. They cover
+role selection, every-call reset, a transient incomplete callback stream, thrown
+callback work, and processor disposal. All 23 focused Node tests and 25 Rust browser
+protocol/transport tests pass. The metadata test round-trips historical JSON and
+rejects missing role evidence. `cargo check --tests --examples --locked` passes;
+the inherited stage example has one test-only unused-import warning outside tests.
+Rust output ownership is exclusively this worktree's `target/compiler`.
+
+`progress_integration_plan regression|callbacks DESTINATION HOST_LOAD_NOTES`
+declares two separate five-case public plans. Four cold cases retain the exact S32
+source bytes, settings, dimensions, and output identity. Standalone perturb reuses
+the separable case's source and field. Both plans keep two pairs, 20 single-call
+samples, 50 ms warmup, and the 10-second cap. Across three engines they total 120
+serial workers. The callbacks plan uses the same S33 artifact in both roles.
+Seven generator tests pass, including inherited S32 cases and fresh native calls
+against all five target-local frozen outputs. These tests do not time operations.

@@ -1,0 +1,961 @@
+{
+  "schema": "ditherette-s33-measurement-report-v1",
+  "measured_revisions": {
+    "accepted": "ec640c6dfc48afcc8fe95edcf1d2fd16c8e74579",
+    "candidate": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4"
+  },
+  "delivery_conformance_head": "06d9ad0730669dac3008baf848b5eb463689c584",
+  "evidence_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01",
+  "quiet_start": {
+    "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/quiet-start.md",
+    "bytes": 964,
+    "sha256": "06167d9c1ef20754c39be824061e92ce0c555347a61fe76364ca3529b7125d51"
+  },
+  "runs": [
+    {
+      "comparison": "regression",
+      "engine": "chromium",
+      "gate": "inconclusive",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": "147.0.7727.15",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "workers_started": 20,
+      "workers_reaped": 20,
+      "max_live_workers": 1,
+      "samples": 400,
+      "warmup_calls": 367,
+      "start_unix_ns": "1788885805888178817",
+      "end_unix_ns": "1788885851662468505",
+      "snapshots": [
+        {
+          "role": "accepted",
+          "revision": "ec640c6dfc48afcc8fe95edcf1d2fd16c8e74579",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-chromium-prepared/pair/accepted/ditherette-bench",
+            "bytes": 6113904,
+            "sha256": "ac01f02143dac948a84080140780ee583142f8569f30e14c68c5947794c0f34f"
+          },
+          "assets_digest": "fc418086ce140d764ffc7ca421002a64b49e382dca8a637cac8ebea0baa1751a",
+          "asset_files": 58
+        },
+        {
+          "role": "candidate",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-chromium-prepared/pair/candidate/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        }
+      ],
+      "evidence": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-chromium-results/prepared.json",
+          "bytes": 2798466,
+          "sha256": "11b22aee0d0477d47381b0924fc28a98a088365ce04e9e23df0dc157ffb01856"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-chromium-results/events.jsonl",
+          "bytes": 8610,
+          "sha256": "4418e34bd8a83164ccd2c64de3b5861a424ae8232f74b65855351678f27705be"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-chromium-results/report.json",
+          "bytes": 47556,
+          "sha256": "0ee74fa99b9f3037540e9b5aac4436089f0ebc553a6e0d3a758b90a3509011f4"
+        }
+      ],
+      "results_inventory_sha256": "1fb4dc44e43b7c029b2bae330ec4bd9a580f3fa3d6fc611df71570ca6404363e",
+      "cases": [
+        {
+          "name": "quantize-lab76-p256-32x24-cold",
+          "accepted_median_ns": 1312500,
+          "candidate_median_ns": 1277500.0035762787,
+          "ratio": 0.9733333360581171,
+          "pair_ratios": [
+            1.2045889114521975,
+            0.9491525403752153
+          ],
+          "gate": "inconclusive",
+          "resolution_limited": false
+        },
+        {
+          "name": "resize-lanczos3-129x97-cold",
+          "accepted_median_ns": 832500.0032782555,
+          "candidate_median_ns": 845000.0062584877,
+          "ratio": 1.0150150185357467,
+          "pair_ratios": [
+            1.0845921408124617,
+            0.9794721428384586
+          ],
+          "gate": "inconclusive",
+          "resolution_limited": false
+        },
+        {
+          "name": "separable-bayer4-oklab-p16-65x49-cold",
+          "accepted_median_ns": 23179999.999701977,
+          "candidate_median_ns": 23132500.004023314,
+          "ratio": 0.9979508198585301,
+          "pair_ratios": [
+            1.0067303519294153,
+            0.990134048238197
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "accepted_median_ns": 1524999.998509884,
+          "candidate_median_ns": 1497499.9986588955,
+          "ratio": 0.9819672131948461,
+          "pair_ratios": [
+            0.9818780914938369,
+            0.9756493520866253
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "perturb-bayer4-oklab-65x49-cold",
+          "accepted_median_ns": 22767499.99448657,
+          "candidate_median_ns": 22785000.00014901,
+          "ratio": 1.000768639756964,
+          "pair_ratios": [
+            1.0073715482098664,
+            0.9984650804132521
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        }
+      ]
+    },
+    {
+      "comparison": "regression",
+      "engine": "firefox",
+      "gate": "pass",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": "148.0.2",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "workers_started": 20,
+      "workers_reaped": 20,
+      "max_live_workers": 1,
+      "samples": 400,
+      "warmup_calls": 88,
+      "start_unix_ns": "1788885859268763872",
+      "end_unix_ns": "1788885951162579587",
+      "snapshots": [
+        {
+          "role": "accepted",
+          "revision": "ec640c6dfc48afcc8fe95edcf1d2fd16c8e74579",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-firefox-prepared/pair/accepted/ditherette-bench",
+            "bytes": 6113904,
+            "sha256": "ac01f02143dac948a84080140780ee583142f8569f30e14c68c5947794c0f34f"
+          },
+          "assets_digest": "fc418086ce140d764ffc7ca421002a64b49e382dca8a637cac8ebea0baa1751a",
+          "asset_files": 58
+        },
+        {
+          "role": "candidate",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-firefox-prepared/pair/candidate/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        }
+      ],
+      "evidence": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-firefox-results/prepared.json",
+          "bytes": 2608319,
+          "sha256": "047a4849eff4bb8fca85bf109eb6233c0107484441a150d7ed023fc9289abb4b"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-firefox-results/events.jsonl",
+          "bytes": 8610,
+          "sha256": "7f95b4268e48668aaf99837bdd3e2f4e309513f0353aad5ff2e40e363f40f20d"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-firefox-results/report.json",
+          "bytes": 47517,
+          "sha256": "88caa1b5e94e05d976c1931f5dccf5f2ef44b0e6010a95405253a850a4842a87"
+        }
+      ],
+      "results_inventory_sha256": "b70c7b31fae8692c10fe97834d2262d30b6fa985c9224e8b6e060ba7f1a37532",
+      "cases": [
+        {
+          "name": "quantize-lab76-p256-32x24-cold",
+          "accepted_median_ns": 7059999.999999988,
+          "candidate_median_ns": 7009999.999999991,
+          "ratio": 0.9929178470254961,
+          "pair_ratios": [
+            0.9957507082153013,
+            0.9914893617021295
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "resize-lanczos3-129x97-cold",
+          "accepted_median_ns": 5379999.999999995,
+          "candidate_median_ns": 5500000,
+          "ratio": 1.0223048327137556,
+          "pair_ratios": [
+            1.0375939849624038,
+            0.9908925318761389
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "separable-bayer4-oklab-p16-65x49-cold",
+          "accepted_median_ns": 203619999.99999994,
+          "candidate_median_ns": 203780000.0000001,
+          "ratio": 1.000785777428544,
+          "pair_ratios": [
+            0.9994101165019903,
+            1.0008820935019123
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "accepted_median_ns": 9270000.000000011,
+          "candidate_median_ns": 9319999.999999993,
+          "ratio": 1.0053937432578188,
+          "pair_ratios": [
+            1.018378378378374,
+            0.9849785407725322
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "perturb-bayer4-oklab-65x49-cold",
+          "accepted_median_ns": 201240000,
+          "candidate_median_ns": 203750000,
+          "ratio": 1.0124726694494137,
+          "pair_ratios": [
+            1.0204112038140645,
+            1.0035778175313066
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        }
+      ]
+    },
+    {
+      "comparison": "regression",
+      "engine": "webkit",
+      "gate": "pass",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": "26.4",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "workers_started": 20,
+      "workers_reaped": 20,
+      "max_live_workers": 1,
+      "samples": 400,
+      "warmup_calls": 280,
+      "start_unix_ns": "1788885974792741446",
+      "end_unix_ns": "1788886030756820303",
+      "snapshots": [
+        {
+          "role": "accepted",
+          "revision": "ec640c6dfc48afcc8fe95edcf1d2fd16c8e74579",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-webkit-prepared/pair/accepted/ditherette-bench",
+            "bytes": 6113904,
+            "sha256": "ac01f02143dac948a84080140780ee583142f8569f30e14c68c5947794c0f34f"
+          },
+          "assets_digest": "fc418086ce140d764ffc7ca421002a64b49e382dca8a637cac8ebea0baa1751a",
+          "asset_files": 58
+        },
+        {
+          "role": "candidate",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-webkit-prepared/pair/candidate/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        }
+      ],
+      "evidence": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-webkit-results/prepared.json",
+          "bytes": 2623500,
+          "sha256": "f152fd83837c186b098334127f757226077793506ccc61c0d6cb14328da627f7"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-webkit-results/events.jsonl",
+          "bytes": 8610,
+          "sha256": "e1c3524551b3ffc85d1c09bc571e185814b1234dea2e7cad53ae83dd36881fa2"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/regression-webkit-results/report.json",
+          "bytes": 47533,
+          "sha256": "37d542f72ec52b824121b0241d51bcf96c6cc654fee1bd30b11b58c38910dd6f"
+        }
+      ],
+      "results_inventory_sha256": "8805eb3c0e513a44dc83481d8e0f0c9ec663a6d880509d301e2d0ce76e879b81",
+      "cases": [
+        {
+          "name": "quantize-lab76-p256-32x24-cold",
+          "accepted_median_ns": 1460000.000000008,
+          "candidate_median_ns": 1469999.9999999846,
+          "ratio": 1.0068493150684772,
+          "pair_ratios": [
+            0.9863013698630165,
+            1.0000000000000142
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "resize-lanczos3-129x97-cold",
+          "accepted_median_ns": 799999.9999999972,
+          "candidate_median_ns": 820000.0000000144,
+          "ratio": 1.0250000000000217,
+          "pair_ratios": [
+            1.0249999999999768,
+            1.0375000000000378
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "separable-bayer4-oklab-p16-65x49-cold",
+          "accepted_median_ns": 22419999.99999999,
+          "candidate_median_ns": 22420000.00000003,
+          "ratio": 1.0000000000000018,
+          "pair_ratios": [
+            1.009333333333336,
+            0.9973178363880202
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "accepted_median_ns": 1599999.9999999944,
+          "candidate_median_ns": 1659999.9999999823,
+          "ratio": 1.0374999999999925,
+          "pair_ratios": [
+            1.0301204819277265,
+            1.006329113924045
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "perturb-bayer4-oklab-65x49-cold",
+          "accepted_median_ns": 22420000,
+          "candidate_median_ns": 22069999.999999963,
+          "ratio": 0.9843889384478128,
+          "pair_ratios": [
+            0.9788079470198674,
+            0.9914104882459333
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        }
+      ]
+    },
+    {
+      "comparison": "callbacks",
+      "engine": "chromium",
+      "gate": "pass",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": "147.0.7727.15",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "workers_started": 20,
+      "workers_reaped": 20,
+      "max_live_workers": 1,
+      "samples": 400,
+      "warmup_calls": 356,
+      "start_unix_ns": "1788886285571091005",
+      "end_unix_ns": "1788886330718541506",
+      "snapshots": [
+        {
+          "role": "accepted",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-chromium-prepared/pair/accepted/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        },
+        {
+          "role": "candidate",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-chromium-prepared/pair/candidate/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        }
+      ],
+      "evidence": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-chromium-results/prepared.json",
+          "bytes": 2800240,
+          "sha256": "8ee23c5b1d21fc8ac86b94dd4f7b302aa1806f092cfd8b8a78ca419a53f552a1"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-chromium-results/events.jsonl",
+          "bytes": 8610,
+          "sha256": "ac4b5fa60c8e10899cfce436364b8dd2f2fa42aca12043cc3c1420930382b96d"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-chromium-results/report.json",
+          "bytes": 47539,
+          "sha256": "6b54fccd0fcaf5eb7642081594ff4335aad1db16e2211d23d7c0dd3fcc0404fd"
+        }
+      ],
+      "results_inventory_sha256": "cb1e6c66606175ab3fe0777ff104920589524bf5ff1731ae0be8a5c643e59e03",
+      "cases": [
+        {
+          "name": "quantize-lab76-p256-32x24-cold",
+          "accepted_median_ns": 1269999.9995529652,
+          "candidate_median_ns": 1234999.9994039536,
+          "ratio": 0.9724409447548571,
+          "pair_ratios": [
+            0.9344569326066213,
+            0.9839034208790646
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "resize-lanczos3-129x97-cold",
+          "accepted_median_ns": 835000.0008940697,
+          "candidate_median_ns": 880000.002682209,
+          "ratio": 1.053892217652642,
+          "pair_ratios": [
+            1.0447761257100037,
+            1.0688622766245672
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "separable-bayer4-oklab-p16-65x49-cold",
+          "accepted_median_ns": 23692499.99895692,
+          "candidate_median_ns": 23344999.995082617,
+          "ratio": 0.985332911094667,
+          "pair_ratios": [
+            0.9849346819192535,
+            0.9848053181631401
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "accepted_median_ns": 1527499.9998509884,
+          "candidate_median_ns": 1589999.9998509884,
+          "ratio": 1.0409165302822239,
+          "pair_ratios": [
+            1.0643564332576647,
+            1.025974025408541
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "perturb-bayer4-oklab-65x49-cold",
+          "accepted_median_ns": 22879999.99895692,
+          "candidate_median_ns": 23042500.000447035,
+          "ratio": 1.007102272792724,
+          "pair_ratios": [
+            1.0015194271274033,
+            1.0071365831255168
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        }
+      ]
+    },
+    {
+      "comparison": "callbacks",
+      "engine": "firefox",
+      "gate": "pass",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": "148.0.2",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "workers_started": 20,
+      "workers_reaped": 20,
+      "max_live_workers": 1,
+      "samples": 400,
+      "warmup_calls": 89,
+      "start_unix_ns": "1788886364175720601",
+      "end_unix_ns": "1788886456277932795",
+      "snapshots": [
+        {
+          "role": "accepted",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-firefox-prepared/pair/accepted/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        },
+        {
+          "role": "candidate",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-firefox-prepared/pair/candidate/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        }
+      ],
+      "evidence": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-firefox-results/prepared.json",
+          "bytes": 2610093,
+          "sha256": "9abcaa2f88ea736d6dfc2f72b16369f50e5bd8bee7b82c73b3f7a61fe0599cfd"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-firefox-results/events.jsonl",
+          "bytes": 8610,
+          "sha256": "a3d6afffce232a35a1fb4ba5d31f0e52288a3bddcc79ec76a9051f6a7b87ec4f"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-firefox-results/report.json",
+          "bytes": 47539,
+          "sha256": "e51182cb2a2aa6cee139475adb7d3c71982fb7e009fae37c3d03b735721d1999"
+        }
+      ],
+      "results_inventory_sha256": "a22f81fb08dc768ccb1987a1314986669bcea9e23f717d8a557692151626b0f7",
+      "cases": [
+        {
+          "name": "quantize-lab76-p256-32x24-cold",
+          "accepted_median_ns": 7110000.000000013,
+          "candidate_median_ns": 7139999.999999986,
+          "ratio": 1.0042194092826966,
+          "pair_ratios": [
+            0.9985795454545429,
+            1.011220196353436
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "resize-lanczos3-129x97-cold",
+          "accepted_median_ns": 5480000.000000019,
+          "candidate_median_ns": 5509999.999999991,
+          "ratio": 1.0054744525547394,
+          "pair_ratios": [
+            1.0054945054945057,
+            1.0054644808743172
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "separable-bayer4-oklab-p16-65x49-cold",
+          "accepted_median_ns": 203629999.99999988,
+          "candidate_median_ns": 203149999.99999985,
+          "ratio": 0.9976427834798407,
+          "pair_ratios": [
+            0.9965173885319069,
+            1.0003447256968392
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "accepted_median_ns": 9379999.999999996,
+          "candidate_median_ns": 9289999.999999993,
+          "ratio": 0.9904051172707885,
+          "pair_ratios": [
+            0.9829424307036251,
+            0.9957264957264937
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "perturb-bayer4-oklab-65x49-cold",
+          "accepted_median_ns": 201059999.9999999,
+          "candidate_median_ns": 201389999.99999982,
+          "ratio": 1.0016413011041476,
+          "pair_ratios": [
+            1.016994633273702,
+            0.9977618621307071
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        }
+      ]
+    },
+    {
+      "comparison": "callbacks",
+      "engine": "webkit",
+      "gate": "pass",
+      "machine": {
+        "os": "linux",
+        "arch": "x86_64",
+        "hostname": "athena-hephaestus",
+        "kernel": "6.12.95+deb13-amd64",
+        "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+        "logical_cpus": 24
+      },
+      "browser": "26.4",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "workers_started": 20,
+      "workers_reaped": 20,
+      "max_live_workers": 1,
+      "samples": 400,
+      "warmup_calls": 270,
+      "start_unix_ns": "1788886467035717409",
+      "end_unix_ns": "1788886522950965474",
+      "snapshots": [
+        {
+          "role": "accepted",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-webkit-prepared/pair/accepted/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        },
+        {
+          "role": "candidate",
+          "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+          "worker": {
+            "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-webkit-prepared/pair/candidate/ditherette-bench",
+            "bytes": 6142896,
+            "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+          },
+          "assets_digest": "7b40132096a0d428d3b2015e4fb7f09971a6c3bb68995a3bfd848430910dc0b8",
+          "asset_files": 60
+        }
+      ],
+      "evidence": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-webkit-results/prepared.json",
+          "bytes": 2625274,
+          "sha256": "7f061315bceb901b3f212e09672a3c8f44dcc18f325878c91e00d2fad3652e3b"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-webkit-results/events.jsonl",
+          "bytes": 8612,
+          "sha256": "2c766d56b59ffb9946bc537b52930648efaf90be6d374d24a9b5db1d62281e25"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-trial-01/callbacks-webkit-results/report.json",
+          "bytes": 47524,
+          "sha256": "c33c8b8a992278c931825ae7e47272752b8a8c68f48f607691d5142533139fec"
+        }
+      ],
+      "results_inventory_sha256": "aef7f30adb4d7cc5d8ef1812e1d96ce0b908b02a8d72390748fe72d1a3f457c7",
+      "cases": [
+        {
+          "name": "quantize-lab76-p256-32x24-cold",
+          "accepted_median_ns": 1479999.9999999898,
+          "candidate_median_ns": 1480000.0000000182,
+          "ratio": 1.000000000000019,
+          "pair_ratios": [
+            1,
+            1.0135135135135205
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "resize-lanczos3-129x97-cold",
+          "accepted_median_ns": 840000.0000000034,
+          "candidate_median_ns": 849999.9999999943,
+          "ratio": 1.011904761904751,
+          "pair_ratios": [
+            0.9999999999999661,
+            1.023809523809536
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "separable-bayer4-oklab-p16-65x49-cold",
+          "accepted_median_ns": 22299999.999999985,
+          "candidate_median_ns": 22520000.00000001,
+          "ratio": 1.0098654708520192,
+          "pair_ratios": [
+            1.0116959064327458,
+            1.0089047195013376
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "accepted_median_ns": 1579999.9999999842,
+          "candidate_median_ns": 1600000.0000000086,
+          "ratio": 1.0126582278481169,
+          "pair_ratios": [
+            1.0316455696202604,
+            1.0256410256410204
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        },
+        {
+          "name": "perturb-bayer4-oklab-65x49-cold",
+          "accepted_median_ns": 22080000.00000004,
+          "candidate_median_ns": 21840000.000000004,
+          "ratio": 0.989130434782607,
+          "pair_ratios": [
+            0.991792065663475,
+            0.9878103837471773
+          ],
+          "gate": "pass",
+          "resolution_limited": false
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "workers_started": 120,
+    "workers_reaped": 120,
+    "max_live_workers": 1,
+    "samples": 2400,
+    "warmup_calls": 1450,
+    "actual_role_pairs": 60,
+    "three_way_records": 120,
+    "exact_component_comparisons": 360
+  },
+  "inconclusive": [
+    {
+      "comparison": "regression",
+      "engine": "chromium",
+      "name": "quantize-lab76-p256-32x24-cold",
+      "accepted_median_ns": 1312500,
+      "candidate_median_ns": 1277500.0035762787,
+      "ratio": 0.9733333360581171,
+      "pair_ratios": [
+        1.2045889114521975,
+        0.9491525403752153
+      ],
+      "gate": "inconclusive",
+      "resolution_limited": false
+    },
+    {
+      "comparison": "regression",
+      "engine": "chromium",
+      "name": "resize-lanczos3-129x97-cold",
+      "accepted_median_ns": 832500.0032782555,
+      "candidate_median_ns": 845000.0062584877,
+      "ratio": 1.0150150185357467,
+      "pair_ratios": [
+        1.0845921408124617,
+        0.9794721428384586
+      ],
+      "gate": "inconclusive",
+      "resolution_limited": false
+    }
+  ],
+  "artifacts": [
+    {
+      "role": "accepted",
+      "revision": "ec640c6dfc48afcc8fe95edcf1d2fd16c8e74579",
+      "native_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-native",
+      "public_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-public",
+      "products": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-native/build-provenance.json",
+          "bytes": 612831,
+          "sha256": "f0cdd2f0b203757da179ce0a09c7e41bc887f19bdf724325eb0bd4556a0bce59"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-public/build-provenance.json",
+          "bytes": 646255,
+          "sha256": "a42d3a4278bbdc8bcc8cc861069cf3f2d31e2e2ea95498059184dd07d0472fd6"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-public/ditherette.tgz",
+          "bytes": 342373,
+          "sha256": "8a51e04d08cfdf73bd022ccef1167fed36c74f8267ea1615e19e46df7636fc80"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-public/scripts/oracle/manifest.json",
+          "bytes": 103027,
+          "sha256": "4382d25e57d18515d90e222f1afb35cd11c2eb880485acb8183261bf545b68f6"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-public/scripts/oracle/ditherette_bench_oracle_bg.wasm",
+          "bytes": 785376,
+          "sha256": "0f10570e805dcf5115c92071887edb9176ac04d73d06cc080c57cdd834829c77"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-native/ditherette-bench",
+          "bytes": 6113904,
+          "sha256": "ac01f02143dac948a84080140780ee583142f8569f30e14c68c5947794c0f34f"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/s33-accepted-ec640c6d-native/ditherette-bench-pair",
+          "bytes": 3419488,
+          "sha256": "dcd2f78f88b1c73eea58a7205927d36381077b1091468f35df21d8902c8ecbcc"
+        }
+      ],
+      "wasm": [
+        {
+          "name": "dist/wasm/scalar/ditherette_wasm_bg.wasm",
+          "bytes": 306335,
+          "gzip_bytes": 139079,
+          "sha256": "f1ed82692f0b2f0f04b51693de02438bda41c7c950ba81881ff0a2d00bd6a6c7"
+        },
+        {
+          "name": "dist/wasm/threads/ditherette_wasm_bg.wasm",
+          "bytes": 413917,
+          "gzip_bytes": 171470,
+          "sha256": "4f0d2226f0c40710ca277e0c911335daf04a39f3aff7b01230add5abbea66235"
+        }
+      ]
+    },
+    {
+      "role": "candidate",
+      "revision": "4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4",
+      "native_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-native",
+      "public_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-public",
+      "products": [
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-native/build-provenance.json",
+          "bytes": 618609,
+          "sha256": "7792ad418cd4c92acff0e01c66f746cd5711b2fc82aac78134cce2f903ac8ede"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-public/build-provenance.json",
+          "bytes": 653192,
+          "sha256": "a81d46c43bf3c483ff22912c3aa9273135c4b840614953374432c0118036e075"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-public/ditherette.tgz",
+          "bytes": 370620,
+          "sha256": "f6e62526cc290d8ca1f9fdcb7fcfc9de39790c1982dab7118adb30a4a84173d2"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-public/scripts/oracle/manifest.json",
+          "bytes": 103035,
+          "sha256": "5f67389250eb4ea7fec8569cb158b1014b8b191de6b5469dfa1c437bfb152577"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-public/scripts/oracle/ditherette_bench_oracle_bg.wasm",
+          "bytes": 785376,
+          "sha256": "cd618b97694e667f087dbc698d20d2c1b09a2a1268bba6cf07e81d2a0e86663b"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-native/ditherette-bench",
+          "bytes": 6142896,
+          "sha256": "5119a802822e01040995ca5db449a3b8284ffd09d68afa3504bda6e349122f34"
+        },
+        {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/s33-candidate-4a75d479-native/ditherette-bench-pair",
+          "bytes": 3424984,
+          "sha256": "6393972c7e50eaa7b7d396f9064823e3df46000d8345511d0064703b5927a0f5"
+        }
+      ],
+      "wasm": [
+        {
+          "name": "dist/wasm/scalar/ditherette_wasm_bg.wasm",
+          "bytes": 339664,
+          "gzip_bytes": 152754,
+          "sha256": "2b589ac837f56f9b941e84d2a8d91c2d144698f968871aeb03800dedd6158bfa"
+        },
+        {
+          "name": "dist/wasm/threads/ditherette_wasm_bg.wasm",
+          "bytes": 445275,
+          "gzip_bytes": 185120,
+          "sha256": "436a9f050dbe0f7c657b9d897f48a37e2ef2aa36c2c95857db5be338a21d35c3"
+        }
+      ]
+    }
+  ],
+  "compiler": [
+    "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/target/compiler",
+    "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/crates/ditherette-wasm/target/scalar",
+    "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-progress/crates/ditherette-wasm/target/threads",
+    "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/target/compiler",
+    "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/crates/ditherette-wasm/target/scalar",
+    "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-bench/crates/ditherette-wasm/target/threads"
+  ],
+  "methodology": {
+    "comparisons": {
+      "regression": "S32 versus S33, callbacks disabled in both roles",
+      "callbacks": "same S33 artifact in both roles, callbacks disabled versus enabled"
+    },
+    "lifecycle": "fresh empty processor outside every single-call timer; no warm-cache cases",
+    "timed": "ordinary public input/output copies, content hashes, preparation, processing, and enabled callback dispatch plus constant-storage observer work",
+    "untimed": "instance creation/disposal, callback construction/reset, preflight, warmup/sample output and source/progress verification",
+    "samples_per_role_case": 40,
+    "pair_order": [
+      "accepted-candidate",
+      "candidate-accepted"
+    ],
+    "gate": "paired.rs threshold rule with both alternating pairs, <=10% pair-ratio spread for pass, and one browser timer quantum uncertainty per elapsed observation",
+    "reproduction": "Read each run's prepared.json, events.jsonl and 20 result files. Match requests/roles/PIDs, check exact output/reference equality, pool two sets of 20 samples per role, and recompute paired gates. Inventory SHA-256 hashes compact JSON of filename-sorted {path: filename, bytes, sha256} records for every file directly in its result directory. Artifact hashes cover complete file bytes; Wasm gzip sizes use Node default gzipSync.",
+    "transport_roundtrip": "JavaScript transport and Rust result samples agree within 1e-10 relative tolerance; serde float decimal roundtrips can differ at sub-nanosecond precision. Output bytes and metadata use exact comparisons."
+  },
+  "release_status": "S33 disabled regression incomplete on two Chromium cases; no new confirmed regression; inherited S32 S41 blockers unchanged",
+  "measured_source_worktree": "/home/mia/mia-cx/ditherette/.worktrees/v1-s33-measured-source"
+}

@@ -4,6 +4,7 @@
 //! y-major, x-minor contribution grouping used by the scalar convolution oracle.
 
 use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
+use crate::prod::contract::failure::Failure;
 
 use super::{
     filter::SupportPolicy,
@@ -39,10 +40,30 @@ const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
 
 pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
     scratch: Option<&mut [f64]>,
 ) {
+    resize_with_progress(source, output, plan, scratch, &mut |_| Ok(()))
+        .expect("disabled progress cannot fail");
+}
+
+pub(super) fn work_rows(plan: &ConvolutionResizePlan) -> u32 {
+    plan.output_dimensions().height()
+        + if !plan.same_height() && !plan.same_width() && should_use_x_then_y(plan) {
+            plan.source_dimensions().height()
+        } else {
+            0
+        }
+}
+
+pub(super) fn resize_with_progress(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    scratch: Option<&mut [f64]>,
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let source_width = source.dimensions().width_usize();
     let output_width = output.dimensions().width_usize();
     let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
@@ -56,8 +77,9 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
             source_row_byte_len,
             output_row_byte_len,
             &plan.x_taps,
-        );
-        return;
+            progress,
+        )?;
+        return Ok(());
     }
 
     if plan.same_width() {
@@ -67,8 +89,9 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
             source_row_byte_len,
             output_row_byte_len,
             &plan.y_taps,
-        );
-        return;
+            progress,
+        )?;
+        return Ok(());
     }
 
     if should_use_x_then_y(plan) {
@@ -80,14 +103,16 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
             &plan.x_taps,
             &plan.y_taps,
             scratch,
-        );
-        return;
+            progress,
+        )?;
+        return Ok(());
     }
 
-    for (output_row, y_taps) in output
+    for (y, (output_row, y_taps)) in output
         .data_mut()
         .chunks_exact_mut(output_row_byte_len)
         .zip(&plan.y_taps)
+        .enumerate()
     {
         for (output_pixel, x_taps) in output_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
@@ -101,7 +126,9 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
                 y_taps,
             );
         }
+        progress(y as u32 + 1)?;
     }
+    Ok(())
 }
 
 pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
@@ -126,7 +153,9 @@ pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
             source_row_byte_len,
             output_row_byte_len,
             &plan.x_taps,
-        );
+            &mut |_| Ok(()),
+        )
+        .expect("disabled progress cannot fail");
         return;
     }
 
@@ -138,7 +167,9 @@ pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
             source_row_byte_len,
             output_row_byte_len,
             &plan.y_taps[y_start..y_start + band_height],
-        );
+            &mut |_| Ok(()),
+        )
+        .expect("disabled progress cannot fail");
         return;
     }
 
@@ -192,7 +223,8 @@ fn resize_x_then_y_into(
     x_taps_by_output: &[Vec<AxisTap>],
     y_taps_by_output: &[Vec<AxisTap>],
     scratch: Option<&mut [f64]>,
-) {
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let source_height = source.len() / source_row_byte_len;
     let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
     let scratch_row_len = output_row_byte_len;
@@ -205,9 +237,10 @@ fn resize_x_then_y_into(
         }
     };
 
-    for (source_row, scratch_row) in source
+    for (y, (source_row, scratch_row)) in source
         .chunks_exact(source_row_byte_len)
         .zip(scratch.chunks_exact_mut(scratch_row_len))
+        .enumerate()
     {
         for (scratch_pixel, x_taps) in scratch_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
@@ -215,11 +248,13 @@ fn resize_x_then_y_into(
         {
             write_horizontal_scratch_pixel(scratch_pixel, source_row, x_taps);
         }
+        progress(y as u32 + 1)?;
     }
 
-    for (output_row, y_taps) in output
+    for (y, (output_row, y_taps)) in output
         .chunks_exact_mut(output_row_byte_len)
         .zip(y_taps_by_output)
+        .enumerate()
     {
         for output_x in 0..output_width {
             let output_start = output_x * rgba8::RGBA8_CHANNELS;
@@ -231,7 +266,9 @@ fn resize_x_then_y_into(
                 y_taps,
             );
         }
+        progress((source_height + y + 1) as u32)?;
     }
+    Ok(())
 }
 
 fn resize_x_then_y_rows_into(
@@ -355,10 +392,12 @@ fn resize_horizontal_only_into(
     source_row_byte_len: usize,
     output_row_byte_len: usize,
     x_taps_by_output: &[Vec<AxisTap>],
-) {
-    for (source_row, output_row) in source
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    for (y, (source_row, output_row)) in source
         .chunks_exact(source_row_byte_len)
         .zip(output.chunks_exact_mut(output_row_byte_len))
+        .enumerate()
     {
         for (output_pixel, x_taps) in output_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
@@ -366,7 +405,9 @@ fn resize_horizontal_only_into(
         {
             write_horizontal_convolution_pixel(output_pixel, source_row, x_taps);
         }
+        progress(y as u32 + 1)?;
     }
+    Ok(())
 }
 
 fn resize_vertical_only_into(
@@ -375,10 +416,12 @@ fn resize_vertical_only_into(
     source_row_byte_len: usize,
     output_row_byte_len: usize,
     y_taps_by_output: &[Vec<AxisTap>],
-) {
-    for (output_row, y_taps) in output
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    for (y, (output_row, y_taps)) in output
         .chunks_exact_mut(output_row_byte_len)
         .zip(y_taps_by_output)
+        .enumerate()
     {
         for (output_x, output_pixel) in output_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
@@ -392,7 +435,9 @@ fn resize_vertical_only_into(
                 y_taps,
             );
         }
+        progress(y as u32 + 1)?;
     }
+    Ok(())
 }
 
 fn write_horizontal_convolution_pixel(

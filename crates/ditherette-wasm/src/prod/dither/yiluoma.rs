@@ -2,6 +2,7 @@
 //! Shared palette matching and Bayer ranks remain their existing production implementations.
 
 mod request;
+pub(crate) use request::dither_yiluoma_with_progress;
 pub use request::{dither_yiluoma, dither_yiluoma_into};
 
 use super::ordered::{bayer_value, BayerSize};

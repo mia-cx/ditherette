@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 
 use crate::image::{ImageView, ImageViewMut, Rgba8};
+use crate::prod::contract::failure::Failure;
 
 use super::plan::{AxisTap, BilinearResizePlan};
 
@@ -34,10 +35,21 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
 
 pub(super) fn resize_with_scratch_into(
     source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
     vertical_row: &mut [f32],
 ) {
+    resize_with_progress(source, output, plan, vertical_row, &mut |_| Ok(()))
+        .expect("disabled progress cannot fail");
+}
+
+pub(super) fn resize_with_progress(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    vertical_row: &mut [f32],
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let source_width = source.dimensions().width_usize();
     let source_height = source.dimensions().height_usize();
     let output_width = output.dimensions().width_usize();
@@ -53,8 +65,9 @@ pub(super) fn resize_with_scratch_into(
             output_row_len,
             plan,
             vertical_row,
-        );
-        return;
+            progress,
+        )?;
+        return Ok(());
     }
 
     if source_height == output_height {
@@ -64,8 +77,9 @@ pub(super) fn resize_with_scratch_into(
             source_row_len,
             output_row_len,
             plan,
-        );
-        return;
+            progress,
+        )?;
+        return Ok(());
     }
 
     let source_data = source.data();
@@ -84,7 +98,9 @@ pub(super) fn resize_with_scratch_into(
         {
             write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
         }
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 pub(super) fn resize_packed_rgba8_rows_with_triangle_filter_into(
@@ -177,7 +193,8 @@ fn resize_height_only(
     output_row_len: usize,
     plan: &BilinearResizePlan,
     vertical_row: &mut [f32],
-) {
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
         vertical_row.fill(0.0);
         let y_weight_sum = accumulate_vertical(source, source_row_len, vertical_row, y_taps);
@@ -193,7 +210,9 @@ fn resize_height_only(
             output_pixel[2] = round_u8(vertical_pixel[2] / y_weight_sum);
             output_pixel[3] = round_u8(vertical_pixel[3] / y_weight_sum);
         }
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 fn resize_width_only(
@@ -202,7 +221,8 @@ fn resize_width_only(
     source_row_len: usize,
     output_row_len: usize,
     plan: &BilinearResizePlan,
-) {
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     for output_y in 0..plan.y_taps.len() {
         let source_row_start = output_y * source_row_len;
         let source_row = &source[source_row_start..source_row_start + source_row_len];
@@ -215,7 +235,9 @@ fn resize_width_only(
         {
             write_horizontal_source_pixel(output_pixel, source_row, x_taps);
         }
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 // NOTE(perf): This path intentionally uses f32 scratch accumulation. A f64

@@ -8,6 +8,7 @@
 pub mod fields;
 pub mod process;
 pub mod processor;
+mod progress;
 pub mod quantize;
 
 use std::{hint::black_box, num::NonZeroU32};

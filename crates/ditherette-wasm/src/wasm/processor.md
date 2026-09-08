@@ -32,11 +32,16 @@ Convolution keeps fixed radii or widens support during minification according to
 Trilinear halves mip dimensions upward, applies area filtering with RGBA8 rounding at every level, and bilinearly samples adjacent LODs.
 Its final blend also rounds to RGBA8. All nine anchors apply; shared levels change neither arithmetic nor storage conversions.
 The landed accumulation and clipping/rounding paths remain unchanged, including their documented bounded reference differences.
-The wrapper supplies a new private plain `{value: undefined}` sink. It reads the value only after status zero.
+The wrapper supplies a private plain `{value: undefined, onProgress}` sink. It reads the value only after status zero.
 Success contains `{width, height, data: Uint8Array}`, with JS-owned data independent of Wasm memory.
 Raw request/version/unknown-field validation belongs to the typed package wrapper.
 The Rust boundary independently validates dimensions, algorithm, anchor, support, intrinsic byte length, and memory limits.
-Supplied progress remains explicitly unsupported until S33.
+Progress uses caught scalar clock/enabled imports and a caught void callback import.
+The production lifecycle model gates stage changes and 50 ms within-stage updates.
+Completion follows durable result construction and precedes `Call.finish`, including image hits.
+Thrown callbacks clear the private sink, return callback status 12 at path 38 (`onProgress`), and publish no new entries.
+The existing busy guards reject recursive processing and disposal throughout callback delivery.
+The borrowed callback record and inline controller count in private bookkeeping; disabled calls never import the clock.
 
 Status zero means success. Statuses one through thirteen follow the copied error categories:
 invalid-request, invalid-image, invalid-palette, invalid-settings, unsupported-operation, capability, initialization,
@@ -50,6 +55,7 @@ memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runti
 | 6, 7, 8 | output.width, output.height, output |
 | 9, 10, 11, 12 | output.resize.anchor, wasm, control, output.resize |
 | 13, 14, 15, 16 | palette, alpha, alpha.threshold, matching |
+| 38 | onProgress |
 
 ## Direct quantization
 
@@ -107,8 +113,8 @@ Module state moves the Processor into the active Rust call before invoking JavaS
 No RefCell or generated class borrow spans an imported helper.
 Reentrant processing, initialization, and disposal return structured failures without changing the active call.
 Caught input/result failures drop the prepared plan, scratch, and both image Vecs, then restore the ready state.
-Future cache publication must follow complete result construction and any successful completion callback.
-This slice publishes no cache entries.
+Cache publication follows complete result construction and any successful completion callback.
+Callback failure discards pending entries and restores prior hits under the shared LRU policy.
 
 ## Verified binding behavior
 

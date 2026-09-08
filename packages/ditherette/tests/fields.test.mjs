@@ -126,8 +126,8 @@ test('field validation retains canonical tags, nested paths, shared reentry and 
 			);
 		}
 		assert.throws(
-			() => processor.perturb({ ...request(), onProgress() {} }),
-			errorIs('unsupported-operation', 'onProgress')
+			() => processor.perturb({ ...request(), onProgress: 1 }),
+			errorIs('invalid-settings', 'onProgress')
 		);
 		assert.throws(
 			() => processor.ditherAndQuantize({ ...fused(), dither: { family: 'unknown' } }),

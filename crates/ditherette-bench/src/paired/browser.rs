@@ -104,6 +104,21 @@ impl CacheCapability {
     }
 }
 
+/// Development protocol only; functions stay in the actual public-call adapter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProgressMode {
+    Disabled,
+    Enabled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProgressRoles {
+    pub accepted: ProgressMode,
+    pub candidate: ProgressMode,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
@@ -112,6 +127,8 @@ pub struct BrowserCase {
     pub candidate: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<ProgressRoles>,
     /// Developer diagnostics only. Differences remain incorrect and retain review artifacts.
     #[serde(default)]
     pub measure_nonexact: bool,
@@ -454,6 +471,8 @@ pub struct BrowserEvidence {
     pub backend: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<ProgressRoles>,
     #[serde(default)]
     pub measure_nonexact: bool,
     pub observation: BrowserObservation,
@@ -577,6 +596,18 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if browser.progress.is_some()
+        && (browser.preparation != BrowserPreparation::FreshInstance
+            || m.scope != CallScope::CompleteCall
+            || m.mode != SampleMode::SingleCall
+            || m.application_cache != ApplicationCache::Cold
+            || browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package)
+    {
+        return Err(io::Error::other(
+            "progress comparisons require cold single ordinary package calls",
+        ));
+    }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::PackageStaged)
         && !matches!(browser.operation, PublicOperation::Process { .. })
     {
@@ -856,6 +887,7 @@ pub(super) fn validate_evidence(
         || evidence.backend != browser_case.backend(result.role)
         || evidence.preparation != browser_case.preparation
         || evidence.cache != browser_case.cache
+        || evidence.progress != browser_case.progress
         || evidence.measure_nonexact != browser_case.measure_nonexact
     {
         return Err(io::Error::other(

@@ -271,35 +271,57 @@ impl PreparedResize {
     pub(super) fn execute(
         &mut self,
         source: ImageView<'_, Rgba8>,
-        mut output: ImageViewMut<'_, Rgba8>,
+        output: ImageViewMut<'_, Rgba8>,
     ) -> Result<(), Failure> {
+        self.execute_with_progress(source, output, &mut |_, _| Ok(()))
+    }
+
+    /// Reuses each prepared kernel and reports only work that its chosen path performs.
+    pub(super) fn execute_with_progress(
+        &mut self,
+        source: ImageView<'_, Rgba8>,
+        mut output: ImageViewMut<'_, Rgba8>,
+        progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
+    ) -> Result<(), Failure> {
+        let height = output.dimensions().height();
         match self {
-            Self::Identity => output.data_mut().copy_from_slice(source.data()),
+            Self::Identity => {
+                progress(0, height)?;
+                output.data_mut().copy_from_slice(source.data());
+                progress(height, height)?;
+            }
             Self::Nearest(plan) => {
-                nearest::resize_nearest_rgba8_with_plan_into(source, output, plan)
+                // Keep its optimized repeat/copy dispatch intact; this whole call is one work batch.
+                progress(0, height)?;
+                nearest::resize_nearest_rgba8_with_plan_into(source, output, plan);
+                progress(height, height)?;
             }
             Self::Area(plan, scratch) => {
-                area::resize_area_rgba8_with_plan_and_scratch_into(source, output, plan, scratch)
+                progress(0, height)?;
+                area::resize_area_with_progress(source, output, plan, scratch, &mut |rows| {
+                    progress(rows, height)
+                })?;
             }
             Self::Bilinear(plan, scratch) => {
-                bilinear::resize_bilinear_rgba8_with_plan_and_scratch_into(
-                    source, output, plan, scratch,
-                )
+                progress(0, height)?;
+                bilinear::resize_bilinear_with_progress(
+                    source,
+                    output,
+                    plan,
+                    scratch,
+                    &mut |rows| progress(rows, height),
+                )?;
             }
             Self::Bicubic(plan, scratch) => {
-                bicubic::resize_bicubic_rgba8_with_plan_and_scratch_into(
-                    source, output, plan, scratch,
-                )?
+                bicubic::resize_bicubic_with_progress(source, output, plan, scratch, progress)?
             }
             Self::Lanczos(plan, scratch) => {
-                lanczos::resize_lanczos_rgba8_with_plan_and_scratch_into(
-                    source, output, plan, scratch,
-                )?
+                lanczos::resize_lanczos_with_progress(source, output, plan, scratch, progress)?
             }
             Self::Trilinear { scratch, .. } => scratch
                 .as_mut()
                 .expect("reserved trilinear scratch")
-                .execute(source, output)?,
+                .execute_with_progress(source, output, progress)?,
         }
         Ok(())
     }

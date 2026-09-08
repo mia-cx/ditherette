@@ -75,6 +75,19 @@ pub fn dither_yiluoma_into(
     size: BayerSize,
     placement: crate::prod::contract::request::Placement,
 ) {
+    dither_yiluoma_with_progress(source, prepared, indices, size, placement, |_| Ok(()))
+        .expect("disabled progress cannot fail");
+}
+
+/// Reports completed rows within the same ordered-mixture traversal.
+pub(crate) fn dither_yiluoma_with_progress(
+    source: crate::image::ImageView<'_, crate::image::Rgba8>,
+    prepared: &PreparedQuantizer,
+    indices: &mut [u8],
+    size: BayerSize,
+    placement: crate::prod::contract::request::Placement,
+    mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+) -> Result<(), crate::prod::contract::failure::Failure> {
     let dimensions = source.dimensions();
     assert_eq!(
         indices.len(),
@@ -101,5 +114,7 @@ pub fn dither_yiluoma_into(
             };
             indices[y as usize * dimensions.width_usize() + x as usize] = index;
         }
+        progress(y + 1)?;
     }
+    Ok(())
 }

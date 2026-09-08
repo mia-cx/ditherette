@@ -185,6 +185,46 @@ test('repeated success and caught failures keep externref capacity and live hand
 	assert.equal(raw.memory.buffer.byteLength, pages);
 });
 
+test('caught void progress rejects reentry and completion failure without retaining handles', async () => {
+	const { bindings, raw } = await fresh(4 << 20);
+	const input = source();
+	let failStage;
+	const sink = { value: undefined, onProgress(event) {
+		assert.equal(bindings.privateDispose(), 11);
+		assert.equal(bindings.privateResize(input, 2, 1, 3, 2, 0, 4, 0, {}), 11);
+		if (event.stage === 'complete') assert.equal(sink.value.data.length, 24);
+		if (event.stage === failStage) throw new Error('fixture progress failure');
+	} };
+	const call = () => {
+		sink.value = undefined;
+		return bindings.privateResize(input, 2, 1, 3, 2, 0, 4, 0, sink);
+	};
+	assert.equal(call(), 0);
+	const table = Object.values(raw).find(value => value instanceof WebAssembly.Table);
+	const live = () => Array.from({ length: table.length }, (_, index) => table.get(index))
+		.filter(value => value !== null).length;
+	const capacity = table.length;
+	const initialLive = live();
+	const pages = raw.memory.buffer.byteLength;
+	for (let iteration = 0; iteration < 512; iteration++) {
+		for (const stage of ['prepare', 'complete']) {
+			failStage = stage;
+			assert.equal(call(), 12);
+			assert.equal(bindings.privateErrorPath(), 38);
+			assert.equal(sink.value, undefined);
+		}
+		failStage = undefined;
+		assert.equal(call(), 0);
+	}
+	assert.equal(table.length, capacity);
+	assert.equal(live(), initialLive);
+	assert.equal(raw.memory.buffer.byteLength, pages);
+	const glue = await readFile(glueUrl, 'utf8');
+	for (const name of ['progressEnabled', 'progressClock', 'reportProgress'])
+		assert.match(glue, new RegExp(`handleError\\(function[^]*?\\b${name}\\(`));
+	bindings.privateDispose();
+});
+
 test('convolution ABI preserves landed output for every policy and anchor and rejects invalid discriminators', async () => {
 	const { bindings } = await fresh(10_000_000);
 	const input = new Uint8Array(Array.from({ length: 7 * 5 * 4 }, (_, i) => (i * 73) % 256));

@@ -27,7 +27,7 @@ export type ResizeAnchor =
 	| 'bottom'
 	| 'bottom-right';
 
-/** Measured processing work. Progress delivery is introduced in S33. */
+/** Measured work. Stage changes report immediately; same-stage events occur at most once per 50 ms. */
 export interface Progress {
 	readonly stage:
 		| 'prepare'
@@ -58,7 +58,7 @@ export interface ResizeRequest {
 			  }
 			| { readonly algorithm: 'area' };
 	};
-	/** Currently rejected explicitly. S33 adds progress delivery without changing this request shape. */
+	/** Synchronous progress. Throwing fails the call; processing and disposal cannot reenter this instance. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 
@@ -96,7 +96,7 @@ export interface QuantizeRequest {
 	readonly palette: readonly PaletteEntry[];
 	readonly alpha: AlphaPolicy;
 	readonly matching: Matching;
-	/** S33 adds progress delivery; supplied callbacks are explicitly rejected for now. */
+	/** Completion follows durable output construction and precedes successful cache publication. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 
@@ -137,7 +137,7 @@ export interface PerturbRequest {
 	readonly version: 1;
 	readonly source: Rgba8Image;
 	readonly perturb: PerturbPolicy;
-	/** S33 adds progress delivery; supplied callbacks are explicitly rejected for now. */
+	/** Completion follows durable output construction and precedes successful cache publication. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 

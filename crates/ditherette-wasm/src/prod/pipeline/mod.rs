@@ -7,6 +7,7 @@ pub mod perturb;
 mod preparation;
 pub mod process;
 pub mod processor;
+pub mod progress;
 pub mod quantize;
 mod resize;
 mod stages;

@@ -367,10 +367,8 @@ export async function browserChecks(wasmUrl) {
 	structuredClone(detached.source.data.buffer, { transfer: [detached.source.data.buffer] });
 	await error(() => active.resize(detached), 'invalid-image', 'source.data');
 	const progress = request();
-	progress.onProgress = () => {
-		throw new Error('Must not silently invoke unsupported progress');
-	};
-	await error(() => active.resize(progress), 'unsupported-operation', 'onProgress');
+	progress.onProgress = 1;
+	await error(() => active.resize(progress), 'invalid-settings', 'onProgress');
 	equal(Array.from(active.resize(request()).data), savedBytes, 'recovery after errors');
 	active.dispose();
 	return {
