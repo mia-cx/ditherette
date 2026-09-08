@@ -216,6 +216,20 @@ Final S34 ancestry and exact final-package validation remain before S39 delivery
 The returned S39 owner starts S35 native row-band adapters in `v1-s35-resize` from capability checkpoint `6296c66b`.
 This owner changes only resize/color adapters, focused native tests, S35 subjects, and its plan. Its sole new compiler assignment is local `target/compiler`.
 S34 retains loading/lifecycle ownership. Final S34 loader fixes and host-worker benchmark protocol must join before S35 artifacts or delivery.
+S34 now ships as unmerged [PR124](https://github.com/mia-cx/ditherette/pull/124) at `d4531667e1158c2068f30614f40c9d39f8c5313e`, based on final S33 `b2ca677e`.
+Trial 02 completes 40 started/reaped workers, 800 samples, 2,453 warmup calls, and 20 exact actual role pairs.
+Four case gates pass; six remain inconclusive. No confirmed >10% startup slowdown is observed.
+The pinned WebKit worker-cleanup failure and missing required-thread startup cell remain S41 release gates.
+S39 is unmerged [PR125](https://github.com/mia-cx/ditherette/pull/125) at `5938b248506ae14d24471498c3a90bb42ed3c32a`.
+Its explicit base `impl/v1-s39-base` at `2a0237680fa249e2293b991ca067d7baf05aef14` joins final S34 and S38 `0305456b`.
+Final retained S34 tarball `33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d` passes 68 focused server tests and six Chromium browser checks.
+The rebase preserves S39's head and tree. The website flag remains disabled; no compiler outputs belong to S39.
+S35 resumes from clean `20fc297b` with sole ownership of shared execution-policy and private Wasm wiring, resize adapters, and the pooled executor.
+S36 resumes from clean `7e5689ca` with quantize/field adapters and direct/separable indexed integration.
+S37 starts at final S34 `d4531667` in `v1-s37-yliluoma`, owning Yliluoma adapters and its benchmark fragment.
+All three agents use GPT-6-astra at high reasoning in separate worktrees and own only their local `target/compiler`.
+S36 coordinates Yliluoma indexed callsites with S37. Root owns final joins, tracking, package artifacts, and exclusive measurements.
+The browser/native performance discussion is an aside. Keep same-kernel timing and compilation-warmup diagnosis in S41; continue slice implementation.
 Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
 Issue #73's corrected S31 blocker is removed after ancestry and native validation.
 Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
