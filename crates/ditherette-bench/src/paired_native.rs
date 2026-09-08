@@ -28,6 +28,7 @@ use ditherette_wasm::{
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
 };
 use std::{
+    cell::RefCell,
     fs,
     time::{Duration, Instant},
 };
@@ -245,6 +246,7 @@ enum TypedWorkload<'a> {
         processor: Option<ditherette_wasm::prod::pipeline::processor::Processor>,
         cold: bool,
         output: Option<preparation::Output>,
+        audit: OutputAudit,
     },
     Process {
         call: process::CompleteCall<'a>,
@@ -277,6 +279,19 @@ enum TypedWorkload<'a> {
         source: ImageView<'a, Rgba8>,
         coordinates: Vec<f32>,
     },
+}
+
+struct OutputAudit {
+    expected: VerificationOutput,
+    first_mismatch: RefCell<Option<VerificationOutput>>,
+}
+
+impl OutputAudit {
+    fn observe(&self, output: VerificationOutput) {
+        if output != self.expected && self.first_mismatch.borrow().is_none() {
+            *self.first_mismatch.borrow_mut() = Some(output);
+        }
+    }
 }
 
 impl Workload for TypedWorkload<'_> {
@@ -359,8 +374,11 @@ impl Workload for TypedWorkload<'_> {
         Ok(())
     }
     fn consume(&self) {
-        if let Self::Processor { output, .. } = self {
+        if let Self::Processor { output, audit, .. } = self {
             std::hint::black_box(output);
+            if let Some(output) = output {
+                audit.observe(output.verification());
+            }
         }
         if let Self::Scores { values, .. } = self {
             std::hint::black_box(values);
@@ -445,6 +463,22 @@ fn run_typed(
                     call.output(&mut processor, &prime)
                         .map_err(|e| BenchError::Runtime(e.to_string()))?,
                 ));
+                let primed_output = call
+                    .output(&mut processor, &case.rgba)
+                    .map_err(|e| BenchError::Runtime(e.to_string()))?
+                    .verification();
+                if primed_output != before {
+                    let evidence = serde_json::to_vec_pretty(&(request, &before, &primed_output))
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?;
+                    fs::write(
+                        request_path.with_extension("primed-preflight-mismatch.json"),
+                        evidence,
+                    )
+                    .map_err(BenchError::io)?;
+                    return Err(BenchError::Runtime(
+                        "primed Processor differs before timing".into(),
+                    ));
+                }
                 Some(processor)
             };
             TypedWorkload::Processor {
@@ -453,6 +487,10 @@ fn run_typed(
                 processor,
                 cold,
                 output: None,
+                audit: OutputAudit {
+                    expected: before.clone(),
+                    first_mismatch: RefCell::new(None),
+                },
             }
         }
         native::NativeOperation::Process { .. } => TypedWorkload::Process {
@@ -522,8 +560,12 @@ fn run_typed(
     if let Some(error) = observer.observation_error {
         return Err(BenchError::io(error));
     }
-    let after = if let TypedWorkload::Processor { output, .. } = &workload {
-        output.as_ref().expect("measured output").verification()
+    let after = if let TypedWorkload::Processor { output, audit, .. } = &workload {
+        audit
+            .first_mismatch
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| output.as_ref().expect("measured output").verification())
     } else {
         verify(subject_id)?
     };
@@ -633,6 +675,32 @@ impl MeasurementObserver for Observer {
 mod tests {
     use super::*;
     use ditherette_bench::verification::settings_digest;
+
+    #[test]
+    fn processor_observation_retains_first_transient_mismatch() {
+        let first = VerificationOutput {
+            dimensions: Dimensions {
+                width: 1,
+                height: 1,
+            },
+            pixels: Pixels::Rgba8 {
+                data: vec![1, 2, 3, 255],
+            },
+            warnings: vec![],
+        };
+        let mut distinct = first.clone();
+        distinct.pixels = Pixels::Rgba8 {
+            data: vec![2, 2, 3, 255],
+        };
+        let audit = OutputAudit {
+            expected: first.clone(),
+            first_mismatch: RefCell::new(None),
+        };
+        audit.observe(first.clone());
+        audit.observe(distinct.clone());
+        audit.observe(first);
+        assert_eq!(*audit.first_mismatch.borrow(), Some(distinct));
+    }
 
     #[test]
     fn native_adapter_rejects_claims_it_cannot_measure_without_timing() {

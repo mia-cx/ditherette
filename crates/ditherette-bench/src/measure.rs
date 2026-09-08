@@ -900,11 +900,16 @@ mod lifecycle_tests {
     struct Tracked {
         events: RefCell<Vec<&'static str>>,
         fail: bool,
+        fail_prepare: bool,
     }
     impl Workload for Tracked {
         fn prepare_sample(&mut self) -> Result<(), BenchError> {
             self.events.borrow_mut().push("prepare");
-            Ok(())
+            if self.fail_prepare {
+                Err(BenchError::Runtime("prepare fixture".into()))
+            } else {
+                Ok(())
+            }
         }
         fn run(&mut self) -> Result<(), BenchError> {
             self.events.borrow_mut().push("run");
@@ -927,12 +932,24 @@ mod lifecycle_tests {
         let mut workload = Tracked {
             events: RefCell::default(),
             fail: true,
+            fail_prepare: false,
         };
         assert!(interactive_sample(&mut workload).is_err());
         assert_eq!(
             *workload.events.borrow(),
             ["prepare", "run", "observe", "finish"]
         );
+    }
+
+    #[test]
+    fn failed_preparation_still_finishes_without_running() {
+        let mut workload = Tracked {
+            events: RefCell::default(),
+            fail: false,
+            fail_prepare: true,
+        };
+        assert!(interactive_sample(&mut workload).is_err());
+        assert_eq!(*workload.events.borrow(), ["prepare", "finish"]);
     }
 
     #[test]
@@ -964,6 +981,7 @@ mod lifecycle_tests {
         let mut workload = Tracked {
             events: RefCell::default(),
             fail: false,
+            fail_prepare: false,
         };
         let result = measure_workload(&mut workload, (1, 1), &config, &mut Discard).unwrap();
         assert_eq!(result.sample_ns.len(), 2);
