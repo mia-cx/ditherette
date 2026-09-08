@@ -1,0 +1,9 @@
+{
+	"schema": 1,
+	"baseline": null,
+	"maximumGrowth": 0.1,
+	"holds": [
+		"Initial package size budget awaits review.",
+		"S41 release gates, including retained WebKit threaded cleanup, remain unresolved."
+	]
+}
