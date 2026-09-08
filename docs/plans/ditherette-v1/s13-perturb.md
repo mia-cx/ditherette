@@ -47,4 +47,5 @@ Read [perturb.md](../../../crates/ditherette-wasm/src/spec/dither/perturb.md) be
 It defines the shared callback signature, global draw assignment, reconstruction boundary, and temporary blue-noise registration.
 The current `BlueNoise` branch is explicitly uncertified inherited data; S14 replaces its lookup at the validated join.
 S17 supplies the completed S10 quantizer to `quantize_after_perturb` and reconciles local forward dispatch.
-S38 converts historical raw-RGB strength by `64/63.75`; normalized color-space strength needs no correction.
+S38 uses the current shared TS RGB strength constant, 96, divided by 63.75; normalized color-space strength needs no correction.
+The historical 64 value in frozen reference notes is not the current website scale.

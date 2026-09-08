@@ -105,7 +105,20 @@ S31 checkpoint `0e90491500efcad950982a5b44df6013283c44aa` copies the frozen cach
 Its 10 production baseline tests and 16 frozen cache tests pass. It retains one assigned 390 MiB worktree-local compiler cache.
 S38 resumes from planning checkpoint `aeb48baa71ee1d64ba1d50eb6d29deda55b4e054` and implements typed package mapping and worker integration.
 The S31 benchmark owner implements its eight-case cold/warm matrix and untimed setup/teardown hooks from `88eb79fc`.
-All descendants join the test-only parent repair at their next clean checkpoint. The coordinator removes restored blockers after that ancestry is verified.
+Both approved-fixture CI runs pass. S30 review fixes advance PR119 to `f408bc99a80d3c83b6caee0b5c1d19868f0db876`.
+The memory fix `aa4f78d1` stops charging an unused converter for non-separable Process recipes; five native Process tests and CI pass.
+The provenance fix `86a98935` prevents sequential browsers from replacing original native probe references.
+All 431 references and two area probes pass on each engine. The [review follow-up](../../../.plans/71-review-followup.md) records refreshed hashes without replacing measured evidence.
+The runtime checkpoint `4aad1dbe` wires preparation reuse across all five methods; seven private and 24 focused native tests pass.
+Independent review found transient diffusion scratch capacity omitted during growth. The runtime owner fixes this before measurements.
+The benchmark checkpoint `9146aac5` implements cold/warm lifecycle and verifies every native/browser sample outside timing.
+It joins the final S30 parent before fresh accepted-role builds. No benchmark is running.
+S38 is delivered in [PR120](https://github.com/mia-cx/ditherette/pull/120) at `2348acbfbcb2451598f1b1f0f5dda9415ae467b9`, initially based on `aa4f78d1`.
+Its 47 focused tests, four Chromium fixtures covering 72 mode combinations, and production build pass.
+Website mapping uses the actual shared TS RGB strength constant, 96, divided by 63.75. Historical frozen notes remain unchanged.
+Website generated-output cleanup reclaims 8.8 MB. No Rust compiler output belongs to that completed worktree.
+The website owner restacks onto final S30, then prepares the S32 plan in `.worktrees/v1-s32-stages` without runtime edits.
+The coordinator removes restored S30 blockers after descendant ancestry is verified. Remaining S31 dependencies stay blocked until delivery.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
