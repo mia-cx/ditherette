@@ -53,7 +53,7 @@ until the full implementation stack exists.
    Prove no new publication after intermediate/completion failure and successful recovery.
 4. [x] Enable typed request callbacks through the caught Wasm boundary.
    Verify callback errors, getters/reentry/disposal, result readiness, and private handle recovery.
-5. [ ] Join installed fixtures and the assigned overhead protocol; validate fresh artifacts.
+5. [x] Join installed fixtures and the assigned overhead protocol; validate fresh artifacts.
    Record exact source/artifact identities, await exclusive measurements, and file an unmerged child PR.
 
 Each completed step is a buildable commit. Count callback/control records in the
@@ -141,5 +141,18 @@ by the official native preparer's `yliluoma_conformance` executable. Tests use
 `DITHERETTE_TEST_TARBALL` and its required SHA-256, plus the existing WebKit alias.
 This record is a report-only delivery delta after the artifact source. The
 coordinator retains a clean detached `4a75d479` checkout for trial provenance.
-Build and browser jobs have drained. Exclusive measurements and the child PR remain
-pending; these correctness results make no performance claim.
+Build and browser jobs have drained. These correctness results make no performance claim.
+
+## Measured delivery
+
+The coordinator completes all six declared browser runs before transferring report and PR ownership.
+Read [the measurement report](74-benchmark-results.md) and [exact-value summary](74-benchmark-results.json) before follow-up work.
+The audit verifies 120 starts/reaps, maximum one live worker, 2,400 samples, and 60 exact role pairs.
+All 15 callback-overhead cases pass. Callback-disabled comparison passes on Firefox and WebKit.
+Chromium cold Lab76 and Lanczos3 remain inconclusive. No new confirmed regression, retry, or tuning claim follows.
+Inherited S32 cold regressions remain S41 release blockers; the coordinator owns their carry-forward.
+
+The measured runtime remains `4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4`.
+The merge-preserving rebase onto final S32 `127a0428` preserves delivery head `06d9ad07` without tree changes.
+Report-only commits follow it. Keep the detached measured-source worktree and all prepared artifacts/evidence.
+After filing the real unmerged PR, return only the six listed S33 compiler targets to the coordinator for cleanup.
