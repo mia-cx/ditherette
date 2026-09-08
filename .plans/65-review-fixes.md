@@ -26,3 +26,12 @@ ABI already retains at most 257 codes. No repository caller generates huge
 palettes; website creation/import limit them to 256 entries. Host JavaScript
 getters and proxies can execute arbitrary caller code regardless of a count cap.
 Keep the approved contract. A practical input cap needs a separate decision.
+
+Follow-up comment 3955731533 identifies SharedArrayBuffer-backed result views.
+Structured cloning preserves their shared backing, so they cannot form private
+snapshots. The collector now rejects shared result storage before retaining it.
+This applies to RGBA bytes, indexed bytes, and palette bytes, including threaded
+subjects, whose public results still need exclusively owned durable storage.
+The new test fails on the previous collector and passes after the guard.
+All 30 relevant browser, timing, and Chromium IPC checks pass. Pending role
+artifacts remain unmeasured and must rebuild with this final collector guard.
