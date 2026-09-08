@@ -96,12 +96,16 @@ The coordinator owns this ledger, the slice table, issue availability, joins, an
 PR119's [CI run](https://github.com/mia-cx/ditherette/actions/runs/34215724426) passes the exact-base guard but fails two controlled-mutation fixtures.
 The coordinator reproduces both failures with `node --test --test-name-pattern='a new procedural macro dependency|resolved JSON feature changes' tools/spec-freeze/guard.test.mjs`.
 The fixture copies the benchmark crate without its new `ditherette-bench-oracle` path dependency. Cargo fails before either intended mutation assertion.
-`guard.test.mjs` belongs to protected freeze policy. A fixture-copy fix needs explicit maintainer approval; no policy or frozen content has changed.
-All three owners are paused and drained pending that approval. Existing runtime/conformance evidence remains valid.
+Mia explicitly approves the fixture-only repair and continued implementation on 2026-09-08.
+Approved trusted parent `af59df116193398886d1111964c87eaaa6111876` adds only the omitted crate to `guard.test.mjs`'s copy list.
+PR119 head `d2356a502501b38ab4f3b476956fc90f1fbfec4a` joins that parent. All 11 mutation tests and the full trusted guard pass locally.
+Frozen source, checkpoint, checker rules, and measured runtime are unchanged. New CI runs validate the approved parent policy.
+Three GPT-6-astra high agents resume as `s31_runtime`, `s38_website`, and `s31_bench`. Their worktrees and ownership remain separate.
 S31 checkpoint `0e90491500efcad950982a5b44df6013283c44aa` copies the frozen cache model literally, without public-runtime wiring.
 Its 10 production baseline tests and 16 frozen cache tests pass. It retains one assigned 390 MiB worktree-local compiler cache.
-S38 checkpoint `aeb48baa71ee1d64ba1d50eb6d29deda55b4e054` contains only its implementation plan; no code, build, or tests have started.
-The S31 benchmark worktree remains clean at `88eb79fc`. Its proposed eight-case cold/warm matrix and untimed setup/teardown hooks await implementation.
+S38 resumes from planning checkpoint `aeb48baa71ee1d64ba1d50eb6d29deda55b4e054` and implements typed package mapping and worker integration.
+The S31 benchmark owner implements its eight-case cold/warm matrix and untimed setup/teardown hooks from `88eb79fc`.
+All descendants join the test-only parent repair at their next clean checkpoint. The coordinator removes restored blockers after that ancestry is verified.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
