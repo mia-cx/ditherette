@@ -61,6 +61,19 @@ test('installed package and actual TypeScript adapter conformance, without measu
 		}
 		fieldFixtures.push(...blueNoiseFixtures);
 	}
+	const diffusionPath = process.env.DITHERETTE_BENCH_DIFFUSION_FIXTURES;
+	if (diffusionPath) {
+		const fixtures = JSON.parse(await readFile(diffusionPath, 'utf8'));
+		assert.equal(fixtures.length, 360);
+		assert.equal(new Set(fixtures.map(({ operation }) => operation.settings.kernel)).size, 4);
+		assert.equal(new Set(fixtures.map(({ operation }) => operation.settings.feedback)).size, 2);
+		assert.equal(
+			new Set(fixtures.map(({ operation }) => operation.settings.quantize.matching)).size,
+			15
+		);
+		for (const fixture of fixtures) assert.equal(fixture.operation.operation, 'diffusion');
+		fieldFixtures.push(...fixtures);
+	}
 	const temporary = await mkdtemp(path.join(tmpdir(), 'ditherette-public-conformance-'));
 	t.after(() => rm(temporary, { recursive: true, force: true }));
 	const consumer = path.join(temporary, 'consumer');
@@ -482,7 +495,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 								request.case.browser.operation = fixture.operation;
 								const operation = await prepareOperation(request);
 								try {
-									const indexed = fixture.operation.operation === 'separable';
+									const indexed = fixture.operation.operation !== 'perturb';
 									const pixels = fixture.source.width * fixture.source.height;
 									const stability = outputStability(
 										indexed ? pixels + 1024 : pixels * 4,
@@ -526,6 +539,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 										);
 										continue;
 									}
+									if (fixture.operation.operation !== 'separable') continue;
 									// Both composition steps use actual package adapters, outside every timer.
 									const perturbTrial = structuredClone(request);
 									perturbTrial.case.browser.operation = {
@@ -593,7 +607,7 @@ test('installed package and actual TypeScript adapter conformance, without measu
 								'area-bilinear-known-vectors-and-drift',
 								'convolution-support-recipes',
 								'47-frozen-quantize-fixtures-all-15-modes-primed-and-fresh',
-								`${fieldFixtures.length}-frozen-field-fixtures-seven-spaces-primed-and-fresh`,
+								`${fieldFixtures.length}-frozen-processing-fixtures-primed-and-fresh`,
 								`${fieldFixtures.filter((fixture) => fixture.operation.operation === 'separable').length * 2}-actual-quantize-perturb-compositions-including-warning-metadata`,
 								...(fieldFixtures.some((fixture) => fixture.name.startsWith('blue-noise'))
 									? ['blue-noise-65x33-tile-boundaries']

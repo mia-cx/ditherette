@@ -80,8 +80,18 @@ function normalizePolicy(value: unknown, path: string) {
 			'Unknown reversible working space.'
 		);
 	const strength = scalar(field(policy, 'strength'), `${path}.strength`);
+	return {
+		field: fieldTag,
+		parameter,
+		space,
+		strength,
+		...normalizePlacement(field(policy, 'placement'), path)
+	};
+}
+
+function normalizePlacement(value: unknown, path: string) {
 	const inputPlacement = object(
-		field(policy, 'placement'),
+		value,
 		['mode', 'radius', 'threshold', 'softness'],
 		'invalid-settings',
 		`${path}.placement`
@@ -118,7 +128,7 @@ function normalizePolicy(value: unknown, path: string) {
 			`${path}.placement.mode`,
 			'Unknown placement mode.'
 		);
-	return { field: fieldTag, parameter, space, strength, placement, radius, threshold, softness };
+	return { placement, radius, threshold, softness };
 }
 
 function normalizationFailure(error: unknown): never {
@@ -178,19 +188,14 @@ export function validateDitherAndQuantize(value: unknown) {
 		);
 		const dither = object(
 			field(request, 'dither'),
-			['family', 'perturb'],
+			['family', 'perturb', 'kernel', 'feedback', 'strength', 'serpentine', 'placement', 'size'],
 			'invalid-settings',
 			'dither'
 		);
 		const family = field(dither, 'family');
 		let normalized;
 		if (family === 'none') {
-			if (Object.hasOwn(dither, 'perturb'))
-				throw new DitheretteError(
-					'invalid-settings',
-					'dither.perturb',
-					'None has no perturb policy.'
-				);
+			object(dither, ['family'], 'invalid-settings', 'dither');
 			normalized = {
 				family: 0,
 				field: 0,
@@ -202,13 +207,65 @@ export function validateDitherAndQuantize(value: unknown) {
 				threshold: 0,
 				softness: 0
 			};
-		} else if (family === 'separable')
+		} else if (family === 'separable') {
+			object(dither, ['family', 'perturb'], 'invalid-settings', 'dither');
 			normalized = { family: 1, ...normalizePolicy(field(dither, 'perturb'), 'dither.perturb') };
-		else
+		} else if (family === 'diffusion') {
+			object(
+				dither,
+				['family', 'kernel', 'feedback', 'strength', 'serpentine', 'placement'],
+				'invalid-settings',
+				'dither'
+			);
+			const kernel = field(dither, 'kernel');
+			const kernelTag =
+				typeof kernel === 'string'
+					? ['floyd-steinberg', 'sierra', 'sierra-lite', 'atkinson'].indexOf(kernel)
+					: -1;
+			if (kernelTag < 0)
+				throw new DitheretteError('invalid-settings', 'dither.kernel', 'Unknown diffusion kernel.');
+			const feedback = field(dither, 'feedback');
+			if (feedback !== 'srgb-bytes' && feedback !== 'matching')
+				throw new DitheretteError(
+					'invalid-settings',
+					'dither.feedback',
+					'Unknown diffusion feedback mode.'
+				);
+			const serpentine = field(dither, 'serpentine');
+			if (typeof serpentine !== 'boolean')
+				throw new DitheretteError(
+					'invalid-settings',
+					'dither.serpentine',
+					'Expected a boolean scan direction control.'
+				);
+			normalized = {
+				family: 2,
+				field: kernelTag,
+				parameter: feedback === 'srgb-bytes' ? 0 : 1,
+				space: Number(serpentine),
+				strength: scalar(field(dither, 'strength'), 'dither.strength'),
+				...normalizePlacement(field(dither, 'placement'), 'dither')
+			};
+		} else if (family === 'yliluoma') {
+			object(dither, ['family', 'size', 'placement'], 'invalid-settings', 'dither');
+			const size = field(dither, 'size');
+			if (typeof size !== 'string' || !sizes.includes(size))
+				throw new DitheretteError(
+					'invalid-settings',
+					'dither.size',
+					'Expected matrix size 2, 4, 8, or 16 as a string tag.'
+				);
+			normalized = {
+				family: 3,
+				field: 0,
+				parameter: Number(size),
+				space: 0,
+				strength: 0,
+				...normalizePlacement(field(dither, 'placement'), 'dither')
+			};
+		} else
 			throw new DitheretteError(
-				family === 'diffusion' || family === 'yliluoma'
-					? 'unsupported-operation'
-					: 'invalid-settings',
+				'invalid-settings',
 				'dither.family',
 				'This dither family is not implemented in this package checkpoint.'
 			);

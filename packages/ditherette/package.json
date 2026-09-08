@@ -21,7 +21,7 @@
 		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && node scripts/stage-wasm.mjs && tsc",
 		"check": "pnpm check:version && tsc --noEmit",
 		"test:validation": "tsc && node --test tests/validation.test.mjs",
-		"test:interface": "tsc && tsc -p tests/tsconfig.json && node --test tests/validation.test.mjs tests/public.test.mjs tests/quantize.test.mjs tests/fields.test.mjs",
+		"test:interface": "tsc && tsc -p tests/tsconfig.json && node --test tests/validation.test.mjs tests/public.test.mjs tests/quantize.test.mjs tests/fields.test.mjs tests/diffusion.test.mjs tests/yiluoma.test.mjs",
 		"test:browser": "node --test tests/tarball-browser.test.mjs",
 		"test:staging": "node --test scripts/stage-wasm.test.mjs",
 		"check:version": "node scripts/check-version.mjs"

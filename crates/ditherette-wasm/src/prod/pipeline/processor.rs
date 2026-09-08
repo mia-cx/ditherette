@@ -172,7 +172,9 @@ impl Processor {
         result
     }
 
-    /// Separable modes quantize a complete clipped/rounded RGBA8 intermediate; None is direct quantize.
+    /// Separable modes quantize a complete RGBA8 intermediate; diffusion uses three work rows.
+    /// None delegates to direct quantization.
+    /// Yliluoma searches literal ordered mixtures.
     pub fn dither_and_quantize<B: super::quantize::QuantizeBoundary>(
         &mut self,
         request: super::quantize::QuantizeRequest<'_>,
@@ -182,7 +184,7 @@ impl Processor {
         self.dither_and_quantize_with_allocator(request, dither, boundary, &mut SystemAllocator)
     }
 
-    /// Reserve the source, optional RGBA8 intermediate, indices, and palette before input copy.
+    /// Reserve the source, mode-specific scratch, indices, and palette before input copy.
     pub fn dither_and_quantize_with_allocator<
         B: super::quantize::QuantizeBoundary,
         A: Allocator,
@@ -201,35 +203,48 @@ impl Processor {
             State::Ready => {}
         }
         use crate::prod::contract::request::DitherPolicy;
-        let perturb = match dither {
-            DitherPolicy::None {} => {
-                return self.quantize_with_allocator(request, boundary, allocator)
-            }
-            DitherPolicy::Separable { perturb } => perturb,
-            _ => {
-                return Err(Failure::new(
-                    ErrorCode::UnsupportedOperation,
-                    ErrorPath::Dither,
-                ))
-            }
-        };
+        if matches!(dither, DitherPolicy::None {}) {
+            return self.quantize_with_allocator(request, boundary, allocator);
+        }
         self.state = State::Running;
+        let mode_capacity = if matches!(dither, DitherPolicy::Diffusion { .. }) {
+            size_of::<crate::prod::dither::error_diffusion::prepared::DiffusionPolicy>() as u64
+                + size_of::<DitherPolicy>() as u64
+        } else if matches!(dither, DitherPolicy::Yliluoma { .. }) {
+            size_of::<DitherPolicy>() as u64
+        } else {
+            (size_of::<crate::prod::contract::request::PerturbPolicy>() + size_of::<Vec<u8>>())
+                as u64
+        };
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
-            + size_of::<crate::prod::contract::request::PerturbPolicy>() as u64
-            + size_of::<Vec<u8>>() as u64
+            + mode_capacity
             + super::perturb::working_capacity_bytes()
             + boundary.capacity_bytes();
         self.peak_capacity = overhead;
-        let result = super::quantize::run_with_perturb(
-            request,
-            Some(perturb),
-            boundary,
-            allocator,
-            self.memory_limit,
-            overhead,
-            &mut self.peak_capacity,
-        );
+        let result = match dither {
+            DitherPolicy::Diffusion { .. } => super::diffusion::run(
+                request,
+                dither,
+                boundary,
+                allocator,
+                self.memory_limit,
+                overhead,
+                &mut self.peak_capacity,
+            ),
+            DitherPolicy::Separable { .. } | DitherPolicy::Yliluoma { .. } => {
+                super::quantize::run_with_dither(
+                    request,
+                    dither,
+                    boundary,
+                    allocator,
+                    self.memory_limit,
+                    overhead,
+                    &mut self.peak_capacity,
+                )
+            }
+            _ => unreachable!("supported family checked before entering running state"),
+        };
         self.state = State::Ready;
         result
     }

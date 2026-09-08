@@ -145,7 +145,20 @@ export interface PerturbRequest {
 export interface DitherAndQuantizeRequest extends QuantizeRequest {
 	readonly dither:
 		| { readonly family: 'none' }
-		| { readonly family: 'separable'; readonly perturb: PerturbPolicy };
+		| { readonly family: 'separable'; readonly perturb: PerturbPolicy }
+		| {
+				readonly family: 'diffusion';
+				readonly kernel: 'floyd-steinberg' | 'sierra' | 'sierra-lite' | 'atkinson';
+				readonly feedback: 'srgb-bytes' | 'matching';
+				readonly strength: number;
+				readonly serpentine: boolean;
+				readonly placement: Placement;
+		  }
+		| {
+				readonly family: 'yliluoma';
+				readonly size: '2' | '4' | '8' | '16';
+				readonly placement: Placement;
+		  };
 }
 
 /** Durable index bytes and their exact ordered palette, independent of later calls/disposal. */
@@ -168,7 +181,7 @@ export interface Ditherette {
 	quantize(request: QuantizeRequest): IndexedImage;
 	/** Perturb RGB without palette influence, preserving every source alpha byte. */
 	perturb(request: PerturbRequest): Rgba8Image;
-	/** Match reconstructed RGBA8 for separable fields, or quantize directly with family none. */
+	/** Quantize directly or apply separable fields, scalar diffusion, or literal Yliluoma mixtures. */
 	ditherAndQuantize(request: DitherAndQuantizeRequest): IndexedImage;
 	/** Release instance ownership once. Wasm pages may retain their high-water mark until collection. */
 	dispose(): void;

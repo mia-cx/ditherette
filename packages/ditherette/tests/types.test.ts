@@ -120,9 +120,21 @@ const dither: DitherAndQuantizeRequest = {
 	...quantize,
 	dither: { family: 'separable', perturb: perturb.perturb }
 };
+const diffusion: DitherAndQuantizeRequest = {
+	...quantize,
+	dither: {
+		family: 'diffusion',
+		kernel: 'atkinson',
+		feedback: 'matching',
+		strength: 1,
+		serpentine: true,
+		placement: { mode: 'everywhere' }
+	}
+};
 processor.then((instance) => {
 	const rgba: Rgba8Image = instance.perturb(perturb);
 	const indexed: IndexedImage = instance.ditherAndQuantize(dither);
+	instance.ditherAndQuantize(diffusion);
 	void rgba;
 	void indexed;
 });
@@ -137,3 +149,24 @@ void badSize;
 void blueNoise;
 void seededBlueNoise;
 void badSpace;
+const yliluoma: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	size: '16',
+	placement: { mode: 'everywhere' }
+};
+const numericMix: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	// @ts-expect-error Yliluoma size is a canonical string tag.
+	size: 4,
+	placement: { mode: 'everywhere' }
+};
+const strengthMix: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	size: '4',
+	placement: { mode: 'everywhere' },
+	// @ts-expect-error Yliluoma has no strength control.
+	strength: 1
+};
+void yliluoma;
+void numericMix;
+void strengthMix;

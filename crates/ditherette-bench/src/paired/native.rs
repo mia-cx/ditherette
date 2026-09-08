@@ -10,6 +10,12 @@ use std::io;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum NativeOperation {
+    Diffusion {
+        settings: super::diffusion::DiffusionSettings,
+    },
+    Yliluoma {
+        settings: super::yliluoma::YliluomaSettings,
+    },
     FieldComponent {
         component: ditherette_wasm::bench_subjects::fields::Component,
     },
@@ -37,6 +43,8 @@ impl NativeOperation {
         rgba: &'a [u8],
     ) -> io::Result<ReferenceRequest<'a>> {
         match self {
+            Self::Diffusion { settings } => settings.reference_request(source, rgba),
+            Self::Yliluoma { settings } => settings.reference_request(source, rgba),
             Self::Perturb { settings } => super::fields::perturb_request(*settings, source, rgba),
             Self::Separable { settings } => settings.reference_request(source, rgba),
             Self::FieldComponent { component } => {
@@ -91,6 +99,8 @@ impl NativeOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
+            Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
             Self::Perturb { .. } => "spec:perturb:request:v1",
             Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
             Self::FieldComponent { component } => component.reference_subject(),
@@ -110,6 +120,8 @@ impl NativeOperation {
 
     pub fn scope(&self) -> super::CallScope {
         match self {
+            Self::Diffusion { .. } => super::CallScope::NativeCompleteCall,
+            Self::Yliluoma { .. } => super::CallScope::NativeCompleteCall,
             Self::Perturb { .. } | Self::Separable { .. } => super::CallScope::NativeCompleteCall,
             Self::FieldComponent { component } => match component {
                 ditherette_wasm::bench_subjects::fields::Component::Inverse { .. } => {
