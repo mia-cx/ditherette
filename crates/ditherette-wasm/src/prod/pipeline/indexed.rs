@@ -36,7 +36,6 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     peak: &mut u64,
     store: &mut Store,
 ) -> Result<B::Output, Failure> {
-    let execution = store.execution_policy();
     // Process has no measured S36 complete-call class; explicit developer bands still apply.
     let measured = if resize.is_none() {
         super::row_fields::measured_indexed(
@@ -49,6 +48,16 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         None
     };
     let row_policy = store.row_policy(super::execution::ExecutionStage::Indexed, measured);
+    let mixing_policy = store.row_policy(
+        super::execution::ExecutionStage::Mixing,
+        crate::prod::dither::yiluoma::policy::measured(
+            output_dimensions,
+            request,
+            dither,
+            resize,
+            super::execution::worker_budget(),
+        ),
+    );
     let enabled = boundary.progress().is_some();
     let mut progress = super::progress::Control::new(enabled);
     progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
@@ -112,9 +121,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         let result = boundary.complete(bytes, output_dimensions, metadata);
         return call.finish(progress.finish(result, boundary.progress()));
     }
-    let mixing_policy = execution
-        .mixing
-        .filter(|_| matches!(dither, DitherPolicy::Yliluoma { .. }));
+    let mixing_policy = mixing_policy.filter(|_| matches!(dither, DitherPolicy::Yliluoma { .. }));
     let mixing_capacity = mixing_policy
         .map(|policy| {
             YliluomaBands::required_bytes(
