@@ -149,6 +149,38 @@ fn field_grids_and_adaptive_masks_use_exact_scalar_bits_without_fake_rendering()
         }
         let (expected, actual) = outputs(&operation, component.prod_subject());
         exact(&expected, &actual);
+        let record = |subject: &str, output: VerificationOutput| RecordedOutput {
+            case: identity.clone(),
+            implementation: ImplementationIdentity {
+                subject: subject.into(),
+                artifact: ArtifactIdentity {
+                    revision: "a".repeat(40),
+                    content: content_digest(subject.as_bytes()),
+                },
+            },
+            output,
+        };
+        let mut records = ThreeWayOutputs {
+            reference_state: ReferenceState::Frozen,
+            reference: Some(record(component.reference_subject(), expected.clone())),
+            accepted: Some(record(component.prod_subject(), actual.clone())),
+            candidate: Some(record(component.prod_subject(), actual.clone())),
+        };
+        let report = verify_three_way(&identity, &records, VerificationBounds::exact());
+        assert!(
+            report.release_conformant(),
+            "{component:?}: {:?}",
+            report.issues
+        );
+        let Pixels::Scores { values } = &mut records.candidate.as_mut().unwrap().output.pixels
+        else {
+            panic!("component scores")
+        };
+        values[0] = f32::from_bits(values[0].to_bits() ^ 1);
+        assert_eq!(
+            verify_three_way(&identity, &records, VerificationBounds::exact()).status,
+            VerificationStatus::Failed
+        );
         assert!(matches!(actual.pixels, Pixels::Scores { .. }));
         assert!(render_rgba(&actual).unwrap().is_none());
         let request = operation.reference_request(SOURCE, &RGBA).unwrap();
@@ -293,4 +325,132 @@ fn identities_reject_missing_inputs_unsupported_fields_and_bind_every_policy_set
     }
     .identity(SOURCE, &RGBA)
     .is_err());
+}
+
+/// Replays retained evidence only. No worker, operation, or collector runs here.
+#[test]
+#[ignore = "requires DITHERETTE_S26_RETAINED_ROOT from the coordinator"]
+fn retained_s26_native_results_reverify_without_running_workers() {
+    use ditherette_bench::paired::{
+        compare, coordinator::validate_experiment, Gate, PairReport, PreparedPair, TrialResult,
+    };
+    use std::{env, fs, io::Write, path::PathBuf};
+
+    let root = fs::canonicalize(PathBuf::from(
+        env::var_os("DITHERETTE_S26_RETAINED_ROOT").expect("retained trial root"),
+    ))
+    .unwrap();
+    let directory = root.join("native-results");
+    let mut inputs = Vec::new();
+    let mut read = |path: PathBuf| {
+        let bytes = fs::read(&path).unwrap();
+        inputs.push((path, content_digest(&bytes)));
+        bytes
+    };
+    let prepared: PreparedPair =
+        serde_json::from_slice(&read(directory.join("prepared.json"))).unwrap();
+    let original: PairReport =
+        serde_json::from_slice(&read(directory.join("report.json"))).unwrap();
+    validate_experiment(&prepared.experiment).unwrap();
+    assert_eq!(prepared.experiment.cases.len(), 25);
+    let mut files: Vec<_> = fs::read_dir(&directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .ends_with(".result.json")
+        })
+        .collect();
+    files.sort();
+    assert_eq!(files.len(), 100);
+    let trials: Vec<TrialResult> = files
+        .into_iter()
+        .map(|path| serde_json::from_slice(&read(path)).unwrap())
+        .collect();
+    let report = compare(&prepared, &trials);
+    let mut repaired = 0;
+    for ((case, old), new) in prepared
+        .experiment
+        .cases
+        .iter()
+        .zip(&original.cases)
+        .zip(&report.cases)
+    {
+        // Apply the same JSON float decoding as the stored report before comparing reports.
+        // The original sample arrays and the comparison calculation remain unchanged.
+        let new: ditherette_bench::paired::CaseComparison =
+            serde_json::from_slice(&serde_json::to_vec(new).unwrap()).unwrap();
+        assert_eq!(case.name, new.case_name);
+        assert!(
+            new.verification
+                .iter()
+                .all(ThreeWayReport::release_conformant),
+            "{}",
+            case.name
+        );
+        if case.identity.semantics.operation != Operation::FieldEvaluation {
+            assert_eq!(
+                serde_json::to_value(old).unwrap(),
+                serde_json::to_value(&new).unwrap(),
+                "unaffected case {}",
+                case.name
+            );
+            continue;
+        }
+        repaired += 1;
+        assert_eq!(old.gate, Gate::Incorrect);
+        assert!(
+            old.verification
+                .iter()
+                .all(|proof| proof.issues
+                    == ["operation requires an explicit working-space identity"])
+        );
+        assert!(!matches!(new.gate, Gate::Incorrect | Gate::Incomplete));
+        assert_eq!(old.pair_ratios, new.pair_ratios);
+        assert_eq!(old.accepted_median_ns, new.accepted_median_ns);
+        assert_eq!(old.candidate_median_ns, new.candidate_median_ns);
+        assert_eq!(old.median_ratio, new.median_ratio);
+        assert_eq!(old.resolution_limited, new.resolution_limited);
+        assert_eq!(old.issues, new.issues);
+        println!(
+            "{}: {:?} -> {:?}; four exact proofs, original samples unchanged",
+            case.name, old.gate, new.gate
+        );
+    }
+    assert_eq!(repaired, 5);
+    for (path, digest) in &inputs {
+        assert_eq!(
+            content_digest(&fs::read(path).unwrap()),
+            *digest,
+            "immutable retained input {}",
+            path.display()
+        );
+    }
+    if let Some(destination) = env::var_os("DITHERETTE_S26_REVERIFIED_REPORT") {
+        let destination = PathBuf::from(destination);
+        assert!(
+            !fs::canonicalize(destination.parent().unwrap())
+                .unwrap()
+                .starts_with(&root),
+            "derived report must be outside the immutable trial root"
+        );
+        let evidence = serde_json::json!({
+            "schema": "ditherette-untimed-s26-reverification-v1",
+            "measured_again": false,
+            "verifier_source_sha256": content_digest(include_bytes!("../src/verification.rs")),
+            "paired_comparison_source_sha256": content_digest(include_bytes!("../src/paired.rs")),
+            "replay_test_source_sha256": content_digest(include_bytes!("field_adapters.rs")),
+            "retained_inputs": inputs.into_iter().map(|(path, sha256)| serde_json::json!({ "path": path, "sha256": sha256 })).collect::<Vec<_>>(),
+            "report": report,
+        });
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(destination)
+            .unwrap()
+            .write_all(&serde_json::to_vec_pretty(&evidence).unwrap())
+            .unwrap();
+    }
 }
