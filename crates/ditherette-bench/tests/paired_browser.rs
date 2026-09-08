@@ -338,6 +338,7 @@ fn preflight_mismatch_preserves_typed_output_without_claiming_timing() {
     let decoded: TrialRequest = serde_json::from_slice(&json).unwrap();
     assert_eq!(decoded.reference_output, request.reference_output);
     let result = BrowserTransportResult {
+        reference: None,
         role: trial.role,
         pair: trial.pair,
         case_name: trial.case_name.clone(),

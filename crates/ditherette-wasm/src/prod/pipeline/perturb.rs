@@ -11,7 +11,7 @@ use crate::{
             failure::{ErrorPath, Failure},
             request::{BayerSize, Field, PerturbPolicy, Placement},
         },
-        dither::{ordered, random_noise},
+        dither::{blue_noise, ordered, random_noise},
         tiling::RowBand,
     },
 };
@@ -30,12 +30,6 @@ pub(super) const fn working_capacity_bytes() -> u64 {
 }
 
 pub(super) fn validate(policy: PerturbPolicy) -> Result<(), Failure> {
-    if matches!(policy.field, Field::BlueNoise {}) {
-        return Err(Failure::new(
-            ErrorCode::UnsupportedOperation,
-            ErrorPath::PerturbField,
-        ));
-    }
     nonnegative(policy.strength, ErrorPath::PerturbStrength)?;
     validate_placement(policy.placement)
 }
@@ -92,7 +86,7 @@ pub(super) fn execute(
                 },
             ),
             Field::Random { seed } => random_noise::random_noise_at(seed, index),
-            Field::BlueNoise {} => unreachable!("unsupported fields fail before allocation"),
+            Field::BlueNoise {} => blue_noise::blue_noise_at(x, y),
         },
     );
 }

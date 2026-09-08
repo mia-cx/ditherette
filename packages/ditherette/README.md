@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, Bayer/random perturbation, and Yliluoma dithering.
+An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, Bayer/random/blue-noise perturbation, and Yliluoma dithering.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -82,7 +82,7 @@ Transparent-only palettes produce transparent indices with the approved warning.
 The result contains durable `indices`, `palette.rgba`, `palette.transparentIndex`, and `{ code, message }` warnings.
 Quantize does not resize, dither, retain the source, or cache prepared palettes in this checkpoint.
 
-## Bayer and random fields
+## Palette-free fields
 
 ```ts
 const perturb = {
@@ -104,6 +104,7 @@ const indexed = processor.ditherAndQuantize({
 
 Bayer sizes are string tags `2`, `4`, `8`, and `16`.
 Random uses `{ algorithm: 'random', seed: 0 }`, with an unsigned 32-bit integer seed.
+Blue noise uses `{ algorithm: 'blue-noise' }`, with a fixed 32×32 tile and no size or seed controls.
 Random values depend on the global pixel index, so row scheduling does not change the sequence.
 Working spaces are `srgb`, `linear-rgb`, `oklab`, `oklch`, `cielab`, `cielch`, and `ycbcr`.
 They are independent of palette matching settings.
@@ -136,7 +137,7 @@ Matrix sizes are `'2'`, `'4'`, `'8'`, and `'16'`. Adaptive placement uses the co
 Yliluoma searches every ordered palette pair and matrix ratio. A zero adaptive mask still searches mixtures of the nearest color.
 It allocates source and index storage without an RGBA8 intermediate or mixture table.
 Exact outputs follow the frozen Wasm reference; native floating-point math can select different mixtures near ties.
-BlueNoise and diffusion are not enabled in this checkpoint.
+Diffusion is not enabled in this checkpoint.
 
 ## Initialization and ownership
 

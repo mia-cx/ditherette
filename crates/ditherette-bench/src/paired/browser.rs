@@ -402,6 +402,10 @@ pub enum TimingSkipped {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserTransportResult {
+    /// Optional only so retained pre-oracle transport records remain readable.
+    /// Newly executed browser trials require an independently identified Wasm reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<OracleOutput>,
     pub role: Role,
     pub pair: usize,
     pub case_name: String,

@@ -163,6 +163,11 @@ export async function startAssetServer(assets, isolated, trial) {
 		dataRoutes,
 		requestUrl: `/${requestPath}`,
 		resultUrl: `/${resultPath}`,
+		setReference(reference) {
+			if (requestJson === undefined || resultStarted)
+				throw new Error('Reference arrived after trial execution.');
+			requestJson = JSON.stringify({ ...trial, reference_output: reference.output });
+		},
 		get result() {
 			return result;
 		}
@@ -245,6 +250,29 @@ export async function exchangeTrial(page, server, pageEntry) {
 	return server.result;
 }
 
+/** The oracle context and server close before the caller can initialize the actual package. */
+export async function frozenBrowserReference(browser, trial) {
+	const { assets, runtime } = trial.browser;
+	const server = await startAssetServer(assets, runtime.cross_origin_isolated, trial);
+	let context;
+	try {
+		context = await browser.newContext({ serviceWorkers: 'block' });
+		await restrictContext(context, server);
+		const page = await context.newPage();
+		await page.goto(server.url);
+		const reference = await exchangeTrial(page, server, 'scripts/benchmark-oracle-page.mjs');
+		if (server.failures.length) throw new Error(server.failures.join('\n'));
+		return reference;
+	} finally {
+		try {
+			await context?.close();
+		} finally {
+			server.instance.closeAllConnections();
+			await new Promise((resolve) => server.instance.close(resolve));
+		}
+	}
+}
+
 /** Leased CLI transport. Browser/package failures propagate after all owned resources close. */
 export async function runPublicBrowser(trial) {
 	const { runtime, assets } = trial.browser;
@@ -280,6 +308,8 @@ export async function runPublicBrowser(trial) {
 			const browser = await engine.connect(browserServer.wsEndpoint());
 			const version = browser.version();
 			if (version !== runtime.browser.version) throw new Error('Browser version mismatch.');
+			const reference = await frozenBrowserReference(browser, trial);
+			server.setReference(reference);
 			const context = await browser.newContext({ serviceWorkers: 'block' });
 			try {
 				await restrictContext(context, server);
@@ -290,6 +320,7 @@ export async function runPublicBrowser(trial) {
 				page.on('pageerror', (error) => server.failures.push(String(error)));
 				await page.goto(server.url);
 				result = await exchangeTrial(page, server, assets.entries.page);
+				result.reference = reference;
 				if (server.failures.length) throw new Error(server.failures.join('\n'));
 				if (result.observation.cross_origin_isolated !== runtime.cross_origin_isolated)
 					throw new Error('Browser isolation mismatch.');
