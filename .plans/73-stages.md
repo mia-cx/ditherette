@@ -5,14 +5,19 @@ Issue [#73](https://github.com/mia-cx/ditherette/issues/73). Preparation branch
 `4aad1dbe5f3eea46d7e5d04572ac5dffae23fba9` in `.worktrees/v1-s32-stages`.
 The coordinator authorized implementation after S31 runtime
 `972d4e9a5882b25bca3de5f0786ad1525b5e6329` passed its exclusive trial.
-The branch joins final S31 PR #121 at
-`a3c9629f35280c36e838faa00e9b664b23abcb53`, which retains that validated runtime.
+The branch joins corrected S31 PR #121 at
+`59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76`. Its reviewed follow-up releases
+undersized byte scratch before replacement and counts Process's parsed diffusion policy.
 S32 now owns its assigned runtime files and tests.
 
 The validated S31 handoff advances the dependency gate. The inventory below still
 matches its actual preparation owners; final provenance is joined.
 The eventual PR base is the delivered S31 branch, currently `impl/v1-s31-preparation`.
-Only `target/compiler` inside this S32 worktree is assigned for compiler outputs.
+Native compiler output belongs to `target/compiler` inside this S32 worktree.
+Fresh Wasm compiler outputs belong to this worktree's
+`crates/ditherette-wasm/target/scalar` and `target/threads`; both were absent before
+the coordinator approved their use. Generated crate/package `dist` directories
+are local staging output. Existing shared compiler paths are not used.
 Build/test jobs may run here; measurements require coordinator clearance.
 
 ## Authority and reuse
@@ -186,3 +191,11 @@ fixtures still prove release after every mandatory allocation failure. A new
 fixture injects optional image-record failure and proves successful durable output
 and full release on disposal. The diffusion-row witness observes deallocation
 before replacement; image eviction may reduce its live-byte total further.
+
+Full native `cargo test --locked --tests` passes after the corrected parent join.
+The 14 processor tests include both physical parent witnesses and optional-record
+failure. A further native hit fixture proves normalized palette and both warnings
+survive matcher eviction, returned metadata mutation, and disposal. Public fixture
+`8bd9208138322776433cb0eb3e9dcf0f4d15de52` is joined. Source-only staging (2)
+and scalar glue (3) tests pass. Interface tests await generated scalar declarations.
+Final artifact builds wait for the coordinator's benchmark-protocol review clearance.

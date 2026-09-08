@@ -387,3 +387,60 @@ fn actual_cross_method_calls_hit_materialized_stages_for_every_family() {
     );
     assert_eq!(processor.preparation.image_stats().1, 2);
 }
+
+#[test]
+fn indexed_hits_own_complete_metadata_after_matcher_eviction_and_output_mutation() {
+    use crate::image::contracts::{NormalizedPalette, ProcessWarning};
+    struct MetadataIo(Io);
+    impl QuantizeBoundary for MetadataIo {
+        type Output = (Vec<u8>, NormalizedPalette, Vec<ProcessWarning>);
+        fn input_len(&mut self) -> Result<usize, Failure> {
+            Boundary::input_len(&mut self.0)
+        }
+        fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
+            Boundary::copy_input(&mut self.0, to)
+        }
+        fn complete(
+            &mut self,
+            bytes: &[u8],
+            _: ImageDimensions,
+            metadata: IndexedMetadataRef<'_>,
+        ) -> Result<Self::Output, Failure> {
+            Ok((
+                bytes.to_vec(),
+                metadata.palette.clone(),
+                metadata.warnings.to_vec(),
+            ))
+        }
+    }
+    let palette = [PaletteEntry::Color { rgb: [1, 2, 3] }; 257];
+    let request = QuantizeRequest {
+        alpha: AlphaPolicy::Preserve {
+            threshold: 127.9999999,
+        },
+        ..quantize(&palette)
+    };
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut io = MetadataIo(Io::new(4));
+    let expected = processor.quantize(request, &mut io).unwrap();
+    assert_eq!(expected.1.rgba.len(), 256 * 4);
+    assert_eq!(expected.2.len(), 2);
+    processor.preparation.evict_preparation();
+    let mut returned = processor
+        .quantize_with_allocator(request, &mut io, &mut NoAllocation)
+        .unwrap();
+    assert_eq!(returned, expected);
+    returned.0.fill(99);
+    returned.1.rgba.fill(99);
+    returned.2[0].message.clear();
+    assert_eq!(
+        processor
+            .quantize_with_allocator(request, &mut io, &mut NoAllocation)
+            .unwrap(),
+        expected
+    );
+    assert_eq!(processor.preparation.image_stats().1, 2);
+    processor.dispose().unwrap();
+    assert_eq!(expected.1.rgba[..4], [1, 2, 3, 255]);
+    assert!(!expected.2[0].message.is_empty());
+}
