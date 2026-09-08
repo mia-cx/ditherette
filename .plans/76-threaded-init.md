@@ -44,7 +44,7 @@ All three paths are absent at handoff. No old caches or symlinks are reused.
 1. [x] Copy the missing frozen thread-pool contract into production and verify its baseline.
 2. [x] Extend the existing AST factory and add isolated pool/bootstrap ownership.
    Prove failed startup releases acquired workers and retains valid builder lifetime.
-3. [ ] Wire typed capability selection, custom inputs, fallback, and guarded teardown.
+3. [x] Wire typed capability selection, custom inputs, fallback, and guarded teardown.
    Validate real isolated threaded instances while preserving scalar behavior.
 4. [ ] Join installed fixtures and S33 report ancestry. Build exact artifacts once coordinated.
    Verify actual browser cleanup, errors, imports, custom inputs, and callback recovery.
@@ -82,3 +82,30 @@ suite passes after this join. Existing private Wasm and package staging tests pa
 19/19. Pool unit tests and built threaded binding checks now belong to the existing
 interface/glue test commands. Package initialization documentation describes the
 selected artifact requirement, isolation, worker CSP, pool sizing, and scalar math.
+
+## Retained engine release gate
+
+The installed fixtures at `1b4bc28cd185b4987e1b251c1ac72dcbdbc16837` and startup
+protocol `bf7912db096810bf63ab3cfa39aba20f1d20291d` are joined. Scalar selection
+and partial startup cleanup pass in Chromium, Firefox, and WebKit. The partial
+failure test observes zero live worker locks before the scalar fallback fetch.
+Chromium and Firefox also pass independent pools, five-method scalar equality,
+callbacks, nine custom inputs, disposal, and processing-host termination.
+
+WebKit 26.4 retains parked Rayon worker locks after disposal and host termination.
+The fixture owner reproduces this with the upstream tiny Wasm atomic-wait module,
+without any Ditherette or Rayon import. See [WebKit bug 289686](https://bugs.webkit.org/show_bug.cgi?id=289686)
+and its [upstream fix](https://github.com/WebKit/WebKit/commit/03e836de2f7bd5627a95f60357633d59fb6bb18d).
+These failures remain an unresolved engine-specific release gate for S41.
+The coordinator permits continuing the reviewable implementation stack, not claiming
+that WebKit cleanup acceptance passed. Preserve both failing assertions.
+
+Two bounded capability experiments were rejected. A surviving waiter count and
+post-wake Wasm sentinel both classify working Chromium like WebKit, despite their
+different observed JS worker lifetimes. They do not justify changing the existing
+capability contract. No probe, browser blacklist, test skip, or scheduler rewrite
+enters production. Experimental browser jobs have drained.
+
+The trusted guard requires private functions under the existing Wasm adapter tree.
+Sizing and abandoned-builder functions now live in `wasm/threads.rs`, without
+unnecessary crate-root reexports. Frozen source and guard policy remain unchanged.

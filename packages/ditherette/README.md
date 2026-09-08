@@ -217,6 +217,10 @@ An uncaught Wasm trap retires that processor without affecting other instances.
 Wasm pages can remain at their high-water mark until the discarded module is collected.
 Recursive processing or disposal fails with `reentrant-call`, including calls from request property getters.
 
+Threaded release remains blocked on the retained WebKit 26.4 engine. Its parked Wasm workers survive termination in lifecycle tests.
+The [upstream WebKit fix](https://github.com/WebKit/WebKit/commit/03e836de2f7bd5627a95f60357633d59fb6bb18d) addresses this engine failure.
+The failing disposal and host-termination checks remain active. Scalar processing does not require a pool.
+
 ## Checkpoint scope
 
 All five synchronous processing methods, private caches, progress delivery, and optional pool initialization are available.
