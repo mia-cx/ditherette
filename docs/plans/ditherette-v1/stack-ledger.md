@@ -113,12 +113,16 @@ The runtime checkpoint `4aad1dbe` wires preparation reuse across all five method
 Independent review found transient diffusion scratch capacity omitted during growth. The runtime owner fixes this before measurements.
 The benchmark checkpoint `9146aac5` implements cold/warm lifecycle and verifies every native/browser sample outside timing.
 It joins the final S30 parent before fresh accepted-role builds. No benchmark is running.
-S38 is delivered in [PR120](https://github.com/mia-cx/ditherette/pull/120) at `2348acbfbcb2451598f1b1f0f5dda9415ae467b9`, initially based on `aa4f78d1`.
+S38 is delivered in [PR120](https://github.com/mia-cx/ditherette/pull/120) at `34ecca9063f68ccbbcb93a2e6d363bf57baa1129`, based on final S30 `f408bc99`.
 Its 47 focused tests, four Chromium fixtures covering 72 mode combinations, and production build pass.
 Website mapping uses the actual shared TS RGB strength constant, 96, divided by 63.75. Historical frozen notes remain unchanged.
 Website generated-output cleanup reclaims 8.8 MB. No Rust compiler output belongs to that completed worktree.
-The website owner restacks onto final S30, then prepares the S32 plan in `.worktrees/v1-s32-stages` without runtime edits.
-The coordinator removes restored S30 blockers after descendant ancestry is verified. Remaining S31 dependencies stay blocked until delivery.
+S32 planning checkpoint `4a2b5673216921648188f2de5c79753b7d5e0d91` lives in `.worktrees/v1-s32-stages`; no runtime work starts before S31 delivery.
+The [stage-cache plan](../../../.plans/73-stages.md) reuses the literal cache model and S31's shared store. It creates no unnecessary full-image color buffer.
+Restored S30 blockers are removed after descendant ancestry verification. Remaining S31 dependencies stay blocked until delivery.
+Accepted benchmark head `863889e52f1b752b6adfc22a9c775b3823f2997e` retains S30 runtime and adds the shared preparation benchmark protocol.
+Fresh native/public accepted artifacts live in the benchmark worktree under `target/s31-baseline-863889e-native` and `target/s31-baseline-863889e-public`.
+The S31 candidate joins that protocol before its own fresh builds. The trusted frozen guard passes after moving reference comparisons into integration tests.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -136,6 +140,8 @@ Three returned freeze-checker profiles reclaim another 0.29 GiB. Their custom ev
 The returned S30 oracle compiler cache reclaimed another 1.29 GiB. Its separately retained Wasm reference artifact is unchanged.
 Cargo clean refused the missing root `CACHEDIR.TAG`; cleanup instead removed three explicit, fingerprint-verified compiler profiles.
 After PR119 opened, ten returned S24 quantize/S30 benchmark compiler profiles reclaimed another 10.91 GiB. Disk free space is 66 GiB.
+After the S30 review fixes, its returned `target/compiler-review` cache reclaimed another 418 MiB of disk blocks.
+Current S31 builds bring worktrees to 47 GiB with 60 GiB free; active caches remain assigned until PR handoff.
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
 Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
 Total compiler cleanup reclaims about 70 GiB. New slices own only their explicitly assigned worktree-local compiler outputs.
