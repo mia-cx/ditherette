@@ -155,4 +155,6 @@ Inherited S32 cold regressions remain S41 release blockers; the coordinator owns
 The measured runtime remains `4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4`.
 The merge-preserving rebase onto final S32 `127a0428` preserves delivery head `06d9ad07` without tree changes.
 Report-only commits follow it. Keep the detached measured-source worktree and all prepared artifacts/evidence.
-After filing the real unmerged PR, return only the six listed S33 compiler targets to the coordinator for cleanup.
+The real non-draft [PR 123](https://github.com/mia-cx/ditherette/pull/123) is open on `impl/v1-s32-stages` and remains unmerged.
+Report commit `20091a51ac28d30a7221c4e2dbc3a5e5d3d97e8b` contains the audited evidence summary.
+All six listed S33 compiler targets return to the coordinator for cleanup; copied binaries and evidence remain retained.
