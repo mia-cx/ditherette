@@ -70,7 +70,7 @@ decode/crop-to-preview/export interfaces as the test boundaries.
   palette decision boundary through the installed package.
 - [x] Build the consumed workspace package before website builds and document
   its one-time development prerequisite.
-- [ ] Complete focused checks, rebase onto the actual S30 parent, and file a real
+- [x] Complete focused checks, rebase onto the actual S30 parent, and file a real
   unmerged, non-draft PR with auto-merge off. Return generated targets after drain.
 
 The retained S30 tarball is approved for website-only tests:
@@ -127,6 +127,21 @@ Svelte checking passes with zero errors and one missing-generated-types warning.
 New adapter, worker, browser test, resize, and config files pass ESLint.
 `quantize-shared.ts` has three pre-existing unused imports at the parent; exporting
 the existing matte helper leaves those inherited diagnostics unchanged.
+
+## Delivery
+
+[PR #120](https://github.com/mia-cx/ditherette/pull/120) is open and non-draft,
+with auto-merge disabled. Base is `impl/v1-s30-process` at
+`aa4f78d1d89b43e35e9a390b4102693c7519a535`. Implementation checkpoint is
+`ff4aed2102d0e3bc479a9ab8c0f681f853bbf363`; this delivery update changes only the plan.
+The production build passed again after the final parent rebase.
+
+All owned build/test/browser jobs drained before cleanup. Removed only this
+worktree's generated `.svelte-kit` and `packages/ditherette/dist`, reclaiming
+8,835,534 logical bytes. No Rust target was created. The retained S30 tarball and
+source/test evidence remain intact. Local installed dependencies remain available.
+Recreate package artifacts with the documented build, or extract the retained
+approved tarball's `package/dist` into `packages/ditherette` for the same website checks.
 
 ## Scope limits
 
