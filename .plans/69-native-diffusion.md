@@ -143,3 +143,40 @@ Built package Wasm SHA-256 values:
 
 These files are validated local artifacts, not fresh clean-checkpoint benchmark provenance. The coordinator prepares immutable measurement artifacts after the final commit.
 No measurements, candidate selection, PR filing, or issue changes occur in this checkpoint.
+
+## Permanent oracle integration and fresh preparation
+
+The S28 benchmark branch joins the permanent oracle and S27 blue-noise delivery at `4383ede30f398efb56806f8ab1ae9fcfa91bc6c3`.
+It retains both modes, exact indexed classification, and immutable first/distinct output snapshots.
+The final S27 dependency is `44cbe43546e739f3d11f7b0bd08d7453afb83da1`, including updated S26 and shared-output rejection.
+Diffusion kernels and the source-initialized three-row implementation remain unchanged from `8df7b48396aec85bf9c1a289d63973b615e31018`.
+Frozen spec, image, and policy files remain unchanged. Yliluoma stays on its sibling branch until the later combined integration.
+
+The new `diffusion_conformance` example binds all 360 original public fixtures to complete independently computed native identities.
+It recomputes native frozen output and checks the original indices/warnings before exporting.
+The permanent browser flow computes a frozen-only Wasm reference in a disposable context, then closes that context before package initialization.
+Actual primed/fresh package adapters match complete target-local indices, palettes, transparency, warnings, and durable output.
+
+Validation at `0fb19ad59e68c5227aa2ca128edab147b801500f` passes all 423 identified cases per engine in Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4.
+Those cases include 360 diffusion, 47 quantize, twelve field, and four blue-noise fixtures.
+All diffusion native/Wasm outputs agree. The only retained target difference is the already diagnosed `blue-noise-oklab-adaptive2` case.
+The run uses immutable comparison snapshots. The subsequent shared-output guard changes no package output; its 28 focused browser/timing tests pass separately.
+Seventeen native kernel/processor tests, thirteen protocol/oracle/generator tests, and 69 public/private/transport Node tests pass.
+All benchmark targets, scalar/threaded artifacts, TypeScript/declaration checks, both crate format checks, and diff checks pass.
+The coordinator's full trusted S18 guard passes at that unchanged Rust/package head, including native/Wasm/threaded isolation and compiler/dependency/syntax/content checks.
+
+Retain `target/s28-validation-01/` as untimed validation evidence, not paired trial provenance:
+
+- `diffusion.json`, `quantize.json`, `fields.json`, and `blue-noise.json` contain complete native identities and frozen outputs.
+- `oracle/manifest.json` binds frozen source, dependency features/checksums, compiler/stdlib identities, source inputs, and emitted oracle bytes.
+- `oracle-evidence/{chromium,firefox,webkit}-references.json` preserves all native and Wasm references, runtime versions, oracle manifest, and tarball digest.
+- The installed tarball SHA-256 is `920a5924cb236cc38990f82e92770c090e626632b5c36efe0bdee6ede02f545f`; the oracle stays outside it.
+- Scalar Wasm is `49dbf3a6717ae2d130e22efe7fae8bf2627288b413794193003b1f9278167182`; threads is `c8b8248e8f9d0bcbba0d10b8a74481922d9809e14557f70e638385b9f0bb82d0`.
+
+The coordinator authorizes fresh independent roles and immutable snapshots after this final parent joins.
+Prepare them under new `target/s28-trial-01/` from the clean commit containing this declaration, keeping source fixed throughout preparation.
+Use the assigned S24 quantize native target and scalar/threads children. Registry caches and previous evidence stay intact.
+Use the existing eight-case native/public generator, two pairs, and at most twenty samples per worker.
+The complete native plus three-engine public declaration remains 128 serial workers and at most 2,560 samples.
+Native roles compare borrowed-source literal full-image against the ring; public roles self-pair the identical ring package.
+Leave every measurement worker unstarted for the coordinator. No candidate selection or PR filing occurs here.
