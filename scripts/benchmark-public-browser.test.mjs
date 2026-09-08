@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,6 +10,7 @@ import {
 	allowedRequest,
 	assetPaths,
 	rejectOnPageFailure,
+	restrictContext,
 	startAssetServer
 } from './benchmark-public-browser.mjs';
 import {
@@ -303,6 +304,8 @@ test('asset server enforces closure and advertises requested isolation without r
 		assert.equal(await response.text(), 'export const fixture = true;');
 		assert.equal(response.headers.get('cross-origin-embedder-policy'), 'require-corp');
 		assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin');
+		assert.equal(response.headers.get('content-security-policy'),
+			"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self' blob:");
 		assert.equal((await fetch(`${server.url}/undeclared.js`)).status, 404);
 		assert.equal(server.failures.length, 1);
 	} finally {
@@ -311,6 +314,62 @@ test('asset server enforces closure and advertises requested isolation without r
 			await new Promise((resolve) => server.instance.close(resolve));
 		}
 		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('installed required pool starts through the restricted benchmark server without timing', {
+	skip: !process.env.DITHERETTE_BENCH_STARTUP_BUNDLE,
+	timeout: 60_000
+}, async () => {
+	const source = JSON.parse(await readFile(process.env.DITHERETTE_BENCH_STARTUP_BUNDLE, 'utf8'));
+	const provenance = JSON.parse(await readFile(source.provenance, 'utf8'));
+	const { chromium } = await import('playwright');
+	const server = await startAssetServer({
+		tree: { root: source.package, files: provenance.package },
+		entries: { package: 'dist/index.js', wasm: 'dist/wasm/threads/ditherette_wasm_bg.wasm' }
+	}, true);
+	let browser;
+	try {
+		browser = await chromium.launch({ headless: true });
+		const context = await browser.newContext();
+		await restrictContext(context, server);
+		const page = await context.newPage();
+		await page.goto(server.url);
+		const result = await rejectOnPageFailure(page, () => page.evaluate(async () => {
+			let created = 0;
+			let terminated = 0;
+			const OriginalWorker = globalThis.Worker;
+			globalThis.Worker = class extends OriginalWorker {
+				constructor(...args) { super(...args); created++; }
+				terminate() { terminated++; super.terminate(); }
+			};
+			const { createDitherette } = await import('/dist/index.js');
+			const wasm = await (await fetch('/dist/wasm/threads/ditherette_wasm_bg.wasm')).arrayBuffer();
+			let processor;
+			let output;
+			try {
+				processor = await createDitherette({ wasm, threads: 'required' });
+				output = processor.resize({
+					version: 1,
+					source: { width: 1, height: 1, data: new Uint8Array([11, 23, 47, 127]) },
+					output: { width: 1, height: 1, resize: { algorithm: 'nearest', anchor: 'center' } }
+				});
+			} finally {
+				processor?.dispose();
+				globalThis.Worker = OriginalWorker;
+			}
+			return { data: [...output.data], width: output.width, height: output.height, created, terminated };
+		}));
+		assert.deepEqual(result.data, [11, 23, 47, 127]);
+		assert.equal(result.width, 1);
+		assert.equal(result.height, 1);
+		assert.ok(result.created > 0);
+		assert.equal(result.terminated, result.created);
+		assert.deepEqual(server.failures, []);
+	} finally {
+		await browser?.close();
+		server.instance.closeAllConnections();
+		await new Promise(resolve => server.instance.close(resolve));
 	}
 });
 

@@ -93,7 +93,7 @@ export async function startAssetServer(assets, isolated, trial) {
 			}
 			response.setHeader(
 				'Content-Security-Policy',
-				"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'"
+				"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self' blob:"
 			);
 			response.setHeader('Cache-Control', 'no-store');
 			const relative = decodeURIComponent(url.pathname).slice(1);
