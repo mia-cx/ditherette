@@ -5,3 +5,4 @@ pub mod error;
 pub mod failure;
 pub mod lifecycle;
 pub mod request;
+pub mod thread_pool;

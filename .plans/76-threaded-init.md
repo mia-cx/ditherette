@@ -41,7 +41,7 @@ All three paths are absent at handoff. No old caches or symlinks are reused.
 
 ## Atomic steps
 
-1. [ ] Copy the missing frozen thread-pool contract into production and verify its baseline.
+1. [x] Copy the missing frozen thread-pool contract into production and verify its baseline.
 2. [ ] Extend the existing AST factory and add isolated pool/bootstrap ownership.
    Prove failed startup releases acquired workers and retains valid builder lifetime.
 3. [ ] Wire typed capability selection, custom inputs, fallback, and guarded teardown.
@@ -52,3 +52,8 @@ All three paths are absent at handoff. No old caches or symlinks are reused.
 
 No measurements run during implementation. Routine reviews remain deferred until
 the complete stack exists. Frozen specs and landed image arithmetic stay unchanged.
+
+The literal production thread-pool model and its mechanically redirected frozen
+fixtures pass 6/6 each under the declared local native target. Dependency installation
+uses the frozen lockfile. The pool-size calculation will call the existing
+`WorkerBudget::from_available_parallelism`, preserving its `clamp(cpus / 2, 1, 8)` policy.
