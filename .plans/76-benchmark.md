@@ -14,12 +14,13 @@ Record these scopes rather than claiming cold network or first-ever compilation 
 Run these engine-specific comparisons:
 
 1. Fresh S33 accepted versus S34 candidate, both with threads disabled, across Chromium, Firefox, and WebKit.
-2. The same S34 artifact in both roles, both with threads required, across Chromium and Firefox only.
+2. The same S34 artifact in both roles, both with threads required inside a dedicated host worker, across Chromium and Firefox only.
 
 Each comparison has two cases, two alternating role pairs, and twenty single-call samples per worker.
 Use 50 ms warmup and a 10-second measurement cap. This is 40 serial workers and at most 800 samples.
 The scalar comparison contributes 24 workers; the required-thread self-control contributes 16.
-Complete the fixed matrix once. Preserve noisy or failed cases; no retry or startup tuning belongs to S34.
+Attempt 01 is retained below. Root must approve any new artifact and measurement budget after the functional context correction.
+Preserve noisy or failed cases; no independent retry or startup tuning belongs to this worktree.
 Scalar regressions above 10% and inconclusive required evidence carry forward explicitly to S41.
 Threaded and scalar absolute times are different initialization paths, not a claim that threading should initialize faster.
 
@@ -41,6 +42,8 @@ That correction is not evidence that the pinned engine contains the fix.
 - [x] Pass the selected public threads option through the actual adapter's preload and measured create call.
 - [x] Reuse each role's existing Wasm asset entry for its selected scalar or threaded artifact. Bind exact bytes and worker assets through normal provenance.
 - [x] Add focused protocol, actual adapter, and generator tests without running timing measurements.
+- [x] Declare host-worker execution and reuse the existing collector there. Preserve historical page execution.
+- [x] Prove repeated real required initialization and exact probes in the host without timing installed calls.
 - [ ] Prepare clean revision-bound accepted and candidate artifacts after runtime validation. Preserve identical benchmark protocol in both.
 - [ ] Drain agents/builds/tests, audit processes, and run the fixed matrix only under root's exclusive clearance.
 - [ ] Record worker reaping, exact probe outputs, browser/tool versions, sample counts, startup medians, and retained artifact hashes.
@@ -61,13 +64,14 @@ These use fake clocks/packages for protocol behavior, not actual startup timing 
 The runtime/installed fixture owners supply real required-pool evidence before artifacts enter the fixed trial.
 
 Compiler ownership is listed in the artifact handoff below. No S33 compiler output is reused.
-No new helper imports or manual browser routes are needed.
+The preparer copies `benchmark-host-worker.mjs` into the existing manifest-bound script tree.
+Historical page/oracle exchanges keep their routes unchanged; only host execution loads the new helper.
 
 `startup_integration_plan regression|threaded NEW_JSON HOST_LOAD_NOTES` reuses the S20 nearest fixture and its two initialization scopes.
 The probe is exactly 1×1 RGBA `[11, 23, 47, 127]`, with 1×1 output and center nearest.
 Both plans retain two pairs, twenty samples, 50 ms warmup, and a 10-second cap.
 The generator does not select engines. The coordinator applies the engine matrix above, totaling 40 serial workers.
-The original generator fixture's 48-worker calculation describes the full three-engine matrix, not permission to run the blocked cell.
+The generator fixture's full three-engine calculation is not permission to run the blocked WebKit cell.
 Two generator fixtures pass, including frozen probe equality and the inherited S20 declaration test.
 All Rust tests/examples compile with the existing stage-example unused-import warning only.
 
@@ -77,7 +81,48 @@ Make selection in new source descriptors before immutable snapshots; preserve th
 Normal snapshot provenance binds every retained file and the selected entrypoint. Do not mutate an existing prepared snapshot.
 Accepted preparation remains final S33 runtime plus this shared protocol, never the S34 implementation.
 
-## Artifact and preparation handoff
+## Retained attempt 01
+
+Root retains `target/s34-trial-01` with all raw requests, outputs, events, and immutable snapshots.
+Twenty-four scalar workers complete 480 exact samples. The first Chromium threaded worker fails untimed preflight before any sample.
+Firefox threaded remains unrun. Root confirms all launched children are reaped and ends the quiet phase.
+The failure comes from pinned Rayon's `builder.build` reaching forbidden `Atomics.wait` on the main JavaScript thread.
+Runtime corrects requested-thread capability handling separately; this worktree changes only the declared benchmark execution context.
+Keep failed attempt 01 separate from any later evidence. Do not relabel it as a successful host-worker trial.
+
+## Host-worker protocol checkpoint
+
+Optional `browser.execution` declares `page` or `host-worker`; omitted historical records retain page execution.
+The required-thread generator declares the host context for both roles. Scalar regression stays in the page.
+The adapter rejects a context mismatch before package creation. Typed observation evidence binds the actual context to the declaration.
+Host execution currently accepts only ordinary package initialization cases.
+
+The page owns one dedicated module worker per trial. That host fetches the request and runs the existing `runTrial` and collector.
+Package import, supplied Wasm fetch, host startup, HTTP serialization, and acknowledgement remain outside each initialization timer.
+Timers run beside actual `createDitherette` calls inside the host. Per-pool worker/bootstrap loading remains inside those create calls.
+Preload, exact probes, disposal, and compiled-input preparation retain their existing untimed scopes.
+The host uploads results through the existing bounded HTTP route and reports success or the concrete failure.
+The page terminates its host after either outcome. Existing browser shutdown owns cleanup after renderer/process failure.
+The frozen oracle stays in its separate disposable page and closes before package initialization.
+
+Focused Rust browser/worker/generator suites pass 28 tests. Node browser/startup/host suites pass 22 tests with the installed fixture skipped.
+The separately enabled installed fixture passes both Wasm input forms using retained candidate `1d1cba89` in Chromium.
+Each form completes preload plus three repeated required create/probe/dispose calls without timers and returns exact RGBA.
+Every observed nested worker receives termination. This proves invocation and output, not browser-internal thread reaping or performance.
+The fake-package host fixture exercises the actual collector with a fake clock, exact output, disposal, and propagated setup failure.
+
+Reproduce the untimed host check from this worktree with an existing installed artifact descriptor:
+
+```sh
+DITHERETTE_BENCH_STARTUP_BUNDLE=/absolute/existing/bundle-source.json \
+  node --test scripts/benchmark-host-worker.test.mjs
+```
+
+The checked descriptor points to `v1-s34-threads/target/s34-candidate-1d1cba89-public/bundle-source.json`.
+That retained artifact predates the runtime capability correction; its host-worker initialization path is unchanged.
+Root must regenerate the required-thread declaration with the newly built generator because older executables omit `execution`.
+
+## Historical artifact handoff
 
 Preserve accepted artifacts built at clean `bf7912db096810bf63ab3cfa39aba20f1d20291d` in this worktree:
 
@@ -85,13 +130,14 @@ Preserve accepted artifacts built at clean `bf7912db096810bf63ab3cfa39aba20f1d20
 - `target/s34-accepted-bf7912db-public` contains the installed package, scripts, oracle, and build provenance.
 - `target/compiler/release/examples/startup_integration_plan` declares either comparison without measuring it.
 
-This matrix amendment changes documentation only. Keep accepted runtime, shared protocol, binaries, and artifacts unchanged.
+These `bf7912db` paths describe an earlier checkpoint. Attempt 01 instead uses accepted `f55f100fd3efdbe6ae63014b22d0285fa0d64d04` artifacts.
+Both artifact sets remain intact. The host-worker protocol requires new official artifacts at clean joined sources after root authorization.
 Before snapshot preparation, root retains a clean detached source checkout at `bf7912db096810bf63ab3cfa39aba20f1d20291d`.
 New accepted source descriptors point `source_checkout` there because provenance validates the exact HEAD and all tracked inputs.
 Leave the original artifact descriptor and provenance untouched. No rebuild belongs to this amendment.
 Compiler ownership remains this worktree's `target/compiler` and `crates/ditherette-wasm/target/{scalar,threads}` until root's cleanup handoff.
 
-From this worktree, declare fresh plans with the already-built generator:
+After root authorizes and builds the new protocol, declare fresh plans with that source's generator:
 
 ```sh
 target/compiler/release/examples/startup_integration_plan regression NEW_REGRESSION_JSON HOST_LOAD_NOTES
@@ -110,5 +156,7 @@ target/s34-accepted-bf7912db-native/ditherette-bench-pair prepare-browser \
   CANDIDATE_WORKER FULL_CANDIDATE_REVISION SOURCES_JSON NEW_PREPARED_DIRECTORY
 ```
 
-Prepare exactly three regression snapshots and two threaded snapshots. Record WebKit threaded as blocked without fabricating a snapshot or result.
+The command shape above remains unchanged; replace historical coordinator and worker paths with root's new revision-bound artifacts.
+The amended matrix has three regression snapshots and two threaded snapshots, subject to root's explicit new budget approval.
+Record WebKit threaded as blocked without fabricating a snapshot or result.
 Root alone grants quiet clearance and runs measurements after all builders and tests drain.
