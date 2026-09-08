@@ -68,7 +68,14 @@ Readable native baseline `3335bb69acc6762a30a0b6844aef436c2e6b8de6` passes its i
 The frozen-only Process oracle is complete at `61d338431b5bd7039fa3d1fae4dd44200abdcfc5` in `.worktrees/v1-s30-oracle`.
 Eight focused checks cover 130 resize/dither combinations, normalized identity, and output dimensions. Its isolated Wasm build passes; same-browser Process conformance is still pending.
 The benchmark agent owns `.worktrees/v1-s30-bench`, complete-call adapters, and the fixed eight-case comparison against actual staged production calls.
-Public wiring, integrated conformance, and exclusive measurements remain in progress. No new optimization is selected.
+Public runtime checkpoint `587339793cf70429b673e888a89d86a332541693` passes both builds, 42 scoped native, 33 public, and 16 private checks.
+The coordinator's full trusted S18 guard passes. Independent native and private/public reviews find no actionable issues.
+Fresh tarball SHA-256 `379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2` passes Chromium, Firefox, and WebKit.
+Each engine verifies 423 actual Process/staged compositions plus inherited field, diffusion, and target-local Yliluoma suites.
+Documentation head `963a80c56a6de8c36617cd08b14244c768b34e38` preserves those runtime bytes. Process-specific frozen browser conformance and measurements remain pending.
+The enlarged native area fixture has 125 inherited resize-byte differences, each at most one, which become seven indexed differences.
+Frozen post-resize processing of the landed resize bytes equals both actual production call paths. Only that case may opt into diagnostic non-exact measurement.
+Its frozen gate stays non-passing; Process-versus-staged equality remains mandatory. No new non-exact implementation or optimization is selected.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
