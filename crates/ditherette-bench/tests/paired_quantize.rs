@@ -115,6 +115,7 @@ fn native_and_public_quantize_scopes_fail_closed() {
     };
     case.browser = Some(BrowserCase {
         execution: None,
+        row_policy: None,
         operation: operation.clone(),
         accepted: BrowserBackend::Package,
         candidate: BrowserBackend::Package,

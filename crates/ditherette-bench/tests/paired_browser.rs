@@ -133,6 +133,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
     let browser = BrowserCase {
         execution: None,
+        row_policy: None,
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
         },
@@ -252,6 +253,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
             cache: browser.cache,
             observation: BrowserObservation {
                 execution: None,
+                row_policy: None,
                 engine: runtime.engine,
                 browser_version: runtime.browser.version.clone(),
                 node_version: runtime.node.version.clone(),
@@ -385,6 +387,85 @@ fn progress_roles_preserve_historical_json_and_bind_trial_evidence() {
     assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
     let case = &mut prepared.experiment.cases[0];
     case.measurement.application_cache = ApplicationCache::Warm;
+    assert!(validate_case(case).is_err());
+}
+
+#[test]
+fn host_complete_calls_bind_the_applied_developer_row_policy() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let browser = case.browser.as_mut().unwrap();
+    let scalar = RowBandParameters {
+        height: 0,
+        active_workers: 1,
+    };
+    let rows = RowBandParameters {
+        height: 32,
+        active_workers: 4,
+    };
+    browser.accepted = BrowserBackend::Package;
+    browser.execution = Some(BrowserExecution::HostWorker);
+    browser.threads = Some(ThreadRoles {
+        accepted: Threads::Required,
+        candidate: Threads::Required,
+    });
+    browser.row_policy = Some(RowPolicyRoles {
+        stage: RowStage::Resize,
+        accepted: scalar,
+        candidate: rows,
+    });
+    case.accepted_subject = browser.operation.subject(BrowserBackend::Package).into();
+    let thread_roles = browser.threads;
+    validate_case(case).unwrap();
+    for trial in &mut trials {
+        trial.output.implementation.subject = case.accepted_subject.clone();
+        let evidence = trial.browser.as_mut().unwrap();
+        evidence.backend = BrowserBackend::Package;
+        evidence.threads = thread_roles;
+        evidence.observation.execution = Some(BrowserExecution::HostWorker);
+        evidence.observation.row_policy = Some(RowPolicyObservation {
+            stage: RowStage::Resize,
+            parameters: if trial.role == Role::Accepted {
+                scalar
+            } else {
+                rows
+            },
+            pool_size: 8,
+        });
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    let original = trials[0].browser.as_ref().unwrap().observation.row_policy;
+    trials[0].browser.as_mut().unwrap().observation.row_policy = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().observation.row_policy = original;
+    trials[0]
+        .browser
+        .as_mut()
+        .unwrap()
+        .observation
+        .row_policy
+        .as_mut()
+        .unwrap()
+        .stage = RowStage::Indexed;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    let case = &mut prepared.experiment.cases[0];
+    case.browser
+        .as_mut()
+        .unwrap()
+        .row_policy
+        .as_mut()
+        .unwrap()
+        .candidate
+        .active_workers = 9;
+    assert!(validate_case(case).is_err());
+    case.browser
+        .as_mut()
+        .unwrap()
+        .row_policy
+        .as_mut()
+        .unwrap()
+        .candidate = rows;
+    case.browser.as_mut().unwrap().execution = None;
     assert!(validate_case(case).is_err());
 }
 

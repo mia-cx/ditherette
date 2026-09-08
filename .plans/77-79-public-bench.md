@@ -7,8 +7,8 @@ Read the coordinator execution contract and each slice's recipe fragment before 
 
 ## Steps
 
-- [ ] Permit complete package calls in the existing host-worker protocol, with focused identity tests.
-- [ ] Bind developer-only row policies to each role and apply them outside method timers through the actual public processor.
+- [x] Permit complete package calls in the existing host-worker protocol, with focused identity tests.
+- [x] Bind developer-only row policies to each role and apply them outside method timers through the actual public processor.
 - [ ] Prepare explicitly marked benchmark-feature artifacts without changing ordinary package exports or build defaults.
 - [ ] Join validated candidates, declare bounded cases and budgets, and check actual installed host calls before measurement.
 - [ ] Drain all agents/builds/tests and run one exclusive paired trial. Retain every result and select only exact complete-call wins.
@@ -26,3 +26,16 @@ Required-thread WebKit measurements remain blocked by the recorded engine cleanu
 No performance measurement runs during implementation. Only this worktree's local native
 `target/compiler` is assigned until artifact preparation receives explicit coordinator clearance.
 The browser cold-start discussion remains S41 diagnostic work, separate from these candidates.
+
+## Protocol checkpoint
+
+The strict Rust protocol accepts complete package calls in a host worker and binds
+the applied stage, band height, active workers, and actual pool capacity to the role.
+Historical records omit this metadata. Missing or different observations fail verification.
+The runner captures only its own ordinary Wasm instantiation during public factory setup,
+restores the instantiation hook immediately, then applies the benchmark-feature numeric ABI.
+Missing exports, insufficient pool capacity, and setter errors fail before timing and release ownership.
+Normal package methods and request types remain unchanged.
+
+Focused validation passes 27 Rust browser/protocol tests and 24 Node timing/policy tests.
+Actual benchmark-feature host validation remains required after the runtime join and fresh build.

@@ -47,6 +47,7 @@ pub fn case(
     };
     let browser = BrowserCase {
         execution: None,
+        row_policy: None,
         operation,
         accepted: if initialization {
             BrowserBackend::Package

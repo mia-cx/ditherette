@@ -33,6 +33,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
     for (name, native) in recipes {
         let browser = public.then(|| BrowserCase {
             execution: None,
+            row_policy: None,
             operation: blue_noise::public(&native),
             accepted: BrowserBackend::Package,
             candidate: BrowserBackend::Package,

@@ -139,6 +139,7 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
             let rgba = fixture(source);
             let browser = public.then(|| BrowserCase {
                 execution: None,
+                row_policy: None,
                 operation: operation.clone(),
                 // The website has no bicubic implementation. This is explicitly
                 // a package/package sequencing control, not a speedup claim.
