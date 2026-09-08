@@ -93,6 +93,15 @@ The preparation owner has `.worktrees/v1-s31-preparation` and private cache/scra
 The website owner has `.worktrees/v1-s38-website` and website adapter/worker mapping plus project-owned integration tests.
 The benchmark owner has `.worktrees/v1-s31-bench` and cold/warm protocol, fixtures, and report only. It does not edit production or measure independently.
 The coordinator owns this ledger, the slice table, issue availability, joins, and exclusive measurements. No benchmark is running.
+PR119's [CI run](https://github.com/mia-cx/ditherette/actions/runs/34215724426) passes the exact-base guard but fails two controlled-mutation fixtures.
+The coordinator reproduces both failures with `node --test --test-name-pattern='a new procedural macro dependency|resolved JSON feature changes' tools/spec-freeze/guard.test.mjs`.
+The fixture copies the benchmark crate without its new `ditherette-bench-oracle` path dependency. Cargo fails before either intended mutation assertion.
+`guard.test.mjs` belongs to protected freeze policy. A fixture-copy fix needs explicit maintainer approval; no policy or frozen content has changed.
+All three owners are paused and drained pending that approval. Existing runtime/conformance evidence remains valid.
+S31 checkpoint `0e90491500efcad950982a5b44df6013283c44aa` copies the frozen cache model literally, without public-runtime wiring.
+Its 10 production baseline tests and 16 frozen cache tests pass. It retains one assigned 390 MiB worktree-local compiler cache.
+S38 checkpoint `aeb48baa71ee1d64ba1d50eb6d29deda55b4e054` contains only its implementation plan; no code, build, or tests have started.
+The S31 benchmark worktree remains clean at `88eb79fc`. Its proposed eight-case cold/warm matrix and untimed setup/teardown hooks await implementation.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -113,6 +122,7 @@ After PR119 opened, ten returned S24 quantize/S30 benchmark compiler profiles re
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
 Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
 Total compiler cleanup reclaims about 70 GiB. New slices own only their explicitly assigned worktree-local compiler outputs.
+The coordinator also removes the 98 MiB syntax-checker profile created by the CI reproduction after its jobs drain.
 All other completed-slice compiler ownership has ended. [S41 retains the measured release gaps](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5582606062).
 Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
 

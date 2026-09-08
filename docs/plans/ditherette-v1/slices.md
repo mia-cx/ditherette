@@ -44,15 +44,15 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Ready | [#116](https://github.com/mia-cx/ditherette/pull/116) |
 | [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Ready | [#118](https://github.com/mia-cx/ditherette/pull/118) |
 | [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) | Ready | [#117](https://github.com/mia-cx/ditherette/pull/117) |
-| [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | Ready | [#119](https://github.com/mia-cx/ditherette/pull/119) |
-| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | In progress | - |
+| [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | CI fixture approval pending | [#119](https://github.com/mia-cx/ditherette/pull/119) |
+| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Paused for policy approval | - |
 | [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Not started | - |
 | [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Not started | - |
 | [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Not started | - |
 | [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Not started | - |
 | [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Not started | - |
 | [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Not started | - |
-| [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | In progress | - |
+| [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Paused for policy approval | - |
 | [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Not started | - |
 | [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Not started | - |
 | [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Not started | - |
