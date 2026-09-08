@@ -1,5 +1,8 @@
 # S27 blue-noise benchmark baseline
 
+Completed trial results and delivery status are in [68-benchmark-results.md](68-benchmark-results.md).
+The preparation checkpoints below retain their original holds and artifact identities as history.
+
 Issue #68. Validated blue-noise parent `e4a44b718d49c48902806c0a35726ca1acac06ef`
 joins accepted S26 delivery `eeb0ba13ec452a26780400b6b7f569c3f7730578` at `28c745a0`.
 Documentation-only join `d99ee390` also includes delivered S26 PR #115 head `bb36452ca831bad485f924e7ee007f9bbdb1cb0d`.
@@ -12,13 +15,14 @@ S26 contributes its benchmark adapters, repaired field verifier, and completed b
 - [x] Declare 68 serial workers and export matching installed-package fixtures; pass untimed native checks.
 - [x] Commit clean code and prepare independent fresh native/public role builds with all jobs drained.
 - [x] Use an independently identified frozen-only Wasm oracle for browser preflight; pass exact public conformance while retaining native diagnostics.
-- [ ] Prepare fresh independent S27 roles and immutable pairs after rebasing onto the actual updated S26 base; leave all workers unstarted.
+- [x] Prepare fresh independent S27 roles and immutable pairs after rebasing onto the actual updated S26 base; hand off unstarted workers.
+- [x] Audit the coordinator's completed 68-worker trial and record exact verification, actual samples, medians, and limitations.
 
 ## Fixed scope
 
 The accepted implementation already uses an O(1) 32×32 lookup. No new optimization candidate is proposed.
 Both roles independently rebuild the same clean revision to establish the exact baseline and check integration stability.
-Measurements remain held for the coordinator; preparation never launches a measurement worker.
+The coordinator owns measurements; preparation never launches a measurement worker.
 
 Use a varied 65×33 RGBA image to cross two tile column boundaries and one tile row boundary.
 Register one native threshold-grid component and four complete recipes:
@@ -47,7 +51,9 @@ For both public role builds, link only local Wasm target `scalar` and `threads` 
 `.worktrees/v1-s23-trilinear/crates/ditherette-wasm/target/{scalar,threads}`.
 Return those exclusive caches to the coordinator after preparation and validation finish.
 Fresh preparation uses existing source-inventory and build-provenance checks.
-No measurement, PR/issue write, merge of a PR, publishing, deployment, or candidate selection occurs in this task.
+The original preparation task excludes measurements and external writes.
+The final delivery task records the coordinator's completed trial and files the unmerged S27 PR.
+PR merging, publishing, deployment, and candidate selection remain outside its scope.
 
 ## Code validation checkpoint
 
@@ -165,3 +171,19 @@ Use the unchanged 68-worker declaration and existing immutable native/browser pr
 Preparation may snapshot all three engines but must not launch measurement workers.
 The S24 native cache and S23 scalar/threaded caches are exclusive to this preparation until the final drain handoff.
 Preserve every earlier preparation, diagnostic, and trial artifact.
+
+### Shared-backing guard and final preparation
+
+The collector now rejects shared output backing before retaining immutable comparison snapshots.
+Fix `f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395` joined through updated S26 parent `59036e1aef87943e462b4cce6b371e5edd082979`.
+The branch rebased with merges preserved. Rebased `625ff0867f77d4d0f65a5301c89833d2d96c2a87` exactly matches the prior joined tracked tree.
+Twenty-eight focused browser/timing tests pass with the shared RGBA, indices, and palette regressions.
+
+Retain `target/s27-trial-01/` as superseded preparation evidence from source `518a4f6d6c40f76928a13dc38f71866605e671bc`.
+Its four independent role builds and both roles' three-engine exact conformance passed.
+Each engine retains 63 native/Wasm references, including the unchanged Oklab byte 6792 difference of native 95 versus Wasm 94.
+Only its native snapshot was prepared. No browser snapshot or measurement worker started before the shared-backing hold.
+
+Prepare final roles and immutable snapshots under new `target/s27-trial-02/` from the clean revision containing this declaration.
+Keep that source fixed through both independent role builds, provenance checks, untimed conformance, and all four snapshots.
+Use the same 68-worker matrix. Leave all measurement workers unstarted for the coordinator's quiet-phase clearance.
