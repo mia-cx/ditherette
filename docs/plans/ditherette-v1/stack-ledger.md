@@ -152,6 +152,13 @@ The public-fixture owner switches to targeted fixes and physical-allocation test
 Only its new `target/compiler-review` belongs to this review task. Historical benchmark artifacts remain unchanged.
 S31 availability is temporarily withdrawn and #73's blocker restored until the corrected parent joins and validates in S32.
 S32 runtime/protocol work continues in isolation; neither prepares measurement artifacts against the outdated parent.
+S31 fix `59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76` resolves both findings with independently failing tests before each fix.
+All 28 focused native tests and frozen-reference CI pass. Four review threads are replied to and resolved.
+The [follow-up](../../../.plans/72-review-followup.md) records physical allocation evidence and the conditional parsed-policy charge.
+Historical S31 measurements remain bound to `972d4e9a`; the fixed-size workloads do not exercise retained-buffer growth.
+S31 availability is restored. S32 removes its blocker after joining and validating this corrected parent.
+S38 fix `0305456bc25259a92d46ded245ae09aaf407be07` caps persisted adaptive radii at the package maximum.
+All 51 mapper/worker tests, focused lint, and CI pass. Its review thread is resolved; no package, kernel, or UI changes occur.
 These three owners have disjoint source/test/protocol responsibilities. S31 compiler caches are no longer assigned to any agent.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
@@ -174,6 +181,8 @@ After the S30 review fixes, its returned `target/compiler-review` cache reclaime
 Current S31 builds bring worktrees to 47 GiB with 60 GiB free; active caches remain assigned until PR handoff.
 S31 handoff returns six compiler targets; their cleanup reclaims 6.93 GiB of disk blocks without changing retained artifact/report hashes.
 The returned trusted-checker target reclaims another 369 MiB. Future checks rebuild it when needed.
+The completed S31 review target reclaims another 516 MiB. Its retained package digest stays unchanged.
+The S38 review recreates and then removes 100 KiB of generated SvelteKit files; no Rust outputs are created.
 Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
 Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
 The entries above record each cleanup separately. New slices own only their explicitly assigned worktree-local compiler outputs.

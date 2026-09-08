@@ -45,7 +45,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Ready | [#118](https://github.com/mia-cx/ditherette/pull/118) |
 | [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) | Ready | [#117](https://github.com/mia-cx/ditherette/pull/117) |
 | [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | Ready | [#119](https://github.com/mia-cx/ditherette/pull/119) |
-| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Review fixes | [#121](https://github.com/mia-cx/ditherette/pull/121) |
+| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Ready | [#121](https://github.com/mia-cx/ditherette/pull/121) |
 | [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | In progress | - |
 | [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Not started | - |
 | [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Not started | - |
