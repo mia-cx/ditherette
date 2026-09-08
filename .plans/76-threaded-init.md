@@ -75,3 +75,10 @@ failure ordering. The public interface/type suite passes 35/35. An untimed Chrom
 check creates two actual required-thread pools, processes exact nearest output,
 disposes one twice, and verifies the second remains usable. Installed cross-engine
 cleanup evidence is still assigned to the public-fixture worktree.
+
+Final S33 PR #123 at `b2ca677ed9927165a1010f5c52646a989d8a02ca` joins at
+`591d4e5b16eae2f85fbe742344b81a2887718c13`. The full native `--locked --tests`
+suite passes after this join. Existing private Wasm and package staging tests pass
+19/19. Pool unit tests and built threaded binding checks now belong to the existing
+interface/glue test commands. Package initialization documentation describes the
+selected artifact requirement, isolation, worker CSP, pool sizing, and scalar math.

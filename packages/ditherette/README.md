@@ -25,7 +25,7 @@ try {
 }
 ```
 
-Imports perform no initialization, network requests, or worker creation. Each `createDitherette()` loads a fresh scalar instance.
+Imports perform no initialization, network requests, or worker creation. Each `createDitherette()` loads a fresh isolated instance.
 Calls are synchronous. Hosts can run them in their own worker to keep the main thread responsive.
 
 Inputs are already-cropped, packed RGBA8 `Uint8Array` views. Offset views work; detached or incorrectly sized views fail.
@@ -197,24 +197,31 @@ Exact outputs follow the frozen Wasm reference; native floating-point math can s
 `createDitherette({ memoryLimitBytes, threads, wasm })` accepts optional initialization settings.
 
 - `memoryLimitBytes` defaults to 1.5 GiB and accepts integers from 1 byte through 2 GiB. Insufficient capacity fails with `memory-limit`.
-- `threads` defaults to `disabled`. At this checkpoint, `preferred` uses scalar and `required` fails with `capability`.
+- `threads` defaults to `disabled`, which loads only scalar assets. `preferred` tries threads when capable and falls back after failed initialization cleanup.
+  `required` reports `capability` at `threads` when shared memory or workers are unavailable, or `initialization` when startup fails.
 - `wasm` accepts bytes, an offset byte view, a URL/string, a Request, a Response, or a compiled `WebAssembly.Module`.
   Caller Response/Request bodies are cloned before initialization. Default assets resolve relative to the package.
+  Custom inputs must match the selected variant. Preferred fallback retries the supplied input with scalar bindings; incompatible bytes remain an initialization error.
+
+Threads require cross-origin isolation, shared Wasm memory, and module workers. Hosts must allow the package's worker script and `blob:` bootstrap.
+Each processor owns independent module memory and its pool. Workers within that pool share only that processor's memory.
+The existing policy uses `clamp(logical CPUs / 2, 1, 8)` pool workers. Pool size is not a public option.
+Initialization creates the pool; this checkpoint still runs all five methods through the landed scalar kernels.
+Later slices select parallel jobs without changing image recipes or results.
 
 The memory limit counts private Wasm capacity and boundary copies. Caller-owned and returned JS buffers and fixed module overhead are excluded.
 Unexpected allocation/copy failures report `wasm-memory-unavailable`. Expected errors leave the processor usable.
 An uncaught Wasm trap retires that processor without affecting other instances.
 
-`dispose()` releases instance ownership and is idempotent. Processing afterward fails with `disposed` at `instance`.
+`dispose()` releases instance ownership and terminates its pool once. Processing afterward fails with `disposed` at `instance`.
 Wasm pages can remain at their high-water mark until the discarded module is collected.
 Recursive processing or disposal fails with `reentrant-call`, including calls from request property getters.
 
 ## Checkpoint scope
 
-All five synchronous processing methods are available. Caches, progress delivery,
-and threaded execution arrive in later implementation slices.
-Supplying `onProgress` currently fails explicitly with `unsupported-operation`; S33 adds progress delivery.
-S34 adds the optional threaded runtime. These are temporary slice limits, not permanent API restrictions.
+All five synchronous processing methods, private caches, progress delivery, and optional pool initialization are available.
+Progress completion follows durable output construction. A thrown callback fails the call without publishing new cache entries.
+Parallel job scheduling remains separate from pool initialization.
 The package exports no raw bindings, backend selection, cache controls, or processor counters.
 The `0.x` public target is browser ESM and browser bundlers. Node-based tests are development fixtures, not public Node support.
 
