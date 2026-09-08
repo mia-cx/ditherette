@@ -49,7 +49,7 @@ until the full implementation stack exists.
    Compare fake-clock schedules and completion permission with frozen lifecycle fixtures.
 2. [x] Add countable, fallible hooks to existing kernel loops without changing their outputs or allocations.
    Prove callback-disabled equality and abort behavior with focused native tests.
-3. [ ] Connect all five pipelines and success-only completion, including image hits.
+3. [x] Connect all five pipelines and success-only completion, including image hits.
    Prove no new publication after intermediate/completion failure and successful recovery.
 4. [ ] Enable typed request callbacks through the caught Wasm boundary.
    Verify callback errors, getters/reentry/disposal, result readiness, and private handle recovery.
@@ -76,3 +76,15 @@ All 5 progress fixtures pass. They cover all seven resize policies, one-axis and
 integer paths, scale-aware convolution, mip blending, abort, recovery, and unchanged
 prepared capacity. The full native `cargo test --locked --tests` suite passes,
 including existing independent frozen comparisons. No measurements ran.
+
+Pipeline wiring now covers all five methods and early image hits. Completion
+uses the durable boundary result before `Call.finish`; any callback error drops
+that result and leaves publication unsuccessful. Disabled calls dispatch through
+the existing no-op kernel specializations and never read the clock.
+The inline controller record belongs to the existing private capacity budget.
+
+Two focused native fixtures pass across every method. They observe readiness
+inside completion, zero retained entries after prepare/intermediate/completion
+failure, no image hits from failed calls, recovery, warm-hit completion failure,
+and no completion after final-copy rejection. Existing processor (14), Process (6),
+and diffusion (10) tests also pass, retaining the physical allocation witnesses.

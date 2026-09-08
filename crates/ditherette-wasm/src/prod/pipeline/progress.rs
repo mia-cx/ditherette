@@ -61,6 +61,17 @@ impl Control {
         self.report(callback, Stage::Complete, 1, 1)?;
         self.model.finish().map_err(|_| control_failure())
     }
+
+    /// Drops an already-built output if completion throws; the caller still owns publication.
+    pub(crate) fn finish<T>(
+        &mut self,
+        result: Result<T, Failure>,
+        callback: Option<&mut dyn Callback>,
+    ) -> Result<T, Failure> {
+        let output = result?;
+        self.complete(callback)?;
+        Ok(output)
+    }
 }
 
 fn control_failure() -> Failure {

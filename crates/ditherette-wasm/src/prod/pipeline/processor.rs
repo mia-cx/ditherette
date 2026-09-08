@@ -11,6 +11,7 @@ use super::resize::{self, PreparedResize};
 use crate::prod::contract::{
     error::ErrorCode,
     failure::{ErrorPath, Failure},
+    lifecycle::Stage,
     request::{
         Output, ResizePolicy, MAX_MEMORY_LIMIT_BYTES, MAX_OUTPUT_SIDE, MAX_PIXELS, MAX_SOURCE_SIDE,
     },
@@ -88,6 +89,7 @@ impl Processor {
     pub const fn bookkeeping_bytes(boundary_capacity: u64) -> u64 {
         (size_of::<Self>() + size_of::<Plan>()) as u64
             + super::preparation::Call::record_bytes()
+            + size_of::<super::progress::Control>() as u64
             + boundary_capacity
     }
 
@@ -380,6 +382,9 @@ impl Processor {
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
         let plan = Plan::new(request, boundary.input_len()?)?;
+        let enabled = boundary.progress().is_some();
+        let mut progress = super::progress::Control::new(enabled);
+        progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
@@ -402,7 +407,7 @@ impl Processor {
         if call.take_image(0, key) {
             let image = call.image(0).unwrap();
             let result = boundary.complete(&image.bytes, image.dimensions);
-            return call.finish(result);
+            return call.finish(progress.finish(result, boundary.progress()));
         }
         call.prepare(
             None,
@@ -417,19 +422,35 @@ impl Processor {
         )?;
         let (_, metadata, scratch) = call.parts();
         let [source, output, _, _] = &mut scratch.buffers;
-        metadata.expect("requested resize").execute(
-            ImageView::<Rgba8>::packed(source, plan.source)
-                .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?,
-            ImageViewMut::<Rgba8>::packed(output, plan.output)
-                .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?,
-        )?;
+        let source = ImageView::<Rgba8>::packed(source, plan.source)
+            .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
+        let output = ImageViewMut::<Rgba8>::packed(output, plan.output)
+            .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
+        if enabled {
+            metadata.expect("requested resize").execute_with_progress(
+                source,
+                output,
+                &mut |completed, total| {
+                    progress.report(
+                        boundary.progress(),
+                        Stage::Resize,
+                        u64::from(completed),
+                        u64::from(total),
+                    )
+                },
+            )?;
+        } else {
+            metadata
+                .expect("requested resize")
+                .execute(source, output)?;
+        }
         let content = call.content(0, 1, plan.output);
         call.retain_rgba(0, key, 1, plan.output, content, &mut self.peak_capacity);
         let bytes = call
             .image(0)
             .map_or(call.scratch.buffers[1].as_slice(), |image| &image.bytes);
         let result = boundary.complete(bytes, plan.output);
-        call.finish(result)
+        call.finish(progress.finish(result, boundary.progress()))
     }
 }
 
@@ -497,3 +518,5 @@ fn memory_limit_failure() -> Failure {
 
 #[cfg(test)]
 mod preparation_tests;
+#[cfg(test)]
+mod progress_tests;
