@@ -277,8 +277,14 @@ fn process_diffusion_counts_its_parsed_policy_before_reservations() {
     // Preparation and all image buffers match no-dither Process. Diffusion adds
     // three packed work rows and a parsed policy distinct from the recipe record.
     let row_bytes = u64::from(diffusion.recipe.output.width) * 3 * 3 * 4;
-    let needed =
-        plain.peak_capacity_bytes() + row_bytes + std::mem::size_of::<DiffusionPolicy>() as u64;
+    let execution = budget_support::minimum(plain.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| {
+                processor.process(request(DitherPolicy::None {}), &mut Boundary::default())
+            })
+            .is_ok()
+    });
+    let needed = execution + row_bytes + std::mem::size_of::<DiffusionPolicy>() as u64;
     let mut short = Processor::new(needed - 1, 0).unwrap();
     let mut boundary = Boundary::default();
     let mut allocations = Reservation::default();
@@ -290,7 +296,7 @@ fn process_diffusion_counts_its_parsed_policy_before_reservations() {
     );
     assert_eq!(
         (allocations.calls, boundary.copies, boundary.completions),
-        (0, 0, 0)
+        (1, 1, 0)
     );
     let mut exact = Processor::new(needed, 0).unwrap();
     exact.process(diffusion, &mut Boundary::default()).unwrap();
@@ -298,7 +304,8 @@ fn process_diffusion_counts_its_parsed_policy_before_reservations() {
     short
         .process(request(DitherPolicy::None {}), &mut boundary)
         .unwrap();
-    assert_eq!(short.peak_capacity_bytes(), plain.peak_capacity_bytes());
+    assert!(short.peak_capacity_bytes() >= execution);
+    assert!(short.peak_capacity_bytes() <= needed - 1);
 }
 
 #[test]

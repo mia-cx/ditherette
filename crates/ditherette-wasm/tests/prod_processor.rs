@@ -143,7 +143,7 @@ fn wider_quantize_drops_idle_bytes_before_reserving_their_replacement() {
         image::contracts::PaletteEntry,
         prod::{
             contract::request::{AlphaPolicy, MatchPolicy},
-            palette::PreparedPalette,
+            pipeline::quantize::IndexedMetadataRef,
             pipeline::quantize::{QuantizeBoundary, QuantizeRequest},
         },
     };
@@ -161,7 +161,7 @@ fn wider_quantize_drops_idle_bytes_before_reserving_their_replacement() {
             &mut self,
             _: &[u8],
             _: ImageDimensions,
-            _: &PreparedPalette,
+            _: IndexedMetadataRef<'_>,
         ) -> Result<(), Failure> {
             Ok(())
         }
