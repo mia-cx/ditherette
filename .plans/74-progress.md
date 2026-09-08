@@ -45,7 +45,7 @@ until the full implementation stack exists.
 
 ## Atomic steps
 
-1. [ ] Add the allocation-free callback boundary and copied-model progress controller.
+1. [x] Add the allocation-free callback boundary and copied-model progress controller.
    Compare fake-clock schedules and completion permission with frozen lifecycle fixtures.
 2. [ ] Add countable, fallible hooks to existing kernel loops without changing their outputs or allocations.
    Prove callback-disabled equality and abort behavior with focused native tests.
@@ -58,3 +58,9 @@ until the full implementation stack exists.
 
 Each completed step is a buildable commit. Count callback/control records in the
 existing ownership budget; callback-disabled calls must avoid clock imports.
+
+The first checkpoint adds optional borrowed callback access to both existing
+boundaries and reuses `InstanceModel` for gating. Two native tests pass, including
+fake-clock event equality against the frozen lifecycle and thrown completion/recovery.
+The callback error uses the static failure record instead of allocating diagnostic text.
+Pipeline behavior remains unchanged until the later wiring step.

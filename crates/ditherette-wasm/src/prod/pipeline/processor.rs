@@ -42,6 +42,10 @@ impl Allocator for SystemAllocator {
 /// Borrowed input and durable output boundary. Every JavaScript call is caught by the adapter.
 pub trait Boundary {
     type Output;
+    /// Borrow this call's optional caught callback without allocating a handle.
+    fn progress(&mut self) -> Option<&mut dyn super::progress::Callback> {
+        None
+    }
     fn input_len(&mut self) -> Result<usize, Failure>;
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure>;
     /// Constructs the complete durable result. Nothing is published if this fails.

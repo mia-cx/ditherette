@@ -46,6 +46,10 @@ impl<'a> From<&'a PreparedPalette> for IndexedMetadataRef<'a> {
 /// Every external read/copy/result construction is caught by the private Wasm adapter.
 pub trait QuantizeBoundary {
     type Output;
+    /// Borrow this call's optional caught callback without allocating a handle.
+    fn progress(&mut self) -> Option<&mut dyn super::progress::Callback> {
+        None
+    }
     /// Additional owned adapter records beyond the shared scalar boundary bookkeeping.
     fn capacity_bytes(&self) -> u64 {
         0
