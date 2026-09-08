@@ -85,8 +85,8 @@ not present yet. The installed workspace package resolves generated `dist` copie
 from the approved S30 tarball; its digest matches the retained evidence.
 OKLCH maps to `oklch-hue-arc`. Raw RGB separable strength uses the website's current
 byte-field scale divided by `63.75`; vector fields and diffusion use percentage divided by 100.
-Adaptive thresholds and softness retain percentage points; radius rounds with
-the existing minimum of one. Fixed-domain package placement remains the approved
+Adaptive thresholds and softness retain percentage points; radius rounds and
+clamps to the package's inclusive 1–32768 range. Fixed-domain package placement remains the approved
 replacement for the historical palette-dependent TS normalization.
 
 Runtime checkpoint: 46 mapper/worker cases pass. The flag is
@@ -154,3 +154,13 @@ S39 owns supersession, faithful fallback, and progress forwarding. S31 owns runt
 caches in its separate worktree. Package/Rust kernels, frozen files and policy,
 UI controls, publication, deployment, rollout activation, and PR merging remain
 unchanged. Integration timings require separate exclusive scheduling and clearance.
+
+## Adaptive-radius review fix
+
+PR120 review identifies persisted finite radii above the public package's maximum.
+Worker validation accepts these values, but the mapper previously clamped only the minimum.
+Four focused tests reproduce rejection-prone mappings at radius 40000 before the fix.
+The mapper now caps rounded radii at 32768 for separable and diffusion placement.
+Boundary cases cover rounding into the maximum, the exact maximum, 40000, and `Number.MAX_VALUE`.
+The mapper and worker suites pass all 51 tests. This changes no UI or package/kernel code.
+No compiler outputs are created; local Node test artifacts remain rebuildable.

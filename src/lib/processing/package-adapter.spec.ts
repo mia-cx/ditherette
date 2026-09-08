@@ -146,6 +146,27 @@ describe('website package request', () => {
 			}
 		});
 	});
+	it.each(['floyd-steinberg', 'sierra', 'sierra-lite', 'random'] as const)(
+		'caps persisted adaptive radii for %s',
+		(algorithm) => {
+			for (const placementRadius of [32767.6, 32768, 40000, Number.MAX_VALUE]) {
+				const { recipe } = packageProcessRequest(
+					source,
+					palette,
+					{
+						...settings,
+						dither: { ...settings.dither, algorithm, placement: 'adaptive', placementRadius }
+					},
+					settings.output
+				).request;
+				expect(recipe.dither).toMatchObject(
+					algorithm === 'random'
+						? { perturb: { placement: { radius: 32768 } } }
+						: { placement: { radius: 32768 } }
+				);
+			}
+		}
+	);
 	it.each(['floyd-steinberg', 'sierra', 'sierra-lite'] as const)(
 		'maps %s diffusion without the field strength adjustment',
 		(algorithm) => {
