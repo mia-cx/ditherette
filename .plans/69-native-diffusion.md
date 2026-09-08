@@ -21,7 +21,7 @@ The final S25 join includes its benchmark-module formatting correction.
 - [x] Compare all four kernels, both feedback modes, all fifteen metrics, scan orders, alpha policies, placement, failures, and complete metadata against frozen references; commit the literal baseline.
 - [x] Join accepted S26 `3915f60519995cb9087a18b3bfd6bd7220ae804a` and register the full-image native benchmark before optimization.
 - [x] Implement fallible three-row scratch with exact arithmetic and width-based capacity checks.
-- [ ] Expose all four diffusion kernels through the private processor and public package; verify public calls and memory failures.
+- [x] Expose all four diffusion kernels through the private processor and public package; verify public calls and memory failures.
 - [ ] Prepare candidate benchmark subjects for the coordinator's exclusive comparisons.
 
 ## Copy boundary
@@ -66,7 +66,7 @@ The registered subject and timed callable match frozen results for 120 kernel/fe
 
 ## Deferred scope
 
-Three-row scratch, capacity-accounted preparation, public methods, benchmark registrations, measurements, and the S28 PR remain unfinished.
+Candidate benchmark protocol completion, exclusive measurements, selection, and the S28 PR remain unfinished.
 The literal baseline and native benchmark registration are recorded before optimization starts.
 The coordinator owns integration/tracking and exclusive measurement clearance. S26 source and artifacts stay untouched.
 
@@ -81,3 +81,15 @@ The candidate's nine native tests pass, including 10,800 frozen comparisons for 
 Height growth adds only owned source and index bytes. Work-row capacity remains unchanged across heights 1, 2, 3, 7, and 19.
 Four existing field processor tests, scalar Wasm check, full crate formatting, and diff checks pass.
 Public package wiring and candidate benchmark registration follow next. No candidate is selected without the coordinator's measurements.
+
+## Public candidate checkpoint
+
+The delivered S26 dependency `bb36452ca831bad485f924e7ee007f9bbdb1cb0d` joins at `c2e3514b9c3709d46db614aab33d95a309b9d833`.
+The join's content delta matches only the accepted S26 verifier repair, tests, and documentation. Thirteen relevant benchmark tests pass.
+Private family 2 exposes diffusion through the existing borrowed numeric ABI; the signature stays unchanged.
+The package adds canonical kernel, feedback, serpentine, strength, and placement validation and publishes the same durable indexed result.
+Forty public/private Node tests pass, including 360 generated frozen diffusion vectors, arithmetic distinctions, metadata, exact budgets, copy failures, and recovery.
+Scalar and threads package artifacts build using the assigned S24 target's scalar/threads children. TypeScript and declaration fixtures pass.
+Installed-tarball conformance passes in Chromium 147.0.7727.15 and Firefox 148.0.2, including all 360 diffusion vectors without cross-origin isolation.
+WebKit 2272 cannot launch because the host lacks libwoff2dec.so.1.0.2; its fixture remains registered.
+The pnpm automatic dependency-install check rejects borrowed node_modules links; build commands use the installed tools directly. Tarball checks disable that automatic installation with `pnpm_config_verify_deps_before_run=false`.

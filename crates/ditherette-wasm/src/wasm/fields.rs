@@ -11,8 +11,8 @@ use crate::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             request::{
-                BayerSize, DitherPolicy, Field, PerturbPolicy, Placement, WorkingSpace,
-                MAX_SOURCE_SIDE,
+                BayerSize, Diffusion, DiffusionFeedback, DitherPolicy, Field, PerturbPolicy,
+                Placement, WorkingSpace, MAX_SOURCE_SIDE,
             },
         },
         pipeline::{perturb::PerturbRequest, quantize::QuantizeRequest},
@@ -60,7 +60,7 @@ pub fn private_perturb(
     result.map_or_else(status, |_| 0)
 }
 
-/// Family 0 is direct matching with zero unused field controls; family 1 is separable Bayer/random.
+/// Families 0/1 select direct/separable matching. Family 2 uses field/parameter/space for kernel/feedback/serpentine.
 /// The completed indexed result uses the same caught void sink helper as direct quantize.
 #[wasm_bindgen(js_name = privateDitherAndQuantize)]
 pub fn private_dither_and_quantize(
@@ -102,6 +102,38 @@ pub fn private_dither_and_quantize(
             1.0 => DitherPolicy::Separable {
                 perturb: parse_policy(
                     field, parameter, space, strength, placement, radius, threshold, softness,
+                )?,
+            },
+            2.0 => DitherPolicy::Diffusion {
+                kernel: match field {
+                    0.0 => Diffusion::FloydSteinberg,
+                    1.0 => Diffusion::Sierra,
+                    2.0 => Diffusion::SierraLite,
+                    3.0 => Diffusion::Atkinson,
+                    _ => return Err(invalid(ErrorPath::DitherKernel)),
+                },
+                feedback: match parameter {
+                    0.0 => DiffusionFeedback::SrgbBytes,
+                    1.0 => DiffusionFeedback::Matching,
+                    _ => return Err(invalid(ErrorPath::DitherFeedback)),
+                },
+                serpentine: match space {
+                    0.0 => false,
+                    1.0 => true,
+                    _ => return Err(invalid(ErrorPath::DitherSerpentine)),
+                },
+                strength: scalar(strength, ErrorPath::DitherStrength)?,
+                placement: parse_placement(
+                    placement,
+                    radius,
+                    threshold,
+                    softness,
+                    [
+                        ErrorPath::DitherPlacement,
+                        ErrorPath::DitherRadius,
+                        ErrorPath::DitherThreshold,
+                        ErrorPath::DitherSoftness,
+                    ],
                 )?,
             },
             _ => {
@@ -196,26 +228,47 @@ fn parse_policy(
         _ => return Err(invalid(ErrorPath::PerturbSpace)),
     };
     let strength = scalar(strength, ErrorPath::PerturbStrength)?;
-    let placement = match placement {
-        0.0 if radius == 0.0 && threshold == 0.0 && softness == 0.0 => Placement::Everywhere {},
-        0.0 => return Err(invalid(ErrorPath::PerturbPlacement)),
-        1.0 => Placement::Adaptive {
-            radius: dimension(
-                radius,
-                MAX_SOURCE_SIDE,
-                ErrorCode::InvalidSettings,
-                ErrorPath::PerturbRadius,
-            )?,
-            threshold: scalar(threshold, ErrorPath::PerturbThreshold)?,
-            softness: scalar(softness, ErrorPath::PerturbSoftness)?,
-        },
-        _ => return Err(invalid(ErrorPath::PerturbPlacement)),
-    };
+    let placement = parse_placement(
+        placement,
+        radius,
+        threshold,
+        softness,
+        [
+            ErrorPath::PerturbPlacement,
+            ErrorPath::PerturbRadius,
+            ErrorPath::PerturbThreshold,
+            ErrorPath::PerturbSoftness,
+        ],
+    )?;
     Ok(PerturbPolicy {
         field,
         space,
         strength,
         placement,
+    })
+}
+
+fn parse_placement(
+    placement: f64,
+    radius: f64,
+    threshold: f64,
+    softness: f64,
+    [placement_path, radius_path, threshold_path, softness_path]: [ErrorPath; 4],
+) -> Result<Placement, Failure> {
+    Ok(match placement {
+        0.0 if radius == 0.0 && threshold == 0.0 && softness == 0.0 => Placement::Everywhere {},
+        0.0 => return Err(invalid(placement_path)),
+        1.0 => Placement::Adaptive {
+            radius: dimension(
+                radius,
+                MAX_SOURCE_SIDE,
+                ErrorCode::InvalidSettings,
+                radius_path,
+            )?,
+            threshold: scalar(threshold, threshold_path)?,
+            softness: scalar(softness, softness_path)?,
+        },
+        _ => return Err(invalid(placement_path)),
     })
 }
 

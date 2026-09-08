@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, and Bayer/random perturbation.
+An MIT-licensed browser ESM image processor. This private checkpoint supports scalar resize, palette quantization, Bayer/random perturbation, and error diffusion.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -115,7 +115,26 @@ Zero strength preserves every source byte. Both placement modes preserve alpha a
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
 Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are reserved before input copy.
 Results remain durable after later calls and disposal. No field buffers or prepared palettes are cached.
-BlueNoise, diffusion, and Yliluoma are not enabled in this checkpoint.
+BlueNoise and Yliluoma are not enabled in this checkpoint.
+
+## Error diffusion
+
+```ts
+const indexed = processor.ditherAndQuantize({
+	version: 1, source, palette, alpha, matching,
+	dither: {
+		family: 'diffusion', kernel: 'floyd-steinberg', feedback: 'srgb-bytes',
+		strength: 1, serpentine: true, placement: { mode: 'everywhere' }
+	}
+});
+```
+
+Kernels are `floyd-steinberg`, `sierra`, `sierra-lite`, and `atkinson`.
+`srgb-bytes` feedback rounds and clips before matching. `matching` feedback keeps unrounded coordinates in the selected matching space.
+Serpentine scanning reverses alternate rows. Adaptive placement uses the unchanged source and the matching space.
+Preserved transparent pixels discard incoming error and emit none. Palette order, duplicates, and warnings follow direct quantization.
+Diffusion stays scalar and reserves three work rows. Scratch capacity scales with width; owned source and index buffers also count toward the limit.
+An arithmetic overflow returns `runtime` at `dither.arithmetic`, publishes no result, and leaves the instance usable.
 
 ## Initialization and ownership
 
