@@ -83,7 +83,10 @@ pub fn private_execution_policy(
     active_workers: u32,
     pool_size: u32,
 ) -> u32 {
-    use crate::prod::{pipeline::execution::RowBandPolicy, tiling::WorkerBudget};
+    use crate::prod::{
+        pipeline::execution::{ExecutionStage, RowBandPolicy},
+        tiling::WorkerBudget,
+    };
     let mut processor = match take_ready() {
         Ok(processor) => processor,
         Err(error) => return status(error),
@@ -93,20 +96,10 @@ pub fn private_execution_policy(
         workers: WorkerBudget::new(pool_size),
         active_workers,
     });
-    let mut policy = processor.execution_policy();
     let result = match stage {
-        0 => {
-            policy.resize = band;
-            processor.set_execution_policy(policy)
-        }
-        1 => {
-            policy.indexed = band;
-            processor.set_execution_policy(policy)
-        }
-        2 => {
-            policy.mixing = band;
-            processor.set_execution_policy(policy)
-        }
+        0 => processor.set_execution_stage(ExecutionStage::Resize, band),
+        1 => processor.set_execution_stage(ExecutionStage::Indexed, band),
+        2 => processor.set_execution_stage(ExecutionStage::Mixing, band),
         _ => Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control)),
     };
     restore_ready(processor);

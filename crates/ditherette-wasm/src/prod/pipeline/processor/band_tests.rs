@@ -8,7 +8,7 @@ use crate::{
             request::*,
         },
         pipeline::{
-            execution::{ExecutionPolicy, RowBandPolicy},
+            execution::{ExecutionPolicy, ExecutionStage, RowBandPolicy},
             progress::Callback,
         },
         tiling::WorkerBudget,
@@ -136,6 +136,89 @@ fn policy(height: u32, workers: u32) -> ExecutionPolicy {
         }),
         ..Default::default()
     }
+}
+
+#[test]
+fn stage_overrides_preserve_automatic_and_explicit_other_stages() {
+    let check = || {
+        let mut processor = Processor::new(1 << 20, 0).unwrap();
+        let measured = policy(16, 2).resize;
+        let automatic = processor
+            .preparation
+            .row_policy(ExecutionStage::Resize, measured);
+        #[cfg(feature = "threads")]
+        assert_eq!(automatic.unwrap().active_workers, 2);
+        #[cfg(not(feature = "threads"))]
+        assert_eq!(automatic, None);
+        assert_eq!(
+            processor
+                .preparation
+                .row_policy(ExecutionStage::Resize, policy(16, 8).resize),
+            None,
+            "automatic selection must not invent an unmeasured worker count"
+        );
+
+        processor
+            .set_execution_stage(ExecutionStage::Resize, None)
+            .unwrap();
+        assert_eq!(
+            processor
+                .preparation
+                .row_policy(ExecutionStage::Resize, measured),
+            None
+        );
+        assert_eq!(
+            processor
+                .preparation
+                .row_policy(ExecutionStage::Indexed, measured),
+            automatic
+        );
+
+        processor
+            .set_execution_stage(ExecutionStage::Indexed, policy(3, 8).resize)
+            .unwrap();
+        let indexed = processor
+            .preparation
+            .row_policy(ExecutionStage::Indexed, None)
+            .unwrap();
+        assert_eq!(indexed.height, 3);
+        #[cfg(feature = "threads")]
+        assert_eq!(
+            (indexed.workers.pool_size(), indexed.active_workers),
+            (2, 2)
+        );
+        assert_eq!(
+            processor
+                .preparation
+                .row_policy(ExecutionStage::Resize, measured),
+            None
+        );
+        assert_eq!(
+            processor
+                .preparation
+                .row_policy(ExecutionStage::Mixing, measured),
+            automatic
+        );
+
+        processor
+            .set_execution_policy(ExecutionPolicy::default())
+            .unwrap();
+        for stage in [
+            ExecutionStage::Resize,
+            ExecutionStage::Indexed,
+            ExecutionStage::Mixing,
+        ] {
+            assert_eq!(processor.preparation.row_policy(stage, measured), None);
+        }
+    };
+    #[cfg(feature = "threads")]
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .unwrap()
+        .install(check);
+    #[cfg(not(feature = "threads"))]
+    check();
 }
 
 #[test]

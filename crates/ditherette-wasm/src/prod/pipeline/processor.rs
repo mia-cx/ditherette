@@ -96,6 +96,32 @@ impl Processor {
         &mut self,
         policy: super::execution::ExecutionPolicy,
     ) -> Result<(), Failure> {
+        self.validate_execution_policy(policy)?;
+        self.preparation.execution = policy;
+        self.preparation.execution_overrides = 0b111;
+        Ok(())
+    }
+
+    /// Override only this stage; None explicitly forces its scalar path.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn set_execution_stage(
+        &mut self,
+        stage: super::execution::ExecutionStage,
+        band: Option<super::execution::RowBandPolicy>,
+    ) -> Result<(), Failure> {
+        let mut policy = self.preparation.execution;
+        policy.set_stage(stage, band);
+        self.validate_execution_policy(policy)?;
+        self.preparation.execution = policy;
+        self.preparation.execution_overrides |= stage.mask();
+        Ok(())
+    }
+
+    #[cfg(any(test, feature = "bench-subjects"))]
+    fn validate_execution_policy(
+        &self,
+        policy: super::execution::ExecutionPolicy,
+    ) -> Result<(), Failure> {
         match self.state {
             State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
             State::Running => {
@@ -110,7 +136,6 @@ impl Processor {
         {
             return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control));
         }
-        self.preparation.execution = policy;
         Ok(())
     }
 
