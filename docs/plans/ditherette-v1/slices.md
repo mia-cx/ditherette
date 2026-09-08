@@ -49,12 +49,12 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Ready | [#122](https://github.com/mia-cx/ditherette/pull/122) |
 | [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Ready | [#123](https://github.com/mia-cx/ditherette/pull/123) |
 | [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Ready | [#124](https://github.com/mia-cx/ditherette/pull/124) |
-| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | In progress | - |
-| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | In progress | - |
-| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | In progress | - |
+| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Ready | [#126](https://github.com/mia-cx/ditherette/pull/126) |
+| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Ready | [#127](https://github.com/mia-cx/ditherette/pull/127) |
+| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Ready | [#128](https://github.com/mia-cx/ditherette/pull/128) |
 | [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Ready | [#120](https://github.com/mia-cx/ditherette/pull/120) |
 | [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Ready | [#125](https://github.com/mia-cx/ditherette/pull/125) |
-| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Not started | - |
+| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | In progress | - |
 | [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Not started | - |
 | [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Not started | - |
 | [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Not started | - |

@@ -17,6 +17,28 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### S35 through S40 handoff, 2026-09-09
+
+Thirty-nine slices have open, unmerged implementation PRs. S40 is in progress.
+
+| Slice | PR | Branch | Immediate base | Head |
+| --- | --- | --- | --- | --- |
+| S35 | [126](https://github.com/mia-cx/ditherette/pull/126) | `delivery/v1-s35-resize` | `impl/v1-s34-threads` | `6bbe113b99a08f2a11ade6296ddf7f25e32e041b` |
+| S36 | [127](https://github.com/mia-cx/ditherette/pull/127) | `delivery/v1-s36-fields-final` | `delivery/v1-s35-resize` | `b542bd94a5dbc724de73815ae0008a22985147fd` |
+| S37 | [128](https://github.com/mia-cx/ditherette/pull/128) | `delivery/v1-s37-yliluoma` | `delivery/v1-s36-fields-final` | `91b114ba610588c504a7551e8123d72e36eb9e66` |
+
+S35 starts from final S34 `d4531667e1158c2068f30614f40c9d39f8c5313e`.
+The pure S36 publication excludes S37 implementation. Historical combined S36 remains preserved on its old branch.
+Both downstream branches include their published parents. All production/build inputs at S37 equal tested `dc81818a`.
+The ordinary tarball SHA-256 is `1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+The trusted frozen guard and 23 automatic-policy browser checks pass, including nine cases per Chromium/Firefox engine.
+Existing frozen bilinear drift and noisy performance comparisons remain S41 gates.
+
+S40 base `5fccb9e6a51c6de49fd0051b204fb16bfde75e22` joins final S37 and S39 `5938b248506ae14d24471498c3a90bb42ed3c32a`.
+Root owns `impl/v1-s40-conformance`, shared fixtures, CI, and delivery.
+Memory fixture `e72cbe7b8a8eb56569a9ff76c1101a748999c180` joins from its isolated branch.
+The S41 preparation agent only inspected existing matrices and evidence. No benchmark runs during conformance.
+
 Current integration work continues on `impl/v1-resize-integration` in `.worktrees/v1-resize-integration`.
 It owns the tracked progress table; the root table remains the visible mirror.
 S21 public area/bilinear checkpoint `056a1324` joins at `b52d1c8b`, with native/package/three-engine conformance passing.
