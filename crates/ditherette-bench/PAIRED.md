@@ -77,8 +77,23 @@ Cold creates an empty processor before every call timer and disposes it after ob
 Warm primes once with every red source byte XOR 255, then restores the measured input.
 The retained processor reuses preparation across ordinary calls with unchanged geometry, settings, and palette.
 Identity binds measured input bytes. Key preparation and boundary copies remain timed.
-Source-content hashing is absent until its production implementation exists.
+These preparation-only artifacts do not hash source content.
 Cache cases reject throughput and initialization scopes. Historical `"none"` metadata remains supported.
+
+Image-stage reuse cases use `stage_integration_plan native|public DESTINATION HOST_LOAD_NOTES`.
+They use the same worker and sample bounds, with the matrix declared in `.plans/73-benchmark.md`.
+Their role metadata declares `"accepted":"preparation"` and `"candidate":"image-stages"`.
+Warm cases also declare `sample_prime` inside `roles`, with browser preparation `"primed-sample"`.
+Supported primes are `same-call`, `resize`, `perturb`, and `no-dither`.
+Each warm call gets a fresh processor and its declared prime outside timing.
+This includes warmup, discarded calls, and preflight. Partial-stage cases never accumulate a final-output hit across samples.
+Historical `"primed-instance"` retains its once-per-worker, changed-source preparation prime.
+
+Each stage prime's actual output must match its own target-local frozen output before timing starts.
+Every measured output is observed before teardown. Failed setup releases its processor and retains the concrete failure.
+Native Processor subjects retain their owned results until untimed observation and release prior results outside the next timer.
+Their ordinary input copies, production hashes, preparation, and durable output copies remain timed.
+Cold cases create empty processors per call and include hashing overhead when the artifact implements it.
 
 Follow [exclusive execution](EXECUTION.md). Drain agents, compilers, builds, and
 tests before setting the quiet attestation. Do not invoke Cargo during trials.
@@ -115,8 +130,8 @@ Native complete quantize borrows source bytes and includes preparation, output a
 and result destruction. Packed-forward conversion excludes table construction and output
 allocation. Its per-iteration output barrier prevents dead-store removal. All native
 scopes exclude fixture decoding and verification. Public calls include the actual package
-boundary, with no benchmark-only hashing. Current package caches are absent; fresh/primed
-instances do not imply cold/warm application caches.
+boundary, with no benchmark-only hashing. Historical `"none"` metadata makes no application-cache claim;
+explicit role metadata and the lifecycle above describe cache comparisons.
 
 Native quantize and color conformance checks the outputs before and after measurement.
 It does not observe every timed output or detect transient A/B/A changes. The typed registry

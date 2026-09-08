@@ -402,6 +402,7 @@ impl<'a> Call<'a> {
             let planned_capacity = length.max(buffer.capacity()) as u64;
             buffer.clear();
             if buffer.capacity() < length {
+                *buffer = Vec::new();
                 allocator.reserve(buffer, length)?;
             }
             actual += buffer.capacity() as u64;
