@@ -29,8 +29,6 @@ let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
 let workerNeedsReplacement = false;
-// Worker replacement must not retry a known package initialization failure during this page session.
-let typeScriptFallback = false;
 
 const SLIDER_DEBOUNCE_MS = 180;
 const OUTPUT_SLIDER_FIELDS = new Set<keyof OutputSettings>([
@@ -165,8 +163,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 					colorSpace: colorSpace.get()
 				},
 				palette: selectedPalette.get(),
-				settingsHash: hash,
-				...(typeScriptFallback ? { typeScriptFallback: true } : {})
+				settingsHash: hash
 			} satisfies WorkerRequest);
 		};
 
@@ -202,17 +199,6 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				});
 				return;
 			}
-			if (message.type === 'fallback') {
-				if (typeScriptFallback) {
-					settle(reject, new Error('Worker repeated an initialization fallback request.'));
-					processingProgress.set(undefined);
-					return;
-				}
-				typeScriptFallback = true;
-				processingProgress.set({ stage: message.message, progress: 0 });
-				postProcessRequest();
-				return;
-			}
 			if (message.type === 'source-loaded') {
 				if (sourceLoadPostedAt) {
 					mainTimings.push({
@@ -231,6 +217,8 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 			}
 			if (message.type === 'error') {
 				processingProgress.set(undefined);
+				// A fresh worker also clears rejected module imports and Wasm compilation promises.
+				resetProcessingWorker(activeWorker);
 				settle(reject, new Error(message.message));
 				return;
 			}

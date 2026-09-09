@@ -1,4 +1,4 @@
-import type { ColorSpaceId, DitherId, ProcessingSettings, ResizeId } from './types';
+import type { ColorSpaceId, DitherId, ResizeId } from './types';
 
 export const METRICS_HISTORY_LIMIT = 100;
 
@@ -22,15 +22,6 @@ export type PipelineCacheSnapshot = {
 	derivedSets: number;
 	derivedSkips: number;
 	derivedEvictions: number;
-};
-
-export type PaletteVectorCacheSnapshot = {
-	entries: number;
-	maxEntries: number;
-	hits: number;
-	misses: number;
-	sets: number;
-	evictions: number;
 };
 
 export type ProcessingCacheSnapshot = PipelineCacheSnapshot & {
@@ -86,98 +77,6 @@ export type TimingSummary = {
 	p98: number;
 	p99: number;
 };
-
-type MemoryInput = {
-	sourceWidth: number;
-	sourceHeight: number;
-	outputWidth: number;
-	outputHeight: number;
-	settings: ProcessingSettings;
-	branchCacheBytes: number;
-	branchCacheMaxBytes: number;
-};
-
-const ERROR_DIFFUSION_DITHERS = new Set<DitherId>(['floyd-steinberg', 'sierra', 'sierra-lite']);
-
-export function imageBytes(width: number, height: number, bytesPerPixel: number) {
-	return Math.max(0, width) * Math.max(0, height) * bytesPerPixel;
-}
-
-export function vectorImageBytes(width: number, height: number) {
-	return imageBytes(width, height, 3 * Float32Array.BYTES_PER_ELEMENT);
-}
-
-export function estimateProcessingMemory({
-	sourceWidth,
-	sourceHeight,
-	outputWidth,
-	outputHeight,
-	settings,
-	branchCacheBytes,
-	branchCacheMaxBytes
-}: MemoryInput): ProcessingMemoryShape {
-	const outputPixels = outputWidth * outputHeight;
-	const ditherWorkBytes = ERROR_DIFFUSION_DITHERS.has(settings.dither.algorithm)
-		? outputPixels * 3 * Float32Array.BYTES_PER_ELEMENT
-		: 0;
-	return {
-		sourceBytes: imageBytes(sourceWidth, sourceHeight, 4),
-		resizedBytes: imageBytes(outputWidth, outputHeight, 4),
-		indexBytes: outputPixels,
-		vectorBytes: vectorImageBytes(outputWidth, outputHeight),
-		ditherWorkBytes,
-		branchCacheBytes,
-		branchCacheMaxBytes
-	};
-}
-
-export function mergeCacheSnapshots(
-	sourceLoaded: boolean,
-	sourceBytes: number,
-	pipeline: PipelineCacheSnapshot,
-	palette: PaletteVectorCacheSnapshot
-): ProcessingCacheSnapshot {
-	return {
-		sourceLoaded,
-		sourceBytes,
-		...pipeline,
-		paletteVectorEntries: palette.entries,
-		paletteVectorMaxEntries: palette.maxEntries,
-		paletteVectorHits: palette.hits,
-		paletteVectorMisses: palette.misses,
-		paletteVectorSets: palette.sets,
-		paletteVectorEvictions: palette.evictions
-	};
-}
-
-export function deltaCacheSnapshot(
-	before: ProcessingCacheSnapshot,
-	after: ProcessingCacheSnapshot
-): ProcessingCacheSnapshot {
-	return {
-		sourceLoaded: after.sourceLoaded,
-		sourceBytes: after.sourceBytes,
-		branchCount: after.branchCount,
-		branchBytes: after.branchBytes,
-		branchMaxBytes: after.branchMaxBytes,
-		resizedHits: after.resizedHits - before.resizedHits,
-		resizedMisses: after.resizedMisses - before.resizedMisses,
-		resizedSets: after.resizedSets - before.resizedSets,
-		resizedSkips: after.resizedSkips - before.resizedSkips,
-		resizedEvictions: after.resizedEvictions - before.resizedEvictions,
-		derivedHits: after.derivedHits - before.derivedHits,
-		derivedMisses: after.derivedMisses - before.derivedMisses,
-		derivedSets: after.derivedSets - before.derivedSets,
-		derivedSkips: after.derivedSkips - before.derivedSkips,
-		derivedEvictions: after.derivedEvictions - before.derivedEvictions,
-		paletteVectorEntries: after.paletteVectorEntries,
-		paletteVectorMaxEntries: after.paletteVectorMaxEntries,
-		paletteVectorHits: after.paletteVectorHits - before.paletteVectorHits,
-		paletteVectorMisses: after.paletteVectorMisses - before.paletteVectorMisses,
-		paletteVectorSets: after.paletteVectorSets - before.paletteVectorSets,
-		paletteVectorEvictions: after.paletteVectorEvictions - before.paletteVectorEvictions
-	};
-}
 
 export function appendMetricsSample(
 	history: ProcessingMetricsSample[],

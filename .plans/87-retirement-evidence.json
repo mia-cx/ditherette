@@ -1,0 +1,171 @@
+{
+	"schema": 1,
+	"status": "retirement-held",
+	"validated_source_revision": "80c62ef564503b6703a3fe47373c32b1dcb38449",
+	"parent_revision": "76bf1f8938c14a1a4cde290d45c61a280f7434d2",
+	"website_baseline_revision": "ad6ff442a235ffbdca5940bc3f8ec3090efa99bd",
+	"provider_commit": "a58f5bee4c8a336f1ba11cd199be01b050c47231",
+	"package": {
+		"build_source_revision": "c43cea1269fcd666835d41c07d82a1c451604107",
+		"sha256": "78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90",
+		"bytes": 407888,
+		"distribution_files": 45,
+		"all_distribution_bytes_match": true,
+		"inventory_sha256": "e461e12f45e91bad4b0677d8ffbd2712de4b24dc3785aa92b34b77ab1f7cf118"
+	},
+	"historical_typescript": {
+		"source_revision": "80c62ef564503b6703a3fe47373c32b1dcb38449",
+		"provider": {
+			"kind": "historical-website-typescript",
+			"source_revision": "a895267baea624a6e89bfcef6c5147f170e8a8f7"
+		},
+		"compiler": {
+			"version": "6.0.3",
+			"source": "/home/mia/mia-cx/ditherette/.worktrees/v1-s45-retirement/node_modules/.pnpm/typescript@6.0.3/node_modules/typescript/lib/typescript.js",
+			"sha256": "569177652966bd528c319171c7dd22860dbf72bde116cbc4f644f1d02bb12e39"
+		},
+		"input_files": 24,
+		"compiler_inputs_sha256": "3e638ea8e92e49271be5711f36ead5315d036cc0cedbebefc6efab2ff541adb4",
+		"emitted_files": 24,
+		"all_emitted_bytes_match_s41": true,
+		"s41_evidence_sha256": "a6aee990b3956e36fb1b403de7d91ba0b0cecf4787cd65b0ad7e6f5199030428",
+		"emitted_inventory": [
+			{
+				"path": "scripts/benchmark-typescript.js",
+				"bytes": 5033,
+				"sha256": "f3a8020138ad1959dc1acb8bc13391525be00f7a33848943e45797fb84bb1339"
+			},
+			{
+				"path": "src/lib/processing/bayer.js",
+				"bytes": 2553,
+				"sha256": "32fed33047e4208cf468669912112caaa83aed070e1243916bcda4e19b920385"
+			},
+			{
+				"path": "src/lib/processing/color.js",
+				"bytes": 17611,
+				"sha256": "0cb04970bb1e47acd1af153ea31c705e17e53c83009dd152e4b0428d269d2fe6"
+			},
+			{
+				"path": "src/lib/processing/compositing.js",
+				"bytes": 1444,
+				"sha256": "e779cb3c654ebbb020ffb45883f95fdab87fabf2c609189689a5c92794315996"
+			},
+			{
+				"path": "src/lib/processing/package-adapter.js",
+				"bytes": 6221,
+				"sha256": "a7c7feaf6475ce7154fc879629fd444e80421cee6ae037fdf71e267224ce368d"
+			},
+			{
+				"path": "src/lib/processing/package-fallback.js",
+				"bytes": 2905,
+				"sha256": "3969360d11c097a1f8f0a6731f47eedada8425581e4f7aa60307af5dcc8128c8"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/bayer-16.js",
+				"bytes": 162,
+				"sha256": "6cc3cffb198409d34cf20796135fbf015767ac6bdca0dbea502ec4825a703be6"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/bayer-2.js",
+				"bytes": 160,
+				"sha256": "c6a0a765ea3bf1bb9c6c7109dc94023350c9ad5290fc0710c7edddd930bc8d8f"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/bayer-4.js",
+				"bytes": 160,
+				"sha256": "5865894ff5e2fa10a3c09f49d05cc0fa7326429e45accbc562a1405d21f926fe"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/bayer-8.js",
+				"bytes": 160,
+				"sha256": "bdca6b282c8355f503d3bbb5aefdd60db604af40593af617b091b1648a0d9de0"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/direct-runner.js",
+				"bytes": 11653,
+				"sha256": "7b2130b1f399a75e43bebe9b7c590512842dd1ca7c033be02a654bff4d274576"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/direct.js",
+				"bytes": 154,
+				"sha256": "564c6c2a911e20525ab0e810de300b4e8db4fb3b3521e2371f3100de1d5173af"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/error-diffusion-runner.js",
+				"bytes": 19009,
+				"sha256": "5ac0dc341f7eae154e0297bc39f17751dbd1bea5e66ca1ec6dfd920a7c551d75"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/error-kernels.js",
+				"bytes": 683,
+				"sha256": "5a618e87e6b580bccb38c36865acb55c769f03e7bbbf7a319a27eb192fce275b"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/floyd-steinberg.js",
+				"bytes": 431,
+				"sha256": "cb5d06c5feda1f3c3843ff66257342c6e0db7774d472b7cc55fa7cfcfb168107"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/random.js",
+				"bytes": 158,
+				"sha256": "442d1286491751f13b2f458a2958e9ec65a9d8cc77bf2d24eef393ba8dba739b"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/registry.js",
+				"bytes": 992,
+				"sha256": "810db91dbaae8154e7a1933afe16ae9cd1c5f9c900f69fc38012d191b9f5b44c"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/sierra-lite.js",
+				"bytes": 415,
+				"sha256": "5268b138ccd191c3f1df8e3176002b85a84322594aecebc7ab8c66bf2bde66cf"
+			},
+			{
+				"path": "src/lib/processing/quantize-algorithms/sierra.js",
+				"bytes": 398,
+				"sha256": "d6fbccce8fa89318fd9d069e7aecd00e7bbf249a42a7be55ac9c3f0819cb8ab1"
+			},
+			{
+				"path": "src/lib/processing/quantize-shared.js",
+				"bytes": 47006,
+				"sha256": "0015d76704fde19b0d324e1e39f0e47189fd97b06eae7e7f76eea1afd5a6cfeb"
+			},
+			{
+				"path": "src/lib/processing/quantize.js",
+				"bytes": 1163,
+				"sha256": "fb0c356846b96bc679bb0a2c470638849aacbead3c698b58ebd66c174bf3780d"
+			},
+			{
+				"path": "src/lib/processing/resize.js",
+				"bytes": 53586,
+				"sha256": "563e5a362e92f92f3b3ba53f5a3b71587074ec034882f4fae537118e86551258"
+			},
+			{
+				"path": "src/lib/processing/schemas.js",
+				"bytes": 18549,
+				"sha256": "69ab94f966d175a32fc868db2b0fb62ff58521b62ede246dd78460d23fddaf88"
+			},
+			{
+				"path": "src/lib/processing/types.js",
+				"bytes": 2347,
+				"sha256": "62c1f61ffd5b12e48c14d04dc3694eee053ccc08a6736768e7f283a298837b8a"
+			}
+		]
+	},
+	"checks": {
+		"provider_and_public_preparation": 8,
+		"website_server": 123,
+		"website_chromium": 4,
+		"svelte_errors": 0,
+		"svelte_warnings": ["Missing ignored worker-configuration.d.ts"],
+		"skipped": 0,
+		"rust_builds": 0,
+		"performance_measurements": 0
+	},
+	"holds": {
+		"actual_rollout_accepted": false,
+		"confirmed_performance_regressions": 18,
+		"missing_scalar_release_cells": 21,
+		"activation_approved": false
+	}
+}

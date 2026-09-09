@@ -240,6 +240,24 @@ describe('website package request', () => {
 			).toThrow(/fractional crop/);
 		}
 	});
+	it('rejects non-finite crop coordinates and dimensions', () => {
+		for (const field of ['x', 'y', 'width', 'height'] as const) {
+			expect(() =>
+				packageProcessRequest(
+					source,
+					palette,
+					{
+						...settings,
+						output: {
+							...settings.output,
+							crop: { x: 0, y: 0, width: 1, height: 1, [field]: Number.NaN }
+						}
+					},
+					settings.output
+				)
+			).toThrow(/must be finite/);
+		}
+	});
 	it('uses the existing disabled and missing matte policy', () => {
 		for (const matteKey of ['#FFFFFF', 'missing']) {
 			const mapped = packageProcessRequest(

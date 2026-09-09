@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { decodeBlob } from './image-decode';
 import { encodeIndexedPng } from './png';
 import { processedToImageData } from './render';
@@ -10,12 +10,6 @@ import {
 } from './schemas';
 import type { ColorSpaceId, DitherId, ProcessedImage, ProcessingSettings } from './types';
 import { ProcessorWorkerPipeline } from './worker-pipeline';
-
-beforeEach(() => {
-	vi.stubEnv('DEV', false);
-	vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
-});
-afterEach(() => vi.unstubAllEnvs());
 
 const uploaded: ProcessedImage = {
 	width: 4,
@@ -81,15 +75,12 @@ const settings: ProcessingSettings = {
 describe('installed package website integration', () => {
 	it('preserves the website byte-field strength at a palette decision boundary', async () => {
 		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{
-				id: 1,
-				type: 'load-source',
-				sourceId: 'strength',
-				source: new ImageData(new Uint8ClampedArray([154, 154, 154, 255]), 1, 1)
-			},
-			() => undefined
-		);
+		pipeline.handle({
+			id: 1,
+			type: 'load-source',
+			sourceId: 'strength',
+			source: new ImageData(new Uint8ClampedArray([154, 154, 154, 255]), 1, 1)
+		});
 		for (const [strength, expected] of [
 			[100, 0],
 			[50, 1]
@@ -118,15 +109,12 @@ describe('installed package website integration', () => {
 
 	it('accepts every website color and dither combination through the public package', async () => {
 		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{
-				id: 1,
-				type: 'load-source',
-				sourceId: 'modes',
-				source: new ImageData(new Uint8ClampedArray([0, 0, 0, 255, 255, 255, 255, 255]), 2, 1)
-			},
-			() => undefined
-		);
+		pipeline.handle({
+			id: 1,
+			type: 'load-source',
+			sourceId: 'modes',
+			source: new ImageData(new Uint8ClampedArray([0, 0, 0, 255, 255, 255, 255, 255]), 2, 1)
+		});
 		const colors: ColorSpaceId[] = [
 			'srgb',
 			'linear-rgb',
@@ -189,7 +177,7 @@ describe('installed package website integration', () => {
 		expect(sourceRecord.width).toBe(4);
 		const sourceBefore = decoded.imageData.data.slice();
 		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
+		await pipeline.handleAsync(
 			validateWorkerRequest({
 				id: 1,
 				type: 'load-source',
@@ -245,10 +233,7 @@ describe('installed package website integration', () => {
 	it('uses the packed crop boundary for filtering and exposes fractional crop refusal', async () => {
 		const decoded = await decodeBlob(encodeIndexedPng(uploaded));
 		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'upload', source: decoded.imageData },
-			() => undefined
-		);
+		pipeline.handle({ id: 1, type: 'load-source', sourceId: 'upload', source: decoded.imageData });
 		const onePixel = {
 			...settings,
 			output: { ...settings.output, resize: 'lanczos3', crop: { x: 2, y: 0, width: 1, height: 1 } }
