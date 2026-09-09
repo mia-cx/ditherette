@@ -1,0 +1,364 @@
+{
+	"schema": 1,
+	"version": "0.1.0",
+	"sourceRevision": "bdbcb3c812701d50f157a12d7f157138f10b4013",
+	"sourceCheckout": "/home/mia/mia-cx/ditherette/.worktrees/v1-s42-release-source",
+	"sourceDigest": "2028a4e43c5b72ed230cf501b5a890aa61898b275dcbfd26e2717e0eb7f1150d",
+	"tools": {
+		"node": "v24.19.0",
+		"pnpm": "11.13.0",
+		"npm": "11.17.0",
+		"wasmPack": "wasm-pack 0.15.0",
+		"scalarRustc": "rustc 1.97.0 (2d8144b78 2026-07-07)\nbinary: rustc\ncommit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3\ncommit-date: 2026-07-07\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.0\nLLVM version: 22.1.6",
+		"threadedRustc": "rustc 1.82.0-nightly (8e86c9567 2024-08-01)\nbinary: rustc\ncommit-hash: 8e86c9567154dc5a9ada15ab196d23eae2bd7d89\ncommit-date: 2024-08-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.82.0-nightly\nLLVM version: 19.1.0"
+	},
+	"build_mode": "public",
+	"compression": {
+		"gzipLevel": 9,
+		"brotliQuality": 11
+	},
+	"files": [
+		{
+			"path": "LICENSE",
+			"sha256": "17180ee68dadfe0856344dec68fb95147a43225117283f8277144f187ba76d2d",
+			"raw": 1069,
+			"gzip": 657,
+			"brotli": 471
+		},
+		{
+			"path": "README.md",
+			"sha256": "447f7364b039ff57404ce51a593146adfaa05b6b538c74966df214b494f0d882",
+			"raw": 15218,
+			"gzip": 6135,
+			"brotli": 5113
+		},
+		{
+			"path": "dist/errors.d.ts",
+			"sha256": "0b06db11045fd21cab3c54c44f8c012758d60231a9b97e927b122a5cde03908f",
+			"raw": 578,
+			"gzip": 335,
+			"brotli": 258
+		},
+		{
+			"path": "dist/errors.js",
+			"sha256": "29a364e60406071fa59bbfdc6a9f057b3d8fbbba003d8a3d06891b3ce87dec73",
+			"raw": 294,
+			"gzip": 186,
+			"brotli": 158
+		},
+		{
+			"path": "dist/index.d.ts",
+			"sha256": "8b3e49129c537961f358c430ad6d3381d63da3e37f223c3fb24eadbcba903c59",
+			"raw": 647,
+			"gzip": 353,
+			"brotli": 283
+		},
+		{
+			"path": "dist/index.js",
+			"sha256": "47b1f859ea20a1df28a35a258531a76315d726de1961ce7d188c585fe50a94ad",
+			"raw": 1948,
+			"gzip": 693,
+			"brotli": 592
+		},
+		{
+			"path": "dist/scalar.d.ts",
+			"sha256": "556948418051fac88bdd60ec0672339d4762af13ab15ee655eee840f6b1ce3ee",
+			"raw": 951,
+			"gzip": 495,
+			"brotli": 394
+		},
+		{
+			"path": "dist/scalar.js",
+			"sha256": "ed5d9735a71812872ecfda9dfb6ba601f1c29e6337899a2eeabee51881780bb5",
+			"raw": 10864,
+			"gzip": 2357,
+			"brotli": 2003
+		},
+		{
+			"path": "dist/thread-worker.d.ts",
+			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+			"raw": 11,
+			"gzip": 31,
+			"brotli": 15
+		},
+		{
+			"path": "dist/thread-worker.js",
+			"sha256": "eee3a3a5bd1602de21c35fbe57c96314d2ed9e918475f2b74558d2268534a22c",
+			"raw": 802,
+			"gzip": 400,
+			"brotli": 329
+		},
+		{
+			"path": "dist/threads.d.ts",
+			"sha256": "c14a49dc367bdf6f6c051615aad9f48eb58988b878468fd836d7cc90400399bc",
+			"raw": 259,
+			"gzip": 210,
+			"brotli": 148
+		},
+		{
+			"path": "dist/threads.js",
+			"sha256": "0c79b53b5e3b4466f19f7b0645d9379709ddab94097c810984040b224e3f6647",
+			"raw": 1144,
+			"gzip": 511,
+			"brotli": 418
+		},
+		{
+			"path": "dist/types.d.ts",
+			"sha256": "f7e7593c4566f56e0b7c50104381826cc6bacad5ace482d9b8ace46c43b1dbe5",
+			"raw": 7461,
+			"gzip": 2356,
+			"brotli": 1972
+		},
+		{
+			"path": "dist/types.js",
+			"sha256": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+			"raw": 11,
+			"gzip": 31,
+			"brotli": 15
+		},
+		{
+			"path": "dist/validation-fields.d.ts",
+			"sha256": "e1ee4a28c2a210ad5e8a13125145de1106b04ca6309ce8835c03fd181f486eda",
+			"raw": 1181,
+			"gzip": 440,
+			"brotli": 346
+		},
+		{
+			"path": "dist/validation-fields.js",
+			"sha256": "cd2ec1d6a8a266f3c3dfac2bac6f6996c37924bccfc2c6c5261267a840d0838a",
+			"raw": 9429,
+			"gzip": 2312,
+			"brotli": 2026
+		},
+		{
+			"path": "dist/validation-process.d.ts",
+			"sha256": "fb3e2dbb87fcbf4e38c1f57d3aa7204c0d5cf958689d8b6c9c8214f9a92b8a8c",
+			"raw": 1021,
+			"gzip": 484,
+			"brotli": 386
+		},
+		{
+			"path": "dist/validation-process.js",
+			"sha256": "109006f0043413ae0bc800f4996902bbaad21929cf8bfa99c81f32a6fcb31f62",
+			"raw": 2459,
+			"gzip": 837,
+			"brotli": 725
+		},
+		{
+			"path": "dist/validation.d.ts",
+			"sha256": "8af2b616d729e65ba8369fea53df3daec6015edce6170cc3777ba6ad058ad7b0",
+			"raw": 1849,
+			"gzip": 698,
+			"brotli": 548
+		},
+		{
+			"path": "dist/validation.js",
+			"sha256": "9df14055182f5f7bbdd9087e1a1b5757c821cc7e379e2177e4247268a193b58a",
+			"raw": 13663,
+			"gzip": 3352,
+			"brotli": 2886
+		},
+		{
+			"path": "dist/wasm/scalar/LICENSE",
+			"sha256": "17180ee68dadfe0856344dec68fb95147a43225117283f8277144f187ba76d2d",
+			"raw": 1069,
+			"gzip": 657,
+			"brotli": 471
+		},
+		{
+			"path": "dist/wasm/scalar/README.md",
+			"sha256": "4dafb72303724225d868f274ff98331ddca386a2074edea210f1d661431c2061",
+			"raw": 1492,
+			"gzip": 738,
+			"brotli": 600
+		},
+		{
+			"path": "dist/wasm/scalar/ditherette_wasm.d.ts",
+			"sha256": "a6bd7cf2bc0355f22b3a9cd79d4dccb6b30b91f4beeb558738c3b74e7205dcda",
+			"raw": 10041,
+			"gzip": 2644,
+			"brotli": 2208
+		},
+		{
+			"path": "dist/wasm/scalar/ditherette_wasm.factory.d.ts",
+			"sha256": "554db75345bf2f2c76d3875a61202dc566cfcb65754348288afbd7f793aabd52",
+			"raw": 159,
+			"gzip": 146,
+			"brotli": 109
+		},
+		{
+			"path": "dist/wasm/scalar/ditherette_wasm.factory.js",
+			"sha256": "c23a36ebeac7d814b4ff8fa491eb36df6fd8f1630bdb239655d5c874fa6fc339",
+			"raw": 21616,
+			"gzip": 3977,
+			"brotli": 3471
+		},
+		{
+			"path": "dist/wasm/scalar/ditherette_wasm.js",
+			"sha256": "d193d2e481de94afcb21f17b56cf5b44bb5681281141490f37ada69059a50530",
+			"raw": 25896,
+			"gzip": 5496,
+			"brotli": 4769
+		},
+		{
+			"path": "dist/wasm/scalar/ditherette_wasm_bg.wasm",
+			"sha256": "cdc795079ed5f8f0d635d9d59b78fdcf6b5f4abced1d836fda4fb5827933189e",
+			"raw": 380928,
+			"gzip": 167411,
+			"brotli": 134397
+		},
+		{
+			"path": "dist/wasm/scalar/ditherette_wasm_bg.wasm.d.ts",
+			"sha256": "a1ca7eaddf22dd0b12ec7b6d80e6201ca328128c030728f58acc98a40fc08f57",
+			"raw": 2873,
+			"gzip": 458,
+			"brotli": 395
+		},
+		{
+			"path": "dist/wasm/scalar/package.json",
+			"sha256": "d00f313037f0d9823ed041ab45ea1d1a4497753357a5ccf0b4efc672c3334ec9",
+			"raw": 380,
+			"gzip": 220,
+			"brotli": 186
+		},
+		{
+			"path": "dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/copy_helpers.js",
+			"sha256": "34e337f66a21affabdbc37012101dc36cb4aa1dbcf38d43edc6b6aa39da7df48",
+			"raw": 915,
+			"gzip": 419,
+			"brotli": 335
+		},
+		{
+			"path": "dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/progress_helpers.js",
+			"sha256": "779c27d40313d58fb815fe6f135929ee27eda208f27fa7f366022e8bc9258192",
+			"raw": 787,
+			"gzip": 436,
+			"brotli": 356
+		},
+		{
+			"path": "dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/quantize_helpers.js",
+			"sha256": "9b6d39ab1f7ee53c6ed74b5706b504964462011dd833ad2a4b59f6727fd37fd2",
+			"raw": 1268,
+			"gzip": 572,
+			"brotli": 468
+		},
+		{
+			"path": "dist/wasm/threads/LICENSE",
+			"sha256": "17180ee68dadfe0856344dec68fb95147a43225117283f8277144f187ba76d2d",
+			"raw": 1069,
+			"gzip": 657,
+			"brotli": 471
+		},
+		{
+			"path": "dist/wasm/threads/README.md",
+			"sha256": "4dafb72303724225d868f274ff98331ddca386a2074edea210f1d661431c2061",
+			"raw": 1492,
+			"gzip": 738,
+			"brotli": 600
+		},
+		{
+			"path": "dist/wasm/threads/ditherette_wasm.d.ts",
+			"sha256": "a8c3fa058d18b1e34b7ef7723b724f91dbacc356bcecccf74ca522196d6f23fe",
+			"raw": 11528,
+			"gzip": 2950,
+			"brotli": 2487
+		},
+		{
+			"path": "dist/wasm/threads/ditherette_wasm.factory.d.ts",
+			"sha256": "54c8cb9325e6a469d25b7f2d3de69d495472e2b1927ea994f21d23ee9c912fad",
+			"raw": 404,
+			"gzip": 250,
+			"brotli": 188
+		},
+		{
+			"path": "dist/wasm/threads/ditherette_wasm.factory.js",
+			"sha256": "e4ea9e1c47493b05dd3281dcb16aa859caba2c54c812b6210d9a9c2484b8a82b",
+			"raw": 26621,
+			"gzip": 4967,
+			"brotli": 4342
+		},
+		{
+			"path": "dist/wasm/threads/ditherette_wasm.js",
+			"sha256": "6b5075b8435d9dc03fb418a4f07fc2e7a6f7fac478c23f0c849877570f778949",
+			"raw": 30647,
+			"gzip": 6519,
+			"brotli": 5656
+		},
+		{
+			"path": "dist/wasm/threads/ditherette_wasm_bg.wasm",
+			"sha256": "eddd706d6137587124db9575f52ffe756dba040a2b99085e3ae451b1b5dcd4e2",
+			"raw": 548630,
+			"gzip": 202542,
+			"brotli": 160932
+		},
+		{
+			"path": "dist/wasm/threads/ditherette_wasm_bg.wasm.d.ts",
+			"sha256": "f75369d19efccc4bd1c13fdc4f176e97f0ae5fc44b69201e54162c7bdb114288",
+			"raw": 3474,
+			"gzip": 565,
+			"brotli": 504
+		},
+		{
+			"path": "dist/wasm/threads/package.json",
+			"sha256": "d00f313037f0d9823ed041ab45ea1d1a4497753357a5ccf0b4efc672c3334ec9",
+			"raw": 380,
+			"gzip": 220,
+			"brotli": 186
+		},
+		{
+			"path": "dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/copy_helpers.js",
+			"sha256": "34e337f66a21affabdbc37012101dc36cb4aa1dbcf38d43edc6b6aa39da7df48",
+			"raw": 915,
+			"gzip": 419,
+			"brotli": 335
+		},
+		{
+			"path": "dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/progress_helpers.js",
+			"sha256": "779c27d40313d58fb815fe6f135929ee27eda208f27fa7f366022e8bc9258192",
+			"raw": 787,
+			"gzip": 436,
+			"brotli": 356
+		},
+		{
+			"path": "dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/quantize_helpers.js",
+			"sha256": "9b6d39ab1f7ee53c6ed74b5706b504964462011dd833ad2a4b59f6727fd37fd2",
+			"raw": 1268,
+			"gzip": 572,
+			"brotli": 468
+		},
+		{
+			"path": "dist/wasm/threads/snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.no-bundler.js",
+			"sha256": "9801503f464f848c6c7405462fca9a5c721556904c5fee5ee0afcb0887ea1b7f",
+			"raw": 2947,
+			"gzip": 1452,
+			"brotli": 1138
+		},
+		{
+			"path": "dist/worker-pool.d.ts",
+			"sha256": "6d666a5a25da1cd795a6ee40ea9f6b8f07e59de53ea0c50667313a23c0d0066c",
+			"raw": 475,
+			"gzip": 321,
+			"brotli": 259
+		},
+		{
+			"path": "dist/worker-pool.js",
+			"sha256": "a27e27a8980a5b97fb5d89ecece63ac0fd3d97cb3b99cf8024871a740c1e8fe7",
+			"raw": 3911,
+			"gzip": 1226,
+			"brotli": 1016
+		},
+		{
+			"path": "package.json",
+			"sha256": "625ea5799a2f121495f29aa0cfc3bc1e1ea5d24ec819b1dedc3ea9dbca1bfc13",
+			"raw": 1971,
+			"gzip": 738,
+			"brotli": 619
+		}
+	],
+	"tarball": {
+		"raw": 1190912,
+		"gzip": 407888,
+		"brotli": 277574,
+		"sha256": "78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90"
+	}
+}

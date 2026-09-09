@@ -1,0 +1,255 @@
+{
+	"schema": 1,
+	"baseline": {
+		"LICENSE": {
+			"raw": 1069,
+			"gzip": 657,
+			"brotli": 471
+		},
+		"README.md": {
+			"raw": 15218,
+			"gzip": 6135,
+			"brotli": 5113
+		},
+		"dist/errors.d.ts": {
+			"raw": 578,
+			"gzip": 335,
+			"brotli": 258
+		},
+		"dist/errors.js": {
+			"raw": 294,
+			"gzip": 186,
+			"brotli": 158
+		},
+		"dist/index.d.ts": {
+			"raw": 647,
+			"gzip": 353,
+			"brotli": 283
+		},
+		"dist/index.js": {
+			"raw": 1948,
+			"gzip": 693,
+			"brotli": 592
+		},
+		"dist/scalar.d.ts": {
+			"raw": 951,
+			"gzip": 495,
+			"brotli": 394
+		},
+		"dist/scalar.js": {
+			"raw": 10864,
+			"gzip": 2357,
+			"brotli": 2003
+		},
+		"dist/thread-worker.d.ts": {
+			"raw": 11,
+			"gzip": 31,
+			"brotli": 15
+		},
+		"dist/thread-worker.js": {
+			"raw": 802,
+			"gzip": 400,
+			"brotli": 329
+		},
+		"dist/threads.d.ts": {
+			"raw": 259,
+			"gzip": 210,
+			"brotli": 148
+		},
+		"dist/threads.js": {
+			"raw": 1144,
+			"gzip": 511,
+			"brotli": 418
+		},
+		"dist/types.d.ts": {
+			"raw": 7461,
+			"gzip": 2356,
+			"brotli": 1972
+		},
+		"dist/types.js": {
+			"raw": 11,
+			"gzip": 31,
+			"brotli": 15
+		},
+		"dist/validation-fields.d.ts": {
+			"raw": 1181,
+			"gzip": 440,
+			"brotli": 346
+		},
+		"dist/validation-fields.js": {
+			"raw": 9429,
+			"gzip": 2312,
+			"brotli": 2026
+		},
+		"dist/validation-process.d.ts": {
+			"raw": 1021,
+			"gzip": 484,
+			"brotli": 386
+		},
+		"dist/validation-process.js": {
+			"raw": 2459,
+			"gzip": 837,
+			"brotli": 725
+		},
+		"dist/validation.d.ts": {
+			"raw": 1849,
+			"gzip": 698,
+			"brotli": 548
+		},
+		"dist/validation.js": {
+			"raw": 13663,
+			"gzip": 3352,
+			"brotli": 2886
+		},
+		"dist/wasm/scalar/LICENSE": {
+			"raw": 1069,
+			"gzip": 657,
+			"brotli": 471
+		},
+		"dist/wasm/scalar/README.md": {
+			"raw": 1492,
+			"gzip": 738,
+			"brotli": 600
+		},
+		"dist/wasm/scalar/ditherette_wasm.d.ts": {
+			"raw": 10041,
+			"gzip": 2644,
+			"brotli": 2208
+		},
+		"dist/wasm/scalar/ditherette_wasm.factory.d.ts": {
+			"raw": 159,
+			"gzip": 146,
+			"brotli": 109
+		},
+		"dist/wasm/scalar/ditherette_wasm.factory.js": {
+			"raw": 21616,
+			"gzip": 3977,
+			"brotli": 3471
+		},
+		"dist/wasm/scalar/ditherette_wasm.js": {
+			"raw": 25896,
+			"gzip": 5496,
+			"brotli": 4769
+		},
+		"dist/wasm/scalar/ditherette_wasm_bg.wasm": {
+			"raw": 380928,
+			"gzip": 167411,
+			"brotli": 134397
+		},
+		"dist/wasm/scalar/ditherette_wasm_bg.wasm.d.ts": {
+			"raw": 2873,
+			"gzip": 458,
+			"brotli": 395
+		},
+		"dist/wasm/scalar/package.json": {
+			"raw": 380,
+			"gzip": 220,
+			"brotli": 186
+		},
+		"dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/copy_helpers.js": {
+			"raw": 915,
+			"gzip": 419,
+			"brotli": 335
+		},
+		"dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/progress_helpers.js": {
+			"raw": 787,
+			"gzip": 436,
+			"brotli": 356
+		},
+		"dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/quantize_helpers.js": {
+			"raw": 1268,
+			"gzip": 572,
+			"brotli": 468
+		},
+		"dist/wasm/threads/LICENSE": {
+			"raw": 1069,
+			"gzip": 657,
+			"brotli": 471
+		},
+		"dist/wasm/threads/README.md": {
+			"raw": 1492,
+			"gzip": 738,
+			"brotli": 600
+		},
+		"dist/wasm/threads/ditherette_wasm.d.ts": {
+			"raw": 11528,
+			"gzip": 2950,
+			"brotli": 2487
+		},
+		"dist/wasm/threads/ditherette_wasm.factory.d.ts": {
+			"raw": 404,
+			"gzip": 250,
+			"brotli": 188
+		},
+		"dist/wasm/threads/ditherette_wasm.factory.js": {
+			"raw": 26621,
+			"gzip": 4967,
+			"brotli": 4342
+		},
+		"dist/wasm/threads/ditherette_wasm.js": {
+			"raw": 30647,
+			"gzip": 6519,
+			"brotli": 5656
+		},
+		"dist/wasm/threads/ditherette_wasm_bg.wasm": {
+			"raw": 548630,
+			"gzip": 202542,
+			"brotli": 160932
+		},
+		"dist/wasm/threads/ditherette_wasm_bg.wasm.d.ts": {
+			"raw": 3474,
+			"gzip": 565,
+			"brotli": 504
+		},
+		"dist/wasm/threads/package.json": {
+			"raw": 380,
+			"gzip": 220,
+			"brotli": 186
+		},
+		"dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/copy_helpers.js": {
+			"raw": 915,
+			"gzip": 419,
+			"brotli": 335
+		},
+		"dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/progress_helpers.js": {
+			"raw": 787,
+			"gzip": 436,
+			"brotli": 356
+		},
+		"dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/quantize_helpers.js": {
+			"raw": 1268,
+			"gzip": 572,
+			"brotli": 468
+		},
+		"dist/wasm/threads/snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.no-bundler.js": {
+			"raw": 2947,
+			"gzip": 1452,
+			"brotli": 1138
+		},
+		"dist/worker-pool.d.ts": {
+			"raw": 475,
+			"gzip": 321,
+			"brotli": 259
+		},
+		"dist/worker-pool.js": {
+			"raw": 3911,
+			"gzip": 1226,
+			"brotli": 1016
+		},
+		"package.json": {
+			"raw": 1971,
+			"gzip": 738,
+			"brotli": 619
+		},
+		"$tarball": {
+			"raw": 1190912,
+			"gzip": 407888,
+			"brotli": 277574
+		}
+	},
+	"maximumGrowth": 0.1,
+	"holds": [
+		"Initial package size budget awaits review.",
+		"S41 release gates, including retained WebKit threaded cleanup, remain unresolved."
+	]
+}
