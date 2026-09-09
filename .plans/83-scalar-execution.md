@@ -43,9 +43,9 @@ All PRs remain unmerged; no publishing, rollout, deployment, or visual-drift acc
 - [x] Audit callable coverage and add matched scalar timing adapters.
 - [x] Prepare exact converter-reuse candidates and focused correctness evidence.
 - [x] Build clean baseline and candidate artifacts.
-- [x] Run the baseline spec/prod matrix; archive verification follows.
-- [ ] Measure and select exact production improvements.
-- [ ] Publish measured per-kernel results and stacked PRs; clean finished outputs.
+- [x] Run the baseline spec/prod matrix and verify its archive.
+- [x] Measure and select exact production improvements.
+- [x] Publish measured per-kernel results and stacked PRs; clean finished outputs.
 
 ## First measurements and bounded follow-up
 
@@ -68,3 +68,24 @@ field composition, placement, quantize, diffusion, and Yliluoma controls against
 Apply the same exactness, regression, and noise gates, with one repeat for inconclusive affected cases.
 If the packed change fails, retain the independently measured field-only change.
 This is the final new implementation candidate in this correction pass.
+
+## Completed correction
+
+PR #137 (`impl/v1-scalar-spec-bench`, `b4b8dbea`) delivers the 101-case comparison and complete evidence report on S45.
+PR #138 (`perf/v1-scalar-packed-loop`, `cef9a733`) delivers field reuse and packed-loop improvements on PR #137.
+Both are open, non-draft, unmerged, with auto-merge disabled. Corrective child issues are #135 and #136; S41 remains open.
+
+All six runs retain 1,232 sequential workers and 23,149 actual samples. The final spec/production matrix has
+66 pass, five inherited resize differences, 25 slower-production cases, and five inconclusive cases.
+The 58-case production selection plus its single five-case repeat passes every required comparison with exact outputs.
+Fields improve 11.91x to 55.52x, packed sRGB 5.59x, and YCbCr 6.52x against previous production.
+CIELAB forward is 8.54% slower, within the agreed 10% limit. The separate Yliluoma target candidate stays held.
+
+The selected measured source is `8e09c05d`. Evidence branches retain it and rejected `086bbd47`.
+Delivery rebase changes only documentation relative to measured processing inputs; the code diff is empty.
+All 21 focused scalar release tests pass again after rebasing. The trusted frozen-reference guard passes.
+
+Verified archives retain all raw results, journals, plans, artifacts, and provenance outside targets.
+The finished baseline and candidate root targets, converter target, and nested freeze compiler target are removed.
+The filesystem has 101 GiB available after cleanup. Reports and source are preserved; compiler outputs can be rebuilt.
+Browser, publishing, rollout, and human visual-acceptance holds remain unchanged. This completes the bounded scalar correction, not v1 release readiness.

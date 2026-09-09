@@ -13,8 +13,8 @@ The reference slices are intentionally a separate prerequisite phase. This follo
 Ready means the slice has validated implementation in an open, unmerged PR. It does not mean merged or released.
 The coordinator updates Progress and PR when work starts, a PR opens, or validation changes. Dependencies and acceptance criteria stay unchanged.
 
-Scalar performance correction is active under S41. Existing slice reports mostly compare production revisions, not timed frozen spec against production.
-The 101-case scalar baseline is measured. Field converter reuse passes its affected comparisons; packed forward tuning and final reporting remain active.
+The scalar correction under S41 has open PRs for the 101-case spec/production report and measured exact improvements.
+Earlier slice reports retain their production-revision comparisons. New measurements select field reuse and packed conversion; release gates remain held.
 Existing optimized kernels and the frozen reference remain unchanged. Historical reports retain their original scope and decisions.
 
 | Slice | Deliverable | Prerequisites | Progress | PR |
@@ -59,7 +59,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Ready | [#120](https://github.com/mia-cx/ditherette/pull/120) |
 | [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Ready | [#125](https://github.com/mia-cx/ditherette/pull/125) |
 | [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Ready | [#129](https://github.com/mia-cx/ditherette/pull/129) |
-| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Scalar spec/prod audit and optimization active; browser continuation paused | [#131](https://github.com/mia-cx/ditherette/pull/131) |
+| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Scalar comparison and tuning ready; release held | [#131](https://github.com/mia-cx/ditherette/pull/131), [#137](https://github.com/mia-cx/ditherette/pull/137), [#138](https://github.com/mia-cx/ditherette/pull/138) |
 | [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Ready | [#130](https://github.com/mia-cx/ditherette/pull/130) |
 | [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Ready; release gates held | [#132](https://github.com/mia-cx/ditherette/pull/132) |
 | [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Ready; activation held | [#133](https://github.com/mia-cx/ditherette/pull/133) |

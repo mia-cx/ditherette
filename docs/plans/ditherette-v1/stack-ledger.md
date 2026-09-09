@@ -19,6 +19,30 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ### Scalar spec/prod correction, 2026-09-09
 
+The bounded scalar correction is delivered in two open, non-draft, unmerged PRs. Both have auto-merge disabled.
+
+| Delivery | Head | Base | Progress |
+| --- | --- | --- | --- |
+| [PR #137](https://github.com/mia-cx/ditherette/pull/137), issue #135 | `impl/v1-scalar-spec-bench`, `b4b8dbea` | S45 `5da82d12` | 101-case tooling and full report ready |
+| [PR #138](https://github.com/mia-cx/ditherette/pull/138), issue #136 | `perf/v1-scalar-packed-loop`, `cef9a733` | PR #137 `b4b8dbea` | Exact scalar field and packed-loop changes selected |
+
+[The per-kernel report](https://github.com/mia-cx/ditherette/blob/impl/v1-scalar-spec-bench/.plans/83-scalar-measurements.md)
+contains all baseline, selection, repeat, and final spec/production medians. Its audit counts 1,232 serial workers and 23,149 samples.
+Fresh production selection measures 11.91x to 55.52x faster field recipes, 5.59x faster packed sRGB, and 6.52x faster YCbCr.
+Every required selection case passes after one five-case repeat; recorded outputs are exact.
+CIELAB forward is 8.54% slower within the agreed 10% limit. The noisy Yliluoma target candidate remains held.
+The final spec-relative report still records five inherited resize differences, 25 slower-production cases, and five inconclusive cases.
+None of those verdicts is relabeled. Native benchmark-profile results do not establish browser/Wasm speedups or release readiness.
+
+Measured source `8e09c05d` remains on `evidence/v1-scalar-selected-8e09c05d`; held `086bbd47` has its own evidence branch.
+Delivered processing inputs match the selected measured source exactly after rebasing. All 21 focused scalar release checks pass again.
+The trusted freeze guard passes, including isolated native/Wasm compilation. Landed resize, color arithmetic, spec, and image files remain unchanged.
+Verified archives preserve complete raw evidence and build provenance outside targets. Finished correction targets and nested freeze compiler outputs are cleared.
+The disk has 101 GiB free. No owned benchmark, build, test, or implementation agent remains active.
+Browser continuation stays paused; publishing, rollout, and visual-acceptance holds remain open.
+
+#### Completed ownership and execution
+
 Mia resumes the scalar optimization workflow after reviewing the missing direct spec/prod timing coverage.
 Most earlier trials compare accepted and candidate production, with the frozen reference outside timers.
 They remain evidence for those comparisons, not a complete scalar spec/prod report.
