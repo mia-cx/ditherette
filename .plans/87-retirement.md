@@ -5,6 +5,7 @@ Parent S44 PR133 is `impl/v1-s44-rollout` at `76bf1f8938c14a1a4cde290d45c61a280f
 ## TODOs
 
 - [x] Retire live legacy execution and fallback selection, retaining website helpers and retryable package-only processing with focused checks.
+- [x] Replace failed workers so retries also clear cached module-import and Wasm-compilation failures.
 - [ ] Record exact package evidence reuse, preserved browser responsibilities, and held rollback/activation boundaries.
 - [ ] Root joins the separately owned benchmark provider, validates the complete diff, and files the held unmerged PR.
 
@@ -23,3 +24,5 @@ The retry test first fails because initialization resolves to the old fallback p
 The website baseline passes 123 server checks and four actual Chromium package checks. Focused ESLint and diff checks pass. Svelte checking reports zero errors and one warning for absent ignored `worker-configuration.d.ts`. Obsolete backend tests are removed; the two retained source/output-bound tests move into `types.spec.ts`. The live source import scan has no retired backend, selector, or fallback references.
 
 Root authorizes joining provider commit `a58f5bee4c8a336f1ba11cd199be01b050c47231` after this clean baseline, then combined validation. PR filing remains root-owned.
+
+The website baseline is `ad6ff442a235ffbdca5940bc3f8ec3090efa99bd`; merge `2b73107dd5e9386ab9c14a337bfa0df590b9a2e6` joins the provider without conflicts. A focused retry test then proves the cached-module boundary needs worker replacement. The existing client error handler now terminates the failed worker, preserves its visible error and last preview, and reloads the source on the next request. No new protocol field or retry control is needed.
