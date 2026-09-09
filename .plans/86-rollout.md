@@ -9,7 +9,7 @@ Parent is S43 PR132, `impl/v1-s43-integration` at `15300c0dc461265fcef2bd72096de
 ## TODOs
 
 - [x] Change only the website gate and prove default, developer override, fallback/error boundaries, and cancellation with focused tests.
-- [ ] Document rollback, exact evidence reuse, and the held activation state.
+- [x] Document rollback, exact evidence reuse, and the held activation state.
 - [ ] Rebase onto the latest parent with merge ancestry preserved, rerun affected checks, and file a non-draft unmerged PR.
 
 ## Notes
@@ -19,3 +19,5 @@ Use the existing `VITE_DITHERETTE_WASM_PROCESS` flag. Only an explicit `false` i
 No kernel, frozen reference, image, guard, package, or public-control changes. No Rust build or performance measurement is needed for this gate-only change. Root owns global tracking and GitHub dependency updates.
 
 The production override test first fails with TypeScript output, then passes after the one-line gate change. Focused validation passes 70 server checks and six Chromium checks using the existing S43 tarball. The full focused runs have no skips. Prettier and ESLint pass for all four changed TypeScript files.
+
+The [rollout report](../docs/plans/ditherette-v1/s44-rollout.md) records configuration, fallback limits, rollback to the previous deployed website build, and inherited release holds. Preparation does not grant activation authority.
