@@ -19,8 +19,8 @@ The cache-candidate agent owns production changes. Frozen spec/image stay unchan
 ## Implementation TODOs
 
 - [x] Add guarded actual-website direct/Process adapters and focused non-timing tests.
-- [ ] Generate bounded release plans using existing subjects and unchanged S32 anchors.
-- [ ] Validate matrix counts, provenance requirements, source identities, and wall-time estimates.
+- [x] Generate bounded release plans using existing subjects and unchanged S32 anchors.
+- [x] Validate matrix counts, provenance requirements, source identities, and wall-time estimates.
 - [ ] Hand off clean committed infrastructure with owned jobs drained.
 
 ## Measurement hold
@@ -49,5 +49,126 @@ Bicubic, trilinear, and other genuinely absent website modes establish package b
 Adapter validation passes the offline closure/output/refusal test and 29 focused
 native protocol tests. The output test covers duplicate palette order, explicit
 transparency, durable results, nearest composition, and the real 2→49 mismatch.
-No browser or timing calls run. A standalone TypeScript check reaches absent
-generated Wasm declarations; artifact preparation must supply those before full checking.
+No browser or processing timing calls run. TypeScript checking passes against the
+retained S40 public declarations. An initial check without those declarations
+fails on missing generated Wasm modules, not an adapter error.
+
+## Fixed matrix and proposed wall-time budget
+
+`release_integration_plan` generates one case per experiment file. First generate
+its compact inventory; use that inventory's case indices. Each destination must
+be new. Source arrays never appear in the inventory. Do not parse complete
+prepared snapshots into Node merely to inspect counts or provenance.
+
+```text
+release_integration_plan LANE inventory NEW_INVENTORY_JSON HOST_LOAD_NOTES
+release_integration_plan LANE CASE_INDEX NEW_CASE_JSON HOST_LOAD_NOTES
+```
+
+Every lane uses two alternating pairs and the existing sample protocol above.
+The counts below include both roles and both pairs. Each measured worker exits
+before the next starts. Parenthesized budgets include setup, frozen verification,
+output observation, disposal, and untimed priming, not just method timers.
+
+| Lane | Cases | Engines | Workers | Proposed wall budget |
+| --- | ---: | --- | ---: | ---: |
+| candidate / candidate-native | 2 each | C/F/W scalar plus native | 32 | 10 min |
+| anchors / anchors-native | 8 each | C/F/W scalar plus native | 128 | 20 min |
+| release | 15 | C/F/W scalar | 180 | 60 min |
+| automatic | 10 | C/F host-worker | 80 | 40 min |
+| typescript | 3 | C/F/W page, both roles | 36 | 10 min |
+| initialization / initialization-threads | 2 each | C/F/W scalar; C/F threads | 40 | 15 min |
+| capped | 1 | C/F/W scalar, feasibility-held | 12 | 60 min provisional |
+| Total | | | 508 | 215 min provisional |
+
+Reserve another 30–60 minutes for fresh immutable build preparation and untimed
+resource checks. These are planning estimates, not measured upper bounds. The
+coordinator approves lanes before running them, stops launching new work at the
+agreed wall deadline, and lets owned work exit. Unrun cases remain incomplete.
+Do not launch the full matrix blindly or repeat a noisy lane without a bounded
+experiment decision. Start with the two cold candidate anchors.
+
+The retained S35–S37 400-worker trial took 35 minutes in Chromium and 141 minutes
+in Firefox. Firefox's scalar 769×513 random field takes about 24.5 seconds per
+call. Its cold worker therefore exceeds the nominal 10-second measured cap to
+achieve five samples. Twenty untimed same-call primes would cost about eight
+minutes per worker, so this matrix does not repeat that expensive final-hit case.
+The medium Yliluoma final-hit control retains priming and remains separately visible.
+
+### Coverage
+
+Release recipes include preview 512×384 nearest and Sierra/Oklab Process,
+3.15 MP common direct and Floyd–Steinberg Process, and 8.39 MP large nearest.
+The selected area/bilinear/Lanczos3 classes reuse measured shapes without a new
+threshold sweep. Random perturb stays 769×513; blue/adaptive Oklab64 stays 65×49.
+Medium palette8 Yliluoma and nearest+OKLCH Yliluoma Process reuse S37 recipes.
+Trilinear establishes an extra-mode baseline. Preview nearest and medium mixing
+have final-hit controls. Historical anchors retain four cold and four warm
+recipes, including partial perturb, resize, and no-dither primes.
+
+The automatic lane compares ordinary scalar versus ordinary required-threaded
+packages, with no developer row policy. Its eight cold cases cover the three selected
+resize classes, direct matching, random perturb, blue/adaptive fused processing,
+mixing, and mixing Process. Two warm controls cover cheap scalar fallback and
+medium mixing. These timings do not select new size thresholds.
+
+The TypeScript lane uses actual website nearest, direct quantize, and no-dither
+Process. Indexed fixtures contain exact palette colors and explicit transparency.
+They establish only that admitted workload class. Both roles run on the page;
+TypeScript remains stateless and makes no application-cache claim. General
+website field/diffusion/perceptual comparisons remain unavailable, not spec-only.
+
+### Capped feasibility hold
+
+Required capped input is 1×1, producing 8192×8192 indexed pixels through nearest
+Process. It exercises maximum output area without embedding a maximum-area RGBA
+source in every JSON request. It is not a maximum-source-image benchmark.
+
+The current collector's 64 MiB stability budget rejects this 64 MiB result before
+timing. Maximum-area RGBA is also impossible in the existing JSON transport: even
+single-digit byte entries need 536,870,913 characters, exceeding this Node's
+536,870,888-character string limit. S35 owns the separate bounded feasibility fix.
+The maximum-area case remains required and held until its untimed resource check
+passes. A 12 MiB substitute does not satisfy that gate. No global limit increase
+or production change is part of this matrix.
+
+## Artifact bindings and execution order
+
+1. Root joins this infrastructure into clean accepted/current and candidate
+   snapshots. Current production is S40 `96c28118`; its later CI-only commits do
+   not change runtime inputs. Candidate adds only `6e48b7dd471edec562a9b19aa53c3688d250d423`.
+   Audit the production diff before building. Keep that candidate unselected.
+2. Root prepares the historical `d51a70a2` snapshot with shared protocol-only
+   updates where required. Its production source remains pre-S32. Never replace
+   this acceptance anchor with a later regressed implementation.
+3. Run the existing fresh native/public preparation scripts in each snapshot.
+   Public preparation omits `--bench-subjects`: these are ordinary packages.
+   Bind native binaries, package assets, TS closure, frozen oracle, source hashes,
+   tool/browser versions, and per-case input/settings identities. Build before
+   quiet clearance. Follow `crates/ditherette-bench/PAIRED.md` for commands.
+4. Candidate/release lanes compare current S40 against the one exact candidate.
+   Anchors compare pre-S32 against the final selected runtime. Automatic compares
+   scalar/threads of that selected ordinary artifact. TS compares the actual
+   website closure against that artifact. Initialization compares current/final
+   with compilation scopes separate. Capped compares current/final only after
+   its resource gate. If the candidate loses, keep the accepted runtime and
+   report that decision; do not relabel candidate output as the baseline.
+5. Drain agents/builds/tests. Root owns the shared lease, serial execution,
+   achieved sample counts, exact result audit, and final report. No threaded
+   WebKit lane runs. Existing frozen resize drift remains diagnostic and incorrect;
+   missing/noisy required comparisons and inherited cold regressions stay open.
+
+## Infrastructure checkpoint validation
+
+- 13 release-generator tests pass, including reused frozen composition tests,
+  fixed lane counts, unchanged cold-anchor identities, and capped dimensions.
+- 29 focused native browser/quantize protocol tests pass, plus the library check.
+- 20 JavaScript closure, fake-clock collector, and stage-prime tests pass.
+- TypeScript adapter checking passes using retained S40 public declarations.
+- The generator emits a compact candidate inventory and one candidate case under
+  this worktree's ignored `target/`. It executes no processing call or benchmark.
+- No production, frozen spec/image, or frozen-guard files change.
+
+The only owned compiler output is this worktree's `target/compiler`. Root owns
+cleanup after handoff. Preserve generated plans and any future retained evidence.
+No Wasm build, browser launch, real measurement, push, or PR runs here.
