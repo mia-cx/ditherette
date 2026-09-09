@@ -37,6 +37,15 @@ Compact reports remain in `.plans/87-retirement.md`, `87-retirement-evidence.jso
 The whole finished target tree is removed, including the 1.25 GiB native decoder build. Source and the small S43 artifact remain.
 Next work is the bounded S41 missing scalar matrix continuation. Existing regressions and all human/operational holds remain open.
 
+Continuation branch `impl/v1-s41-release-completion` starts from S45 `5da82d12`, without rewriting published parents.
+Its plan checkpoint is `accc34e1`; the isolated matrix agent owns helper/artifact preparation in `.worktrees/v1-s41-release-completion`.
+Root owns exclusive execution after that agent drains. The fixed budget covers Firefox 9 through 14 and WebKit 0 through 14.
+Twenty-one complete cells require 84 serial workers, two alternating pairs each, within a 60-minute launch deadline excluding preparation.
+There are no retries or sample-policy changes. Each completed cell preserves compact evidence before raw outputs are removed.
+The runner checks at least 12 GiB free before each launch. No measurement starts during implementation or tests.
+The final published-head audit includes all 46 PRs at `5da82d12`, with every current base in its child and auto-merge disabled.
+Seven leftover nested spec-freeze compiler targets are removed, reclaiming about 1.4 GiB; no finished target trees remain.
+
 S44 [PR133](https://github.com/mia-cx/ditherette/pull/133) is held at `76bf1f8938c14a1a4cde290d45c61a280f7434d2`,
 based on final S43 `15300c0dc461265fcef2bd72096de5202836706b`. It is open, non-draft, unmerged, with auto-merge disabled.
 Its single runtime-line change prepares scalar Wasm as the website default, with a developer-only override.

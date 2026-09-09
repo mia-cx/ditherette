@@ -55,7 +55,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Ready | [#120](https://github.com/mia-cx/ditherette/pull/120) |
 | [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Ready | [#125](https://github.com/mia-cx/ditherette/pull/125) |
 | [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Ready | [#129](https://github.com/mia-cx/ditherette/pull/129) |
-| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | PR open; release gates held | [#131](https://github.com/mia-cx/ditherette/pull/131) |
+| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | PR open; completing missing measurements | [#131](https://github.com/mia-cx/ditherette/pull/131) |
 | [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Ready | [#130](https://github.com/mia-cx/ditherette/pull/130) |
 | [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Ready; release gates held | [#132](https://github.com/mia-cx/ditherette/pull/132) |
 | [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Ready; activation held | [#133](https://github.com/mia-cx/ditherette/pull/133) |
