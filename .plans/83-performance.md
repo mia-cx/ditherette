@@ -257,3 +257,38 @@ The copied release generator SHA-256 is
 Idle compiler outputs are removed after artifact preparation. The three ordinary
 tarballs and all retained evidence keep their hashes. Immutable source checkouts
 and the copied generator remain available throughout measurement.
+
+## Final implementation handoff
+
+The slice delivers benchmark infrastructure and recorded release evidence, not a passing release gate.
+The required coverage checkboxes above remain incomplete where the retained reports say so.
+Do not interpret this implementation PR as approval to publish or enable the website default.
+
+- [x] Record and reject the exact batching candidate after its bounded comparison.
+- [x] Remeasure all eight historical anchors in native and three browser engines.
+- [x] Retain the interrupted release matrix and complete TypeScript/initialization lanes with compact sample evidence.
+- [x] Fix the benchmark-only Process comparison role mismatch and complete the thirteen remaining automatic cells.
+- [x] Preserve every failed, incorrect, inconclusive, and unavailable release gate for S43.
+
+The continuation runs Chromium cases 7–9 and Firefox cases 0–9 from fresh source
+`f0736c782615a911652ecaf21d1f9a8660ae3e3d`. The ordinary tarball remains byte-identical
+to S40. Both roles use that same source, with their actual scalar/threaded public policies.
+The Process fix changes only untimed counterpart setup; no production kernel changes.
+The run finishes all thirteen comparisons in about 22.4 minutes, within its forty-minute launch budget.
+Four cells return non-passing gates. The separate continuation report retains their exact reasons.
+No partial pair from the failed first attempt contributes to a fresh completed pair.
+
+Final merged JavaScript validation passes forty focused tests covering role policies,
+progress, stage primes, bounded transport, timing collection, and actual TypeScript closure preparation.
+Fresh native and ordinary public preparation pass with clean source inventories.
+Earlier native protocol and three-engine conformance evidence remain bound to their recorded artifacts.
+
+Required release gaps remain explicit rather than extending the bounded experiments indefinitely:
+twenty-one scalar release cells lack completed reports after disk exhaustion; maximum-output
+transport fails its feasibility check; historical and TypeScript regressions remain; inherited
+bilinear drift remains unapproved; noisy controls and threaded WebKit cleanup remain unresolved.
+The exact implementation stays selected. S43 must carry these blockers and reproducible commands.
+
+After compact reports are committed, clear finished `target/` trees, including raw payloads and
+browser snapshots. Preserve source and compact reports outside `target/`; rebuild review artifacts later.
+This supersedes this document's earlier instruction to retain all target-local snapshots.
