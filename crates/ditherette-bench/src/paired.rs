@@ -8,6 +8,7 @@ pub mod native;
 pub mod preparation;
 pub mod process;
 pub mod quantize;
+pub mod scalar;
 pub mod yliluoma;
 
 use ditherette_bench_api::verification::*;
@@ -53,12 +54,16 @@ pub enum CallScope {
     NativeMetricScores,
     /// Original f32 inverse image export. Frozen forward input preparation and storage are excluded.
     NativeInverseConversion,
+    /// Preconverted f64 coordinates with deterministic out-of-gamut offsets into caller-owned RGBA8.
+    NativeWideReconstruction,
     /// Complete global-coordinate field threshold batch into caller-owned f32 storage.
     NativeFieldEvaluation,
     /// Source-neighborhood adaptive masks, including actual source conversion work.
     NativePlacementMask,
     /// Complete source-conversion batch, including actual Converter construction.
     NativeSourceConversion,
+    /// Complete perturb loop into caller-owned RGBA8; validation and storage allocation are untimed.
+    NativePerturbKernel,
     CompleteCall,
     Initialization,
 }

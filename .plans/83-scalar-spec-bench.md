@@ -1,0 +1,34 @@
+# #83 Measured scalar spec versus production
+
+## Summary
+
+Extend the existing paired native worker to measure frozen spec and current production at matched boundaries.
+Use the existing registry, identities, verification, alternating coordinator, and OS lease.
+
+## Acceptance criteria
+
+- [x] Expose measured roles for all resize filters/support variants, seven forward/inverse/reconstruction spaces, 15 matching tags, fields, adaptive placement, diffusion/feedback, and Yliluoma.
+- [x] Exclude verification and diagnostic serialization from both timers; declare allocation and preparation scope.
+- [x] Preserve exact gates and existing resize differences as diagnostic evidence.
+- [x] Validate adapters without measurements. Root owns quiet measurements and final integration.
+
+## TODOs
+
+- [x] Enable measured frozen native subjects and a bounded plan using existing adapters and matched component buffers.
+- [~] Validate scalar coverage and actual frozen adapter output with focused untimed tests.
+
+## Notes
+
+- Worktree `v1-scalar-spec-bench`, base `5da82d122`. Ownership covers benchmark crates and `bench_subjects*` only.
+- No production, frozen spec, image, guard, or package edits. No benchmark execution in this worktree.
+- Response and address-issue skills govern work; agent-copy guides this plan.
+- The reusable example supports `spec-prod`, `prod-prod`, and optional case prefixes.
+- Full coverage is 101 cases / 404 sequential workers, two alternating pairs, 50 ms warmup, 5–20 samples, 250 ms target.
+- Complete calls use borrowed source for quantize, diffusion, and Yliluoma. Processor-copy calls remain separate.
+- Six full perturb loops include every field. Zero-strength and tiny perturb/Yliluoma controls cover setup cost.
+- Seven wide reconstruction cases use deterministic out-of-gamut coordinates; source-construction scope covers actual per-pixel helpers.
+- `cargo check --manifest-path crates/ditherette-bench/Cargo.toml --all-targets --no-default-features` passes.
+- Three new untimed tests pass: every role validates, 101-case family counts agree across modes, and real frozen timing adapters match registry outputs.
+- Existing unused-import warnings remain in stage/progress plan examples.
+- Corrected the native paired collector to retain at least five samples, matching its existing evidence gate.
+- The 250 ms limit is a target after five samples. Other commands keep their prior stopping policy; historical reports are unchanged.

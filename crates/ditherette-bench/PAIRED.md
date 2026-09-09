@@ -65,6 +65,51 @@ Existing preparation and result directories cannot be overwritten.
 
 ## Run after explicit clearance
 
+### Scalar spec and production
+
+The prebuilt `scalar_spec_plan` example declares 101 native scalar cases without measuring them:
+
+```sh
+TARGET/release/examples/scalar_spec_plan spec-prod NEW_PLAN_JSON 'Actual host load notes'
+TARGET/release/examples/scalar_spec_plan prod-prod NEW_PLAN_JSON 'Actual host load notes' perturb- tiny-perturb-
+```
+
+Optional trailing prefixes select a bounded subset. Each prefix must match a case.
+Both modes use identical fixtures, identities, scopes, and budgets. `spec-prod` times the frozen
+subject in the accepted role and current production in the candidate role. `prod-prod` selects
+the production subject for both artifacts. Use fresh clean scalar builds with native default
+features; the `ditherette-wasm` default feature set is empty.
+
+The full plan has two alternating pairs, or 404 sequential workers. Each worker requests
+50 ms warmup and 5–20 single-call samples within a 250 ms measurement target. Minimum samples
+and slow calls can exceed that target. Prefix filtering happens before artifact preparation.
+The existing coordinator and exclusive lease still own all measurements.
+The native paired collector enforces five samples before its time target can stop sampling.
+Other measurement commands retain their existing stopping policy. Both fresh artifacts must
+include this collector correction; historical reports keep their original collector identity.
+
+| Scope | Timed work | Untimed work |
+|---|---|---|
+| Resize kernel | Actual resize export, including internal plans, scratch, and mip preparation | Caller-owned RGBA8 input/output storage |
+| Forward conversion | Frozen image export or production packed conversion into coordinates | Output storage and production Converter construction |
+| Source construction | Actual per-pixel source conversion helper, including its Converter construction | Output storage |
+| Inverse / wide reconstruction | f32 inverse image export or f64 reconstruction with fixed out-of-gamut offsets | Frozen forward fixture conversion and output storage |
+| Scores | Actual scalar metric over cyclic coordinate pairs | Frozen pair conversion and score storage |
+| Threshold / placement | Complete field or adaptive mask batch | Output storage |
+| Perturb kernel | Full field, placement, conversion, and RGBA8 reconstruction loop | Validation, contract mapping, and output storage |
+| Complete indexed call | Quantize, diffusion, or Yliluoma validation, preparation, scratch, result allocation, and destruction | Borrowed input, contract mapping, verification serialization |
+
+The seven score families use their declared coordinate fixtures. All 15 matching policies
+also have complete quantize cases; palette preparation and prepared matching remain included
+in those calls. Seven source-construction and seven wide-reconstruction cases expose costs
+that prepared f32 conversion alone does not show. Six perturb loops cover every field, and
+zero-strength and one-pixel controls expose fixed setup costs.
+
+Verification stays outside timers. Component trials verify the actual measured buffers after
+sampling. Existing landed resize differences retain timings and metrics with an incorrect gate;
+those timings are diagnostic only. A slower production/spec ratio is a baseline gap, while a
+production/production ratio tests a new optimization. These are separate comparisons.
+
 Preparation reuse cases use `preparation_integration_plan native|public DESTINATION HOST_LOAD_NOTES`.
 The helper declares four workloads in both cold and warm states, with two alternating role pairs.
 Each worker takes 20 single-call samples, 50 ms warmup, and a 10-second measurement cap.
