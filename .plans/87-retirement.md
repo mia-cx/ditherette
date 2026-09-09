@@ -8,6 +8,7 @@ Parent S44 PR133 is `impl/v1-s44-rollout` at `76bf1f8938c14a1a4cde290d45c61a280f
 - [x] Replace failed workers so retries also clear cached module-import and Wasm-compilation failures.
 - [x] Record exact package evidence reuse, preserved browser responsibilities, and held rollback/activation boundaries.
 - [x] Join the separately owned benchmark provider and validate the combined implementation.
+- [x] Correct the public provenance schema and verify it through the actual Rust decoder.
 - [ ] Root records final ancestry and files the held unmerged PR.
 
 ## Ownership and findings
@@ -18,7 +19,7 @@ The current page-session fallback latch prevents initialization retry. The worke
 
 Move the adapter's small crop/matte/strength helpers into existing adapter/types ownership before deleting legacy modules. Preserve Bayer/color helpers used by previews and timing-history helpers. Check live imports before removal. Keep standalone raw Wasm benchmark/staging tools that do not depend on the retired loader.
 
-Reuse the verified ordinary S43 tarball. No Rust build or performance measurement is authorized or needed for unchanged package/runtime inputs. Preserve frozen spec, image, guard, and production kernels.
+Reuse the verified ordinary S43 tarball. Initial website validation needs no Rust build or performance measurement for unchanged package/runtime inputs. Preserve frozen spec, image, guard, and production kernels. Root separately authorizes a focused native provenance-decoder proof before filing the PR.
 
 The retry test first fails because initialization resolves to the old fallback protocol. The package-only worker now clears failed initialization promises and succeeds on a later request. Processing failures remain visible and do not reset a successful initializer.
 
@@ -34,6 +35,9 @@ Validated source is `80c62ef564503b6703a3fe47373c32b1dcb38449`. [Machine evidenc
 
 `node scripts/prepare-benchmark-typescript.mjs target/s45-typescript` succeeds from that clean joined source with the live legacy files absent. It compiles 24 historical inputs. All 24 emitted JavaScript files match S41's recorded bytes. The provider revision remains `a895267baea624a6e89bfcef6c5147f170e8a8f7`, distinct from the current checkout. The historical TypeScript provider is not the frozen Rust correctness oracle.
 
+Provider identity stays in `compiler-inputs.json`, covered by the public provenance TypeScript inventory hash.
+Public `source_revision` still identifies current package build sources. Its strict schema has no extra top-level provider field.
+
 The ordinary package remains S43's artifact, built from `c43cea1269fcd666835d41c07d82a1c451604107`. Its SHA-256 is `78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90`. All 45 extracted distribution files match the S42/S43 inventory. Package sources, Rust, frozen spec/image/guard, toolchains, and locked dependencies have no changes. Reuse their [S43 conformance, memory, and size evidence](85-release-readiness.md), not an invented S45 rebuild or measurement.
 
 Combined validation passes without skips:
@@ -46,6 +50,18 @@ pnpm exec svelte-check --tsconfig ./tsconfig.json
 ```
 
 Results are eight preparation checks, 123 server checks, and four Chromium checks. Svelte checking has zero errors and one missing generated Cloudflare-types warning. Focused ESLint/Prettier and `git diff --check` also pass. The existing S43 tarball supplies package assets after frozen offline dependency installation and SvelteKit sync. No Rust build or performance benchmark runs.
+
+## Post-join provenance correction
+
+The initial preparation checks miss Rust's strict provenance decoder. At joined base `401bc85d0aa6915f27b80008299e0e358041ac1f`,
+the actual decoder rejects the added `typescript_provider` field. Removing that duplicate field restores the existing schema.
+The historical provider stays explicit in the hashed compiler manifest; no Rust schema change is needed.
+
+The [provider proof](87-benchmark-provider.md#post-join-strict-schema-correction) records actual producer-object bytes, red/green decoder results, and hashes.
+All eight Node preparation checks and ten native browser-assets protocol checks pass without skips.
+Root authorizes this native debug decoder/test build only. It creates no fresh package artifact or measurement.
+This proof supplements, rather than replaces, the earlier `80c62ef564503b6703a3fe47373c32b1dcb38449` website validation and S43 package identity.
+The temporary example and complete 1,312,940 KiB target tree are removed after compact evidence is retained. All owned jobs exit.
 
 ## Preserved responsibilities and holds
 
