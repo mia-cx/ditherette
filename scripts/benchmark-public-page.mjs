@@ -617,12 +617,14 @@ export async function runTrial(trial) {
 							trial.case.browser.preparation === 'primed-sample'
 								? 'fresh-instance'
 								: trial.case.browser.preparation,
-						accepted: 'package-staged',
-						candidate: 'package'
+						accepted: 'package',
+						candidate: 'package',
+						// Keep role policies paired with this trial's package and Wasm assets.
+						[trial.role]:
+							trial.case.browser[trial.role] === 'package' ? 'package-staged' : 'package'
 					},
 					measurement: { ...trial.case.measurement, application_cache: 'not-applicable' }
-				},
-				role: trial.case.browser[trial.role] === 'package' ? 'accepted' : 'candidate'
+				}
 			});
 			try {
 				const current = mismatch ?? trial.reference_output;
