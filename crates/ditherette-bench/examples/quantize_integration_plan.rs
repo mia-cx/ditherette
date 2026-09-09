@@ -116,6 +116,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 | NativeOperation::Yliluoma { .. }
                 | NativeOperation::FieldComponent { .. }
                 | NativeOperation::Perturb { .. }
+                | NativeOperation::PerturbComponent { .. }
                 | NativeOperation::Separable { .. } => {
                     unreachable!("S24 has no metric or field controls")
                 }

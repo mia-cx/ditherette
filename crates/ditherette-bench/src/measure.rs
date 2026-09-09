@@ -110,6 +110,7 @@ impl CacheState {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MeasurementConfig {
     sample_size: usize,
+    minimum_samples: usize,
     measurement_time: Duration,
     warmup_iterations: Option<usize>,
     warmup_time: Duration,
@@ -124,6 +125,18 @@ pub(crate) struct MeasurementConfig {
 }
 
 impl MeasurementConfig {
+    /// Paired evidence requires enough samples even when one call exceeds the time target.
+    pub(crate) fn with_minimum_samples(mut self, minimum: usize) -> Self {
+        assert!((1..=self.sample_size).contains(&minimum));
+        self.minimum_samples = minimum;
+        self
+    }
+
+    fn needs_sample(&self, samples: usize, elapsed: Duration) -> bool {
+        samples < self.minimum_samples
+            || (samples < self.sample_size && elapsed < self.measurement_time)
+    }
+
     pub(crate) fn sample_size(&self) -> usize {
         self.sample_size
     }
@@ -182,6 +195,7 @@ impl MeasurementConfig {
     ) -> Self {
         Self {
             sample_size,
+            minimum_samples: 1,
             measurement_time,
             warmup_iterations,
             warmup_time,
@@ -284,6 +298,7 @@ impl MeasurementConfig {
 
         let config = Self {
             sample_size,
+            minimum_samples: 1,
             measurement_time,
             warmup_iterations,
             warmup_time: duration_from_flags(
@@ -493,9 +508,7 @@ pub(crate) fn measure_workload(
         output,
     );
 
-    while sample_ns.is_empty()
-        || (sample_ns.len() < config.sample_size && measured_elapsed < config.measurement_time)
-    {
+    while config.needs_sample(sample_ns.len(), measured_elapsed) {
         let batch_iterations = iterations_per_sample;
         if std::mem::take(&mut discard_next_batch) {
             cache_scrubber.prepare();
@@ -896,6 +909,19 @@ fn parse_f64_flag(value: &str) -> Result<f64, BenchError> {
 mod lifecycle_tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn paired_minimum_survives_time_limit_without_exceeding_sample_count() {
+        let flags = Flags::parse(&["--sample-size".into(), "20".into()]).unwrap();
+        let default = MeasurementConfig::from_flags(&flags).unwrap();
+        let elapsed = default.measurement_time() * 2;
+        assert!(!default.needs_sample(1, elapsed));
+        let paired = default.with_minimum_samples(5);
+        assert!(paired.needs_sample(4, elapsed));
+        assert!(!paired.needs_sample(5, elapsed));
+        assert!(paired.needs_sample(19, Duration::ZERO));
+        assert!(!paired.needs_sample(20, Duration::ZERO));
+    }
 
     struct Tracked {
         events: RefCell<Vec<&'static str>>,

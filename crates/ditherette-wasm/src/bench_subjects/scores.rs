@@ -89,7 +89,8 @@ impl MetricFamily {
         }
     }
 
-    fn reference_function(self) -> ScoreFn {
+    /// Select the frozen scalar metric before timing the same prepared score batch.
+    pub fn reference_function(self) -> ScoreFn {
         use crate::spec::quantize::metric::*;
         match self {
             Self::Euclidean => euclidean3_squared,

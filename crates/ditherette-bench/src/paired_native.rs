@@ -22,7 +22,7 @@ use ditherette_bench_api::{verification::*, ResizeParams};
 use ditherette_wasm::{
     bench_subjects::{
         diffusion, field_calls, fields, preparation, process, quantize as adapters,
-        reference::ReferenceRequest, scores, yiluoma, BenchSubject,
+        reference::ReferenceRequest, scalar, scores, yiluoma, BenchSubject,
     },
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
@@ -180,6 +180,9 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
                 component.prod_subject() == subject_id
             }
             native::NativeOperation::Perturb { .. } => field_calls::PERTURB_SUBJECT == subject_id,
+            native::NativeOperation::PerturbComponent { .. } => {
+                scalar::PERTURB_SUBJECT == subject_id
+            }
             native::NativeOperation::Separable { .. } => {
                 field_calls::SEPARABLE_SUBJECT == subject_id
             }
@@ -191,15 +194,30 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
                 adapters::color_subject(*space).is_ok_and(|id| id == subject_id)
             }
         };
-        if !callable
-            || subject.operation != case.identity.semantics.operation
-            || reference.operation != subject.operation
-            || subject
+        let frozen = subject_id == &case.reference_subject
+            && matches!(
+                operation,
+                native::NativeOperation::Quantize { .. }
+                    | native::NativeOperation::Diffusion { .. }
+                    | native::NativeOperation::Yliluoma { .. }
+                    | native::NativeOperation::ColorForward { .. }
+                    | native::NativeOperation::MetricScores { .. }
+                    | native::NativeOperation::FieldComponent { .. }
+                    | native::NativeOperation::PerturbComponent { .. }
+            );
+        let oracle = if frozen {
+            Some(subject.descriptor.id.as_str())
+        } else {
+            subject
                 .descriptor
                 .default_oracle
                 .as_ref()
                 .map(|id| id.as_str())
-                != Some(case.reference_subject.as_str())
+        };
+        if !(callable || frozen)
+            || subject.operation != case.identity.semantics.operation
+            || reference.operation != subject.operation
+            || oracle != Some(case.reference_subject.as_str())
         {
             return Err(BenchError::Config(
                 "native callable or oracle differs from its typed operation".into(),
@@ -241,6 +259,11 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
 }
 
 enum TypedWorkload<'a> {
+    FrozenIndexed(spec::Request<'a>),
+    PerturbComponent {
+        batch: scalar::PerturbBatch<'a>,
+        production: bool,
+    },
     Processor {
         call: preparation::CompleteCall<'a>,
         source: &'a [u8],
@@ -262,7 +285,10 @@ enum TypedWorkload<'a> {
         run: yiluoma::YliluomaFn,
         request: ditherette_wasm::prod::contract::request::DitherQuantizeRequest<'a>,
     },
-    FieldComponent(fields::PreparedComponent<'a>),
+    FieldComponent {
+        batch: fields::PreparedComponent<'a>,
+        production: bool,
+    },
     CompleteField {
         call: field_calls::CompleteCall<'a>,
         processor: ditherette_wasm::prod::pipeline::processor::Processor,
@@ -278,6 +304,7 @@ enum TypedWorkload<'a> {
     },
     Color {
         converter: Converter,
+        frozen_space: Option<spec::WorkingSpace>,
         source: ImageView<'a, Rgba8>,
         coordinates: Vec<f32>,
     },
@@ -343,6 +370,13 @@ impl Workload for TypedWorkload<'_> {
 
     fn run(&mut self) -> Result<(), BenchError> {
         match self {
+            Self::FrozenIndexed(request) => {
+                drop(std::hint::black_box(
+                    scalar::indexed_call(*request)
+                        .map_err(|e| BenchError::Runtime(e.to_string()))?,
+                ));
+            }
+            Self::PerturbComponent { batch, production } => batch.run(*production),
             Self::Processor {
                 call,
                 source,
@@ -363,7 +397,7 @@ impl Workload for TypedWorkload<'_> {
                     run(*request).map_err(|e| BenchError::Runtime(e.to_string()))?,
                 ));
             }
-            Self::FieldComponent(batch) => batch.run_production(),
+            Self::FieldComponent { batch, production } => batch.run_selected(*production),
             Self::CompleteField { call, processor } => call
                 .run(processor)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
@@ -380,10 +414,15 @@ impl Workload for TypedWorkload<'_> {
             }
             Self::Color {
                 converter,
+                frozen_space,
                 source,
                 coordinates,
             } => {
-                converter.rgba8_into(*source, coordinates);
+                if let Some(space) = frozen_space {
+                    scalar::forward_into(*source, coordinates, *space);
+                } else {
+                    converter.rgba8_into(*source, coordinates);
+                }
                 // Every conversion is observable, including earlier iterations in a throughput batch.
                 std::hint::black_box(&*coordinates);
             }
@@ -462,7 +501,23 @@ fn run_typed(
             ));
         }
     }
+    let frozen = subject_id == &case.reference_subject;
     let mut workload = match operation {
+        native::NativeOperation::PerturbComponent { .. } => TypedWorkload::PerturbComponent {
+            batch: scalar::PerturbBatch::new(&parameters)
+                .map_err(|e| BenchError::Runtime(e.to_string()))?,
+            production: !frozen,
+        },
+        native::NativeOperation::Quantize { .. }
+        | native::NativeOperation::Diffusion { .. }
+        | native::NativeOperation::Yliluoma { .. }
+            if frozen =>
+        {
+            let ReferenceRequest::Processing(request) = parameters else {
+                unreachable!("validated indexed request")
+            };
+            TypedWorkload::FrozenIndexed(request)
+        }
         native::NativeOperation::Processor { settings, cache } => {
             let call = preparation::CompleteCall::new(&parameters)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?;
@@ -561,10 +616,11 @@ fn run_typed(
             request: yiluoma::yiluoma_request(&parameters)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
         },
-        native::NativeOperation::FieldComponent { component } => TypedWorkload::FieldComponent(
-            fields::PreparedComponent::new(*component, parameters.source())
+        native::NativeOperation::FieldComponent { component } => TypedWorkload::FieldComponent {
+            batch: fields::PreparedComponent::new(*component, parameters.source())
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
-        ),
+            production: !frozen,
+        },
         native::NativeOperation::Perturb { .. } | native::NativeOperation::Separable { .. } => {
             TypedWorkload::CompleteField {
                 call: field_calls::CompleteCall::new(&parameters)
@@ -574,7 +630,11 @@ fn run_typed(
             }
         }
         native::NativeOperation::MetricScores { metric } => TypedWorkload::Scores {
-            run: metric.prod_function(),
+            run: if frozen {
+                metric.reference_function()
+            } else {
+                metric.prod_function()
+            },
             pairs: scores::prepare_pairs(parameters.source(), *metric)
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
             values: vec![0.0; case.rgba.len() / 4],
@@ -585,6 +645,7 @@ fn run_typed(
                 .map_err(|e| BenchError::Runtime(e.to_string()))?,
         },
         native::NativeOperation::ColorForward { space } => TypedWorkload::Color {
+            frozen_space: frozen.then_some(*space),
             converter: Converter::new(
                 adapters::ordinary_space(*space).map_err(|e| BenchError::Runtime(e.to_string()))?,
             ),
@@ -613,14 +674,34 @@ fn run_typed(
     if let Some(error) = observer.observation_error {
         return Err(BenchError::io(error));
     }
-    let after = if let TypedWorkload::Processor { output, audit, .. } = &workload {
-        audit
+    let after = match &workload {
+        TypedWorkload::Processor { output, audit, .. } => audit
             .first_mismatch
             .borrow()
             .clone()
-            .unwrap_or_else(|| output.as_ref().expect("measured output").verification())
-    } else {
-        verify(subject_id)?
+            .unwrap_or_else(|| output.as_ref().expect("measured output").verification()),
+        TypedWorkload::FieldComponent { batch, .. } => batch.output(),
+        TypedWorkload::PerturbComponent { batch, .. } => batch.output(),
+        TypedWorkload::Scores { values, .. } => VerificationOutput {
+            dimensions: case.identity.output,
+            pixels: Pixels::Scores {
+                values: values.clone(),
+            },
+            warnings: vec![],
+        },
+        TypedWorkload::Color { coordinates, .. } => {
+            let mut output = before.clone();
+            let Pixels::Color {
+                coordinates: actual,
+                ..
+            } = &mut output.pixels
+            else {
+                unreachable!("color verification output")
+            };
+            actual.clone_from(coordinates);
+            output
+        }
+        _ => verify(subject_id)?,
     };
     if before != after {
         // Keep exact concrete evidence, but never publish unstable samples as a valid trial.
@@ -687,6 +768,7 @@ fn config(measurement: &Measurement) -> Result<MeasurementConfig, BenchError> {
         .into(),
     ];
     MeasurementConfig::from_flags(&Flags::parse(&args)?)
+        .map(|config| config.with_minimum_samples(5))
 }
 
 struct Observer {
@@ -728,6 +810,20 @@ impl MeasurementObserver for Observer {
 mod tests {
     use super::*;
     use ditherette_bench::verification::settings_digest;
+
+    #[test]
+    fn scalar_plan_roles_validate_without_measurement() {
+        use ditherette_bench::paired::scalar::{experiment, Comparison};
+        let registry = Registry::load();
+        for mode in [Comparison::SpecProd, Comparison::ProdProd] {
+            for mut case in experiment(mode, "untimed fixture".into()).unwrap().cases {
+                validate_native(&case, &registry, Role::Accepted).unwrap();
+                validate_native(&case, &registry, Role::Candidate).unwrap();
+                case.accepted_subject = "spec:process:request:v1".into();
+                assert!(validate_native(&case, &registry, Role::Accepted).is_err());
+            }
+        }
+    }
 
     #[test]
     fn stage_prime_mismatch_is_concrete_and_failed_setup_releases_processor() {
@@ -897,7 +993,7 @@ mod tests {
         case.candidate_subject = adapters::QUANTIZE_SUBJECT.into();
         validate_native(&case, &registry, Role::Candidate).unwrap();
         case.candidate_subject = "spec:quantize:request:v1".into();
-        assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+        validate_native(&case, &registry, Role::Candidate).unwrap();
 
         for metric in scores::MetricFamily::ALL {
             let operation = native::NativeOperation::MetricScores { metric };
