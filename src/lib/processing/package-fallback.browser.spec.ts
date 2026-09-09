@@ -52,8 +52,8 @@ const settings: ProcessingSettings = {
 };
 
 it('admitted fallback outputs match the actual package, including crop, palette order and alpha precision', async () => {
-	vi.stubEnv('DEV', true);
-	vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+	vi.stubEnv('DEV', false);
+	vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', undefined);
 	const processor = await createDitherette();
 	try {
 		const cases = [
