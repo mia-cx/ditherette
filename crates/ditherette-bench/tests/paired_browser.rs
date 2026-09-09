@@ -30,17 +30,24 @@ fn retention_override_is_bounded_and_absent_from_historical_json() {
     browser.operation = operation.clone();
     browser.accepted = BrowserBackend::Package;
     browser.candidate = BrowserBackend::Package;
+    browser.preparation = BrowserPreparation::FreshInstance;
+    browser.cache = CacheCapability::Roles {
+        accepted: PreparationCapability::ImageStages,
+        candidate: PreparationCapability::ImageStages,
+        sample_prime: None,
+    };
+    case.measurement.application_cache = ApplicationCache::Cold;
     case.identity = operation
         .identity(case.source, &case.rgba, case.source)
         .unwrap();
     case.reference_subject = operation.reference_subject().into();
     case.accepted_subject = operation.subject(BrowserBackend::Package).into();
     case.candidate_subject = case.accepted_subject.clone();
-    for limit in [64 * 1024 * 1024, 384 * 1024 * 1024] {
+    for limit in [64 * 1024 * 1024 + 1, 384 * 1024 * 1024] {
         case.browser.as_mut().unwrap().retained_output_limit_bytes = Some(limit);
         validate_case(case).unwrap();
     }
-    for limit in [0, 64 * 1024 * 1024 - 1, 384 * 1024 * 1024 + 1] {
+    for limit in [0, 64 * 1024 * 1024, 384 * 1024 * 1024 + 1] {
         case.browser.as_mut().unwrap().retained_output_limit_bytes = Some(limit);
         assert!(validate_case(case)
             .unwrap_err()
