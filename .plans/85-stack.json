@@ -1,0 +1,2607 @@
+{
+  "schema": "ditherette-s43-stack-audit-v1",
+  "observed_at_utc": "2026-09-09T18:15:46.273Z",
+  "repository": "mia-cx/ditherette",
+  "issue": 85,
+  "scope": "Read-only published stack ancestry audit. Integrated validation and release-readiness evidence remain separate.",
+  "integration": {
+    "sha": "c43cea1269fcd666835d41c07d82a1c451604107",
+    "parents": [
+      "d09e32df8e06ddddec3d6d374c6f22c280bc4d4b",
+      "db78ca0adf60d1a057d10c2bbe7aabc4c1781374"
+    ],
+    "dependencies": [
+      {
+        "slice": "S41",
+        "issue": 83,
+        "pr": 131,
+        "head_sha": "d09e32df8e06ddddec3d6d374c6f22c280bc4d4b"
+      },
+      {
+        "slice": "S42",
+        "issue": 84,
+        "pr": 130,
+        "head_sha": "db78ca0adf60d1a057d10c2bbe7aabc4c1781374"
+      }
+    ],
+    "all_published_heads_present": true
+  },
+  "counts": {
+    "slice_deliveries": 42,
+    "restoration_prs": 1,
+    "open_prs": 43,
+    "open_nondraft_unmerged_automerge_disabled": 43,
+    "published_heads_in_final": 43,
+    "published_bases_in_final": 43,
+    "current_bases_in_child_heads": 43,
+    "declared_slice_dependency_edges": 73,
+    "restoration_base_edges": 1,
+    "dependency_edges_in_child_head_and_base_and_final": 74,
+    "s43_dependency_edges": 2,
+    "dedicated_join_bases": 10,
+    "missing_ancestry": 0
+  },
+  "definitions": {
+    "base_sha": "Current published baseRefOid observed from GitHub, not initial branch-creation or historical validation base.",
+    "dependency_sha": "Current published headRefOid of each immutable prerequisite slice named in issue body and tracked index.",
+    "restoration_dependency": "PR109's immediate S20 base supplies its one recorded dependency; issue108 has no original slice prerequisite list.",
+    "joins": "Dedicated *-base branch tips and merge commits reachable from each tip after excluding its declared prerequisite heads' histories.",
+    "status": "A published unmerged delivery and complete ancestry do not imply release acceptance."
+  },
+  "sources": [
+    {
+      "path": "docs/plans/ditherette-v1/README.md",
+      "sha256": "5878ca991c21737503ffed5fed808987a5ebc6b5b3e36258c3620e8a42f446de"
+    },
+    {
+      "path": "docs/plans/ditherette-v1/slices.md",
+      "sha256": "b4a10d654bd3da2b9965c867a1b0a5fc10783220ea521605162978dcf29ebdd2"
+    },
+    {
+      "path": "docs/plans/ditherette-v1/stack-ledger.md",
+      "sha256": "b5afa59631dc45d6281efd7a0e6e10a294b1d1f59810e3227098be4225802e63"
+    },
+    {
+      "path": "/home/mia/mia-cx/ditherette/docs/plans/ditherette-v1/slices.md",
+      "sha256": "5980df368a0860c5ad49292a27128283d0754a67af428480ffd5173ab7cf7791"
+    }
+  ],
+  "progress_drift": [
+    {
+      "slice": "S28",
+      "tracked_progress": "In progress",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        118
+      ]
+    },
+    {
+      "slice": "S29",
+      "tracked_progress": "In progress",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        117
+      ]
+    },
+    {
+      "slice": "S30",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        119
+      ]
+    },
+    {
+      "slice": "S31",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        121
+      ]
+    },
+    {
+      "slice": "S32",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        122
+      ]
+    },
+    {
+      "slice": "S33",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        123
+      ]
+    },
+    {
+      "slice": "S34",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        124
+      ]
+    },
+    {
+      "slice": "S35",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        126
+      ]
+    },
+    {
+      "slice": "S36",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        127
+      ]
+    },
+    {
+      "slice": "S37",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        128
+      ]
+    },
+    {
+      "slice": "S38",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        120
+      ]
+    },
+    {
+      "slice": "S39",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        125
+      ]
+    },
+    {
+      "slice": "S40",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        129
+      ]
+    },
+    {
+      "slice": "S41",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "PR open; release gates held",
+      "root_mirror_prs": [
+        131
+      ]
+    },
+    {
+      "slice": "S42",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "Ready",
+      "root_mirror_prs": [
+        130
+      ]
+    },
+    {
+      "slice": "S43",
+      "tracked_progress": "Not started",
+      "tracked_prs": [],
+      "root_mirror_progress": "In progress",
+      "root_mirror_prs": []
+    }
+  ],
+  "prs": [
+    {
+      "slice": "S01",
+      "issue": 42,
+      "issue_state": "OPEN",
+      "pr": 75,
+      "url": "https://github.com/mia-cx/ditherette/pull/75",
+      "title": "chore(wasm): establish the inherited port implementation anchor",
+      "head_branch": "impl/v1-s01-anchor",
+      "head_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+      "base_branch": "main",
+      "base_sha": "edc87f5da2b6958f7d9c892483e08af8149482b4",
+      "merge_base_sha": "edc87f5da2b6958f7d9c892483e08af8149482b4",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "60bfa968e9541f14e2e1490a7829f91dda490d89"
+      ],
+      "dependencies": [],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S02",
+      "issue": 43,
+      "issue_state": "OPEN",
+      "pr": 88,
+      "url": "https://github.com/mia-cx/ditherette/pull/88",
+      "title": "build(wasm): give packages ownership of pinned builds",
+      "head_branch": "impl/v1-s02-builds",
+      "head_sha": "bc110d91d441ec3069d128e3cc7d39b3b439a1f4",
+      "base_branch": "impl/v1-s01-anchor",
+      "base_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+      "merge_base_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "ba7dd082bc4016cead440a4b07e2f7f96c1d77f4"
+      ],
+      "dependencies": [
+        {
+          "slice": "S01",
+          "issue": 42,
+          "pr": 75,
+          "head_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S03",
+      "issue": 44,
+      "issue_state": "OPEN",
+      "pr": 89,
+      "url": "https://github.com/mia-cx/ditherette/pull/89",
+      "title": "feat(spec): define version-one processing contracts",
+      "head_branch": "impl/v1-s03-contracts",
+      "head_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "base_branch": "impl/v1-s01-anchor",
+      "base_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+      "merge_base_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "53f4adba24302da4b966c07b6ca4c917c19385cb"
+      ],
+      "dependencies": [
+        {
+          "slice": "S01",
+          "issue": 42,
+          "pr": 75,
+          "head_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S04",
+      "issue": 45,
+      "issue_state": "OPEN",
+      "pr": 90,
+      "url": "https://github.com/mia-cx/ditherette/pull/90",
+      "title": "fix(bench): prevent overlapping benchmark runs",
+      "head_branch": "impl/v1-s04-bench-lock",
+      "head_sha": "b5ed4d250cbdc804f18bbadb24df4463db1b6434",
+      "base_branch": "impl/v1-s01-anchor",
+      "base_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+      "merge_base_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "15ac134de0a02464e4cf93dba22caade34d9edbe"
+      ],
+      "dependencies": [
+        {
+          "slice": "S01",
+          "issue": 42,
+          "pr": 75,
+          "head_sha": "a213effed4b426c5c432c9ccc7062b7016dd5c1b",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S05",
+      "issue": 46,
+      "issue_state": "OPEN",
+      "pr": 96,
+      "url": "https://github.com/mia-cx/ditherette/pull/96",
+      "title": "feat(bench): verify complete reference and candidate results",
+      "head_branch": "impl/v1-s05-verification",
+      "head_sha": "8c05906cb9cfe0a991b351f5260a319b91f76ab4",
+      "base_branch": "impl/v1-s05-base",
+      "base_sha": "61224131f9bb2e30c98bde685defb884d2a68369",
+      "merge_base_sha": "61224131f9bb2e30c98bde685defb884d2a68369",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "1234908aba98383b16dfb0e85ea1c3b38c5f32a2"
+      ],
+      "dependencies": [
+        {
+          "slice": "S03",
+          "issue": 44,
+          "pr": 89,
+          "head_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S04",
+          "issue": 45,
+          "pr": 90,
+          "head_sha": "b5ed4d250cbdc804f18bbadb24df4463db1b6434",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S06",
+      "issue": 47,
+      "issue_state": "OPEN",
+      "pr": 102,
+      "url": "https://github.com/mia-cx/ditherette/pull/102",
+      "title": "feat(bench): gate performance with fresh revision pairs",
+      "head_branch": "impl/v1-s06-paired-bench",
+      "head_sha": "a65f53e24b880932021b39e601b5682b1111bc54",
+      "base_branch": "impl/v1-s05-verification",
+      "base_sha": "8c05906cb9cfe0a991b351f5260a319b91f76ab4",
+      "merge_base_sha": "8c05906cb9cfe0a991b351f5260a319b91f76ab4",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "7898c3b43d80876290ceb25fcb4ef8808d092cd8"
+      ],
+      "dependencies": [
+        {
+          "slice": "S05",
+          "issue": 46,
+          "pr": 96,
+          "head_sha": "8c05906cb9cfe0a991b351f5260a319b91f76ab4",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S07",
+      "issue": 48,
+      "issue_state": "OPEN",
+      "pr": 91,
+      "url": "https://github.com/mia-cx/ditherette/pull/91",
+      "title": "feat(spec): complete ordinary color reference round trips",
+      "head_branch": "impl/v1-s07-color-basic",
+      "head_sha": "7ef52bd2bcaea2774a400875e5c395526bc9b4b9",
+      "base_branch": "impl/v1-s03-contracts",
+      "base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "merge_base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "1ba15ec9d01a0f1ef7d1c8b71124842841a2a439"
+      ],
+      "dependencies": [
+        {
+          "slice": "S03",
+          "issue": 44,
+          "pr": 89,
+          "head_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S08",
+      "issue": 49,
+      "issue_state": "OPEN",
+      "pr": 92,
+      "url": "https://github.com/mia-cx/ditherette/pull/92",
+      "title": "feat(spec): complete perceptual color round trips",
+      "head_branch": "impl/v1-s08-color-perceptual",
+      "head_sha": "d5e2d9761481f7a6b74fb37c7c2f7841570bead1",
+      "base_branch": "impl/v1-s03-contracts",
+      "base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "merge_base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "f267de7e0bd92dfc3bcd48f22da1598033443812"
+      ],
+      "dependencies": [
+        {
+          "slice": "S03",
+          "issue": 44,
+          "pr": 89,
+          "head_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S09",
+      "issue": 50,
+      "issue_state": "OPEN",
+      "pr": 94,
+      "url": "https://github.com/mia-cx/ditherette/pull/94",
+      "title": "feat(spec): define ordered palette and alpha preparation",
+      "head_branch": "impl/v1-s09-palette",
+      "head_sha": "d8bcdcdbe8f874eaee65447a640b97483c9cb775",
+      "base_branch": "impl/v1-s03-contracts",
+      "base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "merge_base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "33c192d49531adc9e66bebcb1211a19221d8ce36"
+      ],
+      "dependencies": [
+        {
+          "slice": "S03",
+          "issue": 44,
+          "pr": 89,
+          "head_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S10",
+      "issue": 51,
+      "issue_state": "OPEN",
+      "pr": 97,
+      "url": "https://github.com/mia-cx/ditherette/pull/97",
+      "title": "feat(spec): quantize every accepted color and metric pair",
+      "head_branch": "impl/v1-s10-quantize",
+      "head_sha": "47712a500c4079293a06fae4a07ae105a643af8f",
+      "base_branch": "impl/v1-s10-base",
+      "base_sha": "af9c0d99dd140f3235968d5f481c5a2c879ce46e",
+      "merge_base_sha": "af9c0d99dd140f3235968d5f481c5a2c879ce46e",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "233ae8eecdd3ac74cd664870d41b4530eef2fb5d"
+      ],
+      "dependencies": [
+        {
+          "slice": "S07",
+          "issue": 48,
+          "pr": 91,
+          "head_sha": "7ef52bd2bcaea2774a400875e5c395526bc9b4b9",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S08",
+          "issue": 49,
+          "pr": 92,
+          "head_sha": "d5e2d9761481f7a6b74fb37c7c2f7841570bead1",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S09",
+          "issue": 50,
+          "pr": 94,
+          "head_sha": "d8bcdcdbe8f874eaee65447a640b97483c9cb775",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S11",
+      "issue": 52,
+      "issue_state": "OPEN",
+      "pr": 93,
+      "url": "https://github.com/mia-cx/ditherette/pull/93",
+      "title": "feat(spec): complete the reference resize operation",
+      "head_branch": "impl/v1-s11-resize",
+      "head_sha": "bb9421cbecdeadb3c70c78d1e7412f982be7053f",
+      "base_branch": "impl/v1-s03-contracts",
+      "base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "merge_base_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "6aac7638beb025d2c37fb6c172d552da2d4ad939"
+      ],
+      "dependencies": [
+        {
+          "slice": "S03",
+          "issue": 44,
+          "pr": 89,
+          "head_sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S12",
+      "issue": 53,
+      "issue_state": "OPEN",
+      "pr": 95,
+      "url": "https://github.com/mia-cx/ditherette/pull/95",
+      "title": "feat(spec): make adaptive placement palette independent",
+      "head_branch": "impl/v1-s12-placement",
+      "head_sha": "01df66826e532d8fb3b522a1564f1121c96f4d1f",
+      "base_branch": "impl/v1-s12-base",
+      "base_sha": "bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e",
+      "merge_base_sha": "bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "0caa43e7c1b463c27020f0100ad2bd214f227cac"
+      ],
+      "dependencies": [
+        {
+          "slice": "S07",
+          "issue": 48,
+          "pr": 91,
+          "head_sha": "7ef52bd2bcaea2774a400875e5c395526bc9b4b9",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S08",
+          "issue": 49,
+          "pr": 92,
+          "head_sha": "d5e2d9761481f7a6b74fb37c7c2f7841570bead1",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S13",
+      "issue": 54,
+      "issue_state": "OPEN",
+      "pr": 98,
+      "url": "https://github.com/mia-cx/ditherette/pull/98",
+      "title": "feat(spec): define palette-free Bayer and random perturbation",
+      "head_branch": "impl/v1-s13-perturb",
+      "head_sha": "2a2b0f2de2592cba424c5823f40e3604f1b2a6b7",
+      "base_branch": "impl/v1-s13-base",
+      "base_sha": "bfa3d42b79dcc51db9a1f99da3be2c02653b3009",
+      "merge_base_sha": "bfa3d42b79dcc51db9a1f99da3be2c02653b3009",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "0f82acba0e16ed07bb0b79d440ee95c937fb326d"
+      ],
+      "dependencies": [
+        {
+          "slice": "S12",
+          "issue": 53,
+          "pr": 95,
+          "head_sha": "01df66826e532d8fb3b522a1564f1121c96f4d1f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S09",
+          "issue": 50,
+          "pr": 94,
+          "head_sha": "d8bcdcdbe8f874eaee65447a640b97483c9cb775",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S14",
+      "issue": 55,
+      "issue_state": "OPEN",
+      "pr": 99,
+      "url": "https://github.com/mia-cx/ditherette/pull/99",
+      "title": "fix(spec): replace mislabeled Bayer thresholds with blue noise",
+      "head_branch": "impl/v1-s14-blue-noise",
+      "head_sha": "769050190114ca584669703be2be0042c035aa9a",
+      "base_branch": "impl/v1-s13-base",
+      "base_sha": "bfa3d42b79dcc51db9a1f99da3be2c02653b3009",
+      "merge_base_sha": "bfa3d42b79dcc51db9a1f99da3be2c02653b3009",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "22ee327ab26526cdd9efbf2e27ecade201b373ff"
+      ],
+      "dependencies": [
+        {
+          "slice": "S12",
+          "issue": 53,
+          "pr": 95,
+          "head_sha": "01df66826e532d8fb3b522a1564f1121c96f4d1f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S09",
+          "issue": 50,
+          "pr": 94,
+          "head_sha": "d8bcdcdbe8f874eaee65447a640b97483c9cb775",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S15",
+      "issue": 56,
+      "issue_state": "OPEN",
+      "pr": 101,
+      "url": "https://github.com/mia-cx/ditherette/pull/101",
+      "title": "feat(spec): complete all four error-diffusion recipes",
+      "head_branch": "impl/v1-s15-diffusion",
+      "head_sha": "cfec5d9b7ab9c1d7c81c1e6a40f7476f75be9788",
+      "base_branch": "impl/v1-s15-base",
+      "base_sha": "578d677822d5daa8d4b63e7f2cb709c12fd608d0",
+      "merge_base_sha": "578d677822d5daa8d4b63e7f2cb709c12fd608d0",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "ee963fb48ef945ee9fad3affe4d8a5771768f1ef"
+      ],
+      "dependencies": [
+        {
+          "slice": "S10",
+          "issue": 51,
+          "pr": 97,
+          "head_sha": "47712a500c4079293a06fae4a07ae105a643af8f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S12",
+          "issue": 53,
+          "pr": 95,
+          "head_sha": "01df66826e532d8fb3b522a1564f1121c96f4d1f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S16",
+      "issue": 57,
+      "issue_state": "OPEN",
+      "pr": 100,
+      "url": "https://github.com/mia-cx/ditherette/pull/100",
+      "title": "feat(spec): complete adaptive Yliluoma indexed mixing",
+      "head_branch": "impl/v1-s16-yliluoma",
+      "head_sha": "d58355e617bf17fa3481f0f165dd4646e856ce7f",
+      "base_branch": "impl/v1-s15-base",
+      "base_sha": "578d677822d5daa8d4b63e7f2cb709c12fd608d0",
+      "merge_base_sha": "578d677822d5daa8d4b63e7f2cb709c12fd608d0",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "6e9f5aa7cfd67827052379bdecbd4bd14a56b743"
+      ],
+      "dependencies": [
+        {
+          "slice": "S10",
+          "issue": 51,
+          "pr": 97,
+          "head_sha": "47712a500c4079293a06fae4a07ae105a643af8f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S12",
+          "issue": 53,
+          "pr": 95,
+          "head_sha": "01df66826e532d8fb3b522a1564f1121c96f4d1f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S17",
+      "issue": 58,
+      "issue_state": "OPEN",
+      "pr": 103,
+      "url": "https://github.com/mia-cx/ditherette/pull/103",
+      "title": "feat(spec): complete the five-method reference processor",
+      "head_branch": "impl/v1-s17-processor",
+      "head_sha": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+      "base_branch": "impl/v1-s17-base",
+      "base_sha": "4f4b48a04c0ccee51222b7e621ff4a566a495613",
+      "merge_base_sha": "4f4b48a04c0ccee51222b7e621ff4a566a495613",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "0fb89b929108b68eb3486e1c6b9834d9351e1a4f"
+      ],
+      "dependencies": [
+        {
+          "slice": "S05",
+          "issue": 46,
+          "pr": 96,
+          "head_sha": "8c05906cb9cfe0a991b351f5260a319b91f76ab4",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S10",
+          "issue": 51,
+          "pr": 97,
+          "head_sha": "47712a500c4079293a06fae4a07ae105a643af8f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S11",
+          "issue": 52,
+          "pr": 93,
+          "head_sha": "bb9421cbecdeadb3c70c78d1e7412f982be7053f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S13",
+          "issue": 54,
+          "pr": 98,
+          "head_sha": "2a2b0f2de2592cba424c5823f40e3604f1b2a6b7",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S14",
+          "issue": 55,
+          "pr": 99,
+          "head_sha": "769050190114ca584669703be2be0042c035aa9a",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S15",
+          "issue": 56,
+          "pr": 101,
+          "head_sha": "cfec5d9b7ab9c1d7c81c1e6a40f7476f75be9788",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S16",
+          "issue": 57,
+          "pr": 100,
+          "head_sha": "d58355e617bf17fa3481f0f165dd4646e856ce7f",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S18",
+      "issue": 59,
+      "issue_state": "OPEN",
+      "pr": 104,
+      "url": "https://github.com/mia-cx/ditherette/pull/104",
+      "title": "feat(spec): freeze v1 reference semantics",
+      "head_branch": "impl/v1-s18-freeze",
+      "head_sha": "662d6483c09d6fc388d9f7315fe63be280c10d45",
+      "base_branch": "impl/v1-s17-processor",
+      "base_sha": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+      "merge_base_sha": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "c03c3c85f5748b7726cfdae50ea6d41acd8ede64"
+      ],
+      "dependencies": [
+        {
+          "slice": "S17",
+          "issue": 58,
+          "pr": 103,
+          "head_sha": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S19",
+      "issue": 60,
+      "issue_state": "OPEN",
+      "pr": 105,
+      "url": "https://github.com/mia-cx/ditherette/pull/105",
+      "title": "feat(package): add isolated scalar nearest processing",
+      "head_branch": "impl/v1-s19-integration",
+      "head_sha": "7de86d799a25a132c8de41ee54696bd8e54bdf76",
+      "base_branch": "impl/v1-s19-base",
+      "base_sha": "1bd175127f92d55fb2ddf693a67d99b9fb190667",
+      "merge_base_sha": "1bd175127f92d55fb2ddf693a67d99b9fb190667",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "db2dbb61c9d6d14723c3f3bfb05a0d3465d6e057"
+      ],
+      "dependencies": [
+        {
+          "slice": "S02",
+          "issue": 43,
+          "pr": 88,
+          "head_sha": "bc110d91d441ec3069d128e3cc7d39b3b439a1f4",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S06",
+          "issue": 47,
+          "pr": 102,
+          "head_sha": "a65f53e24b880932021b39e601b5682b1111bc54",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S18",
+          "issue": 59,
+          "pr": 104,
+          "head_sha": "662d6483c09d6fc388d9f7315fe63be280c10d45",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S20",
+      "issue": 61,
+      "issue_state": "OPEN",
+      "pr": 107,
+      "url": "https://github.com/mia-cx/ditherette/pull/107",
+      "title": "feat(bench): measure complete public browser calls",
+      "head_branch": "impl/v1-s20-browser-bench",
+      "head_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+      "base_branch": "impl/v1-s19-integration",
+      "base_sha": "7de86d799a25a132c8de41ee54696bd8e54bdf76",
+      "merge_base_sha": "7de86d799a25a132c8de41ee54696bd8e54bdf76",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "b8b4eeb2e376b81469141090298b4003577d3daa"
+      ],
+      "dependencies": [
+        {
+          "slice": "S19",
+          "issue": 60,
+          "pr": 105,
+          "head_sha": "7de86d799a25a132c8de41ee54696bd8e54bdf76",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S21",
+      "issue": 62,
+      "issue_state": "OPEN",
+      "pr": 110,
+      "url": "https://github.com/mia-cx/ditherette/pull/110",
+      "title": "feat(resize): add bounded public area and bilinear calls",
+      "head_branch": "impl/v1-s21-area-bilinear",
+      "head_sha": "2d5412664ccd27b5790db7493f375e3490e42c90",
+      "base_branch": "fix/v1-restore-landed",
+      "base_sha": "467542f49ce3f600e5b03aeef574a97be554ae15",
+      "merge_base_sha": "467542f49ce3f600e5b03aeef574a97be554ae15",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "d7c207b1b0ff7d554734edb89bd8d3841a3fc2f8",
+        "debaa849f9041657ccc9b6942f561213d25d5dbc"
+      ],
+      "dependencies": [
+        {
+          "slice": "S19",
+          "issue": 60,
+          "pr": 105,
+          "head_sha": "7de86d799a25a132c8de41ee54696bd8e54bdf76",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S20",
+          "issue": 61,
+          "pr": 107,
+          "head_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S22",
+      "issue": 63,
+      "issue_state": "OPEN",
+      "pr": 111,
+      "url": "https://github.com/mia-cx/ditherette/pull/111",
+      "title": "feat(resize): expose bounded bicubic and Lanczos calls",
+      "head_branch": "impl/v1-s22-convolution",
+      "head_sha": "9eecc670d9ff587ff10f8d2f3a8b86bab600c988",
+      "base_branch": "impl/v1-s21-area-bilinear",
+      "base_sha": "2d5412664ccd27b5790db7493f375e3490e42c90",
+      "merge_base_sha": "2d5412664ccd27b5790db7493f375e3490e42c90",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "a66b63554c0d2e946cfb1e18eeabe6e025678ba6",
+        "2d5412664ccd27b5790db7493f375e3490e42c90"
+      ],
+      "dependencies": [
+        {
+          "slice": "S19",
+          "issue": 60,
+          "pr": 105,
+          "head_sha": "7de86d799a25a132c8de41ee54696bd8e54bdf76",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S20",
+          "issue": 61,
+          "pr": 107,
+          "head_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S23",
+      "issue": 64,
+      "issue_state": "OPEN",
+      "pr": 112,
+      "url": "https://github.com/mia-cx/ditherette/pull/112",
+      "title": "feat(resize): add exact trilinear with shared mip preparation",
+      "head_branch": "impl/v1-s23-trilinear",
+      "head_sha": "cd7a0d298755818f86d710bef9f094c815d127de",
+      "base_branch": "impl/v1-s22-convolution",
+      "base_sha": "9eecc670d9ff587ff10f8d2f3a8b86bab600c988",
+      "merge_base_sha": "9eecc670d9ff587ff10f8d2f3a8b86bab600c988",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "5c0dc4e19e1245593d145b725d9aa46894bf41ab",
+        "9eecc670d9ff587ff10f8d2f3a8b86bab600c988"
+      ],
+      "dependencies": [
+        {
+          "slice": "S21",
+          "issue": 62,
+          "pr": 110,
+          "head_sha": "2d5412664ccd27b5790db7493f375e3490e42c90",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S24",
+      "issue": 65,
+      "issue_state": "OPEN",
+      "pr": 113,
+      "url": "https://github.com/mia-cx/ditherette/pull/113",
+      "title": "feat(quantize): expose bounded five-space palette quantization",
+      "head_branch": "impl/v1-s24-bench",
+      "head_sha": "f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395",
+      "base_branch": "impl/v1-s22-convolution",
+      "base_sha": "9eecc670d9ff587ff10f8d2f3a8b86bab600c988",
+      "merge_base_sha": "9eecc670d9ff587ff10f8d2f3a8b86bab600c988",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "eb1725ef8bf8eadaf703d3e0a93576c2bf9a70eb"
+      ],
+      "dependencies": [
+        {
+          "slice": "S19",
+          "issue": 60,
+          "pr": 105,
+          "head_sha": "7de86d799a25a132c8de41ee54696bd8e54bdf76",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S20",
+          "issue": 61,
+          "pr": 107,
+          "head_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S25",
+      "issue": 66,
+      "issue_state": "OPEN",
+      "pr": 114,
+      "url": "https://github.com/mia-cx/ditherette/pull/114",
+      "title": "feat(quantize): support all weighted and perceptual matching",
+      "head_branch": "impl/v1-s25-delivery",
+      "head_sha": "af8259ac766268e78690a569c10494c62cdb7ce2",
+      "base_branch": "impl/v1-s24-bench",
+      "base_sha": "f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395",
+      "merge_base_sha": "f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "ff2d1232d0be89ca512edadc271f4f800261c844",
+        "f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395"
+      ],
+      "dependencies": [
+        {
+          "slice": "S24",
+          "issue": 65,
+          "pr": 113,
+          "head_sha": "f8a2cc11dc42e4815ea8cffbb1b3f36c1a116395",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S26",
+      "issue": 67,
+      "issue_state": "OPEN",
+      "pr": 115,
+      "url": "https://github.com/mia-cx/ditherette/pull/115",
+      "title": "feat(package): add scalar Bayer and random dithering",
+      "head_branch": "impl/v1-s26-integration",
+      "head_sha": "59036e1aef87943e462b4cce6b371e5edd082979",
+      "base_branch": "impl/v1-s25-delivery",
+      "base_sha": "af8259ac766268e78690a569c10494c62cdb7ce2",
+      "merge_base_sha": "af8259ac766268e78690a569c10494c62cdb7ce2",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "68f058e93dce025ba87fa728f0b960a09dc96948",
+        "af8259ac766268e78690a569c10494c62cdb7ce2"
+      ],
+      "dependencies": [
+        {
+          "slice": "S25",
+          "issue": 66,
+          "pr": 114,
+          "head_sha": "af8259ac766268e78690a569c10494c62cdb7ce2",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S27",
+      "issue": 68,
+      "issue_state": "OPEN",
+      "pr": 116,
+      "url": "https://github.com/mia-cx/ditherette/pull/116",
+      "title": "feat(dither): expose exact scalar blue-noise fields",
+      "head_branch": "impl/v1-s27-bench",
+      "head_sha": "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7",
+      "base_branch": "impl/v1-s26-integration",
+      "base_sha": "59036e1aef87943e462b4cce6b371e5edd082979",
+      "merge_base_sha": "59036e1aef87943e462b4cce6b371e5edd082979",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "44cbe43546e739f3d11f7b0bd08d7453afb83da1"
+      ],
+      "dependencies": [
+        {
+          "slice": "S26",
+          "issue": 67,
+          "pr": 115,
+          "head_sha": "59036e1aef87943e462b4cce6b371e5edd082979",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S28",
+      "issue": 69,
+      "issue_state": "OPEN",
+      "pr": 118,
+      "url": "https://github.com/mia-cx/ditherette/pull/118",
+      "title": "feat(package): add scalar diffusion with width-bounded scratch",
+      "head_branch": "impl/v1-s28-bench",
+      "head_sha": "f4dfef7401d5474ac7318302d117ee0345449793",
+      "base_branch": "impl/v1-s27-bench",
+      "base_sha": "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7",
+      "merge_base_sha": "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "e82df719c2d79b4ce1d6b2f161fd6020871f431c"
+      ],
+      "dependencies": [
+        {
+          "slice": "S25",
+          "issue": 66,
+          "pr": 114,
+          "head_sha": "af8259ac766268e78690a569c10494c62cdb7ce2",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S26",
+          "issue": 67,
+          "pr": 115,
+          "head_sha": "59036e1aef87943e462b4cce6b371e5edd082979",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S29",
+      "issue": 70,
+      "issue_state": "OPEN",
+      "pr": 117,
+      "url": "https://github.com/mia-cx/ditherette/pull/117",
+      "title": "feat(dither): expose exact scalar Yliluoma mixing",
+      "head_branch": "impl/v1-s29-yliluoma",
+      "head_sha": "6eb9e00fd3191fc8bbd03559e89c67c762abfc25",
+      "base_branch": "impl/v1-s27-bench",
+      "base_sha": "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7",
+      "merge_base_sha": "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "e3004c8f6f6769c219f1c56acf22f9924c00c626"
+      ],
+      "dependencies": [
+        {
+          "slice": "S25",
+          "issue": 66,
+          "pr": 114,
+          "head_sha": "af8259ac766268e78690a569c10494c62cdb7ce2",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S26",
+          "issue": 67,
+          "pr": 115,
+          "head_sha": "59036e1aef87943e462b4cce6b371e5edd082979",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S30",
+      "issue": 71,
+      "issue_state": "OPEN",
+      "pr": 119,
+      "url": "https://github.com/mia-cx/ditherette/pull/119",
+      "title": "feat(process): complete resize-to-indexed recipe processing",
+      "head_branch": "impl/v1-s30-process",
+      "head_sha": "f408bc99a80d3c83b6caee0b5c1d19868f0db876",
+      "base_branch": "impl/v1-s30-base",
+      "base_sha": "af59df116193398886d1111964c87eaaa6111876",
+      "merge_base_sha": "af59df116193398886d1111964c87eaaa6111876",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "86a98935e9500670fafca8191364a436f3934379"
+      ],
+      "dependencies": [
+        {
+          "slice": "S23",
+          "issue": 64,
+          "pr": 112,
+          "head_sha": "cd7a0d298755818f86d710bef9f094c815d127de",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S22",
+          "issue": 63,
+          "pr": 111,
+          "head_sha": "9eecc670d9ff587ff10f8d2f3a8b86bab600c988",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S25",
+          "issue": 66,
+          "pr": 114,
+          "head_sha": "af8259ac766268e78690a569c10494c62cdb7ce2",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S27",
+          "issue": 68,
+          "pr": 116,
+          "head_sha": "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S28",
+          "issue": 69,
+          "pr": 118,
+          "head_sha": "f4dfef7401d5474ac7318302d117ee0345449793",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S29",
+          "issue": 70,
+          "pr": 117,
+          "head_sha": "6eb9e00fd3191fc8bbd03559e89c67c762abfc25",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S31",
+      "issue": 72,
+      "issue_state": "OPEN",
+      "pr": 121,
+      "url": "https://github.com/mia-cx/ditherette/pull/121",
+      "title": "feat(runtime): reuse bounded preparation across public calls",
+      "head_branch": "impl/v1-s31-preparation",
+      "head_sha": "59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76",
+      "base_branch": "impl/v1-s30-process",
+      "base_sha": "f408bc99a80d3c83b6caee0b5c1d19868f0db876",
+      "merge_base_sha": "f408bc99a80d3c83b6caee0b5c1d19868f0db876",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "bc0c7e01c0507299f03fa4e9b791bd113912b29a"
+      ],
+      "dependencies": [
+        {
+          "slice": "S30",
+          "issue": 71,
+          "pr": 119,
+          "head_sha": "f408bc99a80d3c83b6caee0b5c1d19868f0db876",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S32",
+      "issue": 73,
+      "issue_state": "OPEN",
+      "pr": 122,
+      "url": "https://github.com/mia-cx/ditherette/pull/122",
+      "title": "feat(cache): reuse image stages across processor methods",
+      "head_branch": "impl/v1-s32-stages",
+      "head_sha": "127a0428a0bfdad7ea3e239e6a96f375449815bb",
+      "base_branch": "impl/v1-s31-preparation",
+      "base_sha": "59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76",
+      "merge_base_sha": "59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "cbd0003c8e0ef4bc1f6a751280bcee4a9ee8596f"
+      ],
+      "dependencies": [
+        {
+          "slice": "S31",
+          "issue": 72,
+          "pr": 121,
+          "head_sha": "59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S33",
+      "issue": 74,
+      "issue_state": "OPEN",
+      "pr": 123,
+      "url": "https://github.com/mia-cx/ditherette/pull/123",
+      "title": "feat(progress): report work and contain callback failures",
+      "head_branch": "impl/v1-s33-progress",
+      "head_sha": "b2ca677ed9927165a1010f5c52646a989d8a02ca",
+      "base_branch": "impl/v1-s32-stages",
+      "base_sha": "127a0428a0bfdad7ea3e239e6a96f375449815bb",
+      "merge_base_sha": "127a0428a0bfdad7ea3e239e6a96f375449815bb",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "20091a51ac28d30a7221c4e2dbc3a5e5d3d97e8b"
+      ],
+      "dependencies": [
+        {
+          "slice": "S32",
+          "issue": 73,
+          "pr": 122,
+          "head_sha": "127a0428a0bfdad7ea3e239e6a96f375449815bb",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S34",
+      "issue": 76,
+      "issue_state": "OPEN",
+      "pr": 124,
+      "url": "https://github.com/mia-cx/ditherette/pull/124",
+      "title": "feat(package): initialize isolated optional worker pools",
+      "head_branch": "impl/v1-s34-threads",
+      "head_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+      "base_branch": "impl/v1-s33-progress",
+      "base_sha": "b2ca677ed9927165a1010f5c52646a989d8a02ca",
+      "merge_base_sha": "b2ca677ed9927165a1010f5c52646a989d8a02ca",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "beaadc2e29097ee12399a194b619b347ed724860"
+      ],
+      "dependencies": [
+        {
+          "slice": "S33",
+          "issue": 74,
+          "pr": 123,
+          "head_sha": "b2ca677ed9927165a1010f5c52646a989d8a02ca",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S35",
+      "issue": 77,
+      "issue_state": "OPEN",
+      "pr": 126,
+      "url": "https://github.com/mia-cx/ditherette/pull/126",
+      "title": "perf(resize): use measured worker capacity for large calls",
+      "head_branch": "delivery/v1-s35-resize",
+      "head_sha": "6bbe113b99a08f2a11ade6296ddf7f25e32e041b",
+      "base_branch": "impl/v1-s34-threads",
+      "base_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+      "merge_base_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "596320d482be7ddf0933b9f6e8788f76d66d42fc"
+      ],
+      "dependencies": [
+        {
+          "slice": "S34",
+          "issue": 76,
+          "pr": 124,
+          "head_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S36",
+      "issue": 78,
+      "issue_state": "OPEN",
+      "pr": 127,
+      "url": "https://github.com/mia-cx/ditherette/pull/127",
+      "title": "perf(fields): parallelize measured quantize and field calls",
+      "head_branch": "delivery/v1-s36-fields-final",
+      "head_sha": "b542bd94a5dbc724de73815ae0008a22985147fd",
+      "base_branch": "delivery/v1-s35-resize",
+      "base_sha": "6bbe113b99a08f2a11ade6296ddf7f25e32e041b",
+      "merge_base_sha": "6bbe113b99a08f2a11ade6296ddf7f25e32e041b",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "67cff5910095ba8b96a969d95bc6a9e24f9955c9"
+      ],
+      "dependencies": [
+        {
+          "slice": "S34",
+          "issue": 76,
+          "pr": 124,
+          "head_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S37",
+      "issue": 79,
+      "issue_state": "OPEN",
+      "pr": 128,
+      "url": "https://github.com/mia-cx/ditherette/pull/128",
+      "title": "perf(yliluoma): use measured workers for exact mixing calls",
+      "head_branch": "delivery/v1-s37-yliluoma",
+      "head_sha": "91b114ba610588c504a7551e8123d72e36eb9e66",
+      "base_branch": "delivery/v1-s36-fields-final",
+      "base_sha": "b542bd94a5dbc724de73815ae0008a22985147fd",
+      "merge_base_sha": "b542bd94a5dbc724de73815ae0008a22985147fd",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "4072b218ae121e312442345572b62ddc357f3ac2"
+      ],
+      "dependencies": [
+        {
+          "slice": "S34",
+          "issue": 76,
+          "pr": 124,
+          "head_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S38",
+      "issue": 80,
+      "issue_state": "OPEN",
+      "pr": 120,
+      "url": "https://github.com/mia-cx/ditherette/pull/120",
+      "title": "feat(web): run complete processing behind a development flag",
+      "head_branch": "impl/v1-s38-website",
+      "head_sha": "0305456bc25259a92d46ded245ae09aaf407be07",
+      "base_branch": "impl/v1-s30-process",
+      "base_sha": "f408bc99a80d3c83b6caee0b5c1d19868f0db876",
+      "merge_base_sha": "f408bc99a80d3c83b6caee0b5c1d19868f0db876",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "34ecca9063f68ccbbcb93a2e6d363bf57baa1129"
+      ],
+      "dependencies": [
+        {
+          "slice": "S30",
+          "issue": 71,
+          "pr": 119,
+          "head_sha": "f408bc99a80d3c83b6caee0b5c1d19868f0db876",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S39",
+      "issue": 81,
+      "issue_state": "OPEN",
+      "pr": 125,
+      "url": "https://github.com/mia-cx/ditherette/pull/125",
+      "title": "feat(web): cancel stale work and retain faithful initialization fallback",
+      "head_branch": "impl/v1-s39-website",
+      "head_sha": "5938b248506ae14d24471498c3a90bb42ed3c32a",
+      "base_branch": "impl/v1-s39-base",
+      "base_sha": "2a0237680fa249e2293b991ca067d7baf05aef14",
+      "merge_base_sha": "2a0237680fa249e2293b991ca067d7baf05aef14",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "ff4208ec58f5b16dec48526dc667c6087090042b"
+      ],
+      "dependencies": [
+        {
+          "slice": "S38",
+          "issue": 80,
+          "pr": 120,
+          "head_sha": "0305456bc25259a92d46ded245ae09aaf407be07",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S34",
+          "issue": 76,
+          "pr": 124,
+          "head_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S40",
+      "issue": 82,
+      "issue_state": "OPEN",
+      "pr": 129,
+      "url": "https://github.com/mia-cx/ditherette/pull/129",
+      "title": "test(wasm): enforce integrated package conformance",
+      "head_branch": "impl/v1-s40-conformance",
+      "head_sha": "95706738e4f3179824a66c80bb5728ce97a34b4b",
+      "base_branch": "impl/v1-s40-base",
+      "base_sha": "5fccb9e6a51c6de49fd0051b204fb16bfde75e22",
+      "merge_base_sha": "5fccb9e6a51c6de49fd0051b204fb16bfde75e22",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "6f5ec7a42c6dbbe44901f0dff15b068b6ef18b08"
+      ],
+      "dependencies": [
+        {
+          "slice": "S35",
+          "issue": 77,
+          "pr": 126,
+          "head_sha": "6bbe113b99a08f2a11ade6296ddf7f25e32e041b",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S36",
+          "issue": 78,
+          "pr": 127,
+          "head_sha": "b542bd94a5dbc724de73815ae0008a22985147fd",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S37",
+          "issue": 79,
+          "pr": 128,
+          "head_sha": "91b114ba610588c504a7551e8123d72e36eb9e66",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S39",
+          "issue": 81,
+          "pr": 125,
+          "head_sha": "5938b248506ae14d24471498c3a90bb42ed3c32a",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S41",
+      "issue": 83,
+      "issue_state": "OPEN",
+      "pr": 131,
+      "url": "https://github.com/mia-cx/ditherette/pull/131",
+      "title": "feat(bench): assemble S41 release evidence and expose blockers",
+      "head_branch": "impl/v1-s41-performance",
+      "head_sha": "d09e32df8e06ddddec3d6d374c6f22c280bc4d4b",
+      "base_branch": "impl/v1-s40-conformance",
+      "base_sha": "95706738e4f3179824a66c80bb5728ce97a34b4b",
+      "merge_base_sha": "95706738e4f3179824a66c80bb5728ce97a34b4b",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "8cff1af509bc71be2d30c15276ef8ecf19ebc4ca"
+      ],
+      "dependencies": [
+        {
+          "slice": "S40",
+          "issue": 82,
+          "pr": 129,
+          "head_sha": "95706738e4f3179824a66c80bb5728ce97a34b4b",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S20",
+          "issue": 61,
+          "pr": 107,
+          "head_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "S42",
+      "issue": 84,
+      "issue_state": "OPEN",
+      "pr": 130,
+      "url": "https://github.com/mia-cx/ditherette/pull/130",
+      "title": "feat(package): prepare reproducible browser package publication",
+      "head_branch": "impl/v1-s42-package",
+      "head_sha": "db78ca0adf60d1a057d10c2bbe7aabc4c1781374",
+      "base_branch": "impl/v1-s40-conformance",
+      "base_sha": "95706738e4f3179824a66c80bb5728ce97a34b4b",
+      "merge_base_sha": "95706738e4f3179824a66c80bb5728ce97a34b4b",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "bb4549c8bac00b391f42a57810dcaf91268c39a6"
+      ],
+      "dependencies": [
+        {
+          "slice": "S34",
+          "issue": 76,
+          "pr": 124,
+          "head_sha": "d4531667e1158c2068f30614f40c9d39f8c5313e",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        },
+        {
+          "slice": "S40",
+          "issue": 82,
+          "pr": 129,
+          "head_sha": "95706738e4f3179824a66c80bb5728ce97a34b4b",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Original issue-body prerequisites, cross-checked against tracked slices index."
+    },
+    {
+      "slice": "restoration",
+      "issue": 108,
+      "issue_state": "OPEN",
+      "pr": 109,
+      "url": "https://github.com/mia-cx/ditherette/pull/109",
+      "title": "fix(resize): restore landed optimized kernels and shared helpers",
+      "head_branch": "fix/v1-restore-landed",
+      "head_sha": "467542f49ce3f600e5b03aeef574a97be554ae15",
+      "base_branch": "impl/v1-s20-browser-bench",
+      "base_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+      "merge_base_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+      "state": "OPEN",
+      "draft": false,
+      "merged_at": null,
+      "auto_merge": null,
+      "head_in_final": true,
+      "base_in_final": true,
+      "current_base_in_head": true,
+      "head_parents": [
+        "c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3"
+      ],
+      "dependencies": [
+        {
+          "slice": "S20",
+          "issue": 61,
+          "pr": 107,
+          "head_sha": "e19e12c219605138399cabd71b84cd4d9262a678",
+          "in_final": true,
+          "in_child_head": true,
+          "in_current_base": true
+        }
+      ],
+      "dependency_authority": "Current PR base branch, supported by restoration ledger."
+    }
+  ],
+  "joins": [
+    {
+      "branch": "impl/v1-s05-base",
+      "sha": "61224131f9bb2e30c98bde685defb884d2a68369",
+      "parents": [
+        "b5ed4d250cbdc804f18bbadb24df4463db1b6434",
+        "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06"
+      ],
+      "slices": [
+        "S05"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S03",
+          "sha": "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06"
+        },
+        {
+          "slice": "S04",
+          "sha": "b5ed4d250cbdc804f18bbadb24df4463db1b6434"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "61224131f9bb2e30c98bde685defb884d2a68369",
+          "parents": [
+            "b5ed4d250cbdc804f18bbadb24df4463db1b6434",
+            "fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06"
+          ],
+          "subject": "chore(stack): join validated contracts and benchmark ownership"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s10-base",
+      "sha": "af9c0d99dd140f3235968d5f481c5a2c879ce46e",
+      "parents": [
+        "bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e",
+        "d8bcdcdbe8f874eaee65447a640b97483c9cb775"
+      ],
+      "slices": [
+        "S10"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S07",
+          "sha": "7ef52bd2bcaea2774a400875e5c395526bc9b4b9"
+        },
+        {
+          "slice": "S08",
+          "sha": "d5e2d9761481f7a6b74fb37c7c2f7841570bead1"
+        },
+        {
+          "slice": "S09",
+          "sha": "d8bcdcdbe8f874eaee65447a640b97483c9cb775"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "af9c0d99dd140f3235968d5f481c5a2c879ce46e",
+          "parents": [
+            "bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e",
+            "d8bcdcdbe8f874eaee65447a640b97483c9cb775"
+          ],
+          "subject": "chore(stack): join color and palette references for quantization"
+        },
+        {
+          "sha": "bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e",
+          "parents": [
+            "7ef52bd2bcaea2774a400875e5c395526bc9b4b9",
+            "d5e2d9761481f7a6b74fb37c7c2f7841570bead1"
+          ],
+          "subject": "chore(stack): join the seven color reference round trips"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s12-base",
+      "sha": "bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e",
+      "parents": [
+        "7ef52bd2bcaea2774a400875e5c395526bc9b4b9",
+        "d5e2d9761481f7a6b74fb37c7c2f7841570bead1"
+      ],
+      "slices": [
+        "S12"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S07",
+          "sha": "7ef52bd2bcaea2774a400875e5c395526bc9b4b9"
+        },
+        {
+          "slice": "S08",
+          "sha": "d5e2d9761481f7a6b74fb37c7c2f7841570bead1"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "bdf79a606c94e8b44ee2c6fa11ea97af490b4b2e",
+          "parents": [
+            "7ef52bd2bcaea2774a400875e5c395526bc9b4b9",
+            "d5e2d9761481f7a6b74fb37c7c2f7841570bead1"
+          ],
+          "subject": "chore(stack): join the seven color reference round trips"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s13-base",
+      "sha": "bfa3d42b79dcc51db9a1f99da3be2c02653b3009",
+      "parents": [
+        "01df66826e532d8fb3b522a1564f1121c96f4d1f",
+        "d8bcdcdbe8f874eaee65447a640b97483c9cb775"
+      ],
+      "slices": [
+        "S13",
+        "S14"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S12",
+          "sha": "01df66826e532d8fb3b522a1564f1121c96f4d1f"
+        },
+        {
+          "slice": "S09",
+          "sha": "d8bcdcdbe8f874eaee65447a640b97483c9cb775"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "bfa3d42b79dcc51db9a1f99da3be2c02653b3009",
+          "parents": [
+            "01df66826e532d8fb3b522a1564f1121c96f4d1f",
+            "d8bcdcdbe8f874eaee65447a640b97483c9cb775"
+          ],
+          "subject": "chore(stack): join palette and placement references for fields"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s15-base",
+      "sha": "578d677822d5daa8d4b63e7f2cb709c12fd608d0",
+      "parents": [
+        "47712a500c4079293a06fae4a07ae105a643af8f",
+        "01df66826e532d8fb3b522a1564f1121c96f4d1f"
+      ],
+      "slices": [
+        "S15",
+        "S16"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S10",
+          "sha": "47712a500c4079293a06fae4a07ae105a643af8f"
+        },
+        {
+          "slice": "S12",
+          "sha": "01df66826e532d8fb3b522a1564f1121c96f4d1f"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "578d677822d5daa8d4b63e7f2cb709c12fd608d0",
+          "parents": [
+            "47712a500c4079293a06fae4a07ae105a643af8f",
+            "01df66826e532d8fb3b522a1564f1121c96f4d1f"
+          ],
+          "subject": "chore(stack): join matching and placement for diffusion and mixing"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s17-base",
+      "sha": "4f4b48a04c0ccee51222b7e621ff4a566a495613",
+      "parents": [
+        "5c0c471d787860e552323bd4ceac72890039fc62"
+      ],
+      "slices": [
+        "S17"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S05",
+          "sha": "8c05906cb9cfe0a991b351f5260a319b91f76ab4"
+        },
+        {
+          "slice": "S10",
+          "sha": "47712a500c4079293a06fae4a07ae105a643af8f"
+        },
+        {
+          "slice": "S11",
+          "sha": "bb9421cbecdeadb3c70c78d1e7412f982be7053f"
+        },
+        {
+          "slice": "S13",
+          "sha": "2a2b0f2de2592cba424c5823f40e3604f1b2a6b7"
+        },
+        {
+          "slice": "S14",
+          "sha": "769050190114ca584669703be2be0042c035aa9a"
+        },
+        {
+          "slice": "S15",
+          "sha": "cfec5d9b7ab9c1d7c81c1e6a40f7476f75be9788"
+        },
+        {
+          "slice": "S16",
+          "sha": "d58355e617bf17fa3481f0f165dd4646e856ce7f"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "5c0c471d787860e552323bd4ceac72890039fc62",
+          "parents": [
+            "6061343071056208aa3312e246bdeae2d17b8f31",
+            "d58355e617bf17fa3481f0f165dd4646e856ce7f"
+          ],
+          "subject": "chore(stack): join adaptive Yliluoma reference for S17"
+        },
+        {
+          "sha": "6061343071056208aa3312e246bdeae2d17b8f31",
+          "parents": [
+            "c0c56dfd8131665480cff9f0df6636fd746b24e0",
+            "cfec5d9b7ab9c1d7c81c1e6a40f7476f75be9788"
+          ],
+          "subject": "chore(stack): join complete diffusion reference for S17"
+        },
+        {
+          "sha": "c0c56dfd8131665480cff9f0df6636fd746b24e0",
+          "parents": [
+            "5bcb147801d362e039c53bd5b7dbdaf24e61762f",
+            "769050190114ca584669703be2be0042c035aa9a"
+          ],
+          "subject": "chore(stack): join corrected blue-noise oracle for S17"
+        },
+        {
+          "sha": "5bcb147801d362e039c53bd5b7dbdaf24e61762f",
+          "parents": [
+            "5b97195490044cb80cb2818ef2cebb0e5b02d656",
+            "2a2b0f2de2592cba424c5823f40e3604f1b2a6b7"
+          ],
+          "subject": "chore(stack): join palette-free field reference for S17"
+        },
+        {
+          "sha": "5b97195490044cb80cb2818ef2cebb0e5b02d656",
+          "parents": [
+            "8fdc48c032e60d84cb91f368cd5a533d365471f6",
+            "47712a500c4079293a06fae4a07ae105a643af8f"
+          ],
+          "subject": "chore(stack): join color palette and quantize references for S17"
+        },
+        {
+          "sha": "8fdc48c032e60d84cb91f368cd5a533d365471f6",
+          "parents": [
+            "bb9421cbecdeadb3c70c78d1e7412f982be7053f",
+            "8c05906cb9cfe0a991b351f5260a319b91f76ab4"
+          ],
+          "subject": "chore(stack): join reference verification into S17 base"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s19-base",
+      "sha": "1bd175127f92d55fb2ddf693a67d99b9fb190667",
+      "parents": [
+        "1dd8128a8532638ee2a17853e562145bad687e3f"
+      ],
+      "slices": [
+        "S19"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S02",
+          "sha": "bc110d91d441ec3069d128e3cc7d39b3b439a1f4"
+        },
+        {
+          "slice": "S06",
+          "sha": "a65f53e24b880932021b39e601b5682b1111bc54"
+        },
+        {
+          "slice": "S18",
+          "sha": "662d6483c09d6fc388d9f7315fe63be280c10d45"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "1dd8128a8532638ee2a17853e562145bad687e3f",
+          "parents": [
+            "5e45b7b6677d1fe4241a8109c39818a36c44b61d",
+            "662d6483c09d6fc388d9f7315fe63be280c10d45"
+          ],
+          "subject": "chore(stack): carry the validated freeze fixture correction"
+        },
+        {
+          "sha": "1f7e7a68803f5af6953ec710c536cbb66a32c1f8",
+          "parents": [
+            "363324c43556f08ef4e8677d226f5659977bcc66",
+            "eee0b5ddfb600b9ba6517c3dcb755e3566fc7813"
+          ],
+          "subject": "docs(stack): carry S18 delivery into the S19 base"
+        },
+        {
+          "sha": "363324c43556f08ef4e8677d226f5659977bcc66",
+          "parents": [
+            "6131ad1b53bc847cd6e7e27ddc6909d4b50a62c6",
+            "e636b3120f566127b5e6b884ff2df3cd24c7c5ca"
+          ],
+          "subject": "chore(stack): join reviewed freeze corrections for S19"
+        },
+        {
+          "sha": "6131ad1b53bc847cd6e7e27ddc6909d4b50a62c6",
+          "parents": [
+            "cdb7c73e9e8e2d30df1fcee0ea95011d7a4c974e",
+            "02507dc8699ade6f111ae1885a37f97818119e90"
+          ],
+          "subject": "chore(stack): add the immutable reference to the S19 base"
+        },
+        {
+          "sha": "ad2410b481d710fb2d739695ec1637d6d08eab79",
+          "parents": [
+            "04f419d433b18e9e785d3800901a85a28ae6d89a",
+            "a65f53e24b880932021b39e601b5682b1111bc54"
+          ],
+          "subject": "chore(stack): join paired benchmarks for S19 preparation"
+        },
+        {
+          "sha": "04f419d433b18e9e785d3800901a85a28ae6d89a",
+          "parents": [
+            "bc110d91d441ec3069d128e3cc7d39b3b439a1f4",
+            "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b"
+          ],
+          "subject": "chore(stack): join complete reference for S19 preparation"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s30-base",
+      "sha": "af59df116193398886d1111964c87eaaa6111876",
+      "parents": [
+        "22b6dd78a6e552596c34aa9e693ad74850426b23"
+      ],
+      "slices": [
+        "S30"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S23",
+          "sha": "cd7a0d298755818f86d710bef9f094c815d127de"
+        },
+        {
+          "slice": "S22",
+          "sha": "9eecc670d9ff587ff10f8d2f3a8b86bab600c988"
+        },
+        {
+          "slice": "S25",
+          "sha": "af8259ac766268e78690a569c10494c62cdb7ce2"
+        },
+        {
+          "slice": "S27",
+          "sha": "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7"
+        },
+        {
+          "slice": "S28",
+          "sha": "f4dfef7401d5474ac7318302d117ee0345449793"
+        },
+        {
+          "slice": "S29",
+          "sha": "6eb9e00fd3191fc8bbd03559e89c67c762abfc25"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "22b6dd78a6e552596c34aa9e693ad74850426b23",
+          "parents": [
+            "331bf6b4f3f3b939231e2f443a405e2a5d4df731",
+            "6eb9e00fd3191fc8bbd03559e89c67c762abfc25"
+          ],
+          "subject": "chore(process): join literal Yliluoma with bounded diffusion"
+        },
+        {
+          "sha": "331bf6b4f3f3b939231e2f443a405e2a5d4df731",
+          "parents": [
+            "246297c94dda86b33b678d11eb194530c0b513a8",
+            "f4dfef7401d5474ac7318302d117ee0345449793"
+          ],
+          "subject": "chore(process): join delivered bounded diffusion"
+        },
+        {
+          "sha": "246297c94dda86b33b678d11eb194530c0b513a8",
+          "parents": [
+            "866e0921222782929ba90945e681c8ffaf04e737",
+            "c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7"
+          ],
+          "subject": "chore(v1): join delivered blue-noise support"
+        },
+        {
+          "sha": "9a9cdfb78c665b34b9bd9a0b8b16184b0982d7a8",
+          "parents": [
+            "228dd0de3661173d9c3376f2cabc04b6ba64c14d",
+            "59036e1aef87943e462b4cce6b371e5edd082979"
+          ],
+          "subject": "fix(stack): reject shared benchmark output in the coordinator"
+        },
+        {
+          "sha": "6d1e3827e307a61e0e3785d8773c2f959075cfb1",
+          "parents": [
+            "cca99c8323261b940c90f49ed33be100a00b979b",
+            "68f058e93dce025ba87fa728f0b960a09dc96948"
+          ],
+          "subject": "fix(stack): preserve immutable benchmark evidence in integration"
+        },
+        {
+          "sha": "82a7e3e9e802e9407bc543128bba742a2a3c8a36",
+          "parents": [
+            "8af3a9c9db579448404d07a12fa67d1f7441c799",
+            "bb36452ca831bad485f924e7ee007f9bbdb1cb0d"
+          ],
+          "subject": "chore(stack): join scalar fields with restored resize families"
+        },
+        {
+          "sha": "12c4ba7d79c71cafffe1667d86fe6475455601a8",
+          "parents": [
+            "c3b7a1c8736ce7e56aeb594d8163de842cce15da",
+            "3a9db011207a44f230ae519edc93c900a747c021"
+          ],
+          "subject": "chore(stack): record delivered matching and active field slices"
+        },
+        {
+          "sha": "0211fcae0e89c5f682d0fd22945723a15c4128f3",
+          "parents": [
+            "9958a394d375c73bd8ad076f26deaed6d142389a",
+            "bf1b887ca90409b909b742e5eb78f97ab00f5bbd"
+          ],
+          "subject": "chore(stack): join retained S25 matching with scalar resize"
+        },
+        {
+          "sha": "d14b166f4171b028c8b194a533b16cfdccf7b10c",
+          "parents": [
+            "b9b7f96b165837694f11ec28f7b3619d327cb45d",
+            "884a8868f52e82ae579835eee173c6385a9c9ca2"
+          ],
+          "subject": "chore(stack): join delivered scalar quantization with trilinear"
+        },
+        {
+          "sha": "3bdf8f5ab6dec269e782a9a669abcc130b08e316",
+          "parents": [
+            "4f80f1c519ff6f0b25925761a391d995d8ecfe92",
+            "cd7a0d298755818f86d710bef9f094c815d127de"
+          ],
+          "subject": "Merge branch 'impl/v1-s23-trilinear' into impl/v1-resize-integration"
+        },
+        {
+          "sha": "9432ddde43ed9b2a43ddbe4182da4c07a34a2c21",
+          "parents": [
+            "e675e97ed937eb0d5ed0d95ef2ca0167b4de0a5d",
+            "5c0dc4e19e1245593d145b725d9aa46894bf41ab"
+          ],
+          "subject": "Merge branch 'impl/v1-s23-trilinear' into impl/v1-resize-integration"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s39-base",
+      "sha": "2a0237680fa249e2293b991ca067d7baf05aef14",
+      "parents": [
+        "72e7b883212fce0be5126ebf4ee9eaa9766ad3fe",
+        "d4531667e1158c2068f30614f40c9d39f8c5313e"
+      ],
+      "slices": [
+        "S39"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S38",
+          "sha": "0305456bc25259a92d46ded245ae09aaf407be07"
+        },
+        {
+          "slice": "S34",
+          "sha": "d4531667e1158c2068f30614f40c9d39f8c5313e"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "2a0237680fa249e2293b991ca067d7baf05aef14",
+          "parents": [
+            "72e7b883212fce0be5126ebf4ee9eaa9766ad3fe",
+            "d4531667e1158c2068f30614f40c9d39f8c5313e"
+          ],
+          "subject": "chore(stack): join final S34 evidence for website integration"
+        },
+        {
+          "sha": "72e7b883212fce0be5126ebf4ee9eaa9766ad3fe",
+          "parents": [
+            "3863cadce82b4d272a1730f3ebad828b18ac4434",
+            "0305456bc25259a92d46ded245ae09aaf407be07"
+          ],
+          "subject": "merge(web): join validated processor and flagged website"
+        }
+      ]
+    },
+    {
+      "branch": "impl/v1-s40-base",
+      "sha": "5fccb9e6a51c6de49fd0051b204fb16bfde75e22",
+      "parents": [
+        "19240e706c7be91e4f6d88f5470f266e3e6d3fbf",
+        "91b114ba610588c504a7551e8123d72e36eb9e66"
+      ],
+      "slices": [
+        "S40"
+      ],
+      "dependency_heads": [
+        {
+          "slice": "S35",
+          "sha": "6bbe113b99a08f2a11ade6296ddf7f25e32e041b"
+        },
+        {
+          "slice": "S36",
+          "sha": "b542bd94a5dbc724de73815ae0008a22985147fd"
+        },
+        {
+          "slice": "S37",
+          "sha": "91b114ba610588c504a7551e8123d72e36eb9e66"
+        },
+        {
+          "slice": "S39",
+          "sha": "5938b248506ae14d24471498c3a90bb42ed3c32a"
+        }
+      ],
+      "join_merges": [
+        {
+          "sha": "5fccb9e6a51c6de49fd0051b204fb16bfde75e22",
+          "parents": [
+            "19240e706c7be91e4f6d88f5470f266e3e6d3fbf",
+            "91b114ba610588c504a7551e8123d72e36eb9e66"
+          ],
+          "subject": "Merge commit '91b114ba610588c504a7551e8123d72e36eb9e66' into impl/v1-s40-base"
+        },
+        {
+          "sha": "19240e706c7be91e4f6d88f5470f266e3e6d3fbf",
+          "parents": [
+            "e1b92a558a7b17ded0179e3686fe4c503ed24482",
+            "596320d482be7ddf0933b9f6e8788f76d66d42fc",
+            "5938b248506ae14d24471498c3a90bb42ed3c32a"
+          ],
+          "subject": "Merge commit '596320d482be7ddf0933b9f6e8788f76d66d42fc'; commit '5938b248506ae14d24471498c3a90bb42ed3c32a' into impl/v1-s40-base"
+        }
+      ]
+    }
+  ],
+  "later_slices": [
+    {
+      "number": 87,
+      "title": "S45: Prepare the held TypeScript-retirement PR",
+      "url": "https://github.com/mia-cx/ditherette/issues/87",
+      "state": "OPEN",
+      "prerequisites": " #86.",
+      "slice": "S45",
+      "dependencies": [
+        86
+      ],
+      "observed_progress": "Not started",
+      "open_implementation_pr": null
+    },
+    {
+      "number": 86,
+      "title": "S44: Prepare the held Wasm-default rollout PR",
+      "url": "https://github.com/mia-cx/ditherette/issues/86",
+      "state": "OPEN",
+      "prerequisites": " #85.",
+      "slice": "S44",
+      "dependencies": [
+        85
+      ],
+      "observed_progress": "Not started",
+      "open_implementation_pr": null
+    },
+    {
+      "number": 85,
+      "title": "S43: Join and verify the complete unmerged implementation stack",
+      "url": "https://github.com/mia-cx/ditherette/issues/85",
+      "state": "OPEN",
+      "prerequisites": " #83, #84.",
+      "slice": "S43",
+      "dependencies": [
+        83,
+        84
+      ],
+      "observed_progress": "In progress",
+      "open_implementation_pr": null
+    }
+  ],
+  "later_absence_checks": {
+    "all_pr_count": 55,
+    "later_pr_matches": [],
+    "remote_later_branch_matches": [],
+    "local_later_branches": [],
+    "limitation": "No S44/S45 branch or PR appears under the slice naming convention or deliverable titles. Root mirror explicitly records both as Not started."
+  },
+  "findings": [
+    "All 43 published prerequisite PR heads are ancestors of c43cea12, including restoration PR109 and S41/S42.",
+    "All 73 declared slice prerequisite heads are present in each current PR base and child head; restoration's S20 base edge also passes.",
+    "Tracked index progress is stale from S28 onward; live PR identities and original dependency lists take precedence for this audit.",
+    "S44 and S45 remain Not started. Their activation requires separate human acceptance.",
+    "No integrated test, browser, benchmark, publication, deployment, merge, or GitHub mutation is performed."
+  ]
+}
