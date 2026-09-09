@@ -1,6 +1,9 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize, palette quantization, Bayer/random/blue-noise perturbation, error diffusion, and Yliluoma dithering.
+An MIT-licensed browser ESM image processor with scalar execution and optional threaded acceleration.
+The `0.x` version signals beta status; releases use ordinary versions such as `0.1.0`, without a prerelease suffix.
+For browser applications and bundlers, depend on `ditherette` at `^0.1.0`. Node and CommonJS are not supported consumer targets.
+Publication remains held while the recorded release gates await acceptance.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -42,8 +45,8 @@ These filters retain the landed f64 kernels, including separable large-image dow
 Trilinear uses `{ algorithm: 'trilinear', anchor: 'center' }` without a support setting.
 It builds area mip levels, samples them with bilinear filtering, and blends the adjacent levels selected by minification.
 Mip dimensions round upward when halved. Every intermediate retains RGBA8 rounding, including hidden RGB and alpha.
-The shared mip chain and temporary outputs reserve capacity before source import and release it after each call.
-Plans and scratch count toward the memory limit. Each call releases this transient storage; there is no package cache.
+The shared mip chain and temporary outputs reserve capacity before execution.
+Plans, scratch, and retained stages count toward the memory limit.
 Requests require version `1`, positive integer dimensions, and canonical object/string tags. Unknown fields are rejected.
 Source sides are at most 32,768 pixels; resize output sides are at most 16,384. Both images allow at most 67,108,864 pixels.
 
@@ -67,9 +70,9 @@ The recipe uses `match`; staged quantization methods use `matching`.
 Every resize and dither family works in this composition. Process equals actual
 `resize` followed by `ditherAndQuantize`, including palette metadata and warnings.
 Resized and perturbed RGBA8 intermediates stay in Wasm with their rounding intact.
-Only the final indexed result crosses back to JS. The complete call reserves
-plans, prepared palettes, scratch, source, intermediates, and indices before input copy.
-No intermediate or prepared data survives the call in this checkpoint.
+Only the final indexed result crosses back to JS. The complete call snapshots
+input and preflights plans, prepared palettes, scratch, intermediates, and indices before processing.
+Successful calls may retain prepared data and deterministic stages for reuse.
 
 Recipe settings errors use paths such as `recipe.match` and `recipe.dither.size`.
 Input, palette, memory, and result-copy errors keep their existing paths.
@@ -113,7 +116,7 @@ Thresholded pixels use the first transparent entry, or the darkest visible entry
 `{ mode: 'premultiplied' }` rounds alpha-scaled RGB bytes; `{ mode: 'matte', rgb: [r, g, b] }` composites onto that RGB matte.
 Transparent-only palettes produce transparent indices with the approved warning.
 The result contains durable `indices`, `palette.rgba`, `palette.transparentIndex`, and `{ code, message }` warnings.
-Quantize does not resize, dither, retain the source, or cache prepared palettes in this checkpoint.
+Quantize does not resize, dither, or retain the original source buffer. Prepared palettes may be reused.
 
 ## Palette-free fields
 
@@ -151,8 +154,8 @@ Zero strength preserves every source byte. Both placement modes preserve alpha a
 
 `ditherAndQuantize` quantizes that completed RGBA8 result, with the same indices, palette, and warnings as `quantize(perturb(...))`.
 `{ family: 'none' }` performs direct quantization and accepts no perturb settings.
-Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are reserved before input copy.
-Results remain durable after later calls and disposal. No field buffers or prepared palettes are cached.
+Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are preflighted before processing.
+Results remain durable after later calls and disposal. Successful calls may cache deterministic field outputs and prepared palettes.
 ## Error diffusion
 
 ```ts
@@ -209,10 +212,13 @@ Synchronous threaded methods run in a processing worker. Browser main JS support
 Hosts must allow the package's worker script and `blob:` bootstrap.
 Each processor owns independent module memory and its pool. Workers within that pool share only that processor's memory.
 The existing policy uses `clamp(logical CPUs / 2, 1, 8)` pool workers. Pool size is not a public option.
-Initialization creates the pool; this checkpoint still runs all five methods through the landed scalar kernels.
-Later slices select parallel jobs without changing image recipes or results.
+Initialization creates the pool. Measured resize, quantize, separable-field, and Yliluoma workload classes may use row bands.
+Small or unmeasured classes and error diffusion remain scalar. Scheduling never changes recipe identities or exact results.
 
 The memory limit counts private Wasm capacity and boundary copies. Caller-owned and returned JS buffers and fixed module overhead are excluded.
+The shared per-instance cache retains at most `min(256 MiB, memoryLimitBytes / 4)` and 128 entries.
+Pressure drops idle scratch before least-recently-used entries. Only successful calls publish new entries.
+Cache keys include input content and normalized settings, so changing an existing input view does not reuse stale pixels.
 Unexpected allocation/copy failures report `wasm-memory-unavailable`. Expected errors leave the processor usable.
 An uncaught Wasm trap retires that processor without affecting other instances.
 
@@ -224,11 +230,11 @@ Threaded release remains blocked on the retained WebKit 26.4 engine. Its parked 
 The [upstream WebKit fix](https://github.com/WebKit/WebKit/commit/03e836de2f7bd5627a95f60357633d59fb6bb18d) addresses this engine failure.
 The failing disposal and host-termination checks remain active. Scalar processing does not require a pool.
 
-## Checkpoint scope
+## Public contract
 
 All five synchronous processing methods, private caches, progress delivery, and optional pool initialization are available.
 Progress completion follows durable output construction. A thrown callback fails the call without publishing new cache entries.
-Parallel job scheduling remains separate from pool initialization.
+Progress uses typed stages and measurable counts, with within-stage callbacks throttled to 50 ms.
 The package exports no raw bindings, backend selection, cache controls, or processor counters.
 The `0.x` public target is browser ESM and browser bundlers. Node-based tests are development fixtures, not public Node support.
 

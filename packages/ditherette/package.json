@@ -1,7 +1,18 @@
 {
 	"name": "ditherette",
 	"version": "0.1.0",
-	"private": true,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mia-cx/ditherette.git",
+		"directory": "packages/ditherette"
+	},
+	"homepage": "https://github.com/mia-cx/ditherette/tree/main/packages/ditherette#readme",
+	"bugs": "https://github.com/mia-cx/ditherette/issues",
+	"publishConfig": {
+		"access": "public",
+		"tag": "latest",
+		"provenance": true
+	},
 	"description": "Browser image processing with scalar and optional threaded WebAssembly.",
 	"license": "MIT",
 	"type": "module",
@@ -25,7 +36,10 @@
 		"test:browser": "node --test tests/tarball-browser.test.mjs",
 		"test:threads-browser": "node --test --test-concurrency=1 tests/thread-observer-browser.test.mjs tests/threads-selection-browser.test.mjs tests/threads-ownership-browser.test.mjs tests/threads-failure-browser.test.mjs tests/threads-host-browser.test.mjs",
 		"test:staging": "node --test scripts/stage-wasm.test.mjs",
-		"check:version": "node scripts/check-version.mjs"
+		"check:version": "node scripts/check-version.mjs",
+		"release:prepare": "node scripts/release.mjs prepare",
+		"release:verify": "node scripts/release.mjs verify",
+		"test:release": "node --test scripts/release.test.mjs"
 	},
 	"devDependencies": {
 		"playwright": "1.59.1",
