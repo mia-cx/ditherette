@@ -50,6 +50,7 @@ fn call(
         candidate_subject: operation.subject(BrowserBackend::Package).into(),
         native: None,
         browser: Some(BrowserCase {
+            retained_output_limit_bytes: None,
             operation,
             accepted: BrowserBackend::Package,
             candidate: BrowserBackend::Package,
@@ -288,7 +289,7 @@ fn typescript() -> io::Result<Vec<PairCase>> {
 }
 
 pub fn experiment(lane: &str, notes: String) -> io::Result<Experiment> {
-    let cases = match lane {
+    let mut cases = match lane {
         "anchors" | "candidate" | "anchors-native" | "candidate-native" => {
             let public = !lane.ends_with("native");
             let mut plan = anchors::experiment(public, notes.clone())?;
@@ -332,6 +333,13 @@ pub fn experiment(lane: &str, notes: String) -> io::Result<Experiment> {
         }
         _ => return Err(io::Error::other("lane must be candidate, anchors, release, automatic, typescript, capped, initialization, or initialization-threads")),
     };
+    if lane == "capped" {
+        cases[0]
+            .browser
+            .as_mut()
+            .unwrap()
+            .retained_output_limit_bytes = Some(384 * 1024 * 1024);
+    }
     let plan = Experiment {
         label: format!("s41-{lane}"),
         reference_state: ReferenceState::Frozen,
@@ -416,6 +424,13 @@ mod tests {
             for case in &plan.cases {
                 assert_eq!(case.measurement.samples, 20);
                 assert_eq!(case.measurement.measurement_ms, 10_000);
+                if let Some(browser) = &case.browser {
+                    let encoded = serde_json::to_value(browser).unwrap();
+                    assert_eq!(
+                        encoded.get("retained_output_limit_bytes").is_some(),
+                        lane == "capped"
+                    );
+                }
                 assert!(case
                     .browser
                     .as_ref()

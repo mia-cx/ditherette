@@ -174,6 +174,9 @@ pub enum BrowserExecution {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
+    /// Explicit developer stability allocation bound. Historical requests omit the override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_output_limit_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_policy: Option<RowPolicyRoles>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -660,6 +663,26 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if let Some(limit) = browser.retained_output_limit_bytes {
+        const DEFAULT: u64 = 64 * 1024 * 1024;
+        const MAXIMUM: u64 = 384 * 1024 * 1024;
+        if !(DEFAULT..=MAXIMUM).contains(&limit)
+            || m.scope != CallScope::CompleteCall
+            || m.mode != SampleMode::SingleCall
+            || !matches!(
+                browser.operation,
+                PublicOperation::Quantize { .. }
+                    | PublicOperation::Process { .. }
+                    | PublicOperation::Separable { .. }
+                    | PublicOperation::Diffusion { .. }
+                    | PublicOperation::Yliluoma { .. }
+            )
+            || browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package
+        {
+            return Err(io::Error::other("retained-output override requires bounded single indexed package calls (64–384 MiB)"));
+        }
+    }
     if browser.execution == Some(BrowserExecution::HostWorker)
         && (!matches!(m.scope, CallScope::Initialization | CallScope::CompleteCall)
             || !matches!(

@@ -114,6 +114,7 @@ fn native_and_public_quantize_scopes_fail_closed() {
         settings: settings(),
     };
     case.browser = Some(BrowserCase {
+        retained_output_limit_bytes: None,
         execution: None,
         row_policy: None,
         operation: operation.clone(),

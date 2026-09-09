@@ -183,3 +183,20 @@ Generated inventory SHA-256 is
 the first candidate case is
 `d88c14b90a8e6f70637f8409e1205a57389b43e55d4972eeeae14e22d68ec996`.
 These are untimed generator outputs, not prepared or measured artifact identities.
+
+## Capped transport integration
+
+Root reassigns this worktree's compiler cache for the bounded protocol integration.
+S41 owns the optional Rust case field, constructor defaults, release matrix, and
+page forwarding/typed comparisons. S35 owns collector limits, compact indexed
+wire helpers/decoders, oracle wrappers, and asset registration.
+
+- [x] Add `retained_output_limit_bytes`, omitted rather than null when unused.
+- [x] Restrict overrides to 64–384 MiB for single indexed package complete calls.
+- [x] Set only the required capped case to 384 MiB; old anchor metadata stays absent.
+- [ ] Forward the explicit bound and compact indexed evidence through the page.
+- [ ] Join S35's helper checkpoint and check the small exact protocol end to end.
+
+Thirty focused native protocol tests pass. All example constructors compile.
+The inherited unused `self` import warning in stage/progress examples remains.
+This confirms protocol structure, not a successful maximum-area allocation or measurement.
