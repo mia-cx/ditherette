@@ -226,3 +226,34 @@ Historical anchors preserve their original page execution and omit the execution
 Only the current/candidate selection lane uses host workers. This keeps historical
 pre-S32 artifacts compatible without changing their production or benchmark source.
 The generator checks complete historical case JSON equality, including all eight warm/cold recipes.
+
+## Selected runtime and remaining execution
+
+The bounded candidate comparison finishes 32 serial workers and 640 exact samples.
+Keep current `a895267b`; batching candidate `80838c2c` shows no useful win.
+See [selection evidence](83-selection.md) and [fresh historical anchors](83-anchors.md).
+The latter completes 128 workers and 2,560 exact samples, retaining seven confirmed
+regressions and four inconclusive cells. These failures continue to block release.
+
+Remaining generated cases live under the coordinator's ignored `target/s41-release-01`.
+Each new prepared manifest references the already checked, freshly built current
+executables and immutable browser asset files from `target/s41-selection-01`.
+Both roles bind the same selected source and unchanged complete content hashes.
+The generated experiment replaces only the case definition. Required-thread roles
+select the threaded Wasm entry already present in that same ordinary package.
+The existing coordinator still validates every executable, source revision, asset
+tree, request, and output. No source identity is relabeled or validation disabled.
+Sharing these read-only files avoids copying a browser installation per case.
+
+The ignored preparation helper handles one case per child, then releases its large
+source arrays at exit. The measurement helper launches each case serially, waits
+for exit, and records completion or unrun cases at the predeclared lane deadline.
+Initialization's 15-minute budget splits into ten scalar minutes and five threaded
+minutes. Transport failures stop that lane; incorrect/noisy gates retain their
+results without retries. Root drains the capped-probe preparation agent before timing.
+
+The copied release generator SHA-256 is
+`f1ad53fbbaf34e5c7809ef0a0ce7891f8a26020c38a28643f7c372563620f28e`.
+Idle compiler outputs are removed after artifact preparation. The three ordinary
+tarballs and all retained evidence keep their hashes. Immutable source checkouts
+and the copied generator remain available throughout measurement.
