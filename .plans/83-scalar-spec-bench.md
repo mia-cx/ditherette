@@ -15,7 +15,7 @@ Use the existing registry, identities, verification, alternating coordinator, an
 ## TODOs
 
 - [x] Enable measured frozen native subjects and a bounded plan using existing adapters and matched component buffers.
-- [~] Validate scalar coverage and actual frozen adapter output with focused untimed tests.
+- [x] Validate scalar coverage and actual frozen adapter output with focused untimed tests.
 
 ## Notes
 
@@ -32,3 +32,8 @@ Use the existing registry, identities, verification, alternating coordinator, an
 - Existing unused-import warnings remain in stage/progress plan examples.
 - Corrected the native paired collector to retain at least five samples, matching its existing evidence gate.
 - The 250 ms limit is a target after five samples. Other commands keep their prior stopping policy; historical reports are unchanged.
+- Final focused validation passes 18 tests, with one existing retained-artifact test ignored. No timers or benchmark workers were run.
+- Commands use this worktree's owned `target-scalar`, `CARGO_BUILD_JOBS=2`, and `--no-default-features`.
+- New checks cover paired role validation, scalar family/identity coverage, real adapter/oracle equality, and minimum-sample stopping behavior.
+- Existing checks cover native rejection boundaries, field adapters, metric scores, and frozen registrations.
+- Root must build both fresh artifacts with the corrected collector before quiet measurements. Existing samples are not relabeled.
