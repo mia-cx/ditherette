@@ -13,11 +13,11 @@ or benchmark timing belongs to this task.
 ## TODOs
 
 1. [x] Add the package release contract, ordinary preparation, metadata/docs,
-   tag workflow, and focused offline tests as one buildable publication path.
+       tag workflow, and focused offline tests as one buildable publication path.
 2. [x] Build both variants locally, verify installed assets, and record per-file
-   raw/gzip/Brotli and complete tarball sizes with a proposed initial budget.
-3. [ ] Rebase on the supplied S40 base, validate final source/artifact identities,
-   and open a non-draft unmerged PR. Report unresolved approvals and idle targets.
+       raw/gzip/Brotli and complete tarball sizes with a proposed initial budget.
+3. [x] Rebase on the supplied S40 base, validate final source/artifact identities,
+       and prepare the non-draft unmerged PR handoff. Report unresolved approvals and idle targets.
 
 Reuse `buildFreshPackage`, `verifyPackageBuildMode`, source-inventory checks,
 existing staging, version checking, and installed-browser fixtures. Preserve the
@@ -41,5 +41,9 @@ reviewing or changing that budget. The initial-budget and S41 holds stay active.
 
 The fresh tarball's interface/types pass 42 tests, staging passes 2, and built
 glue passes 4. Native and installed-browser conformance run against that exact
-tarball before final delivery. No publication, tags, credentials, or timing runs
-occurred.
+tarball before final delivery. Native scalar/threaded pass 424/425 tests; installed
+scalar conformance passes 17 across three engines, threaded passes 12 and automatic
+host fixtures pass 23 across Chromium and Firefox. All processes have exited.
+The branch is rebased onto `95706738e4f3179824a66c80bb5728ce97a34b4b` on
+`impl/v1-s40-conformance`. The authorized non-draft PR is the remaining external
+handoff. No publication, tags, credentials, or timing runs occurred.

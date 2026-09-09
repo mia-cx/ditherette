@@ -38,6 +38,8 @@ grows 421 bytes, about 0.10%. README growth remains below 10% in every metric.
 The package manifest exceeds 10% in every metric, at 1,971 / 738 / 619 bytes
 versus 1,436 / 580 / 480. Added repository/publication metadata and release commands
 explain that growth. This is a review item, not an approved exception.
+SHA-256 comparison confirms every other installed file is byte-identical to the
+retained ordinary artifact, including both Wasm binaries and all worker scripts.
 
 ## Validation
 
@@ -53,7 +55,33 @@ and generated scalar/threaded glue passes 4. Version alignment passes. Offline
 passes without publication. Its expected missing-login warning does not affect
 dry-run validation. Tag/hold tests confirm the publication path fails closed.
 
-Native and exact-artifact installed-browser conformance results are recorded
-after those processes exit. The package uses the existing S40 commands and
-frozen-oracle preparation. WebKit threaded cleanup is not silently skipped into
-a release approval; that retained engine gate remains unresolved.
+The existing conformance commands pass against the exact tarball:
+
+| Command                                                                           | Result                                                                    |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml` | 424 passed across 62 binaries, no ignored tests                           |
+| Same command with `--features threads`                                            | 425 passed across 62 binaries, no ignored tests                           |
+| `pnpm --filter ditherette-wasm test:conformance`                                  | 17 passed, no skips; Chromium 147.0.7727.15, Firefox 148.0.2, WebKit 26.4 |
+| `test:conformance:threads`, Chromium and Firefox                                  | 12 passed, no skips                                                       |
+| `test:conformance:automatic`, Chromium and Firefox                                | 23 passed, no skips                                                       |
+
+Each scalar engine also passes 367 frozen Wasm Yliluoma vectors and 734 untimed
+adapter calls. The local WebKit executable uses the existing test-owned launcher;
+the workflow installs the pinned Playwright engines on its clean runner.
+
+All three scalar engines report actual Wasm memory of 1,179,648 initial bytes and
+1,245,184 steady bytes. Repeated-use observations stay at 1,245,184 bytes with a
+262,144-byte capacity budget. Boundary fixtures reach 3,145,728 bytes with an
+8,388,608-byte budget. Wasm page high-water includes fixed module overhead and
+is not the processor's capacity-accounting total.
+
+The frozen oracle manifest SHA-256 is
+`9a3f96fec042f239c9563dd5b6dfc24fa91fa6685ee9cb7a4dfbf80d1346cacc`.
+The 367-vector fixture SHA-256 is
+`89670b9abf869de1c9db9192bdfa3dfbb778e3d3ea151170f88543100b75aca8`.
+The retained release report SHA-256 is
+`8c850a0c6427ec788273ce10e29034454b2cf2e7061b18f355740eb3ca021f38`.
+
+Every command exits successfully and all local jobs are drained. WebKit threaded
+cleanup remains an unresolved release gate. No publication, tags, credential
+inspection, workflow trigger, or timing run occurred.
