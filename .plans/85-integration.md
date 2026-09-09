@@ -5,7 +5,7 @@ Base `c43cea1269fcd666835d41c07d82a1c451604107` joins S41 PR131 at `d09e32df8e06
 - [x] Validate the fresh joined artifact and repair integration-only fixture wiring.
 - [x] Record reused evidence, remaining release blockers, reproduction commands, and cleanup.
 - [x] Root joins the separate stack audit and verifies ancestry.
-- [ ] File the unmerged PR against the explicit S43 base.
+- [x] File the unmerged PR against the explicit S43 base.
 
 Fresh public preparation succeeds from the clean base. Tarball SHA-256 is `78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90`; every installed file and compressed size equals S42.
 
@@ -27,3 +27,6 @@ Root joins audit `cfd01263f63c77c278ddaeae35d8079df7d9d8a8` at `84820d9a`.
 All 43 published prerequisite PR heads remain ancestors. The audit retains 74 dependency edges and ten dedicated joins.
 Root refreshes the stale progress table and stack ledger from the coordinator's current records.
 The execution contract now includes whole-target cleanup and deferred routine review. These are documentation-only changes.
+
+[PR132](https://github.com/mia-cx/ditherette/pull/132) targets `impl/v1-s43-base` at `c43cea12`.
+It remains open, non-draft, and unmerged. All 43 published prerequisite heads pass the final ancestry check.
