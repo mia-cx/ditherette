@@ -107,22 +107,43 @@ impl Converter {
 
     /// Writes three floats per pixel in row order, leaving the source and alpha untouched.
     pub fn rgba8_into(&self, source: ImageView<'_, Rgba8>, output: &mut [f32]) {
+        match self.target {
+            ColorSpaceF32::Srgb => Self::write_rgba8(source, output, |[r, g, b]| {
+                [
+                    self.tables.unit(r),
+                    self.tables.unit(g),
+                    self.tables.unit(b),
+                ]
+            }),
+            ColorSpaceF32::YCbCr => Self::write_rgba8(source, output, |[r, g, b]| {
+                super::srgb8_to_ycbcr(r, g, b, &self.tables)
+            }),
+            _ => Self::write_rgba8(source, output, |rgb| self.coordinates(rgb)),
+        }
+    }
+
+    fn write_rgba8(
+        source: ImageView<'_, Rgba8>,
+        output: &mut [f32],
+        coordinates: impl Fn([u8; 3]) -> [f32; 3],
+    ) {
         let dimensions = source.dimensions();
         assert_eq!(
             output.len(),
             dimensions.pixel_count().expect("valid dimensions") * 3
         );
-        for y in 0..dimensions.height() {
-            let source_row = source.row(y).expect("valid source row");
-            let output_start = y as usize * dimensions.width_usize() * 3;
-            for x in 0..dimensions.width_usize() {
-                let input = x * 4;
-                let output = &mut output[output_start + x * 3..output_start + x * 3 + 3];
-                output.copy_from_slice(&self.coordinates([
-                    source_row[input],
-                    source_row[input + 1],
-                    source_row[input + 2],
-                ]));
+        for (y, output_row) in output
+            .chunks_exact_mut(dimensions.width_usize() * 3)
+            .enumerate()
+        {
+            let source_row = source.row(y as u32).expect("valid source row");
+            for (pixel, triplet) in source_row
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(output_row.as_chunks_mut::<3>().0)
+            {
+                *triplet = coordinates([pixel[0], pixel[1], pixel[2]]);
             }
         }
     }
