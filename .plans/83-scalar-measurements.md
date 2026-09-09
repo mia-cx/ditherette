@@ -708,6 +708,12 @@ worker inventory e729825f5d1b75b904f2932edb181eec2cde02d71a7a9c08cb5061ed7ed1956
 ```
 
 The reporting audit reads and hashes all final reports, prepared descriptors, journals, and raw worker results.
+The coordinator records `benchmark-results/scalar-spec-prod-2026-09-09/selected-production.tar.gz` in the benchmark worktree.
+Its SHA-256 is `0b1069920357bcf8daa0d53afc8d0784a314f4dcaf19e81cce88d7f2e91c0090`.
+It retains all three final result directories, selection plans/prepared copies, and candidate native provenance/binaries.
+Coordinator byte-for-byte archive comparison remains pending in this checkpoint.
+Remote evidence branches retain measured commits at `evidence/v1-scalar-selected-8e09c05d` and `evidence/v1-scalar-held-086bbd47`.
+Delivery rebases may change commit IDs; production bytes must match the recorded measured source.
 Root owns the final archives, artifact-provenance retention, PRs, release-map updates, and cleanup.
 No additional optimization or experiment is proposed by this report.
 This reporting pass changes only this document. It runs no builds, tests, or benchmarks and leaves no owned jobs.
