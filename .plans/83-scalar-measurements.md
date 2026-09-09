@@ -1,12 +1,19 @@
 # Native scalar measurements
 
+Field/placement converter reuse and packed forward loops are selected at `8e09c05d` after passing the affected previous-production gates.
+The final 101-case spec/selected-production comparison records 66 pass, five incorrect, 25 regression, and five inconclusive gates.
+All six retained runs contain 1,232 reaped workers and 23,149 actual samples. Full final results appear below.
+CIELAB forward is 8.54% slower than previous production in its passing repeat. Yliluoma target-converter reuse remains held.
+
+## Historical baseline and first candidate
+
 The baseline completes 101 spec/production cases. It retains 56 pass, five incorrect, 34 regression, and six inconclusive gates.
 The combined converter candidate completes 38 exact cases, with 33 pass and five inconclusive gates.
 A separate five-case repeat resolves both nearest controls. Tiny inverse, random threshold, and Yliluoma remain inconclusive.
 
 The six ordinary perturb cases improve 12.18–54.91× against previous production. Seven placement components improve 7.31–8.88×.
 All 15 measured field-related cases pass, including zero-strength and tiny perturb controls.
-These results support selecting the field-only change. Final field-only source/artifact measurements remain pending below.
+These results support the field change; the final field-plus-packed selection appears below.
 Yliluoma stays held because its modified tiny path remains inconclusive after the declared repeat.
 
 This is native scalar evidence on one machine. It does not rank browser/Wasm, threaded execution, or TypeScript implementations.
@@ -398,13 +405,309 @@ worker inventory 050c7c12dff542e2f3727eac5148c912977cf201d5d601c377869804046f5ee
 
 ## Final selected implementation measurements
 
-Pending coordinator completion. The following evidence is deliberately absent from this report version:
+Select field/placement converter reuse and the packed forward-loop change at `8e09c05d9455af977746060c39d531848eee8b90`.
+The fresh native executable has SHA-256 `1390d22c75a477fed99b5ee99daf0e364db7bbf9a8509bb5d2b0f75568564070`.
+Its previous-production comparison passes every affected gate after one declared repeat of five inconclusive cases.
+The original 58-case report remains 53 pass and five inconclusive. The separate repeat records five pass.
+Those repeated results do not overwrite initial noise or combine samples with the first run.
 
-1. Exact field-only selected source revision and fresh executable identity after holding the Yliluoma change.
-2. Final-selected spec/production and required previous-production comparisons, with their actual counts, medians, and gates.
-3. Final artifact/archive verification, release-ledger reconciliation, and remaining scalar follow-up decisions.
+The selected source changes only `prod/color/packed.rs`, `prod/dither/perturb.rs`, and `prod/dither/placement.rs` under production.
+Its Yliluoma request file matches previous production byte-for-byte.
+Yliluoma target-converter candidate `086bbd47` is absent. Its earlier measured gains remain unselected historical evidence.
+The packed change moves sRGB/YCbCr dispatch outside pixel loops and uses fixed-size chunks with existing color helpers.
+Field/placement conversion reuse preserves the selected arithmetic and source-neighbor semantics.
 
-The coordinator identifies fresh final candidate `8e09c05d9455af977746060c39d531848eee8b90`; its build and freeze guard are underway.
-That candidate has no final measurement outcome in this checkpoint.
-The first three runs above remain immutable historical evidence. Final measurements must identify their own source and timing scope.
-This reporting pass changes only this document and its read-only audit helper. It runs no builds, tests, or benchmarks.
+### Final execution and identity audit
+
+| Run directory | Cases | Started/reaped | Actual samples | Report gates |
+| --- | ---: | ---: | ---: | --- |
+| packed-selection-results | 58 | 232/232 | 4,225 | 53 pass, 5 inconclusive |
+| packed-selection-repeat-results | 5 | 20/20 | 386 | 5 pass |
+| spec-prod-selected-results | 101 | 404/404 | 7,844 | 66 pass, 5 incorrect, 25 regression, 5 inconclusive |
+| Final three runs | 164 entries | 656/656 | 12,455 | Separate comparisons |
+| All six runs in this document | 308 entries | 1,232/1,232 | 23,149 | Includes distinct comparisons and repeats |
+
+Counts come from every raw worker sample array. No worker or sample total assumes the configured maximum.
+The final three journals have 1,968 matching starting/started/reaped events and exact sequential AB/BA order.
+All workers report one maximum live benchmark process; all owned workers drain before the next starts.
+The run windows also exclude overlap with the three earlier runs. This does not replace the coordinator's host-quiescence attestation.
+Machine, Rust/LLVM versions, sampling policy, and native scalar scopes match the earlier recorded environment.
+
+| Run | First launch admission, UTC | Final reap, UTC |
+| --- | --- | --- |
+| Packed selection | 2026-09-09 21:40:46.219 | 2026-09-09 21:41:38.184 |
+| Packed repeat | 2026-09-09 21:42:08.939 | 2026-09-09 21:42:12.355 |
+| Selected spec/production | 2026-09-09 21:42:50.758 | 2026-09-09 21:44:08.830 |
+
+Selection and repeat use previous-production artifact `2b9bbd68` as accepted and selected `8e09c05d` as candidate.
+Final spec/production uses `8e09c05d` and its same executable hash for both roles, dispatching frozen versus production algorithms.
+All worker source/artifact identities match their prepared descriptors. Raw samples reproduce every median and alternating pair ratio.
+
+The selected spec/production experiment object equals the original full experiment object exactly, including all 101 recipes and notes.
+It reuses `spec-prod-baseline.json`, SHA-256 `578dc59b9fb9404eae5471bb1d013c3dc7b181f6e99bcadf8d161d4c131c55e8`.
+The unchanged wording "baseline" describes this new selected-production baseline. It does not indicate reuse of earlier measurements.
+Canonical `JSON.stringify(experiment)` SHA-256 is `5476bc71774593d264cf8445ffbfd38ff338bbf27eedc07a9da2d037eb5f67a7` in both prepared descriptors.
+The packed selection plan SHA-256 is `832608c1dae2d449938be5c588456191d3745bc3048af07f5bab90e01ed7c25b`.
+The packed repeat plan SHA-256 is `413d0175a29b7b69b673d872922d6b23c4c9effa81d500b288ccfb02070f7698`.
+Every repeat recipe equals its corresponding first-run recipe, including identities, settings, and timing policy.
+
+### Selected production versus previous production
+
+Ordinary sRGB and YCbCr packed forward conversion improve 5.59× and 6.52× respectively.
+The six ordinary perturb cases improve 11.91–55.52×; seven placement grids improve 7.11–8.72×.
+These are direct previous/selected-production comparisons, separate from the spec-relative results below.
+All 232 selection verification entries and twenty repeat entries pass exactness.
+
+| Case | Accepted ns | Candidate ns | C/A | Samples A/C | Gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| resize-nearest-scalar | 5590 | 5695 | 1.0188 | 40/40 | pass |
+| forward-srgb | 925504 | 165527.5 | 0.1789 | 40/40 | pass |
+| placement-srgb | 130794232 | 14997342.5 | 0.1147 | 10/34 | pass |
+| forward-linear-rgb | 913363.5 | 879172.5 | 0.9626 | 40/40 | pass |
+| placement-linear-rgb | 129722645.5 | 14883401.5 | 0.1147 | 10/34 | pass |
+| forward-oklab | 2673135.5 | 2611894.5 | 0.9771 | 40/40 | pass |
+| placement-oklab | 132598947.5 | 16621741 | 0.1254 | 10/31 | pass |
+| forward-cielab | 2981030.5 | 3173553 | 1.0646 | 40/40 | inconclusive |
+| placement-cielab | 131781000 | 16586501 | 0.1259 | 10/31 | pass |
+| forward-ycbcr | 959604.5 | 147092.5 | 0.1533 | 40/40 | pass |
+| placement-ycbcr | 129957929.5 | 15137109.5 | 0.1165 | 10/34 | pass |
+| forward-oklch | 5465593 | 5422887.5 | 0.9922 | 40/40 | pass |
+| placement-oklch | 135838439.5 | 18372298 | 0.1353 | 10/28 | pass |
+| forward-cielch | 6257350.5 | 6270605 | 1.0021 | 40/40 | pass |
+| placement-cielch | 134098161.5 | 18871667 | 0.1407 | 10/27 | pass |
+| quantize-srgb-euclidean-palette32 | 921404 | 929509 | 1.0088 | 40/40 | pass |
+| quantize-linear-rgb-euclidean-palette32 | 938074.5 | 923419.5 | 0.9844 | 40/40 | pass |
+| quantize-oklab-euclidean-palette32 | 1160038 | 1155022.5 | 0.9957 | 40/40 | pass |
+| quantize-cielab-euclidean-palette32 | 1176873.5 | 1211498 | 1.0294 | 40/40 | pass |
+| quantize-ycbcr-euclidean-palette32 | 959125 | 957114 | 0.9979 | 40/40 | pass |
+| quantize-srgb-compuphase-palette32 | 3054131.5 | 3084282 | 1.0099 | 40/40 | pass |
+| quantize-srgb-rec601-palette32 | 1006480 | 990159.5 | 0.9838 | 40/40 | pass |
+| quantize-srgb-rec709-palette32 | 975894 | 969369.5 | 0.9933 | 40/40 | pass |
+| quantize-oklch-euclidean-palette32 | 1378490.5 | 1372576 | 0.9957 | 40/40 | pass |
+| quantize-oklch-circular-hue-palette32 | 3516263 | 3492804 | 0.9933 | 40/40 | pass |
+| quantize-oklch-hue-arc-palette32 | 3410507 | 3310280 | 0.9706 | 40/40 | pass |
+| quantize-cielab-ciede2000-palette32 | 28497858.5 | 28446771 | 0.9982 | 18/18 | pass |
+| quantize-cielch-euclidean-palette32 | 1422641 | 1427956.5 | 1.0037 | 40/40 | pass |
+| quantize-cielch-circular-hue-palette32 | 3626064 | 3544724 | 0.9776 | 40/40 | pass |
+| quantize-cielch-hue-arc-palette32 | 3352741 | 3325370.5 | 0.9918 | 40/40 | pass |
+| perturb-bayer2-srgb | 14372824 | 265884 | 0.0185 | 36/40 | pass |
+| perturb-bayer4-linear-rgb | 14561130.5 | 607944 | 0.0418 | 36/40 | pass |
+| perturb-bayer8-oklab | 139557754.5 | 2513473.5 | 0.0180 | 10/40 | pass |
+| perturb-bayer16-cielab | 15195975.5 | 862838.5 | 0.0568 | 34/40 | pass |
+| perturb-random-oklch | 135805960 | 3902279 | 0.0287 | 10/40 | pass |
+| perturb-blue-cielch | 15601171.5 | 1309640 | 0.0839 | 32/40 | pass |
+| diffusion-floyd-steinberg-srgb-bytes | 1766086.5 | 1763706.5 | 0.9987 | 40/40 | pass |
+| diffusion-floyd-steinberg-matching | 1815893 | 1826822.5 | 1.0060 | 40/40 | pass |
+| diffusion-sierra-srgb-bytes | 2189648 | 2207423.5 | 1.0081 | 40/40 | pass |
+| diffusion-sierra-matching | 2256914.5 | 2239663.5 | 0.9924 | 40/40 | pass |
+| diffusion-sierra-lite-srgb-bytes | 1679030.5 | 1686871 | 1.0047 | 40/40 | pass |
+| diffusion-sierra-lite-matching | 1731740.5 | 1774631 | 1.0248 | 40/40 | pass |
+| diffusion-atkinson-srgb-bytes | 1911914.5 | 1903753.5 | 0.9957 | 40/40 | pass |
+| diffusion-atkinson-matching | 1933969.5 | 1928308.5 | 0.9971 | 40/40 | pass |
+| yliluoma-2 | 1238308.5 | 1278629.5 | 1.0326 | 40/40 | pass |
+| yliluoma-4 | 1933774 | 1965030 | 1.0162 | 40/40 | pass |
+| yliluoma-8 | 4721982 | 4738828 | 1.0036 | 40/40 | pass |
+| yliluoma-16 | 15677987 | 15969052 | 1.0186 | 33/29 | inconclusive |
+| perturb-zero-strength | 49901 | 59245.5 | 1.1873 | 40/40 | inconclusive |
+| tiny-resize-nearest-scalar | 50 | 50 | 1.0000 | 40/40 | inconclusive |
+| tiny-forward-srgb | 30 | 20 | 0.6667 | 40/40 | pass |
+| tiny-inverse-srgb | 40 | 30 | 0.7500 | 40/40 | pass |
+| tiny-scores-euclidean | 20 | 20 | 1.0000 | 40/40 | pass |
+| tiny-quantize-srgb-euclidean-palette32 | 1590 | 1560 | 0.9811 | 40/40 | pass |
+| tiny-threshold-random | 21 | 20 | 0.9524 | 40/40 | inconclusive |
+| tiny-diffusion-floyd-steinberg-srgb-bytes | 2110 | 2110.5 | 1.0002 | 40/40 | pass |
+| tiny-yliluoma-2 | 2931 | 2991 | 1.0205 | 40/40 | pass |
+| tiny-perturb-bayer4-linear-rgb | 1170 | 1210 | 1.0342 | 40/40 | pass |
+
+### Single repeat and the CIELAB tradeoff
+
+All five repeated cases pass. Yliluoma size16 retains 16+17 samples per role; every other repeated role retains 20+20.
+This accounts for 386 actual samples rather than the 400-sample maximum.
+
+CIELAB forward rises from 2,947,605 ns to 3,199,324 ns, an 8.54% slower pooled median.
+Its pair ratios are 1.075418 and 1.089435. Both remain within the declared 10% regression limit.
+The original CIELAB run is inconclusive, with pair ratios 1.109526 and 1.058116.
+Selecting the packed change preserves this measured CIELAB tradeoff; it is not an across-the-board forward improvement.
+
+| Case | Accepted ns | Candidate ns | C/A | Samples A/C | Gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| forward-cielab | 2947605 | 3199324 | 1.0854 | 40/40 | pass |
+| yliluoma-16 | 15631475 | 15668228 | 1.0024 | 33/33 | pass |
+| perturb-zero-strength | 50320.5 | 51560 | 1.0246 | 40/40 | pass |
+| tiny-resize-nearest-scalar | 50 | 50 | 1.0000 | 40/40 | pass |
+| tiny-threshold-random | 20.5 | 20 | 0.9756 | 40/40 | pass |
+
+### Family comparison against frozen spec
+
+The range is frozen-spec median divided by selected-production median. Above one means selected production is faster.
+Ranges cover ordinary cases within each family, not pooled aggregate speedups.
+They exclude nine tiny controls and zero-strength perturb; every excluded row remains in the full table.
+
+| Family | Spec / selected production range | Gate and scope caveat |
+| --- | ---: | --- |
+| Resize, exact cases | 1.1486–9.4401× | Five pass. The other five filters retain incorrect drift diagnostics. |
+| Forward | 1.1586–3.8294× | Seven pass. CIELAB is still slower than previous production in its separate selection repeat. |
+| Inverse | 0.9928–1.0102× | Seven pass; near parity. |
+| Construction-inclusive source conversion | 0.0023–0.0616× | Seven regressions. This helper still constructs a converter for each read. |
+| Wide reconstruction | 0.9917–1.0015× | Seven pass; near parity. |
+| Placement grid | 0.0800–0.5615× | Seven regressions against spec despite improvements against previous production. Each standalone mask call still constructs a converter. |
+| Metric score formulas | 0.9213–1.1593× | Three pass, four inconclusive. |
+| Quantize, fifteen policies | 0.7636–1.4277× | Thirteen pass. Both cylindrical hue-arc policies regress. |
+| Threshold fields | 0.9714–1.0209× | Six pass; near parity. |
+| Perturb, nonzero ordinary cases | 0.7312–3.3308× | Five pass. Bayer2/sRGB still regresses against spec. |
+| Diffusion | 0.9191–1.2190× | Eight pass. All use Oklab matching; byte/matching labels distinguish feedback. |
+| Yliluoma | 0.2668–0.9429× | Sizes 2/4/8 regress; size16 passes. Target-converter candidate remains held. |
+
+All five incorrect resize cases reproduce the exact earlier mismatch counts, first mismatches, and metadata differences.
+They remain one-byte drift diagnostics with no tolerance change or acceptance inference.
+The final spec-relative gate remains incorrect overall. Twenty-five timing regressions and five inconclusive cases remain visible.
+Passing previous-production selection gates does not imply universal superiority to spec or release readiness.
+
+### All selected spec/production medians
+
+Accepted is frozen spec; candidate is selected production. Values retain the same nanosecond and sample-count conventions as earlier tables.
+
+| Case | Accepted ns | Candidate ns | C/A | Samples A/C | Gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| resize-nearest-scalar | 37590.5 | 5680 | 0.1511 | 40/40 | pass |
+| resize-area-scalar | 1145697 | 606664 | 0.5295 | 40/40 | incorrect |
+| resize-bilinear-scalar | 2076712.5 | 891909.5 | 0.4295 | 40/40 | incorrect |
+| resize-bicubic-catmull-rom | 1696870.5 | 830397 | 0.4894 | 40/40 | pass |
+| resize-bicubic-catmull-rom-scale-aware | 9938085 | 1350501 | 0.1359 | 40/40 | incorrect |
+| resize-lanczos2-fixed | 7057626.5 | 836367.5 | 0.1185 | 40/40 | pass |
+| resize-lanczos2-scale-aware | 50545227.5 | 1402645.5 | 0.0278 | 10/40 | incorrect |
+| resize-lanczos3-fixed | 14209440 | 1505223 | 0.1059 | 36/40 | pass |
+| resize-lanczos3-scale-aware | 110506794 | 1983629.5 | 0.0180 | 10/40 | incorrect |
+| resize-trilinear-mip-area | 4426167 | 3853514 | 0.8706 | 40/40 | pass |
+| forward-srgb | 192483 | 166127.5 | 0.8631 | 40/40 | pass |
+| inverse-srgb | 953880 | 946749.5 | 0.9925 | 40/40 | pass |
+| source-construction-srgb | 32440 | 14305855.5 | 440.9943 | 40/36 | regression |
+| reconstruct-srgb | 2773637 | 2774262 | 1.0002 | 40/40 | pass |
+| placement-srgb | 1199808.5 | 15002187.5 | 12.5038 | 40/34 | regression |
+| forward-linear-rgb | 2348965.5 | 881783.5 | 0.3754 | 40/40 | pass |
+| inverse-linear-rgb | 3489658.5 | 3495678.5 | 1.0017 | 40/40 | pass |
+| source-construction-linear-rgb | 284814 | 14643929 | 51.4158 | 40/35 | regression |
+| reconstruct-linear-rgb | 5089071.5 | 5114186.5 | 1.0049 | 40/40 | pass |
+| placement-linear-rgb | 4537259 | 14882384.5 | 3.2800 | 40/34 | regression |
+| forward-oklab | 10045261.5 | 2623184.5 | 0.2611 | 40/40 | pass |
+| inverse-oklab | 4227120 | 4221553.5 | 0.9987 | 40/40 | pass |
+| source-construction-oklab | 657270.5 | 14625172 | 22.2514 | 40/35 | regression |
+| reconstruct-oklab | 8417732 | 8458562 | 1.0049 | 40/40 | pass |
+| placement-oklab | 7819223 | 16477699.5 | 2.1073 | 40/32 | regression |
+| forward-cielab | 9988646.5 | 3179723 | 0.3183 | 40/40 | pass |
+| inverse-cielab | 4320211 | 4333175.5 | 1.0030 | 40/40 | pass |
+| source-construction-cielab | 616779 | 14707872 | 23.8463 | 40/35 | regression |
+| reconstruct-cielab | 5388566.5 | 5390135.5 | 1.0003 | 40/40 | pass |
+| placement-cielab | 7813198.5 | 16936360.5 | 2.1677 | 40/30 | regression |
+| forward-ycbcr | 244064 | 147587.5 | 0.6047 | 40/40 | pass |
+| inverse-ycbcr | 1233278.5 | 1242232.5 | 1.0073 | 40/40 | pass |
+| source-construction-ycbcr | 59680.5 | 14685393 | 246.0669 | 40/35 | regression |
+| reconstruct-ycbcr | 2867243 | 2862892.5 | 0.9985 | 40/40 | pass |
+| placement-ycbcr | 1990720 | 15282241 | 7.6767 | 40/34 | regression |
+| forward-oklch | 14897649.5 | 5625730 | 0.3776 | 34/40 | pass |
+| inverse-oklch | 7006809.5 | 6936020 | 0.9899 | 40/40 | pass |
+| source-construction-oklch | 916114 | 14873550.5 | 16.2355 | 40/34 | regression |
+| reconstruct-oklch | 7686886.5 | 7751016 | 1.0083 | 40/40 | pass |
+| placement-oklch | 10288195 | 18323107 | 1.7810 | 40/28 | regression |
+| forward-cielch | 13976685.5 | 6278485 | 0.4492 | 36/40 | pass |
+| inverse-cielch | 6689196.5 | 6659060 | 0.9955 | 40/40 | pass |
+| source-construction-cielch | 880309 | 14895649.5 | 16.9209 | 40/34 | regression |
+| reconstruct-cielch | 8245064.5 | 8242268.5 | 0.9997 | 40/40 | pass |
+| placement-cielch | 9965740 | 18959506.5 | 1.9025 | 40/28 | regression |
+| scores-euclidean | 336730 | 290455 | 0.8626 | 40/40 | inconclusive |
+| scores-chord | 1010030.5 | 1096321.5 | 1.0854 | 40/40 | inconclusive |
+| scores-arc | 651045 | 651999.5 | 1.0015 | 40/40 | pass |
+| scores-compuphase | 1379111.5 | 1381331 | 1.0016 | 40/40 | pass |
+| scores-rec601 | 307569 | 326695 | 1.0622 | 40/40 | inconclusive |
+| scores-rec709 | 299814 | 302685 | 1.0096 | 40/40 | inconclusive |
+| scores-ciede2000 | 14527384 | 14548165 | 1.0014 | 36/36 | pass |
+| quantize-srgb-euclidean-palette32 | 888508.5 | 921669 | 1.0373 | 40/40 | pass |
+| quantize-linear-rgb-euclidean-palette32 | 1286813.5 | 915014 | 0.7111 | 40/40 | pass |
+| quantize-oklab-euclidean-palette32 | 1654474.5 | 1158852 | 0.7004 | 40/40 | pass |
+| quantize-cielab-euclidean-palette32 | 1670465.5 | 1182293 | 0.7078 | 40/40 | pass |
+| quantize-ycbcr-euclidean-palette32 | 982454.5 | 956533.5 | 0.9736 | 40/40 | pass |
+| quantize-srgb-compuphase-palette32 | 3085641 | 3045180.5 | 0.9869 | 40/40 | pass |
+| quantize-srgb-rec601-palette32 | 925268 | 985929.5 | 1.0656 | 40/40 | pass |
+| quantize-srgb-rec709-palette32 | 915149 | 975874.5 | 1.0664 | 40/40 | pass |
+| quantize-oklch-euclidean-palette32 | 1916404 | 1374571 | 0.7173 | 40/40 | pass |
+| quantize-oklch-circular-hue-palette32 | 3556758.5 | 3562175 | 1.0015 | 40/40 | pass |
+| quantize-oklch-hue-arc-palette32 | 2707780.5 | 3296480 | 1.2174 | 40/40 | regression |
+| quantize-cielab-ciede2000-palette32 | 28825924.5 | 28294717.5 | 0.9816 | 18/18 | pass |
+| quantize-cielch-euclidean-palette32 | 1900109 | 1422441.5 | 0.7486 | 40/40 | pass |
+| quantize-cielch-circular-hue-palette32 | 3475201.5 | 3557968.5 | 1.0238 | 40/40 | pass |
+| quantize-cielch-hue-arc-palette32 | 2581484 | 3380785.5 | 1.3096 | 40/40 | regression |
+| threshold-bayer2 | 275679 | 283794 | 1.0294 | 40/40 | pass |
+| perturb-bayer2-srgb | 198923 | 272040 | 1.3676 | 40/40 | regression |
+| threshold-bayer4 | 377899.5 | 387646 | 1.0258 | 40/40 | pass |
+| perturb-bayer4-linear-rgb | 839458 | 616329.5 | 0.7342 | 40/40 | pass |
+| threshold-bayer8 | 487548.5 | 489906.5 | 1.0048 | 40/40 | pass |
+| perturb-bayer8-oklab | 8381671 | 2516393 | 0.3002 | 40/40 | pass |
+| threshold-bayer16 | 593209 | 598754.5 | 1.0093 | 40/40 | pass |
+| perturb-bayer16-cielab | 1329465 | 860508.5 | 0.6473 | 40/40 | pass |
+| threshold-random | 210388.5 | 215088 | 1.0223 | 40/40 | pass |
+| perturb-random-oklch | 10358835.5 | 3908744.5 | 0.3773 | 40/40 | pass |
+| threshold-blue | 96741.5 | 94761 | 0.9795 | 40/40 | pass |
+| perturb-blue-cielch | 1765291 | 1302448.5 | 0.7378 | 40/40 | pass |
+| diffusion-floyd-steinberg-srgb-bytes | 2039005.5 | 1755301.5 | 0.8609 | 40/40 | pass |
+| diffusion-floyd-steinberg-matching | 1910398.5 | 1824122.5 | 0.9548 | 40/40 | pass |
+| diffusion-sierra-srgb-bytes | 2191007.5 | 2182117.5 | 0.9959 | 40/40 | pass |
+| diffusion-sierra-matching | 2057206.5 | 2238344.5 | 1.0881 | 40/40 | pass |
+| diffusion-sierra-lite-srgb-bytes | 2046027 | 1678450.5 | 0.8203 | 40/40 | pass |
+| diffusion-sierra-lite-matching | 1916904 | 1746141.5 | 0.9109 | 40/40 | pass |
+| diffusion-atkinson-srgb-bytes | 2089356 | 1912888.5 | 0.9155 | 40/40 | pass |
+| diffusion-atkinson-matching | 1945779 | 1961405 | 1.0080 | 40/40 | pass |
+| yliluoma-2 | 334685 | 1254624.5 | 3.7487 | 40/40 | regression |
+| yliluoma-4 | 1061461.5 | 1952614 | 1.8396 | 40/40 | regression |
+| yliluoma-8 | 3839018 | 4760711 | 1.2401 | 40/40 | regression |
+| yliluoma-16 | 14937475.5 | 15842779 | 1.0606 | 34/32 | pass |
+| perturb-zero-strength | 31255 | 51621 | 1.6516 | 40/40 | regression |
+| tiny-resize-nearest-scalar | 40 | 50 | 1.2500 | 40/40 | regression |
+| tiny-forward-srgb | 29 | 20.5 | 0.7069 | 40/40 | inconclusive |
+| tiny-inverse-srgb | 31 | 31 | 1.0000 | 40/40 | pass |
+| tiny-scores-euclidean | 20 | 20 | 1.0000 | 40/40 | pass |
+| tiny-quantize-srgb-euclidean-palette32 | 520 | 1570 | 3.0192 | 40/40 | regression |
+| tiny-threshold-random | 20 | 21 | 1.0500 | 40/40 | pass |
+| tiny-diffusion-floyd-steinberg-srgb-bytes | 2520 | 2125 | 0.8433 | 40/40 | pass |
+| tiny-yliluoma-2 | 625 | 2981 | 4.7696 | 40/40 | regression |
+| tiny-perturb-bayer4-linear-rgb | 80 | 1209.5 | 15.1188 | 40/40 | regression |
+
+### Final evidence hashes and audit command
+
+```sh
+node .plans/83-scalar-report-audit.mjs \\
+  ../v1-scalar-spec-bench/target/scalar-comparison/packed-selection-results \\
+  ../v1-scalar-spec-bench/target/scalar-comparison/packed-selection-repeat-results \\
+  ../v1-scalar-spec-bench/target/scalar-comparison/spec-prod-selected-results
+```
+
+### packed-selection-results
+
+```text
+report.json      6bdf7721cb2b9f621cc2edd8bdefcf7342ef015c4eb569fb21f9dd8247fa701b
+prepared.json    c6b9d15f2c2f41672df0b577f2534cd5d09557acea67d94972db4fabcb0a9155
+events.jsonl     f5839c47b6e402acb7bbd4bf4fb0157d785cd377fefb534bfff96459bfef0463
+worker inventory 38313880136f31a05e1d3d56f8ce523220a9760f6a6ebd2f5173eb2ca14bbab4
+```
+
+### packed-selection-repeat-results
+
+```text
+report.json      15f701515106632296c433a4845470b885bf5a47d4b7ff5dcc0548a8b6b52261
+prepared.json    7083de2c10579cb311ce74fde9afc72f3d0195132a4f46ef525ffb0c26daeee6
+events.jsonl     5089f1a17137517f658aea80bd74fe43346b27018488650d0bbe8074114b9989
+worker inventory 523b7f970122d2fb4d3746b7ddeaaab41d1b527c99931857974601a7ba7c8667
+```
+
+### spec-prod-selected-results
+
+```text
+report.json      53ce1d217dadf32b301d5c367bd4521e007ce3c667b78402eeaff7c4fe9336d2
+prepared.json    7d63394b669e14851100c806d5123edb381d1cd94987918bc0210e7b8c2ea3af
+events.jsonl     354614a5073f8170f6e2e68209bcb76ad189ffbfd3ddf653d692315004d4a908
+worker inventory e729825f5d1b75b904f2932edb181eec2cde02d71a7a9c08cb5061ed7ed19569
+```
+
+The reporting audit reads and hashes all final reports, prepared descriptors, journals, and raw worker results.
+Root owns the final archives, artifact-provenance retention, PRs, release-map updates, and cleanup.
+No additional optimization or experiment is proposed by this report.
+This reporting pass changes only this document. It runs no builds, tests, or benchmarks and leaves no owned jobs.
