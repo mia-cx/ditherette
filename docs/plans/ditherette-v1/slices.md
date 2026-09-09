@@ -59,7 +59,7 @@ The coordinator updates Progress and PR when work starts, a PR opens, or validat
 | [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Ready | [#130](https://github.com/mia-cx/ditherette/pull/130) |
 | [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Ready; release gates held | [#132](https://github.com/mia-cx/ditherette/pull/132) |
 | [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Ready; activation held | [#133](https://github.com/mia-cx/ditherette/pull/133) |
-| [S45](#s45) | Prepare the held TypeScript-retirement PR | [S44](#s44) | In progress; activation held | - |
+| [S45](#s45) | Prepare the held TypeScript-retirement PR | [S44](#s44) | Ready; activation held | [#134](https://github.com/mia-cx/ditherette/pull/134) |
 
 ## Available parallel work
 

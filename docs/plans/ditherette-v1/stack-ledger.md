@@ -17,18 +17,33 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
-### S35 through S40 handoff, 2026-09-09
+### S45 handoff, 2026-09-09
 
-Forty-four slices have open, unmerged implementation PRs. Release gates remain held. S45 is in progress.
+All 45 slices have open, unmerged PRs. S41 still has incomplete required measurements; the end-to-end goal remains unfinished.
+S44 and S45 are prepared, not activated. Routine PR babysitting has not started.
+
+S45 [PR134](https://github.com/mia-cx/ditherette/pull/134) is held at `5da82d1221f79c2ddcb517eba9f621206468bfdc`,
+based on final S44 `76bf1f8938c14a1a4cde290d45c61a280f7434d2`. It is open, non-draft, unmerged, with auto-merge disabled.
+All 45 preceding PR heads, including restoration, belong to this branch. Every published base belongs to its child head.
+Website source `80c62ef5` passes 123 server and four Chromium checks; eight preparation checks pass.
+Svelte checking has zero errors and one absent generated-types warning. No new retry UI is added.
+The client replaces failed workers; the next processing request retries initialization in a fresh module registry.
+Historical TypeScript benchmarks compile pinned Git revision `a895267baea624a6e89bfcef6c5147f170e8a8f7`.
+All 24 emitted historical modules match S41. All 45 package distribution files match S43 tarball `78a3d5b7`.
+Correction `d7b99198` removes a duplicate provenance field rejected by the actual Rust decoder.
+The real decoder red/green proof and ten native protocol checks pass. The historical revision remains in the hashed compiler manifest.
+Package/Rust production inputs, frozen spec/image/guard, and landed kernels are unchanged. No new performance measurement runs.
+Compact reports remain in `.plans/87-retirement.md`, `87-retirement-evidence.json`, `87-benchmark-provider.md`, and `87-stack.json`.
+The whole finished target tree is removed, including the 1.25 GiB native decoder build. Source and the small S43 artifact remain.
+Next work is the bounded S41 missing scalar matrix continuation. Existing regressions and all human/operational holds remain open.
 
 S44 [PR133](https://github.com/mia-cx/ditherette/pull/133) is held at `76bf1f8938c14a1a4cde290d45c61a280f7434d2`,
 based on final S43 `15300c0dc461265fcef2bd72096de5202836706b`. It is open, non-draft, unmerged, with auto-merge disabled.
 Its single runtime-line change prepares scalar Wasm as the website default, with a developer-only override.
 The faithful temporary initialization fallback and cancellation stay intact. Seventy server and six Chromium checks pass.
 No package/Rust changes, measurements, deployment, or activation occur. The finished worktree has no generated outputs.
-S45 starts from this validated head in two isolated worktrees. `impl/v1-s45-retirement` owns live website retirement and retry behavior.
-`impl/v1-s45-benchmark-provider` owns the pinned historical TypeScript benchmark provider and its provenance/tests.
-Root joins those disjoint changes before final validation and the held retirement PR. Browser TypeScript responsibilities remain.
+S45 joins its isolated website and historical-provider branches before combined validation and PR134.
+Browser TypeScript responsibilities remain. Both implementation owners have drained their jobs and returned their build targets.
 
 S43 [PR132](https://github.com/mia-cx/ditherette/pull/132) is open at `15300c0dc461265fcef2bd72096de5202836706b`,
 based on `impl/v1-s43-base` at `c43cea1269fcd666835d41c07d82a1c451604107`.
