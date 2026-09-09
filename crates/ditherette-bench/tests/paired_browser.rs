@@ -8,6 +8,66 @@ use ditherette_bench_api::verification::*;
 mod model;
 
 #[test]
+fn retention_override_is_bounded_and_absent_from_historical_json() {
+    use ditherette_bench::paired::quantize::*;
+    let (mut prepared, _) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let legacy = serde_json::to_value(case.browser.as_ref().unwrap()).unwrap();
+    assert!(legacy.get("retained_output_limit_bytes").is_none());
+    let restored: BrowserCase = serde_json::from_value(legacy.clone()).unwrap();
+    assert_eq!(serde_json::to_value(restored).unwrap(), legacy);
+    let operation = PublicOperation::Quantize {
+        settings: QuantizeSettings {
+            palette: vec![
+                PaletteEntry::Color { rgb: [0, 0, 0] },
+                PaletteEntry::Transparent {},
+            ],
+            alpha: AlphaPolicy::Preserve { threshold: 127.5 },
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+    };
+    let browser = case.browser.as_mut().unwrap();
+    browser.operation = operation.clone();
+    browser.accepted = BrowserBackend::Package;
+    browser.candidate = BrowserBackend::Package;
+    browser.preparation = BrowserPreparation::FreshInstance;
+    browser.cache = CacheCapability::Roles {
+        accepted: PreparationCapability::ImageStages,
+        candidate: PreparationCapability::ImageStages,
+        sample_prime: None,
+    };
+    case.measurement.application_cache = ApplicationCache::Cold;
+    case.identity = operation
+        .identity(case.source, &case.rgba, case.source)
+        .unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    for limit in [64 * 1024 * 1024 + 1, 384 * 1024 * 1024] {
+        case.browser.as_mut().unwrap().retained_output_limit_bytes = Some(limit);
+        validate_case(case).unwrap();
+    }
+    for limit in [0, 64 * 1024 * 1024, 384 * 1024 * 1024 + 1] {
+        case.browser.as_mut().unwrap().retained_output_limit_bytes = Some(limit);
+        assert!(validate_case(case)
+            .unwrap_err()
+            .to_string()
+            .contains("retained-output override"));
+    }
+    case.browser.as_mut().unwrap().retained_output_limit_bytes = Some(384 * 1024 * 1024);
+    case.measurement.mode = SampleMode::Throughput;
+    assert!(validate_case(case).is_err());
+    case.measurement.mode = SampleMode::SingleCall;
+    case.browser.as_mut().unwrap().operation = PublicOperation::ResizeNearest {
+        anchor: Anchor::Center,
+    };
+    assert!(validate_case(case)
+        .unwrap_err()
+        .to_string()
+        .contains("retained-output override"));
+}
+
+#[test]
 fn javascript_warm_trial_payload_preserves_prime_evidence_in_strict_transport() {
     let script = r#"
 import { warmProcessTrial } from './scripts/benchmark-stage-trial-fixture.mjs';
@@ -132,6 +192,7 @@ fn area_and_bilinear_keep_distinct_recipes_and_validate_website_anchors() {
 fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
     let browser = BrowserCase {
+        retained_output_limit_bytes: None,
         execution: None,
         row_policy: None,
         operation: PublicOperation::ResizeNearest {

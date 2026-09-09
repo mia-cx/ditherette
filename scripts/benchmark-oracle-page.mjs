@@ -1,3 +1,5 @@
+import { encodeOutput, usesIndexedWire } from './benchmark-indexed-wire.mjs';
+
 /** Frozen-only Wasm execution in a disposable context. This module never imports the package or timers. */
 export async function runTrial(trial) {
 	const {
@@ -21,5 +23,9 @@ export async function runTrial(trial) {
 	const reference = JSON.parse(evaluate(request));
 	const prime = browser.cache?.roles?.sample_prime;
 	if (prime) reference.prime_output = JSON.parse(evaluate_prime(request, prime));
+	if (usesIndexedWire(trial)) {
+		if (prime) throw new Error('Capped indexed wire does not support stage priming.');
+		reference.output = encodeOutput(reference.output);
+	}
 	return reference;
 }

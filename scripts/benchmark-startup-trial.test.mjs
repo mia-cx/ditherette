@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { warmProcessTrial } from './benchmark-stage-trial-fixture.mjs';
-import { events, failInitialization } from './benchmark-stage-cache-fixture.mjs';
+import { events, failInitialization, requireThreadPolicy } from './benchmark-stage-cache-fixture.mjs';
 
 const startupTrial = (preparation, role, threads, configureFixture) => warmProcessTrial({
 	configureFixture,
@@ -64,4 +64,44 @@ test('host declarations cannot silently run the package in the page context', as
 		}),
 		/execution context differs/
 	);
+});
+
+test('Process composition keeps each role initializer paired with its selected Wasm entry', async () => {
+	for (const role of ['candidate', 'accepted']) {
+		for (const backend of ['package', 'package-staged']) {
+			const selected = role === 'candidate' ? 'required' : 'disabled';
+			const wasm = `package/dist/wasm/${selected === 'required' ? 'threads' : 'scalar'}/fixture.wasm`;
+			const fetched = [];
+			const { result, events, trial } = await warmProcessTrial({
+				configureFixture: () => requireThreadPolicy(selected),
+				configure(trial) {
+					trial.role = role;
+					trial.browser.assets.entries.wasm = wasm;
+					delete trial.prime_reference_output;
+					trial.case.measurement.application_cache = 'not-applicable';
+					Object.assign(trial.case.browser, {
+						cache: 'none', preparation: 'fresh-instance',
+						[role]: backend,
+						threads: { accepted: 'disabled', candidate: 'required' }
+					});
+					const fetch = globalThis.fetch;
+					globalThis.fetch = (url) => {
+						fetched.push(url);
+						return fetch(url);
+					};
+				}
+			});
+			assert.deepEqual(fetched, [`file:///${wasm}`, `file:///${wasm}`]);
+			assert.ok(events.filter(e => e.type === 'initialize').every(e => e.threads === selected));
+			assert.equal(events.filter(e => e.type === 'initialize').length, 10);
+			assert.equal(events.filter(e => e.type === 'process').length, backend === 'package' ? 7 : 1);
+			assert.equal(events.filter(e => e.type === 'ditherAndQuantize').length, backend === 'package' ? 1 : 7);
+			assert.deepEqual(result.output, trial.reference_output);
+			assert.equal(result.role, role);
+			assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+			assert.equal(trial.case.browser[role], backend);
+			assert.deepEqual(events.filter(e => e.type === 'create').map(e => e.id),
+				events.filter(e => e.type === 'dispose').map(e => e.id));
+		}
+	}
 });
