@@ -265,7 +265,7 @@ export async function preparePublicBenchmark(destination, { benchSubjects = fals
 	);
 	const packagePath = await realpath(path.join(consumer, 'node_modules/ditherette'));
 	const typescript = path.join(destination, 'typescript');
-	await prepareTypeScript(typescript);
+	const typeScriptManifest = await prepareTypeScript(typescript);
 	const scripts = path.join(destination, 'scripts');
 	await mkdir(scripts);
 	for (const name of [
@@ -297,6 +297,7 @@ export async function preparePublicBenchmark(destination, { benchSubjects = fals
 			{
 				schema: 1,
 				source_revision: revision,
+				typescript_provider: typeScriptManifest.provider,
 				build_mode: benchSubjects ? 'bench-subjects' : 'public',
 				tools,
 				inputs,
