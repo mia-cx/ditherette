@@ -91,8 +91,8 @@ describe('ProcessorWorkerPipeline', () => {
 	it.each(['initialization', 'capability'] as const)(
 		'requests page-session fallback for %s, then executes only faithful TypeScript',
 		async (code) => {
-			vi.stubEnv('DEV', true);
-			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+			vi.stubEnv('DEV', false);
+			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', undefined);
 			vi.mocked(createDitherette).mockRejectedValue(
 				new DitheretteError(code, 'wasm', 'Load failed')
 			);
@@ -137,8 +137,8 @@ describe('ProcessorWorkerPipeline', () => {
 		'callback',
 		'runtime'
 	] as const)('keeps %s initialization-boundary errors visible', async (code) => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		vi.stubEnv('DEV', false);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', undefined);
 		const error = new DitheretteError(code, 'wasm', 'Visible failure');
 		vi.mocked(createDitherette).mockRejectedValue(error);
 		const pipeline = new ProcessorWorkerPipeline();
@@ -352,7 +352,9 @@ describe('ProcessorWorkerPipeline', () => {
 		);
 	});
 
-	it('async processing path returns complete responses', async () => {
+	it('developer override preserves the async TypeScript path', async () => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(
 			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
@@ -361,22 +363,6 @@ describe('ProcessorWorkerPipeline', () => {
 
 		const response = await pipeline.handleAsync(processRequest({ id: 2 }), () => undefined);
 
-		expect(response?.type).toBe('complete');
-	});
-
-	it.each([
-		[true, undefined],
-		[true, 'false'],
-		[false, 'true']
-	])('retains TypeScript with DEV=%s and package flag=%s', async (dev, flag) => {
-		vi.stubEnv('DEV', dev);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', flag);
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-		const response = await pipeline.handleAsync(processRequest(), () => undefined);
 		expect(response).toMatchObject({
 			type: 'complete',
 			image: { indices: new Uint8Array([0, 1]), settingsHash: 'hash' }
@@ -385,9 +371,15 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(pipeline.branchCacheSize).toBe(1);
 	});
 
-	it('uses one initialized public processor for the complete flagged path', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+	it.each([
+		[false, undefined],
+		[false, 'false'],
+		[false, 'true'],
+		[true, undefined],
+		[true, 'true']
+	])('uses one scalar public processor with DEV=%s and package flag=%s', async (dev, flag) => {
+		vi.stubEnv('DEV', dev);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', flag);
 		const process = vi.fn(() => ({
 			width: 2,
 			height: 1,
@@ -420,6 +412,7 @@ describe('ProcessorWorkerPipeline', () => {
 			}
 		});
 		expect(createDitherette).toHaveBeenCalledTimes(1);
+		expect(createDitherette).toHaveBeenCalledWith();
 		expect(process).toHaveBeenCalledTimes(2);
 		expect(process).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -427,6 +420,30 @@ describe('ProcessorWorkerPipeline', () => {
 			})
 		);
 		expect(pipeline.branchCacheSize).toBe(0);
+	});
+
+	it('does not process a request canceled while scalar initialization is pending', async () => {
+		vi.stubEnv('DEV', false);
+		const pending = Promise.withResolvers<Awaited<ReturnType<typeof createDitherette>>>();
+		vi.mocked(createDitherette).mockReturnValue(pending.promise);
+		const process = vi.fn();
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = pipeline.handleAsync(processRequest(), () => undefined);
+		pipeline.handle({ id: 2, type: 'cancel' }, () => undefined);
+		pending.resolve({
+			process,
+			resize: vi.fn(),
+			quantize: vi.fn(),
+			perturb: vi.fn(),
+			ditherAndQuantize: vi.fn(),
+			dispose: vi.fn()
+		});
+		expect(await response).toBeUndefined();
+		expect(process).not.toHaveBeenCalled();
 	});
 
 	it('forwards public work counts and skipped stages without inventing intermediate work', async () => {
@@ -469,7 +486,8 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(progress.mock.calls.some(([stage]) => stage === 'resize')).toBe(false);
 	});
 
-	it('keeps fractional crops on the disabled TypeScript path', async () => {
+	it('keeps fractional crops on the developer-only TypeScript path', async () => {
+		vi.stubEnv('DEV', true);
 		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(
@@ -496,8 +514,8 @@ describe('ProcessorWorkerPipeline', () => {
 	it.each(['initialization', 'process', 'processing-initialization'])(
 		'keeps %s failures visible without invoking TypeScript',
 		async (failure) => {
-			vi.stubEnv('DEV', true);
-			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+			vi.stubEnv('DEV', false);
+			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', undefined);
 			const error =
 				failure === 'processing-initialization'
 					? new DitheretteError('initialization', 'wasm', 'Processing failed')

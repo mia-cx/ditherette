@@ -200,7 +200,7 @@ export class ProcessorWorkerPipeline {
 	): Promise<WorkerResponse | undefined> {
 		if (request.type !== 'process') return this.handle(request, progress);
 		if (this.#canceledIds.has(request.id)) return undefined;
-		if (import.meta.env.DEV && import.meta.env.VITE_DITHERETTE_WASM_PROCESS === 'true') {
+		if (!import.meta.env.DEV || import.meta.env.VITE_DITHERETTE_WASM_PROCESS !== 'false') {
 			if (request.typeScriptFallback) {
 				const source = this.sourceFor(request.sourceId);
 				if (!faithfulTypeScriptFallback(source, request.palette, request.settings))
