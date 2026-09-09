@@ -46,6 +46,16 @@ The runner checks at least 12 GiB free before each launch. No measurement starts
 The final published-head audit includes all 46 PRs at `5da82d12`, with every current base in its child and auto-merge disabled.
 Seven leftover nested spec-freeze compiler targets are removed, reclaiming about 1.4 GiB; no finished target trees remain.
 
+The scalar continuation completes all 21 missing cells at source `2e85af6ba5b7efdedd7050e2fcf779ab2209964c`.
+Its 84 serial workers produce 1,427 samples in 1,774.712 seconds. Eighteen cells pass, two are inconclusive, and one is incorrect.
+Every completed cell is retained and reopened before deleting its raw directory. No incomplete attempts or unrun cells remain.
+The 24 original scalar cells keep their original identities; the combined scalar matrix now has all 45 case reports.
+The agent audits exactness and final gate details before the follow-up evidence PR. Coverage is not release acceptance.
+The fresh tarball still matches S43 `78a3d5b7`. Firefox's task-local updater policy passes 60-second runtime immutability.
+The source includes capped-only 256 KiB upload chunks. A small actual Chromium pipe test passes; full-size feasibility remains unrun.
+Both implementation agents drain during the entire 29.6-minute measurement, then resume reports and capped-probe preparation.
+Root retains only active native/public/capped artifacts for that next probe. Disk free space returns to about 101 GiB.
+
 S44 [PR133](https://github.com/mia-cx/ditherette/pull/133) is held at `76bf1f8938c14a1a4cde290d45c61a280f7434d2`,
 based on final S43 `15300c0dc461265fcef2bd72096de5202836706b`. It is open, non-draft, unmerged, with auto-merge disabled.
 Its single runtime-line change prepares scalar Wasm as the website default, with a developer-only override.
