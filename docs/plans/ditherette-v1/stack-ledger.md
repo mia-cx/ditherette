@@ -19,7 +19,7 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ### S35 through S40 handoff, 2026-09-09
 
-Forty slices have open, unmerged implementation PRs. S41 and S42 are in progress.
+Forty-one slices have open, unmerged implementation PRs. S41 remains in progress; S42 is delivered.
 
 | Slice | PR | Branch | Immediate base | Head |
 | --- | --- | --- | --- | --- |
@@ -39,19 +39,26 @@ Root owns `impl/v1-s40-conformance`, shared fixtures, CI, and delivery.
 Memory fixture `e72cbe7b8a8eb56569a9ff76c1101a748999c180` joins from its isolated branch.
 The S41 preparation agent only inspected existing matrices and evidence. No benchmark runs during conformance.
 
-S40 is delivered in [PR129](https://github.com/mia-cx/ditherette/pull/129) at `96c281180529c3849823736581daebdcdbd8493e`,
+S40 is delivered in [PR129](https://github.com/mia-cx/ditherette/pull/129) at `95706738e4f3179824a66c80bb5728ce97a34b4b`,
 targeting the explicit `impl/v1-s40-base` join. It adds crate-owned conformance commands and package CI.
 The [report](https://github.com/mia-cx/ditherette/blob/96c281180529c3849823736581daebdcdbd8493e/docs/plans/ditherette-v1/s40-conformance.md)
 records 424 scalar/425 threaded native tests, all three scalar engines, supported Chromium/Firefox pool lifecycle,
 68 server and six website browser tests. Scalar memory stabilizes at 19 pages after warmup and 512 changing calls.
 The local missing-library WebKit launch fails first; its isolated library-alias retry passes. Threaded WebKit remains blocked.
+Fresh CI [34292675315](https://github.com/mia-cx/ditherette/actions/runs/34292675315) passes all conformance steps at this head.
+The final CI-only fixes remove an invalid rustup flag, enforce Bash pipefail, and fetch locked dependencies before offline oracle preparation.
 S35/S36/S37 return about 1.7 GiB of compiler outputs; S40 returns another 326 MiB. Artifacts and logs remain intact.
 
 S41 and S42 start from that final S40 head. Their satisfied native GitHub blockers are removed; every issue remains open.
 S41 matrix/TS adapters belong to `impl/v1-s41-performance`. Its separate cold-cache candidate belongs to `impl/v1-s41-cache-candidate`.
 S42 owns `impl/v1-s42-package`, distribution and publication preparation only. No publication or benchmark is authorized during this phase.
-The root coordinator checks integration ancestry and tracking. All 41 current open implementation PR heads, including the restoration,
-are ancestors of final S40. S43 must repeat that check after S41/S42 delivery.
+S42 is delivered in [PR130](https://github.com/mia-cx/ditherette/pull/130) at `db78ca0adf60d1a057d10c2bbe7aabc4c1781374`, based on final S40.
+Its [report](https://github.com/mia-cx/ditherette/blob/db78ca0adf60d1a057d10c2bbe7aabc4c1781374/.plans/84-package-report.md) records exact-artifact native, browser, package, and offline publication dry-run checks.
+The immutable source is `bdbcb3c812701d50f157a12d7f157138f10b4013` and tarball SHA-256 is `78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90`.
+The tarball is 407,888 bytes. Only README and package metadata differ from the prior ordinary artifact.
+Initial size-budget approval, metadata growth review, S41 gates, and human publisher setup remain pending. Nothing is published.
+The root coordinator checks integration ancestry and tracking. All 41 implementation PR heads available before S42, including the restoration,
+were ancestors of S40 at `96c28118`. S43 must repeat that check after S41/S42 delivery.
 
 Current integration work continues on `impl/v1-resize-integration` in `.worktrees/v1-resize-integration`.
 It owns the tracked progress table; the root table remains the visible mirror.
