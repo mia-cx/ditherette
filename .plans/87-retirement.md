@@ -9,7 +9,7 @@ Parent S44 PR133 is `impl/v1-s44-rollout` at `76bf1f8938c14a1a4cde290d45c61a280f
 - [x] Record exact package evidence reuse, preserved browser responsibilities, and held rollback/activation boundaries.
 - [x] Join the separately owned benchmark provider and validate the combined implementation.
 - [x] Correct the public provenance schema and verify it through the actual Rust decoder.
-- [ ] Root records final ancestry and files the held unmerged PR.
+- [x] Root verifies all published prerequisite heads and records the final PR handoff.
 
 ## Ownership and findings
 
@@ -76,3 +76,12 @@ Rollback restores the complete previously accepted website deployment, including
 ## Handoff
 
 All owned jobs have exited. Cleanup removes the complete target tree, generated website/package outputs, and Vite browser caches, about 42 MiB. No compiler target was created. Compact evidence remains committed; the original S43 tarball is untouched. Root owns final ancestry/tracking and PR filing. No merge to a published parent, deployment, publishing, release tag, or activation occurs.
+
+## Final stack handoff
+
+Root verifies all 45 open prerequisite PR heads at `d7b9919838c697d7bb3d3ef2203c33542121f31e`.
+These cover 44 slices plus the landed-kernel restoration. Every current base belongs to its child head.
+All PRs are non-draft and unmerged, with auto-merge disabled. [Exact snapshot](87-stack.json) records each head and base.
+The merge-preserving rebase onto current S44 `76bf1f8938c14a1a4cde290d45c61a280f7434d2` keeps the same head.
+Website and package inputs remain identical to validated `80c62ef5`; the focused provenance correction has its separate proof below.
+The held PR targets `impl/v1-s44-rollout`. Its URL and delivered head belong in the coordinator progress table.

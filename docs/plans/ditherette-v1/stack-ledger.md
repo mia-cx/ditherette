@@ -19,7 +19,27 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ### S35 through S40 handoff, 2026-09-09
 
-Forty-two slices have open, unmerged implementation PRs. S41's release gates remain held. S43 is in progress.
+Forty-four slices have open, unmerged implementation PRs. Release gates remain held. S45 is in progress.
+
+S44 [PR133](https://github.com/mia-cx/ditherette/pull/133) is held at `76bf1f8938c14a1a4cde290d45c61a280f7434d2`,
+based on final S43 `15300c0dc461265fcef2bd72096de5202836706b`. It is open, non-draft, unmerged, with auto-merge disabled.
+Its single runtime-line change prepares scalar Wasm as the website default, with a developer-only override.
+The faithful temporary initialization fallback and cancellation stay intact. Seventy server and six Chromium checks pass.
+No package/Rust changes, measurements, deployment, or activation occur. The finished worktree has no generated outputs.
+S45 starts from this validated head in two isolated worktrees. `impl/v1-s45-retirement` owns live website retirement and retry behavior.
+`impl/v1-s45-benchmark-provider` owns the pinned historical TypeScript benchmark provider and its provenance/tests.
+Root joins those disjoint changes before final validation and the held retirement PR. Browser TypeScript responsibilities remain.
+
+S43 [PR132](https://github.com/mia-cx/ditherette/pull/132) is open at `15300c0dc461265fcef2bd72096de5202836706b`,
+based on `impl/v1-s43-base` at `c43cea1269fcd666835d41c07d82a1c451604107`.
+The audit includes every one of the 43 published prerequisite PR heads and 74 dependency edges.
+A five-line fixture registration repair passes installed-package conformance without changing runtime code.
+Fresh checks pass 49 native protocol, 40 JS/release, 42 interface, 2 staging, 4 glue, 68 website server,
+6 website Chromium, 17 scalar conformance, and 23 automatic-policy checks. Full unchanged native/threaded checks reuse S42 evidence.
+The freshly built tarball matches S42 `78a3d5b7` exactly. Build source stays `c43cea12`; tested fixtures are `f331ffcf`.
+The S43 report retains all release blockers. Its finished target trees are cleared; a 1.6 MiB compact artifact bundle remains outside target.
+S44 starts from this validated head in `.worktrees/v1-s44-rollout`, owned by its isolated implementation agent.
+It prepares only a held default-rollout PR. No merge, deployment, or activation occurs.
 
 S41 [PR131](https://github.com/mia-cx/ditherette/pull/131) is open at `d09e32df8e06ddddec3d6d374c6f22c280bc4d4b`,
 based on S40 `95706738e4f3179824a66c80bb5728ce97a34b4b`. It changes benchmark infrastructure and reports only.
