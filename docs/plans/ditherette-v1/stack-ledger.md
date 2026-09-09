@@ -19,7 +19,22 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ### S35 through S40 handoff, 2026-09-09
 
-Forty-one slices have open, unmerged implementation PRs. S41 remains in progress; S42 is delivered.
+Forty-two slices have open, unmerged implementation PRs. S41's release gates remain held. S43 is in progress.
+
+S41 [PR131](https://github.com/mia-cx/ditherette/pull/131) is open at `d09e32df8e06ddddec3d6d374c6f22c280bc4d4b`,
+based on S40 `95706738e4f3179824a66c80bb5728ce97a34b4b`. It changes benchmark infrastructure and reports only.
+The batching candidate is rejected. Fresh historical anchors, admitted TypeScript comparisons, initialization,
+and all twenty automatic cells complete. Automatic evidence has 80 workers and 1,318 samples.
+Historical/TypeScript/automatic regressions, inherited drift, noise, 21 incomplete scalar release cells,
+capped transport feasibility, and threaded WebKit remain release blockers. See `.plans/83-release-status.md` in PR131.
+Forty focused merged JavaScript tests and fresh native/public preparation pass. The ordinary artifact stays byte-identical to S40.
+
+S43 base `c43cea1269fcd666835d41c07d82a1c451604107` joins PR131 with S42 `db78ca0adf60d1a057d10c2bbe7aabc4c1781374`.
+`impl/v1-s43-integration` owns integrated validation and the readiness report. `impl/v1-s43-stack-audit` owns the independent ancestry ledger.
+Both use isolated worktrees. Root owns global progress and issue dependency tracking. No measurements run during these checks.
+S41 returns its entire finished target trees, about 33 GiB, including raw payloads and browser snapshots.
+Compact reports remain committed or archived under `benchmark-results/retained-reports-2026-09-09`.
+Only the small reusable browser runtime trees transfer to active S43 ownership. Source and all PRs remain intact.
 
 | Slice | PR | Branch | Immediate base | Head |
 | --- | --- | --- | --- | --- |
