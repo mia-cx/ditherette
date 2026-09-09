@@ -17,6 +17,64 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### S35 through S40 handoff, 2026-09-09
+
+Forty-two slices have open, unmerged implementation PRs. S41's release gates remain held. S43 is in progress.
+
+S41 [PR131](https://github.com/mia-cx/ditherette/pull/131) is open at `d09e32df8e06ddddec3d6d374c6f22c280bc4d4b`,
+based on S40 `95706738e4f3179824a66c80bb5728ce97a34b4b`. It changes benchmark infrastructure and reports only.
+The batching candidate is rejected. Fresh historical anchors, admitted TypeScript comparisons, initialization,
+and all twenty automatic cells complete. Automatic evidence has 80 workers and 1,318 samples.
+Historical/TypeScript/automatic regressions, inherited drift, noise, 21 incomplete scalar release cells,
+capped transport feasibility, and threaded WebKit remain release blockers. See `.plans/83-release-status.md` in PR131.
+Forty focused merged JavaScript tests and fresh native/public preparation pass. The ordinary artifact stays byte-identical to S40.
+
+S43 base `c43cea1269fcd666835d41c07d82a1c451604107` joins PR131 with S42 `db78ca0adf60d1a057d10c2bbe7aabc4c1781374`.
+`impl/v1-s43-integration` owns integrated validation and the readiness report. `impl/v1-s43-stack-audit` owns the independent ancestry ledger.
+Both use isolated worktrees. Root owns global progress and issue dependency tracking. No measurements run during these checks.
+S41 returns its entire finished target trees, about 33 GiB, including raw payloads and browser snapshots.
+Compact reports remain committed or archived under `benchmark-results/retained-reports-2026-09-09`.
+Only the small reusable browser runtime trees transfer to active S43 ownership. Source and all PRs remain intact.
+
+| Slice | PR | Branch | Immediate base | Head |
+| --- | --- | --- | --- | --- |
+| S35 | [126](https://github.com/mia-cx/ditherette/pull/126) | `delivery/v1-s35-resize` | `impl/v1-s34-threads` | `6bbe113b99a08f2a11ade6296ddf7f25e32e041b` |
+| S36 | [127](https://github.com/mia-cx/ditherette/pull/127) | `delivery/v1-s36-fields-final` | `delivery/v1-s35-resize` | `b542bd94a5dbc724de73815ae0008a22985147fd` |
+| S37 | [128](https://github.com/mia-cx/ditherette/pull/128) | `delivery/v1-s37-yliluoma` | `delivery/v1-s36-fields-final` | `91b114ba610588c504a7551e8123d72e36eb9e66` |
+
+S35 starts from final S34 `d4531667e1158c2068f30614f40c9d39f8c5313e`.
+The pure S36 publication excludes S37 implementation. Historical combined S36 remains preserved on its old branch.
+Both downstream branches include their published parents. All production/build inputs at S37 equal tested `dc81818a`.
+The ordinary tarball SHA-256 is `1e9fa5c926f41190a10ef6230a1acbc349718ac0ab94c8542fa2b1a20bc4775d`.
+The trusted frozen guard and 23 automatic-policy browser checks pass, including nine cases per Chromium/Firefox engine.
+Existing frozen bilinear drift and noisy performance comparisons remain S41 gates.
+
+S40 base `5fccb9e6a51c6de49fd0051b204fb16bfde75e22` joins final S37 and S39 `5938b248506ae14d24471498c3a90bb42ed3c32a`.
+Root owns `impl/v1-s40-conformance`, shared fixtures, CI, and delivery.
+Memory fixture `e72cbe7b8a8eb56569a9ff76c1101a748999c180` joins from its isolated branch.
+The S41 preparation agent only inspected existing matrices and evidence. No benchmark runs during conformance.
+
+S40 is delivered in [PR129](https://github.com/mia-cx/ditherette/pull/129) at `95706738e4f3179824a66c80bb5728ce97a34b4b`,
+targeting the explicit `impl/v1-s40-base` join. It adds crate-owned conformance commands and package CI.
+The [report](https://github.com/mia-cx/ditherette/blob/96c281180529c3849823736581daebdcdbd8493e/docs/plans/ditherette-v1/s40-conformance.md)
+records 424 scalar/425 threaded native tests, all three scalar engines, supported Chromium/Firefox pool lifecycle,
+68 server and six website browser tests. Scalar memory stabilizes at 19 pages after warmup and 512 changing calls.
+The local missing-library WebKit launch fails first; its isolated library-alias retry passes. Threaded WebKit remains blocked.
+Fresh CI [34292675315](https://github.com/mia-cx/ditherette/actions/runs/34292675315) passes all conformance steps at this head.
+The final CI-only fixes remove an invalid rustup flag, enforce Bash pipefail, and fetch locked dependencies before offline oracle preparation.
+S35/S36/S37 return about 1.7 GiB of compiler outputs; S40 returns another 326 MiB. Artifacts and logs remain intact.
+
+S41 and S42 start from that final S40 head. Their satisfied native GitHub blockers are removed; every issue remains open.
+S41 matrix/TS adapters belong to `impl/v1-s41-performance`. Its separate cold-cache candidate belongs to `impl/v1-s41-cache-candidate`.
+S42 owns `impl/v1-s42-package`, distribution and publication preparation only. No publication or benchmark is authorized during this phase.
+S42 is delivered in [PR130](https://github.com/mia-cx/ditherette/pull/130) at `db78ca0adf60d1a057d10c2bbe7aabc4c1781374`, based on final S40.
+Its [report](https://github.com/mia-cx/ditherette/blob/db78ca0adf60d1a057d10c2bbe7aabc4c1781374/.plans/84-package-report.md) records exact-artifact native, browser, package, and offline publication dry-run checks.
+The immutable source is `bdbcb3c812701d50f157a12d7f157138f10b4013` and tarball SHA-256 is `78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90`.
+The tarball is 407,888 bytes. Only README and package metadata differ from the prior ordinary artifact.
+Initial size-budget approval, metadata growth review, S41 gates, and human publisher setup remain pending. Nothing is published.
+The root coordinator checks integration ancestry and tracking. All 41 implementation PR heads available before S42, including the restoration,
+were ancestors of S40 at `96c28118`. S43 must repeat that check after S41/S42 delivery.
+
 Current integration work continues on `impl/v1-resize-integration` in `.worktrees/v1-resize-integration`.
 It owns the tracked progress table; the root table remains the visible mirror.
 S21 public area/bilinear checkpoint `056a1324` joins at `b52d1c8b`, with native/package/three-engine conformance passing.
@@ -48,16 +106,232 @@ It passes native/private/interface checks, both builds, and all three package en
 The [measurement report](https://github.com/mia-cx/ditherette/blob/c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7/.plans/68-benchmark-results.md) records 68 reaped workers and 1,264 samples, all exact against the target-local frozen oracle.
 All four runtime gates pass. Both roles rebuild measured source `44cbe43546e739f3d11f7b0bd08d7453afb83da1`; this establishes a baseline, not a speedup.
 Native/Wasm rounding diagnostics remain intact. S41 still owns full-call bottlenecks and equivalent TypeScript comparisons.
-S28 three-row diffusion reaches validated public checkpoint `8df7b48396aec85bf9c1a289d63973b615e31018`.
-It passes 360 frozen public vectors in all three engines and the trusted freeze guard.
-The literal full-image native baseline remains callable; the ring candidate awaits its bounded comparison.
-S29 literal baseline `50cd96d17535ee7f81b1d7a63288751afab50e89` and converter candidate `fdb3921ae1cb7cc3834e42c204d61bb0a63c7cea` pass 367 frozen-Wasm fixtures per engine.
-The candidate only reuses the prepared converter and remains unselected.
-S28 source `058f276d2bf18e1207b74f1a743b5e91f13816e4` and both S29 sources have complete fresh roles and four immutable snapshots each.
-Their benchmarks and PRs remain pending. Both declarations allow 128 serial workers and at most 2,560 samples.
-Fresh public packages match their tested tarballs. S29 oracle executable sections also match; only candidate symbol metadata differs.
-Fresh-role conformance was not rerun. The [integration checkpoint](../../../.plans/68-70-checkpoint.md) retains earlier validation and cross-target diagnostics.
-All three agents are drained before the coordinator's next exclusive measurement phase.
+S28 is delivered in [PR118](https://github.com/mia-cx/ditherette/pull/118) at `f4dfef7401d5474ac7318302d117ee0345449793`, targeting S27 `c9666288cbe03a9f4dcfb14042cfcbff0fe61ca7`.
+The selected three-row diffusion path passes 360 frozen vectors in all three engines and the trusted freeze guard.
+Its trial retains 128 reaped workers and 2,356 exact samples. All eight native comparisons pass with medians 8–91% lower than the literal full-image baseline.
+Chromium and Firefox self-comparisons pass. Two WebKit self-controls remain inconclusive from noise or timer resolution, tracked for S41.
+The [S28 report](https://github.com/mia-cx/ditherette/blob/f4dfef7401d5474ac7318302d117ee0345449793/.plans/69-measurement.md) distinguishes that release-evidence gap from the exact native optimization result.
+S29 is delivered in [PR117](https://github.com/mia-cx/ditherette/pull/117) at `6eb9e00fd3191fc8bbd03559e89c67c762abfc25`, targeting the same S27 parent.
+It retains measured literal `50cd96d17535ee7f81b1d7a63288751afab50e89`; converter candidate `fdb3921ae1cb7cc3834e42c204d61bb0a63c7cea` stays separate and unselected.
+Both pass 367 frozen-Wasm fixtures per engine. The trial retains 128 reaped workers and 2,560 exact samples, but all four runtime gates remain inconclusive from paired noise.
+The candidate has observed gains, not a confirmed regression. Its declared selection rule retains the baseline until required evidence passes.
+Fresh public packages match their tested tarballs. S29 oracle executable sections also match; only candidate symbol metadata differs. Fresh-role conformance was not rerun.
+All benchmark workers exited before implementation resumed. The [integration checkpoint](../../../.plans/68-70-checkpoint.md) retains validation and cross-target diagnostics.
+S30's prerequisite join is validated at `22b6dd78a6e552596c34aa9e693ad74850426b23` on `impl/v1-s30-base`.
+All six delivered prerequisite heads are ancestors. Both fresh builds, 38 native, 31 public, 14 private, 10 transport, and 28 protocol checks pass.
+The fresh builds resolve the coordinator's stale S26 artifact failures. The coordinator joins this base at `cdef9f75`; its older staged artifacts remain historical.
+[Issue #71](https://github.com/mia-cx/ditherette/issues/71#issuecomment-5582676111) records the exact dependency heads. Its six satisfied native blockers are removed; the issue stays open.
+The runtime agent owns `.worktrees/v1-s30-process` and only the missing process composition, private ABI, and public wiring.
+Readable native baseline `3335bb69acc6762a30a0b6844aef436c2e6b8de6` passes its initial all-family composition test, including metadata and one final output copy.
+The frozen-only Process oracle is complete at `61d338431b5bd7039fa3d1fae4dd44200abdcfc5` in `.worktrees/v1-s30-oracle`.
+Eight focused checks cover 130 resize/dither combinations, normalized identity, and output dimensions. Its isolated Wasm build passes.
+The benchmark agent owns `.worktrees/v1-s30-bench`, complete-call adapters, and the fixed eight-case comparison against actual staged production calls.
+Public runtime checkpoint `587339793cf70429b673e888a89d86a332541693` passes both builds, 42 scoped native, 33 public, and 16 private checks.
+The coordinator's full trusted S18 guard passes. Independent native and private/public reviews find no actionable issues.
+Fresh tarball SHA-256 `379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2` passes Chromium, Firefox, and WebKit.
+Each engine verifies 423 actual Process/staged compositions plus inherited field, diffusion, and target-local Yliluoma suites.
+Documentation head `963a80c56a6de8c36617cd08b14244c768b34e38` preserves those runtime bytes.
+Final measurement source `e5aae7bf0e1761af2f970b6da75d34cf3a813323` joins benchmark head `834e882f95bb042b8356b324ef18343ef0ad1c52` without runtime changes.
+Its full trusted S18 guard passes. Fresh native worker `9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0` and the unchanged validated tarball are prepared.
+The fresh Process oracle hash is `300f61644c4b7757d1ad80b97c515121a5ad241fa0051e9827e448f0067ffb64`.
+Both roles use the same fresh artifact with distinct actual staged/Process calls.
+Final conformance passes 431 identified fixtures and two area probes in each of Chromium, Firefox, and WebKit.
+The fixed trial completes 128 serial workers and 2,504 samples. All 64 actual staged/Process output pairs match exactly.
+All four aggregate gates remain `Incorrect` solely from inherited area reference differences. Five other timing cases remain inconclusive.
+No confirmed greater-than-10% slowdown appears. No source optimization candidate is selected or implied.
+The enlarged native area fixture has 125 inherited resize-byte differences, each at most one, which become seven indexed differences.
+Frozen post-resize processing of the landed resize bytes equals both actual production call paths. Only that case may opt into diagnostic non-exact measurement.
+Its frozen gate stays non-passing; Process-versus-staged equality remains mandatory. No new non-exact implementation or optimization is selected.
+S30 is delivered in [PR119](https://github.com/mia-cx/ditherette/pull/119) at `88eb79fc129662fcfc6d4554d3109855348d0316`, targeting `impl/v1-s30-base` at `22b6dd78a6e552596c34aa9e693ad74850426b23`.
+Only four plan/report files differ from measured source `e5aae7bf`; all six prerequisite heads remain ancestors.
+The [S30 report](../../../.plans/71-benchmark-results.md) binds raw evidence, conformance, artifact sizes, and timing limitations.
+S41 retains the timing/reference gaps. No complete pre-S30 tarball exists for a valid size comparison; S41/S42 retain that missing evidence.
+S31 and S38 start from the actual S30 PR head in separate worktrees. Both keep `impl/v1-s30-process` as their immediate PR base.
+The preparation owner has `.worktrees/v1-s31-preparation` and private cache/scratch/accounting changes plus focused tests.
+The website owner has `.worktrees/v1-s38-website` and website adapter/worker mapping plus project-owned integration tests.
+The benchmark owner has `.worktrees/v1-s31-bench` and cold/warm protocol, fixtures, and report only. It does not edit production or measure independently.
+The coordinator owns this ledger, the slice table, issue availability, joins, and exclusive measurements. No benchmark is running.
+PR119's [CI run](https://github.com/mia-cx/ditherette/actions/runs/34215724426) passes the exact-base guard but fails two controlled-mutation fixtures.
+The coordinator reproduces both failures with `node --test --test-name-pattern='a new procedural macro dependency|resolved JSON feature changes' tools/spec-freeze/guard.test.mjs`.
+The fixture copies the benchmark crate without its new `ditherette-bench-oracle` path dependency. Cargo fails before either intended mutation assertion.
+Mia explicitly approves the fixture-only repair and continued implementation on 2026-09-08.
+Approved trusted parent `af59df116193398886d1111964c87eaaa6111876` adds only the omitted crate to `guard.test.mjs`'s copy list.
+PR119 head `d2356a502501b38ab4f3b476956fc90f1fbfec4a` joins that parent. All 11 mutation tests and the full trusted guard pass locally.
+Frozen source, checkpoint, checker rules, and measured runtime are unchanged. New CI runs validate the approved parent policy.
+Three GPT-6-astra high agents resume as `s31_runtime`, `s38_website`, and `s31_bench`. Their worktrees and ownership remain separate.
+S31 checkpoint `0e90491500efcad950982a5b44df6013283c44aa` copies the frozen cache model literally, without public-runtime wiring.
+Its 10 production baseline tests and 16 frozen cache tests pass. It retains one assigned 390 MiB worktree-local compiler cache.
+S38 resumes from planning checkpoint `aeb48baa71ee1d64ba1d50eb6d29deda55b4e054` and implements typed package mapping and worker integration.
+The S31 benchmark owner implements its eight-case cold/warm matrix and untimed setup/teardown hooks from `88eb79fc`.
+Both approved-fixture CI runs pass. S30 review fixes advance PR119 to `f408bc99a80d3c83b6caee0b5c1d19868f0db876`.
+The memory fix `aa4f78d1` stops charging an unused converter for non-separable Process recipes; five native Process tests and CI pass.
+The provenance fix `86a98935` prevents sequential browsers from replacing original native probe references.
+All 431 references and two area probes pass on each engine. The [review follow-up](../../../.plans/71-review-followup.md) records refreshed hashes without replacing measured evidence.
+The runtime checkpoint `4aad1dbe` wires preparation reuse across all five methods; seven private and 24 focused native tests pass.
+Independent review found transient diffusion scratch capacity omitted during growth. The runtime owner fixes this before measurements.
+The benchmark checkpoint `9146aac5` implements cold/warm lifecycle and verifies every native/browser sample outside timing.
+It joins the final S30 parent before fresh accepted-role builds. No benchmark is running.
+S38 is delivered in [PR120](https://github.com/mia-cx/ditherette/pull/120) at `34ecca9063f68ccbbcb93a2e6d363bf57baa1129`, based on final S30 `f408bc99`.
+Its 47 focused tests, four Chromium fixtures covering 72 mode combinations, and production build pass.
+Website mapping uses the actual shared TS RGB strength constant, 96, divided by 63.75. Historical frozen notes remain unchanged.
+Website generated-output cleanup reclaims 8.8 MB. No Rust compiler output belongs to that completed worktree.
+S32 planning checkpoint `4a2b5673216921648188f2de5c79753b7d5e0d91` lives in `.worktrees/v1-s32-stages`; no runtime work starts before S31 delivery.
+The [stage-cache plan](../../../.plans/73-stages.md) reuses the literal cache model and S31's shared store. It creates no unnecessary full-image color buffer.
+Restored S30 blockers are removed after descendant ancestry verification. Remaining S31 dependencies stay blocked until delivery.
+Accepted benchmark head `863889e52f1b752b6adfc22a9c775b3823f2997e` retains S30 runtime and adds the shared preparation benchmark protocol.
+Fresh native/public accepted artifacts live in the benchmark worktree under `target/s31-baseline-863889e-native` and `target/s31-baseline-863889e-public`.
+The S31 candidate joins that protocol before its own fresh builds. The trusted frozen guard passes after moving reference comparisons into integration tests.
+S31 validated runtime is `972d4e9a5882b25bca3de5f0786ad1525b5e6329`; fresh native/public artifacts bind that clean source.
+The corrected installed-package suite passes on all three engines. Its bounded fixture now includes cache-control records and still rejects the 40,400-byte source.
+The exclusive trial finishes all four runtimes with exact outputs and no confirmed greater-than-10% slowdown.
+Chromium/Firefox gates pass; native warm Process and WebKit cold/warm Lab plus cold Lanczos3 remain inconclusive.
+Warm Lanczos3 improves across all runtimes. Retain the required preparation baseline without another candidate or retry.
+Evidence lives at `.worktrees/v1-s31-preparation/target/s31-trial-01`; only `*-prepared-v2` snapshots were measured.
+The benchmark owner writes the report while the runtime owner prepares its stacked PR. No benchmark remains active.
+This validated-runtime handoff permits S32 to begin on `972d4e9a` while S31's report-only PR handoff finishes.
+The S32 owner rebases its plan checkpoint and owns image-stage identity/store/pipeline integration in its isolated worktree.
+S31 is delivered in [PR121](https://github.com/mia-cx/ditherette/pull/121) at `a3c9629f35280c36e838faa00e9b664b23abcb53`, based on final S30 `f408bc99`.
+Frozen-reference CI passes. A resolved rebase conflict preserves exact tree equality and the measured `972d4e9a` ancestor.
+The [S31 report](../../../.plans/72-benchmark-results.md) verifies 128 matching starts/reaps, maximum live worker count one, 64 exact pairs, and 2,560 samples.
+Its [four inconclusive cases](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5587432141) remain S41 work.
+Raw threaded Wasm grows 10.47%; the [size-review item](https://github.com/mia-cx/ditherette/issues/84#issuecomment-5587431766) remains explicit for S42/S43.
+S32 checkpoint `4e9baaad80d6e590303dcdfed5346f01f259b8ce` includes final S31 ancestry and passes exact stage-identity and owned-metadata tests.
+Issue #73's S31 blocker is removed after verifying that ancestry. Its same-store transaction and pipeline wiring remain in progress.
+The runtime owner uses `.worktrees/v1-s32-stages`; the public-fixture owner uses `.worktrees/v1-s32-public`; the benchmark owner uses `.worktrees/v1-s32-bench`.
+Benchmark checkpoint `64eb3357` declares four cold/warm workloads and verifies per-sample priming helpers. No S32 measurements have run.
+Store checkpoint `b6193dd3f14aaabdd4077e7170ad8b5282c8e98d` passes 22 native library tests and an independent read-only review.
+It shares preparation/image caps, LRU, pinned transactions, and success-only publication. Processing-path wiring remains in progress.
+Public fixture checkpoint `8bd9208138322776433cb0eb3e9dcf0f4d15de52` passes the actual installed S31 package in all three engines.
+It covers five methods, 18 compositions, mutation, metadata ownership, disposal, and failed final-copy recovery.
+Those checks establish observable behavior on the recorded S31 tarball, not private cache hits or S32 artifact conformance.
+The public-fixture owner returns its completed checkpoint and independently reviews runtime checkpoints without editing the runtime worktree.
+PR121's later review finds retained byte scratch can overlap its replacement allocation. It also flags parsed Process diffusion-policy accounting.
+The public-fixture owner switches to targeted fixes and physical-allocation tests in `.worktrees/v1-s31-preparation`.
+Only its new `target/compiler-review` belongs to this review task. Historical benchmark artifacts remain unchanged.
+S31 availability is temporarily withdrawn and #73's blocker restored until the corrected parent joins and validates in S32.
+S32 runtime/protocol work continues in isolation; neither prepares measurement artifacts against the outdated parent.
+S31 fix `59b1fe3acdbeae27bbb8ab780b46d2b6b9d67a76` resolves both findings with independently failing tests before each fix.
+All 28 focused native tests and frozen-reference CI pass. Four review threads are replied to and resolved.
+The [follow-up](../../../.plans/72-review-followup.md) records physical allocation evidence and the conditional parsed-policy charge.
+Historical S31 measurements remain bound to `972d4e9a`; the fixed-size workloads do not exercise retained-buffer growth.
+S31 availability is restored. S32 removes its blocker after joining and validating this corrected parent.
+S38 fix `0305456bc25259a92d46ded245ae09aaf407be07` caps persisted adaptive radii at the package maximum.
+All 51 mapper/worker tests, focused lint, and CI pass. Its review thread is resolved; no package, kernel, or UI changes occur.
+These three owners have disjoint source/test/protocol responsibilities. S31 compiler caches are no longer assigned to any agent.
+S32 runtime `d638f87c3a16824ef52964bbb611ef91b173f2ee` joins corrected S31 and benchmark protocol `d51a70a2daf054357d16ea66b235da3733c02888`.
+Full native tests and the trusted frozen guard pass. Image-stage entries reuse the existing shared store and landed kernels.
+Fresh accepted artifacts bind `d51a70a2`; candidate artifacts bind `d638f87c`. Test-only follow-ups do not change those identities.
+Both installed packages pass Chromium, Firefox, and WebKit, including focused ownership and broad conformance suites.
+The four completed trials remain under `v1-s32-stages/target/s32-trial-01`. Every recorded comparison is exact.
+Cold resize regresses 11.8-68%; browser cold Process regresses 21.5-26%. These confirmed release blockers remain S41 work.
+Warm paths improve substantially, but inconclusive cases remain explicit. No extra tuning or retry is selected.
+S32 is delivered in unmerged [PR122](https://github.com/mia-cx/ditherette/pull/122) at `127a0428a0bfdad7ea3e239e6a96f375449815bb`, based on corrected S31 `59b1fe3a`.
+The coordinator join preserves exact code equality; its only conflict replaces the old S32 planning text with the completed delivery plan.
+The [report](../../../.plans/73-benchmark-results.md) verifies 128 reaped workers, 2,560 samples, and 64 exact role pairs.
+Seven regressions and five inconclusive cases remain [explicit S41 work](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5588316158).
+S32 availability is recorded and S33's blocking edge removed. No issue or PR is closed or merged.
+S33 runtime and installed fixtures branch from that same validated handoff in `v1-s33-progress` and `v1-s33-public`.
+Runtime checkpoint `5a832320` reuses the copied lifecycle model and passes two focused controller tests.
+Kernel checkpoint `0acb7842` passes the full native suite and five progress fixtures. Existing arithmetic, traversal, and scratch ownership remain unchanged.
+Installed fixture checkpoint `0bb2552c` passes shared-runner checks on S32 and intentionally fails at its unsupported callback guard. Actual S33 validation remains pending.
+The separate `v1-s33-bench` plan fixes five public workloads and separates disabled-support cost from callback-delivery cost.
+S33 delivery checkpoint `06d9ad0730669dac3008baf848b5eb463689c584` validates the complete callback contract.
+Measured candidate `4a75d479d38a92c75e8ff4ed96c916fec3aaf8f4` passes focused 8/8 and broad 4/4 installed suites in all three browsers.
+The trusted frozen guard passes after moving a reference-comparison test outside production. Frozen content and policy remain unchanged.
+Six serial trials finish under `v1-s33-bench/target/s33-trial-01`; every recorded comparison is exact.
+Callback overhead passes all three browsers. Disabled-support comparisons pass Firefox and WebKit; Chromium Lab76 and Lanczos3 remain inconclusive.
+The report owner now owns `v1-s33-progress` for evidence and the stacked PR. No runtime edits or repeat measurements are planned.
+S34 runtime and public fixtures start from validated `06d9ad07` in separate `v1-s34-threads` and `v1-s34-public` worktrees.
+The runtime owner has package/glue/pool implementation and native/private tests. The fixture owner has installed browser tests and test-server support.
+They coordinate shared fixture routes before editing. Root owns tracking, joins, and startup benchmark preparation.
+Only the new S34 runtime compiler targets are assigned. S33 targets return for cleanup after its PR handoff.
+S33 is delivered in unmerged [PR123](https://github.com/mia-cx/ditherette/pull/123) at `b2ca677ed9927165a1010f5c52646a989d8a02ca`, based on S32 `127a0428`.
+The coordinator joins it without conflicts and verifies identical crate, package, and script code against that head.
+Its [report](../../../.plans/74-benchmark-results.md) verifies 120 reaped workers, 2,400 samples, and 60 exact role pairs.
+All 15 callback cases pass. Chromium's disabled Lab76 and Lanczos3 comparisons remain inconclusive for S41.
+Those gaps are recorded in [S41](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5588948095).
+S33 has the availability label. S34's [validated prerequisite handoff](https://github.com/mia-cx/ditherette/issues/76#issuecomment-5588948351) removes its satisfied native blocker while preserving the original dependency record.
+The returned report owner now owns S34 benchmark protocol and startup artifacts in `v1-s34-bench`.
+Its amended fixed plan has 40 serial workers across scalar regression and threaded same-artifact controls. No measurement is running.
+S34 fixtures at `1b4bc28cd185b4987e1b251c1ac72dcbdbc16837` pass selection and partial-start cleanup in all three engines.
+Chromium and Firefox pass actual disposal and host termination. Pinned WebKit 26.4 retains atomic-wait workers.
+The independent upstream Wasm reproduction fails without Ditherette or Rayon. WebKit fix `319508@main` needs verification in a recorded engine.
+Keep this unresolved release gate and the failing lifecycle assertions. Unreliable capability probes are discarded, not shipped.
+WebKit threaded startup is blocked and unmeasured because retained pools invalidate trial isolation. Scalar startup still covers all engines.
+The [release gate](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5589175119) retains the exact fixture checkpoint and upstream reference.
+S34 `29bccaa5` passes the trusted guard. Build source `2afd1802` adds only the startup-plan amendment.
+Detached `v1-s34-accepted-source` at `bf7912db` and `v1-s34-measured-source` at `2afd1802` preserve exact build provenance.
+S39 starts in `v1-s39-website` from the explicit S34 `29bccaa5` and S38 `0305456b` join `6230326d`.
+Its owner changes website scheduling/fallback and focused tests only. Final S34 ancestry and artifact validation remain required before delivery.
+S39 checkpoint `45947d96` adds immediate stale rejection, debounced replacement, and real progress forwarding; 54 focused tests pass.
+S34 [startup attempt 01](../../../.plans/76-attempt01.md) retains 480 exact scalar samples from 24 completed workers.
+The first threaded worker fails untimed preflight; all 25 started workers are reaped. No threaded samples exist.
+An isolated reproduction proves main-thread `Atomics.wait` is forbidden and failed cleanup masks that error.
+Runtime capability checks and real threaded fixtures now target blocking-capable host workers. The benchmark owner adapts the same collector's host context.
+S39 resumes faithful initialization-only fallback while both S34 fixes proceed. Measurements remain stopped.
+S39 `fa43ab4b` commits page-session faithful fallback. Its focused tests and six actual-package Chromium checks pass.
+Final S34 ancestry and exact final-package validation remain before S39 delivery.
+The returned S39 owner starts S35 native row-band adapters in `v1-s35-resize` from capability checkpoint `6296c66b`.
+This owner changes only resize/color adapters, focused native tests, S35 subjects, and its plan. Its sole new compiler assignment is local `target/compiler`.
+S34 retains loading/lifecycle ownership. Final S34 loader fixes and host-worker benchmark protocol must join before S35 artifacts or delivery.
+S34 now ships as unmerged [PR124](https://github.com/mia-cx/ditherette/pull/124) at `d4531667e1158c2068f30614f40c9d39f8c5313e`, based on final S33 `b2ca677e`.
+Trial 02 completes 40 started/reaped workers, 800 samples, 2,453 warmup calls, and 20 exact actual role pairs.
+Four case gates pass; six remain inconclusive. No confirmed >10% startup slowdown is observed.
+The pinned WebKit worker-cleanup failure and missing required-thread startup cell remain S41 release gates.
+S39 is unmerged [PR125](https://github.com/mia-cx/ditherette/pull/125) at `5938b248506ae14d24471498c3a90bb42ed3c32a`.
+Its explicit base `impl/v1-s39-base` at `2a0237680fa249e2293b991ca067d7baf05aef14` joins final S34 and S38 `0305456b`.
+Final retained S34 tarball `33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d` passes 68 focused server tests and six Chromium browser checks.
+The rebase preserves S39's head and tree. The website flag remains disabled; no compiler outputs belong to S39.
+S35 resumes from clean `20fc297b` with sole ownership of shared execution-policy and private Wasm wiring, resize adapters, and the pooled executor.
+S36 resumes from clean `7e5689ca` with quantize/field adapters and direct/separable indexed integration.
+S37 starts at final S34 `d4531667` in `v1-s37-yliluoma`, owning Yliluoma adapters and its benchmark fragment.
+All three agents use GPT-6-astra at high reasoning in separate worktrees and own only their local `target/compiler`.
+S36 coordinates Yliluoma indexed callsites with S37. Root owns final joins, tracking, package artifacts, and exclusive measurements.
+The browser/native performance discussion is an aside. Keep same-kernel timing and compilation-warmup diagnosis in S41; continue slice implementation.
+Combined row-band candidate `b6522e2f` in `impl/v1-s35-37-bench` includes S35 `87d69cc6`, S36 `fef1eafe`, and S37 `be989cc5`.
+The join preserves S35's scratch-before-LRU pressure ordering and multi-stage private policy updates, plus both indexed adapters.
+Its 39 library and ten focused threaded integration tests pass, including combined resize/indexed Process and mixing failure recovery.
+The trusted frozen guard passes with unchanged checkpoint/digest. Developer-only policy metadata binds actual public host calls; 27 protocol and 24 timing/policy tests pass.
+Explicit benchmark-feature build preparation passes six Node and ten native provenance tests. Normal package build defaults and exports remain unchanged.
+The host fixture `dcfd5d72` and fixed 400-worker matrix `37b8bf59` join at clean source `2b6edc9c91307799e3f5ae16194ee0dfd3e5db38`.
+Fresh native and benchmark-feature public builds pass. Tarball SHA-256 is `f58b0949f93486c0e69b4e956e70f4a6e3381299a08cc47f9ca18fde23d069a8`.
+Seven actual host-worker fixtures pass in Chromium and Firefox, covering both row policies, progress, callback recovery, and durable outputs.
+The fixed first sweep stops at Chromium warm bilinear's cache-prime check after 28 successful workers; all 29 started children exit.
+Its strict prime check rejects inherited frozen-reference drift despite explicit diagnostic mode. No new production difference is established.
+Raw evidence remains in `v1-s35-37-bench/target/rows-trial-01`; Firefox has not started. No configuration is selected from this incomplete run.
+The resize owner fixes only same-call prime diagnostics and bounded error text. The fields owner summarizes completed pairs read-only.
+Root owns fresh artifact preparation and exclusive measurements after that fix. All three slice implementations remain in progress.
+Corrected source `5d16c5682f354fecd75ca7f761802d9e2ea75ab5` preserves every production file and the same tarball digest.
+Same-call prime diagnostics retain unstable outputs; strict and different-stage checks remain unchanged. New machine JSON omits indentation.
+Fresh native/public artifacts and the seven host fixtures pass again. `target/rows-trial-02` prepares the unchanged 400-worker matrix.
+Three clean delivery branches preserve separate slice ownership and immediate-parent ancestry:
+`delivery/v1-s35-resize` at `2bd25aed`, `delivery/v1-s36-fields` at `4c4ea884`, and `delivery/v1-s37-yliluoma` at `d8834596`.
+The complete S37 delivery tree equals corrected measurement source `5d16c568`. Policy selection and PR reports await complete evidence.
+Trial 02 completes all 200 Chromium workers. Its 50 case gates are 37 pass, nine inconclusive, three inherited bilinear mismatches, and one small-nearest regression.
+The complete-call large four-worker results show about 26% lower Lanczos3 latency, 49% lower sRGB field latency, and 67% lower adaptive Yliluoma latency.
+These compare forced policies within the same threaded artifact, not threaded Wasm against the ordinary scalar build.
+Firefox stops after 15 reaped workers when the browser creates writable `.parentlock` and `updates/` inside its immutable runtime snapshot.
+The files are absent from the source snapshot; the normal Playwright profile is separate. Root preserves the failed snapshot unchanged.
+The Firefox updater caused that runtime write. A fresh runtime copy binds its own update-disabled policy through Playwright's alternate policy path.
+Compiled browser files remain unchanged; the configuration files enter the normal immutable snapshot digest. Historical snapshots remain untouched.
+Replacement trial 03 finishes all 200 Firefox workers with maximum live count one and no owned processes remaining.
+All 100 actual scalar/row pairs in each engine match byte-for-byte, including metadata. The separate reference probes retain inherited differences.
+The two completed engines collect 7,215 of 8,000 requested samples. Their declared time cap shortens 64 workers across 17 engine-cases after the existing minimum sample count.
+Its 50 case gates are 43 pass, four inconclusive, and three inherited bilinear mismatches. The coordinator exits 2 for those gates, not a worker failure.
+Firefox's large four-worker latency falls about 37% for Lanczos3, 50% for sRGB fields, and 67% for medium adaptive Yliluoma.
+The Chromium report digest is `160255130439e20dbbcd46a224f4911bed8fc5c10cc3840f46627a09e2148642`.
+The Firefox report digest is `77af173eb9b0c2203d8ad43a75181a68e90d57cf2a8388c1e7b1784603594e73`.
+Both reports compare forced scalar and row policies in the same threaded tarball; ordinary scalar-build comparisons remain S41 work.
+All three agents resume in the clean delivery worktrees. S35 owns the shared automatic-policy seam and resize selection.
+S36 owns combined evidence and field selection; S37 owns mixing selection. Only common-engine measured configurations can become automatic.
+Small or unmeasured classes remain scalar. Noisy cache-hit controls stay visible as incomplete S41 evidence.
+The completed benchmark and compact-JSON build caches return to the coordinator. Cleaning their two audited compiler directories reclaims about 4.3 GiB of disk blocks.
+Native executables, the tarball, both report digests, and all historical trial snapshots remain unchanged. Review can rebuild the compiler outputs.
+Future predeclared sweep budgets must include untimed per-sample priming. Large Firefox scalar cache-hit controls took about nine minutes each.
+Wait for benchmark exit without repeated progress-counter polling. Resume implementation only after the benchmark and its children exit.
+Candidate provenance uses the clean detached `v1-s32-measured-source` checkout at its exact built revision.
+Issue #73's corrected S31 blocker is removed after ancestry and native validation.
+Mia defers routine review and babysitting until the full implementation stack exists. Inline fixes address implementation blockers, correctness failures, and architecture that would propagate downstream.
 The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements.
 A separate owner adds native budgeted subjects in `impl/v1-resize-bench-subjects`; no production files belong to that task.
 S21/S22 measurements complete all 304 serial workers and retain 5,760 samples. No measurement is running.
@@ -70,7 +344,37 @@ Public TypeScript differences and complete-call costs remain [S41 work](https://
 The first inactive-worktree cleanup reclaimed about 46 GiB from 124 compiler profile directories.
 After S27 preparation and measurement ended, eight returned S24 native/S23 Wasm profiles reclaimed another 6.55 GiB.
 The disk had 57 GiB free afterward. Source, copied binaries, trial snapshots, reports, and custom target evidence remain intact.
-S28 owns the S24 quantize cache; S29 owns the S22 convolution cache until their implementations finish.
+After S29 delivery, eight returned S22 compiler profiles reclaimed another 5.34 GiB. Disk free space was 60 GiB afterward.
+Three returned freeze-checker profiles reclaim another 0.29 GiB. Their custom evidence and the active trusted checker cache remain intact.
+The returned S30 oracle compiler cache reclaimed another 1.29 GiB. Its separately retained Wasm reference artifact is unchanged.
+Cargo clean refused the missing root `CACHEDIR.TAG`; cleanup instead removed three explicit, fingerprint-verified compiler profiles.
+After PR119 opened, ten returned S24 quantize/S30 benchmark compiler profiles reclaimed another 10.91 GiB. Disk free space is 66 GiB.
+After the S30 review fixes, its returned `target/compiler-review` cache reclaimed another 418 MiB of disk blocks.
+Current S31 builds bring worktrees to 47 GiB with 60 GiB free; active caches remain assigned until PR handoff.
+S31 handoff returns six compiler targets; their cleanup reclaims 6.93 GiB of disk blocks without changing retained artifact/report hashes.
+The returned trusted-checker target reclaims another 369 MiB. Future checks rebuild it when needed.
+The completed S31 review target reclaims another 516 MiB. Its retained package digest stays unchanged.
+The S38 review recreates and then removes 100 KiB of generated SvelteKit files; no Rust outputs are created.
+The completed S32 trusted check returns its compiler target. Cleanup reclaims 287 MiB of disk blocks from 695 rebuildable files.
+Its exact realpath and compiler-only contents were checked; no active process owned that target. Frozen source and benchmark evidence remain intact.
+After PR122 handoff, six returned S32 compiler targets reclaim another 6.18 GiB of disk blocks.
+After PR123 handoff, six returned S33 compiler targets reclaim 5.51 GiB of disk blocks.
+After PR124 handoff, root cleans six returned S34 compiler targets and the idle trusted-checker target.
+Cargo reports approximately 6.4 GiB of logical file sizes removed. Both final retained package and worker hashes remain unchanged.
+The joined row-band guard later recreates the checker target. Active row-band compiler directories remain assigned and untouched.
+After their native tasks finish, four returned S35/S36/build/matrix compiler targets reclaim about 7 GiB of disk blocks.
+Their paths contain only compiler profiles, have no symlinks or active owners, and are cleaned with explicit Cargo target paths.
+All candidate source, installed artifacts, and partial-trial evidence remain intact. Future review rebuilds those returned targets.
+The returned trusted-checker target reclaims another 289 MiB. Both reports and both package hashes remain unchanged.
+Copied binaries, oracles, trial snapshots, and raw results remain retained. Compiler outputs can be rebuilt for review.
+Current S34 runtime and benchmark owners use only their new worktree-local targets; public fixtures own no compiler cache.
+Both retained package hashes and both report hashes stay unchanged. Copied binaries, oracles, trial snapshots, and raw results remain available.
+S33 owns only its new worktree-local caches. The old S32 compiler assignments have ended.
+Both owners drained their jobs. Exact realpaths, fingerprint directories, and process ownership were checked before deletion.
+Eight retained tarball, binary, conformance, and report hashes remain unchanged. No complete target directory was purged.
+The entries above record each cleanup separately. New slices own only their explicitly assigned worktree-local compiler outputs.
+The coordinator also removes the 98 MiB syntax-checker profile created by the CI reproduction after its jobs drain.
+All other completed-slice compiler ownership has ended. [S41 retains the measured release gaps](https://github.com/mia-cx/ditherette/issues/83#issuecomment-5582606062).
 Each completed PR returns its compiler outputs for cleanup. Review rebuilds them when needed.
 
 ## Delivered S01 through S16
