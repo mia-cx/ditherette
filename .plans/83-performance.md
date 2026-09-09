@@ -221,3 +221,8 @@ these are not performance samples. S35's decoder/oracle/asset-registration join
 and root's quiet-window maximum-area resource check remain separate requirements.
 Regenerating the first cold candidate request after adding metadata produces
 byte-identical JSON to `target/s41-candidate-0.json` (`cmp` passes).
+
+Historical anchors preserve their original page execution and omit the execution field.
+Only the current/candidate selection lane uses host workers. This keeps historical
+pre-S32 artifacts compatible without changing their production or benchmark source.
+The generator checks complete historical case JSON equality, including all eight warm/cold recipes.

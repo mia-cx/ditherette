@@ -303,7 +303,9 @@ pub fn experiment(lane: &str, notes: String) -> io::Result<Experiment> {
                     else if let Some(native::NativeOperation::Processor { cache, .. }) = &mut case.native { *cache = policy; }
                 }
             }
-            for case in &mut plan.cases { if let Some(browser) = &mut case.browser { browser.execution = Some(BrowserExecution::HostWorker); } }
+            if lane == "candidate" {
+                for case in &mut plan.cases { if let Some(browser) = &mut case.browser { browser.execution = Some(BrowserExecution::HostWorker); } }
+            }
             plan.cases
         }
         "release" => release()?,
@@ -452,6 +454,21 @@ mod tests {
             assert_eq!(case.rgba, original.rgba);
             assert_eq!(case.source, dims(129, 97));
             assert_eq!(case.identity.output, dims(65, 49));
+        }
+    }
+
+    #[test]
+    fn historical_anchors_preserve_page_execution_and_wire_cases() {
+        let historical = anchors::experiment(true, "untimed".into()).unwrap();
+        let current = experiment("anchors", "untimed".into()).unwrap();
+        assert_eq!(
+            serde_json::to_value(&current.cases).unwrap(),
+            serde_json::to_value(&historical.cases).unwrap()
+        );
+        for case in current.cases {
+            let browser = case.browser.unwrap();
+            assert!(browser.execution.is_none());
+            assert!(serde_json::to_value(browser).unwrap().get("execution").is_none());
         }
     }
 
