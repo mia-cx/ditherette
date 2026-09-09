@@ -17,6 +17,34 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### Scalar spec/prod correction, 2026-09-09
+
+Mia resumes the scalar optimization workflow after reviewing the missing direct spec/prod timing coverage.
+Most earlier trials compare accepted and candidate production, with the frozen reference outside timers.
+They remain evidence for those comparisons, not a complete scalar spec/prod report.
+New work starts from final S45 `5da82d1221f79c2ddcb517eba9f621206468bfdc` and stacks above existing PRs.
+
+| Owner | Branch and worktree suffix | Exclusive file scope |
+| --- | --- | --- |
+| Scalar benchmark agent | `impl/v1-scalar-spec-bench`, `v1-scalar-spec-bench` | Benchmark crates, subject adapters, focused tests, own plan |
+| Converter reuse agent | `perf/v1-scalar-converter-reuse`, `v1-scalar-converter-reuse` | Production field/placement/Yliluoma loops, existing packed-space mapping, focused tests, own plan |
+| Coverage agent | `docs/v1-scalar-coverage`, `v1-scalar-coverage` | Kernel/export coverage report only; no builds |
+| Coordinator | `impl/v1-resize-integration` | Slice map, joins, fresh artifact preparation, exclusive measurements, retention and PR delivery |
+
+Every measurement times actual frozen spec and actual production at matched boundaries, with named allocation/preparation scope.
+Components and complete calls remain separate. All required scalar modes get coverage, with bounded representative workloads.
+Fresh accepted/candidate comparisons decide optimizations; spec/prod comparisons show distance from the naive implementation.
+Native scalar selection does not depend on unrelated browser noise. Browser validation and release holds remain separate.
+Preserve landed optimized resize kernels, shared arithmetic, the frozen spec/image content, and existing exactness gates.
+Known inherited resize differences remain diagnostic; no non-exact candidate is selected without Mia.
+Stop agents and owned builds/tests before the single benchmark lease. Retain compact samples before clearing complete target trees.
+
+The paused capped browser run drained Chromium successfully: four serial workers, twenty samples, exact outputs and a passing gate.
+Its runner finished after 465.558 seconds with SIGTERM as the stop reason; Firefox and WebKit never launched.
+The small report and complete compact Chromium record remain outside target; its SHA-256 is `1e36bd693c9d8d101e2615f658aec0b3426fb9f220f409d55d860df6d2ec1278`.
+Whole capped and continuation target trees were removed after ownership ended, reclaiming about 1.55 GiB.
+This pauses the remaining browser matrix, not the approved scalar correction. No PR is merged, published, or activated.
+
 ### S45 handoff, 2026-09-09
 
 All 45 slices have open, unmerged PRs. S41 still has incomplete required measurements; the end-to-end goal remains unfinished.
