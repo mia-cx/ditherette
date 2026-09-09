@@ -103,14 +103,35 @@ The host's 5.7 GiB available RAM therefore requires the held real resource check
 
 ## Focused results
 
-- Node 24.19.0: 37 passed, one existing oracle-policy test skipped. Files were
+- Joined S37 page/schema checkpoint `dc2c864133f80ebccf4957faa9c417105056a461`
+  in `ffeb059a`. Add/add conflicts kept the later wire tests, optional browser
+  metadata lookup for legacy fixture inputs, and completed plan entries.
+- Node 24.19.0: 55 passed, one existing oracle-policy test skipped. Files were
   `benchmark-indexed-wire.test.mjs`, `benchmark-public-timing.test.mjs`,
-  `benchmark-public-browser.test.mjs`, and `prepare-benchmark-oracle.test.mjs`.
+  `benchmark-public-browser.test.mjs`, `benchmark-preparation.test.mjs`,
+  `benchmark-stage-cache.test.mjs`, and `prepare-benchmark-oracle.test.mjs`.
+  This includes the actual oracle JavaScript wrapper with a tiny fake serializer,
+  compact page preflight/composition, and measured-call A/B/A evidence.
 - Native Rust: four private wire tests, 11 browser-worker tests, and ten asset
-  tests passed. All used this worktree's `target/compiler`.
+  tests passed. After the final join, 17 paired-browser and two paired-quantize
+  protocol tests also passed, for 44 native tests. All used this worktree's
+  `target/compiler` with `cargo test --locked` and its explicit `--target-dir`.
 - No full-size pixel allocation, actual browser, Wasm build, or measurement ran.
 - The new helper enters public script staging, host/conformance fixture staging,
   and oracle wrapper source provenance. Ordinary served entrypoints stay intact.
+- `git diff --check`, focused Prettier checks, and owned Rust formatting passed.
+  Compared with S40 CI, the Wasm crate, public package, shared benchmark API,
+  frozen oracle Rust crate, and frozen-guard files are unchanged.
+- All owned jobs exited. The only returned compiler output is
+  `.worktrees/v1-s41-capped-transport/target/compiler` (1.7 GiB, rebuildable).
+
+## Deliberate diagnostic limitation
+
+A capped Process-versus-staged mismatch throws a bounded dimensions/format
+summary before measurement. It does not retain full staged mismatch bytes.
+Root explicitly keeps this failure path limited rather than adding another
+protocol. It cannot pass or publish timing. Completed measurements still retain
+exact actual/frozen output and both first/distinct stability outputs.
 
 ## Validation and holds
 
