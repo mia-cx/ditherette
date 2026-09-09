@@ -1,40 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	appendMetricsSample,
-	estimateProcessingMemory,
 	percentile,
 	summarizeTimingHistory,
-	vectorImageBytes,
 	type ProcessingMetricsSample
 } from './metrics';
-import type { ProcessingSettings } from './types';
-
-const settings: ProcessingSettings = {
-	output: {
-		width: 10,
-		height: 10,
-		lockAspect: true,
-		resize: 'bilinear',
-		alphaMode: 'preserve',
-		alphaThreshold: 0,
-		matteKey: '#FFFFFF',
-		autoSizeOnUpload: false,
-		scaleFactor: 1
-	},
-	dither: {
-		algorithm: 'none',
-		strength: 100,
-		placement: 'everywhere',
-		placementRadius: 3,
-		placementThreshold: 12,
-		placementSoftness: 8,
-		serpentine: true,
-		seed: 1,
-		useColorSpace: false
-	},
-	colorSpace: 'oklab'
-};
-
 function sample(overrides: Partial<ProcessingMetricsSample> = {}): ProcessingMetricsSample {
 	return {
 		id: 1,
@@ -49,15 +19,15 @@ function sample(overrides: Partial<ProcessingMetricsSample> = {}): ProcessingMet
 			delta: cacheSnapshot(),
 			lifetime: cacheSnapshot()
 		},
-		memory: estimateProcessingMemory({
-			sourceWidth: 10,
-			sourceHeight: 10,
-			outputWidth: 10,
-			outputHeight: 10,
-			settings,
+		memory: {
+			sourceBytes: 400,
+			resizedBytes: 400,
+			indexBytes: 100,
+			vectorBytes: 1200,
+			ditherWorkBytes: 0,
 			branchCacheBytes: 400,
 			branchCacheMaxBytes: 1024
-		}),
+		},
 		outputPixels: 100,
 		colorSpace: 'oklab',
 		dither: 'none',
@@ -134,29 +104,5 @@ describe('processing metrics helpers', () => {
 
 		expect(history).toHaveLength(100);
 		expect(history[0]?.id).toBe(5);
-	});
-
-	it('estimates vector and dither work memory', () => {
-		expect(vectorImageBytes(10, 10)).toBe(1200);
-		expect(
-			estimateProcessingMemory({
-				sourceWidth: 20,
-				sourceHeight: 10,
-				outputWidth: 10,
-				outputHeight: 10,
-				settings: {
-					...settings,
-					dither: { ...settings.dither, algorithm: 'floyd-steinberg' }
-				},
-				branchCacheBytes: 400,
-				branchCacheMaxBytes: 1024
-			})
-		).toMatchObject({
-			sourceBytes: 800,
-			resizedBytes: 400,
-			indexBytes: 100,
-			vectorBytes: 1200,
-			ditherWorkBytes: 1200
-		});
 	});
 });
