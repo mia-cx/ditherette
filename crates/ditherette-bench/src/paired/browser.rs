@@ -666,9 +666,12 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
     if let Some(limit) = browser.retained_output_limit_bytes {
         const DEFAULT: u64 = 64 * 1024 * 1024;
         const MAXIMUM: u64 = 384 * 1024 * 1024;
-        if !(DEFAULT..=MAXIMUM).contains(&limit)
+        if !(DEFAULT + 1..=MAXIMUM).contains(&limit)
             || m.scope != CallScope::CompleteCall
             || m.mode != SampleMode::SingleCall
+            || m.application_cache != ApplicationCache::Cold
+            || browser.preparation != BrowserPreparation::FreshInstance
+            || browser.cache.sample_prime().is_some()
             || !matches!(
                 browser.operation,
                 PublicOperation::Quantize { .. }
@@ -680,7 +683,7 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
             || browser.accepted != BrowserBackend::Package
             || browser.candidate != BrowserBackend::Package
         {
-            return Err(io::Error::other("retained-output override requires bounded single indexed package calls (64–384 MiB)"));
+            return Err(io::Error::other("retained-output override requires cold fresh single indexed package calls (>64–384 MiB), without priming"));
         }
     }
     if browser.execution == Some(BrowserExecution::HostWorker)

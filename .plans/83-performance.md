@@ -192,11 +192,32 @@ page forwarding/typed comparisons. S35 owns collector limits, compact indexed
 wire helpers/decoders, oracle wrappers, and asset registration.
 
 - [x] Add `retained_output_limit_bytes`, omitted rather than null when unused.
-- [x] Restrict overrides to 64–384 MiB for single indexed package complete calls.
+- [x] Restrict overrides to >64–384 MiB for cold, fresh, single indexed package complete calls without priming.
 - [x] Set only the required capped case to 384 MiB; old anchor metadata stays absent.
-- [ ] Forward the explicit bound and compact indexed evidence through the page.
-- [ ] Join S35's helper checkpoint and check the small exact protocol end to end.
+- [x] Forward the explicit bound and compact indexed evidence through the page.
+- [x] Join S35's helper checkpoint and check the small exact page protocol end to end.
 
 Thirty focused native protocol tests pass. All example constructors compile.
 The inherited unused `self` import warning in stage/progress examples remains.
 This confirms protocol structure, not a successful maximum-area allocation or measurement.
+
+S35's collector/helper commits `337c09bb` and `7d14aa48` join as `31c94927` and
+`f43fae28`. The first cherry-pick encounters a modify/delete conflict because this
+branch lacks S35's earlier plan; retaining `.plans/83-capped-transport.md` resolves
+it without changing implementation. Metadata checkpoint is `81677d3b`.
+
+The compact page path validates its explicit limit before producing results,
+decodes frozen indices once, compares typed preflight bytes, and emits compact
+actual/mismatch/instability evidence. Composition errors stay bounded on this
+path. Normal requests keep the old array transport and omit the new field.
+Warm or primed overrides fail because a fourth maximum-area envelope exceeds
+the retained three-output transport estimate.
+
+Forty-six focused JavaScript tests pass, including tiny exact Process, staged
+composition, frozen mismatch with no samples, A/B/A evidence, rejected limits,
+and rejected prime evidence. Thirty native protocol tests and the allocation-free
+capped-generator test pass. The page uses fake package methods and a fake clock;
+these are not performance samples. S35's decoder/oracle/asset-registration join
+and root's quiet-window maximum-area resource check remain separate requirements.
+Regenerating the first cold candidate request after adding metadata produces
+byte-identical JSON to `target/s41-candidate-0.json` (`cmp` passes).
