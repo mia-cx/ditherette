@@ -19,7 +19,16 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ### S35 through S40 handoff, 2026-09-09
 
-Forty-three slices have open, unmerged implementation PRs. Release gates remain held. S44 is in progress.
+Forty-four slices have open, unmerged implementation PRs. Release gates remain held. S45 is in progress.
+
+S44 [PR133](https://github.com/mia-cx/ditherette/pull/133) is held at `76bf1f8938c14a1a4cde290d45c61a280f7434d2`,
+based on final S43 `15300c0dc461265fcef2bd72096de5202836706b`. It is open, non-draft, unmerged, with auto-merge disabled.
+Its single runtime-line change prepares scalar Wasm as the website default, with a developer-only override.
+The faithful temporary initialization fallback and cancellation stay intact. Seventy server and six Chromium checks pass.
+No package/Rust changes, measurements, deployment, or activation occur. The finished worktree has no generated outputs.
+S45 starts from this validated head in two isolated worktrees. `impl/v1-s45-retirement` owns live website retirement and retry behavior.
+`impl/v1-s45-benchmark-provider` owns the pinned historical TypeScript benchmark provider and its provenance/tests.
+Root joins those disjoint changes before final validation and the held retirement PR. Browser TypeScript responsibilities remain.
 
 S43 [PR132](https://github.com/mia-cx/ditherette/pull/132) is open at `15300c0dc461265fcef2bd72096de5202836706b`,
 based on `impl/v1-s43-base` at `c43cea1269fcd666835d41c07d82a1c451604107`.
