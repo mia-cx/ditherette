@@ -1,13 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDitherette, DitheretteError } from 'ditherette';
 import { ProcessorWorkerPipeline, transferablesForWorkerResponse } from './worker-pipeline';
-import type {
-	DitherSettings,
-	EnabledPaletteColor,
-	OutputSettings,
-	ProcessingSettings,
-	WorkerRequest
-} from './types';
+import type { DitherSettings, EnabledPaletteColor, OutputSettings, WorkerRequest } from './types';
 
 class TestImageData implements ImageData {
 	readonly data: Uint8ClampedArray<ArrayBuffer>;
@@ -87,46 +81,47 @@ function processRequest(overrides: Partial<Extract<WorkerRequest, { type: 'proce
 	} satisfies WorkerRequest;
 }
 
+function processorMock() {
+	return {
+		process: vi.fn(() => ({
+			width: 2,
+			height: 1,
+			indices: new Uint8Array([0, 1]),
+			palette: { rgba: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]), transparentIndex: null },
+			warnings: []
+		})),
+		resize: vi.fn(),
+		quantize: vi.fn(),
+		perturb: vi.fn(),
+		ditherAndQuantize: vi.fn(),
+		dispose: vi.fn()
+	};
+}
+
+function loadedPipeline() {
+	const pipeline = new ProcessorWorkerPipeline();
+	pipeline.handle({ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() });
+	return pipeline;
+}
+
 describe('ProcessorWorkerPipeline', () => {
 	it.each(['initialization', 'capability'] as const)(
-		'requests page-session fallback for %s, then executes only faithful TypeScript',
+		'reports %s failure and retries on the next processing request',
 		async (code) => {
-			vi.stubEnv('DEV', false);
-			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', undefined);
-			vi.mocked(createDitherette).mockRejectedValue(
-				new DitheretteError(code, 'wasm', 'Load failed')
-			);
-			const pipeline = new ProcessorWorkerPipeline();
-			pipeline.handle(
-				{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-				() => undefined
-			);
-			expect(await pipeline.handleAsync(processRequest(), () => undefined)).toMatchObject({
-				id: 2,
-				type: 'fallback'
+			const error = new DitheretteError(code, 'wasm', 'Load failed');
+			const processor = processorMock();
+			vi.mocked(createDitherette).mockRejectedValueOnce(error).mockResolvedValue(processor);
+			const pipeline = loadedPipeline();
+			await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toMatchObject({
+				message: 'Wasm could not initialize. Try processing again.',
+				cause: error
 			});
-			const response = await pipeline.handleAsync(
-				{ ...processRequest(), typeScriptFallback: true },
-				() => undefined
-			);
-			expect(response).toMatchObject({
+			expect(processor.process).not.toHaveBeenCalled();
+			expect(await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined)).toMatchObject({
 				type: 'complete',
-				image: {
-					indices: new Uint8Array([0, 1]),
-					warnings: expect.arrayContaining([expect.stringContaining('page session')])
-				}
+				image: { indices: new Uint8Array([0, 1]), settingsHash: 'hash' }
 			});
-			expect(createDitherette).toHaveBeenCalledOnce();
-			await expect(
-				pipeline.handleAsync(
-					{
-						...processRequest(),
-						typeScriptFallback: true,
-						settings: { output: { ...output, resize: 'area' }, dither, colorSpace: 'srgb' }
-					},
-					() => undefined
-				)
-			).rejects.toThrow(/faithfully/);
+			expect(createDitherette).toHaveBeenCalledTimes(2);
 		}
 	);
 
@@ -137,346 +132,94 @@ describe('ProcessorWorkerPipeline', () => {
 		'callback',
 		'runtime'
 	] as const)('keeps %s initialization-boundary errors visible', async (code) => {
-		vi.stubEnv('DEV', false);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', undefined);
 		const error = new DitheretteError(code, 'wasm', 'Visible failure');
 		vi.mocked(createDitherette).mockRejectedValue(error);
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
+		await expect(loadedPipeline().handleAsync(processRequest(), () => undefined)).rejects.toBe(
+			error
 		);
-		await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toBe(error);
-	});
-	it('loads a source before processing', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-
-		const response = pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-
-		expect(response).toEqual({ id: 1, type: 'source-loaded', sourceId: 'source-1' });
 	});
 
-	it('rejects processing for an unknown source id', () => {
+	it('requires the current loaded source and replaces it for subsequent requests', async () => {
+		const processor = processorMock();
+		vi.mocked(createDitherette).mockResolvedValue(processor);
 		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
+		await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toThrow(
+			/source/i
 		);
-
-		expect(() =>
-			pipeline.handle(processRequest({ sourceId: 'missing-source' }), () => undefined)
-		).toThrow(/source/i);
-	});
-
-	it('reuses resized pixels for settings-only processing changes', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-		pipeline.handle(processRequest(), () => undefined);
-		const progressStages: string[] = [];
-
-		const response = pipeline.handle(
-			processRequest({
-				id: 3,
-				settings: {
-					output,
-					dither: { ...dither, algorithm: 'bayer-2' },
-					colorSpace: 'srgb'
-				},
-				settingsHash: 'hash-2'
-			}),
-			(stage) => progressStages.push(stage)
-		);
-
-		expect(progressStages).toContain('Using cached resize');
-		expect(response).toMatchObject({ type: 'complete' });
-		expect(pipeline.resizeCacheSize).toBe(1);
-	});
-
-	it('reuses quantized output when toggling back to a previous dither branch', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-		const adaptiveSettings: ProcessingSettings = {
-			output,
-			dither: { ...dither, algorithm: 'bayer-2', placement: 'adaptive' },
-			colorSpace: 'oklab'
-		};
-		const everywhereSettings: ProcessingSettings = {
-			...adaptiveSettings,
-			dither: { ...adaptiveSettings.dither, placement: 'everywhere' as const }
-		};
-		const first = pipeline.handle(
-			processRequest({ settings: adaptiveSettings, settingsHash: 'adaptive' }),
-			() => undefined
-		);
-		pipeline.handle(
-			processRequest({ id: 3, settings: everywhereSettings, settingsHash: 'everywhere' }),
-			() => undefined
-		);
-		const progressStages: string[] = [];
-
-		const second = pipeline.handle(
-			processRequest({ id: 4, settings: adaptiveSettings, settingsHash: 'adaptive' }),
-			(stage) => progressStages.push(stage)
-		);
-
-		expect(progressStages).toContain('Using cached quantization');
-		if (!first || first.type !== 'complete' || !second || second.type !== 'complete') {
-			throw new Error('Expected complete responses.');
-		}
-		expect([...second.image.indices]).toEqual([...first.image.indices]);
-		expect(second.image.indices).not.toBe(first.image.indices);
-	});
-
-	it('creates prior branches for resize-affecting changes', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-
-		pipeline.handle(processRequest(), () => undefined);
-		pipeline.handle(
-			processRequest({
-				id: 3,
-				settings: { output: { ...output, width: 1 }, dither, colorSpace: 'srgb' },
-				settingsHash: 'hash-2'
-			}),
-			() => undefined
-		);
-
-		expect(pipeline.branchCacheSize).toBe(2);
-	});
-
-	it('clears active and prior branches when a new source loads', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-		pipeline.handle(processRequest(), () => undefined);
-		expect(pipeline.branchCacheSize).toBe(1);
-
-		pipeline.handle(
-			{ id: 3, type: 'load-source', sourceId: 'source-2', source: sourceImage() },
-			() => undefined
-		);
-
-		expect(pipeline.branchCacheSize).toBe(0);
-	});
-
-	it('includes processing metrics on complete responses', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-
-		const response = pipeline.handle(processRequest(), () => undefined);
-
-		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
-		expect(response.metrics).toMatchObject({
-			id: 2,
-			sourceId: 'source-1',
-			settingsHash: 'hash',
-			outputPixels: 2,
-			resize: 'nearest'
+		const source = sourceImage();
+		expect(pipeline.handle({ id: 1, type: 'load-source', sourceId: 'source-1', source })).toEqual({
+			id: 1,
+			type: 'source-loaded',
+			sourceId: 'source-1'
 		});
-		expect(response.metrics?.timings.length).toBeGreaterThan(0);
-		expect(response.metrics?.cache.delta.resizedMisses).toBe(1);
-		expect(response.metrics?.memory.resizedBytes).toBe(8);
+		await pipeline.handleAsync(processRequest(), () => undefined);
+		const next = new ImageData(new Uint8ClampedArray([255, 255, 255, 255]), 1, 1);
+		pipeline.handle({ id: 3, type: 'load-source', sourceId: 'source-2', source: next });
+		await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toThrow(
+			/source/i
+		);
+		await pipeline.handleAsync(processRequest({ id: 4, sourceId: 'source-2' }), () => undefined);
+		expect(processor.process.mock.calls.at(-1)).toEqual([
+			expect.objectContaining({ source: { width: 1, height: 1, data: new Uint8Array(next.data) } })
+		]);
+		expect(createDitherette).toHaveBeenCalledOnce();
 	});
 
-	it('splits quantize metrics into color conversion and dither matching stages', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-
-		const response = pipeline.handle(
-			processRequest({
-				settings: {
-					output,
-					dither: { ...dither, algorithm: 'bayer-2', useColorSpace: true },
-					colorSpace: 'oklab'
-				}
-			}),
-			() => undefined
-		);
-
-		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
-		const timingNames = response.metrics?.timings.map((timing) => timing.name);
-		expect(timingNames).toEqual(
-			expect.arrayContaining([
-				'color space convert palette cache lookup',
-				'color space convert palette',
-				'quantize direct dither+match loop'
-			])
-		);
-	});
-
-	it('records cache hits and replays cached compute timings in metrics', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-		const first = pipeline.handle(processRequest(), () => undefined);
-		if (!first || first.type !== 'complete') throw new Error('Expected complete response.');
-		const firstResizeMs = first.metrics?.timings.find(
-			(timing) => timing.name === 'resize compute'
-		)?.ms;
-		const firstQuantizeMs = first.metrics?.timings.find(
-			(timing) => timing.name === 'quantize compute'
-		)?.ms;
-
-		const response = pipeline.handle(processRequest({ id: 3 }), () => undefined);
-
-		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
-		expect(response.metrics?.cache.delta.resizedHits).toBe(1);
-		expect(response.metrics?.cache.delta.derivedHits).toBeGreaterThan(0);
-		expect(response.metrics?.timings).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({ name: 'resize compute', ms: firstResizeMs, replayed: true }),
-				expect.objectContaining({ name: 'quantize compute', ms: firstQuantizeMs, replayed: true })
-			])
-		);
-	});
-
-	it('developer override preserves the async TypeScript path', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-
-		const response = await pipeline.handleAsync(processRequest({ id: 2 }), () => undefined);
-
-		expect(response).toMatchObject({
-			type: 'complete',
-			image: { indices: new Uint8Array([0, 1]), settingsHash: 'hash' }
-		});
-		expect(createDitherette).not.toHaveBeenCalled();
-		expect(pipeline.branchCacheSize).toBe(1);
-	});
-
-	it.each([
-		[false, undefined],
-		[false, 'false'],
-		[false, 'true'],
-		[true, undefined],
-		[true, 'true']
-	])('uses one scalar public processor with DEV=%s and package flag=%s', async (dev, flag) => {
-		vi.stubEnv('DEV', dev);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', flag);
-		const process = vi.fn(() => ({
-			width: 2,
-			height: 1,
-			indices: new Uint8Array([1, 0]),
-			palette: { rgba: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]), transparentIndex: null },
-			warnings: []
-		}));
-		vi.mocked(createDitherette).mockResolvedValue({
-			process,
-			resize: vi.fn(),
-			quantize: vi.fn(),
-			perturb: vi.fn(),
-			ditherAndQuantize: vi.fn(),
-			dispose: vi.fn()
-		});
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
+	it('uses one scalar public processor and transfers only completed index buffers', async () => {
+		const processor = processorMock();
+		vi.mocked(createDitherette).mockResolvedValue(processor);
+		const pipeline = loadedPipeline();
 		const response = await pipeline.handleAsync(processRequest(), () => undefined);
 		await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined);
 		expect(response).toMatchObject({
 			type: 'complete',
 			image: {
-				indices: new Uint8Array([1, 0]),
+				indices: new Uint8Array([0, 1]),
 				palette,
 				transparentIndex: -1,
 				settingsHash: 'hash'
 			}
 		});
-		expect(createDitherette).toHaveBeenCalledTimes(1);
-		expect(createDitherette).toHaveBeenCalledWith();
-		expect(process).toHaveBeenCalledTimes(2);
-		expect(process).toHaveBeenCalledWith(
-			expect.objectContaining({
-				recipe: expect.objectContaining({ version: 1, match: 'srgb-euclidean' })
-			})
-		);
-		expect(pipeline.branchCacheSize).toBe(0);
+		expect(createDitherette).toHaveBeenCalledExactlyOnceWith();
+		expect(processor.process).toHaveBeenCalledTimes(2);
+		if (response?.type !== 'complete') throw new Error('Expected completed output.');
+		expect(transferablesForWorkerResponse(response)).toEqual([response.image.indices.buffer]);
+		expect(
+			transferablesForWorkerResponse({ id: 1, type: 'source-loaded', sourceId: 'source-1' })
+		).toEqual([]);
+	});
+
+	it('does not initialize a canceled request', async () => {
+		const pipeline = loadedPipeline();
+		pipeline.handle({ id: 2, type: 'cancel' });
+		expect(await pipeline.handleAsync(processRequest(), () => undefined)).toBeUndefined();
+		expect(createDitherette).not.toHaveBeenCalled();
 	});
 
 	it('does not process a request canceled while scalar initialization is pending', async () => {
-		vi.stubEnv('DEV', false);
 		const pending = Promise.withResolvers<Awaited<ReturnType<typeof createDitherette>>>();
 		vi.mocked(createDitherette).mockReturnValue(pending.promise);
-		const process = vi.fn();
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
+		const processor = processorMock();
+		const pipeline = loadedPipeline();
 		const response = pipeline.handleAsync(processRequest(), () => undefined);
-		pipeline.handle({ id: 2, type: 'cancel' }, () => undefined);
-		pending.resolve({
-			process,
-			resize: vi.fn(),
-			quantize: vi.fn(),
-			perturb: vi.fn(),
-			ditherAndQuantize: vi.fn(),
-			dispose: vi.fn()
-		});
+		pipeline.handle({ id: 2, type: 'cancel' });
+		pending.resolve(processor);
 		expect(await response).toBeUndefined();
-		expect(process).not.toHaveBeenCalled();
+		expect(processor.process).not.toHaveBeenCalled();
 	});
 
 	it('forwards public work counts and skipped stages without inventing intermediate work', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		const processor = processorMock();
 		vi.mocked(createDitherette).mockResolvedValue({
+			...processor,
 			process(request) {
 				request.onProgress?.({ stage: 'quantize', completed: 1, total: 2 });
 				request.onProgress?.({ stage: 'complete' });
-				return {
-					width: 2,
-					height: 1,
-					indices: new Uint8Array([0, 1]),
-					palette: {
-						rgba: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]),
-						transparentIndex: null
-					},
-					warnings: []
-				};
-			},
-			resize: vi.fn(),
-			quantize: vi.fn(),
-			perturb: vi.fn(),
-			ditherAndQuantize: vi.fn(),
-			dispose: vi.fn()
+				return processor.process();
+			}
 		});
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
 		const progress = vi.fn();
-		await pipeline.handleAsync(processRequest(), progress);
+		await loadedPipeline().handleAsync(processRequest(), progress);
 		expect(progress.mock.calls).toContainEqual(['quantize', 0.5, { completed: 1, total: 2 }]);
 		expect(progress.mock.calls.at(-1)).toEqual([
 			'complete',
@@ -486,71 +229,21 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(progress.mock.calls.some(([stage]) => stage === 'resize')).toBe(false);
 	});
 
-	it('keeps fractional crops on the developer-only TypeScript path', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-		const response = await pipeline.handleAsync(
-			processRequest({
-				settings: {
-					output: { ...output, crop: { x: 0.5, y: 0, width: 1, height: 1 } },
-					dither,
-					colorSpace: 'srgb'
-				}
-			}),
-			() => undefined
-		);
-		expect(response).toMatchObject({
-			type: 'complete',
-			image: { indices: new Uint8Array([0, 1]) }
-		});
-		expect(createDitherette).not.toHaveBeenCalled();
-	});
-
-	it.each(['initialization', 'process', 'processing-initialization'])(
-		'keeps %s failures visible without invoking TypeScript',
-		async (failure) => {
-			vi.stubEnv('DEV', false);
-			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', undefined);
-			const error =
-				failure === 'processing-initialization'
-					? new DitheretteError('initialization', 'wasm', 'Processing failed')
-					: new Error(`${failure} failed`);
-			if (failure === 'initialization') vi.mocked(createDitherette).mockRejectedValue(error);
-			else
-				vi.mocked(createDitherette).mockResolvedValue({
-					process: () => {
-						throw error;
-					},
-					resize: vi.fn(),
-					quantize: vi.fn(),
-					perturb: vi.fn(),
-					ditherAndQuantize: vi.fn(),
-					dispose: vi.fn()
-				});
-			const pipeline = new ProcessorWorkerPipeline();
-			pipeline.handle(
-				{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-				() => undefined
-			);
+	it.each(['initialization', 'memory-limit', 'callback', 'runtime'] as const)(
+		'keeps processing %s failures visible without repeating initialization',
+		async (code) => {
+			const error = new DitheretteError(code, 'process', 'Processing failed');
+			const processor = processorMock();
+			processor.process.mockImplementationOnce(() => {
+				throw error;
+			});
+			vi.mocked(createDitherette).mockResolvedValue(processor);
+			const pipeline = loadedPipeline();
 			await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toBe(error);
-			expect(pipeline.branchCacheSize).toBe(0);
+			expect(await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined)).toMatchObject({
+				type: 'complete'
+			});
+			expect(createDitherette).toHaveBeenCalledOnce();
 		}
 	);
-
-	it('returns transferred index buffers for complete responses', () => {
-		const pipeline = new ProcessorWorkerPipeline();
-		pipeline.handle(
-			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
-			() => undefined
-		);
-		const response = pipeline.handle(processRequest(), () => undefined);
-		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
-
-		expect(transferablesForWorkerResponse(response)).toEqual([response.image.indices.buffer]);
-	});
 });

@@ -40,7 +40,7 @@ self.onmessage = (event: MessageEvent<unknown>) => {
 	}
 
 	if (request.type === 'cancel') {
-		pipeline.handle(request, () => undefined);
+		pipeline.handle(request);
 		return;
 	}
 
