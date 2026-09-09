@@ -30,7 +30,9 @@ export function retainedOutputSlots(iterations, outputBytes, limit = RETAINED_OU
 		!Number.isSafeInteger(required) ||
 		required > limit
 	)
-		throw new Error(`Retained output batch exceeds the ${limit / (1024 * 1024)} MiB stability budget.`);
+		throw new Error(
+			`Retained output batch exceeds the ${limit / (1024 * 1024)} MiB stability budget.`
+		);
 	return Array(iterations).fill(undefined);
 }
 
