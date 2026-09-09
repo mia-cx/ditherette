@@ -21,7 +21,7 @@ The cache-candidate agent owns production changes. Frozen spec/image stay unchan
 - [x] Add guarded actual-website direct/Process adapters and focused non-timing tests.
 - [x] Generate bounded release plans using existing subjects and unchanged S32 anchors.
 - [x] Validate matrix counts, provenance requirements, source identities, and wall-time estimates.
-- [ ] Hand off clean committed infrastructure with owned jobs drained.
+- [x] Hand off clean committed infrastructure with owned jobs drained.
 
 ## Measurement hold
 
@@ -172,3 +172,14 @@ or production change is part of this matrix.
 The only owned compiler output is this worktree's `target/compiler`. Root owns
 cleanup after handoff. Preserve generated plans and any future retained evidence.
 No Wasm build, browser launch, real measurement, push, or PR runs here.
+
+CI-only S40 head `95706738e4f3179824a66c80bb5728ce97a34b4b` joins through
+`4e0018290311fabe1c6e1dd47d39ee579adfad68`. Runtime inputs remain unchanged.
+Adapter checkpoint is `9b06037d`; matrix checkpoint is `37e8cc8b`.
+All owned native/JavaScript jobs exit before this handoff. The compiler directory
+uses approximately 1.7 GiB and returns to root ownership without deletion.
+Generated inventory SHA-256 is
+`4d507afe536a8db31c2d150156c24184ed898d46c46faa1aa421c4dacdb1e140`;
+the first candidate case is
+`d88c14b90a8e6f70637f8409e1205a57389b43e55d4972eeeae14e22d68ec996`.
+These are untimed generator outputs, not prepared or measured artifact identities.
