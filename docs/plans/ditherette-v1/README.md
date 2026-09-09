@@ -149,10 +149,11 @@ When a parent changes, restack descendants, verify their actual dependency ances
 
 Complete the implementation stack before routine PR review or babysitting. During implementation, fix blockers, correctness failures, and architectural issues that would propagate through descendants. Defer other review findings to the later review pass.
 
-After each completed PR implementation, remove its rebuildable Rust compiler outputs. Rebuild them when review needs them.
-Before cleanup, drain owned jobs and resolve target symlinks against the coordinator's active cache assignments.
-Preserve source, benchmark reports, immutable trial snapshots, and other retained evidence, including evidence stored inside a target directory.
-Keep a shared cache only while an active slice owns it; clean it when that ownership ends. Record reclaimed space in the handoff.
+When a worktree is finished, clear its entire `target/` trees, including retained browser copies and raw benchmark payloads.
+First drain owned jobs and resolve target symlinks against active assignments. Preserve source and compact reports/hashes outside `target/`.
+Rebuild artifacts when review needs them. Full raw outputs are disposable; do not accumulate immutable snapshots across finished slices.
+Keep a cache only while an active slice owns it. Record removed data and reclaimed space in the handoff.
+Before each benchmark case, check disk headroom and stop launching if less than 12 GiB remains. This is an admission check, not progress polling.
 
 ### Dependency availability without merges
 
