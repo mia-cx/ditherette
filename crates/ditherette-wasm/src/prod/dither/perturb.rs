@@ -1,9 +1,12 @@
-//! Literal field-to-RGBA8 row composition with caller-owned output.
+//! Field-to-RGBA8 row composition with caller-owned output and one shared color converter.
 
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::{
-        color::{packed::rgb8_to_coordinates, reconstruct},
+        color::{
+            packed::{Converter, PackedSpace},
+            reconstruct,
+        },
         contract::{
             failure::Failure,
             request::{Placement, WorkingSpace},
@@ -13,7 +16,7 @@ use crate::{
     },
 };
 
-use super::placement::{coordinate_domain, placement_mask_at};
+use super::placement::{coordinate_domain, placement_mask_with_converter};
 
 const FIELD_SCALE: f64 = 0.25;
 
@@ -181,6 +184,7 @@ fn perturb_rows(
     let dimensions = source.dimensions();
     assert!(rows.y_end() <= dimensions.height());
     let ranges = coordinate_domain(space).ranges().map(f64::from);
+    let converter = Converter::new(PackedSpace::from_working(space));
     for y in rows.y_start()..rows.y_end() {
         let source_row = source.row(y).expect("source row is in bounds");
         let output_row = output
@@ -189,7 +193,7 @@ fn perturb_rows(
         for x in 0..dimensions.width() {
             let global_index = u64::from(y) * u64::from(dimensions.width()) + u64::from(x);
             let threshold = field(x, y, global_index);
-            let mask = placement_mask_at(source, x, y, space, placement);
+            let mask = placement_mask_with_converter(source, x, y, space, placement, &converter);
             let amount = f64::from(threshold) * f64::from(strength) * f64::from(mask) * FIELD_SCALE;
             let offset = x as usize * 4;
             let pixel = &source_row[offset..offset + 4];
@@ -197,7 +201,7 @@ fn perturb_rows(
             let result = if amount == 0.0 {
                 rgb
             } else {
-                let coordinates = rgb8_to_coordinates(rgb, space);
+                let coordinates = converter.coordinates(rgb);
                 let perturbed = std::array::from_fn(|axis| {
                     f64::from(coordinates[axis]) + amount * ranges[axis]
                 });
