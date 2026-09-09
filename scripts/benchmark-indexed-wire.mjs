@@ -6,7 +6,7 @@ const WARNING_CODES = new Set(['palette-truncated', 'transparent-only', 'transpa
 
 /** Only a declared capped case may replace its byte arrays with the compact wire envelope. */
 export function usesIndexedWire(trial) {
-	return trial.case.browser.retained_output_limit_bytes !== undefined;
+	return trial.case.browser?.retained_output_limit_bytes !== undefined;
 }
 
 function keys(value, expected) {

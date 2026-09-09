@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { constants } from 'node:buffer';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { startAssetServer } from './benchmark-public-browser.mjs';
 import { encodeOutput, decodeOutput, usesIndexedWire } from './benchmark-indexed-wire.mjs';
 
 const output = () => ({
@@ -68,4 +74,73 @@ test('encoding crosses chunk boundaries with canonical byte order', () => {
 		(_, index) => index % 2
 	);
 	assert.deepEqual(decodeOutput(encodeOutput(value)), value);
+});
+
+test('three capped hex outputs stay below the Node string bound without allocating them', () => {
+	const resultBound = 8192 * 8192 * 2 * 3 + 1024 * 1024;
+	assert.ok(resultBound < constants.MAX_STRING_LENGTH);
+});
+
+test('oracle wrapper compacts only declared cases after the unchanged serializer returns', async () => {
+	const root = await mkdtemp(path.join(tmpdir(), 'ditherette-wire-oracle-'));
+	const previousFetch = globalThis.fetch;
+	try {
+		await mkdir(path.join(root, 'oracle'));
+		for (const name of ['benchmark-oracle-page.mjs', 'benchmark-indexed-wire.mjs'])
+			await cp(new URL(name, import.meta.url), path.join(root, name));
+		const original = output();
+		original.pixels.indices = Array.from(original.pixels.indices);
+		const reference = { case: { fixture: 'independent oracle' }, output: original };
+		await writeFile(
+			path.join(root, 'oracle/ditherette_bench_oracle.js'),
+			`export default async function init() {}\nexport function evaluate() { return ${JSON.stringify(JSON.stringify(reference))}; }\nexport function evaluate_prime() { throw new Error('unexpected prime'); }\n`
+		);
+		globalThis.fetch = async () => ({ arrayBuffer: async () => new ArrayBuffer(0) });
+		const { runTrial } = await import(pathToFileURL(path.join(root, 'benchmark-oracle-page.mjs')));
+		const trial = {
+			case: {
+				source: { width: 1, height: 1 },
+				rgba: [0, 0, 0, 255],
+				identity: { output: original.dimensions },
+				browser: { operation: { operation: 'process' } }
+			}
+		};
+		assert.deepEqual(await runTrial(trial), reference);
+		trial.case.browser.retained_output_limit_bytes = 384 * 1024 * 1024;
+		const compact = await runTrial(trial);
+		assert.deepEqual(compact.case, reference.case);
+		assert.deepEqual(decodeOutput(compact.output, original.dimensions), output());
+	} finally {
+		globalThis.fetch = previousFetch;
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('compact HTTP results enforce their smaller bound while ordinary results keep their existing bound', async () => {
+	for (const compact of [true, false]) {
+		const trial = {
+			case: {
+				identity: { output: { width: 10_000, height: 1 } },
+				measurement: { samples: 5 },
+				browser: compact ? { retained_output_limit_bytes: 384 * 1024 * 1024 } : {}
+			}
+		};
+		const server = await startAssetServer(
+			{ tree: { root: process.cwd(), files: [] }, entries: {} },
+			false,
+			trial
+		);
+		try {
+			const response = await fetch(server.url + server.resultUrl, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ fixture: 'x'.repeat(120_000) })
+			});
+			assert.equal(response.status, compact ? 413 : 204);
+			assert.deepEqual(server.failures, compact ? ['Result body exceeds declared bound.'] : []);
+		} finally {
+			server.instance.closeAllConnections();
+			await new Promise((resolve) => server.instance.close(resolve));
+		}
+	}
 });

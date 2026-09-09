@@ -1,5 +1,7 @@
 //! One owned Node transport per benchmark worker, with checked response identities.
 
+mod indexed_wire;
+
 use crate::{
     browser_assets::{validate_bundle_revision, validate_oracle, validate_trial_assets},
     lease::Lease,
@@ -42,7 +44,18 @@ pub fn run_transport(
         .env("DITHERETTE_BENCH_TRANSPORT", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
-    let result = read_owned_transport(lease, command, response_limit(request)?, &mut raw)?;
+    let result =
+        read_owned_transport_with(lease, command, response_limit(request)?, &mut raw, |line| {
+            match request
+                .case
+                .browser
+                .as_ref()
+                .and_then(|case| case.retained_output_limit_bytes)
+            {
+                Some(limit) => indexed_wire::decode(line, request.case.identity.output, limit),
+                None => serde_json::from_str(line).map_err(io::Error::other),
+            }
+        })?;
     validate_trial_assets(trial)?;
     validate_response(request, &result)?;
     OpenOptions::new()
@@ -73,6 +86,18 @@ pub fn read_owned_transport(
     limit: u64,
     raw: &mut impl Write,
 ) -> io::Result<BrowserTransportResult> {
+    read_owned_transport_with(lease, command, limit, raw, |line| {
+        serde_json::from_str(line).map_err(io::Error::other)
+    })
+}
+
+fn read_owned_transport_with(
+    lease: &Lease,
+    command: Command,
+    limit: u64,
+    raw: &mut impl Write,
+    decode: impl FnOnce(&str) -> io::Result<BrowserTransportResult>,
+) -> io::Result<BrowserTransportResult> {
     let mut child = lease.spawn(command)?;
     let stdout = child
         .take_stdout()
@@ -87,7 +112,7 @@ pub fn read_owned_transport(
             "transport response exceeds its bound or lacks one complete JSON line",
         ));
     }
-    let result = serde_json::from_str(&line).map_err(io::Error::other)?;
+    let result = decode(&line)?;
     let mut trailing = String::new();
     reader.read_to_string(&mut trailing)?;
     raw.write_all(trailing.as_bytes())?;
@@ -105,9 +130,19 @@ pub fn response_limit(request: &TrialRequest) -> io::Result<u64> {
     // JSON RGBA bytes need at most four characters each, plus structured evidence.
     // An exact preflight does not preclude later instability. Retain two actual results in every trial.
     let outputs = 3;
+    let bytes_per_pixel = if request
+        .case
+        .browser
+        .as_ref()
+        .is_some_and(|case| case.retained_output_limit_bytes.is_some())
+    {
+        2 // Canonical hex carries one indexed byte, not four RGBA decimal bytes.
+    } else {
+        16
+    };
     u64::from(request.case.identity.output.width)
         .checked_mul(u64::from(request.case.identity.output.height))
-        .and_then(|pixels| pixels.checked_mul(16 * outputs))
+        .and_then(|pixels| pixels.checked_mul(bytes_per_pixel * outputs))
         .and_then(|bytes| bytes.checked_add(1024 * 1024))
         .and_then(|bytes| {
             (request.case.measurement.samples as u64)
