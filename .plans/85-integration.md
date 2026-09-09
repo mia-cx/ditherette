@@ -4,7 +4,8 @@ Base `c43cea1269fcd666835d41c07d82a1c451604107` joins S41 PR131 at `d09e32df8e06
 
 - [x] Validate the fresh joined artifact and repair integration-only fixture wiring.
 - [x] Record reused evidence, remaining release blockers, reproduction commands, and cleanup.
-- [ ] Root joins the separate stack audit, verifies ancestry, and files the unmerged PR.
+- [x] Root joins the separate stack audit and verifies ancestry.
+- [ ] File the unmerged PR against the explicit S43 base.
 
 Fresh public preparation succeeds from the clean base. Tarball SHA-256 is `78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90`; every installed file and compressed size equals S42.
 
@@ -21,3 +22,8 @@ No measurements belong to this validation. Reuse S41/S42 evidence only after mat
 The [release-readiness report](85-release-readiness.md) records checks, reuse, blockers, and reproduction commands. Its [artifact manifest](85-artifact.json) distinguishes build source `c43cea12` from validated fixture revision `f331ffcf`.
 
 All validation jobs exited. Cleanup removed the owned root and Wasm `target` trees, about 1.7 GiB. The 1.6 MiB artifact/provenance bundle remains under ignored `benchmark-results/s43-artifact/`. Root owns the separate audit join and PR filing.
+
+Root joins audit `cfd01263f63c77c278ddaeae35d8079df7d9d8a8` at `84820d9a`.
+All 43 published prerequisite PR heads remain ancestors. The audit retains 74 dependency edges and ten dedicated joins.
+Root refreshes the stale progress table and stack ledger from the coordinator's current records.
+The execution contract now includes whole-target cleanup and deferred routine review. These are documentation-only changes.

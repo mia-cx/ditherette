@@ -79,3 +79,7 @@ The fresh native command is `cargo +1.97.0 test --locked --release --manifest-pa
 For unresolved performance gates, generate a fixed case with `release_integration_plan LANE CASE_INDEX NEW_JSON HOST_LOAD_NOTES`. The [S41 reproduction instructions](83-release-status.md#reproduction-and-holds), [paired protocol](../crates/ditherette-bench/PAIRED.md), and [exclusive execution rules](../crates/ditherette-bench/EXECUTION.md) govern fresh artifacts and approved measurement windows. Missing coverage is a blocker, not authority to extend the experiment budget. `release.mjs verify` and `publish-check` retain S42's publication hold checks; no publisher credentials are inspected here.
 
 After validation, all owned jobs exit and all finished target directories are removed. Source, committed reports, and the small artifact/provenance bundle remain. Root owns the final stack-audit join and unmerged PR.
+
+The [complete stack audit](85-stack.md) joins at `84820d9a`; its machine inventory preserves all 43 published heads and 74 dependency edges.
+The audited base remains an ancestor of the final report branch. Root also refreshes the progress table and execution contract.
+These documentation changes do not replace the actual build source or tested fixture revision above.
