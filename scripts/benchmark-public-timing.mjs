@@ -13,9 +13,13 @@ export function timeCalls(call, iterations, now, outputs) {
 // Protocol change: durable results live through their entire batch. Reference writes stay
 // inside the existing timer; validation and slot allocation stay outside. Fresh artifacts are required.
 export const RETAINED_OUTPUT_LIMIT = 64 * 1024 * 1024;
+export const MAX_RETAINED_OUTPUT_LIMIT = 384 * 1024 * 1024;
 export const RESULT_BOOKKEEPING_BYTES = 1024; // Output records, typed-array wrappers, slots, and validation sets.
 export const STABILITY_EVIDENCE_SLOTS = 4; // First/distinct originals plus their private typed snapshots.
-export function retainedOutputSlots(iterations, outputBytes) {
+/** A case may explicitly reserve more result storage; this does not bound JSON transport or Wasm memory. */
+export function retainedOutputSlots(iterations, outputBytes, limit = RETAINED_OUTPUT_LIMIT) {
+	if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RETAINED_OUTPUT_LIMIT)
+		throw new Error('Invalid retained output limit; maximum is 384 MiB.');
 	const required =
 		(iterations + STABILITY_EVIDENCE_SLOTS) * (outputBytes + RESULT_BOOKKEEPING_BYTES);
 	if (
@@ -24,9 +28,9 @@ export function retainedOutputSlots(iterations, outputBytes) {
 		!Number.isSafeInteger(outputBytes) ||
 		outputBytes < 0 ||
 		!Number.isSafeInteger(required) ||
-		required > RETAINED_OUTPUT_LIMIT
+		required > limit
 	)
-		throw new Error('Retained output batch exceeds the 64 MiB stability budget.');
+		throw new Error(`Retained output batch exceeds the ${limit / (1024 * 1024)} MiB stability budget.`);
 	return Array(iterations).fill(undefined);
 }
 
@@ -44,10 +48,11 @@ export async function collectInitializations({
 	probe,
 	observe = () => {},
 	outputBytes = 0,
+	retainedOutputLimit = RETAINED_OUTPUT_LIMIT,
 	now = () => performance.now(),
 	warmupAttemptLimit = 1_000_000
 }) {
-	const outputs = retainedOutputSlots(1, outputBytes);
+	const outputs = retainedOutputSlots(1, outputBytes, retainedOutputLimit);
 	const warmupStart = now();
 	let warmupIterations = 0;
 	let warmupElapsed;
@@ -96,10 +101,11 @@ export async function collectCalls({
 	prepare,
 	observe = () => {},
 	outputBytes = 0,
+	retainedOutputLimit = RETAINED_OUTPUT_LIMIT,
 	now = () => performance.now(),
 	warmupAttemptLimit = 1_000_000
 }) {
-	const warmupOutputs = retainedOutputSlots(1, outputBytes);
+	const warmupOutputs = retainedOutputSlots(1, outputBytes, retainedOutputLimit);
 	let warmupIterations = 0;
 	let warmupElapsed = 0;
 	let warmupCallElapsed = 0;
@@ -130,7 +136,7 @@ export async function collectCalls({
 	if (!Number.isSafeInteger(iterations))
 		throw new Error('Insufficient timer resolution for throughput calibration.');
 	// Reject an oversized calibrated batch before preparing or timing a sample. Never lower its count.
-	const outputs = retainedOutputSlots(iterations, outputBytes);
+	const outputs = retainedOutputSlots(iterations, outputBytes, retainedOutputLimit);
 	const samples = [];
 	let output;
 	let measuredElapsed = 0;

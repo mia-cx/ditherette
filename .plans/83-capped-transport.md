@@ -16,7 +16,8 @@ coordinator approval and explicit ownership first.
 
 - [x] Reproduce the retention refusal without allocating image data; inspect
   production preflight and transport bounds.
-- [ ] Add an explicit bounded retention override and focused collector tests.
+- [x] Add an explicit bounded retention override and focused collector tests.
+- [ ] Add the approved indexed-only wire envelope and tiny decoder tests.
 - [ ] Record required wiring, transport blockers, and a quiet-window resource plan.
 
 ## Findings
@@ -50,6 +51,18 @@ characters, excluding metadata. This exceeds Node's 536,870,888-character
 string limit. Exact uniform output may serialize smaller, but instability must
 still preserve both actual outputs. Raising retention alone cannot guarantee
 the capped case's evidence path.
+
+Root approved a per-output benchmark-only envelope. It retains normal metadata
+with empty transit indices and carries the exact indices as lowercase hex.
+Three maximum-area hex outputs need 384 MiB of ASCII before small metadata,
+below Node's string limit. Rust decodes the envelope before the existing exact
+verifier. The frozen oracle's serializer and shared benchmark API stay unchanged.
+The JavaScript oracle wrapper compacts its already-returned output. S37 owns
+case metadata and public-page forwarding. This agent owns the new wire helper,
+oracle wrapper, private Rust decoder, and asset registration.
+
+The initial collector checkpoint passes 13 focused Node tests. Both new tests
+failed on the base's 64 MiB refusal first. Mock calls allocate no image bytes.
 
 ## Validation and holds
 
