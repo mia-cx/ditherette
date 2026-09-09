@@ -11,6 +11,62 @@ import {
 	STABILITY_EVIDENCE_SLOTS
 } from './benchmark-public-timing.mjs';
 
+test('an explicit capped-output budget admits one max-area indexed result without changing the default', () => {
+	const outputBytes = 8192 * 8192 + 1024;
+	const limit = 384 * 1024 * 1024;
+	assert.throws(() => retainedOutputSlots(1, outputBytes), /64 MiB/);
+	assert.equal(retainedOutputSlots(1, outputBytes, limit).length, 1);
+	assert.throws(() => retainedOutputSlots(2, outputBytes, limit), /stability budget/);
+	const required = (1 + STABILITY_EVIDENCE_SLOTS) * (outputBytes + RESULT_BOOKKEEPING_BYTES);
+	assert.equal(retainedOutputSlots(1, outputBytes, required).length, 1);
+	assert.throws(() => retainedOutputSlots(1, outputBytes, required - 1), /stability budget/);
+	for (const invalid of [0, -1, 1.5, NaN, Infinity, null, '402653184', limit + 1])
+		assert.throws(() => retainedOutputSlots(1, 0, invalid), /retained output limit/);
+});
+
+test('explicit retention reaches both collectors without adding observations to their timers', async () => {
+	for (const initialization of [false, true]) {
+		let clock = 0;
+		let calls = 0;
+		let closes = 0;
+		let observations = 0;
+		const measurement = { mode: 'single-call', samples: 5, warmup_ms: 1, measurement_ms: 100 };
+		const options = {
+			measurement,
+			outputBytes: 8192 * 8192 + 1024, // Declared bytes only; the mock allocates no image.
+			retainedOutputLimit: 384 * 1024 * 1024,
+			now: () => clock,
+			observe(outputs) {
+				assert.equal(outputs.length, 1);
+				assert.equal(outputs[0], calls);
+				observations++;
+				clock += 100;
+			}
+		};
+		const result = initialization
+			? await collectInitializations({
+					...options,
+					create: async () => {
+						clock++;
+						return { dispose: () => closes++ };
+					},
+					probe: () => ++calls
+				})
+			: await collectCalls({
+					...options,
+					prepare: async () => ({
+						call: () => {
+							clock++;
+							return ++calls;
+						},
+						close: () => closes++
+					})
+				});
+		assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+		assert.deepEqual([calls, observations, closes], [6, 6, 6]);
+	}
+});
+
 test('retained output budget includes evidence and fails before oversized samples without reducing their count', async () => {
 	const bytes =
 		Math.floor(RETAINED_OUTPUT_LIMIT / (2 + STABILITY_EVIDENCE_SLOTS)) - RESULT_BOOKKEEPING_BYTES;
