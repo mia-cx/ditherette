@@ -21,7 +21,7 @@ The coordinator owns benchmarks, browser measurements, stacking, and selection.
 ## TODOs
 
 - [x] Restore field converter reuse and verify frozen output, bands, and capacity boundaries; commit separately.
-- [ ] Restore Yliluoma target converter reuse and verify current scalar, band, progress, and complete-call paths; commit separately.
+- [x] Restore Yliluoma target converter reuse and verify current scalar, band, progress, and complete-call paths; commit separately.
 
 ## Validation
 
@@ -35,3 +35,21 @@ The existing vectors cover all working spaces, strength extremes, alpha, padding
 Current disjoint bands and exact/one-under capacity checks pass without edits to their tests.
 `rustfmt --check` on the three changed modules and `git diff --check` pass.
 Placement and packed conversion modules match historical candidate `b237b7468` byte for byte.
+
+Yliluoma validation passes 25 default-feature tests across `prod_yiluoma`, `prod_yiluoma_row_bands`,
+`prod_processor_fields`, `prod_progress`, and `prod_process`.
+`prod_processor_yiluoma_bands` requires `bench-subjects`; the default-feature command runs zero tests for that target.
+Enabling `bench-subjects,threads` passes its four tests plus six field/Yliluoma band and allocation tests.
+These exercise exact frozen metadata, scalar override, threaded callbacks, failed-copy recovery, and exact/one-under budgets.
+Only tests run with the benchmark feature; no benchmark or browser measurements run here.
+The final Yliluoma diff matches historical `abe8241`'s import and target call changes in the current band loop.
+The existing prepared-converter accessor remains unchanged.
+`rustfmt --check` on the Yliluoma request module and `git diff --check` pass.
+
+Commands use `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml` with `--test-threads=2`:
+
+```text
+--test prod_fields --test prod_blue_noise --test prod_field_row_bands --test prod_field_band_allocation --test prod_processor_fields
+--test prod_yiluoma --test prod_yiluoma_row_bands --test prod_processor_yiluoma_bands --test prod_processor_fields --test prod_progress --test prod_process
+--features bench-subjects,threads --test prod_processor_yiluoma_bands --test prod_yiluoma_row_bands --test prod_field_row_bands --test prod_field_band_allocation
+```

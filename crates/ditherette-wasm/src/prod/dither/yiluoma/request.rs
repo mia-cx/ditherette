@@ -5,7 +5,7 @@ use super::{adaptive_target, best_matched_mix, ordered_mix_index};
 use crate::{
     image::{contracts::IndexedImage, ImageBuf, PaletteIndex8},
     prod::{
-        color::packed::{rgb8_to_coordinates, Converter},
+        color::packed::Converter,
         contract::{
             error::{DitheretteError, ErrorCode},
             request::{
@@ -119,7 +119,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
             let index = match palette.prepare_pixel(rgba) {
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
-                    let coordinates = rgb8_to_coordinates(rgb, matching.space());
+                    let coordinates = prepared.converter().coordinates(rgb);
                     let nearest = matcher.nearest(coordinates);
                     let mask = placement_mask_at(source, x, y, matching.space(), placement);
                     let target = adaptive_target(coordinates, nearest.coordinates, mask);
