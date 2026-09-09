@@ -20,7 +20,7 @@ Use the existing registry, identities, verification, alternating coordinator, an
 ## Notes
 
 - Worktree `v1-scalar-spec-bench`, base `5da82d122`. Ownership covers benchmark crates and `bench_subjects*` only.
-- No production, frozen spec, image, guard, or package edits. No benchmark execution in this worktree.
+- No production, frozen spec, image, guard, or package edits. The adapter agent runs no benchmarks; the coordinator runs the later measurements.
 - Response and address-issue skills govern work; agent-copy guides this plan.
 - The reusable example supports `spec-prod`, `prod-prod`, and optional case prefixes.
 - Full coverage is 101 cases / 404 sequential workers, two alternating pairs, 50 ms warmup, 5–20 samples, 250 ms target.
@@ -37,3 +37,11 @@ Use the existing registry, identities, verification, alternating coordinator, an
 - New checks cover paired role validation, scalar family/identity coverage, real adapter/oracle equality, and minimum-sample stopping behavior.
 - Existing checks cover native rejection boundaries, field adapters, metric scores, and frozen registrations.
 - Root must build both fresh artifacts with the corrected collector before quiet measurements. Existing samples are not relabeled.
+
+## Coordinator completion
+
+Fresh baseline, candidate selection, and final selected-spec comparisons are complete.
+The six runs retain 1,232 sequential workers and 23,149 actual samples.
+[The measurements](83-scalar-measurements.md) report every case and distinguish spec-relative results from production selection.
+Verified archives preserve raw evidence and artifact provenance outside rebuildable target directories.
+Corrective issue #135 owns this tooling/report; #136 owns the separately stacked selected production changes.

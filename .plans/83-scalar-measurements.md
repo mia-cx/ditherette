@@ -54,6 +54,8 @@ These journals establish owned worker serialization. The coordinator's quiet-hos
 Machine is `athena-hephaestus`, AMD Ryzen 9 7950X 16-Core Processor, with 24 exposed logical CPUs.
 OS is Linux x86_64, kernel `6.12.95+deb13-amd64`.
 All workers record Rust 1.97.0 (`2d8144b78`, 2026-07-07), LLVM 22.1.6, and benchmark tool version 0.1.0.
+Artifacts use the benchmark manifest's default release profile and no ditherette-wasm threading feature.
+The core package's size-optimized release profile differs. These native ratios do not establish Wasm-profile ratios.
 
 | Artifact | Source revision | Worker SHA-256 |
 | --- | --- | --- |
@@ -365,9 +367,9 @@ Every worker retains 20 samples.
 Run the read-only helper against the retained result directories:
 
 ```sh
-node .plans/83-scalar-report-audit.mjs \\
-  ../v1-scalar-spec-bench/target/scalar-comparison/spec-prod-baseline-results \\
-  ../v1-scalar-spec-bench/target/scalar-comparison/prod-selection-results \\
+node .plans/83-scalar-report-audit.mjs \
+  ../v1-scalar-spec-bench/target/scalar-comparison/spec-prod-baseline-results \
+  ../v1-scalar-spec-bench/target/scalar-comparison/prod-selection-results \
   ../v1-scalar-spec-bench/target/scalar-comparison/prod-selection-repeat-results
 ```
 
@@ -674,9 +676,9 @@ Accepted is frozen spec; candidate is selected production. Values retain the sam
 ### Final evidence hashes and audit command
 
 ```sh
-node .plans/83-scalar-report-audit.mjs \\
-  ../v1-scalar-spec-bench/target/scalar-comparison/packed-selection-results \\
-  ../v1-scalar-spec-bench/target/scalar-comparison/packed-selection-repeat-results \\
+node .plans/83-scalar-report-audit.mjs \
+  ../v1-scalar-spec-bench/target/scalar-comparison/packed-selection-results \
+  ../v1-scalar-spec-bench/target/scalar-comparison/packed-selection-repeat-results \
   ../v1-scalar-spec-bench/target/scalar-comparison/spec-prod-selected-results
 ```
 
@@ -718,3 +720,10 @@ Delivery rebases may change commit IDs; production bytes must match the recorded
 Root owns the final archives, artifact-provenance retention, PRs, release-map updates, and cleanup.
 No additional optimization or experiment is proposed by this report.
 This reporting pass changes only this document. It runs no builds, tests, or benchmarks and leaves no owned jobs.
+
+## Retention after build cleanup
+
+The `target/` paths above identify original runs, not permanent storage. Extract the verified archives into separate directories before rerunning the audit.
+The first archive stores results below `scalar-comparison/`; the selected archive stores its result directories directly at its root.
+Pass those extracted result-directory paths to the read-only audit helper. Preserve both archives separately so their different native artifacts do not overwrite each other.
+Archives, PR body files, and this report remain outside `target/`. Rebuild compiler outputs for PR review.
