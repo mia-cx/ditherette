@@ -238,4 +238,3 @@ The missing release and automatic cases remain required.
 The [maximum-output resource check](83-capped-probe.md) fails transport before establishing feasibility.
 All capped measurements remain held; no smaller substitute satisfies that gate.
 Threaded WebKit and general TypeScript parity remain unavailable as described above.
-
