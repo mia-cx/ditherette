@@ -167,14 +167,12 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 	if (progress) request.onProgress = progress.onProgress;
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
-		if (process) throw new Error('No faithful TypeScript Process adapter is registered.');
 		if (yliluoma) throw new Error('No faithful TypeScript Yliluoma adapter is registered.');
 		if (perturb || separable || diffusion)
 			throw new Error('No faithful TypeScript field adapter is registered.');
-		if (quantize) throw new Error('No faithful TypeScript indexed quantize adapter is registered.');
-		if (resize.algorithm === 'bicubic' || resize.algorithm === 'trilinear')
+		if (resize?.algorithm === 'bicubic' || resize?.algorithm === 'trilinear')
 			throw new Error('The website has no bicubic or trilinear implementation.');
-		if ('anchor' in resize && resize.anchor !== 'center')
+		if (resize && 'anchor' in resize && resize.anchor !== 'center')
 			throw new Error('TypeScript non-center resize is unavailable.');
 		if (
 			measurement.scope !== 'complete-call' ||
@@ -182,11 +180,12 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 		)
 			throw new Error('TypeScript has no Wasm initialization or processor-instance equivalent.');
 		// TypeScript is stateless: both labels execute its ordinary per-call preparation.
-		const { resize: resizeTypeScript } = await import(url(trial.browser.assets.entries.typescript));
+		const adapter = await import(url(trial.browser.assets.entries.typescript));
+		const call = process || quantize ? adapter.prepareIndexed(request) : () => adapter.resize(request);
 		return {
 			request,
-			call: () => resizeTypeScript(request),
-			prepare: async () => ({ call: () => resizeTypeScript(request), close() {} }),
+			call,
+			prepare: async () => ({ call, close() {} }),
 			close() {}
 		};
 	}

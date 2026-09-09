@@ -130,6 +130,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                     target_sample_ms: 2,
                 },
                 browser: public.then_some(BrowserCase {
+                    retained_output_limit_bytes: None,
                     execution: None,
                     row_policy: None,
                     operation,

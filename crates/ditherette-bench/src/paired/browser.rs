@@ -174,6 +174,9 @@ pub enum BrowserExecution {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
+    /// Explicit developer stability allocation bound. Historical requests omit the override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_output_limit_bytes: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub row_policy: Option<RowPolicyRoles>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -660,6 +663,26 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if let Some(limit) = browser.retained_output_limit_bytes {
+        const DEFAULT: u64 = 64 * 1024 * 1024;
+        const MAXIMUM: u64 = 384 * 1024 * 1024;
+        if !(DEFAULT..=MAXIMUM).contains(&limit)
+            || m.scope != CallScope::CompleteCall
+            || m.mode != SampleMode::SingleCall
+            || !matches!(
+                browser.operation,
+                PublicOperation::Quantize { .. }
+                    | PublicOperation::Process { .. }
+                    | PublicOperation::Separable { .. }
+                    | PublicOperation::Diffusion { .. }
+                    | PublicOperation::Yliluoma { .. }
+            )
+            || browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package
+        {
+            return Err(io::Error::other("retained-output override requires bounded single indexed package calls (64–384 MiB)"));
+        }
+    }
     if browser.execution == Some(BrowserExecution::HostWorker)
         && (!matches!(m.scope, CallScope::Initialization | CallScope::CompleteCall)
             || !matches!(
@@ -791,16 +814,41 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         }
     }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript) {
+        // Runtime admission also checks source colors and the actual nearest coordinate map.
+        let indexed_supported = match &browser.operation {
+            PublicOperation::Quantize { settings } => {
+                settings.matching == super::quantize::MatchPolicy::SrgbEuclidean
+                    && matches!(
+                        settings.alpha,
+                        super::quantize::AlphaPolicy::Preserve { .. }
+                    )
+            }
+            PublicOperation::Process { settings } => {
+                use ditherette_wasm::spec::contract::request as spec;
+                settings.recipe.matching == spec::MatchPolicy::SrgbEuclidean
+                    && matches!(settings.recipe.alpha, spec::AlphaPolicy::Preserve { .. })
+                    && matches!(settings.recipe.dither, spec::DitherPolicy::None {})
+                    && matches!(
+                        settings.recipe.output.resize,
+                        spec::ResizePolicy::Nearest {
+                            anchor: spec::Anchor::Center
+                        }
+                    )
+            }
+            _ => true,
+        };
+        if !indexed_supported {
+            return Err(io::Error::other("no faithful TypeScript indexed comparison outside nearest/no-dither/sRGB/preserve alpha"));
+        }
         if matches!(
             browser.operation,
-            PublicOperation::Quantize { .. }
-                | PublicOperation::Process { .. }
+            PublicOperation::Yliluoma { .. }
                 | PublicOperation::Diffusion { .. }
                 | PublicOperation::Perturb { .. }
                 | PublicOperation::Separable { .. }
         ) {
             return Err(io::Error::other(
-                "no faithful TypeScript quantize or field adapter is registered",
+                "no faithful TypeScript field, diffusion, or mixing adapter is registered",
             ));
         }
         if matches!(
