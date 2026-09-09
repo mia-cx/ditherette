@@ -3,7 +3,7 @@
 use crate::{
     image::{ImageView, Rgba8},
     prod::{
-        color::packed::rgb8_to_coordinates,
+        color::packed::{Converter, PackedSpace},
         contract::request::{Placement, WorkingSpace},
     },
 };
@@ -63,7 +63,19 @@ pub fn contrast_at(
     space: WorkingSpace,
     radius: u32,
 ) -> f64 {
-    let center = source_color(source, x, y, space);
+    let converter = Converter::new(PackedSpace::from_working(space));
+    contrast_with_converter(source, x, y, space, radius, &converter)
+}
+
+fn contrast_with_converter(
+    source: ImageView<'_, Rgba8>,
+    x: u32,
+    y: u32,
+    space: WorkingSpace,
+    radius: u32,
+    converter: &Converter,
+) -> f64 {
+    let center = source_color(source, x, y, converter);
     let radius = i64::from(radius);
     let offsets = [
         (-radius, 0),
@@ -80,7 +92,7 @@ pub fn contrast_at(
     for (dx, dy) in offsets {
         let nx = (i64::from(x) + dx).clamp(0, i64::from(dimensions.width()) - 1) as u32;
         let ny = (i64::from(y) + dy).clamp(0, i64::from(dimensions.height()) - 1) as u32;
-        let neighbor = source_color(source, nx, ny, space);
+        let neighbor = source_color(source, nx, ny, converter);
         total += placement_distance(space, center, neighbor);
     }
     let [r0, r1, r2] = coordinate_domain(space).ranges().map(f64::from);
@@ -97,6 +109,22 @@ pub fn placement_mask_at(
     space: WorkingSpace,
     placement: Placement,
 ) -> f32 {
+    if matches!(placement, Placement::Everywhere {}) {
+        return 1.0;
+    }
+    let converter = Converter::new(PackedSpace::from_working(space));
+    placement_mask_with_converter(source, x, y, space, placement, &converter)
+}
+
+/// Uses the caller's converter for this same working space without rebuilding its tables.
+pub(crate) fn placement_mask_with_converter(
+    source: ImageView<'_, Rgba8>,
+    x: u32,
+    y: u32,
+    space: WorkingSpace,
+    placement: Placement,
+    converter: &Converter,
+) -> f32 {
     let Placement::Adaptive {
         radius,
         threshold,
@@ -105,7 +133,7 @@ pub fn placement_mask_at(
     else {
         return 1.0;
     };
-    let contrast = contrast_at(source, x, y, space, radius);
+    let contrast = contrast_with_converter(source, x, y, space, radius, converter);
     let threshold = f64::from(threshold);
     let softness = f64::from(softness);
     let lower = threshold - softness;
@@ -117,10 +145,10 @@ pub fn placement_mask_at(
     (t * t * (3.0 - 2.0 * t)) as f32
 }
 
-fn source_color(source: ImageView<'_, Rgba8>, x: u32, y: u32, space: WorkingSpace) -> [f32; 3] {
+fn source_color(source: ImageView<'_, Rgba8>, x: u32, y: u32, converter: &Converter) -> [f32; 3] {
     let pixel = source
         .pixel(x, y)
         .expect("source coordinates are in bounds");
     let rgb = [pixel[0], pixel[1], pixel[2]];
-    rgb8_to_coordinates(rgb, space)
+    converter.coordinates(rgb)
 }
