@@ -274,6 +274,7 @@ export async function preparePublicBenchmark(destination, { benchSubjects = fals
 		'benchmark-public-page.mjs',
 		'benchmark-row-policy.mjs',
 		'benchmark-public-timing.mjs',
+		'benchmark-indexed-wire.mjs',
 		'benchmark-stage-cache.mjs',
 		'benchmark-progress.mjs',
 		'benchmark-oracle-page.mjs',

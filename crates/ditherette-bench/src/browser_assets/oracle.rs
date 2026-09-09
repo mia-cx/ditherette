@@ -140,6 +140,7 @@ fn oracle_source(path: &str) -> bool {
             "crates/ditherette-bench/src/verification/identity.rs",
             "scripts/prepare-benchmark-oracle.mjs",
             "scripts/benchmark-oracle-page.mjs",
+            "scripts/benchmark-indexed-wire.mjs",
             "tools/spec-freeze/checkpoint.json",
             "tools/spec-freeze/dependencies.json",
             "tools/spec-freeze/content.mjs",

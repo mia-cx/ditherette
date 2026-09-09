@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { constants } from 'node:buffer';
+import { startAssetServer } from './benchmark-public-browser.mjs';
 import { encodeOutput, decodeOutput, usesIndexedWire } from './benchmark-indexed-wire.mjs';
 
 const output = () => ({
@@ -68,4 +70,38 @@ test('encoding crosses chunk boundaries with canonical byte order', () => {
 		(_, index) => index % 2
 	);
 	assert.deepEqual(decodeOutput(encodeOutput(value)), value);
+});
+
+test('three capped hex outputs stay below the Node string bound without allocating them', () => {
+	const resultBound = 8192 * 8192 * 2 * 3 + 1024 * 1024;
+	assert.ok(resultBound < constants.MAX_STRING_LENGTH);
+});
+
+test('compact HTTP results enforce their smaller bound while ordinary results keep their existing bound', async () => {
+	for (const compact of [true, false]) {
+		const trial = {
+			case: {
+				identity: { output: { width: 10_000, height: 1 } },
+				measurement: { samples: 5 },
+				browser: compact ? { retained_output_limit_bytes: 384 * 1024 * 1024 } : {}
+			}
+		};
+		const server = await startAssetServer(
+			{ tree: { root: process.cwd(), files: [] }, entries: {} },
+			false,
+			trial
+		);
+		try {
+			const response = await fetch(server.url + server.resultUrl, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ fixture: 'x'.repeat(120_000) })
+			});
+			assert.equal(response.status, compact ? 413 : 204);
+			assert.deepEqual(server.failures, compact ? ['Result body exceeds declared bound.'] : []);
+		} finally {
+			server.instance.closeAllConnections();
+			await new Promise((resolve) => server.instance.close(resolve));
+		}
+	}
 });

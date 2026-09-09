@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runBrowserTransport } from './benchmark-transport.mjs';
+import { usesIndexedWire } from './benchmark-indexed-wire.mjs';
 
 /** Bind isolated oracle outputs to the emitted transport record without changing measured evidence. */
 export function attachOracleReference(result, reference) {
@@ -66,7 +67,10 @@ export async function startAssetServer(assets, isolated, trial) {
 	const maxResultBytes =
 		trial === undefined
 			? 0
-			: trial.case.identity.output.width * trial.case.identity.output.height * 16 * 2 +
+			: trial.case.identity.output.width *
+					trial.case.identity.output.height *
+					(usesIndexedWire(trial) ? 2 : 16) *
+					2 +
 				trial.case.measurement.samples * 32 +
 				65_536;
 	if (trial !== undefined) {
