@@ -711,7 +711,8 @@ The reporting audit reads and hashes all final reports, prepared descriptors, jo
 The coordinator records `benchmark-results/scalar-spec-prod-2026-09-09/selected-production.tar.gz` in the benchmark worktree.
 Its SHA-256 is `0b1069920357bcf8daa0d53afc8d0784a314f4dcaf19e81cce88d7f2e91c0090`.
 It retains all three final result directories, selection plans/prepared copies, and candidate native provenance/binaries.
-Coordinator byte-for-byte archive comparison remains pending in this checkpoint.
+The coordinator reports a 554 MiB archive and two successful byte-for-byte comparisons, both exit zero.
+Plans/prepared/results match their original benchmark target; the native directory matches the selected candidate target.
 Remote evidence branches retain measured commits at `evidence/v1-scalar-selected-8e09c05d` and `evidence/v1-scalar-held-086bbd47`.
 Delivery rebases may change commit IDs; production bytes must match the recorded measured source.
 Root owns the final archives, artifact-provenance retention, PRs, release-map updates, and cleanup.
