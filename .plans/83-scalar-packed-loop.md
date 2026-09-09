@@ -2,7 +2,7 @@
 
 Base `ad755f85`, branch `perf/v1-scalar-packed-loop`.
 Selection belongs to corrective issue #136 under #83.
-This candidate remains unselected until the coordinator records fresh performance evidence.
+The coordinator selects this candidate for native scalar production after the measurements below.
 
 ## Evidence and scope
 
@@ -54,3 +54,22 @@ The coordinator must measure the actual freshly built benchmark artifacts before
 `rustfmt --check` and `git diff --check` pass. Every owned build and test job has exited.
 `cargo clean` removes 1,576 generated files, reporting 692.9 MiB, from this worktree's resolved `target/packed-loop`.
 Source and this compact report remain intact; no shared cache is changed.
+
+## Selection
+
+Measured source is `8e09c05d9455af977746060c39d531848eee8b90`.
+The fresh benchmark executable is SHA-256 `1390d22c75a477fed99b5ee99daf0e364db7bbf9a8509bb5d2b0f75568564070`.
+Against fresh original production `2b9bbd68`, the 58-case selection records 53 pass and five inconclusive cases.
+All measured outputs are exact. One predeclared repeat resolves all five inconclusive cases as pass.
+The original report remains unchanged. Packed sRGB improves 5.59x and YCbCr improves 6.52x.
+All seven forward cases and affected field cases satisfy the agreed selection gates.
+CIELAB's repeated forward median increases 8.54%, below the agreed 10% regression limit.
+This tradeoff remains visible; this is not a claim that every changed loop becomes faster.
+
+The branch also includes field-only converter reuse from `ad755f85`.
+That change improves complete perturb loops 11.91x to 55.52x against original production in the same trial.
+It does not include the separately held Yliluoma target-reuse commit.
+The final 101-case frozen-spec comparison uses this selected artifact for both roles and preserves every slower-production case.
+See [the scalar measurements](83-scalar-measurements.md) for full tables, scopes, samples, and inherited resize differences.
+The trusted frozen-reference guard passes, including isolated native and Wasm compilation.
+Selection does not clear browser, visual-drift, packaging, publishing, or rollout holds.

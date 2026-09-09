@@ -1,7 +1,8 @@
 # S41 scalar converter reuse candidates
 
 Base PR #134 at `5da82d122` on `perf/v1-scalar-converter-reuse`.
-These candidates remain unselected until the coordinator records fresh scalar evidence.
+The coordinator selects the field-only candidate after fresh scalar evidence.
+The separate Yliluoma target-reuse candidate remains held and is absent from this branch.
 
 ## Scope
 
