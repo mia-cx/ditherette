@@ -14,7 +14,7 @@ Ready means the slice has validated implementation in an open, unmerged PR. It d
 The coordinator updates Progress and PR when work starts, a PR opens, or validation changes. Dependencies and acceptance criteria stay unchanged.
 
 Scalar performance correction is active under S41. Existing slice reports mostly compare production revisions, not timed frozen spec against production.
-The coordinator is adding matched scalar comparisons for every kernel and revisiting exact converter-reuse candidates.
+The 101-case scalar baseline is measured. Field converter reuse passes its affected comparisons; packed forward tuning and final reporting remain active.
 Existing optimized kernels and the frozen reference remain unchanged. Historical reports retain their original scope and decisions.
 
 | Slice | Deliverable | Prerequisites | Progress | PR |

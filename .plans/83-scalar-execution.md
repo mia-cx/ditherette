@@ -42,7 +42,29 @@ All PRs remain unmerged; no publishing, rollout, deployment, or visual-drift acc
 
 - [x] Audit callable coverage and add matched scalar timing adapters.
 - [x] Prepare exact converter-reuse candidates and focused correctness evidence.
-- [ ] Build clean baseline and candidate artifacts.
-- [ ] Run and retain the baseline spec/prod matrix.
+- [x] Build clean baseline and candidate artifacts.
+- [x] Run the baseline spec/prod matrix; archive verification follows.
 - [ ] Measure and select exact production improvements.
 - [ ] Publish measured per-kernel results and stacked PRs; clean finished outputs.
+
+## First measurements and bounded follow-up
+
+The baseline completed 101 cases. It reports 56 pass, five inherited resize differences,
+34 slower-production cases, and six inconclusive cases. These compare production with spec,
+not two production revisions. The ten resize ratios range from 1.15x to 56.5x faster than spec.
+
+Converter selection completed 38 cases, all with exact outputs. Field composition improves
+12.18x to 54.91x against previous production. All affected field, placement, and diffusion controls pass.
+Yliluoma improves 1.07x to 3.74x, but its tiny control remains inconclusive after the one permitted repeat.
+Keep that separate commit unselected. Two unchanged nanosecond-scale controls also remain noisy.
+The repeated ordinary and tiny nearest controls pass. Retain every original verdict.
+
+Use one remaining bounded candidate for measured packed forward overhead in sRGB and YCbCr.
+Their baseline production loops take about five and four times the frozen spec time.
+The candidate branches from field-only `ad755f85`, without the held Yliluoma commit.
+Inspect dispatch, bounds checks, and inlining; keep landed conversion formulas unchanged.
+Target at least 20% lower latency in either affected forward loop. Run all forward cases,
+field composition, placement, quantize, diffusion, and Yliluoma controls against the original baseline.
+Apply the same exactness, regression, and noise gates, with one repeat for inconclusive affected cases.
+If the packed change fails, retain the independently measured field-only change.
+This is the final new implementation candidate in this correction pass.
