@@ -115,7 +115,7 @@ describe('website processing scheduling', () => {
 		expect(metrics?.memory).toBeUndefined();
 		expect(processingMetricsHistory.get()).toHaveLength(1);
 	});
-	it('keeps initialization errors visible and submits the next processing request as a retry', async () => {
+	it('keeps initialization errors visible and retries through a fresh worker module registry', async () => {
 		const first = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
 		const worker = ControlledWorker.instances[0];
@@ -133,8 +133,13 @@ describe('website processing scheduling', () => {
 		expect(processedImage.get()).toBe(retained);
 		const second = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
-		expect(worker.messages.at(-1)).toMatchObject({ type: 'process', sourceId: load.sourceId });
-		expect(worker.messages.at(-1)?.id).not.toBe(load.id);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		const replacement = ControlledWorker.instances[1];
+		const nextLoad = replacement.messages[0];
+		if (nextLoad.type !== 'load-source') throw new Error('Expected source reload.');
+		replacement.receive({ id: nextLoad.id, type: 'source-loaded', sourceId: nextLoad.sourceId });
+		expect(replacement.messages.at(-1)).toMatchObject({ type: 'process', sourceId: load.sourceId });
+		expect(replacement.messages.at(-1)?.id).not.toBe(load.id);
 		expect(processingError.get()).toBeUndefined();
 		cancelProcessing();
 		await second;

@@ -217,6 +217,8 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 			}
 			if (message.type === 'error') {
 				processingProgress.set(undefined);
+				// A fresh worker also clears rejected module imports and Wasm compilation promises.
+				resetProcessingWorker(activeWorker);
 				settle(reject, new Error(message.message));
 				return;
 			}
