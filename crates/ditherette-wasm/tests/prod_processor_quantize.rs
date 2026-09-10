@@ -190,6 +190,75 @@ fn mandatory_capacity_succeeds_one_under_stops_after_snapshot_and_recovers() {
 }
 
 #[test]
+fn rgb_memo_preserves_full_results_at_optional_and_mandatory_public_budgets() {
+    let source: Vec<u8> = (0..4096u32)
+        .flat_map(|n| {
+            [
+                (n * 73) as u8,
+                (n * 31 + n / 256) as u8,
+                (n * 17) as u8,
+                n as u8,
+            ]
+        })
+        .collect();
+    let palette = [
+        PaletteEntry::Transparent {},
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+        PaletteEntry::Color { rgb: [73, 31, 211] },
+    ];
+    let request = QuantizeRequest {
+        source_width: 64,
+        source_height: 64,
+        ..request(&palette)
+    };
+    let expected = spec::quantize::quantize(spec::contract::request::QuantizeRequest {
+        version: 1,
+        source: spec::contract::request::Source {
+            width: 64,
+            height: 64,
+            data: &source,
+        },
+        palette: &palette,
+        alpha: serde_json::from_value(serde_json::to_value(request.alpha).unwrap()).unwrap(),
+        matching: serde_json::from_value(serde_json::to_value(request.matching).unwrap()).unwrap(),
+    })
+    .unwrap();
+    let mut roomy = Processor::new(1 << 20, 0).unwrap();
+    assert_eq!(
+        roomy.quantize(request, &mut boundary(&source)).unwrap(),
+        expected
+    );
+    let minimum = budget_support::minimum(roomy.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| processor.quantize(request, &mut boundary(&source)))
+            .is_ok()
+    });
+    // 4,096 pixels select an 8,192-entry table in the roomy call; its ownership is in the peak.
+    assert!(roomy.peak_capacity_bytes() >= minimum + 8192 * 8);
+    for limit in [minimum, minimum + 8191, minimum + 16384, 1 << 20] {
+        let mut processor = Processor::new(limit, 0).unwrap();
+        assert_eq!(
+            processor.quantize(request, &mut boundary(&source)).unwrap(),
+            expected
+        );
+        assert!(processor.peak_capacity_bytes() <= limit);
+        let mut failing = boundary(&source);
+        failing.fail_complete = true;
+        assert!(processor.quantize(request, &mut failing).is_err());
+        assert_eq!(
+            processor.quantize(request, &mut boundary(&source)).unwrap(),
+            expected
+        );
+        assert!(processor.peak_capacity_bytes() <= limit);
+    }
+    assert!(Processor::new(minimum - 1, 0)
+        .unwrap()
+        .quantize(request, &mut boundary(&source))
+        .is_err());
+}
+
+#[test]
 fn source_and_index_reservation_failures_respect_snapshot_and_never_publish() {
     struct FailAt {
         remaining: usize,

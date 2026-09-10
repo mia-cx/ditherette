@@ -327,6 +327,26 @@ impl<'a> Call<'a> {
         self.overhead -= bytes;
     }
 
+    /// Optional work uses only spare capacity after mandatory preparation and current retention.
+    pub(super) fn available_working_capacity(&self) -> u64 {
+        self.limit
+            .saturating_sub(self.active_capacity() + self.store.capacity())
+    }
+
+    /// Charges an optional allocation against the complete live ownership without evicting data.
+    pub(super) fn charge_optional_capacity(
+        &mut self,
+        bytes: u64,
+        peak: &mut u64,
+    ) -> Result<(), Failure> {
+        if bytes > self.available_working_capacity() {
+            return Err(memory_limit());
+        }
+        self.overhead += bytes;
+        *peak = (*peak).max(self.active_capacity() + self.store.capacity());
+        Ok(())
+    }
+
     pub(super) const fn record_bytes() -> u64 {
         size_of::<Self>() as u64
     }
