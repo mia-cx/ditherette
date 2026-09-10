@@ -11,10 +11,10 @@ use sha2::{Digest, Sha256};
 #[cfg(any(target_arch = "wasm32", test))]
 mod sha256;
 
-#[cfg(target_arch = "wasm32")]
-use sha256::Sha256 as SourceSha256;
 #[cfg(not(target_arch = "wasm32"))]
 use sha2::Sha256 as SourceSha256;
+#[cfg(target_arch = "wasm32")]
+use sha256::Sha256 as SourceSha256;
 
 use crate::image::contracts::PaletteEntry;
 

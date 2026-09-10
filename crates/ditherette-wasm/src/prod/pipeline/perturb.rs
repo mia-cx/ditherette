@@ -215,8 +215,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     }
     drop(bands);
     call.release_working_capacity(band_capacity);
-    let content = call.content(1, 1, dimensions);
-    call.retain_rgba(1, key, 1, dimensions, content, peak);
+    call.retain_rgba(1, key, 1, dimensions, peak);
     let bytes = call
         .image(1)
         .map_or(call.scratch.buffers[1].as_slice(), |image| &image.bytes);

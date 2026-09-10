@@ -135,6 +135,77 @@ impl Allocator for NoAllocation {
 }
 
 #[test]
+fn identity_process_uses_the_same_image_storage_as_direct_quantize() {
+    let mut io = Io::new(4096);
+    let mut direct = Processor::new(4 << 20, 0).unwrap();
+    let expected = direct
+        .quantize(
+            QuantizeRequest {
+                source_width: 4096,
+                ..quantize(&PALETTE)
+            },
+            &mut io,
+        )
+        .unwrap();
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut request = process(&PALETTE);
+    request.source_width = 4096;
+    request.recipe.output = output(4096);
+    assert_eq!(processor.process(request, &mut io).unwrap(), expected);
+    // Process has a larger request record, but must not allocate another RGBA image.
+    assert!(
+        processor.peak_capacity_bytes() <= direct.peak_capacity_bytes() + 1024,
+        "identity process {} vs direct {}",
+        processor.peak_capacity_bytes(),
+        direct.peak_capacity_bytes()
+    );
+}
+
+#[test]
+fn cache_invalidation_follows_source_resize_perturb_and_palette_dependencies() {
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut io = Io::new(4);
+    io.pixels = vec![
+        8, 40, 90, 255, 90, 150, 210, 255, 250, 210, 160, 255, 20, 220, 80, 255,
+    ];
+    let mut request = process(&PALETTE);
+    let mut perturb = PerturbPolicy {
+        field: Field::Bayer {
+            size: BayerSize::Two,
+        },
+        space: WorkingSpace::Srgb,
+        strength: 0.1,
+        placement: Placement::Everywhere {},
+    };
+    request.recipe.dither = DitherPolicy::Separable { perturb };
+    processor.process(request, &mut io).unwrap();
+    let reversed = [PALETTE[1], PALETTE[0]];
+    for change in 0..5 {
+        match change {
+            0 => {}                           // Final hit skips every upstream lookup.
+            1 => request.palette = &reversed, // Perturbed pixels survive palette changes.
+            2 => {
+                perturb.field = Field::Random { seed: 7 };
+                request.recipe.dither = DitherPolicy::Separable { perturb };
+            } // Resized pixels survive perturbation changes.
+            3 => request.recipe.output = output(2),
+            _ => io.pixels.fill(0),
+        }
+        let hits = processor.preparation.image_stats().1;
+        let actual = processor.process(request, &mut io).unwrap();
+        assert_eq!(
+            processor.preparation.image_stats().1 - hits,
+            u64::from(change < 3)
+        );
+        let expected = Processor::new(4 << 20, 0)
+            .unwrap()
+            .process(request, &mut io)
+            .unwrap();
+        assert_eq!(actual, expected, "changed tier {change}");
+    }
+}
+
+#[test]
 fn source_snapshot_reuse_checks_bytes_dimensions_and_recovers_after_failed_input_and_output() {
     let mut processor = Processor::new(4 << 20, 0).unwrap();
     let mut io = Io::new(4);
@@ -305,8 +376,10 @@ fn final_copy_failures_drop_pending_and_active_scratch_but_keep_previous_hits() 
         processor.process(process(&reversed), &mut io).unwrap(),
         [0; 3]
     );
-    assert_eq!(processor.preparation.stats().0, 6);
-    assert_eq!(processor.preparation.stats().2, 12);
+    // The failed call discarded the source snapshot. Its next revision cannot reuse
+    // old image stages without an owned source to verify, but preparation survives.
+    assert_eq!(processor.preparation.stats().0, 7);
+    assert_eq!(processor.preparation.stats().2, 13);
 }
 
 #[test]
@@ -465,11 +538,7 @@ fn actual_cross_method_calls_hit_materialized_stages_for_every_family() {
         );
         assert_eq!(
             processor.preparation.image_stats().1,
-            hits + if matches!(dither, DitherPolicy::Separable { .. }) {
-                2
-            } else {
-                1
-            }
+            hits + 1 // Final hits no longer need intermediate lookups.
         );
         processor.preparation.evict_preparation();
         let hits = processor.preparation.image_stats().1;
@@ -533,6 +602,9 @@ fn indexed_hits_own_complete_metadata_after_matcher_eviction_and_output_mutation
         }
         fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
             Boundary::copy_input(&mut self.0, to)
+        }
+        fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
+            Boundary::snapshot_input(&mut self.0, to, compare)
         }
         fn complete(
             &mut self,

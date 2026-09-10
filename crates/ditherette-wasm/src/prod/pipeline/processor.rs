@@ -460,6 +460,10 @@ impl Processor {
         let parent = call.source(plan.source, |bytes, compare| {
             boundary.snapshot_input(bytes, compare)
         })?;
+        if plan.source == plan.output {
+            let result = boundary.complete(&call.scratch.buffers[0], plan.output);
+            return call.finish(progress.finish(result, boundary.progress()));
+        }
         let key = super::identity::stage(
             Some(parent),
             crate::prod::contract::cache::StageOptions::Resize {
@@ -506,8 +510,7 @@ impl Processor {
                 .expect("requested resize")
                 .execute(source, output)?;
         }
-        let content = call.content(0, 1, plan.output);
-        call.retain_rgba(0, key, 1, plan.output, content, &mut self.peak_capacity);
+        call.retain_rgba(0, key, 1, plan.output, &mut self.peak_capacity);
         let bytes = call
             .image(0)
             .map_or(call.scratch.buffers[1].as_slice(), |image| &image.bytes);

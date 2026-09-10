@@ -20,8 +20,8 @@ const request = (data = new Uint8Array([17, 31, 47, 127])) => ({
 const diagnostic = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
-// An identity resize owns only its preparation record and eight pixel bytes.
-// Probe that compiled record layout; the per-filter heap formulas remain independent below.
+// A 1x1 -> 2x1 nearest resize owns its preparation record, 12 pixel bytes and 12 map bytes.
+// Identity has no preparation now. Probe a real resize; other filter formulas stay independent.
 const resizeOverhead = await (async () => {
 	let low = overhead;
 	let high = overhead + 1024;
@@ -30,7 +30,6 @@ const resizeOverhead = await (async () => {
 		const processor = await createDitherette({ wasm: module, memoryLimitBytes: limit });
 		try {
 			const value = request();
-			value.output.width = 1;
 			processor.resize(value);
 			high = limit;
 		} catch (error) {
@@ -40,8 +39,24 @@ const resizeOverhead = await (async () => {
 			processor.dispose();
 		}
 	}
-	return low - 8;
+	return low - 24;
 })();
+
+test('identity resize needs only the owned source while returned bytes remain independent', async () => {
+	const value = request();
+	value.output.width = 1;
+	const processor = await createDitherette({ wasm: module, memoryLimitBytes: overhead + 4 });
+	try {
+		const result = processor.resize(value);
+		assert.deepEqual(result.data, value.source.data);
+		result.data.fill(0);
+		assert.deepEqual(processor.resize(value).data, value.source.data);
+		value.source.data[0] = 99;
+		assert.equal(processor.resize(value).data[0], 99);
+	} finally {
+		processor.dispose();
+	}
+});
 
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
 	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.

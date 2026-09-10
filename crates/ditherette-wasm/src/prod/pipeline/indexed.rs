@@ -12,7 +12,7 @@ use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::{
         contract::{
-            cache::{Identity, StageOptions},
+            cache::StageOptions,
             failure::Failure,
             lifecycle::Stage,
             request::{BayerSize, DitherPolicy, Output},
@@ -60,6 +60,9 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             super::execution::worker_budget(),
         ),
     );
+    // All supported resize policies already define equal dimensions as exact identity.
+    // Keep that identity in the dependency chain without materializing another image.
+    let resize = resize.filter(|_| source_dimensions != output_dimensions);
     let enabled = boundary.progress().is_some();
     let mut progress = super::progress::Control::new(enabled);
     progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
@@ -77,53 +80,36 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     let resize_key = resize
         .map(|output| identity::stage(Some(source), StageOptions::Resize { output }))
         .transpose()?;
-    let resized_hit = resize_key.is_some_and(|key| call.take_image(0, key));
-    let mut rgba_content = if resize.is_none() {
-        Some(source)
-    } else if resized_hit {
-        Some(call.content(0, 1, output_dimensions))
-    } else {
-        None
-    };
+    let rgba_key = resize_key.unwrap_or(source);
     let policy = match dither {
         DitherPolicy::Separable { perturb } => Some(perturb),
         _ => None,
     };
-    let mut perturb_key = match (rgba_content, policy) {
-        (Some(parent), Some(perturb)) => Some(identity::stage(
-            Some(parent),
-            StageOptions::Perturb { perturb },
-        )?),
-        _ => None,
-    };
-    let mut perturbed_hit = perturb_key.is_some_and(|key| call.take_image(1, key));
-    let mut match_content = if policy.is_none() {
-        rgba_content
-    } else if perturbed_hit {
-        Some(call.content(1, 2, output_dimensions))
-    } else {
-        None
-    };
+    let perturb_key = policy
+        .map(|perturb| identity::stage(Some(rgba_key), StageOptions::Perturb { perturb }))
+        .transpose()?;
     let indexed_dither = if policy.is_some() {
         DitherPolicy::None {}
     } else {
         dither
     };
-    let indexed_key = |parent: Identity| {
-        identity::indexed(
-            parent,
-            palette,
-            request.alpha,
-            request.matching,
-            indexed_dither,
-        )
-    };
-    let mut final_key = match_content.map(indexed_key).transpose()?;
-    if final_key.is_some_and(|key| call.take_image(2, key)) {
+    let final_key = identity::indexed(
+        perturb_key.unwrap_or(rgba_key),
+        palette,
+        request.alpha,
+        request.matching,
+        indexed_dither,
+    )?;
+    if call.take_image(2, final_key) {
         let (bytes, metadata) = call.indexed_result(3);
         let result = boundary.complete(bytes, output_dimensions, metadata);
         return call.finish(progress.finish(result, boundary.progress()));
     }
+    // A downstream hit needs no upstream materialization, even after upstream eviction.
+    let perturbed_hit = perturb_key.is_some_and(|key| call.take_image(1, key));
+    let resize = resize.filter(|_| !perturbed_hit);
+    let resize_key = resize_key.filter(|_| !perturbed_hit);
+    let resized_hit = resize_key.is_some_and(|key| call.take_image(0, key));
     let mixing_policy = mixing_policy.filter(|_| matches!(dither, DitherPolicy::Yliluoma { .. }));
     let mixing_capacity = mixing_policy
         .map(|policy| {
@@ -221,15 +207,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 .expect("requested resize")
                 .execute(source, output)?;
         }
-        rgba_content = Some(call.content(0, 1, output_dimensions));
     }
-    let rgba_content = rgba_content.expect("resized or original content");
     if let Some(perturb) = policy {
-        if perturb_key.is_none() {
-            let key = identity::stage(Some(rgba_content), StageOptions::Perturb { perturb })?;
-            perturb_key = Some(key);
-            perturbed_hit = call.take_image(1, key);
-        }
         if !perturbed_hit {
             let (_, _, images, scratch) = call.image_parts();
             let [source, resized, perturbed, _] = &mut scratch.buffers;
@@ -274,133 +253,123 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 perturb::execute(source, output, perturb);
             }
         }
-        match_content = Some(call.content(1, 2, output_dimensions));
+    }
+    let mut rgb_cache = if matches!(
+        dither,
+        DitherPolicy::None {} | DitherPolicy::Separable { .. }
+    ) {
+        cache::Work::try_new(
+            output_dimensions,
+            row_policy.filter(|_| bands.is_some()),
+            call.available_working_capacity(),
+        )
     } else {
-        match_content = Some(rgba_content);
-    }
-    if final_key.is_none() {
-        let key = indexed_key(match_content.unwrap())?;
-        final_key = Some(key);
-        call.take_image(2, key);
-    }
-    if call.image(2).is_none() {
-        let mut rgb_cache = if matches!(
-            dither,
-            DitherPolicy::None {} | DitherPolicy::Separable { .. }
-        ) {
-            cache::Work::try_new(
-                output_dimensions,
-                row_policy.filter(|_| bands.is_some()),
-                call.available_working_capacity(),
-            )
-        } else {
-            None
-        };
-        let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
-        call.charge_optional_capacity(rgb_cache_capacity, peak)?;
-        let (prepared, _, images, scratch) = call.image_parts();
-        let prepared = prepared.expect("requested palette");
-        let [source, resized, perturbed, indices] = &mut scratch.buffers;
-        let rgba = if policy.is_some() {
-            images[1].map_or(perturbed.as_slice(), |image| &image.bytes)
-        } else if resize.is_some() {
-            images[0].map_or(resized.as_slice(), |image| &image.bytes)
-        } else {
-            source.as_slice()
-        };
-        let view = ImageView::packed(rgba, output_dimensions).expect("complete RGBA");
-        let stage = if matches!(
-            dither,
-            DitherPolicy::Diffusion { .. } | DitherPolicy::Yliluoma { .. }
-        ) {
-            Stage::DitherAndQuantize
-        } else {
-            Stage::Quantize
-        };
+        None
+    };
+    let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
+    call.charge_optional_capacity(rgb_cache_capacity, peak)?;
+    let (prepared, _, images, scratch) = call.image_parts();
+    let prepared = prepared.expect("requested palette");
+    let [source, resized, perturbed, indices] = &mut scratch.buffers;
+    let rgba = if policy.is_some() {
+        images[1].map_or(perturbed.as_slice(), |image| &image.bytes)
+    } else if resize.is_some() {
+        images[0].map_or(resized.as_slice(), |image| &image.bytes)
+    } else {
+        source.as_slice()
+    };
+    let view = ImageView::packed(rgba, output_dimensions).expect("complete RGBA");
+    let stage = if matches!(
+        dither,
+        DitherPolicy::Diffusion { .. } | DitherPolicy::Yliluoma { .. }
+    ) {
+        Stage::DitherAndQuantize
+    } else {
+        Stage::Quantize
+    };
+    progress.report(
+        boundary.progress(),
+        stage,
+        0,
+        u64::from(output_dimensions.height()),
+    )?;
+    let mut report_row = |completed| {
         progress.report(
             boundary.progress(),
             stage,
-            0,
+            u64::from(completed),
             u64::from(output_dimensions.height()),
-        )?;
-        let mut report_row = |completed| {
-            progress.report(
-                boundary.progress(),
-                stage,
-                u64::from(completed),
-                u64::from(output_dimensions.height()),
-            )
-        };
-        match dither {
-            DitherPolicy::Diffusion { .. } if enabled => execute_with_progress(
-                prepared,
-                &mut scratch.diffusion,
-                view,
-                indices,
-                DiffusionPolicy::new(dither)?,
-                &mut report_row,
-            )?,
-            DitherPolicy::Diffusion { .. } => execute_with_scratch(
-                prepared,
-                &mut scratch.diffusion,
-                view,
-                indices,
-                DiffusionPolicy::new(dither)?,
-            )?,
-            DitherPolicy::Yliluoma { size, placement } => {
-                use crate::prod::dither::ordered::BayerSize as Matrix;
-                let matrix = match size {
-                    BayerSize::Two => Matrix::Two,
-                    BayerSize::Four => Matrix::Four,
-                    BayerSize::Eight => Matrix::Eight,
-                    BayerSize::Sixteen => Matrix::Sixteen,
-                };
-                if let Some(work) = &mut mixing {
-                    work.execute(view, prepared, indices, matrix, placement, &mut report_row)?;
-                } else if enabled {
-                    crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
-                        view,
-                        prepared,
-                        indices,
-                        matrix,
-                        placement,
-                        &mut report_row,
-                    )?;
-                } else {
-                    crate::prod::dither::yiluoma::dither_yiluoma_into(
-                        view, prepared, indices, matrix, placement,
-                    );
-                }
+        )
+    };
+    match dither {
+        DitherPolicy::Diffusion { .. } if enabled => execute_with_progress(
+            prepared,
+            &mut scratch.diffusion,
+            view,
+            indices,
+            DiffusionPolicy::new(dither)?,
+            &mut report_row,
+        )?,
+        DitherPolicy::Diffusion { .. } => execute_with_scratch(
+            prepared,
+            &mut scratch.diffusion,
+            view,
+            indices,
+            DiffusionPolicy::new(dither)?,
+        )?,
+        DitherPolicy::Yliluoma { size, placement } => {
+            use crate::prod::dither::ordered::BayerSize as Matrix;
+            let matrix = match size {
+                BayerSize::Two => Matrix::Two,
+                BayerSize::Four => Matrix::Four,
+                BayerSize::Eight => Matrix::Eight,
+                BayerSize::Sixteen => Matrix::Sixteen,
+            };
+            if let Some(work) = &mut mixing {
+                work.execute(view, prepared, indices, matrix, placement, &mut report_row)?;
+            } else if enabled {
+                crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
+                    view,
+                    prepared,
+                    indices,
+                    matrix,
+                    placement,
+                    &mut report_row,
+                )?;
+            } else {
+                crate::prod::dither::yiluoma::dither_yiluoma_into(
+                    view, prepared, indices, matrix, placement,
+                );
             }
-            _ if rgb_cache.is_some() => {
-                rgb_cache
-                    .as_mut()
-                    .unwrap()
-                    .execute(prepared, view, indices, &mut report_row)?
-            }
-            _ if bands.is_some() => prepared.quantize_bands_into(
-                view,
-                indices,
-                bands.as_mut().unwrap(),
-                &mut |completed| report_row(completed as u32),
-            )?,
-            _ if enabled => prepared.quantize_with_progress(view, indices, &mut report_row)?,
-            _ => prepared.quantize_into(view, indices),
         }
-        drop(rgb_cache);
-        call.release_working_capacity(rgb_cache_capacity);
+        _ if rgb_cache.is_some() => {
+            rgb_cache
+                .as_mut()
+                .unwrap()
+                .execute(prepared, view, indices, &mut report_row)?
+        }
+        _ if bands.is_some() => prepared.quantize_bands_into(
+            view,
+            indices,
+            bands.as_mut().unwrap(),
+            &mut |completed| report_row(completed as u32),
+        )?,
+        _ if enabled => prepared.quantize_with_progress(view, indices, &mut report_row)?,
+        _ => prepared.quantize_into(view, indices),
     }
+    drop(rgb_cache);
+    call.release_working_capacity(rgb_cache_capacity);
     drop(bands);
     call.release_working_capacity(band_capacity);
     drop(mixing);
     call.release_working_capacity(mixing_capacity);
     if let Some(key) = resize_key {
-        call.retain_rgba(0, key, 1, output_dimensions, rgba_content, peak);
+        call.retain_rgba(0, key, 1, output_dimensions, peak);
     }
     if let Some(key) = perturb_key {
-        call.retain_rgba(1, key, 2, output_dimensions, match_content.unwrap(), peak);
+        call.retain_rgba(1, key, 2, output_dimensions, peak);
     }
-    call.retain_indexed(final_key.unwrap(), 3, output_dimensions, peak);
+    call.retain_indexed(final_key, 3, output_dimensions, peak);
     let (bytes, metadata) = call.indexed_result(3);
     let result = boundary.complete(bytes, output_dimensions, metadata);
     call.finish(progress.finish(result, boundary.progress()))

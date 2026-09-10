@@ -381,7 +381,14 @@ fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
                 + pixels.len() as u64
                 + expected.len() as u64
                 + heap;
-            assert!(required > heap_without_record);
+            if source == output {
+                assert_eq!(
+                    required,
+                    Processor::bookkeeping_bytes(512) + pixels.len() as u64
+                );
+            } else {
+                assert!(required > heap_without_record);
+            }
             let mut exact = Processor::new(required, 512).unwrap();
             assert_eq!(exact.resize(request, &mut input).unwrap(), expected);
             assert_eq!(result, expected, "{sw}x{sh}->{ow}x{oh} {anchor:?}");
@@ -396,8 +403,9 @@ fn public_trilinear_matches_frozen_bytes_and_counts_its_record_once() {
                 short.resize(request, &mut input).unwrap_err().code,
                 ErrorCode::MemoryLimit
             );
-            assert_eq!(ALLOCATIONS.with(Cell::get), allocations + 1);
-            assert_eq!(input.copy_calls, 1);
+            let source_allocated = usize::from(source != output);
+            assert_eq!(ALLOCATIONS.with(Cell::get), allocations + source_allocated);
+            assert_eq!(input.copy_calls, source_allocated);
         }
     }
 }
