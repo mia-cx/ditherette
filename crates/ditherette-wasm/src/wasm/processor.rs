@@ -32,6 +32,12 @@ extern "C" {
     pub(super) fn input_length(source: &Uint8Array) -> Result<f64, JsValue>;
     #[wasm_bindgen(catch, js_name = copyInput)]
     pub(super) fn copy_input(destination: &mut [u8], source: &Uint8Array) -> Result<(), JsValue>;
+    #[wasm_bindgen(catch, js_name = snapshotInput)]
+    pub(super) fn snapshot_input(
+        destination: &mut [u8],
+        source: &Uint8Array,
+        compare: bool,
+    ) -> Result<bool, JsValue>;
     #[wasm_bindgen(catch, js_name = completeResult)]
     fn complete_result(
         source: &[u8],
@@ -267,6 +273,10 @@ impl Boundary for JsBoundary<'_> {
     }
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         copy_input(destination, self.input)
+            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+    }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        snapshot_input(destination, self.input, compare)
             .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
     }
     fn complete(&mut self, bytes: &[u8], dimensions: ImageDimensions) -> Result<(), Failure> {

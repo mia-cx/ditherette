@@ -67,6 +67,9 @@ test('public trilinear preserves intermediate rounding and recovers from budget 
 	const small = { ...value, source: { width: 1, height: 1, data: new Uint8Array([7, 8, 9, 0]) } };
 	assert.deepEqual([...short.resize(small).data], [7, 8, 9, 0]);
 	for (const phase of [1, 2]) {
+		const changed = structuredClone(value);
+		changed.source.data[0] ^= 1;
+		processor.resize(changed);
 		const originalSet = Uint8Array.prototype.set;
 		let calls = 0;
 		Uint8Array.prototype.set = function (...args) {
@@ -144,6 +147,9 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 		const output = processor.resize(value);
 		assert.deepEqual([...output.data], [100, 50, 150, 128]);
 		assert.deepEqual([...backing], [9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+		const changed = structuredClone(value);
+		changed.source.data[0] ^= 1;
+		processor.resize(changed);
 		const originalSet = Uint8Array.prototype.set;
 		let calls = 0;
 		try {
@@ -224,6 +230,9 @@ test('public convolution preserves alpha and output ownership with bounded prepa
 			assert.deepEqual([...backing], [9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
 			const originalSet = Uint8Array.prototype.set;
 			for (const phase of [1, 2]) {
+				const changed = structuredClone(value);
+				changed.source.data[0] ^= 1;
+				processor.resize(changed);
 				let calls = 0;
 				try {
 					Uint8Array.prototype.set = function (...args) {
@@ -411,6 +420,9 @@ test('caught input/result copy failures recover through the public boundary with
 		['input', 'source.data'],
 		['result', 'output']
 	]) {
+		const changed = request();
+		changed.source.data[0] ^= 1;
+		processor.resize(changed);
 		const set = Uint8Array.prototype.set;
 		const fault = t.mock.method(Uint8Array.prototype, 'set', function (...args) {
 			const intoWasm = this.buffer === raw.memory.buffer;

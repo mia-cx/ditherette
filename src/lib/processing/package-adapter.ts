@@ -64,6 +64,17 @@ function croppedSource(
 		throw new Error('The package processing path does not support fractional crop rectangles.');
 	}
 	const { x, y, width, height } = rect;
+	if (x === 0 && width === source.width) {
+		return {
+			width,
+			height,
+			data: new Uint8Array(
+				source.data.buffer,
+				source.data.byteOffset + y * width * 4,
+				width * height * 4
+			)
+		};
+	}
 	const data = new Uint8Array(width * height * 4);
 	for (let row = 0; row < height; row++) {
 		const start = ((y + row) * source.width + x) * 4;
@@ -143,7 +154,7 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 	}
 }
 
-/** Translate website controls and pack its crop for one complete public process call. */
+/** Translate controls for a synchronous public call. Contiguous crops borrow bytes; Rust owns the snapshot. */
 export function packageProcessRequest(
 	source: Pick<ImageData, 'width' | 'height' | 'data'>,
 	palette: EnabledPaletteColor[],

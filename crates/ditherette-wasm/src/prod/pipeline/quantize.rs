@@ -56,6 +56,12 @@ pub trait QuantizeBoundary {
     }
     fn input_len(&mut self) -> Result<usize, Failure>;
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure>;
+    /// Return true only after exact equality with the current input; otherwise copy it.
+    /// Boundaries without comparison support always copy and request a fresh identity.
+    fn snapshot_input(&mut self, destination: &mut [u8], _compare: bool) -> Result<bool, Failure> {
+        self.copy_input(destination)?;
+        Ok(false)
+    }
     fn complete(
         &mut self,
         indices: &[u8],

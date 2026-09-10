@@ -24,12 +24,18 @@ const PALETTE: [PaletteEntry; 2] = [
 struct Io {
     pixels: Vec<u8>,
     fail: bool,
+    fail_input: bool,
+    copies: usize,
+    comparisons: usize,
 }
 impl Io {
     fn new(width: usize) -> Self {
         Self {
             pixels: vec![255; width * 4],
             fail: false,
+            fail_input: false,
+            copies: 0,
+            comparisons: 0,
         }
     }
 }
@@ -39,8 +45,24 @@ impl Boundary for Io {
         Ok(self.pixels.len())
     }
     fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
+        self.copies += 1;
+        if self.fail_input {
+            to.fill(91);
+            return Err(Failure::new(
+                ErrorCode::WasmMemoryUnavailable,
+                ErrorPath::SourceData,
+            ));
+        }
         to.copy_from_slice(&self.pixels);
         Ok(())
+    }
+    fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        self.comparisons += usize::from(compare);
+        if compare && to == self.pixels {
+            return Ok(true);
+        }
+        Boundary::copy_input(self, to)?;
+        Ok(false)
     }
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Self::Output, Failure> {
         if self.fail {
@@ -59,6 +81,9 @@ impl QuantizeBoundary for Io {
     }
     fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
         Boundary::copy_input(self, to)
+    }
+    fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        Boundary::snapshot_input(self, to, compare)
     }
     fn complete(
         &mut self,
@@ -107,6 +132,68 @@ impl Allocator for NoAllocation {
     fn reserve(&mut self, _: &mut Vec<u8>, _: usize) -> Result<(), Failure> {
         panic!("warm buffers must not reserve")
     }
+}
+
+#[test]
+fn source_snapshot_reuse_checks_bytes_dimensions_and_recovers_after_failed_input_and_output() {
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut io = Io::new(4);
+    let first = processor.quantize(quantize(&PALETTE), &mut io).unwrap();
+    assert_eq!(io.copies, 1);
+    assert_eq!(
+        processor.quantize(quantize(&PALETTE), &mut io).unwrap(),
+        first
+    );
+    assert_eq!((io.copies, io.comparisons), (1, 1));
+    // Equal storage length does not make different source geometry interchangeable.
+    let square = QuantizeRequest {
+        source_width: 2,
+        source_height: 2,
+        ..quantize(&PALETTE)
+    };
+    processor.quantize(square, &mut io).unwrap();
+    assert_eq!((io.copies, io.comparisons), (2, 1));
+    io.pixels[15] = 0;
+    let changed = processor.quantize(square, &mut io).unwrap();
+    let fresh = Processor::new(4 << 20, 0)
+        .unwrap()
+        .quantize(
+            square,
+            &mut Io {
+                pixels: io.pixels.clone(),
+                ..Io::new(4)
+            },
+        )
+        .unwrap();
+    assert_eq!(changed, fresh);
+    assert_eq!((io.copies, io.comparisons), (3, 2));
+
+    io.pixels[0] = 17;
+    io.fail_input = true;
+    assert_eq!(
+        processor.quantize(square, &mut io).unwrap_err().path,
+        ErrorPath::SourceData
+    );
+    assert_eq!(processor.preparation.stats().4, 0);
+    io.fail_input = false;
+    let comparisons = io.comparisons;
+    processor.quantize(square, &mut io).unwrap();
+    assert_eq!(
+        io.comparisons, comparisons,
+        "failed input discards the identity and snapshot"
+    );
+    io.fail = true;
+    processor.quantize(square, &mut io).unwrap_err();
+    assert_eq!(processor.preparation.stats().4, 0);
+    io.fail = false;
+    let comparisons = io.comparisons;
+    processor.quantize(square, &mut io).unwrap();
+    assert_eq!(
+        io.comparisons, comparisons,
+        "failed output cannot publish source reuse"
+    );
+    processor.dispose().unwrap();
+    assert_eq!(processor.preparation.stats().4, 0);
 }
 
 #[test]
@@ -318,6 +405,7 @@ fn actual_cross_method_calls_hit_materialized_stages_for_every_family() {
         let mut returned = Io {
             pixels: resized,
             fail: false,
+            ..Io::new(0)
         };
         let quantize = QuantizeRequest {
             source_width: 3,

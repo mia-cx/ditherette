@@ -49,6 +49,12 @@ pub trait Boundary {
     }
     fn input_len(&mut self) -> Result<usize, Failure>;
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure>;
+    /// Return true only after exact equality with the current input; otherwise copy it.
+    /// Boundaries without comparison support always copy and request a fresh identity.
+    fn snapshot_input(&mut self, destination: &mut [u8], _compare: bool) -> Result<bool, Failure> {
+        self.copy_input(destination)?;
+        Ok(false)
+    }
     /// Constructs the complete durable result. Nothing is published if this fails.
     fn complete(
         &mut self,
@@ -451,8 +457,9 @@ impl Processor {
             &mut self.peak_capacity,
             allocator,
         )?;
-        boundary.copy_input(&mut call.scratch.buffers[0])?;
-        let parent = super::preparation::source_key(&call.scratch.buffers[0], plan.source);
+        let parent = call.source(plan.source, |bytes, compare| {
+            boundary.snapshot_input(bytes, compare)
+        })?;
         let key = super::identity::stage(
             Some(parent),
             crate::prod::contract::cache::StageOptions::Resize {

@@ -138,12 +138,10 @@ impl Converter {
         {
             let source_row = source.row(y as u32).expect("valid source row");
             for (pixel, triplet) in source_row
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .zip(output_row.as_chunks_mut::<3>().0)
+                .chunks_exact(4)
+                .zip(output_row.chunks_exact_mut(3))
             {
-                *triplet = coordinates([pixel[0], pixel[1], pixel[2]]);
+                triplet.copy_from_slice(&coordinates([pixel[0], pixel[1], pixel[2]]));
             }
         }
     }
