@@ -17,6 +17,24 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### Cold processing correction, 2026-09-10
+
+[PR #142](https://github.com/mia-cx/ditherette/pull/142), issue #141, is open on PR #140.
+Head `ea2c85bb` on `perf/v1-cold-processing` selects bounded exact RGB memoization, metric-specific matching, and scalar Wasm SHA-256.
+The source measured is `60b47c26`; final changes only add the report and compact evidence.
+Frozen code, landed resize helpers, the build profile, and public JavaScript API remain unchanged.
+
+Native selection covers 31 cases, with one bounded CIELCH repeat clearing the initial inconclusive result.
+The separate 16-case spec comparison retains its inherited tiny-call regression and noisy OKLCH circular-hue timing.
+Across these runs, 192 serial workers produce 3,744 samples with exact outputs and clean shutdown.
+Two three-engine browser experiments complete 891 calls without errors or expanded-output mismatches.
+Celeste nearest plus sRGB changed-settings medians fall from 198/1357/258 ms to 33/207/33 ms.
+First-image calls still trail historical JS. Firefox hashing does not improve; release holds remain intact.
+
+Both package builds, 440 native tests, 44 interface tests, the trusted freeze guard, and scalar/threaded ownership checks pass.
+All completed compiler targets are removed after preserving raw outputs, PNGs, runtime assets, and a 328 KiB audit archive.
+See the PR's `docs/performance/cold-processing.md`. Nothing is merged or activated.
+
 ### Browser source reuse correction, 2026-09-10
 
 [PR #140](https://github.com/mia-cx/ditherette/pull/140), issue #139, is open on PR #138.
