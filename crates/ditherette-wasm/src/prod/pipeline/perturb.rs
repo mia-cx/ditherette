@@ -161,8 +161,9 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         .and_then(|n| n.checked_add(working_capacity_bytes()))
         .ok_or_else(memory_limit)?;
     let mut call = super::preparation::Call::snapshot(store, len, owned, limit, peak, allocator)?;
-    boundary.copy_input(&mut call.scratch.buffers[0])?;
-    let parent = super::preparation::source_key(&call.scratch.buffers[0], dimensions);
+    let parent = call.source(dimensions, |bytes, compare| {
+        boundary.snapshot_input(bytes, compare)
+    })?;
     let key = super::identity::stage(
         Some(parent),
         crate::prod::contract::cache::StageOptions::Perturb {

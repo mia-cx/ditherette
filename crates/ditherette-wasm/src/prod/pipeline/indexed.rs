@@ -2,7 +2,7 @@
 
 use super::{
     identity, perturb,
-    preparation::{source_key, Call, ResizePreparation, Store},
+    preparation::{Call, ResizePreparation, Store},
     processor::Allocator,
     quantize::{QuantizeBoundary, QuantizeRequest},
 };
@@ -68,8 +68,9 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         .storage_len::<Rgba8>()
         .expect("validated output");
     let mut call = Call::snapshot(store, source_len, overhead, limit, peak, allocator)?;
-    boundary.copy_input(&mut call.scratch.buffers[0])?;
-    let source = source_key(&call.scratch.buffers[0], source_dimensions);
+    let source = call.source(source_dimensions, |bytes, compare| {
+        boundary.snapshot_input(bytes, compare)
+    })?;
     let palette = identity::palette_content(request.palette)?;
     let resize_key = resize
         .map(|output| identity::stage(Some(source), StageOptions::Resize { output }))

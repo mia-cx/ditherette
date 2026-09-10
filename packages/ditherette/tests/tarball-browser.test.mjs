@@ -18,6 +18,7 @@ import { yiluomaBenchmarkChecks } from './yiluoma-benchmark-fixture.mjs';
 import { prepareYliluomaOracle, yiluomaOracleChecks } from './yiluoma-oracle-fixture.mjs';
 import { stageCacheBrowserChecks } from './stage-cache-browser-fixture.mjs';
 import { progressBrowserChecks } from './progress-browser-fixture.mjs';
+import { sourceSnapshotBrowserChecks } from './source-snapshot-browser-fixture.mjs';
 
 test('installed tarball loads only scalar assets and runs the public contract in browser engines', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-tarball-'));
@@ -183,6 +184,13 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					customInputs: 8,
 					scalarWithoutIsolation: true
 				});
+				assert.deepEqual(
+					await page.evaluate(sourceSnapshotBrowserChecks, {
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`,
+						vectors
+					}),
+					{ methods: 5 }
+				);
 				assert.deepEqual(
 					await page.evaluate(stageCacheBrowserChecks, {
 						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`,

@@ -25,6 +25,7 @@ struct Io {
     fail_copy: bool,
     fail_stage: Option<Stage>,
     fail_after_work: bool,
+    compared_source: bool,
     time: u64,
     events: Vec<Progress>,
     caller: std::thread::ThreadId,
@@ -42,6 +43,7 @@ impl Io {
             fail_copy: false,
             fail_stage: None,
             fail_after_work: false,
+            compared_source: false,
             time: 0,
             events: Vec::new(),
             caller: std::thread::current().id(),
@@ -89,6 +91,14 @@ impl Boundary for Io {
         destination.copy_from_slice(&self.input);
         Ok(())
     }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        self.compared_source = compare;
+        if compare && destination == self.input {
+            return Ok(true);
+        }
+        Boundary::copy_input(self, destination)?;
+        Ok(false)
+    }
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         if self.fail_copy {
             return Err(Failure::new(
@@ -111,6 +121,9 @@ impl QuantizeBoundary for Io {
     }
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         Boundary::copy_input(self, destination)
+    }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        Boundary::snapshot_input(self, destination, compare)
     }
     fn complete(
         &mut self,
@@ -503,6 +516,10 @@ fn all_methods_complete_after_copy_before_publication_and_recover_from_callbacks
             io.fail_stage = None;
             io.reset();
             assert_eq!(run(&mut processor, &mut io, method).unwrap(), expected);
+            assert!(
+                !io.compared_source,
+                "failed completion discards source reuse"
+            );
         }
     }
 }

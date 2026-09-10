@@ -85,6 +85,7 @@ impl Entry {
 pub(super) struct Scratch {
     pub buffers: [Vec<u8>; 4],
     pub diffusion: Vec<[f32; 3]>,
+    source: Option<(ImageDimensions, Identity)>,
 }
 
 impl Scratch {
@@ -300,6 +301,7 @@ pub(super) struct Call<'a> {
     images: [Option<Entry>; 3],
     image_hits: [bool; 3],
     pub scratch: Scratch,
+    source_ready: bool,
     success: bool,
     limit: u64,
     overhead: u64,
@@ -350,12 +352,14 @@ impl<'a> Call<'a> {
             images: std::array::from_fn(|_| None),
             image_hits: [false; 3],
             scratch: std::mem::take(&mut store.scratch),
+            source_ready: false,
             store,
             success: false,
             limit,
             overhead,
         };
         call.prepare(palette, resize, lengths, diffusion_len, peak, allocator)?;
+        call.source_ready = true;
         Ok(call)
     }
 
@@ -381,6 +385,27 @@ impl<'a> Call<'a> {
         )
     }
 
+    /// Verify the current input against the owned snapshot before reusing its SHA identity.
+    /// The boundary copies on a mismatch. Source bytes stay immutable throughout execution.
+    pub(super) fn source(
+        &mut self,
+        dimensions: ImageDimensions,
+        snapshot: impl FnOnce(&mut [u8], bool) -> Result<bool, Failure>,
+    ) -> Result<Identity, Failure> {
+        let previous = self
+            .scratch
+            .source
+            .take()
+            .filter(|(size, _)| *size == dimensions);
+        let equal = snapshot(&mut self.scratch.buffers[0], previous.is_some())?;
+        let identity = match previous {
+            Some((_, identity)) if equal => identity,
+            _ => source_key(&self.scratch.buffers[0], dimensions),
+        };
+        self.scratch.source = Some((dimensions, identity));
+        Ok(identity)
+    }
+
     /// After source hashing and available image hits, reserve the remaining execution.
     pub(super) fn prepare<A: Allocator>(
         &mut self,
@@ -392,6 +417,9 @@ impl<'a> Call<'a> {
         allocator: &mut A,
     ) -> Result<(), Failure> {
         let call = self;
+        if call.scratch.buffers[0].len() != lengths[0] {
+            call.scratch.source = None;
+        }
         let limit = call.limit;
         let overhead = call.overhead
             + call
@@ -464,8 +492,9 @@ impl<'a> Call<'a> {
                 *buffer = Vec::new();
             }
             call.scratch.diffusion = Vec::new();
-            if call.scratch.buffers[0].is_empty() {
+            if !call.source_ready {
                 call.scratch.buffers[0] = Vec::new();
+                call.scratch.source = None;
             }
             if let Some(entry) = &mut call.resize {
                 entry.drop_scratch();
@@ -867,7 +896,11 @@ impl Drop for Call<'_> {
             }
         }
         if self.success {
-            for buffer in &mut self.scratch.buffers {
+            // Keep initialized source bytes with their identity; all other scratch is disposable.
+            if self.scratch.source.is_none() {
+                self.scratch.buffers[0].clear();
+            }
+            for buffer in &mut self.scratch.buffers[1..] {
                 buffer.clear();
             }
             self.scratch.diffusion.clear();
@@ -920,6 +953,59 @@ mod tests {
                 content: Identity([byte; 32]),
             },
         }
+    }
+
+    #[test]
+    fn source_identity_follows_snapshot_ownership_and_idle_pressure() {
+        let mut store = Store::default();
+        let dimensions = ImageDimensions::new(16, 1).unwrap();
+        let mut peak = 0;
+        let mut call =
+            Call::snapshot(&mut store, 64, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
+        let identity = call
+            .source(dimensions, |bytes, compare| {
+                assert!(!compare);
+                bytes.fill(7);
+                Ok(false)
+            })
+            .unwrap();
+        assert_eq!(identity, source_key(&[7; 64], dimensions));
+        call.finish(Ok(())).unwrap();
+        assert_eq!(store.scratch.source, Some((dimensions, identity)));
+        let capacity = store.capacity();
+        let mut call =
+            Call::snapshot(&mut store, 64, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
+        assert_eq!(
+            call.source(dimensions, |bytes, compare| {
+                assert!(compare);
+                assert_eq!(bytes, [7; 64]);
+                Ok(true)
+            })
+            .unwrap(),
+            identity
+        );
+        call.finish(Ok(())).unwrap();
+        assert_eq!(
+            store.capacity(),
+            capacity,
+            "reuse adds no source allocation"
+        );
+
+        // Initial preflight drops an oversized idle snapshot before copying a smaller source.
+        let smaller = ImageDimensions::new(1, 1).unwrap();
+        let mut call =
+            Call::snapshot(&mut store, 4, 0, 4, &mut peak, &mut SystemAllocator).unwrap();
+        assert_eq!(call.scratch.capacity(), 4);
+        call.source(smaller, |bytes, compare| {
+            assert!(!compare);
+            bytes.fill(2);
+            Ok(false)
+        })
+        .unwrap();
+        call.finish(Ok(())).unwrap();
+        store.room(4, 4).unwrap();
+        assert!(store.scratch.source.is_none());
+        assert_eq!(store.capacity(), 0);
     }
 
     #[test]
