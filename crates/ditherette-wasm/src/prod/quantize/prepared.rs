@@ -1,6 +1,9 @@
 //! Fallible prepared ownership and allocation-free indexed execution.
 
-use super::matcher::{PaletteColor, PaletteMatcher};
+use super::{
+    cache::RgbCache,
+    matcher::{PaletteColor, PaletteMatcher},
+};
 use crate::{
     image::{
         contracts::{IndexedImage, PaletteEntry},
@@ -135,15 +138,96 @@ impl PreparedQuantizer {
     }
 
     fn quantize_row_into(&self, source: &[u8], output: &mut [u8]) {
+        self.quantize_row_with(source, output, |rgb| {
+            self.matcher.nearest(self.converter.coordinates(rgb)).index
+        });
+    }
+
+    fn quantize_row_with(
+        &self,
+        source: &[u8],
+        output: &mut [u8],
+        mut nearest: impl FnMut([u8; 3]) -> u8,
+    ) {
         for (source, output) in source.chunks_exact(4).zip(output) {
             let rgba = [source[0], source[1], source[2], source[3]];
             *output = match self.palette.prepare_pixel(rgba) {
                 PalettePixel::Index(index) => index,
-                PalettePixel::Color(rgb) => {
-                    self.matcher.nearest(self.converter.coordinates(rgb)).index
-                }
+                PalettePixel::Color(rgb) => nearest(rgb),
             };
         }
+    }
+
+    /// Runs a fresh exact-byte cache across all rows, using only caller-reserved scratch.
+    /// Empty scratch retains the allocation-free direct scan. Rebinding clears all cached entries.
+    pub(crate) fn quantize_cached_with_progress(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        output: &mut [u8],
+        entries: &mut [u64],
+        mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+    ) -> Result<(), crate::prod::contract::failure::Failure> {
+        if entries.is_empty() {
+            return self.quantize_with_progress(source, output, progress);
+        }
+        let dimensions = source.dimensions();
+        assert_eq!(
+            output.len(),
+            dimensions.pixel_count().expect("valid dimensions")
+        );
+        let mut cache = RgbCache::new(entries);
+        for (y, output) in output
+            .chunks_exact_mut(dimensions.width_usize())
+            .enumerate()
+        {
+            self.quantize_row_with(
+                source.row(y as u32).expect("valid source row"),
+                output,
+                |rgb| {
+                    cache.nearest(rgb, || {
+                        self.matcher.nearest(self.converter.coordinates(rgb)).index
+                    })
+                },
+            );
+            progress(y as u32 + 1)?;
+        }
+        Ok(())
+    }
+
+    /// Shares immutable palette data while each worker owns its exact RGB cache.
+    pub(crate) fn quantize_cached_bands_into(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        output: &mut [u8],
+        work: &mut RowBandBuffers<u64>,
+        progress: &mut impl FnMut(u64) -> Result<(), crate::prod::contract::failure::Failure>,
+    ) -> Result<(), crate::prod::contract::failure::Failure> {
+        work.execute(
+            output,
+            source.dimensions().width_usize(),
+            &|band, output, entries| {
+                if entries.is_empty() {
+                    self.quantize_rows_into(source, band, output);
+                } else {
+                    let mut cache = RgbCache::new(entries);
+                    for (y, output) in (band.y_start()..band.y_end())
+                        .zip(output.chunks_exact_mut(source.dimensions().width_usize()))
+                    {
+                        self.quantize_row_with(
+                            source.row(y).expect("valid source row"),
+                            output,
+                            |rgb| {
+                                cache.nearest(rgb, || {
+                                    self.matcher.nearest(self.converter.coordinates(rgb)).index
+                                })
+                            },
+                        );
+                    }
+                }
+                Ok(u64::from(band.height()))
+            },
+            progress,
+        )
     }
 
     /// Reports each completed row without changing per-pixel traversal or arithmetic.
