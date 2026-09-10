@@ -17,6 +17,23 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### Browser source reuse correction, 2026-09-10
+
+[PR #140](https://github.com/mia-cx/ditherette/pull/140), issue #139, is open on PR #138.
+Head `7a57caa5` on `perf/v1-wasm-overhead` retains an owned source snapshot only after success.
+Mia approved exact-byte verification before identity reuse instead of mandatory per-call hashing.
+The frozen reference, landed resize kernels, release profile, and deployment defaults remain unchanged.
+Contiguous website crops now borrow source bytes before Rust takes its snapshot.
+
+Two fresh scalar Celeste runs complete 810 calls across Chromium, Firefox, and WebKit with exact baseline outputs.
+Repeated nearest plus sRGB processing at 650 × 1042 falls from 235/1132/229 ms to 11/15/8 ms respectively.
+Cold and changed-settings calls still lose to historical JS. No existing release gate is relabeled or cleared.
+Full native suites, both package builds, the trusted freeze guard, 44 interface, 35 adapter, and 16 worker tests pass.
+Scalar ownership passes all three engines; threaded ownership passes Chromium and Firefox.
+The implementation worktree's entire compiler target is removed after verifying 520 retained files and 23 candidate assets.
+The report and raw evidence are in the PR's `docs/performance/wasm-source-reuse.md` and adjacent archive.
+No PR is merged or activated. Next performance work must separate cold and cache-miss costs from repeat hits.
+
 ### Scalar spec/prod correction, 2026-09-09
 
 The bounded scalar correction is delivered in two open, non-draft, unmerged PRs. Both have auto-merge disabled.
