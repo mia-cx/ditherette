@@ -310,6 +310,52 @@ fn final_copy_failures_drop_pending_and_active_scratch_but_keep_previous_hits() 
 }
 
 #[test]
+fn rgb_cache_scratch_never_publishes_after_failed_calls_or_palette_changes() {
+    use crate::prod::{
+        pipeline::execution::{ExecutionStage, RowBandPolicy},
+        tiling::WorkerBudget,
+    };
+    for bands in [
+        None,
+        Some(RowBandPolicy {
+            height: 32,
+            workers: WorkerBudget::new(4),
+            active_workers: 4,
+        }),
+    ] {
+        let mut processor = Processor::new(1 << 20, 0).unwrap();
+        processor
+            .set_execution_stage(ExecutionStage::Indexed, bands)
+            .unwrap();
+        let mut io = Io::new(4096);
+        let request = QuantizeRequest {
+            source_width: 64,
+            source_height: 64,
+            ..quantize(&PALETTE)
+        };
+        io.fail = true;
+        assert!(processor.quantize(request, &mut io).is_err());
+        assert_eq!(processor.preparation.stats().0, 0);
+        assert_eq!(processor.preparation.stats().4, 0);
+        io.fail = false;
+        assert_eq!(processor.quantize(request, &mut io).unwrap(), vec![1; 4096]);
+        let entries = processor.preparation.stats().0;
+        let reversed = [PALETTE[1], PALETTE[0]];
+        let changed = QuantizeRequest {
+            palette: &reversed,
+            ..request
+        };
+        io.fail = true;
+        assert!(processor.quantize(changed, &mut io).is_err());
+        assert_eq!(processor.preparation.stats().0, entries);
+        io.fail = false;
+        assert_eq!(processor.quantize(changed, &mut io).unwrap(), vec![0; 4096]);
+        assert_eq!(processor.quantize(request, &mut io).unwrap(), vec![1; 4096]);
+        assert!(processor.peak_capacity_bytes() <= 1 << 20);
+    }
+}
+
+#[test]
 fn entry_limit_is_one_lru_and_hits_update_eviction_order() {
     let mut processor = Processor::new(4 << 20, 0).unwrap();
     let mut io = Io::new(4);

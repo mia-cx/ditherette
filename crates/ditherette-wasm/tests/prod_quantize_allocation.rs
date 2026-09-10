@@ -156,3 +156,50 @@ fn invalid_preparation_settings_fail_before_allocation() {
         assert!(matches!(result, Err(error) if error.code == code));
     }
 }
+
+#[test]
+fn optional_rgb_cache_counts_capacity_and_allocation_failure_keeps_direct_scan() {
+    let palette = [
+        PaletteEntry::Color { rgb: [0; 3] },
+        PaletteEntry::Color { rgb: [255; 3] },
+    ];
+    let source: Vec<u8> = (0..4096u32)
+        .flat_map(|n| {
+            [
+                (n * 73) as u8,
+                (n * 31 + n / 256) as u8,
+                (n * 17) as u8,
+                255,
+            ]
+        })
+        .collect();
+    let request = QuantizeRequest {
+        version: 1,
+        source: Source {
+            width: 64,
+            height: 64,
+            data: &source,
+        },
+        palette: &palette,
+        alpha: ALPHA,
+        matching: MATCHING,
+    };
+    let required = PreparedQuantizer::required_capacity_bytes(&palette, ALPHA, MATCHING).unwrap()
+        + size_of::<ImageBuf<PaletteIndex8>>() as u64
+        + 4096;
+    let before = COUNT.with(Cell::get);
+    let expected = quantize(request, required).unwrap();
+    let mandatory_allocations = COUNT.with(Cell::get) - before;
+    let before = COUNT.with(Cell::get);
+    let cached = quantize(request, required + size_of::<Vec<u64>>() as u64 + 8192).unwrap();
+    assert_eq!(COUNT.with(Cell::get) - before, mandatory_allocations + 1);
+    assert_eq!(cached, expected);
+    let before = COUNT.with(Cell::get);
+    let uncached = quantize(request, required + size_of::<Vec<u64>>() as u64 + 8191).unwrap();
+    assert_eq!(COUNT.with(Cell::get) - before, mandatory_allocations);
+    assert_eq!(uncached, expected);
+    FAIL_AFTER.with(|count| count.set(Some(mandatory_allocations)));
+    let recovered = quantize(request, u64::MAX);
+    FAIL_AFTER.with(|count| count.set(None));
+    assert_eq!(recovered.unwrap(), expected);
+}

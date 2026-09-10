@@ -8,6 +8,14 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+#[cfg(any(target_arch = "wasm32", test))]
+mod sha256;
+
+#[cfg(target_arch = "wasm32")]
+use sha256::Sha256 as SourceSha256;
+#[cfg(not(target_arch = "wasm32"))]
+use sha2::Sha256 as SourceSha256;
+
 use crate::image::contracts::PaletteEntry;
 
 use super::{
@@ -25,7 +33,7 @@ pub struct Identity(pub [u8; 32]);
 
 /// Hashes every current source byte and both dimensions, after request validation.
 pub fn source_identity(source: Source<'_>) -> Identity {
-    let mut hash = Sha256::new();
+    let mut hash = SourceSha256::new();
     hash.update(b"ditherette-rgba8-input-v1\0");
     hash.update(source.width.to_le_bytes());
     hash.update(source.height.to_le_bytes());

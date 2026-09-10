@@ -224,10 +224,45 @@ fn automatic_field_calls_preserve_scalar_bytes_metadata_and_cache_identity() {
             assert_eq!(run(&mut candidate, &mut io).unwrap(), expected);
             assert_eq!(io.metadata, metadata);
             #[cfg(feature = "threads")]
-            assert!(
-                candidate.peak_capacity_bytes() > scalar_peak,
-                "automatic worker ownership is charged"
-            );
+            {
+                // Bounded band tables can use less heap than the scalar table.
+                let (scalar_rgb, worker_rgb) = if method == 0 {
+                    (0, 0)
+                } else {
+                    use crate::prod::quantize::cache::recommended_entries;
+                    let dimensions =
+                        ImageDimensions::new(request.source_width, request.source_height).unwrap();
+                    let policy = crate::prod::pipeline::row_fields::measured_indexed(
+                        dimensions,
+                        request,
+                        if method == 1 {
+                            DitherPolicy::Separable { perturb: field }
+                        } else {
+                            DitherPolicy::None {}
+                        },
+                        crate::prod::pipeline::execution::worker_budget(),
+                    )
+                    .unwrap();
+                    let workers = policy.workers.active_workers(
+                        policy.active_workers,
+                        dimensions.height().div_ceil(policy.height),
+                    );
+                    (
+                        recommended_entries(dimensions.pixel_count().unwrap(), u64::MAX) as u64 * 8,
+                        recommended_entries(
+                            dimensions.width_usize()
+                                * dimensions.height().min(policy.height) as usize,
+                            u64::MAX,
+                        ) as u64
+                            * 8
+                            * u64::from(workers),
+                    )
+                };
+                assert!(
+                    candidate.peak_capacity_bytes() - worker_rgb > scalar_peak - scalar_rgb,
+                    "automatic worker ownership is charged independently of optional RGB tables"
+                );
+            }
             #[cfg(not(feature = "threads"))]
             assert_eq!(candidate.peak_capacity_bytes(), scalar_peak);
             let retained = candidate.preparation.stats().0;

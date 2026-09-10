@@ -1,5 +1,7 @@
 //! Shared materialized resize/perturb/indexed stages around the existing kernels.
 
+mod cache;
+
 use super::{
     identity, perturb,
     preparation::{Call, ResizePreparation, Store},
@@ -282,6 +284,20 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         call.take_image(2, key);
     }
     if call.image(2).is_none() {
+        let mut rgb_cache = if matches!(
+            dither,
+            DitherPolicy::None {} | DitherPolicy::Separable { .. }
+        ) {
+            cache::Work::try_new(
+                output_dimensions,
+                row_policy.filter(|_| bands.is_some()),
+                call.available_working_capacity(),
+            )
+        } else {
+            None
+        };
+        let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
+        call.charge_optional_capacity(rgb_cache_capacity, peak)?;
         let (prepared, _, images, scratch) = call.image_parts();
         let prepared = prepared.expect("requested palette");
         let [source, resized, perturbed, indices] = &mut scratch.buffers;
@@ -356,6 +372,12 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     );
                 }
             }
+            _ if rgb_cache.is_some() => {
+                rgb_cache
+                    .as_mut()
+                    .unwrap()
+                    .execute(prepared, view, indices, &mut report_row)?
+            }
             _ if bands.is_some() => prepared.quantize_bands_into(
                 view,
                 indices,
@@ -365,6 +387,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             _ if enabled => prepared.quantize_with_progress(view, indices, &mut report_row)?,
             _ => prepared.quantize_into(view, indices),
         }
+        drop(rgb_cache);
+        call.release_working_capacity(rgb_cache_capacity);
     }
     drop(bands);
     call.release_working_capacity(band_capacity);
