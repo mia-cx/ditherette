@@ -307,3 +307,50 @@ fn specialized_scores_match_known_vectors_and_frozen_f32_bits() {
         distance_score(a, b, MatchPolicy::OklchHueArc)
     );
 }
+
+#[test]
+fn specialized_scans_match_oracle_for_fractional_diffusion_coordinates() {
+    use prod::quantize::matcher::{PaletteColor, PaletteMatcher};
+    for matching in all_matching() {
+        let reference = serde_json::from_value(serde_json::to_value(matching).unwrap()).unwrap();
+        let converter = Converter::new(OrdinarySpace::from_matching(matching).unwrap());
+        let colors: Vec<_> = (0..64u32)
+            .map(|n| PaletteColor {
+                index: n as u8,
+                coordinates: converter.coordinates([
+                    (n * 73) as u8,
+                    (n * 31) as u8,
+                    (n * 17) as u8,
+                ]),
+            })
+            .collect();
+        let matcher = PaletteMatcher { colors, matching };
+        for n in 0..256u32 {
+            let mut coordinates = converter.coordinates([n as u8, (n * 73) as u8, (n * 17) as u8]);
+            coordinates[0] += 0.000123;
+            coordinates[1] -= 0.000321;
+            let mut expected = matcher.colors[0];
+            let mut best = spec::quantize::metric::distance_score(
+                coordinates,
+                expected.coordinates,
+                reference,
+            );
+            for &candidate in &matcher.colors[1..] {
+                let score = spec::quantize::metric::distance_score(
+                    coordinates,
+                    candidate.coordinates,
+                    reference,
+                );
+                if score < best {
+                    expected = candidate;
+                    best = score;
+                }
+            }
+            assert_eq!(
+                matcher.nearest(coordinates),
+                expected,
+                "{matching:?}, sample {n}"
+            );
+        }
+    }
+}
