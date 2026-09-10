@@ -160,7 +160,8 @@ impl PreparedQuantizer {
 
     /// Runs a fresh exact-byte cache across all rows, using only caller-reserved scratch.
     /// Empty scratch retains the allocation-free direct scan. Rebinding clears all cached entries.
-    pub(crate) fn quantize_cached_with_progress(
+    /// Nonempty scratch must contain a power-of-two number of entries, at most 262,144.
+    pub fn quantize_cached_with_progress(
         &self,
         source: ImageView<'_, Rgba8>,
         output: &mut [u8],

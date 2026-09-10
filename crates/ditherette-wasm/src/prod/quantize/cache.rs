@@ -59,7 +59,6 @@ mod tests {
             quantize::PreparedQuantizer,
             tiling::{RowBandBuffers, WorkerBudget},
         },
-        spec,
     };
 
     #[test]
@@ -82,105 +81,6 @@ mod tests {
                 cache.nearest(rgb, || panic!("exact hit must skip matching")),
                 index
             );
-        }
-    }
-
-    #[test]
-    fn reused_scratch_matches_all_metrics_alpha_and_palette_changes() {
-        use MatchPolicy::*;
-        let policies = [
-            SrgbEuclidean,
-            LinearRgbEuclidean,
-            OklabEuclidean,
-            CielabEuclidean,
-            YcbcrEuclidean,
-            SrgbCompuphase,
-            SrgbRec601,
-            SrgbRec709,
-            OklchEuclidean,
-            OklchCircularHue,
-            OklchHueArc,
-            CielabCiede2000,
-            CielchEuclidean,
-            CielchCircularHue,
-            CielchHueArc,
-        ];
-        let dimensions = ImageDimensions::new(64, 32).unwrap();
-        let source: Vec<u8> = (0..2048u32)
-            .flat_map(|n| {
-                let color = n % 1024;
-                [
-                    (color * 73) as u8,
-                    (color * 31 + color / 256) as u8,
-                    (color * 17) as u8,
-                    (n / 8) as u8,
-                ]
-            })
-            .collect();
-        let view = ImageView::<Rgba8>::packed(&source, dimensions).unwrap();
-        let color = |rgb| PaletteEntry::Color { rgb };
-        let palettes = [
-            vec![
-                PaletteEntry::Transparent {},
-                color([0; 3]),
-                color([2, 0, 0]),
-                color([255; 3]),
-                color([255; 3]),
-            ],
-            vec![color([255; 3]), color([0; 3]), color([73; 3])],
-            vec![PaletteEntry::Transparent {}],
-        ];
-        // Deliberately undersized so high-entropy source colors must collide.
-        let mut entries = [u64::MAX; 128];
-        let mut output = vec![0; 2048];
-        for matching in policies {
-            for palette in &palettes {
-                for alpha in [
-                    AlphaPolicy::Preserve {
-                        threshold: 127.9999999,
-                    },
-                    AlphaPolicy::Matte { rgb: [17, 73, 211] },
-                    AlphaPolicy::Premultiplied {},
-                ] {
-                    let prepared =
-                        PreparedQuantizer::try_new(palette, alpha, matching, u64::MAX).unwrap();
-                    let expected =
-                        spec::quantize::quantize(spec::contract::request::QuantizeRequest {
-                            version: 1,
-                            source: spec::contract::request::Source {
-                                width: 64,
-                                height: 32,
-                                data: &source,
-                            },
-                            palette,
-                            alpha: serde_json::from_value(serde_json::to_value(alpha).unwrap())
-                                .unwrap(),
-                            matching: serde_json::from_value(
-                                serde_json::to_value(matching).unwrap(),
-                            )
-                            .unwrap(),
-                        })
-                        .unwrap();
-                    let mut completed = 0;
-                    prepared
-                        .quantize_cached_with_progress(view, &mut output, &mut entries, |row| {
-                            assert_eq!(row, completed + 1);
-                            completed = row;
-                            Ok(())
-                        })
-                        .unwrap();
-                    assert_eq!(
-                        output,
-                        expected.indices.data(),
-                        "{matching:?}, {alpha:?}, {palette:?}"
-                    );
-                    assert_eq!(completed, 32);
-                    prepared
-                        .quantize_cached_with_progress(view, &mut output, &mut [], |_| Ok(()))
-                        .unwrap();
-                    assert_eq!(output, expected.indices.data());
-                }
-            }
         }
     }
 
