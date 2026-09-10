@@ -17,6 +17,22 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### Dependency caching correction, 2026-09-10
+
+[PR #144](https://github.com/mia-cx/ditherette/pull/144), issue #143, is open on PR #142.
+Head `646de481` on `perf/v1-tiered-cache` includes measured source `1762aaa0` and the retained report.
+Mia approves source revisions and stage dependencies instead of runtime image hashes. Frozen specifications stay unchanged.
+Exact-byte source checks, identity pass-through and downstream-first lookups preserve output ownership, memory limits and successful-publication rules.
+Small settings and palette records retain their existing compact hashes. Returned staged RGBA inputs verify retained bytes before adopting a dependency key.
+
+Fresh before/after runs cover four Celeste scales and three engines: 432 timed calls and 144 primes, with 24 byte-identical rendered image pairs.
+At 100%, warm end-to-end medians fall from 335/2107/321 ms to 174/918/154 ms in Chromium/Firefox/WebKit.
+Firefox quantization and small-output cold overhead remain open. These bounded measurements do not clear release gates.
+442 native tests, 61 benchmark-feature library tests, 45 interface tests, both builds, three-engine scalar checks and two-engine threaded ownership pass.
+The trusted freeze guard passes. Finished compiler targets are removed after preserving package assets, raw samples and PNGs.
+For the next performance change, read this PR's `docs/performance/tiered-caching.md`; historical hashing reports describe older revisions.
+No merge, publication or activation occurs.
+
 ### Cold processing correction, 2026-09-10
 
 [PR #142](https://github.com/mia-cx/ditherette/pull/142), issue #141, is open on PR #140.
