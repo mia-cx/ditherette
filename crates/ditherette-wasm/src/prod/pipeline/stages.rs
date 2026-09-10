@@ -7,10 +7,7 @@ use crate::{
         contracts::{NormalizedPalette, ProcessWarning},
         ImageDimensions,
     },
-    prod::{
-        contract::{cache::Identity, failure::Failure},
-        palette::allocation::Budget,
-    },
+    prod::{contract::failure::Failure, palette::allocation::Budget},
 };
 
 use super::quantize::preparation_failure;
@@ -75,7 +72,7 @@ impl IndexedMetadata {
 }
 
 pub(super) enum Metadata {
-    Rgba { content: Identity },
+    Rgba,
     Indexed(IndexedMetadata),
 }
 
@@ -91,7 +88,7 @@ impl ImageStage {
     pub fn capacity_bytes(&self) -> u64 {
         self.bytes.capacity() as u64
             + match &self.metadata {
-                Metadata::Rgba { .. } => 0,
+                Metadata::Rgba => 0,
                 Metadata::Indexed(metadata) => metadata.capacity_bytes(),
             }
     }
