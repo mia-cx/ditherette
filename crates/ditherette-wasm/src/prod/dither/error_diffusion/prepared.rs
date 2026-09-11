@@ -261,16 +261,26 @@ impl BorrowedDiffusion<'_> {
         let height = source.dimensions().height_usize();
         assert_eq!(self.work.len(), width * ROWS);
         assert_eq!(indices.len(), width * height);
+        let palette = self.quantizer.palette();
+        let fixed_alpha = if palette.visible.is_empty() {
+            let PalettePixel::Index(index) = palette.prepare_pixel([0; 4]) else {
+                unreachable!("transparent-only palette has no visible matching");
+            };
+            Some((255, index))
+        } else {
+            palette.preserved_alpha()
+        };
         for y in 0..height.min(ROWS) {
             self.fill_row(source, y, policy.feedback);
         }
         for y in 0..height {
             let reverse = policy.serpentine && y % 2 == 1;
+            let row = source.row(y as u32).expect("validated source row");
             for step in 0..width {
                 let x = if reverse { width - 1 - step } else { step };
                 let offset = y * width + x;
-                if let PalettePixel::Index(index) =
-                    self.quantizer.palette().prepare_pixel(rgba(source, x, y))
+                if let Some((_, index)) =
+                    fixed_alpha.filter(|&(cutoff, _)| row[x * 4 + 3] <= cutoff)
                 {
                     indices[offset] = index;
                     continue;
@@ -320,12 +330,10 @@ impl BorrowedDiffusion<'_> {
                     if target_x >= width || target_y >= height {
                         continue;
                     }
-                    if matches!(
-                        self.quantizer
-                            .palette()
-                            .prepare_pixel(rgba(source, target_x, target_y)),
-                        PalettePixel::Index(_)
-                    ) {
+                    if fixed_alpha.is_some_and(|(cutoff, _)| {
+                        source.row(target_y as u32).expect("validated target row")
+                            [target_x * 4 + 3] <= cutoff
+                    }) {
                         continue;
                     }
                     let target = (target_y % ROWS) * width + target_x;
