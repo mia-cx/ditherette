@@ -134,6 +134,10 @@ pub(crate) fn placement_mask_with_converter(
         return 1.0;
     };
     let contrast = contrast_with_converter(source, x, y, space, radius, converter);
+    adaptive_mask(contrast, threshold, softness)
+}
+
+fn adaptive_mask(contrast: f64, threshold: f32, softness: f32) -> f32 {
     let threshold = f64::from(threshold);
     let softness = f64::from(softness);
     let lower = threshold - softness;
@@ -145,6 +149,130 @@ pub(crate) fn placement_mask_with_converter(
     (t * t * (3.0 - 2.0 * t)) as f32
 }
 
+/// Reuses converted source rows in caller-owned scratch for one source, space, and radius.
+/// The caller budgets this record and exactly three width-sized coordinate rows, or keeps
+/// `placement_mask_with_converter` as its allocation-free fallback. No helper method allocates.
+pub(crate) struct AdaptivePlacementRows<'a> {
+    source: ImageView<'a, Rgba8>,
+    converter: &'a Converter,
+    coordinates: &'a mut [[f32; 3]],
+    tags: [Option<u32>; 3],
+    space: WorkingSpace,
+    radius: u32,
+    diagonal: f64,
+}
+
+impl<'a> AdaptivePlacementRows<'a> {
+    pub(crate) const ROW_COUNT: usize = 3;
+
+    /// Binds scratch to an unchanged source and its matching working-space converter.
+    /// Scratch contents need no initialization; new row tags invalidate any earlier binding.
+    pub(crate) fn new(
+        source: ImageView<'a, Rgba8>,
+        converter: &'a Converter,
+        space: WorkingSpace,
+        radius: u32,
+        coordinates: &'a mut [[f32; 3]],
+    ) -> Self {
+        assert_eq!(
+            coordinates.len(),
+            source.dimensions().width_usize() * Self::ROW_COUNT
+        );
+        let [r0, r1, r2] = coordinate_domain(space).ranges().map(f64::from);
+        Self {
+            source,
+            converter,
+            coordinates,
+            tags: [None; Self::ROW_COUNT],
+            space,
+            radius,
+            diagonal: (r0 * r0 + r1 * r1 + r2 * r2).sqrt(),
+        }
+    }
+
+    /// Prepares the clamped rows above, at, and below y without evicting any needed row.
+    /// Radius-one forward scans convert each source row once; other row orders remain exact.
+    pub(crate) fn prepare_row(&mut self, y: u32) -> AdaptivePlacementRow<'_> {
+        let dimensions = self.source.dimensions();
+        let width = dimensions.width_usize();
+        let needed = [
+            y.saturating_sub(self.radius),
+            y,
+            y.saturating_add(self.radius).min(dimensions.height() - 1),
+        ];
+        let slots = needed.map(|row| {
+            if let Some(slot) = self.tags.iter().position(|tag| *tag == Some(row)) {
+                return slot;
+            }
+            let slot = self
+                .tags
+                .iter()
+                .position(|tag| tag.is_none_or(|cached| !needed.contains(&cached)))
+                .expect("three slots fit every distinct requested row");
+            let source = self.source.row(row).expect("validated source row");
+            for (pixel, target) in source
+                .chunks_exact(4)
+                .zip(&mut self.coordinates[slot * width..(slot + 1) * width])
+            {
+                *target = self.converter.coordinates([pixel[0], pixel[1], pixel[2]]);
+            }
+            self.tags[slot] = Some(row);
+            slot
+        });
+        let [above, center, below] =
+            slots.map(|slot| &self.coordinates[slot * width..(slot + 1) * width]);
+        AdaptivePlacementRow {
+            above,
+            center,
+            below,
+            space: self.space,
+            radius: self.radius,
+            diagonal: self.diagonal,
+        }
+    }
+}
+
+/// Borrowed coordinates for one prepared row; x may be visited in either scan direction.
+pub(crate) struct AdaptivePlacementRow<'a> {
+    above: &'a [[f32; 3]],
+    center: &'a [[f32; 3]],
+    below: &'a [[f32; 3]],
+    space: WorkingSpace,
+    radius: u32,
+    diagonal: f64,
+}
+
+impl AdaptivePlacementRow<'_> {
+    /// Retains all eight clamped neighbors and the frozen f64 accumulation order.
+    pub(crate) fn contrast_at(&self, x: u32) -> f64 {
+        let left = x.saturating_sub(self.radius) as usize;
+        let right = x
+            .saturating_add(self.radius)
+            .min(self.center.len() as u32 - 1) as usize;
+        let x = x as usize;
+        let center = self.center[x];
+        let mut total = 0.0;
+        for neighbor in [
+            self.center[left],
+            self.center[right],
+            self.above[x],
+            self.below[x],
+            self.above[left],
+            self.above[right],
+            self.below[left],
+            self.below[right],
+        ] {
+            total += placement_distance(self.space, center, neighbor);
+        }
+        total / 8.0 / self.diagonal * 100.0
+    }
+
+    /// Applies validated adaptive threshold and softness to this source pixel's contrast.
+    pub(crate) fn mask_at(&self, x: u32, threshold: f32, softness: f32) -> f32 {
+        adaptive_mask(self.contrast_at(x), threshold, softness)
+    }
+}
+
 fn source_color(source: ImageView<'_, Rgba8>, x: u32, y: u32, converter: &Converter) -> [f32; 3] {
     let pixel = source
         .pixel(x, y)
@@ -152,3 +280,6 @@ fn source_color(source: ImageView<'_, Rgba8>, x: u32, y: u32, converter: &Conver
     let rgb = [pixel[0], pixel[1], pixel[2]];
     converter.coordinates(rgb)
 }
+
+#[cfg(test)]
+mod tests;
