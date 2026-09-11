@@ -20,6 +20,9 @@ PR #144 replaces runtime image hashing with verified source revisions and stage 
 Fresh full-size Celeste warm calls fall from 335/2107/321 ms to 174/918/154 ms. Firefox quantization and release holds remain unresolved.
 PR #146 adds the measured preserved-alpha row path and corrected Firefox benchmark preparation. Prior Firefox timings used baseline-only Wasm.
 Fresh full-size warm public calls fall from 108/120/119 ms to 83/86/83 ms. One native timing gate remains inconclusive; promotion and release stay held.
+PR #148 returns the original input for identity-only resize. All 46 interface tests and three browser alias checks pass.
+Issue #149 tracks the broader JS performance target across scales and settings. The first Chromium screen covers 96 recipes; many cells still lose.
+Diffusion preparation and metric specialization preserve all 16 compared browser PNGs. Exact RGB caching and sparse nearest input gathering are in progress.
 Earlier slice reports retain their production-revision comparisons. New measurements select field reuse and packed conversion; release gates remain held.
 Existing optimized kernels and the frozen reference remain unchanged. Historical reports retain their original scope and decisions.
 
@@ -65,7 +68,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Ready | [#120](https://github.com/mia-cx/ditherette/pull/120) |
 | [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Ready | [#125](https://github.com/mia-cx/ditherette/pull/125) |
 | [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Ready | [#129](https://github.com/mia-cx/ditherette/pull/129) |
-| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Alpha/browser correction in review; native timing and release held | [#131](https://github.com/mia-cx/ditherette/pull/131), [#137](https://github.com/mia-cx/ditherette/pull/137), [#138](https://github.com/mia-cx/ditherette/pull/138), [#140](https://github.com/mia-cx/ditherette/pull/140), [#142](https://github.com/mia-cx/ditherette/pull/142), [#144](https://github.com/mia-cx/ditherette/pull/144), [#146](https://github.com/mia-cx/ditherette/pull/146) |
+| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Identity bypass in review; diffusion and sparse nearest optimization active; JS target and release held | [#131](https://github.com/mia-cx/ditherette/pull/131), [#137](https://github.com/mia-cx/ditherette/pull/137), [#138](https://github.com/mia-cx/ditherette/pull/138), [#140](https://github.com/mia-cx/ditherette/pull/140), [#142](https://github.com/mia-cx/ditherette/pull/142), [#144](https://github.com/mia-cx/ditherette/pull/144), [#146](https://github.com/mia-cx/ditherette/pull/146), [#148](https://github.com/mia-cx/ditherette/pull/148) |
 | [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Ready | [#130](https://github.com/mia-cx/ditherette/pull/130) |
 | [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Ready; release gates held | [#132](https://github.com/mia-cx/ditherette/pull/132) |
 | [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Ready; activation held | [#133](https://github.com/mia-cx/ditherette/pull/133) |

@@ -17,6 +17,30 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### Multi-setting JS performance work, 2026-09-11
+
+[PR #148](https://github.com/mia-cx/ditherette/pull/148), issue #147, is open on PR #146.
+Head `43fe220b` returns the original input for identity-only resize after validation and progress handling.
+All 46 interface tests and Chromium, Firefox and WebKit identity-alias checks pass.
+This is the user-approved ownership exception. Identity-only calls perform no Wasm call or pixel copy.
+
+[Issue #149](https://github.com/mia-cx/ditherette/issues/149) tracks scalar performance against historical JS across scales and settings.
+The 96-recipe Chromium screen is diagnostic, not a release gate. Three samples cannot qualify every cell.
+Cold and warm public calls target 20% lower time than JS; end-to-end timing remains separately visible.
+Zero-copy no-ops are resolution-limited, not claimed speedups. Many nontrivial cells still miss the target.
+
+Integration branch `perf/v1-js-performance` at `f89b4444` adds converter reuse and finite metric specialization for diffusion.
+All 16 compared Chromium output PNGs are byte-identical to the accepted Wasm package.
+Adaptive sRGB warm time falls from 416.6 to 22.9 ms; the fresh JS control takes 17.4 ms.
+Native selection has seven passes and one inconclusive timing result. All eight cases match frozen bytes.
+These improvements remain unfiled pending the next focused validation and evidence handoff.
+
+Restarted agents own separate worktrees. `v1-diffusion-hotpaths` owns diffusion, quantizer matching/cache and `pipeline/indexed.rs`.
+`v1-sparse-nearest` owns nearest plans, resize/processor integration and Wasm gather helpers.
+The coordinator owns package JavaScript, evidence and this map. Measurements wait until implementation agents idle.
+Sparse fused-process integration follows the standalone resize handoff and the release of `pipeline/indexed.rs` ownership.
+No merge, publication or activation occurs.
+
 ### Scalar quantizer hot paths, 2026-09-11
 
 [PR #146](https://github.com/mia-cx/ditherette/pull/146), issue #145, is open on PR #144.
