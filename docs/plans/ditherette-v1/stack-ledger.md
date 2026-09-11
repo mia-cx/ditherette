@@ -43,8 +43,19 @@ Sparse nearest `3b43fb43` now handles standalone resize and fused process under 
 All 96 Chromium six-sample qualification cases complete with exact baseline PNGs.
 Warm public calls have 49 target passes, 46 misses and one borrowed identity no-op. Cold calls have 36 passes and 59 misses.
 Nearest processing at 5% takes 1.75 ms warm versus JS at 7.4 ms; standalone nearest still loses.
-Compact separable gather metadata and caller-scratch adaptive placement reuse are the next isolated candidates.
-Firefox/WebKit qualification remains pending. No overall performance or release completion is claimed.
+Sparse nearest is now [PR #154](https://github.com/mia-cx/ditherette/pull/154), head `652b92a1`, on PR #152.
+Measured code `5a08f2f0` uses compact row/column offsets and direct standalone output when progress is disabled.
+All 18 three-browser PNGs match the compact-gather predecessor. Full processing at 5%, 10%, and 25% meets the cold/warm JS target in every browser.
+Standalone resize still misses; Chromium 25% warm drops from 4.30 to 2.85 ms versus JS 2.80 ms.
+
+Adaptive rows are [PR #155](https://github.com/mia-cx/ditherette/pull/155), head `7d775e8a`, on PR #154.
+Native candidate `0ebcae59` versus `95aad503` passes all 35 exact gates across 140 serial workers and 11,200 samples.
+Browser artifact `29cfdb8c` includes the equivalent pinned-nightly compatibility correction.
+All 72 adaptive recipes complete. Warm target passes are 23/24 Chromium, 24/24 Firefox, and 17/24 WebKit.
+All 24 Chromium PNGs and eight directly compared WebKit diffusion PNGs remain exact.
+Integrated validation passes 464 native tests, 21 private Wasm checks, and scalar/threaded builds.
+Native/browser raw evidence and provenance are archived in each delivery PR. No overall performance or release completion is claimed.
+Next candidates address larger nearest downscales and WebKit diffusion overhead. Build profile changes still require Mia's answer.
 
 Restarted agents own separate worktrees. `v1-diffusion-hotpaths` owns diffusion, quantizer matching/cache and `pipeline/indexed.rs`.
 `v1-sparse-nearest` owns nearest plans, resize/processor integration and Wasm gather helpers.
