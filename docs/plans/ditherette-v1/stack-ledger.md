@@ -33,7 +33,18 @@ Integration branch `perf/v1-js-performance` at `f89b4444` adds converter reuse a
 All 16 compared Chromium output PNGs are byte-identical to the accepted Wasm package.
 Adaptive sRGB warm time falls from 416.6 to 22.9 ms; the fresh JS control takes 17.4 ms.
 Native selection has seven passes and one inconclusive timing result. All eight cases match frozen bytes.
-These improvements remain unfiled pending the next focused validation and evidence handoff.
+The completed diffusion changes are now [PR #152](https://github.com/mia-cx/ditherette/pull/152), head `38cc3dd2`, on PR #148.
+It adds alpha-only sink classification and budgeted exact byte-RGB caching to the earlier preparation and metric work.
+The wider native selection passes all 24 cases. Three retained native trials total 160 workers and 10,880 exact samples.
+Chromium Floyd-Steinberg at 50% now takes 258 ms versus fresh JS at 322 ms. Several adaptive cells still miss the target.
+Combined validation passes 452 native, 46 interface and 13 private Wasm tests, both builds, the freeze guard and three-browser progress/source checks.
+
+Sparse nearest `3b43fb43` now handles standalone resize and fused process under [issue #151](https://github.com/mia-cx/ditherette/issues/151).
+All 96 Chromium six-sample qualification cases complete with exact baseline PNGs.
+Warm public calls have 49 target passes, 46 misses and one borrowed identity no-op. Cold calls have 36 passes and 59 misses.
+Nearest processing at 5% takes 1.75 ms warm versus JS at 7.4 ms; standalone nearest still loses.
+Compact separable gather metadata and caller-scratch adaptive placement reuse are the next isolated candidates.
+Firefox/WebKit qualification remains pending. No overall performance or release completion is claimed.
 
 Restarted agents own separate worktrees. `v1-diffusion-hotpaths` owns diffusion, quantizer matching/cache and `pipeline/indexed.rs`.
 `v1-sparse-nearest` owns nearest plans, resize/processor integration and Wasm gather helpers.
