@@ -21,7 +21,6 @@ use crate::{
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
         quantize::{
             matcher::{PaletteColor, PaletteMatcher},
-            metric::distance_score,
             PreparedQuantizer,
         },
     },
@@ -374,19 +373,9 @@ fn nearest_finite(
     matcher: &PaletteMatcher,
     coordinates: [f32; 3],
 ) -> Result<PaletteColor, Failure> {
-    let mut best = matcher.colors[0];
-    let mut best_score = f32::INFINITY;
-    for &candidate in &matcher.colors {
-        let score = distance_score(coordinates, candidate.coordinates, matcher.matching);
-        if !score.is_finite() {
-            return Err(arithmetic(ErrorPath::DiffusionDistance));
-        }
-        if score < best_score {
-            best = candidate;
-            best_score = score;
-        }
-    }
-    Ok(best)
+    matcher
+        .nearest_finite(coordinates)
+        .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))
 }
 
 fn arithmetic(path: ErrorPath) -> Failure {
