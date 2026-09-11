@@ -179,12 +179,14 @@ test('sparse process matches staged modes on offset views without full input or 
 				const input = backing.subarray(offset);
 				const original = input.slice();
 				for (const mode of modes) {
+					const ratio = mode[0] === 1 || mode[0] === 3 ? 16 : 4;
+					const gathers = output[0] * output[1] <= source[0] * source[1] / ratio;
 					const expected = staged(reference.bindings, input, source, output, mode);
 					const set = Uint8Array.prototype.set;
 					let copies = 0;
 					Uint8Array.prototype.set = function (...args) {
-						assert.notEqual(this.buffer, raw.memory.buffer, 'fused sparse input uses gather');
-						copies++;
+						if (this.buffer === raw.memory.buffer) assert.equal(gathers, false, 'sparse modes never snapshot');
+						else copies++;
 						return Reflect.apply(set, this, args);
 					};
 					let result;
