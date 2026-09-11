@@ -60,11 +60,12 @@ pub trait QuantizeBoundary {
     fn supports_sparse_input(&self) -> bool {
         false
     }
-    /// Gather little-endian u32 source byte offsets, checking the current source byte length.
+    /// Gather little-endian u32 column and row byte offsets, checking current source storage.
     fn gather_input(
         &mut self,
         _destination: &mut [u8],
-        _offsets: &[u8],
+        _column_offsets: &[u8],
+        _row_offsets: &[u8],
         _source_len: usize,
     ) -> Result<(), Failure> {
         Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))

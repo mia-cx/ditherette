@@ -24,6 +24,7 @@ struct Io {
     input: Vec<u8>,
     sparse: bool,
     gathers: usize,
+    gather_offset_bytes: usize,
     snapshots: Vec<bool>,
     fail_gather: bool,
     fail_complete: bool,
@@ -39,6 +40,7 @@ impl Io {
                 .collect(),
             sparse: true,
             gathers: 0,
+            gather_offset_bytes: 0,
             snapshots: Vec::new(),
             fail_gather: false,
             fail_complete: false,
@@ -95,21 +97,29 @@ impl Boundary for Io {
     fn gather_input(
         &mut self,
         destination: &mut [u8],
-        offsets: &[u8],
+        columns: &[u8],
+        rows: &[u8],
         source_len: usize,
     ) -> Result<(), Failure> {
         self.gathers += 1;
         assert_eq!(source_len, self.input.len());
-        assert_eq!(destination.len(), offsets.len());
+        assert_eq!(destination.len(), columns.len() * rows.len() / 4);
+        self.gather_offset_bytes = columns.len() + rows.len();
         // Fail after writing, so stale partial output cannot survive a failed call.
-        for (pixel, offset) in destination.chunks_exact_mut(4).zip(offsets.chunks_exact(4)) {
-            let start = u32::from_le_bytes(offset.try_into().unwrap()) as usize;
-            pixel.copy_from_slice(&self.input[start..start + 4]);
-            if self.fail_gather {
-                return Err(Failure::new(
-                    ErrorCode::WasmMemoryUnavailable,
-                    ErrorPath::SourceData,
-                ));
+        for (destination, row) in destination
+            .chunks_exact_mut(columns.len())
+            .zip(rows.chunks_exact(4))
+        {
+            let row = u32::from_le_bytes(row.try_into().unwrap()) as usize;
+            for (pixel, column) in destination.chunks_exact_mut(4).zip(columns.chunks_exact(4)) {
+                let start = row + u32::from_le_bytes(column.try_into().unwrap()) as usize;
+                pixel.copy_from_slice(&self.input[start..start + 4]);
+                if self.fail_gather {
+                    return Err(Failure::new(
+                        ErrorCode::WasmMemoryUnavailable,
+                        ErrorPath::SourceData,
+                    ));
+                }
             }
         }
         Ok(())
@@ -147,10 +157,11 @@ impl QuantizeBoundary for Io {
     fn gather_input(
         &mut self,
         destination: &mut [u8],
-        offsets: &[u8],
+        columns: &[u8],
+        rows: &[u8],
         source_len: usize,
     ) -> Result<(), Failure> {
-        Boundary::gather_input(self, destination, offsets, source_len)
+        Boundary::gather_input(self, destination, columns, rows, source_len)
     }
     fn complete(
         &mut self,
@@ -453,6 +464,9 @@ fn sparse_samples_match_frozen_nearest_for_every_anchor_and_scale_plan() {
         ((2, 128), (4, 2)),  // Mixed upscale and downscale axes.
         ((128, 3), (4, 3)),  // Same-height map.
         ((3, 128), (3, 4)),  // Same-width map.
+        ((64, 64), (1, 17)), // One output column.
+        ((64, 64), (17, 1)), // One output row.
+        ((64, 64), (1, 1)),  // One sampled pixel.
     ] {
         let mut processor = Processor::new(1_000_000, 0).unwrap();
         let mut io = Io::new(source.0, source.1);
@@ -474,6 +488,7 @@ fn sparse_samples_match_frozen_nearest_for_every_anchor_and_scale_plan() {
             );
         }
         assert_eq!(io.gathers, 9);
+        assert_eq!(io.gather_offset_bytes, (output.0 + output.1) as usize * 4);
         assert!(io.snapshots.is_empty());
     }
 }

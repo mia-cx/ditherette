@@ -53,12 +53,13 @@ pub trait Boundary {
     fn supports_sparse_input(&self) -> bool {
         false
     }
-    /// Gather source byte offsets encoded as little-endian u32 values into final RGBA8 output.
+    /// Gather the sum of column and row byte offsets encoded as little-endian u32 values.
     /// Recheck source length before reading; every call must observe current source bytes.
     fn gather_input(
         &mut self,
         _destination: &mut [u8],
-        _offsets: &[u8],
+        _column_offsets: &[u8],
+        _row_offsets: &[u8],
         _source_len: usize,
     ) -> Result<(), Failure> {
         Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
@@ -474,7 +475,12 @@ impl Processor {
                     output: request.output,
                 }),
                 // Zeroing the snapshot length invalidates its full-source identity.
-                [0, plan.output_len, plan.output_len, 0],
+                [
+                    0,
+                    plan.output_len,
+                    resize::sparse_nearest_offset_bytes(plan.output),
+                    0,
+                ],
                 0,
                 overhead,
                 self.memory_limit,
@@ -483,10 +489,10 @@ impl Processor {
             )?;
             let (_, metadata, scratch) = call.parts();
             let [_, output, offsets, _] = &mut scratch.buffers;
-            metadata
+            let (columns, rows) = metadata
                 .expect("requested nearest resize")
                 .write_nearest_source_offsets(offsets);
-            boundary.gather_input(output, offsets, plan.source_len)?;
+            boundary.gather_input(output, columns, rows, plan.source_len)?;
             progress.report(
                 boundary.progress(),
                 Stage::Resize,

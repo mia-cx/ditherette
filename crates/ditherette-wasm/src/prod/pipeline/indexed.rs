@@ -76,6 +76,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         && resize.is_some_and(|output| {
             super::resize::sparse_nearest(source_len, rgba_len, output.resize)
         });
+    let offset_bytes = super::resize::sparse_nearest_offset_bytes(output_dimensions);
     let (mut call, source) = if sparse {
         // Clear the snapshot length before reusing its storage for source offsets.
         // Sparse samples have no full-source identity and never enter the image cache.
@@ -83,7 +84,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             store, None, None, [0; 4], 0, overhead, limit, peak, allocator,
         )?;
         // Offset scratch must not pin a larger prior snapshot during the remaining preflight.
-        if call.scratch.buffers[0].capacity() > rgba_len {
+        if call.scratch.buffers[0].capacity() > offset_bytes {
             call.scratch.buffers[0] = Vec::new();
         }
         (call, None)
@@ -177,7 +178,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 output,
             }),
         [
-            if sparse { rgba_len } else { source_len },
+            if sparse { offset_bytes } else { source_len },
             if resize.is_some() && !resized_hit {
                 rgba_len
             } else {
@@ -215,8 +216,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         let [source, resized, _, _] = &mut scratch.buffers;
         let prepared = prepared.expect("requested resize");
         if sparse {
-            prepared.write_nearest_source_offsets(source);
-            boundary.gather_input(resized, source, source_len)?;
+            let (columns, rows) = prepared.write_nearest_source_offsets(source);
+            boundary.gather_input(resized, columns, rows, source_len)?;
             progress.report(
                 boundary.progress(),
                 Stage::Resize,

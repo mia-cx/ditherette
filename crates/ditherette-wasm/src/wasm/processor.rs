@@ -35,7 +35,8 @@ extern "C" {
     #[wasm_bindgen(catch, js_name = gatherInput)]
     pub(super) fn gather_input(
         destination: &mut [u8],
-        offsets: &[u8],
+        column_offsets: &[u8],
+        row_offsets: &[u8],
         source: &Uint8Array,
         source_len: usize,
     ) -> Result<(), JsValue>;
@@ -288,11 +289,18 @@ impl Boundary for JsBoundary<'_> {
     fn gather_input(
         &mut self,
         destination: &mut [u8],
-        offsets: &[u8],
+        column_offsets: &[u8],
+        row_offsets: &[u8],
         source_len: usize,
     ) -> Result<(), Failure> {
-        gather_input(destination, offsets, self.input, source_len)
-            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+        gather_input(
+            destination,
+            column_offsets,
+            row_offsets,
+            self.input,
+            source_len,
+        )
+        .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
     }
     fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
         snapshot_input(destination, self.input, compare)

@@ -51,6 +51,10 @@ pub(super) fn sparse_nearest(source_len: usize, output_len: usize, policy: Resiz
         && output_len <= source_len / SPARSE_NEAREST_SOURCE_RATIO
 }
 
+pub(super) fn sparse_nearest_offset_bytes(output: ImageDimensions) -> usize {
+    (output.width() as usize + output.height() as usize) * size_of::<u32>()
+}
+
 pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
     match policy {
         ResizePolicy::Nearest { .. }
@@ -64,11 +68,14 @@ pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
 }
 
 impl PreparedResize {
-    pub(super) fn write_nearest_source_offsets(&self, offsets: &mut [u8]) {
+    pub(super) fn write_nearest_source_offsets<'a>(
+        &self,
+        offsets: &'a mut [u8],
+    ) -> (&'a [u8], &'a [u8]) {
         let Self::Nearest(plan, _) = self else {
             unreachable!("sparse input requires a nonidentity nearest plan")
         };
-        plan.write_source_offsets(offsets);
+        plan.write_source_offsets(offsets)
     }
 
     pub(super) fn required_bytes(

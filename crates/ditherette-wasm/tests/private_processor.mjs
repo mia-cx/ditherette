@@ -72,7 +72,7 @@ test('generated private input ABI borrows externref and catches both borrowed-sl
 
 test('sparse nearest gathers exact Rust-selected pixels from aligned and unaligned views', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
-	for (const [width, height, outWidth, outHeight] of [[40, 32, 10, 8], [43, 37, 7, 5], [2, 128, 4, 2]]) {
+	for (const [width, height, outWidth, outHeight] of [[40, 32, 10, 8], [43, 37, 7, 5], [2, 128, 4, 2], [64, 64, 1, 17], [64, 64, 17, 1], [64, 64, 1, 1]]) {
 		for (const offset of [0, 1, 4]) {
 			const backing = Uint8Array.from({ length: width * height * 4 + 8 }, (_, i) => (i * 73 + Math.floor(i / 251)) & 255);
 			const input = backing.subarray(offset, offset + width * height * 4);

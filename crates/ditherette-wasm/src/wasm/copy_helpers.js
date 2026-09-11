@@ -18,28 +18,39 @@ export function copyInput(destination, source) {
 }
 
 // Rust supplies the exact byte offsets. This import only gathers their RGBA8 bytes.
-export function gatherInput(destination, offsets, source, sourceLength) {
+export function gatherInput(destination, columnOffsets, rowOffsets, source, sourceLength) {
 	if (inputLength(source) !== sourceLength) {
 		throw new TypeError('Input storage changed during the call.');
 	}
-	const indices = new DataView(buffer.call(offsets), offset.call(offsets), length.call(offsets));
+	const columnBytes = length.call(columnOffsets);
+	const rowBytes = length.call(rowOffsets);
+	const columns = new DataView(buffer.call(columnOffsets), offset.call(columnOffsets), columnBytes);
+	const rows = new DataView(buffer.call(rowOffsets), offset.call(rowOffsets), rowBytes);
 	const size = length.call(destination);
 	const sourceOffset = offset.call(source);
 	const destinationOffset = offset.call(destination);
 	if ((sourceOffset | destinationOffset) % 4 === 0) {
 		const input = new Uint32Array(buffer.call(source), sourceOffset, sourceLength / 4);
 		const output = new Uint32Array(buffer.call(destination), destinationOffset, size / 4);
-		for (let index = 0; index < output.length; index++) {
-			output[index] = input[indices.getUint32(index * 4, true) / 4];
+		let index = 0;
+		for (let y = 0; y < rowBytes; y += 4) {
+			const row = rows.getUint32(y, true);
+			for (let x = 0; x < columnBytes; x += 4) {
+				output[index++] = input[(row + columns.getUint32(x, true)) / 4];
+			}
 		}
 		return;
 	}
-	for (let index = 0; index < size; index += 4) {
-		const sourceIndex = indices.getUint32(index, true);
-		destination[index] = source[sourceIndex];
-		destination[index + 1] = source[sourceIndex + 1];
-		destination[index + 2] = source[sourceIndex + 2];
-		destination[index + 3] = source[sourceIndex + 3];
+	let index = 0;
+	for (let y = 0; y < rowBytes; y += 4) {
+		const row = rows.getUint32(y, true);
+		for (let x = 0; x < columnBytes; x += 4) {
+			const sourceIndex = row + columns.getUint32(x, true);
+			destination[index++] = source[sourceIndex];
+			destination[index++] = source[sourceIndex + 1];
+			destination[index++] = source[sourceIndex + 2];
+			destination[index++] = source[sourceIndex + 3];
+		}
 	}
 }
 
