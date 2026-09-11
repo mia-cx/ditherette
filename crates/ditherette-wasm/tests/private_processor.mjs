@@ -65,7 +65,7 @@ test('generated private input ABI borrows externref and catches both borrowed-sl
 	assert.ok(body, 'privateResize export');
 	assert.doesNotMatch(body, /__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/);
 	assert.match(body, /wasm\.privateResize\(input,/);
-	for (const name of ['snapshotInput', 'gatherInput', 'completeResult', 'inputLength']) {
+	for (const name of ['snapshotInput', 'gatherInput', 'completeResult', 'completeSparseResult', 'inputLength']) {
 		assert.match(glue, new RegExp(`handleError\\(function[^]*?\\b${name}\\(`), `${name} uses catch glue`);
 	}
 });
@@ -111,13 +111,53 @@ test('sparse nearest observes mutations across full-source transitions and durab
 	assert.equal(full().data[0], 99);
 	input[0] = 77;
 	assert.equal(sparse().data[0], 77);
-	assert.equal(withCopyFailure(raw, 'result', sparse), 9);
+	assert.equal(bindings.privateResize(input, 64, 64, 4, 4, 0, 0, 0, Object.freeze({})), 9);
 	assert.equal(bindings.privateErrorPath(), 8);
 	assert.equal(sparse().data[0], 77);
 	raw.memory.grow(1);
 	bindings.privateDispose();
 	assert.equal(durable.data[0], 0);
 	assert.equal(sparse(), 10);
+});
+
+test('direct sparse output allocates once without a Wasm output or bulk copy and catches allocation failure', async () => {
+	const { bindings, raw } = await fresh(1 << 20);
+	const input = new Uint8Array(64 * 64 * 4).fill(47);
+	const invoke = sink => bindings.privateResize(input, 64, 64, 4, 4, 0, 4, 0, sink);
+	const Original = Uint8Array;
+	const set = Original.prototype.set;
+	let allocations = 0;
+	let fail = false;
+	globalThis.Uint8Array = new Proxy(Original, { construct(target, args, newTarget) {
+		if (typeof args[0] === 'number') {
+			assert.equal(args[0], 64, 'allocate only the exact final RGBA output');
+			allocations++;
+			if (fail) throw new RangeError('fixture output allocation failed');
+		}
+		return Reflect.construct(target, args, newTarget);
+	} });
+	Original.prototype.set = function () { throw new Error('direct sparse output needs no bulk copy'); };
+	const sink = {};
+	try {
+		assert.equal(invoke(sink), 0);
+		assert.equal(allocations, 1);
+		assert.notEqual(sink.value.data.buffer, raw.memory.buffer);
+		assert.ok(sink.value.data.every(value => value === 47));
+		fail = true;
+		const failed = {};
+		assert.equal(invoke(failed), 9);
+		assert.equal(bindings.privateErrorPath(), 8);
+		assert.equal(failed.value, undefined);
+		fail = false;
+		assert.equal(invoke({}), 0);
+	} finally {
+		Original.prototype.set = set;
+		globalThis.Uint8Array = Original;
+	}
+	input.fill(99);
+	assert.equal(invoke({}), 0);
+	bindings.privateDispose();
+	assert.ok(sink.value.data.every(value => value === 47));
 });
 
 test('sparse gather catches detached storage, thrown imports, and callback failures without leaking handles', async () => {

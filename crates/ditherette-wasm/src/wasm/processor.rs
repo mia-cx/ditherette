@@ -12,7 +12,7 @@ use js_sys::Uint8Array;
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    image::ImageDimensions,
+    image::{ImageDimensions, Rgba8},
     prod::{
         contract::{
             error::ErrorCode,
@@ -53,6 +53,17 @@ extern "C" {
         height: u32,
         sink: &JsValue,
     ) -> Result<(), JsValue>;
+    #[wasm_bindgen(catch, js_name = completeSparseResult)]
+    fn complete_sparse_result(
+        column_offsets: &[u8],
+        row_offsets: &[u8],
+        source: &Uint8Array,
+        source_len: usize,
+        output_len: usize,
+        width: u32,
+        height: u32,
+        sink: &JsValue,
+    ) -> Result<u32, JsValue>;
 }
 
 enum Slot {
@@ -285,6 +296,37 @@ impl Boundary for JsBoundary<'_> {
     }
     fn supports_sparse_input(&self) -> bool {
         true
+    }
+    fn supports_sparse_output(&self) -> bool {
+        true
+    }
+    fn complete_sparse(
+        &mut self,
+        column_offsets: &[u8],
+        row_offsets: &[u8],
+        source_len: usize,
+        dimensions: ImageDimensions,
+    ) -> Result<(), Failure> {
+        match complete_sparse_result(
+            column_offsets,
+            row_offsets,
+            self.input,
+            source_len,
+            dimensions.storage_len::<Rgba8>().expect("validated output"),
+            dimensions.width(),
+            dimensions.height(),
+            self.result_sink,
+        ) {
+            Ok(0) => Ok(()),
+            Ok(1) => Err(Failure::new(
+                ErrorCode::WasmMemoryUnavailable,
+                ErrorPath::SourceData,
+            )),
+            _ => Err(Failure::new(
+                ErrorCode::WasmMemoryUnavailable,
+                ErrorPath::Output,
+            )),
+        }
     }
     fn gather_input(
         &mut self,

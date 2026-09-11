@@ -88,3 +88,24 @@ export function completeResult(source, width, height, sink) {
 	Uint8Array.prototype.set.call(data, source);
 	sink.value = { width, height, data };
 }
+
+// Rust precharges outputLength. Return only a scalar phase code, never an owned JS handle.
+export function completeSparseResult(columnOffsets, rowOffsets, source, sourceLength, outputLength, width, height, sink) {
+	let data;
+	try {
+		data = new Uint8Array(outputLength);
+	} catch {
+		return 2; // Output allocation failed.
+	}
+	try {
+		gatherInput(data, columnOffsets, rowOffsets, source, sourceLength);
+	} catch {
+		return 1; // Source gathering failed; no partial result reaches the sink.
+	}
+	try {
+		sink.value = { width, height, data };
+	} catch {
+		return 2;
+	}
+	return 0;
+}

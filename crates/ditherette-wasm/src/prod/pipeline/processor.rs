@@ -53,6 +53,21 @@ pub trait Boundary {
     fn supports_sparse_input(&self) -> bool {
         false
     }
+    /// Opt into gathering directly into an independent durable result when progress is disabled.
+    fn supports_sparse_output(&self) -> bool {
+        false
+    }
+    /// Construct the complete result from Rust-selected offsets without a Wasm output buffer.
+    /// The caller precharges exactly four output bytes per pixel before any allocation.
+    fn complete_sparse(
+        &mut self,
+        _column_offsets: &[u8],
+        _row_offsets: &[u8],
+        _source_len: usize,
+        _dimensions: ImageDimensions,
+    ) -> Result<Self::Output, Failure> {
+        Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
+    }
     /// Gather the sum of column and row byte offsets encoded as little-endian u32 values.
     /// Recheck source length before reading; every call must observe current source bytes.
     fn gather_input(
@@ -467,6 +482,8 @@ impl Processor {
         if boundary.supports_sparse_input()
             && resize::sparse_nearest(plan.source_len, plan.output_len, plan.resize)
         {
+            // Callback calls retain resize progress before durable output construction.
+            let direct_output = !enabled && boundary.supports_sparse_output();
             let mut call = super::preparation::Call::new(
                 &mut self.preparation,
                 None,
@@ -477,12 +494,18 @@ impl Processor {
                 // Zeroing the snapshot length invalidates its full-source identity.
                 [
                     0,
-                    plan.output_len,
+                    if direct_output { 0 } else { plan.output_len },
                     resize::sparse_nearest_offset_bytes(plan.output),
                     0,
                 ],
                 0,
-                overhead,
+                // Direct output owns the same mandatory bytes outside Wasm until handoff.
+                overhead
+                    + if direct_output {
+                        plan.output_len as u64
+                    } else {
+                        0
+                    },
                 self.memory_limit,
                 &mut self.peak_capacity,
                 allocator,
@@ -492,6 +515,10 @@ impl Processor {
             let (columns, rows) = metadata
                 .expect("requested nearest resize")
                 .write_nearest_source_offsets(offsets);
+            if direct_output {
+                let result = boundary.complete_sparse(columns, rows, plan.source_len, plan.output);
+                return call.finish(progress.finish(result, None));
+            }
             boundary.gather_input(output, columns, rows, plan.source_len)?;
             progress.report(
                 boundary.progress(),

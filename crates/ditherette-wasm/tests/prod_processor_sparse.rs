@@ -23,6 +23,8 @@ use ditherette_wasm::{
 struct Io {
     input: Vec<u8>,
     sparse: bool,
+    direct_output: bool,
+    direct_completions: usize,
     gathers: usize,
     gather_offset_bytes: usize,
     snapshots: Vec<bool>,
@@ -39,6 +41,8 @@ impl Io {
                 .map(|i| (i.wrapping_mul(73) + i / 251) as u8)
                 .collect(),
             sparse: true,
+            direct_output: false,
+            direct_completions: 0,
             gathers: 0,
             gather_offset_bytes: 0,
             snapshots: Vec::new(),
@@ -92,6 +96,23 @@ impl Boundary for Io {
 
     fn supports_sparse_input(&self) -> bool {
         self.sparse
+    }
+
+    fn supports_sparse_output(&self) -> bool {
+        self.direct_output
+    }
+
+    fn complete_sparse(
+        &mut self,
+        columns: &[u8],
+        rows: &[u8],
+        source_len: usize,
+        dimensions: ImageDimensions,
+    ) -> Result<Vec<u8>, Failure> {
+        self.direct_completions += 1;
+        let mut bytes = vec![0; dimensions.storage_len::<Rgba8>().unwrap()];
+        Boundary::gather_input(self, &mut bytes, columns, rows, source_len)?;
+        Boundary::complete(self, &bytes, dimensions)
     }
 
     fn gather_input(
@@ -616,4 +637,103 @@ fn sparse_copy_callback_and_validation_failures_recover() {
         Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData)
     );
     assert_eq!(io.gathers, before);
+}
+
+#[test]
+fn direct_sparse_output_charges_pixels_but_reserves_only_offsets() {
+    let request = request((64, 64), (4, 4), Anchor::Center);
+    let mut io = Io::new(64, 64);
+    let mut fallback = Processor::new(1 << 20, 0).unwrap();
+    let expected = fallback.resize(request, &mut io).unwrap();
+    let limit = fallback.peak_capacity_bytes();
+    io.direct_output = true;
+    struct Reservations {
+        sizes: Vec<usize>,
+        extra: usize,
+    }
+    impl Allocator for Reservations {
+        fn reserve(&mut self, buffer: &mut Vec<u8>, additional: usize) -> Result<(), Failure> {
+            self.sizes.push(additional);
+            buffer.try_reserve_exact(additional + self.extra).unwrap();
+            Ok(())
+        }
+    }
+    let mut reservations = Reservations {
+        sizes: Vec::new(),
+        extra: 0,
+    };
+    let mut direct = Processor::new(limit, 0).unwrap();
+    assert_eq!(
+        direct
+            .resize_with_allocator(request, &mut io, &mut reservations)
+            .unwrap(),
+        expected
+    );
+    assert_eq!(
+        reservations.sizes,
+        [32],
+        "only four column and four row offsets enter Wasm"
+    );
+    assert_eq!(
+        direct.peak_capacity_bytes(),
+        limit,
+        "64 output bytes remain charged"
+    );
+    let completions = io.direct_completions;
+    let mut short = Processor::new(limit - 1, 0).unwrap();
+    assert_eq!(
+        short.resize(request, &mut io).unwrap_err().code,
+        ErrorCode::MemoryLimit
+    );
+    let mut excess = Processor::new(limit, 0).unwrap();
+    reservations.extra = 1;
+    assert_eq!(
+        excess
+            .resize_with_allocator(request, &mut io, &mut reservations)
+            .unwrap_err()
+            .code,
+        ErrorCode::MemoryLimit
+    );
+    assert_eq!(
+        io.direct_completions, completions,
+        "preflight rejects before constructing output"
+    );
+}
+
+#[test]
+fn direct_sparse_output_recovers_from_boundary_failures_and_keeps_callback_ordering() {
+    let request = request((64, 64), (4, 4), Anchor::BottomRight);
+    let mut processor = Processor::new(1 << 20, 0).unwrap();
+    let mut io = Io::new(64, 64);
+    io.direct_output = true;
+    let durable = processor.resize(request, &mut io).unwrap();
+    for phase in 0..5 {
+        io.fail_gather = phase == 0;
+        io.fail_complete = phase == 1;
+        io.fail_stage = match phase {
+            2 => Some(Stage::Prepare),
+            3 => Some(Stage::Resize),
+            4 => Some(Stage::Complete),
+            _ => None,
+        };
+        let completions = io.direct_completions;
+        assert_eq!(
+            processor.resize(request, &mut io).unwrap_err().code,
+            if phase < 2 {
+                ErrorCode::WasmMemoryUnavailable
+            } else {
+                ErrorCode::Callback
+            }
+        );
+        assert_eq!(io.direct_completions, completions + usize::from(phase < 2));
+        io.fail_gather = false;
+        io.fail_complete = false;
+        io.fail_stage = None;
+        assert_eq!(processor.resize(request, &mut io).unwrap(), durable);
+    }
+    processor.dispose().unwrap();
+    assert_eq!(
+        processor.resize(request, &mut io).unwrap_err().code,
+        ErrorCode::Disposed
+    );
 }
