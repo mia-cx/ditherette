@@ -55,7 +55,21 @@ All 72 adaptive recipes complete. Warm target passes are 23/24 Chromium, 24/24 F
 All 24 Chromium PNGs and eight directly compared WebKit diffusion PNGs remain exact.
 Integrated validation passes 464 native tests, 21 private Wasm checks, and scalar/threaded builds.
 Native/browser raw evidence and provenance are archived in each delivery PR. No overall performance or release completion is claimed.
-Next candidates address larger nearest downscales and WebKit diffusion overhead. Build profile changes still require Mia's answer.
+Larger nearest gathering is [PR #158](https://github.com/mia-cx/ditherette/pull/158), head `0400f1bc`, on PR #155.
+Global candidate `520f2008` regresses Bayer palette edits from 66–76 ms to 148–166 ms and is rejected.
+Selected `b72238d4` preserves separable/Yliluoma /16 eligibility while allowing standalone/direct/diffusion /4.
+All 18 global-trial and nine selected-trial PNGs are exact. Selected 50% warm resize takes 9.05/9.5/7.5 ms in Chromium/Firefox/WebKit, versus previous 15.75/20/15 ms.
+Bayer palette edits recover to 65.6/74.5/77 ms. Several JS cells remain unmet.
+
+Row addressing is [PR #159](https://github.com/mia-cx/ditherette/pull/159), head `c92e4869`, on PR #158.
+Isolated native `98240c4f` versus `0ebcae59` passes 35 exact gates, 140 serial workers and 11,200 samples.
+WebKit 50% Floyd warm time falls 609.5 to 589.5 ms, meeting the declared 3% small-candidate target but still trailing JS 383 ms.
+Joined runtime `753bfebe` passes 476 native tests with bench-subjects, 21 private checks and both builds.
+A seven-line Yliluoma test-boundary snapshot fix restores inherited cache-hit assertions without runtime changes.
+Final scalar SHA is `be2e868f9404a2bd1ad47420052b914526c296488d3539499dcae6029024078f`; threaded SHA is `51b9cee2512883ff8756119db1911050eb09484accba5f8a175271eb7749872c`.
+All finished compiler targets from this work are cleared; native executables, Wasm snapshots, PNGs and raw evidence remain outside targets.
+Compiler profile experimentation awaits approval. Frozen bilinear uses anti-aliasing when shrinking, unlike historical JS's four samples; comparison scope also awaits Mia.
+The wider JS target remains open. No merge, release, or activation occurs.
 
 Restarted agents own separate worktrees. `v1-diffusion-hotpaths` owns diffusion, quantizer matching/cache and `pipeline/indexed.rs`.
 `v1-sparse-nearest` owns nearest plans, resize/processor integration and Wasm gather helpers.
