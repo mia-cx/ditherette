@@ -17,6 +17,27 @@ All later work reuses landed kernels and shared helpers. Only missing implementa
 
 ## Current implementation
 
+### Scalar quantizer hot paths, 2026-09-11
+
+[PR #146](https://github.com/mia-cx/ditherette/pull/146), issue #145, is open on PR #144.
+Head `16fea204` on `perf/v1-quantize-hotpaths` retains the measured preserved-alpha row specialization.
+Production changes total 23 added lines. Frozen code, resize kernels, shared image helpers and RGB cache logic stay unchanged.
+Forced inlining and exact adjacent-RGB reuse were measured and removed after failing to improve browser controls.
+
+The corrected Firefox copy enables optimizing Wasm. Older Firefox measurements used Juggler's baseline-only configuration.
+Fresh full-size Celeste warm public calls improve from 108/120/119 ms to 83/86/83 ms in Chromium/Firefox/WebKit.
+JS controls take 151/196/136 ms. These are public processing calls, not the earlier end-to-end numbers.
+Eight trials retain 1,620 timed calls, 540 primes, 1,440 exact repeats and 54 exact PNG pairs.
+Native evidence contains 132 serial workers and 2,552 samples, all exact against frozen outputs.
+One native selection case stays inconclusive after its bounded repeat. Native promotion and release gates remain held.
+The separate timed spec comparison passes all 15 full-image cases; the tiny-call setup regression remains visible.
+
+444 native tests, 45 interface tests, both builds, the trusted freeze guard, three-engine scalar ownership/progress and two-engine threaded ownership pass.
+The broader Yliluoma-oracle test stopped at setup because its separate oracle was absent; no pass is claimed.
+For future performance work, read `docs/performance/quantize-hotpaths.md` on this branch and use corrected Firefox preparation.
+Compact raw evidence is committed. Package snapshots and PNGs remain outside targets; finished targets and browser copies are removed after handoff.
+No merge, publication or activation occurs.
+
 ### Dependency caching correction, 2026-09-10
 
 [PR #144](https://github.com/mia-cx/ditherette/pull/144), issue #143, is open on PR #142.
