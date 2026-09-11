@@ -17,6 +17,32 @@ export function copyInput(destination, source) {
 	Uint8Array.prototype.set.call(destination, source);
 }
 
+// Rust supplies the exact byte offsets. This import only gathers their RGBA8 bytes.
+export function gatherInput(destination, offsets, source, sourceLength) {
+	if (inputLength(source) !== sourceLength) {
+		throw new TypeError('Input storage changed during the call.');
+	}
+	const indices = new DataView(buffer.call(offsets), offset.call(offsets), length.call(offsets));
+	const size = length.call(destination);
+	const sourceOffset = offset.call(source);
+	const destinationOffset = offset.call(destination);
+	if ((sourceOffset | destinationOffset) % 4 === 0) {
+		const input = new Uint32Array(buffer.call(source), sourceOffset, sourceLength / 4);
+		const output = new Uint32Array(buffer.call(destination), destinationOffset, size / 4);
+		for (let index = 0; index < output.length; index++) {
+			output[index] = input[indices.getUint32(index * 4, true) / 4];
+		}
+		return;
+	}
+	for (let index = 0; index < size; index += 4) {
+		const sourceIndex = indices.getUint32(index, true);
+		destination[index] = source[sourceIndex];
+		destination[index + 1] = source[sourceIndex + 1];
+		destination[index + 2] = source[sourceIndex + 2];
+		destination[index + 3] = source[sourceIndex + 3];
+	}
+}
+
 // Compare the current view's bytes, including its offset, before trusting the owned snapshot.
 export function snapshotInput(destination, source, compare) {
 	const size = inputLength(source);

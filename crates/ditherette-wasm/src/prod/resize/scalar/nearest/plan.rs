@@ -11,9 +11,9 @@ use std::mem::size_of;
 use super::{
     alignment::{axis_coordinate_map, map_axis_coordinate, ResizeAnchor},
     scale::{
-        build_source_x_copy_spans_into, exact_downscale_factors, exact_upscale_factors,
-        nearest_scale_class, source_x_copy_spans, uses_source_x_copy_spans, NearestScaleClass,
-        SourceXCopySpan,
+        alignment_offset, build_source_x_copy_spans_into, exact_downscale_factors,
+        exact_upscale_factors, nearest_scale_class, source_x_copy_spans, uses_source_x_copy_spans,
+        NearestScaleClass, SourceXCopySpan,
     },
 };
 
@@ -194,6 +194,33 @@ impl NearestResizePlan {
         (self.x_source_starts.capacity() * size_of::<usize>()
             + self.y_coordinates.capacity() * size_of::<u32>()
             + self.source_x_copy_spans.capacity() * size_of::<SourceXCopySpan>()) as u64
+    }
+
+    /// Write packed source byte offsets as little-endian u32 values for a borrowed gather.
+    /// The caller supplies four bytes per output pixel and validates the source byte length.
+    pub(crate) fn write_source_offsets(&self, offsets: &mut [u8]) {
+        let width = self.output_dimensions.width() as usize;
+        let source_stride = self.source_dimensions.width() * 4;
+        let (x_anchor, y_anchor) = self.anchor.axes();
+        for (y, row) in offsets.chunks_exact_mut(width * 4).enumerate() {
+            let source_y = if let Some((_, factor)) = self.exact_downscale {
+                y as u32 * factor + alignment_offset(factor, y_anchor)
+            } else if let Some((_, factor)) = self.exact_upscale {
+                y as u32 / factor
+            } else {
+                self.y_coordinates[y]
+            };
+            for (x, offset) in row.chunks_exact_mut(4).enumerate() {
+                let source_x = if let Some((factor, _)) = self.exact_downscale {
+                    (x as u32 * factor + alignment_offset(factor, x_anchor)) * 4
+                } else if let Some((factor, _)) = self.exact_upscale {
+                    (x as u32 / factor) * 4
+                } else {
+                    self.x_source_starts[x] as u32
+                };
+                offset.copy_from_slice(&(source_y * source_stride + source_x).to_le_bytes());
+            }
+        }
     }
 
     /// Build reusable coordinate metadata for one nearest-neighbor resize shape.

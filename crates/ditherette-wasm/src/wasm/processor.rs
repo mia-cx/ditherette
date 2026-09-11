@@ -32,6 +32,13 @@ extern "C" {
     pub(super) fn input_length(source: &Uint8Array) -> Result<f64, JsValue>;
     #[wasm_bindgen(catch, js_name = copyInput)]
     pub(super) fn copy_input(destination: &mut [u8], source: &Uint8Array) -> Result<(), JsValue>;
+    #[wasm_bindgen(catch, js_name = gatherInput)]
+    fn gather_input(
+        destination: &mut [u8],
+        offsets: &[u8],
+        source: &Uint8Array,
+        source_len: usize,
+    ) -> Result<(), JsValue>;
     #[wasm_bindgen(catch, js_name = snapshotInput)]
     pub(super) fn snapshot_input(
         destination: &mut [u8],
@@ -273,6 +280,18 @@ impl Boundary for JsBoundary<'_> {
     }
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         copy_input(destination, self.input)
+            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+    }
+    fn supports_sparse_input(&self) -> bool {
+        true
+    }
+    fn gather_input(
+        &mut self,
+        destination: &mut [u8],
+        offsets: &[u8],
+        source_len: usize,
+    ) -> Result<(), Failure> {
+        gather_input(destination, offsets, self.input, source_len)
             .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
     }
     fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {

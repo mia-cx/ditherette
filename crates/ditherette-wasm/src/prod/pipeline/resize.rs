@@ -43,6 +43,14 @@ pub(super) enum PreparedResize {
 // PreparedResize's inline storage belongs to the preparation entry's reserved Vec.
 const TRILINEAR_RECORD_BYTES: u64 = size_of::<PreparedTrilinear<Rgba8>>() as u64;
 
+/// Initial public gather cutoff; complete-call measurements determine later tuning.
+const SPARSE_NEAREST_SOURCE_RATIO: usize = 16;
+
+pub(super) fn sparse_nearest(source_len: usize, output_len: usize, policy: ResizePolicy) -> bool {
+    matches!(policy, ResizePolicy::Nearest { .. })
+        && output_len <= source_len / SPARSE_NEAREST_SOURCE_RATIO
+}
+
 pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
     match policy {
         ResizePolicy::Nearest { .. }
@@ -56,6 +64,13 @@ pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
 }
 
 impl PreparedResize {
+    pub(super) fn write_nearest_source_offsets(&self, offsets: &mut [u8]) {
+        let Self::Nearest(plan, _) = self else {
+            unreachable!("sparse input requires a nonidentity nearest plan")
+        };
+        plan.write_source_offsets(offsets);
+    }
+
     pub(super) fn required_bytes(
         source: ImageDimensions,
         output: ImageDimensions,

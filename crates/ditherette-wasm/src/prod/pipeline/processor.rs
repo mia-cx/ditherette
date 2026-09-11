@@ -49,6 +49,20 @@ pub trait Boundary {
     }
     fn input_len(&mut self) -> Result<usize, Failure>;
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure>;
+    /// Opt into copying only Rust-selected RGBA8 pixels from borrowed input.
+    fn supports_sparse_input(&self) -> bool {
+        false
+    }
+    /// Gather source byte offsets encoded as little-endian u32 values into final RGBA8 output.
+    /// Recheck source length before reading; every call must observe current source bytes.
+    fn gather_input(
+        &mut self,
+        _destination: &mut [u8],
+        _offsets: &[u8],
+        _source_len: usize,
+    ) -> Result<(), Failure> {
+        Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
+    }
     /// Return true only after exact equality with the current input; otherwise copy it.
     /// Boundaries without comparison support always copy and request a fresh identity.
     fn snapshot_input(&mut self, destination: &mut [u8], _compare: bool) -> Result<bool, Failure> {
@@ -449,6 +463,39 @@ impl Processor {
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
+        if boundary.supports_sparse_input()
+            && resize::sparse_nearest(plan.source_len, plan.output_len, plan.resize)
+        {
+            let mut call = super::preparation::Call::new(
+                &mut self.preparation,
+                None,
+                Some(super::preparation::ResizePreparation {
+                    source: plan.source,
+                    output: request.output,
+                }),
+                // Zeroing the snapshot length invalidates its full-source identity.
+                [0, plan.output_len, plan.output_len, 0],
+                0,
+                overhead,
+                self.memory_limit,
+                &mut self.peak_capacity,
+                allocator,
+            )?;
+            let (_, metadata, scratch) = call.parts();
+            let [_, output, offsets, _] = &mut scratch.buffers;
+            metadata
+                .expect("requested nearest resize")
+                .write_nearest_source_offsets(offsets);
+            boundary.gather_input(output, offsets, plan.source_len)?;
+            progress.report(
+                boundary.progress(),
+                Stage::Resize,
+                u64::from(plan.output.height()),
+                u64::from(plan.output.height()),
+            )?;
+            let result = boundary.complete(output, plan.output);
+            return call.finish(progress.finish(result, boundary.progress()));
+        }
         let mut call = super::preparation::Call::snapshot(
             &mut self.preparation,
             plan.source_len,
