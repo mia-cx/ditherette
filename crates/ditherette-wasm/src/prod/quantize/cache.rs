@@ -22,7 +22,7 @@ pub(crate) fn recommended_entries(pixel_count: usize, available_bytes: u64) -> u
 }
 
 /// A fresh binding to one prepared palette/alpha/metric. No float coordinates enter this cache.
-pub(super) struct RgbCache<'a> {
+pub(crate) struct RgbCache<'a> {
     entries: &'a mut [u64],
 }
 
@@ -36,16 +36,27 @@ impl<'a> RgbCache<'a> {
 
     #[inline]
     pub fn nearest(&mut self, rgb: [u8; 3], miss: impl FnOnce() -> u8) -> u8 {
+        self.try_nearest(rgb, || Ok::<_, std::convert::Infallible>(miss()))
+            .unwrap()
+    }
+
+    /// Failed scans leave the slot unchanged; only fully validated matches become hits.
+    #[inline]
+    pub fn try_nearest<E>(
+        &mut self,
+        rgb: [u8; 3],
+        miss: impl FnOnce() -> Result<u8, E>,
+    ) -> Result<u8, E> {
         let key = u32::from(rgb[0]) << 16 | u32::from(rgb[1]) << 8 | u32::from(rgb[2]);
         // Mix all three byte channels before masking the bounded direct-mapped table.
         let slot = (key.wrapping_mul(0x9e37_79b1) >> 8) as usize & (self.entries.len() - 1);
         let entry = &mut self.entries[slot];
         if *entry & (VALID | RGB_MASK) == VALID | u64::from(key) {
-            return (*entry >> 24) as u8;
+            return Ok((*entry >> 24) as u8);
         }
-        let index = miss();
+        let index = miss()?;
         *entry = VALID | u64::from(key) | u64::from(index) << 24;
-        index
+        Ok(index)
     }
 }
 
@@ -82,6 +93,26 @@ mod tests {
                 index
             );
         }
+    }
+
+    #[test]
+    fn failed_misses_do_not_replace_valid_entries_or_become_hits() {
+        let mut entries = [0];
+        let mut cache = RgbCache::new(&mut entries);
+        assert_eq!(
+            cache.try_nearest([0; 3], || Err("distance")),
+            Err("distance")
+        );
+        assert_eq!(cache.nearest([0; 3], || 7), 7);
+        assert_eq!(
+            cache.try_nearest([255; 3], || Err("distance")),
+            Err("distance")
+        );
+        assert_eq!(
+            cache.nearest([0; 3], || panic!("failed collision replaced the hit")),
+            7
+        );
+        assert_eq!(cache.nearest([255; 3], || 255), 255);
     }
 
     #[test]

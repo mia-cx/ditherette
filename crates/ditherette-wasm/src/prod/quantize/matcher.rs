@@ -67,6 +67,56 @@ impl PaletteMatcher {
         }
     }
 
+    /// Keeps the first exact tie and rejects any non-finite candidate score.
+    /// Diffusion can exceed the converted source domain, including after an earlier finite match.
+    pub(crate) fn nearest_finite(&self, coordinates: [f32; 3]) -> Option<PaletteColor> {
+        match self.matching {
+            MatchPolicy::SrgbEuclidean
+            | MatchPolicy::LinearRgbEuclidean
+            | MatchPolicy::OklabEuclidean
+            | MatchPolicy::OklchEuclidean
+            | MatchPolicy::CielabEuclidean
+            | MatchPolicy::CielchEuclidean
+            | MatchPolicy::YcbcrEuclidean => self.scan_finite(coordinates, euclidean3_squared),
+            MatchPolicy::OklchCircularHue | MatchPolicy::CielchCircularHue => {
+                self.scan_finite(coordinates, circular_hue3_squared)
+            }
+            MatchPolicy::OklchHueArc | MatchPolicy::CielchHueArc => {
+                self.scan_finite(coordinates, hue_arc3_squared)
+            }
+            MatchPolicy::SrgbCompuphase => self.scan_finite(coordinates, |a, b| {
+                weighted_rgb_squared(a, b, WeightedRgbMetric::CompuPhase)
+            }),
+            MatchPolicy::SrgbRec601 => self.scan_finite(coordinates, |a, b| {
+                weighted_rgb_squared(a, b, WeightedRgbMetric::Rec601)
+            }),
+            MatchPolicy::SrgbRec709 => self.scan_finite(coordinates, |a, b| {
+                weighted_rgb_squared(a, b, WeightedRgbMetric::Rec709)
+            }),
+            MatchPolicy::CielabCiede2000 => self.scan_finite(coordinates, ciede2000_distance),
+        }
+    }
+
+    fn scan_finite(
+        &self,
+        coordinates: [f32; 3],
+        distance: impl Fn([f32; 3], [f32; 3]) -> f32,
+    ) -> Option<PaletteColor> {
+        let mut best = self.colors[0];
+        let mut best_score = f32::INFINITY;
+        for &candidate in &self.colors {
+            let score = distance(coordinates, candidate.coordinates);
+            if !score.is_finite() {
+                return None;
+            }
+            if score < best_score {
+                best = candidate;
+                best_score = score;
+            }
+        }
+        Some(best)
+    }
+
     // Each function item/closure produces its own scan, with no per-candidate policy dispatch.
     fn scan(
         &self,

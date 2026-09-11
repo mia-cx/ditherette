@@ -15,7 +15,7 @@ use crate::{
             cache::StageOptions,
             failure::Failure,
             lifecycle::Stage,
-            request::{BayerSize, DitherPolicy, Output},
+            request::{BayerSize, DiffusionFeedback, DitherPolicy, Output},
         },
         dither::error_diffusion::prepared::{
             execute_with_progress, execute_with_scratch, DiffusionPolicy,
@@ -256,7 +256,12 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     }
     let mut rgb_cache = if matches!(
         dither,
-        DitherPolicy::None {} | DitherPolicy::Separable { .. }
+        DitherPolicy::None {}
+            | DitherPolicy::Separable { .. }
+            | DitherPolicy::Diffusion {
+                feedback: DiffusionFeedback::SrgbBytes,
+                ..
+            }
     ) {
         cache::Work::try_new(
             output_dimensions,
@@ -305,6 +310,10 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         DitherPolicy::Diffusion { .. } if enabled => execute_with_progress(
             prepared,
             &mut scratch.diffusion,
+            match &mut rgb_cache {
+                Some(cache::Work::Scalar(entries)) => entries,
+                _ => &mut [],
+            },
             view,
             indices,
             DiffusionPolicy::new(dither)?,
@@ -313,6 +322,10 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         DitherPolicy::Diffusion { .. } => execute_with_scratch(
             prepared,
             &mut scratch.diffusion,
+            match &mut rgb_cache {
+                Some(cache::Work::Scalar(entries)) => entries,
+                _ => &mut [],
+            },
             view,
             indices,
             DiffusionPolicy::new(dither)?,
