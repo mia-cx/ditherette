@@ -68,7 +68,9 @@ Joined runtime `753bfebe` passes 476 native tests with bench-subjects, 21 privat
 A seven-line Yliluoma test-boundary snapshot fix restores inherited cache-hit assertions without runtime changes.
 Final scalar SHA is `be2e868f9404a2bd1ad47420052b914526c296488d3539499dcae6029024078f`; threaded SHA is `51b9cee2512883ff8756119db1911050eb09484accba5f8a175271eb7749872c`.
 All finished compiler targets from this work are cleared; native executables, Wasm snapshots, PNGs and raw evidence remain outside targets.
-Compiler profile experimentation awaits approval. Frozen bilinear uses anti-aliasing when shrinking, unlike historical JS's four samples; comparison scope also awaits Mia.
+Mia approves an opt-level=3 production Wasm experiment, measuring speed and package size before selection. The default manifest remains opt-level=s.
+The experiment completes 33 browser cases with exact before/after PNGs. The scalar-only change adds 21,236 bytes to the npm archive (5.1%). Area and Lanczos improve; Chromium Oklch's targeted repeat is 83.85→88.45 ms warm. See `docs/performance/wasm-profile-experiment.md` before selecting a default.
+Mia keeps frozen anti-aliased bilinear unchanged. Historical JS samples four pixels; downscale comparisons retain timings but are labeled quality mismatches outside like-for-like target counts.
 The wider JS target remains open. No merge, release, or activation occurs.
 
 Restarted agents own separate worktrees. `v1-diffusion-hotpaths` owns diffusion, quantizer matching/cache and `pipeline/indexed.rs`.
