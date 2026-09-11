@@ -1,6 +1,6 @@
 import { DitheretteError } from './errors.js';
 import type { ErrorCode } from './errors.js';
-import type { InitInput, InitOptions, Progress } from './types.js';
+import type { InitInput, InitOptions, Progress, Rgba8Image } from './types.js';
 
 const maxPixels = 67_108_864;
 const anchors = [
@@ -218,6 +218,8 @@ export function validateResize(value: unknown) {
 		const outputSize = dimensions(output, 16_384, 'invalid-settings', 'output');
 		const data = rgbaBytes(rawData, sourceSize.width * sourceSize.height * 4);
 		return {
+			// Dimensions, allowed keys and packed bytes above validate this caller-owned image.
+			source: source as unknown as Rgba8Image,
 			data,
 			onProgress,
 			sourceWidth: sourceSize.width,

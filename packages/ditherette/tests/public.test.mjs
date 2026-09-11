@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createDitherette, DitheretteError } from '../dist/index.js';
 import { createScalarBindings } from '../dist/wasm/scalar/ditherette_wasm.factory.js';
+import { initializeProcessor } from '../dist/scalar.js';
 
 // Node is a development fixture host, not a supported public runtime.
 const bytes = await readFile(
@@ -42,20 +43,51 @@ const resizeOverhead = await (async () => {
 	return low - 24;
 })();
 
-test('identity resize needs only the owned source while returned bytes remain independent', async () => {
+test('identity resize returns the input object and aliases its bytes', async () => {
 	const value = request();
 	value.output.width = 1;
 	const processor = await createDitherette({ wasm: module, memoryLimitBytes: overhead + 4 });
 	try {
 		const result = processor.resize(value);
-		assert.deepEqual(result.data, value.source.data);
+		assert.equal(result, value.source);
 		result.data.fill(0);
+		assert.deepEqual([...value.source.data], [0, 0, 0, 0]);
 		assert.deepEqual(processor.resize(value).data, value.source.data);
 		value.source.data[0] = 99;
 		assert.equal(processor.resize(value).data[0], 99);
 	} finally {
 		processor.dispose();
 	}
+});
+
+test('identity bypass validates requests and preserves lifecycle without entering Wasm', () => {
+	const processor = initializeProcessor({
+		privateInitialize: () => 0,
+		privateDispose: () => 0,
+		privateResize: () => assert.fail('identity must not enter Wasm')
+	}, 1);
+	const value = request(new Uint8Array([9, 17, 31, 47, 127, 9]).subarray(1, 5));
+	value.output.width = 1;
+	for (const algorithm of ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3', 'trilinear']) {
+		value.output.resize = algorithm === 'area' ? { algorithm } : {
+			algorithm, anchor: 'center',
+			...(['bicubic', 'lanczos2', 'lanczos3'].includes(algorithm) ? { support: 'fixed' } : {})
+		};
+		assert.equal(processor.resize(value), value.source);
+	}
+	value.onProgress = event => {
+		assert.deepEqual(event, { stage: 'complete' });
+		assert.throws(() => processor.resize(value), diagnostic('reentrant-call', 'instance'));
+		assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
+	};
+	assert.equal(processor.resize(value), value.source);
+	value.onProgress = () => { throw new Error('callback failed'); };
+	assert.throws(() => processor.resize(value), diagnostic('callback', 'onProgress'));
+	delete value.onProgress;
+	assert.equal(processor.resize(value), value.source);
+	assert.throws(() => processor.resize({ ...value, version: 0 }), diagnostic('invalid-request', 'version'));
+	processor.dispose();
+	assert.throws(() => processor.resize(value), diagnostic('disposed', 'instance'));
 });
 
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
