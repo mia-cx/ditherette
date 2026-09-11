@@ -11,9 +11,9 @@ use std::mem::size_of;
 use super::{
     alignment::{axis_coordinate_map, map_axis_coordinate, ResizeAnchor},
     scale::{
-        build_source_x_copy_spans_into, exact_downscale_factors, exact_upscale_factors,
-        nearest_scale_class, source_x_copy_spans, uses_source_x_copy_spans, NearestScaleClass,
-        SourceXCopySpan,
+        alignment_offset, build_source_x_copy_spans_into, exact_downscale_factors,
+        exact_upscale_factors, nearest_scale_class, source_x_copy_spans, uses_source_x_copy_spans,
+        NearestScaleClass, SourceXCopySpan,
     },
 };
 
@@ -194,6 +194,35 @@ impl NearestResizePlan {
         (self.x_source_starts.capacity() * size_of::<usize>()
             + self.y_coordinates.capacity() * size_of::<u32>()
             + self.source_x_copy_spans.capacity() * size_of::<SourceXCopySpan>()) as u64
+    }
+
+    /// Write column and row byte offsets as little-endian u32 values for a borrowed gather.
+    /// The caller supplies four bytes per output column and row and validates source storage.
+    pub(crate) fn write_source_offsets<'a>(&self, offsets: &'a mut [u8]) -> (&'a [u8], &'a [u8]) {
+        let (columns, rows) = offsets.split_at_mut(self.output_dimensions.width() as usize * 4);
+        let source_stride = self.source_dimensions.width() * 4;
+        let (x_anchor, y_anchor) = self.anchor.axes();
+        for (x, offset) in columns.chunks_exact_mut(4).enumerate() {
+            let source_x = if let Some((factor, _)) = self.exact_downscale {
+                (x as u32 * factor + alignment_offset(factor, x_anchor)) * 4
+            } else if let Some((factor, _)) = self.exact_upscale {
+                (x as u32 / factor) * 4
+            } else {
+                self.x_source_starts[x] as u32
+            };
+            offset.copy_from_slice(&source_x.to_le_bytes());
+        }
+        for (y, offset) in rows.chunks_exact_mut(4).enumerate() {
+            let source_y = if let Some((_, factor)) = self.exact_downscale {
+                y as u32 * factor + alignment_offset(factor, y_anchor)
+            } else if let Some((_, factor)) = self.exact_upscale {
+                y as u32 / factor
+            } else {
+                self.y_coordinates[y]
+            };
+            offset.copy_from_slice(&(source_y * source_stride).to_le_bytes());
+        }
+        (columns, rows)
     }
 
     /// Build reusable coordinate metadata for one nearest-neighbor resize shape.

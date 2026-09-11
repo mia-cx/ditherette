@@ -56,6 +56,20 @@ pub trait QuantizeBoundary {
     }
     fn input_len(&mut self) -> Result<usize, Failure>;
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure>;
+    /// Opt into copying only Rust-selected RGBA8 pixels before fused indexed processing.
+    fn supports_sparse_input(&self) -> bool {
+        false
+    }
+    /// Gather little-endian u32 column and row byte offsets, checking current source storage.
+    fn gather_input(
+        &mut self,
+        _destination: &mut [u8],
+        _column_offsets: &[u8],
+        _row_offsets: &[u8],
+        _source_len: usize,
+    ) -> Result<(), Failure> {
+        Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
+    }
     /// Return true only after exact equality with the current input; otherwise copy it.
     /// Boundaries without comparison support always copy and request a fresh identity.
     fn snapshot_input(&mut self, destination: &mut [u8], _compare: bool) -> Result<bool, Failure> {

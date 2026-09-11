@@ -49,6 +49,36 @@ pub trait Boundary {
     }
     fn input_len(&mut self) -> Result<usize, Failure>;
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure>;
+    /// Opt into copying only Rust-selected RGBA8 pixels from borrowed input.
+    fn supports_sparse_input(&self) -> bool {
+        false
+    }
+    /// Opt into gathering directly into an independent durable result when progress is disabled.
+    fn supports_sparse_output(&self) -> bool {
+        false
+    }
+    /// Construct the complete result from Rust-selected offsets without a Wasm output buffer.
+    /// The caller precharges exactly four output bytes per pixel before any allocation.
+    fn complete_sparse(
+        &mut self,
+        _column_offsets: &[u8],
+        _row_offsets: &[u8],
+        _source_len: usize,
+        _dimensions: ImageDimensions,
+    ) -> Result<Self::Output, Failure> {
+        Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
+    }
+    /// Gather the sum of column and row byte offsets encoded as little-endian u32 values.
+    /// Recheck source length before reading; every call must observe current source bytes.
+    fn gather_input(
+        &mut self,
+        _destination: &mut [u8],
+        _column_offsets: &[u8],
+        _row_offsets: &[u8],
+        _source_len: usize,
+    ) -> Result<(), Failure> {
+        Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
+    }
     /// Return true only after exact equality with the current input; otherwise copy it.
     /// Boundaries without comparison support always copy and request a fresh identity.
     fn snapshot_input(&mut self, destination: &mut [u8], _compare: bool) -> Result<bool, Failure> {
@@ -449,6 +479,56 @@ impl Processor {
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
+        if boundary.supports_sparse_input()
+            && resize::sparse_nearest(plan.source_len, plan.output_len, plan.resize)
+        {
+            // Callback calls retain resize progress before durable output construction.
+            let direct_output = !enabled && boundary.supports_sparse_output();
+            let mut call = super::preparation::Call::new(
+                &mut self.preparation,
+                None,
+                Some(super::preparation::ResizePreparation {
+                    source: plan.source,
+                    output: request.output,
+                }),
+                // Zeroing the snapshot length invalidates its full-source identity.
+                [
+                    0,
+                    if direct_output { 0 } else { plan.output_len },
+                    resize::sparse_nearest_offset_bytes(plan.output),
+                    0,
+                ],
+                0,
+                // Direct output owns the same mandatory bytes outside Wasm until handoff.
+                overhead
+                    + if direct_output {
+                        plan.output_len as u64
+                    } else {
+                        0
+                    },
+                self.memory_limit,
+                &mut self.peak_capacity,
+                allocator,
+            )?;
+            let (_, metadata, scratch) = call.parts();
+            let [_, output, offsets, _] = &mut scratch.buffers;
+            let (columns, rows) = metadata
+                .expect("requested nearest resize")
+                .write_nearest_source_offsets(offsets);
+            if direct_output {
+                let result = boundary.complete_sparse(columns, rows, plan.source_len, plan.output);
+                return call.finish(progress.finish(result, None));
+            }
+            boundary.gather_input(output, columns, rows, plan.source_len)?;
+            progress.report(
+                boundary.progress(),
+                Stage::Resize,
+                u64::from(plan.output.height()),
+                u64::from(plan.output.height()),
+            )?;
+            let result = boundary.complete(output, plan.output);
+            return call.finish(progress.finish(result, boundary.progress()));
+        }
         let mut call = super::preparation::Call::snapshot(
             &mut self.preparation,
             plan.source_len,

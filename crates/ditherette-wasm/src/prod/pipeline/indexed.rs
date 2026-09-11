@@ -72,35 +72,62 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     let rgba_len = output_dimensions
         .storage_len::<Rgba8>()
         .expect("validated output");
-    let mut call = Call::snapshot(store, source_len, overhead, limit, peak, allocator)?;
-    let source = call.source(source_dimensions, |bytes, compare| {
-        boundary.snapshot_input(bytes, compare)
-    })?;
-    let palette = identity::palette_content(request.palette)?;
+    let sparse = boundary.supports_sparse_input()
+        && resize.is_some_and(|output| {
+            super::resize::sparse_nearest(source_len, rgba_len, output.resize)
+        });
+    let offset_bytes = super::resize::sparse_nearest_offset_bytes(output_dimensions);
+    let (mut call, source) = if sparse {
+        // Clear the snapshot length before reusing its storage for source offsets.
+        // Sparse samples have no full-source identity and never enter the image cache.
+        let mut call = Call::new(
+            store, None, None, [0; 4], 0, overhead, limit, peak, allocator,
+        )?;
+        // Offset scratch must not pin a larger prior snapshot during the remaining preflight.
+        if call.scratch.buffers[0].capacity() > offset_bytes {
+            call.scratch.buffers[0] = Vec::new();
+        }
+        (call, None)
+    } else {
+        let mut call = Call::snapshot(store, source_len, overhead, limit, peak, allocator)?;
+        let source = call.source(source_dimensions, |bytes, compare| {
+            boundary.snapshot_input(bytes, compare)
+        })?;
+        (call, Some(source))
+    };
     let resize_key = resize
-        .map(|output| identity::stage(Some(source), StageOptions::Resize { output }))
+        .zip(source)
+        .map(|(output, source)| identity::stage(Some(source), StageOptions::Resize { output }))
         .transpose()?;
-    let rgba_key = resize_key.unwrap_or(source);
+    let rgba_key = resize_key.or(source);
     let policy = match dither {
         DitherPolicy::Separable { perturb } => Some(perturb),
         _ => None,
     };
     let perturb_key = policy
-        .map(|perturb| identity::stage(Some(rgba_key), StageOptions::Perturb { perturb }))
+        .zip(rgba_key)
+        .map(|(perturb, rgba_key)| {
+            identity::stage(Some(rgba_key), StageOptions::Perturb { perturb })
+        })
         .transpose()?;
     let indexed_dither = if policy.is_some() {
         DitherPolicy::None {}
     } else {
         dither
     };
-    let final_key = identity::indexed(
-        perturb_key.unwrap_or(rgba_key),
-        palette,
-        request.alpha,
-        request.matching,
-        indexed_dither,
-    )?;
-    if call.take_image(2, final_key) {
+    let final_key = perturb_key
+        .or(rgba_key)
+        .map(|parent| {
+            identity::indexed(
+                parent,
+                identity::palette_content(request.palette)?,
+                request.alpha,
+                request.matching,
+                indexed_dither,
+            )
+        })
+        .transpose()?;
+    if final_key.is_some_and(|key| call.take_image(2, key)) {
         let (bytes, metadata) = call.indexed_result(3);
         let result = boundary.complete(bytes, output_dimensions, metadata);
         return call.finish(progress.finish(result, boundary.progress()));
@@ -151,7 +178,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 output,
             }),
         [
-            source_len,
+            if sparse { offset_bytes } else { source_len },
             if resize.is_some() && !resized_hit {
                 rgba_len
             } else {
@@ -187,25 +214,31 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     if resize.is_some() && !resized_hit {
         let (_, prepared, scratch) = call.parts();
         let [source, resized, _, _] = &mut scratch.buffers;
-        let source = ImageView::packed(source, source_dimensions).expect("owned source");
-        let output = ImageViewMut::packed(resized, output_dimensions).expect("reserved resize");
-        if enabled {
-            prepared.expect("requested resize").execute_with_progress(
-                source,
-                output,
-                &mut |completed, total| {
+        let prepared = prepared.expect("requested resize");
+        if sparse {
+            let (columns, rows) = prepared.write_nearest_source_offsets(source);
+            boundary.gather_input(resized, columns, rows, source_len)?;
+            progress.report(
+                boundary.progress(),
+                Stage::Resize,
+                u64::from(output_dimensions.height()),
+                u64::from(output_dimensions.height()),
+            )?;
+        } else {
+            let source = ImageView::packed(source, source_dimensions).expect("owned source");
+            let output = ImageViewMut::packed(resized, output_dimensions).expect("reserved resize");
+            if enabled {
+                prepared.execute_with_progress(source, output, &mut |completed, total| {
                     progress.report(
                         boundary.progress(),
                         Stage::Resize,
                         u64::from(completed),
                         u64::from(total),
                     )
-                },
-            )?;
-        } else {
-            prepared
-                .expect("requested resize")
-                .execute(source, output)?;
+                })?;
+            } else {
+                prepared.execute(source, output)?;
+            }
         }
     }
     if let Some(perturb) = policy {
@@ -382,7 +415,9 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     if let Some(key) = perturb_key {
         call.retain_rgba(1, key, 2, output_dimensions, peak);
     }
-    call.retain_indexed(final_key, 3, output_dimensions, peak);
+    if let Some(key) = final_key {
+        call.retain_indexed(key, 3, output_dimensions, peak);
+    }
     let (bytes, metadata) = call.indexed_result(3);
     let result = boundary.complete(bytes, output_dimensions, metadata);
     call.finish(progress.finish(result, boundary.progress()))
