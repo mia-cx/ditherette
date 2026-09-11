@@ -143,7 +143,6 @@ impl PreparedQuantizer {
         });
     }
 
-    #[inline(always)]
     fn quantize_row_with(
         &self,
         source: &[u8],
