@@ -291,7 +291,11 @@ fn staged(input: &[u8], request: ProcessRequest<'_>) -> IndexedImage {
 #[test]
 fn sparse_process_matches_staged_calls_for_all_modes_and_observes_mutations() {
     let mut processor = Processor::new(1 << 20, 0).unwrap();
-    for (source, output) in [((43, 37), (7, 5)), ((256, 256), (64, 64))] {
+    for (source, output) in [
+        ((43, 37), (7, 5)),
+        ((256, 256), (64, 64)),
+        ((64, 64), (32, 32)),
+    ] {
         let mut io = Io::new(source.0, source.1);
         for dither in dithers() {
             let request = process_request(request(source, output, Anchor::BottomRight), dither);
@@ -305,8 +309,20 @@ fn sparse_process_matches_staged_calls_for_all_modes_and_observes_mutations() {
             assert_eq!(changed, staged(&io.input, request));
             assert_ne!(transparent, changed);
         }
-        assert!(io.snapshots.is_empty());
-        assert_eq!(io.gathers, 15);
+        if output == (32, 32) {
+            assert_eq!(
+                io.snapshots.len(),
+                6,
+                "separable and Yliluoma keep full snapshots"
+            );
+            assert_eq!(
+                io.gathers, 9,
+                "only None and both diffusion modes gather at half size"
+            );
+        } else {
+            assert!(io.snapshots.is_empty());
+            assert_eq!(io.gathers, 15);
+        }
     }
 }
 
@@ -315,7 +331,7 @@ fn sparse_process_full_transitions_never_reuse_offset_bytes_as_a_snapshot() {
     let mut processor = Processor::new(1 << 20, 0).unwrap();
     let mut io = Io::new(64, 64);
     let full = process_request(
-        request((64, 64), (32, 32), Anchor::TopLeft),
+        request((64, 64), (48, 48), Anchor::TopLeft),
         DitherPolicy::None {},
     );
     let sparse = process_request(
@@ -486,15 +502,17 @@ fn expected(input: &[u8], request: ResizeRequest, anchor: ResizeAnchor) -> Vec<u
 #[test]
 fn sparse_samples_match_frozen_nearest_for_every_anchor_and_scale_plan() {
     for (source, output) in [
-        ((40, 32), (10, 8)), // Exact factors at the cutoff.
-        ((45, 63), (5, 7)),  // Odd exact factors.
-        ((43, 37), (7, 5)),  // Fractional maps.
-        ((2, 128), (4, 2)),  // Mixed upscale and downscale axes.
-        ((128, 3), (4, 3)),  // Same-height map.
-        ((3, 128), (3, 4)),  // Same-width map.
-        ((64, 64), (1, 17)), // One output column.
-        ((64, 64), (17, 1)), // One output row.
-        ((64, 64), (1, 1)),  // One sampled pixel.
+        ((40, 32), (20, 16)), // Exact factors at the candidate cutoff.
+        ((41, 33), (20, 16)), // Fractional maps just below the cutoff.
+        ((40, 32), (10, 8)),  // Quarter-sized dimensions.
+        ((45, 63), (5, 7)),   // Odd exact factors.
+        ((43, 37), (7, 5)),   // Fractional maps.
+        ((2, 128), (4, 2)),   // Mixed upscale and downscale axes.
+        ((128, 3), (4, 3)),   // Same-height map.
+        ((3, 128), (3, 4)),   // Same-width map.
+        ((64, 64), (1, 17)),  // One output column.
+        ((64, 64), (17, 1)),  // One output row.
+        ((64, 64), (1, 1)),   // One sampled pixel.
     ] {
         let mut processor = Processor::new(1_000_000, 0).unwrap();
         let mut io = Io::new(source.0, source.1);
@@ -526,7 +544,7 @@ fn sparse_calls_observe_mutations_and_invalidate_full_source_identity() {
     let mut processor = Processor::new(1_000_000, 0).unwrap();
     let mut io = Io::new(64, 64);
     let sparse = request((64, 64), (4, 4), Anchor::TopLeft);
-    let full = request((64, 64), (32, 32), Anchor::TopLeft);
+    let full = request((64, 64), (48, 48), Anchor::TopLeft);
     processor.resize(full, &mut io).unwrap();
     processor.resize(full, &mut io).unwrap();
     assert_eq!(io.snapshots, [false, true]);

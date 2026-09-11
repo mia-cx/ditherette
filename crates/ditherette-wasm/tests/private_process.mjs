@@ -173,18 +173,20 @@ test('sparse process matches staged modes on offset views without full input or 
 	const { bindings, raw } = await fresh();
 	const reference = await fresh();
 	try {
-		for (const [source, output] of [[[43, 37], [7, 5]], [[256, 256], [64, 64]]]) {
+		for (const [source, output] of [[[43, 37], [7, 5]], [[256, 256], [64, 64]], [[64, 64], [32, 32]]]) {
 			for (const offset of [0, 1, 4]) {
 				const backing = Uint8Array.from({ length: source[0] * source[1] * 4 + offset }, (_, i) => (i * 73 + Math.floor(i / 251)) & 255);
 				const input = backing.subarray(offset);
 				const original = input.slice();
 				for (const mode of modes) {
+					const ratio = mode[0] === 1 || mode[0] === 3 ? 16 : 4;
+					const gathers = output[0] * output[1] <= source[0] * source[1] / ratio;
 					const expected = staged(reference.bindings, input, source, output, mode);
 					const set = Uint8Array.prototype.set;
 					let copies = 0;
 					Uint8Array.prototype.set = function (...args) {
-						assert.notEqual(this.buffer, raw.memory.buffer, 'fused sparse input uses gather');
-						copies++;
+						if (this.buffer === raw.memory.buffer) assert.equal(gathers, false, 'sparse modes never snapshot');
+						else copies++;
 						return Reflect.apply(set, this, args);
 					};
 					let result;
@@ -209,7 +211,7 @@ test('sparse process stays fresh across source mutations, geometry changes, and 
 	const input = Uint8Array.from({ length: 64 * 64 * 4 }, (_, i) => i & 255);
 	const durable = process(bindings, input, [64, 64], [4, 4]).value;
 	const saved = structuredClone(durable);
-	for (const output of [[32, 32], [4, 4], [3, 5], [4, 4], [32, 32], [4, 4]]) {
+	for (const output of [[48, 48], [4, 4], [32, 32], [3, 5], [4, 4], [48, 48], [4, 4]]) {
 		input.fill(output[0] === 4 ? 255 : 0);
 		for (const mode of modes) {
 			const result = process(bindings, input, [64, 64], output, mode);

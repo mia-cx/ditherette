@@ -73,7 +73,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         .expect("validated output");
     let sparse = boundary.supports_sparse_input()
         && resize.is_some_and(|output| {
-            super::resize::sparse_nearest(source_len, rgba_len, output.resize)
+            super::resize::sparse_nearest_for_process(source_len, rgba_len, output.resize, dither)
         });
     let offset_bytes = super::resize::sparse_nearest_offset_bytes(output_dimensions);
     let (mut call, source) = if sparse {
