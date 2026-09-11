@@ -1,15 +1,20 @@
 use ditherette_wasm::{
-    image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
+    image::{
+        contracts::{IndexedImage, PaletteEntry},
+        ImageBuf, ImageDimensions, ImageView, ImageViewMut, PaletteIndex8, Rgba8,
+    },
     prod::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             lifecycle::{Progress, Stage},
-            request::{Anchor, Output, ResizePolicy},
+            request::*,
         },
         pipeline::{
+            process::ProcessRequest,
             processor::{Allocator, Boundary, Processor, ResizeRequest},
             progress::Callback,
+            quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
         },
     },
     spec::resize::{common::alignment::ResizeAnchor, scalar::nearest::resize_nearest_into},
@@ -79,7 +84,7 @@ impl Boundary for Io {
         if compare && destination == self.input {
             return Ok(true);
         }
-        self.copy_input(destination)?;
+        Boundary::copy_input(self, destination)?;
         Ok(false)
     }
 
@@ -119,6 +124,300 @@ impl Boundary for Io {
         }
         Ok(bytes.to_vec())
     }
+}
+
+impl QuantizeBoundary for Io {
+    type Output = IndexedImage;
+
+    fn progress(&mut self) -> Option<&mut dyn Callback> {
+        Boundary::progress(self)
+    }
+    fn input_len(&mut self) -> Result<usize, Failure> {
+        Boundary::input_len(self)
+    }
+    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
+        Boundary::copy_input(self, destination)
+    }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        Boundary::snapshot_input(self, destination, compare)
+    }
+    fn supports_sparse_input(&self) -> bool {
+        self.sparse
+    }
+    fn gather_input(
+        &mut self,
+        destination: &mut [u8],
+        offsets: &[u8],
+        source_len: usize,
+    ) -> Result<(), Failure> {
+        Boundary::gather_input(self, destination, offsets, source_len)
+    }
+    fn complete(
+        &mut self,
+        bytes: &[u8],
+        dimensions: ImageDimensions,
+        metadata: IndexedMetadataRef<'_>,
+    ) -> Result<IndexedImage, Failure> {
+        let indices = Boundary::complete(self, bytes, dimensions)?;
+        Ok(IndexedImage {
+            indices: ImageBuf::<PaletteIndex8>::from_vec_packed(indices, dimensions).unwrap(),
+            palette: metadata.palette.clone(),
+            warnings: metadata.warnings.to_vec(),
+        })
+    }
+}
+
+const PALETTE: [PaletteEntry; 4] = [
+    PaletteEntry::Color { rgb: [0; 3] },
+    PaletteEntry::Color { rgb: [255; 3] },
+    PaletteEntry::Color { rgb: [255; 3] },
+    PaletteEntry::Transparent {},
+];
+
+fn process_request(resize: ResizeRequest, dither: DitherPolicy) -> ProcessRequest<'static> {
+    ProcessRequest {
+        source_width: resize.source_width,
+        source_height: resize.source_height,
+        palette: &PALETTE,
+        recipe: RecipeV1 {
+            version: 1,
+            output: resize.output,
+            alpha: AlphaPolicy::Preserve { threshold: 128.0 },
+            matching: MatchPolicy::SrgbEuclidean,
+            dither,
+        },
+    }
+}
+
+fn dithers() -> [DitherPolicy; 5] {
+    [
+        DitherPolicy::None {},
+        DitherPolicy::Separable {
+            perturb: PerturbPolicy {
+                field: Field::BlueNoise {},
+                space: WorkingSpace::Oklab,
+                strength: 0.7,
+                placement: Placement::Adaptive {
+                    radius: 1,
+                    threshold: 0.3,
+                    softness: 0.2,
+                },
+            },
+        },
+        DitherPolicy::Diffusion {
+            kernel: Diffusion::SierraLite,
+            feedback: DiffusionFeedback::Matching,
+            strength: 0.7,
+            serpentine: true,
+            placement: Placement::Everywhere {},
+        },
+        DitherPolicy::Diffusion {
+            kernel: Diffusion::FloydSteinberg,
+            feedback: DiffusionFeedback::SrgbBytes,
+            strength: 1.0,
+            serpentine: true,
+            placement: Placement::Everywhere {},
+        },
+        DitherPolicy::Yliluoma {
+            size: BayerSize::Four,
+            placement: Placement::Everywhere {},
+        },
+    ]
+}
+
+fn staged(input: &[u8], request: ProcessRequest<'_>) -> IndexedImage {
+    let mut processor = Processor::new(1 << 20, 0).unwrap();
+    let mut io = Io::new(1, 1);
+    io.input = input.to_vec();
+    io.sparse = false;
+    let resized = processor
+        .resize(
+            ResizeRequest {
+                source_width: request.source_width,
+                source_height: request.source_height,
+                output: request.recipe.output,
+            },
+            &mut io,
+        )
+        .unwrap();
+    io.input = resized;
+    processor
+        .dither_and_quantize(
+            QuantizeRequest {
+                source_width: request.recipe.output.width,
+                source_height: request.recipe.output.height,
+                palette: request.palette,
+                alpha: request.recipe.alpha,
+                matching: request.recipe.matching,
+            },
+            request.recipe.dither,
+            &mut io,
+        )
+        .unwrap()
+}
+
+#[test]
+fn sparse_process_matches_staged_calls_for_all_modes_and_observes_mutations() {
+    let mut processor = Processor::new(1 << 20, 0).unwrap();
+    for (source, output) in [((43, 37), (7, 5)), ((256, 256), (64, 64))] {
+        let mut io = Io::new(source.0, source.1);
+        for dither in dithers() {
+            let request = process_request(request(source, output, Anchor::BottomRight), dither);
+            let durable = processor.process(request, &mut io).unwrap();
+            assert_eq!(durable, staged(&io.input, request));
+            io.input.fill(0);
+            let transparent = processor.process(request, &mut io).unwrap();
+            assert_eq!(transparent, staged(&io.input, request));
+            io.input.fill(255);
+            let changed = processor.process(request, &mut io).unwrap();
+            assert_eq!(changed, staged(&io.input, request));
+            assert_ne!(transparent, changed);
+        }
+        assert!(io.snapshots.is_empty());
+        assert_eq!(io.gathers, 15);
+    }
+}
+
+#[test]
+fn sparse_process_full_transitions_never_reuse_offset_bytes_as_a_snapshot() {
+    let mut processor = Processor::new(1 << 20, 0).unwrap();
+    let mut io = Io::new(64, 64);
+    let full = process_request(
+        request((64, 64), (32, 32), Anchor::TopLeft),
+        DitherPolicy::None {},
+    );
+    let sparse = process_request(
+        request((64, 64), (4, 4), Anchor::TopLeft),
+        DitherPolicy::None {},
+    );
+    processor.process(full, &mut io).unwrap();
+    processor.process(full, &mut io).unwrap();
+    processor.process(sparse, &mut io).unwrap();
+    io.input[0..4].fill(255);
+    assert_eq!(
+        processor.process(sparse, &mut io).unwrap(),
+        staged(&io.input, sparse)
+    );
+    assert_eq!(
+        processor.process(full, &mut io).unwrap(),
+        staged(&io.input, full)
+    );
+    assert_eq!(io.snapshots, [false, true, false]);
+    io.input[4] ^= 255; // Unsampled data changes without a full-source snapshot.
+    assert_eq!(
+        processor.process(sparse, &mut io).unwrap(),
+        staged(&io.input, sparse)
+    );
+    io.sparse = false;
+    assert_eq!(
+        processor.process(sparse, &mut io).unwrap(),
+        staged(&io.input, sparse)
+    );
+    assert_eq!(io.gathers, 3);
+}
+
+#[test]
+fn sparse_process_budget_and_partial_gather_failures_recover_before_publication() {
+    let request = process_request(request((256, 256), (4, 4), Anchor::Center), dithers()[1]);
+    let mut io = Io::new(256, 256);
+    let mut probe = Processor::new(1 << 20, 0).unwrap();
+    let expected = probe.process(request, &mut io).unwrap();
+    let limit = probe.peak_capacity_bytes();
+    assert!(limit < io.input.len() as u64);
+    let mut exact = Processor::new(limit, 0).unwrap();
+    assert_eq!(exact.process(request, &mut io).unwrap(), expected);
+    let before = io.gathers;
+    let mut short = Processor::new(limit - 1, 0).unwrap();
+    assert_eq!(
+        short.process(request, &mut io).unwrap_err().code,
+        ErrorCode::MemoryLimit
+    );
+    assert_eq!(io.gathers, before);
+    struct Reservation {
+        calls: usize,
+        fail_at: usize,
+        extra: usize,
+    }
+    impl Allocator for Reservation {
+        fn reserve(&mut self, buffer: &mut Vec<u8>, additional: usize) -> Result<(), Failure> {
+            self.calls += 1;
+            if self.calls == self.fail_at {
+                return Err(Failure::new(
+                    ErrorCode::WasmMemoryUnavailable,
+                    ErrorPath::Wasm,
+                ));
+            }
+            buffer.try_reserve_exact(additional + self.extra).unwrap();
+            Ok(())
+        }
+    }
+    for fail_at in 0..=4 {
+        let mut processor = Processor::new(limit, 0).unwrap();
+        let mut reservation = Reservation {
+            calls: 0,
+            fail_at,
+            extra: usize::from(fail_at == 0),
+        };
+        assert_eq!(
+            processor
+                .process_with_allocator(request, &mut io, &mut reservation)
+                .unwrap_err()
+                .code,
+            if fail_at == 0 {
+                ErrorCode::MemoryLimit
+            } else {
+                ErrorCode::WasmMemoryUnavailable
+            }
+        );
+        assert_eq!(io.gathers, before);
+    }
+    for phase in 0..6 {
+        io.fail_gather = phase == 0;
+        io.fail_complete = phase == 1;
+        io.fail_stage = match phase {
+            2 => Some(Stage::Resize),
+            3 => Some(Stage::Perturb),
+            4 => Some(Stage::Quantize),
+            5 => Some(Stage::Complete),
+            _ => None,
+        };
+        assert_eq!(
+            exact.process(request, &mut io).unwrap_err().code,
+            if phase < 2 {
+                ErrorCode::WasmMemoryUnavailable
+            } else {
+                ErrorCode::Callback
+            }
+        );
+        io.fail_gather = false;
+        io.fail_complete = false;
+        io.fail_stage = None;
+        assert_eq!(exact.process(request, &mut io).unwrap(), expected);
+    }
+    exact.dispose().unwrap();
+    assert_eq!(
+        exact.process(request, &mut io).unwrap_err().code,
+        ErrorCode::Disposed
+    );
+}
+
+#[test]
+fn sparse_process_drops_a_large_idle_snapshot_before_reserving_offset_scratch() {
+    let mut io = Io::new(256, 256);
+    let limit = Processor::bookkeeping_bytes(0) + io.input.len() as u64 + 4096;
+    let mut processor = Processor::new(limit, 0).unwrap();
+    processor
+        .resize(request((256, 256), (256, 256), Anchor::Center), &mut io)
+        .unwrap();
+    let request = process_request(
+        request((256, 256), (64, 64), Anchor::Center),
+        DitherPolicy::None {},
+    );
+    assert_eq!(
+        processor.process(request, &mut io).unwrap(),
+        staged(&io.input, request)
+    );
+    assert!(processor.peak_capacity_bytes() <= limit);
 }
 
 fn request(source: (u32, u32), output: (u32, u32), anchor: Anchor) -> ResizeRequest {

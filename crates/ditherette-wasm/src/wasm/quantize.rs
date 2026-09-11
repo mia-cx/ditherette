@@ -1,7 +1,8 @@
 //! Borrowed, caught quantize boundary sharing the scalar processor's lifecycle.
 
 use super::processor::{
-    copy_input, dimension, input_length, restore_ready, snapshot_input, status, take_ready,
+    copy_input, dimension, gather_input, input_length, restore_ready, snapshot_input, status,
+    take_ready,
 };
 use crate::{
     image::{
@@ -126,6 +127,18 @@ impl QuantizeBoundary for JsQuantizeBoundary<'_> {
     }
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         copy_input(destination, self.input)
+            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+    }
+    fn supports_sparse_input(&self) -> bool {
+        true
+    }
+    fn gather_input(
+        &mut self,
+        destination: &mut [u8],
+        offsets: &[u8],
+        source_len: usize,
+    ) -> Result<(), Failure> {
+        gather_input(destination, offsets, self.input, source_len)
             .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
     }
     fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {

@@ -33,7 +33,7 @@ extern "C" {
     #[wasm_bindgen(catch, js_name = copyInput)]
     pub(super) fn copy_input(destination: &mut [u8], source: &Uint8Array) -> Result<(), JsValue>;
     #[wasm_bindgen(catch, js_name = gatherInput)]
-    fn gather_input(
+    pub(super) fn gather_input(
         destination: &mut [u8],
         offsets: &[u8],
         source: &Uint8Array,
