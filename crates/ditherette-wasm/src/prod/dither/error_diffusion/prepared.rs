@@ -366,6 +366,14 @@ impl BorrowedDiffusion<'_> {
                 .map(|rows| rows.prepare_row(y as u32));
             let reverse = policy.serpentine && y % 2 == 1;
             let row = source.row(y as u32).expect("validated source row");
+            let work_rows: [usize; ROWS] = std::array::from_fn(|dy| ((y + dy) % ROWS) * width);
+            let alpha_rows: [Option<&[u8]>; ROWS] = std::array::from_fn(|dy| {
+                if fixed_alpha.is_some() && y + dy < height {
+                    source.row((y + dy) as u32)
+                } else {
+                    None
+                }
+            });
             for step in 0..width {
                 let x = if reverse { width - 1 - step } else { step };
                 let offset = y * width + x;
@@ -375,7 +383,7 @@ impl BorrowedDiffusion<'_> {
                     indices[offset] = index;
                     continue;
                 }
-                let current = self.work[(y % ROWS) * width + x];
+                let current = self.work[work_rows[0] + x];
                 if current.iter().any(|value| !value.is_finite()) {
                     return Err(arithmetic(ErrorPath::DiffusionWork));
                 }
@@ -437,12 +445,12 @@ impl BorrowedDiffusion<'_> {
                         continue;
                     }
                     if fixed_alpha.is_some_and(|(cutoff, _)| {
-                        source.row(target_y as u32).expect("validated target row")[target_x * 4 + 3]
+                        alpha_rows[tap.dy as usize].expect("validated target row")[target_x * 4 + 3]
                             <= cutoff
                     }) {
                         continue;
                     }
-                    let target = (target_y % ROWS) * width + target_x;
+                    let target = work_rows[tap.dy as usize] + target_x;
                     let weight = f64::from(tap.weight) * strength_mask;
                     for axis in 0..3 {
                         let updated =

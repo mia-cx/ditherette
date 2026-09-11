@@ -79,6 +79,13 @@ impl QuantizeBoundary for Boundary<'_> {
         destination.copy_from_slice(self.source);
         Ok(())
     }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        if !self.fail_copy && compare && destination == self.source {
+            return Ok(true);
+        }
+        self.copy_input(destination)?;
+        Ok(false)
+    }
     fn complete(
         &mut self,
         indices: &[u8],
