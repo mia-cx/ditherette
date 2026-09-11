@@ -309,8 +309,20 @@ fn sparse_process_matches_staged_calls_for_all_modes_and_observes_mutations() {
             assert_eq!(changed, staged(&io.input, request));
             assert_ne!(transparent, changed);
         }
-        assert!(io.snapshots.is_empty());
-        assert_eq!(io.gathers, 15);
+        if output == (32, 32) {
+            assert_eq!(
+                io.snapshots.len(),
+                6,
+                "separable and Yliluoma keep full snapshots"
+            );
+            assert_eq!(
+                io.gathers, 9,
+                "only None and both diffusion modes gather at half size"
+            );
+        } else {
+            assert!(io.snapshots.is_empty());
+            assert_eq!(io.gathers, 15);
+        }
     }
 }
 

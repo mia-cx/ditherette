@@ -13,7 +13,7 @@ use crate::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
-            request::{Anchor, ResizePolicy, Support},
+            request::{Anchor, DitherPolicy, ResizePolicy, Support},
         },
         resize::{
             common::allocation::CapacityBudget,
@@ -45,10 +45,27 @@ const TRILINEAR_RECORD_BYTES: u64 = size_of::<PreparedTrilinear<Rgba8>>() as u64
 
 /// Candidate gather cutoff includes half-sized nearest dimensions; complete-call trials select it.
 const SPARSE_NEAREST_SOURCE_RATIO: usize = 4;
+// Larger separable calls benefit from retained perturb stages; Yliluoma stays conservative.
+const SPARSE_NEAREST_STAGE_CACHE_SOURCE_RATIO: usize = 16;
 
 pub(super) fn sparse_nearest(source_len: usize, output_len: usize, policy: ResizePolicy) -> bool {
     matches!(policy, ResizePolicy::Nearest { .. })
         && output_len <= source_len / SPARSE_NEAREST_SOURCE_RATIO
+}
+
+pub(super) fn sparse_nearest_for_process(
+    source_len: usize,
+    output_len: usize,
+    policy: ResizePolicy,
+    dither: DitherPolicy,
+) -> bool {
+    let ratio = match dither {
+        DitherPolicy::None {} | DitherPolicy::Diffusion { .. } => SPARSE_NEAREST_SOURCE_RATIO,
+        DitherPolicy::Separable { .. } | DitherPolicy::Yliluoma { .. } => {
+            SPARSE_NEAREST_STAGE_CACHE_SOURCE_RATIO
+        }
+    };
+    matches!(policy, ResizePolicy::Nearest { .. }) && output_len <= source_len / ratio
 }
 
 pub(super) fn sparse_nearest_offset_bytes(output: ImageDimensions) -> usize {
@@ -58,6 +75,60 @@ pub(super) fn sparse_nearest_offset_bytes(output: ImageDimensions) -> usize {
 #[cfg(test)]
 mod sparse_policy_tests {
     use super::*;
+    use crate::prod::contract::request::{
+        BayerSize, Diffusion, DiffusionFeedback, Field, PerturbPolicy, Placement, WorkingSpace,
+    };
+
+    #[test]
+    fn fused_half_size_gathers_none_and_diffusion_but_keeps_cached_dither_stages() {
+        let nearest = ResizePolicy::Nearest {
+            anchor: Anchor::Center,
+        };
+        for (dither, half_size_gathers) in [
+            (DitherPolicy::None {}, true),
+            (
+                DitherPolicy::Diffusion {
+                    kernel: Diffusion::FloydSteinberg,
+                    feedback: DiffusionFeedback::SrgbBytes,
+                    strength: 1.0,
+                    serpentine: true,
+                    placement: Placement::Everywhere {},
+                },
+                true,
+            ),
+            (
+                DitherPolicy::Separable {
+                    perturb: PerturbPolicy {
+                        field: Field::Bayer {
+                            size: BayerSize::Eight,
+                        },
+                        space: WorkingSpace::Srgb,
+                        strength: 1.0,
+                        placement: Placement::Everywhere {},
+                    },
+                },
+                false,
+            ),
+            (
+                DitherPolicy::Yliluoma {
+                    size: BayerSize::Eight,
+                    placement: Placement::Everywhere {},
+                },
+                false,
+            ),
+        ] {
+            assert_eq!(
+                sparse_nearest_for_process(64 * 64 * 4, 32 * 32 * 4, nearest, dither),
+                half_size_gathers
+            );
+            assert!(sparse_nearest_for_process(
+                64 * 64 * 4,
+                16 * 16 * 4,
+                nearest,
+                dither
+            ));
+        }
+    }
 
     #[test]
     fn half_size_nearest_is_included_but_identity_upscale_and_other_filters_are_not() {
