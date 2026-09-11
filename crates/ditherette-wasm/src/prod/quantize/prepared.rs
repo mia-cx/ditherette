@@ -149,6 +149,20 @@ impl PreparedQuantizer {
         output: &mut [u8],
         mut nearest: impl FnMut([u8; 3]) -> u8,
     ) {
+        if let Some((threshold, index)) = self.palette.preserved_alpha() {
+            if self.palette.visible.is_empty() {
+                output.fill(index);
+                return;
+            }
+            for (source, output) in source.chunks_exact(4).zip(output) {
+                *output = if source[3] <= threshold {
+                    index
+                } else {
+                    nearest([source[0], source[1], source[2]])
+                };
+            }
+            return;
+        }
         for (source, output) in source.chunks_exact(4).zip(output) {
             let rgba = [source[0], source[1], source[2], source[3]];
             *output = match self.palette.prepare_pixel(rgba) {
