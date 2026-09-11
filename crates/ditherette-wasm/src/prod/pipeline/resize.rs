@@ -43,7 +43,7 @@ pub(super) enum PreparedResize {
 // PreparedResize's inline storage belongs to the preparation entry's reserved Vec.
 const TRILINEAR_RECORD_BYTES: u64 = size_of::<PreparedTrilinear<Rgba8>>() as u64;
 
-/// Candidate gather cutoff includes half-sized nearest dimensions; complete-call trials select it.
+/// Measured gather cutoff includes half-sized nearest dimensions.
 const SPARSE_NEAREST_SOURCE_RATIO: usize = 4;
 // Larger separable calls benefit from retained perturb stages; Yliluoma stays conservative.
 const SPARSE_NEAREST_STAGE_CACHE_SOURCE_RATIO: usize = 16;
