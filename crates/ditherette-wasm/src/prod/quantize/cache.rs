@@ -24,6 +24,7 @@ pub(crate) fn recommended_entries(pixel_count: usize, available_bytes: u64) -> u
 /// A fresh binding to one prepared palette/alpha/metric. No float coordinates enter this cache.
 pub(super) struct RgbCache<'a> {
     entries: &'a mut [u64],
+    last: u64,
 }
 
 impl<'a> RgbCache<'a> {
@@ -31,20 +32,27 @@ impl<'a> RgbCache<'a> {
         assert!(entries.len().is_power_of_two() && entries.len() <= MAX_ENTRIES);
         // Scratch may have belonged to any earlier prepared quantizer, including after cancellation.
         entries.fill(0);
-        Self { entries }
+        Self { entries, last: 0 }
     }
 
     #[inline]
     pub fn nearest(&mut self, rgb: [u8; 3], miss: impl FnOnce() -> u8) -> u8 {
         let key = u32::from(rgb[0]) << 16 | u32::from(rgb[1]) << 8 | u32::from(rgb[2]);
+        let tagged = VALID | u64::from(key);
+        // Flat runs avoid the table lookup without weakening exact RGB identity.
+        if self.last & (VALID | RGB_MASK) == tagged {
+            return (self.last >> 24) as u8;
+        }
         // Mix all three byte channels before masking the bounded direct-mapped table.
         let slot = (key.wrapping_mul(0x9e37_79b1) >> 8) as usize & (self.entries.len() - 1);
         let entry = &mut self.entries[slot];
-        if *entry & (VALID | RGB_MASK) == VALID | u64::from(key) {
+        if *entry & (VALID | RGB_MASK) == tagged {
+            self.last = *entry;
             return (*entry >> 24) as u8;
         }
         let index = miss();
         *entry = VALID | u64::from(key) | u64::from(index) << 24;
+        self.last = *entry;
         index
     }
 }
