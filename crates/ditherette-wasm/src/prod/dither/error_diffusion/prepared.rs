@@ -20,6 +20,7 @@ use crate::{
         dither::placement::placement_mask_with_converter,
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
         quantize::{
+            cache::{recommended_entries, RgbCache},
             matcher::{PaletteColor, PaletteMatcher},
             PreparedQuantizer,
         },
@@ -146,6 +147,7 @@ fn nonnegative(value: f32, path: ErrorPath) -> Result<(), Failure> {
 pub struct PreparedDiffusion {
     quantizer: PreparedQuantizer,
     work: Vec<[f32; 3]>,
+    rgb_cache: Vec<u64>,
 }
 
 impl PreparedDiffusion {
@@ -186,12 +188,24 @@ impl PreparedDiffusion {
         let mut work = Vec::new();
         budget.reserve(&mut work, work_len)?;
         work.resize(work_len, [0.0; 3]);
-        Ok(Self { quantizer, work })
+        let entries = recommended_entries(work_len, limit - budget.used);
+        let mut rgb_cache = Vec::new();
+        if entries > 0 && budget.reserve(&mut rgb_cache, entries).is_ok() {
+            rgb_cache.resize(entries, 0);
+        } else {
+            rgb_cache = Vec::new();
+        }
+        Ok(Self {
+            quantizer,
+            work,
+            rgb_cache,
+        })
     }
 
-    /// Actual work capacity alone depends on width, regardless of source height.
+    /// Actual row and optional RGB cache capacities depend on width, not source height.
     pub fn scratch_capacity_bytes(&self) -> u64 {
-        (self.work.capacity() * size_of::<[f32; 3]>()) as u64
+        (self.work.capacity() * size_of::<[f32; 3]>()
+            + self.rgb_cache.capacity() * size_of::<u64>()) as u64
     }
 
     /// Actual owned record, quantizer tables, palette metadata, and work capacities.
@@ -217,7 +231,14 @@ impl PreparedDiffusion {
         indices: &mut [u8],
         policy: DiffusionPolicy,
     ) -> Result<(), Failure> {
-        execute_with_scratch(&self.quantizer, &mut self.work, source, indices, policy)
+        execute_with_scratch(
+            &self.quantizer,
+            &mut self.work,
+            &mut self.rgb_cache,
+            source,
+            indices,
+            policy,
+        )
     }
 }
 
@@ -225,28 +246,40 @@ impl PreparedDiffusion {
 pub(crate) fn execute_with_scratch(
     quantizer: &PreparedQuantizer,
     work: &mut [[f32; 3]],
+    rgb_cache: &mut [u64],
     source: ImageView<'_, Rgba8>,
     indices: &mut [u8],
     policy: DiffusionPolicy,
 ) -> Result<(), Failure> {
-    execute_with_progress(quantizer, work, source, indices, policy, |_| Ok(()))
+    execute_with_progress(quantizer, work, rgb_cache, source, indices, policy, |_| {
+        Ok(())
+    })
 }
 
 /// Reports completed rows without resetting or replaying the continuous feedback traversal.
 pub(crate) fn execute_with_progress(
     quantizer: &PreparedQuantizer,
     work: &mut [[f32; 3]],
+    rgb_cache: &mut [u64],
     source: ImageView<'_, Rgba8>,
     indices: &mut [u8],
     policy: DiffusionPolicy,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    BorrowedDiffusion { quantizer, work }.execute(source, indices, policy, progress)
+    let rgb_cache = (policy.feedback == DiffusionFeedback::SrgbBytes && !rgb_cache.is_empty())
+        .then(|| RgbCache::new(rgb_cache));
+    BorrowedDiffusion {
+        quantizer,
+        work,
+        rgb_cache,
+    }
+    .execute(source, indices, policy, progress)
 }
 
 struct BorrowedDiffusion<'a> {
     quantizer: &'a PreparedQuantizer,
     work: &'a mut [[f32; 3]],
+    rgb_cache: Option<RgbCache<'a>>,
 }
 
 impl BorrowedDiffusion<'_> {
@@ -290,28 +323,34 @@ impl BorrowedDiffusion<'_> {
                     return Err(arithmetic(ErrorPath::DiffusionWork));
                 }
                 let matcher = self.quantizer.matcher();
-                let (selected, error) = match policy.feedback {
+                let (index, error) = match policy.feedback {
                     DiffusionFeedback::SrgbBytes => {
                         let rgb = current
                             .map(|channel| f64::from(channel).round().clamp(0.0, 255.0) as u8);
-                        let selected =
-                            nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))?;
-                        let start = usize::from(selected.index) * 4;
+                        let miss = || {
+                            nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))
+                                .map(|selected| selected.index)
+                        };
+                        let index = match &mut self.rgb_cache {
+                            Some(cache) => cache.try_nearest(rgb, miss)?,
+                            None => miss()?,
+                        };
+                        let start = usize::from(index) * 4;
                         let error: [f64; 3] = std::array::from_fn(|axis| {
                             f64::from(rgb[axis])
                                 - f64::from(self.quantizer.palette().palette.rgba[start + axis])
                         });
-                        (selected, error)
+                        (index, error)
                     }
                     DiffusionFeedback::Matching => {
                         let selected = nearest_finite(matcher, current)?;
                         let error = std::array::from_fn(|axis| {
                             f64::from(current[axis]) - f64::from(selected.coordinates[axis])
                         });
-                        (selected, error)
+                        (selected.index, error)
                     }
                 };
-                indices[offset] = selected.index;
+                indices[offset] = index;
                 let mask = placement_mask_with_converter(
                     source,
                     x as u32,
@@ -331,8 +370,8 @@ impl BorrowedDiffusion<'_> {
                         continue;
                     }
                     if fixed_alpha.is_some_and(|(cutoff, _)| {
-                        source.row(target_y as u32).expect("validated target row")
-                            [target_x * 4 + 3] <= cutoff
+                        source.row(target_y as u32).expect("validated target row")[target_x * 4 + 3]
+                            <= cutoff
                     }) {
                         continue;
                     }

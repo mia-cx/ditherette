@@ -28,6 +28,7 @@ struct Boundary<'a> {
     completions: usize,
     fail_copy: bool,
     fail_complete: bool,
+    progress: bool,
 }
 
 impl<'a> Boundary<'a> {
@@ -38,12 +39,16 @@ impl<'a> Boundary<'a> {
             completions: 0,
             fail_copy: false,
             fail_complete: false,
+            progress: false,
         }
     }
 }
 
 impl QuantizeBoundary for Boundary<'_> {
     type Output = IndexedImage;
+    fn progress(&mut self) -> Option<&mut dyn ditherette_wasm::prod::pipeline::progress::Callback> {
+        self.progress.then_some(self)
+    }
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.data.len())
     }
@@ -76,6 +81,19 @@ impl QuantizeBoundary for Boundary<'_> {
             palette: palette.palette.clone(),
             warnings: palette.warnings.to_vec(),
         })
+    }
+}
+
+impl ditherette_wasm::prod::pipeline::progress::Callback for Boundary<'_> {
+    fn now_ms(&mut self) -> Result<u64, Failure> {
+        Ok(0)
+    }
+
+    fn report(
+        &mut self,
+        _: ditherette_wasm::prod::contract::lifecycle::Progress,
+    ) -> Result<(), ()> {
+        Ok(())
     }
 }
 
@@ -423,6 +441,141 @@ fn ring_capacity_is_three_rows_and_reuse_clears_prior_work() {
                 .unwrap();
             assert_eq!(indices, oracle(input).unwrap().indices.data());
             assert_eq!(prepared.capacity_bytes(), required);
+        }
+    }
+}
+
+#[test]
+fn cached_byte_feedback_matches_frozen_and_direct_scans_for_every_metric_and_kernel() {
+    use production::prepared::{DiffusionPolicy, PreparedDiffusion};
+    let palette = [
+        BW[0],
+        BW[1],
+        PaletteEntry::Color { rgb: [181, 31, 91] },
+        BW[1],
+        PaletteEntry::Transparent {},
+    ];
+    let width = 512;
+    let height = 3;
+    let data: Vec<u8> = (0..width * height)
+        .flat_map(|i| {
+            [
+                (i * 73 + 17) as u8,
+                (i * 31 + 99) as u8,
+                (i * 117 + 41) as u8,
+                [0, 127, 128, 255][i as usize % 4],
+            ]
+        })
+        .collect();
+    let dimensions = ImageDimensions::new(width, height).unwrap();
+    let source = ImageView::packed(&data, dimensions).unwrap();
+    for matching in MODES {
+        for (ordinal, kernel) in KERNELS.into_iter().enumerate() {
+            let mut input = request(&data, width, height);
+            input.quantize.palette = &palette;
+            input.quantize.matching = matching;
+            input.quantize.alpha = [
+                AlphaPolicy::Preserve {
+                    threshold: 127.9999999,
+                },
+                AlphaPolicy::Premultiplied {},
+                AlphaPolicy::Matte { rgb: [33, 71, 109] },
+            ][ordinal % 3];
+            input.dither = DitherPolicy::Diffusion {
+                kernel,
+                feedback: DiffusionFeedback::SrgbBytes,
+                strength: 0.75,
+                serpentine: ordinal % 2 == 0,
+                placement: Placement::Everywhere {},
+            };
+            let required = PreparedDiffusion::required_capacity_bytes(
+                width,
+                &palette,
+                input.quantize.alpha,
+                matching,
+            )
+            .unwrap();
+            let expected = oracle(input).unwrap();
+            for limit in [required, required + (1 << 20)] {
+                let mut prepared = PreparedDiffusion::try_new(
+                    width,
+                    &palette,
+                    input.quantize.alpha,
+                    matching,
+                    limit,
+                )
+                .unwrap();
+                assert_eq!(prepared.capacity_bytes() > required, limit > required);
+                assert!(prepared.capacity_bytes() <= limit);
+                let mut output = vec![0; (width * height) as usize];
+                prepared
+                    .execute(
+                        source,
+                        &mut output,
+                        DiffusionPolicy::new(input.dither).unwrap(),
+                    )
+                    .unwrap();
+                assert_eq!(
+                    output,
+                    expected.indices.data(),
+                    "{matching:?}, {kernel:?}, budget {limit}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn public_diffusion_uses_spare_cache_capacity_and_recovers_with_or_without_progress() {
+    let data: Vec<u8> = (0..2048u32)
+        .flat_map(|i| [(i * 73) as u8, (i * 31) as u8, (i * 117) as u8, 255])
+        .collect();
+    for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+        let mut input = request(&data, 64, 32);
+        if let DitherPolicy::Diffusion { feedback: mode, .. } = &mut input.dither {
+            *mode = feedback;
+        }
+        let run = |processor: &mut Processor, boundary: &mut Boundary<'_>| {
+            processor.dither_and_quantize(processor_request(input), input.dither, boundary)
+        };
+        let mut roomy = Processor::new(1 << 20, 0).unwrap();
+        let expected = oracle(input).unwrap();
+        assert_eq!(
+            run(&mut roomy, &mut Boundary::new(&data)).unwrap(),
+            expected
+        );
+        let minimum = budget_support::minimum(roomy.peak_capacity_bytes(), |limit| {
+            Processor::new(limit, 0)
+                .and_then(|mut processor| run(&mut processor, &mut Boundary::new(&data)))
+                .is_ok()
+        });
+        for progress in [false, true] {
+            for limit in [minimum, 1 << 20] {
+                let mut processor = Processor::new(limit, 0).unwrap();
+                let mut boundary = Boundary {
+                    progress,
+                    ..Boundary::new(&data)
+                };
+                assert_eq!(run(&mut processor, &mut boundary).unwrap(), expected);
+                let peak = processor.peak_capacity_bytes();
+                assert!(peak <= limit);
+                assert_eq!(
+                    peak >= minimum + 8192,
+                    limit > minimum && feedback == DiffusionFeedback::SrgbBytes,
+                    "{feedback:?}, progress {progress}, minimum {minimum}, limit {limit}, peak {peak}"
+                );
+                let mut overflow = input.dither;
+                if let DitherPolicy::Diffusion { strength, .. } = &mut overflow {
+                    *strength = f32::MAX;
+                }
+                let completions = boundary.completions;
+                let failure = processor
+                    .dither_and_quantize(processor_request(input), overflow, &mut boundary)
+                    .unwrap_err();
+                assert_eq!(failure.code, ErrorCode::Runtime);
+                assert_eq!(boundary.completions, completions);
+                assert_eq!(run(&mut processor, &mut boundary).unwrap(), expected);
+            }
         }
     }
 }
