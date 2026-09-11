@@ -17,7 +17,7 @@ use crate::{
                 MAX_SOURCE_SIDE,
             },
         },
-        dither::placement::placement_mask_at,
+        dither::placement::placement_mask_with_converter,
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
         quantize::{
             matcher::{PaletteColor, PaletteMatcher},
@@ -303,12 +303,13 @@ impl BorrowedDiffusion<'_> {
                     }
                 };
                 indices[offset] = selected.index;
-                let mask = placement_mask_at(
+                let mask = placement_mask_with_converter(
                     source,
                     x as u32,
                     y as u32,
                     matcher.matching.space(),
                     policy.placement,
+                    self.quantizer.converter(),
                 );
                 let strength_mask = f64::from(policy.strength) * f64::from(mask);
                 for tap in policy.kernel.taps() {
