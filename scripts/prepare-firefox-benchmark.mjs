@@ -51,6 +51,15 @@ export async function prepareFirefoxBenchmark(executable, destination) {
 	catch (error) { if (error.code !== 'ENOENT') throw error; }
 	await mkdir(path.dirname(policyPath), { recursive: true });
 	await writeFile(policyPath, JSON.stringify({ ...policy, policies: { ...policy.policies, DisableAppUpdate: true } }));
+	// Juggler's test configuration overrides normal policy discovery. Resolve from
+	// the executable directory so paired snapshots can relocate the prepared tree.
+	const configPath = path.join(target, 'playwright.cfg');
+	const config = await readFile(configPath, 'utf8');
+	await writeFile(configPath, `${config}\n// Pin the benchmark runtime even after relocation.\n` +
+		`var benchmarkPolicy = Components.classes["@mozilla.org/file/directory_service;1"]\n` +
+		`  .getService(Components.interfaces.nsIProperties).get("GreD", Components.interfaces.nsIFile);\n` +
+		`benchmarkPolicy.append("distribution");\nbenchmarkPolicy.append("policies.json");\n` +
+		`lockPref("browser.policies.alternatePath", benchmarkPolicy.path);\n`);
 	const result = { executable: path.join(target, path.basename(executable)), source: path.resolve(executable),
 		archiveBefore: before, archiveAfter: await hash(), allowUnobservedWasm: true };
 	await writeFile(path.join(target, 'benchmark-runtime.json'), JSON.stringify(result, null, 2));
