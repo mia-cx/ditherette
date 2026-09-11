@@ -240,7 +240,7 @@ impl<'a> AdaptivePlacementRows<'a> {
             let slot = self
                 .tags
                 .iter()
-                .position(|tag| tag.is_none_or(|cached| !needed.contains(&cached)))
+                .position(|tag| tag.map_or(true, |cached| !needed.contains(&cached)))
                 .expect("three slots fit every distinct requested row");
             let source = self.source.row(row).expect("validated source row");
             for (pixel, target) in source
