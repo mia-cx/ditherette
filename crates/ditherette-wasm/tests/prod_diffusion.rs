@@ -290,7 +290,13 @@ fn compare(input: DitherQuantizeRequest<'_>) {
             input.dither,
             &mut Boundary::new(input.quantize.source.data),
         );
-        for result in [ring, complete] {
+        let native = production::prepared::diffuse(input, u64::MAX).map_err(|failure| {
+            let production::prepared::DiffusionError::Execution(failure) = failure else {
+                panic!("validated native diffusion preparation failed");
+            };
+            failure
+        });
+        for result in [ring, complete, native] {
             match (result, oracle(input)) {
                 (Ok(actual), Ok(expected)) => {
                     assert_eq!(actual, expected, "ring {:?}", input.dither)
@@ -532,8 +538,18 @@ fn public_diffusion_uses_spare_cache_capacity_and_recovers_with_or_without_progr
         .collect();
     for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
         let mut input = request(&data, 64, 32);
-        if let DitherPolicy::Diffusion { feedback: mode, .. } = &mut input.dither {
+        if let DitherPolicy::Diffusion {
+            feedback: mode,
+            placement,
+            ..
+        } = &mut input.dither
+        {
             *mode = feedback;
+            *placement = Placement::Adaptive {
+                radius: 1,
+                threshold: 0.0,
+                softness: 0.0,
+            };
         }
         let run = |processor: &mut Processor, boundary: &mut Boundary<'_>| {
             processor.dither_and_quantize(processor_request(input), input.dither, boundary)

@@ -15,6 +15,93 @@ const SPACES: [WorkingSpace; 7] = [
 ];
 
 #[test]
+fn optional_rows_count_actual_capacity_and_preserve_low_budget_and_everywhere_fallbacks() {
+    let adaptive = Placement::Adaptive {
+        radius: 1,
+        threshold: 5.0,
+        softness: 10.0,
+    };
+    let full = AdaptivePlacementWork::try_new(7, adaptive, u64::MAX).unwrap();
+    let minimum = full.capacity_bytes();
+    assert_eq!(minimum, AdaptivePlacementWork::RECORD_BYTES + 7 * 36);
+    assert!(AdaptivePlacementWork::try_new(7, adaptive, minimum - 1).is_none());
+    assert_eq!(
+        AdaptivePlacementWork::try_new(7, adaptive, minimum)
+            .unwrap()
+            .capacity_bytes(),
+        minimum
+    );
+    assert!(AdaptivePlacementWork::try_new(7, Placement::Everywhere {}, u64::MAX).is_none());
+}
+
+#[test]
+fn cached_fields_draw_once_per_pixel_and_cancel_after_the_completed_row() {
+    use crate::{
+        image::ImageViewMut,
+        prod::{
+            contract::{
+                error::ErrorCode,
+                failure::{ErrorPath, Failure},
+            },
+            dither::perturb::perturb_by_field_with_scratch,
+            tiling::RowBand,
+        },
+    };
+    use std::cell::Cell;
+    let dimensions = ImageDimensions::new(7, 5).unwrap();
+    let bytes: Vec<_> = (0..7 * 5 * 4).map(|n| (n * 73) as u8).collect();
+    let source = ImageView::packed(&bytes, dimensions).unwrap();
+    let cancelled = Failure::new(ErrorCode::Callback, ErrorPath::OnProgress);
+    for space in SPACES {
+        let mut expected = None;
+        for scratch_len in [0, 7 * 3] {
+            let mut scratch = vec![[f32::NAN; 3]; scratch_len];
+            for cancel in [true, false] {
+                let mut output = vec![213; bytes.len()];
+                let draws = Cell::new(0);
+                let mut completed = 0;
+                let result = perturb_by_field_with_scratch(
+                    source,
+                    ImageViewMut::packed(&mut output, dimensions).unwrap(),
+                    space,
+                    0.75,
+                    Placement::Adaptive {
+                        radius: 2,
+                        threshold: 5.0,
+                        softness: 10.0,
+                    },
+                    RowBand::new(0, 5).unwrap(),
+                    &mut scratch,
+                    |x, y, index| {
+                        assert_eq!(index, draws.get());
+                        assert_eq!(index, u64::from(y * 7 + x));
+                        draws.set(index + 1);
+                        crate::prod::dither::random_noise::random_noise_at(71, index)
+                    },
+                    |row| {
+                        completed = row;
+                        if cancel && row == 2 {
+                            Err(cancelled)
+                        } else {
+                            Ok(())
+                        }
+                    },
+                );
+                if cancel {
+                    assert_eq!(result, Err(cancelled));
+                    assert_eq!((completed, draws.get()), (2, 14));
+                    assert!(output[7 * 2 * 4..].iter().all(|&value| value == 213));
+                } else {
+                    result.unwrap();
+                    assert_eq!((completed, draws.get()), (5, 35));
+                    assert_eq!(output, *expected.get_or_insert_with(|| output.clone()));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn cached_rows_preserve_frozen_contrast_and_masks_across_spaces_edges_and_scan_orders() {
     for (width, height) in [(1, 1), (1, 7), (7, 1), (3, 5), (8, 9)] {
         let dimensions = ImageDimensions::new(width, height).unwrap();

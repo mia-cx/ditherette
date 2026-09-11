@@ -149,6 +149,39 @@ fn adaptive_mask(contrast: f64, threshold: f32, softness: f32) -> f32 {
     (t * t * (3.0 - 2.0 * t)) as f32
 }
 
+/// Optional call-owned coordinates. Reservation failure keeps the direct converter path usable.
+pub(crate) struct AdaptivePlacementWork {
+    coordinates: Vec<[f32; 3]>,
+}
+
+impl AdaptivePlacementWork {
+    const RECORD_BYTES: u64 = (std::mem::size_of::<Self>()
+        + std::mem::size_of::<AdaptivePlacementRows<'_>>()
+        + std::mem::size_of::<AdaptivePlacementRow<'_>>()) as u64;
+
+    pub(crate) fn try_new(width: u32, placement: Placement, available: u64) -> Option<Self> {
+        if !matches!(placement, Placement::Adaptive { .. }) {
+            return None;
+        }
+        let heap = available.checked_sub(Self::RECORD_BYTES)?;
+        let count = (width as usize).checked_mul(AdaptivePlacementRows::ROW_COUNT)?;
+        let mut coordinates = crate::prod::resize::common::allocation::CapacityBudget::new(heap)
+            .vector(count)
+            .ok()?;
+        coordinates.resize(count, [0.0; 3]);
+        Some(Self { coordinates })
+    }
+
+    pub(crate) fn capacity_bytes(&self) -> u64 {
+        Self::RECORD_BYTES
+            + self.coordinates.capacity() as u64 * std::mem::size_of::<[f32; 3]>() as u64
+    }
+
+    pub(crate) fn scratch(&mut self) -> &mut [[f32; 3]] {
+        &mut self.coordinates
+    }
+}
+
 /// Reuses converted source rows in caller-owned scratch for one source, space, and radius.
 /// The caller budgets this record and exactly three width-sized coordinate rows, or keeps
 /// `placement_mask_with_converter` as its allocation-free fallback. No helper method allocates.
@@ -243,6 +276,11 @@ pub(crate) struct AdaptivePlacementRow<'a> {
 }
 
 impl AdaptivePlacementRow<'_> {
+    /// The unchanged center coordinates can also feed a field's perturbation arithmetic.
+    pub(crate) fn center_at(&self, x: u32) -> [f32; 3] {
+        self.center[x as usize]
+    }
+
     /// Retains all eight clamped neighbors and the frozen f64 accumulation order.
     pub(crate) fn contrast_at(&self, x: u32) -> f64 {
         let left = x.saturating_sub(self.radius) as usize;
