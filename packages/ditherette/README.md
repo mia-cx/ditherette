@@ -197,6 +197,10 @@ Exact outputs follow the frozen Wasm reference; native floating-point math can s
 
 ## Initialization and ownership
 
+When `resize()` receives unchanged width and height, it validates the request and returns the source object itself.
+No pixels are copied and no resize kernel runs. The returned bytes alias the caller's input.
+Other resize calls return independent images. Identity calls still enforce disposal, reentrancy and callback errors.
+
 `createDitherette({ memoryLimitBytes, threads, wasm })` accepts optional initialization settings.
 
 - `memoryLimitBytes` defaults to 1.5 GiB and accepts integers from 1 byte through 2 GiB. Insufficient capacity fails with `memory-limit`.

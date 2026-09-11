@@ -98,6 +98,7 @@ test('nearest validation preserves byte views and the frozen anchor order', () =
 		const padded = new Uint8Array([9, ...value.source.data, 9]);
 		value.source.data = padded.subarray(1, 5);
 		assert.deepEqual(validateResize(value), {
+			source: value.source,
 			data: value.source.data,
 			onProgress: undefined,
 			sourceWidth: 1,
