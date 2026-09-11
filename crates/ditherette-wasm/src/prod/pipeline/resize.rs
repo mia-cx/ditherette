@@ -43,8 +43,8 @@ pub(super) enum PreparedResize {
 // PreparedResize's inline storage belongs to the preparation entry's reserved Vec.
 const TRILINEAR_RECORD_BYTES: u64 = size_of::<PreparedTrilinear<Rgba8>>() as u64;
 
-/// Initial public gather cutoff; complete-call measurements determine later tuning.
-const SPARSE_NEAREST_SOURCE_RATIO: usize = 16;
+/// Candidate gather cutoff includes half-sized nearest dimensions; complete-call trials select it.
+const SPARSE_NEAREST_SOURCE_RATIO: usize = 4;
 
 pub(super) fn sparse_nearest(source_len: usize, output_len: usize, policy: ResizePolicy) -> bool {
     matches!(policy, ResizePolicy::Nearest { .. })
@@ -53,6 +53,28 @@ pub(super) fn sparse_nearest(source_len: usize, output_len: usize, policy: Resiz
 
 pub(super) fn sparse_nearest_offset_bytes(output: ImageDimensions) -> usize {
     (output.width() as usize + output.height() as usize) * size_of::<u32>()
+}
+
+#[cfg(test)]
+mod sparse_policy_tests {
+    use super::*;
+
+    #[test]
+    fn half_size_nearest_is_included_but_identity_upscale_and_other_filters_are_not() {
+        let nearest = ResizePolicy::Nearest {
+            anchor: Anchor::Center,
+        };
+        let source_bytes = 64 * 64 * 4;
+        assert!(sparse_nearest(source_bytes, 32 * 32 * 4, nearest));
+        assert!(!sparse_nearest(source_bytes, (32 * 32 + 1) * 4, nearest));
+        assert!(!sparse_nearest(source_bytes, source_bytes, nearest));
+        assert!(!sparse_nearest(source_bytes, 96 * 96 * 4, nearest));
+        assert!(!sparse_nearest(
+            source_bytes,
+            32 * 32 * 4,
+            ResizePolicy::Area {}
+        ));
+    }
 }
 
 pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {

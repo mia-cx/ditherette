@@ -72,7 +72,7 @@ test('generated private input ABI borrows externref and catches both borrowed-sl
 
 test('sparse nearest gathers exact Rust-selected pixels from aligned and unaligned views', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
-	for (const [width, height, outWidth, outHeight] of [[40, 32, 10, 8], [43, 37, 7, 5], [2, 128, 4, 2], [64, 64, 1, 17], [64, 64, 17, 1], [64, 64, 1, 1]]) {
+	for (const [width, height, outWidth, outHeight] of [[40, 32, 20, 16], [41, 33, 20, 16], [40, 32, 10, 8], [43, 37, 7, 5], [2, 128, 4, 2], [64, 64, 1, 17], [64, 64, 17, 1], [64, 64, 1, 1]]) {
 		for (const offset of [0, 1, 4]) {
 			const backing = Uint8Array.from({ length: width * height * 4 + 8 }, (_, i) => (i * 73 + Math.floor(i / 251)) & 255);
 			const input = backing.subarray(offset, offset + width * height * 4);
@@ -101,7 +101,7 @@ test('sparse nearest gathers exact Rust-selected pixels from aligned and unalign
 test('sparse nearest observes mutations across full-source transitions and durable output survives disposal', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
 	const input = Uint8Array.from({ length: 64 * 64 * 4 }, (_, i) => i & 255);
-	const full = () => invoke(bindings, input, 64, 64, 32, 32, 0);
+	const full = () => invoke(bindings, input, 64, 64, 48, 48, 0);
 	const sparse = () => invoke(bindings, input, 64, 64, 4, 4, 0);
 	full();
 	full();
