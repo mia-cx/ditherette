@@ -175,6 +175,15 @@ impl PreparedPalette {
         })
     }
 
+    /// Byte cutoff and fallback for a row with preserved alpha. Validated fractional
+    /// thresholds have the same cutoff as their floor because source alpha is integral.
+    pub(crate) fn preserved_alpha(&self) -> Option<(u8, u8)> {
+        match self.alpha {
+            AlphaPolicy::Preserve { threshold } => Some((threshold as u8, self.threshold_index)),
+            _ => None,
+        }
+    }
+
     /// Applies the indexed-output alpha policy before color conversion/matching.
     /// Alpha comparison and compositing retain JavaScript's f64 precision.
     pub fn prepare_pixel(&self, [r, g, b, alpha]: [u8; 4]) -> PalettePixel {

@@ -7,6 +7,11 @@ starts. There is no baseline-writing or candidate-promotion command.
 
 ## Prepare before the quiet phase
 
+For older Playwright Firefox builds, first use `scripts/prepare-firefox-benchmark.mjs`
+to prepare an optimizing, update-pinned browser copy. Pass its executable when preparing
+the browser artifacts. Juggler without `allowUnobservedWasm` measures baseline-only Wasm;
+see `docs/performance/quantize-hotpaths.md`. Existing snapshots remain unchanged.
+
 Prepare each requested revision in its own clean worktree with the same toolchain:
 
 ```sh
