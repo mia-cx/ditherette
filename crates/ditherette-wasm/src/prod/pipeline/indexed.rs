@@ -15,11 +15,10 @@ use crate::{
             cache::StageOptions,
             failure::Failure,
             lifecycle::Stage,
-            request::{BayerSize, DiffusionFeedback, DitherPolicy, Output},
+            request::{BayerSize, DiffusionFeedback, DitherPolicy, Output, Placement},
         },
-        dither::error_diffusion::prepared::{
-            execute_with_progress, execute_with_scratch, DiffusionPolicy,
-        },
+        dither::error_diffusion::prepared::{execute_with_placement_progress, DiffusionPolicy},
+        dither::placement::AdaptivePlacementWork,
         dither::yiluoma::row_bands::YliluomaBands,
     },
 };
@@ -211,6 +210,22 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         })
         .transpose()?;
     let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
+    let placement_policy = match dither {
+        DitherPolicy::Diffusion { placement, .. } => placement,
+        DitherPolicy::Separable { perturb } if !perturbed_hit && bands.is_none() => {
+            perturb.placement
+        }
+        _ => Placement::Everywhere {},
+    };
+    let mut placement = AdaptivePlacementWork::try_new(
+        output_dimensions.width(),
+        placement_policy,
+        call.available_working_capacity(),
+    );
+    let placement_capacity = placement
+        .as_ref()
+        .map_or(0, AdaptivePlacementWork::capacity_bytes);
+    call.charge_optional_capacity(placement_capacity, peak)?;
     if resize.is_some() && !resized_hit {
         let (_, prepared, scratch) = call.parts();
         let [source, resized, _, _] = &mut scratch.buffers;
@@ -276,14 +291,28 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 } else {
                     let output = ImageViewMut::packed(perturbed, output_dimensions)
                         .expect("reserved perturb");
-                    perturb::execute_with_progress(source, output, perturb, |completed| {
-                        report(u64::from(completed))
-                    })?;
+                    perturb::execute_with_scratch(
+                        source,
+                        output,
+                        perturb,
+                        placement
+                            .as_mut()
+                            .map_or(&mut [], AdaptivePlacementWork::scratch),
+                        |completed| report(u64::from(completed)),
+                    )?;
                 }
             } else {
                 let output =
                     ImageViewMut::packed(perturbed, output_dimensions).expect("reserved perturb");
-                perturb::execute(source, output, perturb);
+                perturb::execute_with_scratch(
+                    source,
+                    output,
+                    perturb,
+                    placement
+                        .as_mut()
+                        .map_or(&mut [], AdaptivePlacementWork::scratch),
+                    |_| Ok(()),
+                )?;
             }
         }
     }
@@ -340,28 +369,35 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         )
     };
     match dither {
-        DitherPolicy::Diffusion { .. } if enabled => execute_with_progress(
+        DitherPolicy::Diffusion { .. } if enabled => execute_with_placement_progress(
             prepared,
             &mut scratch.diffusion,
             match &mut rgb_cache {
                 Some(cache::Work::Scalar(entries)) => entries,
                 _ => &mut [],
             },
+            placement
+                .as_mut()
+                .map_or(&mut [], AdaptivePlacementWork::scratch),
             view,
             indices,
             DiffusionPolicy::new(dither)?,
             &mut report_row,
         )?,
-        DitherPolicy::Diffusion { .. } => execute_with_scratch(
+        DitherPolicy::Diffusion { .. } => execute_with_placement_progress(
             prepared,
             &mut scratch.diffusion,
             match &mut rgb_cache {
                 Some(cache::Work::Scalar(entries)) => entries,
                 _ => &mut [],
             },
+            placement
+                .as_mut()
+                .map_or(&mut [], AdaptivePlacementWork::scratch),
             view,
             indices,
             DiffusionPolicy::new(dither)?,
+            |_| Ok(()),
         )?,
         DitherPolicy::Yliluoma { size, placement } => {
             use crate::prod::dither::ordered::BayerSize as Matrix;
@@ -405,6 +441,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     }
     drop(rgb_cache);
     call.release_working_capacity(rgb_cache_capacity);
+    drop(placement);
+    call.release_working_capacity(placement_capacity);
     drop(bands);
     call.release_working_capacity(band_capacity);
     drop(mixing);

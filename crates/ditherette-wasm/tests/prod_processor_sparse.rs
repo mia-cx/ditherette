@@ -354,7 +354,11 @@ fn sparse_process_budget_and_partial_gather_failures_recover_before_publication(
     let mut io = Io::new(256, 256);
     let mut probe = Processor::new(1 << 20, 0).unwrap();
     let expected = probe.process(request, &mut io).unwrap();
-    let limit = probe.peak_capacity_bytes();
+    let limit = budget_support::minimum(probe.peak_capacity_bytes(), |limit| {
+        Processor::new(limit, 0)
+            .and_then(|mut processor| processor.process(request, &mut Io::new(256, 256)))
+            .is_ok()
+    });
     assert!(limit < io.input.len() as u64);
     let mut exact = Processor::new(limit, 0).unwrap();
     assert_eq!(exact.process(request, &mut io).unwrap(), expected);
@@ -432,6 +436,9 @@ fn sparse_process_budget_and_partial_gather_failures_recover_before_publication(
         ErrorCode::Disposed
     );
 }
+
+#[path = "support/budget.rs"]
+mod budget_support;
 
 #[test]
 fn sparse_process_drops_a_large_idle_snapshot_before_reserving_offset_scratch() {

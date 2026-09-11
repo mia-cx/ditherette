@@ -12,7 +12,7 @@ use crate::{
             lifecycle::Stage,
             request::{BayerSize, Field, PerturbPolicy, Placement},
         },
-        dither::{blue_noise, ordered, random_noise},
+        dither::{blue_noise, ordered, placement::AdaptivePlacementWork, random_noise},
         tiling::{RowBand, RowBandBuffers},
     },
 };
@@ -62,29 +62,22 @@ fn nonnegative(value: f32, path: ErrorPath) -> Result<(), Failure> {
     }
 }
 
-/// No allocation, alternate reconstruction, or source mutation occurs during field execution.
-pub(super) fn execute(
+/// Optional row storage belongs to the enclosing call's capacity ledger.
+pub(super) fn execute_with_scratch(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
     policy: PerturbPolicy,
-) {
-    execute_with_progress(source, output, policy, |_| Ok(()))
-        .expect("disabled progress cannot fail");
-}
-
-pub(super) fn execute_with_progress(
-    source: ImageView<'_, Rgba8>,
-    output: ImageViewMut<'_, Rgba8>,
-    policy: PerturbPolicy,
+    scratch: &mut [[f32; 3]],
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    crate::prod::dither::perturb::perturb_by_field_with_progress(
+    crate::prod::dither::perturb::perturb_by_field_with_scratch(
         source,
         output,
         policy.space,
         policy.strength,
         policy.placement,
         RowBand::new(0, source.dimensions().height()).expect("validated dimensions"),
+        scratch,
         |x, y, index| field_value(policy.field, x, y, index),
         progress,
     )
@@ -184,6 +177,19 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     call.charge_working_capacity(band_capacity, peak)?;
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
     let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
+    let mut placement = if bands.is_none() {
+        AdaptivePlacementWork::try_new(
+            dimensions.width(),
+            request.perturb.placement,
+            call.available_working_capacity(),
+        )
+    } else {
+        None
+    };
+    let placement_capacity = placement
+        .as_ref()
+        .map_or(0, AdaptivePlacementWork::capacity_bytes);
+    call.charge_optional_capacity(placement_capacity, peak)?;
     let [source, output, _, _] = &mut call.scratch.buffers;
     let source = ImageView::packed(source, dimensions).expect("validated source storage");
     if bands.is_some() || enabled {
@@ -205,14 +211,30 @@ pub(super) fn run<B: Boundary, A: Allocator>(
             execute_bands(source, output, request.perturb, work, &mut report)?;
         } else {
             let output = ImageViewMut::packed(output, dimensions).expect("reserved output storage");
-            execute_with_progress(source, output, request.perturb, |completed| {
-                report(u64::from(completed))
-            })?;
+            execute_with_scratch(
+                source,
+                output,
+                request.perturb,
+                placement
+                    .as_mut()
+                    .map_or(&mut [], AdaptivePlacementWork::scratch),
+                |completed| report(u64::from(completed)),
+            )?;
         }
     } else {
         let output = ImageViewMut::packed(output, dimensions).expect("reserved output storage");
-        execute(source, output, request.perturb);
+        execute_with_scratch(
+            source,
+            output,
+            request.perturb,
+            placement
+                .as_mut()
+                .map_or(&mut [], AdaptivePlacementWork::scratch),
+            |_| Ok(()),
+        )?;
     }
+    drop(placement);
+    call.release_working_capacity(placement_capacity);
     drop(bands);
     call.release_working_capacity(band_capacity);
     call.retain_rgba(1, key, 1, dimensions, peak);

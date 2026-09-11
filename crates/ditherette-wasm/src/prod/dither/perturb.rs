@@ -16,7 +16,9 @@ use crate::{
     },
 };
 
-use super::placement::{coordinate_domain, placement_mask_with_converter};
+use super::placement::{
+    coordinate_domain, placement_mask_with_converter, AdaptivePlacementRows, AdaptivePlacementWork,
+};
 
 const FIELD_SCALE: f64 = 0.25;
 
@@ -104,6 +106,7 @@ pub fn perturb_by_field_bands_into(
 
 /// Shared field composition. The callback returns one threshold in [-0.5,0.5] per global pixel.
 /// It runs once per written pixel even when alpha, strength, or placement would suppress an effect.
+/// Adaptive calls reserve three coordinate rows fallibly and use direct conversion if unavailable.
 pub fn perturb_by_field_rows_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -113,13 +116,29 @@ pub fn perturb_by_field_rows_into(
     rows: RowBand,
     field: impl Fn(u32, u32, u64) -> f32,
 ) {
-    perturb_by_field_with_progress(
+    let mut work = AdaptivePlacementWork::try_new(source.dimensions().width(), placement, u64::MAX);
+    if work.is_none() {
+        return perturb_by_field_with_progress(
+            source,
+            output,
+            space,
+            strength,
+            placement,
+            rows,
+            field,
+            |_| Ok(()),
+        )
+        .expect("disabled progress cannot fail");
+    }
+    perturb_by_field_with_scratch(
         source,
         output,
         space,
         strength,
         placement,
         rows,
+        work.as_mut()
+            .map_or(&mut [], AdaptivePlacementWork::scratch),
         field,
         |_| Ok(()),
     )
@@ -137,9 +156,34 @@ pub(crate) fn perturb_by_field_with_progress(
     field: impl Fn(u32, u32, u64) -> f32,
     progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
+    perturb_by_field_with_scratch(
+        source,
+        output,
+        space,
+        strength,
+        placement,
+        rows,
+        &mut [],
+        field,
+        progress,
+    )
+}
+
+/// Executes with optional preflighted coordinate rows; empty scratch keeps direct conversion.
+pub(crate) fn perturb_by_field_with_scratch(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    space: WorkingSpace,
+    strength: f32,
+    placement: Placement,
+    rows: RowBand,
+    scratch: &mut [[f32; 3]],
+    field: impl Fn(u32, u32, u64) -> f32,
+    progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     assert_eq!(source.dimensions(), output.dimensions());
     perturb_rows(
-        source, output, space, strength, placement, rows, 0, field, progress,
+        source, output, space, strength, placement, rows, 0, scratch, field, progress,
     )
 }
 
@@ -164,6 +208,7 @@ pub fn perturb_by_field_band_into(
         placement,
         rows,
         rows.y_start(),
+        &mut [],
         field,
         |_| Ok(()),
     )
@@ -178,6 +223,7 @@ fn perturb_rows(
     placement: Placement,
     rows: RowBand,
     output_y_start: u32,
+    scratch: &mut [[f32; 3]],
     field: impl Fn(u32, u32, u64) -> f32,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
@@ -185,7 +231,14 @@ fn perturb_rows(
     assert!(rows.y_end() <= dimensions.height());
     let ranges = coordinate_domain(space).ranges().map(f64::from);
     let converter = Converter::new(PackedSpace::from_working(space));
+    let mut cached = match placement {
+        Placement::Adaptive { radius, .. } if !scratch.is_empty() => Some(
+            AdaptivePlacementRows::new(source, &converter, space, radius, scratch),
+        ),
+        _ => None,
+    };
     for y in rows.y_start()..rows.y_end() {
+        let cached_row = cached.as_mut().map(|cache| cache.prepare_row(y));
         let source_row = source.row(y).expect("source row is in bounds");
         let output_row = output
             .row_mut(y - output_y_start)
@@ -193,7 +246,17 @@ fn perturb_rows(
         for x in 0..dimensions.width() {
             let global_index = u64::from(y) * u64::from(dimensions.width()) + u64::from(x);
             let threshold = field(x, y, global_index);
-            let mask = placement_mask_with_converter(source, x, y, space, placement, &converter);
+            let mask = match (&cached_row, placement) {
+                (
+                    Some(row),
+                    Placement::Adaptive {
+                        threshold,
+                        softness,
+                        ..
+                    },
+                ) => row.mask_at(x, threshold, softness),
+                _ => placement_mask_with_converter(source, x, y, space, placement, &converter),
+            };
             let amount = f64::from(threshold) * f64::from(strength) * f64::from(mask) * FIELD_SCALE;
             let offset = x as usize * 4;
             let pixel = &source_row[offset..offset + 4];
@@ -201,7 +264,9 @@ fn perturb_rows(
             let result = if amount == 0.0 {
                 rgb
             } else {
-                let coordinates = converter.coordinates(rgb);
+                let coordinates = cached_row
+                    .as_ref()
+                    .map_or_else(|| converter.coordinates(rgb), |row| row.center_at(x));
                 let perturbed = std::array::from_fn(|axis| {
                     f64::from(coordinates[axis]) + amount * ranges[axis]
                 });

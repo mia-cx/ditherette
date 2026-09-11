@@ -17,7 +17,9 @@ use crate::{
                 MAX_SOURCE_SIDE,
             },
         },
-        dither::placement::placement_mask_with_converter,
+        dither::placement::{
+            placement_mask_with_converter, AdaptivePlacementRows, AdaptivePlacementWork,
+        },
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
         quantize::{
             cache::{recommended_entries, RgbCache},
@@ -69,9 +71,24 @@ pub fn diffuse(
         .reserve(&mut indices, count)
         .map_err(DiffusionError::Preparation)?;
     indices.resize(count, 0);
-    prepared
-        .execute(layout.source, &mut indices, policy)
-        .map_err(DiffusionError::Execution)?;
+    let mut placement = AdaptivePlacementWork::try_new(
+        layout.output.width(),
+        policy.placement,
+        memory_limit - budget.used,
+    );
+    execute_with_placement_progress(
+        &prepared.quantizer,
+        &mut prepared.work,
+        &mut prepared.rgb_cache,
+        placement
+            .as_mut()
+            .map_or(&mut [], AdaptivePlacementWork::scratch),
+        layout.source,
+        &mut indices,
+        policy,
+        |_| Ok(()),
+    )
+    .map_err(DiffusionError::Execution)?;
     Ok(prepared.into_indexed(
         ImageBuf::from_vec_packed(indices, layout.output).expect("reserved output storage"),
     ))
@@ -266,6 +283,29 @@ pub(crate) fn execute_with_progress(
     policy: DiffusionPolicy,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    execute_with_placement_progress(
+        quantizer,
+        work,
+        rgb_cache,
+        &mut [],
+        source,
+        indices,
+        policy,
+        progress,
+    )
+}
+
+/// Uses capacity-accounted optional placement rows without changing diffusion work or progress.
+pub(crate) fn execute_with_placement_progress(
+    quantizer: &PreparedQuantizer,
+    work: &mut [[f32; 3]],
+    rgb_cache: &mut [u64],
+    placement_scratch: &mut [[f32; 3]],
+    source: ImageView<'_, Rgba8>,
+    indices: &mut [u8],
+    policy: DiffusionPolicy,
+    progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let rgb_cache = (policy.feedback == DiffusionFeedback::SrgbBytes && !rgb_cache.is_empty())
         .then(|| RgbCache::new(rgb_cache));
     BorrowedDiffusion {
@@ -273,7 +313,7 @@ pub(crate) fn execute_with_progress(
         work,
         rgb_cache,
     }
-    .execute(source, indices, policy, progress)
+    .execute(source, indices, policy, placement_scratch, progress)
 }
 
 struct BorrowedDiffusion<'a> {
@@ -288,12 +328,26 @@ impl BorrowedDiffusion<'_> {
         source: ImageView<'_, Rgba8>,
         indices: &mut [u8],
         policy: DiffusionPolicy,
+        placement_scratch: &mut [[f32; 3]],
         mut progress: impl FnMut(u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
         let height = source.dimensions().height_usize();
         assert_eq!(self.work.len(), width * ROWS);
         assert_eq!(indices.len(), width * height);
+        let quantizer = self.quantizer;
+        let mut placement_rows = match policy.placement {
+            Placement::Adaptive { radius, .. } if !placement_scratch.is_empty() => {
+                Some(AdaptivePlacementRows::new(
+                    source,
+                    quantizer.converter(),
+                    quantizer.matcher().matching.space(),
+                    radius,
+                    placement_scratch,
+                ))
+            }
+            _ => None,
+        };
         let palette = self.quantizer.palette();
         let fixed_alpha = if palette.visible.is_empty() {
             let PalettePixel::Index(index) = palette.prepare_pixel([0; 4]) else {
@@ -307,6 +361,9 @@ impl BorrowedDiffusion<'_> {
             self.fill_row(source, y, policy.feedback);
         }
         for y in 0..height {
+            let placement_row = placement_rows
+                .as_mut()
+                .map(|rows| rows.prepare_row(y as u32));
             let reverse = policy.serpentine && y % 2 == 1;
             let row = source.row(y as u32).expect("validated source row");
             for step in 0..width {
@@ -351,14 +408,24 @@ impl BorrowedDiffusion<'_> {
                     }
                 };
                 indices[offset] = index;
-                let mask = placement_mask_with_converter(
-                    source,
-                    x as u32,
-                    y as u32,
-                    matcher.matching.space(),
-                    policy.placement,
-                    self.quantizer.converter(),
-                );
+                let mask = match (&placement_row, policy.placement) {
+                    (
+                        Some(row),
+                        Placement::Adaptive {
+                            threshold,
+                            softness,
+                            ..
+                        },
+                    ) => row.mask_at(x as u32, threshold, softness),
+                    _ => placement_mask_with_converter(
+                        source,
+                        x as u32,
+                        y as u32,
+                        matcher.matching.space(),
+                        policy.placement,
+                        self.quantizer.converter(),
+                    ),
+                };
                 let strength_mask = f64::from(policy.strength) * f64::from(mask);
                 for tap in policy.kernel.taps() {
                     let dx = if reverse { -tap.dx } else { tap.dx };
