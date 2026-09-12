@@ -162,9 +162,12 @@ impl WasmBenchFlags {
                 index += 1;
             }
         }
+        if save_baseline.is_some() {
+            return Err(BenchError::Config("wasm-resize cannot save accepted baselines without complete exact output verification; record a diagnostic run instead".to_owned()));
+        }
         if no_run {
             return Err(BenchError::Config(
-                "wasm-resize does not support --no-run yet; use --replace-baseline NAME to refresh the baseline from a new browser run".to_owned(),
+                "wasm-resize does not support --no-run; accepted baseline writes require complete exact output verification".to_owned(),
             ));
         }
         Ok(Self {
@@ -939,5 +942,26 @@ mod benchmark_config_tests {
         let mut current = result(candidate, fingerprint, 50.0);
         state.attach_same_run_scalar_comparison(&mut current);
         assert_eq!(current.comparisons["oracle"].median_ns, 200.0);
+    }
+
+    #[test]
+    fn unverified_wasm_baseline_writes_fail_before_transport() {
+        for args in [
+            vec!["--save-baseline"],
+            vec!["--save-baseline", "named"],
+            vec!["--save-baseline=named"],
+            vec!["--replace-baseline", "named"],
+            vec!["--replace-baseline=named"],
+        ] {
+            let args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
+            let Err(error) = WasmBenchFlags::parse(&args) else {
+                panic!("unverified baseline saving was accepted");
+            };
+            assert!(error
+                .to_string()
+                .contains("complete exact output verification"));
+        }
+        let flags = WasmBenchFlags::parse(&["--baseline".into(), "named".into()]).unwrap();
+        assert_eq!(flags.accepted_baseline.as_deref(), Some("named"));
     }
 }
