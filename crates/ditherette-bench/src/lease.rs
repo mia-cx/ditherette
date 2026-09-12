@@ -175,6 +175,11 @@ mod platform {
     }
 
     impl OwnedChild {
+        /// OS process identity retained until this owned child is reaped.
+        pub fn id(&self) -> u32 {
+            self.child.id()
+        }
+
         /// Take captured transport output while retaining child ownership.
         pub fn take_stdout(&mut self) -> Option<ChildStdout> {
             self.child.stdout.take()
@@ -351,6 +356,10 @@ mod platform {
     }
     pub struct OwnedChild;
     impl OwnedChild {
+        pub fn id(&self) -> u32 {
+            0
+        }
+
         pub fn take_stdout(&mut self) -> Option<ChildStdout> {
             None
         }
