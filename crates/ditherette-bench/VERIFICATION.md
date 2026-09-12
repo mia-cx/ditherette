@@ -2,7 +2,9 @@
 
 `ditherette_bench::verification` compares reference, accepted production, and
 candidate outputs. It shares the RGBA comparison engine used by existing resize
-commands. Verification fixtures and output comparisons collect no timings.
+commands. Verification fixtures produce no performance evidence. One controlled
+one-pixel fixture exercises the measured-invocation path to reject stale
+verification.
 
 `ditherette_bench_api::verification` owns generic `VerificationCase<P>` and
 `VerificationSubject<P>`. `P` is the implementation's concrete request type,
@@ -46,7 +48,8 @@ or incomplete outcome it writes `results.json` to a fresh directory. Raw results
 survive even when invalid storage cannot render. Available valid outputs produce
 reference, accepted, and candidate PNGs plus all three pairwise difference PNGs.
 Differences are opaque; alpha error contributes to all three visible channels.
-Existing bundles cannot be overwritten.
+Existing bundles cannot be overwritten. Missing parent directories are created
+before the fresh final bundle directory is reserved.
 
 `verify_three_way` is the pure comparison interface for fixtures or coordinators
 that retain the complete returned evidence themselves. Missing or invalid outputs
@@ -56,7 +59,19 @@ Legacy resize reports now distinguish exact `passed` from `within_bounds`.
 Accepted-baseline writes and indexed refreshes require complete exact proof for
 every result before replacing any file. `--allow-correctness-failures` permits
 diagnostic runs but cannot promote their failing results. Historical artifacts
-without the new exact proof cannot be promoted through this path.
+without the new exact proof cannot be promoted through this path. Native
+measurement results retain a full SHA-256 digest of the final output. Exact
+verification records bind the checked candidate bytes to that digest. A changed
+measured output, missing digest, or mismatched digest cannot become an accepted
+baseline. The legacy display checksum remains unchanged. Tiling sweeps use
+numeric bounds for diagnostic continuation; they do not grant accepted-baseline
+approval. Preflight reports are keyed by subject, normalized source dimensions
+and full source SHA-256, plus the case identifier. Same-stem image paths cannot
+replace each other's proof. The legacy browser transport supplies telemetry
+without complete exact output verification, so accepted-baseline save and
+replace options fail before launching it. Diagnostic runs and loading existing
+baselines for comparison remain available; no digest is invented from a
+telemetry checksum.
 
 ## S17 adapter handoff
 

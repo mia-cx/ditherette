@@ -414,6 +414,12 @@ pub fn write_review_artifacts(
     outputs: &ThreeWayOutputs,
     report: &ThreeWayReport,
 ) -> io::Result<()> {
+    if let Some(parent) = directory
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
     fs::create_dir(directory)?;
     #[derive(Serialize)]
     struct Artifact<'a> {

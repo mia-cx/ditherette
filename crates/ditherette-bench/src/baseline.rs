@@ -133,6 +133,8 @@ fn require_accepted_verification(role: &str, run: &BenchRun) -> Result<(), Bench
             !result.verified
                 || !result.verification.as_ref().is_some_and(|verification| {
                     verification.is_exact()
+                        && verification.candidate_digest.is_some()
+                        && verification.candidate_digest == result.output_digest
                         && u64::try_from(verification.pixels).ok()
                             == Some(
                                 u64::from(result.output_width) * u64::from(result.output_height),
@@ -494,4 +496,95 @@ fn artifact_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("target")
         .join("bench")
+}
+
+#[cfg(test)]
+mod verification_tests {
+    use super::*;
+    use crate::{
+        case::ResizeScale,
+        fixture::Fixture,
+        measure::{measure_resize_case, run_resize_once, MeasurementConfig},
+        registry::Registry,
+        result::{verify_with_bounds, VerificationBounds},
+    };
+    use ditherette_bench_api::ResizeParams;
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
+    };
+
+    #[test]
+    fn measured_output_must_match_the_verified_invocation() {
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        CALLS.store(0, Ordering::SeqCst);
+        let oracle = Registry::load()
+            .resize_subject("spec:resize:nearest:scalar")
+            .unwrap();
+        let mut candidate = oracle.clone();
+        candidate.resize_u8_rgba = |input, output, _| {
+            output.data.copy_from_slice(input.data);
+            if CALLS.fetch_add(1, Ordering::SeqCst) != 0 {
+                output.data[0] ^= 1;
+            }
+            Ok(())
+        };
+        let fixture = Fixture {
+            id: "changing-output".into(),
+            kind: "test".into(),
+            fingerprint: "changing-output".into(),
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 255],
+        };
+        let config = MeasurementConfig::browser_wasm(
+            1,
+            Duration::from_nanos(1),
+            Some(0),
+            Duration::ZERO,
+            Duration::from_nanos(1),
+            false,
+        );
+        for (subject, expected_exact) in [(candidate, false), (oracle, true)] {
+            let checked =
+                run_resize_once(&subject, &fixture, (1, 1), &ResizeParams::default()).unwrap();
+            let proof = verify_with_bounds(&fixture.rgba, &checked, VerificationBounds::exact());
+            assert!(proof.is_exact());
+            let result = measure_resize_case(
+                &subject,
+                &fixture,
+                (1, 1),
+                ResizeScale::uniform(1.0),
+                &ResizeParams::default(),
+                &config,
+                Some(proof),
+                &mut (),
+            )
+            .unwrap();
+            let run = BenchRun::new("perf", "resize", Some(config.artifact()), vec![result]);
+            assert_eq!(
+                require_accepted_verification("accepted", &run).is_ok(),
+                expected_exact,
+                "accepted proof must describe the measured bytes"
+            );
+            assert_eq!(run.results[0].verified, expected_exact);
+            if expected_exact {
+                let mut stale = run.clone();
+                stale.results[0].output_digest = None;
+                assert!(require_accepted_verification("accepted", &stale).is_err());
+                stale.results[0].output_digest =
+                    Some(ditherette_bench::verification::content_digest(&[
+                        9, 2, 3, 255,
+                    ]));
+                assert!(require_accepted_verification("accepted", &stale).is_err());
+                let mut missing = run.clone();
+                missing.results[0]
+                    .verification
+                    .as_mut()
+                    .unwrap()
+                    .candidate_digest = None;
+                assert!(require_accepted_verification("accepted", &missing).is_err());
+            }
+        }
+    }
 }

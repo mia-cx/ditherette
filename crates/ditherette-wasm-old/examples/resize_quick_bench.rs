@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf, time::Instant};
 
-use ditherette_wasm::{
+use ditherette_wasm_old::{
     image::{rgba, ImageDimensions},
     resize::{
         bilinear::resize_rgba_bilinear_2_into, resize_rgba_area_into, resize_rgba_bilinear_into,

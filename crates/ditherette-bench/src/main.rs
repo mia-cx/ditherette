@@ -52,10 +52,14 @@ fn run() -> Result<(), BenchError> {
 
     let command = args.remove(0);
     let expanded = expand_command(command, args)?;
-    if matches!(
-        expanded.command.as_str(),
-        "perf" | "comp" | "tile" | "tiling-sweep" | "wasm-resize" | "paired-trial"
-    ) {
+    let wasm_help =
+        expanded.command == "wasm-resize" && expanded.args.iter().any(|arg| arg == "--help");
+    if !wasm_help
+        && matches!(
+            expanded.command.as_str(),
+            "perf" | "comp" | "tile" | "tiling-sweep" | "wasm-resize" | "paired-trial"
+        )
+    {
         require_quiet().map_err(BenchError::io)?;
     }
     let registry = Registry::load();

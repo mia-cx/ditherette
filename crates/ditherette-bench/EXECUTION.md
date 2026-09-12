@@ -32,6 +32,18 @@ remains the coordinator's responsibility. Build commands, including `cargo run`
 and `cargo bench`, belong before the measurement phase; execute their prebuilt
 binaries during it. Node is a transport entry point and rejects unguarded use.
 
+## Published pnpm commands
+
+Preparation runs first. `pnpm bench:prepare` compiles and stages the benchmark
+executables into `crates/ditherette-bench/target/prepared/`; it is build-only and
+does not attest quietness. Wasm assets are prepared separately: `pnpm wasm:build`
+for scalar resize, `pnpm wasm:build:threads` for threaded or color measurements.
+
+Then drain all agents, builds and tests. Only then invoke the existing `bench:*`
+aliases. Invoking a `bench:*` measurement alias is the coordinator's explicit
+quiet-phase attestation. These aliases pass `--quiet` to the lease helper and
+never build. Re-run preparation after source changes.
+
 ## Lease ownership
 
 `/tmp/ditherette-bench.lock` is the fixed host lease. It ignores the working
