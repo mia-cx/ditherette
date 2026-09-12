@@ -1,0 +1,17 @@
+{
+	"name": "ditherette-wasm",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "pnpm build:scalar && pnpm build:threads",
+		"build:scalar": "node scripts/build.mjs scalar",
+		"build:threads": "node scripts/build.mjs threads",
+		"test": "cargo test --locked",
+		"test:wasm": "wasm-pack test --node . --locked",
+		"test:browser": "wasm-pack test --headless --chrome . --locked",
+		"check": "cargo fmt --check && cargo check --locked --target wasm32-unknown-unknown"
+	},
+	"devDependencies": {
+		"wasm-pack": "0.15.0"
+	}
+}
