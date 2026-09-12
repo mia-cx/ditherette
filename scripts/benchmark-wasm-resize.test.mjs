@@ -138,3 +138,16 @@ test('decoded content identity reaches fixture metadata and both lanes without m
 	assert.equal(await decode([0, 0, 0, 255]), first);
 	assert.notEqual(await decode([1, 0, 0, 255]), first);
 });
+
+test('browser profiles resolve only supported Wasm subjects', async () => {
+	const config = host.parseTomlSubset(
+		await readFile(new URL('./ditherette-wasm-bench.toml', import.meta.url), 'utf8')
+	);
+	for (const [name, profile] of Object.entries(config.profiles)) {
+		if (!profile.subjects) continue;
+		const resolved = await host.resolveOptions(['run', name]);
+		for (const subject of resolved.subjects) {
+			assert.doesNotThrow(() => host.subjectConfig(subject), name);
+		}
+	}
+});
