@@ -101,6 +101,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
                     rustc: "rustc fixture".into(),
                     tool_version: "fixture".into(),
                     configuration: "fixture build configuration".into(),
+                    recorded: true,
                 },
                 measurement: measurement.clone(),
                 warmup_iterations: 1,
@@ -390,5 +391,8 @@ fn compilation_settings_must_match_between_roles() {
         changed[1].build.configuration = configuration.into();
         assert_eq!(compare(&prepared, &changed).gate, Gate::Incomplete);
     }
+    let mut unrecorded = trials.clone();
+    unrecorded[1].build.recorded = false;
+    assert_eq!(compare(&prepared, &unrecorded).gate, Gate::Incomplete);
     assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
 }

@@ -27,7 +27,7 @@ if ((failure === 'reference' || (failure === 'mixed' && request.pair === 0)) && 
   reference.output.pixels.data[0] += 1;
 }
 process.stdout.write(JSON.stringify({ role: request.role, pair: request.pair, case_name: request.case.name,
-  build: { revision: request.executable.revision, dirty: false, rustc: 'fake compiler', tool_version: 'fake', configuration: 'fixture build configuration' },
+  build: { revision: request.executable.revision, dirty: false, rustc: 'fake compiler', tool_version: 'fake', configuration: 'fixture build configuration', recorded: true },
   measurement: request.case.measurement, warmup_iterations: 1, warmup_elapsed_ns: 1,
   sample_ns: failure === 'mixed' && request.pair === 1 ? [] : [100, 100, 100, 100, 100], iterations_per_sample: 1,
   reference, output, pid: process.pid, max_live_benchmark_processes: 1 }));
