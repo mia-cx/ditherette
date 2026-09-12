@@ -1,0 +1,206 @@
+# Ditherette benchmark defaults.
+#
+# CLI flags always win over this file:
+# built-in defaults < [defaults] < [profiles.NAME] < CLI flags.
+#
+# Keep [defaults] subject/oracle/baseline-free. Profiles may pin subjects for
+# repeatable workflows, but should not pin oracles or baseline names by default.
+
+[defaults]
+preheat_time = "5s"
+warm_up_time = "1s"
+sample_size = 100
+measurement_time = "10s"
+target_sample_time = "50ms"
+
+process_priority = "high"
+
+scale_group = ["partial", "identity"]
+sample_mode = "throughput"
+fixtures = ["Celeste_Insta_selfie.png", "Celeste_box_art.png"]
+
+cache_state = "warm"
+cache_scrub_size = "64MiB"
+inter_sample_delay = "0ms"
+
+correctness = "bounded"
+max_color_distance = 2.0
+max_mean_color_distance = 0.5
+max_rms_color_distance = 0.5
+
+baseline = "accepted"
+live_stats = true
+
+[profiles.all]
+command = "perf"
+domain = "resize"
+subjects = [
+  "prod:resize:nearest:scalar",
+  "prod:resize:area:scalar",
+  "prod:resize:bilinear:scalar",
+  "prod:resize:bicubic:catmull-rom",
+  "prod:resize:bicubic:catmull-rom-scale-aware",
+  "prod:resize:lanczos2:fixed",
+  "prod:resize:lanczos2:scale-aware",
+  "prod:resize:lanczos3:fixed",
+  "prod:resize:lanczos3:scale-aware"
+]
+
+[profiles.nearest]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:nearest:scalar"]
+oracle = "spec:resize:nearest:scalar"
+correctness = "exact"
+
+[profiles.area]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:area:scalar"]
+oracle = "spec:resize:area:scalar"
+
+[profiles.bilinear]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bilinear:scalar"]
+oracle = "spec:resize:bilinear:scalar"
+correctness = "bounded"
+scale_group = ["partial", "identity", "bilinear-anisotropic"]
+
+[profiles.bicubic]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom"]
+oracle = "spec:resize:bicubic:catmull-rom"
+correctness = "bounded"
+
+[profiles.bicubic-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:bicubic:catmull-rom-scale-aware"]
+oracle = "spec:resize:bicubic:catmull-rom-scale-aware"
+correctness = "bounded"
+
+[profiles.lanczos2]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:fixed"]
+oracle = "spec:resize:lanczos2:fixed"
+correctness = "bounded"
+
+[profiles.lanczos2-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos2:scale-aware"]
+oracle = "spec:resize:lanczos2:scale-aware"
+correctness = "bounded"
+
+[profiles.lanczos3]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:fixed"]
+oracle = "spec:resize:lanczos3:fixed"
+correctness = "bounded"
+
+[profiles.lanczos3-scale-aware]
+command = "perf"
+domain = "resize"
+subjects = ["prod:resize:lanczos3:scale-aware"]
+oracle = "spec:resize:lanczos3:scale-aware"
+correctness = "bounded"
+
+
+[profiles.trilinear]
+command = "perf"
+domain = "resize"
+subjects = ["spec:resize:trilinear:mip-area"]
+
+[profiles.tiling-sweep]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = [
+  "nearest",
+  "area",
+  "bilinear",
+  "bicubic",
+  "bicubic-scale-aware",
+  "lanczos2",
+  "lanczos2-scale-aware",
+  "lanczos3",
+  "lanczos3-scale-aware"
+]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-nearest]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["nearest"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-area]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["area"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-bilinear]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["bilinear"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-bicubic]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["bicubic"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-bicubic-scale-aware]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["bicubic-scale-aware"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-lanczos2]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos2"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-lanczos2-scale-aware]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos2-scale-aware"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-lanczos3]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos3"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+
+target_sample_time = "1ms"
+sample_size = 50
+[profiles.tiling-sweep-lanczos3-scale-aware]
+command = "tiling-sweep"
+fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]
+filters = ["lanczos3-scale-aware"]
+worker_counts = [1, 2, 3, 4, 5, 6, 7, 8]
+target_sample_time = "1ms"
+sample_size = 50

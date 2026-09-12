@@ -1,0 +1,26 @@
+[package]
+name = "ditherette-bench"
+version = "0.1.0"
+edition = "2021"
+description = "Custom image-processing benchmark harness for Ditherette."
+license = "UNLICENSED"
+publish = false
+
+[dependencies]
+ditherette-bench-api = { path = "../ditherette-bench-api" }
+ditherette-wasm = { path = "../ditherette-wasm", features = ["bench-subjects"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
+
+[dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports"] }
+
+[[bench]]
+name = "crit_spec_nearest"
+harness = false

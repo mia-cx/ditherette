@@ -55,6 +55,8 @@ export function resizeImageData(
 	const { width, height } = assertOutputDimensions(outWidth, outHeight, 'Resize output');
 	assertSourceDimensions(source.width, source.height, 'Resize source');
 	const sourceRect = clampCrop(source.width, source.height, crop);
+	if (isIdentityResize(source, width, height, sourceRect)) return source;
+
 	const output = new ImageData(width, height);
 	const targetLeft = 0;
 	const targetTop = 0;
@@ -154,6 +156,17 @@ export function resizeImageData(
 	}
 
 	return output;
+}
+
+function isIdentityResize(source: ImageData, width: number, height: number, sourceRect: Rect) {
+	return (
+		width === source.width &&
+		height === source.height &&
+		sourceRect.x === 0 &&
+		sourceRect.y === 0 &&
+		sourceRect.width === source.width &&
+		sourceRect.height === source.height
+	);
 }
 
 function resizeNearestAxisTable(source: ImageData, output: ImageData, sourceRect: Rect) {

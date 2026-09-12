@@ -1,0 +1,133 @@
+> Legacy Rust/Wasm prototype preserved for reference while the new `ditherette-wasm` crate is specified from a clean slate.
+
+# ditherette-wasm-old
+
+Rust/Wasm scratch package for porting Ditherette's image-processing core.
+
+## Current API
+
+- `hello(name)` — scaffold export.
+- `resize_rgba_nearest(source_rgba, source_width, source_height, output_width, output_height)` — resizes tightly packed browser-order RGBA bytes with deterministic nearest-neighbor sampling.
+- `resize_rgba_nearest_into(source_rgba, source_width, source_height, output_width, output_height, output_rgba)` — allocation-free nearest-neighbor form that writes into a caller-owned RGBA buffer.
+- `resize_rgba_bilinear(source_rgba, source_width, source_height, output_width, output_height)` — resizes tightly packed browser-order RGBA bytes with deterministic center-aligned bilinear interpolation.
+- `resize_rgba_bilinear_into(source_rgba, source_width, source_height, output_width, output_height, output_rgba)` — allocation-free bilinear form that writes into a caller-owned RGBA buffer.
+- Reference resamplers: `resize_rgba_trilinear`, `resize_rgba_bicubic`, `resize_rgba_lanczos2`, `resize_rgba_lanczos3`, `resize_rgba_lanczos2_scale_aware`, `resize_rgba_lanczos3_scale_aware`, `resize_rgba_area`, and `resize_rgba_box`.
+- `antialias_rgba_box3(source_rgba, width, height)` — applies a simple post-resize 3x3 box antialiasing pass for comparison.
+
+## Prerequisites
+
+Use Rust through `rustup`; the repo-level `rust-toolchain.toml` requests the `wasm32-unknown-unknown` target for `wasm-pack` builds.
+
+## Build
+
+```sh
+pnpm wasm:build
+```
+
+Or, with `wasm-pack` installed locally/globally:
+
+```sh
+wasm-pack build crates/ditherette-wasm --target web
+```
+
+From inside this directory:
+
+```sh
+wasm-pack build --target web
+```
+
+## Test
+
+```sh
+cargo test --manifest-path crates/ditherette-wasm/Cargo.toml
+pnpm wasm:test
+pnpm wasm:test:browser
+```
+
+## Benchmark
+
+Run the Rust nearest-neighbor kernel benchmark:
+
+```sh
+pnpm crit:resize
+```
+
+Run the Rust bilinear kernel benchmark:
+
+```sh
+pnpm crit:resize:bilinear
+```
+
+Run all canonical Rust resize filters in Criterion. Before sampling, the bench reports byte equality for local `<filter>` vs `<filter>_reference` and, where useful, for `<filter>_reference` vs matching `image` crate output; mismatches are reported but do not stop the benchmark.
+
+```sh
+pnpm crit:resize:filters
+```
+
+Run one filter at a time:
+
+```sh
+pnpm crit:resize:nearest
+pnpm crit:resize:nearest:aa
+pnpm crit:resize:bilinear
+pnpm crit:resize:trilinear
+pnpm crit:resize:bicubic
+pnpm crit:resize:lanczos2
+pnpm crit:resize:lanczos2-scale-aware
+pnpm crit:resize:lanczos3
+pnpm crit:resize:lanczos3-scale-aware
+pnpm crit:resize:area
+pnpm crit:resize:box
+pnpm crit:resize:antialias
+```
+
+Pass Criterion options when you want a longer or shorter run:
+
+```sh
+pnpm bench:resize --measurement-time 30 --sample-size 100 --warm-up-time 5
+pnpm crit:resize:bilinear --measurement-time 30 --sample-size 100 --warm-up-time 5
+pnpm crit:resize:filters --measurement-time 30 --sample-size 100 --warm-up-time 5
+```
+
+The npm script preserves Criterion's saved benchmark state so `--save-baseline` and `--baseline` can show regressions and speedups. After Criterion finishes, it prints a percentile summary from Criterion's raw samples. Before sampling each scale, the benchmark checks selected canonical filters against their reference implementations.
+
+Compare two resize filter implementations with Criterion baselines:
+
+```sh
+pnpm crit:cmp --compare resize:area:reference --to resize:area:scalar
+pnpm crit:cmp --compare resize:area:scalar --to resize:area:tiling
+pnpm crit:cmp --compare resize:bilinear:scalar --to resize:bicubic:scalar
+```
+
+Compare in-process resize libraries without Criterion or CLI tool startup overhead:
+
+```sh
+pnpm bench:resize:shootout --filter nearest,bilinear,lanczos3,area --scales 2,1,0.99,0.95,0.8,0.5,0.25
+```
+
+The shootout decodes the fixture once, reuses RGBA buffers, and compares Ditherette with Rust libraries (`image`, `fast_image_resize`, and `resize` where that filter exists). External CLIs are intentionally excluded so process startup and file I/O do not muddy kernel timings.
+
+Measure row-band overhead directly and in area/nearest context on a small scale subset (`2x`, `1x`, `0.8x`, `0.5x`, `0.25x`, `0.125x`):
+
+```sh
+pnpm crit:resize:tiling-overhead
+```
+
+Sweep row-band tiling policies for a target kernel. By default this covers every 0.1x scale from 2x down to 0.1x, every 0.01x scale near identity from 1.05x through 0.95x, plus exact downscale waypoints 0.25x, 0.125x, and 0.0625x:
+
+```sh
+pnpm bench:tiling-sweep --target resize:nearest
+pnpm bench:tiling-sweep --target resize:area
+pnpm bench:tiling-sweep --target resize:box
+pnpm bench:tiling-plot benchmark-results/tiling-sweep-resize-nearest.json
+```
+
+The plot highlights the dense near-identity band (`0.95x` through `1.05x`) and colors each best point by resolved band count, which makes the near-1x scalar/tiling cliff visible.
+
+Run the real-browser nearest-neighbor resize smoke benchmark:
+
+```sh
+pnpm bench:resize:wasm
+```
+
+Both benchmarks use `benchmark-fixtures/Celeste_box_art_full.png` by default at 2x, 0.95x, 0.75x, 0.5x, 0.25x, and 0.125x. Criterion measures canonical production kernels only; reference implementations run in preflight correctness checks. The Rust benchmark times kernels over decoded RGBA memory; the browser benchmark includes the generated Wasm package and reports browser decode/normalization context.

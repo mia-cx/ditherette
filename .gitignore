@@ -10,6 +10,9 @@ dist/
 .vercel/
 .netlify/
 .wrangler/
+target/
+crates/**/target/
+bench/results/
 
 # Generated Cloudflare types
 worker-configuration.d.ts
@@ -51,7 +54,9 @@ vite.config.ts.timestamp-*
 .worktrees/
 .references/
 
+# Generated Wasm package served by Vite/SvelteKit
+static/wasm/
+
 # Benchmark artifacts
 benchmark-results/
-benchmark-fixtures/
 .ant-colony/
