@@ -40,7 +40,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | Slice | Deliverable | Prerequisites | Progress | PR |
 |---|---|---|---|---|
 | [S01](#s01) | Establish the inherited port stack and validation baseline | None | Merged db1c3f67; current-head approval, checks and 18 resolved threads | [#75](https://github.com/mia-cx/ditherette/pull/75) |
-| [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) | Restacked on main without conflicts; babysitting next | [#88](https://github.com/mia-cx/ditherette/pull/88) |
+| [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) | Baseline passes at a53aef27; held for shared pnpm pin decision after upstream deprecation | [#88](https://github.com/mia-cx/ditherette/pull/88) |
 | [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Ready | [#89](https://github.com/mia-cx/ditherette/pull/89) |
 | [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Ready | [#90](https://github.com/mia-cx/ditherette/pull/90) |
 | [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | Ready | [#96](https://github.com/mia-cx/ditherette/pull/96) |

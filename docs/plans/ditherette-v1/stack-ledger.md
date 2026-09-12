@@ -2,6 +2,10 @@
 
 ## Stack collapse on 2026-09-12
 
+S02 head `a53aef27` passes both pinned Wasm builds, package/version checks, 102 native tests, two Wasm overflow tests, 120 TypeScript tests and 15 deterministic benchmark-tooling tests. Fusion session `purple-twill` used Astra High and SWE-2 Medium. Finished targets were cleared, freeing 1.5 GiB.
+
+Pullfrog finding `3997233677` blocks PR #88. npm marks pnpm 11.13.0 broken; pnpm's installer rejects its missing native binary. The installed JavaScript CLI passing locally does not validate fresh native installs. The active tip also pins 11.13.0 in package conformance and publishing workflows. Changing the shared pin to the non-deprecated 11.13.1 requires Mia's downstream-impact decision. No pin/source changes or PR skips. The thread remains unresolved and the watcher has exited.
+
 PR #75 merged as `db1c3f6767a5e74a4abefdeaa36882ef807a0e45` after Pullfrog approved head `75de22dd`, CI passed, and all 18 threads were resolved. Issue #42 closed. Local main fast-forwarded. Children #88, #89, and #90 were retargeted before branch deletion. S02 now restacks onto main without conflicts and enters babysitting. About 2 GB of finished root build targets were cleared.
 
 Mia authorizes root-first babysitting, merge, and restacking through active work, using Devin Fusion GPT-6 Astra High with SWE-2. Stop and flag actual conflicts, skipped PRs, or fixes that collide with downstream runtime/spec work.
