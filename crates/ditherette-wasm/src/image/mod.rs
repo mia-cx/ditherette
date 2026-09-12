@@ -5,6 +5,7 @@
 //! transform image content or destructure flat channel arrays into per-pixel
 //! structs.
 
+pub mod contracts;
 pub mod dimensions;
 pub mod formats;
 pub mod owned;
