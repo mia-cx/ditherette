@@ -2,6 +2,8 @@
 
 ## Stack collapse on 2026-09-12
 
+PR #88 merged as `9e99b5bbd6b4e52475ab703e94e0ebcbed22e6cc` from head `534a4395` after exact-head Pullfrog approval, passing checks and resolution of its pnpm thread. Issue #43 closed and local main fast-forwarded. No open PR directly targeted S02 at merge time. Fresh native pnpm 11.13.1 passed frozen install, both Wasm builds, package/Rust checks, 102 native tests, two Wasm tests, 120 TypeScript tests and 15 deterministic Node tests; locks remained unchanged. Finished S02 targets were already cleared. PR #89 is next, followed by #90; no PR is skipped. The earlier pnpm hold entries below are historical and resolved.
+
 Mia approves replacing pnpm 11.13.0 with 11.13.1, including the downstream conformance and publishing workflow pins. The hold below is resolved. Fusion resumes PR #88 with a fresh native installation check; later restacks must preserve this correction. No other tooling upgrades are authorized.
 
 S02 head `a53aef27` passes both pinned Wasm builds, package/version checks, 102 native tests, two Wasm overflow tests, 120 TypeScript tests and 15 deterministic benchmark-tooling tests. Fusion session `purple-twill` used Astra High and SWE-2 Medium. Finished targets were cleared, freeing 1.5 GiB.
