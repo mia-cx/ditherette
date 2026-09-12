@@ -138,20 +138,24 @@ await runBrowserTransport({
 
 function sweepRunConfigs(options) {
 	const configs = [];
-	const scalarSubjects = options.subjects.filter((subject) => /:scalar$|:fixed$/.test(subject));
+	const scalarSubjects = options.subjects.filter((subject) => isScalarSubject(subjectConfig(subject)));
 	const candidateSubjects = options.subjects.filter((subject) => !scalarSubjects.includes(subject));
+	const periodicScalarSubjects = options.periodicScalarRemeasurement
+		? scalarSubjects.filter((scalar) => candidateSubjects.some((candidate) =>
+			isMatchingScalarSubject(subjectConfig(scalar), subjectConfig(candidate))))
+		: [];
+	const onceSubjects = scalarSubjects.filter((subject) => !periodicScalarSubjects.includes(subject));
 
 	for (const scale of options.scales) {
-		if (scalarSubjects.length > 0) {
+		if (onceSubjects.length > 0) {
 			configs.push({
 				threadCount: options.threadCounts[0],
 				rowBandHeight: options.rowBandHeights[0],
 				scales: [scale],
-				subjects: scalarSubjects,
+				subjects: onceSubjects,
 				periodicScalarRemeasurement: false
 			});
 		}
-
 		for (const threadCount of options.threadCounts) {
 			for (const rowBandHeight of options.rowBandHeights) {
 				if (candidateSubjects.length === 0) continue;
@@ -159,14 +163,38 @@ function sweepRunConfigs(options) {
 					threadCount,
 					rowBandHeight,
 					scales: [scale],
-					subjects: candidateSubjects,
+					subjects: [...periodicScalarSubjects, ...candidateSubjects],
 					label: `workers-${threadCount}-band-${rowBandHeight}`,
-					periodicScalarRemeasurement: false
+					periodicScalarRemeasurement: options.periodicScalarRemeasurement
 				});
 			}
 		}
 	}
 	return configs;
+}
+
+function scheduledSubjects(subjects, periodicScalarRemeasurement) {
+	if (!periodicScalarRemeasurement) return subjects;
+	const schedule = [];
+	for (const subject of subjects) {
+		schedule.push(subject);
+		if (isScalarSubject(subject)) continue;
+		const scalar = subjects.find((candidate) => isMatchingScalarSubject(candidate, subject));
+		if (scalar) schedule.push(scalar);
+	}
+	return schedule;
+}
+
+function isScalarSubject(subject) {
+	return subject.domain === 'color'
+		? subject.executionMode === 'scalar'
+		: subject.parallelizationPolicy === false;
+}
+
+function isMatchingScalarSubject(candidate, subject) {
+	if (!isScalarSubject(candidate) || candidate.domain !== subject.domain) return false;
+	if (subject.domain === 'color') return candidate.target === subject.target;
+	return candidate.filter === subject.filter && candidate.supportPolicy === 'fixed';
 }
 
 function writeStatusLine(message) {
@@ -396,6 +424,7 @@ globalThis.runWasmBench = async function runWasmBench(config) {
 			width: fixture.sourceWidth,
 			height: fixture.sourceHeight,
 			kind: 'browser-image',
+			fingerprint: fixture.fingerprint,
 			decodeNs: millisecondsToNanoseconds(fixture.decodeMs),
 			normalizeNs: millisecondsToNanoseconds(fixture.normalizeMs)
 		}))
@@ -426,6 +455,7 @@ globalThis.runWasmBench = async function runWasmBench(config) {
 			name: fixture.name,
 			width: fixture.sourceWidth,
 			height: fixture.sourceHeight,
+			fingerprint: fixture.fingerprint,
 			decodeNs: millisecondsToNanoseconds(fixture.decodeMs),
 			normalizeNs: millisecondsToNanoseconds(fixture.normalizeMs)
 		})),
@@ -458,32 +488,13 @@ async function decodeFixture(fixture) {
 	const normalizeMs = performance.now() - normalizeStarted;
 	bitmap.close?.();
 
-	return { name: fixture.name, sourceWidth, sourceHeight, sourceRgba, decodeMs, normalizeMs };
+	const fingerprint = 'rgba8:' + sourceWidth + 'x' + sourceHeight + ':fnv1a32:' + checksumBytes(sourceRgba).toString(16).padStart(8, '0');
+	return { name: fixture.name, sourceWidth, sourceHeight, sourceRgba, decodeMs, normalizeMs, fingerprint };
 }
 
-function scheduledSubjects(subjects, periodicScalarRemeasurement) {
-	if (!periodicScalarRemeasurement) return subjects;
-	const schedule = [];
-	for (const subject of subjects) {
-		schedule.push(subject);
-		if (isScalarSubject(subject)) continue;
-		const scalar = subjects.find((candidate) => isMatchingScalarSubject(candidate, subject));
-		if (scalar) schedule.push({ ...scalar, id: scalar.id + ':remeasure' });
-	}
-	return schedule;
-}
-
-function isScalarSubject(subject) {
-	return subject.domain === 'color'
-		? subject.executionMode === 'scalar'
-		: subject.parallelizationPolicy === false;
-}
-
-function isMatchingScalarSubject(candidate, subject) {
-	if (!isScalarSubject(candidate) || candidate.domain !== subject.domain) return false;
-	if (subject.domain === 'color') return candidate.target === subject.target;
-	return candidate.filter === subject.filter && candidate.supportPolicy === 'fixed';
-}
+${scheduledSubjects.toString()}
+${isScalarSubject.toString()}
+${isMatchingScalarSubject.toString()}
 
 function makeCases(decodedFixture, config) {
 	if (config.domain === 'color') {
@@ -510,7 +521,7 @@ function makeScaleCases(decodedFixture, scales, lanes, sweepLabel, options = {})
 		if (lanes.includes('browser-decode-rgba')) {
 			cases.push({
 				id: id + '-browser-decode',
-				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
+				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight, fingerprint: decodedFixture.fingerprint },
 				lane: 'browser-decode-rgba',
 				scale,
 				sourceWidth,
@@ -526,7 +537,7 @@ function makeScaleCases(decodedFixture, scales, lanes, sweepLabel, options = {})
 		if (lanes.includes('decoded-rgba')) {
 			cases.push({
 				id: id + '-decoded-rgba',
-				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight },
+				fixture: { name: decodedFixture.name, width: decodedFixture.sourceWidth, height: decodedFixture.sourceHeight, fingerprint: decodedFixture.fingerprint },
 				lane: 'decoded-rgba',
 				scale,
 				sourceWidth,
@@ -883,20 +894,22 @@ function benchRunArtifact(options, browserResult) {
 }
 
 function candidateComparisons(results) {
-	const byCaseAndKernel = new Map();
-	for (const result of results) {
-		const key = [comparisonCaseId(result), result.filter, result.fixture.name].join('|');
-		const bucket = byCaseAndKernel.get(key) ?? { scalar: undefined, candidates: [] };
-		if (isScalarResult(result)) bucket.scalar = result;
-		else if (isCandidateResult(result)) bucket.candidates.push(result);
-		byCaseAndKernel.set(key, bucket);
-	}
-
+	const scalars = new Map();
 	const comparisons = [];
-	for (const bucket of byCaseAndKernel.values()) {
-		if (!bucket.scalar) continue;
-		for (const candidate of bucket.candidates)
-			comparisons.push(candidateComparison(bucket.scalar, candidate));
+	for (const result of results) {
+		const subject = subjectConfig(result.subject);
+		const key = [
+			comparisonCaseId(result),
+			subject.domain,
+			result.filter,
+			result.fixture.name,
+			result.fixture.fingerprint,
+			subject.domain === 'resize' ? subject.supportPolicy.split('+')[0] : ''
+		].join('|');
+		if (isScalarResult(result)) scalars.set(key, result);
+		else if (isCandidateResult(result) && scalars.has(key)) {
+			comparisons.push(candidateComparison(scalars.get(key), result));
+		}
 	}
 	return comparisons;
 }
@@ -907,7 +920,7 @@ function comparisonCaseId(result) {
 }
 
 function isScalarResult(result) {
-	return result.subject.endsWith(':scalar') || result.subject.endsWith(':fixed');
+	return isScalarSubject(subjectConfig(result.subject));
 }
 
 function isCandidateResult(result) {
@@ -1267,7 +1280,7 @@ function defaultSubjects(domain) {
 }
 
 function requiresThreadedWasm(subjects) {
-	return subjects.some((subject) => /:pooled_(direct|noop|copy)$/.test(subject));
+	return subjects.some((subject) => !isScalarSubject(subjectConfig(subject)));
 }
 
 function parseArgs(rawArgs) {
@@ -1651,7 +1664,12 @@ function booleanValue(value, fallback) {
 }
 
 function helpText() {
-	return `Usage:
+	return `Preparation:
+  pnpm bench:prepare && pnpm wasm:build        Scalar; use wasm:build:threads for threaded/color.
+  Then drain all agents, builds and tests. bench:* measurement aliases pass --quiet to the
+  lease helper as the coordinator's quiet-phase attestation and never build.
+
+Usage:
   pnpm bench:resize:wasm -- run PROFILE [overrides...]
   pnpm bench:resize:wasm -- [overrides...]
 
@@ -1664,7 +1682,7 @@ Measurement flags:
   --iterations N             Alias for --sample-size.
   --measurement-time D       Stop after duration, e.g. 10s or 500ms.
   --warm-up-time D           Warm up for duration, e.g. 1s or 250ms.
-  --warm-up-iterations N     Optional extra warmup batch minimum. Default: 0.
+  --warm-up-iterations N     Optional warmup iteration minimum. Default: 0.
   --warmups N                Alias for --warm-up-iterations.
   --target-sample-time D     Calibrate in-Wasm batches to roughly this duration.
   --live-stats               Render live measurement blocks.
