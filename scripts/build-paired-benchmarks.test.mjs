@@ -81,3 +81,11 @@ test('opaque compiler response files cannot bypass recipe recording', () => {
 		['-C', '@/tmp/flags.rsp']
 	]) assert.throws(() => normalizedArguments(args, {}), /response files/);
 });
+
+test('recorded recipes require stable compiler semantics', () => {
+	for (const value of ['1', 'ditherette_bench']) {
+		assert.throws(() => normalizedArguments(['-Ztune-cpu=native'], { RUSTC_BOOTSTRAP: value }), /stable compiler/);
+	}
+	const args = ['-C', 'target-cpu=x86-64'];
+	assert.deepEqual(normalizedArguments(args, { RUSTC_BOOTSTRAP: '-1' }), args);
+});
