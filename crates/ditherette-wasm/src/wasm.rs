@@ -230,7 +230,10 @@ pub fn benchmark_resize_rgba8(
     let source = ImageView::<Rgba8>::packed(input, source_dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
-    let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    let output_len = output_dimensions
+        .storage_len::<Rgba8>()
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut output = vec![0; output_len];
 
     let config = WasmBenchmarkConfig {
         sample_size,
@@ -376,7 +379,10 @@ fn resize_rgba8_scalar(
     let source = ImageView::<Rgba8>::packed(input, source_dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
-    let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    let output_len = output_dimensions
+        .storage_len::<Rgba8>()
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut output = vec![0; output_len];
 
     #[cfg(feature = "threads")]
     if parallelization_policy {
