@@ -43,8 +43,8 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) | Merged 9e99b5bb; native pnpm 11.13.1 validated; one thread resolved | [#88](https://github.com/mia-cx/ditherette/pull/88) |
 | [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Merged cc08a0cc; 118 native tests pass; five review threads resolved | [#89](https://github.com/mia-cx/ditherette/pull/89) |
 | [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Merged 6a6b35bd; exclusive lifecycle and help checks pass; three threads resolved | [#90](https://github.com/mia-cx/ditherette/pull/90) |
-| [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | Ready | [#96](https://github.com/mia-cx/ditherette/pull/96) |
-| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | Ready | [#102](https://github.com/mia-cx/ditherette/pull/102) |
+| [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | Merged a739c71e; exact output proof and fixture identities verified; five threads resolved | [#96](https://github.com/mia-cx/ditherette/pull/96) |
+| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | Blocked: restack conflict in benchmark main.rs; no merge started | [#102](https://github.com/mia-cx/ditherette/pull/102) |
 | [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) | Ready | [#91](https://github.com/mia-cx/ditherette/pull/91) |
 | [S08](#s08) | Complete Lab and LCH reference round trips | [S03](#s03) | Ready | [#92](https://github.com/mia-cx/ditherette/pull/92) |
 | [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Ready | [#94](https://github.com/mia-cx/ditherette/pull/94) |
