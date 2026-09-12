@@ -131,3 +131,26 @@ formatting pass. Mixed failure evidence includes its expected PNG review image.
 No standalone timing workload, browser launch, threshold change, kernel rewrite,
 publication, or promotion occurred. Historical control measurements above remain
 unchanged and do not validate performance at this amended head.
+
+### Measured output and effective compiler settings
+
+Pullfrog found two gaps after the first amendments. The native adapter retained
+its probe rather than its final measured buffer. Build-script environment capture
+also missed effective `--config profile.release.*` settings.
+
+`e2ceed2c` retains the measured pixels outside timed batches and requires compiler-
+recorded builds for paired evidence. The build-only Node recorder captures actual
+rustc arguments for the executable and dependencies. Default Cargo builds cannot
+claim this proof. It leaves optimization defaults and reference kernels unchanged.
+
+`ed022edf` records actual compiler controls. Different root codegen settings and
+dependency-only overrides produce different recipes. Identical builds in separate
+worktrees produce equal recipes. The old environment-only identities remain equal
+across the same codegen overrides, reproducing the incomplete capture.
+
+The measured-output test failed with retained `[1, 2, 3, 255]` versus measured
+`[0, 2, 3, 255]`; it now retains the measured bytes. The final Rust gate passes
+35 tests, including eight paired tests and 13 binary tests, plus the nested Node
+ownership fixtures. Criterion compilation and formatting pass. The actual
+benchmark dependency graph also builds through the recorder. No standalone
+performance trial or browser run occurred.

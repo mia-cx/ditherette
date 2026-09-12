@@ -10,17 +10,22 @@ starts. There is no baseline-writing or candidate-promotion command.
 Build each requested revision in its own clean worktree with the same toolchain:
 
 ```sh
-cargo build --manifest-path crates/ditherette-bench/Cargo.toml --locked --release --bins
+node scripts/build-paired-benchmarks.mjs /absolute/clean-worktree /absolute/new-build-directory
 ```
 
-The native executable embeds its full source revision, dirty status, tool version,
-and verbose compiler version. A trial rejects a dirty build, a different requested
-revision, or a different executable SHA-256. Build artifacts are not inferred from
-the working directory during measurement. The build also embeds Cargo's
-target/host configuration, feature flags, profile, optimization/debug settings,
-encoded Rust flags, linker/wrapper choices, and profile environment overrides.
-Paired results require an exact configuration match. Missing configuration is
-incomplete evidence, not a legacy default.
+The build-only recorder uses Rust 1.97.0 and a fresh external target directory.
+It prints the three executable paths for control-plan, preparation, and trials.
+Use those printed paths instead of the historical `target/release` paths below.
+Optional `--config profile.KEY=VALUE` arguments select explicit profile settings;
+resolved settings remain part of the recorded recipe.
+
+The native executable embeds its source revision, dirty status, tool version,
+compiler version, and normalized compiler commands for itself and its dependencies.
+The recipe includes actual target, feature, LTO, and codegen arguments. It removes
+transient worktree/output paths and Cargo filename metadata. Paired roles require
+exact recipe equality. Default Cargo builds remain available for ordinary commands,
+but cannot provide recorded paired evidence. A trial also rejects a dirty build,
+a different requested revision, or a different executable SHA-256.
 
 Accepted and candidate revisions must differ. Preparation and execution both
 check this, including when loading an edited prepared manifest. Output
@@ -85,6 +90,9 @@ sizes. S05 verifies all three outputs and both executable-local references.
 Incorrect results preserve raw output and available PNG review bundles. A known
 correctness failure remains incorrect even when another pair or case has
 incomplete timing evidence. Its available review images remain part of the run.
+
+Native output records contain the final measured buffer, copied after the timing
+loop. A correct one-shot probe cannot certify a later divergent execution.
 
 The protocol separates single-call latency from calibrated throughput. It also
 separates native kernels, complete calls, initialization, and cold/warm application
