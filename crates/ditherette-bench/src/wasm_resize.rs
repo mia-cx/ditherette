@@ -31,6 +31,26 @@ const WASM_HARNESS: &str = "scripts/benchmark-wasm-resize.mjs";
 
 pub(crate) fn wasm_resize_command(lease: &Lease, args: &[String]) -> Result<(), BenchError> {
     let args = strip_leading_separator(args);
+    if args.iter().any(|arg| arg == "--help") {
+        let mut command = Command::new("node");
+        command
+            .arg(WASM_HARNESS)
+            .args(args)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        let status = lease
+            .spawn(command)
+            .map_err(BenchError::io)?
+            .wait()
+            .map_err(BenchError::io)?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(BenchError::Runtime(format!(
+                "browser/Wasm help exited with {status}"
+            )))
+        };
+    }
     let bench_flags = WasmBenchFlags::parse(args)?;
     let mut command = Command::new("node");
     command
