@@ -38,7 +38,7 @@ function options(subjects, periodicScalarRemeasurement = false) {
 
 for (const filter of ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3', 'trilinear']) {
 	test(`native ${filter} alias selects its actual profile`, async () => {
-		const profile = manifest.scripts[`bench:resize:${filter}`].split(' -- run ')[1];
+		const profile = manifest.scripts[`bench:resize:${filter}`].split('ditherette-bench run ')[1];
 		const native = host.parseTomlSubset(await readFile(new URL('../crates/ditherette-bench/ditherette-bench.toml', import.meta.url), 'utf8'));
 		assert.equal(profile, filter);
 		assert.equal(native.profiles[profile].domain, 'resize');
@@ -46,11 +46,21 @@ for (const filter of ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lan
 }
 
 test('color alias resolves the color profile', async () => {
-	const args = manifest.scripts['bench:color:wasm'].split(' -- wasm-resize')[1].trim().split(/\s+/).filter(Boolean);
+	const args = manifest.scripts['bench:color:wasm'].split('ditherette-bench wasm-resize')[1].trim().split(/\s+/).filter(Boolean);
 	const resolved = await host.resolveOptions(args);
 	assert.equal(resolved.profile, 'color');
 	assert.equal(resolved.domain, 'color');
 	assert.ok(resolved.subjects.every((id) => id.startsWith('wasm:color:')));
+});
+
+test('measurement aliases launch prepared executables under the coordinator', () => {
+	for (const [name, script] of Object.entries(manifest.scripts)) {
+		if (!name.startsWith('bench:') || name === 'bench:prepare') continue;
+		assert.ok(!script.includes('cargo '), name);
+		assert.ok(!script.includes('wasm:build'), name);
+		assert.ok(script.startsWith('crates/ditherette-bench/target/prepared/ditherette-bench-lease --quiet -- '), name);
+	}
+	assert.ok(manifest.scripts['bench:resize:criterion-nearest'].endsWith('crit_spec_nearest --bench --noplot'));
 });
 
 test('all scalar execution policies run once outside worker grids', () => {

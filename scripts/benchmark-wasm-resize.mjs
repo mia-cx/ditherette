@@ -1664,7 +1664,12 @@ function booleanValue(value, fallback) {
 }
 
 function helpText() {
-	return `Usage:
+	return `Preparation:
+  pnpm bench:prepare && pnpm wasm:build        Scalar; use wasm:build:threads for threaded/color.
+  Then drain all agents, builds and tests. bench:* measurement aliases pass --quiet to the
+  lease helper as the coordinator's quiet-phase attestation and never build.
+
+Usage:
   pnpm bench:resize:wasm -- run PROFILE [overrides...]
   pnpm bench:resize:wasm -- [overrides...]
 
