@@ -1,5 +1,8 @@
 # Ditherette bench artifacts
 
+Read [exclusive execution](EXECUTION.md) before collecting timings. Prepare builds,
+drain implementation work, then run prebuilt executables under the shared lease.
+
 `ditherette-bench` writes benchmark run and baseline artifacts as JSON under:
 
 ```text

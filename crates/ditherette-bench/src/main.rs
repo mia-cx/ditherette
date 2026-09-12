@@ -20,6 +20,7 @@ mod tiling_sweep;
 mod util;
 mod wasm_resize;
 
+use ditherette_bench::lease::{require_quiet, BenchmarkGuard};
 use std::{env, process::ExitCode};
 
 use cli::help_text;
@@ -41,6 +42,7 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), BenchError> {
+    let guard = BenchmarkGuard::acquire().map_err(BenchError::io)?;
     let mut args = env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!("{}", help_text());
@@ -49,6 +51,16 @@ fn run() -> Result<(), BenchError> {
 
     let command = args.remove(0);
     let expanded = expand_command(command, args)?;
+    let wasm_help =
+        expanded.command == "wasm-resize" && expanded.args.iter().any(|arg| arg == "--help");
+    if !wasm_help
+        && matches!(
+            expanded.command.as_str(),
+            "perf" | "comp" | "tile" | "tiling-sweep" | "wasm-resize"
+        )
+    {
+        require_quiet().map_err(BenchError::io)?;
+    }
     let registry = Registry::load();
 
     match expanded.command.as_str() {
@@ -58,7 +70,7 @@ fn run() -> Result<(), BenchError> {
         "comp" => comp_command(&registry, &expanded.args),
         "tile" => tile_command(&registry, &expanded.args),
         "tiling-sweep" => tiling_sweep_command(&registry, &expanded.args),
-        "wasm-resize" => wasm_resize_command(&expanded.args),
+        "wasm-resize" => wasm_resize_command(&guard.lease, &expanded.args),
         unknown => Err(BenchError::Config(format!("unknown command {unknown:?}"))),
     }
 }

@@ -4,6 +4,7 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { runBrowserTransport } from './benchmark-transport.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -38,91 +39,102 @@ await assertFile(
 );
 
 const fixtures = await benchmarkFixtures(options.fixtures);
-const server = await startBenchmarkServer({ pkgDir, fixtures });
-const browser = await chromium.launch({ headless: true });
 let statusLineActive = false;
 
-try {
-	let browserResult;
-	const runConfigs = sweepRunConfigs(options);
-	for (let runIndex = 0; runIndex < runConfigs.length; runIndex += 1) {
-		const runConfig = runConfigs[runIndex];
-		const page = await browser.newPage();
-		page.on('console', (message) => {
-		if (message.type() !== 'debug') return;
-		const text = message.text();
-		if (text.startsWith('bench-progress ')) {
-			if (!options.jsonlEvents) writeStatusLine(text.slice('bench-progress '.length));
-			return;
-		}
-		if (text.startsWith('bench-event ')) {
-			const event = JSON.parse(text.slice('bench-event '.length));
-			if (options.jsonlEvents) {
-				console.log(JSON.stringify(event));
-				return;
+await runBrowserTransport({
+	startServer: () => startBenchmarkServer({ pkgDir, fixtures }),
+	launchBrowserServer: () =>
+		chromium.launchServer({
+			headless: true,
+			handleSIGINT: false,
+			handleSIGTERM: false,
+			handleSIGHUP: false
+		}),
+	run: async ({ server, browserServer }) => {
+		const browser = await chromium.connect(browserServer.wsEndpoint());
+		try {
+			let browserResult;
+			const runConfigs = sweepRunConfigs(options);
+			for (let runIndex = 0; runIndex < runConfigs.length; runIndex += 1) {
+				const runConfig = runConfigs[runIndex];
+				const page = await browser.newPage();
+				page.on('console', (message) => {
+					if (message.type() !== 'debug') return;
+					const text = message.text();
+					if (text.startsWith('bench-progress ')) {
+						if (!options.jsonlEvents) writeStatusLine(text.slice('bench-progress '.length));
+						return;
+					}
+					if (text.startsWith('bench-event ')) {
+						const event = JSON.parse(text.slice('bench-event '.length));
+						if (options.jsonlEvents) {
+							console.log(JSON.stringify(event));
+							return;
+						}
+						handleBenchEvent(event, options);
+					}
+				});
+				await page.goto(server.url, { waitUntil: 'load' });
+
+				const partialResult = await page.evaluate(
+					async (config) => globalThis.runWasmBench(config),
+					{
+						domain: options.domain,
+						profile: options.profile,
+						fixtures: fixtures.map((fixture) => ({
+							name: fixture.name,
+							url: `/fixtures/${encodeURIComponent(fixture.name)}`
+						})),
+						subjects: runConfig.subjects.map(subjectConfig),
+						reportSubjects: options.subjects.map(subjectConfig),
+						scales: runConfig.scales,
+						reportScales: options.scales,
+						lanes: options.lanes,
+						baseline: options.baseline,
+						sampleSize: options.sampleSize,
+						measurementTimeMs: options.measurementTimeMs,
+						warmUpTimeMs: options.warmUpTimeMs,
+						warmUpIterations: options.warmUpIterations,
+						targetSampleTimeMs: options.targetSampleTimeMs,
+						liveStats: options.liveStats,
+						threadedWasm: options.threadedWasm,
+						threadCount: runConfig.threadCount,
+						rowBandHeight: runConfig.rowBandHeight,
+						sweepLabel: runConfig.label,
+						emitStart: runIndex === 0,
+						periodicScalarRemeasurement:
+							runConfig.periodicScalarRemeasurement ?? options.periodicScalarRemeasurement
+					}
+				);
+				await page.close();
+				if (!browserResult) {
+					browserResult = partialResult;
+				} else {
+					browserResult.results.push(...partialResult.results);
+				}
 			}
-			handleBenchEvent(event, options);
-		}
-		});
-		await page.goto(server.url, { waitUntil: 'load' });
+			const artifact = benchRunArtifact(options, browserResult);
 
-		const partialResult = await page.evaluate(async (config) => globalThis.runWasmBench(config), {
-		domain: options.domain,
-		profile: options.profile,
-		fixtures: fixtures.map((fixture) => ({
-			name: fixture.name,
-			url: `/fixtures/${encodeURIComponent(fixture.name)}`
-		})),
-		subjects: runConfig.subjects.map(subjectConfig),
-		reportSubjects: options.subjects.map(subjectConfig),
-		scales: runConfig.scales,
-		reportScales: options.scales,
-		lanes: options.lanes,
-		baseline: options.baseline,
-		sampleSize: options.sampleSize,
-		measurementTimeMs: options.measurementTimeMs,
-		warmUpTimeMs: options.warmUpTimeMs,
-		warmUpIterations: options.warmUpIterations,
-		targetSampleTimeMs: options.targetSampleTimeMs,
-		liveStats: options.liveStats,
-		threadedWasm: options.threadedWasm,
-		threadCount: runConfig.threadCount,
-		rowBandHeight: runConfig.rowBandHeight,
-		sweepLabel: runConfig.label,
-		emitStart: runIndex === 0,
-		periodicScalarRemeasurement: runConfig.periodicScalarRemeasurement ?? options.periodicScalarRemeasurement
-		});
-		await page.close();
-		if (!browserResult) {
-			browserResult = partialResult;
-		} else {
-			browserResult.results.push(...partialResult.results);
+			if (options.jsonlEvents) {
+				console.log(JSON.stringify({ kind: 'complete', artifact }));
+			} else {
+				await mkdir(outDir, { recursive: true });
+				const jsonPath = path.join(
+					outDir,
+					`${sanitizePathComponent(options.profile ?? 'ad-hoc')}.json`
+				);
+				await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
+
+				clearStatusLine();
+				if (!runHeaderPrinted) console.log(renderPerfStart(artifact));
+				console.log(renderSummary(artifact));
+				console.log(`\nWrote ${path.relative(root, jsonPath)}`);
+			}
+		} finally {
+			clearStatusLine();
 		}
 	}
-	const artifact = benchRunArtifact(options, browserResult);
-
-	if (options.jsonlEvents) {
-		console.log(JSON.stringify({ kind: 'complete', artifact }));
-	} else {
-		await mkdir(outDir, { recursive: true });
-		const jsonPath = path.join(
-			outDir,
-			`${sanitizePathComponent(options.profile ?? 'ad-hoc')}.json`
-		);
-		await writeFile(jsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
-
-		clearStatusLine();
-		if (!runHeaderPrinted) console.log(renderPerfStart(artifact));
-		console.log(renderSummary(artifact));
-		console.log(`\nWrote ${path.relative(root, jsonPath)}`);
-	}
-} finally {
-	clearStatusLine();
-	await browser.close();
-	await new Promise((resolve, reject) => {
-		server.instance.close((error) => (error ? reject(error) : resolve()));
-	});
-}
+});
 
 function sweepRunConfigs(options) {
 	const configs = [];
@@ -1652,7 +1664,12 @@ function booleanValue(value, fallback) {
 }
 
 function helpText() {
-	return `Usage:
+	return `Preparation:
+  pnpm bench:prepare && pnpm wasm:build        Scalar; use wasm:build:threads for threaded/color.
+  Then drain all agents, builds and tests. bench:* measurement aliases pass --quiet to the
+  lease helper as the coordinator's quiet-phase attestation and never build.
+
+Usage:
   pnpm bench:resize:wasm -- run PROFILE [overrides...]
   pnpm bench:resize:wasm -- [overrides...]
 
