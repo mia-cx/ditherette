@@ -65,7 +65,13 @@ verification records bind the checked candidate bytes to that digest. A changed
 measured output, missing digest, or mismatched digest cannot become an accepted
 baseline. The legacy display checksum remains unchanged. Tiling sweeps use
 numeric bounds for diagnostic continuation; they do not grant accepted-baseline
-approval.
+approval. Preflight reports are keyed by subject, normalized source dimensions
+and full source SHA-256, plus the case identifier. Same-stem image paths cannot
+replace each other's proof. The legacy browser transport supplies telemetry
+without complete exact output verification, so accepted-baseline save and
+replace options fail before launching it. Diagnostic runs and loading existing
+baselines for comparison remain available; no digest is invented from a
+telemetry checksum.
 
 ## S17 adapter handoff
 

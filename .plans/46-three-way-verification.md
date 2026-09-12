@@ -89,3 +89,16 @@ fixture), 8 verification tests, and 3 adapter tests;
 crates/ditherette-bench/Cargo.toml --benches`, rustfmt, and `git diff --check`
 are clean. Raw evidence is under `/tmp/ditherette-collapse-88.27wHc7/` with
 `pr96-fix-*` prefixes. No review or merge completion is claimed here.
+
+A further review pass adds two more corrections. Preflight reports were keyed
+only by subject and case, so two image paths sharing a stem (`a/image.png`,
+`b/image.png`) produced one report instead of two; the key now carries the
+subject, normalized source dimensions, the full source SHA-256, and the case,
+and `same_stem_fixture_paths_keep_distinct_reports` failed before (1 vs 2) and
+passes after. Browser accepted-baseline rejection moved before transport launch:
+`--save-baseline`/`--replace-baseline` now fail during flag parsing because the
+current telemetry cannot supply complete exact proof, shown by the new
+`unverified_wasm_baseline_writes_fail_before_transport` regression; diagnostic
+runs and `--baseline` loading remain available. A third comment requested
+coverage-only additions and identified no semantic defect, so no source change
+was made for it.
