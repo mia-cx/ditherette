@@ -5,6 +5,7 @@
 //! the semantics expressed here.
 
 pub mod color;
+pub mod contract;
 pub mod dither;
 pub mod quantize;
 pub mod resize;
