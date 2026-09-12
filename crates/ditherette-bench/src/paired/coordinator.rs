@@ -23,11 +23,7 @@ pub fn prepare(
     directory: &Path,
 ) -> io::Result<PreparedPair> {
     validate_experiment(&experiment)?;
-    for (_, revision) in [accepted, candidate] {
-        if ![40, 64].contains(&revision.len()) || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
-            return Err(io::Error::other("prepare requires full source revisions"));
-        }
-    }
+    validate_revisions(accepted.1, candidate.1)?;
     // Read both inputs before creating the destination. An absent candidate cannot
     // leave an apparently usable accepted-only preparation.
     let a = fs::read(accepted.0)?;
@@ -70,6 +66,10 @@ pub fn prepare(
 pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> {
     require_quiet()?;
     validate_experiment(&prepared.experiment)?;
+    validate_revisions(
+        &prepared.accepted.identity.revision,
+        &prepared.candidate.identity.revision,
+    )?;
     if prepared.schema != SCHEMA || prepared.machine != machine()? {
         return Err(io::Error::other(
             "prepared schema or machine identity differs",
@@ -190,6 +190,20 @@ pub fn run(prepared: &PreparedPair, directory: &Path) -> io::Result<PairReport> 
     Ok(report)
 }
 
+fn validate_revisions(accepted: &str, candidate: &str) -> io::Result<()> {
+    for revision in [accepted, candidate] {
+        if ![40, 64].contains(&revision.len()) || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(io::Error::other("prepare requires full source revisions"));
+        }
+    }
+    if accepted.eq_ignore_ascii_case(candidate) {
+        return Err(io::Error::other(
+            "paired benchmarks require distinct source revisions",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_executable(executable: &Executable) -> io::Result<()> {
     let metadata = fs::symlink_metadata(&executable.path)?;
     if !metadata.is_file()
@@ -240,6 +254,13 @@ pub fn validate_experiment(experiment: &Experiment) -> io::Result<()> {
                 "fixture dimensions or full content digest differ",
             ));
         }
+        usize::try_from(case.identity.output.width)
+            .ok()
+            .zip(usize::try_from(case.identity.output.height).ok())
+            .and_then(|(width, height)| width.checked_mul(height))
+            .and_then(|pixels| pixels.checked_mul(4))
+            .filter(|bytes| *bytes <= isize::MAX as usize)
+            .ok_or_else(|| io::Error::other("output dimensions overflow native byte length"))?;
         let m = &case.measurement;
         if m.samples < 5 || m.measurement_ms == 0 || m.warmup_ms == 0 || m.target_sample_ms == 0 {
             return Err(io::Error::other(

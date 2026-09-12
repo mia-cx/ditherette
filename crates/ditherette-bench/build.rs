@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::process::Command;
 
 fn output(program: &str, args: &[&str]) -> Option<String> {
@@ -38,4 +39,29 @@ fn main() {
     println!("cargo:rustc-env=DITHERETTE_BENCH_REVISION={revision}");
     println!("cargo:rustc-env=DITHERETTE_BENCH_DIRTY={dirty}");
     println!("cargo:rustc-env=DITHERETTE_BENCH_RUSTC={rustc}");
+    let mut configuration = BTreeMap::new();
+    for name in [
+        "HOST",
+        "TARGET",
+        "PROFILE",
+        "OPT_LEVEL",
+        "DEBUG",
+        "CARGO_ENCODED_RUSTFLAGS",
+        "RUSTC_LINKER",
+        "RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
+    ] {
+        println!("cargo:rerun-if-env-changed={name}");
+        configuration.insert(name.to_owned(), std::env::var(name).unwrap_or_default());
+    }
+    for (name, value) in std::env::vars() {
+        if name.starts_with("CARGO_FEATURE_")
+            || name.starts_with("CARGO_CFG_")
+            || name.starts_with("CARGO_PROFILE_")
+        {
+            println!("cargo:rerun-if-env-changed={name}");
+            configuration.insert(name, value);
+        }
+    }
+    println!("cargo:rustc-env=DITHERETTE_BENCH_CONFIGURATION={configuration:?}");
 }

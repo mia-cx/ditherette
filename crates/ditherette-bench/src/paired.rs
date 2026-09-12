@@ -84,6 +84,7 @@ pub struct BuildIdentity {
     pub dirty: bool,
     pub rustc: String,
     pub tool_version: String,
+    pub configuration: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,6 +182,16 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             median_ratio: None,
             verification: Vec::new(),
         };
+        if prepared
+            .accepted
+            .identity
+            .revision
+            .eq_ignore_ascii_case(&prepared.candidate.identity.revision)
+        {
+            result
+                .issues
+                .push("paired benchmarks require distinct source revisions".into());
+        }
         let mut accepted_samples = Vec::new();
         let mut candidate_samples = Vec::new();
         for pair in 0..prepared.experiment.pairs {
@@ -211,6 +222,7 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     || trial.build.revision != executable.identity.revision
                     || trial.build.rustc.is_empty()
                     || trial.build.tool_version.is_empty()
+                    || trial.build.configuration.is_empty()
                     || trial.measurement != case.measurement
                     || trial.output.implementation.artifact != executable.identity
                     || trial.reference.implementation.artifact != executable.identity
@@ -242,6 +254,7 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             let (accepted, candidate) = (outputs[0], outputs[1]);
             if accepted.build.rustc != candidate.build.rustc
                 || accepted.build.tool_version != candidate.build.tool_version
+                || accepted.build.configuration != candidate.build.configuration
             {
                 result
                     .issues
@@ -266,18 +279,18 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             accepted_samples.extend_from_slice(&accepted.sample_ns);
             candidate_samples.extend_from_slice(&candidate.sample_ns);
         }
-        if !result.issues.is_empty()
-            || result.pair_ratios.len() != prepared.experiment.pairs
-            || prepared.experiment.pairs < 2
-            || prepared.experiment.pairs % 2 != 0
-        {
-            result.gate = Gate::Incomplete;
-        } else if result
+        if result
             .verification
             .iter()
             .any(|proof| proof.status != VerificationStatus::Exact)
         {
             result.gate = Gate::Incorrect;
+        } else if !result.issues.is_empty()
+            || result.pair_ratios.len() != prepared.experiment.pairs
+            || prepared.experiment.pairs < 2
+            || prepared.experiment.pairs % 2 != 0
+        {
+            result.gate = Gate::Incomplete;
         } else {
             let a = median(&accepted_samples);
             let b = median(&candidate_samples);
@@ -311,18 +324,17 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                 .iter()
                 .any(|case| case.name == trial.case_name)
     });
-    let gate =
-        if cases.is_empty() || extra || cases.iter().any(|case| case.gate == Gate::Incomplete) {
-            Gate::Incomplete
-        } else if cases.iter().any(|case| case.gate == Gate::Incorrect) {
-            Gate::Incorrect
-        } else if cases.iter().any(|case| case.gate == Gate::Regression) {
-            Gate::Regression
-        } else if cases.iter().any(|case| case.gate == Gate::Inconclusive) {
-            Gate::Inconclusive
-        } else {
-            Gate::Pass
-        };
+    let gate = if cases.iter().any(|case| case.gate == Gate::Incorrect) {
+        Gate::Incorrect
+    } else if cases.is_empty() || extra || cases.iter().any(|case| case.gate == Gate::Incomplete) {
+        Gate::Incomplete
+    } else if cases.iter().any(|case| case.gate == Gate::Regression) {
+        Gate::Regression
+    } else if cases.iter().any(|case| case.gate == Gate::Inconclusive) {
+        Gate::Inconclusive
+    } else {
+        Gate::Pass
+    };
     PairReport {
         schema: "ditherette-fresh-pair-v1".into(),
         gate,

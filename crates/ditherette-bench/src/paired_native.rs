@@ -37,6 +37,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
         dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
         rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
         tool_version: env!("CARGO_PKG_VERSION").into(),
+        configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
     };
     if build.dirty
         || build.revision != request.executable.revision
