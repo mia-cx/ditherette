@@ -17,7 +17,8 @@ The build-only recorder uses Rust 1.97.0 and a fresh external target directory.
 It prints the three executable paths for control-plan, preparation, and trials.
 Use those printed paths instead of the historical `target/release` paths below.
 Optional `--config profile.KEY=VALUE` arguments select explicit profile settings;
-resolved settings remain part of the recorded recipe.
+resolved settings remain part of the recorded recipe. Recorded builds reject
+`target-cpu=native`; use an explicit CPU or the compiler's default target.
 
 The native executable embeds its source revision, dirty status, tool version,
 compiler version, and normalized compiler commands for itself and its dependencies.

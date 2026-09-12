@@ -155,3 +155,8 @@ The measured-output test failed with retained `[1, 2, 3, 255]` versus measured
 ownership fixtures. Criterion compilation and formatting pass. The actual
 benchmark dependency graph also builds through the recorder. No standalone
 performance trial or browser run occurred.
+
+`40814081` rejects host-dependent `target-cpu=native` so recipe equality cannot
+hide different compiler hosts. `dac08260` covers all four codegen flag spellings.
+The real Cargo probe rejects the option before compilation. Both compiler tests
+pass, including unchanged explicit-CPU and cross-worktree controls.
