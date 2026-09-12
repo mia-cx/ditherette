@@ -1,7 +1,7 @@
-use ditherette_wasm::{image::ImageDimensions, resize::resize_rgba_bilinear};
+use ditherette_wasm_old::{image::ImageDimensions, resize::resize_rgba_bilinear};
 
 #[cfg(feature = "tiling")]
-use ditherette_wasm::resize::{
+use ditherette_wasm_old::resize::{
     bilinear::{resize_rgba_bilinear_scalar_into, resize_rgba_bilinear_with_row_band_tiling_into},
     cpu_tiling::RowBandTiling,
 };
