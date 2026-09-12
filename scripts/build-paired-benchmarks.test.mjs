@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { normalizedArguments } from './build-paired-benchmarks.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const builder = join(root, 'scripts/build-paired-benchmarks.mjs');
@@ -59,4 +60,15 @@ test('compiler recipes bind effective root and dependency profiles across fresh 
 	cpSync(worktree, twin, { recursive: true });
 	assert.equal(one, recorded('recorded-twin', twin, ['profile.release.codegen-units=1']));
 	process.stdout.write(`Compiler recipe evidence: ${directory}\n`);
+});
+
+test('host-dependent CPU selection cannot claim a portable recorded recipe', () => {
+	for (const args of [
+		['-C', 'target-cpu=native'],
+		['-Ctarget-cpu=native'],
+		['--codegen', 'target-cpu=native'],
+		['--codegen=target-cpu=native']
+	]) assert.throws(() => normalizedArguments(args, {}), /explicit CPU/);
+	const explicit = ['-C', 'target-cpu=x86-64', '-C', 'codegen-units=1'];
+	assert.deepEqual(normalizedArguments(explicit, {}), explicit);
 });
