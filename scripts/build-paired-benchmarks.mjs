@@ -9,6 +9,9 @@ const self = fileURLToPath(import.meta.url);
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 export function normalizedArguments(args, environment) {
+	if (args.some((arg) => arg.startsWith('@'))) {
+		throw new Error('Recorded paired builds do not accept compiler response files');
+	}
 	const normalized = [];
 	for (let i = 0; i < args.length; i += 1) {
 		const arg = args[i];
