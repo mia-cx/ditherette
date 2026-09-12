@@ -22,11 +22,12 @@ const output = { case: request.case.identity,
   output: { dimensions: request.case.identity.output, pixels: { format: 'rgba8', data: request.case.rgba }, warnings: [] } };
 const reference = structuredClone(output);
 reference.implementation.subject = request.case.reference_subject;
-if (process.env.DITHERETTE_PAIR_FIXTURE_FAILURE === 'reference' && request.role === 'candidate') {
+const failure = process.env.DITHERETTE_PAIR_FIXTURE_FAILURE;
+if ((failure === 'reference' || (failure === 'mixed' && request.pair === 0)) && request.role === 'candidate') {
   reference.output.pixels.data[0] += 1;
 }
 process.stdout.write(JSON.stringify({ role: request.role, pair: request.pair, case_name: request.case.name,
-  build: { revision: request.executable.revision, dirty: false, rustc: 'fake compiler', tool_version: 'fake' },
+  build: { revision: request.executable.revision, dirty: false, rustc: 'fake compiler', tool_version: 'fake', configuration: 'fixture build configuration' },
   measurement: request.case.measurement, warmup_iterations: 1, warmup_elapsed_ns: 1,
-  sample_ns: [100, 100, 100, 100, 100], iterations_per_sample: 1,
+  sample_ns: failure === 'mixed' && request.pair === 1 ? [] : [100, 100, 100, 100, 100], iterations_per_sample: 1,
   reference, output, pid: process.pid, max_live_benchmark_processes: 1 }));

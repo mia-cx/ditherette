@@ -55,7 +55,10 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         },
         candidate: Executable {
             path: "candidate/ditherette-bench".into(),
-            identity: artifact.clone(),
+            identity: ArtifactIdentity {
+                revision: "b".repeat(40),
+                content: content_digest(b"candidate executable"),
+            },
         },
         machine: Machine {
             os: "fixture".into(),
@@ -83,15 +86,21 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let mut trials = Vec::new();
     for pair in 0..2 {
         for role in [Role::Accepted, Role::Candidate] {
+            let mut record = record.clone();
+            record.implementation.artifact = match role {
+                Role::Accepted => prepared.accepted.identity.clone(),
+                Role::Candidate => prepared.candidate.identity.clone(),
+            };
             trials.push(TrialResult {
                 pair,
                 role,
                 case_name: "one-call".into(),
                 build: BuildIdentity {
-                    revision: "a".repeat(40),
+                    revision: record.implementation.artifact.revision.clone(),
                     dirty: false,
                     rustc: "rustc fixture".into(),
                     tool_version: "fixture".into(),
+                    configuration: "fixture build configuration".into(),
                 },
                 measurement: measurement.clone(),
                 warmup_iterations: 1,
@@ -225,6 +234,16 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
         &template.experiment.cases[0].rgba,
     );
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/paired-child.mjs");
+    assert!(coordinator::prepare(
+        template.experiment.clone(),
+        (&script, &"a".repeat(40)),
+        (&script, &"a".repeat(40)),
+        &directory.join("identical"),
+    )
+    .unwrap_err()
+    .to_string()
+    .contains("distinct"));
+    assert!(!directory.join("identical").exists());
     let prepared = coordinator::prepare(
         template.experiment,
         (&script, &"a".repeat(40)),
@@ -232,6 +251,15 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
         &directory.join("prepared"),
     )
     .unwrap();
+    let mut same_revision = prepared.clone();
+    same_revision.candidate.identity.revision = prepared.accepted.identity.revision.clone();
+    assert!(
+        coordinator::run(&same_revision, &directory.join("edited-identical"))
+            .unwrap_err()
+            .to_string()
+            .contains("distinct")
+    );
+    assert!(!directory.join("edited-identical").exists());
     let report = coordinator::run(&prepared, &directory.join("success")).unwrap();
     assert_eq!(report.gate, Gate::Pass);
     let events = fs::read_to_string(directory.join("success/events.jsonl")).unwrap();
@@ -278,6 +306,16 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
     assert!(!directory
         .join("reference/review-000-000-production")
         .exists());
+    std::env::set_var("DITHERETTE_PAIR_FIXTURE_FAILURE", "mixed");
+    assert_eq!(
+        coordinator::run(&prepared, &directory.join("mixed"))
+            .unwrap()
+            .gate,
+        Gate::Incorrect
+    );
+    assert!(directory
+        .join("mixed/review-000-000-reference/accepted.png")
+        .exists());
     std::env::remove_var("DITHERETTE_PAIR_FIXTURE_FAILURE");
     // A permission change or byte replacement fails before another child starts.
     use std::os::unix::fs::PermissionsExt;
@@ -289,4 +327,68 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
     std::env::remove_var(QUIET_ENV);
     std::env::remove_var("DITHERETTE_PAIR_FIXTURE_DIRECTORY");
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn copied_revisions_cannot_form_a_cross_revision_gate() {
+    let (mut prepared, mut trials) = fixture();
+    prepared.candidate.identity = prepared.accepted.identity.clone();
+    for trial in &mut trials {
+        if trial.role == Role::Candidate {
+            trial.build.revision = prepared.accepted.identity.revision.clone();
+            trial.output.implementation.artifact = prepared.accepted.identity.clone();
+            trial.reference.implementation.artifact = prepared.accepted.identity.clone();
+        }
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+}
+
+#[test]
+fn output_byte_lengths_are_checked_before_native_allocation() {
+    let (mut prepared, _) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    case.identity.input = ditherette_bench::verification::input_digest(case.source, &case.rgba);
+    case.identity.output = Dimensions {
+        width: u32::MAX,
+        height: u32::MAX,
+    };
+    assert!(coordinator::validate_experiment(&prepared.experiment)
+        .unwrap_err()
+        .to_string()
+        .contains("output dimensions overflow"));
+}
+
+#[test]
+fn known_correctness_failures_survive_incomplete_timing_evidence() {
+    let (mut prepared, mut trials) = fixture();
+    if let Pixels::Rgba8 { data } = &mut trials[1].output.output.pixels {
+        data[0] += 1;
+    }
+    trials[3].sample_ns.clear();
+    let report = compare(&prepared, &trials);
+    assert_eq!(report.cases[0].gate, Gate::Incorrect);
+    assert_eq!(report.gate, Gate::Incorrect);
+    let mut missing = prepared.experiment.cases[0].clone();
+    missing.name = "missing-case".into();
+    prepared.experiment.cases.push(missing);
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incorrect);
+}
+
+#[test]
+fn compilation_settings_must_match_between_roles() {
+    let (prepared, trials) = fixture();
+    for configuration in [
+        "",
+        "different target",
+        "different profile",
+        "different opt level",
+        "different debug info",
+        "different features",
+        "different codegen flags",
+    ] {
+        let mut changed = trials.clone();
+        changed[1].build.configuration = configuration.into();
+        assert_eq!(compare(&prepared, &changed).gate, Gate::Incomplete);
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
 }
