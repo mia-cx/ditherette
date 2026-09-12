@@ -36,3 +36,48 @@ with auto-merge disabled. Base remains `impl/v1-s01-anchor` at
 `a213effed4b426c5c432c9ccc7062b7016dd5c1b`. Rebase was up to date.
 Head `15ac134` includes documentation and formatting after the validated code
 checkpoint. This final entry records delivery only. Issue #45 remains open.
+
+## Restack and amendment verification, 2026-09-12
+
+The historical entries above describe the original `impl/v1-s01-anchor` base.
+The branch was restacked onto merged main `cc08a0cc` through merge commit
+`523070ca`, which resolved a single conflict in
+`crates/ditherette-bench/src/wasm_resize.rs` by retaining both test modules.
+
+At `523070ca`, `cargo +1.97.0 test --locked --manifest-path
+crates/ditherette-bench/Cargo.toml --bins --test lease -- --test-threads=1`
+passes 7 binary tests, the cross-process lease lifecycle test, and the 3 Node
+transport fixtures it invokes under the inherited lease. `cargo +1.97.0 check
+--locked --manifest-path crates/ditherette-bench/Cargo.toml --benches` and
+`cargo +1.97.0 fmt --manifest-path crates/ditherette-bench/Cargo.toml --check`
+pass.
+
+The subsequent amendment adds two verified corrections. First, `Lease::spawn`
+now serializes check/launch/register under `SPAWN_LOCK`; the shared-reference
+regression `concurrent_spawn_keeps_one_child` in `tests/lease.rs` failed before
+the fix with two admitted children and passes afterward inside the existing
+lifecycle test. Second, `bench:prepare` stages `ditherette-bench`,
+`ditherette-bench-lease`, and `crit_spec_nearest` into
+`target/prepared/`; every `bench:*` measurement alias now launches the prepared
+helper with `--quiet` and never builds. The new Node regression
+`measurement aliases launch prepared executables under the coordinator` failed
+on the old cargo aliases and passes on the updated manifest. `node --test
+scripts/benchmark-wasm-resize.test.mjs` passes all 16 deterministic tests.
+`node --check` passes for `prepare-benchmarks.mjs` and
+`benchmark-wasm-resize.mjs`; `node scripts/prepare-benchmarks.mjs` built and
+staged all three executables; `git diff --check` is clean.
+
+A third correction was found during this verification: forwarding `--help`
+through the harness reached the Node transport's stdout, which the JSONL reader
+rejected with exit code 5. The new fixture `tests/help.rs`
+(`wasm_help_uses_owned_text_transport_without_measurement`) failed with that
+exact JSONL error before the fix. `wasm_resize_command` now intercepts
+`--help`, spawns the harness through the owned lease with inherited stdio, and
+returns its exit status; `run()` in `main.rs` exempts `wasm-resize --help` from
+`require_quiet` while every other measurement command keeps it. After the fix
+the test passes, `pnpm bench:resize:wasm --help` and
+`pnpm bench:color:wasm --help` both exit 0 and print the full help including
+the Preparation block, and `cargo +1.97.0 fmt --manifest-path
+crates/ditherette-bench/Cargo.toml --check` and `git diff --check` remain
+clean. All results describe the uncommitted working tree after `523070ca`. No
+benchmark timing workload or real browser launch ran.
