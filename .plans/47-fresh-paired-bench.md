@@ -105,3 +105,29 @@ unmerged against `impl/v1-s05-verification`. Final evidence commits change no
 measured implementation. The control candidate stays rejected for performance;
 this delivery makes the paired measurement tooling available, not that candidate
 accepted production.
+
+## Stack-collapse amendment
+
+Restacked onto merged S05 main `a739c71e` through merge `94b6ac2c`.
+The approved conflict keeps Wasm help outside measurement attestation and adds
+`paired-trial` to quiet-required commands. Both quiet states pass the executable
+regression in `39141f30` without starting measurements.
+
+`7f2fa6f3` rejects copied accepted/candidate revisions, records Cargo build settings,
+checks native output byte-length overflow, and preserves known correctness
+failures despite incomplete timing evidence. `187b3d87` retains the deterministic
+regressions and uses distinct per-role fixture identities. The three gate failures
+reproduced before correction. A build-script probe previously emitted identical
+identities under different profile/flag settings; it now records the difference.
+
+The Git metadata-path finding did not reproduce. From the package directory in a
+normal checkout, Git returns `../../.git/HEAD`, `../../.git/index`, and the matching
+branch reference. These paths already resolve relative to Cargo's package cwd.
+
+The restack baseline passed 30 Rust tests, three nested Node ownership fixtures,
+and 16 deterministic Node configuration tests. After corrections, all eight
+paired tests, 12 binary tests, the help fixture, Criterion compilation, and Rust
+formatting pass. Mixed failure evidence includes its expected PNG review image.
+No standalone timing workload, browser launch, threshold change, kernel rewrite,
+publication, or promotion occurred. Historical control measurements above remain
+unchanged and do not validate performance at this amended head.

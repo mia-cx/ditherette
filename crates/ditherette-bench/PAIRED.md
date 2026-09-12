@@ -16,7 +16,15 @@ cargo build --manifest-path crates/ditherette-bench/Cargo.toml --locked --releas
 The native executable embeds its full source revision, dirty status, tool version,
 and verbose compiler version. A trial rejects a dirty build, a different requested
 revision, or a different executable SHA-256. Build artifacts are not inferred from
-the working directory during measurement.
+the working directory during measurement. The build also embeds Cargo's
+target/host configuration, feature flags, profile, optimization/debug settings,
+encoded Rust flags, linker/wrapper choices, and profile environment overrides.
+Paired results require an exact configuration match. Missing configuration is
+incomplete evidence, not a legacy default.
+
+Accepted and candidate revisions must differ. Preparation and execution both
+check this, including when loading an edited prepared manifest. Output
+dimensions must fit a native RGBA allocation before any worker allocates it.
 
 Write an `Experiment` JSON using the public typed model. The native control-plan
 helper creates two explicitly provisional reference fixtures without running them:
@@ -74,7 +82,9 @@ It does not certify unrelated host quiescence or stop other projects' processes.
 Required cases retain full fixture/settings/artifact digests, dimensions, recipe,
 both revisions, warmup settings and observed work, raw per-call samples, and batch
 sizes. S05 verifies all three outputs and both executable-local references.
-Incorrect results preserve raw output and available PNG review bundles.
+Incorrect results preserve raw output and available PNG review bundles. A known
+correctness failure remains incorrect even when another pair or case has
+incomplete timing evidence. Its available review images remain part of the run.
 
 The protocol separates single-call latency from calibrated throughput. It also
 separates native kernels, complete calls, initialization, and cold/warm application
