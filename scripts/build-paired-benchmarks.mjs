@@ -12,6 +12,12 @@ export function normalizedArguments(args, environment) {
 	const normalized = [];
 	for (let i = 0; i < args.length; i += 1) {
 		const arg = args[i];
+		const codegen = arg === '-C' || arg === '--codegen' ? args[i + 1] :
+			arg.startsWith('-C') ? arg.slice(2) :
+			arg.startsWith('--codegen=') ? arg.slice('--codegen='.length) : '';
+		if (codegen === 'target-cpu=native') {
+			throw new Error('Recorded paired builds require an explicit CPU; target-cpu=native is host-dependent');
+		}
 		if (['--out-dir', '--error-format', '--json', '--color', '--diagnostic-width'].includes(arg)) {
 			i += 1;
 			continue;
