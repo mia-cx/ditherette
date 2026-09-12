@@ -1,4 +1,4 @@
-use ditherette_wasm::{image::ImageDimensions, resize::resize_rgba_area};
+use ditherette_wasm_old::{image::ImageDimensions, resize::resize_rgba_area};
 
 #[test]
 fn area_identity_preserves_pixels() {
