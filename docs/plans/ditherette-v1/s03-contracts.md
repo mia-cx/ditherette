@@ -46,7 +46,7 @@ The regression tests and this plan sit outside that closure. S03 does not modify
 When S18 reaches the front, record the corrected reference identity and exact amendment without accepting unrelated content differences.
 Carry the corrected classification into production integration where duplicated validation requires it.
 
-Verification on 2026-09-12 with Rust 1.97.0 at restacked head `85eaad56`:
+Verification on 2026-09-12 with Rust 1.97.0 against pre-fix restacked baseline `85eaad56` and amended head `694365fa`:
 
 - `cargo +1.97.0 test --locked --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_contract implicit_output_limits_report_invalid_source_images` failed before the fix with `(InvalidSettings, "source.width")` where `InvalidImage` was expected, and passes after it.
 - `cargo +1.97.0 test --locked --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_contract explicit_output_limits_remain_invalid_settings` passes before and after the fix.
