@@ -85,6 +85,7 @@ pub struct BuildIdentity {
     pub rustc: String,
     pub tool_version: String,
     pub configuration: String,
+    pub recorded: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -223,6 +224,7 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     || trial.build.rustc.is_empty()
                     || trial.build.tool_version.is_empty()
                     || trial.build.configuration.is_empty()
+                    || !trial.build.recorded
                     || trial.measurement != case.measurement
                     || trial.output.implementation.artifact != executable.identity
                     || trial.reference.implementation.artifact != executable.identity

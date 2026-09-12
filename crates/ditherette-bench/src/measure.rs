@@ -34,6 +34,7 @@ const MIN_BATCH_REFINEMENTS: usize = 3;
 pub(crate) trait MeasurementObserver {
     fn warmup_batch(&mut self, _batch_size: usize, _elapsed: Duration) {}
     fn warmup_finished(&mut self, _batch_size: usize, _elapsed: Duration) {}
+    fn measured_output(&mut self, _rgba: &[u8]) {}
 
     /// Returns true when reporting did enough work that the next timed batch should be discarded.
     fn measurement_progress(
@@ -432,6 +433,7 @@ pub(crate) fn measure_resize_case(
     let final_checksum = checksum(&output_rgba);
     black_box(&final_checksum);
     let output_digest = ditherette_bench::verification::content_digest(&output_rgba);
+    observer.measured_output(&output_rgba);
 
     let stats = SampleStats::from_samples(&sample_ns);
     let output_pixels = f64::from(output.0) * f64::from(output.1);

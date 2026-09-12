@@ -38,7 +38,14 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
         rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
         tool_version: env!("CARGO_PKG_VERSION").into(),
         configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
+        recorded: env!("DITHERETTE_BENCH_RECORDED_BUILD") == "true",
     };
+    if !build.recorded {
+        return Err(BenchError::Config(
+            "paired trials require a fresh compiler-recorded build; use scripts/build-paired-benchmarks.mjs"
+                .into(),
+        ));
+    }
     if build.dirty
         || build.revision != request.executable.revision
         || content_digest(
@@ -75,6 +82,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
         warmup_elapsed_ns: 0,
         max_live: live_benchmarks().map_err(BenchError::io)?,
         observation_error: None,
+        output: subject_rgba,
     };
     let measured = measure_resize_case(
         &subject,
@@ -115,7 +123,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
         sample_ns: measured.sample_ns,
         iterations_per_sample: measured.iterations_per_sample,
         reference: record(case.reference_subject.clone(), reference_rgba),
-        output: record(subject_id.clone(), subject_rgba),
+        output: record(subject_id.clone(), observer.output),
         pid: std::process::id(),
         max_live_benchmark_processes: observer.max_live,
     };
@@ -198,10 +206,14 @@ struct Observer {
     warmup_elapsed_ns: u128,
     max_live: usize,
     observation_error: Option<std::io::Error>,
+    output: Vec<u8>,
 }
 impl MeasurementObserver for Observer {
     fn warmup_batch(&mut self, batch_size: usize, _: Duration) {
         self.warmup_iterations += batch_size;
+    }
+    fn measured_output(&mut self, rgba: &[u8]) {
+        self.output.copy_from_slice(rgba);
     }
     fn measurement_progress(
         &mut self,
@@ -281,5 +293,72 @@ mod tests {
         case.measurement.application_cache = ApplicationCache::NotApplicable;
         case.identity.settings = content_digest(b"wrong settings");
         assert!(validate_native(&case).is_err());
+    }
+
+    #[test]
+    fn paired_evidence_retains_the_measured_buffer_after_probe_drift() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        let oracle = Registry::load()
+            .resize_subject("spec:resize:nearest:scalar")
+            .unwrap();
+        let mut changing = oracle.clone();
+        changing.resize_u8_rgba = |input, output, _| {
+            output.data.copy_from_slice(input.data);
+            if CALLS.fetch_add(1, Ordering::SeqCst) != 0 {
+                output.data[0] ^= 1;
+            }
+            Ok(())
+        };
+        let fixture = Fixture {
+            id: "paired-changing-output".into(),
+            kind: "test".into(),
+            fingerprint: "paired-changing-output".into(),
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 255],
+        };
+        let config = MeasurementConfig::browser_wasm(
+            1,
+            Duration::from_nanos(1),
+            Some(0),
+            Duration::ZERO,
+            Duration::from_nanos(1),
+            false,
+        );
+        for (subject, expected) in [
+            (changing, vec![0, 2, 3, 255]),
+            (oracle, fixture.rgba.clone()),
+        ] {
+            CALLS.store(0, Ordering::SeqCst);
+            let checked =
+                run_resize_once(&subject, &fixture, (1, 1), &ResizeParams::default()).unwrap();
+            let proof = verify_with_bounds(&fixture.rgba, &checked, VerificationBounds::exact());
+            assert!(proof.is_exact());
+            let mut observer = Observer {
+                warmup_iterations: 0,
+                started: Instant::now(),
+                warmup_elapsed_ns: 0,
+                max_live: 0,
+                observation_error: None,
+                output: checked,
+            };
+            let measured = measure_resize_case(
+                &subject,
+                &fixture,
+                (1, 1),
+                ResizeScale::uniform(1.0),
+                &ResizeParams::default(),
+                &config,
+                Some(proof),
+                &mut observer,
+            )
+            .unwrap();
+            assert_eq!(measured.output_digest, Some(content_digest(&expected)));
+            assert_eq!(
+                observer.output, expected,
+                "paired evidence must retain measured bytes, not the earlier probe"
+            );
+        }
     }
 }

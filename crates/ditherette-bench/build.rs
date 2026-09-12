@@ -64,4 +64,5 @@ fn main() {
         }
     }
     println!("cargo:rustc-env=DITHERETTE_BENCH_CONFIGURATION={configuration:?}");
+    println!("cargo:rustc-env=DITHERETTE_BENCH_RECORDED_BUILD=false");
 }
