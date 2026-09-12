@@ -40,10 +40,27 @@ pub(crate) struct CorrectnessFailure {
     pub(crate) verification: VerificationReport,
 }
 
+type CorrectnessKey = (SubjectId, [u8; 32], String);
+
+fn correctness_key(
+    subject: &SubjectId,
+    fixture: &crate::fixture::Fixture,
+    case: &str,
+) -> CorrectnessKey {
+    let input = ditherette_bench::verification::input_digest(
+        ditherette_bench_api::verification::Dimensions {
+            width: fixture.width,
+            height: fixture.height,
+        },
+        &fixture.rgba,
+    );
+    (subject.clone(), input.0, case.to_owned())
+}
+
 #[derive(Default)]
 struct CorrectnessChecks {
     failures: Vec<CorrectnessFailure>,
-    reports: BTreeMap<(SubjectId, String), VerificationReport>,
+    reports: BTreeMap<CorrectnessKey, VerificationReport>,
 }
 
 #[cfg(test)]
@@ -88,7 +105,11 @@ mod verification_tests {
         let mut result = resize_probe_result(&candidate, &fixtures[0], (1, 1), scale);
         result.verification = checks
             .reports
-            .get(&(candidate.descriptor.id, result.case_id.clone()))
+            .get(&correctness_key(
+                &candidate.descriptor.id,
+                &fixtures[0],
+                &result.case_id,
+            ))
             .cloned();
         assert!(result.verification.as_ref().unwrap().within_bounds);
         assert!(!result.verification.as_ref().unwrap().passed);
@@ -117,6 +138,54 @@ mod verification_tests {
         run.results[0].verification = None;
         assert!(save_baseline("accepted", &name, &run, true).is_err());
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn same_stem_fixture_paths_keep_distinct_reports() {
+        let root =
+            std::env::temp_dir().join(format!("ditherette-same-stem-{}", std::process::id()));
+        let paths = [root.join("a/image.png"), root.join("b/image.png")];
+        for (path, data) in paths.iter().zip([[1, 2, 3, 255], [4, 5, 6, 255]]) {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            image::save_buffer(path, &data, 1, 1, image::ColorType::Rgba8).unwrap();
+        }
+        let flags = Flags::parse(&[
+            "--fixtures".into(),
+            format!("{},{}", paths[0].display(), paths[1].display()),
+        ])
+        .unwrap();
+        let fixtures = fixtures_from_flags(&flags).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+        assert_eq!(fixtures[0].id, fixtures[1].id);
+        assert_ne!(fixtures[0].fingerprint, fixtures[1].fingerprint);
+        let registry = Registry::load();
+        let oracle = registry
+            .resize_subject("spec:resize:nearest:scalar")
+            .unwrap();
+        let checks = run_resize_correctness_checks(
+            &registry,
+            &oracle.descriptor.id,
+            &[oracle.clone()],
+            &fixtures,
+            &[ResizeScale::uniform(1.0)],
+            VerificationBounds::exact(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(checks.reports.len(), 2);
+        for fixture in &fixtures {
+            let case = format!("{}-1x1-{}", fixture.id, ResizeScale::uniform(1.0).label());
+            let report = checks
+                .reports
+                .get(&correctness_key(&oracle.descriptor.id, fixture, &case))
+                .unwrap();
+            assert_eq!(
+                report.candidate_digest,
+                Some(ditherette_bench::verification::content_digest(
+                    &fixture.rgba
+                ))
+            );
+        }
     }
 }
 
@@ -350,7 +419,7 @@ pub(crate) fn perf_command(registry: &Registry, args: &[String]) -> Result<(), B
                     &measurement,
                     correctness
                         .reports
-                        .get(&(subject.descriptor.id.clone(), case.clone()))
+                        .get(&correctness_key(&subject.descriptor.id, fixture, &case))
                         .cloned(),
                     &mut logger,
                 )?;
@@ -755,7 +824,7 @@ fn run_resize_correctness_checks(
                 run_resize_once(&oracle, fixture, output, &ResizeParams::default())?;
             let case = format!("{}-{}x{}-{}", fixture.id, output.0, output.1, scale.label());
             checks.reports.insert(
-                (oracle_id.clone(), case.clone()),
+                correctness_key(oracle_id, fixture, &case),
                 verify_with_bounds(&oracle_output, &oracle_output, VerificationBounds::exact()),
             );
 
@@ -768,7 +837,7 @@ fn run_resize_correctness_checks(
                 let verification =
                     verify_with_bounds(&oracle_output, &candidate_output, verification_bounds);
                 checks.reports.insert(
-                    (subject.descriptor.id.clone(), case.clone()),
+                    correctness_key(&subject.descriptor.id, fixture, &case),
                     verification.clone(),
                 );
                 if !verification.passed {
