@@ -39,7 +39,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 
 | Slice | Deliverable | Prerequisites | Progress | PR |
 |---|---|---|---|---|
-| [S01](#s01) | Establish the inherited port stack and validation baseline | None | Babysitting; overflow bda074ee and scales cd2a04dd fixed; paused for fixture-fingerprint compatibility decision | [#75](https://github.com/mia-cx/ditherette/pull/75) |
+| [S01](#s01) | Establish the inherited port stack and validation baseline | None | Babysitting; overflow bda074ee and scales cd2a04dd fixed; benchmark fixes active, legacy-artifact compatibility hold removed | [#75](https://github.com/mia-cx/ditherette/pull/75) |
 | [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) | Ready | [#88](https://github.com/mia-cx/ditherette/pull/88) |
 | [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Ready | [#89](https://github.com/mia-cx/ditherette/pull/89) |
 | [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Ready | [#90](https://github.com/mia-cx/ditherette/pull/90) |

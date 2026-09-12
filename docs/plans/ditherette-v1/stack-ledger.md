@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## Stack collapse on 2026-09-12
+
+Mia authorizes root-first babysitting, merge, and restacking through active work, using Devin Fusion GPT-6 Astra High with SWE-2. Stop and flag actual conflicts, skipped PRs, or fixes that collide with downstream runtime/spec work.
+PR75 has verified fixes `bda074ee` for output-storage overflow and `cd2a04dd` for invalid benchmark scales. The area, bilinear, and legacy website-only threads are resolved under the package-first scope; kernels and legacy adapter stay unchanged.
+Generated fixtures and benchmark artifacts do not belong in the repository. Mia removes the legacy-artifact compatibility hold: no migration or old-baseline preservation gate is required for correct new-run fingerprints. This does not authorize bulk deletion of existing tracked files. Other review and merge gates remain active.
+
 Read the [execution contract](README.md#execution-contract) before claiming a slice. Each entry records the validated dependency commits and outstanding evidence.
 
 ## Current correction: retain landed production
