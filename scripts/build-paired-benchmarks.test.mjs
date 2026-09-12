@@ -72,3 +72,12 @@ test('host-dependent CPU selection cannot claim a portable recorded recipe', () 
 	const explicit = ['-C', 'target-cpu=x86-64', '-C', 'codegen-units=1'];
 	assert.deepEqual(normalizedArguments(explicit, {}), explicit);
 });
+
+test('opaque compiler response files cannot bypass recipe recording', () => {
+	for (const args of [
+		['@/tmp/flags.rsp'],
+		['--extern', '@/tmp/flags.rsp'],
+		['--out-dir', '@/tmp/flags.rsp'],
+		['-C', '@/tmp/flags.rsp']
+	]) assert.throws(() => normalizedArguments(args, {}), /response files/);
+});
