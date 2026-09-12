@@ -4,14 +4,14 @@ Internal MIT-licensed Rust/Wasm processing crate. It owns compilation and Rust/W
 
 ## Build and test
 
-Install workspace dependencies with the repository's pinned Node and pnpm versions, then run these commands from this directory:
+Install workspace dependencies with Node 24.19.0 and pnpm 11.13.1, then run these commands from this directory:
 
 - `pnpm build` builds scalar and threaded variants into ignored `dist/scalar` and `dist/threads` directories.
 - `pnpm test` runs the native Rust correctness suite.
 - `pnpm test:wasm` and `pnpm test:browser` invoke wasm-pack's Node and headless Chrome runners.
 - `pnpm check` checks formatting and compilation for the Wasm target.
 
-The existing Rust tests use native `#[test]` attributes. The Wasm runner currently compiles them but discovers no browser/Node Wasm tests; later conformance slices must add actual Wasm coverage.
+The current suite has 102 native tests and two Node Wasm tests for storage-overflow errors. Most Rust tests still use native `#[test]` attributes; broader browser/Wasm conformance remains for later slices.
 
 Scalar compilation uses the root Rust pin. Threaded compilation uses `rust-toolchain-threads.toml` and requires that toolchain's `rust-src` component. Both variants declare a 2 GiB memory maximum and use separate Cargo target directories.
 
