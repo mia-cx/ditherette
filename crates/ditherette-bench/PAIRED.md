@@ -56,7 +56,9 @@ crates/ditherette-bench/target/release/ditherette-bench-pair prepare \
 
 Preparation reads both executables before writing the manifest. Copies become
 read-only. Each trial checks their complete hashes before launch and after exit.
-Existing preparation and result directories cannot be overwritten.
+Existing preparation and result directories cannot be overwritten. This is a
+cooperative local benchmark protocol, not a security boundary against deliberate
+same-UID tampering with executables or evidence.
 
 ## Run after explicit clearance
 

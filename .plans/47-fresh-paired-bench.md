@@ -1,7 +1,8 @@
 # #47 Fresh accepted and candidate performance pairs
 
-Base: `8c05906cb9cfe0a991b351f5260a319b91f76ab4` (S05, PR #96).
-Branch: `impl/v1-s06-paired-bench`. PR base: `impl/v1-s05-verification`.
+Original base: `8c05906cb9cfe0a991b351f5260a319b91f76ab4` (S05, PR #96).
+Branch: `impl/v1-s06-paired-bench`. Current PR base: `main` at `a739c71e`.
+The original PR base was `impl/v1-s05-verification` before S05 merged.
 
 ## TODOs
 
@@ -100,8 +101,8 @@ These generated files stay ignored; this record binds their retained contents:
 - `events.jsonl`: `fcd7897e12708cf646942649e7941a63b02ca68d18187b80d0113e7b30e78ef4`.
 - `prepared.json`: `e1f66044133b9a0632260d57827cfaafcd3a68e878117ee383ebdbe3b7c2e5c8`.
 
-Delivered in [PR #102](https://github.com/mia-cx/ditherette/pull/102), non-draft and
-unmerged against `impl/v1-s05-verification`. Final evidence commits change no
+Originally delivered in [PR #102](https://github.com/mia-cx/ditherette/pull/102),
+non-draft and unmerged against `impl/v1-s05-verification`. Those evidence commits change no
 measured implementation. The control candidate stays rejected for performance;
 this delivery makes the paired measurement tooling available, not that candidate
 accepted production.
