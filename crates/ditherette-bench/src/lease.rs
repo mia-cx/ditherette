@@ -34,10 +34,14 @@ mod platform {
             },
         },
         process::{Child, ChildStdout, ExitStatus, Stdio},
-        sync::atomic::{AtomicI32, Ordering},
+        sync::{
+            atomic::{AtomicI32, Ordering},
+            Mutex,
+        },
     };
 
     static OWNED_CHILD: AtomicI32 = AtomicI32::new(0);
+    static SPAWN_LOCK: Mutex<()> = Mutex::new(());
 
     /// An OS lease that can be lent to sequential child executables.
     pub struct Lease(File);
@@ -88,6 +92,9 @@ mod platform {
         /// Start one owned child with an inherited lease and a parent-liveness pipe.
         /// Drop terminates and reaps that child before releasing its lease.
         pub fn spawn(&self, mut command: Command) -> io::Result<OwnedChild> {
+            let _spawn = SPAWN_LOCK
+                .lock()
+                .map_err(|_| io::Error::other("benchmark child spawn lock poisoned"))?;
             if OWNED_CHILD.load(Ordering::SeqCst) != 0 {
                 return Err(io::Error::other(
                     "only one owned benchmark child may run at a time",
