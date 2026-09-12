@@ -165,3 +165,9 @@ pass, including unchanged explicit-CPU and cross-worktree controls.
 A real build previously accepted a response file containing `target-cpu=native`;
 it now fails during Cargo's compiler probe. `94550ac5` covers response files in
 bare and option-value positions. All three recorder tests pass.
+
+`6ad57c02` rejects bootstrap-enabled compiler semantics inside the recorder.
+The real `RUSTC_BOOTSTRAP=1` plus `-Ztune-cpu=native` build previously succeeded;
+it now fails at the compiler probe. `5f226f80` verifies global and crate-specific
+bootstrap rejection while preserving forced-stable `-1`. All four recorder tests
+pass. The unchanged Rust implementation retains its 35-test validation.

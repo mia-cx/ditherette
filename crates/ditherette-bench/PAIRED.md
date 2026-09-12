@@ -21,6 +21,8 @@ resolved settings remain part of the recorded recipe. Recorded builds reject
 `target-cpu=native`; use an explicit CPU or the compiler's default target.
 Compiler response files (`@path`) are rejected because their contents are opaque
 to the recorded argument list. Pass compiler options directly instead.
+Recorded builds also reject `RUSTC_BOOTSTRAP` enablement. The pinned stable
+compiler or explicit forced-stable `RUSTC_BOOTSTRAP=-1` is required.
 
 The native executable embeds its source revision, dirty status, tool version,
 compiler version, and normalized compiler commands for itself and its dependencies.
