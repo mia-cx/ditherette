@@ -160,3 +160,8 @@ performance trial or browser run occurred.
 hide different compiler hosts. `dac08260` covers all four codegen flag spellings.
 The real Cargo probe rejects the option before compilation. Both compiler tests
 pass, including unchanged explicit-CPU and cross-worktree controls.
+
+`423f7c34` rejects opaque compiler response files before argument normalization.
+A real build previously accepted a response file containing `target-cpu=native`;
+it now fails during Cargo's compiler probe. `94550ac5` covers response files in
+bare and option-value positions. All three recorder tests pass.

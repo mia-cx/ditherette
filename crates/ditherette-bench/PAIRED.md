@@ -19,6 +19,8 @@ Use those printed paths instead of the historical `target/release` paths below.
 Optional `--config profile.KEY=VALUE` arguments select explicit profile settings;
 resolved settings remain part of the recorded recipe. Recorded builds reject
 `target-cpu=native`; use an explicit CPU or the compiler's default target.
+Compiler response files (`@path`) are rejected because their contents are opaque
+to the recorded argument list. Pass compiler options directly instead.
 
 The native executable embeds its source revision, dirty status, tool version,
 compiler version, and normalized compiler commands for itself and its dependencies.
