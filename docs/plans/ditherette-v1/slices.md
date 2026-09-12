@@ -41,8 +41,8 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 |---|---|---|---|---|
 | [S01](#s01) | Establish the inherited port stack and validation baseline | None | Merged db1c3f67; current-head approval, checks and 18 resolved threads | [#75](https://github.com/mia-cx/ditherette/pull/75) |
 | [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) | Merged 9e99b5bb; native pnpm 11.13.1 validated; one thread resolved | [#88](https://github.com/mia-cx/ditherette/pull/88) |
-| [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Verified fixes pushed 694365fa; 16 focused and 118 native tests pass; awaiting exact-head review | [#89](https://github.com/mia-cx/ditherette/pull/89) |
-| [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Ready | [#90](https://github.com/mia-cx/ditherette/pull/90) |
+| [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Merged cc08a0cc; 118 native tests pass; five review threads resolved | [#89](https://github.com/mia-cx/ditherette/pull/89) |
+| [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Blocked: restack conflict in benchmark wasm_resize.rs; no merge started | [#90](https://github.com/mia-cx/ditherette/pull/90) |
 | [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | Ready | [#96](https://github.com/mia-cx/ditherette/pull/96) |
 | [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | Ready | [#102](https://github.com/mia-cx/ditherette/pull/102) |
 | [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) | Ready | [#91](https://github.com/mia-cx/ditherette/pull/91) |
