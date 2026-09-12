@@ -52,11 +52,24 @@ transport fixtures it invokes under the inherited lease. `cargo +1.97.0 check
 `cargo +1.97.0 fmt --manifest-path crates/ditherette-bench/Cargo.toml --check`
 pass.
 
-The subsequent amendment adds two verified corrections. First, `Lease::spawn`
-now serializes check/launch/register under `SPAWN_LOCK`; the shared-reference
+The subsequent amendment adds verified corrections. First, `Lease::spawn` was
+initially serialized under a `SPAWN_LOCK` mutex; the shared-reference
 regression `concurrent_spawn_keeps_one_child` in `tests/lease.rs` failed before
-the fix with two admitted children and passes afterward inside the existing
-lifecycle test. Second, `bench:prepare` stages `ditherette-bench`,
+it with two admitted children and passed afterward inside the existing
+lifecycle test. Review then identified a remaining gap: `SignalMask` blocks
+only the spawning thread, so a signal on another thread could run `interrupted`
+between fork and PID publication and orphan the child. The mutex is replaced by
+an atomic spawn reservation: `spawn` CASes `OWNED_CHILD` to `SPAWNING` under
+the existing mask, a `SpawnRegistration` guard publishes the child PID or
+rolls the slot back on failure, and `interrupted` encodes a pending signal as
+`-signal - 1` when it observes `SPAWNING` so the deferred shutdown runs during
+publication. The Linux-only fixture `tests/spawn_signal.rs`
+(`interruption_during_spawn_reaps_the_child`) fails against the mutex
+implementation with "supervisor exited without reaping its forked child" and
+passes after the reservation. `cargo +1.97.0 test --locked --manifest-path
+crates/ditherette-bench/Cargo.toml --test spawn_signal --test lease --
+--test-threads=1` passes the spawn-interruption and lease lifecycle tests,
+including the lifecycle test's 3 Node transport fixtures. Second, `bench:prepare` stages `ditherette-bench`,
 `ditherette-bench-lease`, and `crit_spec_nearest` into
 `target/prepared/`; every `bench:*` measurement alias now launches the prepared
 helper with `--quiet` and never builds. The new Node regression
