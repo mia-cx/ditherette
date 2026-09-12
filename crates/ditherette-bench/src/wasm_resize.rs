@@ -757,6 +757,7 @@ impl WasmResult {
             params_fingerprint: "wasm-resize-default".to_owned(),
             verified: false,
             verification: None,
+            output_digest: None,
             checksum: format!("{:08x}", self.checksum),
             samples: self.stats_ns.samples.len(),
             sample_ns: self.stats_ns.samples,

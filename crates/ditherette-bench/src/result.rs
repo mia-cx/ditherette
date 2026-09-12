@@ -193,6 +193,8 @@ pub(crate) struct BenchResult {
     pub(crate) params_fingerprint: String,
     pub(crate) verified: bool,
     pub(crate) verification: Option<VerificationReport>,
+    #[serde(default)]
+    pub(crate) output_digest: Option<ditherette_bench_api::verification::Digest256>,
     pub(crate) checksum: String,
     pub(crate) samples: usize,
     pub(crate) sample_ns: Vec<f64>,

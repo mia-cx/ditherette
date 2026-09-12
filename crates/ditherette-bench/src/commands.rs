@@ -104,6 +104,9 @@ mod verification_tests {
             VerificationBounds::exact(),
         ));
         exact.results[0].verified = true;
+        exact.results[0].output_digest = Some(ditherette_bench::verification::content_digest(
+            &fixtures[0].rgba,
+        ));
         save_baseline("accepted", &name, &exact, false).unwrap();
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("target/bench/baselines/accepted")
@@ -644,6 +647,7 @@ fn resize_probe_result(
         params_fingerprint: "resize-default".to_owned(),
         verified: false,
         verification: None,
+        output_digest: None,
         checksum: String::new(),
         samples: 0,
         sample_ns: Vec::new(),
