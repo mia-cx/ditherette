@@ -38,6 +38,7 @@ mod platform {
     };
 
     static OWNED_CHILD: AtomicI32 = AtomicI32::new(0);
+    const SPAWNING: i32 = -1;
 
     /// An OS lease that can be lent to sequential child executables.
     pub struct Lease(File);
@@ -88,11 +89,16 @@ mod platform {
         /// Start one owned child with an inherited lease and a parent-liveness pipe.
         /// Drop terminates and reaps that child before releasing its lease.
         pub fn spawn(&self, mut command: Command) -> io::Result<OwnedChild> {
-            if OWNED_CHILD.load(Ordering::SeqCst) != 0 {
+            let mask = SignalMask::block()?;
+            if OWNED_CHILD
+                .compare_exchange(0, SPAWNING, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
                 return Err(io::Error::other(
                     "only one owned benchmark child may run at a time",
                 ));
             }
+            let mut registration = SpawnRegistration { pid: 0 };
             // Keep a dedicated duplicate alive with the child. This also avoids
             // replacing an unrelated descriptor through a fixed dup2 target.
             let inherited = self.0.try_clone()?;
@@ -100,7 +106,6 @@ mod platform {
             command
                 .env(LEASE_FD_ENV, fd.to_string())
                 .stdin(Stdio::piped());
-            let mask = SignalMask::block()?;
             // SAFETY: this closure only calls async-signal-safe functions after fork.
             unsafe {
                 command.pre_exec(move || {
@@ -118,8 +123,9 @@ mod platform {
                 });
             }
             let mut child = command.spawn()?;
+            registration.pid = child.id() as i32;
             let stdin = child.stdin.take();
-            OWNED_CHILD.store(child.id() as i32, Ordering::SeqCst);
+            drop(registration);
             drop(mask);
             Ok(OwnedChild {
                 child,
@@ -145,6 +151,18 @@ mod platform {
                 lease,
                 _execution: execution,
             })
+        }
+    }
+
+    struct SpawnRegistration {
+        pid: i32,
+    }
+    impl Drop for SpawnRegistration {
+        fn drop(&mut self) {
+            let previous = OWNED_CHILD.swap(self.pid, Ordering::SeqCst);
+            if previous < SPAWNING {
+                interrupted(-previous - 1);
+            }
         }
     }
 
@@ -254,7 +272,21 @@ mod platform {
     }
 
     extern "C" fn interrupted(signal: i32) {
-        let pid = OWNED_CHILD.load(Ordering::SeqCst);
+        let mut pid = OWNED_CHILD.load(Ordering::SeqCst);
+        while pid < 0 {
+            if pid < SPAWNING {
+                return;
+            }
+            match OWNED_CHILD.compare_exchange(
+                SPAWNING,
+                -signal - 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => return,
+                Err(current) => pid = current,
+            }
+        }
         // SAFETY: kill, waitpid and _exit are async-signal-safe. Keep the lease
         // open until our child finishes its own browser cleanup.
         unsafe {
