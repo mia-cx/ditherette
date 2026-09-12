@@ -2,6 +2,8 @@
 
 ## Stack collapse on 2026-09-12
 
+Mia approves replacing pnpm 11.13.0 with 11.13.1, including the downstream conformance and publishing workflow pins. The hold below is resolved. Fusion resumes PR #88 with a fresh native installation check; later restacks must preserve this correction. No other tooling upgrades are authorized.
+
 S02 head `a53aef27` passes both pinned Wasm builds, package/version checks, 102 native tests, two Wasm overflow tests, 120 TypeScript tests and 15 deterministic benchmark-tooling tests. Fusion session `purple-twill` used Astra High and SWE-2 Medium. Finished targets were cleared, freeing 1.5 GiB.
 
 Pullfrog finding `3997233677` blocks PR #88. npm marks pnpm 11.13.0 broken; pnpm's installer rejects its missing native binary. The installed JavaScript CLI passing locally does not validate fresh native installs. The active tip also pins 11.13.0 in package conformance and publishing workflows. Changing the shared pin to the non-deprecated 11.13.1 requires Mia's downstream-impact decision. No pin/source changes or PR skips. The thread remains unresolved and the watcher has exited.
