@@ -9,6 +9,9 @@ const self = fileURLToPath(import.meta.url);
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 export function normalizedArguments(args, environment) {
+	if (environment.RUSTC_BOOTSTRAP && environment.RUSTC_BOOTSTRAP !== '-1') {
+		throw new Error('Recorded paired builds require stable compiler semantics; RUSTC_BOOTSTRAP is unsupported');
+	}
 	if (args.some((arg) => arg.startsWith('@'))) {
 		throw new Error('Recorded paired builds do not accept compiler response files');
 	}
