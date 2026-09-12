@@ -71,6 +71,7 @@ All finished compiler targets from this work are cleared; native executables, Wa
 Mia approves an opt-level=3 production Wasm experiment, measuring speed and package size before selection. The default manifest remains opt-level=s.
 The experiment completes 33 browser cases with exact before/after PNGs. The scalar-only change adds 21,236 bytes to the npm archive (5.1%). Area and Lanczos improve; Chromium Oklch's targeted repeat is 83.85→88.45 ms warm. See `docs/performance/wasm-profile-experiment.md` before selecting a default.
 Mia keeps frozen anti-aliased bilinear unchanged. Historical JS samples four pixels; downscale comparisons retain timings but are labeled quality mismatches outside like-for-like target counts.
+On 2026-09-12, Mia also keeps the legacy website adapter unchanged and deprecates JS area comparisons for two-axis upscales. JS substitutes bilinear; frozen and production Wasm use exact area coverage. Preserve timings as quality mismatches outside like-for-like target counts, not as Wasm wins. Downscale comparisons remain applicable. This resolves the area compatibility decision raised during PR75 babysitting, not its other review findings or merge gates.
 The wider JS target remains open. No merge, release, or activation occurs.
 
 Restarted agents own separate worktrees. `v1-diffusion-hotpaths` owns diffusion, quantizer matching/cache and `pipeline/indexed.rs`.

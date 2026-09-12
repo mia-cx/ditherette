@@ -32,6 +32,7 @@ PR #159 hoists diffusion row addressing. All 35 native gates pass; WebKit 50% Fl
 The joined runtime passes 476 native tests, 21 private checks, and both builds. Finished compiler targets are cleared; evidence and compiled snapshots remain.
 The approved opt-level=3 experiment completes 33 browser comparisons with exact PNGs. The npm archive grows 5.1%; area and Lanczos improve, while some paths regress. The default profile remains unchanged.
 Keep anti-aliased bilinear unchanged and label its historical JS downscale comparison as a quality mismatch, outside like-for-like target counts.
+On 2026-09-12, Mia keeps the legacy website adapter unchanged. Deprecate JS area comparisons when both output axes enlarge, because JS substitutes bilinear while the Wasm package uses exact area coverage. Keep timings as quality mismatches outside like-for-like target counts; preserve spec and optimized kernels. Area downscale comparisons remain applicable.
 The wider JS target and release holds remain open.
 Earlier slice reports retain their production-revision comparisons. New measurements select field reuse and packed conversion; release gates remain held.
 Existing optimized kernels and the frozen reference remain unchanged. Historical reports retain their original scope and decisions.
