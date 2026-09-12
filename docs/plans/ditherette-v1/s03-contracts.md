@@ -16,7 +16,7 @@ Branch: `impl/v1-s03-contracts`.
 This slice specifies requests and control behavior. S07 through S17 complete the processing references before S18 freezes them.
 S09 owns palette normalization and alpha behavior. Production dispatch remains unchanged.
 
-Read [the contract inventory](../../../../crates/ditherette-wasm/src/spec/contract/inventory.md) when implementing a request consumer or preparing the freeze.
+Read [the contract inventory](../../../crates/ditherette-wasm/src/spec/contract/inventory.md) when implementing a request consumer or preparing the freeze.
 It maps all supported modes, inherited exports, adapters, and remaining reference obligations.
 S15/S28 must preserve sRGB feedback with perceptual matching and the separate adaptive-placement coordinates documented there.
 
