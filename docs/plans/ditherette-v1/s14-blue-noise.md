@@ -67,3 +67,12 @@ All 204 native tests pass, including six blue-noise tests. Locked benchmark-feat
 The generator, rank asset, numerical gates, and recorded analysis remain unchanged. No standalone timing workload or browser run occurs.
 This registration matches the already-authored S17 join. It does not add a new runtime amendment to the S18 checkpoint.
 The approved S03 and S11 amendments remain pending, with their exact differences preserved.
+
+## Exact documentation amendment for S18
+
+Pullfrog finding `3999708215` identifies stale 8x8 lookup descriptions after the corrected dispatcher joins.
+The obsolete inline comment is retired, matching the already-authored S17 source.
+The four-line registration paragraph in `src/spec/dither/perturb.md` now states that `BlueNoise` uses the corrected 32x32 lookup.
+That stale paragraph also exists at original checkpoint `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
+S18 must retain its original checkpoint/digest and add only this exact paragraph replacement to the approved S03 and S11 amendments.
+The generator, rank tile, numerical gates, formulas, and runtime output remain unchanged by this documentation correction.
