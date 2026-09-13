@@ -1,7 +1,7 @@
 use std::{hint::black_box, time::Duration};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use ditherette_wasm::resize::cpu_tiling::{
+use ditherette_wasm_old::resize::cpu_tiling::{
     plan_row_bands, process_row_bands, process_row_bands_with_plan, RowBandTiling,
 };
 
@@ -180,7 +180,7 @@ fn bench_process_row_bands(c: &mut Criterion) {
 
 fn tiny_row_kernel(
     output_width: usize,
-    band: ditherette_wasm::resize::cpu_tiling::RowBand,
+    band: ditherette_wasm_old::resize::cpu_tiling::RowBand,
     rows: &mut [u8],
 ) {
     let row_byte_len = output_width * 4;

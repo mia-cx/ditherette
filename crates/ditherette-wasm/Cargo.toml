@@ -3,7 +3,7 @@ name = "ditherette-wasm"
 version = "0.1.0"
 edition = "2021"
 description = "Fresh Rust/Wasm image-processing core for Ditherette."
-license = "UNLICENSED"
+license = "MIT"
 publish = false
 
 [lib]

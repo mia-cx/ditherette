@@ -2,7 +2,8 @@
 
 use std::{hint::black_box, path::Path, time::Duration};
 
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
+use criterion::{criterion_group, Criterion, SamplingMode, Throughput};
+use ditherette_bench::lease::{require_quiet, BenchmarkGuard};
 use ditherette_bench_api::{
     BenchSubject, ResizeBenchSubject, ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams,
 };
@@ -101,4 +102,17 @@ fn output_axis(source: u32, scale: f64) -> u32 {
 }
 
 criterion_group!(benches, criterion_spec_nearest);
-criterion_main!(benches);
+
+fn main() {
+    let result = BenchmarkGuard::acquire().and_then(|guard| {
+        require_quiet()?;
+        benches();
+        Criterion::default().configure_from_args().final_summary();
+        drop(guard);
+        Ok(())
+    });
+    if let Err(error) = result {
+        eprintln!("error: {error}");
+        std::process::exit(5);
+    }
+}

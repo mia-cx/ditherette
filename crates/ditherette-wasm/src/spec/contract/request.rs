@@ -349,16 +349,16 @@ impl<'a> Request<'a> {
                 "RGBA8 byte length does not match dimensions.",
             )
         })?;
-        let (width, height, path) = output.map_or((source.width, source.height, "source"), |out| {
-            (out.width, out.height, "output")
-        });
-        let output = validate_dimensions(
-            width,
-            height,
-            MAX_OUTPUT_SIDE,
-            path,
-            ErrorCode::InvalidSettings,
-        )?;
+        let (width, height, path, code) = output.map_or(
+            (
+                source.width,
+                source.height,
+                "source",
+                ErrorCode::InvalidImage,
+            ),
+            |out| (out.width, out.height, "output", ErrorCode::InvalidSettings),
+        );
+        let output = validate_dimensions(width, height, MAX_OUTPUT_SIDE, path, code)?;
         Ok(ValidatedLayout {
             source: view,
             output,
