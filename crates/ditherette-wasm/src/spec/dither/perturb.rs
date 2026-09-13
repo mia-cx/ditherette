@@ -120,11 +120,7 @@ fn field_at(field: Field, x: u32, y: u32, index: u64) -> f32 {
             ordered::bayer_noise_at(x, y, size)
         }
         Field::Random { seed } => random_noise::random_noise_at(seed, index),
-        // Temporary inherited transposed-Bayer tile. S14 replaces this registration at the validated join.
-        Field::BlueNoise => {
-            let rank = blue_noise::BLUE_NOISE_8X8[(y as usize % 8) * 8 + x as usize % 8];
-            (f32::from(rank) + 0.5) / 64.0 - 0.5
-        }
+        Field::BlueNoise => blue_noise::blue_noise_at(x, y),
     }
 }
 
