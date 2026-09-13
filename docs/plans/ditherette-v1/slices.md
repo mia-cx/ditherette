@@ -47,7 +47,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | Merged fd035567; paired evidence and compiler recipes verified; thirteen threads resolved | [#102](https://github.com/mia-cx/ditherette/pull/102) |
 | [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) | Merged b5b3fe66; 128 native tests pass; exact-head approval with no findings | [#91](https://github.com/mia-cx/ditherette/pull/91) |
 | [S08](#s08) | Complete Lab and LCH reference round trips | [S03](#s03) | Merged 8c19f361; 138 native tests pass; exact-head approval with no findings | [#92](https://github.com/mia-cx/ditherette/pull/92) |
-| [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Ready | [#94](https://github.com/mia-cx/ditherette/pull/94) |
+| [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Merged 707b9abf; 148 native tests pass; exact-head approval with no findings | [#94](https://github.com/mia-cx/ditherette/pull/94) |
 | [S10](#s10) | Specify direct quantization for every valid metric | [S07](#s07), [S08](#s08), [S09](#s09) | Ready | [#97](https://github.com/mia-cx/ditherette/pull/97) |
 | [S11](#s11) | Audit and complete the reference resize family | [S03](#s03) | Ready | [#93](https://github.com/mia-cx/ditherette/pull/93) |
 | [S12](#s12) | Specify palette-independent adaptive placement | [S07](#s07), [S08](#s08) | Ready | [#95](https://github.com/mia-cx/ditherette/pull/95) |
