@@ -10,53 +10,56 @@ The reference slices are intentionally a separate prerequisite phase. This follo
 
 ## Index
 
-| Slice | Deliverable | Prerequisites |
-|---|---|---|
-| [S01](#s01) | Establish the inherited port stack and validation baseline | None |
-| [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) |
-| [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) |
-| [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) |
-| [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) |
-| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) |
-| [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) |
-| [S08](#s08) | Complete Lab and LCH reference round trips | [S03](#s03) |
-| [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) |
-| [S10](#s10) | Specify direct quantization for every valid metric | [S07](#s07), [S08](#s08), [S09](#s09) |
-| [S11](#s11) | Audit and complete the reference resize family | [S03](#s03) |
-| [S12](#s12) | Specify palette-independent adaptive placement | [S07](#s07), [S08](#s08) |
-| [S13](#s13) | Specify palette-free Bayer and random perturbation | [S12](#s12), [S09](#s09) |
-| [S14](#s14) | Repair the blue-noise reference before freezing | [S12](#s12), [S09](#s09) |
-| [S15](#s15) | Specify all four error-diffusion recipes | [S10](#s10), [S12](#s12) |
-| [S16](#s16) | Specify adaptive Yliluoma mixing | [S10](#s10), [S12](#s12) |
-| [S17](#s17) | Complete the five-method reference processor | [S05](#s05), [S10](#s10), [S11](#s11), [S13](#s13), [S14](#s14), [S15](#s15), [S16](#s16) |
-| [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) |
-| [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) |
-| [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) |
-| [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) |
-| [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) |
-| [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) |
-| [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) |
-| [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) |
-| [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) |
-| [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) |
-| [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) |
-| [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) |
-| [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) |
-| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) |
-| [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) |
-| [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) |
-| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) |
-| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) |
-| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) |
-| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) |
-| [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) |
-| [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) |
-| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) |
-| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) |
-| [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) |
-| [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) |
-| [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) |
-| [S45](#s45) | Prepare the held TypeScript-retirement PR | [S44](#s44) |
+Ready means the slice has validated implementation in an open, unmerged PR. It does not mean merged or released.
+The coordinator updates Progress and PR when work starts, a PR opens, or validation changes. Dependencies and acceptance criteria stay unchanged.
+
+| Slice | Deliverable | Prerequisites | Progress | PR |
+|---|---|---|---|---|
+| [S01](#s01) | Establish the inherited port stack and validation baseline | None | Merged db1c3f67; current-head approval, checks and 18 resolved threads | [#75](https://github.com/mia-cx/ditherette/pull/75) |
+| [S02](#s02) | Move builds and package ownership into their settled workspaces | [S01](#s01) | Merged 9e99b5bb; native pnpm 11.13.1 validated; one thread resolved | [#88](https://github.com/mia-cx/ditherette/pull/88) |
+| [S03](#s03) | Define reference requests, results, errors, and mode inventory | [S01](#s01) | Merged cc08a0cc; 118 native tests pass; five review threads resolved | [#89](https://github.com/mia-cx/ditherette/pull/89) |
+| [S04](#s04) | Enforce exclusive benchmark execution across worktrees | [S01](#s01) | Merged 6a6b35bd; exclusive lifecycle and help checks pass; three threads resolved | [#90](https://github.com/mia-cx/ditherette/pull/90) |
+| [S05](#s05) | Add typed three-way benchmark verification | [S03](#s03), [S04](#s04) | Merged a739c71e; exact output proof and fixture identities verified; five threads resolved | [#96](https://github.com/mia-cx/ditherette/pull/96) |
+| [S06](#s06) | Measure fresh accepted and candidate performance pairs | [S05](#s05) | Merged fd035567; paired evidence and compiler recipes verified; thirteen threads resolved | [#102](https://github.com/mia-cx/ditherette/pull/102) |
+| [S07](#s07) | Complete sRGB, linear RGB, and YCbCr reference round trips | [S03](#s03) | Merged b5b3fe66; 128 native tests pass; exact-head approval with no findings | [#91](https://github.com/mia-cx/ditherette/pull/91) |
+| [S08](#s08) | Complete Lab and LCH reference round trips | [S03](#s03) | Merged 8c19f361; 138 native tests pass; exact-head approval with no findings | [#92](https://github.com/mia-cx/ditherette/pull/92) |
+| [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Merged 707b9abf; 148 native tests pass; exact-head approval with no findings | [#94](https://github.com/mia-cx/ditherette/pull/94) |
+| [S10](#s10) | Specify direct quantization for every valid metric | [S07](#s07), [S08](#s08), [S09](#s09) | Merged 8547e29e; 162 native tests pass; exact-head approval with no findings | [#97](https://github.com/mia-cx/ditherette/pull/97) |
+| [S11](#s11) | Audit and complete the reference resize family | [S03](#s03) | Ready | [#93](https://github.com/mia-cx/ditherette/pull/93) |
+| [S12](#s12) | Specify palette-independent adaptive placement | [S07](#s07), [S08](#s08) | Ready | [#95](https://github.com/mia-cx/ditherette/pull/95) |
+| [S13](#s13) | Specify palette-free Bayer and random perturbation | [S12](#s12), [S09](#s09) | Ready | [#98](https://github.com/mia-cx/ditherette/pull/98) |
+| [S14](#s14) | Repair the blue-noise reference before freezing | [S12](#s12), [S09](#s09) | Ready | [#99](https://github.com/mia-cx/ditherette/pull/99) |
+| [S15](#s15) | Specify all four error-diffusion recipes | [S10](#s10), [S12](#s12) | Ready | [#101](https://github.com/mia-cx/ditherette/pull/101) |
+| [S16](#s16) | Specify adaptive Yliluoma mixing | [S10](#s10), [S12](#s12) | Ready | [#100](https://github.com/mia-cx/ditherette/pull/100) |
+| [S17](#s17) | Complete the five-method reference processor | [S05](#s05), [S10](#s10), [S11](#s11), [S13](#s13), [S14](#s14), [S15](#s15), [S16](#s16) | Ready | [#103](https://github.com/mia-cx/ditherette/pull/103) |
+| [S18](#s18) | Freeze the complete reference and enforce immutability | [S17](#s17) | Ready | [#104](https://github.com/mia-cx/ditherette/pull/104) |
+| [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | Ready | [#105](https://github.com/mia-cx/ditherette/pull/105), correction [#109](https://github.com/mia-cx/ditherette/pull/109) |
+| [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) | Ready | [#107](https://github.com/mia-cx/ditherette/pull/107) |
+| [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | Ready | [#110](https://github.com/mia-cx/ditherette/pull/110) |
+| [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | Ready | [#111](https://github.com/mia-cx/ditherette/pull/111) |
+| [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | Ready | [#112](https://github.com/mia-cx/ditherette/pull/112) |
+| [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | Ready | [#113](https://github.com/mia-cx/ditherette/pull/113) |
+| [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | Ready | [#114](https://github.com/mia-cx/ditherette/pull/114) |
+| [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | Ready | [#115](https://github.com/mia-cx/ditherette/pull/115) |
+| [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Ready | [#116](https://github.com/mia-cx/ditherette/pull/116) |
+| [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Ready | [#118](https://github.com/mia-cx/ditherette/pull/118) |
+| [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) | Ready | [#117](https://github.com/mia-cx/ditherette/pull/117) |
+| [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | Ready | [#119](https://github.com/mia-cx/ditherette/pull/119) |
+| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Ready | [#121](https://github.com/mia-cx/ditherette/pull/121) |
+| [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Ready | [#122](https://github.com/mia-cx/ditherette/pull/122) |
+| [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Ready | [#123](https://github.com/mia-cx/ditherette/pull/123) |
+| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Ready | [#124](https://github.com/mia-cx/ditherette/pull/124) |
+| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Ready | [#126](https://github.com/mia-cx/ditherette/pull/126) |
+| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Ready | [#127](https://github.com/mia-cx/ditherette/pull/127) |
+| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Ready | [#128](https://github.com/mia-cx/ditherette/pull/128) |
+| [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Ready | [#120](https://github.com/mia-cx/ditherette/pull/120) |
+| [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Ready | [#125](https://github.com/mia-cx/ditherette/pull/125) |
+| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Ready | [#129](https://github.com/mia-cx/ditherette/pull/129) |
+| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Measured nearest/adaptive/diffusion PRs ready; profile experiment measured; bilinear mismatch settled; JS target and release held | [#131](https://github.com/mia-cx/ditherette/pull/131), [#137](https://github.com/mia-cx/ditherette/pull/137), [#138](https://github.com/mia-cx/ditherette/pull/138), [#140](https://github.com/mia-cx/ditherette/pull/140), [#142](https://github.com/mia-cx/ditherette/pull/142), [#144](https://github.com/mia-cx/ditherette/pull/144), [#146](https://github.com/mia-cx/ditherette/pull/146), [#148](https://github.com/mia-cx/ditherette/pull/148), [#152](https://github.com/mia-cx/ditherette/pull/152), [#154](https://github.com/mia-cx/ditherette/pull/154), [#155](https://github.com/mia-cx/ditherette/pull/155), [#158](https://github.com/mia-cx/ditherette/pull/158), [#159](https://github.com/mia-cx/ditherette/pull/159) |
+| [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Ready | [#130](https://github.com/mia-cx/ditherette/pull/130) |
+| [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Ready; release gates held | [#132](https://github.com/mia-cx/ditherette/pull/132) |
+| [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Ready; activation held | [#133](https://github.com/mia-cx/ditherette/pull/133) |
+| [S45](#s45) | Prepare the held TypeScript-retirement PR | [S44](#s44) | Ready; activation held | [#134](https://github.com/mia-cx/ditherette/pull/134) |
 
 ## Available parallel work
 

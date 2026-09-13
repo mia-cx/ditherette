@@ -131,7 +131,7 @@ pub(crate) fn tiling_sweep_command(registry: &Registry, args: &[String]) -> Resu
                         &tiled.output,
                         bounds_for_subject(subject),
                     );
-                    if !verification.passed {
+                    if !verification.within_bounds {
                         return Err(BenchError::Runtime(format!(
                             "tiled row-range output failed verification for {} {} {}x{} band_height={} workers={}: {:?}",
                             subject.descriptor.id,

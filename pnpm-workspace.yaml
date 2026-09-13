@@ -1,7 +1,12 @@
-onlyBuiltDependencies:
-  - esbuild
-  - msgpackr-extract
-  - sharp
-  - workerd
+packages:
+  - crates/ditherette-wasm
+  - packages/ditherette
+engineStrict: true
+allowBuilds:
+  esbuild: true
+  msgpackr-extract: true
+  sharp: true
+  workerd: true
+  wasm-pack: true
 overrides:
   cookie@<0.7.0: '>=0.7.0'
