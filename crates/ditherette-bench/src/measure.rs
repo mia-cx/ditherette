@@ -34,6 +34,7 @@ const MIN_BATCH_REFINEMENTS: usize = 3;
 pub(crate) trait MeasurementObserver {
     fn warmup_batch(&mut self, _batch_size: usize, _elapsed: Duration) {}
     fn warmup_finished(&mut self, _batch_size: usize, _elapsed: Duration) {}
+    fn measured_output(&mut self, _rgba: &[u8]) {}
 
     /// Returns true when reporting did enough work that the next timed batch should be discarded.
     fn measurement_progress(
@@ -431,6 +432,8 @@ pub(crate) fn measure_resize_case(
 
     let final_checksum = checksum(&output_rgba);
     black_box(&final_checksum);
+    let output_digest = ditherette_bench::verification::content_digest(&output_rgba);
+    observer.measured_output(&output_rgba);
 
     let stats = SampleStats::from_samples(&sample_ns);
     let output_pixels = f64::from(output.0) * f64::from(output.1);
@@ -455,8 +458,9 @@ pub(crate) fn measure_resize_case(
         params_fingerprint: "resize-default".to_owned(),
         verified: verification
             .as_ref()
-            .is_some_and(|verification| verification.passed),
+            .is_some_and(|proof| proof.is_exact() && proof.candidate_digest == Some(output_digest)),
         verification,
+        output_digest: Some(output_digest),
         checksum: final_checksum,
         samples: sample_ns.len(),
         sample_ns,
@@ -538,20 +542,22 @@ fn warm_up_and_calibrate(
     let warmup_start = Instant::now();
     let mut warmup_iterations = 0usize;
 
+    let discard_start = Instant::now();
     for _ in 0..WARMUP_DISCARD_ITERATIONS {
         run_resize_into(subject, fixture, output, output_rgba, params)?;
         warmup_iterations += 1;
     }
+    observer.warmup_batch(WARMUP_DISCARD_ITERATIONS, discard_start.elapsed());
     black_box(checksum(output_rgba));
 
     let single_start = Instant::now();
     run_resize_into(subject, fixture, output, output_rgba, params)?;
     let single_elapsed = single_start.elapsed();
     warmup_iterations += 1;
+    observer.warmup_batch(1, single_elapsed);
     black_box(checksum(output_rgba));
 
     if single_elapsed >= config.target_sample {
-        observer.warmup_batch(1, single_elapsed);
         continue_warmup(
             subject,
             fixture,

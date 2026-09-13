@@ -9,7 +9,7 @@ use super::{ImageBuf, PaletteIndex8, Rgba8};
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PaletteEntry {
     Color { rgb: [u8; 3] },
-    Transparent,
+    Transparent {},
 }
 
 /// Packed RGBA palette entries in retained input order, including duplicates.
