@@ -230,7 +230,10 @@ pub fn benchmark_resize_rgba8(
     let source = ImageView::<Rgba8>::packed(input, source_dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
-    let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    let output_len = output_dimensions
+        .storage_len::<Rgba8>()
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut output = vec![0; output_len];
 
     let config = WasmBenchmarkConfig {
         sample_size,
@@ -376,7 +379,10 @@ fn resize_rgba8_scalar(
     let source = ImageView::<Rgba8>::packed(input, source_dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let resize = WasmResize::parse(filter, anchor, support_policy)?;
-    let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    let output_len = output_dimensions
+        .storage_len::<Rgba8>()
+        .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let mut output = vec![0; output_len];
 
     #[cfg(feature = "threads")]
     if parallelization_policy {
@@ -852,6 +858,24 @@ struct WasmBenchmarkConfig {
     row_band_height: usize,
 }
 
+#[derive(Default)]
+struct WarmupProgress {
+    elapsed_ms: f64,
+    iterations: u64,
+}
+
+impl WarmupProgress {
+    fn needs_more(&self, config: WasmBenchmarkConfig) -> bool {
+        self.elapsed_ms < config.warm_up_time_ms
+            || self.iterations < u64::from(config.warm_up_iterations)
+    }
+
+    fn record(&mut self, batch_size: u32, elapsed_ms: f64) {
+        self.iterations += u64::from(batch_size);
+        self.elapsed_ms = elapsed_ms;
+    }
+}
+
 struct WasmBenchmarkResult {
     batch_size: u32,
     total_iterations: u64,
@@ -892,14 +916,10 @@ fn run_color_benchmark(
 
     let mut batch_size = 1;
     let warmup_started = performance_now();
-    let mut warmup_elapsed = 0.0;
-    let mut warmup_batches = 0;
-    let mut warmup_iterations = 0u64;
+    let mut warmup = WarmupProgress::default();
     let mut best_batch_size = batch_size;
     let mut best_batch_elapsed = f64::INFINITY;
-    while warmup_elapsed < config.warm_up_time_ms
-        || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
-    {
+    while warmup.needs_more(config) {
         let elapsed = run_color_batch(
             source,
             target,
@@ -914,13 +934,12 @@ fn run_color_benchmark(
             best_batch_size = batch_size;
             best_batch_elapsed = elapsed;
         }
-        warmup_batches += 1;
-        warmup_iterations += u64::from(batch_size);
-        warmup_elapsed = performance_now() - warmup_started;
+        warmup.record(batch_size, performance_now() - warmup_started);
         report_event(
             reporter,
             &format!(
-                "{{\"kind\":\"warmup-batch\",\"batchSize\":{batch_size},\"batchElapsedMs\":{elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6}}}"
+                "{{\"kind\":\"warmup-batch\",\"batchSize\":{batch_size},\"batchElapsedMs\":{elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6}}}",
+                warmup_elapsed = warmup.elapsed_ms
             ),
         )?;
 
@@ -935,7 +954,9 @@ fn run_color_benchmark(
     report_event(
         reporter,
         &format!(
-            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}"
+            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}",
+            warmup_elapsed = warmup.elapsed_ms,
+            warmup_iterations = warmup.iterations
         ),
     )?;
 
@@ -1106,14 +1127,10 @@ fn run_resize_benchmark(
 
     let mut batch_size = 1;
     let warmup_started = performance_now();
-    let mut warmup_elapsed = 0.0;
-    let mut warmup_batches = 0;
-    let mut warmup_iterations = 0u64;
+    let mut warmup = WarmupProgress::default();
     let mut best_batch_size = batch_size;
     let mut best_batch_elapsed = f64::INFINITY;
-    while warmup_elapsed < config.warm_up_time_ms
-        || (config.warm_up_iterations > 0 && warmup_batches < config.warm_up_iterations)
-    {
+    while warmup.needs_more(config) {
         let elapsed = run_resize_batch(
             source,
             output_dimensions,
@@ -1129,13 +1146,12 @@ fn run_resize_benchmark(
             best_batch_size = batch_size;
             best_batch_elapsed = elapsed;
         }
-        warmup_batches += 1;
-        warmup_iterations += u64::from(batch_size);
-        warmup_elapsed = performance_now() - warmup_started;
+        warmup.record(batch_size, performance_now() - warmup_started);
         report_event(
             reporter,
             &format!(
-                "{{\"kind\":\"warmup-batch\",\"batchSize\":{batch_size},\"batchElapsedMs\":{elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6}}}"
+                "{{\"kind\":\"warmup-batch\",\"batchSize\":{batch_size},\"batchElapsedMs\":{elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6}}}",
+                warmup_elapsed = warmup.elapsed_ms
             ),
         )?;
 
@@ -1150,7 +1166,9 @@ fn run_resize_benchmark(
     report_event(
         reporter,
         &format!(
-            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}"
+            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}",
+            warmup_elapsed = warmup.elapsed_ms,
+            warmup_iterations = warmup.iterations
         ),
     )?;
 
@@ -1459,5 +1477,44 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn warmup_counts_iterations_not_batches() {
+        let config = WasmBenchmarkConfig {
+            sample_size: 1,
+            measurement_time_ms: 1.0,
+            warm_up_time_ms: 10.0,
+            warm_up_iterations: 32,
+            target_sample_time_ms: 1.0,
+            live_stats: false,
+            row_band_height: 32,
+        };
+        let mut progress = WarmupProgress::default();
+        progress.record(16, 10.0);
+        assert!(progress.needs_more(config));
+        progress.record(16, 10.0);
+        assert_eq!(progress.iterations, 32);
+        assert!(!progress.needs_more(config));
+    }
+
+    #[test]
+    fn warmup_preserves_the_time_minimum_and_zero_iteration_target() {
+        let mut config = WasmBenchmarkConfig {
+            sample_size: 1,
+            measurement_time_ms: 1.0,
+            warm_up_time_ms: 10.0,
+            warm_up_iterations: 32,
+            target_sample_time_ms: 1.0,
+            live_stats: false,
+            row_band_height: 32,
+        };
+        let mut progress = WarmupProgress::default();
+        progress.record(64, 5.0);
+        assert!(progress.needs_more(config));
+        config.warm_up_iterations = 0;
+        assert!(progress.needs_more(config));
+        progress.record(1, 10.0);
+        assert!(!progress.needs_more(config));
     }
 }

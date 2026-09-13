@@ -1,8 +1,8 @@
 # S08 perceptual color round trips
 
 Implements [issue 49](https://github.com/mia-cx/ditherette/issues/49).
-Branch: `impl/v1-s08-color-perceptual`. PR base: `impl/v1-s03-contracts`.
-Validated dependency: `fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06`, [S03 PR 89](https://github.com/mia-cx/ditherette/pull/89).
+Branch: `impl/v1-s08-color-perceptual`. Current PR base: `main`.
+Original validated dependency: `fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06`, [S03 PR 89](https://github.com/mia-cx/ditherette/pull/89).
 
 ## Work
 
@@ -12,11 +12,11 @@ Validated dependency: `fa3007fffc9e4ca9a85c19c4d6e06ebedb41bd06`, [S03 PR 89](ht
 ## Decisions and evidence
 
 Retain the inherited f32 forward matrices and D65 white. Formula sources and numerical conventions live beside each color module.
-S07 proceeds independently in its own modules; this branch has no S07 dependency or shared-helper edits.
+S07 originally proceeded independently in its own modules. The restack includes merged S07 without adding a logical dependency or changing shared helpers.
 No production code or benchmark measurements belong to this slice.
 
 `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_color_perceptual --test spec_color_spaces` passes 16 focused tests.
-`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet` passes all 134 native tests and zero doctests.
+`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet` originally reported 134 native tests; the verified current count is below.
 `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
 `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` and `git diff --check` pass.
 
@@ -28,3 +28,11 @@ Documented domain boxes are conservative enclosures; S12 still owns selection an
 Sources checked on 2026-09-07: [Ottosson's published Oklab matrices](https://bottosson.github.io/posts/oklab/) and [W3C conversion equations](https://www.w3.org/TR/css-color-4/#color-conversion-code).
 Primary vectors were independently evaluated from those formulas in f64 and compared against f32 output.
 CIELAB retains the inherited D65 white and XYZ matrix; its inverse matrix was calculated from that existing decimal matrix.
+
+## Stack-collapse validation
+
+Merge `6902d5ef` restacks S08 onto main `b5b3fe66` without conflicts or changes
+to its reference implementations or vectors. All 138 native tests pass, including
+ten perceptual tests, ten ordinary-color tests, and six inherited color tests.
+Wasm-target compilation and rustfmt pass. No standalone benchmark workload,
+browser run, production change, or new freeze amendment occurred.
