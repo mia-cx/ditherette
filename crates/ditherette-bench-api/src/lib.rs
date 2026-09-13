@@ -6,6 +6,8 @@
 
 use std::{collections::BTreeMap, error::Error, fmt, str::FromStr};
 
+pub mod verification;
+
 /// Stable identifier for a benchmarkable implementation.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SubjectId(String);

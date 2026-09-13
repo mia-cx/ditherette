@@ -13,6 +13,7 @@ pub mod lab_ciede2000;
 pub mod linear;
 pub mod oklab;
 pub mod oklch;
+pub mod reconstruct;
 pub mod spaces;
 pub mod srgb;
 pub mod ycbcr;
