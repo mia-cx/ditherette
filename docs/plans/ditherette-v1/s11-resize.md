@@ -38,5 +38,19 @@ to its resize implementation or numerical vectors. All 174 native tests pass,
 including eleven complete resize fixtures and the Lanczos kernel fixture.
 Benchmark-feature compilation, Wasm-target compilation, and rustfmt pass.
 Anti-aliased bilinear, the original trilinear storage rules, and correct optimized
-kernels remain unchanged. No standalone timing workload, browser run, production
-change, or new reference amendment occurred during collapse.
+kernels remain unchanged. No standalone timing workload, browser run, or production
+change occurred during collapse. The documentation amendment below changes no runtime behavior.
+
+## Exact frozen-document amendment
+
+`6e01ab32` corrects the S11 audit reference in
+`crates/ditherette-wasm/src/spec/contract/inventory.md` from
+`tests/spec_resize_contract.rs` to `../tests/spec_resize_contract.rs`.
+The inventory declares paths relative to the crate's `src/` directory; the old
+path does not exist and the corrected path names the actual test file.
+
+The same typo exists at frozen checkpoint `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
+At S18, preserve that original identity and add this exact one-line documentation
+correction to the already approved S03 request/four-document amendment. Validate
+only those named differences and keep the freeze guard strict. No kernel, formula,
+vector, or runtime behavior changes.
