@@ -1,39 +1,20 @@
 # ditherette-wasm
 
-Fresh Rust/Wasm image-processing core for Ditherette.
+Internal MIT-licensed Rust/Wasm processing crate. It owns compilation and Rust/Wasm test commands. The public browser package lives in `packages/ditherette`; this crate is not published.
 
-The previous prototype has been preserved as `crates/ditherette-wasm-old`. This crate is intentionally minimal while we spec the new design before porting behavior back in.
+## Build and test
 
-## Initial design goals
+Install workspace dependencies with Node 24.19.0 and pnpm 11.13.1, then run these commands from this directory:
 
-- Keep public Wasm/API wrappers thin and stable.
-- Separate correctness references from optimized production code.
-- Treat production resize inputs as normalized packed `Rgba8`; convert HDR or other color spaces before resize.
-- Make resize/filter choices explicit presets, not accidental module coupling.
-- Keep shared code limited to invariants, data shapes, and neutral math helpers.
-- Let each optimized filter own its hot path and tiling plan.
-- Add benchmarks only after the API and correctness oracle are clear.
+- `pnpm build` builds scalar and threaded variants into ignored `dist/scalar` and `dist/threads` directories.
+- `pnpm test` runs the native Rust correctness suite.
+- `pnpm test:wasm` and `pnpm test:browser` invoke wasm-pack's Node and headless Chrome runners.
+- `pnpm check` checks formatting and compilation for the Wasm target.
 
-## Proposed future layout
+The current suite has 102 native tests and two Node Wasm tests for storage-overflow errors. Most Rust tests still use native `#[test]` attributes; broader browser/Wasm conformance remains for later slices.
 
-```text
-src/
-  lib.rs
-  wasm.rs
-  error.rs
-  image/
-    dimensions.rs
-    rgba.rs
-  resize/
-    mod.rs
-    nearest.rs
-    area.rs
-    bilinear.rs
-    bicubic.rs
-    lanczos.rs
-    trilinear.rs
-    reference/
-    scalar/
-    shared/
-    tiling/
-```
+Scalar compilation uses the root Rust pin. Threaded compilation uses `rust-toolchain-threads.toml` and requires that toolchain's `rust-src` component. Both variants declare a 2 GiB memory maximum and use separate Cargo target directories.
+
+Root `wasm:build` commands stage generated artifacts into the website's existing `static/wasm` URLs. The public package's build stages both variants and worker files into its own distribution. Generated files remain private and ignored.
+
+`packages/ditherette/package.json` owns the release version. Its build and check commands verify that this crate's version agrees.

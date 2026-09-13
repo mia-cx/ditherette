@@ -1,7 +1,7 @@
 use std::{env, fs, hint::black_box, path::PathBuf, sync::OnceLock};
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Throughput};
-use ditherette_wasm::{
+use ditherette_wasm_old::{
     image::{rgba, ImageDimensions},
     resize::{
         bilinear::{resize_rgba_bilinear_2_into, resize_rgba_bilinear_reference},
@@ -97,7 +97,7 @@ fn bench_resize_into(
         ImageDimensions,
         ImageDimensions,
         &mut [u8],
-    ) -> Result<(), ditherette_wasm::error::ProcessingError>,
+    ) -> Result<(), ditherette_wasm_old::error::ProcessingError>,
 ) {
     group.bench_function(name, |bencher| {
         let mut output_rgba = vec![0; output_byte_len];

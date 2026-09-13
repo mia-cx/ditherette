@@ -4,6 +4,8 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
+pub mod verification;
+
 use ditherette_bench_api::{
     BenchSubject, BenchSubjectError, ParamSchema, PixelFormat, ResizeBenchSubject,
     ResizeInputU8Rgba, ResizeOutputU8Rgba, ResizeParams, ResizeU8RgbaFn, SubjectCapabilities,
