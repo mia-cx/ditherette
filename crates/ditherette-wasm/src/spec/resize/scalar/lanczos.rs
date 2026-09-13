@@ -93,3 +93,24 @@ fn sinc(value: f64) -> f64 {
         x.sin() / x
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lobes_follow_known_sine_values_and_finite_support() {
+        for (radius, halfway) in [
+            (2.0, 4.0 * 2.0_f64.sqrt() / PI.powi(2)),
+            (3.0, 6.0 / PI.powi(2)),
+        ] {
+            let kernel = Lanczos { radius };
+            assert_eq!(kernel.weight(0.0), 1.0);
+            assert!((kernel.weight(0.5) - halfway).abs() < 1e-15);
+            assert_eq!(kernel.weight(-0.5), kernel.weight(0.5));
+            assert!(kernel.weight(1.0).abs() < 1e-15);
+            assert_eq!(kernel.weight(radius), 0.0);
+            assert_eq!(kernel.weight(radius + 1.0), 0.0);
+        }
+    }
+}
