@@ -100,7 +100,7 @@ Area integrates pixel footprints and therefore has no anchor.
 `convolution::resize_convolution_into` directly applies the public `ReconstructionKernel` recipe.
 `common/alignment::{map_axis_coordinate, ResizeAnchor::axes}` and `common/coordinates::map_axis_position` define discrete and continuous mapping.
 `common/sample::ResizeSample` owns sample conversion, including rounding.
-S11 audits those helpers and exports through the complete request. `tests/spec_resize_contract.rs` covers anchors, support policies, odd/fractional/anisotropic mips, and padded logical rows. Lanczos kernel fixtures independently check half-angle sine values.
+S11 audits those helpers and exports through the complete request. `../tests/spec_resize_contract.rs` covers anchors, support policies, odd/fractional/anisotropic mips, and padded logical rows. Lanczos kernel fixtures independently check half-angle sine values.
 
 Inherited production resize adapters map to the same complete-image oracle, or the corresponding output rows:
 
