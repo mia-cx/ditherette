@@ -6,7 +6,7 @@
 
 ## Inputs and outputs
 
-Input and output are validated image views with the same packed format. Storage channels must implement `ResizeSample`.
+Input and output are validated image views with the same format. Logical rows may contain backing-storage padding; it is never image content. Storage channels must implement `ResizeSample`.
 
 The caller chooses a `ResizeAnchor` used by the bilinear resizes from mip levels.
 
@@ -14,7 +14,7 @@ The caller chooses a `ResizeAnchor` used by the bilinear resizes from mip levels
 
 1. Compute minification as the larger source/output scale across x and y.
 2. If minification is not greater than `1`, delegate directly to bilinear.
-3. Build mip levels by repeatedly halving dimensions with round-up and resizing with exact area.
+3. Copy logical source rows into packed mip storage. Build levels by repeatedly halving dimensions with round-up and resizing with exact area.
 4. Compute level of detail:
    ```text
    lod = log2(minification)
@@ -32,6 +32,8 @@ Trilinear is not a kernel like Lanczos or bicubic. It is a policy over mip level
 - Minification uses the largest axis scale.
 - Magnification and same-size cases use bilinear directly.
 - Mip-level blending is per channel after the two bilinear outputs are produced.
+- Each area mip and bilinear output uses its declared storage rounding before the final blend.
+- Bilinear is the scale-aware triangle reference, including when sampling between mip levels.
 
 ## Edge cases
 

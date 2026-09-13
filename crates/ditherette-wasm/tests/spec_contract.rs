@@ -83,7 +83,7 @@ fn all_five_requests_borrow_valid_storage_without_changing_it() {
                 strength: 1.0,
                 placement: Placement::Everywhere,
                 serpentine: true,
-                space: WorkingSpace::Srgb,
+                feedback: DiffusionFeedback::SrgbBytes,
             },
         }),
     ];
@@ -157,6 +157,100 @@ fn validates_dimension_limits_without_allocating_large_images() {
 }
 
 #[test]
+fn implicit_output_limits_report_invalid_source_images() {
+    for side in [MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE + 1] {
+        let data = vec![0; side as usize * 4];
+        for (width, height, path) in [(side, 1, "source.width"), (1, side, "source.height")] {
+            let source = Source {
+                width,
+                height,
+                data: &data,
+            };
+            let quantize = QuantizeRequest {
+                source,
+                ..quantize()
+            };
+            let requests = [
+                Request::Perturb(PerturbRequest {
+                    version: 1,
+                    source,
+                    perturb: perturb(),
+                }),
+                Request::Quantize(quantize),
+                Request::DitherAndQuantize(DitherQuantizeRequest {
+                    quantize,
+                    dither: DitherPolicy::None,
+                }),
+            ];
+            for request in requests {
+                if side == MAX_OUTPUT_SIDE {
+                    let layout = request.validate().unwrap();
+                    assert_eq!(layout.output, ImageDimensions::new(width, height).unwrap());
+                } else {
+                    let error = request.validate().unwrap_err();
+                    assert_eq!(
+                        (error.code, error.path.as_str()),
+                        (ErrorCode::InvalidImage, path)
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn explicit_output_limits_remain_invalid_settings() {
+    for (width, height, path) in [
+        (MAX_OUTPUT_SIDE + 1, 1, "output.width"),
+        (1, MAX_OUTPUT_SIDE + 1, "output.height"),
+    ] {
+        let output = Output {
+            width,
+            height,
+            ..output()
+        };
+        for request in [
+            Request::Resize(ResizeRequest {
+                version: 1,
+                source: source(),
+                output,
+            }),
+            Request::Process(ProcessRequest {
+                source: source(),
+                palette: &PALETTE,
+                recipe: RecipeV1 { output, ..recipe() },
+            }),
+        ] {
+            let error = request.validate().unwrap_err();
+            assert_eq!(
+                (error.code, error.path.as_str()),
+                (ErrorCode::InvalidSettings, path)
+            );
+        }
+    }
+    let data = vec![0; (MAX_OUTPUT_SIDE as usize + 1) * 4];
+    let source = Source {
+        width: MAX_OUTPUT_SIDE + 1,
+        height: 1,
+        data: &data,
+    };
+    for request in [
+        Request::Resize(ResizeRequest {
+            version: 1,
+            source,
+            output: output(),
+        }),
+        Request::Process(ProcessRequest {
+            source,
+            palette: &PALETTE,
+            recipe: recipe(),
+        }),
+    ] {
+        assert!(request.validate().is_ok());
+    }
+}
+
+#[test]
 fn accepts_transparent_only_and_oversize_palettes_for_later_normalization() {
     let transparent = [PaletteEntry::Transparent {}];
     let oversized = [PaletteEntry::Transparent {}; 257];
@@ -204,6 +298,41 @@ fn match_tags_cover_all_coherent_pairs_and_reject_invalid_pairs() {
             (ErrorCode::InvalidSettings, "recipe.match")
         );
     }
+}
+
+#[test]
+fn diffusion_feedback_tags_distinguish_bytes_from_matching_coordinates() {
+    for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+        let policy = DitherPolicy::Diffusion {
+            kernel: Diffusion::FloydSteinberg,
+            strength: 1.0,
+            placement: Placement::Everywhere,
+            serpentine: false,
+            feedback,
+        };
+        let value = serde_json::to_value(policy).unwrap();
+        let tag = if feedback == DiffusionFeedback::SrgbBytes {
+            "srgb-bytes"
+        } else {
+            "matching"
+        };
+        assert_eq!(value["feedback"], tag);
+        assert!(value.get("space").is_none());
+        assert_eq!(
+            serde_json::from_value::<DitherPolicy>(value.clone()).unwrap(),
+            policy
+        );
+        let mut invalid = value;
+        invalid["space"] = "srgb".into();
+        assert!(serde_json::from_value::<DitherPolicy>(invalid).is_err());
+        assert!(Request::DitherAndQuantize(DitherQuantizeRequest {
+            quantize: quantize(),
+            dither: policy
+        })
+        .validate()
+        .is_ok());
+    }
+    assert!(serde_json::from_str::<DiffusionFeedback>("\"srgb\"").is_err());
 }
 
 #[test]

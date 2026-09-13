@@ -1,9 +1,9 @@
 # S10 complete reference quantization
 
 Issue [51](https://github.com/mia-cx/ditherette/issues/51).
-Branch `impl/v1-s10-quantize`, PR base `impl/v1-s10-base`.
+Branch `impl/v1-s10-quantize`, current PR base `main`.
 Review [PR 97](https://github.com/mia-cx/ditherette/pull/97), open and non-draft with auto-merge disabled.
-Integration base `af9c0d99dd140f3235968d5f481c5a2c879ce46e` contains:
+Original integration base `af9c0d99dd140f3235968d5f481c5a2c879ce46e` contains:
 
 - S07 `7ef52bd2bcaea2774a400875e5c395526bc9b4b9`.
 - S08 `d5e2d9761481f7a6b74fb37c7c2f7841570bead1`.
@@ -53,11 +53,11 @@ Rec.601 and Rec.709 independently calculated red-15/blue-25 fixtures select diff
 
 Focused validation passes 25 tests across `spec_quantize_request`, `spec_quantize_dispatch`, and `spec_quantize_metrics`.
 
-## Final validation
+## Original final validation
 
 Implementation head `6e1e7431` passes:
 
-- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: 168 native tests, zero failures.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: historically reported 168 native tests; superseded by current validation below.
 - `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`: passes.
 - `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all -- --check`: passes.
 - `git diff --check`: passes.
@@ -69,3 +69,14 @@ The final fetch/rebase found the integration base unchanged at `af9c0d99dd140f32
 The 22 focused request, dispatch, and contract tests pass again after rebase.
 Validated code and evidence head was `233ae8eecdd3ac74cd664870d41b4530eef2fb5d`.
 The final bookkeeping commit changes only documentation; its exact SHA appears in the coordinator's stack ledger.
+
+## Stack-collapse validation
+
+Join `f1257021` preserves the original prerequisite ancestry and has exactly the
+tree of main `707b9abf`. Merge `9aaf997e` restacks S10 through that join without
+conflicts or changes to its quantization implementation or metric vectors.
+The PR now targets main. All 162 native tests pass, including ten complete-request,
+four dispatch, and eleven inherited metric tests. Benchmark-feature compilation,
+Wasm-target compilation, and rustfmt pass. The corrected implicit-source
+`InvalidImage` classification remains intact. No standalone timing workload,
+browser run, production change, or new reference amendment occurred during collapse.

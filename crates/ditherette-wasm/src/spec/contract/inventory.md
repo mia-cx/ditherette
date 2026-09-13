@@ -26,7 +26,7 @@ The later JS adapter supplies precise paths for raw JS property-type errors befo
 | Method | Rust request | Result storage | Required reference composition |
 | --- | --- | --- | --- |
 | `process` | `ProcessRequest` | `image::contracts::IndexedImage` | S17 resize then fused dither/quantize |
-| `resize` | `ResizeRequest` | `image::contracts::Rgba8Image` | S11 resize dispatch |
+| `resize` | `ResizeRequest` | `image::contracts::Rgba8Image` | `spec::resize::resize`, complete naive dispatch |
 | `perturb` | `PerturbRequest` | `image::contracts::Rgba8Image` | S07/S08 conversion, S12 placement, S13/S14 field, inverse RGBA8 |
 | `quantize` | `QuantizeRequest` | `image::contracts::IndexedImage` | S09 palette/alpha, S10 matching, S17 result composition |
 | `ditherAndQuantize` | `DitherQuantizeRequest` | `image::contracts::IndexedImage` | S13/S14 perturb then quantize, or S15/S16 feedback/mixing |
@@ -100,7 +100,7 @@ Area integrates pixel footprints and therefore has no anchor.
 `convolution::resize_convolution_into` directly applies the public `ReconstructionKernel` recipe.
 `common/alignment::{map_axis_coordinate, ResizeAnchor::axes}` and `common/coordinates::map_axis_position` define discrete and continuous mapping.
 `common/sample::ResizeSample` owns sample conversion, including rounding.
-S11 audits those helpers, exported kernels, and strided internal images before freeze.
+S11 audits those helpers and exports through the complete request. `../tests/spec_resize_contract.rs` covers anchors, support policies, odd/fractional/anisotropic mips, and padded logical rows. Lanczos kernel fixtures independently check half-angle sine values.
 
 Inherited production resize adapters map to the same complete-image oracle, or the corresponding output rows:
 
@@ -179,7 +179,11 @@ process(input) = ditherAndQuantize(resize(input))
 ditherAndQuantize(input, separable) = quantize(perturb(input))
 ```
 
-Diffusion supports feedback in sRGB or the selected matching space. The distinction preserves the website's `useColorSpace` setting.
+Diffusion uses explicit `feedback: "srgb-bytes" | "matching"` tags.
+Byte feedback rounds/clips sRGB before matching and residual calculation; matching feedback keeps unrounded coordinates.
+The former `space` field was ambiguous when matching also used sRGB and is rejected before freeze.
+With palette red bytes 0/2 and source red bytes 1/1, Floyd strength 1 produces `[0,0]` for bytes and `[0,1]` for matching.
+This distinction preserves both website `useColorSpace` paths and the inherited unrounded coordinate kernels.
 Read `src/lib/processing/quantize-shared.ts::supportsVectorDither` and `src/lib/processing/quantize-algorithms/error-diffusion-runner.ts::quantizeErrorDiffusion` when implementing S15 or S28.
 The latter calls `matcher.nearestIndexByteRgb` after byte clamping while scattering sRGB error when vector dithering is disabled.
 `quantizeVectorErrorDiffusion` instead matches and scatters in working coordinates.

@@ -95,9 +95,13 @@ where
     F: ImageFormat,
     F::Storage: ResizeSample,
 {
+    let mut data = Vec::new();
+    for y in 0..source.dimensions().height() {
+        data.extend_from_slice(source.row(y).expect("source row is within dimensions"));
+    }
     let mut current = MipLevel {
         dimensions: source.dimensions(),
-        data: source.data().to_vec(),
+        data,
     };
 
     for _ in 0..target_level {
