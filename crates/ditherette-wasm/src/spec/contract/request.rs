@@ -42,10 +42,12 @@ pub enum MatchPolicy {
     OklabEuclidean,
     OklchEuclidean,
     OklchCircularHue,
+    OklchHueArc,
     CielabEuclidean,
     CielabCiede2000,
     CielchEuclidean,
     CielchCircularHue,
+    CielchHueArc,
     YcbcrEuclidean,
 }
 
@@ -58,9 +60,13 @@ impl MatchPolicy {
             }
             Self::LinearRgbEuclidean => WorkingSpace::LinearRgb,
             Self::OklabEuclidean => WorkingSpace::Oklab,
-            Self::OklchEuclidean | Self::OklchCircularHue => WorkingSpace::Oklch,
+            Self::OklchEuclidean | Self::OklchCircularHue | Self::OklchHueArc => {
+                WorkingSpace::Oklch
+            }
             Self::CielabEuclidean | Self::CielabCiede2000 => WorkingSpace::Cielab,
-            Self::CielchEuclidean | Self::CielchCircularHue => WorkingSpace::Cielch,
+            Self::CielchEuclidean | Self::CielchCircularHue | Self::CielchHueArc => {
+                WorkingSpace::Cielch
+            }
             Self::YcbcrEuclidean => WorkingSpace::Ycbcr,
         }
     }
@@ -349,16 +355,16 @@ impl<'a> Request<'a> {
                 "RGBA8 byte length does not match dimensions.",
             )
         })?;
-        let (width, height, path) = output.map_or((source.width, source.height, "source"), |out| {
-            (out.width, out.height, "output")
-        });
-        let output = validate_dimensions(
-            width,
-            height,
-            MAX_OUTPUT_SIDE,
-            path,
-            ErrorCode::InvalidSettings,
-        )?;
+        let (width, height, path, code) = output.map_or(
+            (
+                source.width,
+                source.height,
+                "source",
+                ErrorCode::InvalidImage,
+            ),
+            |out| (out.width, out.height, "output", ErrorCode::InvalidSettings),
+        );
+        let output = validate_dimensions(width, height, MAX_OUTPUT_SIDE, path, code)?;
         Ok(ValidatedLayout {
             source: view,
             output,

@@ -157,6 +157,100 @@ fn validates_dimension_limits_without_allocating_large_images() {
 }
 
 #[test]
+fn implicit_output_limits_report_invalid_source_images() {
+    for side in [MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE + 1] {
+        let data = vec![0; side as usize * 4];
+        for (width, height, path) in [(side, 1, "source.width"), (1, side, "source.height")] {
+            let source = Source {
+                width,
+                height,
+                data: &data,
+            };
+            let quantize = QuantizeRequest {
+                source,
+                ..quantize()
+            };
+            let requests = [
+                Request::Perturb(PerturbRequest {
+                    version: 1,
+                    source,
+                    perturb: perturb(),
+                }),
+                Request::Quantize(quantize),
+                Request::DitherAndQuantize(DitherQuantizeRequest {
+                    quantize,
+                    dither: DitherPolicy::None,
+                }),
+            ];
+            for request in requests {
+                if side == MAX_OUTPUT_SIDE {
+                    let layout = request.validate().unwrap();
+                    assert_eq!(layout.output, ImageDimensions::new(width, height).unwrap());
+                } else {
+                    let error = request.validate().unwrap_err();
+                    assert_eq!(
+                        (error.code, error.path.as_str()),
+                        (ErrorCode::InvalidImage, path)
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn explicit_output_limits_remain_invalid_settings() {
+    for (width, height, path) in [
+        (MAX_OUTPUT_SIDE + 1, 1, "output.width"),
+        (1, MAX_OUTPUT_SIDE + 1, "output.height"),
+    ] {
+        let output = Output {
+            width,
+            height,
+            ..output()
+        };
+        for request in [
+            Request::Resize(ResizeRequest {
+                version: 1,
+                source: source(),
+                output,
+            }),
+            Request::Process(ProcessRequest {
+                source: source(),
+                palette: &PALETTE,
+                recipe: RecipeV1 { output, ..recipe() },
+            }),
+        ] {
+            let error = request.validate().unwrap_err();
+            assert_eq!(
+                (error.code, error.path.as_str()),
+                (ErrorCode::InvalidSettings, path)
+            );
+        }
+    }
+    let data = vec![0; (MAX_OUTPUT_SIDE as usize + 1) * 4];
+    let source = Source {
+        width: MAX_OUTPUT_SIDE + 1,
+        height: 1,
+        data: &data,
+    };
+    for request in [
+        Request::Resize(ResizeRequest {
+            version: 1,
+            source,
+            output: output(),
+        }),
+        Request::Process(ProcessRequest {
+            source,
+            palette: &PALETTE,
+            recipe: recipe(),
+        }),
+    ] {
+        assert!(request.validate().is_ok());
+    }
+}
+
+#[test]
 fn accepts_transparent_only_and_oversize_palettes_for_later_normalization() {
     let transparent = [PaletteEntry::Transparent {}];
     let oversized = [PaletteEntry::Transparent {}; 257];
@@ -180,10 +274,12 @@ fn match_tags_cover_all_coherent_pairs_and_reject_invalid_pairs() {
         "oklab-euclidean",
         "oklch-euclidean",
         "oklch-circular-hue",
+        "oklch-hue-arc",
         "cielab-euclidean",
         "cielab-ciede2000",
         "cielch-euclidean",
         "cielch-circular-hue",
+        "cielch-hue-arc",
         "ycbcr-euclidean",
     ];
     for tag in tags {
@@ -192,6 +288,7 @@ fn match_tags_cover_all_coherent_pairs_and_reject_invalid_pairs() {
     for tag in [
         "oklab-ciede2000",
         "srgb-circular-hue",
+        "srgb-hue-arc",
         "linear-rgb-rec709",
         "cielch-ciede2000",
     ] {

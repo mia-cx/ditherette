@@ -26,7 +26,7 @@ The later JS adapter supplies precise paths for raw JS property-type errors befo
 | Method | Rust request | Result storage | Required reference composition |
 | --- | --- | --- | --- |
 | `process` | `ProcessRequest` | `image::contracts::IndexedImage` | S17 resize then fused dither/quantize |
-| `resize` | `ResizeRequest` | `image::contracts::Rgba8Image` | S11 resize dispatch |
+| `resize` | `ResizeRequest` | `image::contracts::Rgba8Image` | `spec::resize::resize`, complete naive dispatch |
 | `perturb` | `PerturbRequest` | `image::contracts::Rgba8Image` | S07/S08 conversion, S12 placement, S13/S14 field, inverse RGBA8 |
 | `quantize` | `QuantizeRequest` | `image::contracts::IndexedImage` | S09 palette/alpha, S10 matching, S17 result composition |
 | `ditherAndQuantize` | `DitherQuantizeRequest` | `image::contracts::IndexedImage` | S13/S14 perturb then quantize, or S15/S16 feedback/mixing |
@@ -100,7 +100,7 @@ Area integrates pixel footprints and therefore has no anchor.
 `convolution::resize_convolution_into` directly applies the public `ReconstructionKernel` recipe.
 `common/alignment::{map_axis_coordinate, ResizeAnchor::axes}` and `common/coordinates::map_axis_position` define discrete and continuous mapping.
 `common/sample::ResizeSample` owns sample conversion, including rounding.
-S11 audits those helpers, exported kernels, and strided internal images before freeze.
+S11 audits those helpers and exports through the complete request. `../tests/spec_resize_contract.rs` covers anchors, support policies, odd/fractional/anisotropic mips, and padded logical rows. Lanczos kernel fixtures independently check half-angle sine values.
 
 Inherited production resize adapters map to the same complete-image oracle, or the corresponding output rows:
 
@@ -128,21 +128,26 @@ All color buffers use packed f32 triples with separate byte alpha in the complet
 | Gamma sRGB | `srgb-euclidean`, `srgb-compuphase`, `srgb-rec601`, `srgb-rec709` | `srgb::rgba8_to_srgb32_into`; S07 |
 | Linear sRGB | `linear-rgb-euclidean` | `linear::rgba8_to_linear_rgb32_into`; S07 |
 | Oklab | `oklab-euclidean` | `oklab::rgba8_to_oklab32_into`; S08 |
-| OKLCH | `oklch-euclidean`, `oklch-circular-hue` | `oklch::rgba8_to_oklch32_into`; S08 |
+| OKLCH | `oklch-euclidean`, `oklch-circular-hue`, `oklch-hue-arc` | `oklch::rgba8_to_oklch32_into`; S08 |
 | D65 CIELAB | `cielab-euclidean`, `cielab-ciede2000` | `cielab::rgba8_to_cielab32_into`; S08 |
-| CIELCH | `cielch-euclidean`, `cielch-circular-hue` | `cielch::rgba8_to_cielch32_into`; S08 |
+| CIELCH | `cielch-euclidean`, `cielch-circular-hue`, `cielch-hue-arc` | `cielch::rgba8_to_cielch32_into`; S08 |
 | Full-range BT.601 YCbCr | `ycbcr-euclidean` | `ycbcr::rgba8_to_ycbcr32_into`; S07 |
 
 The website's `weighted-rgb`, `weighted-rgb-601`, and `weighted-rgb-709` map to CompuPhase, Rec.601, and Rec.709 sRGB matching.
-Its CIELAB mode uses Euclidean matching; CIEDE2000 is an extra. Its OKLCH mode uses circular hue.
+Its CIELAB mode uses Euclidean matching; CIEDE2000 is an extra. Its OKLCH mode maps to `oklch-hue-arc`.
+The website uses a minimum-chroma weighted shortest arc. The existing `*-circular-hue` tags retain the geometric-mean chroma chord.
 Euclidean LCH compares the existing three coordinates directly. It is distinct from circular hue and is never silently substituted.
 CIEDE2000 accepts CIELAB only. Weighted RGB metrics accept gamma sRGB only.
 
-`spec/quantize/metric` exports `euclidean3_squared`, `circular_hue3_squared`, `weighted_rgb_squared`, and `ciede2000_distance`.
+`spec/quantize/metric` exports `euclidean3_squared`, `circular_hue3_squared`, `hue_arc3_squared`, `weighted_rgb_squared`, and `ciede2000_distance`.
 `spec/color/lab_ciede2000::ciede2000` contains the latter formula.
 `spec/quantize/nearest_color` exports `quantize_euclidean3_into`, `quantize_circular_hue3_into`, `quantize_weighted_rgb_into`, and `quantize_ciede2000_into`.
 The single-color adapters are `nearest_euclidean3_index`, `nearest_circular_hue3_index`, `nearest_weighted_rgb_index`, and `nearest_ciede2000_index`.
-All retain the first palette entry on an exact distance tie. S09/S10 exclude Transparent while retaining original output indices.
+
+S10 adds complete typed `spec::quantize::quantize` composition and `matcher::PaletteMatcher` for all 15 valid pairs.
+`metric::distance_score` selects the exact metric recipe, including both chord and arc hue behavior.
+`color::rgb8_to_coordinates` and `color::coordinates_to_rgb8` dispatch the seven per-space byte conversions.
+The matching adapters retain the first palette entry on an exact distance tie. S09/S10 exclude Transparent while retaining original output indices.
 
 `spec/color/common` exports the component formulas `srgb8_to_unit`, `srgb_unit_to_linear`, `linear_to_srgb_unit`, `srgb8_to_linear`, `linear_srgb_to_xyz`, `xyz_to_cielab`, `cartesian_to_cylindrical`, `srgb8_to_oklab`, `linear_srgb_to_oklab`, and `srgb8_to_cielab`.
 S07/S08 complete inverse formulas, neutral hue, coordinate domains, clipping, and byte reconstruction before freeze.
