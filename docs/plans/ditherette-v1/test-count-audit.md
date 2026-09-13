@@ -17,8 +17,10 @@ It corrects totals, not execution results. The recorded test runs passed; no tes
 | S12 | [95](https://github.com/mia-cx/ditherette/pull/95) | 143 |
 | S13 | [98](https://github.com/mia-cx/ditherette/pull/98) | 168 |
 | S14 | [99](https://github.com/mia-cx/ditherette/pull/99) | 159 |
+| S15 | [101](https://github.com/mia-cx/ditherette/pull/101) | 181 |
+| S16 | [100](https://github.com/mia-cx/ditherette/pull/100) | 179 |
 
 Each total belongs to the original slice's own dependency tree, not the eventual full join or the later collapse heads.
 This table corrects the original handoff prose. Current collapse validation in each slice plan and the maintained stack ledger supersedes these historical totals.
-Keep these original counts as history; do not overwrite later validated counts when S17 joins the documents.
+S17 corrects the original joined handoff documents without rewriting validated implementation histories or later collapse evidence.
 Future validation records derive totals from actual output groups, not sums copied from earlier prose.

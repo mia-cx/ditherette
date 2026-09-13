@@ -22,9 +22,9 @@ The fixed-domain fixture passes for all seven spaces, including cube corners and
 `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_dither_placement` passes all nine focused tests.
 YCbCr chroma bounds include a documented 0.000001 f32 allowance; the approved conversion remains unchanged.
 
-Historical reported validation (the original PR body reports 143 tests; this plan reports 153):
+Original corrected validation is 143 tests. An earlier version of this plan reported 153:
 
-- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 153 native tests.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 143 native tests.
 - `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
 - `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check` and `git diff --check` pass.
 

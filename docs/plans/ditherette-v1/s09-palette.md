@@ -40,7 +40,7 @@ The first run exposed the transparent unit variant's extra-field acceptance; the
 
 Implementation commit `841334cb` passes:
 
-- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: historically reported 134 native tests; superseded by current validation below.
+- `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked`: original corrected count of 124 native tests, zero failures. The earlier 134 report overcounted by ten; current collapse validation is below.
 - `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown`: passes.
 - `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --all -- --check`: passes.
 - `git diff --check`: passes.

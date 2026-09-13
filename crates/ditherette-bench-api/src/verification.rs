@@ -44,6 +44,8 @@ pub struct SemanticIdentity {
     pub operation: Operation,
     pub recipe: String,
     pub version: u32,
+    /// Primary output-coordinate or matching space, not the complete stage recipe.
+    /// The settings digest must also bind every independent perturb/matching space.
     pub space: Option<ColorSpace>,
 }
 

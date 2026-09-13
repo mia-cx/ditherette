@@ -1,5 +1,4 @@
-//! Pre-freeze adapters from concrete request/storage contracts to conformance records.
-//! S17 connects the completed semantic references through this same output model.
+//! Adapters from concrete request/storage contracts to the shared conformance model.
 
 use crate::{
     image::{
@@ -64,11 +63,13 @@ pub fn color_space(space: WorkingSpace) -> ColorSpace {
     }
 }
 
-/// Execute the existing readable resize subject selected by a typed S03 request.
+/// Execute the complete readable resize request, including its validation.
 pub fn reference_resize(
     request: &ResizeRequest<'_>,
 ) -> Result<VerificationOutput, BenchSubjectError> {
-    resize("spec", request)
+    crate::spec::resize::resize(*request)
+        .map(|image| rgba_output(&image))
+        .map_err(|error| BenchSubjectError::new(error.to_string()))
 }
 
 /// Execute the existing production resize subject, or report a missing implementation.
@@ -87,7 +88,7 @@ fn resize(
         .map_err(|error| BenchSubjectError::new(error.to_string()))?;
     let (filter, variant, anchor, support) = match request.output.resize {
         ResizePolicy::Nearest { anchor } => ("nearest", "scalar", Some(anchor), None),
-        ResizePolicy::Area => ("area", "scalar", None, None),
+        ResizePolicy::Area {} => ("area", "scalar", None, None),
         ResizePolicy::Bilinear { anchor } => ("bilinear", "scalar", Some(anchor), None),
         ResizePolicy::Bicubic { anchor, support } => (
             "bicubic",

@@ -1,6 +1,7 @@
 # Version-one contract and oracle inventory
 
-This is the S03 inventory at anchor `a213effed4b426c5c432c9ccc7062b7016dd5c1b`.
+This inventory includes the complete S07 through S17 references, compositions, and control models.
+Its integration base is `4f4b48a04c0ccee51222b7e621ff4a566a495613`.
 Paths below are relative to `crates/ditherette-wasm/src/` unless they start with `src/lib/`.
 The inventory records inherited kernels and the references required before the S18 freeze.
 An existing kernel is not evidence that a complete public operation already works.
@@ -20,18 +21,21 @@ The old process-contract prototype's rejection of palettes above 256 entries is 
 The source remains borrowed and immutable. Successful results own separate storage through `image::ImageBuf`.
 The JS boundary must validate raw property types and copy returned storage into durable JS-owned arrays.
 Rust enum tags reject malformed palette forms and incoherent color/metric combinations.
-`decode_recipe` rejects malformed recipe structure at `recipe`; `parse_match` gives a precise caller-supplied match path.
-The later JS adapter supplies precise paths for raw JS property-type errors before constructing these typed requests.
+`decode_recipe` rejects unsupported typed tags and unknown fields at `recipe`; `parse_match` gives a caller-supplied match path.
+Serde also accepts alternate map/sequence representations for enums. The package boundary rejects those raw JS property types before decoding.
+Settings records must be objects, and scalar enum tags must be strings. The JS adapter supplies precise property-error paths.
 
 | Method | Rust request | Result storage | Required reference composition |
 | --- | --- | --- | --- |
-| `process` | `ProcessRequest` | `image::contracts::IndexedImage` | S17 resize then fused dither/quantize |
+| `process` | `ProcessRequest` | `image::contracts::IndexedImage` | `pipeline::process`; resize then dither/quantize |
 | `resize` | `ResizeRequest` | `image::contracts::Rgba8Image` | `spec::resize::resize`, complete naive dispatch |
-| `perturb` | `PerturbRequest` | `image::contracts::Rgba8Image` | S07/S08 conversion, S12 placement, S13/S14 field, inverse RGBA8 |
-| `quantize` | `QuantizeRequest` | `image::contracts::IndexedImage` | S09 palette/alpha, S10 matching, S17 result composition |
-| `ditherAndQuantize` | `DitherQuantizeRequest` | `image::contracts::IndexedImage` | S13/S14 perturb then quantize, or S15/S16 feedback/mixing |
+| `perturb` | `PerturbRequest` | `image::contracts::Rgba8Image` | `pipeline::perturb`; validated `dither::perturb::perturb` composition |
+| `quantize` | `QuantizeRequest` | `image::contracts::IndexedImage` | `quantize::quantize`, `palette::PreparedPalette`, `quantize::matcher::PaletteMatcher` |
+| `ditherAndQuantize` | `DitherQuantizeRequest` | `image::contracts::IndexedImage` | `pipeline::dither_and_quantize`; none, separable, diffusion, or Yliluoma |
 
 The Rust fused request nests `QuantizeRequest` to reuse the shared fields. This is an internal representation, not a nested JS requirement.
+The pipeline references and executable processor are integrated with these adapters.
+Read `spec/pipeline/README.md` for stage and callback composition.
 Every processing call may receive an optional `onProgress` callback at execution time.
 `InstanceModel::begin(progress_enabled)` models its presence. Callbacks, thread policy, cache keys, and frontend identifiers are absent from recipes.
 There is no public stage graph, crop operation, or palette generator.
@@ -150,7 +154,16 @@ S10 adds complete typed `spec::quantize::quantize` composition and `matcher::Pal
 The matching adapters retain the first palette entry on an exact distance tie. S09/S10 exclude Transparent while retaining original output indices.
 
 `spec/color/common` exports the component formulas `srgb8_to_unit`, `srgb_unit_to_linear`, `linear_to_srgb_unit`, `srgb8_to_linear`, `linear_srgb_to_xyz`, `xyz_to_cielab`, `cartesian_to_cylindrical`, `srgb8_to_oklab`, `linear_srgb_to_oklab`, and `srgb8_to_cielab`.
-S07/S08 complete inverse formulas, neutral hue, coordinate domains, clipping, and byte reconstruction before freeze.
+S07/S08 complete inverse formulas, neutral hue, coordinate domains, clipping, and byte reconstruction.
+Their per-pixel exports are `rgb8_to_<space>([u8; 3]) -> [f32; 3]` and `<space>_to_rgb8([f32; 3]) -> [u8; 3]`.
+Each image inverse reads separate RGBA8 alpha and copies those bytes unchanged.
+Public OKLCH/CIELCH forward conversion gives exact byte grays zero chroma and hue.
+
+`color::coordinates_to_rgb8` dispatches those f32 inverse recipes.
+`color::reconstruct::{coordinates_to_rgb8, coordinates_to_srgb}` instead accepts f64 scalar coordinates for perturbation.
+It keeps legal finite strengths from overflowing intermediate inverse formulas, without allocating f64 image planes.
+Source triples remain f32. The wide inverse and ordinary f32 inverse can differ at byte-rounding boundaries.
+Their roles stay explicit; dispatch consolidation must not replace the wide field inverse with f32 arithmetic.
 
 ## Dither, placement, and feedback
 
@@ -167,7 +180,17 @@ S07/S08 complete inverse formulas, neutral hue, coordinate domains, clipping, an
 
 `spec/dither/common` exports `assert_dither_inputs`, `read_color`, `add_scaled_noise`, `add_error`, `sub_color`, `nearest_euclidean`, `squared_distance`, and `write_index`.
 These compose the named formulas above. They are semantic helpers and belong to the frozen content audit.
-`Mulberry32::{new, next_u32, next_f32}` currently describes a sequential generator. S13 must fix global pixel identity before freeze.
+`Mulberry32::{new, next_u32, next_f32}` remains the inherited sequential generator for generic indexed kernels.
+`random_noise::{random_u32_at, random_noise_at}` supplies the palette-free field from seed and global pixel index.
+Each pixel owns one draw, including transparent and zero-strength pixels, without mutable draw state.
+The field's f64 centering precedes f32 conversion; legacy `next_f32` rounds before centering in its callers.
+These are distinct reference exports, not interchangeable implementations of one recipe.
+
+`placement::{coordinate_domain, placement_distance, contrast_at, placement_mask_at}` supplies fixed-domain adaptive placement.
+The domain depends only on `WorkingSpace`. Cylindrical placement uses minimum chroma times wrapped angle, not circular-chord matching.
+`perturb::{perturb_into, perturb_rows_into, perturb_by_field_rows_into}` preserves global rows and the RGBA8 reconstruction boundary.
+The field scale is one quarter of the fixed coordinate range. The output preserves alpha bytes and processes hidden RGB.
+`blue_noise::blue_noise_at` reads the generated 32x32 tile. Its generator, asset, and analysis artifact belong to the freeze.
 
 Separable `DitherPolicy` contains its own `WorkingSpace`, independently of matching.
 Weighted RGB matches use sRGB perturbation. `perturb` accepts no palette or diffusion/mixing modes.
@@ -192,35 +215,52 @@ The reference completion must preserve this distinction while making placement p
 
 Diffusion scan reversal is explicit. Transparent preserved pixels drop incoming error and emit none.
 The spec may use full-image scratch. Production uses bounded three-row error scratch and remains scalar.
-Yliluoma interpolates coordinates componentwise, including hue. S16 applies adaptive placement to its target before pair selection.
+Yliluoma interpolates coordinates componentwise, including hue, and adapts its target before pair selection.
+Pairs, ratios, and first ties retain inherited enumeration even at zero placement.
+For palette `[black, gray128, gray64]` and source `gray64`, zero placement with Bayer2 yields indices `[1,0,0,1]`.
+The earlier half-mixture ties the nearest entry. Zero placement therefore does not promise flat nearest output.
 
 ## Executable adapters and control
 
 | Existing adapter/export | Named reference or completion obligation |
 | --- | --- |
-| `wasm::hello` | Literal greeting sanity export; remove from public npm exports in S30 |
-| `wasm::convert_color_space` | Selected forward color oracle plus allocation/copy composition; inherited f32x4 output needs S24's packed-triple correction |
-| `wasm::resize_rgba8` | Matching resize oracle, settings validation, allocation, output ownership |
-| `wasm::process_rgba8` | Currently resize-only; S17 complete process composition, then S30 production boundary |
-| `wasm::benchmark_color_space` | Same color operation plus calibration/timing/checksum; not a public package method |
-| `wasm::benchmark_resize_rgba8` | Same resize operation plus calibration/timing/checksum; not a public package method |
-| `wasm_bindgen_rayon::init_thread_pool` | `lifecycle::initialize` selection; S17/S34 pool lifecycle model/implementation |
-| `bench_subjects::bench_subjects` | Every descriptor selects its named spec oracle; S05 extends beyond resize |
-| `prod/color::rgba8_to_color_space_f32`, `_into`, `_with_policy_into`, `_rows_into`, `_parallel_with_band_height_into` | Forward conversion oracle; complete output or selected global rows; S17 execution composition |
-| `prod/color::{ColorSpaceF32::parse, ColorTilingPolicy::for_request}` | Typed space selection and scalar-equivalent row partition; thread count cannot alter semantics |
-| `prod/tiling::{RowBand, RowBandPlan}` | `spec/tiling/contract::{RowBand, RowBandPlan}` covers each output row exactly once |
-| `prod/tiling::{Tile, TileGrid, WorkerBudget, RowBandWorkPlan, RowBandWorkAssignment}` | S17 reference partition/work-assignment model; coordinates and bounds derive from complete output |
-| `prod/tiling/executor::{for_each_row_band, for_each_tile}` | S17 sequential application of each disjoint output partition; compare with whole-image oracle |
+| `wasm::hello` | `adapters::legacy_hello`; remove from public npm exports in S30 |
+| `wasm::convert_color_space` | `adapters::{legacy_convert_color_space, legacy_color_space, legacy_color_rows_into}`; legacy f32x4, normalized alpha |
+| `wasm::resize_rgba8` | `adapters::{legacy_resize_rgba8, LegacyResize}`; legacy parsing, allocation, and direct resize references |
+| `wasm::process_rgba8` | `adapters::legacy_process_rgba8`; resize-only app-JSON shell, distinct from the version-one indexed process |
+| `wasm::benchmark_color_space` | `legacy_color_rows_into`, `diagnostic_color_copy_into`, or `diagnostic_noop`; timing remains bookkeeping |
+| `wasm::benchmark_resize_rgba8` | `LegacyResize`, `diagnostic_resize_copy_into`, or `diagnostic_noop`; timing remains bookkeeping |
+| `wasm_bindgen_rayon::init_thread_pool` | `lifecycle::initialize` and `thread_pool::ThreadPoolModel`; per-instance selection, partial cleanup, fallback, ownership, disposal, and host teardown |
+| `bench_subjects::bench_subjects` | Five callable typed processing references and seven packed-f32 color/inverse references, plus the inherited resize subjects |
+| `prod/color::rgba8_to_color_space_f32`, `_into`, `_with_policy_into`, `_rows_into`, `_parallel_with_band_height_into` | `adapters::legacy_color_rows_into`; whole output or selected global rows in f32x4 |
+| `prod/color::{ColorSpaceF32::parse, ColorTilingPolicy::for_request}` | `adapters::legacy_color_space` and the same global-row composition; empirical policy does not change reference pixels |
+| `prod/tiling::{RowBand, RowBandPlan}` | `spec/tiling/contract::{RowBand, RowBandPlan}`, including `for_output_height` |
+| `prod/tiling::{Tile, TileGrid, WorkerBudget, RowBandWorkPlan, RowBandWorkAssignment}` | Same-named `spec/tiling/execution` models; early workers receive remainder bands |
+| `prod/tiling/executor::{for_each_row_band, for_each_tile}` | Same-named sequential spec visitors preserve order and return the first callback error |
 
 Production color names in the table share the `rgba8_to_color_space_f32` prefix.
 `wasm.rs` also has private scalar, pooled-direct, pooled-copy, and pooled-noop adapters, row dispatch, filter/support/anchor parsers, and plan scopes.
-The scalar/direct adapters compose the corresponding complete-image or row oracle.
-Pooled copy preserves input storage and pooled noop preserves initialized output. Neither is an image-processing mode.
-S17 gives these executable compositions named references before S18 audits the exported and indirect semantic dependencies.
+`LegacyResize::resize_rows_into` computes the complete naive image and copies the requested global rows to a local band buffer.
+`LegacyResize::pooled_direct_into` visits those bands sequentially. Full-image and per-band prepared plans share those reference pixels.
+It retains the inherited pooled-direct filter restriction to nearest, bicubic, and Lanczos2/3.
+`LegacyResize::parse` preserves diagnostic support-string aliases and validation order.
+
+The legacy color reference retains raw Cartesian-to-cylindrical arithmetic, rather than public neutral canonicalization.
+RGB8 `[8,8,8]` has legacy CIELCH chroma about `8.024521e-6` and hue about `2.7610862` radians.
+The public forward recipe gives that gray zero chroma and hue. Legacy storage has a fourth normalized alpha channel.
+
+`diagnostic_color_copy_into` casts raw RGBA bytes to f32 without normalization.
+`diagnostic_resize_copy_into` repeats raw source storage, including padding, using `(global_y * band_byte_len) % source_len`.
+The shortened final band changes that offset. The inherited usize expression retains target/build overflow behavior.
+`diagnostic_noop` preserves initialized output, including floating-point payload bits.
+These diagnostics are not processing recipes and need not be invariant under band-size changes.
 Calibration, clocks, sample aggregation, and checksums remain benchmark bookkeeping; their correctness does not establish processing conformance.
 
-The current subject registry includes spec/prod nearest, area, bilinear, bicubic fixed/scale-aware, Lanczos2 fixed/scale-aware, and Lanczos3 fixed/scale-aware.
-It also includes spec-only trilinear. This is 19 subjects, all mapped to the resize table above.
+The inherited subject registry includes spec/prod nearest, area, bilinear, bicubic fixed/scale-aware, Lanczos2 fixed/scale-aware, and Lanczos3 fixed/scale-aware.
+It also includes spec-only trilinear. These 19 inherited subjects map to the resize table above.
+The complete registry adds 12 callable conformance subjects for the five methods and seven color/inverse pairs.
+`bench_subjects/reference.rs` maps each typed request to this inventory and preserves every relevant setting in verification identity.
+Color records retain packed coordinates, byte alpha, and actual inverse-rendered RGBA8.
 Thread counts, row-band sizes, pooled modes, plan scopes, and batch sizes are execution parameters, never new semantic recipe tags.
 
 `lifecycle.rs` is the readable S03 reference for initialization fallback, memory preflight, isolated instance state, disposal, and callback/publication ordering.
@@ -230,11 +270,29 @@ Callback reentry and disposal fail without disrupting the active operation. Thro
 Disposal releases instance-owned allocations; Wasm pages may remain at their high-water mark until module collection.
 The host owns worker termination and stale-result rejection. Cancellation is not a hidden asynchronous package method.
 
-## Remaining pre-freeze work
+## Completed control references and freeze boundary
 
-S07/S08 define inverse reconstruction and coordinate domains. S09/S10 complete palette/alpha/metric compositions.
-S11 completes resize edges and the export audit. S12 defines fixed placement ranges and preserves metric/feedback distinctions.
-S13 fixes random identity. S14 replaces the transposed-Bayer blue-noise table with its documented generator and accepted asset.
-S15/S16 complete feedback and adaptive mixing. S17 connects all methods and finishes executable adapter/control references.
+The five-method `pipeline` references and `pipeline::processor::Processor` are joined with these adapters.
+The processor's focused fixtures cover composition equalities, reentry, disposal, callback failures, and runtime-error recovery.
+Joined fixtures retain palette order, transparency, ordered warnings, and the exact 50 ms progress boundary.
+
+`contract/cache.rs` implements normalized stage identity and digest, private capacity accounting, scratch-first eviction, and LRU retention.
+`request_identity_plan` gives the canonical five-method composition, including logical Alpha and Color stages.
+Operation keys and intermediate content identities remain distinct so composed and standalone methods can share actual outputs.
+Color content identities include separate alpha, including when RGB triples match but alpha differs.
+Pending cache entries publish atomically only after successful completion callbacks; failed calls publish none.
+Executable model fixtures cover allocation failure, disposal, and both retained-capacity limits.
+`InitOptions::preflight` accepts a supplied byte count; it does not prove that an operation counted every allocation.
+Production slices must demonstrate concrete allocation accounting against the frozen capacity/ownership model as their implementations change.
+
+`contract/thread_pool.rs` models per-instance worker and shared-memory ownership.
+Preferred initialization releases partial threaded ownership before scalar fallback. Required initialization preserves capability/init errors.
+Disposal and distinct host termination release the pool once; scalar selection owns no workers or shared memory.
+These are readable ownership transitions, not claims that native tests started browser workers.
+
+The final reference subjects now use S05's verifier and actual inverse-rendered color output.
+Settings identity distinguishes perturb and matching spaces, feedback modes, palette order, and complete recipe settings.
+Reference records remain pre-freeze; missing accepted/candidate implementations remain explicit.
 S18 freezes that complete reference, including this mode inventory and semantic shared-storage dependencies.
-These are assigned implementation obligations. They do not authorize production to call spec as its implementation.
+Physical allocation, browser loading, and production execution remain later implementation obligations.
+Their frozen reference is the named composition or ownership model above. Production cannot call spec as its implementation.

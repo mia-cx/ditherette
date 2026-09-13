@@ -16,7 +16,7 @@ S07 originally proceeded independently in its own modules. The restack includes 
 No production code or benchmark measurements belong to this slice.
 
 `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --test spec_color_perceptual --test spec_color_spaces` passes 16 focused tests.
-`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet` originally reported 134 native tests; the verified current count is below.
+`cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked --quiet` originally passes 124 native tests and zero doctests. The earlier 134 report overcounted by ten; current collapse validation is below.
 `cargo check --manifest-path crates/ditherette-wasm/Cargo.toml --locked --target wasm32-unknown-unknown` passes.
 `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml --check` and `git diff --check` pass.
 

@@ -73,10 +73,10 @@ fn fixed_srgb_rgba8_composition_rounds_channels_and_preserves_hidden_rgb_alpha()
     let perturbed = perturb(
         ImageView::packed(source.as_flattened(), ImageDimensions::new(4, 1).unwrap()).unwrap(),
         PerturbPolicy {
-            field: Field::BlueNoise,
+            field: Field::BlueNoise {},
             space: WorkingSpace::Srgb,
             strength: 1.0,
-            placement: Placement::Everywhere,
+            placement: Placement::Everywhere {},
         },
     )
     .unwrap();

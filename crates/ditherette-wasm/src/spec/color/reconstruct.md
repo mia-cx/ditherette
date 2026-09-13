@@ -4,7 +4,9 @@
 Source forward conversions and any stored working-color images remain packed f32 triples. There are no f64 image planes.
 The existing decimal matrix coefficients, D65 white, transfer curves, and negative-chroma neutral convention stay the same.
 Hue reduction uses f64 TAU here because the field offset and inverse arithmetic are f64.
-The original f32 inverse exports remain unchanged until the complete reference join reconciles shared helpers before S18.
+The complete reference keeps two named inverse recipes. `color::coordinates_to_rgb8` preserves the original f32 inverse exports.
+This module owns wide scalar field reconstruction, which supports every legal finite field strength without an f32 inverse overflow.
+Both use the same color equations but different arithmetic widths. They are not interchangeable byte oracles.
 
 The equations and primary-source provenance are in [Oklab](oklab.md), [CIELAB](cielab.md), [linear sRGB](linear.md), and [YCbCr](ycbcr.md).
 This module changes arithmetic width, not the color model. Roundoff need not match the original f32 inverse exports bit for bit.

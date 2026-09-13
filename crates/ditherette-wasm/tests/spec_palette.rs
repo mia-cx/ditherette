@@ -129,7 +129,7 @@ fn transparent_only_short_circuits_every_alpha_mode_and_preserves_warning_order(
     let entries = vec![PaletteEntry::Transparent {}; 257];
     for alpha in [
         PRESERVE,
-        AlphaPolicy::Premultiplied,
+        AlphaPolicy::Premultiplied {},
         AlphaPolicy::Matte {
             rgb: [255, 255, 255],
         },
@@ -174,7 +174,7 @@ fn darkest_fallback_uses_rgb_sum_and_keeps_first_exact_tie() {
         PalettePixel::Color([12, 34, 56])
     );
     for alpha in [
-        AlphaPolicy::Premultiplied,
+        AlphaPolicy::Premultiplied {},
         AlphaPolicy::Matte {
             rgb: [255, 255, 255],
         },
@@ -222,7 +222,7 @@ fn premultiplication_rounds_to_bytes_before_color_matching() {
         PaletteEntry::Color { rgb: [0, 0, 0] },
         PaletteEntry::Transparent {},
     ];
-    let prepared = prepare(&entries, AlphaPolicy::Premultiplied);
+    let prepared = prepare(&entries, AlphaPolicy::Premultiplied {});
     assert_eq!(
         prepared.prepare_pixel([200, 100, 50, 128]),
         PalettePixel::Color([100, 50, 25])

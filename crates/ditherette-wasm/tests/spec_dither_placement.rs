@@ -136,7 +136,7 @@ fn uniform_images_include_the_zero_threshold_boundary_in_every_space() {
                 0.0
             );
             assert_eq!(
-                placement_mask_at(source, 0, 0, space, Placement::Everywhere),
+                placement_mask_at(source, 0, 0, space, Placement::Everywhere {}),
                 1.0
             );
         }

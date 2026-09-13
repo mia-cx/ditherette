@@ -1,6 +1,10 @@
-//! Spec tiling contracts.
-//!
-//! This module documents and validates the generic output-domain tiling contract.
-//! It does not contain domain adapters and is not imported by operation specs.
+//! Readable output partitions, worker assignments, and sequential execution.
 
 pub mod contract;
+pub mod execution;
+
+pub use contract::{RowBand, RowBandPlan};
+pub use execution::{
+    for_each_row_band, for_each_tile, RowBandWorkAssignment, RowBandWorkPlan, Tile, TileGrid,
+    WorkerBudget, MAX_WORKER_BUDGET,
+};

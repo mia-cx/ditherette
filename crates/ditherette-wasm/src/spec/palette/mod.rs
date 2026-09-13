@@ -118,7 +118,7 @@ impl PreparedPalette {
                 }
                 [r, g, b]
             }
-            AlphaPolicy::Premultiplied => {
+            AlphaPolicy::Premultiplied {} => {
                 [r, g, b].map(|channel| (f64::from(channel) * opacity).round() as u8)
             }
             AlphaPolicy::Matte { rgb: matte } => {
