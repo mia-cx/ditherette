@@ -50,7 +50,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S09](#s09) | Specify supplied palettes, alpha handling, and warnings | [S03](#s03) | Merged 707b9abf; 148 native tests pass; exact-head approval with no findings | [#94](https://github.com/mia-cx/ditherette/pull/94) |
 | [S10](#s10) | Specify direct quantization for every valid metric | [S07](#s07), [S08](#s08), [S09](#s09) | Merged 8547e29e; 162 native tests pass; exact-head approval with no findings | [#97](https://github.com/mia-cx/ditherette/pull/97) |
 | [S11](#s11) | Audit and complete the reference resize family | [S03](#s03) | Merged 0e200d36; 174 native tests pass; two threads resolved; exact doc amendment recorded | [#93](https://github.com/mia-cx/ditherette/pull/93) |
-| [S12](#s12) | Specify palette-independent adaptive placement | [S07](#s07), [S08](#s08) | Ready | [#95](https://github.com/mia-cx/ditherette/pull/95) |
+| [S12](#s12) | Specify palette-independent adaptive placement | [S07](#s07), [S08](#s08) | Merged 0494186d; 183 native tests pass; exact-head approval with no findings | [#95](https://github.com/mia-cx/ditherette/pull/95) |
 | [S13](#s13) | Specify palette-free Bayer and random perturbation | [S12](#s12), [S09](#s09) | Ready | [#98](https://github.com/mia-cx/ditherette/pull/98) |
 | [S14](#s14) | Repair the blue-noise reference before freezing | [S12](#s12), [S09](#s09) | Ready | [#99](https://github.com/mia-cx/ditherette/pull/99) |
 | [S15](#s15) | Specify all four error-diffusion recipes | [S10](#s10), [S12](#s12) | Ready | [#101](https://github.com/mia-cx/ditherette/pull/101) |
