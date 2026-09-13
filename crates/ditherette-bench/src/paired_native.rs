@@ -1,0 +1,364 @@
+//! Native protocol adapter. Reuses the existing measurement loop and registry.
+
+use crate::{
+    case::ResizeScale,
+    cli::Flags,
+    error::BenchError,
+    fixture::Fixture,
+    measure::{
+        measure_resize_case, run_resize_once, MeasurementConfig, MeasurementObserver,
+        MeasurementProgress,
+    },
+    registry::Registry,
+};
+use ditherette_bench::{
+    paired::{
+        coordinator::{live_benchmarks, validate_experiment},
+        *,
+    },
+    verification::{content_digest, settings_digest, verify_with_bounds, VerificationBounds},
+};
+use ditherette_bench_api::{verification::*, ResizeParams, SubjectId};
+use std::{
+    fs,
+    time::{Duration, Instant},
+};
+
+pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError> {
+    let [path] = args else {
+        return Err(BenchError::Config(
+            "paired-trial requires one prepared request path".into(),
+        ));
+    };
+    let request: TrialRequest = serde_json::from_slice(&fs::read(path).map_err(BenchError::io)?)
+        .map_err(|error| BenchError::Config(error.to_string()))?;
+    let build = BuildIdentity {
+        revision: env!("DITHERETTE_BENCH_REVISION").into(),
+        dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
+        rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
+        tool_version: env!("CARGO_PKG_VERSION").into(),
+        configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
+        recorded: env!("DITHERETTE_BENCH_RECORDED_BUILD") == "true",
+    };
+    if !build.recorded {
+        return Err(BenchError::Config(
+            "paired trials require a fresh compiler-recorded build; use scripts/build-paired-benchmarks.mjs"
+                .into(),
+        ));
+    }
+    if build.dirty
+        || build.revision != request.executable.revision
+        || content_digest(
+            &fs::read(std::env::current_exe().map_err(BenchError::io)?).map_err(BenchError::io)?,
+        ) != request.executable.content
+    {
+        return Err(BenchError::Config("paired artifact differs from its embedded clean source revision or complete executable digest".into()));
+    }
+    validate_native(&request.case)?;
+    let case = &request.case;
+    let subject_id = match request.role {
+        Role::Accepted => &case.accepted_subject,
+        Role::Candidate => &case.candidate_subject,
+    };
+    let reference = registry.resize_subject(&case.reference_subject)?;
+    let subject = registry.resize_subject(subject_id)?;
+    let fixture = Fixture {
+        id: case.name.clone(),
+        kind: "paired-rgba8".into(),
+        fingerprint: format!("{:02x?}", case.identity.input.0),
+        width: case.source.width,
+        height: case.source.height,
+        rgba: case.rgba.clone(),
+    };
+    let output = (case.identity.output.width, case.identity.output.height);
+    let params = ResizeParams::default();
+    let reference_rgba = run_resize_once(&reference, &fixture, output, &params)?;
+    let subject_rgba = run_resize_once(&subject, &fixture, output, &params)?;
+    let proof = verify_with_bounds(&reference_rgba, &subject_rgba, VerificationBounds::exact());
+    let config = config(&case.measurement)?;
+    let mut observer = Observer {
+        warmup_iterations: 0,
+        started: Instant::now(),
+        warmup_elapsed_ns: 0,
+        max_live: live_benchmarks().map_err(BenchError::io)?,
+        observation_error: None,
+        output: subject_rgba,
+    };
+    let measured = measure_resize_case(
+        &subject,
+        &fixture,
+        output,
+        ResizeScale {
+            x: f64::from(output.0) / f64::from(fixture.width),
+            y: f64::from(output.1) / f64::from(fixture.height),
+        },
+        &params,
+        &config,
+        Some(proof),
+        &mut observer,
+    )?;
+    if let Some(error) = observer.observation_error {
+        return Err(BenchError::io(error));
+    }
+    let record = |subject: String, rgba: Vec<u8>| RecordedOutput {
+        case: case.identity.clone(),
+        implementation: ImplementationIdentity {
+            subject,
+            artifact: request.executable.clone(),
+        },
+        output: VerificationOutput {
+            dimensions: case.identity.output,
+            pixels: Pixels::Rgba8 { data: rgba },
+            warnings: Vec::new(),
+        },
+    };
+    let result = TrialResult {
+        role: request.role,
+        pair: request.pair,
+        case_name: case.name.clone(),
+        build,
+        measurement: case.measurement.clone(),
+        warmup_iterations: observer.warmup_iterations,
+        warmup_elapsed_ns: observer.warmup_elapsed_ns,
+        sample_ns: measured.sample_ns,
+        iterations_per_sample: measured.iterations_per_sample,
+        reference: record(case.reference_subject.clone(), reference_rgba),
+        output: record(subject_id.clone(), observer.output),
+        pid: std::process::id(),
+        max_live_benchmark_processes: observer.max_live,
+    };
+    println!(
+        "{}",
+        serde_json::to_string(&result).map_err(|error| BenchError::Runtime(error.to_string()))?
+    );
+    Ok(())
+}
+
+fn validate_native(case: &PairCase) -> Result<(), BenchError> {
+    validate_experiment(&Experiment {
+        label: "native request".into(),
+        reference_state: ReferenceState::PreFreeze,
+        pairs: 2,
+        host_load_notes: "coordinator request".into(),
+        cases: vec![case.clone()],
+    })
+    .map_err(BenchError::io)?;
+    let m = &case.measurement;
+    if m.scope != CallScope::NativeKernel || m.application_cache != ApplicationCache::NotApplicable
+    {
+        return Err(BenchError::Config("native resize has no application cache and cannot claim complete-call or initialization measurements".into()));
+    }
+    let ids = [
+        &case.reference_subject,
+        &case.accepted_subject,
+        &case.candidate_subject,
+    ]
+    .map(|subject| SubjectId::parse(subject.as_str()));
+    let ids = ids
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| BenchError::Config(error.to_string()))?;
+    if ids
+        .iter()
+        .any(|id| id.domain() != "resize" || id.filter() != ids[0].filter())
+        || case.identity.semantics.operation != Operation::Resize
+        || case.identity.semantics.version != 1
+        || case.identity.semantics.space.is_some()
+        || case.identity.semantics.recipe != format!("{}-center-default", ids[0].filter())
+        || case.identity.settings
+            != settings_digest(&(
+                case.identity.semantics.clone(),
+                case.identity.output,
+                "center-default",
+            ))
+            .map_err(|error| BenchError::Config(error.to_string()))?
+    {
+        return Err(BenchError::Config(
+            "native subjects or normalized center/default recipe identity differ".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn config(measurement: &Measurement) -> Result<MeasurementConfig, BenchError> {
+    let args = vec![
+        "--sample-size".into(),
+        measurement.samples.to_string(),
+        "--measurement-time-ms".into(),
+        measurement.measurement_ms.to_string(),
+        "--warm-up-time".into(),
+        format!("{}ms", measurement.warmup_ms),
+        "--target-sample-time".into(),
+        measurement.target_sample_ms.to_string(),
+        "--sample-mode".into(),
+        match measurement.mode {
+            SampleMode::SingleCall => "interactive",
+            SampleMode::Throughput => "throughput",
+        }
+        .into(),
+    ];
+    MeasurementConfig::from_flags(&Flags::parse(&args)?)
+}
+
+struct Observer {
+    warmup_iterations: usize,
+    started: Instant,
+    warmup_elapsed_ns: u128,
+    max_live: usize,
+    observation_error: Option<std::io::Error>,
+    output: Vec<u8>,
+}
+impl MeasurementObserver for Observer {
+    fn warmup_batch(&mut self, batch_size: usize, _: Duration) {
+        self.warmup_iterations += batch_size;
+    }
+    fn measured_output(&mut self, rgba: &[u8]) {
+        self.output.copy_from_slice(rgba);
+    }
+    fn measurement_progress(
+        &mut self,
+        progress: MeasurementProgress,
+        _: &[f64],
+        _: (u32, u32),
+    ) -> bool {
+        if progress.samples_done == 0 {
+            self.warmup_elapsed_ns = self.started.elapsed().as_nanos();
+        }
+        // Process observation stays at measurement boundaries, outside samples.
+        if progress.samples_done != 0
+            && progress.samples_done < progress.sample_size
+            && progress.elapsed < progress.measurement_time
+        {
+            return false;
+        }
+        match live_benchmarks() {
+            Ok(count) => self.max_live = self.max_live.max(count),
+            Err(error) => self.observation_error = Some(error),
+        }
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_adapter_rejects_claims_it_cannot_measure_without_timing() {
+        let source = Dimensions {
+            width: 1,
+            height: 1,
+        };
+        let semantics = SemanticIdentity {
+            operation: Operation::Resize,
+            recipe: "nearest-center-default".into(),
+            version: 1,
+            space: None,
+        };
+        let mut case = PairCase {
+            name: "fixture".into(),
+            source,
+            rgba: vec![1, 2, 3, 255],
+            identity: CaseIdentity {
+                input: ditherette_bench::verification::input_digest(source, &[1, 2, 3, 255]),
+                settings: settings_digest(&(semantics.clone(), source, "center-default")).unwrap(),
+                semantics,
+                output: source,
+            },
+            reference_subject: "spec:resize:nearest:scalar".into(),
+            accepted_subject: "spec:resize:nearest:scalar".into(),
+            candidate_subject: "prod:resize:nearest:scalar".into(),
+            measurement: Measurement {
+                mode: SampleMode::SingleCall,
+                scope: CallScope::NativeKernel,
+                application_cache: ApplicationCache::NotApplicable,
+                samples: 5,
+                measurement_ms: 20,
+                warmup_ms: 1,
+                target_sample_ms: 1,
+            },
+        };
+        validate_native(&case).unwrap();
+        assert_eq!(
+            config(&case.measurement).unwrap().sample_mode().as_str(),
+            "interactive"
+        );
+        case.measurement.mode = SampleMode::Throughput;
+        assert_eq!(
+            config(&case.measurement).unwrap().sample_mode().as_str(),
+            "throughput"
+        );
+        case.measurement.application_cache = ApplicationCache::Cold;
+        assert!(validate_native(&case).is_err());
+        case.measurement.application_cache = ApplicationCache::NotApplicable;
+        case.identity.settings = content_digest(b"wrong settings");
+        assert!(validate_native(&case).is_err());
+    }
+
+    #[test]
+    fn paired_evidence_retains_the_measured_buffer_after_probe_drift() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        let oracle = Registry::load()
+            .resize_subject("spec:resize:nearest:scalar")
+            .unwrap();
+        let mut changing = oracle.clone();
+        changing.resize_u8_rgba = |input, output, _| {
+            output.data.copy_from_slice(input.data);
+            if CALLS.fetch_add(1, Ordering::SeqCst) != 0 {
+                output.data[0] ^= 1;
+            }
+            Ok(())
+        };
+        let fixture = Fixture {
+            id: "paired-changing-output".into(),
+            kind: "test".into(),
+            fingerprint: "paired-changing-output".into(),
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 255],
+        };
+        let config = MeasurementConfig::browser_wasm(
+            1,
+            Duration::from_nanos(1),
+            Some(0),
+            Duration::ZERO,
+            Duration::from_nanos(1),
+            false,
+        );
+        for (subject, expected) in [
+            (changing, vec![0, 2, 3, 255]),
+            (oracle, fixture.rgba.clone()),
+        ] {
+            CALLS.store(0, Ordering::SeqCst);
+            let checked =
+                run_resize_once(&subject, &fixture, (1, 1), &ResizeParams::default()).unwrap();
+            let proof = verify_with_bounds(&fixture.rgba, &checked, VerificationBounds::exact());
+            assert!(proof.is_exact());
+            let mut observer = Observer {
+                warmup_iterations: 0,
+                started: Instant::now(),
+                warmup_elapsed_ns: 0,
+                max_live: 0,
+                observation_error: None,
+                output: checked,
+            };
+            let measured = measure_resize_case(
+                &subject,
+                &fixture,
+                (1, 1),
+                ResizeScale::uniform(1.0),
+                &ResizeParams::default(),
+                &config,
+                Some(proof),
+                &mut observer,
+            )
+            .unwrap();
+            assert_eq!(measured.output_digest, Some(content_digest(&expected)));
+            assert_eq!(
+                observer.output, expected,
+                "paired evidence must retain measured bytes, not the earlier probe"
+            );
+        }
+    }
+}
