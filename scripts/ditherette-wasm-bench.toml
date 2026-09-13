@@ -115,11 +115,6 @@ oracle = "spec:resize:lanczos3:scale-aware"
 correctness = "bounded"
 
 
-[profiles.trilinear]
-command = "perf"
-domain = "resize"
-subjects = ["spec:resize:trilinear:mip-area"]
-
 [profiles.tiling-sweep]
 command = "tiling-sweep"
 fixtures = ["Celeste_Insta_selfie", "Celeste_box_art"]

@@ -3,7 +3,7 @@ use std::{hint::black_box, time::Duration};
 use criterion::{
     criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode, Throughput,
 };
-use ditherette_wasm::{
+use ditherette_wasm_old::{
     image::ImageDimensions,
     resize::{
         area::{
