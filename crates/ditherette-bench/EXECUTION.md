@@ -32,6 +32,18 @@ remains the coordinator's responsibility. Build commands, including `cargo run`
 and `cargo bench`, belong before the measurement phase; execute their prebuilt
 binaries during it. Node is a transport entry point and rejects unguarded use.
 
+## Published pnpm commands
+
+Preparation runs first. `pnpm bench:prepare` compiles and stages the benchmark
+executables into `crates/ditherette-bench/target/prepared/`; it is build-only and
+does not attest quietness. Wasm assets are prepared separately: `pnpm wasm:build`
+for scalar resize, `pnpm wasm:build:threads` for threaded or color measurements.
+
+Then drain all agents, builds and tests. Only then invoke the existing `bench:*`
+aliases. Invoking a `bench:*` measurement alias is the coordinator's explicit
+quiet-phase attestation. These aliases pass `--quiet` to the lease helper and
+never build. Re-run preparation after source changes.
+
 ## Lease ownership
 
 `/tmp/ditherette-bench.lock` is the fixed host lease. It ignores the working
@@ -58,7 +70,8 @@ expire a lease because shutdown takes longer than expected.
 
 ## Fresh cross-revision pairs
 
-S06 can use the public `ditherette_bench::lease` module from a separate coordinator:
+The [fresh-pair coordinator](PAIRED.md) uses the public
+`ditherette_bench::lease` module from a separate executable:
 
 ```rust,ignore
 let lease = Lease::exclusive()?;
@@ -70,7 +83,7 @@ for command in alternating_prebuilt_commands {
 ```
 
 Set `DITHERETTE_BENCH_QUIET=1` on each `Command` after completing the quiet phase.
-Set each command's working directory to its prepared revision. `spawn` consumes
+Bind commands to prepared executable identities. `spawn` consumes
 the command and forwards the inherited lease descriptor. Keep the outer lease
 until all trials exit. The execution guard remains local to each benchmark.
 

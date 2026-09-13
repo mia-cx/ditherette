@@ -1,7 +1,7 @@
 # S14 blue-noise reference
 
 Implements [issue55](https://github.com/mia-cx/ditherette/issues/55) on `impl/v1-s14-blue-noise`.
-PR base is `impl/v1-s13-base` at `bfa3d42b79dcc51db9a1f99da3be2c02653b3009`.
+Original PR base was `impl/v1-s13-base` at `bfa3d42b79dcc51db9a1f99da3be2c02653b3009`.
 Prerequisites are S12 `01df66826e532d8fb3b522a1564f1121c96f4d1f` and S09 `d8bcdcdbe8f874eaee65447a640b97483c9cb775`.
 Both are verified ancestors. Their combined placement/palette tests pass 19 fixtures in this joined tree.
 
@@ -36,7 +36,7 @@ Ranks must contain every integer 0..1023 once. At occupancies 1/8, 1/4, 1/2, 3/4
 
 These construction checks do not claim universal visual quality or approve any non-exact production candidate.
 
-## Construction result
+## Historical construction result
 
 Generator checkpoint `c70bedc368ec9e6023c89931f961ccfde8c0766c` predates the asset.
 The original parameters converge after 45 moves and pass every gate on the first generation.
@@ -49,10 +49,30 @@ The raw per-pattern numbers, parameters, and toolchain are retained in `spec/dit
 Six focused tests pass, including complete regeneration and negative Bayer/stripe controls; the existing 12 dither fixtures also pass.
 The fixed RGBA8 fixture proves quarter-range scaling and byte rounding independently, including hidden RGB with zero alpha.
 
-Final validation passes all 159 native tests. This count is the sum of the actual `cargo test -- --list` groups.
+Original validation passed all 159 native tests. This count is the sum of the actual `cargo test -- --list` groups.
 Wasm-target compilation, rustfmt, source-array SHA-256 verification, and `git diff --check` pass.
 The tests include offline construction, not benchmark timing. No production code changed.
 
-[PR99](https://github.com/mia-cx/ditherette/pull/99) is open and non-draft against `impl/v1-s13-base`.
+[PR99](https://github.com/mia-cx/ditherette/pull/99) now targets `main`.
 The code checkpoint is `4346fd18`; subsequent commits record evidence only.
 [The test-count audit](test-count-audit.md) corrects inherited prose totals for earlier slices.
+
+## Current collapse validation
+
+The shared prerequisite join fast-forwards to main `4434aa13c392b90486b05e140822a6284b2974db`, retaining the original S12/S09 ancestry.
+The conflict-free merge exposes S13's reference to the removed `BLUE_NOISE_8X8` constant and fails compilation with E0425.
+The fix applies the existing S17 registration early: `Field::BlueNoise` calls `blue_noise::blue_noise_at(x, y)`.
+The existing four-pixel RGBA8 fixture now also exercises that dispatcher and retains its independently calculated output and alpha bytes.
+All 204 native tests pass, including six blue-noise tests. Locked benchmark-feature and Wasm-target checks, rustfmt, and diff checks pass.
+The generator, rank asset, numerical gates, and recorded analysis remain unchanged. No standalone timing workload or browser run occurs.
+This registration matches the already-authored S17 join. It does not add a new runtime amendment to the S18 checkpoint.
+The approved S03 and S11 amendments remain pending, with their exact differences preserved.
+
+## Exact documentation amendment for S18
+
+Pullfrog finding `3999708215` identifies stale 8x8 lookup descriptions after the corrected dispatcher joins.
+The obsolete inline comment is retired, matching the already-authored S17 source.
+The four-line registration paragraph in `src/spec/dither/perturb.md` now states that `BlueNoise` uses the corrected 32x32 lookup.
+That stale paragraph also exists at original checkpoint `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
+S18 must retain its original checkpoint/digest and add only this exact paragraph replacement to the approved S03 and S11 amendments.
+The generator, rank tile, numerical gates, formulas, and runtime output remain unchanged by this documentation correction.

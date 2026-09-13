@@ -50,6 +50,7 @@ fn exclusive_lifecycle_across_processes() {
     drop(finished);
     assert!(lease.spawn(fixture("try")).is_err());
     drop(active);
+    concurrent_spawn_keeps_one_child(&lease);
     assert!(lease
         .spawn(Command::new("/no-such-ditherette-fixture"))
         .is_err());
@@ -102,6 +103,40 @@ fn exclusive_lifecycle_across_processes() {
     );
     std::fs::remove_file(marker).unwrap();
     assert!(fixture("try").output().unwrap().status.success());
+}
+
+fn concurrent_spawn_keeps_one_child(lease: &Lease) {
+    use std::{os::unix::process::CommandExt, sync::Barrier};
+    let barrier = Barrier::new(2);
+    let children = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    let mut command = Command::new("sh");
+                    command.args(["-c", "read value"]);
+                    unsafe {
+                        command.pre_exec(|| {
+                            libc::usleep(100_000);
+                            Ok(())
+                        });
+                    }
+                    barrier.wait();
+                    lease.spawn(command)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    let started = children.iter().filter(|child| child.is_ok()).count();
+    for error in children.iter().filter_map(|child| child.as_ref().err()) {
+        assert!(error.to_string().contains("only one owned benchmark child"));
+    }
+    drop(children);
+    assert_eq!(started, 1, "concurrent spawn must retain one owned child");
 }
 
 fn browser_fixture() -> Command {
