@@ -32,7 +32,7 @@ The one-draw-per-global-pixel assignment is independent of alpha, strength, plac
 Four reconstruction fixtures pass, covering known vectors, sampled seven-space byte round trips, hue/neutral conventions, and maximum legal strengths.
 The numeric proof bounds valid inverse intermediates below `1e125`; no new public strength ceiling or coordinate clipping is needed.
 
-Historical reported validation (the original PR body reports 168 tests; this plan reports 178):
+Original corrected validation is 168 tests. An earlier version of this plan reported 178:
 
 - `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 168 native tests.
 - Focused `spec_dither_perturb` passes 11 tests and `spec_color_reconstruct` passes four.
