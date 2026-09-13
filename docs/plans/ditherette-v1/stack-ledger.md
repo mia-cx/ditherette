@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## Stack collapse on 2026-09-13
+
+PR #92 merged as `8c19f3611ec8ed78ddfd7789f654d5c70f2e0735` from exact-head-approved `67cba6842142c5d647881763e36ed79b7155c8b3`. Merge `6902d5ef` restacks S08 onto `b5b3fe66` without conflicts or reference-code changes. The perceptual reference implementations and numerical vectors remain unchanged. All 138 native tests pass, including ten perceptual, ten ordinary-color, and six inherited color tests; Wasm-target compilation and rustfmt pass. Pullfrog review `5188655748` approves the exact head, required checks pass, and no review findings or threads exist. CodeRabbit's rate-limited success is not a fresh full review. No direct child PR targeted S08 before deletion. Issue #49 closed automatically, main fast-forwarded, and S08 detached at the merge. Green comment `5649560426` and merge comment `5649560508` record the decision. No standalone timing workload, browser run, or new freeze amendment occurred. S09/PR #94 is next; standing test-only conflict approval and the exact S18/pnpm obligations remain active.
+
+The finished S08 `ditherette-wasm` target was cleared afterward with `cargo +1.97.0 clean --manifest-path crates/ditherette-wasm/Cargo.toml`.
+
 ## Stack collapse on 2026-09-12
 
 PR #91 merged as `b5b3fe660f419635522bf34c063abf62c74b16df` from exact-head-approved `6e940cf25d160dbd64ac67f5af0a374bf066962d`. Merge `0eee8606` restacks S07 onto `fd035567` without conflicts or reference-code changes. The ordinary color references retain their original implementations and vectors. All 128 native tests, including ten ordinary-color and six inherited color tests, pass; Wasm-target compilation and rustfmt pass. Current validation metadata supersedes the old inconsistent count without relabeling historical implementation evidence. Pullfrog review `5188611644` approves the head, required checks pass, and no review threads or findings exist. No direct child PR targeted S07 before deletion. Issue #48 closed automatically, main fast-forwarded, and S07 detached at the merge. Green comment `5649499332` and merge comment `5649499412` record the decision. No standalone timing workload or browser run occurred. S08/PR #92 is next; standing test-only conflict approval and the exact S18/pnpm obligations remain active.
