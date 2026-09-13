@@ -1,8 +1,8 @@
 # S13 palette-free Bayer and random perturbation
 
 Implements [issue 54](https://github.com/mia-cx/ditherette/issues/54).
-Branch `impl/v1-s13-perturb` uses PR base `impl/v1-s13-base`.
-Validated join `bfa3d42b79dcc51db9a1f99da3be2c02653b3009` contains both prerequisite commits:
+Branch `impl/v1-s13-perturb` now targets `main`.
+Original validated join `bfa3d42b79dcc51db9a1f99da3be2c02653b3009` contains both prerequisite commits:
 
 - S12 placement `01df66826e532d8fb3b522a1564f1121c96f4d1f`.
 - S09 palette `d8bcdcdbe8f874eaee65447a640b97483c9cb775`.
@@ -32,7 +32,7 @@ The one-draw-per-global-pixel assignment is independent of alpha, strength, plac
 Four reconstruction fixtures pass, covering known vectors, sampled seven-space byte round trips, hue/neutral conventions, and maximum legal strengths.
 The numeric proof bounds valid inverse intermediates below `1e125`; no new public strength ceiling or coordinate clipping is needed.
 
-Final validation:
+Historical reported validation (the original PR body reports 168 tests; this plan reports 178):
 
 - `cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --locked` passes all 178 native tests.
 - Focused `spec_dither_perturb` passes 11 tests and `spec_color_reconstruct` passes four.
@@ -40,6 +40,15 @@ Final validation:
 - `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check` and `git diff --check` pass.
 
 No benchmark measurement ran. Inherited native benchmark-export smoke tests provide no performance evidence.
+
+## Current collapse validation
+
+Join `59dec19b` preserves the original palette/placement ancestry and matches main `0494186d355e63cf65936efa944cefc117e159d2` exactly.
+S13 restacks without conflicts. Its field implementations, wide reconstruction, and fixtures remain unchanged.
+All 198 native tests pass, including eleven perturbation and four reconstruction tests. This replaces the historical counts for current validation.
+Locked benchmark-feature and Wasm-target checks, rustfmt, and diff checks pass with Rust 1.97.0.
+No standalone timing workload or browser run occurs. S14 still owns the corrected blue-noise lookup.
+The exact approved S03 and S11 amendments remain scheduled for S18; this restack adds none.
 
 ## Handoff
 
