@@ -45,9 +45,8 @@ The callback has type `Fn(u32,u32,u64)->f32`, receiving global x, global y, and 
 It returns a centered scalar threshold in `[-0.5,0.5]` and runs once for every written pixel, including zero-effect pixels.
 Band boundaries, traversal order, source alpha, and placement never alter random draw assignment.
 
-The `BlueNoise` branch temporarily reads the inherited 8x8 table, which is transposed Bayer and is not certified blue noise.
-S14 owns the corrected asset and `blue_noise::blue_noise_at(x,y)->f32`.
-At the validated S13/S14 join, replace the isolated legacy lookup with that helper.
+The `BlueNoise` branch reads S14's corrected 32x32 rank tile through `blue_noise::blue_noise_at(x,y)->f32`.
+The validated S13/S14 join replaces the inherited transposed-Bayer lookup with this helper.
 The scalar composition and byte boundary remain the same; S14 provides its own asset and registration fixtures.
 
 ## Website adapter handoff

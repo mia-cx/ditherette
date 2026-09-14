@@ -6,6 +6,9 @@ drain implementation work, then run prebuilt executables under the shared lease.
 [Three-way verification](VERIFICATION.md) defines typed result identities,
 exactness requirements, and retained raw/PNG review bundles.
 
+[Fresh paired performance](PAIRED.md) owns the regression gate. The legacy
+historical comparisons described below are diagnostic, not fresh release evidence.
+
 `ditherette-bench` writes benchmark run and baseline artifacts as JSON under:
 
 ```text

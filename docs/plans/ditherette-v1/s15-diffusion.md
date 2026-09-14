@@ -1,9 +1,9 @@
 # S15 full-image diffusion reference
 
 Issue [56](https://github.com/mia-cx/ditherette/issues/56).
-Branch `impl/v1-s15-diffusion`, PR base `impl/v1-s15-base`.
+Branch `impl/v1-s15-diffusion`, current PR base `main`.
 Review [PR 101](https://github.com/mia-cx/ditherette/pull/101), open and non-draft with auto-merge disabled.
-Join `578d677822d5daa8d4b63e7f2cb709c12fd608d0` contains S10 `47712a500c4079293a06fae4a07ae105a643af8f`
+Original join `578d677822d5daa8d4b63e7f2cb709c12fd608d0` contains S10 `47712a500c4079293a06fae4a07ae105a643af8f`
 and S12 `01df66826e532d8fb3b522a1564f1121c96f4d1f`.
 
 ## TODOs
@@ -51,7 +51,7 @@ Six diffusion tests pass, covering tap definitions, the two-pixel feedback disti
 separate work/score overflow errors, legal maximum-strength success, and zero-strength composition across all kernels and metrics.
 The normative recipe and TypeScript source pointers live in `crates/ditherette-wasm/src/spec/dither/error_diffusion.md`.
 
-## Final correctness evidence
+## Historical correctness evidence
 
 The completed diffusion suite has 13 tests. Hand-calculated 2x2 outputs distinguish raster and serpentine for every kernel.
 A one-column `[64,0,120]` fixture distinguishes two-row taps and verifies discarded edge weights.
@@ -72,3 +72,13 @@ The final fetch/rebase found the join unchanged at `578d677822d5daa8d4b63e7f2cb7
 All 31 focused diffusion, contract, and placement tests pass again after rebase.
 Validated code and evidence head was `ee963fb48ef945ee9fad3affe4d8a5771768f1ef`.
 The final bookkeeping commit changes only this PR record; the coordinator records its exact SHA in the stack ledger.
+
+## Current collapse validation
+
+Join `9b4c1074` preserves the original S10/S12 ancestry and matches main `5c2f9a9c2700173844f5af444560d92e3fa80111` exactly.
+S15 restacks without conflicts. Its diffusion implementation and fixtures remain unchanged.
+The combined contract retains implicit-source `InvalidImage` errors and the corrected S11 inventory path.
+All 218 native tests pass, including thirteen diffusion tests and seventeen contract/lifecycle tests.
+Locked benchmark-feature and Wasm-target checks, rustfmt, and diff checks pass with Rust 1.97.0.
+No standalone timing workload or browser run occurs. No new frozen-reference amendment is introduced during this restack.
+The exact S03, S11, and S14 amendments remain scheduled for S18, with original checkpoint identity and strict guards preserved.
