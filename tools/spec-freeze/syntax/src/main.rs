@@ -23,6 +23,12 @@ fn contains_ident(tokens: proc_tokens::TokenStream, names: &[&str]) -> bool {
 
 impl<'ast> Visit<'ast> for Check<'_> {
     fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+        if ["asm", "global_asm", "naked_asm"].contains(&ident.to_string().trim_start_matches("r#"))
+        {
+            self.errors.push(format!(
+                "assembly identifier requires policy review: {ident}"
+            ));
+        }
         if [
             "include",
             "include_str",
@@ -151,6 +157,13 @@ impl<'ast> Visit<'ast> for Check<'_> {
 
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         let name = mac.path.to_token_stream().to_string().replace("r#", "");
+        if mac.path.segments.last().is_some_and(|segment| {
+            ["asm", "global_asm", "naked_asm"]
+                .contains(&segment.ident.to_string().trim_start_matches("r#"))
+        }) {
+            self.errors
+                .push(format!("assembly macro requires policy review: {name}"));
+        }
         let injection = [
             "include",
             "include_str",
@@ -210,7 +223,12 @@ impl<'ast> Visit<'ast> for Check<'_> {
                     .contains(&name.as_str())
             })
             .collect();
-        let forbidden = [self.forbidden, &token_injection].concat();
+        let forbidden = [
+            self.forbidden,
+            &token_injection,
+            &["asm", "global_asm", "naked_asm"],
+        ]
+        .concat();
         inspect(mac.tokens.clone(), &forbidden, &mut self.errors);
         if self.semantic
             && contains_ident(
@@ -233,6 +251,10 @@ fn root(file: &syn::File) -> Result<(), String> {
         match item {
             Item::Mod(module) if module.content.is_none() => {
                 let name = module.ident.to_string();
+                let expected_public = name != "wasm";
+                if matches!(module.vis, syn::Visibility::Public(_)) != expected_public {
+                    return Err(format!("changed module visibility: {name}"));
+                }
                 let attrs = module
                     .attrs
                     .iter()
