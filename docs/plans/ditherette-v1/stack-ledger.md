@@ -1,5 +1,15 @@
 # Ditherette v1 implementation stack
 
+## S18 review resumed on 2026-09-17
+
+Mia approved removing only `workflow_dispatch` and explicitly restored continuation after PR #104 through the remaining slices and restoration/performance PRs to PR #159 and active `perf/v1-js-performance`. The prior PR104-only stop and workflow approval hold are superseded. Root stays outside write scope; its earlier truncation and uncertain recovery disclosure remain preserved below.
+
+PR #104 is clean tracked/pushed at `c545b42cc061ea1fd7243f2de60133b6c19e026c`. Commit `aef5ff2e` removes the trigger without changing pull-request checkouts or the exact bootstrap SHA. Commit `a3d136e3` preserves audited root reexports, rejects inactive cross-family macro paths, fetches locked test-only dependencies, and requires the intended compiler rejection. Commit `c545b42c` corrects the CI evidence sentence. Lead reproduced both Pullfrog findings through focused execution, reviewed the diff and logs, and authored the fix design; Fusion SWE-2 Medium applied and verified the guard changes. No frozen source, checkpoint, dependency record, or optimized kernel changed.
+
+The full guard passes with the unchanged original and seven-change amended identities. Both fresh and warm Cargo-cache mutation runs pass 15/15. Four focused fixtures, rustfmt, Prettier, and diff checks pass. The extended bootstrap proof accepts only the exact S17 base and preserves trusted-policy precedence after trigger removal. All five findings received fixed replies and their threads are resolved. Existing Pullfrog review was requested on the exact head in comment `5709602334`; approval is pending. The previous aggregate CodeQL failure remains visible and no scanner settings or alert states changed.
+
+Main remains `e0101af71410e7551d8de7ed4d54056e3d7f0fd8`; no PR merged or issue closed yet. S19 base `1bd175127f92d55fb2ddf693a67d99b9fb190667` and integration `7de86d799a25a132c8de41ee54696bd8e54bdf76` remain untouched so far. No cleanup occurred because S18 remains unfinished. After review and all Done conditions, retarget children, merge exact head, update main and this coordinator, clean complete finished targets, then inspect S19 prerequisite joins and continue root-first. Evidence stays in `/tmp/ditherette-collapse-88.27wHc7` and the current external handoff.
+
 ## S18 review hold on 2026-09-15
 
 Mia limits this continuation to PR #104, then bookkeeping and cleanup. S19 must not start. PR #104 is open at clean tracked/pushed head `dad3bf84d7d825773f2001d51576efa42181feda`, targeting main `e0101af71410e7551d8de7ed4d54056e3d7f0fd8`. The inherited ancestry-preserving merge `ed5fad3c` remains intact. Local Cursor configuration stays untracked and excluded. Only this coordinator receives progress updates; the root worktree was not edited. The earlier root truncation and uncertain recovery disclosure below remains intact.
