@@ -12,13 +12,14 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
+import test, { before } from 'node:test';
 import { CRATE, git, verifyContent } from './content.mjs';
 import {
 	dependencySnapshot,
 	isolatedCheck,
 	run,
 	syntaxBinary,
+	TOOLCHAIN,
 	verifyBuildConfiguration,
 	verifyDependencies,
 	verifySyntax
@@ -29,6 +30,14 @@ const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const checkpoint = JSON.parse(readFileSync(join(ROOT, POLICY, 'checkpoint.json')));
 const dependencies = JSON.parse(readFileSync(join(ROOT, POLICY, 'dependencies.json')));
 const binary = syntaxBinary();
+
+before(() => {
+	run(
+		'cargo',
+		[`+${TOOLCHAIN}`, 'fetch', '--locked', '--manifest-path', join(ROOT, CRATE, 'Cargo.toml')],
+		tmpdir()
+	);
+});
 
 function fixture(operation) {
 	const root = mkdtempSync(join(tmpdir(), 'ditherette-freeze-test-'));
@@ -183,6 +192,28 @@ test('syntax rejects both directions, aliases, shared/adapter bridges, and sourc
 		);
 	}));
 
+test('inactive macro paths reject opposite semantic families', () =>
+	fixture((root) => {
+		for (const [role, opposite] of [
+			['prod', 'spec'],
+			['spec', 'prod']
+		]) {
+			const path = `${CRATE}/src/${role}/mod.rs`;
+			for (const name of [opposite, `r#${opposite}`]) {
+				mutation(
+					root,
+					path,
+					`${readFileSync(join(root, path))}\n#[cfg(any())] fn inactive() { crate::${name}::helper!(); }\n`,
+					() =>
+						assert.throws(
+							() => verifySyntax(root, binary),
+							(error) => /forbidden semantic identifier/.test(error.stderr)
+						)
+				);
+			}
+		}
+	}));
+
 test('independent Rust compilation rejects indirect helper imports in both directions', () =>
 	fixture((root) => {
 		for (const [role, opposite] of [
@@ -194,7 +225,13 @@ test('independent Rust compilation rejects indirect helper imports in both direc
 				root,
 				path,
 				`${readFileSync(join(root, path))}\npub use crate::${opposite}::color as bridge;\n`,
-				() => assert.throws(() => isolatedCheck(root, role, 'x86_64-unknown-linux-gnu'))
+				() =>
+					assert.throws(
+						() => isolatedCheck(root, role, 'x86_64-unknown-linux-gnu'),
+						(error) =>
+							/error\[E0432\]: unresolved import/.test(error.stderr) &&
+							error.stderr.includes(`could not find \`${opposite}\` in the crate root`)
+					)
 			);
 		}
 	}));
@@ -287,6 +324,36 @@ test('foreign symbol bridges are rejected in semantic roles, not the Wasm adapte
 			`${readFileSync(join(root, adapter))}\n#[wasm_bindgen] extern "C" { #[wasm_bindgen(catch, js_name = now)] fn host_now() -> Result<f64, JsValue>; }\n`,
 			() => verifySyntax(root, binary)
 		);
+	}));
+
+test('root reexports retain public visibility, exact members, and all declarations', () =>
+	fixture((root) => {
+		const path = `${CRATE}/src/lib.rs`;
+		const original = readFileSync(join(root, path), 'utf8');
+		const changes = [
+			original.replace('pub use wasm::{', 'use wasm::{'),
+			original.replace(
+				'convert_color_space, hello, process_rgba8,',
+				'convert_color_space, process_rgba8,'
+			),
+			original.replace(
+				'convert_color_space, hello, process_rgba8,',
+				'convert_color_space, replaced, process_rgba8,'
+			),
+			original.replace(
+				'#[cfg(feature = "threads")]\npub use wasm_bindgen_rayon::init_thread_pool;',
+				''
+			)
+		];
+		for (const changed of changes) {
+			assert.notEqual(changed, original);
+			mutation(root, path, changed, () =>
+				assert.throws(
+					() => verifySyntax(root, binary),
+					(error) => /root reexport/.test(error.stderr)
+				)
+			);
+		}
 	}));
 
 test('root-use procedural attributes cannot inject code omitted from isolated roots', () =>
