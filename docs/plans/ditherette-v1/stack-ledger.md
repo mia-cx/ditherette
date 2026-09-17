@@ -1,5 +1,17 @@
 # Ditherette v1 implementation stack
 
+## S18 merged and stopped on 2026-09-17
+
+Mia's latest boundary is PR #104 only, followed by bookkeeping and cleanup. This supersedes the continuation instruction in the historical entry below. S19 has not started. The root worktree remains untouched; the earlier truncation and uncertain recovery disclosure remains intact.
+
+PR #104 merged as `6ad907cdaa393d650f142704b7525bc985300f5a` from exact-head-approved `c545b42cc061ea1fd7243f2de60133b6c19e026c`. The merge preserves both prerequisite and PR ancestry. Pullfrog review `5231771759` approves that head; CodeRabbit reports no actionable findings. All review threads are resolved and the review decision is APPROVED. The full guard passes, cold and warm mutation runs each pass 15/15, and four focused fixtures, formatting, and exact-base bootstrap proof pass. Existing native/Wasm evidence remains valid for unchanged crate code. The original checkpoint and seven-change amended identity remain intact.
+
+Aggregate CodeQL check `105092448425` still fails on three file-race warnings in `content.mjs:41` and `guard.test.mjs:70,73`. The inspected paths have no concurrent writer: validation precedes candidate compilation and mutation helpers own synchronous temporary fixtures. All three language analyses, Frozen reference, CodeRabbit, Pullfrog, and pullfrog-approval pass. No required checks are configured. The normal merge used no bypass; no alert was dismissed and no scanner policy changed. This records a named non-applicable failure, not an all-green CI claim.
+
+No open PR directly targeted `impl/v1-s18-freeze`, so no retarget was needed before branch deletion. Issue #59 closed; parent #41 remains open. Local main and origin/main are `6ad907cd`, and S18 is detached at that merge. Green comment `5709699591`, merge comment `5709699733`, and issue comment `5709706503` record completion. The finished targets were cleaned with Rust 1.97.0 and exact manifests. No benchmark, publication, tag, deployment, or optimization run occurred.
+
+S19 base remains `1bd175127f92d55fb2ddf693a67d99b9fb190667`; integration remains `7de86d799a25a132c8de41ee54696bd8e54bdf76`; package remains `26f6ff34629a4d83f34ca58b1b8be25d5088a2b9`. No S19 restack, validation, or branch change occurred. On a later authorized resume, inspect prerequisite joins before PR #105. Carry implicit-source `InvalidImage` and pnpm 11.13.1 downstream while preserving frozen kernels, scalar support, `opt-level = "s"`, bilinear anti-aliasing, legacy website behavior, and two-axis JS area-upscale quality exclusions. The exact handoff is `/tmp/ditherette-collapse-driver.Yj1v0l/resumed-handoff.md`.
+
 ## S18 review resumed on 2026-09-17
 
 Mia approved removing only `workflow_dispatch` and explicitly restored continuation after PR #104 through the remaining slices and restoration/performance PRs to PR #159 and active `perf/v1-js-performance`. The prior PR104-only stop and workflow approval hold are superseded. Root stays outside write scope; its earlier truncation and uncertain recovery disclosure remain preserved below.
