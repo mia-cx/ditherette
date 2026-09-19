@@ -12,6 +12,97 @@
 		"revision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
 		"artifact": "sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe"
 	},
+	"amendment": {
+		"revision": "e0101af71410e7551d8de7ed4d54056e3d7f0fd8",
+		"trees": {
+			"crates/ditherette-wasm/src/spec": "ef2f10408b1ca591ec1512c0e56e82f5a9001b8a",
+			"crates/ditherette-wasm/src/image": "138cb82ba25b3250ac25f4ac11ee17d02d09f811"
+		},
+		"contentSha256": "a5f90b9b3b864c4826748646818bbe1c903de958811f4c5af3345082cf5ad47d",
+		"identity": {
+			"state": "frozen",
+			"revision": "e0101af71410e7551d8de7ed4d54056e3d7f0fd8",
+			"artifact": "sha256:a5f90b9b3b864c4826748646818bbe1c903de958811f4c5af3345082cf5ad47d",
+			"amends": "sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe"
+		},
+		"changes": [
+			{
+				"path": "crates/ditherette-wasm/src/spec/contract/error.md",
+				"before": null,
+				"after": {
+					"path": "crates/ditherette-wasm/src/spec/contract/error.md",
+					"mode": "100644",
+					"sha256": "6b14d323b20d4d4e77b3e934997a0283c47c4fe7a7a3f0351231233512b11491"
+				}
+			},
+			{
+				"path": "crates/ditherette-wasm/src/spec/contract/inventory.md",
+				"before": {
+					"path": "crates/ditherette-wasm/src/spec/contract/inventory.md",
+					"mode": "100644",
+					"sha256": "95e176383099c30a7369762648d1e384fb3f1131c7ce397d49f5ce69db7d07c1"
+				},
+				"after": {
+					"path": "crates/ditherette-wasm/src/spec/contract/inventory.md",
+					"mode": "100644",
+					"sha256": "1e0ce1660efd9dc656584bbc7be415e4aae6760d45c3c99479f2c3bb7d500360"
+				}
+			},
+			{
+				"path": "crates/ditherette-wasm/src/spec/contract/lifecycle.md",
+				"before": null,
+				"after": {
+					"path": "crates/ditherette-wasm/src/spec/contract/lifecycle.md",
+					"mode": "100644",
+					"sha256": "50b0be79006d0b45256b9e71060c31530dc1018d9fcefc4d793b45d5152815ea"
+				}
+			},
+			{
+				"path": "crates/ditherette-wasm/src/spec/contract/request.md",
+				"before": null,
+				"after": {
+					"path": "crates/ditherette-wasm/src/spec/contract/request.md",
+					"mode": "100644",
+					"sha256": "2e12fbadf99864ac0d31c739058771080bf35c5d5dbe2dd68514af4d0455d647"
+				}
+			},
+			{
+				"path": "crates/ditherette-wasm/src/spec/contract/request.rs",
+				"before": {
+					"path": "crates/ditherette-wasm/src/spec/contract/request.rs",
+					"mode": "100644",
+					"sha256": "79f5f236771952bb2188f6a569be4ac70bea01ba833fe682eb9d1dd7d8679061"
+				},
+				"after": {
+					"path": "crates/ditherette-wasm/src/spec/contract/request.rs",
+					"mode": "100644",
+					"sha256": "f8e4e7ce0f7706daffa8c8cc749a05b5e4949086cc555bb504af11ad12f689d9"
+				}
+			},
+			{
+				"path": "crates/ditherette-wasm/src/spec/contract/spec.md",
+				"before": null,
+				"after": {
+					"path": "crates/ditherette-wasm/src/spec/contract/spec.md",
+					"mode": "100644",
+					"sha256": "88040d7121e61993e3f6b5bcdcfb3674a3e26ca134a87bd6f3bb3d0fdcee1041"
+				}
+			},
+			{
+				"path": "crates/ditherette-wasm/src/spec/dither/perturb.md",
+				"before": {
+					"path": "crates/ditherette-wasm/src/spec/dither/perturb.md",
+					"mode": "100644",
+					"sha256": "094089392e41b4337e081fd99d78cbff88019249b48f9cb4186f99616b152d95"
+				},
+				"after": {
+					"path": "crates/ditherette-wasm/src/spec/dither/perturb.md",
+					"mode": "100644",
+					"sha256": "e37cadc0fda38e0dba32d0035cbe694684d69e3912a4b97ff504936c16d57300"
+				}
+			}
+		]
+	},
 	"inventory": "crates/ditherette-wasm/src/spec/contract/inventory.md",
 	"files": [
 		{

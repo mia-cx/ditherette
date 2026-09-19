@@ -105,7 +105,7 @@ fn io() -> Io {
     }
 }
 fn budget() -> u64 {
-    Processor::bookkeeping_bytes(512) + 8 + 24
+    Processor::bookkeeping_bytes(512) + 8 + 24 + (3 * std::mem::size_of::<usize>() + 2 * 4) as u64
 }
 
 #[test]
@@ -139,7 +139,8 @@ fn exact_capacity_budget_passes_and_one_under_preflights_before_allocation_or_co
 
 #[test]
 fn each_real_reservation_failure_reports_without_allocating_an_error_and_recovers() {
-    for successful_allocations in [0, 1] {
+    // Two coordinate maps, then the owned source and output buffers.
+    for successful_allocations in 0..4 {
         let mut processor = Processor::new(budget(), 512).unwrap();
         let mut input = io();
         let before = ALLOCATIONS.with(Cell::get);
@@ -156,6 +157,41 @@ fn each_real_reservation_failure_reports_without_allocating_an_error_and_recover
         );
         assert_eq!((input.copy_calls, input.complete_calls), (0, 0));
         assert_eq!(processor.resize(request(), &mut input).unwrap().len(), 24);
+    }
+}
+
+#[test]
+fn near_identity_span_reservation_is_fallible_and_recovers_before_copy() {
+    let request = NearestRequest {
+        source_width: 21,
+        source_height: 21,
+        output: Output {
+            width: 20,
+            height: 20,
+            resize: ResizePolicy::Nearest {
+                anchor: Anchor::Center,
+            },
+        },
+    };
+    // The near-identity path additionally reserves the copy-span Vec.
+    for successful_allocations in 0..5 {
+        let mut processor = Processor::new(1_000_000, 512).unwrap();
+        let mut input = Io {
+            input: vec![73; 21 * 21 * 4],
+            ..Io::default()
+        };
+        ALLOCATION_FAILURE.with(|remaining| remaining.set(Some(successful_allocations)));
+        let failure = processor.resize(request, &mut input).unwrap_err();
+        ALLOCATION_FAILURE.with(|remaining| remaining.set(None));
+        assert_eq!(
+            failure,
+            Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Wasm)
+        );
+        assert_eq!((input.copy_calls, input.complete_calls), (0, 0));
+        assert_eq!(
+            processor.resize(request, &mut input).unwrap(),
+            vec![73; 20 * 20 * 4]
+        );
     }
 }
 

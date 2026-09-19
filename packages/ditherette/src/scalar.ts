@@ -1,7 +1,7 @@
 import { DitheretteError } from './errors.js';
 import type { ErrorCode } from './errors.js';
 import type { Ditherette, InitInput, ResizeRequest, Rgba8Image } from './types.js';
-import { validateResize } from './validation.js';
+import { normalizeInitInput, validateResize } from './validation.js';
 
 type Bindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
@@ -71,12 +71,7 @@ export async function createScalar(options: {
 	try {
 		const { createScalarBindings } = await import('./wasm/scalar/ditherette_wasm.factory.js');
 		const bindings = createScalarBindings();
-		let wasm = options.wasm;
-		if (typeof Response !== 'undefined' && wasm instanceof Response) wasm = wasm.clone();
-		if (typeof Request !== 'undefined' && wasm instanceof Request) wasm = wasm.clone();
-		// Chromium rejects DataView at its Wasm boundary. Normalize every view without copying bytes.
-		if (ArrayBuffer.isView(wasm))
-			wasm = new Uint8Array(wasm.buffer, wasm.byteOffset, wasm.byteLength);
+		const wasm = normalizeInitInput(options.wasm);
 		await bindings.default({ module_or_path: wasm });
 		let status: number;
 		try {

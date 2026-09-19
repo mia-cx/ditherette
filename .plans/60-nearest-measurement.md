@@ -1,5 +1,7 @@
 # S19 nearest measurement
 
+Historical evidence for the recorded revisions only. These measurements do not establish performance for the restored landed kernel shipped by S19.
+
 The first bounded native experiment passes every required case with exact frozen-reference output.
 The candidate meets the 20% improvement target. No second candidate or repeated measurement is needed.
 This evidence covers native kernels, not complete browser calls or initialization. Those measurements remain required in S20.

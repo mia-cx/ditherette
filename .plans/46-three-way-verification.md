@@ -56,3 +56,49 @@ all three Rust crates pass formatting. `VERIFICATION.md` records S17's handoff.
 Delivered in [PR #96](https://github.com/mia-cx/ditherette/pull/96), non-draft and
 unmerged against `impl/v1-s05-base`. Validated implementation head:
 `1234908aba98383b16dfb0e85ea1c3b38c5f32a2`. This final evidence update changes no code.
+
+## Restack and review amendments, 2026-09-12
+
+Merge `61d46a08` carries updated prerequisite join `4cf944f8`, whose tree matches
+main `6a6b35bd`. Its baseline passes 22 focused Rust tests, three controlled Node
+transport fixtures, 16 deterministic Node tests, benchmark/Wasm compilation, and
+formatting. Historical entries above retain their original heads.
+
+Review amendments add three corrections. The directory and stale-proof fixes
+have failing-before/passing-after regressions; the tiling fix has a numeric
+probe and a direct trace of the existing caller. `write_review_artifacts` now creates missing ancestors before
+the exclusive final bundle directory: the nested-directory variant of
+`failures_keep_raw_outputs_and_all_review_images_without_overwriting` failed
+with NotFound before and passes after. `require_accepted_verification` binds the
+recorded exact proof to the measured output's SHA-256: the controlled one-pixel
+`measured_output_must_match_the_verified_invocation` fixture, where the
+candidate changes bytes between the verification and measured invocations, was
+promotable before and is rejected after, alongside missing and mismatched digest
+cases; this fixture proves stale-report rejection only and is not performance
+evidence. The tiling sweep's unique bounded validation now tests
+`within_bounds` instead of `passed`: a temporary numeric probe
+(`tiling_gate_probe.rs`, removed after execution) showed `within_bounds=true`,
+`passed=false`, `max_color_distance=1.0` for bounded output, and exact bounds
+rejecting the same bytes, while the old caller took the failure branch.
+After the changes, `cargo +1.97.0 test --locked --manifest-path
+crates/ditherette-bench/Cargo.toml --bin ditherette-bench --test verification
+--test verification_adapters -- --test-threads=1` passes 9 binary tests
+(including the new digest-binding test and the updated accepted-baseline
+fixture), 8 verification tests, and 3 adapter tests;
+`cargo +1.97.0 check --locked --manifest-path
+crates/ditherette-bench/Cargo.toml --benches`, rustfmt, and `git diff --check`
+are clean. Raw evidence is under `/tmp/ditherette-collapse-88.27wHc7/` with
+`pr96-fix-*` prefixes. No review or merge completion is claimed here.
+
+A further review pass adds two more corrections. Preflight reports were keyed
+only by subject and case, so two image paths sharing a stem (`a/image.png`,
+`b/image.png`) produced one report instead of two; the key now carries the
+subject, normalized source dimensions, the full source SHA-256, and the case,
+and `same_stem_fixture_paths_keep_distinct_reports` failed before (1 vs 2) and
+passes after. Browser accepted-baseline rejection moved before transport launch:
+`--save-baseline`/`--replace-baseline` now fail during flag parsing because the
+current telemetry cannot supply complete exact proof, shown by the new
+`unverified_wasm_baseline_writes_fail_before_transport` regression; diagnostic
+runs and `--baseline` loading remain available. A third comment requested
+coverage-only additions and identified no semantic defect, so no source change
+was made for it.

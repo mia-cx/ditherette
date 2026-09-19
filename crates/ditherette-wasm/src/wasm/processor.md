@@ -8,13 +8,13 @@ The copied contracts at `0ede7f6c` and frozen `spec/pipeline/processor.rs` suppl
 
 ## Functions
 
-| Private export | Contract |
-|---|---|
-| `privateInitialize(limit: number): number` | Return zero or a failure status; preflight before priming fixed boundary storage |
+| Private export                                                                                                           | Contract                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `privateInitialize(limit: number): number`                                                                               | Return zero or a failure status; preflight before priming fixed boundary storage           |
 | `privateResize(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, anchor: number, sink: object): number` | Borrow both JS handles; write `sink.value` only after complete durable result construction |
-| `privateDispose(): number` | Idempotently release processor ownership; reject active-call recursion |
-| `privateErrorPath(): number` | Read immediately after a failure status |
-| `privateMemoryOverhead(): number` | Private fixture/accounting observation, excluded from the public wrapper |
+| `privateDispose(): number`                                                                                               | Idempotently release processor ownership; reject active-call recursion                     |
+| `privateErrorPath(): number`                                                                                             | Read immediately after a failure status                                                    |
+| `privateMemoryOverhead(): number`                                                                                        | Private fixture/accounting observation, excluded from the public wrapper                   |
 
 All incoming numbers use f64 before validation, avoiding generated integer truncation.
 Anchors are top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right, numbered zero through eight.
@@ -28,23 +28,24 @@ Status zero means success. Statuses one through thirteen follow the copied error
 invalid-request, invalid-image, invalid-palette, invalid-settings, unsupported-operation, capability, initialization,
 memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runtime.
 
-| Path ID | Public path |
-|---|---|
-| 0 | instance |
-| 1 | memoryLimitBytes |
-| 2, 3, 4, 5 | source.width, source.height, source.data, source |
-| 6, 7, 8 | output.width, output.height, output |
+| Path ID       | Public path                                        |
+| ------------- | -------------------------------------------------- |
+| 0             | instance                                           |
+| 1             | memoryLimitBytes                                   |
+| 2, 3, 4, 5    | source.width, source.height, source.data, source   |
+| 6, 7, 8       | output.width, output.height, output                |
 | 9, 10, 11, 12 | output.resize.anchor, wasm, control, output.resize |
 
 ## Memory and cleanup
 
-The accounted peak is `privateMemoryOverhead() + input Vec capacity + output Vec capacity`.
+The accounted peak is `privateMemoryOverhead() + nearest-plan capacity + input Vec capacity + output Vec capacity`.
 Both Vecs use fallible exact reservation before byte copying. Their actual capacities are checked before processing.
-The metadata term counts Processor, plan, both Vec headers, module state, error-path storage, and borrowed boundary handles.
+The fixed term counts Processor, both Vec headers, module state, error-path storage, borrowed boundary handles, and wasm-bindgen's externref bookkeeping.
+Non-identity resizes also count the actual nearest-plan allocation capacity.
 Borrowed slice helpers create no extra Rust byte buffer. Returned JS bytes and caller JS storage are excluded under decision37.
 
 The wasm32 release build reports 648 bytes of bookkeeping. A 1x1-to-1x1 call needs exactly 656 bytes.
-The 2x1-to-3x2 fixture needs 680 bytes. One byte less fails preflight before any source copy.
+The 2x1-to-3x2 fixture needs 712 bytes. One byte less fails preflight before any source copy.
 Limits from one through 647 are valid option values but fail initialization with memory-limit before priming.
 The default remains 1610612736; the maximum remains 2147483648.
 

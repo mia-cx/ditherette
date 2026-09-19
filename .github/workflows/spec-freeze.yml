@@ -2,7 +2,6 @@ name: Frozen reference
 
 on:
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -35,7 +34,7 @@ jobs:
         run: |
           if test -f trusted/tools/spec-freeze/guard.mjs; then
             node trusted/tools/spec-freeze/guard.mjs --root "$GITHUB_WORKSPACE/candidate" --trusted-root "$GITHUB_WORKSPACE/trusted"
-          elif test "$BASE_SHA" = cef2b60a635fd43c3b8e7cb880b5c92fe77d640b; then
+          elif test "$BASE_SHA" = e0101af71410e7551d8de7ed4d54056e3d7f0fd8; then
             echo 'S18 bootstrap: candidate policy requires explicit human review.'
             node candidate/tools/spec-freeze/guard.mjs
           else

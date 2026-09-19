@@ -23,6 +23,12 @@ fn contains_ident(tokens: proc_tokens::TokenStream, names: &[&str]) -> bool {
 
 impl<'ast> Visit<'ast> for Check<'_> {
     fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+        if ["asm", "global_asm", "naked_asm"].contains(&ident.to_string().trim_start_matches("r#"))
+        {
+            self.errors.push(format!(
+                "assembly identifier requires policy review: {ident}"
+            ));
+        }
         if [
             "include",
             "include_str",
@@ -151,6 +157,13 @@ impl<'ast> Visit<'ast> for Check<'_> {
 
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
         let name = mac.path.to_token_stream().to_string().replace("r#", "");
+        if mac.path.segments.last().is_some_and(|segment| {
+            ["asm", "global_asm", "naked_asm"]
+                .contains(&segment.ident.to_string().trim_start_matches("r#"))
+        }) {
+            self.errors
+                .push(format!("assembly macro requires policy review: {name}"));
+        }
         let injection = [
             "include",
             "include_str",
@@ -210,7 +223,12 @@ impl<'ast> Visit<'ast> for Check<'_> {
                     .contains(&name.as_str())
             })
             .collect();
-        let forbidden = [self.forbidden, &token_injection].concat();
+        let forbidden = [
+            self.forbidden,
+            &token_injection,
+            &["asm", "global_asm", "naked_asm"],
+        ]
+        .concat();
         inspect(mac.tokens.clone(), &forbidden, &mut self.errors);
         if self.semantic
             && contains_ident(
@@ -221,6 +239,15 @@ impl<'ast> Visit<'ast> for Check<'_> {
             self.errors
                 .push("semantic macro cannot generate foreign symbols".into());
         }
+        for segment in &mac.path.segments {
+            if self
+                .forbidden
+                .contains(&segment.ident.to_string().trim_start_matches("r#"))
+            {
+                self.errors
+                    .push(format!("forbidden semantic identifier: {}", segment.ident));
+            }
+        }
     }
 }
 
@@ -229,10 +256,15 @@ fn root(file: &syn::File) -> Result<(), String> {
         return Err("changed crate-wide reference compilation attributes".into());
     }
     let mut modules = Vec::new();
+    let mut reexports = Vec::new();
     for item in &file.items {
         match item {
             Item::Mod(module) if module.content.is_none() => {
                 let name = module.ident.to_string();
+                let expected_public = name != "wasm";
+                if matches!(module.vis, syn::Visibility::Public(_)) != expected_public {
+                    return Err(format!("changed module visibility: {name}"));
+                }
                 let attrs = module
                     .attrs
                     .iter()
@@ -249,6 +281,11 @@ fn root(file: &syn::File) -> Result<(), String> {
                 modules.push(name);
             }
             Item::Use(import) => {
+                if !matches!(import.vis, syn::Visibility::Public(_))
+                    || import.leading_colon.is_some()
+                {
+                    return Err("changed root reexport visibility or path".into());
+                }
                 let UseTree::Path(path) = &import.tree else {
                     return Err("root reexports must name their module".into());
                 };
@@ -316,6 +353,18 @@ fn root(file: &syn::File) -> Result<(), String> {
                 if !no_alias(&import.tree) {
                     return Err("root aliases/glob reexports are forbidden".into());
                 }
+                let expected: UseTree = syn::parse_str(match path.ident.to_string().as_str() {
+                    "wasm" => "wasm::{benchmark_color_space, benchmark_resize_rgba8, convert_color_space, hello, process_rgba8, resize_rgba8,}",
+                    "bench_subjects" => "bench_subjects::bench_subjects",
+                    "wasm_bindgen_rayon" => "wasm_bindgen_rayon::init_thread_pool",
+                    _ => unreachable!(),
+                }).unwrap();
+                if import.tree.to_token_stream().to_string()
+                    != expected.to_token_stream().to_string()
+                {
+                    return Err("changed root reexport members".into());
+                }
+                reexports.push(path.ident.to_string());
             }
             _ => {
                 return Err(
@@ -328,6 +377,10 @@ fn root(file: &syn::File) -> Result<(), String> {
     modules.sort();
     if modules != ["bench_subjects", "image", "prod", "spec", "wasm"] {
         return Err("changed crate module set".into());
+    }
+    reexports.sort();
+    if reexports != ["bench_subjects", "wasm", "wasm_bindgen_rayon"] {
+        return Err("changed root reexport set".into());
     }
     Ok(())
 }

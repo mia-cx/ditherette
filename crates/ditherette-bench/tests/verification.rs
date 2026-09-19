@@ -251,8 +251,9 @@ fn failures_keep_raw_outputs_and_all_review_images_without_overwriting() {
         unreachable!()
     };
     indices[0] = 1;
-    let directory =
+    let root =
         std::env::temp_dir().join(format!("ditherette-review-fixture-{}", std::process::id()));
+    let directory = root.join("reviews/case/run");
     let report =
         verify_and_preserve(&case, &records, VerificationBounds::exact(), &directory).unwrap();
     assert_eq!(report.status, VerificationStatus::Failed);
@@ -278,7 +279,7 @@ fn failures_keep_raw_outputs_and_all_review_images_without_overwriting() {
         fs::read_to_string(directory.join("results.json")).unwrap(),
         raw
     );
-    fs::remove_dir_all(directory).unwrap();
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

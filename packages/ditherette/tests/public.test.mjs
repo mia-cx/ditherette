@@ -56,10 +56,12 @@ test('public calls preserve inputs and durable outputs across growth, later call
 });
 
 test('one exact capacity budget succeeds and one byte less rejects without poisoning the instance', async () => {
-	const exact = await createDitherette({ wasm: module, memoryLimitBytes: overhead + 12 });
+	// 12 pixel bytes plus two Wasm usize x offsets and one u32 y coordinate.
+	const capacity = 12 + 2 * 4 + 4;
+	const exact = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity });
 	assert.equal(exact.resize(request()).data.length, 8);
 	exact.dispose();
-	const short = await createDitherette({ wasm: module, memoryLimitBytes: overhead + 11 });
+	const short = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity - 1 });
 	assert.throws(() => short.resize(request()), diagnostic('memory-limit', 'memoryLimitBytes'));
 	const smaller = request();
 	smaller.output.width = 1;

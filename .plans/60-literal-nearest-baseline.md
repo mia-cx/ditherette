@@ -1,5 +1,7 @@
 # S19 literal nearest baseline
 
+Historical checkpoint only. Final S19 delivery preserves this comparison evidence without replacing the already-landed nearest implementation.
+
 Issue [60](https://github.com/mia-cx/ditherette/issues/60). This checkpoint completes only the literal-copy prerequisite.
 The processor, fallible allocations, package boundary, and optimization evidence remain pending.
 
