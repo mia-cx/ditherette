@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S20 merged; S19 restoration folded; S21 restacking on 2026-09-19
+
+PR #107 landed as `53efd548` from approved correction `2ad564b4`; issue #61 closed and main fast-forwarded. PR #110 was retargeted to main before the S20 merge, and Terra now restacks its approved conflicts. PR #109 is already merged into PR #107 and is now in main; Sol is closing issue #108. S20's CI passes, Pullfrog approved the exact head, and both review threads are resolved. CodeRabbit is green but quota-skipped, so no CodeRabbit review is claimed.
+
+The 65 source tests and the other existing validation groups passed. Completed targets were cleaned, reclaiming 2.61 GB while preserving validation logs. The root worktree remains untouched.
+
 ## S20 downstream validation correction approved on 2026-09-19
 
 Mia approved downstream validation correction `2ad564b4`; S20 review is resuming. Build cleanup reclaimed 2.61 GB, and the root worktree remains untouched. The correction is not recorded as pushed until Sol confirms. PR #110's prior approval to retain diagnostic medians and correctness-first ordering remains in force; PR #110 stays untouched until PR #107 lands.
