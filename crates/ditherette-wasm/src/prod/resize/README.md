@@ -1,5 +1,9 @@
 # Production resize rules
 
+Canonical `scalar/nearest/` contains the landed optimized implementation and its shared planning helpers.
+The S19 generic incremental experiment remains in Git history, not compiled production.
+Historical S19 baseline and measurement records remain unchanged.
+
 This directory contains optimized internal resize kernels. These rules are kept
 here so they are visible while grepping or editing prod resize code. See
 [`PERFORMANCE.md`](./PERFORMANCE.md) for the benchmark-driven optimization

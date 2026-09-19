@@ -290,7 +290,22 @@ fn subjects_for_filters(
 ) -> Result<Vec<ResizeBenchSubject>, BenchError> {
     filters
         .iter()
-        .map(|filter| registry.resize_subject(subject_for_filter(filter)))
+        .map(|filter| {
+            let subject = registry.resize_subject(subject_for_filter(filter))?;
+            if subject.descriptor.id.filter() == "nearest"
+                && ![
+                    "prod:resize:nearest:scalar",
+                    "candidate:resize:nearest:legacy",
+                ]
+                .contains(&subject.descriptor.id.as_str())
+            {
+                return Err(BenchError::Config(
+                    "Nearest row-band sweeps require the landed production nearest implementation."
+                        .to_owned(),
+                ));
+            }
+            Ok(subject)
+        })
         .collect()
 }
 
@@ -306,6 +321,40 @@ fn subject_for_filter(filter: &str) -> &str {
         "lanczos3" => "prod:resize:lanczos3:fixed",
         "lanczos3-scale-aware" => "prod:resize:lanczos3:scale-aware",
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod nearest_identity_tests {
+    use super::*;
+
+    #[test]
+    fn landed_row_band_sweep_defaults_to_production_and_accepts_its_historical_alias() {
+        let registry = Registry::load();
+        let selected = subjects_for_filters(&registry, &["nearest".into()]).unwrap();
+        assert_eq!(
+            selected[0].descriptor.id.as_str(),
+            "prod:resize:nearest:scalar"
+        );
+        for id in [
+            "prod:resize:nearest:scalar",
+            "candidate:resize:nearest:legacy",
+        ] {
+            let selected = subjects_for_filters(&registry, &[id.into()]).unwrap();
+            assert!(selected[0]
+                .descriptor
+                .source_file
+                .ends_with("prod/resize/scalar/nearest/mod.rs"));
+        }
+        for id in [
+            "candidate:resize:nearest:incremental",
+            "spec:resize:nearest:scalar",
+        ] {
+            assert!(
+                subjects_for_filters(&registry, &[id.into()]).is_err(),
+                "{id}"
+            );
+        }
     }
 }
 

@@ -76,7 +76,9 @@ Issue [#59](https://github.com/mia-cx/ditherette/issues/59) runs in `.worktrees/
 Its immediate parent is `impl/v1-s17-processor` at `cef2b60a635fd43c3b8e7cb880b5c92fe77d640b`.
 The prerequisite commit is in ancestry. Its native blocking edge was removed only after this worktree existed.
 Validated implementation and creation head is `e636b3120f566127b5e6b884ff2df3cd24c7c5ca` in [PR #104](https://github.com/mia-cx/ditherette/pull/104).
-The PR is open and non-draft, with auto-merge disabled. Later handoff commits change documentation only.
+The PR is open and non-draft, with auto-merge disabled.
+CI found a cold-cache fixture setup failure. Fix `c03c3c85f5748b7726cfdae50ea6d41acd8ede64` passes [run 34131713248](https://github.com/mia-cx/ditherette/actions/runs/34131713248), including all 11 mutation fixtures and the guard.
+Its follow-up delivery is `662d6483`; the frozen digest and guard semantics are unchanged.
 The fixed checkpoint remains the S17 parent, retained by branch `reference/ditherette-v1`.
 The guard uses recorded bytes, never that branch's tip or a new parent.
 All 106 reference/shared-image/provenance files match SHA-256 `17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
@@ -94,7 +96,41 @@ The separate S19 preparation branch `impl/v1-s19-base` now joins S02, S06, and S
 All three delivered prerequisite SHAs are ancestors; the merges needed no source conflict resolution.
 The joined tree passes native Rust tests, Wasm compilation, formatting, and the combined benchmark verifier/paired/lease fixtures.
 Its `spec/`, `image/`, and both consumer lockfiles exactly match the S17 parent.
-S19 remains unstarted and blocked on S18. This preparation contains no new production implementation.
+The reviewed S18 head `eee0b5ddfb600b9ba6517c3dcb755e3566fc7813` now joins this base.
+Its trusted guard passes the complete resolved tree at `363324c43556f08ef4e8677d226f5659977bcc66`.
+Documentation-only join `1f7e7a68803f5af6953ec710c536cbb66a32c1f8` retains identical crates, guard, and workflow content.
+S19 started in `impl/v1-s19-scalar` for the literal Rust baseline and `impl/v1-s19-package` for private glue generation.
+The coordinator owns progress and joins. Neither child runs benchmarks during implementation.
+The corrected S18 fixture joins this base at `1dd8128a8532638ee2a17853e562145bad687e3f`.
+The separate trusted S18 guard passes that joined tree.
+This prerequisite branch contains no new production implementation.
+
+## S19 scalar package implementation
+
+Issue [#60](https://github.com/mia-cx/ditherette/issues/60) is implemented in open, non-draft [PR #105](https://github.com/mia-cx/ditherette/pull/105), with auto-merge disabled.
+The final slice joins in `.worktrees/v1-s19-integration` on `impl/v1-s19-integration`, based on `impl/v1-s19-base`.
+This worktree owns the current tracked progress and ledger; the root `slices.md` remains the visible mirror.
+
+- Literal production baseline `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902` has five verified copies and a separate unchanged legacy candidate.
+- Policy join `89b570e0dbb4280352b157bfde5b20c3a7e80a9e` retains the exact baseline and passes the separately trusted S18 guard.
+- Private factory delivery `8ecdf786191a451ad13eb0f65191341101ffdc01` passes seven focused fixtures, actual scalar/threaded builds, declaration checks, and inert-import validation.
+- The coordinator joined both deliveries without conflicts. Private Rust allocation handling and the public TypeScript wrapper continue in their assigned worktrees.
+- Native candidate work runs in `impl/v1-s19-nearest-opt`; the accepted binary builds from clean `89b570e0` in `impl/v1-s19-nearest-accepted`.
+
+The baseline has 280 passing native tests. It is not a completed public package call.
+The first S19 experiment now passes all ten native cases with exact output, 8,000 samples, and 80 sequential children reaped.
+Accepted artifact `89b570e0` and candidate artifact `f9b51e45` produce about 52% lower resize latency and 96.6% lower identity latency.
+The [measurement report](../../../.plans/60-nearest-measurement.md) records exact revisions, executable hashes, raw artifact locations, and every median.
+All three agents and builds stop for the measurement; every child exits before implementation resumes.
+Promotion `964683f46a24c248aa91318bd6280ca91bec88f7` preserves tested arithmetic and passes 285 native tests, Wasm compilation, and the trusted guard.
+Delivery `b48511321f47722fcfb48c51a40a05a825f06a7b` joins at `fdef72b5788c3c09fc6439991a01bfc851dc71ce`.
+The final code join is `a9835a97276bfc726590f931caa2af1b4b0b3d9a`, including the private Rust adapter, public wrapper, and corrected tarball staging.
+It passes both Wasm builds, 285 native tests, 12 public/validation fixtures, public type checks, two staging fixtures, five factory fixtures, and six private Wasm fixtures.
+The installed tarball passes Chromium 147.0.7727.15, Firefox 148.0.2, and WebKit 26.4 using a task-local WebKit library launcher.
+Trusted freeze enforcement and Rust formatting pass. A merge-preserving rebase keeps the exact code head and all required checkpoint ancestry unchanged.
+S20 still owns complete browser-call timing; native evidence and browser conformance do not replace it.
+Documentation/provenance joins at `db2dbb61c9d6d14723c3f3bfb05a0d3465d6e057`; the crate and package trees match the validated code head.
+The PR's current head is authoritative for subsequent progress-only commits. The issue remains open until a separately authorized merge.
 
 ## S01 inherited port anchor
 

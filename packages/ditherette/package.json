@@ -18,11 +18,16 @@
 		"LICENSE"
 	],
 	"scripts": {
-		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && tsc && node scripts/stage-wasm.mjs",
-		"check": "pnpm check:version && tsc --noEmit",
+		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && node scripts/stage-wasm.mjs && tsc",
+		"check": "pnpm check:version && pnpm --filter ditherette-wasm build:scalar && node scripts/stage-wasm.mjs scalar && tsc --noEmit",
+		"test:validation": "pnpm check && tsc && node --test tests/validation.test.mjs",
+		"test:interface": "pnpm check && tsc && tsc -p tests/tsconfig.json && node --test tests/validation.test.mjs tests/public.test.mjs",
+		"test:browser": "pnpm build && node --test tests/tarball-browser.test.mjs",
+		"test:staging": "node --test scripts/stage-wasm.test.mjs",
 		"check:version": "node scripts/check-version.mjs"
 	},
 	"devDependencies": {
+		"playwright": "1.59.1",
 		"typescript": "6.0.3"
 	}
 }

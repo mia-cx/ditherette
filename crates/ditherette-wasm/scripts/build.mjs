@@ -1,6 +1,7 @@
 import { cp, readFile, rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { writeScalarFactory } from './scalar-factory.mjs';
 
 const variant = process.argv[2];
 if (variant !== 'scalar' && variant !== 'threads') {
@@ -34,4 +35,5 @@ const result = spawnSync('wasm-pack', args, {
 });
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
+if (!threaded) await writeScalarFactory(new URL('dist/scalar/', crate));
 await cp(new URL('LICENSE', root), new URL(`dist/${variant}/LICENSE`, crate));
