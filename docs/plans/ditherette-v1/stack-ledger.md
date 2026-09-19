@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S23 merged; S24 decision pending on 2026-09-19
+
+PR #112 merged as `1aae2e78` from `8dede0f2`; issue #64 closed and main fast-forwarded, with no child retarget needed. Validation passed for 308 Wasm tests, 72 benchmark tests, 3 browsers, and the trusted guard; the parent passed 18 Wasm tests, 2 adapter tests, and the guard. The obsolete 24-line fixture was removed. Pullfrog’s exact-head clean result is recorded only in silent log `35456104116` (no GitHub review object); the CodeRabbit supported-format-scope nit was rejected. There are zero threads and all CI passes.
+
+S23 cleanup is in progress and not complete. The actual PR #113 head is `f8a2cc11` on `impl/v1-s24-bench`, not `0ae` implementation. Mia approved scalar import only; three additional benchmark source conflicts in `crates/ditherette-bench/src/measure.rs`, `crates/ditherette-bench/src/paired/browser.rs`, and `scripts/benchmark-public-page.mjs` await asynchronous approval. The proposed resolution retains generic workload plus final measured-output digest/observer proof and composes quantize, trilinear, and unsupported-JavaScript guards. PR #113 remains untouched; stop before restack.
+
 ## S23 restack handoff on 2026-09-19
 
 Sol’s validation handoff is restacked at `bdd3df70`, combining `cd7a0d29` with S22 merge `75f5b621`. The parent verified the source-conflict-free result with zero optimized-resize and frozen-tree deltas. S22 cleanup is complete: 4.098 GB freed, five target paths parent-verified absent, S22 detached clean at `75f5b621`, and distribution artifacts plus logs retained.
