@@ -1,10 +1,16 @@
 # Ditherette v1 implementation stack
 
+## S20 validation and PR109 fold completed on 2026-09-19
+
+Parent validation passed with 14 Node checks and the trusted guard. Worker validation passed with explicit exits for 65 Rust checks, 20 JavaScript checks, 4 build recipes, TypeScript, and 3 browser-conformance checks. Metadata fix `92a39be9` and documentation update `9dcf0506` are pushed.
+
+The push auto-marked PR #109 merged into PR #107 at `e7e10ca9` on 2026-09-19T15:35:17Z; this was not a merge to main. Issue #108 remains open, and PR #110 still targets `fix/v1-restore-landed`.
+
 ## S20 local restack verified on 2026-09-19
 
 The clean local restack at `e7e10ca9` merges PR #109 head `467542f4` and includes the main merge `757c01c0` plus duration fixes `f1483a43` and `05bc96dd`. The parent verified that PR #109 contributes a net fifteen documentation files and no source, with the frozen spec and image unchanged and the approved source-conflict intent preserved.
 
-Sol now fixes the missing `BuildIdentity` configuration and recorded initialization, then validates before pushing and babysitting PR #107. PR #109 remains open; PR #110 is untouched.
+Sol's validation handoff covered the missing `BuildIdentity` configuration and recorded initialization before pushing and babysitting PR #107.
 
 ## S20 restack and supersession approved on 2026-09-19
 
