@@ -1,5 +1,9 @@
 # Ditherette v1 implementation stack
 
+## S22 restack handoff on 2026-09-19
+
+Sol’s S22 handoff is restacked at `4e8d7144`; validation is underway. The parent verified the combined 54 convolution checks and 8 cross-realm test fields, with no optimized-resize merge delta or frozen-tree delta. S21 is cleanly detached at `d40cf0dd`; five target paths are parent-verified absent, 3.748 GB was freed, and logs plus distribution artifacts are preserved.
+
 ## S21 merged; S22 restacking on 2026-09-19
 
 PR #110 merged as `d40cf0dd` from `c66c1a79`; issue #62 closed and main fast-forwarded. PR #111 was retargeted to main before the merge, and Terra is restacking its preapproved documentation and test conflicts. All checks and the exact Pullfrog approval are green. The parent caught one outdated unresolved thread; Sol verified the A/B/A fix and resolved it, leaving all three threads resolved before merge.

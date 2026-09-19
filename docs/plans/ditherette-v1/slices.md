@@ -60,7 +60,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S19](#s19) | Ship the first scalar package call with bounded memory | [S02](#s02), [S06](#s06), [S18](#s18) | Merged; optimized nearest restored | [#105](https://github.com/mia-cx/ditherette/pull/105), restoration [#109](https://github.com/mia-cx/ditherette/pull/109) folded via [#107](https://github.com/mia-cx/ditherette/pull/107) |
 | [S20](#s20) | Benchmark complete public browser calls | [S19](#s19) | Merged `53efd548` | [#107](https://github.com/mia-cx/ditherette/pull/107) |
 | [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | Merged `d40cf0dd` | [#110](https://github.com/mia-cx/ditherette/pull/110) |
-| [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | Restacking preapproved docs/test conflicts; validation underway | [#111](https://github.com/mia-cx/ditherette/pull/111) |
+| [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | Restacked `4e8d7144`; validation underway | [#111](https://github.com/mia-cx/ditherette/pull/111) |
 | [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | Ready | [#112](https://github.com/mia-cx/ditherette/pull/112) |
 | [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | Ready | [#113](https://github.com/mia-cx/ditherette/pull/113) |
 | [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | Ready | [#114](https://github.com/mia-cx/ditherette/pull/114) |
