@@ -77,7 +77,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         sample_ns: vec![0.0, 1.0, 2.0, 3.0, 4.0],
         iterations_per_sample: 1,
         warmup_iterations: 1,
-        warmup_elapsed_ns: 1,
+        warmup_elapsed_ns: 1_000_000,
         output: output.clone(),
         unstable_output: None,
         timing_skipped: None,
@@ -158,6 +158,22 @@ fn checked_response_preserves_zero_samples_and_rejects_mismatched_evidence() {
         data[0] = 99;
     }
     validate_response(&request, &changed).unwrap(); // Real byte differences go to S05, not a protocol error.
+}
+
+#[test]
+fn checked_response_requires_the_configured_warmup_duration() {
+    let (mut request, mut result) = fixture();
+    request.case.measurement.samples = 6;
+    result.sample_ns.fill(2_000_000.0);
+    result.warmup_elapsed_ns = 1_000_000;
+
+    validate_response(&request, &result).unwrap();
+    result.warmup_elapsed_ns = 999_999;
+
+    assert!(validate_response(&request, &result).is_err());
+    result.warmup_elapsed_ns = 1_000_000;
+    result.sample_ns.fill(1_999_999.0);
+    assert!(validate_response(&request, &result).is_err());
 }
 
 #[test]

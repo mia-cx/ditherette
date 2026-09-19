@@ -6,7 +6,7 @@ use std::{
     time::Instant,
 };
 
-use ditherette_wasm::{
+use ditherette_wasm_old::{
     error::ProcessingError,
     image::{rgba, ImageDimensions},
     resize::{
@@ -334,9 +334,6 @@ fn run_target(
                 .expect("bilinear tiling mode should provide row-band config"),
         )
         .map_err(format_processing_error),
-        (TilingKernel::Planned(name), _) => Err(format!(
-            "resize:{name}:tiling sweep is planned but not implemented yet"
-        )),
     }
 }
 

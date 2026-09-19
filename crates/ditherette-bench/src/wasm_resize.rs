@@ -31,6 +31,26 @@ const WASM_HARNESS: &str = "scripts/benchmark-wasm-resize.mjs";
 
 pub(crate) fn wasm_resize_command(lease: &Lease, args: &[String]) -> Result<(), BenchError> {
     let args = strip_leading_separator(args);
+    if args.iter().any(|arg| arg == "--help") {
+        let mut command = Command::new("node");
+        command
+            .arg(WASM_HARNESS)
+            .args(args)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        let status = lease
+            .spawn(command)
+            .map_err(BenchError::io)?
+            .wait()
+            .map_err(BenchError::io)?;
+        return if status.success() {
+            Ok(())
+        } else {
+            Err(BenchError::Runtime(format!(
+                "browser/Wasm help exited with {status}"
+            )))
+        };
+    }
     let bench_flags = WasmBenchFlags::parse(args)?;
     let mut command = Command::new("node");
     command
@@ -142,9 +162,12 @@ impl WasmBenchFlags {
                 index += 1;
             }
         }
+        if save_baseline.is_some() {
+            return Err(BenchError::Config("wasm-resize cannot save accepted baselines without complete exact output verification; record a diagnostic run instead".to_owned()));
+        }
         if no_run {
             return Err(BenchError::Config(
-                "wasm-resize does not support --no-run yet; use --replace-baseline NAME to refresh the baseline from a new browser run".to_owned(),
+                "wasm-resize does not support --no-run; accepted baseline writes require complete exact output verification".to_owned(),
             ));
         }
         Ok(Self {
@@ -389,7 +412,7 @@ impl WasmRunState {
         if result.subject == baseline_subject {
             return;
         }
-        let Some(baseline) = self.results.iter().find(|candidate| {
+        let Some(baseline) = self.results.iter().rev().find(|candidate| {
             candidate.subject == baseline_subject && same_case(result, candidate)
         }) else {
             return;
@@ -484,7 +507,7 @@ fn attach_same_run_scalar_comparisons(profile: Option<&str>, results: &mut [Benc
         if results[index].subject == baseline_subject {
             continue;
         }
-        let Some(baseline) = results.iter().find(|candidate| {
+        let Some(baseline) = results[..index].iter().rev().find(|candidate| {
             candidate.subject == baseline_subject && same_case(&results[index], candidate)
         }) else {
             continue;
@@ -670,6 +693,7 @@ struct WasmFixture {
     name: String,
     width: u32,
     height: u32,
+    fingerprint: String,
     #[serde(default = "browser_image_kind")]
     kind: String,
 }
@@ -683,7 +707,7 @@ impl WasmFixture {
         Fixture {
             id: self.name.clone(),
             kind: self.kind.clone(),
-            fingerprint: format!("browser:{}:{}x{}", self.name, self.width, self.height),
+            fingerprint: self.fingerprint.clone(),
             width: self.width,
             height: self.height,
             rgba: Vec::new(),
@@ -720,10 +744,7 @@ impl WasmResult {
         BenchResult {
             subject: self.subject.clone(),
             case_id: self.id,
-            fixture_fingerprint: format!(
-                "browser:{}:{}x{}",
-                fixture_name, self.source.width, self.source.height
-            ),
+            fixture_fingerprint: self.fixture.fingerprint,
             fixture: fixture_name,
             fixture_kind: self.fixture.kind.unwrap_or_else(browser_image_kind),
             filter: self.filter,
@@ -739,6 +760,7 @@ impl WasmResult {
             params_fingerprint: "wasm-resize-default".to_owned(),
             verified: false,
             verification: None,
+            output_digest: None,
             checksum: format!("{:08x}", self.checksum),
             samples: self.stats_ns.samples.len(),
             sample_ns: self.stats_ns.samples,
@@ -773,6 +795,7 @@ fn wasm_variant(subject: &str, support_policy: &str) -> String {
 #[serde(rename_all = "camelCase")]
 struct WasmResultFixture {
     name: String,
+    fingerprint: String,
     #[serde(default)]
     kind: Option<String>,
 }
@@ -842,5 +865,103 @@ mod tests {
         assert!(error.to_string().contains("invalid JSONL"));
         assert_eq!(fs::read_to_string(&marker).unwrap(), "closed");
         fs::remove_file(marker).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod benchmark_config_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn result(subject: &str, fingerprint: &str, sample: f64) -> BenchResult {
+        serde_json::from_value::<WasmResult>(json!({
+            "id": "fixture-decoded-rgba",
+            "subject": subject,
+            "filter": "lanczos3",
+            "fixture": { "name": "fixture.png", "fingerprint": fingerprint },
+            "scale": 1.0,
+            "source": { "width": 1, "height": 1 },
+            "output": { "width": 1, "height": 1 },
+            "checksum": 0,
+            "statsNs": { "samples": [sample] },
+            "iterationsPerSample": 1,
+            "totalIterations": 1
+        }))
+        .unwrap()
+        .into_bench_result()
+    }
+
+    #[test]
+    fn decoded_fingerprints_reach_results_and_fixture_metadata() {
+        let fingerprint = "rgba8:1x1:fnv1a32:12345678";
+        let fixture: WasmFixture = serde_json::from_value(json!({
+            "name": "fixture.png", "width": 1, "height": 1, "fingerprint": fingerprint
+        }))
+        .unwrap();
+        assert_eq!(fixture.fixture().fingerprint, fingerprint);
+        let left = result("wasm:resize:lanczos3:fixed", fingerprint, 100.0);
+        assert_eq!(left.fixture_fingerprint, fingerprint);
+        let right = result(
+            "wasm:resize:lanczos3:fixed",
+            "rgba8:1x1:fnv1a32:87654321",
+            100.0,
+        );
+        assert!(!same_case(&left, &right));
+    }
+
+    #[test]
+    fn missing_decoded_fingerprints_are_rejected() {
+        assert!(serde_json::from_value::<WasmFixture>(json!({
+            "name": "fixture.png", "width": 1, "height": 1
+        }))
+        .is_err());
+        assert!(
+            serde_json::from_value::<WasmResultFixture>(json!({ "name": "fixture.png" })).is_err()
+        );
+    }
+
+    #[test]
+    fn periodic_comparisons_use_the_latest_preceding_scalar() {
+        let scalar = "wasm:resize:lanczos3:fixed";
+        let candidate = "wasm:resize:lanczos3:pooled_direct";
+        let fingerprint = "rgba8:1x1:fnv1a32:12345678";
+        let mut results = vec![
+            result(scalar, fingerprint, 100.0),
+            result(candidate, fingerprint, 50.0),
+            result(scalar, fingerprint, 200.0),
+            result(candidate, fingerprint, 50.0),
+        ];
+        attach_same_run_scalar_comparisons(Some("convolution-thread"), &mut results);
+        assert_eq!(results[1].comparisons["oracle"].median_ns, 100.0);
+        assert_eq!(results[3].comparisons["oracle"].median_ns, 200.0);
+        let state = WasmRunState {
+            profile: Some("convolution-thread".into()),
+            results: results[..3].to_vec(),
+            ..WasmRunState::default()
+        };
+        let mut current = result(candidate, fingerprint, 50.0);
+        state.attach_same_run_scalar_comparison(&mut current);
+        assert_eq!(current.comparisons["oracle"].median_ns, 200.0);
+    }
+
+    #[test]
+    fn unverified_wasm_baseline_writes_fail_before_transport() {
+        for args in [
+            vec!["--save-baseline"],
+            vec!["--save-baseline", "named"],
+            vec!["--save-baseline=named"],
+            vec!["--replace-baseline", "named"],
+            vec!["--replace-baseline=named"],
+        ] {
+            let args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
+            let Err(error) = WasmBenchFlags::parse(&args) else {
+                panic!("unverified baseline saving was accepted");
+            };
+            assert!(error
+                .to_string()
+                .contains("complete exact output verification"));
+        }
+        let flags = WasmBenchFlags::parse(&["--baseline".into(), "named".into()]).unwrap();
+        assert_eq!(flags.accepted_baseline.as_deref(), Some("named"));
     }
 }

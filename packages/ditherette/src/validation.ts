@@ -20,6 +20,58 @@ const arrayTag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toS
 const arrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')!.get!;
 const arrayOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteOffset')!.get!;
 const arrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteLength')!.get!;
+const bufferLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')!.get!;
+const dataViewBuffer = Object.getOwnPropertyDescriptor(DataView.prototype, 'buffer')!.get!;
+const dataViewOffset = Object.getOwnPropertyDescriptor(DataView.prototype, 'byteOffset')!.get!;
+const dataViewLength = Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength')!.get!;
+const urlHref =
+	typeof URL === 'undefined'
+		? undefined
+		: Object.getOwnPropertyDescriptor(URL.prototype, 'href')?.get;
+const requestUrl =
+	typeof Request === 'undefined'
+		? undefined
+		: Object.getOwnPropertyDescriptor(Request.prototype, 'url')?.get;
+const responseType =
+	typeof Response === 'undefined'
+		? undefined
+		: Object.getOwnPropertyDescriptor(Response.prototype, 'type')?.get;
+
+function hasSlot(read: (() => unknown) | undefined, value: unknown): boolean {
+	if (!read) return false;
+	try {
+		read.call(value);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function isUrl(value: unknown): value is URL {
+	return hasSlot(urlHref, value);
+}
+
+function isRequest(value: unknown): value is Request {
+	return hasSlot(requestUrl, value);
+}
+
+function isResponse(value: unknown): value is Response {
+	return hasSlot(responseType, value);
+}
+
+function isArrayBuffer(value: unknown): value is ArrayBuffer {
+	return hasSlot(bufferLength, value);
+}
+
+function isWebAssemblyModule(value: unknown): value is WebAssembly.Module {
+	if (typeof WebAssembly === 'undefined') return false;
+	try {
+		Reflect.apply(WebAssembly.Module.exports, WebAssembly.Module, [value]);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 function object(
 	value: unknown,
@@ -106,13 +158,42 @@ export function validateOptions(
 function isInitInput(value: unknown): value is InitInput {
 	return (
 		typeof value === 'string' ||
-		(typeof URL !== 'undefined' && value instanceof URL) ||
-		(typeof Request !== 'undefined' && value instanceof Request) ||
-		(typeof Response !== 'undefined' && value instanceof Response) ||
-		value instanceof ArrayBuffer ||
+		isUrl(value) ||
+		isRequest(value) ||
+		isResponse(value) ||
+		isArrayBuffer(value) ||
 		ArrayBuffer.isView(value) ||
-		(typeof WebAssembly !== 'undefined' && value instanceof WebAssembly.Module)
+		isWebAssemblyModule(value)
 	);
+}
+
+/** Normalize accepted foreign-realm values for wasm-bindgen's current-realm loader checks. */
+export function normalizeInitInput(value: InitInput | undefined): InitInput | undefined {
+	if (value === undefined || typeof value === 'string' || isWebAssemblyModule(value)) return value;
+	if (isUrl(value)) return urlHref!.call(value);
+	if (isRequest(value)) return new Request(Request.prototype.clone.call(value));
+	if (isResponse(value)) {
+		const clone = Response.prototype.clone.call(value);
+		return new Response(clone.body, {
+			headers: clone.headers,
+			status: clone.status,
+			statusText: clone.statusText
+		});
+	}
+	if (isArrayBuffer(value)) return new Uint8Array(value);
+	try {
+		return new Uint8Array(
+			arrayBuffer.call(value),
+			arrayOffset.call(value),
+			arrayLength.call(value)
+		);
+	} catch {
+		return new Uint8Array(
+			dataViewBuffer.call(value),
+			dataViewOffset.call(value),
+			dataViewLength.call(value)
+		);
+	}
 }
 
 function rgbaBytes(value: unknown, expectedBytes: number): Uint8Array {

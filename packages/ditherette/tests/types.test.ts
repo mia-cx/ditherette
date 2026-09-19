@@ -17,7 +17,7 @@ processor.then((instance) => {
 	// @ts-expect-error The complete pipeline is not exposed before its implementation slice.
 	instance.process(request);
 	// @ts-expect-error Raw bindings are not public processor state.
-	instance.wasm;
+	void instance.wasm;
 });
 // @ts-expect-error Noncanonical anchor object tags are not accepted.
 const invalidAnchor: Extract<ResizeRequest['output']['resize'], { anchor: unknown }>['anchor'] = {

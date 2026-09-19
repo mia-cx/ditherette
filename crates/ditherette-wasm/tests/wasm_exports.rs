@@ -192,3 +192,57 @@ fn benchmark_export_returns_samples_json() {
     assert!(output.contains("\"totalIterations\":"));
     assert!(output.contains("\"samplesNs\":"));
 }
+
+#[cfg(target_arch = "wasm32")]
+mod storage_overflow {
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    #[wasm_bindgen_test]
+    fn resize_returns_storage_overflow() {
+        let error = resize_rgba8(
+            &[0, 0, 0, 255],
+            1,
+            1,
+            65_536,
+            65_535,
+            "nearest",
+            "center",
+            "fixed",
+            false,
+        )
+        .expect_err("overflow must return an error");
+        assert_eq!(
+            error.as_string().as_deref(),
+            Some("image storage element length overflowed usize")
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn benchmark_resize_returns_storage_overflow_before_measurement() {
+        let error = benchmark_resize_rgba8(
+            &[0, 0, 0, 255],
+            1,
+            1,
+            65_536,
+            65_535,
+            "nearest",
+            "center",
+            "fixed",
+            false,
+            1,
+            1.0,
+            1.0,
+            1,
+            1.0,
+            false,
+            32,
+            None,
+        )
+        .expect_err("overflow must return an error before measurement");
+        assert_eq!(
+            error.as_string().as_deref(),
+            Some("image storage element length overflowed usize")
+        );
+    }
+}
