@@ -95,7 +95,7 @@ export async function browserChecks(wasmUrl) {
 
 	const frame = document.createElement('iframe');
 	document.body.append(frame);
-	let crossRealmInputs = 0;
+	let crossRealmInputs;
 	try {
 		const foreign = frame.contentWindow;
 		if (!foreign || foreign.URL === URL) throw new Error('Iframe did not create a separate realm.');
