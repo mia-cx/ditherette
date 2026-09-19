@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S24 merged; S25 approval pending on 2026-09-20
+
+PR #113 merged as `5a2c6244` from `45b9e735`; issue #65 closed and main fast-forwarded. PR #114 was retargeted to main before the merge. The parent verified exact Pullfrog approval, all CI, five resolved review threads, and seven `browser_worker` tests. New fixes `471e55ad` add fallible missing-browser-recipe validation and `45b9e735` consume negative TypeScript fixtures for lint; no kernels changed.
+
+The baseline passed 319 Wasm tests, 77 benchmark tests, 38 JavaScript tests, private ABI 8+2 tests, 22 interface tests, three engines across 17 fixtures, and the trusted guard. Tarball `43b01c94` belongs to formatting fix `f497d1bf`; subsequent changes are transport-validator/tests only, with no package or kernel changes. Cleanup is underway. PR #114 has three source conflicts awaiting Mia’s approval and remains untouched.
+
 ## S24 validation passed; S25 delivery preview pending on 2026-09-20
 
 S24 is restacked at `2152095c` onto `1aae2e78`; current formatting-only fix is `f497d1bf`. Full validation and the trusted guard pass. The parent verified four production-quantize checks, eleven timing checks, and three-engine conformance across 17 frozen fixtures from fresh tarball `43b01c94`. Sol hit a capacity failure; Terra continued and is now authorized to push and babysit. No merge has occurred.
