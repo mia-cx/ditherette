@@ -62,9 +62,15 @@ fn sorted_scales(mut scales: Vec<ResizeScale>) -> Vec<ResizeScale> {
 }
 
 fn parse_scale(value: &str) -> Result<f64, BenchError> {
-    value
+    let scale = value
         .parse::<f64>()
-        .map_err(|error| BenchError::Config(format!("invalid scale {value:?}: {error}")))
+        .map_err(|error| BenchError::Config(format!("invalid scale {value:?}: {error}")))?;
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(BenchError::Config(format!(
+            "invalid scale {value:?}; expected a finite value greater than zero"
+        )));
+    }
+    Ok(scale)
 }
 
 fn parse_scale_pair(value: &str) -> Result<ResizeScale, BenchError> {
@@ -120,4 +126,58 @@ fn scale_group(group: &str) -> Result<Vec<ResizeScale>, BenchError> {
 
 fn uniform(scales: Vec<f64>) -> Vec<ResizeScale> {
     scales.into_iter().map(ResizeScale::uniform).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scales_reject_invalid_values() {
+        for value in ["NaN", "inf", "-inf", "0", "-1", "1e309"] {
+            let flags = Flags::parse(&["--scales".into(), value.into()]).unwrap();
+            let error = scales_from_flags(&flags).expect_err(value);
+            assert!(matches!(error, BenchError::Config(_)));
+            assert_eq!(
+                error.to_string(),
+                format!("invalid scale {value:?}; expected a finite value greater than zero")
+            );
+        }
+    }
+
+    #[test]
+    fn scale_pairs_reject_invalid_values() {
+        for value in ["NaN", "inf", "-inf", "0", "-1", "1e309"] {
+            for pair in [format!("{value}x1"), format!("1x{value}")] {
+                let flags = Flags::parse(&["--scale-pairs".into(), pair.clone()]).unwrap();
+                let error = scales_from_flags(&flags).expect_err(&pair);
+                assert!(matches!(error, BenchError::Config(_)));
+                assert_eq!(
+                    error.to_string(),
+                    format!("invalid scale {value:?}; expected a finite value greater than zero")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scales_preserve_finite_positive_values() {
+        let flags = Flags::parse(&["--scales".into(), "2,0.5,1,0.5".into()]).unwrap();
+        assert_eq!(
+            scales_from_flags(&flags).unwrap(),
+            vec![
+                ResizeScale::uniform(0.5),
+                ResizeScale::uniform(1.0),
+                ResizeScale::uniform(2.0),
+            ]
+        );
+        let flags = Flags::parse(&["--scale-pairs".into(), "2x0.5,0.5x1".into()]).unwrap();
+        assert_eq!(
+            scales_from_flags(&flags).unwrap(),
+            vec![
+                ResizeScale { x: 0.5, y: 1.0 },
+                ResizeScale { x: 2.0, y: 0.5 }
+            ]
+        );
+    }
 }

@@ -246,7 +246,7 @@ export function isolatedCheck(root, role, target, threads = false) {
 			tmpdir(),
 			{
 				env: { ...cargoEnv(), CARGO_TARGET_DIR: join(HERE, 'syntax/target/isolation') },
-				stdio: ['ignore', 'inherit', 'inherit']
+				stdio: ['ignore', 'pipe', 'pipe']
 			}
 		);
 	} finally {

@@ -1,5 +1,6 @@
 //! RGBA comparison shared by resize measurements and typed conformance.
 
+use ditherette_bench_api::verification::Digest256;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,6 +10,8 @@ pub struct VerificationReport {
     /// Numeric diagnostics never establish approval for non-exact output.
     #[serde(default)]
     pub within_bounds: bool,
+    #[serde(default)]
+    pub candidate_digest: Option<Digest256>,
     pub first_mismatch: Option<MismatchReport>,
     #[serde(default)]
     pub bytes: usize,
@@ -185,6 +188,7 @@ pub fn verify_with_bounds(
         mode: bounds.mode(),
         passed: within_bounds && bytes > 0 && differing_bytes == 0,
         within_bounds,
+        candidate_digest: Some(super::content_digest(right)),
         first_mismatch,
         bytes,
         pixels,
