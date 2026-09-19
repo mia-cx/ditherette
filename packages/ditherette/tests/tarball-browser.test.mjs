@@ -64,13 +64,25 @@ test('installed tarball loads only scalar assets and runs the public contract in
 	});
 	const requests = [];
 	const server = createServer(async (request, response) => {
-		const pathname = new URL(request.url, 'http://localhost').pathname;
+		const url = new URL(request.url, 'http://localhost');
+		const pathname = url.pathname;
 		requests.push(pathname);
 		if (pathname === '/') {
-			response.writeHead(200, { 'Content-Type': 'text/html' });
+			response.writeHead(200, {
+				'Content-Type': 'text/html',
+				'Set-Cookie': 'ditherette-realm=1; SameSite=Lax'
+			});
 			response.end(
 				'<!doctype html><title>Installed ditherette fixture</title><script type="importmap">{"imports":{"ditherette":"/node_modules/ditherette/dist/index.js"}}</script>'
 			);
+			return;
+		}
+		if (
+			url.searchParams.has('cross-realm-request') &&
+			(request.headers['x-ditherette-cross-realm'] !== '1' ||
+				request.headers.cookie?.includes('ditherette-realm=1'))
+		) {
+			response.writeHead(400).end();
 			return;
 		}
 		const file = join(consumer, decodeURIComponent(pathname));
@@ -138,8 +150,10 @@ test('installed tarball loads only scalar assets and runs the public contract in
 				assert.deepEqual(result, {
 					anchors: 9,
 					convolutionCases: 54,
+					trilinearCases: 27,
 					quantizeCases: 5,
 					customInputs: 8,
+					crossRealmInputs: 8,
 					scalarWithoutIsolation: true
 				});
 				assert.ok(

@@ -1,7 +1,6 @@
 # S19 nearest measurement
 
-Historical evidence for the recorded revisions only. [The restoration](108-restore-landed.md) removes this replacement from current production.
-These measurements do not establish restored-kernel performance.
+Historical evidence for the recorded revisions only. [The restoration](108-restore-landed.md) removes this replacement from current production; these measurements do not establish performance for the restored landed kernel shipped by S19.
 
 The first bounded native experiment passes every required case with exact frozen-reference output.
 The candidate meets the 20% improvement target. No second candidate or repeated measurement is needed.

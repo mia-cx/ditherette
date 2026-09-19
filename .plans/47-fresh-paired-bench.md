@@ -1,7 +1,8 @@
 # #47 Fresh accepted and candidate performance pairs
 
-Base: `8c05906cb9cfe0a991b351f5260a319b91f76ab4` (S05, PR #96).
-Branch: `impl/v1-s06-paired-bench`. PR base: `impl/v1-s05-verification`.
+Original base: `8c05906cb9cfe0a991b351f5260a319b91f76ab4` (S05, PR #96).
+Branch: `impl/v1-s06-paired-bench`. Current PR base: `main` at `a739c71e`.
+The original PR base was `impl/v1-s05-verification` before S05 merged.
 
 ## TODOs
 
@@ -100,8 +101,73 @@ These generated files stay ignored; this record binds their retained contents:
 - `events.jsonl`: `fcd7897e12708cf646942649e7941a63b02ca68d18187b80d0113e7b30e78ef4`.
 - `prepared.json`: `e1f66044133b9a0632260d57827cfaafcd3a68e878117ee383ebdbe3b7c2e5c8`.
 
-Delivered in [PR #102](https://github.com/mia-cx/ditherette/pull/102), non-draft and
-unmerged against `impl/v1-s05-verification`. Final evidence commits change no
+Originally delivered in [PR #102](https://github.com/mia-cx/ditherette/pull/102),
+non-draft and unmerged against `impl/v1-s05-verification`. Those evidence commits change no
 measured implementation. The control candidate stays rejected for performance;
 this delivery makes the paired measurement tooling available, not that candidate
 accepted production.
+
+## Stack-collapse amendment
+
+Restacked onto merged S05 main `a739c71e` through merge `94b6ac2c`.
+The approved conflict keeps Wasm help outside measurement attestation and adds
+`paired-trial` to quiet-required commands. Both quiet states pass the executable
+regression in `39141f30` without starting measurements.
+
+`7f2fa6f3` rejects copied accepted/candidate revisions, records Cargo build settings,
+checks native output byte-length overflow, and preserves known correctness
+failures despite incomplete timing evidence. `187b3d87` retains the deterministic
+regressions and uses distinct per-role fixture identities. The three gate failures
+reproduced before correction. A build-script probe previously emitted identical
+identities under different profile/flag settings; it now records the difference.
+
+The Git metadata-path finding did not reproduce. From the package directory in a
+normal checkout, Git returns `../../.git/HEAD`, `../../.git/index`, and the matching
+branch reference. These paths already resolve relative to Cargo's package cwd.
+
+The restack baseline passed 30 Rust tests, three nested Node ownership fixtures,
+and 16 deterministic Node configuration tests. After corrections, all eight
+paired tests, 12 binary tests, the help fixture, Criterion compilation, and Rust
+formatting pass. Mixed failure evidence includes its expected PNG review image.
+No standalone timing workload, browser launch, threshold change, kernel rewrite,
+publication, or promotion occurred. Historical control measurements above remain
+unchanged and do not validate performance at this amended head.
+
+### Measured output and effective compiler settings
+
+Pullfrog found two gaps after the first amendments. The native adapter retained
+its probe rather than its final measured buffer. Build-script environment capture
+also missed effective `--config profile.release.*` settings.
+
+`e2ceed2c` retains the measured pixels outside timed batches and requires compiler-
+recorded builds for paired evidence. The build-only Node recorder captures actual
+rustc arguments for the executable and dependencies. Default Cargo builds cannot
+claim this proof. It leaves optimization defaults and reference kernels unchanged.
+
+`ed022edf` records actual compiler controls. Different root codegen settings and
+dependency-only overrides produce different recipes. Identical builds in separate
+worktrees produce equal recipes. The old environment-only identities remain equal
+across the same codegen overrides, reproducing the incomplete capture.
+
+The measured-output test failed with retained `[1, 2, 3, 255]` versus measured
+`[0, 2, 3, 255]`; it now retains the measured bytes. The final Rust gate passes
+35 tests, including eight paired tests and 13 binary tests, plus the nested Node
+ownership fixtures. Criterion compilation and formatting pass. The actual
+benchmark dependency graph also builds through the recorder. No standalone
+performance trial or browser run occurred.
+
+`40814081` rejects host-dependent `target-cpu=native` so recipe equality cannot
+hide different compiler hosts. `dac08260` covers all four codegen flag spellings.
+The real Cargo probe rejects the option before compilation. Both compiler tests
+pass, including unchanged explicit-CPU and cross-worktree controls.
+
+`423f7c34` rejects opaque compiler response files before argument normalization.
+A real build previously accepted a response file containing `target-cpu=native`;
+it now fails during Cargo's compiler probe. `94550ac5` covers response files in
+bare and option-value positions. All three recorder tests pass.
+
+`6ad57c02` rejects bootstrap-enabled compiler semantics inside the recorder.
+The real `RUSTC_BOOTSTRAP=1` plus `-Ztune-cpu=native` build previously succeeded;
+it now fails at the compiler probe. `5f226f80` verifies global and crate-specific
+bootstrap rejection while preserving forced-stable `-1`. All four recorder tests
+pass. The unchanged Rust implementation retains its 35-test validation.

@@ -72,7 +72,7 @@ S21/S22 still need public package integration and their remaining slice evidence
 
 ## Delivery
 
-Open, non-draft [PR #109](https://github.com/mia-cx/ditherette/pull/109) targets `impl/v1-s20-browser-bench`; auto-merge is disabled.
+The restoration record is folded into [PR #107](https://github.com/mia-cx/ditherette/pull/107). [PR #109](https://github.com/mia-cx/ditherette/pull/109) closes after #107 lands, without a separate merge.
 Its creation head is `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
 Both clean S21/S22 branches fast-forward to that validated correction; their next PRs target `fix/v1-restore-landed`.
 The progress table links the correction beside S19. S21/S22 remain in progress.

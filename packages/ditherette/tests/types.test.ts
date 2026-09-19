@@ -23,7 +23,7 @@ processor.then((instance) => {
 	// @ts-expect-error The complete pipeline is not exposed before its implementation slice.
 	instance.process(request);
 	// @ts-expect-error Raw bindings are not public processor state.
-	instance.wasm;
+	void instance.wasm;
 });
 
 const quantize: QuantizeRequest = {
@@ -58,6 +58,15 @@ const bilinear: ResizeRequest = {
 };
 void area;
 void bilinear;
+const trilinear: ResizeRequest['output']['resize'] = { algorithm: 'trilinear', anchor: 'center' };
+const invalidTrilinear: ResizeRequest['output']['resize'] = {
+	algorithm: 'trilinear',
+	anchor: 'center',
+	// @ts-expect-error Trilinear has no support setting.
+	support: 'fixed'
+};
+void trilinear;
+void invalidTrilinear;
 const convolution: ResizeRequest['output']['resize'][] = [
 	{ algorithm: 'bicubic', anchor: 'bottom-right', support: 'fixed' },
 	{ algorithm: 'lanczos2', anchor: 'center', support: 'scale-aware' },

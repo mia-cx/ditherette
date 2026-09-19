@@ -58,7 +58,10 @@ pub fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         },
         candidate: Executable {
             path: "candidate/ditherette-bench".into(),
-            identity: artifact.clone(),
+            identity: ArtifactIdentity {
+                revision: "b".repeat(40),
+                content: content_digest(b"candidate executable"),
+            },
         },
         machine: Machine {
             os: "fixture".into(),
@@ -86,16 +89,23 @@ pub fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let mut trials = Vec::new();
     for pair in 0..2 {
         for role in [Role::Accepted, Role::Candidate] {
+            let mut record = record.clone();
+            record.implementation.artifact = match role {
+                Role::Accepted => prepared.accepted.identity.clone(),
+                Role::Candidate => prepared.candidate.identity.clone(),
+            };
             trials.push(TrialResult {
                 browser: None,
                 pair,
                 role,
                 case_name: "one-call".into(),
                 build: BuildIdentity {
-                    revision: "a".repeat(40),
+                    revision: record.implementation.artifact.revision.clone(),
                     dirty: false,
                     rustc: "rustc fixture".into(),
                     tool_version: "fixture".into(),
+                    configuration: "fixture build configuration".into(),
+                    recorded: true,
                 },
                 measurement: measurement.clone(),
                 warmup_iterations: 1,

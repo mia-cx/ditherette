@@ -40,3 +40,15 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Threaded Wasm build prerequisites
+
+`pnpm wasm:build:threads` requires `nightly-2024-08-02`, its `wasm32-unknown-unknown` target, and `rust-src`.
+The root `rust-toolchain.toml` configures stable Rust; it does not provision this separate nightly.
+Install these prerequisites once before running the threaded build:
+
+```sh
+rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
+```
+
+`rust-src` is required by the threaded build's `-Z build-std=panic_abort,std`.
