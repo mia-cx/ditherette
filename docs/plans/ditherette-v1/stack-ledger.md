@@ -8,6 +8,8 @@ The S19 audit found that PR #105 still demotes the landed optimized nearest impl
 
 Terra owns the S19 base and integration restack. Sol will own PR #105 fixes and babysitting after the coordinator checks the restoration. No benchmark, publication, deployment, or root-worktree edit is authorized by this continuation. Progress updates stay in this coordinator, and finished build targets are cleared after each PR.
 
+The ancestry-preserving base is `008c88d4`; integration `fe5be5e6` carries all three restoration patches. Only progress-document conflicts occurred. The coordinator verified that the restored resize and processor trees match PR #109 exactly, and frozen `spec/` and `image/` match main. PR #105 now targets main. Its reviewed local fixes are pushed at `9ec7c8c6`: scalar-only staging makes clean typechecks work, cross-realm Wasm inputs retain request options and reusable responses, and production validation inherits the settled implicit-source `InvalidImage` classification. Incremental-nearest measurements are marked historical. Sol reports native, Wasm, package, three-browser, and trusted freeze checks passing. The coordinator independently reran fourteen package tests and three production-contract tests successfully. Remote review and CI remain in progress; no merge is claimed.
+
 ## S18 merged and stopped on 2026-09-17
 
 Mia's latest boundary is PR #104 only, followed by bookkeeping and cleanup. This supersedes the continuation instruction in the historical entry below. S19 has not started. The root worktree remains untouched; the earlier truncation and uncertain recovery disclosure remains intact.
