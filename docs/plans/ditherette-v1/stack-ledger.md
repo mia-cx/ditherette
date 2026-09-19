@@ -1,5 +1,13 @@
 # Ditherette v1 implementation stack
 
+## Stack collapse resumed on 2026-09-19
+
+Mia resumes the remaining stack with local Sol, Terra, and Luna subagents instead of Devin. The coordinator verifies worker reports and owns integration and merges. PRs land one at a time after babysitting. This supersedes the S18 stop boundary below.
+
+The S19 audit found that PR #105 still demotes the landed optimized nearest implementation until PR #109 restores it. Mia approves moving restoration commits `1f8c8d90`, `2476b4cc`, and `d17e323d` into PR #105 before it lands, then restacking downstream work. This preserves optimized kernels in every landed state. Historical joins and measurement evidence remain intact. Source conflicts outside this approved move still require a decision; documentation and test-only conflicts retain standing approval.
+
+Terra owns the S19 base and integration restack. Sol will own PR #105 fixes and babysitting after the coordinator checks the restoration. No benchmark, publication, deployment, or root-worktree edit is authorized by this continuation. Progress updates stay in this coordinator, and finished build targets are cleared after each PR.
+
 ## S18 merged and stopped on 2026-09-17
 
 Mia's latest boundary is PR #104 only, followed by bookkeeping and cleanup. This supersedes the continuation instruction in the historical entry below. S19 has not started. The root worktree remains untouched; the earlier truncation and uncertain recovery disclosure remains intact.
