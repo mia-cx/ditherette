@@ -116,6 +116,7 @@ class ScalarProcessor implements Ditherette {
 					input.sourceHeight,
 					input.outputWidth,
 					input.outputHeight,
+					input.algorithm,
 					input.anchor,
 					result
 				);

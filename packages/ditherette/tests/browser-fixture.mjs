@@ -55,6 +55,31 @@ export async function browserChecks(wasmUrl) {
 		equal(Array.from(output.data), expected, `nearest ${anchor}`);
 		equal(Array.from(value.source.data), original, 'source mutation');
 	}
+	for (const algorithm of ['area', 'bilinear']) {
+		const backing = new Uint8Array([9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+		const value = {
+			version: 1,
+			source: { width: 2, height: 1, data: backing.subarray(1, 9) },
+			output: {
+				width: 1,
+				height: 1,
+				resize: algorithm === 'area' ? { algorithm } : { algorithm, anchor: 'center' }
+			}
+		};
+		const average = processor.resize(value);
+		equal(Array.from(average.data), [100, 50, 150, 128], `${algorithm} hidden-RGB average`);
+		equal(
+			Array.from(backing),
+			[9, 200, 0, 100, 0, 0, 100, 200, 255, 9],
+			`${algorithm} source ownership`
+		);
+		value.output.width = 2;
+		const identity = processor.resize(value);
+		equal(Array.from(identity.data), Array.from(value.source.data), `${algorithm} identity`);
+		equal(Array.from(average.data), [100, 50, 150, 128], `${algorithm} result durability`);
+		value.output.resize.support = 'fixed';
+		await error(() => processor.resize(value), 'invalid-settings', 'output.resize.support');
+	}
 	const saved = processor.resize(request());
 	const savedBytes = Array.from(saved.data);
 	const larger = request();

@@ -19,8 +19,24 @@ thread_local! {
 
 pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+) {
+    if plan.scratch_elements() == 0 {
+        resize_with_scratch_into(source, output, plan, &mut []);
+        return;
+    }
+    VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
+        vertical_row.resize(plan.scratch_elements(), 0.0);
+        resize_with_scratch_into(source, output, plan, vertical_row);
+    });
+}
+
+pub(super) fn resize_with_scratch_into(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
+    vertical_row: &mut [f32],
 ) {
     let source_width = source.dimensions().width_usize();
     let source_height = source.dimensions().height_usize();
@@ -36,6 +52,7 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
             source_row_len,
             output_row_len,
             plan,
+            vertical_row,
         );
         return;
     }
@@ -51,31 +68,23 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
         return;
     }
 
-    VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
-        vertical_row.resize(source_row_len, 0.0);
-        let source_data = source.data();
-        let output_data = output.data_mut();
+    let source_data = source.data();
+    let output_data = output.data_mut();
 
-        for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
-            vertical_row.fill(0.0);
-            let y_weight_sum = accumulate_vertical(
-                source_data,
-                source_row_len,
-                vertical_row.as_mut_slice(),
-                y_taps,
-            );
+    for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
+        vertical_row.fill(0.0);
+        let y_weight_sum = accumulate_vertical(source_data, source_row_len, vertical_row, y_taps);
 
-            let output_row_start = output_y * output_row_len;
-            let output_row = &mut output_data[output_row_start..output_row_start + output_row_len];
+        let output_row_start = output_y * output_row_len;
+        let output_row = &mut output_data[output_row_start..output_row_start + output_row_len];
 
-            for (output_pixel, x_taps) in output_row
-                .chunks_exact_mut(RGBA8_CHANNELS)
-                .zip(&plan.x_taps)
-            {
-                write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
-            }
+        for (output_pixel, x_taps) in output_row
+            .chunks_exact_mut(RGBA8_CHANNELS)
+            .zip(&plan.x_taps)
+        {
+            write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
         }
-    });
+    }
 }
 
 pub(super) fn resize_packed_rgba8_rows_with_triangle_filter_into(
@@ -167,28 +176,24 @@ fn resize_height_only(
     source_row_len: usize,
     output_row_len: usize,
     plan: &BilinearResizePlan,
+    vertical_row: &mut [f32],
 ) {
-    VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
-        vertical_row.resize(source_row_len, 0.0);
+    for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
+        vertical_row.fill(0.0);
+        let y_weight_sum = accumulate_vertical(source, source_row_len, vertical_row, y_taps);
+        let output_start = output_y * output_row_len;
+        let output_row = &mut output[output_start..output_start + output_row_len];
 
-        for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
-            vertical_row.fill(0.0);
-            let y_weight_sum =
-                accumulate_vertical(source, source_row_len, vertical_row.as_mut_slice(), y_taps);
-            let output_start = output_y * output_row_len;
-            let output_row = &mut output[output_start..output_start + output_row_len];
-
-            for (output_pixel, vertical_pixel) in output_row
-                .chunks_exact_mut(RGBA8_CHANNELS)
-                .zip(vertical_row.chunks_exact(RGBA8_CHANNELS))
-            {
-                output_pixel[0] = round_u8(vertical_pixel[0] / y_weight_sum);
-                output_pixel[1] = round_u8(vertical_pixel[1] / y_weight_sum);
-                output_pixel[2] = round_u8(vertical_pixel[2] / y_weight_sum);
-                output_pixel[3] = round_u8(vertical_pixel[3] / y_weight_sum);
-            }
+        for (output_pixel, vertical_pixel) in output_row
+            .chunks_exact_mut(RGBA8_CHANNELS)
+            .zip(vertical_row.chunks_exact(RGBA8_CHANNELS))
+        {
+            output_pixel[0] = round_u8(vertical_pixel[0] / y_weight_sum);
+            output_pixel[1] = round_u8(vertical_pixel[1] / y_weight_sum);
+            output_pixel[2] = round_u8(vertical_pixel[2] / y_weight_sum);
+            output_pixel[3] = round_u8(vertical_pixel[3] / y_weight_sum);
         }
-    });
+    }
 }
 
 fn resize_width_only(

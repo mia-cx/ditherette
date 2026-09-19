@@ -4,8 +4,138 @@ import {
 	collectCalls,
 	collectInitializations,
 	timeCalls,
-	timeInitialization
+	timeInitialization,
+	retainedOutputSlots,
+	RETAINED_OUTPUT_LIMIT,
+	RESULT_BOOKKEEPING_BYTES
 } from './benchmark-public-timing.mjs';
+
+test('retained output budget includes evidence and fails before oversized samples without reducing their count', async () => {
+	const bytes = RETAINED_OUTPUT_LIMIT / 4 - RESULT_BOOKKEEPING_BYTES;
+	assert.equal(retainedOutputSlots(2, bytes).length, 2);
+	assert.throws(() => retainedOutputSlots(2, bytes + 1), /64 MiB/);
+	let calls = 0,
+		prepares = 0,
+		closes = 0,
+		clock = 0;
+	await assert.rejects(
+		collectCalls({
+			measurement: { mode: 'throughput', samples: 5, warmup_ms: 1, target_sample_ms: 100 },
+			outputBytes: 1024 * 1024,
+			now: () => clock,
+			prepare: async () => {
+				prepares++;
+				return {
+					call() {
+						clock++;
+						return ++calls;
+					},
+					close() {
+						closes++;
+					}
+				};
+			}
+		}),
+		/64 MiB/
+	);
+	assert.deepEqual([calls, prepares, closes], [1, 1, 1]);
+});
+
+test('retained slots clear before disposal even when outside-timer validation rejects', async () => {
+	let retained,
+		closes = 0,
+		clock = 0;
+	await assert.rejects(
+		collectCalls({
+			measurement: { mode: 'single-call', warmup_ms: 1 },
+			now: () => clock++,
+			observe(outputs) {
+				retained = outputs;
+				throw new Error('invalid output');
+			},
+			prepare: async () => ({
+				call: () => ({}),
+				close() {
+					closes++;
+					assert.ok(retained.every((value) => value === undefined));
+				}
+			})
+		}),
+		/invalid output/
+	);
+	assert.equal(closes, 1);
+});
+
+test('every warmup and throughput output reaches the observer after its whole batch timer', async () => {
+	let clock = 0,
+		calls = 0,
+		closes = 0;
+	const batches = [];
+	const result = await collectCalls({
+		measurement: {
+			mode: 'throughput',
+			samples: 5,
+			warmup_ms: 1,
+			target_sample_ms: 3,
+			measurement_ms: 100
+		},
+		now: () => clock,
+		outputBytes: 4,
+		observe: (outputs) => {
+			batches.push([...outputs]);
+			clock += 100;
+		},
+		prepare: async () => ({
+			call() {
+				clock++;
+				return ++calls === 3 ? 'B' : 'A';
+			},
+			close() {
+				closes++;
+			}
+		})
+	});
+	assert.deepEqual(batches, [
+		['A'],
+		['A', 'B', 'A'],
+		['A', 'A', 'A'],
+		['A', 'A', 'A'],
+		['A', 'A', 'A'],
+		['A', 'A', 'A']
+	]);
+	assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+	assert.equal(result.iterations_per_sample, 3);
+	assert.equal(calls, 16);
+	assert.equal(closes, 6);
+});
+
+test('every initialization probe reaches the observer outside its timer and before disposal', async () => {
+	let clock = 0,
+		calls = 0,
+		observed = 0;
+	const values = [];
+	const result = await collectInitializations({
+		measurement: { samples: 5, warmup_ms: 1, measurement_ms: 100 },
+		now: () => clock,
+		outputBytes: 4,
+		create: async () => {
+			clock++;
+			return {
+				dispose() {
+					assert.equal(observed, calls);
+				}
+			};
+		},
+		probe: () => (++calls === 3 ? 'B' : 'A'),
+		observe: (outputs) => {
+			values.push(...outputs);
+			observed++;
+			clock += 100;
+		}
+	});
+	assert.deepEqual(values, ['A', 'A', 'B', 'A', 'A', 'A']);
+	assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+});
 
 test('latency keeps a zero-duration call without retry, batching, or clamping', () => {
 	let calls = 0;

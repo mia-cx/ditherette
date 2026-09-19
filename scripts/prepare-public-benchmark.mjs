@@ -188,7 +188,11 @@ export async function preparePublicBenchmark(destination) {
 			dependencies: { ditherette: `file:${tarball}` }
 		})
 	);
-	run('pnpm', ['install', '--offline', '--ignore-scripts', '--lockfile=false'], consumer);
+	run(
+		'pnpm',
+		['install', '--offline', '--ignore-scripts', '--ignore-workspace', '--lockfile=false'],
+		consumer
+	);
 	const packagePath = await realpath(path.join(consumer, 'node_modules/ditherette'));
 	const typescript = path.join(destination, 'typescript');
 	await prepareTypeScript(typescript);

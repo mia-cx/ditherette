@@ -42,14 +42,16 @@ export interface Progress {
 	readonly total?: number;
 }
 
-/** Version-one nearest resize. Other filters are introduced by their implementation slices. */
+/** Version-one resize using the landed scalar kernels. */
 export interface ResizeRequest {
 	readonly version: 1;
 	readonly source: Rgba8Image;
 	readonly output: {
 		readonly width: number;
 		readonly height: number;
-		readonly resize: { readonly algorithm: 'nearest'; readonly anchor: ResizeAnchor };
+		readonly resize:
+			| { readonly algorithm: 'nearest' | 'bilinear'; readonly anchor: ResizeAnchor }
+			| { readonly algorithm: 'area' };
 	};
 	/** Currently rejected explicitly. S33 adds progress delivery without changing this request shape. */
 	readonly onProgress?: (progress: Progress) => void;

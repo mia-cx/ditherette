@@ -109,6 +109,25 @@ pub fn resize_bilinear_rgba8_with_plan_into(
     kernel::resize_packed_rgba8_with_triangle_filter_into(source, output, plan);
 }
 
+/// Execute the landed full-call kernel with caller-owned, already-reserved scratch.
+pub fn resize_bilinear_rgba8_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    scratch: &mut [f32],
+) {
+    common::rgba8::assert_packed_source(source, "bilinear");
+    common::rgba8::assert_packed_output(&output, "bilinear");
+    assert_eq!(source.dimensions(), plan.source_dimensions());
+    assert_eq!(output.dimensions(), plan.output_dimensions());
+    assert_eq!(scratch.len(), plan.scratch_elements());
+    if plan.is_identity() {
+        output.data_mut().copy_from_slice(source.data());
+        return;
+    }
+    kernel::resize_with_scratch_into(source, output, plan, scratch);
+}
+
 fn assert_row_band_matches_plan(
     band_dimensions: crate::image::ImageDimensions,
     full_output_dimensions: crate::image::ImageDimensions,

@@ -15,6 +15,14 @@ S20 tooling evidence remains valid for the artifact it measured; it does not est
 The interrupted diagnostic branch stays separate and will not delay restoring landed code.
 All later work reuses landed kernels and shared helpers. Only missing implementations start from literal spec copies.
 
+## Current implementation
+
+Current integration work continues on `impl/v1-resize-integration` in `.worktrees/v1-resize-integration`.
+It owns the tracked progress table; the root table remains the visible mirror.
+S21 owns area/bilinear and public resize wiring. S22 owns convolution plan/scratch integration, then adds its public modes after S21.
+S24 independently starts packed color/palette/direct quantization in `impl/v1-s24-quantize` from restored `467542f4`.
+The coordinator owns benchmark protocol/adapters, joins, and exclusive measurements. No measurement is running.
+
 ## Delivered S01 through S16
 
 This snapshot comes from the live PR state after S16 delivery. All 16 PRs are open, non-draft, and have auto-merge disabled.
