@@ -65,6 +65,17 @@ fn indexed_transport_preserves_metadata_and_rejects_malformed_indices() {
     assert!(validate_response(&request, &result).is_err());
 }
 
+#[test]
+fn browser_transport_requires_a_browser_recipe() {
+    let (mut request, result) = fixture();
+    request.case.browser = None;
+    request.case.measurement.scope = CallScope::NativeKernel;
+    let error = validate_response(&request, &result).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("browser transport requires a browser recipe"));
+}
+
 fn fixture() -> (TrialRequest, BrowserTransportResult) {
     let dimensions = Dimensions {
         width: 1,
