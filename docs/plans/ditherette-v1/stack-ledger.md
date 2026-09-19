@@ -2,7 +2,7 @@
 
 ## S20 local restack verified on 2026-09-19
 
-Codex (GPT-5) records the clean local restack at `e7e10ca9`. It includes the main merge `757c01c0`, duration fixes `f1483a43` and `05bc96dd`, and the PR #109 merge `467542f4`. The parent verified that PR #109 contributes a net fifteen documentation files and no source, with the frozen spec and image unchanged and the approved source-conflict intent preserved.
+The clean local restack at `e7e10ca9` merges PR #109 head `467542f4` and includes the main merge `757c01c0` plus duration fixes `f1483a43` and `05bc96dd`. The parent verified that PR #109 contributes a net fifteen documentation files and no source, with the frozen spec and image unchanged and the approved source-conflict intent preserved.
 
 Sol now fixes the missing `BuildIdentity` configuration and recorded initialization, then validates before pushing and babysitting PR #107. PR #109 remains open; PR #110 is untouched.
 
