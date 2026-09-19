@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S20 downstream validation held on 2026-09-19
+
+Pullfrog review `4053644697` correctly identifies a global distinct-revision gate that conflicts with settled `.plans/61-initial-trial-budget.md` line 37 and historical same-source TypeScript/package trials. Parent inspected local fix `2ad564b4`: browser roles may share a revision while native roles remain distinct; all full SHA, artifact, and build checks remain intact. Reproduction has five failures; focused ten and full 65 Rust checks pass with explicit exits, and the parent verified diffs and logs. S20 is blocked pending Mia approval; `2ad564b4` is local only while `9dcf0506` is pushed. No monitor is active.
+
+PR #110's resolution is approved: retain diagnostic medians and correctness-first ordering, but leave PR #110 untouched until PR #107 lands. PR #109 is merged into PR #107, not main; issue #108 remains open.
+
 ## S20 validation and PR109 fold completed on 2026-09-19
 
 Parent validation passed with 14 Node checks and the trusted guard. Worker validation passed with explicit exits for 65 Rust checks, 20 JavaScript checks, 4 build recipes, TypeScript, and 3 browser-conformance checks. Metadata fix `92a39be9` and documentation update `9dcf0506` are pushed.
