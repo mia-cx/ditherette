@@ -2,6 +2,19 @@
 
 Read the [execution contract](README.md#execution-contract) before claiming a slice. Each entry records the validated dependency commits and outstanding evidence.
 
+## Current correction: retain landed production
+
+Mia directs restoration of the landed optimized kernels and shared helpers in [#108](https://github.com/mia-cx/ditherette/issues/108).
+This supersedes earlier copied-baseline execution instructions for already-landed implementations, not the frozen reference itself.
+The coordinator owns `fix/v1-restore-landed` in `.worktrees/v1-restore-landed`, based on S20 `e19e12c219605138399cabd71b84cd4d9262a678`.
+S21 restores area/bilinear; S22 restores cubic/Lanczos/convolution. Both restored heads join this correction.
+Nearest restoration `d17e323d2ba6487474c6fa9952e03a86d393a8ba` reconnects the public API with bounded/fallible integration.
+The correction is validated in open, non-draft [PR #109](https://github.com/mia-cx/ditherette/pull/109), targeting `impl/v1-s20-browser-bench`.
+S19 is ready with this correction included. Existing PRs and historical evidence remain open and recoverable.
+S20 tooling evidence remains valid for the artifact it measured; it does not establish performance of the restored implementation.
+The interrupted diagnostic branch stays separate and will not delay restoring landed code.
+All later work reuses landed kernels and shared helpers. Only missing implementations start from literal spec copies.
+
 ## Delivered S01 through S16
 
 This snapshot comes from the live PR state after S16 delivery. All 16 PRs are open, non-draft, and have auto-merge disabled.
@@ -151,23 +164,23 @@ All 45 Rust benchmark tests and 20 focused JavaScript tests pass after the uncha
 The independent audit verifies every sample-derived gate, 216 exact outputs, and complete snapshot identities.
 Ready describes the tooling PR, not release performance. S41 retains the confirmed regressions.
 
-## S21 and S22 literal baselines
+## S21 and S22 remaining integration
 
-Both slices start from validated S20 delivery `711c7aec61587b45a91c2e404583161edb1e0de9`.
-Their ancestry contains S19 `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
-Their future PRs target `impl/v1-s20-browser-bench`; neither PR exists yet.
+Both branches restore their crate trees to S20 delivery `711c7aec61587b45a91c2e404583161edb1e0de9`.
+S21 restoration is `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508`; S22 restoration is `55b08b4ad4911fc8aa3d65a86a9b94c801079962`.
+The coordinator verifies both source trees byte-for-byte and joins them into `fix/v1-restore-landed`.
+Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
+Future PRs target `fix/v1-restore-landed`; neither exists yet.
 
 | Slice | Branch/worktree suffix | Current task |
 | --- | --- | --- |
-| S21 / #62 | `v1-s21-area-bilinear` | Literal area/bilinear copies and exact native conformance |
-| S22 / #63 | `v1-s22-convolution` | Literal cubic/Lanczos/convolution copies and exact native conformance |
+| S21 / #62 | `v1-s21-area-bilinear` | Connect landed area/bilinear and shared planning to the package |
+| S22 / #63 | `v1-s22-convolution` | Connect landed cubic/Lanczos and shared convolution to the package |
 
 Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
-Each agent preserves inherited optimizations as explicit candidates and records its own verified literal baseline commit.
-Shared coordinate/sample helpers are identical frozen copies in both isolated worktrees. The coordinator reconciles common module/caller wiring.
-Public processor/package and benchmark integration remain incomplete. No optimization or slice-performance claim follows from these baseline tasks.
-The third agent owns the developer-only nearest diagnostic in `impl/v1-s20-nearest-diagnostic`.
-All three agents and their owned build/test processes must exit before that diagnostic can measure anything.
+Existing optimized kernels and shared helpers stay canonical production. Removed replacements remain recoverable in historical commits.
+Public processor/package and benchmark integration remain incomplete. No new optimization or slice-performance claim follows from restoration.
+The interrupted nearest diagnostic in `impl/v1-s20-nearest-diagnostic` stays held and separate.
 
 ## S01 inherited port anchor
 

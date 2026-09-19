@@ -1,6 +1,6 @@
 # S19 private nearest processor
 
-Historical delivery record. Final S19 connects this bounded processor to landed nearest with fallible, capacity-accounted planning metadata.
+Historical delivery record. [The restoration](108-restore-landed.md) connects this bounded processor to landed nearest with fallible, capacity-accounted planning metadata.
 
 The literal-copy baseline is `0ede7f6c6f90d6c5d40b169b1dd835f0ac752902`.
 This work adds bounded ownership around its unchanged nearest kernel.
