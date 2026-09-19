@@ -9,7 +9,7 @@ This supersedes earlier copied-baseline execution instructions for already-lande
 The coordinator owns `fix/v1-restore-landed` in `.worktrees/v1-restore-landed`, based on S20 `e19e12c219605138399cabd71b84cd4d9262a678`.
 S21 restores area/bilinear; S22 restores cubic/Lanczos/convolution. Both restored heads join this correction.
 Nearest restoration `d17e323d2ba6487474c6fa9952e03a86d393a8ba` reconnects the public API with bounded/fallible integration.
-The correction is validated in open, non-draft [PR #109](https://github.com/mia-cx/ditherette/pull/109), targeting `impl/v1-s20-browser-bench`.
+The correction record is folded into [PR #107](https://github.com/mia-cx/ditherette/pull/107). [PR #109](https://github.com/mia-cx/ditherette/pull/109) closes after #107 lands, without a separate merge.
 S19 is ready with this correction included. Existing PRs and historical evidence remain open and recoverable.
 S20 tooling evidence remains valid for the artifact it measured; it does not establish performance of the restored implementation.
 The interrupted diagnostic branch stays separate and will not delay restoring landed code.
