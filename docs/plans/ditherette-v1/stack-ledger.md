@@ -1,5 +1,9 @@
 # Ditherette v1 implementation stack
 
+## S21 restack verified on 2026-09-19
+
+Clean restack `c66c1a79` combines S21 `2d541266` with S20 merge `53efd548`. The parent checked zero optimized-resize merge delta, zero frozen-tree delta, and preserved approved gates. Sol is validating before push. Issue #108 is closed with evidence comment `5743311878`; S20 is detached clean at `53efd548`, and completed targets are absent.
+
 ## S20 merged; S19 restoration folded; S21 restacking on 2026-09-19
 
 PR #107 landed as `53efd548` from approved correction `2ad564b4`; issue #61 closed and main fast-forwarded. PR #110 was retargeted to main before the S20 merge, and Terra now restacks its approved conflicts. PR #109 is already merged into PR #107 and is now in main; Sol is closing issue #108. S20's CI passes, Pullfrog approved the exact head, and both review threads are resolved. CodeRabbit is green but quota-skipped, so no CodeRabbit review is claimed.
