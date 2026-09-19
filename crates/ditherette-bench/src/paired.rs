@@ -54,6 +54,33 @@ pub struct Measurement {
     pub target_sample_ms: u64,
 }
 
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
+
+/// Browser transport reports per-call durations as floating-point nanoseconds.
+/// Reconstruct batches before rounding once so fractional per-call values retain
+/// their recorded batch duration.
+pub(crate) fn has_complete_browser_timing_evidence(
+    measurement: &Measurement,
+    sample_ns: &[f64],
+    iterations_per_sample: usize,
+    warmup_elapsed_ns: u128,
+) -> bool {
+    let warmup_ns = u128::from(measurement.warmup_ms) * NANOSECONDS_PER_MILLISECOND;
+    if warmup_elapsed_ns < warmup_ns {
+        return false;
+    }
+    if sample_ns.len() == measurement.samples {
+        return true;
+    }
+
+    let measurement_ns = u128::from(measurement.measurement_ms) * NANOSECONDS_PER_MILLISECOND;
+    let elapsed_ns = sample_ns
+        .iter()
+        .map(|sample| sample * iterations_per_sample as f64)
+        .sum::<f64>();
+    elapsed_ns.is_finite() && elapsed_ns.floor() >= measurement_ns as f64
+}
+
 /// Native fixture requests currently use the existing center/default resize recipe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -272,6 +299,13 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     || trial.iterations_per_sample == 0
                     || trial.warmup_iterations == 0
                     || trial.warmup_elapsed_ns == 0
+                    || (case.browser.is_some()
+                        && !has_complete_browser_timing_evidence(
+                            &case.measurement,
+                            &trial.sample_ns,
+                            trial.iterations_per_sample,
+                            trial.warmup_elapsed_ns,
+                        ))
                     || trial.max_live_benchmark_processes != 1
                     || (case.measurement.mode == SampleMode::SingleCall
                         && trial.iterations_per_sample != 1)

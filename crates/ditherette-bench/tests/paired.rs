@@ -45,7 +45,7 @@ fn missing_identity_settings_samples_or_correctness_never_pass() {
     let mut duplicate = trials.clone();
     duplicate.push(trials[0].clone());
     assert_eq!(compare(&prepared, &duplicate).gate, Gate::Incomplete);
-    for mutation in 0..6 {
+    for mutation in 0..7 {
         let mut changed = trials.clone();
         match mutation {
             0 => changed[0].build.revision = "b".repeat(40),
@@ -53,6 +53,7 @@ fn missing_identity_settings_samples_or_correctness_never_pass() {
             2 => changed[0].sample_ns[0] = f64::NAN,
             3 => changed[0].iterations_per_sample = 2,
             4 => changed[0].max_live_benchmark_processes = 2,
+            5 => changed[0].warmup_elapsed_ns = 0,
             _ => changed[0].build.rustc = "different compiler".into(),
         }
         assert_eq!(compare(&prepared, &changed).gate, Gate::Incomplete);
