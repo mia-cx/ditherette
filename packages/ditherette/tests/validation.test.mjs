@@ -27,6 +27,29 @@ test('area and bilinear accept only their frozen fields', () => {
 	fails(() => validateResize(bilinear), 'invalid-settings', 'output.resize.support');
 });
 
+test('trilinear uses tag six, all anchors, and no support field', () => {
+	for (const [anchor, name] of [
+		'top-left',
+		'top',
+		'top-right',
+		'left',
+		'center',
+		'right',
+		'bottom-left',
+		'bottom',
+		'bottom-right'
+	].entries()) {
+		const value = request();
+		value.output.resize = { algorithm: 'trilinear', anchor: name };
+		const result = validateResize(value);
+		assert.equal(result.algorithm, 6);
+		assert.equal(result.anchor, anchor);
+		assert.equal(result.support, 0);
+		value.output.resize.support = 'fixed';
+		fails(() => validateResize(value), 'invalid-settings', 'output.resize.support');
+	}
+});
+
 test('convolution requires canonical support and reads each setting once', () => {
 	for (const [offset, algorithm] of ['bicubic', 'lanczos2', 'lanczos3'].entries()) {
 		for (const [support, name] of ['fixed', 'scale-aware'].entries()) {
@@ -113,11 +136,6 @@ test('canonical raw request shapes reject coercions, sequence tags, and extra fi
 		[(r) => (r.output.resize.anchor = 'bogus'), 'invalid-settings', 'output.resize.anchor'],
 		[(r) => (r.output.resize.support = 'fixed'), 'invalid-settings', 'output.resize.support'],
 		[(r) => (r.output.resize.other = false), 'invalid-settings', 'output.resize.other'],
-		[
-			(r) => (r.output.resize.algorithm = 'trilinear'),
-			'unsupported-operation',
-			'output.resize.algorithm'
-		],
 		[(r) => (r.output.resize.algorithm = 'bogus'), 'invalid-settings', 'output.resize.algorithm'],
 		[(r) => (r.onProgress = () => {}), 'unsupported-operation', 'onProgress'],
 		[(r) => (r.onProgress = false), 'invalid-settings', 'onProgress'],

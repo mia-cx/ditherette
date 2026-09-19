@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports scalar nearest, area, bilinear, bicubic, Lanczos2, and Lanczos3 resize.
+An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize mode, including trilinear.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -39,6 +39,10 @@ Area and bilinear preserve the landed f32 accumulation paths and their bounded d
 Bicubic, Lanczos2, and Lanczos3 require explicit support, for example `{ algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' }`.
 `fixed` keeps the kernel radius constant. `scale-aware` widens support during minification.
 These filters retain the landed f64 kernels, including separable large-image downscales and their bounded reference differences.
+Trilinear uses `{ algorithm: 'trilinear', anchor: 'center' }` without a support setting.
+It builds area mip levels, samples them with bilinear filtering, and blends the adjacent levels selected by minification.
+Mip dimensions round upward when halved. Every intermediate retains RGBA8 rounding, including hidden RGB and alpha.
+The shared mip chain and temporary outputs reserve capacity before source import and release it after each call.
 Plans and scratch count toward the memory limit. Each call releases this transient storage; there is no package cache.
 Requests require version `1`, positive integer dimensions, and canonical object/string tags. Unknown fields are rejected.
 Source sides are at most 32,768 pixels; output sides are at most 16,384. Both images allow at most 67,108,864 pixels.
@@ -62,7 +66,7 @@ Recursive processing or disposal fails with `reentrant-call`, including calls fr
 
 ## Checkpoint scope
 
-Trilinear and the other processing methods arrive in later implementation slices.
+The other processing methods arrive in later implementation slices.
 Supplying `onProgress` currently fails explicitly with `unsupported-operation`; S33 adds progress delivery.
 S34 adds the optional threaded runtime. These are temporary slice limits, not permanent API restrictions.
 The package exports no raw bindings, backend selection, cache controls, or processor counters.

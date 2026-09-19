@@ -1,4 +1,4 @@
-//! Prepare bounded S21/S22 comparisons. This program never runs measurements.
+//! Prepare bounded resize comparisons. This program never runs measurements.
 
 use ditherette_bench::paired::{
     browser::{
@@ -28,7 +28,8 @@ fn operations(slice: &str) -> io::Result<Vec<PublicOperation>> {
                 ]
             })
             .collect()),
-        _ => Err(io::Error::other("slice must be s21 or s22")),
+        "s23" => Ok(vec![PublicOperation::ResizeTrilinear { anchor }]),
+        _ => Err(io::Error::other("slice must be s21, s22, or s23")),
     }
 }
 
@@ -63,13 +64,14 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
         let variant = parts.next().expect("registered variant");
         let budgeted_variant = match operation {
             PublicOperation::ResizeArea {} | PublicOperation::ResizeBilinear { .. } => "budgeted",
+            PublicOperation::ResizeTrilinear { .. } => "mip-area",
             PublicOperation::ResizeBicubic { support, .. }
             | PublicOperation::ResizeLanczos2 { support, .. }
             | PublicOperation::ResizeLanczos3 { support, .. } => match support {
                 Support::Fixed => "budgeted-fixed",
                 Support::ScaleAware => "budgeted-scale-aware",
             },
-            _ => unreachable!("matrix includes S21/S22 only"),
+            _ => unreachable!("matrix includes S21/S22/S23 only"),
         };
         let mut shapes = vec![
             (
@@ -85,6 +87,30 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
                 SampleMode::Throughput,
             ),
         ];
+        if slice == "s23" {
+            shapes = vec![
+                (
+                    "fractional-shallow",
+                    (512, 384),
+                    (173, 129),
+                    SampleMode::SingleCall,
+                ),
+                (
+                    "fractional-deep-latency",
+                    (512, 384),
+                    (53, 41),
+                    SampleMode::SingleCall,
+                ),
+                (
+                    "fractional-deep-throughput",
+                    (512, 384),
+                    (53, 41),
+                    SampleMode::Throughput,
+                ),
+                ("integer-lod", (512, 384), (64, 48), SampleMode::SingleCall),
+                ("enlargement", (128, 96), (389, 291), SampleMode::SingleCall),
+            ];
+        }
         if public && slice == "s21" {
             shapes.extend([
                 (
@@ -115,7 +141,10 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
                 operation: operation.clone(),
                 // The website has no bicubic implementation. This is explicitly
                 // a package/package sequencing control, not a speedup claim.
-                accepted: if matches!(operation, PublicOperation::ResizeBicubic { .. }) {
+                accepted: if matches!(
+                    operation,
+                    PublicOperation::ResizeBicubic { .. } | PublicOperation::ResizeTrilinear { .. }
+                ) {
                     BrowserBackend::Package
                 } else {
                     BrowserBackend::TypeScript
@@ -127,7 +156,7 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
                     BrowserPreparation::PrimedInstance
                 },
                 cache: CacheCapability::None,
-                measure_nonexact: true,
+                measure_nonexact: slice != "s23",
             });
             let (identity, accepted_subject, candidate_subject) = if let Some(browser) = &browser {
                 (
@@ -139,7 +168,11 @@ fn experiment(slice: &str, kind: &str, host_load_notes: String) -> io::Result<Ex
                 (
                     ditherette_bench::paired::native::identity(reference, source, &rgba, output)?,
                     format!("prod:resize:{filter}:{variant}"),
-                    format!("candidate:resize:{filter}:{budgeted_variant}"),
+                    if slice == "s23" {
+                        format!("prod:resize:{filter}:{variant}")
+                    } else {
+                        format!("candidate:resize:{filter}:{budgeted_variant}")
+                    },
                 )
             };
             cases.push(PairCase {
@@ -182,7 +215,7 @@ fn main() -> io::Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
     let [slice, kind, path, host_load_notes] = args.as_slice() else {
         return Err(io::Error::other(
-            "usage: resize_integration_plan s21|s22 native|public NEW_JSON HOST_LOAD_NOTES",
+            "usage: resize_integration_plan s21|s22|s23 native|public NEW_JSON HOST_LOAD_NOTES",
         ));
     };
     let bytes = serde_json::to_vec_pretty(&experiment(slice, kind, host_load_notes.clone())?)
@@ -197,6 +230,26 @@ fn main() -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trilinear_budget_has_80_exact_serial_workers() {
+        let mut workers = 0;
+        for kind in ["native", "public"] {
+            let plan = experiment("s23", kind, "fixture only".into()).unwrap();
+            assert_eq!(plan.cases.len(), 5);
+            workers += plan.pairs * 2 * plan.cases.len() * if kind == "public" { 3 } else { 1 };
+            for case in plan.cases {
+                assert_eq!(case.reference_subject, "spec:resize:trilinear:mip-area");
+                assert_eq!(case.measurement.samples, 20);
+                if let Some(browser) = case.browser {
+                    assert!(!browser.measure_nonexact);
+                    assert_eq!(browser.accepted, BrowserBackend::Package);
+                    assert_eq!(browser.candidate, BrowserBackend::Package);
+                }
+            }
+        }
+        assert_eq!(workers, 80);
+    }
 
     #[test]
     fn bounded_matrix_has_304_serial_workers_across_native_and_three_engines() {

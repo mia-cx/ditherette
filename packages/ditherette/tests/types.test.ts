@@ -34,6 +34,15 @@ const bilinear: ResizeRequest = {
 };
 void area;
 void bilinear;
+const trilinear: ResizeRequest['output']['resize'] = { algorithm: 'trilinear', anchor: 'center' };
+const invalidTrilinear: ResizeRequest['output']['resize'] = {
+	algorithm: 'trilinear',
+	anchor: 'center',
+	// @ts-expect-error Trilinear has no support setting.
+	support: 'fixed'
+};
+void trilinear;
+void invalidTrilinear;
 const convolution: ResizeRequest['output']['resize'][] = [
 	{ algorithm: 'bicubic', anchor: 'bottom-right', support: 'fixed' },
 	{ algorithm: 'lanczos2', anchor: 'center', support: 'scale-aware' },

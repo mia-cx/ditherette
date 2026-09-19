@@ -8,6 +8,40 @@ use ditherette_bench_api::verification::*;
 mod model;
 
 #[test]
+fn trilinear_binds_anchors_and_rejects_nonexistent_website_operation() {
+    let (mut prepared, _) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let operation = PublicOperation::ResizeTrilinear {
+        anchor: Anchor::Left,
+    };
+    let browser = case.browser.as_mut().unwrap();
+    browser.operation = operation.clone();
+    browser.accepted = BrowserBackend::Package;
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(browser.accepted).into();
+    case.candidate_subject = operation.subject(browser.candidate).into();
+    case.identity = operation
+        .identity(case.source, &case.rgba, case.identity.output)
+        .unwrap();
+    validate_case(case).unwrap();
+    let center = PublicOperation::ResizeTrilinear {
+        anchor: Anchor::Center,
+    };
+    assert_ne!(
+        case.identity,
+        center
+            .identity(case.source, &case.rgba, case.identity.output)
+            .unwrap()
+    );
+    case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
+    case.accepted_subject = operation.subject(BrowserBackend::TypeScript).into();
+    assert!(validate_case(case)
+        .unwrap_err()
+        .to_string()
+        .contains("no bicubic or trilinear"));
+}
+
+#[test]
 fn area_and_bilinear_keep_distinct_recipes_and_validate_website_anchors() {
     for (operation, filter) in [
         (PublicOperation::ResizeArea {}, "area"),

@@ -203,6 +203,29 @@ test('installed package and actual TypeScript adapter conformance, without measu
 							}
 						}
 					}
+					for (const [anchor, red] of [
+						['left', 68],
+						['center', 85],
+						['right', 103]
+					]) {
+						const request = trial('package', 'primed-instance', 3, 1);
+						request.case.rgba = [0, 0, 255].flatMap((r) => [r, 0, 0, 255]);
+						request.case.browser.operation = { operation: 'resize-trilinear', anchor };
+						const operation = await prepareOperation(request);
+						try {
+							equal(
+								await preflightOperation(operation, {
+									dimensions: { width: 1, height: 1 },
+									pixels: { format: 'rgba8', data: [red, 0, 0, 255] },
+									warnings: []
+								}),
+								undefined,
+								`trilinear odd mip ${anchor}`
+							);
+						} finally {
+							operation.close();
+						}
+					}
 					// Nontrivial convolution vectors live in the native and package suites.
 					// This checks every actual benchmark adapter recipe without collecting timings.
 					for (const filter of ['bicubic', 'lanczos2', 'lanczos3']) {
