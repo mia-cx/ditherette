@@ -241,7 +241,12 @@ pub fn validate_response(
             .any(|sample| !sample.is_finite() || *sample < 0.0)
         || result.iterations_per_sample == 0
         || result.warmup_iterations == 0
-        || result.warmup_elapsed_ns == 0
+        || !has_complete_browser_timing_evidence(
+            &case.measurement,
+            &result.sample_ns,
+            result.iterations_per_sample,
+            result.warmup_elapsed_ns,
+        )
         || (case.measurement.mode == SampleMode::SingleCall && result.iterations_per_sample != 1)
     {
         return Err(invalid(

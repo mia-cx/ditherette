@@ -87,6 +87,7 @@ fn area_and_bilinear_keep_distinct_recipes_and_validate_website_anchors() {
 
 fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
+    prepared.candidate.identity.revision = prepared.accepted.identity.revision.clone();
     let browser = BrowserCase {
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
@@ -182,8 +183,10 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
             Role::Accepted => &prepared.accepted,
             Role::Candidate => &prepared.candidate,
         };
+        trial.build.revision = worker.identity.revision.clone();
         trial.measurement = case.measurement.clone();
         trial.sample_ns.fill(1000.0);
+        trial.warmup_elapsed_ns = 1_000_000;
         trial.output.case = case.identity.clone();
         trial.reference.case = case.identity.clone();
         trial.output.implementation.subject = browser
@@ -353,6 +356,40 @@ fn zero_and_coarse_timer_samples_remain_raw_and_inconclusive() {
     let (native, mut trials) = model::fixture();
     trials[0].sample_ns[0] = 0.0;
     assert_eq!(compare(&native, &trials).gate, Gate::Incomplete);
+}
+
+#[test]
+fn browser_short_evidence_requires_the_configured_duration() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    case.measurement.samples = 6;
+    for trial in &mut trials {
+        trial.measurement = case.measurement.clone();
+        trial.sample_ns.fill(2_000_000.0);
+        trial.warmup_elapsed_ns = 1_000_000;
+    }
+
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    for trial in &mut trials {
+        trial.sample_ns.fill(1_999_999.0);
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+}
+
+#[test]
+fn browser_duration_evidence_reconstructs_fractional_calls_as_batches() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    case.measurement.mode = SampleMode::Throughput;
+    case.measurement.samples = 6;
+    for trial in &mut trials {
+        trial.measurement = case.measurement.clone();
+        trial.iterations_per_sample = 29;
+        trial.sample_ns.fill(2_000_000.0 / 29.0);
+        trial.warmup_elapsed_ns = 1_000_000;
+    }
+
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
 }
 
 #[test]
@@ -556,7 +593,7 @@ fn browser_coordinator_checks_both_sides_of_each_child_and_preserves_failure_cle
         let prepared = coordinator::prepare_with_browser(
             template.experiment,
             (&script, &"a".repeat(40)),
-            (&script, &"b".repeat(40)),
+            (&script, &"a".repeat(40)),
             &directory.join("prepared"),
             template.browser.unwrap(),
         )

@@ -56,7 +56,7 @@ Source sides are at most 32,768 pixels; output sides are at most 16,384. Both im
 - `wasm` accepts bytes, an offset byte view, a URL/string, a Request, a Response, or a compiled `WebAssembly.Module`.
   Caller Response/Request bodies are cloned before initialization. Default assets resolve relative to the package.
 
-The memory limit counts private Wasm capacity and boundary copies. Caller-owned and returned JS buffers and fixed module overhead are excluded.
+The memory limit counts processor and boundary state, nearest-plan metadata, fixed 512-byte wasm-bindgen externref bookkeeping, and Rust input/output capacity. Caller-owned and returned JS buffers, plus engine-managed memory outside this accounting, are excluded.
 Unexpected allocation/copy failures report `wasm-memory-unavailable`. Expected errors leave the processor usable.
 An uncaught Wasm trap retires that processor without affecting other instances.
 

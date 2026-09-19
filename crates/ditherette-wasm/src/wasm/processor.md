@@ -41,12 +41,12 @@ Status zero means success. Statuses one through thirteen follow the copied error
 invalid-request, invalid-image, invalid-palette, invalid-settings, unsupported-operation, capability, initialization,
 memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runtime.
 
-| Path ID | Public path |
-|---|---|
-| 0 | instance |
-| 1 | memoryLimitBytes |
-| 2, 3, 4, 5 | source.width, source.height, source.data, source |
-| 6, 7, 8 | output.width, output.height, output |
+| Path ID       | Public path                                        |
+| ------------- | -------------------------------------------------- |
+| 0             | instance                                           |
+| 1             | memoryLimitBytes                                   |
+| 2, 3, 4, 5    | source.width, source.height, source.data, source   |
+| 6, 7, 8       | output.width, output.height, output                |
 | 9, 10, 11, 12 | output.resize.anchor, wasm, control, output.resize |
 
 ## Memory and cleanup

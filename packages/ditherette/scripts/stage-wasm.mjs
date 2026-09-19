@@ -3,10 +3,15 @@ import { pathToFileURL } from 'node:url';
 import { basename } from 'node:path';
 
 /** Stage private generated assets and declarations before the wrapper's TypeScript compilation. */
-export async function stageWasm(crate, packageDirectory, license) {
+export async function stageWasm(
+	crate,
+	packageDirectory,
+	license,
+	variants = ['scalar', 'threads']
+) {
 	await access(new URL('dist/scalar/ditherette_wasm.factory.js', crate));
 	await access(new URL('dist/scalar/ditherette_wasm.factory.d.ts', crate));
-	for (const variant of ['scalar', 'threads']) {
+	for (const variant of variants) {
 		const destination = new URL(`dist/wasm/${variant}/`, packageDirectory);
 		await rm(destination, { recursive: true, force: true });
 		// wasm-pack's generated '*' ignore file would remove every asset from the npm tarball.
@@ -19,9 +24,11 @@ export async function stageWasm(crate, packageDirectory, license) {
 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+	const variants = process.argv[2] === 'scalar' ? ['scalar'] : undefined;
 	await stageWasm(
 		new URL('../../../crates/ditherette-wasm/', import.meta.url),
 		new URL('../', import.meta.url),
-		new URL('../../../LICENSE', import.meta.url)
+		new URL('../../../LICENSE', import.meta.url),
+		variants
 	);
 }

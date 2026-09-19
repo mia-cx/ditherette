@@ -12,13 +12,14 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
+import test, { before } from 'node:test';
 import { CRATE, git, verifyContent } from './content.mjs';
 import {
 	dependencySnapshot,
 	isolatedCheck,
 	run,
 	syntaxBinary,
+	TOOLCHAIN,
 	verifyBuildConfiguration,
 	verifyDependencies,
 	verifySyntax
@@ -29,6 +30,14 @@ const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const checkpoint = JSON.parse(readFileSync(join(ROOT, POLICY, 'checkpoint.json')));
 const dependencies = JSON.parse(readFileSync(join(ROOT, POLICY, 'dependencies.json')));
 const binary = syntaxBinary();
+
+before(() => {
+	run(
+		'cargo',
+		[`+${TOOLCHAIN}`, 'fetch', '--locked', '--manifest-path', join(ROOT, CRATE, 'Cargo.toml')],
+		tmpdir()
+	);
+});
 
 function fixture(operation) {
 	const root = mkdtempSync(join(tmpdir(), 'ditherette-freeze-test-'));
@@ -88,6 +97,13 @@ test('controlled frozen edits, additions, deletion, and symlinks fail, then rest
 		verifyContent(root, checkpoint);
 	}));
 
+test('frozen roots reject symlinked ancestors', () =>
+	fixture((root) => {
+		rmSync(join(root, CRATE), { recursive: true });
+		symlinkSync(join(ROOT, CRATE), join(root, CRATE), 'dir');
+		assert.throws(() => verifyContent(root, checkpoint), /Symlink/);
+	}));
+
 test('trusted base rejects checkpoint, checker, workflow, and added helper replacement', () =>
 	fixture((root) => {
 		verifyPolicy(root, ROOT);
@@ -112,13 +128,38 @@ test('content identity survives unrelated history, but a new parent cannot bless
 		git(root, 'add', '.');
 		git(root, 'commit', '--quiet', '-m', 'unrelated root');
 		assert.notEqual(git(root, 'rev-parse', 'HEAD'), checkpoint.revision);
-		assert.deepEqual(verifyContent(root, checkpoint), checkpoint.identity);
+		assert.deepEqual(verifyContent(root, checkpoint), checkpoint.amendment.identity);
 		mutation(root, `${CRATE}/src/spec/mod.rs`, '// changed parent\n', () => {
 			git(root, 'add', '.');
 			git(root, 'commit', '--quiet', '-m', 'different parent contents');
 			assert.throws(() => verifyContent(root, checkpoint), /Frozen content changed/);
 		});
 	}));
+
+test('checkpoint preserves the original identity and binds only approved amendments', () => {
+	assert.equal(checkpoint.revision, 'cef2b60a635fd43c3b8e7cb880b5c92fe77d640b');
+	assert.equal(
+		checkpoint.contentSha256,
+		'17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe'
+	);
+	assert.deepEqual(
+		checkpoint.amendment.changes.map(({ path }) => path),
+		[
+			`${CRATE}/src/spec/contract/error.md`,
+			`${CRATE}/src/spec/contract/inventory.md`,
+			`${CRATE}/src/spec/contract/lifecycle.md`,
+			`${CRATE}/src/spec/contract/request.md`,
+			`${CRATE}/src/spec/contract/request.rs`,
+			`${CRATE}/src/spec/contract/spec.md`,
+			`${CRATE}/src/spec/dither/perturb.md`
+		]
+	);
+	assert.deepEqual(verifyContent(ROOT, checkpoint), checkpoint.amendment.identity);
+
+	const changed = structuredClone(checkpoint);
+	changed.amendment.changes[0].after.sha256 = '0'.repeat(64);
+	assert.throws(() => verifyContent(ROOT, changed), /Invalid amended checkpoint content digest/);
+});
 
 test('syntax rejects both directions, aliases, shared/adapter bridges, and source injection', () =>
 	fixture((root) => {
@@ -151,6 +192,28 @@ test('syntax rejects both directions, aliases, shared/adapter bridges, and sourc
 		);
 	}));
 
+test('inactive macro paths reject opposite semantic families', () =>
+	fixture((root) => {
+		for (const [role, opposite] of [
+			['prod', 'spec'],
+			['spec', 'prod']
+		]) {
+			const path = `${CRATE}/src/${role}/mod.rs`;
+			for (const name of [opposite, `r#${opposite}`]) {
+				mutation(
+					root,
+					path,
+					`${readFileSync(join(root, path))}\n#[cfg(any())] fn inactive() { crate::${name}::helper!(); }\n`,
+					() =>
+						assert.throws(
+							() => verifySyntax(root, binary),
+							(error) => /forbidden semantic identifier/.test(error.stderr)
+						)
+				);
+			}
+		}
+	}));
+
 test('independent Rust compilation rejects indirect helper imports in both directions', () =>
 	fixture((root) => {
 		for (const [role, opposite] of [
@@ -162,7 +225,13 @@ test('independent Rust compilation rejects indirect helper imports in both direc
 				root,
 				path,
 				`${readFileSync(join(root, path))}\npub use crate::${opposite}::color as bridge;\n`,
-				() => assert.throws(() => isolatedCheck(root, role, 'x86_64-unknown-linux-gnu'))
+				() =>
+					assert.throws(
+						() => isolatedCheck(root, role, 'x86_64-unknown-linux-gnu'),
+						(error) =>
+							/error\[E0432\]: unresolved import/.test(error.stderr) &&
+							error.stderr.includes(`could not find \`${opposite}\` in the crate root`)
+					)
 			);
 		}
 	}));
@@ -183,6 +252,16 @@ test('real profile changes and crate-root module redirection cannot hide behind 
 		for (const name of ['serde_json', 'r#serde_json', 'r#vec']) {
 			mutation(root, lib, `${readFileSync(join(root, lib))}\npub use wasm::${name};\n`, () =>
 				assert.throws(() => verifySyntax(root, binary))
+			);
+		}
+		const original = readFileSync(join(root, lib), 'utf8');
+		for (const [from, to] of [
+			['pub mod image;', 'mod image;'],
+			['pub mod spec;', 'pub(crate) mod spec;'],
+			['mod wasm;', 'pub mod wasm;']
+		]) {
+			mutation(root, lib, original.replace(from, to), () =>
+				assert.throws(() => verifySyntax(root, binary), /module visibility/)
 			);
 		}
 		const adapter = `${CRATE}/src/wasm.rs`;
@@ -247,6 +326,36 @@ test('foreign symbol bridges are rejected in semantic roles, not the Wasm adapte
 		);
 	}));
 
+test('root reexports retain public visibility, exact members, and all declarations', () =>
+	fixture((root) => {
+		const path = `${CRATE}/src/lib.rs`;
+		const original = readFileSync(join(root, path), 'utf8');
+		const changes = [
+			original.replace('pub use wasm::{', 'use wasm::{'),
+			original.replace(
+				'convert_color_space, hello, process_rgba8,',
+				'convert_color_space, process_rgba8,'
+			),
+			original.replace(
+				'convert_color_space, hello, process_rgba8,',
+				'convert_color_space, replaced, process_rgba8,'
+			),
+			original.replace(
+				'#[cfg(feature = "threads")]\npub use wasm_bindgen_rayon::init_thread_pool;',
+				''
+			)
+		];
+		for (const changed of changes) {
+			assert.notEqual(changed, original);
+			mutation(root, path, changed, () =>
+				assert.throws(
+					() => verifySyntax(root, binary),
+					(error) => /root reexport/.test(error.stderr)
+				)
+			);
+		}
+	}));
+
 test('root-use procedural attributes cannot inject code omitted from isolated roots', () =>
 	fixture((root) => {
 		const path = `${CRATE}/src/lib.rs`;
@@ -286,6 +395,8 @@ test('adapter procedural expansion, symbol interposition, and Wasm oracle routes
 			'#[unsafe(r#no_mangle)] pub extern "C" fn powf(_: f32, _: f32) -> f32 { 0.0 }',
 			'#[r#export_name = "powf"] pub extern "C" fn changed(_: f32, _: f32) -> f32 { 0.0 }',
 			'#[r#link_name = "powf"] pub fn changed() {}',
+			'core::arch::global_asm!(".global powf");',
+			'macro_rules! local { () => { core::arch::global_asm!(""); }; } local!();',
 			'use crate::spec as oracle;',
 			'use crate::bench_subjects as bridge;'
 		]) {

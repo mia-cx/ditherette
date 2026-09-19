@@ -37,6 +37,13 @@ fn lookup_uses_global_coordinates_across_rows_bands_and_large_origins() {
 
 #[test]
 fn fixed_srgb_rgba8_composition_rounds_channels_and_preserves_hidden_rgb_alpha() {
+    use ditherette_wasm::{
+        image::{ImageDimensions, ImageView},
+        spec::{
+            contract::request::{Field, PerturbPolicy, Placement, WorkingSpace},
+            dither::perturb::perturb,
+        },
+    };
     let source = [
         [128, 128, 128, 0],
         [128, 128, 128, 1],
@@ -63,6 +70,17 @@ fn fixed_srgb_rgba8_composition_rounds_channels_and_preserves_hidden_rgb_alpha()
             [151, 151, 151, 255]
         ]
     );
+    let perturbed = perturb(
+        ImageView::packed(source.as_flattened(), ImageDimensions::new(4, 1).unwrap()).unwrap(),
+        PerturbPolicy {
+            field: Field::BlueNoise {},
+            space: WorkingSpace::Srgb,
+            strength: 1.0,
+            placement: Placement::Everywhere {},
+        },
+    )
+    .unwrap();
+    assert_eq!(perturbed.data(), output.as_flattened());
     assert_eq!(source[0], [128, 128, 128, 0]);
 }
 
