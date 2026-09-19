@@ -29,9 +29,9 @@ use crate::{
 #[wasm_bindgen(module = "/src/wasm/copy_helpers.js")]
 extern "C" {
     #[wasm_bindgen(catch, js_name = inputLength)]
-    fn input_length(source: &Uint8Array) -> Result<f64, JsValue>;
+    pub(super) fn input_length(source: &Uint8Array) -> Result<f64, JsValue>;
     #[wasm_bindgen(catch, js_name = copyInput)]
-    fn copy_input(destination: &mut [u8], source: &Uint8Array) -> Result<(), JsValue>;
+    pub(super) fn copy_input(destination: &mut [u8], source: &Uint8Array) -> Result<(), JsValue>;
     #[wasm_bindgen(catch, js_name = completeResult)]
     fn complete_result(
         source: &[u8],
@@ -225,7 +225,7 @@ pub fn private_dispose() -> u32 {
     result.map_or_else(status, |_| 0)
 }
 
-fn take_ready() -> Result<Processor, Failure> {
+pub(super) fn take_ready() -> Result<Processor, Failure> {
     INSTANCE.with(|instance| {
         let mut slot = instance.borrow_mut();
         match &*slot {
@@ -271,12 +271,21 @@ impl Boundary for JsBoundary<'_> {
     }
 }
 
-fn status(error: Failure) -> u32 {
+pub(super) fn restore_ready(processor: Processor) {
+    INSTANCE.with(|instance| *instance.borrow_mut() = Slot::Ready(processor));
+}
+
+pub(super) fn status(error: Failure) -> u32 {
     ERROR_PATH.with(|path| path.set(error.path));
     error.status()
 }
 
-fn dimension(value: f64, limit: u32, code: ErrorCode, path: ErrorPath) -> Result<u32, Failure> {
+pub(super) fn dimension(
+    value: f64,
+    limit: u32,
+    code: ErrorCode,
+    path: ErrorPath,
+) -> Result<u32, Failure> {
     if !value.is_finite() || value.fract() != 0.0 || !(1.0..=limit as f64).contains(&value) {
         return Err(Failure::new(code, path));
     }

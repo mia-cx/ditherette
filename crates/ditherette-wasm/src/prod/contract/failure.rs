@@ -19,6 +19,10 @@ pub enum ErrorPath {
     Wasm = 10,
     Control = 11,
     OutputResize = 12,
+    Palette = 13,
+    Alpha = 14,
+    AlphaThreshold = 15,
+    Matching = 16,
 }
 
 /// A small value usable even when Rust cannot allocate an error string.

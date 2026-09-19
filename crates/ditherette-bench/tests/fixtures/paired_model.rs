@@ -31,6 +31,7 @@ pub fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     };
     let subject = "spec:resize:nearest:scalar".to_owned();
     let case = PairCase {
+        native: None,
         browser: None,
         name: "one-call".into(),
         identity: identity.clone(),

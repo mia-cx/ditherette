@@ -4,6 +4,8 @@
 //! color buffers used by pipeline caches. The first three channels are the
 //! requested color space; alpha is preserved as a normalized `0..=1` f32 value.
 
+pub mod packed;
+
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
 

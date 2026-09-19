@@ -57,6 +57,7 @@ fn case(
         measure_nonexact: false,
     };
     Ok(PairCase {
+        native: None,
         name: name.into(),
         identity: browser.operation.identity(source, &rgba, output)?,
         source,

@@ -58,6 +58,7 @@ fn main() -> io::Result<()> {
             (SampleMode::Throughput, "throughput"),
         ] {
             cases.push(PairCase {
+                native: None,
                 browser: None,
                 name: format!("nearest-{name}-{suffix}"),
                 identity: identity.clone(),

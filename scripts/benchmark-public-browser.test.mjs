@@ -17,9 +17,158 @@ import {
 	resizeRecipe,
 	runTrial,
 	timerResolution,
-	outputStability
+	outputStability,
+	verificationOutput
 } from './benchmark-public-page.mjs';
-import { collectInitializations } from './benchmark-public-timing.mjs';
+import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
+
+const indexedOutput = () => ({
+	width: 2,
+	height: 1,
+	indices: new Uint8Array([0, 1]),
+	palette: { rgba: new Uint8Array([10, 20, 30, 255, 0, 0, 0, 0]), transparentIndex: 1 },
+	warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
+});
+
+test('shared backing stores fail before the collector can retain mutable snapshots', () => {
+	for (const field of ['data', 'indices', 'palette']) {
+		const output =
+			field === 'data'
+				? { width: 1, height: 1, data: new Uint8Array([10, 20, 30, 255]) }
+				: indexedOutput();
+		const record = field === 'palette' ? output.palette : output;
+		const key = field === 'palette' ? 'rgba' : field;
+		const shared = new Uint8Array(new SharedArrayBuffer(record[key].byteLength));
+		shared.set(record[key]);
+		record[key] = shared;
+		const tracker = outputStability(
+			field === 'data' ? 4 : 1026,
+			field === 'data' ? 'rgba8' : 'indexed8'
+		);
+		assert.throws(() => tracker.observe([output]), /durable byte-result contract/);
+	}
+});
+
+test('later calls cannot rewrite the first or distinct stability evidence through retained results', () => {
+	for (const indexed of [false, true]) {
+		const create = indexed
+			? indexedOutput
+			: () => ({ width: 1, height: 1, data: new Uint8Array([10, 20, 30, 255]) });
+		const mutate = indexed
+			? (output) => {
+					output.indices.reverse();
+					output.palette.rgba[0]++;
+					output.warnings[0].message += ' changed';
+				}
+			: (output) => output.data[0]++;
+		for (const changeNext of [false, true]) {
+			const tracker = outputStability(indexed ? 1026 : 4, indexed ? 'indexed8' : 'rgba8');
+			const first = create();
+			const expectedFirst = verificationOutput(first);
+			tracker.observe([first]);
+			mutate(first);
+			const next = create();
+			if (changeNext) mutate(next);
+			tracker.observe([next]);
+			const evidence = tracker.evidence(next);
+			assert.deepEqual(evidence.unstable_output, expectedFirst);
+			assert.notDeepEqual(evidence.unstable_output, evidence.output);
+			const retained = structuredClone(evidence);
+			mutate(first);
+			mutate(next);
+			assert.deepEqual(tracker.evidence(create()), retained);
+		}
+	}
+});
+
+test('indexed A/B/A retains exact indices, palette, transparency, and warnings outside batch timers', async () => {
+	for (const mutate of [
+		(output) => output.indices.reverse(),
+		(output) => output.palette.rgba[0]++,
+		(output) => (output.palette.transparentIndex = null),
+		(output) => (output.warnings[0].code = 'transparent-only'),
+		(output) => (output.warnings[0].message += ' changed')
+	]) {
+		const tracker = outputStability(2 + 1024, 'indexed8');
+		tracker.observe([indexedOutput()]);
+		let calls = 0,
+			clock = 0;
+		const result = await collectCalls({
+			measurement: {
+				mode: 'throughput',
+				samples: 5,
+				warmup_ms: 1,
+				target_sample_ms: 3,
+				measurement_ms: 100
+			},
+			now: () => clock,
+			outputBytes: 2 + 1024,
+			prepare: async () => ({
+				call() {
+					clock++;
+					const output = indexedOutput();
+					if (++calls === 3) mutate(output);
+					return output;
+				},
+				close() {}
+			}),
+			observe(outputs) {
+				tracker.observe(outputs);
+				clock += 100;
+			}
+		});
+		const evidence = tracker.evidence(result.output);
+		assert.deepEqual(result.output, indexedOutput());
+		assert.notDeepEqual(evidence.output, evidence.unstable_output);
+		assert.deepEqual(evidence.unstable_output.pixels.indices, [0, 1]);
+		assert.deepEqual(result.sample_ns, Array(5).fill(1e6));
+		assert.equal(result.iterations_per_sample, 3);
+	}
+});
+
+test('indexed retention rejects shared storage, oversized backing buffers, and unbounded metadata', () => {
+	for (const field of ['indices', 'palette', 'warnings']) {
+		const tracker = outputStability(2 + 1024, 'indexed8');
+		const first = indexedOutput();
+		tracker.observe([first]);
+		const next = indexedOutput();
+		next[field] = first[field];
+		assert.throws(() => tracker.observe([next]), /aliases/);
+	}
+	const sharedWarning = indexedOutput().warnings[0];
+	const first = indexedOutput(),
+		next = indexedOutput();
+	first.warnings = [sharedWarning];
+	next.warnings = [sharedWarning];
+	assert.throws(() => outputStability(1026, 'indexed8').observe([first, next]), /aliases/);
+	for (const mutate of [
+		(output) => (output.indices = new Uint8Array(3).subarray(0, 2)),
+		(output) => (output.palette.rgba = new Uint8Array(1028)),
+		(output) => (output.warnings[0].message = 'x'.repeat(89)),
+		(output) => (output.warnings = Array(4).fill(output.warnings[0])),
+		(output) => (output.extra = new Uint8Array(1024)),
+		(output) => (output.indices[0] = 2)
+	]) {
+		const output = indexedOutput();
+		mutate(output);
+		assert.throws(() => outputStability(2 + 1024, 'indexed8').observe([output]), /contract/);
+	}
+});
+
+test('reused result records cannot hide A/B/A by replacing their byte buffers', () => {
+	for (const indexed of [false, true]) {
+		const create = indexed
+			? indexedOutput
+			: () => ({ width: 1, height: 1, data: new Uint8Array(4) });
+		for (const retained of [false, true]) {
+			const tracker = outputStability(indexed ? 1026 : 4, indexed ? 'indexed8' : 'rgba8');
+			const result = create();
+			if (retained) tracker.observe([result]);
+			Object.assign(result, create()); // Fresh buffers do not make a reused mutable result record durable.
+			assert.throws(() => tracker.observe(retained ? [result] : [result, result]), /aliases/);
+		}
+	}
+});
 
 test('initialization A/B/A preserves the first distinct probe, including warmup, without timing comparisons', async () => {
 	for (const changedAt of [2, 4]) {
@@ -69,6 +218,38 @@ test('output storage aliases fail closed instead of hiding overwritten batch evi
 		() => outputStability(4).observe([{ ...output(), data: new Uint8Array(8).subarray(0, 4) }]),
 		/storage/
 	);
+});
+
+test('indexed preflight checks indices, palette, transparency, and warnings without timing', async () => {
+	const output = {
+		width: 2,
+		height: 1,
+		indices: new Uint8Array([0, 1]),
+		palette: { rgba: new Uint8Array([10, 20, 30, 255, 0, 0, 0, 0]), transparentIndex: 1 },
+		warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
+	};
+	const reference = {
+		dimensions: { width: 2, height: 1 },
+		pixels: {
+			format: 'indexed8',
+			indices: [0, 1],
+			palette_rgba: [10, 20, 30, 255, 0, 0, 0, 0],
+			transparent_index: 1
+		},
+		warnings: output.warnings
+	};
+	const operation = { prepare: () => ({ call: () => output, close() {} }) };
+	assert.equal(await preflightOperation(operation, reference), undefined);
+	for (const mutate of [
+		(value) => value.pixels.indices.reverse(),
+		(value) => value.pixels.palette_rgba[0]++,
+		(value) => (value.pixels.transparent_index = null),
+		(value) => (value.warnings[0].message += ' changed')
+	]) {
+		const changed = structuredClone(reference);
+		mutate(changed);
+		assert.deepEqual(await preflightOperation(operation, changed), reference);
+	}
 });
 
 test('public resize recipes retain mode-specific settings', () => {

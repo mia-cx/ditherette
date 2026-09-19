@@ -352,88 +352,21 @@ pub(crate) fn measure_resize_case(
     verification: Option<VerificationReport>,
     observer: &mut impl MeasurementObserver,
 ) -> Result<BenchResult, BenchError> {
-    let output_len = output.0 as usize * output.1 as usize * RGBA_CHANNELS;
-    let mut output_rgba = vec![0; output_len];
-
-    let iterations_per_sample = match config.sample_mode {
-        SampleMode::Throughput => warm_up_and_calibrate(
-            subject,
-            fixture,
-            output,
-            &mut output_rgba,
-            params,
-            config,
-            observer,
-        )?,
-        SampleMode::Interactive => {
-            warm_up_interactive(
-                subject,
-                fixture,
-                output,
-                &mut output_rgba,
-                params,
-                config,
-                observer,
-            )?;
-            1
-        }
-    };
-    let mut cache_scrubber = CacheScrubber::new(config.cache_state, config.cache_scrub_size);
-    let mut sample_ns = Vec::new();
-    let mut measured_iterations = 0usize;
-    let mut measured_elapsed = Duration::ZERO;
-    let mut discard_next_batch = observer.measurement_progress(
-        MeasurementProgress {
-            samples_done: 0,
-            sample_size: config.sample_size,
-            elapsed: Duration::ZERO,
-            measurement_time: config.measurement_time,
-            total_iterations: 0,
-        },
-        &sample_ns,
+    let mut workload = ResizeWorkload {
+        subject,
+        fixture,
         output,
-    );
-
-    while sample_ns.is_empty()
-        || (sample_ns.len() < config.sample_size && measured_elapsed < config.measurement_time)
-    {
-        let batch_iterations = iterations_per_sample;
-        if std::mem::take(&mut discard_next_batch) {
-            cache_scrubber.prepare();
-            for _ in 0..batch_iterations {
-                run_resize_into(subject, fixture, output, &mut output_rgba, params)?;
-            }
-        }
-        if !config.inter_sample_delay.is_zero() {
-            thread::sleep(config.inter_sample_delay);
-        }
-        cache_scrubber.prepare();
-
-        let start = Instant::now();
-        for _ in 0..batch_iterations {
-            run_resize_into(subject, fixture, output, &mut output_rgba, params)?;
-        }
-        let elapsed = start.elapsed();
-        measured_iterations += batch_iterations;
-        measured_elapsed += elapsed;
-        sample_ns.push(elapsed.as_nanos() as f64 / batch_iterations as f64);
-        discard_next_batch = observer.measurement_progress(
-            MeasurementProgress {
-                samples_done: sample_ns.len(),
-                sample_size: config.sample_size,
-                elapsed: measured_elapsed,
-                measurement_time: config.measurement_time,
-                total_iterations: measured_iterations,
-            },
-            &sample_ns,
-            output,
-        );
-    }
-
-    let final_checksum = checksum(&output_rgba);
+        params,
+        rgba: vec![0; output.0 as usize * output.1 as usize * RGBA_CHANNELS],
+    };
+    let measured = measure_workload(&mut workload, output, config, observer)?;
+    let sample_ns = measured.sample_ns;
+    let iterations_per_sample = measured.iterations_per_sample;
+    let measured_iterations = measured.total_iterations;
+    let final_checksum = checksum(&workload.rgba);
     black_box(&final_checksum);
-    let output_digest = ditherette_bench::verification::content_digest(&output_rgba);
-    observer.measured_output(&output_rgba);
+    let output_digest = ditherette_bench::verification::content_digest(&workload.rgba);
+    observer.measured_output(&workload.rgba);
 
     let stats = SampleStats::from_samples(&sample_ns);
     let output_pixels = f64::from(output.0) * f64::from(output.1);
@@ -481,6 +414,115 @@ pub(crate) fn measure_resize_case(
     })
 }
 
+/// One iteration's owned work. Consumption runs outside every timed batch.
+pub(crate) trait Workload {
+    fn run(&mut self) -> Result<(), BenchError>;
+    fn consume(&self);
+}
+
+pub(crate) struct MeasuredSamples {
+    pub sample_ns: Vec<f64>,
+    pub iterations_per_sample: usize,
+    pub total_iterations: usize,
+}
+
+struct ResizeWorkload<'a> {
+    subject: &'a ResizeBenchSubject,
+    fixture: &'a Fixture,
+    output: (u32, u32),
+    params: &'a ResizeParams,
+    rgba: Vec<u8>,
+}
+
+impl Workload for ResizeWorkload<'_> {
+    fn run(&mut self) -> Result<(), BenchError> {
+        run_resize_into(
+            self.subject,
+            self.fixture,
+            self.output,
+            &mut self.rgba,
+            self.params,
+        )
+    }
+    fn consume(&self) {
+        black_box(checksum(&self.rgba));
+    }
+}
+
+/// Shared resize, conversion, and complete native call loop.
+pub(crate) fn measure_workload(
+    workload: &mut impl Workload,
+    output: (u32, u32),
+    config: &MeasurementConfig,
+    observer: &mut impl MeasurementObserver,
+) -> Result<MeasuredSamples, BenchError> {
+    let iterations_per_sample = match config.sample_mode {
+        SampleMode::Throughput => warm_up_and_calibrate(workload, config, observer)?,
+        SampleMode::Interactive => {
+            warm_up_interactive(workload, config, observer)?;
+            1
+        }
+    };
+    let mut cache_scrubber = CacheScrubber::new(config.cache_state, config.cache_scrub_size);
+    let mut sample_ns = Vec::new();
+    let mut measured_iterations = 0usize;
+    let mut measured_elapsed = Duration::ZERO;
+    let mut discard_next_batch = observer.measurement_progress(
+        MeasurementProgress {
+            samples_done: 0,
+            sample_size: config.sample_size,
+            elapsed: Duration::ZERO,
+            measurement_time: config.measurement_time,
+            total_iterations: 0,
+        },
+        &sample_ns,
+        output,
+    );
+
+    while sample_ns.is_empty()
+        || (sample_ns.len() < config.sample_size && measured_elapsed < config.measurement_time)
+    {
+        let batch_iterations = iterations_per_sample;
+        if std::mem::take(&mut discard_next_batch) {
+            cache_scrubber.prepare();
+            for _ in 0..batch_iterations {
+                workload.run()?;
+            }
+        }
+        if !config.inter_sample_delay.is_zero() {
+            thread::sleep(config.inter_sample_delay);
+        }
+        cache_scrubber.prepare();
+
+        let start = Instant::now();
+        for _ in 0..batch_iterations {
+            workload.run()?;
+        }
+        let elapsed = start.elapsed();
+        measured_iterations += batch_iterations;
+        measured_elapsed += elapsed;
+        sample_ns.push(elapsed.as_nanos() as f64 / batch_iterations as f64);
+        discard_next_batch = observer.measurement_progress(
+            MeasurementProgress {
+                samples_done: sample_ns.len(),
+                sample_size: config.sample_size,
+                elapsed: measured_elapsed,
+                measurement_time: config.measurement_time,
+                total_iterations: measured_iterations,
+            },
+            &sample_ns,
+            output,
+        );
+    }
+
+    workload.consume();
+    Ok(MeasuredSamples {
+        sample_ns,
+        iterations_per_sample,
+        total_iterations: measured_iterations,
+    })
+}
+
 pub(crate) fn run_resize_once(
     subject: &ResizeBenchSubject,
     fixture: &Fixture,
@@ -493,11 +535,7 @@ pub(crate) fn run_resize_once(
 }
 
 fn warm_up_interactive(
-    subject: &ResizeBenchSubject,
-    fixture: &Fixture,
-    output: (u32, u32),
-    output_rgba: &mut [u8],
-    params: &ResizeParams,
+    workload: &mut impl Workload,
     config: &MeasurementConfig,
     observer: &mut impl MeasurementObserver,
 ) -> Result<(), BenchError> {
@@ -513,11 +551,11 @@ fn warm_up_interactive(
         }
 
         let start = Instant::now();
-        run_resize_into(subject, fixture, output, output_rgba, params)?;
+        workload.run()?;
         let elapsed = start.elapsed();
         warmup_iterations += 1;
         observer.warmup_batch(1, elapsed);
-        black_box(checksum(output_rgba));
+        workload.consume();
 
         let hit_iteration_target = config
             .warmup_iterations
@@ -531,11 +569,7 @@ fn warm_up_interactive(
 }
 
 fn warm_up_and_calibrate(
-    subject: &ResizeBenchSubject,
-    fixture: &Fixture,
-    output: (u32, u32),
-    output_rgba: &mut [u8],
-    params: &ResizeParams,
+    workload: &mut impl Workload,
     config: &MeasurementConfig,
     observer: &mut impl MeasurementObserver,
 ) -> Result<usize, BenchError> {
@@ -544,26 +578,22 @@ fn warm_up_and_calibrate(
 
     let discard_start = Instant::now();
     for _ in 0..WARMUP_DISCARD_ITERATIONS {
-        run_resize_into(subject, fixture, output, output_rgba, params)?;
+        workload.run()?;
         warmup_iterations += 1;
     }
     observer.warmup_batch(WARMUP_DISCARD_ITERATIONS, discard_start.elapsed());
-    black_box(checksum(output_rgba));
+    workload.consume();
 
     let single_start = Instant::now();
-    run_resize_into(subject, fixture, output, output_rgba, params)?;
+    workload.run()?;
     let single_elapsed = single_start.elapsed();
     warmup_iterations += 1;
     observer.warmup_batch(1, single_elapsed);
-    black_box(checksum(output_rgba));
+    workload.consume();
 
     if single_elapsed >= config.target_sample {
         continue_warmup(
-            subject,
-            fixture,
-            output,
-            output_rgba,
-            params,
+            workload,
             config,
             observer,
             warmup_start,
@@ -583,13 +613,13 @@ fn warm_up_and_calibrate(
     loop {
         let start = Instant::now();
         for _ in 0..batch_iterations {
-            run_resize_into(subject, fixture, output, output_rgba, params)?;
+            workload.run()?;
         }
         let elapsed = start.elapsed();
         warmup_iterations += batch_iterations;
         refinements += 1;
         observer.warmup_batch(batch_iterations, elapsed);
-        black_box(checksum(output_rgba));
+        workload.consume();
 
         let hit_iteration_target = config
             .warmup_iterations
@@ -612,11 +642,7 @@ fn warm_up_and_calibrate(
 }
 
 fn continue_warmup(
-    subject: &ResizeBenchSubject,
-    fixture: &Fixture,
-    output: (u32, u32),
-    output_rgba: &mut [u8],
-    params: &ResizeParams,
+    workload: &mut impl Workload,
     config: &MeasurementConfig,
     observer: &mut impl MeasurementObserver,
     warmup_start: Instant,
@@ -634,12 +660,12 @@ fn continue_warmup(
 
         let start = Instant::now();
         for _ in 0..batch_iterations {
-            run_resize_into(subject, fixture, output, output_rgba, params)?;
+            workload.run()?;
         }
         let elapsed = start.elapsed();
         warmup_iterations += batch_iterations;
         observer.warmup_batch(batch_iterations, elapsed);
-        black_box(checksum(output_rgba));
+        workload.consume();
     }
 }
 

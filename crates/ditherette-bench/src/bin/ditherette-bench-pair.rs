@@ -31,6 +31,7 @@ fn run() -> io::Result<bool> {
             let identity = CaseIdentity { settings: settings_digest(&(semantics.clone(), output, "center-default")).map_err(io::Error::other)?,
                 semantics, input: input_digest(source, &rgba), output };
             let cases = [SampleMode::SingleCall, SampleMode::Throughput].into_iter().map(|mode| PairCase {
+            native: None,
                 browser: None,
                 name: match mode { SampleMode::SingleCall => "nearest-latency", SampleMode::Throughput => "nearest-throughput" }.into(),
                 identity: identity.clone(), source, rgba: rgba.clone(), reference_subject: "spec:resize:nearest:scalar".into(),

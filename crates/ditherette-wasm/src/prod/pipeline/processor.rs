@@ -134,6 +134,46 @@ impl Processor {
         self.resize_with_allocator(request, boundary, &mut SystemAllocator)
     }
 
+    /// Quantize into durable indexed output after complete call-owned capacity preflight.
+    pub fn quantize<B: super::quantize::QuantizeBoundary>(
+        &mut self,
+        request: super::quantize::QuantizeRequest<'_>,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.quantize_with_allocator(request, boundary, &mut SystemAllocator)
+    }
+
+    /// Injectable source/index reservations; palette preparation also reserves fallibly.
+    pub fn quantize_with_allocator<B: super::quantize::QuantizeBoundary, A: Allocator>(
+        &mut self,
+        request: super::quantize::QuantizeRequest<'_>,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        self.state = State::Running;
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
+            + boundary.capacity_bytes();
+        self.peak_capacity = overhead;
+        let result = super::quantize::run(
+            request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+        );
+        self.state = State::Ready;
+        result
+    }
+
     /// Runs a call with injectable reservation failures for independent ownership fixtures.
     pub fn resize_with_allocator<B: Boundary, A: Allocator>(
         &mut self,
@@ -235,7 +275,11 @@ impl Plan {
     }
 }
 
-fn dimensions(width: u32, height: u32, source: bool) -> Result<ImageDimensions, Failure> {
+pub(super) fn dimensions(
+    width: u32,
+    height: u32,
+    source: bool,
+) -> Result<ImageDimensions, Failure> {
     let (limit, code, width_path, height_path, image_path) = if source {
         (
             MAX_SOURCE_SIDE,

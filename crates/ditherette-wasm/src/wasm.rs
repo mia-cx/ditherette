@@ -6,6 +6,7 @@
 //! memoization, and browser/Wasm benchmarks.
 
 pub mod processor;
+pub mod quantize;
 
 use std::{hint::black_box, num::NonZeroU32};
 

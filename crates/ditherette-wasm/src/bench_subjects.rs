@@ -4,6 +4,7 @@
 //! benchmark adapters in the implementation crate so `ditherette-bench` can
 //! consume stable subject descriptors without deep-importing internal modules.
 
+pub mod quantize;
 pub mod reference;
 mod resize_budgeted;
 mod trilinear;
@@ -187,6 +188,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     ];
     subjects.extend(resize_budgeted::subjects());
     subjects.extend(reference::subjects());
+    subjects.extend(quantize::subjects());
     subjects
 }
 
