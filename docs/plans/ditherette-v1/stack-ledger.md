@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S25 restack blocked; S26 preview pending on 2026-09-20
+
+S25 local restack `ccbb80a2` is clean and unpushed; approved conflicts are composed and 27 focused benchmark tests pass. Parent and Terra verified the blocker: direct Cargo `prepare-native` reports `recorded=false`, because `BuildIdentity::current` is now library-compiled while the existing recorder stamps only the binary and must also record the library. Mia’s requested approval is to reuse the existing recorded builder, stamp the library, and retain copy, digest, and inventory checks. No fix or full validation is approved; S25 validation is paused.
+
+S26 preview head `59036e1a` has unresolved source/config conflicts in `crates/ditherette-bench/src/browser_worker.rs`, `packages/ditherette/src/scalar.ts`, `packages/ditherette/src/validation.ts`, `packages/ditherette/README.md`, and `packages/ditherette/package.json`; no decisions are made. S25 target cleanup remains in progress.
+
 ## S24 merged; S25 approved restack on 2026-09-20
 
 PR #113 merged as `5a2c6244` from `45b9e735`; issue #65 closed and main fast-forwarded. PR #114 was retargeted to main before the merge. The parent verified exact Pullfrog approval, all CI, five resolved review threads, and seven `browser_worker` tests. New fixes `471e55ad` add fallible missing-browser-recipe validation and `45b9e735` consume negative TypeScript fixtures for lint; no kernels changed.
