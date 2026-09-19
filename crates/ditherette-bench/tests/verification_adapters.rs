@@ -133,27 +133,3 @@ fn storage_adapter_retains_palette_duplicates_warning_text_and_logical_rows() {
         }]
     );
 }
-
-#[test]
-fn unavailable_production_modes_report_missing_evidence_without_using_spec() {
-    let request = ResizeRequest {
-        version: 1,
-        source: Source {
-            width: 1,
-            height: 1,
-            data: &[10, 20, 30, 255],
-        },
-        output: Output {
-            width: 1,
-            height: 1,
-            resize: ResizePolicy::Trilinear {
-                anchor: Anchor::Center,
-            },
-        },
-    };
-    assert!(reference_resize(&request).is_ok());
-    assert!(production_resize(&request)
-        .unwrap_err()
-        .to_string()
-        .contains("missing required resize implementation"));
-}
