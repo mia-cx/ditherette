@@ -19,7 +19,7 @@
 	],
 	"scripts": {
 		"build": "pnpm check:version && pnpm --filter ditherette-wasm build && node scripts/stage-wasm.mjs && tsc",
-		"check": "pnpm check:version && tsc --noEmit",
+		"check": "pnpm check:version && pnpm --filter ditherette-wasm build:scalar && node scripts/stage-wasm.mjs scalar && tsc --noEmit",
 		"test:validation": "tsc && node --test tests/validation.test.mjs",
 		"test:interface": "tsc && tsc -p tests/tsconfig.json && node --test tests/validation.test.mjs tests/public.test.mjs",
 		"test:browser": "node --test tests/tarball-browser.test.mjs",
