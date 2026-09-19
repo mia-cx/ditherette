@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S24 validation passed; S25 delivery preview pending on 2026-09-20
+
+S24 is restacked at `2152095c` onto `1aae2e78`; current formatting-only fix is `f497d1bf`. Full validation and the trusted guard pass. The parent verified four production-quantize checks, eleven timing checks, and three-engine conformance across 17 frozen fixtures from fresh tarball `43b01c94`. Sol hit a capacity failure; Terra continued and is now authorized to push and babysit. No merge has occurred.
+
+PR #114 delivery preview `af8259ac` has three source conflicts with approval pending. The intended resolution preserves BuildIdentity configuration, recorded checks and scores, measured-output proof, and trilinear behavior. PR #114 remains untouched.
+
 ## S23 merged; S24 approved restack on 2026-09-19
 
 PR #112 merged as `1aae2e78` from `8dede0f2`; issue #64 closed and main fast-forwarded, with no child retarget needed. Validation passed for 308 Wasm tests, 72 benchmark tests, 3 browsers, and the trusted guard; the parent passed 18 Wasm tests, 2 adapter tests, and the guard. The obsolete 24-line fixture was removed. Pullfrog’s exact-head clean result is recorded only in silent log `35456104116` (no GitHub review object); the CodeRabbit supported-format-scope nit was rejected. There are zero threads and all CI passes.
