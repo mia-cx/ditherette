@@ -41,8 +41,10 @@ processor.then((instance) => {
 });
 // @ts-expect-error Future metrics are not advertised before their implementation slice.
 const futureQuantize: QuantizeRequest = { ...quantize, matching: 'cielab-ciede2000' };
+void futureQuantize;
 // @ts-expect-error RGB triples require every byte.
 const shortPalette: QuantizeRequest['palette'] = [{ kind: 'color', rgb: [0, 0] }];
+void shortPalette;
 // @ts-expect-error Noncanonical anchor object tags are not accepted.
 const invalidAnchor: Extract<ResizeRequest['output']['resize'], { anchor: unknown }>['anchor'] = {
 	center: null
