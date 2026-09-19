@@ -5,7 +5,7 @@ import { closeSync, openSync, readFileSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
 const request = JSON.parse(readFileSync(process.argv[3], 'utf8'));
-assert.equal(process.argv[2], 'paired-trial');
+assert.equal(process.argv[2], request.browser ? 'paired-browser-trial' : 'paired-trial');
 assert.ok(Number(process.env.DITHERETTE_BENCH_LEASE_FD) >= 3);
 assert.equal(spawnSync('flock', ['-n', '/tmp/ditherette-bench.lock', 'true']).status, 1);
 const overlap = `${process.env.DITHERETTE_PAIR_FIXTURE_DIRECTORY}/active`;

@@ -2,6 +2,19 @@
 
 Read the [execution contract](README.md#execution-contract) before claiming a slice. Each entry records the validated dependency commits and outstanding evidence.
 
+## Current correction: retain landed production
+
+Mia directs restoration of the landed optimized kernels and shared helpers in [#108](https://github.com/mia-cx/ditherette/issues/108).
+This supersedes earlier copied-baseline execution instructions for already-landed implementations, not the frozen reference itself.
+The coordinator owns `fix/v1-restore-landed` in `.worktrees/v1-restore-landed`, based on S20 `e19e12c219605138399cabd71b84cd4d9262a678`.
+S21 restores area/bilinear; S22 restores cubic/Lanczos/convolution. Both restored heads join this correction.
+Nearest restoration `d17e323d2ba6487474c6fa9952e03a86d393a8ba` reconnects the public API with bounded/fallible integration.
+The correction record is folded into [PR #107](https://github.com/mia-cx/ditherette/pull/107). [PR #109](https://github.com/mia-cx/ditherette/pull/109) closes after #107 lands, without a separate merge.
+S19 is ready with this correction included. Existing PRs and historical evidence remain open and recoverable.
+S20 tooling evidence remains valid for the artifact it measured; it does not establish performance of the restored implementation.
+The interrupted diagnostic branch stays separate and will not delay restoring landed code.
+All later work reuses landed kernels and shared helpers. Only missing implementations start from literal spec copies.
+
 ## Delivered S01 through S16
 
 This snapshot comes from the live PR state after S16 delivery. All 16 PRs are open, non-draft, and have auto-merge disabled.
@@ -131,6 +144,43 @@ Trusted freeze enforcement and Rust formatting pass. A merge-preserving rebase k
 S20 still owns complete browser-call timing; native evidence and browser conformance do not replace it.
 Documentation/provenance joins at `db2dbb61c9d6d14723c3f3bfb05a0d3465d6e057`; the crate and package trees match the validated code head.
 The PR's current head is authoritative for subsequent progress-only commits. The issue remains open until a separately authorized merge.
+
+## S20 public browser benchmark implementation
+
+Issue [#61](https://github.com/mia-cx/ditherette/issues/61) starts from validated S19 PR #105 at `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+The immediate PR base is `impl/v1-s19-integration`. The coordinator owns `.worktrees/v1-s20-browser-bench` on `impl/v1-s20-browser-bench`.
+This worktree now owns tracked progress and the ledger; root `slices.md` remains the visible mirror.
+Read [the scoped plan](../../../.plans/61-browser-benchmark.md) and [preflight](../../../.plans/61-browser-preflight.md) before implementation.
+Protocol, script transport, and asset/worker implementation use separate child worktrees. Measurements wait until every agent and build/test exits.
+Trial 02 completes with exact output but performance regressions in every engine. No release-performance readiness claim exists.
+S19's exact delivered head passes CI run `34136269326`; its frozen-reference check and PR status are green.
+The [initial trial budget](../../../.plans/61-initial-trial-budget.md) fixes the case matrix before measurement.
+The [measurement report](../../../.plans/61-public-measurement.md) records actual medians, runtime identities, retained failures, and S41 obligations.
+Both package roles build from clean `e84a55eddb0014f97b64446408bfb5f656deb5d4`; all three engine coordinators complete with regression exit 2.
+No performance candidate is promoted. A developer-only same-kernel comparison investigates the gap from older internal Wasm measurements.
+S20 is delivered in open, non-draft [PR #107](https://github.com/mia-cx/ditherette/pull/107), with creation head `b97e0e5b20b198692fe37944f89ccdfc51734426`.
+Its immediate base remains `impl/v1-s19-integration` at `7de86d799a25a132c8de41ee54696bd8e54bdf76`.
+All 45 Rust benchmark tests and 20 focused JavaScript tests pass after the unchanged rebase.
+The independent audit verifies every sample-derived gate, 216 exact outputs, and complete snapshot identities.
+Ready describes the tooling PR, not release performance. S41 retains the confirmed regressions.
+
+## S21 and S22 remaining integration
+
+Both branches restore their crate trees to S20 delivery `711c7aec61587b45a91c2e404583161edb1e0de9`.
+S21 restoration is `23f6e4f5b9bb6cc1110322b83b8538ffd6dd4508`; S22 restoration is `55b08b4ad4911fc8aa3d65a86a9b94c801079962`.
+The coordinator verifies both source trees byte-for-byte and joins them into `fix/v1-restore-landed`.
+Both clean branches fast-forward to validated correction `c3e00ffee699d655f0c9fd5cfa56e25b7f1ef3e3`.
+Future PRs target `fix/v1-restore-landed`; neither exists yet.
+
+| Slice | Branch/worktree suffix | Current task |
+| --- | --- | --- |
+| S21 / #62 | `v1-s21-area-bilinear` | Connect landed area/bilinear and shared planning to the package |
+| S22 / #63 | `v1-s22-convolution` | Connect landed cubic/Lanczos and shared convolution to the package |
+
+Branches have the `impl/` prefix; worktrees live under `.worktrees/`.
+Existing optimized kernels and shared helpers stay canonical production. Removed replacements remain recoverable in historical commits.
+Public processor/package and benchmark integration remain incomplete. No new optimization or slice-performance claim follows from restoration.
+The interrupted nearest diagnostic in `impl/v1-s20-nearest-diagnostic` stays held and separate.
 
 ## S01 inherited port anchor
 

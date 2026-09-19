@@ -1,5 +1,6 @@
 //! Fresh paired evidence. Historical samples never replace a required role.
 
+pub mod browser;
 pub mod coordinator;
 
 use ditherette_bench_api::verification::*;
@@ -53,6 +54,33 @@ pub struct Measurement {
     pub target_sample_ms: u64,
 }
 
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
+
+/// Browser transport reports per-call durations as floating-point nanoseconds.
+/// Reconstruct batches before rounding once to the nearest nanosecond so
+/// fractional per-call values retain their recorded batch duration.
+pub(crate) fn has_complete_browser_timing_evidence(
+    measurement: &Measurement,
+    sample_ns: &[f64],
+    iterations_per_sample: usize,
+    warmup_elapsed_ns: u128,
+) -> bool {
+    let warmup_ns = u128::from(measurement.warmup_ms) * NANOSECONDS_PER_MILLISECOND;
+    if warmup_elapsed_ns < warmup_ns {
+        return false;
+    }
+    if sample_ns.len() == measurement.samples {
+        return true;
+    }
+
+    let measurement_ns = u128::from(measurement.measurement_ms) * NANOSECONDS_PER_MILLISECOND;
+    let elapsed_ns = sample_ns
+        .iter()
+        .map(|sample| sample * iterations_per_sample as f64)
+        .sum::<f64>();
+    elapsed_ns.is_finite() && elapsed_ns.round() >= measurement_ns as f64
+}
+
 /// Native fixture requests currently use the existing center/default resize recipe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,6 +93,8 @@ pub struct PairCase {
     pub accepted_subject: String,
     pub candidate_subject: String,
     pub measurement: Measurement,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<browser::BrowserCase>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +141,8 @@ pub struct PreparedPair {
     pub accepted: Executable,
     pub candidate: Executable,
     pub machine: Machine,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<browser::PreparedBrowser>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +152,11 @@ pub struct TrialRequest {
     pub reference_state: ReferenceState,
     pub executable: ArtifactIdentity,
     pub case: PairCase,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<browser::BrowserTrial>,
+    /// Browser workers attach the independently computed output before Node can time a call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_output: Option<VerificationOutput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +175,8 @@ pub struct TrialResult {
     pub output: RecordedOutput,
     pub pid: u32,
     pub max_live_benchmark_processes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser: Option<browser::BrowserEvidence>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,6 +199,9 @@ pub struct CaseComparison {
     pub candidate_median_ns: Option<f64>,
     pub median_ratio: Option<f64>,
     pub verification: Vec<ThreeWayReport>,
+    /// Browser timer quantum cannot resolve this case's regression threshold.
+    #[serde(default)]
+    pub resolution_limited: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +213,9 @@ pub struct PairReport {
 
 /// Compare fresh trial pairs only. No API in this module promotes a candidate.
 pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
+    let preparation_error =
+        coordinator::validate_browser_preparation(&prepared.experiment, prepared.browser.as_ref())
+            .err();
     let mut cases = Vec::new();
     for case in &prepared.experiment.cases {
         let mut result = CaseComparison {
@@ -182,19 +227,27 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             candidate_median_ns: None,
             median_ratio: None,
             verification: Vec::new(),
+            resolution_limited: false,
         };
-        if prepared
-            .accepted
-            .identity
-            .revision
-            .eq_ignore_ascii_case(&prepared.candidate.identity.revision)
+        if case.browser.is_none()
+            && prepared
+                .accepted
+                .identity
+                .revision
+                .eq_ignore_ascii_case(&prepared.candidate.identity.revision)
         {
             result
                 .issues
                 .push("paired benchmarks require distinct source revisions".into());
         }
         let mut accepted_samples = Vec::new();
+        if let Some(error) = &preparation_error {
+            result.issues.push(error.to_string());
+        }
         let mut candidate_samples = Vec::new();
+        let mut complete_pairs = 0;
+        let mut resolution_allows_pass = true;
+        let mut resolution_allows_regression = true;
         for pair in 0..prepared.experiment.pairs {
             let mut outputs = Vec::new();
             for role in [Role::Accepted, Role::Candidate] {
@@ -219,6 +272,13 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     Role::Accepted => &case.accepted_subject,
                     Role::Candidate => &case.candidate_subject,
                 };
+                let artifact = match browser::validate_evidence(prepared, case, trial) {
+                    Ok(artifact) => artifact,
+                    Err(error) => {
+                        result.issues.push(format!("pair {pair} {role:?}: {error}"));
+                        continue;
+                    }
+                };
                 if trial.build.dirty
                     || trial.build.revision != executable.identity.revision
                     || trial.build.rustc.is_empty()
@@ -226,19 +286,27 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     || trial.build.configuration.is_empty()
                     || !trial.build.recorded
                     || trial.measurement != case.measurement
-                    || trial.output.implementation.artifact != executable.identity
-                    || trial.reference.implementation.artifact != executable.identity
+                    || trial.output.implementation.artifact != artifact
+                    || trial.reference.implementation.artifact != artifact
                     || trial.output.implementation.subject != *subject
                     || trial.reference.implementation.subject != case.reference_subject
                     || trial.sample_ns.len() < 5
                     || trial.sample_ns.len() > case.measurement.samples
-                    || trial
-                        .sample_ns
-                        .iter()
-                        .any(|sample| !sample.is_finite() || *sample <= 0.0)
+                    || trial.sample_ns.iter().any(|sample| {
+                        !sample.is_finite()
+                            || *sample < 0.0
+                            || (*sample == 0.0 && case.browser.is_none())
+                    })
                     || trial.iterations_per_sample == 0
                     || trial.warmup_iterations == 0
                     || trial.warmup_elapsed_ns == 0
+                    || (case.browser.is_some()
+                        && !has_complete_browser_timing_evidence(
+                            &case.measurement,
+                            &trial.sample_ns,
+                            trial.iterations_per_sample,
+                            trial.warmup_elapsed_ns,
+                        ))
                     || trial.max_live_benchmark_processes != 1
                     || (case.measurement.mode == SampleMode::SingleCall
                         && trial.iterations_per_sample != 1)
@@ -254,6 +322,7 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                 continue;
             }
             let (accepted, candidate) = (outputs[0], outputs[1]);
+            complete_pairs += 1;
             if accepted.build.rustc != candidate.build.rustc
                 || accepted.build.tool_version != candidate.build.tool_version
                 || accepted.build.configuration != candidate.build.configuration
@@ -275,9 +344,23 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     VerificationBounds::exact(),
                 ));
             }
-            result
-                .pair_ratios
-                .push(median(&candidate.sample_ns) / median(&accepted.sample_ns));
+            let a = median(&accepted.sample_ns);
+            let b = median(&candidate.sample_ns);
+            if a > 0.0 && b > 0.0 {
+                result.pair_ratios.push(b / a);
+            } else {
+                result.resolution_limited = true;
+            }
+            if let (Some(a_browser), Some(b_browser)) = (&accepted.browser, &candidate.browser) {
+                let qa = a_browser.observation.timer_resolution_ns
+                    / accepted.iterations_per_sample as f64;
+                let qb = b_browser.observation.timer_resolution_ns
+                    / candidate.iterations_per_sample as f64;
+                // Each elapsed-time observation may differ by one timer quantum.
+                // A positive but coarse median is not precise threshold evidence.
+                resolution_allows_pass &= a > qa && (b + qb) / (a - qa) <= 1.10;
+                resolution_allows_regression &= (b - qb).max(0.0) / (a + qa) > 1.10;
+            }
             accepted_samples.extend_from_slice(&accepted.sample_ns);
             candidate_samples.extend_from_slice(&candidate.sample_ns);
         }
@@ -288,7 +371,7 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
         {
             result.gate = Gate::Incorrect;
         } else if !result.issues.is_empty()
-            || result.pair_ratios.len() != prepared.experiment.pairs
+            || complete_pairs != prepared.experiment.pairs
             || prepared.experiment.pairs < 2
             || prepared.experiment.pairs % 2 != 0
         {
@@ -296,10 +379,10 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
         } else {
             let a = median(&accepted_samples);
             let b = median(&candidate_samples);
-            let ratio = b / a;
+            let ratio = if a > 0.0 { b / a } else { 0.0 };
             result.accepted_median_ns = Some(a);
             result.candidate_median_ns = Some(b);
-            result.median_ratio = Some(ratio);
+            result.median_ratio = (a > 0.0 && b > 0.0).then_some(ratio);
             // Each alternating order must independently confirm a threshold crossing.
             // Mixed or unstable pairs remain inconclusive within the fixed run budget.
             let min = result
@@ -308,11 +391,17 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                 .copied()
                 .fold(f64::INFINITY, f64::min);
             let max = result.pair_ratios.iter().copied().fold(0.0, f64::max);
-            result.gate = if ratio > 1.10 && min > 1.10 {
+            let nominal_regression = ratio > 1.10 && min > 1.10;
+            let nominal_pass = ratio <= 1.10 && max <= 1.10 && max / min <= 1.10;
+            result.gate = if result.resolution_limited {
+                Gate::Inconclusive
+            } else if nominal_regression && resolution_allows_regression {
                 Gate::Regression
-            } else if ratio <= 1.10 && max <= 1.10 && max / min <= 1.10 {
+            } else if nominal_pass && resolution_allows_pass {
                 Gate::Pass
             } else {
+                result.resolution_limited = (nominal_pass && !resolution_allows_pass)
+                    || (nominal_regression && !resolution_allows_regression);
                 Gate::Inconclusive
             };
         }

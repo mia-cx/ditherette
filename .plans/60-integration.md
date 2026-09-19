@@ -1,6 +1,6 @@
 # S19 scalar call integration
 
-Historical evidence below records the incremental experiment. Final S19 delivery restores landed nearest through `ca979646`, `ca04fa99`, and `fe5be5e6` while retaining the bounded processor and package integration.
+Historical S19 delivery record. [The restoration](108-restore-landed.md) supersedes the incremental replacement and promotion through `ca979646`, `ca04fa99`, and `fe5be5e6`, while retaining the bounded processor and package integration. Reuse landed production kernels for remaining work.
 
 Read [the approved PRD](../docs/plans/ditherette-v1/README.md) and [S19 acceptance](../docs/plans/ditherette-v1/slices.md#s19).
 The coordinator joins reviewed child commits here, validates the actual public call, and opens one unmerged slice PR.
