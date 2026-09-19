@@ -92,6 +92,43 @@ export async function browserChecks(wasmUrl) {
 		equal(Array.from(other.resize(request()).data), savedBytes, 'custom input output');
 		other.dispose();
 	}
+
+	const frame = document.createElement('iframe');
+	document.body.append(frame);
+	let crossRealmInputs = 0;
+	try {
+		const foreign = frame.contentWindow;
+		if (!foreign || foreign.URL === URL) throw new Error('Iframe did not create a separate realm.');
+		const foreignResponse = await foreign.fetch(wasmUrl);
+		const foreignBytes = await foreignResponse.clone().arrayBuffer();
+		const foreignPadding = new foreign.Uint8Array(foreignBytes.byteLength + 8);
+		foreignPadding.set(new foreign.Uint8Array(foreignBytes), 4);
+		const foreignModule = await foreign.WebAssembly.compile(foreignBytes);
+		const foreignInputs = [
+			new foreign.URL(wasmUrl),
+			new foreign.Request(`${wasmUrl}?cross-realm-request`, {
+				credentials: 'omit',
+				headers: { 'x-ditherette-cross-realm': '1' }
+			}),
+			foreignResponse,
+			foreignResponse,
+			foreignModule,
+			foreignBytes,
+			foreignPadding.subarray(4, 4 + foreignBytes.byteLength),
+			new foreign.DataView(foreignPadding.buffer, 4, foreignBytes.byteLength)
+		];
+		const foreignInstances = await Promise.all(
+			foreignInputs.map((wasm) => createDitherette({ wasm }))
+		);
+		if (foreignResponse.bodyUsed) throw new Error('Cross-realm Response was consumed.');
+		for (const instance of foreignInstances) {
+			equal(Array.from(instance.resize(request()).data), savedBytes, 'cross-realm input output');
+			instance.dispose();
+		}
+		crossRealmInputs = foreignInputs.length;
+	} finally {
+		frame.remove();
+	}
 	const [failed, healthy] = await Promise.allSettled([
 		createDitherette({ wasm: new Uint8Array([1, 2, 3]) }),
 		createDitherette({ wasm: compiled })
@@ -116,5 +153,10 @@ export async function browserChecks(wasmUrl) {
 	await error(() => active.resize(progress), 'unsupported-operation', 'onProgress');
 	equal(Array.from(active.resize(request()).data), savedBytes, 'recovery after errors');
 	active.dispose();
-	return { anchors: anchors.length, customInputs: inputs.length, scalarWithoutIsolation: true };
+	return {
+		anchors: anchors.length,
+		customInputs: inputs.length,
+		crossRealmInputs,
+		scalarWithoutIsolation: true
+	};
 }
