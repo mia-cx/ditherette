@@ -4,7 +4,7 @@
 
 PR #113 merged as `5a2c6244` from `45b9e735`; issue #65 closed and main fast-forwarded. PR #114 was retargeted to main before the merge. The parent verified exact Pullfrog approval, all CI, five resolved review threads, and seven `browser_worker` tests. New fixes `471e55ad` add fallible missing-browser-recipe validation and `45b9e735` consume negative TypeScript fixtures for lint; no kernels changed.
 
-The baseline passed 319 Wasm tests, 77 benchmark tests, 38 JavaScript tests, private ABI 8+2 tests, 22 interface tests, three engines across 17 fixtures, and the trusted guard. Tarball `43b01c94` belongs to formatting fix `f497d1bf`; subsequent changes are transport-validator/tests only, with no package or kernel changes. Cleanup is underway. PR #114 has three source conflicts awaiting Mia’s approval and remains untouched.
+The baseline passed 319 Wasm tests, 77 benchmark tests, 38 JavaScript tests, private ABI 8+2 tests, 22 interface tests, three engines across 17 fixtures, and the trusted guard. Tarball `43b01c94` belongs to formatting fix `f497d1bf`; subsequent changes are transport-validator/tests only, with no package or kernel changes. S24 is clean and detached at `5a2c6244`; the parent verified six targets absent: S24 bench, Wasm, bench-api, own syntax, trusted S18 syntax, and moved `/tmp/ditherette-s24-bench-target.Qs8raa/target`. Final Cargo removal freed 1.2 GiB of moved-bench targets and 349.3 MiB of syntax targets; the earlier fresh-prep 4.1 GiB was already cleared. Artifacts are retained. PR #114 has three source conflicts awaiting Mia’s approval and remains untouched.
 
 ## S24 validation passed; S25 delivery preview pending on 2026-09-20
 
