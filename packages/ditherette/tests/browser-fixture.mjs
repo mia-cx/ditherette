@@ -130,6 +130,51 @@ export async function browserChecks(wasmUrl) {
 			equal(Array.from(average.data), expected, 'convolution result durability');
 		}
 	}
+	let trilinearCases = 0;
+	const boundedTrilinear = await createDitherette({ memoryLimitBytes: 4000 });
+	for (const [anchorIndex, anchor] of anchors.entries()) {
+		// 3→2 area mip is [0,170]. Its anchored bilinear outputs are [43,85,128].
+		// The 1-pixel mip is 85. Blending at log2(3)-1 rounds to [68,85,103].
+		for (const [width, height, values, expectations] of [
+			[4, 1, [0, 0, 0, 1], [1, 1, 1]],
+			[3, 1, [0, 0, 255], [68, 85, 103]],
+			[1, 3, [0, 0, 255], [68, 85, 103]]
+		]) {
+			const expected = expectations[width === 1 ? Math.floor(anchorIndex / 3) : anchorIndex % 3];
+			const sourceBytes = values.flatMap((value) => [value, value, value, value]);
+			const backing = new Uint8Array([99, ...sourceBytes, 98]);
+			const value = {
+				version: 1,
+				source: { width, height, data: backing.subarray(1, backing.length - 1) },
+				output: { width: 1, height: 1, resize: { algorithm: 'trilinear', anchor } }
+			};
+			const output = boundedTrilinear.resize(value);
+			equal(
+				Array.from(output.data),
+				[expected, expected, expected, expected],
+				`trilinear ${width}x${height} ${anchor}`
+			);
+			equal(Array.from(backing), [99, ...sourceBytes, 98], 'trilinear source ownership');
+			const oversized = {
+				...value,
+				source: { width: 101, height: 100, data: new Uint8Array(101 * 100 * 4) }
+			};
+			await error(() => boundedTrilinear.resize(oversized), 'memory-limit', 'memoryLimitBytes');
+			equal(
+				Array.from(boundedTrilinear.resize(value).data),
+				Array.from(output.data),
+				'trilinear recovery'
+			);
+			value.output.resize.support = 'fixed';
+			await error(
+				() => boundedTrilinear.resize(value),
+				'invalid-settings',
+				'output.resize.support'
+			);
+			trilinearCases++;
+		}
+	}
+	boundedTrilinear.dispose();
 	const quantizeRequest = {
 		version: 1,
 		source: { width: 2, height: 1, data: new Uint8Array([255, 0, 0, 128, 17, 31, 53, 0]) },
@@ -302,6 +347,43 @@ export async function browserChecks(wasmUrl) {
 		equal(Array.from(other.resize(request()).data), savedBytes, 'custom input output');
 		other.dispose();
 	}
+
+	const frame = document.createElement('iframe');
+	document.body.append(frame);
+	let crossRealmInputs;
+	try {
+		const foreign = frame.contentWindow;
+		if (!foreign || foreign.URL === URL) throw new Error('Iframe did not create a separate realm.');
+		const foreignResponse = await foreign.fetch(wasmUrl);
+		const foreignBytes = await foreignResponse.clone().arrayBuffer();
+		const foreignPadding = new foreign.Uint8Array(foreignBytes.byteLength + 8);
+		foreignPadding.set(new foreign.Uint8Array(foreignBytes), 4);
+		const foreignModule = await foreign.WebAssembly.compile(foreignBytes);
+		const foreignInputs = [
+			new foreign.URL(wasmUrl),
+			new foreign.Request(`${wasmUrl}?cross-realm-request`, {
+				credentials: 'omit',
+				headers: { 'x-ditherette-cross-realm': '1' }
+			}),
+			foreignResponse,
+			foreignResponse,
+			foreignModule,
+			foreignBytes,
+			foreignPadding.subarray(4, 4 + foreignBytes.byteLength),
+			new foreign.DataView(foreignPadding.buffer, 4, foreignBytes.byteLength)
+		];
+		const foreignInstances = await Promise.all(
+			foreignInputs.map((wasm) => createDitherette({ wasm }))
+		);
+		if (foreignResponse.bodyUsed) throw new Error('Cross-realm Response was consumed.');
+		for (const instance of foreignInstances) {
+			equal(Array.from(instance.resize(request()).data), savedBytes, 'cross-realm input output');
+			instance.dispose();
+		}
+		crossRealmInputs = foreignInputs.length;
+	} finally {
+		frame.remove();
+	}
 	const [failed, healthy] = await Promise.allSettled([
 		createDitherette({ wasm: new Uint8Array([1, 2, 3]) }),
 		createDitherette({ wasm: compiled })
@@ -329,8 +411,10 @@ export async function browserChecks(wasmUrl) {
 	return {
 		anchors: anchors.length,
 		convolutionCases,
+		trilinearCases,
 		quantizeCases,
 		customInputs: inputs.length,
+		crossRealmInputs,
 		scalarWithoutIsolation: true
 	};
 }

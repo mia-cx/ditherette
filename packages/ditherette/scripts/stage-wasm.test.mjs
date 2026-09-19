@@ -14,7 +14,6 @@ test('staged declarations resolve source imports and emitted package-relative as
 	const crate = new URL('crate/', root);
 	const packageDirectory = new URL('package/', root);
 	await mkdir(new URL('dist/scalar/', crate), { recursive: true });
-	await mkdir(new URL('dist/threads/snippets/', crate), { recursive: true });
 	await mkdir(new URL('src/', packageDirectory), { recursive: true });
 	await writeFile(new URL('LICENSE', root), 'MIT fixture');
 	await writeFile(new URL('dist/scalar/.gitignore', crate), '*');
@@ -39,7 +38,6 @@ test('staged declarations resolve source imports and emitted package-relative as
 		new URL('dist/scalar/ditherette_wasm_bg.wasm', crate),
 		new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])
 	);
-	await writeFile(new URL('dist/threads/snippets/worker.js', crate), '// threaded worker fixture');
 	await writeFile(
 		new URL('src/index.ts', packageDirectory),
 		`
@@ -47,7 +45,7 @@ import { createScalarBindings } from './wasm/scalar/ditherette_wasm.factory.js';
 export function greet(name: string): string { return createScalarBindings().hello(name); }
 `
 	);
-	await stageWasm(crate, packageDirectory, new URL('LICENSE', root));
+	await stageWasm(crate, packageDirectory, new URL('LICENSE', root), ['scalar']);
 	await assert.rejects(readFile(new URL('dist/wasm/scalar/.gitignore', packageDirectory)), {
 		code: 'ENOENT'
 	});
@@ -70,6 +68,10 @@ export function greet(name: string): string { return createScalarBindings().hell
 	assert.match(emitted, /\.\/wasm\/scalar\/ditherette_wasm\.factory\.js/);
 	const built = await import(new URL('dist/index.js', packageDirectory).href);
 	assert.equal(built.greet('typed factory'), 'typed factory');
+
+	await mkdir(new URL('dist/threads/snippets/', crate), { recursive: true });
+	await writeFile(new URL('dist/threads/snippets/worker.js', crate), '// threaded worker fixture');
+	await stageWasm(crate, packageDirectory, new URL('LICENSE', root));
 	assert.equal(
 		await readFile(new URL('dist/wasm/threads/snippets/worker.js', packageDirectory), 'utf8'),
 		'// threaded worker fixture'

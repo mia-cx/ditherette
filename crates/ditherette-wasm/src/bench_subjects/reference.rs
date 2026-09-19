@@ -5,7 +5,10 @@ use super::{
     verification::{color_space, indexed_output, rgba_output},
     BenchSubject,
 };
-use crate::spec::{self, contract::request::*};
+use crate::{
+    image::contracts::PaletteEntry,
+    spec::{self, contract::request::*},
+};
 use ditherette_bench_api::{
     verification::*, BenchSubjectError, ConformanceBenchSubject, ParamField, ParamSchema,
     PixelFormat, SubjectCapabilities, SubjectDescriptor, SubjectId,
@@ -123,7 +126,7 @@ impl Serialize for ReferenceRequest<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match *self {
             Self::Processing(Request::Process(request)) => {
-                ("process", request.palette, request.recipe).serialize(serializer)
+                ("process", palette_settings(request.palette), request.recipe).serialize(serializer)
             }
             Self::Processing(Request::Resize(request)) => {
                 ("resize", request.version, request.output).serialize(serializer)
@@ -134,7 +137,7 @@ impl Serialize for ReferenceRequest<'_> {
             Self::Processing(Request::Quantize(request)) => (
                 "quantize",
                 request.version,
-                request.palette,
+                palette_settings(request.palette),
                 request.alpha,
                 request.matching,
             )
@@ -142,7 +145,7 @@ impl Serialize for ReferenceRequest<'_> {
             Self::Processing(Request::DitherAndQuantize(request)) => (
                 "dither-and-quantize",
                 request.quantize.version,
-                request.quantize.palette,
+                palette_settings(request.quantize.palette),
                 request.quantize.alpha,
                 request.quantize.matching,
                 request.dither,
@@ -158,6 +161,13 @@ impl Serialize for ReferenceRequest<'_> {
                 .serialize(serializer),
         }
     }
+}
+
+fn palette_settings(entries: &[PaletteEntry]) -> (&[PaletteEntry], bool) {
+    (
+        &entries[..entries.len().min(MAX_PALETTE_ENTRIES)],
+        entries.len() > MAX_PALETTE_ENTRIES,
+    )
 }
 
 pub(super) fn subjects() -> Vec<BenchSubject> {

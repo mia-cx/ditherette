@@ -10,31 +10,31 @@ starts. There is no baseline-writing or candidate-promotion command.
 Prepare each requested revision in its own clean worktree with the same toolchain:
 
 ```sh
-node scripts/prepare-native-benchmark.mjs /absolute/new-native-artifacts /absolute/owned-native-target
+node scripts/build-paired-benchmarks.mjs /absolute/clean-worktree /absolute/new-build-directory
 ```
 
-Preparation cleans only `ditherette-bench`, `ditherette-bench-api`, and `ditherette-wasm`
-release outputs in that explicit target. It then builds `--bins --examples --release --locked`.
-Dependency caches remain. A shared target can reuse stale local outputs across checkouts;
-a clean Git tree alone does not prove that Cargo recompiled the requested source.
-Targets must have one owner, and artifact destinations must sit outside their `release` directory.
+The build-only recorder uses Rust 1.97.0 and a fresh external target directory.
+It prints the three executable paths for control-plan, preparation, and trials.
+Use those printed paths instead of the historical `target/release` paths below.
+Optional `--config profile.KEY=VALUE` arguments select explicit profile settings;
+resolved settings remain part of the recorded recipe. Recorded builds reject
+`target-cpu=native`; use an explicit CPU or the compiler's default target.
+Compiler response files (`@path`) are rejected because their contents are opaque
+to the recorded argument list. Pass compiler options directly instead.
+Recorded builds also reject `RUSTC_BOOTSTRAP` enablement. The pinned stable
+compiler or explicit forced-stable `RUSTC_BOOTSTRAP=-1` is required.
 
-Preparation copies both binaries into the new artifact directory and makes them read-only.
-It invokes each copy's `build-info` command, validates the embedded clean revision and complete
-executable SHA-256, and records source inventory and metadata in `build-provenance.json`.
-Only a successful handoff contains that provenance file. Failed directories remain diagnostic evidence.
-Use the copied worker and coordinator binaries for subsequent preparation and trials.
-Examples remain in the build target for untimed experiment generation.
+The native executable embeds its source revision, dirty status, tool version,
+compiler version, and normalized compiler commands for itself and its dependencies.
+The recipe includes actual target, feature, LTO, and codegen arguments. It removes
+transient worktree/output paths and Cargo filename metadata. Paired roles require
+exact recipe equality. Default Cargo builds remain available for ordinary commands,
+but cannot provide recorded paired evidence. A trial also rejects a dirty build,
+a different requested revision, or a different executable SHA-256.
 
-Both binaries support `build-info` under the normal exclusive benchmark execution guard.
-It requires no quiet attestation, initializes no registry, and executes no workload.
-The JSON contains the existing `BuildIdentity` in `build` and the complete SHA-256 byte array in `executable`.
-Preparation still trusts cached external dependencies and the pinned compiler; it is not a hermetic rebuild.
-
-The native executable embeds its full source revision, dirty status, tool version,
-and verbose compiler version. A trial rejects a dirty build, a different requested
-revision, or a different executable SHA-256. Build artifacts are not inferred from
-the working directory during measurement.
+Accepted and candidate revisions must differ. Preparation and execution both
+check this, including when loading an edited prepared manifest. Output
+dimensions must fit a native RGBA allocation before any worker allocates it.
 
 Write an `Experiment` JSON using the public typed model. The native control-plan
 helper creates two explicitly provisional reference fixtures without running them:
@@ -61,7 +61,9 @@ crates/ditherette-bench/target/release/ditherette-bench-pair prepare \
 
 Preparation reads both executables before writing the manifest. Copies become
 read-only. Each trial checks their complete hashes before launch and after exit.
-Existing preparation and result directories cannot be overwritten.
+Existing preparation and result directories cannot be overwritten. This is a
+cooperative local benchmark protocol, not a security boundary against deliberate
+same-UID tampering with executables or evidence.
 
 ## Run after explicit clearance
 
@@ -92,7 +94,12 @@ It does not certify unrelated host quiescence or stop other projects' processes.
 Required cases retain full fixture/settings/artifact digests, dimensions, recipe,
 both revisions, warmup settings and observed work, raw per-call samples, and batch
 sizes. S05 verifies all three outputs and both executable-local references.
-Incorrect results preserve raw output and available PNG review bundles.
+Incorrect results preserve raw output and available PNG review bundles. A known
+correctness failure remains incorrect even when another pair or case has
+incomplete timing evidence. Its available review images remain part of the run.
+
+Native output records contain the final measured buffer, copied after the timing
+loop. A correct one-shot probe cannot certify a later divergent execution.
 
 The protocol separates single-call latency from calibrated throughput and keeps each
 operation's timing scope explicit. Native resize uses caller-owned output storage.

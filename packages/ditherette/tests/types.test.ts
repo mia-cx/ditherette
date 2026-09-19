@@ -23,7 +23,7 @@ processor.then((instance) => {
 	// @ts-expect-error The complete pipeline is not exposed before its implementation slice.
 	instance.process(request);
 	// @ts-expect-error Raw bindings are not public processor state.
-	instance.wasm;
+	void instance.wasm;
 });
 
 const quantize: QuantizeRequest = {
@@ -43,8 +43,10 @@ const perceptualQuantize: QuantizeRequest = { ...quantize, matching: 'cielab-cie
 // @ts-expect-error CIEDE2000 is a CIELAB metric, not an OKLCH metric.
 const invalidPair: QuantizeRequest = { ...quantize, matching: 'oklch-ciede2000' };
 void perceptualQuantize;
+void invalidPair;
 // @ts-expect-error RGB triples require every byte.
 const shortPalette: QuantizeRequest['palette'] = [{ kind: 'color', rgb: [0, 0] }];
+void shortPalette;
 // @ts-expect-error Noncanonical anchor object tags are not accepted.
 const invalidAnchor: Extract<ResizeRequest['output']['resize'], { anchor: unknown }>['anchor'] = {
 	center: null
@@ -60,6 +62,15 @@ const bilinear: ResizeRequest = {
 };
 void area;
 void bilinear;
+const trilinear: ResizeRequest['output']['resize'] = { algorithm: 'trilinear', anchor: 'center' };
+const invalidTrilinear: ResizeRequest['output']['resize'] = {
+	algorithm: 'trilinear',
+	anchor: 'center',
+	// @ts-expect-error Trilinear has no support setting.
+	support: 'fixed'
+};
+void trilinear;
+void invalidTrilinear;
 const convolution: ResizeRequest['output']['resize'][] = [
 	{ algorithm: 'bicubic', anchor: 'bottom-right', support: 'fixed' },
 	{ algorithm: 'lanczos2', anchor: 'center', support: 'scale-aware' },

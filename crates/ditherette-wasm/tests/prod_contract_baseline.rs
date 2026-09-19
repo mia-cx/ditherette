@@ -8,6 +8,8 @@ macro_rules! contract_cases {
         use ditherette_wasm::image::contracts::PaletteEntry;
         let bytes = [13, 29, 71, 0];
         let source = Source { width: 1, height: 1, data: &bytes };
+        let wide_bytes = vec![0; 16_385 * 4];
+        let wide_source = Source { width: 16_385, height: 1, data: &wide_bytes };
         let palette = [PaletteEntry::Transparent {}];
         let output = Output { width: 2, height: 3, resize: ResizePolicy::Nearest { anchor: Anchor::BottomRight } };
         let alpha = AlphaPolicy::Preserve { threshold: 127.5 };
@@ -25,6 +27,7 @@ macro_rules! contract_cases {
             Request::Resize(ResizeRequest { version: 1, source, output: Output { width: 0, ..output } }),
             Request::Quantize(QuantizeRequest { palette: &[], ..quantize }),
             Request::Perturb(PerturbRequest { version: 1, source, perturb: PerturbPolicy { strength: f32::NAN, ..perturb } }),
+            Request::Perturb(PerturbRequest { version: 1, source: wide_source, perturb }),
         ];
         let mut observations = Vec::new();
         for request in requests {
@@ -66,6 +69,8 @@ fn requests_wire_tags_validation_order_and_diagnostics_match() {
     assert_eq!(actual[5]["error"]["code"], "invalid-request");
     assert_eq!(actual[6]["error"]["path"], "source.data");
     assert_eq!(actual[9]["error"]["path"], "perturb.strength");
+    assert_eq!(actual[10]["error"]["code"], "invalid-image");
+    assert_eq!(actual[10]["error"]["path"], "source.width");
 }
 
 macro_rules! initialization_cases {

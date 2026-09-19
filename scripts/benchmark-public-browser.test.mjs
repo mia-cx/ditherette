@@ -254,7 +254,7 @@ test('indexed preflight checks indices, palette, transparency, and warnings with
 
 test('public resize recipes retain mode-specific settings', () => {
 	assert.deepEqual(resizeRecipe({ operation: 'resize-area' }), { algorithm: 'area' });
-	for (const algorithm of ['nearest', 'bilinear'])
+	for (const algorithm of ['nearest', 'bilinear', 'trilinear'])
 		assert.deepEqual(resizeRecipe({ operation: `resize-${algorithm}`, anchor: 'bottom-left' }), {
 			algorithm,
 			anchor: 'bottom-left'

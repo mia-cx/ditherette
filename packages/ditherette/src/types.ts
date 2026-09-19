@@ -50,7 +50,7 @@ export interface ResizeRequest {
 		readonly width: number;
 		readonly height: number;
 		readonly resize:
-			| { readonly algorithm: 'nearest' | 'bilinear'; readonly anchor: ResizeAnchor }
+			| { readonly algorithm: 'nearest' | 'bilinear' | 'trilinear'; readonly anchor: ResizeAnchor }
 			| {
 					readonly algorithm: 'bicubic' | 'lanczos2' | 'lanczos3';
 					readonly anchor: ResizeAnchor;

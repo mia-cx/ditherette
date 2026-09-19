@@ -1,4 +1,4 @@
-use ditherette_wasm::{image::ImageDimensions, resize::resize_rgba_nearest};
+use ditherette_wasm_old::{image::ImageDimensions, resize::resize_rgba_nearest};
 
 #[cfg(not(target_arch = "wasm32"))]
 use image::{imageops::FilterType, ImageBuffer, RgbaImage};

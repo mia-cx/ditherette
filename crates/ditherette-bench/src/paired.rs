@@ -62,6 +62,33 @@ pub struct Measurement {
     pub target_sample_ms: u64,
 }
 
+const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
+
+/// Browser transport reports per-call durations as floating-point nanoseconds.
+/// Reconstruct batches before rounding once to the nearest nanosecond so
+/// fractional per-call values retain their recorded batch duration.
+pub(crate) fn has_complete_browser_timing_evidence(
+    measurement: &Measurement,
+    sample_ns: &[f64],
+    iterations_per_sample: usize,
+    warmup_elapsed_ns: u128,
+) -> bool {
+    let warmup_ns = u128::from(measurement.warmup_ms) * NANOSECONDS_PER_MILLISECOND;
+    if warmup_elapsed_ns < warmup_ns {
+        return false;
+    }
+    if sample_ns.len() == measurement.samples {
+        return true;
+    }
+
+    let measurement_ns = u128::from(measurement.measurement_ms) * NANOSECONDS_PER_MILLISECOND;
+    let elapsed_ns = sample_ns
+        .iter()
+        .map(|sample| sample * iterations_per_sample as f64)
+        .sum::<f64>();
+    elapsed_ns.is_finite() && elapsed_ns.round() >= measurement_ns as f64
+}
+
 /// Native fixture requests currently use the existing center/default resize recipe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,6 +124,8 @@ pub struct BuildIdentity {
     pub dirty: bool,
     pub rustc: String,
     pub tool_version: String,
+    pub configuration: String,
+    pub recorded: bool,
 }
 
 impl BuildIdentity {
@@ -107,6 +136,8 @@ impl BuildIdentity {
             dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
             rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
             tool_version: env!("CARGO_PKG_VERSION").into(),
+            configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
+            recorded: env!("DITHERETTE_BENCH_RECORDED_BUILD") == "true",
         }
     }
 }
@@ -232,6 +263,17 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             verification: Vec::new(),
             resolution_limited: false,
         };
+        if case.browser.is_none()
+            && prepared
+                .accepted
+                .identity
+                .revision
+                .eq_ignore_ascii_case(&prepared.candidate.identity.revision)
+        {
+            result
+                .issues
+                .push("paired benchmarks require distinct source revisions".into());
+        }
         let mut accepted_samples = Vec::new();
         if let Some(error) = &preparation_error {
             result.issues.push(error.to_string());
@@ -275,6 +317,8 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     || trial.build.revision != executable.identity.revision
                     || trial.build.rustc.is_empty()
                     || trial.build.tool_version.is_empty()
+                    || trial.build.configuration.is_empty()
+                    || !trial.build.recorded
                     || trial.measurement != case.measurement
                     || trial.output.implementation.artifact != artifact
                     || trial.reference.implementation.artifact != artifact
@@ -290,6 +334,13 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                     || trial.iterations_per_sample == 0
                     || trial.warmup_iterations == 0
                     || trial.warmup_elapsed_ns == 0
+                    || (case.browser.is_some()
+                        && !has_complete_browser_timing_evidence(
+                            &case.measurement,
+                            &trial.sample_ns,
+                            trial.iterations_per_sample,
+                            trial.warmup_elapsed_ns,
+                        ))
                     || trial.max_live_benchmark_processes != 1
                     || (case.measurement.mode == SampleMode::SingleCall
                         && trial.iterations_per_sample != 1)
@@ -308,6 +359,7 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             complete_pairs += 1;
             if accepted.build.rustc != candidate.build.rustc
                 || accepted.build.tool_version != candidate.build.tool_version
+                || accepted.build.configuration != candidate.build.configuration
             {
                 result
                     .issues
@@ -355,18 +407,18 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             result.candidate_median_ns = Some(b);
             result.median_ratio = (a > 0.0 && b > 0.0).then_some(b / a);
         }
-        if !result.issues.is_empty()
-            || complete_pairs != prepared.experiment.pairs
-            || prepared.experiment.pairs < 2
-            || prepared.experiment.pairs % 2 != 0
-        {
-            result.gate = Gate::Incomplete;
-        } else if result
+        if result
             .verification
             .iter()
             .any(|proof| proof.status != VerificationStatus::Exact)
         {
             result.gate = Gate::Incorrect;
+        } else if !result.issues.is_empty()
+            || complete_pairs != prepared.experiment.pairs
+            || prepared.experiment.pairs < 2
+            || prepared.experiment.pairs % 2 != 0
+        {
+            result.gate = Gate::Incomplete;
         } else {
             let a = median(&accepted_samples);
             let b = median(&candidate_samples);
@@ -406,18 +458,17 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
                 .iter()
                 .any(|case| case.name == trial.case_name)
     });
-    let gate =
-        if cases.is_empty() || extra || cases.iter().any(|case| case.gate == Gate::Incomplete) {
-            Gate::Incomplete
-        } else if cases.iter().any(|case| case.gate == Gate::Incorrect) {
-            Gate::Incorrect
-        } else if cases.iter().any(|case| case.gate == Gate::Regression) {
-            Gate::Regression
-        } else if cases.iter().any(|case| case.gate == Gate::Inconclusive) {
-            Gate::Inconclusive
-        } else {
-            Gate::Pass
-        };
+    let gate = if cases.iter().any(|case| case.gate == Gate::Incorrect) {
+        Gate::Incorrect
+    } else if cases.is_empty() || extra || cases.iter().any(|case| case.gate == Gate::Incomplete) {
+        Gate::Incomplete
+    } else if cases.iter().any(|case| case.gate == Gate::Regression) {
+        Gate::Regression
+    } else if cases.iter().any(|case| case.gate == Gate::Inconclusive) {
+        Gate::Inconclusive
+    } else {
+        Gate::Pass
+    };
     PairReport {
         schema: "ditherette-fresh-pair-v1".into(),
         gate,

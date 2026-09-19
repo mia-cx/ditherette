@@ -221,14 +221,11 @@ pub fn validate_response(
             return Err(invalid("invalid first-distinct-output instability marker"));
         }
     }
-    let indexed = matches!(
-        &case
-            .browser
-            .as_ref()
-            .expect("validated browser recipe")
-            .operation,
-        PublicOperation::Quantize { .. }
-    );
+    let browser_case = case
+        .browser
+        .as_ref()
+        .ok_or_else(|| invalid("browser transport requires a browser recipe"))?;
+    let indexed = matches!(browser_case.operation, PublicOperation::Quantize { .. });
     for output in std::iter::once(&result.output).chain(result.unstable_output.iter()) {
         let format_matches = if indexed {
             matches!(output.pixels, Pixels::Indexed8 { .. })
@@ -262,7 +259,12 @@ pub fn validate_response(
             .any(|sample| !sample.is_finite() || *sample < 0.0)
         || result.iterations_per_sample == 0
         || result.warmup_iterations == 0
-        || result.warmup_elapsed_ns == 0
+        || !has_complete_browser_timing_evidence(
+            &case.measurement,
+            &result.sample_ns,
+            result.iterations_per_sample,
+            result.warmup_elapsed_ns,
+        )
         || (case.measurement.mode == SampleMode::SingleCall && result.iterations_per_sample != 1)
     {
         return Err(invalid(

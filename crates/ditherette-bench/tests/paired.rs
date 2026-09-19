@@ -45,7 +45,7 @@ fn missing_identity_settings_samples_or_correctness_never_pass() {
     let mut duplicate = trials.clone();
     duplicate.push(trials[0].clone());
     assert_eq!(compare(&prepared, &duplicate).gate, Gate::Incomplete);
-    for mutation in 0..6 {
+    for mutation in 0..7 {
         let mut changed = trials.clone();
         match mutation {
             0 => changed[0].build.revision = "b".repeat(40),
@@ -53,6 +53,7 @@ fn missing_identity_settings_samples_or_correctness_never_pass() {
             2 => changed[0].sample_ns[0] = f64::NAN,
             3 => changed[0].iterations_per_sample = 2,
             4 => changed[0].max_live_benchmark_processes = 2,
+            5 => changed[0].warmup_elapsed_ns = 0,
             _ => changed[0].build.rustc = "different compiler".into(),
         }
         assert_eq!(compare(&prepared, &changed).gate, Gate::Incomplete);
@@ -186,4 +187,71 @@ fn coordinator_holds_one_lease_across_alternating_children_and_failures() {
     std::env::remove_var(QUIET_ENV);
     std::env::remove_var("DITHERETTE_PAIR_FIXTURE_DIRECTORY");
     fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn copied_revisions_cannot_form_a_cross_revision_gate() {
+    let (mut prepared, mut trials) = fixture();
+    prepared.candidate.identity = prepared.accepted.identity.clone();
+    for trial in &mut trials {
+        if trial.role == Role::Candidate {
+            trial.build.revision = prepared.accepted.identity.revision.clone();
+            trial.output.implementation.artifact = prepared.accepted.identity.clone();
+            trial.reference.implementation.artifact = prepared.accepted.identity.clone();
+        }
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+}
+
+#[test]
+fn output_byte_lengths_are_checked_before_native_allocation() {
+    let (mut prepared, _) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    case.identity.input = ditherette_bench::verification::input_digest(case.source, &case.rgba);
+    case.identity.output = Dimensions {
+        width: u32::MAX,
+        height: u32::MAX,
+    };
+    assert!(coordinator::validate_experiment(&prepared.experiment)
+        .unwrap_err()
+        .to_string()
+        .contains("output dimensions overflow"));
+}
+
+#[test]
+fn known_correctness_failures_survive_incomplete_timing_evidence() {
+    let (mut prepared, mut trials) = fixture();
+    if let Pixels::Rgba8 { data } = &mut trials[1].output.output.pixels {
+        data[0] += 1;
+    }
+    trials[3].sample_ns.clear();
+    let report = compare(&prepared, &trials);
+    assert_eq!(report.cases[0].gate, Gate::Incorrect);
+    assert_eq!(report.gate, Gate::Incorrect);
+    let mut missing = prepared.experiment.cases[0].clone();
+    missing.name = "missing-case".into();
+    prepared.experiment.cases.push(missing);
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incorrect);
+}
+
+#[test]
+fn compilation_settings_must_match_between_roles() {
+    let (prepared, trials) = fixture();
+    for configuration in [
+        "",
+        "different target",
+        "different profile",
+        "different opt level",
+        "different debug info",
+        "different features",
+        "different codegen flags",
+    ] {
+        let mut changed = trials.clone();
+        changed[1].build.configuration = configuration.into();
+        assert_eq!(compare(&prepared, &changed).gate, Gate::Incomplete);
+    }
+    let mut unrecorded = trials.clone();
+    unrecorded[1].build.recorded = false;
+    assert_eq!(compare(&prepared, &unrecorded).gate, Gate::Incomplete);
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
 }

@@ -20,6 +20,46 @@ const request = (data = new Uint8Array([17, 31, 47, 127])) => ({
 const diagnostic = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
+test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
+	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.
+	const capacity = 3 * 20 + 16 + 8 + 4 + 32 + 16 + 4;
+	const processor = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity });
+	const short = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity - 1 });
+	const backing = new Uint8Array([99, ...new Uint8Array(12), 1, 1, 1, 1, 98]);
+	const value = {
+		version: 1,
+		source: { width: 4, height: 1, data: backing.subarray(1, 17) },
+		output: { width: 1, height: 1, resize: { algorithm: 'trilinear', anchor: 'center' } }
+	};
+	const original = [...backing];
+	const result = processor.resize(value);
+	assert.deepEqual([...result.data], [1, 1, 1, 1]);
+	assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
+	const small = { ...value, source: { width: 1, height: 1, data: new Uint8Array([7, 8, 9, 0]) } };
+	assert.deepEqual([...short.resize(small).data], [7, 8, 9, 0]);
+	for (const phase of [1, 2]) {
+		const originalSet = Uint8Array.prototype.set;
+		let calls = 0;
+		Uint8Array.prototype.set = function (...args) {
+			if (++calls === phase) throw new RangeError('trilinear copy failure');
+			return Reflect.apply(originalSet, this, args);
+		};
+		try {
+			assert.throws(
+				() => processor.resize(value),
+				diagnostic('wasm-memory-unavailable', phase === 1 ? 'source.data' : 'output')
+			);
+		} finally {
+			Uint8Array.prototype.set = originalSet;
+		}
+		assert.deepEqual([...processor.resize(value).data], [1, 1, 1, 1]);
+	}
+	processor.dispose();
+	short.dispose();
+	assert.deepEqual([...result.data], [1, 1, 1, 1]);
+	assert.deepEqual([...backing], original);
+});
+
 test('public calls preserve inputs and durable outputs across growth, later calls, and disposal', async (t) => {
 	const memories = [];
 	const instantiate = WebAssembly.instantiate;
