@@ -45,7 +45,11 @@ fn prepare_inner(
 ) -> io::Result<PreparedPair> {
     validate_experiment(&experiment)?;
     validate_browser_preparation(&experiment, browser.as_ref())?;
-    validate_revisions(accepted.1, candidate.1)?;
+    validate_revisions(
+        accepted.1,
+        candidate.1,
+        experiment.cases.iter().any(|case| case.browser.is_none()),
+    )?;
     // Read both inputs before creating the destination. An absent candidate cannot
     // leave an apparently usable accepted-only preparation.
     let a = fs::read(accepted.0)?;
@@ -121,6 +125,11 @@ fn run_inner(
     validate_revisions(
         &prepared.accepted.identity.revision,
         &prepared.candidate.identity.revision,
+        prepared
+            .experiment
+            .cases
+            .iter()
+            .any(|case| case.browser.is_none()),
     )?;
     if prepared.schema != SCHEMA || prepared.machine != machine()? {
         return Err(io::Error::other(
@@ -265,13 +274,13 @@ fn run_inner(
     Ok(report)
 }
 
-fn validate_revisions(accepted: &str, candidate: &str) -> io::Result<()> {
+fn validate_revisions(accepted: &str, candidate: &str, distinct: bool) -> io::Result<()> {
     for revision in [accepted, candidate] {
         if ![40, 64].contains(&revision.len()) || !revision.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(io::Error::other("prepare requires full source revisions"));
         }
     }
-    if accepted.eq_ignore_ascii_case(candidate) {
+    if distinct && accepted.eq_ignore_ascii_case(candidate) {
         return Err(io::Error::other(
             "paired benchmarks require distinct source revisions",
         ));

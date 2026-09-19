@@ -229,11 +229,12 @@ pub fn compare(prepared: &PreparedPair, trials: &[TrialResult]) -> PairReport {
             verification: Vec::new(),
             resolution_limited: false,
         };
-        if prepared
-            .accepted
-            .identity
-            .revision
-            .eq_ignore_ascii_case(&prepared.candidate.identity.revision)
+        if case.browser.is_none()
+            && prepared
+                .accepted
+                .identity
+                .revision
+                .eq_ignore_ascii_case(&prepared.candidate.identity.revision)
         {
             result
                 .issues

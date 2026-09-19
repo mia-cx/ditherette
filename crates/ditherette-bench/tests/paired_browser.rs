@@ -9,6 +9,7 @@ mod model;
 
 fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
+    prepared.candidate.identity.revision = prepared.accepted.identity.revision.clone();
     let browser = BrowserCase {
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
@@ -103,6 +104,7 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
             Role::Accepted => &prepared.accepted,
             Role::Candidate => &prepared.candidate,
         };
+        trial.build.revision = worker.identity.revision.clone();
         trial.measurement = case.measurement.clone();
         trial.sample_ns.fill(1000.0);
         trial.warmup_elapsed_ns = 1_000_000;
@@ -426,7 +428,7 @@ fn browser_coordinator_checks_both_sides_of_each_child_and_preserves_failure_cle
         let prepared = coordinator::prepare_with_browser(
             template.experiment,
             (&script, &"a".repeat(40)),
-            (&script, &"b".repeat(40)),
+            (&script, &"a".repeat(40)),
             &directory.join("prepared"),
             template.browser.unwrap(),
         )
