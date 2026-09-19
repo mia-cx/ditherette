@@ -1,5 +1,17 @@
 # Ditherette v1 implementation stack
 
+## S19 merged on 2026-09-19
+
+PR #105 merged as `12bd2cef4a8bc8a0bff7a6c93cdc4a58ab8fe29f` from `1e38b15afc017cbb046a7db214f50f2a80a424f7`. The restored optimized nearest kernel is active in the landed tree. Issue #60 closed, PR #107 was retargeted to main before branch deletion, and local main fast-forwarded. All CI passes, seven review threads are resolved, and no changes-requested verdict remains. CodeRabbit reviewed the fixes and its current-head status is successful; the final manual retrigger for the one-line sibling test-script fix was rate-limited. Pullfrog did not review this PR. No fresh full-review claim is made for that final retrigger.
+
+The coordinator verified the workers' changes, independently reran 284 native tests, fourteen package tests, three production-contract tests, the trusted freeze guard, and installed-tarball checks in Chromium, Firefox, and WebKit. Source fixes preserve frozen spec/image content and the generated private Wasm ABI. Later review fixes correct memory documentation, prepare all standalone package test commands from clean artifacts, and fix two test lint errors. Explicit command/exit evidence is retained outside the repository in `/tmp/ditherette-s19-105-validation`.
+
+S19 is clean and detached at the merge. Complete S19 Wasm and trusted S18 syntax targets were cleared, removing 2.2 GiB and 413.2 MiB respectively. S19 benchmark, benchmark-API, and syntax targets were already absent. The coordinator verified all five paths are absent. Together with the completed S20 preparation target, this continuation freed about 4 GiB. Built package and browser evidence remain available. The preexisting S18 `.cursor/` directory and all root-worktree changes remain untouched.
+
+PR #107 has a read-only restack preview with new source conflicts in `crates/ditherette-bench/src/main.rs`, `src/paired.rs`, and `src/paired/coordinator.rs`, plus already-authorized test/document conflicts. No PR #107 merge or conflict resolution has started. Terra's separate duration-evidence fix is prepared in `fix/v1-s20-duration-evidence` at `e7785ac8`, with parent `3fb26538`. The coordinator independently passed its eighteen focused tests and cleared its complete benchmark target, freeing 1.4 GiB. Those commits remain unpublished until the source-conflict decision and restack.
+
+The proposed source resolution preserves both intents: retain main's `wasm-resize --help` quiet-mode bypass while adding browser trials to the guarded commands; run both revision and browser-preparation validators; check correctness failures before incomplete timing evidence. Use S20's validated `complete_pairs` count rather than main's old ratio count, because a complete zero-timer browser pair has no ratio and must remain `Inconclusive`. Existing tests cover that distinction. Port main's corrected fixture fields and regression tests into S20's shared fixture. These resolutions await Mia's approval. Afterward, merge main into the existing S20 branch without flattening joins, apply the two prepared timing commits, validate, and babysit PR #107. PR #109 retains only documentation after the approved restoration move; it is not skipped.
+
 ## Stack collapse resumed on 2026-09-19
 
 Mia resumes the remaining stack with local Sol, Terra, and Luna subagents instead of Devin. The coordinator verifies worker reports and owns integration and merges. PRs land one at a time after babysitting. This supersedes the S18 stop boundary below.
