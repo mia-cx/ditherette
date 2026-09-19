@@ -57,8 +57,8 @@ pub struct Measurement {
 const NANOSECONDS_PER_MILLISECOND: u128 = 1_000_000;
 
 /// Browser transport reports per-call durations as floating-point nanoseconds.
-/// Reconstruct batches before rounding once so fractional per-call values retain
-/// their recorded batch duration.
+/// Reconstruct batches before rounding once to the nearest nanosecond so
+/// fractional per-call values retain their recorded batch duration.
 pub(crate) fn has_complete_browser_timing_evidence(
     measurement: &Measurement,
     sample_ns: &[f64],
@@ -78,7 +78,7 @@ pub(crate) fn has_complete_browser_timing_evidence(
         .iter()
         .map(|sample| sample * iterations_per_sample as f64)
         .sum::<f64>();
-    elapsed_ns.is_finite() && elapsed_ns.floor() >= measurement_ns as f64
+    elapsed_ns.is_finite() && elapsed_ns.round() >= measurement_ns as f64
 }
 
 /// Native fixture requests currently use the existing center/default resize recipe.

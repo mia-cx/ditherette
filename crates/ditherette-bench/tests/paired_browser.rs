@@ -218,8 +218,8 @@ fn browser_duration_evidence_reconstructs_fractional_calls_as_batches() {
     case.measurement.samples = 6;
     for trial in &mut trials {
         trial.measurement = case.measurement.clone();
-        trial.iterations_per_sample = 3;
-        trial.sample_ns.fill(2_000_000.0 / 3.0);
+        trial.iterations_per_sample = 29;
+        trial.sample_ns.fill(2_000_000.0 / 29.0);
         trial.warmup_elapsed_ns = 1_000_000;
     }
 
