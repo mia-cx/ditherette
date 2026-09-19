@@ -1,5 +1,9 @@
 # Ditherette v1 implementation stack
 
+## S20 downstream validation correction approved on 2026-09-19
+
+Mia approved downstream validation correction `2ad564b4`; S20 review is resuming. Build cleanup reclaimed 2.61 GB, and the root worktree remains untouched. The correction is not recorded as pushed until Sol confirms. PR #110's prior approval to retain diagnostic medians and correctness-first ordering remains in force; PR #110 stays untouched until PR #107 lands.
+
 ## S20 downstream validation held on 2026-09-19
 
 Pullfrog review `4053644697` correctly identifies a global distinct-revision gate that conflicts with settled `.plans/61-initial-trial-budget.md` line 37 and historical same-source TypeScript/package trials. Parent inspected local fix `2ad564b4`: browser roles may share a revision while native roles remain distinct; all full SHA, artifact, and build checks remain intact. Reproduction has five failures; focused ten and full 65 Rust checks pass with explicit exits, and the parent verified diffs and logs. S20 is blocked pending Mia approval; `2ad564b4` is local only while `9dcf0506` is pushed. No monitor is active.
