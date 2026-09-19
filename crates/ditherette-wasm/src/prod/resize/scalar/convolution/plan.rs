@@ -5,6 +5,13 @@
 //! without recomputing coordinate math.
 
 use crate::image::ImageDimensions;
+use crate::prod::{
+    contract::{
+        error::ErrorCode,
+        failure::{ErrorPath, Failure},
+    },
+    resize::common::allocation::CapacityBudget,
+};
 
 use super::{
     alignment::{self, ResizeAnchor},
@@ -71,6 +78,125 @@ pub(super) struct AxisTap {
 }
 
 impl ConvolutionResizePlan {
+    /// Conservative capacity for nested plan vectors and the landed full-call scratch path.
+    /// The caller accounts for this plan's inline header and source/output buffers separately.
+    pub fn required_bytes<K: ReconstructionKernel>(
+        source_dimensions: ImageDimensions,
+        output_dimensions: ImageDimensions,
+        kernel: &K,
+        support_policy: SupportPolicy,
+    ) -> Result<u64, Failure> {
+        let shape = Self {
+            source_dimensions,
+            output_dimensions,
+            support_policy,
+            x_taps: Vec::new(),
+            y_taps: Vec::new(),
+        };
+        if shape.is_identity() {
+            return Ok(0);
+        }
+        let mut bytes = 0_u64;
+        for (source_len, output_len) in [
+            (source_dimensions.width(), output_dimensions.width()),
+            (source_dimensions.height(), output_dimensions.height()),
+        ] {
+            let taps = max_axis_taps(source_len, output_len, kernel, support_policy)? as u64;
+            let row_bytes = taps
+                .checked_mul(std::mem::size_of::<AxisTap>() as u64)
+                .and_then(|n| n.checked_add(std::mem::size_of::<Vec<AxisTap>>() as u64))
+                .ok_or_else(memory_limit)?;
+            bytes = row_bytes
+                .checked_mul(u64::from(output_len))
+                .and_then(|n| bytes.checked_add(n))
+                .ok_or_else(memory_limit)?;
+        }
+        bytes
+            .checked_add(
+                (shape.scratch_elements()? as u64)
+                    .checked_mul(8)
+                    .ok_or_else(memory_limit)?,
+            )
+            .ok_or_else(memory_limit)
+    }
+
+    /// Build the existing nested tap layout with fallible, capacity-accounted reservations.
+    /// Discard the preparation and its ledger together if any reservation fails.
+    pub fn try_new<K: ReconstructionKernel>(
+        source_dimensions: ImageDimensions,
+        output_dimensions: ImageDimensions,
+        anchor: ResizeAnchor,
+        kernel: &K,
+        support_policy: SupportPolicy,
+        budget: &mut CapacityBudget,
+    ) -> Result<Self, Failure> {
+        budget.check_additional(Self::required_bytes(
+            source_dimensions,
+            output_dimensions,
+            kernel,
+            support_policy,
+        )?)?;
+        if source_dimensions == output_dimensions {
+            return Ok(Self {
+                source_dimensions,
+                output_dimensions,
+                support_policy,
+                x_taps: Vec::new(),
+                y_taps: Vec::new(),
+            });
+        }
+        let (x_alignment, y_alignment) = anchor.axes();
+        let x_taps = try_axis_taps(
+            source_dimensions.width(),
+            output_dimensions.width(),
+            x_alignment,
+            kernel,
+            support_policy,
+            budget,
+        )?;
+        let y_taps = try_axis_taps(
+            source_dimensions.height(),
+            output_dimensions.height(),
+            y_alignment,
+            kernel,
+            support_policy,
+            budget,
+        )?;
+        Ok(Self {
+            source_dimensions,
+            output_dimensions,
+            support_policy,
+            x_taps,
+            y_taps,
+        })
+    }
+
+    /// Actual owned heap capacity, including every nested vector header and tap allocation.
+    pub fn capacity_bytes(&self) -> u64 {
+        [&self.x_taps, &self.y_taps]
+            .into_iter()
+            .map(|axis| {
+                (axis.capacity() * std::mem::size_of::<Vec<AxisTap>>()) as u64
+                    + axis
+                        .iter()
+                        .map(|row| (row.capacity() * std::mem::size_of::<AxisTap>()) as u64)
+                        .sum::<u64>()
+            })
+            .sum()
+    }
+
+    /// Caller-owned f64 elements needed by the unchanged full-call dispatch.
+    pub fn scratch_elements(&self) -> Result<usize, Failure> {
+        if self.same_height() || self.same_width() || !super::kernel::should_use_x_then_y(self) {
+            return Ok(0);
+        }
+        self.source_dimensions
+            .height_usize()
+            .checked_mul(self.output_dimensions.width_usize())
+            .and_then(|n| n.checked_mul(crate::image::rgba8::RGBA8_CHANNELS))
+            .ok_or_else(memory_limit)
+    }
+
     /// Builds reusable coordinate metadata for packed RGBA8 convolution resize.
     pub fn new<K>(
         source_dimensions: ImageDimensions,
@@ -130,6 +256,52 @@ impl ConvolutionResizePlan {
     pub(super) fn support_policy(&self) -> SupportPolicy {
         self.support_policy
     }
+}
+
+fn memory_limit() -> Failure {
+    Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
+}
+
+fn max_axis_taps<K: ReconstructionKernel>(
+    source_len: u32,
+    output_len: u32,
+    kernel: &K,
+    policy: SupportPolicy,
+) -> Result<usize, Failure> {
+    let support = kernel.radius() * axis_kernel_scale(source_len, output_len, policy);
+    let bound = (2.0 * support).ceil() + 2.0;
+    if !support.is_finite() || support <= 0.0 || bound >= usize::MAX as f64 {
+        return Err(memory_limit());
+    }
+    Ok(bound as usize)
+}
+
+fn try_axis_taps<K: ReconstructionKernel>(
+    source_len: u32,
+    output_len: u32,
+    alignment: alignment::AxisAlignment,
+    kernel: &K,
+    support_policy: SupportPolicy,
+    budget: &mut CapacityBudget,
+) -> Result<Vec<Vec<AxisTap>>, Failure> {
+    let scale = axis_kernel_scale(source_len, output_len, support_policy);
+    let support = kernel.radius() * scale;
+    let capacity = max_axis_taps(source_len, output_len, kernel, support_policy)?;
+    let mut axis = budget.vector(output_len as usize)?;
+    for output_coordinate in 0..output_len {
+        let position = map_axis_position(output_coordinate, source_len, output_len, alignment);
+        let mut taps = budget.vector(capacity)?;
+        for source_coordinate in support_range(position, support) {
+            let weight = kernel.weight((source_coordinate as f64 - position) / scale);
+            if weight == 0.0 {
+                continue;
+            }
+            let index = source_coordinate.clamp(0, i64::from(source_len) - 1) as usize;
+            taps.push(AxisTap { index, weight });
+        }
+        axis.push(taps);
+    }
+    Ok(axis)
 }
 
 fn axis_taps<K>(

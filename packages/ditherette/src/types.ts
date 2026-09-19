@@ -51,6 +51,11 @@ export interface ResizeRequest {
 		readonly height: number;
 		readonly resize:
 			| { readonly algorithm: 'nearest' | 'bilinear'; readonly anchor: ResizeAnchor }
+			| {
+					readonly algorithm: 'bicubic' | 'lanczos2' | 'lanczos3';
+					readonly anchor: ResizeAnchor;
+					readonly support: 'fixed' | 'scale-aware';
+			  }
 			| { readonly algorithm: 'area' };
 	};
 	/** Currently rejected explicitly. S33 adds progress delivery without changing this request shape. */

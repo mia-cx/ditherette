@@ -41,6 +41,7 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
     source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
+    scratch: Option<&mut [f64]>,
 ) {
     let source_width = source.dimensions().width_usize();
     let output_width = output.dimensions().width_usize();
@@ -78,6 +79,7 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
             output_row_byte_len,
             &plan.x_taps,
             &plan.y_taps,
+            scratch,
         );
         return;
     }
@@ -174,7 +176,7 @@ pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
     }
 }
 
-fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
+pub(super) fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
     let source_dimensions = plan.source_dimensions();
     plan.support_policy() == SupportPolicy::ScaleAware
         && source_dimensions.width() > plan.output_dimensions().width()
@@ -189,11 +191,19 @@ fn resize_x_then_y_into(
     output_row_byte_len: usize,
     x_taps_by_output: &[Vec<AxisTap>],
     y_taps_by_output: &[Vec<AxisTap>],
+    scratch: Option<&mut [f64]>,
 ) {
     let source_height = source.len() / source_row_byte_len;
     let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
     let scratch_row_len = output_row_byte_len;
-    let mut scratch = vec![0.0; source_height * scratch_row_len];
+    let mut owned_scratch;
+    let scratch = match scratch {
+        Some(scratch) => scratch,
+        None => {
+            owned_scratch = vec![0.0; source_height * scratch_row_len];
+            &mut owned_scratch
+        }
+    };
 
     for (source_row, scratch_row) in source
         .chunks_exact(source_row_byte_len)

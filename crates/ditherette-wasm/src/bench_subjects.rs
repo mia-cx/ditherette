@@ -5,6 +5,7 @@
 //! consume stable subject descriptors without deep-importing internal modules.
 
 pub mod reference;
+mod resize_budgeted;
 pub mod verification;
 
 /// Existing registry with this crate's concrete, borrowed conformance protocol.
@@ -182,6 +183,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
             resize_trilinear_subject,
         ),
     ];
+    subjects.extend(resize_budgeted::subjects());
     subjects.extend(reference::subjects());
     subjects
 }
@@ -470,11 +472,11 @@ fn resize_trilinear_subject(
     })
 }
 
-fn with_views(
+fn with_views<T>(
     input: ResizeInputU8Rgba<'_>,
     output: ResizeOutputU8Rgba<'_>,
-    resize: impl FnOnce(ImageView<'_, Rgba8>, ImageViewMut<'_, Rgba8>),
-) -> Result<(), BenchSubjectError> {
+    resize: impl FnOnce(ImageView<'_, Rgba8>, ImageViewMut<'_, Rgba8>) -> T,
+) -> Result<T, BenchSubjectError> {
     let input_dimensions = ImageDimensions::new(input.width, input.height)
         .map_err(|error| BenchSubjectError::new(error.to_string()))?;
     let output_dimensions = ImageDimensions::new(output.width, output.height)
@@ -494,8 +496,7 @@ fn with_views(
     )
     .map_err(|error| BenchSubjectError::new(error.to_string()))?;
 
-    resize(source, output);
-    Ok(())
+    Ok(resize(source, output))
 }
 
 fn candidate_nearest_anchor(params: &ResizeParams) -> CandidateNearestResizeAnchor {

@@ -149,6 +149,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 				);
 				assert.deepEqual(result, {
 					anchors: 9,
+					convolutionCases: 54,
 					customInputs: 8,
 					crossRealmInputs: 8,
 					scalarWithoutIsolation: true

@@ -27,6 +27,36 @@ test('area and bilinear accept only their frozen fields', () => {
 	fails(() => validateResize(bilinear), 'invalid-settings', 'output.resize.support');
 });
 
+test('convolution requires canonical support and reads each setting once', () => {
+	for (const [offset, algorithm] of ['bicubic', 'lanczos2', 'lanczos3'].entries()) {
+		for (const [support, name] of ['fixed', 'scale-aware'].entries()) {
+			const value = request();
+			let reads = 0;
+			value.output.resize = {
+				algorithm,
+				anchor: 'bottom-right',
+				get support() {
+					reads++;
+					return name;
+				}
+			};
+			const validated = validateResize(value);
+			assert.equal(validated.algorithm, offset + 3);
+			assert.equal(validated.support, support);
+			assert.equal(validated.anchor, 8);
+			assert.equal(reads, 1);
+		}
+		for (const support of [undefined, null, 0, true, 'auto', ['fixed'], { fixed: null }]) {
+			const value = request();
+			value.output.resize = { algorithm, anchor: 'center', support };
+			fails(() => validateResize(value), 'invalid-settings', 'output.resize.support');
+		}
+		const missing = request();
+		missing.output.resize = { algorithm, anchor: 'center' };
+		fails(() => validateResize(missing), 'invalid-settings', 'output.resize.support');
+	}
+});
+
 test('nearest validation preserves byte views and the frozen anchor order', () => {
 	const anchors = [
 		'top-left',
@@ -51,7 +81,8 @@ test('nearest validation preserves byte views and the frozen anchor order', () =
 			outputWidth: 2,
 			outputHeight: 1,
 			algorithm: 0,
-			anchor
+			anchor,
+			support: 0
 		});
 		assert.equal(validateResize(value).data.buffer, value.source.data.buffer);
 		assert.equal(validateResize(value).data.byteOffset, 1);

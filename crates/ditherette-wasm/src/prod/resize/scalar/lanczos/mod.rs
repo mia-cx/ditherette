@@ -8,6 +8,7 @@ mod filter;
 use std::num::NonZeroU32;
 
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};
+use crate::prod::{contract::failure::Failure, resize::common::allocation::CapacityBudget};
 
 use super::convolution::{
     resize_convolution_rgba8_into, resize_convolution_rgba8_rows_into,
@@ -39,6 +40,76 @@ pub struct LanczosResizePlan {
 }
 
 impl LanczosResizePlan {
+    /// Conservative nested-plan and full-call scratch capacity, excluding inline headers.
+    pub fn required_bytes(
+        source: ImageDimensions,
+        output: ImageDimensions,
+        radius: NonZeroU32,
+        policy: SupportPolicy,
+    ) -> Result<u64, Failure> {
+        ConvolutionResizePlan::required_bytes(source, output, &filter::Lanczos::new(radius), policy)
+    }
+
+    /// Fallible Lanczos2 planning with the same const-radius fixed-policy dispatch as one-shot calls.
+    pub fn try_new2(
+        source: ImageDimensions,
+        output: ImageDimensions,
+        anchor: ResizeAnchor,
+        policy: SupportPolicy,
+        budget: &mut CapacityBudget,
+    ) -> Result<Self, Failure> {
+        Self::try_fixed::<2>(source, output, anchor, policy, budget)
+    }
+
+    /// Fallible Lanczos3 planning with the same const-radius fixed-policy dispatch as one-shot calls.
+    pub fn try_new3(
+        source: ImageDimensions,
+        output: ImageDimensions,
+        anchor: ResizeAnchor,
+        policy: SupportPolicy,
+        budget: &mut CapacityBudget,
+    ) -> Result<Self, Failure> {
+        Self::try_fixed::<3>(source, output, anchor, policy, budget)
+    }
+
+    fn try_fixed<const RADIUS: u32>(
+        source: ImageDimensions,
+        output: ImageDimensions,
+        anchor: ResizeAnchor,
+        policy: SupportPolicy,
+        budget: &mut CapacityBudget,
+    ) -> Result<Self, Failure> {
+        let inner = match policy {
+            SupportPolicy::Fixed => ConvolutionResizePlan::try_new(
+                source,
+                output,
+                anchor,
+                &filter::FixedLanczos::<RADIUS>::new(),
+                policy,
+                budget,
+            )?,
+            SupportPolicy::ScaleAware => ConvolutionResizePlan::try_new(
+                source,
+                output,
+                anchor,
+                &filter::Lanczos::new(NonZeroU32::new(RADIUS).unwrap()),
+                policy,
+                budget,
+            )?,
+        };
+        Ok(Self { inner })
+    }
+
+    /// Actual heap capacity owned by the plan, excluding caller-owned scratch.
+    pub fn capacity_bytes(&self) -> u64 {
+        self.inner.capacity_bytes()
+    }
+
+    /// Required f64 scratch elements for the landed full-call dispatch.
+    pub fn scratch_elements(&self) -> Result<usize, Failure> {
+        self.inner.scratch_elements()
+    }
+
     /// Builds reusable coordinate metadata for packed RGBA8 Lanczos resize.
     pub fn new(
         source_dimensions: ImageDimensions,
@@ -58,6 +129,21 @@ impl LanczosResizePlan {
             ),
         }
     }
+}
+
+/// Execute landed Lanczos with preallocated plan and scratch; failures leave output unchanged.
+pub fn resize_lanczos_rgba8_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &LanczosResizePlan,
+    scratch: &mut [f64],
+) -> Result<(), Failure> {
+    super::convolution::resize_convolution_rgba8_with_plan_and_scratch_into(
+        source,
+        output,
+        &plan.inner,
+        scratch,
+    )
 }
 
 /// Resizes packed RGBA8 `source` into packed RGBA8 `output` with a Lanczos kernel.

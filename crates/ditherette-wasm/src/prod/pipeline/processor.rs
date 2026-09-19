@@ -190,7 +190,7 @@ impl Processor {
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
         let output = ImageViewMut::<Rgba8>::packed(&mut buffers.output, plan.output)
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-        metadata.execute(source, output);
+        metadata.execute(source, output)?;
         // A failed complete helper drops both Vecs. Future callback/cache publication
         // belongs after this complete result exists, never before it.
         boundary.complete(&buffers.output, plan.output)
