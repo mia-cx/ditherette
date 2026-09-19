@@ -1,5 +1,9 @@
 # Ditherette v1 implementation stack
 
+## S23 restack handoff on 2026-09-19
+
+Sol’s validation handoff is restacked at `bdd3df70`, combining `cd7a0d29` with S22 merge `75f5b621`. The parent verified the source-conflict-free result with zero optimized-resize and frozen-tree deltas. S22 cleanup is complete: 4.098 GB freed, five target paths parent-verified absent, S22 detached clean at `75f5b621`, and distribution artifacts plus logs retained.
+
 ## S22 merged; S23 restacking on 2026-09-19
 
 PR #111 merged as `75f5b621` from `4e8d7144`; issue #63 closed and main fast-forwarded. PRs #112 and #113 were retargeted to main before branch deletion. The 300 Wasm, 72 benchmark, 32 JavaScript, 7 private-ABI, 16 interface, 3 browser-conformance, and trusted-guard checks passed; the parent’s 14 production checks and guard also passed. Exact Pullfrog and CI are green with zero threads; CodeRabbit is green, but no fresh review is claimed.
