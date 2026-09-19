@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S20 restack and supersession approved on 2026-09-19
+
+Mia approves the S20 source-conflict resolutions recorded below. She also permits superseding, closing, or skipping PRs when their work belongs upstream. PR #109's remaining documentation will join PR #107, preserving the already-restored optimized code. After PR #107 lands, retarget PR #110 to main before closing PR #109 as superseded, and close restoration issue #108 with the covering merge evidence. No substantive later slice is skipped merely to reduce the PR count.
+
+Terra owns the S20 restack, approved conflict resolution, prepared timing-evidence fixes, and ancestry-preserving integration of PR #109. The coordinator verifies the result before Sol validates and babysits PR #107. Existing topic history remains recoverable; root-worktree changes remain untouched.
+
 ## S19 merged on 2026-09-19
 
 PR #105 merged as `12bd2cef4a8bc8a0bff7a6c93cdc4a58ab8fe29f` from `1e38b15afc017cbb046a7db214f50f2a80a424f7`. The restored optimized nearest kernel is active in the landed tree. Issue #60 closed, PR #107 was retargeted to main before branch deletion, and local main fast-forwarded. All CI passes, seven review threads are resolved, and no changes-requested verdict remains. CodeRabbit reviewed the fixes and its current-head status is successful; the final manual retrigger for the one-line sibling test-script fix was rate-limited. Pullfrog did not review this PR. No fresh full-review claim is made for that final retrigger.
