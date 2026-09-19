@@ -52,3 +52,18 @@ S18 must freeze the shared image source tree alongside spec and bind the referen
 Delivered [PR #103](https://github.com/mia-cx/ditherette/pull/103), open and non-draft, against `impl/v1-s17-base`.
 Creation head `0fb89b929108b68eb3486e1c6b9834d9351e1a4f` contains the validated code checkpoint and rebase evidence.
 Auto-merge is disabled and issue #58 remains open. Subsequent handoff commits change documentation only.
+
+## Stack-collapse validation
+
+Join `865b82a5` preserves the original prerequisite ancestry and matches main `36abbae4`.
+Restack `f2c5b750` resolves seven approved documentation conflicts, retaining corrected original counts and current collapse evidence.
+Three inherited test constructors now use S17's strict empty-struct variants; assertions remain unchanged.
+The combined reference passes 274 native tests, benchmark-feature and Wasm compilation, and formatting.
+
+Review finding `3950171813` reproduces through all three palette-bearing registry subjects.
+Equal retained palettes with different discarded tails produce equal complete outputs but different case settings identities.
+The adapter now serializes the retained prefix and truncation flag. Order, duplicates, and warning-affecting truncation remain distinct.
+The new registry fixture passes with the existing reference, verifier, and storage-adapter fixtures.
+This correction changes only benchmark settings serialization outside the frozen spec/image trees.
+The exact S03/S11/S14 freeze amendments remain pending for S18; no checkpoint or guard changes here.
+No timing workload, browser run, optimized-kernel change, or publication occurs during this validation.

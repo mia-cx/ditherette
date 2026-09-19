@@ -7,6 +7,14 @@ The retention branch `reference/ditherette-v1` keeps that named commit reachable
 through implementation-stack rebases. Its mutable tip is not a source of trust;
 validation uses the recorded full SHA and content digest.
 
+The top-level checkpoint keeps the original 106-file digest
+`17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe`.
+Its amendment records seven exact additions or replacements from merged S03,
+S11, and S14 fixes. The resulting 110-file closure has digest
+`a5f90b9b3b864c4826748646818bbe1c903de958811f4c5af3345082cf5ad47d`.
+Validation checks the original inventory, each recorded before/after entry, and
+the amended digest. An unrelated downstream file cannot enter the closure.
+
 ## Shared dependency audit
 
 The frozen closure includes every file under `src/spec` and `src/image` in
@@ -40,20 +48,20 @@ The record also binds every resolved procedural-macro implementation and its
 dependencies, including Wasm binding expansion. Attribute names alone do not
 identify the macro behind an imported alias.
 
-Reference validation uses Rust 1.97.0, matching the S02 package branch. The
-inherited root toolchain still says `stable`; that floating selector is not the
-reference compiler identity. Production packaging may adopt the S02 pin without
-changing frozen content. The S06 benchmark provenance build script is unrelated
-to reference compilation and remains allowed.
+Reference validation uses Rust 1.97.0, matching the pinned root toolchain and S02
+package build. The guard also verifies the compiler commit and LLVM version.
+The S06 benchmark provenance build script is unrelated to reference compilation
+and remains allowed.
 
 ## Conformance identity
 
-`checkpoint.json` exposes an `identity` record with `state: "frozen"`, the full
-reference revision, and the content artifact digest. A conformance client may
-use S05 `ReferenceState::Frozen` only after validating this checkout against that
-record. Registration alone does not prove a checkout is frozen. Existing
-pre-freeze/control experiments remain pre-freeze; this does not promote them or
-any production candidate.
+`checkpoint.json` retains the original identity and exposes the exact amended
+identity returned by current validation. Both records contain `state: "frozen"`,
+the full source revision, and the content artifact digest. The amended identity
+also names the original artifact it changes. A conformance client may use S05
+`ReferenceState::Frozen` only after validating this checkout against that record.
+Registration alone does not prove a checkout is frozen. Existing pre-freeze/control
+experiments remain pre-freeze; this does not promote them or any production candidate.
 
 ## Validation boundary
 
@@ -65,10 +73,11 @@ frozen image tree. Production remains pure Rust; Wasm/JS adapters stay in `wasm`
 Neither semantic family may call back through `wasm` or `bench_subjects`.
 
 Source redirection (`#[path]`, `include*`), environment-based source injection,
-and escaping macro definitions (`macro_export`, `macro_use`) are forbidden.
+symlinks along guarded paths, and escaping macro definitions
+(`macro_export`, `macro_use`) are forbidden.
 Local macros and ordinary optimization attributes remain available. Rust, not a
 custom resolver, handles imported aliases and helper dependencies. The real crate
-root retains its audited module set and permits explicit adapter reexports.
+root retains its audited module set, public module visibility, and explicit adapter reexports.
 Root reexports accept only their exact audited feature gates and literal doc
 strings, so procedural attributes cannot inject code outside isolated roots.
 Semantic modules cannot declare foreign blocks or symbol-linking attributes.
@@ -77,7 +86,8 @@ imports remain allowed at the boundary, including `wasm-bindgen` extern blocks.
 Explicit `no_mangle`, `export_name`, `link_name`, and `link` attributes are forbidden throughout source,
 including adapters, because they can interpose native arithmetic symbols.
 Raw identifier spellings receive the same checks. Wasm binding imports need none
-of these explicit symbol attributes.
+of these explicit symbol attributes. Inline, global, and naked assembly macros
+also require a reviewed policy change.
 Adapters accept audited procedural attributes and derives; new expanders require
 policy review. `wasm.rs` and its submodules may call production, never spec or
 benchmark subjects. Benchmark adapters retain their two-family comparison role.

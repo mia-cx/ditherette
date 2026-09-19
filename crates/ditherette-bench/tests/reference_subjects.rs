@@ -211,6 +211,102 @@ fn run(method: &str, request: Request<'_>) -> VerificationOutput {
 }
 
 #[test]
+fn settings_identity_normalizes_palette_tails_without_losing_metadata() {
+    use ditherette_wasm::image::contracts::PaletteEntry;
+
+    fn requests(palette: &[PaletteEntry]) -> [(&'static str, ReferenceRequest<'_>); 3] {
+        let source = Source {
+            width: 1,
+            height: 1,
+            data: &[128, 128, 128, 255],
+        };
+        let quantize = QuantizeRequest {
+            version: 1,
+            source,
+            palette,
+            alpha: AlphaPolicy::Premultiplied {},
+            matching: MatchPolicy::SrgbEuclidean,
+        };
+        let dither = DitherPolicy::None {};
+        [
+            (
+                "quantize",
+                ReferenceRequest::Processing(Request::Quantize(quantize)),
+            ),
+            (
+                "dither-and-quantize",
+                ReferenceRequest::Processing(Request::DitherAndQuantize(DitherQuantizeRequest {
+                    quantize,
+                    dither,
+                })),
+            ),
+            (
+                "process",
+                ReferenceRequest::Processing(Request::Process(ProcessRequest {
+                    source,
+                    palette,
+                    recipe: RecipeV1 {
+                        version: 1,
+                        output: Output {
+                            width: 1,
+                            height: 1,
+                            resize: ResizePolicy::Nearest {
+                                anchor: Anchor::Center,
+                            },
+                        },
+                        alpha: quantize.alpha,
+                        matching: quantize.matching,
+                        dither,
+                    },
+                })),
+            ),
+        ]
+    }
+
+    let retained: Vec<_> = (0..256)
+        .map(|i| PaletteEntry::Color { rgb: [i as u8; 3] })
+        .collect();
+    let mut long = retained.clone();
+    long.push(PaletteEntry::Transparent {});
+    let mut changed_tail = retained.clone();
+    changed_tail.extend([PaletteEntry::Color { rgb: [7, 8, 9] }; 3]);
+    let mut reordered = long.clone();
+    reordered.swap(0, 1);
+    let mut duplicated = long.clone();
+    duplicated[1] = duplicated[0];
+    let mut mismatched_methods = Vec::new();
+    for (index, (method, request)) in requests(&long).into_iter().enumerate() {
+        let registered = subject(&format!("spec:{method}:request:v1"));
+        let tail_request = requests(&changed_tail)[index].1;
+        let short_request = requests(&retained)[index].1;
+        let output = (registered.run)(&request).unwrap();
+        assert_eq!(output, (registered.run)(&tail_request).unwrap());
+        let short_output = (registered.run)(&short_request).unwrap();
+        assert_eq!(output.pixels, short_output.pixels);
+        assert_eq!(output.warnings.len(), 1);
+        assert_eq!(output.warnings[0].code, WarningCode::PaletteTruncated);
+        assert!(short_output.warnings.is_empty());
+        let identity = case(request).identity;
+        assert_ne!(identity.settings, case(short_request).identity.settings);
+        assert_ne!(
+            identity.settings,
+            case(requests(&reordered)[index].1).identity.settings
+        );
+        assert_ne!(
+            identity.settings,
+            case(requests(&duplicated)[index].1).identity.settings
+        );
+        if identity != case(tail_request).identity {
+            mismatched_methods.push(method);
+        }
+    }
+    assert!(
+        mismatched_methods.is_empty(),
+        "equivalent palette tails differ: {mismatched_methods:?}"
+    );
+}
+
+#[test]
 fn all_five_registry_methods_preserve_byte_composition_and_warning_metadata() {
     use ditherette_wasm::image::contracts::PaletteEntry;
     let registered = ditherette_wasm::bench_subjects();
