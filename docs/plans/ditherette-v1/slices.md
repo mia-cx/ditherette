@@ -62,7 +62,7 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S21](#s21) | Complete and optimize scalar bilinear and area resize | [S19](#s19), [S20](#s20) | Merged `d40cf0dd` | [#110](https://github.com/mia-cx/ditherette/pull/110) |
 | [S22](#s22) | Complete and optimize scalar cubic and Lanczos resize | [S19](#s19), [S20](#s20) | Merged `75f5b621` | [#111](https://github.com/mia-cx/ditherette/pull/111) |
 | [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | Merged `1aae2e78` | [#112](https://github.com/mia-cx/ditherette/pull/112) |
-| [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | Pending decision; PR113 untouched | [#113](https://github.com/mia-cx/ditherette/pull/113) |
+| [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | Approved; Terra restacking `f8a2cc11` onto main `1aae2e78` | [#113](https://github.com/mia-cx/ditherette/pull/113) |
 | [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | Ready | [#114](https://github.com/mia-cx/ditherette/pull/114) |
 | [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | Ready | [#115](https://github.com/mia-cx/ditherette/pull/115) |
 | [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Ready | [#116](https://github.com/mia-cx/ditherette/pull/116) |
