@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## S20 local restack verified on 2026-09-19
+
+Codex (GPT-5) records the clean local restack at `e7e10ca9`. It includes the main merge `757c01c0`, duration fixes `f1483a43` and `05bc96dd`, and the PR #109 merge `467542f4`. The parent verified that PR #109 contributes a net fifteen documentation files and no source, with the frozen spec and image unchanged and the approved source-conflict intent preserved.
+
+Sol now fixes the missing `BuildIdentity` configuration and recorded initialization, then validates before pushing and babysitting PR #107. PR #109 remains open; PR #110 is untouched.
+
 ## S20 restack and supersession approved on 2026-09-19
 
 Mia approves the S20 source-conflict resolutions recorded below. She also permits superseding, closing, or skipping PRs when their work belongs upstream. PR #109's remaining documentation will join PR #107, preserving the already-restored optimized code. After PR #107 lands, retarget PR #110 to main before closing PR #109 as superseded, and close restoration issue #108 with the covering merge evidence. No substantive later slice is skipped merely to reduce the PR count.
