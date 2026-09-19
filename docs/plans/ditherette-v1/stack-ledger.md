@@ -4,7 +4,7 @@
 
 S25 local restack `ccbb80a2` is clean and unpushed; approved conflicts are composed and 27 focused benchmark tests pass. Parent and Terra verified two separate defects: direct Cargo `prepare-native` always emits `recorded=false`; independently, shared `BuildIdentity` now reads library compile env while the recorder stamps only the binary, so simply routing the builder is insufficient. The proposed fix must preserve the complete dependency and final-binary recipe, not weaken metadata to library-only; implementation choice is pending approval. Full validation is paused on this source decision.
 
-S26 preview head `59036e1a` has unresolved source conflicts in `crates/ditherette-bench/src/browser_worker.rs`, `packages/ditherette/src/scalar.ts`, and `packages/ditherette/src/validation.ts`, a documentation conflict in `packages/ditherette/README.md`, and a config conflict in `packages/ditherette/package.json`; no decisions are made. Parent verified five targets absent and clean unpushed `ccbb80a2`; Cargo freed 1.4 GiB. S25 target cleanup remains in progress.
+S26 preview head `59036e1a` has unresolved source conflicts in `crates/ditherette-bench/src/browser_worker.rs`, `packages/ditherette/src/scalar.ts`, and `packages/ditherette/src/validation.ts`, a documentation conflict in `packages/ditherette/README.md`, and a config conflict in `packages/ditherette/package.json`; no decisions are made. Parent verified five targets absent and clean unpushed `ccbb80a2`; Cargo freed 1.4 GiB. S25 target cleanup is complete.
 
 ## S24 merged; S25 approved restack on 2026-09-20
 
