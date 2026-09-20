@@ -54,6 +54,6 @@ the threaded Wasm, generated JS, factory, and copy helper. Their original build 
 Global and selected package-wrapper sources are unchanged from accepted; no separate wrapper rebuild is claimed for them.
 
 The original package directories and reproduction logs remain outside tracked source.
-No compiled package, fixture, or new evidence archive was added to Git.
+No compiled package or fixture was added to Git. The tracked evidence archive contains reproduction records, not package outputs.
 This record restores the source-to-scalar-binary checks needed to inspect the historical cutoff comparison.
 It does not satisfy the broader performance release gate or lift any release hold.
