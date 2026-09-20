@@ -61,10 +61,15 @@ pub fn quantize(
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
     let available = memory_limit - budget.used;
-    let entries = cache::recommended_entries(
-        count,
-        available.saturating_sub(size_of::<Vec<u64>>() as u64),
-    );
+    let entries = prepared
+        .can_match_rgb()
+        .then(|| {
+            cache::recommended_entries(
+                count,
+                available.saturating_sub(size_of::<Vec<u64>>() as u64),
+            )
+        })
+        .unwrap_or_default();
     if entries == 0 {
         prepared.quantize_into(layout.source, &mut indices);
     } else {
