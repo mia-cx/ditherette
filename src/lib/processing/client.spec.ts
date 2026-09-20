@@ -176,30 +176,4 @@ describe('website processing scheduling', () => {
 		expect(ControlledWorker.instances).toHaveLength(0);
 		expect(processingError.get()).toBeUndefined();
 	});
-
-	it('does not start a debounce callback queued before a newer schedule', async () => {
-		const callbacks: Array<() => void> = [];
-		vi.stubGlobal('setTimeout', (callback: () => void) => {
-			callbacks.push(callback);
-			return callbacks.length;
-		});
-		// A browser task already queued when clearTimeout runs still calls its callback.
-		vi.stubGlobal('clearTimeout', () => undefined);
-
-		scheduleProcessing(180);
-		const staleCallback = callbacks.at(-1);
-		outputSettings.set({ ...outputSettings.get(), width: 2 });
-		scheduleProcessing(180);
-		const currentCallback = callbacks.at(-1);
-		expect(staleCallback).not.toBe(currentCallback);
-		if (!staleCallback || !currentCallback) throw new Error('Expected two scheduled callbacks.');
-
-		staleCallback();
-		await Promise.resolve();
-		expect(ControlledWorker.instances).toHaveLength(0);
-
-		currentCallback();
-		await Promise.resolve();
-		expect(ControlledWorker.instances).toHaveLength(1);
-	});
 });

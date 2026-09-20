@@ -325,13 +325,11 @@ export function scheduleProcessing(delay = 0) {
 		if (workerNeedsReplacement) terminateProcessingWorker();
 		return;
 	}
-	const scheduledRequestId = activeRequestId;
 	const schedule: ProcessingSchedule = {
 		scheduledAt: performance.now(),
 		scheduledDelay: delay
 	};
 	timer = setTimeout(() => {
-		if (activeRequestId !== scheduledRequestId) return;
 		timer = undefined;
 		void processCurrentImage(schedule);
 	}, delay);
