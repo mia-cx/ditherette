@@ -75,13 +75,13 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Merged `de9158cc`; normal guard, review, CI and three-browser conformance pass | [#160](https://github.com/mia-cx/ditherette/pull/160) |
 | [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) | Merged `de9158cc`; normal guard, review, CI and three-browser conformance pass | [#160](https://github.com/mia-cx/ditherette/pull/160) |
 | [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | Merged `de9158cc`; normal guard, review, CI and three-browser conformance pass | [#160](https://github.com/mia-cx/ditherette/pull/160) |
-| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
-| [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
-| [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
-| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
-| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
-| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
-| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
 | [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165) |
 | [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165) |
 | [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Consolidated; review deferred | [#162](https://github.com/mia-cx/ditherette/pull/162) |

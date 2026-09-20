@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## Runtime merged on 2026-09-20; verification next
+
+PR #161 merged as `a80ce69c` from `df1f5a44`. Issues #72–#74 and #76–#79 closed, local main fast-forwarded, and #162 was retargeted before the merge. The parent verified exact-head approval, all CI, zero unresolved threads, 439 native Wasm and 121 benchmark correctness passes, and reran 18 public/runtime checks. The agent's interface suite passes 42 tests. The known external WebKit lifecycle failures remain active release holds, not passing checks.
+
+PR #162 locally restacked at `77a3d484` without conflicts. Provider/preparation checks pass 8/8 and release-integration tests pass 14/14. Full validation and babysitting continue against the merged main. PR #163's carried fixes remain local; `c0e266bd` replaces an unsafe handwritten Firefox tokenizer with the existing TypeScript parser. Five focused Firefox-preparation tests pass in the parent's rerun. No benchmark campaign or release activity occurred.
+
 ## Core merged on 2026-09-20; runtime next
 
 PR #160 merged as `de9158cc` from `ec3b0aac`. Issues #67–#71 closed and local main fast-forwarded. PR #161 was retargeted to main before the merge. The parent verified all CI, exact-head Pullfrog approval, zero unresolved threads, and unchanged frozen/shared/optimized resize files. Full native Wasm and benchmark suites, frozen-oracle 8/8, private ABI 16/16, package interface 33/33, and installed-package conformance in all three browsers pass. The normal frozen-reference check passes without an exception.
