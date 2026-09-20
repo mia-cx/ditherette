@@ -12,6 +12,17 @@ Downstream oracle-identity failures belong to this same core fix. Runtime, perfo
 
 ## Consolidated stack on 2026-09-20; review deferred
 
+Current local preparation after review resumed:
+
+| PR | Local progress | Publication |
+|---|---|---|
+| #161 | `45420454` fixes required-thread allocation diagnostics and clean package checks. Focused checks pass; two WebKit worker-lock failures are being compared against the baseline. | Unpushed pending #160 |
+| #162 | Existing provider commit `3255c034` moved upstream from #163. The missing website import reproduces before it; all eight focused Node checks pass afterward, including the parent's run. | Unpushed pending #161 |
+| #163 | `6373cf26` moves frozen placement assertions out of production source. Cached-row and external parity checks pass; its disposable target is cleared. No kernel or policy changes. | Unpushed pending #162 |
+| #164 | `37ec818b` validates optional/peer dependencies and complete finite size baselines. `7a130e4f` corrects preparation and npm setup docs. Four focused tests pass, including the parent's run. | Unpushed pending #163 |
+
+The provider move makes that part of #163's net diff empty. Release workflow and holds remain unchanged. These focused results do not claim full validation or merge readiness.
+
 Mia approved five package PRs and separate optional website integration. This task stops after consolidation. No reviews, benchmark campaigns, merges, publication, or rollout follow it.
 
 | Replacement | Base | Superseded PRs |
