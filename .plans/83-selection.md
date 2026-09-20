@@ -18,8 +18,9 @@ Current preparation reproduces the S40 ordinary tarball byte-for-byte.
 
 Native executable hashes are `2c26ec86d5ba668667438713ecbeb9c44fc2c384ab0e05a32e3ff09aa4320650`
 and `fdbf1932a699ca9319976a90cb570b28944356a4e9ddc4087e1c45a9116b15e7`.
-Full provenance remains in each immutable source worktree's `target/s41-*-native`
-and `target/s41-*-public` directories.
+Compact provenance reports remain gzip-archived under
+`benchmark-results/retained-reports-2026-09-09`; finished-worktree cleanup
+removed the rebuildable native/public target trees.
 
 ## Results
 
@@ -42,7 +43,8 @@ not a confirmed regression. Native, Chromium, and Firefox show no useful improve
 The passing gate is a regression check, not proof of a speedup.
 
 Raw requests, results, samples, process events, prepared snapshots, and completion
-records remain in `.worktrees/v1-resize-integration/target/s41-selection-01`.
+records were deleted during finished-worktree cleanup. Their compact reports and
+verified hashes remain in `benchmark-results/retained-reports-2026-09-09`.
 
 | Report | SHA-256 |
 | --- | --- |

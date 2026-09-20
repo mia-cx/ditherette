@@ -509,6 +509,51 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
     (request, result)
 }
 
+fn capped_indexed_fixture() -> (TrialRequest, BrowserTransportResult) {
+    use ditherette_bench::paired::quantize::*;
+
+    let (mut request, mut result) = fixture();
+    let operation = PublicOperation::Quantize {
+        settings: QuantizeSettings {
+            palette: vec![PaletteEntry::Color { rgb: [1, 2, 3] }],
+            alpha: AlphaPolicy::Premultiplied {},
+            matching: MatchPolicy::SrgbEuclidean,
+        },
+    };
+    let case = &mut request.case;
+    case.identity = operation
+        .identity(case.source, &case.rgba, case.source)
+        .unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    case.measurement.application_cache = ApplicationCache::Cold;
+    let browser = case.browser.as_mut().unwrap();
+    browser.operation = operation;
+    browser.accepted = BrowserBackend::Package;
+    browser.candidate = BrowserBackend::Package;
+    browser.preparation = BrowserPreparation::FreshInstance;
+    browser.cache = CacheCapability::Roles {
+        accepted: PreparationCapability::ImageStages,
+        candidate: PreparationCapability::ImageStages,
+        sample_prime: None,
+    };
+    browser.retained_output_limit_bytes = Some(64 * 1024 * 1024 + 1);
+    result.input = case.identity.input;
+    result.settings = case.identity.settings;
+    result.output.pixels = Pixels::Indexed8 {
+        indices: vec![0],
+        palette_rgba: vec![1, 2, 3, 255],
+        transparent_index: None,
+    };
+    request.reference_output = Some(result.output.clone());
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
+    (request, result)
+}
+
 #[test]
 fn checked_response_preserves_zero_samples_and_rejects_mismatched_evidence() {
     let (request, result) = fixture();
@@ -671,4 +716,71 @@ fn unstable_trial_retains_first_distinct_images_and_rejects_publication() {
     std::fs::remove_dir_all(&directory).unwrap();
     result.unstable_output = Some(result.output.clone());
     assert!(validate_response(&request, &result).is_err());
+}
+
+#[test]
+fn capped_unstable_diagnostics_retain_summaries_not_pixel_arrays() {
+    let (request, mut result) = capped_indexed_fixture();
+    result.output.warnings.push(Warning {
+        code: WarningCode::TransparentFallback,
+        message: "fixture".into(),
+    });
+    result.unstable_output = request.reference_output.clone();
+    validate_response(&request, &result).unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "ditherette-browser-capped-unstable-{}",
+        std::process::id()
+    ));
+    assert!(reject_unstable_output(&request, &result, &directory).is_err());
+    let diagnostic: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("transport.json")).unwrap()).unwrap();
+    assert_eq!(
+        diagnostic["schema"],
+        "ditherette-capped-transport-diagnostic-v1"
+    );
+    assert_eq!(
+        diagnostic["outputs"]["native_reference"]["pixels"]["index_count"],
+        1
+    );
+    assert_eq!(
+        diagnostic["outputs"]["first_output"]["pixels"]["index_count"],
+        1
+    );
+    assert!(diagnostic["outputs"]["first_output"]["pixels"]
+        .get("indices")
+        .is_none());
+    assert!(!directory.join("first-output").exists());
+    assert!(!directory.join("first-distinct-output").exists());
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn capped_reference_mismatch_retains_bounded_summary_without_review_pixels() {
+    let (request, mut result) = capped_indexed_fixture();
+    result.timing_skipped = Some(TimingSkipped::ReferenceMismatch);
+    result.sample_ns.clear();
+    result.iterations_per_sample = 0;
+    result.warmup_iterations = 0;
+    result.warmup_elapsed_ns = 0;
+    if let Pixels::Indexed8 { palette_rgba, .. } = &mut result.output.pixels {
+        palette_rgba[0] = 9;
+    }
+    validate_response(&request, &result).unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "ditherette-browser-capped-mismatch-{}",
+        std::process::id()
+    ));
+    preserve_reference_mismatch(&request, &result, &directory).unwrap();
+    let diagnostic: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("results.json")).unwrap()).unwrap();
+    assert_eq!(
+        diagnostic["schema"],
+        "ditherette-capped-reference-mismatch-v1"
+    );
+    assert_eq!(diagnostic["actual_output"]["pixels"]["index_count"], 1);
+    assert!(diagnostic["actual_output"]["pixels"]
+        .get("indices")
+        .is_none());
+    assert!(!directory.join("candidate.png").exists());
+    std::fs::remove_dir_all(directory).unwrap();
 }

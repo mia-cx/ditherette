@@ -1,10 +1,18 @@
 //! Private capped-output transport. Decode exact bytes before the existing verifier sees a result.
 
 use super::BrowserTransportResult;
-use ditherette_bench_api::verification::{Dimensions, Pixels, VerificationOutput, Warning};
+use crate::paired::{
+    browser::{BrowserObservation, TimingSkipped},
+    Role,
+};
+use ditherette_bench_api::verification::{
+    CaseIdentity, Digest256, Dimensions, OracleOutput, Pixels, VerificationOutput, Warning,
+};
 use serde::Deserialize;
-use serde_json::Value;
 use std::io;
+
+#[cfg(test)]
+use serde_json::Value;
 
 const MAX_PIXELS: u64 = 8192 * 8192;
 const DEFAULT_LIMIT: u64 = 64 * 1024 * 1024;
@@ -51,12 +59,43 @@ struct IndexedMetadata {
     transparent_index: Option<u8>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CappedOracleOutput {
+    case: CaseIdentity,
+    output: Envelope,
+}
+
+/// Parse capped output envelopes directly so large index bytes never become JSON number trees.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CappedTransport {
+    #[serde(default)]
+    reference: Option<CappedOracleOutput>,
+    #[serde(default)]
+    prime_reference_output: Option<()>,
+    role: Role,
+    pair: usize,
+    case_name: String,
+    input: Digest256,
+    settings: Digest256,
+    sample_ns: Vec<f64>,
+    iterations_per_sample: usize,
+    warmup_iterations: usize,
+    warmup_elapsed_ns: u128,
+    output: Envelope,
+    #[serde(default)]
+    unstable_output: Option<Envelope>,
+    observation: BrowserObservation,
+    #[serde(default)]
+    timing_skipped: Option<TimingSkipped>,
+}
+
 fn invalid() -> io::Error {
     io::Error::other("invalid capped indexed wire evidence")
 }
 
-fn decode_output(value: Value, expected: Dimensions) -> io::Result<VerificationOutput> {
-    let envelope: Envelope = serde_json::from_value(value).map_err(|_| invalid())?;
+fn decode_output(envelope: Envelope, expected: Dimensions) -> io::Result<VerificationOutput> {
     let metadata = envelope.metadata;
     let pixels = metadata.pixels;
     let count = u64::from(expected.width) * u64::from(expected.height);
@@ -119,6 +158,14 @@ fn decode_output(value: Value, expected: Dimensions) -> io::Result<VerificationO
     })
 }
 
+#[cfg(test)]
+fn decode_value(value: Value, expected: Dimensions) -> io::Result<VerificationOutput> {
+    decode_output(
+        serde_json::from_value(value).map_err(|_| invalid())?,
+        expected,
+    )
+}
+
 /// Only an explicitly declared capped case reaches this decoder. Ordinary JSON keeps its existing parser.
 pub(super) fn decode(
     line: &str,
@@ -133,39 +180,34 @@ pub(super) fn decode(
     {
         return Err(invalid());
     }
-    let mut value: Value = serde_json::from_str(line).map_err(|_| invalid())?;
-    if value
-        .get("prime_reference_output")
-        .is_some_and(|prime| !prime.is_null())
-    {
+    let record: CappedTransport = serde_json::from_str(line).map_err(|_| invalid())?;
+    if record.prime_reference_output.is_some() {
         return Err(invalid());
     }
-    // Remove hex strings before deserializing ordinary metadata. Never expand bytes into JSON Values.
-    let mut take = |pointer: &str| -> io::Result<Option<VerificationOutput>> {
-        let Some(slot) = value.pointer_mut(pointer).filter(|slot| !slot.is_null()) else {
-            return Ok(None);
-        };
-        let mut output = decode_output(slot.take(), expected)?;
-        let Pixels::Indexed8 { indices, .. } = &mut output.pixels else {
-            unreachable!()
-        };
-        let saved = std::mem::take(indices);
-        *slot = serde_json::to_value(&output).map_err(|_| invalid())?;
-        let Pixels::Indexed8 { indices, .. } = &mut output.pixels else {
-            unreachable!()
-        };
-        *indices = saved;
-        Ok(Some(output))
-    };
-    let output = take("/output")?.ok_or_else(invalid)?;
-    let unstable = take("/unstable_output")?;
-    let reference = take("/reference/output")?.ok_or_else(invalid)?;
-    let mut result: BrowserTransportResult =
-        serde_json::from_value(value).map_err(|_| invalid())?;
-    result.output = output;
-    result.unstable_output = unstable;
-    result.reference.as_mut().ok_or_else(invalid)?.output = reference;
-    Ok(result)
+    let reference = record.reference.ok_or_else(invalid)?;
+    Ok(BrowserTransportResult {
+        reference: Some(OracleOutput {
+            case: reference.case,
+            output: decode_output(reference.output, expected)?,
+        }),
+        prime_reference_output: None,
+        role: record.role,
+        pair: record.pair,
+        case_name: record.case_name,
+        input: record.input,
+        settings: record.settings,
+        sample_ns: record.sample_ns,
+        iterations_per_sample: record.iterations_per_sample,
+        warmup_iterations: record.warmup_iterations,
+        warmup_elapsed_ns: record.warmup_elapsed_ns,
+        output: decode_output(record.output, expected)?,
+        unstable_output: record
+            .unstable_output
+            .map(|output| decode_output(output, expected))
+            .transpose()?,
+        observation: record.observation,
+        timing_skipped: record.timing_skipped,
+    })
 }
 
 #[cfg(test)]
@@ -183,7 +225,7 @@ mod tests {
 
     #[test]
     fn decodes_exact_indices_and_metadata() {
-        let output = decode_output(
+        let output = decode_value(
             envelope(),
             Dimensions {
                 width: 2,
@@ -221,7 +263,7 @@ mod tests {
         ] {
             let mut value = envelope();
             *value.pointer_mut(pointer).unwrap() = replacement;
-            let error = decode_output(
+            let error = decode_value(
                 value,
                 Dimensions {
                     width: 2,

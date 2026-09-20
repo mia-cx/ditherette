@@ -15,6 +15,10 @@ Accepted package `29cfdb8cc6c4e6ed5a17647bd299591a346a6bf1` uses the previous cu
 Candidate `520f2008d852eee6e06d8314393272f1cb8b6602` widens it globally.
 Selected candidate `b72238d414395c4d1df06d70bbfeb78b7d9c415b` preserves larger separable/Yliluoma cache paths.
 
+All three source commits now have retention refs. The [scalar reproduction record](nearest-quarter-reproduction.md)
+ties each source to its measured Wasm hash through a fresh, byte-exact build.
+This verifies the historical scalar artifacts, not new timings or threaded artifacts.
+
 The first comparison runs six 50% settings in all three browsers, before and after the global change.
 Settings include resize alone, direct sRGB, Oklch, Bayer8, Floyd-Steinberg, and high-entropy sRGB.
 All 18 PNGs remain byte-exact.
