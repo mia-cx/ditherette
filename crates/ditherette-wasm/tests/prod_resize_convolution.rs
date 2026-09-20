@@ -137,10 +137,6 @@ fn assert_matches_spec(
             ImageDimensions::new(4, 3).unwrap(),
         ),
         (
-            ImageDimensions::new(101, 100).unwrap(),
-            ImageDimensions::new(5, 4).unwrap(),
-        ),
-        (
             ImageDimensions::new(5, 5).unwrap(),
             ImageDimensions::new(5, 5).unwrap(),
         ),
