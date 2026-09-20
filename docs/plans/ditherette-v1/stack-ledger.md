@@ -1,5 +1,26 @@
 # Ditherette v1 implementation stack
 
+## Consolidated stack on 2026-09-20; review deferred
+
+Mia approved five package PRs and separate optional website integration. This task stops after consolidation. No reviews, benchmark campaigns, merges, publication, or rollout follow it.
+
+| Replacement | Base | Superseded PRs |
+|---|---|---|
+| [#160](https://github.com/mia-cx/ditherette/pull/160) core processing | main `9bcf3f7c` | #115, #116, #117, #118, #119 |
+| [#161](https://github.com/mia-cx/ditherette/pull/161) caching, progress and threads | #160 | #121, #122, #123, #124, #126, #127, #128 |
+| [#162](https://github.com/mia-cx/ditherette/pull/162) conformance and benchmark validation | #161 | #129, #131, #132 |
+| [#163](https://github.com/mia-cx/ditherette/pull/163) selected performance changes | #162 | #137, #138, #140, #142, #144, #146, #148, #152, #154, #155, #158, #159 |
+| [#164](https://github.com/mia-cx/ditherette/pull/164) release preparation | #163 | #130 |
+| [#165](https://github.com/mia-cx/ditherette/pull/165) optional website integration | #163 | #120, #125 |
+
+Original branches remain intact. The 30 superseded PRs carry replacement links; their findings are not marked resolved. PRs #133 and #134 remain held on their historical branches. They need a later restack before activation. PR #163 retains only #134's historical benchmark-provider changes, including the strict-provenance correction. PR #165 retains the later contiguous-crop optimization and website-only conformance step. It preserves the legacy default and fallback.
+
+Composition checks confirm clean diffs, unchanged frozen spec, preserved current-main provenance and cross-realm handling, and no website source changes in the package stack. Production code at #163 matches the old final performance tip except for main's preserved request contract. Core composition temporarily lost a shared validator export; that export was restored before filing. Direct TypeScript checks remain incomplete without generated Wasm factories. No fresh full-suite or performance validation is claimed.
+
+Inherited guard, conformance, memory/progress, release-tooling and evidence findings remain documented in replacement descriptions for the deferred review pass. No frozen policy or selected kernel behavior was changed to resolve those findings.
+
+S26's validated `827f1b03` remains available locally. Its four finished Cargo target directories were cleared, reclaiming about 5.8 GiB; validation logs and compiled evidence remain outside the repository. New consolidation worktrees created no Cargo targets. The dirty root worktree remains untouched.
+
 ## S25 merged; S26 restack approved on 2026-09-20
 
 PR #114 merged as `9bcf3f7c` from `77ecdc41`; issue #66 closed and main fast-forwarded. PR #115 was retargeted to main before the merge. The parent verified the exact-head silent Pullfrog clean log `35481011023`, all CI, and three resolved review threads. Documentation-only `77ecdc41` fixes native-preparation guidance and the three-alpha count; the registry count is 19.
