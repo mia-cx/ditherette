@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::verification::{input_digest, settings_digest};
+pub use ditherette_wasm::prod::contract::lifecycle::Threads;
 pub use ditherette_wasm::prod::contract::request::{Anchor, Support};
 use std::{collections::BTreeSet, io, path::Component};
 
@@ -66,27 +67,126 @@ pub enum BrowserBackend {
 pub enum BrowserPreparation {
     FreshInstance,
     PrimedInstance,
+    /// A fresh instance and declared stage prime precede every single-call sample.
+    PrimedSample,
     /// Time createDitherette with already-loaded bytes; package import/fetch is excluded.
     InitializationBytes,
     /// Time createDitherette with an already-compiled module.
     InitializationCompiled,
 }
 
-/// S19 has no content hash or application cache. Later cache implementations extend this tag.
+/// Historical fixtures use `none`; cache comparisons declare each artifact's capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CacheCapability {
     None,
+    Roles {
+        accepted: PreparationCapability,
+        candidate: PreparationCapability,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sample_prime: Option<super::preparation::SamplePrime>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PreparationCapability {
+    Uncached,
+    Preparation,
+    ImageStages,
+}
+
+impl CacheCapability {
+    pub fn sample_prime(self) -> Option<super::preparation::SamplePrime> {
+        match self {
+            Self::Roles { sample_prime, .. } => sample_prime,
+            Self::None => None,
+        }
+    }
+}
+
+/// Development protocol only; functions stay in the actual public-call adapter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProgressMode {
+    Disabled,
+    Enabled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProgressRoles {
+    pub accepted: ProgressMode,
+    pub candidate: ProgressMode,
+}
+
+/// Public initialization policy for each measured role; omitted historical metadata stays scalar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ThreadRoles {
+    pub accepted: Threads,
+    pub candidate: Threads,
+}
+
+/// Developer-only selector. It never changes the public request or cache identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RowStage {
+    Resize,
+    Indexed,
+    Mixing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowBandParameters {
+    /// Zero keeps this stage scalar; positive values choose an absolute output band height.
+    pub height: u32,
+    pub active_workers: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowPolicyRoles {
+    pub stage: RowStage,
+    pub accepted: RowBandParameters,
+    pub candidate: RowBandParameters,
+}
+
+/// Recorded only after the real instance accepts its private policy setter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowPolicyObservation {
+    pub stage: RowStage,
+    pub parameters: RowBandParameters,
+    pub pool_size: u32,
+}
+
+/// JavaScript context owning the package and its call timers. Historical records use the page.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BrowserExecution {
+    #[default]
+    Page,
+    HostWorker,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserCase {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_policy: Option<RowPolicyRoles>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<BrowserExecution>,
     pub operation: PublicOperation,
     pub accepted: BrowserBackend,
     pub candidate: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<ProgressRoles>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threads: Option<ThreadRoles>,
     /// Developer diagnostics only. Differences remain incorrect and retain review artifacts.
     #[serde(default)]
     pub measure_nonexact: bool,
@@ -412,6 +512,10 @@ pub struct BrowserTrial {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserObservation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row_policy: Option<RowPolicyObservation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<BrowserExecution>,
     pub engine: BrowserEngine,
     pub browser_version: String,
     pub node_version: String,
@@ -429,6 +533,10 @@ pub struct BrowserEvidence {
     pub backend: BrowserBackend,
     pub preparation: BrowserPreparation,
     pub cache: CacheCapability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<ProgressRoles>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threads: Option<ThreadRoles>,
     #[serde(default)]
     pub measure_nonexact: bool,
     pub observation: BrowserObservation,
@@ -448,6 +556,9 @@ pub struct BrowserTransportResult {
     /// Newly executed browser trials require an independently identified Wasm reference.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<OracleOutput>,
+    /// Frozen output checked after every declared stage prime; absent from historical trials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prime_reference_output: Option<VerificationOutput>,
     pub role: Role,
     pub pair: usize,
     pub case_name: String,
@@ -515,11 +626,18 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
     if let Some(native) = &case.native {
         if case.browser.is_some()
             || case.measurement.scope != native.scope()
-            || case.measurement.application_cache != ApplicationCache::NotApplicable
+            || (case.measurement.application_cache != ApplicationCache::NotApplicable
+                && !matches!(native, super::native::NativeOperation::Processor { .. }))
         {
             return Err(io::Error::other(
                 "native operation requires its declared scope without browser or cache claims",
             ));
+        }
+        if let super::native::NativeOperation::Processor { cache, settings } = native {
+            validate_preparation_cache(*cache, &case.measurement)?;
+            if let Some(prime) = cache.sample_prime() {
+                settings.prime_request(prime, case.source, &case.rgba)?;
+            }
         }
         if case.identity != native.identity(case.source, &case.rgba)?
             || case.reference_subject != native.reference_subject()
@@ -542,6 +660,77 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if browser.execution == Some(BrowserExecution::HostWorker)
+        && (!matches!(m.scope, CallScope::Initialization | CallScope::CompleteCall)
+            || !matches!(
+                browser.accepted,
+                BrowserBackend::Package | BrowserBackend::PackageStaged
+            )
+            || !matches!(
+                browser.candidate,
+                BrowserBackend::Package | BrowserBackend::PackageStaged
+            ))
+    {
+        return Err(io::Error::other(
+            "host-worker execution requires package initialization or complete calls",
+        ));
+    }
+    if browser.threads.is_some()
+        && (!matches!(
+            browser.accepted,
+            BrowserBackend::Package | BrowserBackend::PackageStaged
+        ) || !matches!(
+            browser.candidate,
+            BrowserBackend::Package | BrowserBackend::PackageStaged
+        ))
+    {
+        return Err(io::Error::other(
+            "thread policies require ordinary package calls",
+        ));
+    }
+    if let Some(policy) = browser.row_policy {
+        if browser.execution != Some(BrowserExecution::HostWorker)
+            || m.scope != CallScope::CompleteCall
+            || browser.threads
+                != Some(ThreadRoles {
+                    accepted: Threads::Required,
+                    candidate: Threads::Required,
+                })
+            || [policy.accepted, policy.candidate]
+                .iter()
+                .any(|p| p.height > 32_768 || !(1..=8).contains(&p.active_workers))
+        {
+            return Err(io::Error::other(
+                "row policies require bounded complete calls in a required-thread host",
+            ));
+        }
+        let stage_matches = match browser.operation {
+            PublicOperation::Process { .. } => true,
+            PublicOperation::Quantize { .. }
+            | PublicOperation::Perturb { .. }
+            | PublicOperation::Separable { .. } => policy.stage == RowStage::Indexed,
+            PublicOperation::Yliluoma { .. } => policy.stage == RowStage::Mixing,
+            PublicOperation::Diffusion { .. } => false,
+            _ => policy.stage == RowStage::Resize,
+        };
+        if !stage_matches {
+            return Err(io::Error::other(
+                "row policy stage differs from the measured operation",
+            ));
+        }
+    }
+    if browser.progress.is_some()
+        && (browser.preparation != BrowserPreparation::FreshInstance
+            || m.scope != CallScope::CompleteCall
+            || m.mode != SampleMode::SingleCall
+            || m.application_cache != ApplicationCache::Cold
+            || browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package)
+    {
+        return Err(io::Error::other(
+            "progress comparisons require cold single ordinary package calls",
+        ));
+    }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::PackageStaged)
         && !matches!(browser.operation, PublicOperation::Process { .. })
     {
@@ -549,14 +738,46 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
             "staged package calls require the Process operation",
         ));
     }
-    if m.application_cache != ApplicationCache::NotApplicable {
-        return Err(io::Error::other(
-            "S19 has no application cache; cold/warm claims are unsupported",
-        ));
+    if browser.cache != CacheCapability::None
+        || m.application_cache != ApplicationCache::NotApplicable
+    {
+        validate_preparation_cache(browser.cache, m)?;
+        let preparation = match m.application_cache {
+            ApplicationCache::Cold => BrowserPreparation::FreshInstance,
+            ApplicationCache::Warm if browser.cache.sample_prime().is_some() => {
+                BrowserPreparation::PrimedSample
+            }
+            ApplicationCache::Warm => BrowserPreparation::PrimedInstance,
+            ApplicationCache::NotApplicable => unreachable!("validated cache state"),
+        };
+        if browser.preparation != preparation
+            || browser.accepted != BrowserBackend::Package
+            || browser.candidate != BrowserBackend::Package
+        {
+            return Err(io::Error::other("preparation cache cases require ordinary package calls and matching instance lifecycle"));
+        }
+        if let Some(prime) = browser.cache.sample_prime() {
+            use super::preparation::SamplePrime;
+            if !matches!(
+                (prime, &browser.operation),
+                (SamplePrime::SameCall, _)
+                    | (SamplePrime::Resize, PublicOperation::Process { .. })
+                    | (SamplePrime::Perturb, PublicOperation::Separable { .. })
+                    | (SamplePrime::NoDither, PublicOperation::Quantize { .. })
+            ) {
+                return Err(io::Error::other(
+                    "stage prime does not match the measured operation",
+                ));
+            }
+        }
     }
     match browser.preparation {
         BrowserPreparation::FreshInstance
             if m.scope == CallScope::CompleteCall && m.mode == SampleMode::SingleCall => {}
+        BrowserPreparation::PrimedSample
+            if m.scope == CallScope::CompleteCall
+                && m.mode == SampleMode::SingleCall
+                && browser.cache.sample_prime().is_some() => {}
         BrowserPreparation::PrimedInstance if m.scope == CallScope::CompleteCall => {}
         BrowserPreparation::InitializationBytes | BrowserPreparation::InitializationCompiled
             if m.scope == CallScope::Initialization
@@ -607,6 +828,36 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         return Err(io::Error::other(
             "browser operation, subjects, input, or settings identity differs",
         ));
+    }
+    Ok(())
+}
+
+pub fn validate_preparation_cache(
+    cache: CacheCapability,
+    measurement: &Measurement,
+) -> io::Result<()> {
+    if !matches!(cache, CacheCapability::Roles { .. })
+        || measurement.application_cache == ApplicationCache::NotApplicable
+        || measurement.mode != SampleMode::SingleCall
+        || !matches!(
+            measurement.scope,
+            CallScope::NativeCompleteCall | CallScope::CompleteCall
+        )
+    {
+        return Err(io::Error::other("preparation comparison requires explicit role capabilities and cold/warm single complete calls"));
+    }
+    if let CacheCapability::Roles {
+        accepted,
+        candidate,
+        sample_prime,
+    } = cache
+    {
+        let stages = [accepted, candidate].contains(&PreparationCapability::ImageStages);
+        if sample_prime.is_some()
+            != (stages && measurement.application_cache == ApplicationCache::Warm)
+        {
+            return Err(io::Error::other("image-stage warmth requires an explicit per-sample prime; cold and preparation-only cases have none"));
+        }
     }
     Ok(())
 }
@@ -754,11 +1005,38 @@ pub(super) fn validate_evidence(
         .as_ref()
         .ok_or_else(|| io::Error::other("missing browser runtime evidence"))?;
     validate_observation(&trial.runtime, &evidence.observation)?;
+    match (browser_case.row_policy, evidence.observation.row_policy) {
+        (None, None) => {}
+        (Some(policy), Some(observed)) => {
+            let expected = match result.role {
+                Role::Accepted => policy.accepted,
+                Role::Candidate => policy.candidate,
+            };
+            if observed.stage != policy.stage
+                || observed.parameters != expected
+                || !(1..=8).contains(&observed.pool_size)
+                || expected.active_workers > observed.pool_size
+            {
+                return Err(io::Error::other(
+                    "observed row policy differs from the measured role",
+                ));
+            }
+        }
+        _ => {
+            return Err(io::Error::other(
+                "missing or unexpected row-policy observation",
+            ))
+        }
+    }
     if evidence.assets != trial.assets.tree.digest
         || evidence.runtime != runtime_digest(&trial.runtime)?
         || evidence.backend != browser_case.backend(result.role)
         || evidence.preparation != browser_case.preparation
         || evidence.cache != browser_case.cache
+        || evidence.progress != browser_case.progress
+        || evidence.threads != browser_case.threads
+        || evidence.observation.execution.unwrap_or_default()
+            != browser_case.execution.unwrap_or_default()
         || evidence.measure_nonexact != browser_case.measure_nonexact
     {
         return Err(io::Error::other(

@@ -303,6 +303,10 @@ test('asset server enforces closure and advertises requested isolation without r
 		assert.equal(await response.text(), 'export const fixture = true;');
 		assert.equal(response.headers.get('cross-origin-embedder-policy'), 'require-corp');
 		assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin');
+		assert.equal(
+			response.headers.get('content-security-policy'),
+			"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self' blob:"
+		);
 		assert.equal((await fetch(`${server.url}/undeclared.js`)).status, 404);
 		assert.equal(server.failures.length, 1);
 	} finally {

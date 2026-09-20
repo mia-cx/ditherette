@@ -8,7 +8,10 @@
 pub mod fields;
 pub mod process;
 pub mod processor;
+mod progress;
 pub mod quantize;
+#[cfg(feature = "threads")]
+pub mod threads;
 
 use std::{hint::black_box, num::NonZeroU32};
 

@@ -94,16 +94,21 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 subject.clone(),
                 subject,
                 Some(BrowserCase {
+                    execution: None,
+                    row_policy: None,
                     operation,
                     accepted: BrowserBackend::Package,
                     candidate: BrowserBackend::Package,
                     preparation: BrowserPreparation::PrimedInstance,
                     cache: CacheCapability::None,
                     measure_nonexact: false,
+                    progress: None,
+                    threads: None,
                 }),
             )
         } else {
             match &native {
+                NativeOperation::Processor { .. } => unreachable!("quantize integration cases"),
                 NativeOperation::Diffusion { .. }
                 | NativeOperation::Process { .. }
                 | NativeOperation::MetricScores { .. }

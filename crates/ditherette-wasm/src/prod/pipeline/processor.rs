@@ -11,6 +11,7 @@ use super::resize::{self, PreparedResize};
 use crate::prod::contract::{
     error::ErrorCode,
     failure::{ErrorPath, Failure},
+    lifecycle::Stage,
     request::{
         Output, ResizePolicy, MAX_MEMORY_LIMIT_BYTES, MAX_OUTPUT_SIDE, MAX_PIXELS, MAX_SOURCE_SIDE,
     },
@@ -42,6 +43,10 @@ impl Allocator for SystemAllocator {
 /// Borrowed input and durable output boundary. Every JavaScript call is caught by the adapter.
 pub trait Boundary {
     type Output;
+    /// Borrow this call's optional caught callback without allocating a handle.
+    fn progress(&mut self) -> Option<&mut dyn super::progress::Callback> {
+        None
+    }
     fn input_len(&mut self) -> Result<usize, Failure>;
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure>;
     /// Constructs the complete durable result. Nothing is published if this fails.
@@ -59,19 +64,14 @@ enum State {
     Disposed,
 }
 
-/// Per-instance control and budget. S19 retains no image or scratch allocations.
+/// Per-instance control, shared preparation/image reuse, and capacity-accounted idle scratch.
 #[derive(Debug)]
 pub struct Processor {
     memory_limit: u64,
     boundary_capacity: u64,
     peak_capacity: u64,
     state: State,
-}
-
-#[derive(Default)]
-struct Buffers {
-    source: Vec<u8>,
-    output: Vec<u8>,
+    preparation: super::preparation::Store,
 }
 
 #[derive(Clone, Copy)]
@@ -84,11 +84,67 @@ struct Plan {
 }
 
 impl Processor {
+    /// Observe the private candidate without changing other stage selections.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn execution_policy(&self) -> super::execution::ExecutionPolicy {
+        self.preparation.execution_policy()
+    }
+
+    /// Development-only scheduling override. Public package settings never expose execution policy.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn set_execution_policy(
+        &mut self,
+        policy: super::execution::ExecutionPolicy,
+    ) -> Result<(), Failure> {
+        self.validate_execution_policy(policy)?;
+        self.preparation.execution = policy;
+        self.preparation.execution_overrides = 0b111;
+        Ok(())
+    }
+
+    /// Override only this stage; None explicitly forces its scalar path.
+    #[cfg(any(test, feature = "bench-subjects"))]
+    pub fn set_execution_stage(
+        &mut self,
+        stage: super::execution::ExecutionStage,
+        band: Option<super::execution::RowBandPolicy>,
+    ) -> Result<(), Failure> {
+        let mut policy = self.preparation.execution;
+        policy.set_stage(stage, band);
+        self.validate_execution_policy(policy)?;
+        self.preparation.execution = policy;
+        self.preparation.execution_overrides |= stage.mask();
+        Ok(())
+    }
+
+    #[cfg(any(test, feature = "bench-subjects"))]
+    fn validate_execution_policy(
+        &self,
+        policy: super::execution::ExecutionPolicy,
+    ) -> Result<(), Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        if [policy.resize, policy.indexed, policy.mixing]
+            .into_iter()
+            .flatten()
+            .any(|band| band.height == 0)
+        {
+            return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control));
+        }
+        Ok(())
+    }
+
     /// Counts owned control, buffer headers, and plan records, plus adapter-owned capacity.
     /// Compiler stack frames and fixed module overhead are outside this ownership accounting.
     pub const fn bookkeeping_bytes(boundary_capacity: u64) -> u64 {
-        (size_of::<Self>() + size_of::<Buffers>() + size_of::<Plan>() + size_of::<PreparedResize>())
-            as u64
+        (size_of::<Self>() + size_of::<Plan>()) as u64
+            + super::preparation::Call::record_bytes()
+            + size_of::<super::progress::Control>() as u64
             + boundary_capacity
     }
 
@@ -109,6 +165,7 @@ impl Processor {
             boundary_capacity,
             peak_capacity: overhead,
             state: State::Ready,
+            preparation: super::preparation::Store::default(),
         })
     }
 
@@ -117,11 +174,12 @@ impl Processor {
         self.peak_capacity
     }
 
-    /// Releases retained ownership idempotently. There are no retained images in this slice.
+    /// Releases retained preparation, image stages, and scratch idempotently.
     pub fn dispose(&mut self) -> Result<(), Failure> {
         if self.state == State::Running {
             return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance));
         }
+        self.preparation = super::preparation::Store::default();
         self.state = State::Disposed;
         Ok(())
     }
@@ -143,7 +201,7 @@ impl Processor {
         self.process_with_allocator(request, boundary, &mut SystemAllocator)
     }
 
-    /// Reserve the complete call before input copying, with recoverable boundary failures.
+    /// Snapshot current input, then preflight hit-aware execution with recoverable failures.
     pub fn process_with_allocator<B: super::quantize::QuantizeBoundary, A: Allocator>(
         &mut self,
         request: super::process::ProcessRequest<'_>,
@@ -158,16 +216,19 @@ impl Processor {
             State::Ready => {}
         }
         self.state = State::Running;
-        // Shared bookkeeping includes resize preparation and two Vec records.
-        // Process owns two more records for perturb RGBA8 and indexed output.
+        // Call bookkeeping includes preparation handles and all four scratch Vec records.
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::process::ProcessRequest<'_>>() as u64
-            + 2 * size_of::<Vec<u8>>() as u64
             + if matches!(
                 request.recipe.dither,
                 crate::prod::contract::request::DitherPolicy::Separable { .. }
             ) {
                 super::perturb::working_capacity_bytes()
+            } else if matches!(
+                request.recipe.dither,
+                crate::prod::contract::request::DitherPolicy::Diffusion { .. }
+            ) {
+                size_of::<crate::prod::dither::error_diffusion::prepared::DiffusionPolicy>() as u64
             } else {
                 0
             }
@@ -180,12 +241,13 @@ impl Processor {
             self.memory_limit,
             overhead,
             &mut self.peak_capacity,
+            &mut self.preparation,
         );
         self.state = State::Ready;
         result
     }
 
-    /// Materialize palette-free, durable RGBA8 with all owned capacity checked before input copy.
+    /// Snapshot current input and materialize palette-free, durable RGBA8 within the budget.
     pub fn perturb<B: Boundary>(
         &mut self,
         request: super::perturb::PerturbRequest,
@@ -218,6 +280,7 @@ impl Processor {
             self.memory_limit,
             overhead,
             &mut self.peak_capacity,
+            &mut self.preparation,
         );
         self.state = State::Ready;
         result
@@ -235,7 +298,7 @@ impl Processor {
         self.dither_and_quantize_with_allocator(request, dither, boundary, &mut SystemAllocator)
     }
 
-    /// Reserve the source, mode-specific scratch, indices, and palette before input copy.
+    /// Snapshot current input before reserving mode-specific work not supplied by image hits.
     pub fn dither_and_quantize_with_allocator<
         B: super::quantize::QuantizeBoundary,
         A: Allocator,
@@ -270,7 +333,11 @@ impl Processor {
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
             + mode_capacity
-            + super::perturb::working_capacity_bytes()
+            + if matches!(dither, DitherPolicy::Separable { .. }) {
+                super::perturb::working_capacity_bytes()
+            } else {
+                0
+            }
             + boundary.capacity_bytes();
         self.peak_capacity = overhead;
         let result = match dither {
@@ -282,6 +349,7 @@ impl Processor {
                 self.memory_limit,
                 overhead,
                 &mut self.peak_capacity,
+                &mut self.preparation,
             ),
             DitherPolicy::Separable { .. } | DitherPolicy::Yliluoma { .. } => {
                 super::quantize::run_with_dither(
@@ -292,6 +360,7 @@ impl Processor {
                     self.memory_limit,
                     overhead,
                     &mut self.peak_capacity,
+                    &mut self.preparation,
                 )
             }
             _ => unreachable!("supported family checked before entering running state"),
@@ -335,6 +404,7 @@ impl Processor {
             self.memory_limit,
             overhead,
             &mut self.peak_capacity,
+            &mut self.preparation,
         );
         self.state = State::Ready;
         result
@@ -367,53 +437,75 @@ impl Processor {
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
         let plan = Plan::new(request, boundary.input_len()?)?;
+        let enabled = boundary.progress().is_some();
+        let mut progress = super::progress::Control::new(enabled);
+        progress.report(boundary.progress(), Stage::Prepare, 0, 1)?;
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
-        let metadata_bytes = PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
-        let planned = overhead
-            .checked_add(plan.source_len as u64)
-            .and_then(|bytes| bytes.checked_add(plan.output_len as u64))
-            .and_then(|bytes| bytes.checked_add(metadata_bytes))
-            .ok_or_else(memory_limit_failure)?;
-        if planned > self.memory_limit {
-            return Err(memory_limit_failure());
+        PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
+        let mut call = super::preparation::Call::snapshot(
+            &mut self.preparation,
+            plan.source_len,
+            overhead,
+            self.memory_limit,
+            &mut self.peak_capacity,
+            allocator,
+        )?;
+        boundary.copy_input(&mut call.scratch.buffers[0])?;
+        let parent = super::preparation::source_key(&call.scratch.buffers[0], plan.source);
+        let key = super::identity::stage(
+            Some(parent),
+            crate::prod::contract::cache::StageOptions::Resize {
+                output: request.output,
+            },
+        )?;
+        if call.take_image(0, key) {
+            let image = call.image(0).unwrap();
+            let result = boundary.complete(&image.bytes, image.dimensions);
+            return call.finish(progress.finish(result, boundary.progress()));
         }
-
-        let budget = self.memory_limit - overhead - plan.source_len as u64 - plan.output_len as u64;
-        let mut metadata = PreparedResize::new(plan.source, plan.output, plan.resize, budget)?;
-        let overhead = overhead + metadata.capacity_bytes();
-        self.peak_capacity = overhead;
-        let mut buffers = Buffers::default();
-        allocator.reserve(&mut buffers.source, plan.source_len)?;
-        self.check_capacity(&buffers, overhead, plan.output_len)?;
-        allocator.reserve(&mut buffers.output, plan.output_len)?;
-        self.check_capacity(&buffers, overhead, 0)?;
-        // Both reservations finish before either resize can grow a Vec.
-        buffers.source.resize(plan.source_len, 0);
-        buffers.output.resize(plan.output_len, 0);
-        boundary.copy_input(&mut buffers.source)?;
-        let source = ImageView::<Rgba8>::packed(&buffers.source, plan.source)
+        call.prepare(
+            None,
+            Some(super::preparation::ResizePreparation {
+                source: plan.source,
+                output: request.output,
+            }),
+            [plan.source_len, plan.output_len, 0, 0],
+            0,
+            &mut self.peak_capacity,
+            allocator,
+        )?;
+        let (_, metadata, scratch) = call.parts();
+        let [source, output, _, _] = &mut scratch.buffers;
+        let source = ImageView::<Rgba8>::packed(source, plan.source)
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-        let output = ImageViewMut::<Rgba8>::packed(&mut buffers.output, plan.output)
+        let output = ImageViewMut::<Rgba8>::packed(output, plan.output)
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
-        metadata.execute(source, output)?;
-        // A failed complete helper drops both Vecs. Future callback/cache publication
-        // belongs after this complete result exists, never before it.
-        boundary.complete(&buffers.output, plan.output)
-    }
-
-    fn check_capacity(
-        &mut self,
-        buffers: &Buffers,
-        overhead: u64,
-        remaining_output: usize,
-    ) -> Result<(), Failure> {
-        let actual = overhead + buffers.source.capacity() as u64 + buffers.output.capacity() as u64;
-        self.peak_capacity = self.peak_capacity.max(actual);
-        if actual + remaining_output as u64 > self.memory_limit {
-            return Err(memory_limit_failure());
+        if enabled {
+            metadata.expect("requested resize").execute_with_progress(
+                source,
+                output,
+                &mut |completed, total| {
+                    progress.report(
+                        boundary.progress(),
+                        Stage::Resize,
+                        u64::from(completed),
+                        u64::from(total),
+                    )
+                },
+            )?;
+        } else {
+            metadata
+                .expect("requested resize")
+                .execute(source, output)?;
         }
-        Ok(())
+        let content = call.content(0, 1, plan.output);
+        call.retain_rgba(0, key, 1, plan.output, content, &mut self.peak_capacity);
+        let bytes = call
+            .image(0)
+            .map_or(call.scratch.buffers[1].as_slice(), |image| &image.bytes);
+        let result = boundary.complete(bytes, plan.output);
+        call.finish(progress.finish(result, boundary.progress()))
     }
 }
 
@@ -478,3 +570,10 @@ pub(super) fn dimensions(
 fn memory_limit_failure() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
 }
+
+#[cfg(test)]
+mod band_tests;
+#[cfg(test)]
+mod preparation_tests;
+#[cfg(test)]
+mod progress_tests;

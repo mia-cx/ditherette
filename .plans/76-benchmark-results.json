@@ -1,0 +1,519 @@
+{
+  "schema": "ditherette-s34-startup-report-v1",
+  "date": "2026-09-08",
+  "base_revision": "b2ca677ed9927165a1010f5c52646a989d8a02ca",
+  "delivery_before_report": "3863cadce82b4d272a1730f3ebad828b18ac4434",
+  "accepted_revision": "3f2cc41a9fa13f6b29f286a6cb7d5a9e690c32d8",
+  "candidate_revision": "c01467f9ed45ba79d855b95421564f2088929693",
+  "evidence_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s34-bench/target/s34-trial-02",
+  "quiet": {
+    "started_utc": "2026-09-08 18:06:46 UTC",
+    "accepted_revision": "3f2cc41a9fa13f6b29f286a6cb7d5a9e690c32d8",
+    "candidate_revision": "c01467f9ed45ba79d855b95421564f2088929693",
+    "delivery_head": "3863cadce82b4d272a1730f3ebad828b18ac4434",
+    "reason": "Fresh artifacts after functional capability, cleanup and host-context correction; not noise retuning",
+    "agents": "all three completed and explicitly drained",
+    "preparation_jobs": "all five exited 0",
+    "owned_build_test_browser_jobs": 0,
+    "unrelated_compiler_node_browser_processes_observed": 0,
+    "host_load_average": [
+      0.58,
+      1.65,
+      1.55
+    ],
+    "order": [
+      "threaded-chromium",
+      "threaded-firefox",
+      "regression-chromium",
+      "regression-firefox",
+      "regression-webkit"
+    ],
+    "threaded_execution": "host-worker",
+    "scalar_execution": "page",
+    "scheduled_workers": 40,
+    "maximum_samples": 800,
+    "blocked_cell": "threaded-webkit: retained atomic.wait worker-cleanup failure",
+    "retries": 0
+  },
+  "quiet_sha256": "147bd040ceede3339b370294f728bc3f533ca02d953465c4dbfad443fa9bcb92",
+  "runs": [
+    {
+      "name": "regression-chromium",
+      "context": "page",
+      "gate": "inconclusive",
+      "started": 8,
+      "reaped": 8,
+      "max_live": 1,
+      "samples": 160,
+      "warmup_calls": 1329,
+      "actual_role_pairs_exact": 4,
+      "recorded_outputs_exact": 8,
+      "three_way_verifications_exact": 8,
+      "report_sha256": "74c6c9037435d72376904775a75a0ac5fa49569b1c67edbf4139f887d8c7cd35",
+      "events_sha256": "6befddd5d875094d94cc46ef92f82b915b29040f000f19e03de79f468668c74e",
+      "prepared_sha256": "fbbd57375d63dae7f7b7c848b5b6b51cc7a57d1419eddcaf40424640a01114af",
+      "raw_files": 51,
+      "raw_inventory_sha256": "0c7f18ca197a7517d8d5eb99bba9762b337f275f8bdd21a57853ab2927f7b2e2",
+      "browser": {
+        "engine": "chromium",
+        "browser_version": "147.0.7727.15",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.7727.15 Safari/537.36",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 4999.995231628418
+      },
+      "cases": [
+        {
+          "case_name": "initialization-bytes",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9788359753735999,
+            1.0698924791483484
+          ],
+          "accepted_median_ns": 465000.0035762787,
+          "candidate_median_ns": 475000.0014901161,
+          "median_ratio": 1.0215053716923188,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        },
+        {
+          "case_name": "initialization-compiled",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.9500000093132259,
+            0.8636363282307129
+          ],
+          "accepted_median_ns": 104999.99672174454,
+          "candidate_median_ns": 94999.9988079071,
+          "median_ratio": 0.9047619216566458,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        }
+      ]
+    },
+    {
+      "name": "regression-firefox",
+      "context": "page",
+      "gate": "inconclusive",
+      "started": 8,
+      "reaped": 8,
+      "max_live": 1,
+      "samples": 160,
+      "warmup_calls": 709,
+      "actual_role_pairs_exact": 4,
+      "recorded_outputs_exact": 8,
+      "three_way_verifications_exact": 8,
+      "report_sha256": "ad786591c22202454d0c803f9a85ca174449f411d153ab3a3cd039e379ff640f",
+      "events_sha256": "bda069fe9bd34bf6b3f4860f5e1d20bd7184f8365f5afdd809507f4fe07fbe1d",
+      "prepared_sha256": "a5e694b4819485b44fb44daea82da32cee6c63c17555166fe1b0b2d52afac32a",
+      "raw_files": 51,
+      "raw_inventory_sha256": "feeb946aad21d3456ed1fe2b9d9cdf83f7cc5eea2041d259cb8f7c3dbab54a11",
+      "browser": {
+        "engine": "firefox",
+        "browser_version": "148.0.2",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 19999.99999999602
+      },
+      "cases": [
+        {
+          "case_name": "initialization-bytes",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.91115702479339,
+            1.0545454545454531
+          ],
+          "accepted_median_ns": 4689999.999999998,
+          "candidate_median_ns": 4500000.000000015,
+          "median_ratio": 0.9594882729211123,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        },
+        {
+          "case_name": "initialization-compiled",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            1,
+            1
+          ],
+          "accepted_median_ns": 140000.00000001478,
+          "candidate_median_ns": 140000.00000001478,
+          "median_ratio": 1,
+          "resolution_limited": true,
+          "exact_verifications": 4
+        }
+      ]
+    },
+    {
+      "name": "regression-webkit",
+      "context": "page",
+      "gate": "inconclusive",
+      "started": 8,
+      "reaped": 8,
+      "max_live": 1,
+      "samples": 160,
+      "warmup_calls": 391,
+      "actual_role_pairs_exact": 4,
+      "recorded_outputs_exact": 8,
+      "three_way_verifications_exact": 8,
+      "report_sha256": "9401d50940e13e001a1e22c936e2e0b847b042e403a1d874886737af9abec3fc",
+      "events_sha256": "604dcf994b0226788592c715b9c666895e0416335e5015237ded83cf37917b10",
+      "prepared_sha256": "d343b55609c27de798980d680f3e92c08ce61cc75eb415aff3b011d105e7ecb7",
+      "raw_files": 51,
+      "raw_inventory_sha256": "ca18b6214a4a837deb2e35adfb89f355828d32ba81d21d14b3d2e08b48e4bfae",
+      "browser": {
+        "engine": "webkit",
+        "browser_version": "26.4",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 19999.99999999602
+      },
+      "cases": [
+        {
+          "case_name": "initialization-bytes",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.7239263803680923,
+            1.2058823529411766
+          ],
+          "accepted_median_ns": 1230000.000000004,
+          "candidate_median_ns": 1200000.0000000028,
+          "median_ratio": 0.9756097560975601,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        },
+        {
+          "case_name": "initialization-compiled",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            1.0526315789473586,
+            1.157894736842113
+          ],
+          "accepted_median_ns": 189999.99999999773,
+          "candidate_median_ns": 200000.00000000285,
+          "median_ratio": 1.0526315789473961,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        }
+      ]
+    },
+    {
+      "name": "threaded-chromium",
+      "context": "host-worker",
+      "gate": "inconclusive",
+      "started": 8,
+      "reaped": 8,
+      "max_live": 1,
+      "samples": 160,
+      "warmup_calls": 8,
+      "actual_role_pairs_exact": 4,
+      "recorded_outputs_exact": 8,
+      "three_way_verifications_exact": 8,
+      "report_sha256": "d0f7af8c7e1a972e89d66e3027e0366fb425a1d90ca464bfbf3e6bedb8af4720",
+      "events_sha256": "57f982afa1c3245a074cc841306ca729f2f3145e29117cf5ba1273491e86d073",
+      "prepared_sha256": "8fe82a2f8bb99c43be9932bcf0c69f286a7e4e5fa953e80df8c1dce5def9173a",
+      "raw_files": 51,
+      "raw_inventory_sha256": "aea780bd93c6ab289085aabf4788c0dd333721e781802b51658d29d2cd503bd0",
+      "browser": {
+        "execution": "host-worker",
+        "engine": "chromium",
+        "browser_version": "147.0.7727.15",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.7727.15 Safari/537.36",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 4999.995231628418
+      },
+      "cases": [
+        {
+          "case_name": "initialization-bytes",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.9849182410612102,
+            1.0848852318085787
+          ],
+          "accepted_median_ns": 60177499.99836087,
+          "candidate_median_ns": 62197500.00163913,
+          "median_ratio": 1.03356736327254,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        },
+        {
+          "case_name": "initialization-compiled",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9969692004853276,
+            1.0147512866325685
+          ],
+          "accepted_median_ns": 59157499.99508262,
+          "candidate_median_ns": 60387499.99925494,
+          "median_ratio": 1.0207919537552224,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        }
+      ]
+    },
+    {
+      "name": "threaded-firefox",
+      "context": "host-worker",
+      "gate": "pass",
+      "started": 8,
+      "reaped": 8,
+      "max_live": 1,
+      "samples": 160,
+      "warmup_calls": 16,
+      "actual_role_pairs_exact": 4,
+      "recorded_outputs_exact": 8,
+      "three_way_verifications_exact": 8,
+      "report_sha256": "69129fbc51313f0289c241bc6ebeb7ac2323932909faa10175e235327ca53f06",
+      "events_sha256": "93b0d92fa4fd92005c5f5ca3088663a365e11dd9dd8b8da559401995ceca6926",
+      "prepared_sha256": "d134559586711b1e3b0f7d4fbca201bb7f897aa4769919fdbc22b02347f41562",
+      "raw_files": 51,
+      "raw_inventory_sha256": "738d492ce109d89cfbd967c59bb4cf9f12e7915a202bd702740dacd543f764bd",
+      "browser": {
+        "execution": "host-worker",
+        "engine": "firefox",
+        "browser_version": "148.0.2",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 19999.999999999574
+      },
+      "cases": [
+        {
+          "case_name": "initialization-bytes",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9910999543587419,
+            1.0336075205640438
+          ],
+          "accepted_median_ns": 42719999.99999997,
+          "candidate_median_ns": 43940000.00000005,
+          "median_ratio": 1.0285580524344589,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        },
+        {
+          "case_name": "initialization-compiled",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.052380952380951,
+            0.9943181818181829
+          ],
+          "accepted_median_ns": 36449999.999999985,
+          "candidate_median_ns": 37090000.00000003,
+          "median_ratio": 1.0175582990397818,
+          "resolution_limited": false,
+          "exact_verifications": 4
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "started": 40,
+    "reaped": 40,
+    "max_live": 1,
+    "samples": 800,
+    "warmup_calls": 2453,
+    "recorded_outputs_exact": 40,
+    "actual_role_pairs_exact": 20,
+    "three_way_verifications_exact": 40,
+    "verification_components_exact": 120
+  },
+  "artifacts": {
+    "accepted": {
+      "native_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s34-bench/target/s34-accepted-3f2cc41a-native",
+      "public_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s34-bench/target/s34-accepted-3f2cc41a-public",
+      "revision": "3f2cc41a9fa13f6b29f286a6cb7d5a9e690c32d8",
+      "files": {
+        "ditherette.tgz": {
+          "bytes": 370620,
+          "sha256": "f6e62526cc290d8ca1f9fdcb7fcfc9de39790c1982dab7118adb30a4a84173d2"
+        },
+        "build-provenance.json": {
+          "bytes": 657792,
+          "sha256": "d80eb8743fffcb6795b4a04027321511dbc566f2d520938fc3eaa9cfb5a5bc15"
+        },
+        "bundle-source.json": {
+          "bytes": 921,
+          "sha256": "69abe4d395b59378f9de2d70753220e13cc4697022ef239a8e782a43bd4c36f6"
+        },
+        "scripts/benchmark-host-worker.mjs": {
+          "bytes": 1173,
+          "sha256": "13c9e647d84e0b30020300630ec0fed332d348c62e614444fb1087c52fa848f8"
+        },
+        "scripts/benchmark-public-browser.mjs": {
+          "bytes": 14152,
+          "sha256": "0f75d38285f0e597eae99bdd9a9b5b23018dfe1cdc99fc01fe5c92b5cce0ed5d"
+        },
+        "scripts/benchmark-public-page.mjs": {
+          "bytes": 22022,
+          "sha256": "0ec606811d294bda53578aaf35a2a3355d29d029c1e2235250729706d105f0f6"
+        },
+        "scripts/oracle/ditherette_bench_oracle_bg.wasm": {
+          "bytes": 785376,
+          "sha256": "d1aed94fa5a4057f7bc50262bf29e6a52652a37c0b40db7bac2f1f79e555d86e"
+        },
+        "scripts/oracle/manifest.json": {
+          "bytes": 103040,
+          "sha256": "334e4cbe0e1c0324e0644d2e6c13414007c21b4526eed78a80194d1a8c785a4f"
+        },
+        "wasm/scalar": {
+          "bytes": 339664,
+          "gzip_bytes": 152754,
+          "sha256": "2b589ac837f56f9b941e84d2a8d91c2d144698f968871aeb03800dedd6158bfa"
+        },
+        "wasm/threads": {
+          "bytes": 445275,
+          "gzip_bytes": 185120,
+          "sha256": "436a9f050dbe0f7c657b9d897f48a37e2ef2aa36c2c95857db5be338a21d35c3"
+        }
+      },
+      "native": {
+        "worker_sha256": "315369e7e280e37313978e29c5eda81192b30cc2345e4f00410510bee16f73c6",
+        "coordinator_sha256": "4b908c4cb51556c68afc9cdaeb5df9dd4ddbf56871acdce0f9139b309ece0afb",
+        "provenance_sha256": "67a2363c438dd5832207489dc72cfd66eafccb5508fcc06c20136a5cda0dd234"
+      }
+    },
+    "candidate": {
+      "native_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s34-threads/target/s34-candidate-c01467f9-native",
+      "public_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s34-threads/target/s34-candidate-c01467f9-public",
+      "revision": "c01467f9ed45ba79d855b95421564f2088929693",
+      "files": {
+        "ditherette.tgz": {
+          "bytes": 375167,
+          "sha256": "33a46ac0de03c1d9947302af356648549cd288f8cfcbf5b3953843af65d75c9d"
+        },
+        "build-provenance.json": {
+          "bytes": 673483,
+          "sha256": "4abc0e9c24d22387bde858078399918f09e4a67f329a3c421467c3e82fded8e6"
+        },
+        "bundle-source.json": {
+          "bytes": 935,
+          "sha256": "7ed4fcee999e8b51481dbbb1003e12b32d14a98cfd44f3c102c40c3e8f60a139"
+        },
+        "scripts/benchmark-host-worker.mjs": {
+          "bytes": 1173,
+          "sha256": "13c9e647d84e0b30020300630ec0fed332d348c62e614444fb1087c52fa848f8"
+        },
+        "scripts/benchmark-public-browser.mjs": {
+          "bytes": 14152,
+          "sha256": "0f75d38285f0e597eae99bdd9a9b5b23018dfe1cdc99fc01fe5c92b5cce0ed5d"
+        },
+        "scripts/benchmark-public-page.mjs": {
+          "bytes": 22022,
+          "sha256": "0ec606811d294bda53578aaf35a2a3355d29d029c1e2235250729706d105f0f6"
+        },
+        "scripts/oracle/ditherette_bench_oracle_bg.wasm": {
+          "bytes": 785564,
+          "sha256": "557c4af0cd1f158c12d760330fbb0628dbfde151e4e2adfb8901a91418ab6b22"
+        },
+        "scripts/oracle/manifest.json": {
+          "bytes": 103031,
+          "sha256": "fa2a3dd4d3adfe0fb26985192ca359333a845e0dd1e9cfa57aa28bbbade19927"
+        },
+        "wasm/scalar": {
+          "bytes": 339443,
+          "gzip_bytes": 152653,
+          "sha256": "739f2f6b4147cc2eee216a99d40caa3523d2a6ebc24273ae2ef734846a233147"
+        },
+        "wasm/threads": {
+          "bytes": 445270,
+          "gzip_bytes": 185060,
+          "sha256": "23304936d3740e3b6bcbe4f5bb14ba78dd02aa82308d716e9c2b4364f2b65a0c"
+        }
+      },
+      "native": {
+        "worker_sha256": "9f1f35b6700edf0832697a8e9d921b7fc304f594815fb05f2bd7e44db82536df",
+        "coordinator_sha256": "857ecf9af5f4bd1f5b00eb8b839bb8d22865eeb30018418967fac99c1d802e70",
+        "provenance_sha256": "6717631ea8bfc035deb69342b9192f904a814696b45d7392d7e9aa5d7ae657ce"
+      }
+    }
+  },
+  "machine": {
+    "os": "linux",
+    "arch": "x86_64",
+    "hostname": "athena-hephaestus",
+    "kernel": "6.12.95+deb13-amd64",
+    "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+    "logical_cpus": 24
+  },
+  "attempt01": {
+    "root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s34-bench/target/s34-trial-01",
+    "started": 25,
+    "reaped": 25,
+    "samples": 480,
+    "empty_result_files": [
+      "threaded-chromium-results/pair-000-case-000-accepted.result.json"
+    ],
+    "raw_inventory_sha256": "e0291b3c142146efd72ad95116addf78bef853b3a4bde826e5d5d7242d11a51e",
+    "raw_files": 160
+  },
+  "release_gate": {
+    "confirmed_regressions": 0,
+    "passing_cases": 4,
+    "inconclusive_cases": 6,
+    "blocked_cells": [
+      {
+        "comparison": "threaded",
+        "engine": "webkit",
+        "status": "blocked-unmeasured",
+        "reason": "Pinned engine retains parked atomic.wait worker locks after disposal and host termination.",
+        "excluded_workers": 8,
+        "maximum_excluded_samples": 160
+      }
+    ],
+    "promotion": false
+  },
+  "scopes": {
+    "scalar": "S33 accepted versus S34 candidate, threads disabled, page context.",
+    "threaded": "Same S34 candidate in both roles, threads required, dedicated host-worker context.",
+    "timed": "Actual asynchronous createDitherette including per-pool bootstrap/loading, bindings/memory initialization and Rayon priming.",
+    "untimed": [
+      "Host-worker startup and RPC",
+      "Package import and supplied Wasm fetch",
+      "Compiled-input preparation",
+      "Preload, exact output probes and disposal",
+      "HTTP serialization and upload"
+    ],
+    "compilation_cache": "Not reset; not cold-network or first-ever compilation evidence.",
+    "probe": {
+      "source": [
+        11,
+        23,
+        47,
+        127
+      ],
+      "width": 1,
+      "height": 1,
+      "output_width": 1,
+      "output_height": 1,
+      "filter": "nearest",
+      "anchor": "center"
+    }
+  },
+  "audit_method": {
+    "raw_inventory": "SHA-256 of UTF-8 JSON.stringify(sorted [relative_name, byte_length, file_sha256] rows), without trailing newline. Per-run inventories include every top-level regular result-directory file. Attempt01 names include the sorted result-directory prefix.",
+    "medians": "Recomputed pooled medians from 40 raw samples per role per case; exactly equal to retained report values.",
+    "exactness": "Compare each recorded output with its native recorded reference and target-local Wasm transport reference; compare both actual role outputs per pair. Validate every retained three-way exact component.",
+    "warmup_limit": "Warmup/sample probes are checked during collection; only retained final/stability outputs are available for this read-only audit.",
+    "events": "Match every started PID to one reaped event; combine all five event streams in timestamp order to compute global maximum concurrency."
+  },
+  "root_completion_audit_utc": "2026-09-08 18:13:34 UTC"
+}

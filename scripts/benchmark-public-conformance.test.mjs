@@ -114,7 +114,11 @@ test('installed package and actual TypeScript adapter conformance, without measu
 	for (const name of [
 		'benchmark-public-page.mjs',
 		'benchmark-public-timing.mjs',
+		'benchmark-stage-cache.mjs',
+		'benchmark-progress.mjs',
+		'benchmark-row-policy.mjs',
 		'benchmark-public-browser.mjs',
+		'benchmark-host-worker.mjs',
 		'benchmark-oracle-page.mjs',
 		'benchmark-transport.mjs'
 	])

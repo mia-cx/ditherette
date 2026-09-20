@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 
 use crate::image::{ImageView, ImageViewMut, Rgba8};
+use crate::prod::contract::failure::Failure;
 
 use super::plan::{AxisTap, BilinearResizePlan};
 
@@ -34,10 +35,21 @@ pub(super) fn resize_packed_rgba8_with_triangle_filter_into(
 
 pub(super) fn resize_with_scratch_into(
     source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
     vertical_row: &mut [f32],
 ) {
+    resize_with_progress(source, output, plan, vertical_row, &mut |_| Ok(()))
+        .expect("disabled progress cannot fail");
+}
+
+pub(super) fn resize_with_progress(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    vertical_row: &mut [f32],
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     let source_width = source.dimensions().width_usize();
     let source_height = source.dimensions().height_usize();
     let output_width = output.dimensions().width_usize();
@@ -53,8 +65,9 @@ pub(super) fn resize_with_scratch_into(
             output_row_len,
             plan,
             vertical_row,
-        );
-        return;
+            progress,
+        )?;
+        return Ok(());
     }
 
     if source_height == output_height {
@@ -64,8 +77,9 @@ pub(super) fn resize_with_scratch_into(
             source_row_len,
             output_row_len,
             plan,
-        );
-        return;
+            progress,
+        )?;
+        return Ok(());
     }
 
     let source_data = source.data();
@@ -84,14 +98,35 @@ pub(super) fn resize_with_scratch_into(
         {
             write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
         }
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 pub(super) fn resize_packed_rgba8_rows_with_triangle_filter_into(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    y_start: u32,
+) {
+    if plan.source_dimensions().width() != plan.output_dimensions().width()
+        && plan.source_dimensions().height() == plan.output_dimensions().height()
+    {
+        resize_rows_with_scratch_into(source, output, plan, y_start, &mut []);
+        return;
+    }
+    VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
+        vertical_row.resize(source.dimensions().width_usize() * RGBA8_CHANNELS, 0.0);
+        resize_rows_with_scratch_into(source, output, plan, y_start, vertical_row);
+    });
+}
+
+pub(super) fn resize_rows_with_scratch_into(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
     y_start: u32,
+    vertical_row: &mut [f32],
 ) {
     let source_width = source.dimensions().width_usize();
     let output_width = plan.output_dimensions().width_usize();
@@ -102,28 +137,25 @@ pub(super) fn resize_packed_rgba8_rows_with_triangle_filter_into(
     let output_data = output.data_mut();
 
     if source_width == output_width {
-        VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
-            vertical_row.resize(source_row_len, 0.0);
-            for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
-                let output_y = y_start + local_y;
-                vertical_row.fill(0.0);
-                let y_weight_sum = accumulate_vertical(
-                    source_data,
-                    source_row_len,
-                    vertical_row.as_mut_slice(),
-                    &plan.y_taps[output_y],
-                );
-                for (output_pixel, vertical_pixel) in output_row
-                    .chunks_exact_mut(RGBA8_CHANNELS)
-                    .zip(vertical_row.chunks_exact(RGBA8_CHANNELS))
-                {
-                    output_pixel[0] = round_u8(vertical_pixel[0] / y_weight_sum);
-                    output_pixel[1] = round_u8(vertical_pixel[1] / y_weight_sum);
-                    output_pixel[2] = round_u8(vertical_pixel[2] / y_weight_sum);
-                    output_pixel[3] = round_u8(vertical_pixel[3] / y_weight_sum);
-                }
+        for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
+            let output_y = y_start + local_y;
+            vertical_row.fill(0.0);
+            let y_weight_sum = accumulate_vertical(
+                source_data,
+                source_row_len,
+                vertical_row,
+                &plan.y_taps[output_y],
+            );
+            for (output_pixel, vertical_pixel) in output_row
+                .chunks_exact_mut(RGBA8_CHANNELS)
+                .zip(vertical_row.chunks_exact(RGBA8_CHANNELS))
+            {
+                output_pixel[0] = round_u8(vertical_pixel[0] / y_weight_sum);
+                output_pixel[1] = round_u8(vertical_pixel[1] / y_weight_sum);
+                output_pixel[2] = round_u8(vertical_pixel[2] / y_weight_sum);
+                output_pixel[3] = round_u8(vertical_pixel[3] / y_weight_sum);
             }
-        });
+        }
         return;
     }
 
@@ -142,25 +174,22 @@ pub(super) fn resize_packed_rgba8_rows_with_triangle_filter_into(
         return;
     }
 
-    VERTICAL_SCRATCH.with_borrow_mut(|vertical_row| {
-        vertical_row.resize(source_row_len, 0.0);
-        for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
-            let output_y = y_start + local_y;
-            vertical_row.fill(0.0);
-            let y_weight_sum = accumulate_vertical(
-                source_data,
-                source_row_len,
-                vertical_row.as_mut_slice(),
-                &plan.y_taps[output_y],
-            );
-            for (output_pixel, x_taps) in output_row
-                .chunks_exact_mut(RGBA8_CHANNELS)
-                .zip(&plan.x_taps)
-            {
-                write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
-            }
+    for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
+        let output_y = y_start + local_y;
+        vertical_row.fill(0.0);
+        let y_weight_sum = accumulate_vertical(
+            source_data,
+            source_row_len,
+            vertical_row,
+            &plan.y_taps[output_y],
+        );
+        for (output_pixel, x_taps) in output_row
+            .chunks_exact_mut(RGBA8_CHANNELS)
+            .zip(&plan.x_taps)
+        {
+            write_horizontal_pixel(output_pixel, vertical_row, x_taps, y_weight_sum);
         }
-    });
+    }
 }
 
 // ACCEPT(perf): Specializing identity-axis resizes keeps the single production
@@ -177,7 +206,8 @@ fn resize_height_only(
     output_row_len: usize,
     plan: &BilinearResizePlan,
     vertical_row: &mut [f32],
-) {
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
         vertical_row.fill(0.0);
         let y_weight_sum = accumulate_vertical(source, source_row_len, vertical_row, y_taps);
@@ -193,7 +223,9 @@ fn resize_height_only(
             output_pixel[2] = round_u8(vertical_pixel[2] / y_weight_sum);
             output_pixel[3] = round_u8(vertical_pixel[3] / y_weight_sum);
         }
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 fn resize_width_only(
@@ -202,7 +234,8 @@ fn resize_width_only(
     source_row_len: usize,
     output_row_len: usize,
     plan: &BilinearResizePlan,
-) {
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     for output_y in 0..plan.y_taps.len() {
         let source_row_start = output_y * source_row_len;
         let source_row = &source[source_row_start..source_row_start + source_row_len];
@@ -215,7 +248,9 @@ fn resize_width_only(
         {
             write_horizontal_source_pixel(output_pixel, source_row, x_taps);
         }
+        progress(output_y as u32 + 1)?;
     }
+    Ok(())
 }
 
 // NOTE(perf): This path intentionally uses f32 scratch accumulation. A f64

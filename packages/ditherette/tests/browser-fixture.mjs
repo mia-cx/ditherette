@@ -25,6 +25,8 @@ export async function browserChecks(wasmUrl) {
 	});
 	if (crossOriginIsolated) throw new Error('Scalar fixture must not require isolation headers.');
 	const processor = await createDitherette();
+	// Covers the preparation-control records while rejecting the 40,400-byte source below.
+	const boundedMemoryLimit = 32 * 1024;
 	const anchors = [
 		'top-left',
 		'top',
@@ -105,7 +107,7 @@ export async function browserChecks(wasmUrl) {
 			value.output.resize.support = { fixed: null };
 			await error(() => processor.resize(value), 'invalid-settings', 'output.resize.support');
 			value.output.resize.support = support;
-			const bounded = await createDitherette({ memoryLimitBytes: 4000 });
+			const bounded = await createDitherette({ memoryLimitBytes: boundedMemoryLimit });
 			const oversized = {
 				...value,
 				source: { width: 101, height: 100, data: new Uint8Array(101 * 100 * 4) }
@@ -131,7 +133,7 @@ export async function browserChecks(wasmUrl) {
 		}
 	}
 	let trilinearCases = 0;
-	const boundedTrilinear = await createDitherette({ memoryLimitBytes: 4000 });
+	const boundedTrilinear = await createDitherette({ memoryLimitBytes: boundedMemoryLimit });
 	for (const [anchorIndex, anchor] of anchors.entries()) {
 		// 3→2 area mip is [0,170]. Its anchored bilinear outputs are [43,85,128].
 		// The 1-pixel mip is 85. Blending at log2(3)-1 rounds to [68,85,103].
@@ -402,10 +404,8 @@ export async function browserChecks(wasmUrl) {
 	structuredClone(detached.source.data.buffer, { transfer: [detached.source.data.buffer] });
 	await error(() => active.resize(detached), 'invalid-image', 'source.data');
 	const progress = request();
-	progress.onProgress = () => {
-		throw new Error('Must not silently invoke unsupported progress');
-	};
-	await error(() => active.resize(progress), 'unsupported-operation', 'onProgress');
+	progress.onProgress = 1;
+	await error(() => active.resize(progress), 'invalid-settings', 'onProgress');
 	equal(Array.from(active.resize(request()).data), savedBytes, 'recovery after errors');
 	active.dispose();
 	return {

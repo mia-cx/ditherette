@@ -73,6 +73,39 @@ pub fn private_error_path() -> u32 {
     ERROR_PATH.with(|path| path.get() as u32)
 }
 
+/// Forced complete-call candidate for internal browser benchmarks only.
+/// The benchmark host initializes its blocking-capable worker pool before selecting bands.
+#[cfg(feature = "bench-subjects")]
+#[wasm_bindgen(js_name = privateExecutionPolicy)]
+pub fn private_execution_policy(
+    stage: u32,
+    height: u32,
+    active_workers: u32,
+    pool_size: u32,
+) -> u32 {
+    use crate::prod::{
+        pipeline::execution::{ExecutionStage, RowBandPolicy},
+        tiling::WorkerBudget,
+    };
+    let mut processor = match take_ready() {
+        Ok(processor) => processor,
+        Err(error) => return status(error),
+    };
+    let band = (height != 0).then_some(RowBandPolicy {
+        height,
+        workers: WorkerBudget::new(pool_size),
+        active_workers,
+    });
+    let result = match stage {
+        0 => processor.set_execution_stage(ExecutionStage::Resize, band),
+        1 => processor.set_execution_stage(ExecutionStage::Indexed, band),
+        2 => processor.set_execution_stage(ExecutionStage::Mixing, band),
+        _ => Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control)),
+    };
+    restore_ready(processor);
+    result.map_or_else(status, |()| 0)
+}
+
 /// Validates and preflights before priming boundary handles.
 /// A trap in this function discards the isolated factory during package initialization.
 #[wasm_bindgen(js_name = privateInitialize)]
@@ -161,7 +194,7 @@ pub fn private_resize(
                 resize: parse_resize(algorithm, anchor, support)?,
             },
         };
-        processor.resize(request, &mut JsBoundary { input, result_sink })
+        processor.resize(request, &mut JsBoundary::new(input, result_sink)?)
     })();
     // No RefCell borrow or generated &mut self borrow spans a JavaScript call.
     INSTANCE.with(|instance| *instance.borrow_mut() = Slot::Ready(processor));
@@ -207,10 +240,26 @@ pub(super) fn take_ready() -> Result<Processor, Failure> {
 pub(super) struct JsBoundary<'a> {
     pub(super) input: &'a Uint8Array,
     pub(super) result_sink: &'a JsValue,
+    progress: Option<super::progress::JsProgress<'a>>,
+}
+
+impl<'a> JsBoundary<'a> {
+    pub(super) fn new(input: &'a Uint8Array, result_sink: &'a JsValue) -> Result<Self, Failure> {
+        Ok(Self {
+            input,
+            result_sink,
+            progress: super::progress::JsProgress::new(result_sink)?,
+        })
+    }
 }
 
 impl Boundary for JsBoundary<'_> {
     type Output = ();
+    fn progress(&mut self) -> Option<&mut dyn crate::prod::pipeline::progress::Callback> {
+        self.progress
+            .as_mut()
+            .map(|progress| progress as &mut dyn crate::prod::pipeline::progress::Callback)
+    }
     fn input_len(&mut self) -> Result<usize, Failure> {
         input_length(self.input)
             .map(|length| length as usize)

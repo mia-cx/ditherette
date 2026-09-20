@@ -22,12 +22,23 @@ pub struct BuildTool {
     pub digest: Digest256,
 }
 
+/// Explicit developer feature selection, independent of the scalar or threaded variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BuildMode {
+    Public,
+    BenchSubjects,
+}
+
 /// Paths are relative to explicit source roots, never part of content identity.
+/// An absent build mode preserves compatibility with older schema-one records.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BuildProvenance {
     pub schema: u32,
     pub source_revision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_mode: Option<BuildMode>,
     pub tools: Vec<BuildTool>,
     pub inputs: Vec<BuildFile>,
     pub package: Vec<BuildFile>,

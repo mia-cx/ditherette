@@ -7,7 +7,7 @@ const glueUrl = new URL('ditherette_wasm.js', distribution);
 const compiled = await WebAssembly.compile(await readFile(new URL('ditherette_wasm_bg.wasm', distribution)));
 let instanceId = 0;
 // 2×1→3×2 owns 32 pixel bytes, three Wasm usize x offsets, and two u32 y coordinates.
-const resizeCapacity = 32 + 3 * 4 + 2 * 4;
+let resizeCapacity = 32 + 3 * 4 + 2 * 4;
 
 // Only this low-level fixture isolates generated singleton glue with fresh import URLs.
 // The shipped wrapper uses the separately tested crate-owned binding factory.
@@ -31,6 +31,22 @@ function invoke(bindings, input, ...shape) {
 	return sink.value;
 }
 const resize = (bindings, input = source()) => invoke(bindings, input, 2, 1, 3, 2, 4);
+
+// Determine the compiled preparation record using an identity's eight pixel bytes.
+// The coordinate-map and source/output capacity formula above stays independent.
+const { overhead: fixedOverhead } = await fresh(null);
+let low = fixedOverhead;
+let high = fixedOverhead + 1024;
+while (low < high) {
+	const limit = Math.floor((low + high) / 2);
+	const { bindings } = await fresh(limit);
+	const result = invoke(bindings, new Uint8Array(4), 1, 1, 1, 1, 4);
+	if (typeof result === 'number') { assert.equal(result, 8); low = limit + 1; }
+	else high = limit;
+	bindings.privateDispose();
+}
+const resizeRecordBytes = low - fixedOverhead - 8;
+resizeCapacity += resizeRecordBytes;
 
 function withCopyFailure(raw, phase, run) {
 	const original = Uint8Array.prototype.set;
@@ -74,7 +90,7 @@ test('exact capacity, one-under preflight, and tiny initialization have stable e
 	try {
 		assert.equal(resize(short.bindings), 8);
 		assert.equal(short.bindings.privateErrorPath(), 1);
-		assert.equal(copies, 0);
+		assert.equal(copies, 1); // Hash the owned snapshot before remaining execution preflight.
 	} finally { Uint8Array.prototype.set = original; }
 	assert.equal(invoke(short.bindings, source(), 2, 1, 1, 1, 4).data.length, 4);
 });
@@ -169,6 +185,46 @@ test('repeated success and caught failures keep externref capacity and live hand
 	assert.equal(raw.memory.buffer.byteLength, pages);
 });
 
+test('caught void progress rejects reentry and completion failure without retaining handles', async () => {
+	const { bindings, raw } = await fresh(4 << 20);
+	const input = source();
+	let failStage;
+	const sink = { value: undefined, onProgress(event) {
+		assert.equal(bindings.privateDispose(), 11);
+		assert.equal(bindings.privateResize(input, 2, 1, 3, 2, 0, 4, 0, {}), 11);
+		if (event.stage === 'complete') assert.equal(sink.value.data.length, 24);
+		if (event.stage === failStage) throw new Error('fixture progress failure');
+	} };
+	const call = () => {
+		sink.value = undefined;
+		return bindings.privateResize(input, 2, 1, 3, 2, 0, 4, 0, sink);
+	};
+	assert.equal(call(), 0);
+	const table = Object.values(raw).find(value => value instanceof WebAssembly.Table);
+	const live = () => Array.from({ length: table.length }, (_, index) => table.get(index))
+		.filter(value => value !== null).length;
+	const capacity = table.length;
+	const initialLive = live();
+	const pages = raw.memory.buffer.byteLength;
+	for (let iteration = 0; iteration < 512; iteration++) {
+		for (const stage of ['prepare', 'complete']) {
+			failStage = stage;
+			assert.equal(call(), 12);
+			assert.equal(bindings.privateErrorPath(), 38);
+			assert.equal(sink.value, undefined);
+		}
+		failStage = undefined;
+		assert.equal(call(), 0);
+	}
+	assert.equal(table.length, capacity);
+	assert.equal(live(), initialLive);
+	assert.equal(raw.memory.buffer.byteLength, pages);
+	const glue = await readFile(glueUrl, 'utf8');
+	for (const name of ['progressEnabled', 'progressClock', 'reportProgress'])
+		assert.match(glue, new RegExp(`handleError\\(function[^]*?\\b${name}\\(`));
+	bindings.privateDispose();
+});
+
 test('convolution ABI preserves landed output for every policy and anchor and rejects invalid discriminators', async () => {
 	const { bindings } = await fresh(10_000_000);
 	const input = new Uint8Array(Array.from({ length: 7 * 5 * 4 }, (_, i) => (i * 73) % 256));
@@ -204,8 +260,8 @@ test('convolution ABI preserves landed output for every policy and anchor and re
 
 test('trilinear exact budget, mip rounding, caught failures, and recovery use the borrowed ABI', async () => {
 	// 4x1→1x1 owns 20 input/output bytes, three 20-byte Wasm MipLevel headers,
-	// 16+8+4 mip bytes, and four f64 accumulators. The inline record is in overhead.
-	const capacity = 20 + 3 * 20 + 16 + 8 + 4 + 32;
+	// 16+8+4 mip bytes, four f64 accumulators, and the owned preparation record.
+	const capacity = resizeRecordBytes + 20 + 3 * 20 + 16 + 8 + 4 + 32;
 	const initial = await fresh(null);
 	assert.equal(initial.bindings.privateInitialize(initial.overhead + capacity), 0);
 	const { bindings, raw } = initial;

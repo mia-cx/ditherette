@@ -1,8 +1,9 @@
 /** Browser wasm-bindgen inputs. Views retain their byte offset and length. */
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
-/** Scalar is the default. Required threads are unavailable until the threaded runtime lands. */
+/** Scalar is the default. Preferred threads fall back after failed capability checks or pool initialization. */
 export interface InitOptions {
+	/** Threaded synchronous calls require a worker context permitting blocking waits. */
 	readonly threads?: 'disabled' | 'preferred' | 'required';
 	readonly memoryLimitBytes?: number;
 	readonly wasm?: InitInput;
@@ -27,7 +28,7 @@ export type ResizeAnchor =
 	| 'bottom'
 	| 'bottom-right';
 
-/** Measured processing work. Progress delivery is introduced in S33. */
+/** Measured work. Stage changes report immediately; same-stage events occur at most once per 50 ms. */
 export interface Progress {
 	readonly stage:
 		| 'prepare'
@@ -58,7 +59,7 @@ export interface ResizeRequest {
 			  }
 			| { readonly algorithm: 'area' };
 	};
-	/** Currently rejected explicitly. S33 adds progress delivery without changing this request shape. */
+	/** Synchronous progress. Throwing fails the call; processing and disposal cannot reenter this instance. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 
@@ -96,7 +97,7 @@ export interface QuantizeRequest {
 	readonly palette: readonly PaletteEntry[];
 	readonly alpha: AlphaPolicy;
 	readonly matching: Matching;
-	/** S33 adds progress delivery; supplied callbacks are explicitly rejected for now. */
+	/** Completion follows durable output construction and precedes successful cache publication. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 
@@ -137,7 +138,7 @@ export interface PerturbRequest {
 	readonly version: 1;
 	readonly source: Rgba8Image;
 	readonly perturb: PerturbPolicy;
-	/** S33 adds progress delivery; supplied callbacks are explicitly rejected for now. */
+	/** Completion follows durable output construction and precedes successful cache publication. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 
@@ -187,11 +188,11 @@ export interface ProcessRequest {
 	readonly source: Rgba8Image;
 	readonly palette: readonly PaletteEntry[];
 	readonly recipe: RecipeV1;
-	/** S33 adds delivery; supplied callbacks remain explicitly unsupported. */
+	/** Completion follows durable output construction and precedes successful cache publication. */
 	readonly onProgress?: (progress: Progress) => void;
 }
 
-/** One isolated scalar processor. Calls are synchronous; hosts choose their execution context. */
+/** One isolated processor. Calls are synchronous; hosts choose their execution context. */
 export interface Ditherette {
 	/** Apply the full recipe, preserving the same RGBA8 boundaries as staged calls. */
 	process(request: ProcessRequest): IndexedImage;

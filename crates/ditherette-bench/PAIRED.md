@@ -67,6 +67,36 @@ same-UID tampering with executables or evidence.
 
 ## Run after explicit clearance
 
+Preparation reuse cases use `preparation_integration_plan native|public DESTINATION HOST_LOAD_NOTES`.
+The helper declares four workloads in both cold and warm states, with two alternating role pairs.
+Each worker takes 20 single-call samples, 50 ms warmup, and a 10-second measurement cap.
+Running native plus Chromium, Firefox, and WebKit requires 128 serial workers.
+
+Cache metadata declares each role, for example
+`{"roles":{"accepted":"uncached","candidate":"preparation"}}`.
+Both artifacts must use the same protocol and their declared production implementation.
+Cold creates an empty processor before every call timer and disposes it after observing the output.
+Warm primes once with every red source byte XOR 255, then restores the measured input.
+The retained processor reuses preparation across ordinary calls with unchanged geometry, settings, and palette.
+Identity binds measured input bytes. Key preparation and boundary copies remain timed.
+These preparation-only artifacts do not hash source content.
+Cache cases reject throughput and initialization scopes. Historical `"none"` metadata remains supported.
+
+Image-stage reuse cases use `stage_integration_plan native|public DESTINATION HOST_LOAD_NOTES`.
+They use the same worker and sample bounds, with the matrix declared in `.plans/73-benchmark.md`.
+Their role metadata declares `"accepted":"preparation"` and `"candidate":"image-stages"`.
+Warm cases also declare `sample_prime` inside `roles`, with browser preparation `"primed-sample"`.
+Supported primes are `same-call`, `resize`, `perturb`, and `no-dither`.
+Each warm call gets a fresh processor and its declared prime outside timing.
+This includes warmup, discarded calls, and preflight. Partial-stage cases never accumulate a final-output hit across samples.
+Historical `"primed-instance"` retains its once-per-worker, changed-source preparation prime.
+
+Each stage prime's actual output must match its own target-local frozen output before timing starts.
+Every measured output is observed before teardown. Failed setup releases its processor and retains the concrete failure.
+Native Processor subjects retain their owned results until untimed observation and release prior results outside the next timer.
+Their ordinary input copies, production hashes, preparation, and durable output copies remain timed.
+Cold cases create empty processors per call and include hashing overhead when the artifact implements it.
+
 Follow [exclusive execution](EXECUTION.md). Drain agents, compilers, builds, and
 tests before setting the quiet attestation. Do not invoke Cargo during trials.
 
@@ -89,6 +119,46 @@ Machine identity contains architecture, CPU model, logical CPU count, hostname,
 OS, and kernel. This native coordinator currently requires Linux for host evidence.
 It does not certify unrelated host quiescence or stop other projects' processes.
 
+## Public initialization policies
+
+Optional `browser.threads` declares each role's existing public initialization policy:
+`disabled`, `preferred`, or `required`. Historical declarations omit it and stay scalar.
+The worker binds matching policy evidence separately from image identity. Both preload
+and measured factory calls receive the selected policy; failed required startup never retries as scalar.
+Each role's existing `AssetEntries.wasm` must point to the selected scalar or threaded bytes.
+The normal package asset tree retains factory, bootstrap, and pool-worker modules with their hashes.
+
+`startup_integration_plan regression|threaded NEW_JSON HOST_LOAD_NOTES` declares S34's
+two one-pixel nearest probes. Both use existing initialization bytes/compiled scopes,
+two role pairs, 20 single-call samples, 50 ms warmup, and a 10-second cap. Across both
+comparisons and three browsers this is 48 workers. `regression` compares S33/S34 with
+threads disabled; `threaded` uses the same S34 artifact in both roles with threads required.
+Package import and initial Wasm fetch stay untimed. Browser compilation caches are not
+reset, and each new threaded pool may still load its worker modules during initialization.
+The exact output probe and disposal remain outside every initialization timer.
+
+## Public callback comparisons
+
+Optional `browser.progress` metadata declares each role as `disabled` or `enabled`.
+Omitted metadata preserves historical requests and evidence. This development setting
+is separate from image identity and is never a public package option.
+
+These comparisons require cold, fresh-instance, single complete package calls.
+The enabled role attaches one constant-storage observer before timing. Instance setup,
+observer reset, output/source verification, progress verification, and disposal stay
+outside the timer. Public callback dispatch and the observer's bounded work stay inside.
+Every preflight, warmup, and measured call must finish with valid completion evidence.
+A transient invalid stream or thrown callback fails the trial even if a later call could recover.
+The untimed Process composition clears callback metadata and checks only output semantics.
+
+`progress_integration_plan regression|callbacks DESTINATION HOST_LOAD_NOTES` writes
+the approved S33 plans without running measurements. `regression` compares S32/S33
+with callbacks disabled. `callbacks` compares the same S33 artifact with callbacks
+disabled/enabled. Each plan contains five reused cold workloads, two role pairs,
+20 single-call samples, 50 ms warmup, and a 10-second cap. Three browser engines
+across both plans require 120 serial workers. Artifact preparation and exclusive
+measurement follow the existing controls above.
+
 ## Evidence and decisions
 
 Required cases retain full fixture/settings/artifact digests, dimensions, recipe,
@@ -107,8 +177,8 @@ Native complete quantize borrows source bytes and includes preparation, output a
 and result destruction. Packed-forward conversion excludes table construction and output
 allocation. Its per-iteration output barrier prevents dead-store removal. All native
 scopes exclude fixture decoding and verification. Public calls include the actual package
-boundary, with no benchmark-only hashing. Current package caches are absent; fresh/primed
-instances do not imply cold/warm application caches.
+boundary, with no benchmark-only hashing. Historical `"none"` metadata makes no application-cache claim;
+explicit role metadata and the lifecycle above describe cache comparisons.
 
 Native quantize and color conformance checks the outputs before and after measurement.
 It does not observe every timed output or detect transient A/B/A changes. The typed registry

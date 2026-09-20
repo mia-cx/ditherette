@@ -3,6 +3,9 @@ import {
 	collectInitializations,
 	retainedOutputSlots
 } from './benchmark-public-timing.mjs';
+import { prepareStageSample, stagePrimeRequest } from './benchmark-stage-cache.mjs';
+import { progressProbe } from './benchmark-progress.mjs';
+import { createRowBandProcessor } from './benchmark-row-policy.mjs';
 
 /** Observe the browser clock quantum without changing, retrying, or censoring operation samples. */
 export function timerResolution(now = () => performance.now()) {
@@ -17,7 +20,7 @@ export function timerResolution(now = () => performance.now()) {
 	return quantum * 1e6;
 }
 
-/** Prepare only existing public operations. No private glue, synthetic hashing, or application caches. */
+/** Prepare only existing public operations. */
 export function resizeRecipe(operation) {
 	switch (operation.operation) {
 		case 'resize-nearest':
@@ -41,11 +44,48 @@ export function resizeRecipe(operation) {
 	}
 }
 
-/** Prepare the actual package or website call outside measurement timers. */
-export async function prepareOperation(trial) {
+/** Prepare calls outside timers; diagnostic same-call primes also enter the caller's output verifier. */
+export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCallPrime = () => {}) {
 	const config = trial.case.browser;
+	const execution =
+		typeof DedicatedWorkerGlobalScope !== 'undefined' &&
+		globalThis instanceof DedicatedWorkerGlobalScope
+			? 'host-worker'
+			: 'page';
+	if ((config.execution ?? 'page') !== execution)
+		throw new Error('Browser execution context differs from the declaration.');
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
+	const packageBackend = (value) => value === 'package' || (value === 'package-staged' && config.operation.operation === 'process');
+	if (
+		config.threads !== undefined &&
+		(!config.threads ||
+			!['disabled', 'preferred', 'required'].includes(config.threads.accepted) ||
+			!['disabled', 'preferred', 'required'].includes(config.threads.candidate) ||
+			!packageBackend(config.accepted) ||
+			!packageBackend(config.candidate))
+	)
+		throw new Error('Thread policies require ordinary package calls and valid role policies.');
+	const threads = config.threads?.[trial.role] ?? 'disabled';
+	const selectedRowPolicy = config.row_policy === undefined ? undefined : {
+		stage: config.row_policy.stage,
+		parameters: config.row_policy[trial.role]
+	};
+	if (selectedRowPolicy && (execution !== 'host-worker' || threads !== 'required' || measurement.scope !== 'complete-call'))
+		throw new Error('Row policies require complete calls in a required-thread host.');
+	if (
+		config.progress !== undefined &&
+		(!config.progress ||
+			!['disabled', 'enabled'].includes(config.progress.accepted) ||
+			!['disabled', 'enabled'].includes(config.progress.candidate) ||
+			config.accepted !== 'package' ||
+			config.candidate !== 'package' ||
+			config.preparation !== 'fresh-instance' ||
+			measurement.mode !== 'single-call' ||
+			measurement.scope !== 'complete-call' ||
+			measurement.application_cache !== 'cold')
+	)
+		throw new Error('Progress comparisons require cold single ordinary package calls.');
 	const quantize = config.operation.operation === 'quantize';
 	const perturb = config.operation.operation === 'perturb';
 	const separable = config.operation.operation === 'separable';
@@ -56,8 +96,32 @@ export async function prepareOperation(trial) {
 		process || quantize || perturb || separable || diffusion || yliluoma
 			? undefined
 			: resizeRecipe(config.operation);
-	if (config.cache !== 'none' || measurement.application_cache !== 'not-applicable')
-		throw new Error('This package has no application cache.');
+	const cacheComparison = config.cache !== 'none';
+	const samplePrime = config.cache?.roles?.sample_prime;
+	if (cacheComparison) {
+		const roles = config.cache?.roles;
+		const stages = [roles?.accepted, roles?.candidate].includes('image-stages');
+		if (
+			!roles ||
+			!['uncached', 'preparation', 'image-stages'].includes(roles.accepted) ||
+			!['uncached', 'preparation', 'image-stages'].includes(roles.candidate) ||
+			Boolean(samplePrime) !== (stages && measurement.application_cache === 'warm') ||
+			measurement.mode !== 'single-call' ||
+			measurement.scope !== 'complete-call' ||
+			!['cold', 'warm'].includes(measurement.application_cache) ||
+			config.preparation !==
+				(measurement.application_cache === 'cold'
+					? 'fresh-instance'
+					: samplePrime
+						? 'primed-sample'
+						: 'primed-instance') ||
+			config.accepted !== 'package' ||
+			config.candidate !== 'package'
+		)
+			throw new Error('Invalid preparation-cache comparison.');
+	} else if (measurement.application_cache !== 'not-applicable') {
+		throw new Error('Application cache claims require role capabilities.');
+	}
 	if (measurement.mode === 'throughput' && config.preparation !== 'primed-instance')
 		throw new Error('Throughput requires a primed instance.');
 	const request = process
@@ -99,6 +163,8 @@ export async function prepareOperation(trial) {
 									}
 								})
 			};
+	const progress = config.progress?.[trial.role] === 'enabled' ? progressProbe() : undefined;
+	if (progress) request.onProgress = progress.onProgress;
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
 		if (process) throw new Error('No faithful TypeScript Process adapter is registered.');
@@ -131,11 +197,17 @@ export async function prepareOperation(trial) {
 	if (!response.ok) throw new Error(`Wasm fetch failed: ${response.status}`);
 	const bytes = await response.arrayBuffer();
 	// Load the real lazy factory module before timing. Browser compilation caches are not reset.
-	const preload = await createDitherette({ wasm: bytes });
+	const preload = await createDitherette({ wasm: bytes, threads });
 	preload.dispose();
 	const compiled =
 		config.preparation === 'initialization-bytes' ? undefined : await WebAssembly.compile(bytes);
-	const create = () => createDitherette({ wasm: compiled ?? bytes });
+	const create = async () => {
+		const initialize = () => createDitherette({ wasm: compiled ?? bytes, threads });
+		if (!selectedRowPolicy) return initialize();
+		const result = await createRowBandProcessor(initialize, selectedRowPolicy, navigator.hardwareConcurrency);
+		onRowPolicy(result.observation);
+		return result.processor;
+	};
 	const call = process
 		? (instance) =>
 				backend === 'package-staged'
@@ -166,11 +238,38 @@ export async function prepareOperation(trial) {
 	}
 	if (measurement.scope !== 'complete-call')
 		throw new Error('Browser processing requires complete-call scope.');
+	if (config.preparation === 'primed-sample') {
+		const prime = stagePrimeRequest(config.operation.operation, request, samplePrime);
+		const diagnosticPrime = samplePrime === 'same-call' && config.measure_nonexact === true;
+		if (!trial.prime_reference_output)
+			throw new Error('Stage priming requires a frozen prime output.');
+		return {
+			request,
+			prepare: () =>
+				prepareStageSample({
+					create,
+					prime: (instance) => (prime ? instance[prime.method](prime.request) : call(instance)),
+					call,
+					observePrime: (output) => {
+						assertMeasuredSource(request, trial.case.rgba);
+						const actual = verificationOutput(output);
+						if (!equalOutput(actual, trial.prime_reference_output) && !diagnosticPrime)
+							throw new Error('Stage prime differs from frozen reference; actual prime rejected before timing.');
+						// The same operation shares its final oracle and bounded instability evidence.
+						// Different-stage primes cannot use that verifier's dimensions or pixel format.
+						if (diagnosticPrime) onSameCallPrime(output);
+					}
+				}),
+			close() {}
+		};
+	}
 	if (config.preparation === 'fresh-instance') {
 		return {
 			request,
+			observe: progress?.verify,
 			prepare: async () => {
 				const instance = await create();
+				progress?.reset();
 				return { call: () => call(instance), close: () => instance.dispose() };
 			},
 			close() {}
@@ -178,12 +277,46 @@ export async function prepareOperation(trial) {
 	}
 	if (config.preparation !== 'primed-instance') throw new Error('Unknown processing preparation.');
 	const instance = await create();
+	if (cacheComparison) {
+		try {
+			primeChangedSource(request, () => call(instance));
+		} catch (error) {
+			instance.dispose();
+			throw error;
+		}
+	}
 	return {
 		request,
 		call: () => call(instance),
 		prepare: async () => ({ call: () => call(instance), close() {} }),
 		close: () => instance.dispose()
 	};
+}
+
+/** Prime preparation with different source bytes, then restore the measured request. */
+export function primeChangedSource(request, call) {
+	const measured = request.source.data;
+	const prime = measured.slice();
+	for (let index = 0; index < prime.length; index += 4) prime[index] ^= 0xff;
+	request.source.data = prime;
+	try {
+		const output = call();
+		const indexed = 'indices' in output;
+		const bytes =
+			output.width * output.height * (indexed ? 1 : 4) + (indexed ? MAX_PALETTE_BYTES : 0);
+		outputStability(bytes, indexed ? 'indexed8' : 'rgba8').observe([output]);
+	} finally {
+		request.source.data = measured;
+	}
+}
+
+/** Check every observed call so a later call cannot hide transient input mutation. */
+export function assertMeasuredSource(request, rgba) {
+	if (
+		request.source.data.length !== rgba.length ||
+		!request.source.data.every((byte, index) => byte === rgba[index])
+	)
+		throw new Error('Operation mutated source bytes.');
 }
 
 // Comparison views share buffers. Stability snapshots own separate typed storage.
@@ -323,6 +456,7 @@ export async function preflightOperation(operation, reference, observe = () => {
 		const instance = await operation.create();
 		try {
 			output = operation.probe(instance);
+			observe([output]);
 		} finally {
 			instance.dispose();
 		}
@@ -330,11 +464,11 @@ export async function preflightOperation(operation, reference, observe = () => {
 		const prepared = await operation.prepare();
 		try {
 			output = prepared.call();
+			observe([output]);
 		} finally {
 			prepared.close();
 		}
 	}
-	observe([output]);
 	const actual = verificationOutput(output);
 	if (equalOutput(actual, reference)) return undefined;
 	return actual;
@@ -376,7 +510,22 @@ export async function requireMatchingComposition(operation, current) {
 /** Invoked only by the leased transport. All serialization and observations are outside call timers. */
 export async function runTrial(trial) {
 	const resolution = timerResolution();
-	const operation = await prepareOperation(trial);
+	let rowPolicyObservation;
+	const format = ['quantize', 'separable', 'diffusion', 'yliluoma', 'process'].includes(
+		trial.case.browser.operation.operation
+	)
+		? 'indexed8'
+		: 'rgba8';
+	const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
+	// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
+	const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
+	retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
+	const stability = outputStability(outputBytes, format);
+	const operation = await prepareOperation(
+		trial,
+		(value) => { rowPolicyObservation = value; },
+		(output) => stability.observe([output])
+	);
 	try {
 		const identity = {
 			role: trial.role,
@@ -386,27 +535,37 @@ export async function runTrial(trial) {
 			settings: trial.case.identity.settings
 		};
 		const observation = {
+			get row_policy() { return rowPolicyObservation; },
+			...(trial.case.browser.execution === undefined
+				? {}
+				: { execution: trial.case.browser.execution }),
 			user_agent: navigator.userAgent,
 			cross_origin_isolated: crossOriginIsolated,
 			timer_resolution_ns: resolution
 		};
-		const format = ['quantize', 'separable', 'diffusion', 'yliluoma', 'process'].includes(
-			trial.case.browser.operation.operation
-		)
-			? 'indexed8'
-			: 'rgba8';
-		const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
-		// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
-		const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
-		retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
-		const stability = outputStability(outputBytes, format);
-		const mismatch = await preflightOperation(operation, trial.reference_output, stability.observe);
+		const observe = (outputs) => {
+			stability.observe(outputs);
+			assertMeasuredSource(operation.request, trial.case.rgba);
+			operation.observe?.();
+		};
+		const mismatch = await preflightOperation(operation, trial.reference_output, observe);
 		if (trial.case.browser.operation.operation === 'process') {
 			const comparison = await prepareOperation({
 				...trial,
 				case: {
 					...trial.case,
-					browser: { ...trial.case.browser, accepted: 'package-staged', candidate: 'package' }
+					browser: {
+						...trial.case.browser,
+						cache: 'none',
+						progress: undefined,
+						preparation:
+							trial.case.browser.preparation === 'primed-sample'
+								? 'fresh-instance'
+								: trial.case.browser.preparation,
+						accepted: 'package-staged',
+						candidate: 'package'
+					},
+					measurement: { ...trial.case.measurement, application_cache: 'not-applicable' }
 				},
 				role: trial.case.browser[trial.role] === 'package' ? 'accepted' : 'candidate'
 			});
@@ -417,8 +576,6 @@ export async function runTrial(trial) {
 				comparison.close();
 			}
 		}
-		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
-			throw new Error('Operation mutated source bytes during preflight.');
 		if (mismatch && trial.case.browser.measure_nonexact !== true)
 			return {
 				...identity,
@@ -437,17 +594,15 @@ export async function runTrial(trial) {
 						measurement,
 						create: operation.create,
 						probe: operation.probe,
-						observe: stability.observe,
+						observe,
 						outputBytes
 					})
 				: await collectCalls({
 						measurement,
 						prepare: operation.prepare,
-						observe: stability.observe,
+						observe,
 						outputBytes
 					});
-		if (!operation.request.source.data.every((byte, index) => byte === trial.case.rgba[index]))
-			throw new Error('Operation mutated source bytes.');
 		const { output, ...timings } = measured;
 		// Keep the actual timing result separate. Instability evidence is the first distinct pair,
 		// not a claim that the final timed output still differs (A/B/A must also fail).

@@ -56,23 +56,9 @@ impl RowBandPlan {
         output_dimensions: ImageDimensions,
         target_height: u32,
     ) -> Option<Self> {
-        if target_height == 0 {
-            return None;
-        }
-
-        let mut bands = Vec::new();
-        let mut y_start = 0;
-        while y_start < output_dimensions.height() {
-            let y_end = y_start
-                .saturating_add(target_height)
-                .min(output_dimensions.height());
-            bands.push(RowBand { y_start, y_end });
-            y_start = y_end;
-        }
-
         Some(Self {
             output_dimensions,
-            bands,
+            bands: bands_for_output_height(output_dimensions, target_height)?.collect(),
         })
     }
 
@@ -85,6 +71,21 @@ impl RowBandPlan {
     pub fn bands(&self) -> &[RowBand] {
         &self.bands
     }
+}
+
+/// Iterate complete output bands without allocating. The exact iterator length supports worker preflight.
+pub fn bands_for_output_height(
+    output: ImageDimensions,
+    target_height: u32,
+) -> Option<impl ExactSizeIterator<Item = RowBand>> {
+    (target_height > 0).then(|| {
+        (0..output.height())
+            .step_by(target_height as usize)
+            .map(move |y_start| RowBand {
+                y_start,
+                y_end: y_start.saturating_add(target_height).min(output.height()),
+            })
+    })
 }
 
 fn covers_output_once(output_dimensions: ImageDimensions, bands: &[RowBand]) -> bool {

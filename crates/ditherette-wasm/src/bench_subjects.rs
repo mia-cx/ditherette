@@ -7,10 +7,12 @@
 pub mod diffusion;
 pub mod field_calls;
 pub mod fields;
+pub mod preparation;
 pub mod process;
 pub mod quantize;
 pub mod reference;
 mod resize_budgeted;
+mod resize_calls;
 pub mod scores;
 mod trilinear;
 pub mod verification;
@@ -193,6 +195,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
         ),
     ];
     subjects.extend(resize_budgeted::subjects());
+    subjects.extend(resize_calls::subjects());
     subjects.extend(reference::subjects());
     subjects.extend(quantize::subjects());
     subjects.extend(scores::subjects());
@@ -201,6 +204,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(diffusion::subjects());
     subjects.extend(yiluoma::subjects());
     subjects.extend(process::subjects());
+    subjects.extend(preparation::subjects());
     subjects
 }
 

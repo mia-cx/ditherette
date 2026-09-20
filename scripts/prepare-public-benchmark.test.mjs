@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
+import {
+	buildConfiguration,
+	writeBenchmarkMarker
+} from '../crates/ditherette-wasm/scripts/build.mjs';
 import {
 	assertBuildEnvironment,
 	buildFreshPackage,
 	cleanRevision,
 	fileInventory,
-	sourceInventory
+	sourceInventory,
+	verifyPackageBuildMode
 } from './prepare-public-benchmark.mjs';
 
 test('each role rebuilds only the crate release Wasm outputs before package compilation', async (t) => {
@@ -43,6 +49,20 @@ test('each role rebuilds only the crate release Wasm outputs before package comp
 	await buildFreshPackage(directory, run);
 	await buildFreshPackage(directory, run);
 	assert.deepEqual(calls, [...expected, ...expected]);
+	calls.length = 0;
+	await buildFreshPackage(directory, run, true);
+	const packageDirectory = path.join(directory, 'packages/ditherette');
+	assert.deepEqual(calls, [
+		...expected.slice(0, 2),
+		{ program: 'pnpm', args: ['check:version'], cwd: packageDirectory },
+		...['scalar', 'threads'].map((variant) => ({
+			program: 'pnpm',
+			args: ['--filter', 'ditherette-wasm', `build:${variant}`, '--bench-subjects'],
+			cwd: directory
+		})),
+		{ program: 'node', args: ['scripts/stage-wasm.mjs'], cwd: packageDirectory },
+		{ program: 'pnpm', args: ['exec', 'tsc'], cwd: packageDirectory }
+	]);
 
 	for (const failingVariant of ['scalar', 'threads']) {
 		const attempted = [];
@@ -56,6 +76,83 @@ test('each role rebuilds only the crate release Wasm outputs before package comp
 		);
 		assert.ok(attempted.every((program) => program === 'cargo'));
 	}
+});
+
+test('developer builds only add the explicit benchmark feature to normal compiler commands', async () => {
+	for (const variant of ['scalar', 'threads']) {
+		const normal = await buildConfiguration(variant);
+		const developer = await buildConfiguration(variant, true);
+		assert.deepEqual(developer, {
+			...normal,
+			args: [...normal.args, '--features', 'bench-subjects']
+		});
+		assert.ok(!normal.args.includes('bench-subjects'));
+		assert.ok(normal.args.includes('--locked'));
+		assert.ok(normal.rustFlags.includes('link-arg=--max-memory=2147483648'));
+		assert.equal(normal.threaded, variant === 'threads');
+	}
+	await assert.rejects(buildConfiguration('unknown'), /Expected scalar or threads/);
+});
+
+test('both artifact variants require matching developer markers and raw Wasm exports', async (t) => {
+	const directory = await mkdtemp(path.join(tmpdir(), 'ditherette-build-mode-'));
+	t.after(() => rm(directory, { recursive: true, force: true }));
+	const header = [0, 97, 115, 109, 1, 0, 0, 0];
+	const name = Buffer.from('privateExecutionPolicy');
+	const developer = Buffer.from([
+		...header,
+		1,
+		4,
+		1,
+		96,
+		0,
+		0, // One no-argument function type.
+		3,
+		2,
+		1,
+		0, // One function.
+		7,
+		name.length + 4,
+		1,
+		name.length,
+		...name,
+		0,
+		0, // Its developer export.
+		10,
+		4,
+		1,
+		2,
+		0,
+		11 // An empty function body.
+	]);
+	for (const variant of ['scalar', 'threads']) {
+		const output = path.join(directory, 'dist/wasm', variant);
+		await mkdir(output, { recursive: true });
+		await writeFile(path.join(output, 'ditherette_wasm_bg.wasm'), Buffer.from(header));
+	}
+	await verifyPackageBuildMode(directory, false);
+	await assert.rejects(verifyPackageBuildMode(directory, true), /build mode/);
+	for (const variant of ['scalar', 'threads']) {
+		const output = path.join(directory, 'dist/wasm', variant);
+		await writeFile(path.join(output, 'ditherette_wasm_bg.wasm'), developer);
+	}
+	await assert.rejects(verifyPackageBuildMode(directory, true), /benchmark build marker/);
+	for (const variant of ['scalar', 'threads']) {
+		const output = path.join(directory, 'dist/wasm', variant);
+		await writeBenchmarkMarker(pathToFileURL(`${output}/`), variant);
+		assert.deepEqual(JSON.parse(await readFile(path.join(output, 'build-mode.json'))), {
+			schema: 1,
+			mode: 'bench-subjects',
+			variant
+		});
+	}
+	await verifyPackageBuildMode(directory, true);
+	await assert.rejects(verifyPackageBuildMode(directory, false), /build mode/);
+	await writeFile(
+		path.join(directory, 'dist/wasm/threads/build-mode.json'),
+		'{"schema":1,"mode":"bench-subjects","variant":"scalar"}\n'
+	);
+	await assert.rejects(verifyPackageBuildMode(directory, true), /threads developer artifact/);
 });
 
 test('source provenance rejects dirty input and records every tracked byte', async (t) => {

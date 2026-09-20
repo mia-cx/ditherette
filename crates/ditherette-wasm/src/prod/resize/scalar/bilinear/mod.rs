@@ -90,6 +90,42 @@ pub fn resize_bilinear_rgba8_rows_with_plan_into(
     kernel::resize_packed_rgba8_rows_with_triangle_filter_into(source, output, plan, y_start);
 }
 
+/// Execute an absolute row band using only the caller's reserved f32 scratch.
+/// Insufficient scratch fails before writes; identity plans need no taps or scratch.
+pub fn resize_bilinear_rgba8_rows_with_plan_and_scratch_into(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    y_start: u32,
+    scratch: &mut [f32],
+) -> Result<(), crate::prod::contract::failure::Failure> {
+    use crate::prod::contract::{
+        error::ErrorCode,
+        failure::{ErrorPath, Failure},
+    };
+    common::rgba8::assert_packed_source(source, "bilinear");
+    common::rgba8::assert_packed_output(&output, "bilinear");
+    assert_eq!(source.dimensions(), plan.source_dimensions());
+    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    let required = plan.scratch_elements();
+    if scratch.len() < required {
+        return Err(Failure::new(
+            ErrorCode::MemoryLimit,
+            ErrorPath::MemoryLimitBytes,
+        ));
+    }
+    if plan.is_identity() {
+        let start = y_start as usize * source.stride().elements();
+        let end = start + output.data().len();
+        output
+            .data_mut()
+            .copy_from_slice(&source.data()[start..end]);
+        return Ok(());
+    }
+    kernel::resize_rows_with_scratch_into(source, output, plan, y_start, &mut scratch[..required]);
+    Ok(())
+}
+
 /// Resize packed RGBA8 `source` into packed RGBA8 `output` with cached metadata.
 pub fn resize_bilinear_rgba8_with_plan_into(
     source: ImageView<'_, Rgba8>,
@@ -112,10 +148,22 @@ pub fn resize_bilinear_rgba8_with_plan_into(
 /// Execute the landed full-call kernel with caller-owned, already-reserved scratch.
 pub fn resize_bilinear_rgba8_with_plan_and_scratch_into(
     source: ImageView<'_, Rgba8>,
-    mut output: ImageViewMut<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
     plan: &BilinearResizePlan,
     scratch: &mut [f32],
 ) {
+    resize_bilinear_with_progress(source, output, plan, scratch, &mut |_| Ok(()))
+        .expect("disabled progress cannot fail");
+}
+
+/// Reports completed rows from the existing caller-scratch dispatch.
+pub(crate) fn resize_bilinear_with_progress(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    plan: &BilinearResizePlan,
+    scratch: &mut [f32],
+    progress: &mut impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+) -> Result<(), crate::prod::contract::failure::Failure> {
     common::rgba8::assert_packed_source(source, "bilinear");
     common::rgba8::assert_packed_output(&output, "bilinear");
     assert_eq!(source.dimensions(), plan.source_dimensions());
@@ -123,9 +171,9 @@ pub fn resize_bilinear_rgba8_with_plan_and_scratch_into(
     assert_eq!(scratch.len(), plan.scratch_elements());
     if plan.is_identity() {
         output.data_mut().copy_from_slice(source.data());
-        return;
+        return progress(output.dimensions().height());
     }
-    kernel::resize_with_scratch_into(source, output, plan, scratch);
+    kernel::resize_with_progress(source, output, plan, scratch, progress)
 }
 
 fn assert_row_band_matches_plan(

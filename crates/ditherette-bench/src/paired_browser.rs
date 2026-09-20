@@ -176,6 +176,8 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
             preparation: browser.preparation,
             cache: browser.cache,
             measure_nonexact: browser.measure_nonexact,
+            progress: browser.progress,
+            threads: browser.threads,
             observation: measured.observation,
         }),
     };

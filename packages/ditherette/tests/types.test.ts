@@ -10,6 +10,13 @@ import type {
 	ProcessRequest
 } from '../src/index.js';
 
+const progress: NonNullable<ProcessRequest['onProgress']> = (event) => {
+	const stage: import('../src/index.js').Progress['stage'] = event.stage;
+	const completed: number | undefined = event.completed;
+	const total: number | undefined = event.total;
+	void [stage, completed, total];
+};
+
 const request: ResizeRequest = {
 	version: 1,
 	source: { width: 1, height: 1, data: new Uint8Array(4) },
@@ -21,6 +28,7 @@ const processor: Promise<Ditherette> = createDitherette({
 });
 processor.then((instance) => {
 	const image: Rgba8Image = instance.resize(request);
+	instance.resize({ ...request, onProgress: progress });
 	image.data[0] = 255;
 	instance.dispose();
 	// @ts-expect-error Process settings belong inside the versioned recipe.
