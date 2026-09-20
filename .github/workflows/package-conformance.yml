@@ -79,6 +79,11 @@ jobs:
         run: pnpm --filter ditherette-wasm test:conformance:threads | tee target/conformance-threads.log
       - name: Actual automatic policies in Chromium and Firefox
         run: pnpm --filter ditherette-wasm test:conformance:automatic | tee target/conformance-automatic.log
+      - name: Website cancellation and faithful fallback
+        run: |
+          pnpm exec svelte-kit sync
+          pnpm exec vitest run --project server src/lib/processing/client.spec.ts src/lib/processing/worker-pipeline.spec.ts src/lib/processing/package-fallback.spec.ts src/lib/processing/schemas.spec.ts src/lib/stores/app.spec.ts
+          pnpm exec vitest run --project client src/lib/processing/package-pipeline.browser.spec.ts src/lib/processing/package-fallback.browser.spec.ts
       - name: Report coverage limits
         if: always()
         run: |

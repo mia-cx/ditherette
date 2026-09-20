@@ -33,6 +33,22 @@ const settings: ProcessingSettings = {
 const source = { width: 1, height: 1, data: new Uint8ClampedArray([0, 0, 0, 255]) };
 
 describe('website package request', () => {
+	it('borrows contiguous source rows with their original byte offset', () => {
+		const backing = Uint8ClampedArray.from({ length: 18 }, (_, index) => index);
+		const image = { width: 2, height: 2, data: backing.subarray(1, 17) };
+		for (const crop of [undefined, { x: 0, y: 1, width: 2, height: 1 }]) {
+			const { request } = packageProcessRequest(
+				image,
+				palette,
+				{ ...settings, output: { ...settings.output, crop } },
+				settings.output
+			);
+			const start = crop ? 9 : 1;
+			expect(request.source.data.buffer).toBe(backing.buffer);
+			expect(request.source.data.byteOffset).toBe(start);
+			expect([...request.source.data]).toEqual([...backing.subarray(start, 17)]);
+		}
+	});
 	it('maps the existing settings to the public process contract', () => {
 		const { request, warnings } = packageProcessRequest(source, palette, settings, settings.output);
 		expect(request).toEqual({
