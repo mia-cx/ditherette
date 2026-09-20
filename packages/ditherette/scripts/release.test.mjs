@@ -27,6 +27,8 @@ test('release identity is unscoped browser ESM and exact stable 0.x tags', () =>
 		{ sideEffects: true },
 		{ exports: { ...manifest.exports, './raw': './dist/scalar.js' } },
 		{ dependencies: { other: '1.0.0' } },
+		{ optionalDependencies: { other: '1.0.0' } },
+		{ peerDependencies: { other: '1.0.0' } },
 		{ publishConfig: { ...manifest.publishConfig, tag: 'beta' } }
 	])
 		assert.throws(() => validateManifest({ ...manifest, ...change }));
@@ -83,6 +85,14 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 	assert.equal(sizeReview({ ...sizes, tarball: { ...baseline, gzip: 111 } }, policy).length, 1);
 	assert.equal(sizeReview({ ...sizes, files: [{ path: 'new', ...baseline }] }, policy).length, 1);
 	assert.equal(sizeReview(sizes, { ...policy, baseline: null }).length, 1);
+	assert.throws(
+		() => sizeReview(sizes, { ...policy, baseline: { file: { ...baseline, brotli: undefined } } }),
+		/Baseline file\.brotli must be finite/
+	);
+	assert.throws(
+		() => sizeReview(sizes, { ...policy, baseline: { file: { ...baseline, raw: Number.NaN } } }),
+		/Baseline file\.raw must be finite/
+	);
 	const environment = {
 		GITHUB_REF_NAME: 'v0.1.0',
 		GITHUB_REF_TYPE: 'tag',

@@ -21,11 +21,12 @@ export function validateManifest(manifest) {
 	assert.deepEqual(manifest.files, ['dist', 'README.md', 'LICENSE']);
 	assert.equal(manifest.repository.url, 'https://github.com/mia-cx/ditherette.git');
 	assert.equal(manifest.repository.directory, 'packages/ditherette');
-	assert.equal(
-		Object.keys(manifest.dependencies ?? {}).length,
-		0,
-		'Runtime assets are self-contained.'
-	);
+	for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies'])
+		assert.equal(
+			Object.keys(manifest[section] ?? {}).length,
+			0,
+			`Runtime assets are self-contained; ${section} must be empty.`
+		);
 }
 
 /** Reject stale/debug payloads while retaining the private JS helpers required by Wasm. */
@@ -85,6 +86,13 @@ export function sizeReview(sizes, policy) {
 	assert.equal(policy.schema, 1);
 	assert.equal(policy.maximumGrowth, 0.1);
 	if (!policy.baseline) return ['Initial size baseline is not recorded.'];
+	for (const [path, baseline] of Object.entries(policy.baseline))
+		for (const metric of ['raw', 'gzip', 'brotli'])
+			assert.equal(
+				Number.isFinite(baseline?.[metric]),
+				true,
+				`Baseline ${path}.${metric} must be finite.`
+			);
 	const findings = [];
 	for (const item of [...sizes.files, { path: '$tarball', ...sizes.tarball }]) {
 		const baseline = policy.baseline[item.path];
