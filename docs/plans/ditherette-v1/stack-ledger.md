@@ -1,5 +1,13 @@
 # Ditherette v1 implementation stack
 
+## Performance and release preparation merged on 2026-09-20
+
+PR #163 merged as `9e57b24d` from exact-head-approved `d9baacec`. Its twelve linked issues closed. The parent verified all CI, exact-head Pullfrog approval, zero unresolved threads, and the normal frozen check. The retained nearest scalar sources were rebuilt byte-for-byte against their recorded artifacts. That evidence verifies historical source and artifact identity only. It adds no new timing claim. Issue #149 and the release holds remain open.
+
+PR #164 merged as `85d5fb5a` from exact-head-approved `7534bc9f`; issue #84 closed. Fresh scalar and threaded preparation plus offline verification pass. The retained tarball SHA-256 is `ba9804b7a066e04df7f61a9639196cf3b693d8d926aa73acabdc487c81dee357`. The parent verified all CI, exact-head Pullfrog approval, and zero unresolved threads. No tag, release, or npm publication was created.
+
+Both completed worktrees detached after their targets were cleared. PR #165 remains in babysitting. PRs #133 and #134 remain held. Historical reports, source retention, dependencies, and release holds remain unchanged.
+
 ## Verification merged on 2026-09-20; performance next
 
 PR #162 merged as `39fc28c0` from `5ceaa701`. Issues #82, #83, and #85 closed. The parent verified all CI, exact-head Pullfrog approval, five resolved threads, and the final diagnostic fix. The normal frozen check passes. Scalar browser checks pass 17/17, threaded Chromium/Firefox 12/12, automatic policy 23/23, and focused transport tests 15/15. Bounded capped diagnostics preserve exact raw evidence without full pixel JSON or PNG copies. This does not certify new timings or remove release holds.
