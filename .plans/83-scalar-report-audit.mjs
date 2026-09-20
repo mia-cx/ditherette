@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
@@ -17,20 +18,21 @@ const countBy = (values) => values.reduce((counts, value) => {
   return counts;
 }, {});
 
-function audit(directory) {
-  const read = (name) => readFileSync(resolve(directory, name));
-  const reportBytes = read('report.json');
-  const preparedBytes = read('prepared.json');
-  const eventBytes = read('events.jsonl');
-  const report = JSON.parse(reportBytes);
-  const prepared = JSON.parse(preparedBytes);
-  const events = eventBytes.toString().trim().split('\n').map((line) =>
-    JSON.parse(line.replace(/"unix_ns":(\d+)/, '"unix_ns":"$1"')));
+export function auditLifecycle(events, expectedOrder) {
+  const expectedEvents = expectedOrder.flatMap((trial) => [
+    { state: 'starting', trial },
+    { state: 'started', trial },
+    { state: 'reaped', trial },
+  ]);
+  assert.equal(events.length, expectedEvents.length, 'each trial must have one complete lifecycle');
   const live = new Map();
   const reaped = new Map();
   let maximumLive = 0;
   let previous = 0n;
-  for (const event of events) {
+  for (const [index, event] of events.entries()) {
+    const expected = expectedEvents[index];
+    assert.equal(event.state, expected.state, `event ${index} must be ${expected.state}`);
+    assert.equal(event.trial, expected.trial, `event ${index} has the wrong trial`);
     assert(BigInt(event.unix_ns) >= previous, 'event timestamps must be ordered');
     previous = BigInt(event.unix_ns);
     if (event.state === 'started') {
@@ -42,13 +44,26 @@ function audit(directory) {
       assert.equal(live.get(event.trial), event.pid, 'reap must match its started pid');
       live.delete(event.trial);
       reaped.set(event.trial, event.pid);
-    } else assert.equal(event.state, 'starting');
+    }
   }
   assert.equal(live.size, 0, 'all workers must be reaped');
+  assert.equal(events.at(-1).state, 'reaped', 'journal must end with a reap');
+  return { maximumLive, reaped };
+}
+
+function audit(directory) {
+  const read = (name) => readFileSync(resolve(directory, name));
+  const reportBytes = read('report.json');
+  const preparedBytes = read('prepared.json');
+  const eventBytes = read('events.jsonl');
+  const report = JSON.parse(reportBytes);
+  const prepared = JSON.parse(preparedBytes);
+  const events = eventBytes.toString().trim().split('\n').map((line) =>
+    JSON.parse(line.replace(/"unix_ns":(\d+)/, '"unix_ns":"$1"')));
   const expectedOrder = Array.from({ length: prepared.experiment.pairs }, (_, pair) =>
     prepared.experiment.cases.flatMap((_, index) => (pair % 2 ? ['candidate', 'accepted'] : ['accepted', 'candidate'])
       .map((role) => `pair-${String(pair).padStart(3, '0')}-case-${String(index).padStart(3, '0')}-${role}`))).flat();
-  assert.deepEqual(events.filter((event) => event.state === 'started').map((event) => event.trial), expectedOrder);
+  const { maximumLive, reaped } = auditLifecycle(events, expectedOrder);
   const byCase = new Map();
   const builds = new Map();
   const workerDigests = createHash('sha256');
@@ -116,5 +131,7 @@ function audit(directory) {
     final_reap_utc: new Date(Number(BigInt(events.at(-1).unix_ns) / 1000000n)).toISOString(), cases };
 }
 
-assert(process.argv.length > 2, 'supply at least one result directory');
-console.log(JSON.stringify(process.argv.slice(2).map(audit)));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  assert(process.argv.length > 2, 'supply at least one result directory');
+  console.log(JSON.stringify(process.argv.slice(2).map(audit)));
+}
