@@ -17,6 +17,8 @@ export function normalizedArguments(args, environment) {
 	if (args.some((arg) => arg.startsWith('@'))) {
 		throw new Error('Recorded paired builds do not accept compiler response files');
 	}
+	const autocfgProbe =
+		args.includes('--crate-type=lib') && args.includes('--emit=llvm-ir') && args.at(-1) === '-';
 	const normalized = [];
 	for (let i = 0; i < args.length; i += 1) {
 		const arg = args[i];
@@ -42,6 +44,15 @@ export function normalizedArguments(args, environment) {
 			continue;
 		}
 		if (/^-C(metadata|extra-filename)=/.test(arg)) continue;
+		if (
+			autocfgProbe &&
+			arg === '--crate-name' &&
+			/^autocfg_[0-9a-f]{16}_[0-9]+$/.test(args[i + 1] ?? '')
+		) {
+			normalized.push(arg, args[i + 1].replace(/^autocfg_[0-9a-f]{16}_/, 'autocfg_<probe>_'));
+			i += 1;
+			continue;
+		}
 		if (arg === '--extern') {
 			normalized.push(arg, args[++i].split('=')[0]);
 			continue;
