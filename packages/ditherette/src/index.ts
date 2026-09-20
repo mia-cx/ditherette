@@ -53,7 +53,19 @@ export async function createDitherette(options?: InitOptions): Promise<Ditherett
 			} catch (error) {
 				if (error instanceof DitheretteError && error.code === 'memory-limit') throw error;
 				if (normalized.threads === 'required') {
-					throw new DitheretteError('initialization', 'threads', 'Required threaded initialization is unavailable.');
+					if (error instanceof DitheretteError && error.code === 'wasm-memory-unavailable')
+						throw error;
+					if (error instanceof RangeError)
+						throw new DitheretteError(
+							'wasm-memory-unavailable',
+							'wasm',
+							'The browser could not allocate or copy processing memory.'
+						);
+					throw new DitheretteError(
+						'initialization',
+						'threads',
+						'Required threaded initialization is unavailable.'
+					);
 				}
 			}
 		} else if (normalized.threads === 'required') {
