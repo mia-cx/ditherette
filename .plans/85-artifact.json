@@ -1,0 +1,103 @@
+{
+	"schema": 1,
+	"status": "release-blocked",
+	"build_source_revision": "c43cea1269fcd666835d41c07d82a1c451604107",
+	"validated_fixture_revision": "f331ffcfde354726d8f1266e3839dbc6bffef1e0",
+	"build_mode": "public",
+	"source_files": 1286,
+	"source_inventory_sha256": "11756f2596600ea3190a9906a69224ba5f51eb1e14696468c6a02fa1fb446079",
+	"artifacts": {
+		"ditherette.tgz": {
+			"bytes": 407888,
+			"sha256": "78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90"
+		},
+		"build-provenance.json": {
+			"bytes": 726612,
+			"sha256": "b74925b9b2d046c9eabe6fe63e1677e5c3412a472413904b472da1fb42a1565f"
+		},
+		"oracle-manifest.json": {
+			"bytes": 103552,
+			"sha256": "47e40893f0cb2dd329da5596639c8072cd8e100eab00ab35026b0f12b77baa75"
+		},
+		"yliluoma-conformance.json": {
+			"bytes": 405547,
+			"sha256": "89670b9abf869de1c9db9192bdfa3dfbb778e3d3ea151170f88543100b75aca8"
+		}
+	},
+	"package_file_inventory": {
+		"reference": "84-package-sizes.json",
+		"sha256": "e461e12f45e91bad4b0677d8ffbd2712de4b24dc3785aa92b34b77ab1f7cf118",
+		"files": 48,
+		"all_files_and_sizes_equal": true
+	},
+	"sizes": {
+		"raw": 1190912,
+		"gzip": 407888,
+		"brotli": 277574,
+		"sha256": "78a3d5b7321a3dfca8eeb9ee956796a9b6f62d5b2ada94a5f89aada1600c0b90"
+	},
+	"wasm": [
+		{
+			"path": "dist/wasm/scalar/ditherette_wasm_bg.wasm",
+			"sha256": "cdc795079ed5f8f0d635d9d59b78fdcf6b5f4abced1d836fda4fb5827933189e",
+			"raw": 380928,
+			"gzip": 167411,
+			"brotli": 134397
+		},
+		{
+			"path": "dist/wasm/threads/ditherette_wasm_bg.wasm",
+			"sha256": "eddd706d6137587124db9575f52ffe756dba040a2b99085e3ae451b1b5dcd4e2",
+			"raw": 548630,
+			"gzip": 202542,
+			"brotli": 160932
+		}
+	],
+	"evidence": {
+		"83-anchors.json": "42c932997f6d2d212272d4ed9fa5c799fed3642b3b4dfb09ea6731992c99bee3",
+		"83-matrix.json": "684de29b62d9f0ef78a81c06f7f860d820f987f48bab601655d7411b68a6fd20",
+		"83-automatic-continuation.json": "a6aee990b3956e36fb1b403de7d91ba0b0cecf4787cd65b0ad7e6f5199030428"
+	},
+	"reused_native": {
+		"source_revision": "bdbcb3c812701d50f157a12d7f157138f10b4013",
+		"scalar_passed": 424,
+		"threaded_passed": 425,
+		"threaded_lifecycle_passed": 12
+	},
+	"fresh_checks": {
+		"native_protocol_and_matrix": 49,
+		"javascript_and_release": 40,
+		"public_interface": 42,
+		"staging": 2,
+		"generated_glue": 4,
+		"website_server": 68,
+		"website_chromium": 6,
+		"scalar_browser_conformance": 17,
+		"automatic_browser_conformance": 23
+	},
+	"scalar_memory": {
+		"initial_bytes": 1179648,
+		"steady_bytes": 1245184,
+		"repeated_bytes": [1245184, 1245184],
+		"boundary_high_water_bytes": 3145728,
+		"processing_capacity_budget_bytes": 262144,
+		"boundary_capacity_budget_bytes": 8388608,
+		"engines": ["chromium", "firefox", "webkit"]
+	},
+	"browsers": {
+		"chromium": "147.0.7727.15",
+		"firefox": "148.0.2",
+		"webkit": "26.4",
+		"playwright": "1.59.1"
+	},
+	"release_gate": {
+		"confirmed_regressions": 18,
+		"missing_scalar_release_cells": 21,
+		"automatic": {
+			"pass": 15,
+			"regression": 2,
+			"incorrect": 2,
+			"inconclusive": 1
+		},
+		"approved": false
+	}
+}

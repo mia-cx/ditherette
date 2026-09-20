@@ -182,6 +182,7 @@ pub fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 candidate_subject: subject.into(),
                 native: (!public).then_some(native.clone()),
                 browser: public.then_some(BrowserCase {
+                    retained_output_limit_bytes: None,
                     execution: None,
                     row_policy: None,
                     operation: operation.clone(),

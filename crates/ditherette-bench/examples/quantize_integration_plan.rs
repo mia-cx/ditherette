@@ -94,6 +94,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
                 subject.clone(),
                 subject,
                 Some(BrowserCase {
+                    retained_output_limit_bytes: None,
                     execution: None,
                     row_policy: None,
                     operation,

@@ -390,6 +390,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         warnings: vec![],
     };
     let browser = BrowserCase {
+        retained_output_limit_bytes: None,
         execution: None,
         row_policy: None,
         operation: PublicOperation::ResizeNearest {

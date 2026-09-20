@@ -9,6 +9,7 @@ export async function stageHostAssets(bundle, root, fixture, wasm) {
 		'benchmark-host-worker',
 		'benchmark-public-page',
 		'benchmark-public-timing',
+		'benchmark-indexed-wire',
 		'benchmark-stage-cache',
 		'benchmark-progress',
 		'benchmark-row-policy'

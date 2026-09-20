@@ -32,6 +32,7 @@ fn experiment(public: bool, notes: String) -> io::Result<Experiment> {
     let mut cases = Vec::new();
     for (name, native) in recipes {
         let browser = public.then(|| BrowserCase {
+            retained_output_limit_bytes: None,
             execution: None,
             row_policy: None,
             operation: blue_noise::public(&native),

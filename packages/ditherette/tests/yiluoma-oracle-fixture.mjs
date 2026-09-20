@@ -47,6 +47,10 @@ export async function prepareYliluomaOracle(directory) {
 		new URL('../../../scripts/benchmark-oracle-page.mjs', import.meta.url),
 		join(assetRoot, 'scripts/benchmark-oracle-page.mjs')
 	);
+	await cp(
+		new URL('../../../scripts/benchmark-indexed-wire.mjs', import.meta.url),
+		join(assetRoot, 'scripts/benchmark-indexed-wire.mjs')
+	);
 	return {
 		manifest,
 		records,

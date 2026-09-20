@@ -1,8 +1,11 @@
 import {
 	collectCalls,
 	collectInitializations,
-	retainedOutputSlots
+	retainedOutputSlots,
+	RETAINED_OUTPUT_LIMIT,
+	MAX_RETAINED_OUTPUT_LIMIT
 } from './benchmark-public-timing.mjs';
+import { encodeOutput, decodeOutput, usesIndexedWire } from './benchmark-indexed-wire.mjs';
 import { prepareStageSample, stagePrimeRequest } from './benchmark-stage-cache.mjs';
 import { progressProbe } from './benchmark-progress.mjs';
 import { createRowBandProcessor } from './benchmark-row-policy.mjs';
@@ -56,7 +59,8 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 		throw new Error('Browser execution context differs from the declaration.');
 	const backend = config[trial.role];
 	const measurement = trial.case.measurement;
-	const packageBackend = (value) => value === 'package' || (value === 'package-staged' && config.operation.operation === 'process');
+	const packageBackend = (value) =>
+		value === 'package' || (value === 'package-staged' && config.operation.operation === 'process');
 	if (
 		config.threads !== undefined &&
 		(!config.threads ||
@@ -67,11 +71,17 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 	)
 		throw new Error('Thread policies require ordinary package calls and valid role policies.');
 	const threads = config.threads?.[trial.role] ?? 'disabled';
-	const selectedRowPolicy = config.row_policy === undefined ? undefined : {
-		stage: config.row_policy.stage,
-		parameters: config.row_policy[trial.role]
-	};
-	if (selectedRowPolicy && (execution !== 'host-worker' || threads !== 'required' || measurement.scope !== 'complete-call'))
+	const selectedRowPolicy =
+		config.row_policy === undefined
+			? undefined
+			: {
+					stage: config.row_policy.stage,
+					parameters: config.row_policy[trial.role]
+				};
+	if (
+		selectedRowPolicy &&
+		(execution !== 'host-worker' || threads !== 'required' || measurement.scope !== 'complete-call')
+	)
 		throw new Error('Row policies require complete calls in a required-thread host.');
 	if (
 		config.progress !== undefined &&
@@ -167,14 +177,12 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 	if (progress) request.onProgress = progress.onProgress;
 	const url = (entry) => new URL(`/${entry}`, location.href).href;
 	if (backend === 'typescript') {
-		if (process) throw new Error('No faithful TypeScript Process adapter is registered.');
 		if (yliluoma) throw new Error('No faithful TypeScript Yliluoma adapter is registered.');
 		if (perturb || separable || diffusion)
 			throw new Error('No faithful TypeScript field adapter is registered.');
-		if (quantize) throw new Error('No faithful TypeScript indexed quantize adapter is registered.');
-		if (resize.algorithm === 'bicubic' || resize.algorithm === 'trilinear')
+		if (resize?.algorithm === 'bicubic' || resize?.algorithm === 'trilinear')
 			throw new Error('The website has no bicubic or trilinear implementation.');
-		if ('anchor' in resize && resize.anchor !== 'center')
+		if (resize && 'anchor' in resize && resize.anchor !== 'center')
 			throw new Error('TypeScript non-center resize is unavailable.');
 		if (
 			measurement.scope !== 'complete-call' ||
@@ -182,11 +190,13 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 		)
 			throw new Error('TypeScript has no Wasm initialization or processor-instance equivalent.');
 		// TypeScript is stateless: both labels execute its ordinary per-call preparation.
-		const { resize: resizeTypeScript } = await import(url(trial.browser.assets.entries.typescript));
+		const adapter = await import(url(trial.browser.assets.entries.typescript));
+		const call =
+			process || quantize ? adapter.prepareIndexed(request) : () => adapter.resize(request);
 		return {
 			request,
-			call: () => resizeTypeScript(request),
-			prepare: async () => ({ call: () => resizeTypeScript(request), close() {} }),
+			call,
+			prepare: async () => ({ call, close() {} }),
 			close() {}
 		};
 	}
@@ -204,7 +214,11 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 	const create = async () => {
 		const initialize = () => createDitherette({ wasm: compiled ?? bytes, threads });
 		if (!selectedRowPolicy) return initialize();
-		const result = await createRowBandProcessor(initialize, selectedRowPolicy, navigator.hardwareConcurrency);
+		const result = await createRowBandProcessor(
+			initialize,
+			selectedRowPolicy,
+			navigator.hardwareConcurrency
+		);
 		onRowPolicy(result.observation);
 		return result.processor;
 	};
@@ -254,7 +268,9 @@ export async function prepareOperation(trial, onRowPolicy = () => {}, onSameCall
 						assertMeasuredSource(request, trial.case.rgba);
 						const actual = verificationOutput(output);
 						if (!equalOutput(actual, trial.prime_reference_output) && !diagnosticPrime)
-							throw new Error('Stage prime differs from frozen reference; actual prime rejected before timing.');
+							throw new Error(
+								'Stage prime differs from frozen reference; actual prime rejected before timing.'
+							);
 						// The same operation shares its final oracle and bounded instability evidence.
 						// Different-stage primes cannot use that verifier's dimensions or pixel format.
 						if (diagnosticPrime) onSameCallPrime(output);
@@ -340,8 +356,9 @@ function outputView(output) {
 	};
 }
 
-export function verificationOutput(output) {
+export function verificationOutput(output, compact = false) {
 	const view = outputView(output);
+	if (compact) return encodeOutput(view);
 	return {
 		...view,
 		pixels:
@@ -362,7 +379,7 @@ const MAX_WARNING_CHARACTERS = 88;
 const WARNING_CODES = new Set(['palette-truncated', 'transparent-only', 'transparent-fallback']);
 
 /** Require independent records and durable buffers; retain only the first and first distinct result. */
-export function outputStability(outputBytes, format = 'rgba8') {
+export function outputStability(outputBytes, format = 'rgba8', compact = false) {
 	let first;
 	let firstSnapshot;
 	let distinct;
@@ -439,16 +456,16 @@ export function outputStability(outputBytes, format = 'rgba8') {
 		evidence(finalOutput) {
 			return distinct
 				? {
-						unstable_output: verificationOutput(firstSnapshot),
-						output: verificationOutput(distinct)
+						unstable_output: verificationOutput(firstSnapshot, compact),
+						output: verificationOutput(distinct, compact)
 					}
-				: { output: verificationOutput(finalOutput) };
+				: { output: verificationOutput(finalOutput, compact) };
 		}
 	};
 }
 
 /** Compare one untimed actual call with worker-supplied frozen bytes; return concrete mismatch evidence. */
-export async function preflightOperation(operation, reference, observe = () => {}) {
+export async function preflightOperation(operation, reference, observe = () => {}, typed = false) {
 	if (!reference || !['rgba8', 'indexed8'].includes(reference.pixels.format))
 		throw new Error('Browser trial requires frozen RGBA8 or indexed reference_output.');
 	let output;
@@ -469,7 +486,7 @@ export async function preflightOperation(operation, reference, observe = () => {
 			prepared.close();
 		}
 	}
-	const actual = verificationOutput(output);
+	const actual = typed ? outputView(output) : verificationOutput(output);
 	if (equalOutput(actual, reference)) return undefined;
 	return actual;
 }
@@ -499,11 +516,18 @@ export function equalOutput(actual, expected) {
 }
 
 /** Fail before timing when the equivalent production composition differs; retain both concrete outputs. */
-export async function requireMatchingComposition(operation, current) {
-	const counterpart = await preflightOperation(operation, current);
+export async function requireMatchingComposition(operation, current, compact = false) {
+	const counterpart = await preflightOperation(operation, current, undefined, compact);
 	if (counterpart)
 		throw new Error(
-			`Process differs from staged production before timing: ${JSON.stringify({ current, counterpart })}`
+			`Process differs from staged production before timing: ${JSON.stringify(
+				compact
+					? {
+							current: { dimensions: current.dimensions, format: current.pixels.format },
+							counterpart: { dimensions: counterpart.dimensions, format: counterpart.pixels.format }
+						}
+					: { current, counterpart }
+			)}`
 		);
 }
 
@@ -519,11 +543,40 @@ export async function runTrial(trial) {
 	const pixels = trial.case.identity.output.width * trial.case.identity.output.height;
 	// Indexed records reserve the maximum palette plus the collector's fixed metadata allowance.
 	const outputBytes = format === 'indexed8' ? pixels + MAX_PALETTE_BYTES : pixels * 4;
-	retainedOutputSlots(1, outputBytes); // Bound the first probe and retained evidence before producing either.
-	const stability = outputStability(outputBytes, format);
+	const retainedOutputLimit = trial.case.browser.retained_output_limit_bytes;
+	const compact = usesIndexedWire(trial);
+	if (compact) {
+		const config = trial.case.browser;
+		const measurement = trial.case.measurement;
+		if (
+			!Number.isSafeInteger(retainedOutputLimit) ||
+			retainedOutputLimit <= RETAINED_OUTPUT_LIMIT ||
+			retainedOutputLimit > MAX_RETAINED_OUTPUT_LIMIT ||
+			format !== 'indexed8' ||
+			config.accepted !== 'package' ||
+			config.candidate !== 'package' ||
+			config.preparation !== 'fresh-instance' ||
+			config.cache?.roles?.sample_prime !== undefined ||
+			measurement.scope !== 'complete-call' ||
+			measurement.mode !== 'single-call' ||
+			measurement.application_cache !== 'cold' ||
+			trial.prime_reference_output !== undefined
+		)
+			throw new Error(
+				'Capped indexed wire requires a cold fresh single package call without priming and a >64–384 MiB limit.'
+			);
+		trial = {
+			...trial,
+			reference_output: decodeOutput(trial.reference_output, trial.case.identity.output)
+		};
+	}
+	retainedOutputSlots(1, outputBytes, retainedOutputLimit); // Bound probes before producing either result.
+	const stability = outputStability(outputBytes, format, compact);
 	const operation = await prepareOperation(
 		trial,
-		(value) => { rowPolicyObservation = value; },
+		(value) => {
+			rowPolicyObservation = value;
+		},
 		(output) => stability.observe([output])
 	);
 	try {
@@ -535,7 +588,9 @@ export async function runTrial(trial) {
 			settings: trial.case.identity.settings
 		};
 		const observation = {
-			get row_policy() { return rowPolicyObservation; },
+			get row_policy() {
+				return rowPolicyObservation;
+			},
 			...(trial.case.browser.execution === undefined
 				? {}
 				: { execution: trial.case.browser.execution }),
@@ -548,7 +603,7 @@ export async function runTrial(trial) {
 			assertMeasuredSource(operation.request, trial.case.rgba);
 			operation.observe?.();
 		};
-		const mismatch = await preflightOperation(operation, trial.reference_output, observe);
+		const mismatch = await preflightOperation(operation, trial.reference_output, observe, compact);
 		if (trial.case.browser.operation.operation === 'process') {
 			const comparison = await prepareOperation({
 				...trial,
@@ -562,16 +617,18 @@ export async function runTrial(trial) {
 							trial.case.browser.preparation === 'primed-sample'
 								? 'fresh-instance'
 								: trial.case.browser.preparation,
-						accepted: 'package-staged',
-						candidate: 'package'
+						accepted: 'package',
+						candidate: 'package',
+						// Keep role policies paired with this trial's package and Wasm assets.
+						[trial.role]:
+							trial.case.browser[trial.role] === 'package' ? 'package-staged' : 'package'
 					},
 					measurement: { ...trial.case.measurement, application_cache: 'not-applicable' }
-				},
-				role: trial.case.browser[trial.role] === 'package' ? 'accepted' : 'candidate'
+				}
 			});
 			try {
 				const current = mismatch ?? trial.reference_output;
-				await requireMatchingComposition(comparison, current);
+				await requireMatchingComposition(comparison, current, compact);
 			} finally {
 				comparison.close();
 			}
@@ -583,7 +640,7 @@ export async function runTrial(trial) {
 				iterations_per_sample: 0,
 				warmup_iterations: 0,
 				warmup_elapsed_ns: 0,
-				output: mismatch,
+				output: compact ? encodeOutput(mismatch) : mismatch,
 				observation,
 				timing_skipped: 'reference-mismatch'
 			};
@@ -595,13 +652,15 @@ export async function runTrial(trial) {
 						create: operation.create,
 						probe: operation.probe,
 						observe,
-						outputBytes
+						outputBytes,
+						retainedOutputLimit
 					})
 				: await collectCalls({
 						measurement,
 						prepare: operation.prepare,
 						observe,
-						outputBytes
+						outputBytes,
+						retainedOutputLimit
 					});
 		const { output, ...timings } = measured;
 		// Keep the actual timing result separate. Instability evidence is the first distinct pair,

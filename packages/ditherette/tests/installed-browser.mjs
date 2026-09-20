@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, firefox, webkit } from 'playwright';
+import { browserEngines, browserLaunchOptions } from './browser-engines.mjs';
 import { startAssetServer, restrictContext } from '../../../scripts/benchmark-public-browser.mjs';
 
 /** Install an explicit tarball and run one caller-visible fixture in each browser engine. */
@@ -61,12 +61,9 @@ export async function installedBrowserChecks(t, check, expected, options = {}) {
 			})
 	);
 	const vectors = JSON.parse(await readFile(new URL('./fixtures/fields.json', import.meta.url)));
-	for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
+	for (const [name, engine] of browserEngines()) {
 		await t.test(name, async () => {
-			const browser = await engine.launch({
-				executablePath:
-					name === 'webkit' ? process.env.DITHERETTE_TEST_WEBKIT_EXECUTABLE : undefined
-			});
+			const browser = await engine.launch(browserLaunchOptions(name));
 			try {
 				const context = await browser.newContext();
 				await restrictContext(context, server);

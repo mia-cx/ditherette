@@ -46,6 +46,7 @@ pub fn case(
         anchor: Anchor::Center,
     };
     let browser = BrowserCase {
+        retained_output_limit_bytes: None,
         execution: None,
         row_policy: None,
         operation,
