@@ -1,5 +1,13 @@
 # Ditherette v1 implementation stack
 
+## Fixture maintenance and website integration merged on 2026-09-20
+
+PR #169 merged as `3c1c16f0` from exact-head-approved `bd9b45f8`, closing #168. Its one-line fixture-maintenance change disables temporary repository maintenance only while that fixture exists. The policy exception applies only to #169. All 15 guard tests, trace checks, all other CI, and exact-head Pullfrog approval pass. It has no child work. Frozen policy and production guard behavior remain unchanged.
+
+PR #165 merged as `9f85ff4e` from exact-head-approved `f4c0bccb`, closing #80 and #81. The normal frozen check, all CI, exact-head Pullfrog approval, and three resolved threads pass. Its final 15 guard tests, 38 website/typecheck checks, and earlier six Chromium fixtures pass. Parent verification reverted speculative timer fix `3284e1bf` as `ee713991` before merge. No new timing result, release, deployment, or publication is claimed.
+
+All six consolidated PRs #160 through #165 are merged. Only #133 and #134 remain held. Issue #149, publication, and WebKit holds remain open. Completed target paths are absent; final agent cleanup verification remains pending. Historical reports, source retention, dependencies, and release holds remain unchanged.
+
 ## Performance and release preparation merged on 2026-09-20
 
 PR #163 merged as `9e57b24d` from exact-head-approved `d9baacec`. Its twelve linked issues closed. The parent verified all CI, exact-head Pullfrog approval, zero unresolved threads, and the normal frozen check. The retained nearest scalar sources were rebuilt byte-for-byte against their recorded artifacts. That evidence verifies historical source and artifact identity only. It adds no new timing claim. Issue #149 and the release holds remain open.
