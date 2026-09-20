@@ -42,7 +42,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
             "native worker rejects browser assets".into(),
         ));
     }
-    let build = BuildIdentity::current();
+    let build = crate::build_identity();
     if !build.recorded {
         return Err(BenchError::Config(
             "paired trials require a fresh compiler-recorded build; use scripts/build-paired-benchmarks.mjs"

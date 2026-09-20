@@ -40,66 +40,51 @@ async function fixture(t) {
 
 function metadata(executable, revision) {
 	return {
-		build: { revision, dirty: false, rustc: 'rustc fixture; host: fixture', tool_version: '0.1.0' },
+		build: {
+			revision,
+			dirty: false,
+			rustc: 'rustc fixture; host: fixture',
+			tool_version: '0.1.0',
+			configuration: '{"schema":"ditherette-rustc-recipe-v1"}',
+			recorded: true
+		},
 		executable: [...createHash('sha256').update(readFileSync(executable)).digest()]
 	};
 }
 
-test('native roles clean exactly three local release packages before the unchanged build recipe', async (t) => {
+test('native preparation delegates to the recorded builder and receives named artifacts', async (t) => {
 	const { source, target } = await fixture(t);
 	const calls = [];
-	const run = (program, args, cwd) => calls.push({ program, args, cwd });
-	for (let role = 0; role < 2; role++) await buildFreshNative(source, target, run);
-	const manifest = path.join(source, 'crates/ditherette-bench/Cargo.toml');
-	const expected = [
+	const artifacts = [
+		'ditherette-bench\t' + path.join(target, 'release/ditherette-bench'),
+		'ditherette-bench-pair\t' + path.join(target, 'release/ditherette-bench-pair')
+	].join('\n');
+	const run = (program, args, cwd) => {
+		calls.push({ program, args, cwd });
+		return artifacts;
+	};
+	assert.deepEqual(await buildFreshNative(source, target, run), {
+		'ditherette-bench': path.join(target, 'release/ditherette-bench'),
+		'ditherette-bench-pair': path.join(target, 'release/ditherette-bench-pair')
+	});
+	assert.deepEqual(calls, [
 		{
-			program: 'cargo',
-			args: [
-				'+1.97.0',
-				'clean',
-				'--manifest-path',
-				manifest,
-				'--package',
-				'ditherette-bench',
-				'--package',
-				'ditherette-bench-api',
-				'--package',
-				'ditherette-wasm',
-				'--release',
-				'--target-dir',
-				target
-			],
-			cwd: source
-		},
-		{
-			program: 'cargo',
-			args: [
-				'+1.97.0',
-				'build',
-				'--manifest-path',
-				manifest,
-				'--bins',
-				'--examples',
-				'--release',
-				'--locked',
-				'--target-dir',
-				target
-			],
+			program: process.execPath,
+			args: [path.join(source, 'scripts/build-paired-benchmarks.mjs'), source, target],
 			cwd: source
 		}
-	];
-	assert.deepEqual(calls, [...expected, ...expected]);
-	let count = 0;
+	]);
 	await assert.rejects(
 		buildFreshNative(source, target, () => {
-			count++;
-			throw new Error('clean failed');
+			throw new Error('recorded build failed');
 		}),
-		/clean failed/
+		/recorded build failed/
 	);
-	assert.equal(count, 1);
 	for (const invalid of ['relative', '/'])
-		await assert.rejects(buildFreshNative(source, invalid, run), /explicit absolute target/);
+		await assert.rejects(
+			buildFreshNative(source, invalid, run),
+			/explicit absolute new build directory/
+		);
 });
 
 test('native preparation verifies copied binaries before writing handoff provenance', async (t) => {
@@ -108,12 +93,16 @@ test('native preparation verifies copied binaries before writing handoff provena
 	const destination = path.join(base, 'prepared');
 	const result = await prepareNativeBenchmark(destination, target, source, (program, args) => {
 		commands.push({ program, args });
-		if (program === 'cargo') return '';
+		if (program === process.execPath)
+			return [
+				'ditherette-bench\t' + path.join(target, 'release/ditherette-bench'),
+				'ditherette-bench-pair\t' + path.join(target, 'release/ditherette-bench-pair')
+			].join('\n');
 		assert.deepEqual(args, ['build-info']);
 		assert.equal(path.dirname(program), destination);
 		return JSON.stringify(metadata(program, revision));
 	});
-	assert.equal(commands.length, 4);
+	assert.equal(commands.length, 3);
 	assert.equal(result.source_revision, revision);
 	assert.equal(Object.keys(result.executables).length, 2);
 	assert.deepEqual(
@@ -130,7 +119,12 @@ test('native preparation verifies copied binaries before writing handoff provena
 	const rejected = path.join(base, 'rejected');
 	await assert.rejects(
 		prepareNativeBenchmark(rejected, target, source, (program) =>
-			program === 'cargo' ? '' : JSON.stringify(metadata(program, '0'.repeat(40)))
+			program === process.execPath
+				? [
+						'ditherette-bench\t' + path.join(target, 'release/ditherette-bench'),
+						'ditherette-bench-pair\t' + path.join(target, 'release/ditherette-bench-pair')
+					].join('\n')
+				: JSON.stringify(metadata(program, '0'.repeat(40)))
 		),
 		/embedded clean revision/
 	);
@@ -155,6 +149,12 @@ test('metadata rejects stale revision, dirty output, bad digest, malformed JSON 
 		},
 		(info) => {
 			info.build.tool_version = '';
+		},
+		(info) => {
+			info.build.recorded = false;
+		},
+		(info) => {
+			info.build.configuration = '';
 		}
 	]) {
 		await assert.rejects(

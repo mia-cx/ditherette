@@ -20,63 +20,53 @@ const runCommand = (program, args, cwd) =>
 		maxBuffer: 16 * 1024 ** 2
 	});
 
-/** Invalidate only local release packages, preserving downloaded dependency caches. */
+/** Build both native executables into a new directory with compiler-recorded provenance. */
 export async function buildFreshNative(directory, target, run = runCommand) {
 	if (!path.isAbsolute(target) || path.parse(target).root === target) {
-		throw new Error('Native preparation requires an explicit absolute target directory.');
+		throw new Error('Native preparation requires an explicit absolute new build directory.');
 	}
-	const config = path.join(directory, 'rust-toolchain.toml');
-	const channel = (await readFile(config, 'utf8')).match(/^channel = "([^"]+)"$/m)?.[1];
-	if (!channel) throw new Error(`Missing compiler channel in ${config}`);
-	const manifest = path.join(directory, 'crates/ditherette-bench/Cargo.toml');
-	run(
-		'cargo',
-		[
-			`+${channel}`,
-			'clean',
-			'--manifest-path',
-			manifest,
-			'--package',
-			'ditherette-bench',
-			'--package',
-			'ditherette-bench-api',
-			'--package',
-			'ditherette-wasm',
-			'--release',
-			'--target-dir',
-			target
-		],
+	const output = run(
+		process.execPath,
+		[path.join(directory, 'scripts/build-paired-benchmarks.mjs'), directory, target],
 		directory
 	);
-	run(
-		'cargo',
-		[
-			`+${channel}`,
-			'build',
-			'--manifest-path',
-			manifest,
-			'--bins',
-			'--examples',
-			'--release',
-			'--locked',
-			'--target-dir',
-			target
-		],
-		directory
-	);
+	const artifacts = {};
+	for (const line of output.trim().split('\n').filter(Boolean)) {
+		const [name, executable, ...extra] = line.split('\t');
+		if (extra.length || !name || !path.isAbsolute(executable ?? '')) {
+			throw new Error('Recorded builder emitted an invalid executable artifact.');
+		}
+		if (Object.hasOwn(artifacts, name)) {
+			throw new Error(`Recorded builder emitted duplicate ${name} artifacts.`);
+		}
+		artifacts[name] = executable;
+	}
+	for (const name of ['ditherette-bench', 'ditherette-bench-pair']) {
+		if (!artifacts[name]) throw new Error(`Recorded builder omitted ${name}.`);
+	}
+	return artifacts;
 }
 
 /** Verify copied executable metadata against clean source and its complete observed bytes. */
 export async function verifyNativeExecutable(executable, revision, run = runCommand) {
 	const before = digest(await readFile(executable));
 	const info = JSON.parse(run(executable, ['build-info'], path.dirname(executable)));
+	let configuration;
+	try {
+		configuration = JSON.parse(info.build?.configuration);
+	} catch {
+		configuration = null;
+	}
 	if (
 		info.build?.revision !== revision ||
 		info.build?.dirty !== false ||
+		info.build?.recorded !== true ||
 		typeof info.build?.rustc !== 'string' ||
 		!info.build.rustc.startsWith('rustc ') ||
 		typeof info.build?.tool_version !== 'string' ||
 		!info.build.tool_version ||
+		typeof info.build?.configuration !== 'string' ||
+		configuration?.schema !== 'ditherette-rustc-recipe-v1' ||
 		JSON.stringify(info.executable) !== JSON.stringify(before) ||
 		JSON.stringify(digest(await readFile(executable))) !== JSON.stringify(before)
 	) {
@@ -101,11 +91,11 @@ export async function prepareNativeBenchmark(
 	const revision = cleanRevision(directory);
 	const inputs = await sourceInventory(directory);
 	await mkdir(destination);
-	await buildFreshNative(directory, target, run);
+	const built = await buildFreshNative(directory, target, run);
 	const executables = {};
 	for (const name of ['ditherette-bench', 'ditherette-bench-pair']) {
 		const executable = path.join(destination, name);
-		await copyFile(path.join(target, 'release', name), executable);
+		await copyFile(built[name], executable);
 		await chmod(executable, 0o555);
 		executables[name] = {
 			path: executable,
@@ -129,7 +119,7 @@ export async function prepareNativeBenchmark(
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	if (process.argv.length !== 4)
 		throw new Error(
-			'Usage: prepare-native-benchmark.mjs NEW_OUTPUT_DIRECTORY ABSOLUTE_TARGET_DIRECTORY'
+			'Usage: prepare-native-benchmark.mjs NEW_OUTPUT_DIRECTORY ABSOLUTE_NEW_BUILD_DIRECTORY'
 		);
 	const destination = path.resolve(process.argv[2]);
 	const { source_revision, executables } = await prepareNativeBenchmark(

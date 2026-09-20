@@ -29,7 +29,7 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
                 .into(),
         ));
     }
-    let build = BuildIdentity::current();
+    let build = crate::build_identity();
     if build.dirty
         || build.revision != request.executable.revision
         || content_digest(

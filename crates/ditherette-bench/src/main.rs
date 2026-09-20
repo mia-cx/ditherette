@@ -23,6 +23,7 @@ mod util;
 mod wasm_resize;
 
 use ditherette_bench::lease::{require_quiet, BenchmarkGuard};
+use ditherette_bench::paired::BuildIdentity;
 use std::{env, process::ExitCode};
 
 use cli::help_text;
@@ -43,6 +44,18 @@ fn main() -> ExitCode {
     }
 }
 
+/// Recorded provenance belongs to this final binary, not its shared library.
+fn build_identity() -> BuildIdentity {
+    BuildIdentity {
+        revision: env!("DITHERETTE_BENCH_REVISION").into(),
+        dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
+        rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
+        tool_version: env!("CARGO_PKG_VERSION").into(),
+        configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
+        recorded: env!("DITHERETTE_BENCH_RECORDED_BUILD") == "true",
+    }
+}
+
 fn run() -> Result<(), BenchError> {
     let guard = BenchmarkGuard::acquire().map_err(BenchError::io)?;
     let mut args = env::args().skip(1).collect::<Vec<_>>();
@@ -58,7 +71,7 @@ fn run() -> Result<(), BenchError> {
         }
         println!(
             "{}",
-            ditherette_bench::paired::build_info_json().map_err(BenchError::io)?
+            ditherette_bench::paired::build_info_json(build_identity()).map_err(BenchError::io)?
         );
         return Ok(());
     }

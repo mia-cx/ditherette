@@ -2,7 +2,7 @@
 
 use ditherette_bench::{
     browser_assets::{self, BrowserSources},
-    paired::{coordinator, Experiment, Gate, PreparedPair},
+    paired::{coordinator, BuildIdentity, Experiment, Gate, PreparedPair},
 };
 use std::{env, fs, io, path::Path, process::ExitCode};
 
@@ -17,12 +17,27 @@ fn main() -> ExitCode {
     }
 }
 
+/// Recorded provenance belongs to this final binary, not its shared library.
+fn build_identity() -> BuildIdentity {
+    BuildIdentity {
+        revision: env!("DITHERETTE_BENCH_REVISION").into(),
+        dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
+        rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
+        tool_version: env!("CARGO_PKG_VERSION").into(),
+        configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
+        recorded: env!("DITHERETTE_BENCH_RECORDED_BUILD") == "true",
+    }
+}
+
 fn run() -> io::Result<bool> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
         [command] if command == "build-info" => {
             let _guard = ditherette_bench::lease::BenchmarkGuard::acquire()?;
-            println!("{}", ditherette_bench::paired::build_info_json()?);
+            println!(
+                "{}",
+                ditherette_bench::paired::build_info_json(build_identity())?
+            );
             Ok(true)
         }
         [command, path, notes] if command == "control-plan" => {
