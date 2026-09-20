@@ -4,9 +4,9 @@
 
 PR #169 merged as `3c1c16f0` from exact-head-approved `bd9b45f8`, closing #168. Its one-line fixture-maintenance change disables temporary repository maintenance only while that fixture exists. The policy exception applies only to #169. All 15 guard tests, trace checks, all other CI, and exact-head Pullfrog approval pass. It has no child work. Frozen policy and production guard behavior remain unchanged.
 
-PR #165 merged as `9f85ff4e` from exact-head-approved `f4c0bccb`, closing #80 and #81. The normal frozen check, all CI, exact-head Pullfrog approval, and three resolved threads pass. Its final 15 guard tests, 38 website/typecheck checks, and earlier six Chromium fixtures pass. Parent verification reverted speculative timer fix `3284e1bf` as `ee713991` before merge. No new timing result, release, deployment, or publication is claimed.
+PR #165 merged as `9f85ff4e` from exact-head-approved `f4c0bccb`, closing #80 and #81. The normal frozen check, all CI, exact-head Pullfrog approval, and three resolved threads pass. Its final 15 guard tests, 38 website tests, typecheck, and earlier six Chromium fixtures pass. Parent verification reverted speculative timer fix `3284e1bf` as `ee713991` before merge. No new timing result, release, deployment, or publication is claimed.
 
-All six consolidated PRs #160 through #165 are merged. Only #133 and #134 remain held. Issue #149, publication, and WebKit holds remain open. Completed target paths are absent; final agent cleanup verification remains pending. Historical reports, source retention, dependencies, and release holds remain unchanged.
+All six consolidated PRs #160 through #165 are merged. Only #133 and #134 remain held. Issue #149, publication, and WebKit holds remain open. Final cleanup is verified. The parent found and cleared a missed 99 MiB release syntax target; all completed task targets are absent. Worktrees are clean and detached, with evidence and package artifacts retained. Historical reports, source retention, dependencies, and release holds remain unchanged.
 
 ## Performance and release preparation merged on 2026-09-20
 
