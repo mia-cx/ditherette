@@ -197,7 +197,7 @@ export function normalizeInitInput(value: InitInput | undefined): InitInput | un
 	}
 }
 
-function rgbaBytes(value: unknown, expectedBytes: number): Uint8Array {
+export function rgbaBytes(value: unknown, expectedBytes: number): Uint8Array {
 	if (
 		!ArrayBuffer.isView(value) ||
 		arrayTag.call(value) !== 'Uint8Array' ||
