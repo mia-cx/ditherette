@@ -33,7 +33,7 @@ jobs:
           node-version: '24.19.0'
       - name: Install pinned build and publication tools
         run: |
-          npm install --global npm@11.17.0 pnpm@11.13.0
+          npm install --global npm@11.17.0 pnpm@11.13.1
           pnpm install --frozen-lockfile
           rustup show
           rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown

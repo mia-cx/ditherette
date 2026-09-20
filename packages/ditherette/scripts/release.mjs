@@ -35,7 +35,7 @@ const serialize = (value) => `${JSON.stringify(value, null, 2)}\n`;
 async function tools() {
 	const workspace = await json(join(root, 'package.json'));
 	const crate = await json(join(root, 'crates/ditherette-wasm/package.json'));
-	assert.equal(workspace.packageManager, 'pnpm@11.13.0');
+	assert.equal(workspace.packageManager, 'pnpm@11.13.1');
 	assert.equal(workspace.engines.node, '24.19.0');
 	assert.equal(crate.devDependencies['wasm-pack'], '0.15.0');
 	for (const [file, channel] of [
@@ -57,7 +57,7 @@ async function tools() {
 		threadedRustc: command('rustc', ['+nightly-2024-08-02', '--version', '--verbose'])
 	};
 	assert.equal(result.node, 'v24.19.0');
-	assert.equal(result.pnpm, '11.13.0');
+	assert.equal(result.pnpm, '11.13.1');
 	assert.equal(result.npm, '11.17.0');
 	assert.equal(result.wasmPack, 'wasm-pack 0.15.0');
 	return result;

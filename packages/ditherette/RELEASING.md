@@ -68,6 +68,6 @@ default, but staging requires a separate human approval before the package goes
 live. Choosing staged publication would require a separately approved workflow
 and release-procedure change; it is not silently substituted here.
 
-The checked tools are Node 24.19.0, pnpm 11.13.0, npm 11.17.0, wasm-pack 0.15.0,
+The checked tools are Node 24.19.0, pnpm 11.13.1, npm 11.17.0, wasm-pack 0.15.0,
 Rust 1.97.0, and the genuine `nightly-2024-08-02` threaded compiler. The frozen
 build guard remains authoritative for compiler identity and flags.
