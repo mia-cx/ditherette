@@ -1,5 +1,13 @@
 # Ditherette v1 implementation stack
 
+## Core merged on 2026-09-20; runtime next
+
+PR #160 merged as `de9158cc` from `ec3b0aac`. Issues #67–#71 closed and local main fast-forwarded. PR #161 was retargeted to main before the merge. The parent verified all CI, exact-head Pullfrog approval, zero unresolved threads, and unchanged frozen/shared/optimized resize files. Full native Wasm and benchmark suites, frozen-oracle 8/8, private ABI 16/16, package interface 33/33, and installed-package conformance in all three browsers pass. The normal frozen-reference check passes without an exception.
+
+PR #161 restacks its local `45420454` fixes next. Its two WebKit worker-lock failures reproduce on the pre-fix branch and with a minimal Wasm atomic-wait module without Ditherette. They match the existing engine-specific threaded release hold in `.plans/76-threaded-init.md`. Keep the failing assertions and release hold; no browser blacklist, scheduler change, or passing-WebKit-lifecycle claim is authorized.
+
+PR #163 also has local `1e960a58` correcting changed-source copy-failure fixtures, plus `5fdb3333` requiring canonical native reference identity and `724ac46a` validating complete lifecycle journals. The fixture edits have syntax checks only pending a current Wasm build. Focused native provenance and three lifecycle checks pass; the parent reran the lifecycle checks. These remain unpushed pending their parents.
+
 ## Babysitting resumed on 2026-09-20; isolated guard amendment merged
 
 Mia authorizes babysitting and merging the consolidated stack. The earlier stop after consolidation is lifted. Website rollout #133 and legacy retirement #134 remain held; no publication or deployment is authorized.
