@@ -20,6 +20,12 @@ coordinator approval and explicit ownership first.
 - [x] Add the approved indexed-only wire envelope and tiny decoder tests.
 - [x] Record required wiring, transport blockers, and a quiet-window resource plan.
 
+## #162 capped diagnostic repair
+
+- [x] Decode the capped wire without pixel-sized JSON value trees.
+- [x] Retain capped reference and instability diagnostics as metadata, counts, and digests.
+- [x] Prove the compact diagnostic shape with a small indexed output and focused native tests.
+
 ## Findings
 
 The required case is `capped-indexed-8192x8192`. It runs Process from a 1x1
@@ -94,12 +100,16 @@ Known live storage includes about 320 MiB package scratch, at most 320 MiB plus
 small metadata in collector/evidence slots, and 64 MiB typed reference indices.
 Encoding one output temporarily holds up to two 128 MiB hex representations.
 Node retains up to three 128 MiB hex strings and one combined JSON string.
-Rust holds the incoming line, its parsed strings, and decoded byte vectors.
-These phases are sequential but garbage collection and Wasm high-water memory
-can retain earlier allocations. The frozen oracle still constructs its original
-JSON number array once; its own allocation peak has not been measured. The
-initial native reference JSON also remains on the existing transport input path.
-The host's 5.7 GiB available RAM therefore requires the held real resource check.
+Rust holds the incoming line, typed envelope strings, and decoded byte vectors.
+The capped decoder does not construct pixel-sized JSON values or number arrays.
+After validation, capped reference and instability diagnostics stream metadata,
+index counts, SHA-256 digests, palette metadata, and warnings. The raw compact
+transport JSON keeps the exact browser evidence, while the request already
+retains its frozen native reference. Capped derived diagnostics do not create
+full review JSON or PNG copies. Validation can still render one RGBA image at a
+time, and the frozen oracle still constructs its original JSON number array
+once. Their actual peaks remain unmeasured. The host's 5.7 GiB available RAM
+therefore requires the held real resource check.
 
 ## Focused results
 
@@ -124,6 +134,24 @@ The host's 5.7 GiB available RAM therefore requires the held real resource check
   frozen oracle Rust crate, and frozen-guard files are unchanged.
 - All owned jobs exited. The only returned compiler output is
   `.worktrees/v1-s41-capped-transport/target/compiler` (1.7 GiB, rebuildable).
+
+## #162 diagnostic repair result
+
+The capped Rust decoder now deserializes typed envelopes directly. It validates
+canonical hex and restores only the exact `Vec<u8>` needed by the existing
+verifier. It never converts those bytes into `serde_json::Value` number arrays.
+
+For capped runs, `reference-diagnostics.json` and an unstable trial's derived
+`transport.json` are bounded envelopes. They retain case and trial metadata,
+dimensions, indexed palette metadata and warnings, index count, and a SHA-256
+digest for every retained output. The already-written raw transport response
+keeps the complete compact hex evidence. Uncapped trials keep their existing
+full JSON and PNG review bundles.
+
+The red small-scale native test expected the bounded schema but found the old
+full result document. After the change it verifies the bounded schema, index
+count, absent index array, and absent pixel review bundles. It does not allocate
+the 8192 by 8192 output, run a browser, build a package, or collect timings.
 
 ## Deliberate diagnostic limitation
 
