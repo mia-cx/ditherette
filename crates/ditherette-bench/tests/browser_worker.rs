@@ -753,3 +753,34 @@ fn capped_unstable_diagnostics_retain_summaries_not_pixel_arrays() {
     assert!(!directory.join("first-distinct-output").exists());
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn capped_reference_mismatch_retains_bounded_summary_without_review_pixels() {
+    let (request, mut result) = capped_indexed_fixture();
+    result.timing_skipped = Some(TimingSkipped::ReferenceMismatch);
+    result.sample_ns.clear();
+    result.iterations_per_sample = 0;
+    result.warmup_iterations = 0;
+    result.warmup_elapsed_ns = 0;
+    if let Pixels::Indexed8 { palette_rgba, .. } = &mut result.output.pixels {
+        palette_rgba[0] = 9;
+    }
+    validate_response(&request, &result).unwrap();
+    let directory = std::env::temp_dir().join(format!(
+        "ditherette-browser-capped-mismatch-{}",
+        std::process::id()
+    ));
+    preserve_reference_mismatch(&request, &result, &directory).unwrap();
+    let diagnostic: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("results.json")).unwrap()).unwrap();
+    assert_eq!(
+        diagnostic["schema"],
+        "ditherette-capped-reference-mismatch-v1"
+    );
+    assert_eq!(diagnostic["actual_output"]["pixels"]["index_count"], 1);
+    assert!(diagnostic["actual_output"]["pixels"]
+        .get("indices")
+        .is_none());
+    assert!(!directory.join("candidate.png").exists());
+    std::fs::remove_dir_all(directory).unwrap();
+}
