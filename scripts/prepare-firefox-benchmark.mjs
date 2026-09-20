@@ -5,16 +5,94 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const runtimeEntry = 'chrome/juggler/content/content/Runtime.js';
-const constructor = 'this._debugger = new Debugger();';
 const allowWasm = 'this._debugger.allowUnobservedWasm = true;';
+
+function tokens(source) {
+	const result = [];
+	let index = 0;
+	while (index < source.length) {
+		if (/\s/.test(source[index])) {
+			index += 1;
+			continue;
+		}
+		if (source.startsWith('//', index)) {
+			const end = source.indexOf('\n', index + 2);
+			index = end === -1 ? source.length : end + 1;
+			continue;
+		}
+		if (source.startsWith('/*', index)) {
+			const end = source.indexOf('*/', index + 2);
+			if (end === -1) return null;
+			index = end + 2;
+			continue;
+		}
+		if (source[index] === '"' || source[index] === "'" || source[index] === '`') {
+			const quote = source[index++];
+			while (index < source.length) {
+				if (source[index] === '\\') {
+					index += 2;
+					continue;
+				}
+				if (source[index++] === quote) break;
+			}
+			if (source[index - 1] !== quote) return null;
+			continue;
+		}
+		const identifier = /^[A-Za-z_$][\w$]*/.exec(source.slice(index));
+		if (identifier) {
+			result.push({ value: identifier[0], start: index, end: index + identifier[0].length });
+			index += identifier[0].length;
+			continue;
+		}
+		result.push({ value: source[index], start: index, end: index + 1 });
+		index += 1;
+	}
+	return result;
+}
+
+function matches(values, index, expected) {
+	return expected.every((value, offset) => values[index + offset] === value);
+}
+
+function debuggerLayout(source) {
+	const scanned = tokens(source);
+	if (!scanned) return null;
+	const values = scanned.map(({ value }) => value);
+	let constructorEnd;
+	let constructorIndex;
+	let constructorCount = 0;
+	let allowIndex;
+	let firstAddDebuggeeIndex;
+	for (let index = 0; index < values.length; index += 1) {
+		if (matches(values, index, ['this', '.', '_debugger', '='])) {
+			if (!matches(values, index + 4, ['new', 'Debugger', '(', ')', ';'])) return null;
+			constructorCount += 1;
+			constructorIndex = index;
+			constructorEnd = scanned[index + 8].end;
+		}
+		if (matches(values, index, ['this', '.', '_debugger', '.', 'allowUnobservedWasm', '=', 'true', ';'])) {
+			if (allowIndex !== undefined) return null;
+			allowIndex = index;
+		}
+		if (matches(values, index, ['this', '.', '_debugger', '.', 'allowUnobservedWasm', '=']) &&
+			!matches(values, index, ['this', '.', '_debugger', '.', 'allowUnobservedWasm', '=', 'true', ';'])) return null;
+		if (firstAddDebuggeeIndex === undefined &&
+			matches(values, index, ['this', '.', '_debugger', '.', 'addDebuggee'])) firstAddDebuggeeIndex = index;
+	}
+	if (constructorCount !== 1 || (allowIndex !== undefined && allowIndex <= constructorIndex) ||
+		(firstAddDebuggeeIndex !== undefined && firstAddDebuggeeIndex <= constructorIndex) ||
+		(firstAddDebuggeeIndex !== undefined && allowIndex !== undefined && firstAddDebuggeeIndex < allowIndex)) return null;
+	return { constructorEnd, patched: allowIndex !== undefined };
+}
 
 /** Keep Juggler automation while allowing Firefox to optimize the measured Wasm. */
 export function enableOptimizedWasm(source) {
-	if (source.includes(allowWasm)) return source;
-	if (source.split(constructor).length !== 2) {
+	const layout = debuggerLayout(source);
+	if (!layout) {
 		throw new Error('Unrecognized Juggler runtime; inspect its Debugger setup before benchmarking.');
 	}
-	return source.replace(constructor, `${constructor}\n    ${allowWasm}`);
+	if (layout.patched) return source;
+	return `${source.slice(0, layout.constructorEnd)}\n    ${allowWasm}${source.slice(layout.constructorEnd)}`;
 }
 
 /** Prepare a separate Firefox tree before snapshotting it for a paired trial. Requires unzip/zip. */
@@ -29,7 +107,7 @@ export async function prepareFirefoxBenchmark(executable, destination) {
 	}
 	await mkdir(path.dirname(target), { recursive: true });
 	await mkdir(target);
-	await cp(original, target, { recursive: true });
+	await cp(original, target, { recursive: true, verbatimSymlinks: true });
 	const archive = path.join(target, 'omni.ja');
 	const hash = async () => createHash('sha256').update(await readFile(archive)).digest('hex');
 	const before = await hash();
@@ -40,7 +118,7 @@ export async function prepareFirefoxBenchmark(executable, destination) {
 		const filename = path.join(scratch, runtimeEntry);
 		await mkdir(path.dirname(filename), { recursive: true });
 		await writeFile(filename, patched);
-		execFileSync('zip', ['-q', '-u', archive, runtimeEntry], { cwd: scratch });
+		execFileSync('zip', ['-q', archive, runtimeEntry], { cwd: scratch });
 		await rm(scratch, { recursive: true });
 	}
 	const actual = execFileSync('unzip', ['-p', archive, runtimeEntry], { encoding: 'utf8' });
