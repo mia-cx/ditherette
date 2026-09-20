@@ -218,7 +218,8 @@ class Processor implements Ditherette {
 			const input = validateResize(request);
 			if (input.sourceWidth === input.outputWidth && input.sourceHeight === input.outputHeight) {
 				try {
-					input.onProgress?.({ stage: 'complete' });
+					input.onProgress?.({ stage: 'prepare', completed: 0, total: 1 });
+					input.onProgress?.({ stage: 'complete', completed: 1, total: 1 });
 				} catch {
 					throw new DitheretteError('callback', 'onProgress', errorMessages.callback);
 				}
