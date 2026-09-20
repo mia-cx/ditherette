@@ -148,6 +148,11 @@ digest for every retained output. The already-written raw transport response
 keeps the complete compact hex evidence. Uncapped trials keep their existing
 full JSON and PNG review bundles.
 
+A capped untimed reference mismatch now writes the same bounded evidence shape
+for the native reference, frozen Wasm reference, and actual output. It does not
+enter the ordinary `results.json` or PNG review-artifact writer, so a mismatch
+cannot re-expand indexed pixels after the decoder has bounded them.
+
 The red small-scale native test expected the bounded schema but found the old
 full result document. After the change it verifies the bounded schema, index
 count, absent index array, and absent pixel review bundles. It does not allocate

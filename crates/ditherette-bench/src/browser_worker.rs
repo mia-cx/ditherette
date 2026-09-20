@@ -265,6 +265,46 @@ pub fn preserve_reference_mismatch(
     if result.timing_skipped != Some(TimingSkipped::ReferenceMismatch) {
         return Err(invalid("expected untimed reference mismatch"));
     }
+    if uses_capped_diagnostics(request) {
+        #[derive(Serialize)]
+        struct Diagnostics<'a> {
+            schema: &'static str,
+            case: &'a CaseIdentity,
+            native_reference: CappedOutput<'a>,
+            wasm_reference: CappedOracleOutput<'a>,
+            actual_output: CappedOutput<'a>,
+            timing_skipped: TimingSkipped,
+        }
+        #[derive(Serialize)]
+        struct CappedOracleOutput<'a> {
+            case: &'a CaseIdentity,
+            output: CappedOutput<'a>,
+        }
+        fs::create_dir_all(directory)?;
+        let native = request
+            .reference_output
+            .as_ref()
+            .ok_or_else(|| invalid("missing native reference for capped diagnostics"))?;
+        let wasm = result
+            .reference
+            .as_ref()
+            .ok_or_else(|| invalid("missing Wasm reference for capped diagnostics"))?;
+        write_pretty(
+            &directory.join("results.json"),
+            &Diagnostics {
+                schema: "ditherette-capped-reference-mismatch-v1",
+                case: &request.case.identity,
+                native_reference: capped_output(native)?,
+                wasm_reference: CappedOracleOutput {
+                    case: &wasm.case,
+                    output: capped_output(&wasm.output)?,
+                },
+                actual_output: capped_output(&result.output)?,
+                timing_skipped: TimingSkipped::ReferenceMismatch,
+            },
+        )?;
+        return Ok(());
+    }
     preserve_output(
         request,
         result.reference.as_ref().expect("validated oracle"),
