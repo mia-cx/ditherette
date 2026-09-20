@@ -8,13 +8,13 @@ Frozen spec and shared image files stay unchanged. Preserve the landed optimized
 
 ## Tasks
 
-- [~] Inventory benchmark coverage, retained evidence, build prerequisites, and execution commands.
-- [ ] Prepare fresh recorded artifacts and a bounded baseline matrix outside Git.
-- [ ] Run one quiet benchmark campaign covering native kernels and browser complete calls.
-- [ ] Rank comparable losses by absolute cost and likely benefit. Select at most three high-value areas for this pass.
-- [ ] Try at most two focused candidates per selected area. Keep only verified improvements; stop an area after two unsuccessful candidates.
-- [ ] Remeasure affected cases and broad controls. Report wins, losses, noise, coverage gaps, and remaining release requirements.
-- [ ] File measured changes in scoped PRs; update progress and remove disposable compiler targets.
+- [x] Inventory benchmark coverage, retained evidence, build prerequisites, and execution commands.
+- [x] Prepare fresh recorded artifacts and a bounded baseline matrix outside Git.
+- [x] Run one quiet benchmark campaign covering native kernels and browser complete calls.
+- [x] Rank comparable losses by absolute cost and likely benefit. Select at most three high-value areas for this pass.
+- [x] Try at most two focused candidates per selected area. Keep only verified improvements; stop an area after two unsuccessful candidates.
+- [x] Remeasure affected cases and broad controls. Report wins, losses, noise, coverage gaps, and remaining release requirements.
+- [x] File measured changes in scoped PRs; update progress and remove disposable compiler targets.
 
 ## Measurement rules
 
@@ -33,3 +33,15 @@ The coordinator owns this plan, artifact preparation, benchmark scheduling, and 
 ## Completion
 
 Deliver measured coverage and the worthwhile exact improvements within these bounds, not an unbounded search for maximum speed. Keep publication, rollout, and legacy retirement held. Explicitly distinguish finishing this pass from satisfying every release performance gate.
+
+## Measured outcome, 2026-09-21
+
+PR #172 fixes randomized autocfg probe identities. PR #173 keeps shared immutable color tables, exact saturating byte-feedback conversion, and explicit CIELAB reconstruction inlining. Both remain unmerged. Child issues #170 and #171 track these changes under #149.
+
+The three selected areas were color setup, Lanczos resizing, and diffusion. Constant-radius Lanczos specialization and tap hoisting showed no useful gain and were removed. The second diffusion candidate and color-table reuse passed exact verification. Explicit CIELAB inlining removed a compiler-induced inverse-color regression.
+
+Measured source is `8b3be973a8a3eb274cbf1cef1f95df974c7c7020`. Delivery `cd8e13e1d88ea6c78b8d97214b9828bc908ff509` has identical implementation and build-script contents. Full tables, retained noise and inherited differences, fixtures, artifacts, and raw evidence remain outside Git at `/home/mia/mia-cx/ditherette-performance-20260920`.
+
+Finished task-owned compiler targets are removed. Recorded artifacts and executable copies of the lease and plan helpers remain outside Git for reproduction.
+
+WebKit diffusion and some Lanczos cases still lose to JS. Issue #149 remains open. Publication, website-default rollout, and legacy retirement remain held.
