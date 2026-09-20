@@ -58,7 +58,7 @@ pub trait Boundary {
         false
     }
     /// Construct the complete result from Rust-selected offsets without a Wasm output buffer.
-    /// The caller precharges exactly four output bytes per pixel before any allocation.
+    /// The returned JS-owned output does not consume this processor's private budget.
     fn complete_sparse(
         &mut self,
         _column_offsets: &[u8],
@@ -502,13 +502,7 @@ impl Processor {
                     0,
                 ],
                 0,
-                // Direct output owns the same mandatory bytes outside Wasm until handoff.
-                overhead
-                    + if direct_output {
-                        plan.output_len as u64
-                    } else {
-                        0
-                    },
+                overhead,
                 self.memory_limit,
                 &mut self.peak_capacity,
                 allocator,

@@ -89,7 +89,7 @@ export function completeResult(source, width, height, sink) {
 	sink.value = { width, height, data };
 }
 
-// Rust precharges outputLength. Return only a scalar phase code, never an owned JS handle.
+// Returned bytes are JS-owned. Return only a scalar phase code, never an owned JS handle.
 export function completeSparseResult(columnOffsets, rowOffsets, source, sourceLength, outputLength, width, height, sink) {
 	let data;
 	try {
