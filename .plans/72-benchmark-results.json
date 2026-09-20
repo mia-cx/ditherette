@@ -1,0 +1,814 @@
+{
+  "schema": "ditherette-s31-measurement-summary-v1",
+  "issue": 72,
+  "revisions": {
+    "accepted": "863889e52f1b752b6adfc22a9c775b3823f2997e",
+    "candidate": "972d4e9a5882b25bca3de5f0786ad1525b5e6329"
+  },
+  "decision": "Retain the required preparation baseline. No additional candidate or retry. Warm Lanczos3 improves across all four runtimes; four cases remain inconclusive.",
+  "overall_gate": "inconclusive",
+  "confirmed_regressions": 0,
+  "scope": {
+    "accepted": "863889e52f1b752b6adfc22a9c775b3823f2997e",
+    "candidate": "972d4e9a5882b25bca3de5f0786ad1525b5e6329",
+    "prepared_suffix": "-prepared-v2",
+    "workers": 128,
+    "maximum_live_workers": 1,
+    "samples_per_worker_maximum": 20,
+    "earlier_preparations": "The unsuffixed prepared directories bind fef6cc63. They are retained unused. No measurements ran against them.",
+    "native_timing": "Actual Processor call including keys, preparation, input copies and durable result construction. Output verification, prior result destruction and processor setup/destruction are untimed.",
+    "browser_timing": "Actual public scalar method. Initialization, priming, verification and disposal are untimed.",
+    "temperature": "No hwmon temperature readings are exposed. No temperature normalization is applied."
+  },
+  "machine": {
+    "os": "linux",
+    "arch": "x86_64",
+    "hostname": "athena-hephaestus",
+    "kernel": "6.12.95+deb13-amd64",
+    "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+    "logical_cpus": 24
+  },
+  "totals": {
+    "workers_started": 128,
+    "workers_reaped": 128,
+    "maximum_live_workers": 1,
+    "actual_pairs": 64,
+    "samples": 2560,
+    "warmup_iterations": 6647,
+    "exact_target_local_outputs": 128,
+    "exact_pair_outputs": 64,
+    "exact_three_way_records": 128
+  },
+  "root_evidence": {
+    "trial-index.json": {
+      "bytes": 810,
+      "sha256": "988e41b9a88f3a4bcbf38874b129092347ecb7f153a37478b38ad632cd0f7c6d"
+    },
+    "host-before.json": {
+      "bytes": 786,
+      "sha256": "443cfc72c380930a97bca7d571b37b441e191d2db93bddd17c600a01fdf4de1d"
+    },
+    "experiment-native.json": {
+      "bytes": 7716930,
+      "sha256": "dac031c9d452114fe47a805ec6d18d6b2c51f3d6df9268cc6839015442cdb260"
+    },
+    "experiment-public.json": {
+      "bytes": 7717138,
+      "sha256": "5213f09545478c43188cb568a40561ffa322c3844b03165865d4d982887a5490"
+    }
+  },
+  "engines": {
+    "native": {
+      "gate": "inconclusive",
+      "workers_started": 32,
+      "workers_reaped": 32,
+      "maximum_live_workers": 1,
+      "actual_pairs": 16,
+      "samples": 640,
+      "warmup_iterations": 4380,
+      "first_started_utc": "2026-09-08T14:58:25.489Z",
+      "last_reaped_utc": "2026-09-08T14:58:28.159Z",
+      "browser": null,
+      "evidence": {
+        "directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-trial-01/native-results",
+        "files": 99,
+        "inventory_sha256": "36bb0ae6abb925c58357889e740a2ce8a0be5c94fb5e6e99c3200e7b64f38182",
+        "inventory_encoding": "SHA-256 of compact JSON array, lexically sorted direct filenames; each object has path, bytes, sha256 keys in that order",
+        "report": {
+          "bytes": 75889,
+          "sha256": "d03a012b9c1bb241176436a9caf9485569f9f55f5c88adada848138189b2f5a1"
+        },
+        "events": {
+          "bytes": 13776,
+          "sha256": "c7882468e7e5004bce67a5f7066d7ab083759ae66b29f6728eef2f7124bf79f2"
+        },
+        "prepared": {
+          "bytes": 8928438,
+          "sha256": "bdb380dbc3893b06b378ee086c5e93faf4ca25b1892a2fa354d33a57c1398d78"
+        }
+      },
+      "cases": [
+        {
+          "case_name": "quantize-lab76-p256-32x24-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.002753549404421,
+            1.0265608652278644
+          ],
+          "accepted_median_ns": 501172.5,
+          "candidate_median_ns": 506193,
+          "median_ratio": 1.0100175089415322,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "quantize-lab76-p256-32x24-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0177016913242305,
+            1.0206949903223763
+          ],
+          "accepted_median_ns": 494103,
+          "candidate_median_ns": 503398,
+          "median_ratio": 1.0188118671613005,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.99019800039208,
+            1.0136085974565352
+          ],
+          "accepted_median_ns": 165453,
+          "candidate_median_ns": 166968,
+          "median_ratio": 1.009156678936012,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.8936563383689455,
+            0.8381608853895862
+          ],
+          "accepted_median_ns": 165897.5,
+          "candidate_median_ns": 145163,
+          "median_ratio": 0.8750161997619011,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.005196998531553,
+            0.9961498815991086
+          ],
+          "accepted_median_ns": 806217.5,
+          "candidate_median_ns": 806238.5,
+          "median_ratio": 1.0000260475616072,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0099715849624664,
+            1.0057398828178226
+          ],
+          "accepted_median_ns": 793968.5,
+          "candidate_median_ns": 800232.5,
+          "median_ratio": 1.007889481761556,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9741348242281979,
+            1.0001755096397935
+          ],
+          "accepted_median_ns": 517679.5,
+          "candidate_median_ns": 505852.5,
+          "median_ratio": 0.9771538181442379,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            1.0515482838568355,
+            0.94528878096742
+          ],
+          "accepted_median_ns": 503812.5,
+          "candidate_median_ns": 509322.5,
+          "median_ratio": 1.0109366083612454,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        }
+      ]
+    },
+    "chromium": {
+      "gate": "pass",
+      "workers_started": 32,
+      "workers_reaped": 32,
+      "maximum_live_workers": 1,
+      "actual_pairs": 16,
+      "samples": 640,
+      "warmup_iterations": 1095,
+      "first_started_utc": "2026-09-08T14:58:48.047Z",
+      "last_reaped_utc": "2026-09-08T14:59:53.963Z",
+      "browser": {
+        "engine": "chromium",
+        "browser_version": "147.0.7727.15",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.7727.15 Safari/537.36",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 4999.995231628418
+      },
+      "evidence": {
+        "directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-trial-01/chromium-results",
+        "files": 195,
+        "inventory_sha256": "f95d1ee93e0b02b6cf7746162f641758855455dc64135c51b57411004af8e6b3",
+        "inventory_encoding": "SHA-256 of compact JSON array, lexically sorted direct filenames; each object has path, bytes, sha256 keys in that order",
+        "report": {
+          "bytes": 76013,
+          "sha256": "d36f4ef4f8fc8261566bdb32454a1532addef4af6ad0c953c880fc84656d93aa"
+        },
+        "events": {
+          "bytes": 13776,
+          "sha256": "e4bf88359ef344d2f025ce09457bee42f492ac5ecbe0e556a375283d00485093"
+        },
+        "prepared": {
+          "bytes": 9761684,
+          "sha256": "1d693e955104cba0719f9812ac4aa7ecdefe88e8a7788747830b75f971df8d5b"
+        }
+      },
+      "cases": [
+        {
+          "case_name": "quantize-lab76-p256-32x24-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0819277115874582,
+            1.0709046470178327
+          ],
+          "accepted_median_ns": 1032500.0025331974,
+          "candidate_median_ns": 1104999.9967217443,
+          "median_ratio": 1.070217911874742,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "quantize-lab76-p256-32x24-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0554156208062686,
+            1.0788804075877836
+          ],
+          "accepted_median_ns": 985000.0031292439,
+          "candidate_median_ns": 1054999.9997019768,
+          "median_ratio": 1.0710659861424874,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9952380997658857,
+            1.0198019834847185
+          ],
+          "accepted_median_ns": 515000.0005960465,
+          "candidate_median_ns": 519999.99955296516,
+          "median_ratio": 1.0097087358274404,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9320987568016442,
+            0.9683544230974938
+          ],
+          "accepted_median_ns": 399999.9985098839,
+          "candidate_median_ns": 380000.002682209,
+          "median_ratio": 0.9500000102445484,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0016181214323112,
+            0.9950900185978686
+          ],
+          "accepted_median_ns": 1535000.0001490116,
+          "candidate_median_ns": 1529999.9974668026,
+          "median_ratio": 0.9967426692627207,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.994423794364773,
+            0.9720670380209926
+          ],
+          "accepted_median_ns": 1344999.998807907,
+          "candidate_median_ns": 1317499.9952316284,
+          "median_ratio": 0.97955390066866,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.972111553642947,
+            1.0142857158931282
+          ],
+          "accepted_median_ns": 1234999.9994039536,
+          "candidate_median_ns": 1234999.9994039536,
+          "median_ratio": 1,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9726027454117148,
+            0.9863013693503697
+          ],
+          "accepted_median_ns": 1094999.998807907,
+          "candidate_median_ns": 1074999.999254942,
+          "median_ratio": 0.9817351602057183,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        }
+      ]
+    },
+    "firefox": {
+      "gate": "pass",
+      "workers_started": 32,
+      "workers_reaped": 32,
+      "maximum_live_workers": 1,
+      "actual_pairs": 16,
+      "samples": 640,
+      "warmup_iterations": 240,
+      "first_started_utc": "2026-09-08T15:00:09.814Z",
+      "last_reaped_utc": "2026-09-08T15:01:41.042Z",
+      "browser": {
+        "engine": "firefox",
+        "browser_version": "148.0.2",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 19999.99999999602
+      },
+      "evidence": {
+        "directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-trial-01/firefox-results",
+        "files": 195,
+        "inventory_sha256": "8172c177a58ef8550f0f57c7e59f4a16c8c31884c3dbe24764ee11152664d064",
+        "inventory_encoding": "SHA-256 of compact JSON array, lexically sorted direct filenames; each object has path, bytes, sha256 keys in that order",
+        "report": {
+          "bytes": 76009,
+          "sha256": "90d822d1f7e3f5853194868460842ef444fcdbb7c6cd1d14c3b47a871f8d8173"
+        },
+        "events": {
+          "bytes": 13776,
+          "sha256": "94ba4028b124ca24b99ef819280b6a40cc88d8ae3939c52d8a00bbc197f893de"
+        },
+        "prepared": {
+          "bytes": 9571537,
+          "sha256": "7dba1e19c7e1b378d3264320b1c107fa3152d138bb4b8c0094b2c927d14f5fb0"
+        }
+      },
+      "cases": [
+        {
+          "case_name": "quantize-lab76-p256-32x24-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0483870967741906,
+            1.0284810126582289
+          ],
+          "accepted_median_ns": 6300000.000000011,
+          "candidate_median_ns": 6500000,
+          "median_ratio": 1.0317460317460299,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "quantize-lab76-p256-32x24-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0357142857142856,
+            1.0711974110032407
+          ],
+          "accepted_median_ns": 6160000.000000025,
+          "candidate_median_ns": 6449999.999999989,
+          "median_ratio": 1.047077922077916,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0052356020942472,
+            1.010723860589818
+          ],
+          "accepted_median_ns": 3750000,
+          "candidate_median_ns": 3800000.000000011,
+          "median_ratio": 1.0133333333333363,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9531680440771384,
+            0.9285714285714235
+          ],
+          "accepted_median_ns": 3639999.9999999865,
+          "candidate_median_ns": 3409999.9999999963,
+          "median_ratio": 0.9368131868131893,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0097259062776316,
+            0.9784110535405897
+          ],
+          "accepted_median_ns": 11460000.000000007,
+          "candidate_median_ns": 11340000.000000032,
+          "median_ratio": 0.9895287958115204,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.006392694063925,
+            0.9846570397111938
+          ],
+          "accepted_median_ns": 11040000.00000002,
+          "candidate_median_ns": 10979999.99999996,
+          "median_ratio": 0.994565217391299,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0065963060685992,
+            1.0171730515191557
+          ],
+          "accepted_median_ns": 7579999.999999998,
+          "candidate_median_ns": 7669999.999999987,
+          "median_ratio": 1.0118733509234814,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9228758169934654,
+            0.9638554216867495
+          ],
+          "accepted_median_ns": 7580000.000000013,
+          "candidate_median_ns": 7149999.999999978,
+          "median_ratio": 0.9432717678100219,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        }
+      ]
+    },
+    "webkit": {
+      "gate": "inconclusive",
+      "workers_started": 32,
+      "workers_reaped": 32,
+      "maximum_live_workers": 1,
+      "actual_pairs": 16,
+      "samples": 640,
+      "warmup_iterations": 932,
+      "first_started_utc": "2026-09-08T15:01:51.687Z",
+      "last_reaped_utc": "2026-09-08T15:03:12.748Z",
+      "browser": {
+        "engine": "webkit",
+        "browser_version": "26.4",
+        "node_version": "v24.19.0",
+        "playwright_version": "1.59.1",
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15",
+        "cross_origin_isolated": true,
+        "timer_resolution_ns": 19999.99999999602
+      },
+      "evidence": {
+        "directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-trial-01/webkit-results",
+        "files": 195,
+        "inventory_sha256": "68d331a9660d1717a37993c3093c07ee04d2aa5819016318e81e53ecb260d82b",
+        "inventory_encoding": "SHA-256 of compact JSON array, lexically sorted direct filenames; each object has path, bytes, sha256 keys in that order",
+        "report": {
+          "bytes": 76051,
+          "sha256": "6cd1fb6d71b2edf46f7d0ee35b32a6de18f93198ec03e2f146c8deb4951f9b13"
+        },
+        "events": {
+          "bytes": 13776,
+          "sha256": "1e36d4ddd827514ce802ec502a11923f52a03b475ee00713e8bbe0a5d279da65"
+        },
+        "prepared": {
+          "bytes": 9586718,
+          "sha256": "2113c166320a1a9b5f4396ab1bd04bc836aca774b9671f18a24cc74d47e8caaf"
+        }
+      },
+      "cases": [
+        {
+          "case_name": "quantize-lab76-p256-32x24-cold",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            1.0697674418604848,
+            1.0454545454545414
+          ],
+          "accepted_median_ns": 1300000.0000000114,
+          "candidate_median_ns": 1380000.0000000098,
+          "median_ratio": 1.0615384615384598,
+          "resolution_limited": true,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "quantize-lab76-p256-32x24-warm",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            1.0983606557376973,
+            1.032786885245889
+          ],
+          "accepted_median_ns": 1219999.9999999988,
+          "candidate_median_ns": 1319999.9999999932,
+          "median_ratio": 1.0819672131147495,
+          "resolution_limited": true,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-cold",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.9600000000000081,
+            1.041666666666689
+          ],
+          "accepted_median_ns": 490000.0000000091,
+          "candidate_median_ns": 500000,
+          "median_ratio": 1.0204081632652873,
+          "resolution_limited": true,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-lanczos3-129x97-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.8947368421053016,
+            0.947368421052604
+          ],
+          "accepted_median_ns": 379999.99999999546,
+          "candidate_median_ns": 340000.00000001764,
+          "median_ratio": 0.8947368421053202,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9999999999999843,
+            0.9710144927536292
+          ],
+          "accepted_median_ns": 1379999.999999995,
+          "candidate_median_ns": 1359999.999999985,
+          "median_ratio": 0.9855072463768043,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "resize-trilinear-256x192-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0086206896551768,
+            1.0260869565217463
+          ],
+          "accepted_median_ns": 1159999.9999999965,
+          "candidate_median_ns": 1180000.0000000068,
+          "median_ratio": 1.0172413793103536,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-cold",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.015625000000008,
+            0.9999999999999944
+          ],
+          "accepted_median_ns": 1260000.0000000051,
+          "candidate_median_ns": 1280000.0000000012,
+          "median_ratio": 1.0158730158730127,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        },
+        {
+          "case_name": "process-lanczos2-floyd-steinberg-p16-129x97-warm",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9473684210526538,
+            0.972972972972972
+          ],
+          "accepted_median_ns": 1120000.000000005,
+          "candidate_median_ns": 1080000.0000000126,
+          "median_ratio": 0.9642857142857213,
+          "resolution_limited": false,
+          "actual_pairs": 2,
+          "exact_three_way_records": 4
+        }
+      ]
+    }
+  },
+  "artifacts": {
+    "accepted": {
+      "revision": "863889e52f1b752b6adfc22a9c775b3823f2997e",
+      "public_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-bench/target/s31-baseline-863889e-public",
+      "native_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-bench/target/s31-baseline-863889e-native",
+      "package_tarball": {
+        "bytes": 308343,
+        "sha256": "c2725329e6dd9016c956274a1c914349b7806a373762d25411b46ed7e4d0cc71",
+        "uncompressed_tar_bytes": 836096
+      },
+      "installed_package": {
+        "files": 38,
+        "raw_bytes": 806698,
+        "sum_individual_gzip_level_9_bytes": 325666
+      },
+      "wasm": {
+        "scalar": {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-bench/target/s31-baseline-863889e-public/consumer/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm",
+          "bytes": 267046,
+          "sha256": "3ad3bd656cf267ba0706b33aee84a8b1726206ec103ec1461d25f8fd95c38f51",
+          "gzip_level_9_bytes": 122604
+        },
+        "threads": {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-bench/target/s31-baseline-863889e-public/consumer/node_modules/ditherette/dist/wasm/threads/ditherette_wasm_bg.wasm",
+          "bytes": 358234,
+          "sha256": "75daec979adbb2af02d17253d3e347da1da86dd148a196c26bf88e16ba72bdc2",
+          "gzip_level_9_bytes": 153710
+        }
+      },
+      "native_worker": {
+        "bytes": 5963040,
+        "sha256": "ac0a2c586d98d8b344dd39ac95d498b3de04c8d445f4d62c0abc1cb681054893"
+      },
+      "native_coordinator": {
+        "bytes": 3366936,
+        "sha256": "86712ec9adc03d916098910ffe059d105ec33c175936f764da567f43aee8d759"
+      },
+      "public_provenance": {
+        "bytes": 628602,
+        "sha256": "42f9c677f98747db5b283eac9d7c1c438ac6404dacaa8cf51d7dd9ff810e56d5"
+      },
+      "native_provenance": {
+        "bytes": 596168,
+        "sha256": "c42adc8f9b874a179132832f32099605cb3421abf90e3f315c2f73c8414d6984"
+      },
+      "bundle_source": {
+        "bytes": 917,
+        "sha256": "2faded45c185f938672dcb262ae415bc5a94a5d6d27b6d5cb7010aa93af31d74"
+      },
+      "oracle_manifest": {
+        "bytes": 103029,
+        "sha256": "288b94c363b82f326dd7d866930622f723d0ab6af348f0e9163a580e1f291273"
+      },
+      "conformance": null
+    },
+    "candidate": {
+      "revision": "972d4e9a5882b25bca3de5f0786ad1525b5e6329",
+      "public_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-candidate-972d4e9a-public",
+      "native_directory": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-candidate-972d4e9a-native",
+      "package_tarball": {
+        "bytes": 327780,
+        "sha256": "ce556c8dc5a7f747ebdd572d84d0185a9d2db2796cd9d3af085905fa3d9bb4a0",
+        "uncompressed_tar_bytes": 896512
+      },
+      "installed_package": {
+        "files": 38,
+        "raw_bytes": 867086,
+        "sum_individual_gzip_level_9_bytes": 344906
+      },
+      "wasm": {
+        "scalar": {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-candidate-972d4e9a-public/consumer/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm",
+          "bytes": 289912,
+          "sha256": "8fb971e602c1c7583d57cf665d247e9a247ce6d607713602a7f7ce0231d2759c",
+          "gzip_level_9_bytes": 131540
+        },
+        "threads": {
+          "path": "/home/mia/mia-cx/ditherette/.worktrees/v1-s31-preparation/target/s31-candidate-972d4e9a-public/consumer/node_modules/ditherette/dist/wasm/threads/ditherette_wasm_bg.wasm",
+          "bytes": 395756,
+          "sha256": "508ac4d8b26eb0856396190cdb4b9d741bec423e9e2f7b69dfd7d34ce726abbb",
+          "gzip_level_9_bytes": 164014
+        }
+      },
+      "native_worker": {
+        "bytes": 6025240,
+        "sha256": "e588bdc804e9ef294aa5795a8ae369adaec0716583ceb7a5bda1fa7538d32bb6"
+      },
+      "native_coordinator": {
+        "bytes": 3375088,
+        "sha256": "6b2e9c7b2d5038ecb8dcfc675a75ddde3f2ab571e5d108ea94345c1b0481333d"
+      },
+      "public_provenance": {
+        "bytes": 632861,
+        "sha256": "106b50e199e0fa27ebcef795cf1804518e5337efe94a9c63c296110982b96899"
+      },
+      "native_provenance": {
+        "bytes": 600456,
+        "sha256": "e78c9f7b46e658eecb2ddfadcd7e6fd27c88ad8b1794fdd6bf1c4489fc7cb9b5"
+      },
+      "bundle_source": {
+        "bytes": 955,
+        "sha256": "3f6139ee34cfa926a70f92518c5afbc65c2b7ac6d1929e5f1cf9e25151a50de5"
+      },
+      "oracle_manifest": {
+        "bytes": 103031,
+        "sha256": "f66f8068637fd012b57a53f9eaca444664ea10fee1a3e49ab100e60ff5bd2444"
+      },
+      "conformance": {
+        "bytes": 2875,
+        "sha256": "9f8f3545a86893c2d42109d9a8f277ffb18cbdee0e4db4094b959464c86d2cf6"
+      }
+    }
+  },
+  "frozen": {
+    "state": "frozen",
+    "revision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+    "artifact": "sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe"
+  },
+  "verification_method": "Read-only recomputation of worker lifecycle, alternating role order, per-role sample medians and pair ratios; deep equality of each worker output to its target-local frozen reference and both role outputs/references per pair; artifact and prepared asset hash checks.",
+  "package_size_method": "Raw installed-package bytes sum its 38 regular files; gzip sum compresses each file independently at Node zlib level 9. Tarball bytes are the original packed .tgz, not recompressed. Raw tar bytes include archive headers and padding. Wasm gzip figures use level 9."
+}

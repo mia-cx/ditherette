@@ -19,7 +19,7 @@ use std::{
 mod oracle;
 mod provenance;
 pub use oracle::validate_oracle;
-pub use provenance::{validate_source_revision, BuildFile, BuildProvenance, BuildTool};
+pub use provenance::{validate_source_revision, BuildFile, BuildMode, BuildProvenance, BuildTool};
 const WEBKIT_LAUNCHER: &[u8] = include_bytes!("browser_assets/webkit-launcher.sh");
 
 /// Explicit built inputs for one role. Entries are relative to the combined snapshot.

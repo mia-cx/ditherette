@@ -8,6 +8,50 @@ use ditherette_bench_api::verification::*;
 mod model;
 
 #[test]
+fn javascript_warm_trial_payload_preserves_prime_evidence_in_strict_transport() {
+    let script = r#"
+import { warmProcessTrial } from './scripts/benchmark-stage-trial-fixture.mjs';
+import { attachOracleReference } from './scripts/benchmark-public-browser.mjs';
+const { result, trial } = await warmProcessTrial();
+const oracle = JSON.parse(process.env.ORACLE_FIXTURE);
+attachOracleReference(result, { ...oracle, prime_output: trial.prime_reference_output });
+Object.assign(result.observation, {
+    engine: 'chromium', browser_version: 'fixture', node_version: process.version,
+    playwright_version: 'fixture'
+});
+console.log(JSON.stringify(result));
+"#;
+    let (_, trials) = fixture();
+    let oracle = OracleOutput {
+        case: trials[0].reference.case.clone(),
+        output: trials[0].reference.output.clone(),
+    };
+    let output = std::process::Command::new("node")
+        .args(["--input-type=module", "-e", script])
+        .env("ORACLE_FIXTURE", serde_json::to_string(&oracle).unwrap())
+        .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let payload: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        payload["prime_reference_output"]["pixels"]["data"],
+        serde_json::json!([1, 2, 3, 255])
+    );
+    let parsed: BrowserTransportResult = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(parsed.sample_ns.len(), 5);
+    let encoded = serde_json::to_value(parsed).unwrap();
+    assert_eq!(
+        encoded["prime_reference_output"],
+        payload["prime_reference_output"]
+    );
+}
+
+#[test]
 fn trilinear_binds_anchors_and_rejects_nonexistent_website_operation() {
     let (mut prepared, _) = fixture();
     let case = &mut prepared.experiment.cases[0];
@@ -89,6 +133,8 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
     let (mut prepared, mut trials) = model::fixture();
     prepared.candidate.identity.revision = prepared.accepted.identity.revision.clone();
     let browser = BrowserCase {
+        execution: None,
+        row_policy: None,
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
         },
@@ -97,6 +143,8 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
         measure_nonexact: false,
+        progress: None,
+        threads: None,
     };
     let case = &mut prepared.experiment.cases[0];
     case.identity = browser
@@ -199,12 +247,16 @@ fn fixture() -> (PreparedPair, Vec<TrialResult>) {
         trial.reference.implementation.artifact = trial.output.implementation.artifact.clone();
         trial.browser = Some(BrowserEvidence {
             measure_nonexact: false,
+            progress: None,
+            threads: None,
             assets: assets.tree.digest,
             runtime: runtime_digest(&runtime).unwrap(),
             backend: browser.backend(trial.role),
             preparation: browser.preparation,
             cache: browser.cache,
             observation: BrowserObservation {
+                execution: None,
+                row_policy: None,
                 engine: runtime.engine,
                 browser_version: runtime.browser.version.clone(),
                 node_version: runtime.node.version.clone(),
@@ -293,6 +345,187 @@ fn typed_browser_calls_share_exact_three_way_gates() {
         data[0] += 1;
     }
     assert_eq!(compare(&prepared, &trials).gate, Gate::Incorrect);
+}
+
+#[test]
+fn progress_roles_preserve_historical_json_and_bind_trial_evidence() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let browser = case.browser.as_mut().unwrap();
+    let historical = serde_json::to_value(&*browser).unwrap();
+    assert!(historical.get("progress").is_none());
+    let decoded: BrowserCase = serde_json::from_value(historical.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+    let roles = ProgressRoles {
+        accepted: ProgressMode::Disabled,
+        candidate: ProgressMode::Enabled,
+    };
+    browser.progress = Some(roles);
+    browser.accepted = BrowserBackend::Package;
+    browser.preparation = BrowserPreparation::FreshInstance;
+    browser.cache = CacheCapability::Roles {
+        accepted: PreparationCapability::ImageStages,
+        candidate: PreparationCapability::ImageStages,
+        sample_prime: None,
+    };
+    case.accepted_subject = browser.operation.subject(BrowserBackend::Package).into();
+    case.measurement.mode = SampleMode::SingleCall;
+    case.measurement.application_cache = ApplicationCache::Cold;
+    validate_case(case).unwrap();
+    for trial in &mut trials {
+        trial.measurement = case.measurement.clone();
+        trial.output.implementation.subject = case.accepted_subject.clone();
+        let evidence = trial.browser.as_mut().unwrap();
+        let historical = serde_json::to_value(&*evidence).unwrap();
+        assert!(historical.get("progress").is_none());
+        let decoded: BrowserEvidence = serde_json::from_value(historical.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+        evidence.backend = BrowserBackend::Package;
+        evidence.preparation = BrowserPreparation::FreshInstance;
+        evidence.cache = case.browser.as_ref().unwrap().cache;
+        evidence.progress = Some(roles);
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    trials[0].browser.as_mut().unwrap().progress = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    let case = &mut prepared.experiment.cases[0];
+    case.measurement.application_cache = ApplicationCache::Warm;
+    assert!(validate_case(case).is_err());
+}
+
+#[test]
+fn host_complete_calls_bind_the_applied_developer_row_policy() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let browser = case.browser.as_mut().unwrap();
+    let scalar = RowBandParameters {
+        height: 0,
+        active_workers: 1,
+    };
+    let rows = RowBandParameters {
+        height: 32,
+        active_workers: 4,
+    };
+    browser.accepted = BrowserBackend::Package;
+    browser.execution = Some(BrowserExecution::HostWorker);
+    browser.threads = Some(ThreadRoles {
+        accepted: Threads::Required,
+        candidate: Threads::Required,
+    });
+    browser.row_policy = Some(RowPolicyRoles {
+        stage: RowStage::Resize,
+        accepted: scalar,
+        candidate: rows,
+    });
+    case.accepted_subject = browser.operation.subject(BrowserBackend::Package).into();
+    let thread_roles = browser.threads;
+    validate_case(case).unwrap();
+    for trial in &mut trials {
+        trial.output.implementation.subject = case.accepted_subject.clone();
+        let evidence = trial.browser.as_mut().unwrap();
+        evidence.backend = BrowserBackend::Package;
+        evidence.threads = thread_roles;
+        evidence.observation.execution = Some(BrowserExecution::HostWorker);
+        evidence.observation.row_policy = Some(RowPolicyObservation {
+            stage: RowStage::Resize,
+            parameters: if trial.role == Role::Accepted {
+                scalar
+            } else {
+                rows
+            },
+            pool_size: 8,
+        });
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    let original = trials[0].browser.as_ref().unwrap().observation.row_policy;
+    trials[0].browser.as_mut().unwrap().observation.row_policy = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().observation.row_policy = original;
+    trials[0]
+        .browser
+        .as_mut()
+        .unwrap()
+        .observation
+        .row_policy
+        .as_mut()
+        .unwrap()
+        .stage = RowStage::Indexed;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    let case = &mut prepared.experiment.cases[0];
+    case.browser
+        .as_mut()
+        .unwrap()
+        .row_policy
+        .as_mut()
+        .unwrap()
+        .candidate
+        .active_workers = 9;
+    assert!(validate_case(case).is_err());
+    case.browser
+        .as_mut()
+        .unwrap()
+        .row_policy
+        .as_mut()
+        .unwrap()
+        .candidate = rows;
+    case.browser.as_mut().unwrap().execution = None;
+    assert!(validate_case(case).is_err());
+}
+
+#[test]
+fn thread_roles_preserve_historical_json_and_bind_initialization_evidence() {
+    let (mut prepared, mut trials) = fixture();
+    let case = &mut prepared.experiment.cases[0];
+    let browser = case.browser.as_mut().unwrap();
+    let historical = serde_json::to_value(&*browser).unwrap();
+    assert!(historical.get("threads").is_none());
+    assert!(historical.get("execution").is_none());
+    let decoded: BrowserCase = serde_json::from_value(historical.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+    let roles = ThreadRoles {
+        accepted: Threads::Disabled,
+        candidate: Threads::Required,
+    };
+    browser.threads = Some(roles);
+    browser.execution = Some(BrowserExecution::HostWorker);
+    browser.accepted = BrowserBackend::Package;
+    browser.preparation = BrowserPreparation::InitializationCompiled;
+    case.accepted_subject = browser.operation.subject(BrowserBackend::Package).into();
+    case.measurement.mode = SampleMode::SingleCall;
+    case.measurement.scope = CallScope::Initialization;
+    validate_case(case).unwrap();
+    let mut unsupported = case.clone();
+    unsupported.measurement.scope = CallScope::CompleteCall;
+    assert!(validate_case(&unsupported).is_err());
+    for trial in &mut trials {
+        trial.measurement = case.measurement.clone();
+        trial.output.implementation.subject = case.accepted_subject.clone();
+        let evidence = trial.browser.as_mut().unwrap();
+        let historical = serde_json::to_value(&*evidence).unwrap();
+        assert!(historical.get("threads").is_none());
+        let decoded: BrowserEvidence = serde_json::from_value(historical.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), historical);
+        evidence.backend = BrowserBackend::Package;
+        evidence.preparation = BrowserPreparation::InitializationCompiled;
+        evidence.threads = Some(roles);
+        evidence.observation.execution = Some(BrowserExecution::HostWorker);
+    }
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Pass);
+    trials[0].browser.as_mut().unwrap().observation.execution = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().observation.execution = Some(BrowserExecution::Page);
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().observation.execution = Some(BrowserExecution::HostWorker);
+    trials[0].browser.as_mut().unwrap().threads = None;
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    trials[0].browser.as_mut().unwrap().threads = Some(ThreadRoles {
+        accepted: Threads::Disabled,
+        candidate: Threads::Preferred,
+    });
+    assert_eq!(compare(&prepared, &trials).gate, Gate::Incomplete);
+    let case = &mut prepared.experiment.cases[0];
+    case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
+    assert!(validate_case(case).is_err());
 }
 
 #[test]
@@ -410,6 +643,7 @@ fn preflight_mismatch_preserves_typed_output_without_claiming_timing() {
     assert_eq!(decoded.reference_output, request.reference_output);
     let result = BrowserTransportResult {
         reference: None,
+        prime_reference_output: None,
         role: trial.role,
         pair: trial.pair,
         case_name: trial.case_name.clone(),

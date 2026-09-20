@@ -121,17 +121,22 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
             (
                 operation.subject(BrowserBackend::Package).to_owned(),
                 Some(BrowserCase {
+                    execution: None,
+                    row_policy: None,
                     operation,
                     accepted: BrowserBackend::Package,
                     candidate: BrowserBackend::Package,
                     preparation: BrowserPreparation::PrimedInstance,
                     cache: CacheCapability::None,
                     measure_nonexact: false,
+                    progress: None,
+                    threads: None,
                 }),
             )
         } else {
             (
                 match &native {
+                    NativeOperation::Processor { .. } => unreachable!("matching integration cases"),
                     NativeOperation::Quantize { .. } => {
                         ditherette_wasm::bench_subjects::quantize::QUANTIZE_SUBJECT.into()
                     }

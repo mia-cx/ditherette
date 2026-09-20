@@ -390,6 +390,8 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         warnings: vec![],
     };
     let browser = BrowserCase {
+        execution: None,
+        row_policy: None,
         operation: PublicOperation::ResizeNearest {
             anchor: Anchor::Center,
         },
@@ -398,6 +400,8 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         preparation: BrowserPreparation::PrimedInstance,
         cache: CacheCapability::None,
         measure_nonexact: false,
+        progress: None,
+        threads: None,
     };
     let identity = browser
         .operation
@@ -441,6 +445,7 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         cross_origin_isolated: true,
     };
     let result = BrowserTransportResult {
+        prime_reference_output: None,
         reference: Some(OracleOutput {
             case: identity.clone(),
             output: output.clone(),
@@ -458,6 +463,8 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         unstable_output: None,
         timing_skipped: None,
         observation: BrowserObservation {
+            execution: None,
+            row_policy: None,
             engine: runtime.engine,
             browser_version: runtime.browser.version.clone(),
             node_version: runtime.node.version.clone(),

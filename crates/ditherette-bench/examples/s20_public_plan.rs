@@ -10,7 +10,8 @@ use ditherette_bench::paired::{
 use ditherette_bench_api::verification::{Dimensions, ReferenceState};
 use std::{env, fs::OpenOptions, io, io::Write};
 
-fn case(
+/// Reuse the original deterministic nearest fixture and explicit initialization scopes.
+pub fn case(
     name: &str,
     source: (u32, u32),
     output: (u32, u32),
@@ -45,6 +46,8 @@ fn case(
         anchor: Anchor::Center,
     };
     let browser = BrowserCase {
+        execution: None,
+        row_policy: None,
         operation,
         accepted: if initialization {
             BrowserBackend::Package
@@ -55,6 +58,8 @@ fn case(
         preparation,
         cache: CacheCapability::None,
         measure_nonexact: false,
+        progress: None,
+        threads: None,
     };
     Ok(PairCase {
         native: None,
