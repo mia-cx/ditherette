@@ -3,86 +3,68 @@ import { execFileSync } from 'node:child_process';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const runtimeEntry = 'chrome/juggler/content/content/Runtime.js';
 const allowWasm = 'this._debugger.allowUnobservedWasm = true;';
 
-function tokens(source) {
-	const result = [];
-	let index = 0;
-	while (index < source.length) {
-		if (/\s/.test(source[index])) {
-			index += 1;
-			continue;
-		}
-		if (source.startsWith('//', index)) {
-			const end = source.indexOf('\n', index + 2);
-			index = end === -1 ? source.length : end + 1;
-			continue;
-		}
-		if (source.startsWith('/*', index)) {
-			const end = source.indexOf('*/', index + 2);
-			if (end === -1) return null;
-			index = end + 2;
-			continue;
-		}
-		if (source[index] === '"' || source[index] === "'" || source[index] === '`') {
-			const quote = source[index++];
-			while (index < source.length) {
-				if (source[index] === '\\') {
-					index += 2;
-					continue;
-				}
-				if (source[index++] === quote) break;
-			}
-			if (source[index - 1] !== quote) return null;
-			continue;
-		}
-		const identifier = /^[A-Za-z_$][\w$]*/.exec(source.slice(index));
-		if (identifier) {
-			result.push({ value: identifier[0], start: index, end: index + identifier[0].length });
-			index += identifier[0].length;
-			continue;
-		}
-		result.push({ value: source[index], start: index, end: index + 1 });
-		index += 1;
-	}
-	return result;
-}
-
-function matches(values, index, expected) {
-	return expected.every((value, offset) => values[index + offset] === value);
-}
-
 function debuggerLayout(source) {
-	const scanned = tokens(source);
-	if (!scanned) return null;
-	const values = scanned.map(({ value }) => value);
-	let constructorEnd;
-	let constructorIndex;
-	let constructorCount = 0;
-	let allowIndex;
-	let firstAddDebuggeeIndex;
-	for (let index = 0; index < values.length; index += 1) {
-		if (matches(values, index, ['this', '.', '_debugger', '='])) {
-			if (!matches(values, index + 4, ['new', 'Debugger', '(', ')', ';'])) return null;
-			constructorCount += 1;
-			constructorIndex = index;
-			constructorEnd = scanned[index + 8].end;
+	const sourceFile = ts.createSourceFile('Runtime.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+	if (sourceFile.parseDiagnostics.length) return null;
+	const isDebugger = (node) => ts.isPropertyAccessExpression(node) && node.name.text === '_debugger';
+	const isThisDebugger = (node) => isDebugger(node) && node.expression.kind === ts.SyntaxKind.ThisKeyword;
+	const isAssignment = (node) => ts.isExpressionStatement(node) && ts.isBinaryExpression(node.expression) &&
+		node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+	const isConstructor = (statement) => {
+		if (!isAssignment(statement) || !isThisDebugger(statement.expression.left)) return false;
+		const right = statement.expression.right;
+		return ts.isNewExpression(right) && ts.isIdentifier(right.expression) && right.expression.text === 'Debugger' &&
+			(!right.arguments || right.arguments.length === 0);
+	};
+	const isAllowAssignment = (statement) => {
+		if (!isAssignment(statement)) return false;
+		const left = statement.expression.left;
+		return ts.isPropertyAccessExpression(left) && left.name.text === 'allowUnobservedWasm' &&
+			isThisDebugger(left.expression) && statement.expression.right.kind === ts.SyntaxKind.TrueKeyword;
+	};
+	const isAllowTarget = (statement) => isAssignment(statement) && ts.isPropertyAccessExpression(statement.expression.left) &&
+		statement.expression.left.name.text === 'allowUnobservedWasm' && isThisDebugger(statement.expression.left.expression);
+	const isAddDebuggee = (node) => ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+		node.expression.name.text === 'addDebuggee' && isDebugger(node.expression.expression);
+	const constructors = [];
+	const debuggerAssignments = [];
+	const allowAssignments = [];
+	let invalidAllowAssignment = false;
+	const blocks = [];
+	const debuggeeCalls = [];
+	function visit(node) {
+		if (isAssignment(node)) {
+			if (isDebugger(node.expression.left)) {
+				debuggerAssignments.push(node);
+				if (isConstructor(node)) constructors.push(node);
+			}
+			if (isAllowTarget(node)) {
+				allowAssignments.push(node);
+				if (!isAllowAssignment(node)) invalidAllowAssignment = true;
+			}
 		}
-		if (matches(values, index, ['this', '.', '_debugger', '.', 'allowUnobservedWasm', '=', 'true', ';'])) {
-			if (allowIndex !== undefined) return null;
-			allowIndex = index;
-		}
-		if (matches(values, index, ['this', '.', '_debugger', '.', 'allowUnobservedWasm', '=']) &&
-			!matches(values, index, ['this', '.', '_debugger', '.', 'allowUnobservedWasm', '=', 'true', ';'])) return null;
-		if (firstAddDebuggeeIndex === undefined &&
-			matches(values, index, ['this', '.', '_debugger', '.', 'addDebuggee'])) firstAddDebuggeeIndex = index;
+		if (isAddDebuggee(node)) debuggeeCalls.push(node);
+		if (ts.isBlock(node)) blocks.push(node);
+		node.forEachChild(visit);
 	}
-	if (constructorCount !== 1 || (allowIndex !== undefined && allowIndex <= constructorIndex) ||
-		(firstAddDebuggeeIndex !== undefined && firstAddDebuggeeIndex <= constructorIndex) ||
-		(firstAddDebuggeeIndex !== undefined && allowIndex !== undefined && firstAddDebuggeeIndex < allowIndex)) return null;
-	return { constructorEnd, patched: allowIndex !== undefined };
+	visit(sourceFile);
+	if (debuggerAssignments.length !== 1 || constructors.length !== 1 || allowAssignments.length > 1 || invalidAllowAssignment) return null;
+	const constructor = constructors[0];
+	const allow = allowAssignments[0];
+	const matchingBlock = blocks.find((block) => {
+		const statements = [...block.statements];
+		const constructorIndex = statements.indexOf(constructor);
+		if (constructorIndex < 0) return false;
+		return allow ? statements[constructorIndex + 1] === allow : true;
+	});
+	if (!matchingBlock || (allow && debuggeeCalls.some((call) => call.pos < allow.pos)) ||
+		(!allow && debuggeeCalls.some((call) => call.pos < constructor.pos))) return null;
+	return { constructorEnd: constructor.end, patched: Boolean(allow) };
 }
 
 /** Keep Juggler automation while allowing Firefox to optimize the measured Wasm. */
