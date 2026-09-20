@@ -126,6 +126,7 @@ pub fn cases() -> io::Result<Vec<PairCase>> {
                 candidate_subject: operation.subject(BrowserBackend::Package).into(),
                 native: None,
                 browser: Some(BrowserCase {
+                    retained_output_limit_bytes: None,
                     row_policy: None,
                     execution: Some(BrowserExecution::HostWorker),
                     operation: operation.clone(),

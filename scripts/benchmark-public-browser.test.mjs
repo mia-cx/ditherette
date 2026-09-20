@@ -20,6 +20,9 @@ import {
 	outputStability,
 	verificationOutput
 } from './benchmark-public-page.mjs';
+import { requireMatchingComposition, equalOutput } from './benchmark-public-page.mjs';
+import { encodeOutput, decodeOutput } from './benchmark-indexed-wire.mjs';
+import { warmProcessTrial } from './benchmark-stage-trial-fixture.mjs';
 import { collectCalls, collectInitializations } from './benchmark-public-timing.mjs';
 
 const indexedOutput = () => ({
@@ -28,6 +31,101 @@ const indexedOutput = () => ({
 	indices: new Uint8Array([0, 1]),
 	palette: { rgba: new Uint8Array([10, 20, 30, 255, 0, 0, 0, 0]), transparentIndex: 1 },
 	warnings: [{ code: 'transparent-fallback', message: 'fixture warning' }]
+});
+
+function cappedTrial(configure = () => {}) {
+	return warmProcessTrial({
+		configure(trial) {
+			trial.case.browser.retained_output_limit_bytes = 384 * 1024 * 1024;
+			trial.case.browser.preparation = 'fresh-instance';
+			delete trial.case.browser.cache.roles.sample_prime;
+			trial.case.measurement.application_cache = 'cold';
+			delete trial.prime_reference_output;
+			trial.reference_output = encodeOutput(trial.reference_output);
+			configure(trial);
+		}
+	});
+}
+
+test('explicit capped page retains tiny exact wire output through preflight, composition and samples', async () => {
+	const { result, trial } = await cappedTrial();
+	assert.equal(result.sample_ns.length, 5);
+	assert.equal(result.output.wire_encoding, 'indexed8-hex-v1');
+	assert.ok(equalOutput(decodeOutput(result.output), decodeOutput(trial.reference_output)));
+	assert.equal(result.unstable_output, undefined);
+	assert.equal(result.timing_skipped, undefined);
+	assert.equal(trial.reference_output.wire_encoding, 'indexed8-hex-v1');
+});
+
+test('compact frozen mismatch retains actual bytes and skips all measured samples', async () => {
+	const { result, trial, events } = await cappedTrial((trial) => {
+		trial.reference_output.metadata.pixels.palette_rgba[0] = 1;
+	});
+	assert.equal(result.timing_skipped, 'reference-mismatch');
+	assert.deepEqual(result.sample_ns, []);
+	assert.equal(result.output.wire_encoding, 'indexed8-hex-v1');
+	assert.equal(decodeOutput(result.output).pixels.palette_rgba[0], 0);
+	assert.equal(decodeOutput(trial.reference_output).pixels.palette_rgba[0], 1);
+	assert.equal(events.filter((event) => event.type === 'process').length, 1);
+});
+
+test('explicit wire refuses ordinary-size overrides, invalid limits, warm calls and extra prime evidence', async () => {
+	for (const limit of [null, 0, 64 * 1024 * 1024, 384 * 1024 * 1024 + 1, 1.5])
+		await assert.rejects(
+			cappedTrial((trial) => {
+				trial.case.browser.retained_output_limit_bytes = limit;
+			}),
+			/Capped indexed wire requires/
+		);
+	await assert.rejects(
+		cappedTrial((trial) => {
+			trial.case.measurement.application_cache = 'warm';
+		}),
+		/without priming/
+	);
+	await assert.rejects(
+		cappedTrial((trial) => {
+			trial.prime_reference_output = trial.reference_output;
+		}),
+		/without priming/
+	);
+});
+
+test('compact evidence preserves A/B/A without expanding typed indices into number arrays', () => {
+	const first = indexedOutput();
+	first.indices[Symbol.iterator] = () => {
+		throw new Error('Index iteration would expand the image.');
+	};
+	assert.equal(verificationOutput(first, true).indices_hex, '0001');
+	const tracker = outputStability(1026, 'indexed8', true);
+	tracker.observe([first]);
+	const second = indexedOutput();
+	second.indices.reverse();
+	tracker.observe([second]);
+	const final = indexedOutput();
+	tracker.observe([final]);
+	const evidence = tracker.evidence(final);
+	assert.equal(evidence.unstable_output.indices_hex, '0001');
+	assert.equal(evidence.output.indices_hex, '0100');
+	assert.ok(
+		equalOutput(decodeOutput(evidence.unstable_output), verificationOutput(indexedOutput()))
+	);
+});
+
+test('compact composition failure keeps its message independent of index length', async () => {
+	const output = indexedOutput();
+	const operation = { prepare: async () => ({ call: () => output, close() {} }) };
+	const expected = verificationOutput(indexedOutput());
+	expected.pixels.indices.reverse();
+	await assert.rejects(requireMatchingComposition(operation, expected, true), (error) => {
+		assert.match(
+			error.message,
+			/Process differs from staged production before timing.*current.*counterpart/
+		);
+		assert.ok(error.message.length < 300);
+		assert.ok(!error.message.includes('indices'));
+		return true;
+	});
 });
 
 test('shared backing stores fail before the collector can retain mutable snapshots', () => {

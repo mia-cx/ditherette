@@ -121,6 +121,7 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
             (
                 operation.subject(BrowserBackend::Package).to_owned(),
                 Some(BrowserCase {
+                    retained_output_limit_bytes: None,
                     execution: None,
                     row_policy: None,
                     operation,

@@ -5,6 +5,12 @@ let mismatchAt = 0;
 let progressCalls = 0;
 let progressFailure;
 let initializationFailure = 0;
+let wasmThreadPolicy;
+
+/** Model the initializer policy required by the selected Wasm fixture. */
+export function requireThreadPolicy(threads) {
+	wasmThreadPolicy = threads;
+}
 
 export function failInitialization(at) {
 	initializationFailure = at;
@@ -21,12 +27,15 @@ export function reset(transientMismatchAt = 0) {
 	progressCalls = 0;
 	progressFailure = undefined;
 	initializationFailure = 0;
+	wasmThreadPolicy = undefined;
 }
 
 export async function createDitherette(options) {
 	const id = ++nextId;
 	events.push({ type: 'initialize', id, threads: options.threads,
 		wasm: options.wasm instanceof WebAssembly.Module ? 'compiled' : 'bytes' });
+	if (wasmThreadPolicy !== undefined && options.threads !== wasmThreadPolicy)
+		throw new Error(`Wasm fixture requires ${wasmThreadPolicy} threads; got ${options.threads}.`);
 	if (id === initializationFailure) throw new Error('injected required startup failure');
 	events.push({ type: 'create', id });
 	const call = (method, request) => {

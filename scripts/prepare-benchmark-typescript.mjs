@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,9 +8,26 @@ import ts from 'typescript';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const providerRevision = 'a895267baea624a6e89bfcef6c5147f170e8a8f7';
 
-/** Offline compilation of the actual adapter dependency closure, preserving module boundaries. */
-export async function prepareTypeScript(destination) {
+/** Compile the historical S41 website provider from Git, independent of live source files. */
+export async function prepareTypeScript(destination, { sourceCheckout = root } = {}) {
+	const git = (...args) =>
+		execFileSync('git', ['--no-replace-objects', ...args], {
+			cwd: sourceCheckout,
+			encoding: 'utf8',
+			stdio: 'pipe',
+			env: { ...process.env, GIT_NO_LAZY_FETCH: '1' }
+		});
+	try {
+		git('cat-file', '-e', `${providerRevision}^{commit}`);
+	} catch (cause) {
+		throw new Error(
+			`Historical TypeScript provider commit ${providerRevision} is unavailable. Fetch its Git objects before offline preparation.`,
+			{ cause }
+		);
+	}
+	const revision = git('rev-parse', 'HEAD').trim();
 	await mkdir(destination); // Refuse stale output. The caller chooses a new directory before the lease.
 	const pending = ['scripts/benchmark-typescript.ts'];
 	const inputs = new Map();
@@ -17,7 +35,15 @@ export async function prepareTypeScript(destination) {
 	while (pending.length) {
 		const relative = pending.pop();
 		if (inputs.has(relative)) continue;
-		const source = await readFile(path.join(root, relative), 'utf8');
+		let source;
+		try {
+			source = git('show', `${providerRevision}:${relative}`);
+		} catch (cause) {
+			throw new Error(
+				`Historical TypeScript provider input ${providerRevision}:${relative} is unavailable. Fetch its Git objects before offline preparation.`,
+				{ cause }
+			);
+		}
 		inputs.set(relative, digest(source));
 		const emitted = ts.transpileModule(source, {
 			fileName: relative,
@@ -68,6 +94,8 @@ export async function prepareTypeScript(destination) {
 	}
 	const compiler = fileURLToPath(import.meta.resolve('typescript'));
 	const manifest = {
+		source_revision: revision,
+		provider: { kind: 'historical-website-typescript', source_revision: providerRevision },
 		entry: 'scripts/benchmark-typescript.js',
 		compiler: { version: ts.version, source: compiler, sha256: digest(await readFile(compiler)) },
 		options,

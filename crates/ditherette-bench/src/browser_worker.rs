@@ -1,13 +1,17 @@
 //! One owned Node transport per benchmark worker, with checked response identities.
 
+mod indexed_wire;
+
 use crate::{
     browser_assets::{validate_bundle_revision, validate_oracle, validate_trial_assets},
     lease::Lease,
     paired::{browser::*, *},
 };
 use ditherette_bench_api::verification::{
-    ImplementationIdentity, Pixels, RecordedOutput, ThreeWayOutputs,
+    ArtifactIdentity, CaseIdentity, Digest256, Dimensions, ImplementationIdentity, Pixels,
+    RecordedOutput, ThreeWayOutputs, VerificationOutput, Warning,
 };
+use serde::Serialize;
 use std::{
     fs::{self, OpenOptions},
     io::{self, BufRead, BufReader, Read, Write},
@@ -42,22 +46,26 @@ pub fn run_transport(
         .env("DITHERETTE_BENCH_TRANSPORT", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
-    let result = read_owned_transport(lease, command, response_limit(request)?, &mut raw)?;
+    let result =
+        read_owned_transport_with(lease, command, response_limit(request)?, &mut raw, |line| {
+            match request
+                .case
+                .browser
+                .as_ref()
+                .and_then(|case| case.retained_output_limit_bytes)
+            {
+                Some(limit) => indexed_wire::decode(line, request.case.identity.output, limit),
+                None => serde_json::from_str(line).map_err(io::Error::other),
+            }
+        })?;
     validate_trial_assets(trial)?;
     validate_response(request, &result)?;
-    OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(request_path.with_extension("reference-diagnostics.json"))?
-        .write_all(
-            &serde_json::to_vec_pretty(&serde_json::json!({
-                "case": request.case.identity,
-                "native_reference": request.reference_output,
-                "wasm_reference": result.reference,
-                "artifact": artifact_identity(&request.executable, &trial.assets, &trial.runtime)?,
-            }))
-            .map_err(io::Error::other)?,
-        )?;
+    write_reference_diagnostics(
+        request,
+        &result,
+        &request_path.with_extension("reference-diagnostics.json"),
+        artifact_identity(&request.executable, &trial.assets, &trial.runtime)?,
+    )?;
     reject_unstable_output(
         request,
         &result,
@@ -73,6 +81,18 @@ pub fn read_owned_transport(
     limit: u64,
     raw: &mut impl Write,
 ) -> io::Result<BrowserTransportResult> {
+    read_owned_transport_with(lease, command, limit, raw, |line| {
+        serde_json::from_str(line).map_err(io::Error::other)
+    })
+}
+
+fn read_owned_transport_with(
+    lease: &Lease,
+    command: Command,
+    limit: u64,
+    raw: &mut impl Write,
+    decode: impl FnOnce(&str) -> io::Result<BrowserTransportResult>,
+) -> io::Result<BrowserTransportResult> {
     let mut child = lease.spawn(command)?;
     let stdout = child
         .take_stdout()
@@ -87,7 +107,7 @@ pub fn read_owned_transport(
             "transport response exceeds its bound or lacks one complete JSON line",
         ));
     }
-    let result = serde_json::from_str(&line).map_err(io::Error::other)?;
+    let result = decode(&line)?;
     let mut trailing = String::new();
     reader.read_to_string(&mut trailing)?;
     raw.write_all(trailing.as_bytes())?;
@@ -105,9 +125,19 @@ pub fn response_limit(request: &TrialRequest) -> io::Result<u64> {
     // JSON RGBA bytes need at most four characters each, plus structured evidence.
     // An exact preflight does not preclude later instability. Retain two actual results in every trial.
     let outputs = 3;
+    let bytes_per_pixel = if request
+        .case
+        .browser
+        .as_ref()
+        .is_some_and(|case| case.retained_output_limit_bytes.is_some())
+    {
+        2 // Canonical hex carries one indexed byte, not four RGBA decimal bytes.
+    } else {
+        16
+    };
     u64::from(request.case.identity.output.width)
         .checked_mul(u64::from(request.case.identity.output.height))
-        .and_then(|pixels| pixels.checked_mul(16 * outputs))
+        .and_then(|pixels| pixels.checked_mul(bytes_per_pixel * outputs))
         .and_then(|bytes| bytes.checked_add(1024 * 1024))
         .and_then(|bytes| {
             (request.case.measurement.samples as u64)
@@ -115,6 +145,114 @@ pub fn response_limit(request: &TrialRequest) -> io::Result<u64> {
                 .and_then(|samples| bytes.checked_add(samples))
         })
         .ok_or_else(|| invalid("transport response size overflow"))
+}
+
+fn uses_capped_diagnostics(request: &TrialRequest) -> bool {
+    request
+        .case
+        .browser
+        .as_ref()
+        .is_some_and(|case| case.retained_output_limit_bytes.is_some())
+}
+
+#[derive(Serialize)]
+struct CappedPixels<'a> {
+    format: &'static str,
+    index_count: usize,
+    index_digest: Digest256,
+    palette_rgba: &'a [u8],
+    transparent_index: Option<u8>,
+}
+
+#[derive(Serialize)]
+struct CappedOutput<'a> {
+    dimensions: &'a Dimensions,
+    pixels: CappedPixels<'a>,
+    warnings: &'a [Warning],
+}
+
+fn capped_output(output: &VerificationOutput) -> io::Result<CappedOutput<'_>> {
+    let Pixels::Indexed8 {
+        indices,
+        palette_rgba,
+        transparent_index,
+    } = &output.pixels
+    else {
+        return Err(invalid("capped diagnostics require indexed output"));
+    };
+    Ok(CappedOutput {
+        dimensions: &output.dimensions,
+        pixels: CappedPixels {
+            format: "indexed8",
+            index_count: indices.len(),
+            index_digest: crate::verification::content_digest(indices),
+            palette_rgba,
+            transparent_index: *transparent_index,
+        },
+        warnings: &output.warnings,
+    })
+}
+
+fn write_pretty(path: &Path, value: &impl Serialize) -> io::Result<()> {
+    let file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    serde_json::to_writer_pretty(file, value).map_err(io::Error::other)
+}
+
+fn write_reference_diagnostics(
+    request: &TrialRequest,
+    result: &BrowserTransportResult,
+    path: &Path,
+    artifact: ArtifactIdentity,
+) -> io::Result<()> {
+    if !uses_capped_diagnostics(request) {
+        return OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?
+            .write_all(
+                &serde_json::to_vec_pretty(&serde_json::json!({
+                "case": request.case.identity,
+                "native_reference": request.reference_output,
+                "wasm_reference": result.reference,
+                "artifact": artifact,
+                }))
+                .map_err(io::Error::other)?,
+            );
+    }
+    #[derive(Serialize)]
+    struct Diagnostics<'a> {
+        schema: &'static str,
+        case: &'a CaseIdentity,
+        native_reference: CappedOutput<'a>,
+        wasm_reference: CappedOracleOutput<'a>,
+        artifact: ArtifactIdentity,
+    }
+    #[derive(Serialize)]
+    struct CappedOracleOutput<'a> {
+        case: &'a CaseIdentity,
+        output: CappedOutput<'a>,
+    }
+    let native = request
+        .reference_output
+        .as_ref()
+        .ok_or_else(|| invalid("missing native reference for capped diagnostics"))?;
+    let wasm = result
+        .reference
+        .as_ref()
+        .ok_or_else(|| invalid("missing Wasm reference for capped diagnostics"))?;
+    write_pretty(
+        path,
+        &Diagnostics {
+            schema: "ditherette-capped-reference-diagnostic-v1",
+            case: &request.case.identity,
+            native_reference: capped_output(native)?,
+            wasm_reference: CappedOracleOutput {
+                case: &wasm.case,
+                output: capped_output(&wasm.output)?,
+            },
+            artifact,
+        },
+    )
 }
 
 /// Preserve the actual untimed mismatch, with no fabricated output for the absent peer role.
@@ -127,6 +265,46 @@ pub fn preserve_reference_mismatch(
     if result.timing_skipped != Some(TimingSkipped::ReferenceMismatch) {
         return Err(invalid("expected untimed reference mismatch"));
     }
+    if uses_capped_diagnostics(request) {
+        #[derive(Serialize)]
+        struct Diagnostics<'a> {
+            schema: &'static str,
+            case: &'a CaseIdentity,
+            native_reference: CappedOutput<'a>,
+            wasm_reference: CappedOracleOutput<'a>,
+            actual_output: CappedOutput<'a>,
+            timing_skipped: TimingSkipped,
+        }
+        #[derive(Serialize)]
+        struct CappedOracleOutput<'a> {
+            case: &'a CaseIdentity,
+            output: CappedOutput<'a>,
+        }
+        fs::create_dir_all(directory)?;
+        let native = request
+            .reference_output
+            .as_ref()
+            .ok_or_else(|| invalid("missing native reference for capped diagnostics"))?;
+        let wasm = result
+            .reference
+            .as_ref()
+            .ok_or_else(|| invalid("missing Wasm reference for capped diagnostics"))?;
+        write_pretty(
+            &directory.join("results.json"),
+            &Diagnostics {
+                schema: "ditherette-capped-reference-mismatch-v1",
+                case: &request.case.identity,
+                native_reference: capped_output(native)?,
+                wasm_reference: CappedOracleOutput {
+                    case: &wasm.case,
+                    output: capped_output(&wasm.output)?,
+                },
+                actual_output: capped_output(&result.output)?,
+                timing_skipped: TimingSkipped::ReferenceMismatch,
+            },
+        )?;
+        return Ok(());
+    }
     preserve_output(
         request,
         result.reference.as_ref().expect("validated oracle"),
@@ -135,8 +313,8 @@ pub fn preserve_reference_mismatch(
     )
 }
 
-/// Preserve both actual images, then fail before a normal paired result can be published.
-/// Raw transport JSON remains available even if writing a review bundle fails.
+/// Preserve full ordinary outputs or capped summaries, then reject the unstable trial.
+/// Raw transport JSON remains available even if writing the derived diagnostics fails.
 pub fn reject_unstable_output(
     request: &TrialRequest,
     result: &BrowserTransportResult,
@@ -147,6 +325,80 @@ pub fn reject_unstable_output(
         return Ok(());
     };
     fs::create_dir(directory)?;
+    if uses_capped_diagnostics(request) {
+        // run_transport already persisted the exact compact response before this bounded derivative.
+        #[derive(Serialize)]
+        struct Trial<'a> {
+            role: Role,
+            pair: usize,
+            case_name: &'a str,
+            input: &'a Digest256,
+            settings: &'a Digest256,
+            sample_ns: &'a [f64],
+            iterations_per_sample: usize,
+            warmup_iterations: usize,
+            warmup_elapsed_ns: u128,
+            observation: &'a BrowserObservation,
+            timing_skipped: Option<TimingSkipped>,
+        }
+        #[derive(Serialize)]
+        struct Oracle<'a> {
+            case: &'a CaseIdentity,
+            output: CappedOutput<'a>,
+        }
+        #[derive(Serialize)]
+        struct Outputs<'a> {
+            native_reference: CappedOutput<'a>,
+            wasm_reference: Oracle<'a>,
+            first_output: CappedOutput<'a>,
+            first_distinct_output: CappedOutput<'a>,
+        }
+        #[derive(Serialize)]
+        struct Diagnostics<'a> {
+            schema: &'static str,
+            trial: Trial<'a>,
+            outputs: Outputs<'a>,
+        }
+        let wasm = result
+            .reference
+            .as_ref()
+            .ok_or_else(|| invalid("missing Wasm reference for capped diagnostics"))?;
+        let native = request
+            .reference_output
+            .as_ref()
+            .ok_or_else(|| invalid("missing native reference for capped diagnostics"))?;
+        write_pretty(
+            &directory.join("transport.json"),
+            &Diagnostics {
+                schema: "ditherette-capped-transport-diagnostic-v1",
+                trial: Trial {
+                    role: result.role,
+                    pair: result.pair,
+                    case_name: &result.case_name,
+                    input: &result.input,
+                    settings: &result.settings,
+                    sample_ns: &result.sample_ns,
+                    iterations_per_sample: result.iterations_per_sample,
+                    warmup_iterations: result.warmup_iterations,
+                    warmup_elapsed_ns: result.warmup_elapsed_ns,
+                    observation: &result.observation,
+                    timing_skipped: result.timing_skipped,
+                },
+                outputs: Outputs {
+                    native_reference: capped_output(native)?,
+                    wasm_reference: Oracle {
+                        case: &wasm.case,
+                        output: capped_output(&wasm.output)?,
+                    },
+                    first_output: capped_output(first)?,
+                    first_distinct_output: capped_output(&result.output)?,
+                },
+            },
+        )?;
+        return Err(invalid(
+            "output changed during the trial; both actual outputs retained, trial rejected",
+        ));
+    }
     OpenOptions::new()
         .write(true)
         .create_new(true)
