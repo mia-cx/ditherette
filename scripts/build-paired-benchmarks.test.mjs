@@ -151,6 +151,32 @@ test('host-dependent CPU selection cannot claim a portable recorded recipe', () 
 	assert.deepEqual(normalizedArguments(explicit, {}), explicit);
 });
 
+test('compiler recipes ignore autocfg randomized probe crate names', () => {
+	const probe = [
+		'--crate-name',
+		'autocfg_2ff379b7f5182713_0',
+		'--crate-type=lib',
+		'--emit=llvm-ir',
+		'--target',
+		'x86_64-unknown-linux-gnu',
+		'-'
+	];
+	const anotherProbe = [...probe];
+	anotherProbe[1] = 'autocfg_b7b8dee399bd0873_0';
+	assert.deepEqual(normalizedArguments(probe, {}), normalizedArguments(anotherProbe, {}));
+	const nextProbe = [...probe];
+	nextProbe[1] = 'autocfg_2ff379b7f5182713_1';
+	assert.notDeepEqual(normalizedArguments(probe, {}), normalizedArguments(nextProbe, {}));
+	assert.notDeepEqual(
+		normalizedArguments(['--crate-name', 'ditherette_bench', ...probe.slice(2)], {}),
+		normalizedArguments(['--crate-name', 'ditherette_bench_pair', ...probe.slice(2)], {})
+	);
+	assert.notDeepEqual(
+		normalizedArguments(['--crate-name', probe[1], '--crate-type=lib'], {}),
+		normalizedArguments(['--crate-name', anotherProbe[1], '--crate-type=lib'], {})
+	);
+});
+
 test('opaque compiler response files cannot bypass recipe recording', () => {
 	for (const args of [
 		['@/tmp/flags.rsp'],
