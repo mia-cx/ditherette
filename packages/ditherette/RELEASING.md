@@ -13,6 +13,7 @@ Wasm variants to the crate's pinned build scripts.
 
 ```sh
 pnpm install --frozen-lockfile
+mkdir -p "$PWD/target"
 node packages/ditherette/scripts/release.mjs prepare "$PWD/target/release"
 node packages/ditherette/scripts/release.mjs verify "$PWD/target/release" v0.1.0
 ```
@@ -53,6 +54,19 @@ the protected `npm-publish` environment. Configure required human reviewers in
 that environment. npm's trusted-publisher requirements and automatic provenance
 are documented in [npm's guide](https://docs.npmjs.com/trusted-publishers/).
 GitHub documents [environment protection rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+
+The first publication requires an external npm setup step: the package must
+exist on the registry before its trusted-publisher connection can be configured.
+Complete that package bootstrap and trust configuration with an authorized
+maintainer before creating a release tag; this repository does not automate or
+authorize that account action. The npm CLI documents the package prerequisite
+and trust permissions in [`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
+
+The workflow currently uses direct `npm publish`, so the trusted publisher must
+allow that action. Newer trust configurations allow staged publication by
+default, but staging requires a separate human approval before the package goes
+live. Choosing staged publication would require a separately approved workflow
+and release-procedure change; it is not silently substituted here.
 
 The checked tools are Node 24.19.0, pnpm 11.13.0, npm 11.17.0, wasm-pack 0.15.0,
 Rust 1.97.0, and the genuine `nightly-2024-08-02` threaded compiler. The frozen
