@@ -95,6 +95,16 @@ fn quantize<'a>(settings: &'a QuantizeSettings, source: Source<'a>) -> QuantizeR
     }
 }
 
+/// Match the coordinator's canonical settings identity after request validation.
+fn palette_settings(
+    entries: &[image::contracts::PaletteEntry],
+) -> (&[image::contracts::PaletteEntry], bool) {
+    (
+        &entries[..entries.len().min(MAX_PALETTE_ENTRIES)],
+        entries.len() > MAX_PALETTE_ENTRIES,
+    )
+}
+
 impl OracleRequest {
     fn request(&self) -> Request<'_> {
         let source = Source {
@@ -202,7 +212,13 @@ impl OracleRequest {
                 Operation::Quantize,
                 "public-quantize",
                 Some(q.matching.space()),
-                settings_digest(&("quantize", q.version, q.palette, q.alpha, q.matching)),
+                settings_digest(&(
+                    "quantize",
+                    q.version,
+                    palette_settings(q.palette),
+                    q.alpha,
+                    q.matching,
+                )),
             ),
             Request::DitherAndQuantize(d) => (
                 Operation::DitherAndQuantize,
@@ -211,7 +227,7 @@ impl OracleRequest {
                 settings_digest(&(
                     "dither-and-quantize",
                     d.quantize.version,
-                    d.quantize.palette,
+                    palette_settings(d.quantize.palette),
                     d.quantize.alpha,
                     d.quantize.matching,
                     d.dither,
@@ -235,7 +251,7 @@ impl OracleRequest {
                 Operation::Process,
                 "public-process",
                 Some(p.recipe.matching.space()),
-                settings_digest(&("process", p.palette, p.recipe)),
+                settings_digest(&("process", palette_settings(p.palette), p.recipe)),
             ),
         };
         let space = space.map(|value| {

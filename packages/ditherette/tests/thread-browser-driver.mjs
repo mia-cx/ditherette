@@ -201,6 +201,17 @@ function hostCheck(page, operation, input) {
 
 export async function threadedFailureDriver({ page, server, input, t, context }) {
 	await prepareThreadServer(server, t, context);
+	await page.goto(server.url);
+	await startCheckHost(page);
+	try {
+		assert.deepEqual(
+			await hostCheck(page, 'initializeMemoryUnavailable', input),
+			{ structured: true, code: 'wasm-memory-unavailable', path: 'wasm' }
+		);
+		await waitForWorkers(page, 0);
+	} finally {
+		await page.evaluate(() => checkHost.terminate());
+	}
 	for (const threads of ['preferred', 'required']) {
 		await page.goto(server.url);
 		await startCheckHost(page);
@@ -240,7 +251,12 @@ export async function threadedFailureDriver({ page, server, input, t, context })
 			await page.evaluate(() => checkHost.terminate());
 		}
 	}
-	return { partialWorkersObserved: 4, preferredFallback: true, requiredInitializationError: true };
+	return {
+		partialWorkersObserved: 4,
+		preferredFallback: true,
+		requiredInitializationError: true,
+		requiredAllocationDiagnostic: true
+	};
 }
 
 export async function processingHostDriver({ page, server, input, t, context }) {
