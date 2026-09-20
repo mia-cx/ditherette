@@ -1,0 +1,652 @@
+{
+  "engines": {
+    "native": {
+      "sha256": "4fbe400051bf72c25370c2a4f3aa81896a2e97f82bd9e8921c4f0e49c981081f",
+      "report": {
+        "schema": "ditherette-fresh-pair-v1",
+        "gate": "inconclusive",
+        "cases": [
+          {
+            "case_name": "srgb-p2-b2",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.056740235753070904,
+              0.05769598303367577
+            ],
+            "accepted_median_ns": 984427,
+            "candidate_median_ns": 56151,
+            "median_ratio": 0.057039272592076404,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "linear-p16-b2",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.6209543233118451,
+              0.6732904762365789
+            ],
+            "accepted_median_ns": 209813.5,
+            "candidate_median_ns": 137731.5,
+            "median_ratio": 0.6564472734118634,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklab-p8-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.5743613984509538,
+              0.5817610989793917
+            ],
+            "accepted_median_ns": 596450.5,
+            "candidate_median_ns": 344295,
+            "median_ratio": 0.5772398547742017,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "cielab-p16-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.8340145033797491,
+              0.8447672526874349
+            ],
+            "accepted_median_ns": 490733,
+            "candidate_median_ns": 411782,
+            "median_ratio": 0.8391161792665258,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "ciede2000-p4-b4",
+            "gate": "inconclusive",
+            "issues": [],
+            "pair_ratios": [
+              0.9169947791674744,
+              1.0372516889849972
+            ],
+            "accepted_median_ns": 224354,
+            "candidate_median_ns": 209773,
+            "median_ratio": 0.935008959055778,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklch-p8-b4-adaptive",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.9072771394202968,
+              0.923052413080533
+            ],
+            "accepted_median_ns": 970565.5,
+            "candidate_median_ns": 892515,
+            "median_ratio": 0.919582449613138,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p256-b2-control",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.9865438037807439,
+              1.0113285076997707
+            ],
+            "accepted_median_ns": 475337.5,
+            "candidate_median_ns": 474703,
+            "median_ratio": 0.9986651589659978,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p2-b16-control",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.6783765347885402,
+              0.6790356322233273
+            ],
+            "accepted_median_ns": 14630.5,
+            "candidate_median_ns": 9931,
+            "median_ratio": 0.6787874645432487,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          }
+        ]
+      },
+      "workers": 32,
+      "samples": 640,
+      "maxLive": 1,
+      "firstEvent": {
+        "trial": "pair-000-case-000-accepted",
+        "state": "starting",
+        "pid": null,
+        "unix_ns": 1788858255160167000,
+        "host_load": "0.81 1.08 1.42 2/703 766240"
+      },
+      "lastEvent": {
+        "trial": "pair-001-case-007-accepted",
+        "state": "reaped",
+        "pid": 766272,
+        "unix_ns": 1788858257507644000,
+        "host_load": "0.83 1.07 1.42 1/702 766272"
+      }
+    },
+    "chromium": {
+      "sha256": "576feb5fcda2a14100e0fc93ec6d93a5cb173d102bfd15223a62dfac9bb1c0fe",
+      "report": {
+        "schema": "ditherette-fresh-pair-v1",
+        "gate": "inconclusive",
+        "cases": [
+          {
+            "case_name": "srgb-p2-b2",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.02071139130461739,
+              0.021306159959519944
+            ],
+            "accepted_median_ns": 5447499.999776483,
+            "candidate_median_ns": 114999.99836087228,
+            "median_ratio": 0.02111060089317868,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "linear-p16-b2",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.35763888896973284,
+              0.36363636079443845
+            ],
+            "accepted_median_ns": 719999.9988079071,
+            "candidate_median_ns": 259999.99791383743,
+            "median_ratio": 0.3611111088115492,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklab-p8-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.3412797991486505,
+              0.3316326521496843
+            ],
+            "accepted_median_ns": 1964999.9998509884,
+            "candidate_median_ns": 660000.0001490116,
+            "median_ratio": 0.3358778626967233,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "cielab-p16-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.6161417330283379,
+              0.6419753097018557
+            ],
+            "accepted_median_ns": 1237499.998882413,
+            "candidate_median_ns": 780000.0011920929,
+            "median_ratio": 0.6303030318355648,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "ciede2000-p4-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.6999999946781568,
+              0.6556291413602063
+            ],
+            "accepted_median_ns": 360000.0012665987,
+            "candidate_median_ns": 245000.00104308128,
+            "median_ratio": 0.6805555560585848,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklch-p8-b4-adaptive",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.893114080603182,
+              0.929208180311011
+            ],
+            "accepted_median_ns": 4830000.000074506,
+            "candidate_median_ns": 4387500.001117587,
+            "median_ratio": 0.9083850933850739,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p256-b2-control",
+            "gate": "inconclusive",
+            "issues": [],
+            "pair_ratios": [
+              0.9644670067943698,
+              1.1201044367528472
+            ],
+            "accepted_median_ns": 975000.001490116,
+            "candidate_median_ns": 980000.0004470348,
+            "median_ratio": 1.0051282040505407,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p2-b16-control",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.4545454299154359,
+              0.4545454637817115
+            ],
+            "accepted_median_ns": 54999.999701976776,
+            "candidate_median_ns": 24999.99850988388,
+            "median_ratio": 0.4545454299154359,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          }
+        ]
+      },
+      "workers": 32,
+      "samples": 640,
+      "maxLive": 1,
+      "firstEvent": {
+        "trial": "pair-000-case-000-accepted",
+        "state": "starting",
+        "pid": null,
+        "unix_ns": 1788858280591345000,
+        "host_load": "0.67 1.02 1.39 1/696 766391"
+      },
+      "lastEvent": {
+        "trial": "pair-001-case-007-accepted",
+        "state": "reaped",
+        "pid": 772027,
+        "unix_ns": 1788858360553603600,
+        "host_load": "1.40 1.23 1.44 1/691 772173"
+      }
+    },
+    "firefox": {
+      "sha256": "e1830ca7626f06e5ac10560cd6b73c8cd3a5e6b67a6238ef292df6d84c329aeb",
+      "report": {
+        "schema": "ditherette-fresh-pair-v1",
+        "gate": "inconclusive",
+        "cases": [
+          {
+            "case_name": "srgb-p2-b2",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.015232606010704185,
+              0.015426308109235128
+            ],
+            "accepted_median_ns": 48150000,
+            "candidate_median_ns": 740000.0000000091,
+            "median_ratio": 0.015368639667705276,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "linear-p16-b2",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.3041958041958009,
+              0.3215547703180202
+            ],
+            "accepted_median_ns": 5680000.0000000065,
+            "candidate_median_ns": 1760000.0000000051,
+            "median_ratio": 0.309859154929578,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklab-p8-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.2718922229026333,
+              0.2689486552567238
+            ],
+            "accepted_median_ns": 16340000.000000032,
+            "candidate_median_ns": 4419999.999999988,
+            "median_ratio": 0.27050183598531086,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "cielab-p16-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.5714285714285733,
+              0.5738758029978551
+            ],
+            "accepted_median_ns": 9350000.000000022,
+            "candidate_median_ns": 5360000,
+            "median_ratio": 0.5732620320855601,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "ciede2000-p4-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.6666666666666711,
+              0.6925566343042019
+            ],
+            "accepted_median_ns": 3120000.0000000047,
+            "candidate_median_ns": 2120000.0000000047,
+            "median_ratio": 0.67948717948718,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklch-p8-b4-adaptive",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.9080188679245295,
+              0.9021713752042954
+            ],
+            "accepted_median_ns": 42630000,
+            "candidate_median_ns": 38570000.00000002,
+            "median_ratio": 0.9047619047619053,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p256-b2-control",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.985781990521331,
+              0.965408805031449
+            ],
+            "accepted_median_ns": 6339999.999999975,
+            "candidate_median_ns": 6189999.999999998,
+            "median_ratio": 0.9763406940063127,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p2-b16-control",
+            "gate": "inconclusive",
+            "issues": [],
+            "pair_ratios": [
+              0.39130434782609497,
+              0.45454545454543105
+            ],
+            "accepted_median_ns": 439999.9999999978,
+            "candidate_median_ns": 180000.0000000068,
+            "median_ratio": 0.4090909090909266,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          }
+        ]
+      },
+      "workers": 32,
+      "samples": 640,
+      "maxLive": 1,
+      "firstEvent": {
+        "trial": "pair-000-case-000-accepted",
+        "state": "starting",
+        "pid": null,
+        "unix_ns": 1788858375165078500,
+        "host_load": "1.09 1.17 1.41 1/696 772351"
+      },
+      "lastEvent": {
+        "trial": "pair-001-case-007-accepted",
+        "state": "reaped",
+        "pid": 783151,
+        "unix_ns": 1788858472695064000,
+        "host_load": "1.83 1.46 1.50 1/699 783563"
+      }
+    },
+    "webkit": {
+      "sha256": "6d5a06155ee38953202161eebce3bdc1a93db1aaf0eac7b1e054566385d3bbe9",
+      "report": {
+        "schema": "ditherette-fresh-pair-v1",
+        "gate": "inconclusive",
+        "cases": [
+          {
+            "case_name": "srgb-p2-b2",
+            "gate": "inconclusive",
+            "issues": [],
+            "pair_ratios": [
+              0.023076923076921205,
+              0.027027027027027105
+            ],
+            "accepted_median_ns": 5180000.000000035,
+            "candidate_median_ns": 120000.00000000454,
+            "median_ratio": 0.023166023166023883,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "linear-p16-b2",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.4411764705882266,
+              0.41176470588234004
+            ],
+            "accepted_median_ns": 680000.0000000069,
+            "candidate_median_ns": 280000.00000000116,
+            "median_ratio": 0.4117647058823505,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklab-p8-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.34693877551020397,
+              0.3434343434343437
+            ],
+            "accepted_median_ns": 1960000.000000008,
+            "candidate_median_ns": 680000.0000000069,
+            "median_ratio": 0.3469387755102062,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "cielab-p16-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.6746031746031862,
+              0.6614173228346504
+            ],
+            "accepted_median_ns": 1260000.0000000051,
+            "candidate_median_ns": 840000.0000000034,
+            "median_ratio": 0.6666666666666666,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "ciede2000-p4-b4",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.7222222222222573,
+              0.7777777777777822
+            ],
+            "accepted_median_ns": 359999.9999999994,
+            "candidate_median_ns": 280000.00000000116,
+            "median_ratio": 0.7777777777777822,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "oklch-p8-b4-adaptive",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.9010526315789515,
+              0.9008438818565405
+            ],
+            "accepted_median_ns": 4740000.000000009,
+            "candidate_median_ns": 4280000.000000001,
+            "median_ratio": 0.9029535864978887,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p256-b2-control",
+            "gate": "pass",
+            "issues": [],
+            "pair_ratios": [
+              0.9622641509434103,
+              1
+            ],
+            "accepted_median_ns": 1060000.0000000023,
+            "candidate_median_ns": 1040000.0000000064,
+            "median_ratio": 0.981132075471702,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          },
+          {
+            "case_name": "srgb-p2-b16-control",
+            "gate": "inconclusive",
+            "issues": [],
+            "pair_ratios": [
+              0.6666666666665088,
+              0.5
+            ],
+            "accepted_median_ns": 60000.00000000227,
+            "candidate_median_ns": 39999.99999999204,
+            "median_ratio": 0.6666666666665088,
+            "resolution_limited": false,
+            "verification_count": 4,
+            "verification_statuses": [
+              "exact"
+            ]
+          }
+        ]
+      },
+      "workers": 32,
+      "samples": 640,
+      "maxLive": 1,
+      "firstEvent": {
+        "trial": "pair-000-case-000-accepted",
+        "state": "starting",
+        "pid": null,
+        "unix_ns": 1788858494727626200,
+        "host_load": "1.31 1.37 1.46 1/705 783705"
+      },
+      "lastEvent": {
+        "trial": "pair-001-case-007-accepted",
+        "state": "reaped",
+        "pid": 795700,
+        "unix_ns": 1788858585035417600,
+        "host_load": "1.32 1.34 1.45 1/701 796073"
+      }
+    }
+  }
+}

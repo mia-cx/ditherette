@@ -289,7 +289,6 @@ test('unsupported capabilities and invalid options do not silently select anothe
 	);
 	const preferred = await createDitherette({ wasm: module, threads: 'preferred' });
 	assert.equal(preferred.resize(request()).data[0], 17);
-	assert.equal('process' in preferred, false);
 	assert.equal('wasm' in preferred, false);
 	assert.equal('cache' in preferred, false);
 	preferred.dispose();

@@ -1,6 +1,6 @@
 # ditherette
 
-An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize mode, including trilinear, plus direct palette quantization.
+An MIT-licensed browser ESM image processor. This private checkpoint supports every v1 scalar resize, palette quantization, Bayer/random/blue-noise perturbation, error diffusion, and Yliluoma dithering.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';
@@ -47,6 +47,35 @@ Plans and scratch count toward the memory limit. Each call releases this transie
 Requests require version `1`, positive integer dimensions, and canonical object/string tags. Unknown fields are rejected.
 Source sides are at most 32,768 pixels; resize output sides are at most 16,384. Both images allow at most 67,108,864 pixels.
 
+## Complete processing
+
+```ts
+const indexed = processor.process({
+	source,
+	palette,
+	recipe: {
+		version: 1,
+		output: { width: 320, height: 240, resize: { algorithm: 'trilinear', anchor: 'center' } },
+		alpha: { mode: 'preserve', threshold: 128 },
+		match: 'oklab-euclidean',
+		dither: { family: 'none' }
+	}
+});
+```
+
+The recipe uses `match`; staged quantization methods use `matching`.
+Every resize and dither family works in this composition. Process equals actual
+`resize` followed by `ditherAndQuantize`, including palette metadata and warnings.
+Resized and perturbed RGBA8 intermediates stay in Wasm with their rounding intact.
+Only the final indexed result crosses back to JS. The complete call reserves
+plans, prepared palettes, scratch, source, intermediates, and indices before input copy.
+No intermediate or prepared data survives the call in this checkpoint.
+
+Recipe settings errors use paths such as `recipe.match` and `recipe.dither.size`.
+Input, palette, memory, and result-copy errors keep their existing paths.
+The landed resize kernels retain their documented frozen-reference differences;
+process does not claim to remove them.
+
 ## Direct quantization
 
 ```ts
@@ -86,6 +115,83 @@ Transparent-only palettes produce transparent indices with the approved warning.
 The result contains durable `indices`, `palette.rgba`, `palette.transparentIndex`, and `{ code, message }` warnings.
 Quantize does not resize, dither, retain the source, or cache prepared palettes in this checkpoint.
 
+## Palette-free fields
+
+```ts
+const perturb = {
+	field: { algorithm: 'bayer', size: '4' },
+	space: 'oklch',
+	strength: 0.7,
+	placement: { mode: 'adaptive', radius: 1, threshold: 5, softness: 10 }
+} as const;
+const rgba = processor.perturb({ version: 1, source, perturb });
+const indexed = processor.ditherAndQuantize({
+	version: 1,
+	source,
+	palette,
+	alpha,
+	matching,
+	dither: { family: 'separable', perturb }
+});
+```
+
+Bayer sizes are string tags `2`, `4`, `8`, and `16`.
+Random uses `{ algorithm: 'random', seed: 0 }`, with an unsigned 32-bit integer seed.
+Blue noise uses `{ algorithm: 'blue-noise' }`, with a fixed 32×32 tile and no size or seed controls.
+Random values depend on the global pixel index, so row scheduling does not change the sequence.
+Working spaces are `srgb`, `linear-rgb`, `oklab`, `oklch`, `cielab`, `cielch`, and `ycbcr`.
+They are independent of palette matching settings.
+
+`{ mode: 'everywhere' }` has no adaptive controls.
+Adaptive placement uses the original image's eight-neighbor contrast and fixed color-space ranges, without reading the palette.
+Cylindrical placement uses the minimum-chroma hue arc, not matching's circular chord.
+Radius is an integer from 1 through 32,768. Strength, threshold, and softness accept finite nonnegative f32-range numbers.
+The implementation rounds these controls to f32, but reconstructs perturbed coordinates with wide arithmetic before final RGB clipping and byte rounding.
+Zero strength preserves every source byte. Both placement modes preserve alpha and hidden RGB processing.
+
+`ditherAndQuantize` quantizes that completed RGBA8 result, with the same indices, palette, and warnings as `quantize(perturb(...))`.
+`{ family: 'none' }` performs direct quantization and accepts no perturb settings.
+Input, output, and the separable RGBA8 intermediate count toward the capacity limit and are reserved before input copy.
+Results remain durable after later calls and disposal. No field buffers or prepared palettes are cached.
+## Error diffusion
+
+```ts
+const indexed = processor.ditherAndQuantize({
+	version: 1, source, palette, alpha, matching,
+	dither: {
+		family: 'diffusion', kernel: 'floyd-steinberg', feedback: 'srgb-bytes',
+		strength: 1, serpentine: true, placement: { mode: 'everywhere' }
+	}
+});
+```
+
+Kernels are `floyd-steinberg`, `sierra`, `sierra-lite`, and `atkinson`.
+`srgb-bytes` feedback rounds and clips before matching. `matching` feedback keeps unrounded coordinates in the selected matching space.
+Serpentine scanning reverses alternate rows. Adaptive placement uses the unchanged source and the matching space.
+Preserved transparent pixels discard incoming error and emit none. Palette order, duplicates, and warnings follow direct quantization.
+Diffusion stays scalar and reserves three work rows. Scratch capacity scales with width; owned source and index buffers also count toward the limit.
+An arithmetic overflow returns `runtime` at `dither.arithmetic`, publishes no result, and leaves the instance usable.
+
+## Yliluoma
+
+Yliluoma uses the same palette, matching, and alpha controls:
+
+```ts
+const indexed = processor.ditherAndQuantize({
+	version: 1,
+	source,
+	palette,
+	matching: 'srgb-euclidean',
+	alpha: { mode: 'preserve', threshold: 128 },
+	dither: { family: 'yliluoma', size: '4', placement: { mode: 'everywhere' } }
+});
+```
+
+Matrix sizes are `'2'`, `'4'`, `'8'`, and `'16'`. Adaptive placement uses the controls shown above.
+Yliluoma searches every ordered palette pair and matrix ratio. A zero adaptive mask still searches mixtures of the nearest color.
+It allocates source and index storage without an RGBA8 intermediate or mixture table.
+Exact outputs follow the frozen Wasm reference; native floating-point math can select different mixtures near ties.
+
 ## Initialization and ownership
 
 `createDitherette({ memoryLimitBytes, threads, wasm })` accepts optional initialization settings.
@@ -105,7 +211,8 @@ Recursive processing or disposal fails with `reentrant-call`, including calls fr
 
 ## Checkpoint scope
 
-The remaining processing methods arrive in later implementation slices.
+All five synchronous processing methods are available. Caches, progress delivery,
+and threaded execution arrive in later implementation slices.
 Supplying `onProgress` currently fails explicitly with `unsupported-operation`; S33 adds progress delivery.
 S34 adds the optional threaded runtime. These are temporary slice limits, not permanent API restrictions.
 The package exports no raw bindings, backend selection, cache controls, or processor counters.

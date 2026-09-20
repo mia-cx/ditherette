@@ -10,6 +10,24 @@ use std::io;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum NativeOperation {
+    Process {
+        settings: super::process::ProcessSettings,
+    },
+    Diffusion {
+        settings: super::diffusion::DiffusionSettings,
+    },
+    Yliluoma {
+        settings: super::yliluoma::YliluomaSettings,
+    },
+    FieldComponent {
+        component: ditherette_wasm::bench_subjects::fields::Component,
+    },
+    Perturb {
+        settings: super::fields::PerturbPolicy,
+    },
+    Separable {
+        settings: super::fields::SeparableSettings,
+    },
     Quantize {
         settings: super::quantize::QuantizeSettings,
     },
@@ -28,6 +46,23 @@ impl NativeOperation {
         rgba: &'a [u8],
     ) -> io::Result<ReferenceRequest<'a>> {
         match self {
+            Self::Process { settings } => settings.reference_request(source, rgba),
+            Self::Diffusion { settings } => settings.reference_request(source, rgba),
+            Self::Yliluoma { settings } => settings.reference_request(source, rgba),
+            Self::Perturb { settings } => super::fields::perturb_request(*settings, source, rgba),
+            Self::Separable { settings } => settings.reference_request(source, rgba),
+            Self::FieldComponent { component } => {
+                let request = ReferenceRequest::FieldComponent {
+                    source: ditherette_wasm::spec::contract::request::Source {
+                        width: source.width,
+                        height: source.height,
+                        data: rgba,
+                    },
+                    component: *component,
+                };
+                request.dimensions().map_err(io::Error::other)?;
+                Ok(request)
+            }
             Self::Quantize { settings } => settings.reference_request(source, rgba),
             Self::MetricScores { metric } => {
                 let request = ReferenceRequest::MetricScores {
@@ -62,12 +97,18 @@ impl NativeOperation {
             semantics: request.semantics(),
             input: input_digest(source, rgba),
             settings: settings_digest(&request).map_err(io::Error::other)?,
-            output: source,
+            output: request.dimensions().map_err(io::Error::other)?,
         })
     }
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Process { .. } => "spec:process:request:v1",
+            Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
+            Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
+            Self::Perturb { .. } => "spec:perturb:request:v1",
+            Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
+            Self::FieldComponent { component } => component.reference_subject(),
             Self::Quantize { .. } => "spec:quantize:request:v1",
             Self::MetricScores { metric } => metric.reference_subject(),
             Self::ColorForward { space } => match space {
@@ -84,6 +125,24 @@ impl NativeOperation {
 
     pub fn scope(&self) -> super::CallScope {
         match self {
+            Self::Process { .. } => super::CallScope::NativeCompleteCall,
+            Self::Diffusion { .. } => super::CallScope::NativeCompleteCall,
+            Self::Yliluoma { .. } => super::CallScope::NativeCompleteCall,
+            Self::Perturb { .. } | Self::Separable { .. } => super::CallScope::NativeCompleteCall,
+            Self::FieldComponent { component } => match component {
+                ditherette_wasm::bench_subjects::fields::Component::Inverse { .. } => {
+                    super::CallScope::NativeInverseConversion
+                }
+                ditherette_wasm::bench_subjects::fields::Component::Field { .. } => {
+                    super::CallScope::NativeFieldEvaluation
+                }
+                ditherette_wasm::bench_subjects::fields::Component::Placement { .. } => {
+                    super::CallScope::NativePlacementMask
+                }
+                ditherette_wasm::bench_subjects::fields::Component::SourceConversion { .. } => {
+                    super::CallScope::NativeSourceConversion
+                }
+            },
             Self::Quantize { .. } => super::CallScope::NativeCompleteCall,
             Self::ColorForward { .. } => super::CallScope::NativeForwardConversion,
             Self::MetricScores { .. } => super::CallScope::NativeMetricScores,

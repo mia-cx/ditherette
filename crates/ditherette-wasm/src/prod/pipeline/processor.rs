@@ -134,6 +134,172 @@ impl Processor {
         self.resize_with_allocator(request, boundary, &mut SystemAllocator)
     }
 
+    /// Resize then dither into one durable indexed result, retaining both RGBA8 barriers.
+    pub fn process<B: super::quantize::QuantizeBoundary>(
+        &mut self,
+        request: super::process::ProcessRequest<'_>,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.process_with_allocator(request, boundary, &mut SystemAllocator)
+    }
+
+    /// Reserve the complete call before input copying, with recoverable boundary failures.
+    pub fn process_with_allocator<B: super::quantize::QuantizeBoundary, A: Allocator>(
+        &mut self,
+        request: super::process::ProcessRequest<'_>,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        self.state = State::Running;
+        // Shared bookkeeping includes resize preparation and two Vec records.
+        // Process owns two more records for perturb RGBA8 and indexed output.
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + size_of::<super::process::ProcessRequest<'_>>() as u64
+            + 2 * size_of::<Vec<u8>>() as u64
+            + if matches!(
+                request.recipe.dither,
+                crate::prod::contract::request::DitherPolicy::Separable { .. }
+            ) {
+                super::perturb::working_capacity_bytes()
+            } else {
+                0
+            }
+            + boundary.capacity_bytes();
+        self.peak_capacity = overhead;
+        let result = super::process::run(
+            request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+        );
+        self.state = State::Ready;
+        result
+    }
+
+    /// Materialize palette-free, durable RGBA8 with all owned capacity checked before input copy.
+    pub fn perturb<B: Boundary>(
+        &mut self,
+        request: super::perturb::PerturbRequest,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.perturb_with_allocator(request, boundary, &mut SystemAllocator)
+    }
+
+    /// Injectable reservations preserve the same recoverable lifecycle as resize and quantize.
+    pub fn perturb_with_allocator<B: Boundary, A: Allocator>(
+        &mut self,
+        request: super::perturb::PerturbRequest,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        self.state = State::Running;
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        self.peak_capacity = overhead;
+        let result = super::perturb::run(
+            request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+        );
+        self.state = State::Ready;
+        result
+    }
+
+    /// Separable modes quantize a complete RGBA8 intermediate; diffusion uses three work rows.
+    /// None delegates to direct quantization.
+    /// Yliluoma searches literal ordered mixtures.
+    pub fn dither_and_quantize<B: super::quantize::QuantizeBoundary>(
+        &mut self,
+        request: super::quantize::QuantizeRequest<'_>,
+        dither: crate::prod::contract::request::DitherPolicy,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.dither_and_quantize_with_allocator(request, dither, boundary, &mut SystemAllocator)
+    }
+
+    /// Reserve the source, mode-specific scratch, indices, and palette before input copy.
+    pub fn dither_and_quantize_with_allocator<
+        B: super::quantize::QuantizeBoundary,
+        A: Allocator,
+    >(
+        &mut self,
+        request: super::quantize::QuantizeRequest<'_>,
+        dither: crate::prod::contract::request::DitherPolicy,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        use crate::prod::contract::request::DitherPolicy;
+        if matches!(dither, DitherPolicy::None {}) {
+            return self.quantize_with_allocator(request, boundary, allocator);
+        }
+        self.state = State::Running;
+        let mode_capacity = if matches!(dither, DitherPolicy::Diffusion { .. }) {
+            size_of::<crate::prod::dither::error_diffusion::prepared::DiffusionPolicy>() as u64
+                + size_of::<DitherPolicy>() as u64
+        } else if matches!(dither, DitherPolicy::Yliluoma { .. }) {
+            size_of::<DitherPolicy>() as u64
+        } else {
+            (size_of::<crate::prod::contract::request::PerturbPolicy>() + size_of::<Vec<u8>>())
+                as u64
+        };
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
+            + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
+            + mode_capacity
+            + super::perturb::working_capacity_bytes()
+            + boundary.capacity_bytes();
+        self.peak_capacity = overhead;
+        let result = match dither {
+            DitherPolicy::Diffusion { .. } => super::diffusion::run(
+                request,
+                dither,
+                boundary,
+                allocator,
+                self.memory_limit,
+                overhead,
+                &mut self.peak_capacity,
+            ),
+            DitherPolicy::Separable { .. } | DitherPolicy::Yliluoma { .. } => {
+                super::quantize::run_with_dither(
+                    request,
+                    dither,
+                    boundary,
+                    allocator,
+                    self.memory_limit,
+                    overhead,
+                    &mut self.peak_capacity,
+                )
+            }
+            _ => unreachable!("supported family checked before entering running state"),
+        };
+        self.state = State::Ready;
+        result
+    }
+
     /// Quantize into durable indexed output after complete call-owned capacity preflight.
     pub fn quantize<B: super::quantize::QuantizeBoundary>(
         &mut self,

@@ -141,6 +141,14 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
                             .into()
                     }
                     NativeOperation::MetricScores { metric } => metric.prod_subject().into(),
+                    NativeOperation::Diffusion { .. }
+                    | NativeOperation::Process { .. }
+                    | NativeOperation::FieldComponent { .. }
+                    | NativeOperation::Yliluoma { .. }
+                    | NativeOperation::Perturb { .. }
+                    | NativeOperation::Separable { .. } => {
+                        unreachable!("S25 has no field controls")
+                    }
                 },
                 None,
             )

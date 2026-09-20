@@ -5,6 +5,8 @@
 //! `processRgba8` exists, but staged exports are useful for lazy materialization,
 //! memoization, and browser/Wasm benchmarks.
 
+pub mod fields;
+pub mod process;
 pub mod processor;
 pub mod quantize;
 
