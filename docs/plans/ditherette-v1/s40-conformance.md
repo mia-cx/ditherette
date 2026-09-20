@@ -67,7 +67,7 @@ Native preparation/stage tests cover entry and byte eviction. Browser behavior d
 The Rust workspace owns `test:conformance`, `test:conformance:threads`, and `test:conformance:automatic`.
 The new package conformance workflow builds one ordinary tarball with the existing fresh-artifact preparer.
 It generates the independent native Yliluoma identities and tests the installed tarball by digest.
-It runs the native, public/private, scalar browser, supported threaded, automatic-policy, and website checks.
+It runs the native, public/private, scalar browser, supported threaded, and automatic-policy checks.
 It uploads the tarball, provenance, and browser logs without publishing or tagging anything.
 The separate trusted frozen-reference workflow remains unchanged.
 

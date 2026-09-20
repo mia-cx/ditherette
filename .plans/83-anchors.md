@@ -105,12 +105,11 @@ Native worker SHA-256 digests are
 `2c26ec86d5ba668667438713ecbeb9c44fc2c384ab0e05a32e3ff09aa4320650` for current.
 The current tarball reproduces the retained S40 ordinary artifact byte-for-byte.
 
-Raw requests, outputs, all samples, completion records, event streams, and
-prepared asset snapshots remain in
-`.worktrees/v1-resize-integration/target/s41-anchors-01`.
-Fresh source and build provenance remain in `.worktrees/v1-s32-bench` under
-`target/s41-anchor-{native,public}` and `.worktrees/v1-s41-current-source`
-under `target/s41-current-{native,public}`. Neither immutable source tree changes.
+Compact reports, provenance, and event journals remain gzip-archived under
+`benchmark-results/retained-reports-2026-09-09`. Finished-worktree cleanup
+deleted the raw requests, outputs, samples, completion payloads, prepared asset
+snapshots, and rebuildable target trees; the archive retains their report hashes.
+Neither immutable source tree changes.
 
 The machine summary records full native/public provenance hashes, coordinator
 hashes, both packaged Wasm hashes, role asset-tree hashes, frozen oracle manifest
