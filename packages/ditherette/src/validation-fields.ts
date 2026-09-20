@@ -1,5 +1,12 @@
 import { DitheretteError } from './errors.js';
-import { dimensions, field, object, rgbaBytes, validateQuantize } from './validation.js';
+import {
+	dimensions,
+	field,
+	object,
+	progressCallback,
+	rgbaBytes,
+	validateQuantize
+} from './validation.js';
 
 const spaces = ['srgb', 'linear-rgb', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr'];
 const sizes = ['2', '4', '8', '16'];
@@ -151,13 +158,7 @@ export function validatePerturb(value: unknown) {
 		);
 		if (field(request, 'version') !== 1)
 			throw new DitheretteError('invalid-request', 'version', 'Unsupported recipe version.');
-		const progress = field(request, 'onProgress');
-		if (progress !== undefined)
-			throw new DitheretteError(
-				typeof progress === 'function' ? 'unsupported-operation' : 'invalid-settings',
-				'onProgress',
-				'Progress callbacks are not implemented in this package checkpoint.'
-			);
+		const onProgress = progressCallback(field(request, 'onProgress'));
 		const policy = normalizePolicy(field(request, 'perturb'), 'perturb');
 		const source = object(
 			field(request, 'source'),
@@ -168,6 +169,7 @@ export function validatePerturb(value: unknown) {
 		const size = dimensions(source, 32_768, 'invalid-image', 'source');
 		return {
 			data: rgbaBytes(field(source, 'data'), size.width * size.height * 4),
+			onProgress,
 			sourceWidth: size.width,
 			sourceHeight: size.height,
 			...policy

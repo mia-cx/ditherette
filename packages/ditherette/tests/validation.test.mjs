@@ -99,6 +99,7 @@ test('nearest validation preserves byte views and the frozen anchor order', () =
 		value.source.data = padded.subarray(1, 5);
 		assert.deepEqual(validateResize(value), {
 			data: value.source.data,
+			onProgress: undefined,
 			sourceWidth: 1,
 			sourceHeight: 1,
 			outputWidth: 2,
@@ -137,7 +138,6 @@ test('canonical raw request shapes reject coercions, sequence tags, and extra fi
 		[(r) => (r.output.resize.support = 'fixed'), 'invalid-settings', 'output.resize.support'],
 		[(r) => (r.output.resize.other = false), 'invalid-settings', 'output.resize.other'],
 		[(r) => (r.output.resize.algorithm = 'bogus'), 'invalid-settings', 'output.resize.algorithm'],
-		[(r) => (r.onProgress = () => {}), 'unsupported-operation', 'onProgress'],
 		[(r) => (r.onProgress = false), 'invalid-settings', 'onProgress'],
 		[(r) => (r.source.data = [17, 31, 47, 127]), 'invalid-image', 'source.data'],
 		[(r) => (r.source.data = new Uint8ClampedArray(4)), 'invalid-image', 'source.data'],

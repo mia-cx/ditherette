@@ -44,6 +44,7 @@ pub enum ErrorPath {
     DiffusionDistance = 35,
     DitherSize = 36,
     RecipeVersion = 37,
+    OnProgress = 38,
 }
 
 /// A small value usable even when Rust cannot allocate an error string.

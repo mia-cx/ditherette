@@ -11,11 +11,10 @@ use crate::{
     image::{contracts::IndexedImage, ImageBuf, ImageDimensions, PaletteIndex8, Rgba8},
     prod::{
         contract::{failure::Failure, request as prod},
-        palette::PreparedPalette,
         pipeline::{
             perturb::PerturbRequest,
             processor::{Boundary, Processor},
-            quantize::{QuantizeBoundary, QuantizeRequest},
+            quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
         },
     },
     spec::contract::request as spec,
@@ -174,13 +173,13 @@ impl QuantizeBoundary for NativeBoundary<'_> {
         &mut self,
         indices: &[u8],
         dimensions: ImageDimensions,
-        palette: &PreparedPalette,
+        palette: IndexedMetadataRef<'_>,
     ) -> Result<Self::Output, Failure> {
         Ok(IndexedImage {
             indices: ImageBuf::<PaletteIndex8>::from_vec_packed(indices.to_vec(), dimensions)
                 .expect("validated indices"),
             palette: palette.palette.clone(),
-            warnings: palette.warnings.clone(),
+            warnings: palette.warnings.to_vec(),
         })
     }
 }

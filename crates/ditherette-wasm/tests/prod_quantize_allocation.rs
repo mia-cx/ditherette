@@ -123,6 +123,11 @@ fn prepared_execution_never_allocates_and_prior_outputs_survive_preparation_drop
     let mut output = [0; 2];
     let before = COUNT.with(Cell::get);
     prepared.quantize_into(source, &mut output);
+    prepared.quantize_rows_into(
+        source,
+        ditherette_wasm::prod::tiling::RowBand::new(0, 1).unwrap(),
+        &mut output,
+    );
     assert_eq!(COUNT.with(Cell::get), before);
     assert_eq!(output, [1, 0]);
     let first = quantize(request(&entries), budget(&entries)).unwrap();

@@ -9,15 +9,19 @@ import type {
 	IndexedImage,
 	PerturbRequest,
 	DitherAndQuantizeRequest,
-	ProcessRequest
+	ProcessRequest,
+	Progress
 } from './types.js';
 import { normalizeInitInput, validateResize, validateQuantize } from './validation.js';
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
 import { processErrorPath, validateProcess } from './validation-process.js';
 
-type Bindings = ReturnType<
+export type Bindings = Pick<ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
->;
+>, 'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
+	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize'>;
+
+type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
 
 // Private numeric ABI. Keep these aligned with the crate's allocation-free error table.
 const errorCodes: readonly ErrorCode[] = [
@@ -73,7 +77,8 @@ const errorPaths = [
 	'dither.arithmetic',
 	'dither.arithmetic',
 	'dither.size',
-	'recipe.version'
+	'recipe.version',
+	'onProgress'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',
@@ -124,21 +129,8 @@ export async function createScalar(options: {
 	try {
 		const { createScalarBindings } = await import('./wasm/scalar/ditherette_wasm.factory.js');
 		const bindings = createScalarBindings();
-		const wasm = normalizeInitInput(options.wasm);
-		await bindings.default({ module_or_path: wasm });
-		let status: number;
-		try {
-			status = bindings.privateInitialize(options.memoryLimitBytes);
-		} catch {
-			// Pinned private initialization only adds fallible externref bookkeeping after preflight.
-			throw new DitheretteError(
-				'wasm-memory-unavailable',
-				'wasm',
-				errorMessages['wasm-memory-unavailable']
-			);
-		}
-		if (status !== 0) throw failure(bindings, status);
-		return new ScalarProcessor(bindings);
+		await bindings.default({ module_or_path: normalizeWasmInput(options.wasm) });
+		return initializeProcessor(bindings, options.memoryLimitBytes);
 	} catch (error) {
 		if (error instanceof DitheretteError) throw error;
 		const code = error instanceof RangeError ? 'wasm-memory-unavailable' : 'initialization';
@@ -146,12 +138,31 @@ export async function createScalar(options: {
 	}
 }
 
-class ScalarProcessor implements Ditherette {
+/** Normalize caller inputs across realms before passing them to wasm-bindgen. */
+export function normalizeWasmInput(wasm: InitInput | undefined): InitInput | undefined {
+	return normalizeInitInput(wasm);
+}
+
+/** Share the existing processing boundary while keeping artifact resources instance-owned. */
+export function initializeProcessor(bindings: Bindings, memoryLimitBytes: number, release?: () => void): Ditherette {
+	let status: number;
+	try {
+		status = bindings.privateInitialize(memoryLimitBytes);
+	} catch {
+		throw new DitheretteError('wasm-memory-unavailable', 'wasm', errorMessages['wasm-memory-unavailable']);
+	}
+	if (status !== 0) throw failure(bindings, status);
+	return new Processor(bindings, release);
+}
+
+class Processor implements Ditherette {
 	#bindings: Bindings | undefined;
 	#active = false;
+	#release: (() => void) | undefined;
 
-	constructor(bindings: Bindings) {
+	constructor(bindings: Bindings, release?: () => void) {
 		this.#bindings = bindings;
+		this.#release = release;
 	}
 
 	process(request: ProcessRequest): IndexedImage {
@@ -160,7 +171,7 @@ class ScalarProcessor implements Ditherette {
 		try {
 			const input = validateProcess(request);
 			const policy = input.dither;
-			const result: { value?: IndexedImage } = { value: undefined };
+			const result: ResultSink<IndexedImage> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateProcess(
@@ -205,7 +216,7 @@ class ScalarProcessor implements Ditherette {
 		this.#active = true;
 		try {
 			const input = validateResize(request);
-			const result: { value?: Rgba8Image } = { value: undefined };
+			const result: ResultSink<Rgba8Image> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateResize(
@@ -235,7 +246,7 @@ class ScalarProcessor implements Ditherette {
 		this.#active = true;
 		try {
 			const input = validateQuantize(request);
-			const result: { value?: IndexedImage } = { value: undefined };
+			const result: ResultSink<IndexedImage> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateQuantize(
@@ -264,7 +275,7 @@ class ScalarProcessor implements Ditherette {
 		this.#active = true;
 		try {
 			const input = validatePerturb(request);
-			const result: { value?: Rgba8Image } = { value: undefined };
+			const result: ResultSink<Rgba8Image> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privatePerturb(
@@ -297,7 +308,7 @@ class ScalarProcessor implements Ditherette {
 		try {
 			const input = validateDitherAndQuantize(request);
 			const policy = input.dither;
-			const result: { value?: IndexedImage } = { value: undefined };
+			const result: ResultSink<IndexedImage> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
 				status = bindings.privateDitherAndQuantize(
@@ -345,6 +356,8 @@ class ScalarProcessor implements Ditherette {
 			}
 			if (status !== 0) throw failure(bindings, status);
 			this.#bindings = undefined;
+			this.#release?.();
+			this.#release = undefined;
 		} finally {
 			this.#active = false;
 		}
@@ -360,6 +373,8 @@ class ScalarProcessor implements Ditherette {
 	#trap(error: unknown): DitheretteError {
 		// An uncaught trap may leave Rust control state incomplete. Discard only this instance.
 		this.#bindings = undefined;
+		this.#release?.();
+		this.#release = undefined;
 		const code = error instanceof RangeError ? 'wasm-memory-unavailable' : 'runtime';
 		return new DitheretteError(code, 'wasm', errorMessages[code]);
 	}

@@ -20,11 +20,40 @@ const request = (data = new Uint8Array([17, 31, 47, 127])) => ({
 const diagnostic = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
+// An identity resize owns only its preparation record and eight pixel bytes.
+// Probe that compiled record layout; the per-filter heap formulas remain independent below.
+const resizeOverhead = await (async () => {
+	let low = overhead;
+	let high = overhead + 1024;
+	while (low < high) {
+		const limit = Math.floor((low + high) / 2);
+		const processor = await createDitherette({ wasm: module, memoryLimitBytes: limit });
+		try {
+			const value = request();
+			value.output.width = 1;
+			processor.resize(value);
+			high = limit;
+		} catch (error) {
+			assert.ok(diagnostic('memory-limit', 'memoryLimitBytes')(error));
+			low = limit + 1;
+		} finally {
+			processor.dispose();
+		}
+	}
+	return low - 8;
+})();
+
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
 	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.
 	const capacity = 3 * 20 + 16 + 8 + 4 + 32 + 16 + 4;
-	const processor = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity });
-	const short = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity - 1 });
+	const processor = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity
+	});
+	const short = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity - 1
+	});
 	const backing = new Uint8Array([99, ...new Uint8Array(12), 1, 1, 1, 1, 98]);
 	const value = {
 		version: 1,
@@ -110,7 +139,7 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 		};
 		const processor = await createDitherette({
 			wasm: module,
-			memoryLimitBytes: overhead + capacity
+			memoryLimitBytes: resizeOverhead + capacity
 		});
 		const output = processor.resize(value);
 		assert.deepEqual([...output.data], [100, 50, 150, 128]);
@@ -131,7 +160,7 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 		assert.deepEqual([...output.data], [100, 50, 150, 128]);
 		const short = await createDitherette({
 			wasm: module,
-			memoryLimitBytes: overhead + capacity - 1
+			memoryLimitBytes: resizeOverhead + capacity - 1
 		});
 		assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
 		const smaller = request();
@@ -144,10 +173,16 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 test('one exact capacity budget succeeds and one byte less rejects without poisoning the instance', async () => {
 	// 12 pixel bytes plus two Wasm usize x offsets and one u32 y coordinate.
 	const capacity = 12 + 2 * 4 + 4;
-	const exact = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity });
+	const exact = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity
+	});
 	assert.equal(exact.resize(request()).data.length, 8);
 	exact.dispose();
-	const short = await createDitherette({ wasm: module, memoryLimitBytes: overhead + capacity - 1 });
+	const short = await createDitherette({
+		wasm: module,
+		memoryLimitBytes: resizeOverhead + capacity - 1
+	});
 	assert.throws(() => short.resize(request()), diagnostic('memory-limit', 'memoryLimitBytes'));
 	const smaller = request();
 	smaller.output.width = 1;
@@ -175,7 +210,7 @@ test('public convolution preserves alpha and output ownership with bounded prepa
 			};
 			const processor = await createDitherette({
 				wasm: module,
-				memoryLimitBytes: overhead + capacity
+				memoryLimitBytes: resizeOverhead + capacity
 			});
 			const output = processor.resize(value);
 			// The landed Wasm Lanczos3 accumulation rounds this half-byte downward for scale-aware support.
@@ -208,7 +243,7 @@ test('public convolution preserves alpha and output ownership with bounded prepa
 			assert.deepEqual([...output.data], expected);
 			const short = await createDitherette({
 				wasm: module,
-				memoryLimitBytes: overhead + capacity - 1
+				memoryLimitBytes: resizeOverhead + capacity - 1
 			});
 			assert.throws(() => short.resize(value), diagnostic('memory-limit', 'memoryLimitBytes'));
 			value.output.width = 2;
@@ -269,12 +304,36 @@ test('raw request failures and property-triggered recursion are structured befor
 	structuredClone(detached.source.data.buffer, { transfer: [detached.source.data.buffer] });
 	assert.throws(() => processor.resize(detached), diagnostic('invalid-image', 'source.data'));
 	const callback = request();
-	callback.onProgress = () => assert.fail('unsupported callback must not run');
+	callback.onProgress = () => { throw new Error('fixture callback failure'); };
 	assert.throws(
 		() => processor.resize(callback),
-		diagnostic('unsupported-operation', 'onProgress')
+		diagnostic('callback', 'onProgress')
 	);
 	assert.equal(processor.resize(request()).data[0], 17);
+	processor.dispose();
+});
+
+test('validated callbacks are read once and reject reentry while allowing recovery', async () => {
+	const processor = await createDitherette({ wasm: module });
+	const value = request();
+	let reads = 0;
+	const events = [];
+	Object.defineProperty(value, 'onProgress', { enumerable: true, get() {
+		reads++;
+		return (event) => {
+			events.push(event);
+			assert.throws(() => processor.resize(request()), diagnostic('reentrant-call', 'instance'));
+			assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
+		};
+	} });
+	assert.equal(processor.resize(value).data.length, 8);
+	assert.equal(reads, 1);
+	assert.equal(events.at(-1).stage, 'complete');
+	assert.deepEqual(events.at(-1), { stage: 'complete', completed: 1, total: 1 });
+	assert.throws(() => processor.resize({ ...request(), onProgress(event) {
+		if (event.stage === 'complete') throw new Error('completion failure');
+	} }), diagnostic('callback', 'onProgress'));
+	assert.equal(processor.resize(request()).data.length, 8);
 	processor.dispose();
 });
 
@@ -292,6 +351,34 @@ test('unsupported capabilities and invalid options do not silently select anothe
 	assert.equal('wasm' in preferred, false);
 	assert.equal('cache' in preferred, false);
 	preferred.dispose();
+});
+
+test('thread selection checks blocking-wait permission without probing disabled calls', async (t) => {
+	for (const [name, value] of [['crossOriginIsolated', true], ['Worker', class {
+		constructor() { assert.fail('Incapable contexts must not create workers.'); }
+	}]]) {
+		const previous = Object.getOwnPropertyDescriptor(globalThis, name);
+		Object.defineProperty(globalThis, name, { configurable: true, value });
+		t.after(() => {
+			if (previous) Object.defineProperty(globalThis, name, previous);
+			else delete globalThis[name];
+		});
+	}
+	let probes = 0;
+	t.mock.method(Atomics, 'wait', (view, index, expected, timeout) => {
+		probes++;
+		assert.ok(view.buffer instanceof SharedArrayBuffer);
+		assert.deepEqual([view.length, index, expected, timeout], [1, 0, 0, 0]);
+		throw new TypeError('Atomics.wait cannot be called in this context');
+	});
+	const disabled = await createDitherette({ wasm: module, threads: 'disabled' });
+	disabled.dispose();
+	assert.equal(probes, 0);
+	await assert.rejects(createDitherette({ wasm: module, threads: 'required' }), diagnostic('capability', 'threads'));
+	const preferred = await createDitherette({ wasm: module, threads: 'preferred' });
+	assert.equal(preferred.resize(request()).data[0], 17);
+	preferred.dispose();
+	assert.equal(probes, 2);
 });
 
 test('unexpected initialization allocation failures are structured and do not poison later creates', async (t) => {

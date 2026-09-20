@@ -8,7 +8,7 @@
 		"build:threads": "node scripts/build.mjs threads",
 		"test": "cargo test --locked",
 		"test:glue": "node --test scripts/scalar-factory.test.mjs",
-		"test:glue:built": "node --test scripts/scalar-factory-built.test.mjs",
+		"test:glue:built": "node --test scripts/scalar-factory-built.test.mjs scripts/threaded-factory-built.test.mjs",
 		"test:wasm": "wasm-pack test --node . --locked",
 		"test:private": "pnpm build:scalar && node --test tests/private_processor.mjs tests/private_quantize.mjs tests/private_fields.mjs tests/private_diffusion.mjs tests/private_yiluoma.mjs tests/private_process.mjs",
 		"test:browser": "wasm-pack test --headless --chrome . --locked",
