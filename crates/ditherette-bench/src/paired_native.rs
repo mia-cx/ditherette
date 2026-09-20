@@ -176,6 +176,11 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
                 "typed native operation requires its conformance reference".into(),
             ));
         };
+        if case.reference_subject != operation.reference_subject() {
+            return Err(BenchError::Config(
+                "typed native operation requires its canonical reference subject".into(),
+            ));
+        }
         let callable = match operation {
             native::NativeOperation::Processor { settings, .. } => settings.subject() == subject_id,
             native::NativeOperation::Process { .. } => process::callable(subject_id),
@@ -1004,6 +1009,9 @@ mod tests {
         assert!(validate_native(&case, &registry, Role::Candidate).is_err());
         case.candidate_subject = adapters::QUANTIZE_SUBJECT.into();
         validate_native(&case, &registry, Role::Candidate).unwrap();
+        case.reference_subject = adapters::QUANTIZE_SUBJECT.into();
+        assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+        case.reference_subject = case.native.as_ref().unwrap().reference_subject().into();
         case.candidate_subject = "spec:quantize:request:v1".into();
         validate_native(&case, &registry, Role::Candidate).unwrap();
 

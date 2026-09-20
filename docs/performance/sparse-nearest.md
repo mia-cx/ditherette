@@ -12,7 +12,7 @@ Standalone resize without progress gathers directly into its independent JS resu
 Progress-enabled resize keeps the Wasm output buffer and existing callback ordering.
 Fused processing gathers into Wasm for the remaining Rust stages.
 Every call reads current source pixels; sparse results do not enter the full-source image cache.
-Memory accounting includes final output bytes even when JS owns that allocation.
+Private Wasm accounting excludes final output bytes when JS owns that allocation.
 
 ## Browser comparison
 

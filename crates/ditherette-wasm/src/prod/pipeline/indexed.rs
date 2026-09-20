@@ -316,15 +316,17 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             }
         }
     }
-    let mut rgb_cache = if matches!(
-        dither,
-        DitherPolicy::None {}
-            | DitherPolicy::Separable { .. }
-            | DitherPolicy::Diffusion {
-                feedback: DiffusionFeedback::SrgbBytes,
-                ..
-            }
-    ) {
+    let can_match_rgb = call.parts().0.expect("requested palette").can_match_rgb();
+    let mut rgb_cache = if can_match_rgb
+        && matches!(
+            dither,
+            DitherPolicy::None {}
+                | DitherPolicy::Separable { .. }
+                | DitherPolicy::Diffusion {
+                    feedback: DiffusionFeedback::SrgbBytes,
+                    ..
+                }
+        ) {
         cache::Work::try_new(
             output_dimensions,
             row_policy.filter(|_| bands.is_some()),

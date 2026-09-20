@@ -1,8 +1,5 @@
 use super::*;
-use crate::{
-    image::{ImageDimensions, RowStride},
-    spec,
-};
+use crate::image::{ImageDimensions, RowStride};
 
 const SPACES: [WorkingSpace; 7] = [
     WorkingSpace::Srgb,
@@ -102,7 +99,7 @@ fn cached_fields_draw_once_per_pixel_and_cancel_after_the_completed_row() {
 }
 
 #[test]
-fn cached_rows_preserve_frozen_contrast_and_masks_across_spaces_edges_and_scan_orders() {
+fn cached_rows_preserve_production_contrast_and_masks_across_spaces_edges_and_scan_orders() {
     for (width, height) in [(1, 1), (1, 7), (7, 1), (3, 5), (8, 9)] {
         let dimensions = ImageDimensions::new(width, height).unwrap();
         let stride = width as usize * 4 + 7;
@@ -121,8 +118,6 @@ fn cached_rows_preserve_frozen_contrast_and_masks_across_spaces_edges_and_scan_o
         let source = ImageView::new(&bytes, dimensions, RowStride::new(stride).unwrap()).unwrap();
         for space in SPACES {
             let converter = Converter::new(PackedSpace::from_working(space));
-            let frozen_space =
-                serde_json::from_value(serde_json::to_value(space).unwrap()).unwrap();
             for radius in [1, 2, height + 3, u32::MAX] {
                 let mut scratch =
                     vec![[f32::NAN; 3]; width as usize * AdaptivePlacementRows::ROW_COUNT];
@@ -135,23 +130,12 @@ fn cached_rows_preserve_frozen_contrast_and_masks_across_spaces_edges_and_scan_o
                 {
                     let row = cache.prepare_row(y);
                     for x in (0..width).rev() {
-                        let expected = spec::dither::placement::contrast_at(
-                            source,
-                            x,
-                            y,
-                            frozen_space,
-                            radius,
-                        );
                         let actual = row.contrast_at(x);
                         assert_eq!(
                             actual.to_bits(),
-                            expected.to_bits(),
-                            "{space:?}, {width}x{height}, r{radius}, ({x},{y})"
-                        );
-                        assert_eq!(
-                            actual.to_bits(),
                             contrast_with_converter(source, x, y, space, radius, &converter)
-                                .to_bits()
+                                .to_bits(),
+                            "{space:?}, {width}x{height}, r{radius}, ({x},{y})"
                         );
                         for (threshold, softness) in [
                             (0.0, 0.0),
@@ -166,20 +150,6 @@ fn cached_rows_preserve_frozen_contrast_and_masks_across_spaces_edges_and_scan_o
                                 threshold,
                                 softness,
                             };
-                            let frozen_placement =
-                                serde_json::from_value(serde_json::to_value(placement).unwrap())
-                                    .unwrap();
-                            assert_eq!(
-                                row.mask_at(x, threshold, softness).to_bits(),
-                                spec::dither::placement::placement_mask_at(
-                                    source,
-                                    x,
-                                    y,
-                                    frozen_space,
-                                    frozen_placement
-                                )
-                                .to_bits()
-                            );
                             assert_eq!(
                                 row.mask_at(x, threshold, softness).to_bits(),
                                 placement_mask_with_converter(

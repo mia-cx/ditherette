@@ -98,6 +98,9 @@ test('repeated caught input, output, palette and sink failures retain no externr
 	for (let cycle = 0; cycle < 512; cycle++) {
 		assert.equal(invoke(bindings).status, 0);
 		for (const failAt of [1, 2, 3]) {
+			// Equal snapshots skip input copying; change transparent RGB so all copy failures remain reachable.
+			const original = input[4];
+			input[4] ^= 1;
 			const set = Uint8Array.prototype.set;
 			let copies = 0;
 			Uint8Array.prototype.set = function (...args) {
@@ -108,6 +111,7 @@ test('repeated caught input, output, palette and sink failures retain no externr
 				assert.equal(invoke(bindings).status, 9);
 			} finally {
 				Uint8Array.prototype.set = set;
+				input[4] = original;
 			}
 			assert.equal(bindings.privateErrorPath(), failAt === 1 ? 4 : 8);
 		}
