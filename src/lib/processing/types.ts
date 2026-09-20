@@ -132,6 +132,8 @@ export type WorkerProcessRequest = {
 	settings: ProcessingSettings;
 	palette: EnabledPaletteColor[];
 	settingsHash: string;
+	/** Internal page-session decision after a reported package initialization failure. */
+	typeScriptFallback?: boolean;
 };
 
 export type WorkerCancelRequest = {
@@ -146,6 +148,8 @@ export type WorkerProgress = {
 	type: 'progress';
 	stage: string;
 	progress: number;
+	completed?: number;
+	total?: number;
 };
 
 export type WorkerSourceLoaded = {
@@ -167,7 +171,18 @@ export type WorkerFailure = {
 	message: string;
 };
 
-export type WorkerResponse = WorkerProgress | WorkerSourceLoaded | WorkerComplete | WorkerFailure;
+export type WorkerFallback = {
+	id: number;
+	type: 'fallback';
+	message: string;
+};
+
+export type WorkerResponse =
+	| WorkerProgress
+	| WorkerSourceLoaded
+	| WorkerComplete
+	| WorkerFailure
+	| WorkerFallback;
 
 export function clampOutputDimension(value: number): number {
 	if (!Number.isFinite(value)) return 1;

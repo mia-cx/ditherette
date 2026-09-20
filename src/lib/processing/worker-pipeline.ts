@@ -1,6 +1,14 @@
 import { resizeImageData } from '$lib/processing/resize';
 import { quantizeImageWithRowWorkers } from '$lib/processing/quantize-row-workers';
 import { resizeImageDataWithOptionalWasm } from '$lib/wasm/ditherette-wasm';
+import type { Ditherette, Progress } from 'ditherette';
+import { packageProcessRequest, packageQuantizeResult } from './package-adapter';
+import {
+	FALLBACK_WARNING,
+	PackageInitializationFailure,
+	faithfulTypeScriptFallback,
+	initializePackageProcessor
+} from './package-fallback';
 import {
 	quantizeImage,
 	type PaletteVectorSpace,
@@ -36,7 +44,11 @@ type SourceCache = {
 	source: ImageData;
 };
 
-type ProgressSink = (stage: string, progress: number) => void;
+type ProgressSink = (
+	stage: string,
+	progress: number,
+	counts?: Pick<Progress, 'completed' | 'total'>
+) => void;
 
 type TimingSink = {
 	values: ProcessingStageTiming[];
@@ -50,6 +62,7 @@ export class ProcessorWorkerPipeline {
 	#branchCache = new PipelineBranchCache();
 	#paletteVectorCache = new PaletteVectorCache<PaletteVectorSpace>();
 	#canceledIds = new Set<number>();
+	#package: Promise<Ditherette> | undefined;
 
 	get branchCacheSize() {
 		return this.#branchCache.size;
@@ -187,6 +200,19 @@ export class ProcessorWorkerPipeline {
 	): Promise<WorkerResponse | undefined> {
 		if (request.type !== 'process') return this.handle(request, progress);
 		if (this.#canceledIds.has(request.id)) return undefined;
+		if (import.meta.env.DEV && import.meta.env.VITE_DITHERETTE_WASM_PROCESS === 'true') {
+			if (request.typeScriptFallback) {
+				const source = this.sourceFor(request.sourceId);
+				if (!faithfulTypeScriptFallback(source, request.palette, request.settings))
+					throw new Error(
+						'TypeScript fallback cannot faithfully process these settings and pixels.'
+					);
+				const response = this.handle(request, progress);
+				if (response?.type === 'complete') response.image.warnings.push(FALLBACK_WARNING);
+				return response;
+			}
+			return this.processWithPackage(request, progress);
+		}
 
 		const startedAt = performance.now();
 		const timings = timingSink();
@@ -300,6 +326,52 @@ export class ProcessorWorkerPipeline {
 				dither: settings.dither.algorithm,
 				resize: settings.output.resize,
 				warnings
+			}
+		};
+	}
+
+	private async processWithPackage(
+		request: Extract<WorkerRequest, { type: 'process' }>,
+		progress: ProgressSink
+	): Promise<WorkerResponse | undefined> {
+		const { id, sourceId, settings, palette, settingsHash } = request;
+		const source = this.sourceFor(sourceId);
+		progress('Sizing output', PROGRESS.queued);
+		const size = clampOutputSize(settings.output.width, settings.output.height);
+		const mapped = packageProcessRequest(source, palette, settings, size);
+		this.#package ??= initializePackageProcessor();
+		let processor;
+		try {
+			processor = await this.#package;
+		} catch (error) {
+			if (error instanceof PackageInitializationFailure)
+				return { id, type: 'fallback', message: FALLBACK_WARNING };
+			throw error;
+		}
+		if (this.#canceledIds.has(id)) return undefined;
+		const result = packageQuantizeResult(
+			processor.process({
+				...mapped.request,
+				onProgress({ stage, completed, total }) {
+					progress(stage, stage === 'complete' ? 1 : total ? (completed ?? 0) / total : 0, {
+						completed,
+						total
+					});
+				}
+			}),
+			palette,
+			mapped.warnings
+		);
+		return {
+			id,
+			type: 'complete',
+			image: {
+				...result,
+				width: size.width,
+				height: size.height,
+				warnings: size.warning ? [size.warning, ...result.warnings] : result.warnings,
+				settingsHash,
+				updatedAt: Date.now()
 			}
 		};
 	}

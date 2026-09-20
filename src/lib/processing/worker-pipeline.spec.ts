@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createDitherette, DitheretteError } from 'ditherette';
 import { ProcessorWorkerPipeline, transferablesForWorkerResponse } from './worker-pipeline';
 import type {
 	DitherSettings,
@@ -14,14 +15,32 @@ class TestImageData implements ImageData {
 	readonly height: number;
 	readonly colorSpace: PredefinedColorSpace = 'srgb';
 
-	constructor(data: Uint8ClampedArray<ArrayBuffer>, width: number, height: number) {
-		this.data = data;
-		this.width = width;
-		this.height = height;
+	constructor(data: Uint8ClampedArray<ArrayBuffer> | number, width: number, height?: number) {
+		this.width = typeof data === 'number' ? data : width;
+		this.height = typeof data === 'number' ? width : height!;
+		this.data =
+			typeof data === 'number' ? new Uint8ClampedArray(this.width * this.height * 4) : data;
 	}
 }
 
 Object.defineProperty(globalThis, 'ImageData', { value: TestImageData, configurable: true });
+
+vi.mock('ditherette', () => ({
+	createDitherette: vi.fn(),
+	DitheretteError: class extends Error {
+		constructor(
+			public code: string,
+			public path: string,
+			message: string
+		) {
+			super(message);
+		}
+	}
+}));
+afterEach(() => {
+	vi.unstubAllEnvs();
+	vi.resetAllMocks();
+});
 
 const palette: EnabledPaletteColor[] = [
 	{ name: 'Black', key: '#000000', rgb: { r: 0, g: 0, b: 0 }, kind: 'free', enabled: true },
@@ -69,6 +88,66 @@ function processRequest(overrides: Partial<Extract<WorkerRequest, { type: 'proce
 }
 
 describe('ProcessorWorkerPipeline', () => {
+	it.each(['initialization', 'capability'] as const)(
+		'requests page-session fallback for %s, then executes only faithful TypeScript',
+		async (code) => {
+			vi.stubEnv('DEV', true);
+			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+			vi.mocked(createDitherette).mockRejectedValue(
+				new DitheretteError(code, 'wasm', 'Load failed')
+			);
+			const pipeline = new ProcessorWorkerPipeline();
+			pipeline.handle(
+				{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+				() => undefined
+			);
+			expect(await pipeline.handleAsync(processRequest(), () => undefined)).toMatchObject({
+				id: 2,
+				type: 'fallback'
+			});
+			const response = await pipeline.handleAsync(
+				{ ...processRequest(), typeScriptFallback: true },
+				() => undefined
+			);
+			expect(response).toMatchObject({
+				type: 'complete',
+				image: {
+					indices: new Uint8Array([0, 1]),
+					warnings: expect.arrayContaining([expect.stringContaining('page session')])
+				}
+			});
+			expect(createDitherette).toHaveBeenCalledOnce();
+			await expect(
+				pipeline.handleAsync(
+					{
+						...processRequest(),
+						typeScriptFallback: true,
+						settings: { output: { ...output, resize: 'area' }, dither, colorSpace: 'srgb' }
+					},
+					() => undefined
+				)
+			).rejects.toThrow(/faithfully/);
+		}
+	);
+
+	it.each([
+		'invalid-request',
+		'memory-limit',
+		'wasm-memory-unavailable',
+		'callback',
+		'runtime'
+	] as const)('keeps %s initialization-boundary errors visible', async (code) => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		const error = new DitheretteError(code, 'wasm', 'Visible failure');
+		vi.mocked(createDitherette).mockRejectedValue(error);
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toBe(error);
+	});
 	it('loads a source before processing', () => {
 		const pipeline = new ProcessorWorkerPipeline();
 
@@ -284,6 +363,166 @@ describe('ProcessorWorkerPipeline', () => {
 
 		expect(response?.type).toBe('complete');
 	});
+
+	it.each([
+		[true, undefined],
+		[true, 'false'],
+		[false, 'true']
+	])('retains TypeScript with DEV=%s and package flag=%s', async (dev, flag) => {
+		vi.stubEnv('DEV', dev);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', flag);
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = await pipeline.handleAsync(processRequest(), () => undefined);
+		expect(response).toMatchObject({
+			type: 'complete',
+			image: { indices: new Uint8Array([0, 1]), settingsHash: 'hash' }
+		});
+		expect(createDitherette).not.toHaveBeenCalled();
+		expect(pipeline.branchCacheSize).toBe(1);
+	});
+
+	it('uses one initialized public processor for the complete flagged path', async () => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		const process = vi.fn(() => ({
+			width: 2,
+			height: 1,
+			indices: new Uint8Array([1, 0]),
+			palette: { rgba: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]), transparentIndex: null },
+			warnings: []
+		}));
+		vi.mocked(createDitherette).mockResolvedValue({
+			process,
+			resize: vi.fn(),
+			quantize: vi.fn(),
+			perturb: vi.fn(),
+			ditherAndQuantize: vi.fn(),
+			dispose: vi.fn()
+		});
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = await pipeline.handleAsync(processRequest(), () => undefined);
+		await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined);
+		expect(response).toMatchObject({
+			type: 'complete',
+			image: {
+				indices: new Uint8Array([1, 0]),
+				palette,
+				transparentIndex: -1,
+				settingsHash: 'hash'
+			}
+		});
+		expect(createDitherette).toHaveBeenCalledTimes(1);
+		expect(process).toHaveBeenCalledTimes(2);
+		expect(process).toHaveBeenCalledWith(
+			expect.objectContaining({
+				recipe: expect.objectContaining({ version: 1, match: 'srgb-euclidean' })
+			})
+		);
+		expect(pipeline.branchCacheSize).toBe(0);
+	});
+
+	it('forwards public work counts and skipped stages without inventing intermediate work', async () => {
+		vi.stubEnv('DEV', true);
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+		vi.mocked(createDitherette).mockResolvedValue({
+			process(request) {
+				request.onProgress?.({ stage: 'quantize', completed: 1, total: 2 });
+				request.onProgress?.({ stage: 'complete' });
+				return {
+					width: 2,
+					height: 1,
+					indices: new Uint8Array([0, 1]),
+					palette: {
+						rgba: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]),
+						transparentIndex: null
+					},
+					warnings: []
+				};
+			},
+			resize: vi.fn(),
+			quantize: vi.fn(),
+			perturb: vi.fn(),
+			ditherAndQuantize: vi.fn(),
+			dispose: vi.fn()
+		});
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const progress = vi.fn();
+		await pipeline.handleAsync(processRequest(), progress);
+		expect(progress.mock.calls).toContainEqual(['quantize', 0.5, { completed: 1, total: 2 }]);
+		expect(progress.mock.calls.at(-1)).toEqual([
+			'complete',
+			1,
+			{ completed: undefined, total: undefined }
+		]);
+		expect(progress.mock.calls.some(([stage]) => stage === 'resize')).toBe(false);
+	});
+
+	it('keeps fractional crops on the disabled TypeScript path', async () => {
+		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle(
+			{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+			() => undefined
+		);
+		const response = await pipeline.handleAsync(
+			processRequest({
+				settings: {
+					output: { ...output, crop: { x: 0.5, y: 0, width: 1, height: 1 } },
+					dither,
+					colorSpace: 'srgb'
+				}
+			}),
+			() => undefined
+		);
+		expect(response).toMatchObject({
+			type: 'complete',
+			image: { indices: new Uint8Array([0, 1]) }
+		});
+		expect(createDitherette).not.toHaveBeenCalled();
+	});
+
+	it.each(['initialization', 'process', 'processing-initialization'])(
+		'keeps %s failures visible without invoking TypeScript',
+		async (failure) => {
+			vi.stubEnv('DEV', true);
+			vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
+			const error =
+				failure === 'processing-initialization'
+					? new DitheretteError('initialization', 'wasm', 'Processing failed')
+					: new Error(`${failure} failed`);
+			if (failure === 'initialization') vi.mocked(createDitherette).mockRejectedValue(error);
+			else
+				vi.mocked(createDitherette).mockResolvedValue({
+					process: () => {
+						throw error;
+					},
+					resize: vi.fn(),
+					quantize: vi.fn(),
+					perturb: vi.fn(),
+					ditherAndQuantize: vi.fn(),
+					dispose: vi.fn()
+				});
+			const pipeline = new ProcessorWorkerPipeline();
+			pipeline.handle(
+				{ id: 1, type: 'load-source', sourceId: 'source-1', source: sourceImage() },
+				() => undefined
+			);
+			await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toBe(error);
+			expect(pipeline.branchCacheSize).toBe(0);
+		}
+	);
 
 	it('returns transferred index buffers for complete responses', () => {
 		const pipeline = new ProcessorWorkerPipeline();

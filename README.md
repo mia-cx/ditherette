@@ -20,13 +20,31 @@ pnpm dlx sv@0.15.2 create --template minimal --types ts --add prettier playwrigh
 
 ## Developing
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Install dependencies and build the workspace processing package once before starting development:
 
 ```sh
-npm run dev
+pnpm install
+pnpm package:build
+pnpm dev
+```
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+Rebuild the package after changing its wrapper or Rust implementation. See the
+[package build prerequisites](packages/ditherette/README.md).
+
+The complete package path is off by default. To exercise it during development:
+
+```sh
+VITE_DITHERETTE_WASM_PROCESS=true pnpm dev
+```
+
+Production builds ignore this flag. This path accepts integer crops and reports
+unsupported fractional crops through the existing error display. It filters the
+packed cropped image, so filter edges clamp to that crop.
+
+After building the package, run its website integration fixtures with:
+
+```sh
+pnpm exec vitest run --project client src/lib/processing/package-pipeline.browser.spec.ts
 ```
 
 ## Building
@@ -34,8 +52,11 @@ npm run dev -- --open
 To create a production version of your app:
 
 ```sh
-npm run build
+pnpm build
 ```
+
+The website build first builds the public workspace package and reuses its scalar
+artifacts for the historical resize path.
 
 You can preview the production build with `npm run preview`.
 

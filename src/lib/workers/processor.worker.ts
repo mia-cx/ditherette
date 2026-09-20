@@ -52,12 +52,13 @@ async function handleRequest(
 ) {
 	try {
 		postResponse(
-			await pipeline.handleAsync(request, (stage, progress) => {
+			await pipeline.handleAsync(request, (stage, progress, counts) => {
 				workerSelf.postMessage({
 					id: request.id,
 					type: 'progress',
 					stage,
-					progress
+					progress,
+					...counts
 				} satisfies WorkerResponse);
 			})
 		);

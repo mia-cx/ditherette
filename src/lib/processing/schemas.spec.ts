@@ -9,6 +9,20 @@ import {
 } from './schemas';
 import type { DitherSettings, EnabledPaletteColor, OutputSettings, ProcessedImage } from './types';
 
+it('preserves optional real work counts and rejects malformed worker counts', () => {
+	const progress = {
+		id: 1,
+		type: 'progress',
+		stage: 'quantize',
+		progress: 0.5,
+		completed: 1,
+		total: 2
+	};
+	expect(validateWorkerResponse(progress)).toEqual(progress);
+	for (const counts of [{ completed: -1 }, { total: 1.5 }, { completed: 3, total: 2 }])
+		expect(() => validateWorkerResponse({ ...progress, ...counts })).toThrow(/progress/);
+});
+
 class TestImageData implements ImageData {
 	readonly data: Uint8ClampedArray<ArrayBuffer>;
 	readonly width: number;
