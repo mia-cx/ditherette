@@ -9,4 +9,4 @@ This local branch is based on `91b114ba` and records the optional website source
 
 The package adapter, worker route, stale-request cancellation, page-session initialization fallback, and their focused tests are retained. PR #130 release files and PR #129 verification files are not included.
 
-The website-only conformance step removed from the verification workflow is not composable as a standalone workflow on this independent `91b114ba` branch. It remains deferred for the parent to add after combining this source with the verification workflow. No rollout/default flip or TypeScript retirement is included.
+The independent `91b114ba` source branch deferred its website-only conformance step because it did not carry the verification workflow. After composition, that step is included in the package-conformance workflow. No rollout/default flip or TypeScript retirement is included.
