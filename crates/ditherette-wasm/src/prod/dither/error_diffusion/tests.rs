@@ -85,3 +85,44 @@ fn finite_matching_checks_candidates_after_an_exact_match() {
     assert!(super::nearest_finite(&matcher, [0.0; 3]).is_err());
     assert_eq!(matcher.nearest_finite([0.0; 3]), None);
 }
+
+#[test]
+fn byte_feedback_rounding_matches_the_legacy_finite_recipe() {
+    let legacy = |channel: f32| f64::from(channel).round().clamp(0.0, 255.0) as u8;
+    let check = |channel| {
+        assert_eq!(
+            super::prepared::rounded_srgb_byte(channel),
+            legacy(channel),
+            "{channel:?}"
+        );
+    };
+    for channel in [
+        -f32::MAX,
+        -255.5,
+        -1.5,
+        -1.0,
+        -0.5,
+        -f32::MIN_POSITIVE,
+        -f32::from_bits(1),
+        -0.0,
+        0.0,
+        f32::MIN_POSITIVE,
+        f32::from_bits(1),
+        0.499_999_97,
+        255.0,
+        255.5,
+        f32::MAX,
+    ] {
+        check(channel);
+    }
+    for byte in 0..=255u16 {
+        let half = f32::from(byte) + 0.5;
+        for channel in [
+            f32::from_bits(half.to_bits() - 1),
+            half,
+            f32::from_bits(half.to_bits() + 1),
+        ] {
+            check(channel);
+        }
+    }
+}

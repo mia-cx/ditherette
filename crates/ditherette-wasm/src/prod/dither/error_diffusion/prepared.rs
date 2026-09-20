@@ -390,8 +390,7 @@ impl BorrowedDiffusion<'_> {
                 let matcher = self.quantizer.matcher();
                 let (index, error) = match policy.feedback {
                     DiffusionFeedback::SrgbBytes => {
-                        let rgb = current
-                            .map(|channel| f64::from(channel).round().clamp(0.0, 255.0) as u8);
+                        let rgb = current.map(rounded_srgb_byte);
                         let miss = || {
                             nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))
                                 .map(|selected| selected.index)
@@ -489,6 +488,12 @@ fn rgba(source: ImageView<'_, Rgba8>, x: usize, y: usize) -> [u8; 4] {
     let row = source.row(y as u32).expect("validated source row");
     let start = x * 4;
     [row[start], row[start + 1], row[start + 2], row[start + 3]]
+}
+
+/// Rounds a finite byte-feedback channel before the saturating integer conversion.
+#[inline(always)]
+pub(super) fn rounded_srgb_byte(channel: f32) -> u8 {
+    (f64::from(channel) + 0.5) as u8
 }
 
 fn nearest_finite(
