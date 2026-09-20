@@ -4,7 +4,10 @@ import type {
 	ResizeRequest,
 	Rgba8Image,
 	QuantizeRequest,
-	IndexedImage
+	IndexedImage,
+	PerturbRequest,
+	DitherAndQuantizeRequest,
+	ProcessRequest
 } from '../src/index.js';
 
 const request: ResizeRequest = {
@@ -20,7 +23,7 @@ processor.then((instance) => {
 	const image: Rgba8Image = instance.resize(request);
 	image.data[0] = 255;
 	instance.dispose();
-	// @ts-expect-error The complete pipeline is not exposed before its implementation slice.
+	// @ts-expect-error Process settings belong inside the versioned recipe.
 	instance.process(request);
 	// @ts-expect-error Raw bindings are not public processor state.
 	void instance.wasm;
@@ -33,6 +36,21 @@ const quantize: QuantizeRequest = {
 	alpha: { mode: 'preserve', threshold: 127.9999999 },
 	matching: 'oklab-euclidean'
 };
+const complete: ProcessRequest = {
+	source: request.source,
+	palette: quantize.palette,
+	recipe: {
+		version: 1,
+		output: request.output,
+		alpha: quantize.alpha,
+		match: quantize.matching,
+		dither: { family: 'none' }
+	}
+};
+processor.then((instance) => {
+	const image: IndexedImage = instance.process(complete);
+	void image;
+});
 processor.then((instance) => {
 	const image: IndexedImage = instance.quantize(quantize);
 	image.indices[0] = 0;
@@ -106,3 +124,67 @@ createDitherette({ backend: 'scalar' });
 createDitherette({ threads: true });
 const error: Error = new DitheretteError('invalid-image', 'source.data', 'Invalid bytes.');
 void error;
+const perturb: PerturbRequest = {
+	version: 1,
+	source: request.source,
+	perturb: {
+		field: { algorithm: 'bayer', size: '4' },
+		space: 'oklch',
+		strength: 0.7,
+		placement: { mode: 'adaptive', radius: 1, threshold: 5, softness: 10 }
+	}
+};
+const dither: DitherAndQuantizeRequest = {
+	...quantize,
+	dither: { family: 'separable', perturb: perturb.perturb }
+};
+const diffusion: DitherAndQuantizeRequest = {
+	...quantize,
+	dither: {
+		family: 'diffusion',
+		kernel: 'atkinson',
+		feedback: 'matching',
+		strength: 1,
+		serpentine: true,
+		placement: { mode: 'everywhere' }
+	}
+};
+processor.then((instance) => {
+	const rgba: Rgba8Image = instance.perturb(perturb);
+	const indexed: IndexedImage = instance.ditherAndQuantize(dither);
+	instance.ditherAndQuantize(diffusion);
+	void rgba;
+	void indexed;
+});
+// @ts-expect-error Bayer matrix sizes are canonical string tags.
+const badSize: PerturbRequest['perturb']['field'] = { algorithm: 'bayer', size: 4 };
+const blueNoise: PerturbRequest['perturb']['field'] = { algorithm: 'blue-noise' };
+// @ts-expect-error Blue noise uses the fixed tile without a seed control.
+const seededBlueNoise: PerturbRequest['perturb']['field'] = { algorithm: 'blue-noise', seed: 0 };
+// @ts-expect-error Matching metrics are not reversible working spaces.
+const badSpace: PerturbRequest['perturb']['space'] = 'srgb-rec709';
+void badSize;
+void blueNoise;
+void seededBlueNoise;
+void badSpace;
+const yliluoma: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	size: '16',
+	placement: { mode: 'everywhere' }
+};
+const numericMix: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	// @ts-expect-error Yliluoma size is a canonical string tag.
+	size: 4,
+	placement: { mode: 'everywhere' }
+};
+const strengthMix: DitherAndQuantizeRequest['dither'] = {
+	family: 'yliluoma',
+	size: '4',
+	placement: { mode: 'everywhere' },
+	// @ts-expect-error Yliluoma has no strength control.
+	strength: 1
+};
+void yliluoma;
+void numericMix;
+void strengthMix;

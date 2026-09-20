@@ -6,9 +6,14 @@ import type {
 	ResizeRequest,
 	Rgba8Image,
 	QuantizeRequest,
-	IndexedImage
+	IndexedImage,
+	PerturbRequest,
+	DitherAndQuantizeRequest,
+	ProcessRequest
 } from './types.js';
 import { normalizeInitInput, validateResize, validateQuantize } from './validation.js';
+import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
+import { processErrorPath, validateProcess } from './validation-process.js';
 
 type Bindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
@@ -47,7 +52,28 @@ const errorPaths = [
 	'palette',
 	'alpha',
 	'alpha.threshold',
-	'matching'
+	'matching',
+	'perturb',
+	'perturb.field',
+	'perturb.space',
+	'perturb.strength',
+	'perturb.placement',
+	'perturb.placement.radius',
+	'perturb.placement.threshold',
+	'perturb.placement.softness',
+	'dither',
+	'dither.strength',
+	'dither.placement',
+	'dither.placement.radius',
+	'dither.placement.threshold',
+	'dither.placement.softness',
+	'dither.kernel',
+	'dither.feedback',
+	'dither.serpentine',
+	'dither.arithmetic',
+	'dither.arithmetic',
+	'dither.size',
+	'recipe.version'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',
@@ -65,12 +91,28 @@ const errorMessages: Record<ErrorCode, string> = {
 	runtime: 'Processing failed unexpectedly.'
 };
 
-function failure(bindings: Bindings, status: number): DitheretteError {
+function failure(
+	bindings: Bindings,
+	status: number,
+	fused: boolean | 'process' = false
+): DitheretteError {
 	const code = errorCodes[status - 1] ?? 'runtime';
+	const pathTag = bindings.privateErrorPath();
+	const path = errorPaths[pathTag] ?? 'wasm';
+	const message =
+		pathTag === 34
+			? 'Diffusion work exceeded finite f32 range.'
+			: pathTag === 35
+				? 'Diffusion matching produced a non-finite distance.'
+				: errorMessages[code];
 	return new DitheretteError(
 		code,
-		errorPaths[bindings.privateErrorPath()] ?? 'wasm',
-		errorMessages[code]
+		fused === 'process'
+			? processErrorPath(path, code)
+			: fused && path.startsWith('perturb')
+				? `dither.${path}`
+				: path,
+		message
 	);
 }
 
@@ -110,6 +152,51 @@ class ScalarProcessor implements Ditherette {
 
 	constructor(bindings: Bindings) {
 		this.#bindings = bindings;
+	}
+
+	process(request: ProcessRequest): IndexedImage {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateProcess(request);
+			const policy = input.dither;
+			const result: { value?: IndexedImage } = { value: undefined };
+			let status: number;
+			try {
+				status = bindings.privateProcess(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.palette,
+					1,
+					input.outputWidth,
+					input.outputHeight,
+					input.algorithm,
+					input.anchor,
+					input.support,
+					input.matching,
+					input.alphaMode,
+					input.threshold,
+					input.matte,
+					policy.family,
+					policy.field,
+					policy.parameter,
+					policy.space,
+					policy.strength,
+					policy.placement,
+					policy.radius,
+					policy.threshold,
+					policy.softness,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status, 'process');
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
 	}
 
 	resize(request: ResizeRequest): Rgba8Image {
@@ -166,6 +253,77 @@ class ScalarProcessor implements Ditherette {
 				throw this.#trap(error);
 			}
 			if (status !== 0) throw failure(bindings, status);
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
+	perturb(request: PerturbRequest): Rgba8Image {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validatePerturb(request);
+			const result: { value?: Rgba8Image } = { value: undefined };
+			let status: number;
+			try {
+				status = bindings.privatePerturb(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.field,
+					input.parameter,
+					input.space,
+					input.strength,
+					input.placement,
+					input.radius,
+					input.threshold,
+					input.softness,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status);
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
+	ditherAndQuantize(request: DitherAndQuantizeRequest): IndexedImage {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateDitherAndQuantize(request);
+			const policy = input.dither;
+			const result: { value?: IndexedImage } = { value: undefined };
+			let status: number;
+			try {
+				status = bindings.privateDitherAndQuantize(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.palette,
+					input.matching,
+					input.alphaMode,
+					input.threshold,
+					input.matte,
+					policy.family,
+					policy.field,
+					policy.parameter,
+					policy.space,
+					policy.strength,
+					policy.placement,
+					policy.radius,
+					policy.threshold,
+					policy.softness,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status, true);
 			return result.value!;
 		} finally {
 			this.#active = false;

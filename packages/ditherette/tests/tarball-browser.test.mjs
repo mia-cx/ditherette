@@ -9,11 +9,25 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { chromium, firefox, webkit } from 'playwright';
 import { browserChecks } from './browser-fixture.mjs';
+import { fieldBrowserChecks } from './field-browser-fixture.mjs';
+import { diffusionBrowserChecks } from './diffusion-browser-fixture.mjs';
+import { processBrowserChecks } from './process-browser-fixture.mjs';
+import { yiluomaBrowserChecks } from './yiluoma-browser-fixture.mjs';
+import { yiluomaBenchmarkChecks } from './yiluoma-benchmark-fixture.mjs';
+import { prepareYliluomaOracle, yiluomaOracleChecks } from './yiluoma-oracle-fixture.mjs';
 
 test('installed tarball loads only scalar assets and runs the public contract in browser engines', async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'ditherette-tarball-'));
 	t.after(() => rm(directory, { recursive: true, force: true }));
+	const oracle = await prepareYliluomaOracle(directory);
 	const packageDirectory = fileURLToPath(new URL('../', import.meta.url));
+	const vectors = JSON.parse(await readFile(new URL('./fixtures/fields.json', import.meta.url)));
+	const diffusionVectors = JSON.parse(
+		await readFile(new URL('./fixtures/diffusion.json', import.meta.url))
+	);
+	const yiluoma = JSON.parse(
+		await readFile(new URL('./fixtures/yiluoma-wasm.json', import.meta.url))
+	);
 	const manifest = JSON.parse(await readFile(join(packageDirectory, 'package.json'), 'utf8'));
 	const tarball = join(directory, `ditherette-${manifest.version}.tgz`);
 	execFileSync('pnpm', ['pack', '--out', tarball], { cwd: packageDirectory, stdio: 'pipe' });
@@ -67,6 +81,17 @@ test('installed tarball loads only scalar assets and runs the public contract in
 		const url = new URL(request.url, 'http://localhost');
 		const pathname = url.pathname;
 		requests.push(pathname);
+		if (
+			['/benchmark/benchmark-public-page.mjs', '/benchmark/benchmark-public-timing.mjs'].includes(
+				pathname
+			)
+		) {
+			response.writeHead(200, { 'Content-Type': 'text/javascript' });
+			response.end(
+				await readFile(new URL(`../../../scripts/${pathname.split('/').at(-1)}`, import.meta.url))
+			);
+			return;
+		}
 		if (pathname === '/') {
 			response.writeHead(200, {
 				'Content-Type': 'text/html',
@@ -119,6 +144,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					name === 'webkit' ? process.env.DITHERETTE_TEST_WEBKIT_EXECUTABLE : undefined
 			});
 			try {
+				const yiluomaReference = await yiluomaOracleChecks(browser, name, oracle, yiluoma, tarball);
 				const page = await browser.newPage();
 				await page.goto(origin);
 				requests.length = 0;
@@ -160,7 +186,47 @@ test('installed tarball loads only scalar assets and runs the public contract in
 					requests.every((path) => !path.includes('/threads/')),
 					'scalar never loads threaded artifacts'
 				);
+				assert.deepEqual(
+					await page.evaluate(fieldBrowserChecks, {
+						vectors,
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+					}),
+					{ fields: 110, compositions: 1650, caughtFailures: 5 }
+				);
 				t.diagnostic(`${name} ${browser.version()}: installed-tarball checks pass`);
+				assert.deepEqual(
+					await page.evaluate(processBrowserChecks, {
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+					}),
+					{
+						compositions: 423,
+						strictRequests: 9,
+						caughtCopies: 3,
+						exactBudget: true,
+						scalarWithoutIsolation: true
+					}
+				);
+				assert.deepEqual(
+					await page.evaluate(diffusionBrowserChecks, {
+						vectors: diffusionVectors,
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+					}),
+					{ diffusion: 360, scalarWithoutIsolation: true }
+				);
+				assert.deepEqual(
+					await page.evaluate(yiluomaBrowserChecks, {
+						vectors: yiluomaReference,
+						wasmUrl: `${origin}/node_modules/ditherette/dist/wasm/scalar/ditherette_wasm_bg.wasm`
+					}),
+					{ vectors: 367, caughtFailures: 3, strictControls: 8, exactBudget: true }
+				);
+				assert.equal(
+					await page.evaluate(yiluomaBenchmarkChecks, { vectors: yiluomaReference }),
+					734
+				);
+				t.diagnostic(
+					`${name}: 367 frozen Wasm Yliluoma vectors and 734 untimed actual benchmark-adapter calls pass`
+				);
 			} finally {
 				await browser.close();
 			}
