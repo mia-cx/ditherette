@@ -1,5 +1,15 @@
 # Ditherette v1 implementation stack
 
+## S25 merged; S26 restack approved on 2026-09-20
+
+PR #114 merged as `9bcf3f7c` from `77ecdc41`; issue #66 closed and main fast-forwarded. PR #115 was retargeted to main before the merge. The parent verified the exact-head silent Pullfrog clean log `35481011023`, all CI, and three resolved review threads. Documentation-only `77ecdc41` fixes native-preparation guidance and the three-alpha count; the registry count is 19.
+
+The full validation passed 321 Wasm tests, 84 benchmark tests, 42 JavaScript tests, 23 interface tests, 47 fixtures across three browsers, and the trusted guard. The parent verified seven provenance tests, both real 84-command/bin proofs, and three-browser coverage. Tarball `4e1eee77` belongs to `f97965d7`; no later code change occurred. Fixes `471e55ad` and `45b9e735` are included without kernel changes.
+
+S25 is clean and detached at `9bcf3f7c`. The parent verified all six target paths absent. Cargo removed 2.6 GiB of benchmark targets, 2.0 GiB of Wasm targets, 222 MiB of external-native targets, and 349.8 MiB of trusted S18 syntax targets, 5.17 GiB total. Logs, native copied executables, and tar fixtures are retained. The previously missed tools/spec-freeze/syntax path was corrected and reverified. S25 cleanup is complete; no S26 target cleanup is claimed.
+
+S26 is cleanly restacked at `827f1b03` onto `9bcf3f7c`. The parent verified the approved composition, zero frozen-resize delta, preserved provenance, and eight focused checks; Terra's full validation is underway.
+
 ## S25 provenance fix; validation underway; S26 approved pending S25 merge on 2026-09-20
 
 S25 local fix `f97965d7` atop `ccbb80a2` implements one recorded build and passes binary-callsite metadata to shared helpers. It does not use library stamping or a two-pass build. Both native and paired complete recipes remain; the preparer uses the builder while retaining digests and source checks. Parent review and seven provenance tests pass. Terra’s full validation is underway with real native preparation and non-timing three-browser/47-fixture checks; no push yet.
