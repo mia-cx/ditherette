@@ -120,6 +120,25 @@ export async function threadedHostCheck({ operation, input }) {
 		);
 		return;
 	}
+	if (operation === 'initializeMemoryUnavailable') {
+		const { createDitherette, DitheretteError } = await import(input.moduleUrl);
+		const Memory = WebAssembly.Memory;
+		WebAssembly.Memory = new Proxy(Memory, {
+			construct() {
+				throw new RangeError('shared Wasm memory allocation failed');
+			}
+		});
+		try {
+			await createDitherette({ threads: 'required' });
+			throw new Error('Required threaded initialization unexpectedly allocated memory.');
+		} catch (error) {
+			if (error instanceof DitheretteError)
+				return { structured: true, code: error.code, path: error.path };
+			throw error;
+		} finally {
+			WebAssembly.Memory = Memory;
+		}
+	}
 	if (operation === 'partialOutcome') return globalThis.partialOutcome;
 	if (operation === 'completePartial') {
 		await partialCompletion;
