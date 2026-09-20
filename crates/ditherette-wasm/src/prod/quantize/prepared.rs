@@ -83,10 +83,10 @@ impl PreparedQuantizer {
     /// RGB matching is unreachable when alpha policy fixes every output index.
     pub(crate) fn can_match_rgb(&self) -> bool {
         !self.palette.visible.is_empty()
-            && self
-                .palette
-                .preserved_alpha()
-                .is_none_or(|(threshold, _)| threshold < u8::MAX)
+            && match self.palette.preserved_alpha() {
+                Some((threshold, _)) => threshold < u8::MAX,
+                None => true,
+            }
     }
 
     /// Borrow the ordered visible coordinates for palette-mixing kernels.
