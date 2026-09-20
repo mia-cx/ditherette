@@ -5,30 +5,10 @@ pub use rgba::{verify_with_bounds, VerificationBounds, VerificationReport};
 
 use ditherette_bench_api::{verification::*, SubjectId};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{fs, io, path::Path};
 
-/// SHA-256 of complete bytes. No shortened identifiers enter artifacts.
-pub fn content_digest(bytes: &[u8]) -> Digest256 {
-    Digest256(Sha256::digest(bytes).into())
-}
-
-/// Includes dimensions and every source byte, with a versioned domain prefix.
-pub fn input_digest(dimensions: Dimensions, rgba: &[u8]) -> Digest256 {
-    let mut hash = Sha256::new();
-    hash.update(b"ditherette-rgba8-input-v1\0");
-    hash.update(dimensions.width.to_le_bytes());
-    hash.update(dimensions.height.to_le_bytes());
-    hash.update(rgba);
-    Digest256(hash.finalize().into())
-}
-
-/// Hash typed normalized settings using canonical JSON object ordering.
-/// Callers validate numeric settings through their concrete request contract first.
-pub fn settings_digest<P: Serialize>(settings: &P) -> Result<Digest256, serde_json::Error> {
-    let canonical = serde_json::to_value(settings)?;
-    Ok(content_digest(&serde_json::to_vec(&canonical)?))
-}
+mod identity;
+pub use identity::{content_digest, input_digest, settings_digest};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -105,7 +85,12 @@ pub fn verify_three_way(
             .issues
             .push("case requires a named, versioned semantic recipe".into());
     }
-    if expected.semantics.operation != Operation::Resize && expected.semantics.space.is_none() {
+    // Field thresholds depend on global coordinates/seed, independently of color coordinates.
+    if !matches!(
+        expected.semantics.operation,
+        Operation::Resize | Operation::FieldEvaluation
+    ) && expected.semantics.space.is_none()
+    {
         report
             .issues
             .push("operation requires an explicit working-space identity".into());
@@ -208,13 +193,18 @@ fn roles(outputs: &ThreeWayOutputs) -> [(&str, Option<&RecordedOutput>); 3] {
 fn operation_matches(operation: Operation, pixels: &Pixels) -> bool {
     matches!(
         (operation, pixels),
-        (Operation::Resize | Operation::Perturb, Pixels::Rgba8 { .. })
-            | (
-                Operation::Quantize | Operation::DitherAndQuantize | Operation::Process,
-                Pixels::Indexed8 { .. }
-            )
-            | (Operation::Color, Pixels::Color { .. })
+        (
+            Operation::Resize | Operation::Perturb | Operation::ColorInverse,
+            Pixels::Rgba8 { .. }
+        ) | (
+            Operation::Quantize | Operation::DitherAndQuantize | Operation::Process,
+            Pixels::Indexed8 { .. }
+        ) | (Operation::Color, Pixels::Color { .. })
             | (Operation::MetricScores, Pixels::Scores { .. })
+            | (
+                Operation::FieldEvaluation | Operation::PlacementMask,
+                Pixels::Scores { .. }
+            )
     )
 }
 

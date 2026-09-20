@@ -21,6 +21,7 @@ toml = "0.9"
 windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }
 
 [dev-dependencies]
+ditherette-bench-oracle = { path = "../ditherette-bench-oracle" }
 criterion = { version = "0.7", features = ["html_reports"] }
 
 [[bench]]

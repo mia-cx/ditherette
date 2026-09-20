@@ -12,6 +12,9 @@ pub struct Digest256(pub [u8; 32]);
 #[serde(rename_all = "kebab-case")]
 pub enum Operation {
     MetricScores,
+    FieldEvaluation,
+    PlacementMask,
+    ColorInverse,
     Resize,
     Color,
     Perturb,
@@ -152,6 +155,14 @@ pub struct VerificationOutput {
     pub dimensions: Dimensions,
     pub pixels: Pixels,
     pub warnings: Vec<Warning>,
+}
+
+/// Independently computed case and exact output from the isolated frozen oracle.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OracleOutput {
+    pub case: CaseIdentity,
+    pub output: VerificationOutput,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

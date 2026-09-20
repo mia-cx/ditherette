@@ -1,0 +1,326 @@
+{
+  "version": 1,
+  "base_revision": "0085972a05a3dbdbbef6d47351d6e37bdd8625d2",
+  "reference_revision": "cef2b60a635fd43c3b8e7cb880b5c92fe77d640b",
+  "verification": "24 verbatim fragments and 2 complete modules; only recorded module/import substitutions",
+  "entries": [
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/srgb.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/srgb.rs",
+      "kind": "function",
+      "name": "srgb_to_rgb8",
+      "source_sha256": "b75f0b7b9e1b1796bf00535968ff7c7490bae3ef1fc4c264cff185e8513005ba",
+      "fragment_sha256": "194d7fc1972e874999cd00e4b7c58c27c82da3683013b9648e0310ddb42a8145",
+      "fragment_bytes": 278
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/srgb.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/srgb.rs",
+      "kind": "function",
+      "name": "srgb32_to_rgba8_into",
+      "source_sha256": "b75f0b7b9e1b1796bf00535968ff7c7490bae3ef1fc4c264cff185e8513005ba",
+      "fragment_sha256": "5ef30d931c228f6e9f5bff66422c59f913825723724ab3986d2de27c16136e15",
+      "fragment_bytes": 1297
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/linear.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/linear.rs",
+      "kind": "function",
+      "name": "linear_rgb_to_rgb8",
+      "source_sha256": "cb0571ece32caf2f604eaf818465ebb22f9af548484b950da40c284e167f606d",
+      "fragment_sha256": "ce37992012f46bf84029238a0902f088a9a3acf8ae379a4d4f6e82be5fbe808e",
+      "fragment_bytes": 302
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/linear.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/linear.rs",
+      "kind": "function",
+      "name": "linear_rgb32_to_rgba8_into",
+      "source_sha256": "cb0571ece32caf2f604eaf818465ebb22f9af548484b950da40c284e167f606d",
+      "fragment_sha256": "23cfa890f83e5851bdbf7301f37e2f6adcde5abbc486913c215bea395ddc450b",
+      "fragment_bytes": 1334
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/oklab.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/oklab.rs",
+      "kind": "function",
+      "name": "oklab_to_rgb8",
+      "source_sha256": "4ed1ef3b281ee6e0caf9b4c6e1be89c61f66a75252e9bccae4cee17ee42900ab",
+      "fragment_sha256": "a11c646c10aed58e08e3d860a3f7376da4a56a55d1985f8a3e9ea2126f4426df",
+      "fragment_bytes": 856
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/oklab.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/oklab.rs",
+      "kind": "function",
+      "name": "oklab32_to_rgba8_into",
+      "source_sha256": "4ed1ef3b281ee6e0caf9b4c6e1be89c61f66a75252e9bccae4cee17ee42900ab",
+      "fragment_sha256": "05a0b634c90483731047880e2477ec3ebdaf9c4f90d9e422408b4bd09bf37592",
+      "fragment_bytes": 1197
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/oklch.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/oklch.rs",
+      "kind": "function",
+      "name": "oklch_to_rgb8",
+      "source_sha256": "d8700bf1725223d2907c66bafe37fd8f64cac84d9a2784cbc912c035f17d2ba5",
+      "fragment_sha256": "10fb2d39a2e8a29a7a8164b0df6023a909edd830a09b9805e770c9cde1235e90",
+      "fragment_bytes": 464
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/oklch.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/oklch.rs",
+      "kind": "function",
+      "name": "oklch32_to_rgba8_into",
+      "source_sha256": "d8700bf1725223d2907c66bafe37fd8f64cac84d9a2784cbc912c035f17d2ba5",
+      "fragment_sha256": "e46be6c1479a25c9984d8c4928963939a371f2282f82ffc5ead8e15a691838ee",
+      "fragment_bytes": 1196
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/cielab.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/cielab.rs",
+      "kind": "function",
+      "name": "cielab_to_rgb8",
+      "source_sha256": "4a39baa33f57eed00731175b50e9b19a14adc7a67e32040fc6c10998a5d3ed50",
+      "fragment_sha256": "22fd386262b03df7bf13f6fb8a60059c5854f534db291cf5fb09199312c7854e",
+      "fragment_bytes": 765
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/cielab.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/cielab.rs",
+      "kind": "function",
+      "name": "inverse_lab_f",
+      "source_sha256": "4a39baa33f57eed00731175b50e9b19a14adc7a67e32040fc6c10998a5d3ed50",
+      "fragment_sha256": "aa2a1ac3310d6cb9028344f6347e4ce610f311e5bba1aa320f1c2f053fd24e4c",
+      "fragment_bytes": 225
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/cielab.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/cielab.rs",
+      "kind": "function",
+      "name": "cielab32_to_rgba8_into",
+      "source_sha256": "4a39baa33f57eed00731175b50e9b19a14adc7a67e32040fc6c10998a5d3ed50",
+      "fragment_sha256": "a23648786f691d30e06c12cdec11c779e5832408bf7fb78017b9eff6379aa09d",
+      "fragment_bytes": 1201
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/cielch.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/cielch.rs",
+      "kind": "function",
+      "name": "cielch_to_rgb8",
+      "source_sha256": "b58b027b77050589aa778dd6940d27497bd763c25af60fee728866355f2c8d52",
+      "fragment_sha256": "163654697e8916d74d6ed764ca1106282ecbf1f4cbcb325dc92517358fcb1dc1",
+      "fragment_bytes": 472
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/cielch.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/cielch.rs",
+      "kind": "function",
+      "name": "cielch32_to_rgba8_into",
+      "source_sha256": "b58b027b77050589aa778dd6940d27497bd763c25af60fee728866355f2c8d52",
+      "fragment_sha256": "cb68ba8697c3405c0ae7002e76cbfdccaebf617121b54bb08df2ef15cf7425d0",
+      "fragment_bytes": 1205
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/ycbcr.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/ycbcr.rs",
+      "kind": "function",
+      "name": "ycbcr_to_rgb8",
+      "source_sha256": "2cedef2c74ad07deae9eb67eb2223c296201d979484ccf68fb2be5af46857043",
+      "fragment_sha256": "7fd5b84b9b36b76bb5e79a0b2dd13ac7b07f24a9bfb1b15d7d1c753539f8d72e",
+      "fragment_bytes": 450
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/ycbcr.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/ycbcr.rs",
+      "kind": "function",
+      "name": "ycbcr32_to_rgba8_into",
+      "source_sha256": "2cedef2c74ad07deae9eb67eb2223c296201d979484ccf68fb2be5af46857043",
+      "fragment_sha256": "d5fcc5f0c693b110f154f3d578754dfd42c49d5a83fe902ff75a819f17225ac0",
+      "fragment_bytes": 1306
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/common.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/common.rs",
+      "kind": "function",
+      "name": "linear_to_srgb_unit",
+      "source_sha256": "48378e77bd6f1677ae490a47fa6527ec2d8802b8456d5bcd758ef933cdbd8d0f",
+      "fragment_sha256": "0cfe7bdd839d3074a5d98c750505080c668bb5559a0aac7badfadbd018b58328",
+      "fragment_bytes": 174
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/mod.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/inverse.rs",
+      "kind": "function",
+      "name": "coordinates_to_rgb8",
+      "source_sha256": "213affb8359c023c64ca6e57a665c8a589894f41e6f5f5161bbf94ccff7071bb",
+      "fragment_sha256": "39639c7872a25e841fa87a0e4d7324136e5ff8cfb754497dc2a76669981e5735",
+      "fragment_bytes": 731
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/dither/ordered.rs",
+      "target": "crates/ditherette-wasm/src/prod/dither/ordered.rs",
+      "kind": "item",
+      "name": "BayerSize and impl",
+      "source_sha256": "ffead72bc6829d1cecfdf7a4f455429de3432587cca0537acf454a8389a0543c",
+      "fragment_sha256": "b732664c4bd8f1a7b293cfbe4700f22cfab75b400d1e25799c3b493b5ee7a454",
+      "fragment_bytes": 333
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/dither/ordered.rs",
+      "target": "crates/ditherette-wasm/src/prod/dither/ordered.rs",
+      "kind": "function",
+      "name": "bayer_value",
+      "source_sha256": "ffead72bc6829d1cecfdf7a4f455429de3432587cca0537acf454a8389a0543c",
+      "fragment_sha256": "296381cd983c7c5d69575ea41f7d3ec82d36cf1c8555edc3553c11087ae56d18",
+      "fragment_bytes": 397
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/dither/ordered.rs",
+      "target": "crates/ditherette-wasm/src/prod/dither/ordered.rs",
+      "kind": "function",
+      "name": "bayer_noise_at",
+      "source_sha256": "ffead72bc6829d1cecfdf7a4f455429de3432587cca0537acf454a8389a0543c",
+      "fragment_sha256": "56d55171d0c9e38994fde61ad8900e1a195b56eb09189750a84ce469ffd9c303",
+      "fragment_bytes": 361
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/dither/random_noise.rs",
+      "target": "crates/ditherette-wasm/src/prod/dither/random_noise.rs",
+      "kind": "item",
+      "name": "global-index field closure",
+      "source_sha256": "02f95f37e70d7cb4ab02649f184f60a320f4ce51a9ac28319f7671272529484d",
+      "fragment_sha256": "933fef83b027887f7b2d0a5f03d3eb2a8dea2c4d4230a90fbb36324e1db9597e",
+      "fragment_bytes": 906
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/dither/perturb.rs",
+      "target": "crates/ditherette-wasm/src/prod/dither/perturb.rs",
+      "kind": "function",
+      "name": "perturb_by_field_rows_into",
+      "source_sha256": "b4493bbddb6c9b7a00fe865ed10732b9c4cd268ebe20723afcef2db8f8ba8501",
+      "fragment_sha256": "9237a9f9287a3c7e8be421e8a3df44d0db48ced52b878e59ef6b95142a83b79b",
+      "fragment_bytes": 1883
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/common.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/common.rs",
+      "kind": "item",
+      "name": "D65 white constants",
+      "source_sha256": "48378e77bd6f1677ae490a47fa6527ec2d8802b8456d5bcd758ef933cdbd8d0f",
+      "fragment_sha256": "15e6573082126dc0cd9876086332d9f1813cdc558d8c08c35855aa262c48ecd3",
+      "fragment_bytes": 94
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/dither/perturb.rs",
+      "target": "crates/ditherette-wasm/src/prod/dither/perturb.rs",
+      "kind": "item",
+      "name": "FIELD_SCALE",
+      "source_sha256": "b4493bbddb6c9b7a00fe865ed10732b9c4cd268ebe20723afcef2db8f8ba8501",
+      "fragment_sha256": "2e6c00c6793ff71c0ada9eac4c03a9e65ef3edd3152baace922a867625495700",
+      "fragment_bytes": 30
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/color/reconstruct.rs",
+      "target": "crates/ditherette-wasm/src/prod/color/reconstruct.rs",
+      "kind": "module",
+      "source_sha256": "b54ea554a05ed783e780d259b44ef610722b1b7d67d222e4ff937521d04eb23d",
+      "target_sha256": "6e04db5f6587f0e53639d9d92f37b4bf18d72917168061dc79d2ef9d89f66b51",
+      "replacements": [
+        [
+          "crate::spec::",
+          "crate::prod::"
+        ]
+      ]
+    },
+    {
+      "source": "crates/ditherette-wasm/src/spec/dither/placement.rs",
+      "target": "crates/ditherette-wasm/src/prod/dither/placement.rs",
+      "kind": "module",
+      "source_sha256": "4f8ab3ac5244f1871e3c8518d1641276b747e1869c6a370932bb2f71ee3453c0",
+      "target_sha256": "e36502c1f5c14eb3ad754906cdeb57e78a537bfe643b9078b8e41ca9b3c0f24b",
+      "replacements": [
+        [
+          "    spec::{",
+          "    prod::{"
+        ],
+        [
+          "color::rgb8_to_coordinates",
+          "color::packed::rgb8_to_coordinates"
+        ]
+      ]
+    }
+  ],
+  "targets": [
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/srgb.rs",
+      "sha256": "841926fd5f9679d4b148fb629bb1a352941117ce0ff697f7d70704b6344d77b5",
+      "bytes": 1719
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/linear.rs",
+      "sha256": "07c8e4eaef769a6eb740312e85afed6a6afc4933552ec3c0f220209fee8cc84d",
+      "bytes": 1828
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/oklab.rs",
+      "sha256": "388e8731496399952eb7f7db503958409b14ca821622e26f1e36db748d91f431",
+      "bytes": 2240
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/oklch.rs",
+      "sha256": "48916f42c0b08cc96110a8e2bde78490c3a53e65145807722708c3ca8dc49748",
+      "bytes": 1840
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/cielab.rs",
+      "sha256": "6faa9e8964fcc861feaed2036a2b212416f82481768a46cac982c9e9c03d6e8a",
+      "bytes": 2408
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/cielch.rs",
+      "sha256": "61bfdcbe25527455c05f6a3750759c627ae98eda7224f1df61b644a5f3072f40",
+      "bytes": 1861
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/ycbcr.rs",
+      "sha256": "60020b77e9e994be9aa05f40523db1473b531c2558b417a741734521ea7803ab",
+      "bytes": 1902
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/common.rs",
+      "sha256": "f28aa9277d04cb453f058b1ce2997d75fdbcad2b11eb59dff58d3b44f433a2ce",
+      "bytes": 329
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/inverse.rs",
+      "sha256": "6b15f288df73dccf37672713c9811e8d632daf5a5677593b8cdc36808050c565",
+      "bytes": 931
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/dither/ordered.rs",
+      "sha256": "d0cf0ef8b8bcdfd2723ab659e5f47eb1088e2bbac8e065b08f9b4646cea5e5f7",
+      "bytes": 1179
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/dither/random_noise.rs",
+      "sha256": "dbf2ab912fb278533540433dedc8a27a9cf33faa5902ba77169c7c36c51326af",
+      "bytes": 998
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/dither/perturb.rs",
+      "sha256": "f387c814f0b181cb54dd8626e4076a871d62da06a0b447ef833cd6e4c30951dc",
+      "bytes": 2268
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/color/reconstruct.rs",
+      "sha256": "6e04db5f6587f0e53639d9d92f37b4bf18d72917168061dc79d2ef9d89f66b51",
+      "bytes": 3451
+    },
+    {
+      "path": "crates/ditherette-wasm/src/prod/dither/placement.rs",
+      "sha256": "e36502c1f5c14eb3ad754906cdeb57e78a537bfe643b9078b8e41ca9b3c0f24b",
+      "bytes": 4527
+    }
+  ]
+}

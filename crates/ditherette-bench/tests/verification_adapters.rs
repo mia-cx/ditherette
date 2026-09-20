@@ -133,3 +133,37 @@ fn storage_adapter_retains_palette_duplicates_warning_text_and_logical_rows() {
         }]
     );
 }
+
+#[test]
+fn joined_trilinear_adapter_matches_frozen_odd_mips_and_anchor_bytes() {
+    let mut request = ResizeRequest {
+        version: 1,
+        source: Source {
+            width: 3,
+            height: 1,
+            data: &[0, 0, 0, 255, 0, 0, 0, 255, 255, 0, 0, 255],
+        },
+        output: Output {
+            width: 1,
+            height: 1,
+            resize: ResizePolicy::Trilinear {
+                anchor: Anchor::Center,
+            },
+        },
+    };
+    for (anchor, red) in [
+        (Anchor::Left, 68),
+        (Anchor::Center, 85),
+        (Anchor::Right, 103),
+    ] {
+        request.output.resize = ResizePolicy::Trilinear { anchor };
+        let expected = reference_resize(&request).unwrap();
+        assert_eq!(
+            expected.pixels,
+            Pixels::Rgba8 {
+                data: vec![red, 0, 0, 255]
+            }
+        );
+        assert_eq!(production_resize(&request).unwrap(), expected);
+    }
+}

@@ -240,6 +240,7 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "ditherette-bench-api",
+ "ditherette-bench-oracle",
  "ditherette-wasm",
  "image",
  "libc",
@@ -255,6 +256,17 @@ name = "ditherette-bench-api"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "ditherette-bench-oracle"
+version = "0.1.0"
+dependencies = [
+ "ditherette-bench-api",
+ "serde",
+ "serde_json",
+ "sha2",
+ "wasm-bindgen",
 ]
 
 [[package]]

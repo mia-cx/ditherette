@@ -11,6 +11,7 @@ use std::{
 
 #[derive(Serialize)]
 struct Fixture {
+    identity: ditherette_bench_api::verification::CaseIdentity,
     settings: QuantizeSettings,
     source: Dimensions,
     rgba: Vec<u8>,
@@ -91,6 +92,7 @@ fn main() -> io::Result<()> {
         let request = settings.reference_request(source, &rgba)?;
         let reference = (subject.run)(&request).map_err(io::Error::other)?;
         fixtures.push(Fixture {
+            identity: settings.identity(source, &rgba)?,
             settings,
             source,
             rgba: rgba.clone(),

@@ -6,6 +6,303 @@ use ditherette_bench::{
 use ditherette_bench_api::verification::*;
 
 #[test]
+fn process_transport_uses_recipe_output_dimensions_and_indexed_bounds() {
+    use ditherette_bench::paired::process::ProcessSettings;
+    use ditherette_wasm::{image::contracts::PaletteEntry, spec::contract::request as spec};
+    let (mut request, mut result) = fixture();
+    let output = Dimensions {
+        width: 2,
+        height: 3,
+    };
+    let operation = PublicOperation::Process {
+        settings: ProcessSettings {
+            palette: vec![PaletteEntry::Color { rgb: [1, 2, 3] }],
+            recipe: spec::RecipeV1 {
+                version: 1,
+                output: spec::Output {
+                    width: 2,
+                    height: 3,
+                    resize: spec::ResizePolicy::Nearest {
+                        anchor: spec::Anchor::Center,
+                    },
+                },
+                alpha: spec::AlphaPolicy::Premultiplied {},
+                matching: spec::MatchPolicy::SrgbEuclidean,
+                dither: spec::DitherPolicy::None {},
+            },
+        },
+    };
+    let case = &mut request.case;
+    case.identity = operation.identity(case.source, &case.rgba, output).unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    case.browser.as_mut().unwrap().operation = operation;
+    case.browser.as_mut().unwrap().accepted = BrowserBackend::Package;
+    result.input = case.identity.input;
+    result.settings = case.identity.settings;
+    result.output.dimensions = output;
+    result.output.pixels = Pixels::Indexed8 {
+        indices: vec![0; 6],
+        palette_rgba: vec![1, 2, 3, 255],
+        transparent_index: None,
+    };
+    request.reference_output = Some(result.output.clone());
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
+    validate_response(&request, &result).unwrap();
+    result.output.dimensions = request.case.source;
+    assert!(validate_response(&request, &result).is_err());
+}
+
+#[test]
+fn yliluoma_transport_accepts_indexed_output_and_rejects_rgba_output() {
+    use ditherette_bench::paired::{quantize::*, yliluoma::YliluomaSettings};
+    use ditherette_wasm::spec::contract::request::{BayerSize, Placement};
+
+    let (mut request, mut result) = fixture();
+    let operation = PublicOperation::Yliluoma {
+        settings: YliluomaSettings {
+            quantize: QuantizeSettings {
+                palette: vec![PaletteEntry::Color { rgb: [1, 2, 3] }],
+                alpha: AlphaPolicy::Premultiplied {},
+                matching: MatchPolicy::SrgbEuclidean,
+            },
+            size: BayerSize::Two,
+            placement: Placement::Everywhere {},
+        },
+    };
+    let case = &mut request.case;
+    case.identity = operation
+        .identity(case.source, &case.rgba, case.source)
+        .unwrap();
+    case.reference_subject = operation.reference_subject().into();
+    case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+    case.candidate_subject = case.accepted_subject.clone();
+    let browser = case.browser.as_mut().unwrap();
+    browser.operation = operation;
+    browser.accepted = BrowserBackend::Package;
+    result.input = case.identity.input;
+    result.settings = case.identity.settings;
+    // A single opaque palette entry always emits its original index.
+    result.output.pixels = Pixels::Indexed8 {
+        indices: vec![0],
+        palette_rgba: vec![1, 2, 3, 255],
+        transparent_index: None,
+    };
+    request.reference_output = Some(result.output.clone());
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
+    validate_response(&request, &result).unwrap();
+    result.output.pixels = Pixels::Rgba8 {
+        data: vec![1, 2, 3, 255],
+    };
+    assert!(validate_response(&request, &result).is_err());
+}
+
+#[test]
+fn browser_transport_requires_an_independently_identified_target_reference() {
+    let (request, mut result) = fixture();
+    result.reference = None;
+    assert!(validate_response(&request, &result)
+        .unwrap_err()
+        .to_string()
+        .contains("Wasm oracle"));
+}
+
+#[test]
+fn transport_bound_retains_reference_and_both_large_unstable_outputs() {
+    let (mut request, mut result) = fixture();
+    let dimensions = Dimensions {
+        width: 400,
+        height: 400,
+    };
+    let output = VerificationOutput {
+        dimensions,
+        pixels: Pixels::Rgba8 {
+            data: vec![255; 400 * 400 * 4],
+        },
+        warnings: vec![],
+    };
+    request.case.identity.output = dimensions;
+    result.output = output.clone();
+    result.unstable_output = Some(output.clone());
+    result.reference.as_mut().unwrap().output = output;
+    assert!(
+        serde_json::to_vec(&result).unwrap().len() as u64 + 1 <= response_limit(&request).unwrap()
+    );
+}
+
+#[test]
+fn wasm_reference_identity_and_exact_mismatch_evidence_are_not_native_overrides() {
+    let (request, mut result) = fixture();
+    if let Pixels::Rgba8 { data } = &mut result.reference.as_mut().unwrap().output.pixels {
+        data[0] = 94;
+    }
+    result.output = result.reference.as_ref().unwrap().output.clone();
+    validate_response(&request, &result).unwrap();
+    for mutate in [
+        |v: &mut OracleOutput| v.case.input.0[0] ^= 1,
+        |v: &mut OracleOutput| v.case.settings.0[0] ^= 1,
+        |v: &mut OracleOutput| v.case.semantics.recipe.push('x'),
+        |v: &mut OracleOutput| v.case.output.width += 1,
+    ] {
+        let mut changed = result.clone();
+        mutate(changed.reference.as_mut().unwrap());
+        assert!(validate_response(&request, &changed).is_err());
+    }
+    if let Pixels::Rgba8 { data } = &mut result.output.pixels {
+        data[0] += 1;
+    }
+    result.timing_skipped = Some(TimingSkipped::ReferenceMismatch);
+    result.sample_ns.clear();
+    result.iterations_per_sample = 0;
+    result.warmup_iterations = 0;
+    result.warmup_elapsed_ns = 0;
+    let directory =
+        std::env::temp_dir().join(format!("wasm-reference-mismatch-{}", std::process::id()));
+    preserve_reference_mismatch(&request, &result, &directory).unwrap();
+    let retained: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join("results.json")).unwrap()).unwrap();
+    let outputs: ThreeWayOutputs = serde_json::from_value(retained["outputs"].clone()).unwrap();
+    assert_eq!(
+        outputs.reference.unwrap().output,
+        result.reference.unwrap().output
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn field_and_diffusion_protocol_bind_native_identity_and_require_the_correct_public_output() {
+    use ditherette_bench::paired::{fields::*, native::NativeOperation, quantize::*};
+    use ditherette_wasm::bench_subjects::{self, BenchSubject};
+    let perturb = PerturbPolicy {
+        field: Field::Random { seed: 0x12345678 },
+        space: WorkingSpace::Oklab,
+        strength: 0.7,
+        placement: Placement::Adaptive {
+            radius: 1,
+            threshold: 10.0,
+            softness: 5.0,
+        },
+    };
+    let separable = SeparableSettings {
+        perturb,
+        quantize: QuantizeSettings {
+            palette: vec![
+                PaletteEntry::Color { rgb: [1, 2, 3] },
+                PaletteEntry::Transparent {},
+            ],
+            alpha: AlphaPolicy::Preserve { threshold: 0.5 },
+            matching: MatchPolicy::OklchHueArc,
+        },
+    };
+    let diffusion = ditherette_bench::paired::diffusion::DiffusionSettings {
+        quantize: separable.quantize.clone(),
+        kernel: ditherette_wasm::spec::contract::request::Diffusion::Atkinson,
+        feedback: ditherette_wasm::spec::contract::request::DiffusionFeedback::Matching,
+        strength: 0.75,
+        serpentine: true,
+        placement: perturb.placement,
+    };
+    for (operation, native) in [
+        (
+            PublicOperation::Diffusion {
+                settings: diffusion.clone(),
+            },
+            NativeOperation::Diffusion {
+                settings: diffusion,
+            },
+        ),
+        (
+            PublicOperation::Perturb { settings: perturb },
+            NativeOperation::Perturb { settings: perturb },
+        ),
+        (
+            PublicOperation::Separable {
+                settings: separable.clone(),
+            },
+            NativeOperation::Separable {
+                settings: separable,
+            },
+        ),
+    ] {
+        let (mut request, mut result) = fixture();
+        let case = &mut request.case;
+        case.identity = operation
+            .identity(case.source, &case.rgba, case.source)
+            .unwrap();
+        assert_eq!(
+            case.identity,
+            native.identity(case.source, &case.rgba).unwrap()
+        );
+        assert!(operation
+            .identity(
+                case.source,
+                &case.rgba,
+                Dimensions {
+                    width: 2,
+                    height: 1
+                }
+            )
+            .is_err());
+        case.reference_subject = operation.reference_subject().into();
+        case.accepted_subject = operation.subject(BrowserBackend::Package).into();
+        case.candidate_subject = case.accepted_subject.clone();
+        case.browser.as_mut().unwrap().accepted = BrowserBackend::Package;
+        case.browser.as_mut().unwrap().operation = operation.clone();
+        validate_case(case).unwrap();
+        let registry = bench_subjects::bench_subjects();
+        let BenchSubject::Conformance(reference) = registry
+            .iter()
+            .find(|subject| subject.descriptor().id.as_str() == operation.reference_subject())
+            .unwrap()
+        else {
+            panic!("typed reference")
+        };
+        let reference_request = operation
+            .processing_request(case.source, &case.rgba)
+            .unwrap()
+            .unwrap();
+        result.output = (reference.run)(&reference_request).unwrap();
+        result.input = case.identity.input;
+        result.settings = case.identity.settings;
+        request.reference_output = Some(result.output.clone());
+        result.reference = Some(OracleOutput {
+            case: case.identity.clone(),
+            output: result.output.clone(),
+        });
+        validate_response(&request, &result).unwrap();
+        let restored: TrialRequest =
+            serde_json::from_slice(&serde_json::to_vec(&request).unwrap()).unwrap();
+        assert_eq!(restored.case.identity, request.case.identity);
+        assert_eq!(restored.case.browser, request.case.browser);
+        result.output.pixels = match result.output.pixels {
+            Pixels::Rgba8 { .. } => Pixels::Indexed8 {
+                indices: vec![0],
+                palette_rgba: vec![1, 2, 3, 255],
+                transparent_index: None,
+            },
+            Pixels::Indexed8 { .. } => Pixels::Rgba8 {
+                data: vec![1, 2, 3, 4],
+            },
+            _ => unreachable!(),
+        };
+        assert!(validate_response(&request, &result).is_err());
+        request.case.browser.as_mut().unwrap().accepted = BrowserBackend::TypeScript;
+        request.case.accepted_subject = operation.subject(BrowserBackend::TypeScript).into();
+        assert!(validate_case(&request.case)
+            .unwrap_err()
+            .to_string()
+            .contains("no faithful TypeScript"));
+    }
+}
+
+#[test]
 fn indexed_transport_preserves_metadata_and_rejects_malformed_indices() {
     use ditherette_bench::paired::quantize::*;
     let (mut request, mut result) = fixture();
@@ -34,6 +331,10 @@ fn indexed_transport_preserves_metadata_and_rejects_malformed_indices() {
         transparent_index: None,
     };
     request.reference_output = Some(result.output.clone());
+    result.reference = Some(OracleOutput {
+        case: case.identity.clone(),
+        output: result.output.clone(),
+    });
     validate_response(&request, &result).unwrap();
     result.output.warnings.push(Warning {
         code: WarningCode::TransparentFallback,
@@ -140,6 +441,10 @@ fn fixture() -> (TrialRequest, BrowserTransportResult) {
         cross_origin_isolated: true,
     };
     let result = BrowserTransportResult {
+        reference: Some(OracleOutput {
+            case: identity.clone(),
+            output: output.clone(),
+        }),
         role: Role::Candidate,
         pair: 0,
         case_name: "fixture".into(),

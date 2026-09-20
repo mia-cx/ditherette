@@ -234,9 +234,12 @@ export async function preparePublicBenchmark(destination) {
 		'benchmark-public-browser.mjs',
 		'benchmark-public-page.mjs',
 		'benchmark-public-timing.mjs',
+		'benchmark-oracle-page.mjs',
 		'benchmark-transport.mjs'
 	])
 		await cp(path.join(root, 'scripts', name), path.join(scripts, name));
+	const { prepareBenchmarkOracle } = await import('./prepare-benchmark-oracle.mjs');
+	await prepareBenchmarkOracle(path.join(scripts, 'oracle'), root, fileInventory);
 	const tools = await buildTools();
 	if (
 		cleanRevision(root) !== revision ||

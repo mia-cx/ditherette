@@ -82,6 +82,51 @@ fn every_operation_requires_the_correct_output_and_a_frozen_reference_for_releas
 }
 
 #[test]
+fn color_dependent_operations_still_require_a_working_space() {
+    for operation in [
+        Operation::Color,
+        Operation::ColorInverse,
+        Operation::PlacementMask,
+        Operation::MetricScores,
+        Operation::Perturb,
+        Operation::Quantize,
+        Operation::DitherAndQuantize,
+        Operation::Process,
+    ] {
+        let mut case = case(operation);
+        let mut output = indexed();
+        output.pixels = match operation {
+            Operation::Color => Pixels::Color {
+                space: ColorSpace::Srgb,
+                coordinates: vec![0.0; 6],
+                alpha: vec![255; 2],
+                rendered_rgba: None,
+            },
+            Operation::ColorInverse | Operation::Perturb => Pixels::Rgba8 { data: vec![0; 8] },
+            Operation::PlacementMask | Operation::MetricScores => Pixels::Scores {
+                values: vec![0.0; 2],
+            },
+            _ => output.pixels,
+        };
+        let records = outputs(&case, output.clone());
+        assert_eq!(
+            verify_three_way(&case, &records, VerificationBounds::exact()).status,
+            VerificationStatus::Exact
+        );
+        case.semantics.space = None;
+        let report = verify_three_way(&case, &outputs(&case, output), VerificationBounds::exact());
+        assert_eq!(report.status, VerificationStatus::Incomplete);
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|issue| issue == "operation requires an explicit working-space identity"),
+            "{operation:?}"
+        );
+    }
+}
+
+#[test]
 fn indexed_error_reuses_rgba_distances_without_numeric_auto_approval() {
     let case = case(Operation::Quantize);
     let mut records = outputs(&case, indexed());

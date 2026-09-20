@@ -1,0 +1,2099 @@
+{
+  "schema": 1,
+  "review_followup": "71-review-followup.md supersedes original Firefox/WebKit native-probe provenance; original artifact records below remain historical.",
+  "source_revision": "e5aae7bf0e1761af2f970b6da75d34cf3a813323",
+  "artifact_root": "/home/mia/mia-cx/ditherette/.worktrees/v1-s30-process/target/s30-trial-01",
+  "comparison": "same-artifact actual staged production versus complete Process",
+  "decision": "retain required complete API; no new source candidate or optimization selected",
+  "workers": 128,
+  "samples": 2504,
+  "all_actual_pairs_exact": true,
+  "aggregate_gates": "Incorrect solely from inherited area frozen drift",
+  "evidence_tree_digest_encoding": "SHA-256 of UTF-8 JSON.stringify(sorted [{path,bytes,sha256}]); bytewise path order; paths relative to artifact_root",
+  "runs": [
+    {
+      "engine": "native",
+      "gate": "incorrect",
+      "samples": 640,
+      "workers": 32,
+      "started": 32,
+      "reaped": 32,
+      "max_live": 1,
+      "actual_pairs": 16,
+      "all_actual_pairs_exact": true,
+      "version": "rustc 1.97.0 (2d8144b78 2026-07-07); binary: rustc; commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3; commit-date: 2026-07-07; host: x86_64-unknown-linux-gnu; release: 1.97.0; LLVM version: 22.1.6",
+      "timer_resolution_ns": null,
+      "worker_identity": {
+        "revision": "e5aae7bf0e1761af2f970b6da75d34cf3a813323",
+        "sha256": "9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0"
+      },
+      "runtime_digest": null,
+      "cases": [
+        {
+          "case_name": "nearest-none",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9998070548907273,
+            0.9952331276900013
+          ],
+          "accepted_median_ns": 2674341.5,
+          "candidate_median_ns": 2666047,
+          "median_ratio": 0.9968984888429544,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "area-bayer",
+          "gate": "incorrect",
+          "issues": [],
+          "pair_ratios": [
+            1.0081229947402923,
+            0.9679626766294446
+          ],
+          "accepted_median_ns": 15962382.5,
+          "candidate_median_ns": 15628466.5,
+          "median_ratio": 0.9790810676288455,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            },
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bilinear-random",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9819089008285812,
+            0.9921649212353381
+          ],
+          "accepted_median_ns": 15796695,
+          "candidate_median_ns": 15632272,
+          "median_ratio": 0.989591303750563,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bicubic-blue-noise",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9796711353597449,
+            1.0203342609970438
+          ],
+          "accepted_median_ns": 4045606,
+          "candidate_median_ns": 4027340.5,
+          "median_ratio": 0.9954851016139485,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos2-floyd-steinberg",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9650797273884069,
+            1.0026578700550002
+          ],
+          "accepted_median_ns": 551031.5,
+          "candidate_median_ns": 537732,
+          "median_ratio": 0.9758643562119407,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos3-atkinson",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9764946748678924,
+            0.9995333692658688
+          ],
+          "accepted_median_ns": 678759.5,
+          "candidate_median_ns": 672939,
+          "median_ratio": 0.9914247977376376,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "trilinear-sierra-lite",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9903204490098486,
+            0.9916275224247038
+          ],
+          "accepted_median_ns": 1181935,
+          "candidate_median_ns": 1174409.5,
+          "median_ratio": 0.9936328985942543,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "nearest-yliluoma",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.4887193435888175,
+            1.0037494177922683
+          ],
+          "accepted_median_ns": 36516,
+          "candidate_median_ns": 21615,
+          "median_ratio": 0.5919323036477161,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "native-results/report.json",
+          "bytes": 79999,
+          "sha256": "27388af243453c3b8e8ae3bcb7a2e570d2d056fba9517b03d88b7b318af709ca"
+        },
+        {
+          "path": "native-results/prepared.json",
+          "bytes": 22408694,
+          "sha256": "8ed7d5112408c979594d9276cd2aab9325acf9488bf28b7be2a6d604bc38dbf6"
+        },
+        {
+          "path": "native-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "6f656a65d3b6c8800a4fb0d4f5663a61f3b6ae864a8063ec9c2d0e7f9994cbc0"
+        }
+      ],
+      "evidence_tree": {
+        "files": 127,
+        "bytes": 92276559,
+        "sha256": "5495f25c58a809486aae25f44c3bb5147fa5ba75c0e4961da024a31db379cc39"
+      }
+    },
+    {
+      "engine": "chromium",
+      "gate": "incorrect",
+      "samples": 640,
+      "workers": 32,
+      "started": 32,
+      "reaped": 32,
+      "max_live": 1,
+      "actual_pairs": 16,
+      "all_actual_pairs_exact": true,
+      "version": "147.0.7727.15",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "timer_resolution_ns": {
+        "min": 4999.998956918716,
+        "max": 4999.998956918716
+      },
+      "worker_identity": {
+        "revision": "e5aae7bf0e1761af2f970b6da75d34cf3a813323",
+        "sha256": "9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0"
+      },
+      "runtime_digest": "2de3e25c063d9da5a8b997a848f1a8d9ebf37969f8b504d0cd1327117667670a",
+      "cases": [
+        {
+          "case_name": "nearest-none",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9634387354332158,
+            0.964407605488446
+          ],
+          "accepted_median_ns": 5067500.000819564,
+          "candidate_median_ns": 4905000.001192093,
+          "median_ratio": 0.9679329058507765,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "area-bayer",
+          "gate": "incorrect",
+          "issues": [],
+          "pair_ratios": [
+            0.9886697440285747,
+            1.0154141494012547
+          ],
+          "accepted_median_ns": 88700000.00111759,
+          "candidate_median_ns": 89092499.99932945,
+          "median_ratio": 1.0044250281646778,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            },
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bilinear-random",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.993347555142923,
+            0.9999718222396675
+          ],
+          "accepted_median_ns": 88902499.99985099,
+          "candidate_median_ns": 88592499.99932945,
+          "median_ratio": 0.9965130339358054,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bicubic-blue-noise",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0057312906789049,
+            1.0062851472082148
+          ],
+          "accepted_median_ns": 22677499.998360872,
+          "candidate_median_ns": 22814999.99947846,
+          "median_ratio": 1.0060632786298105,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos2-floyd-steinberg",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9955357135506943,
+            1.0022421519981688
+          ],
+          "accepted_median_ns": 1115000.0020861626,
+          "candidate_median_ns": 1114999.9983608725,
+          "median_ratio": 0.9999999966589327,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos3-atkinson",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9781021889275535,
+            0.969147006460631
+          ],
+          "accepted_median_ns": 1370000.0010430813,
+          "candidate_median_ns": 1337500.000372529,
+          "median_ratio": 0.9762773717913813,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "trilinear-sierra-lite",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9719853831478681,
+            0.9914425418475067
+          ],
+          "accepted_median_ns": 2047499.9994039536,
+          "candidate_median_ns": 2019999.9995529652,
+          "median_ratio": 0.986568986637854,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "nearest-yliluoma",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.9999999830668626,
+            1.0909090693578254
+          ],
+          "accepted_median_ns": 110000.00312924384,
+          "candidate_median_ns": 114999.99836087228,
+          "median_ratio": 1.0454545008126384,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": true,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "chromium-results/report.json",
+          "bytes": 80135,
+          "sha256": "c5304178abc770ee89a40ab1351d7c059ee2af130d934e36429e6d16719a2094"
+        },
+        {
+          "path": "chromium-results/prepared.json",
+          "bytes": 23245828,
+          "sha256": "6f103c26f4dbbf60705078d249d3f82d379996ee9085c5c46968d67f6a44ff17"
+        },
+        {
+          "path": "chromium-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "27325a04655b64a71e6a5ef7c8e03fee8dd5e515a5675750e11231cadb381a39"
+        }
+      ],
+      "evidence_tree": {
+        "files": 223,
+        "bytes": 158737533,
+        "sha256": "da3e25e3fe23d03f5287e9228b4a4563601f271fa868467029f0c0c298bd65be"
+      }
+    },
+    {
+      "engine": "firefox",
+      "gate": "incorrect",
+      "samples": 584,
+      "workers": 32,
+      "started": 32,
+      "reaped": 32,
+      "max_live": 1,
+      "actual_pairs": 16,
+      "all_actual_pairs_exact": true,
+      "version": "148.0.2",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "timer_resolution_ns": {
+        "min": 19999.99999999602,
+        "max": 19999.99999999602
+      },
+      "worker_identity": {
+        "revision": "e5aae7bf0e1761af2f970b6da75d34cf3a813323",
+        "sha256": "9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0"
+      },
+      "runtime_digest": "d920c40b8102cd44416560c1e5fe59807fae18d49b27323919da88a1dab11cb2",
+      "cases": [
+        {
+          "case_name": "nearest-none",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9953803510933167,
+            1.015328019619865
+          ],
+          "accepted_median_ns": 32569999.999999933,
+          "candidate_median_ns": 32619999.999999948,
+          "median_ratio": 1.0015351550506606,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "area-bayer",
+          "gate": "incorrect",
+          "issues": [],
+          "pair_ratios": [
+            1.0050431726140445,
+            0.9997453591708908
+          ],
+          "accepted_median_ns": 785320000.0000002,
+          "candidate_median_ns": 788440000,
+          "median_ratio": 1.0039729027657511,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            },
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 13,
+              "candidate_samples": 13,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 13,
+              "candidate_samples": 13,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bilinear-random",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9986850756081513,
+            0.9950918382836647
+          ],
+          "accepted_median_ns": 790719999.9999993,
+          "candidate_median_ns": 788280000.0000002,
+          "median_ratio": 0.9969142047753958,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 13,
+              "candidate_samples": 13,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 13,
+              "candidate_samples": 13,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bicubic-blue-noise",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0042918454935625,
+            1.0001492537313437
+          ],
+          "accepted_median_ns": 200769999.99999997,
+          "candidate_median_ns": 201090000.00000024,
+          "median_ratio": 1.001593863625045,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos2-floyd-steinberg",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9763033175355429,
+            0.9831325301204785
+          ],
+          "accepted_median_ns": 8340000.000000032,
+          "candidate_median_ns": 8179999.999999978,
+          "median_ratio": 0.9808153477218161,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos3-atkinson",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0738636363636365,
+            0.9883945841392673
+          ],
+          "accepted_median_ns": 10389999.999999987,
+          "candidate_median_ns": 10379999.999999968,
+          "median_ratio": 0.9990375360923948,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "trilinear-sierra-lite",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0119949494949474,
+            0.9699201964395329
+          ],
+          "accepted_median_ns": 16070000.00000002,
+          "candidate_median_ns": 15909999.999999996,
+          "median_ratio": 0.9900435594275032,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "nearest-yliluoma",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9387755102040941,
+            0.979166666666656
+          ],
+          "accepted_median_ns": 979999.9999999898,
+          "candidate_median_ns": 920000.000000016,
+          "median_ratio": 0.9387755102041078,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "firefox-results/report.json",
+          "bytes": 80121,
+          "sha256": "a2464635d9bd94832208a77247f7baae0cab44b3a1dd6e268456f4b7d957db2e"
+        },
+        {
+          "path": "firefox-results/prepared.json",
+          "bytes": 23055681,
+          "sha256": "0fd7251c39eaab2fd075686312cb5de3fa98b8aad892c86c6a58c13aa0665d4d"
+        },
+        {
+          "path": "firefox-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "34cf9af33ce53ecf86a49d4e28a9afecc80c66b04c28fa30a64155208f8377e3"
+        }
+      ],
+      "evidence_tree": {
+        "files": 223,
+        "bytes": 150767610,
+        "sha256": "a1b2e95db1a563274d077205f89ac24faac4a586c3d4890eea447d5865af1178"
+      }
+    },
+    {
+      "engine": "webkit",
+      "gate": "incorrect",
+      "samples": 640,
+      "workers": 32,
+      "started": 32,
+      "reaped": 32,
+      "max_live": 1,
+      "actual_pairs": 16,
+      "all_actual_pairs_exact": true,
+      "version": "26.4",
+      "node": "v24.19.0",
+      "playwright": "1.59.1",
+      "timer_resolution_ns": {
+        "min": 19999.99999999602,
+        "max": 19999.99999999602
+      },
+      "worker_identity": {
+        "revision": "e5aae7bf0e1761af2f970b6da75d34cf3a813323",
+        "sha256": "9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0"
+      },
+      "runtime_digest": "6bc355ff00ce5d17c2568b596a5ac14aa3589c685dec28bbc10aaf810f42d8dc",
+      "cases": [
+        {
+          "case_name": "nearest-none",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            1.0546737213403832,
+            0.9493243243243153
+          ],
+          "accepted_median_ns": 5780000.000000015,
+          "candidate_median_ns": 5860000.000000013,
+          "median_ratio": 1.0138408304498265,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "area-bayer",
+          "gate": "incorrect",
+          "issues": [],
+          "pair_ratios": [
+            0.9911038276951899,
+            1.0062677388836336
+          ],
+          "accepted_median_ns": 84939999.99999994,
+          "candidate_median_ns": 84890000.00000009,
+          "median_ratio": 0.9994113491876636,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            },
+            {
+              "kind": "actual-pair",
+              "status": "failed",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "failed",
+              "accepted_candidate_exact": false
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bilinear-random",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0117605550981998,
+            0.9944880966342216
+          ],
+          "accepted_median_ns": 85159999.99999997,
+          "candidate_median_ns": 85579999.99999993,
+          "median_ratio": 1.0049318929074678,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "bicubic-blue-noise",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9835315645013744,
+            1.016166281755196
+          ],
+          "accepted_median_ns": 21740000.000000007,
+          "candidate_median_ns": 21730000.000000015,
+          "median_ratio": 0.9995400183992643,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos2-floyd-steinberg",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            0.9016393442623146,
+            1.0000000000000127
+          ],
+          "accepted_median_ns": 1150000.0000000056,
+          "candidate_median_ns": 1120000.000000005,
+          "median_ratio": 0.9739130434782604,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "lanczos3-atkinson",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            0.9852941176470725,
+            0.9927007299269934
+          ],
+          "accepted_median_ns": 1360000.0000000135,
+          "candidate_median_ns": 1359999.999999985,
+          "median_ratio": 0.9999999999999791,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "trilinear-sierra-lite",
+          "gate": "pass",
+          "issues": [],
+          "pair_ratios": [
+            1.0362694300518098,
+            1
+          ],
+          "accepted_median_ns": 1910000.0000000107,
+          "candidate_median_ns": 1959999.9999999795,
+          "median_ratio": 1.0261780104711877,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        },
+        {
+          "case_name": "nearest-yliluoma",
+          "gate": "inconclusive",
+          "issues": [],
+          "pair_ratios": [
+            1,
+            1.1999999999998012
+          ],
+          "accepted_median_ns": 100000.00000000851,
+          "candidate_median_ns": 100000.00000000851,
+          "median_ratio": 1,
+          "verification": [
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "actual-pair",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            },
+            {
+              "kind": "candidate-frozen-reference-check",
+              "status": "exact",
+              "accepted_candidate_exact": true
+            }
+          ],
+          "resolution_limited": false,
+          "pairs": [
+            {
+              "pair": 0,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            },
+            {
+              "pair": 1,
+              "accepted_samples": 20,
+              "candidate_samples": 20,
+              "actual_output_exact": true
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "webkit-results/report.json",
+          "bytes": 80110,
+          "sha256": "7ae5ed99891a5cdecf472dd3d11df3a9ee8d45c5217c683ebd802e80057a695a"
+        },
+        {
+          "path": "webkit-results/prepared.json",
+          "bytes": 23070862,
+          "sha256": "b3138128ffff0d4e683a311de3ab354178c63bbf0aae09ad6ab0d3fd44eba582"
+        },
+        {
+          "path": "webkit-results/events.jsonl",
+          "bytes": 13776,
+          "sha256": "e8d1efb4f4b92ec020bb6bd585b309842ae63d52697e9107ac090cc9c41057b8"
+        }
+      ],
+      "evidence_tree": {
+        "files": 223,
+        "bytes": 151431400,
+        "sha256": "fbeda09929f953f9e5e633a0c17d6d9e56cbc8f2fe8eb8df35ecf78011b51e7d"
+      }
+    }
+  ],
+  "conformance": {
+    "source_revision": "e5aae7bf0e1761af2f970b6da75d34cf3a813323",
+    "tarball_sha256": "379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2",
+    "oracle_wasm_sha256": "300f61644c4b7757d1ad80b97c515121a5ad241fa0051e9827e448f0067ffb64",
+    "oracle_manifest_sha256": "09f703c2cb1447ab4b028a8d16691b1534a62a72279d1387cba05b1fecbdabaf",
+    "fixture_manifest_sha256": "1e0fb04d829c01dab5e6ec68b97e2280fe3c1631282be1c244e50ddf3353b265",
+    "runner_log_sha256": "68c1db523af4e80268d1e2df70612feb950a0cfed788beb7560e54d5f2d0bcd2",
+    "engines": [
+      {
+        "engine": "chromium",
+        "version": "147.0.7727.15",
+        "identified_references": 431,
+        "process_compositions": 16,
+        "all_process_staged_exact": true,
+        "nonexact_frozen_cases": [
+          "area-bayer"
+        ],
+        "area": {
+          "resized_byte_differences": 125,
+          "maximum_absolute_byte_difference": 1,
+          "indexed_difference_positions": [
+            2644,
+            3160,
+            6772,
+            7804,
+            8836,
+            11932,
+            12448
+          ],
+          "frozen_post_resize_exact": true,
+          "original_native_probe_references_preserved": true
+        },
+        "native_wasm_differences": [
+          "blue-noise-oklab-adaptive2"
+        ],
+        "evidence": [
+          {
+            "path": "conformance/chromium-references.json",
+            "sha256": "bfeccffc16f9a0873bfa9313cd5e664b349b50f68c7039eb35cec23389f5928d"
+          },
+          {
+            "path": "conformance/chromium-process-composition.json",
+            "sha256": "5c91ca00ea5227b7225d78cb7bbb09b7dfa1efada228d6b9c7748d2a94addeb6"
+          }
+        ]
+      },
+      {
+        "engine": "firefox",
+        "version": "148.0.2",
+        "identified_references": 431,
+        "process_compositions": 16,
+        "all_process_staged_exact": true,
+        "nonexact_frozen_cases": [
+          "area-bayer"
+        ],
+        "area": {
+          "resized_byte_differences": 125,
+          "maximum_absolute_byte_difference": 1,
+          "indexed_difference_positions": [
+            2644,
+            3160,
+            6772,
+            7804,
+            8836,
+            11932,
+            12448
+          ],
+          "frozen_post_resize_exact": true,
+          "original_native_probe_references_preserved": true
+        },
+        "native_wasm_differences": [
+          "blue-noise-oklab-adaptive2"
+        ],
+        "evidence": [
+          {
+            "path": "conformance/firefox-references.json",
+            "sha256": "e3aa6d963891ddacca2b663f653d1aabdc0516cb760bb9efd6c32b4fe578db15"
+          },
+          {
+            "path": "conformance/firefox-process-composition.json",
+            "sha256": "038d42c7d594bf0b7106882ae77237c0a20fe47301836de6fcbdd977dee3de6d"
+          }
+        ]
+      },
+      {
+        "engine": "webkit",
+        "version": "26.4",
+        "identified_references": 431,
+        "process_compositions": 16,
+        "all_process_staged_exact": true,
+        "nonexact_frozen_cases": [
+          "area-bayer"
+        ],
+        "area": {
+          "resized_byte_differences": 125,
+          "maximum_absolute_byte_difference": 1,
+          "indexed_difference_positions": [
+            2644,
+            3160,
+            6772,
+            7804,
+            8836,
+            11932,
+            12448
+          ],
+          "frozen_post_resize_exact": true,
+          "original_native_probe_references_preserved": true
+        },
+        "native_wasm_differences": [
+          "blue-noise-oklab-adaptive2"
+        ],
+        "evidence": [
+          {
+            "path": "conformance/webkit-references.json",
+            "sha256": "adf09f19a5392dbf9f28d83ed3664913b877770bb1ce3a6de65769dc244b5b78"
+          },
+          {
+            "path": "conformance/webkit-process-composition.json",
+            "sha256": "038d42c7d594bf0b7106882ae77237c0a20fe47301836de6fcbdd977dee3de6d"
+          }
+        ]
+      }
+    ],
+    "scope": "Untimed installed benchmark-adapter conformance; no performance measurements or release acceptance."
+  },
+  "artifacts": [
+    {
+      "path": "native/ditherette-bench",
+      "bytes": 5845912,
+      "sha256": "9575273f58645c8d107f6df3848d49fbfde1ec0354ae7e54a51ecc28db6310b0"
+    },
+    {
+      "path": "native/ditherette-bench-pair",
+      "bytes": 3284976,
+      "sha256": "1a2256c9b981e6bb414de138bf76e739fd80249de75e01653a7a1a6306c35c5c"
+    },
+    {
+      "path": "native/build-provenance.json",
+      "bytes": 591485,
+      "sha256": "d9f37ef080b8a2dd23c51d0c7bf36097fff7e313d52bf9a134f0760b1f0dfc46"
+    },
+    {
+      "path": "public/ditherette.tgz",
+      "bytes": 308337,
+      "sha256": "379c733b02bc67a24500d3ae825901d17d5fa342f93d114c20761da1aa9193b2"
+    },
+    {
+      "path": "public/build-provenance.json",
+      "bytes": 623917,
+      "sha256": "81a05b374a1605fc1e29472ca0801b9d3ca852eee113fc57c7c5d5a37f0c24dc"
+    },
+    {
+      "path": "public/bundle-source.json",
+      "bytes": 895,
+      "sha256": "11a132aa46561eaeb27f3771fe3f380d04dc9807fdfaa28e532dd64859e3147f"
+    },
+    {
+      "path": "public/scripts/oracle/manifest.json",
+      "bytes": 103025,
+      "sha256": "09f703c2cb1447ab4b028a8d16691b1534a62a72279d1387cba05b1fecbdabaf"
+    },
+    {
+      "path": "public/scripts/oracle/ditherette_bench_oracle_bg.wasm",
+      "bytes": 781940,
+      "sha256": "300f61644c4b7757d1ad80b97c515121a5ad241fa0051e9827e448f0067ffb64"
+    },
+    {
+      "path": "fixtures/manifest.json",
+      "bytes": 2366,
+      "sha256": "1e0fb04d829c01dab5e6ec68b97e2280fe3c1631282be1c244e50ddf3353b265"
+    },
+    {
+      "path": "fixtures/native-experiment.json",
+      "bytes": 19349881,
+      "sha256": "a2d51ac579625f9ab6f3efcca1f32ce3f74e1efb2eeaafcea5b91a701a31da93"
+    },
+    {
+      "path": "fixtures/public-experiment.json",
+      "bytes": 19353926,
+      "sha256": "faa05ae97ea204e4b6e39539e5819440b7887640855b7891553690614d1df416"
+    },
+    {
+      "path": "fixtures/process.json",
+      "bytes": 26517779,
+      "sha256": "63ac50059dfe6fd4681d9afdbe9a1dca8394c19ae561b0d0bf2e3a3d986b6488"
+    },
+    {
+      "path": "conformance/summary.json",
+      "bytes": 16904,
+      "sha256": "fbcfce096e5987f44327b2228d75476556ca6cc60d8aca5b84d74f93b3f0d72b"
+    },
+    {
+      "path": "conformance/run.tap",
+      "bytes": 1936,
+      "sha256": "68c1db523af4e80268d1e2df70612feb950a0cfed788beb7560e54d5f2d0bcd2"
+    },
+    {
+      "path": "conformance/chromium-references.json",
+      "bytes": 37953331,
+      "sha256": "bfeccffc16f9a0873bfa9313cd5e664b349b50f68c7039eb35cec23389f5928d"
+    },
+    {
+      "path": "conformance/chromium-process-composition.json",
+      "bytes": 26853784,
+      "sha256": "5c91ca00ea5227b7225d78cb7bbb09b7dfa1efada228d6b9c7748d2a94addeb6"
+    },
+    {
+      "path": "chromium-prepared/pair/prepared.json",
+      "bytes": 23245828,
+      "sha256": "6f103c26f4dbbf60705078d249d3f82d379996ee9085c5c46968d67f6a44ff17"
+    },
+    {
+      "path": "browser-sources/chromium.json",
+      "bytes": 2805,
+      "sha256": "2f4075a9f1c852610459450f89af9b6ad94670d073cbde4a1bd4364e5d25b0df"
+    },
+    {
+      "path": "conformance/firefox-references.json",
+      "bytes": 37953324,
+      "sha256": "e3aa6d963891ddacca2b663f653d1aabdc0516cb760bb9efd6c32b4fe578db15"
+    },
+    {
+      "path": "conformance/firefox-process-composition.json",
+      "bytes": 26853784,
+      "sha256": "038d42c7d594bf0b7106882ae77237c0a20fe47301836de6fcbdd977dee3de6d"
+    },
+    {
+      "path": "firefox-prepared/pair/prepared.json",
+      "bytes": 23055681,
+      "sha256": "0fd7251c39eaab2fd075686312cb5de3fa98b8aad892c86c6a58c13aa0665d4d"
+    },
+    {
+      "path": "browser-sources/firefox.json",
+      "bytes": 2758,
+      "sha256": "d6a21f5201801281b34239b95813b8b5ccda9ba4bfccdc31016272c4497e1490"
+    },
+    {
+      "path": "conformance/webkit-references.json",
+      "bytes": 37953320,
+      "sha256": "adf09f19a5392dbf9f28d83ed3664913b877770bb1ce3a6de65769dc244b5b78"
+    },
+    {
+      "path": "conformance/webkit-process-composition.json",
+      "bytes": 26853784,
+      "sha256": "038d42c7d594bf0b7106882ae77237c0a20fe47301836de6fcbdd977dee3de6d"
+    },
+    {
+      "path": "webkit-prepared/pair/prepared.json",
+      "bytes": 23070862,
+      "sha256": "b3138128ffff0d4e683a311de3ab354178c63bbf0aae09ad6ab0d3fd44eba582"
+    },
+    {
+      "path": "browser-sources/webkit.json",
+      "bytes": 2741,
+      "sha256": "5609091159fd502e1302690bde9573f79c76e17eecd27b26e733c63cf2b15780"
+    }
+  ],
+  "package_wasm": [
+    {
+      "path": "dist/wasm/scalar/ditherette_wasm_bg.wasm",
+      "bytes": 267054,
+      "sha256": "170b1ad5a9a13290b0d2e07db141f35895abf3d51cb237b999b86f93122fa739"
+    },
+    {
+      "path": "dist/wasm/threads/ditherette_wasm_bg.wasm",
+      "bytes": 358201,
+      "sha256": "9731aad8eb95ad8aeb9dad59f13711202e3818a69b81cb14624f147f39089e71"
+    }
+  ],
+  "tools": [
+    {
+      "name": "cargo-scalar",
+      "version": "cargo 1.97.0 (c980f4866 2026-06-30)"
+    },
+    {
+      "name": "cargo-threads",
+      "version": "cargo 1.82.0-nightly (257b72b8a 2024-07-30)"
+    },
+    {
+      "name": "node",
+      "version": "v24.19.0"
+    },
+    {
+      "name": "pnpm-package",
+      "version": "11.13.0"
+    },
+    {
+      "name": "rustc-scalar",
+      "version": "rustc 1.97.0 (2d8144b78 2026-07-07)"
+    },
+    {
+      "name": "rustc-threads",
+      "version": "rustc 1.82.0-nightly (8e86c9567 2024-08-01)"
+    },
+    {
+      "name": "typescript-package",
+      "version": "6.0.3"
+    },
+    {
+      "name": "wasm-pack",
+      "version": "wasm-pack 0.15.0"
+    },
+    {
+      "name": "wasm-pack-cache/wasm-bindgen-0abf6999c4bc0a86/wasm-bindgen",
+      "version": "wasm-bindgen 0.2.121"
+    },
+    {
+      "name": "wasm-pack-cache/wasm-opt-1ceaaea8b7b5f7e0/bin/wasm-opt",
+      "version": "wasm-opt version 117 (version_117)"
+    }
+  ],
+  "package_sizes": {
+    "files": 38,
+    "total_unpacked_bytes": 806673,
+    "tarball_bytes": 308337,
+    "scalar": {
+      "raw_bytes": 267054,
+      "gzip_level_9_bytes": 122611
+    },
+    "threads": {
+      "raw_bytes": 358201,
+      "gzip_level_9_bytes": 153689
+    },
+    "predecessor_comparison": "Unavailable: no retained tarball for complete predecessor22b6dd78; no rebuild or sibling substitution."
+  },
+  "machine": {
+    "os": "linux",
+    "arch": "x86_64",
+    "hostname": "athena-hephaestus",
+    "kernel": "6.12.95+deb13-amd64",
+    "cpu": "AMD Ryzen 9 7950X 16-Core Processor",
+    "logical_cpus": 24
+  }
+}

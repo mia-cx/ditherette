@@ -9,14 +9,29 @@ use std::{collections::BTreeSet, io, path::Component};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum PublicOperation {
+    Process {
+        settings: super::process::ProcessSettings,
+    },
+    Diffusion {
+        settings: super::diffusion::DiffusionSettings,
+    },
+    Perturb {
+        settings: super::fields::PerturbPolicy,
+    },
+    Separable {
+        settings: super::fields::SeparableSettings,
+    },
+    Yliluoma {
+        settings: super::yliluoma::YliluomaSettings,
+    },
     ResizeNearest {
         anchor: Anchor,
     },
     ResizeArea {},
-    ResizeBilinear {
+    ResizeTrilinear {
         anchor: Anchor,
     },
-    ResizeTrilinear {
+    ResizeBilinear {
         anchor: Anchor,
     },
     ResizeBicubic {
@@ -40,6 +55,8 @@ pub enum PublicOperation {
 #[serde(rename_all = "kebab-case")]
 pub enum BrowserBackend {
     Package,
+    /// Actual resize plus ditherAndQuantize calls from the same package.
+    PackageStaged,
     #[serde(rename = "typescript")]
     TypeScript,
 }
@@ -87,15 +104,45 @@ impl BrowserCase {
 impl PublicOperation {
     pub fn subject(&self, backend: BrowserBackend) -> &'static str {
         match (self, backend) {
-            (Self::Quantize { .. }, BrowserBackend::Package) => "public:quantize:request:package",
-            (Self::Quantize { .. }, BrowserBackend::TypeScript) => {
-                "public:quantize:request:typescript"
+            (Self::Process { .. }, BrowserBackend::Package) => "public:process:request:package",
+            (Self::Process { .. }, BrowserBackend::PackageStaged) => {
+                "public:process:request:package-staged"
             }
+            (Self::Process { .. }, BrowserBackend::TypeScript) => {
+                "public:process:request:typescript"
+            }
+            (_, BrowserBackend::PackageStaged) => "public:unsupported:request:package-staged",
             (Self::ResizeTrilinear { .. }, BrowserBackend::Package) => {
                 "public:resize:trilinear:package"
             }
             (Self::ResizeTrilinear { .. }, BrowserBackend::TypeScript) => {
                 "public:resize:trilinear:typescript"
+            }
+            (Self::Diffusion { .. }, BrowserBackend::Package) => {
+                "public:dither-and-quantize:diffusion:package"
+            }
+            (Self::Diffusion { .. }, BrowserBackend::TypeScript) => {
+                "public:dither-and-quantize:diffusion:typescript"
+            }
+            (Self::Yliluoma { .. }, BrowserBackend::Package) => {
+                "public:dither-and-quantize:yliluoma:package"
+            }
+            (Self::Yliluoma { .. }, BrowserBackend::TypeScript) => {
+                "public:dither-and-quantize:yliluoma:typescript"
+            }
+            (Self::Perturb { .. }, BrowserBackend::Package) => "public:perturb:request:package",
+            (Self::Perturb { .. }, BrowserBackend::TypeScript) => {
+                "public:perturb:request:typescript"
+            }
+            (Self::Separable { .. }, BrowserBackend::Package) => {
+                "public:dither-and-quantize:request:package"
+            }
+            (Self::Separable { .. }, BrowserBackend::TypeScript) => {
+                "public:dither-and-quantize:request:typescript"
+            }
+            (Self::Quantize { .. }, BrowserBackend::Package) => "public:quantize:request:package",
+            (Self::Quantize { .. }, BrowserBackend::TypeScript) => {
+                "public:quantize:request:typescript"
             }
             (Self::ResizeNearest { .. }, BrowserBackend::Package) => {
                 "public:resize:nearest:package"
@@ -134,9 +181,13 @@ impl PublicOperation {
 
     pub fn reference_subject(&self) -> &'static str {
         match self {
+            Self::Process { .. } => "spec:process:request:v1",
+            Self::ResizeTrilinear { .. } => "spec:resize:trilinear:mip-area",
+            Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
+            Self::Perturb { .. } => "spec:perturb:request:v1",
+            Self::Separable { .. } | Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
             Self::Quantize { .. } => "spec:quantize:request:v1",
             Self::ResizeNearest { .. } => "spec:resize:nearest:scalar",
-            Self::ResizeTrilinear { .. } => "spec:resize:trilinear:mip-area",
             Self::ResizeArea {} => "spec:resize:area:scalar",
             Self::ResizeBilinear { .. } => "spec:resize:bilinear:scalar",
             Self::ResizeBicubic {
@@ -175,7 +226,13 @@ impl PublicOperation {
             | Self::ResizeBicubic { anchor, .. }
             | Self::ResizeLanczos2 { anchor, .. }
             | Self::ResizeLanczos3 { anchor, .. } => anchor,
-            Self::ResizeArea {} | Self::Quantize { .. } => Anchor::Center,
+            Self::ResizeArea {}
+            | Self::Process { .. }
+            | Self::Diffusion { .. }
+            | Self::Quantize { .. }
+            | Self::Perturb { .. }
+            | Self::Separable { .. }
+            | Self::Yliluoma { .. } => Anchor::Center,
         }
     }
 
@@ -186,13 +243,18 @@ impl PublicOperation {
         rgba: &[u8],
         output: Dimensions,
     ) -> io::Result<CaseIdentity> {
-        if let Self::Quantize { settings } = self {
-            if output != source {
+        if let Some(request) = self.processing_request(source, rgba)? {
+            if output != request.dimensions().map_err(io::Error::other)? {
                 return Err(io::Error::other(
-                    "quantize output dimensions must equal its source",
+                    "processing output dimensions differ from the validated recipe",
                 ));
             }
-            return settings.identity(source, rgba);
+            return Ok(CaseIdentity {
+                semantics: request.semantics(),
+                input: input_digest(source, rgba),
+                settings: settings_digest(&request).map_err(io::Error::other)?,
+                output,
+            });
         }
         let semantics = SemanticIdentity {
             operation: Operation::Resize,
@@ -204,7 +266,14 @@ impl PublicOperation {
                 Self::ResizeBicubic { .. } => "bicubic-public-v1",
                 Self::ResizeLanczos2 { .. } => "lanczos2-public-v1",
                 Self::ResizeLanczos3 { .. } => "lanczos3-public-v1",
-                Self::Quantize { .. } => unreachable!("quantize returned above"),
+                Self::Quantize { .. }
+                | Self::Process { .. }
+                | Self::Perturb { .. }
+                | Self::Separable { .. }
+                | Self::Diffusion { .. }
+                | Self::Yliluoma { .. } => {
+                    unreachable!("processing returned above")
+                }
             }
             .into(),
             version: 1,
@@ -216,6 +285,25 @@ impl PublicOperation {
             input: input_digest(source, rgba),
             output,
         })
+    }
+
+    /// Typed non-resize reference requests reuse the same frozen registry as native calls.
+    pub fn processing_request<'a>(
+        &'a self,
+        source: Dimensions,
+        rgba: &'a [u8],
+    ) -> io::Result<Option<ditherette_wasm::bench_subjects::reference::ReferenceRequest<'a>>> {
+        match self {
+            Self::Process { settings } => settings.reference_request(source, rgba).map(Some),
+            Self::Diffusion { settings } => settings.reference_request(source, rgba).map(Some),
+            Self::Quantize { settings } => settings.reference_request(source, rgba).map(Some),
+            Self::Perturb { settings } => {
+                super::fields::perturb_request(*settings, source, rgba).map(Some)
+            }
+            Self::Separable { settings } => settings.reference_request(source, rgba).map(Some),
+            Self::Yliluoma { settings } => settings.reference_request(source, rgba).map(Some),
+            _ => Ok(None),
+        }
     }
 }
 
@@ -356,6 +444,10 @@ pub enum TimingSkipped {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserTransportResult {
+    /// Optional only so retained pre-oracle transport records remain readable.
+    /// Newly executed browser trials require an independently identified Wasm reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<OracleOutput>,
     pub role: Role,
     pub pair: usize,
     pub case_name: String,
@@ -450,6 +542,13 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         };
     };
     let m = &case.measurement;
+    if [browser.accepted, browser.candidate].contains(&BrowserBackend::PackageStaged)
+        && !matches!(browser.operation, PublicOperation::Process { .. })
+    {
+        return Err(io::Error::other(
+            "staged package calls require the Process operation",
+        ));
+    }
     if m.application_cache != ApplicationCache::NotApplicable {
         return Err(io::Error::other(
             "S19 has no application cache; cold/warm claims are unsupported",
@@ -471,9 +570,16 @@ pub fn validate_case(case: &PairCase) -> io::Result<()> {
         }
     }
     if [browser.accepted, browser.candidate].contains(&BrowserBackend::TypeScript) {
-        if matches!(browser.operation, PublicOperation::Quantize { .. }) {
+        if matches!(
+            browser.operation,
+            PublicOperation::Quantize { .. }
+                | PublicOperation::Process { .. }
+                | PublicOperation::Diffusion { .. }
+                | PublicOperation::Perturb { .. }
+                | PublicOperation::Separable { .. }
+        ) {
             return Err(io::Error::other(
-                "no faithful TypeScript indexed quantize adapter is registered",
+                "no faithful TypeScript quantize or field adapter is registered",
             ));
         }
         if matches!(
