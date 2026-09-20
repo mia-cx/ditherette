@@ -28,6 +28,9 @@ let activeRequestId = 0;
 let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
+let workerNeedsReplacement = false;
+// Worker replacement must not retry a known package initialization failure during this page session.
+let typeScriptFallback = false;
 
 const SLIDER_DEBOUNCE_MS = 180;
 const OUTPUT_SLIDER_FIELDS = new Set<keyof OutputSettings>([
@@ -56,10 +59,15 @@ export function cancelProcessing() {
 	activeRequestId = ++requestId;
 	activeReject?.(new ProcessingCanceled());
 	activeReject = undefined;
+	terminateProcessingWorker();
+	processingProgress.set(undefined);
+}
+
+function terminateProcessingWorker() {
 	worker?.terminate();
 	worker = undefined;
 	loadedSourceId = undefined;
-	processingProgress.set(undefined);
+	workerNeedsReplacement = false;
 }
 
 function getProcessingWorker() {
@@ -73,17 +81,14 @@ function getProcessingWorker() {
 
 function resetProcessingWorker(activeWorker: Worker) {
 	if (worker !== activeWorker) return;
-	worker = undefined;
-	loadedSourceId = undefined;
+	terminateProcessingWorker();
 }
 
 function supersedeActiveRequest() {
-	const canceledId = activeRequestId;
+	activeRequestId = ++requestId;
+	if (activeReject) workerNeedsReplacement = true;
 	activeReject?.(new ProcessingCanceled('Processing was superseded by newer settings.'));
 	activeReject = undefined;
-	if (worker && canceledId > 0) {
-		worker.postMessage({ id: canceledId, type: 'cancel' } satisfies WorkerRequest);
-	}
 }
 
 function currentSourceId(image: ImageData) {
@@ -120,6 +125,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 	if (!source) return Promise.reject(new Error('Upload an image before processing.'));
 
 	supersedeActiveRequest();
+	if (workerNeedsReplacement) terminateProcessingWorker();
 	const id = ++requestId;
 	activeRequestId = id;
 	const activeWorker = getProcessingWorker();
@@ -137,6 +143,8 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 
 	return new Promise((resolve, reject) => {
 		activeReject = reject;
+		const isCurrent = () =>
+			worker === activeWorker && activeRequestId === id && activeReject === reject;
 		const settle = <T>(callback: (value: T) => void, value: T) => {
 			if (activeRequestId !== id) return;
 			if (activeReject === reject) activeReject = undefined;
@@ -157,11 +165,22 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 					colorSpace: colorSpace.get()
 				},
 				palette: selectedPalette.get(),
-				settingsHash: hash
+				settingsHash: hash,
+				...(typeScriptFallback ? { typeScriptFallback: true } : {})
 			} satisfies WorkerRequest);
 		};
 
 		activeWorker.onmessage = (event: MessageEvent<unknown>) => {
+			if (!isCurrent()) return;
+			// A reused worker may still deliver an older response. Reject its identity before validation.
+			if (
+				event.data &&
+				typeof event.data === 'object' &&
+				'id' in event.data &&
+				Number.isInteger(event.data.id) &&
+				event.data.id !== id
+			)
+				return;
 			let message;
 			const validationStart = performance.now();
 			try {
@@ -175,7 +194,23 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 			}
 			if (message.id !== id || activeRequestId !== id) return;
 			if (message.type === 'progress') {
-				processingProgress.set({ stage: message.stage, progress: message.progress });
+				processingProgress.set({
+					stage: message.stage,
+					progress: message.progress,
+					completed: message.completed,
+					total: message.total
+				});
+				return;
+			}
+			if (message.type === 'fallback') {
+				if (typeScriptFallback) {
+					settle(reject, new Error('Worker repeated an initialization fallback request.'));
+					processingProgress.set(undefined);
+					return;
+				}
+				typeScriptFallback = true;
+				processingProgress.set({ stage: message.message, progress: 0 });
+				postProcessRequest();
 				return;
 			}
 			if (message.type === 'source-loaded') {
@@ -222,6 +257,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 			});
 		};
 		activeWorker.onerror = () => {
+			if (!isCurrent()) return;
 			processingProgress.set(undefined);
 			resetProcessingWorker(activeWorker);
 			settle(reject, new Error('Worker crashed while processing the image.'));
@@ -281,8 +317,14 @@ export function scheduleProcessing(delay = 0) {
 	if (!sourceImageData.get()) return;
 	const hash = currentSettingsHash();
 	const previous = processedImage.get();
-	if (previous?.settingsHash === hash) return;
 	if (timer) clearTimeout(timer);
+	timer = undefined;
+	supersedeActiveRequest();
+	processingProgress.set(undefined);
+	if (previous?.settingsHash === hash) {
+		if (workerNeedsReplacement) terminateProcessingWorker();
+		return;
+	}
 	const schedule: ProcessingSchedule = {
 		scheduledAt: performance.now(),
 		scheduledDelay: delay

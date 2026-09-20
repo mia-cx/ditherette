@@ -10,7 +10,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "pnpm wasm:build && wrangler types --check && vite build",
+		"build": "pnpm package:build && node scripts/stage-wasm.mjs scalar && wrangler types --check && vite build",
 		"preview": "wrangler dev .svelte-kit/cloudflare/_worker.js --port 4173",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "node -e \"import('node:fs').then(fs=>{fs.rmSync('.svelte-kit/output',{recursive:true,force:true});fs.rmSync('.svelte-kit/cloudflare',{recursive:true,force:true});})\" && wrangler types --check && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

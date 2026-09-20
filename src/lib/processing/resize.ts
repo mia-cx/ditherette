@@ -10,7 +10,8 @@ function finiteRectValue(value: number, label: string) {
 	return value;
 }
 
-function clampCrop(sourceWidth: number, sourceHeight: number, crop?: CropRect): Rect {
+/** Clamp the requested crop to the source bounds without rounding fractional coordinates. */
+export function clampCrop(sourceWidth: number, sourceHeight: number, crop?: CropRect): Rect {
 	if (!crop) return { x: 0, y: 0, width: sourceWidth, height: sourceHeight };
 	finiteRectValue(crop.x, 'Crop x');
 	finiteRectValue(crop.y, 'Crop y');
