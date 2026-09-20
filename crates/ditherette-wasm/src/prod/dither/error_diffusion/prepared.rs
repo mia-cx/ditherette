@@ -336,6 +336,7 @@ impl BorrowedDiffusion<'_> {
         assert_eq!(self.work.len(), width * ROWS);
         assert_eq!(indices.len(), width * height);
         let quantizer = self.quantizer;
+        let taps = policy.kernel.taps();
         let mut placement_rows = match policy.placement {
             Placement::Adaptive { radius, .. } if !placement_scratch.is_empty() => {
                 Some(AdaptivePlacementRows::new(
@@ -435,7 +436,7 @@ impl BorrowedDiffusion<'_> {
                     ),
                 };
                 let strength_mask = f64::from(policy.strength) * f64::from(mask);
-                for tap in policy.kernel.taps() {
+                for tap in taps {
                     let dx = if reverse { -tap.dx } else { tap.dx };
                     let Some(target_x) = x.checked_add_signed(dx as isize) else {
                         continue;
