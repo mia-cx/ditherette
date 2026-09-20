@@ -25,6 +25,7 @@ struct Io {
     pixels: Vec<u8>,
     fail: bool,
     fail_input: bool,
+    fail_input_len: bool,
     copies: usize,
     comparisons: usize,
 }
@@ -34,6 +35,7 @@ impl Io {
             pixels: vec![255; width * 4],
             fail: false,
             fail_input: false,
+            fail_input_len: false,
             copies: 0,
             comparisons: 0,
         }
@@ -42,6 +44,9 @@ impl Io {
 impl Boundary for Io {
     type Output = Vec<u8>;
     fn input_len(&mut self) -> Result<usize, Failure> {
+        if self.fail_input_len {
+            return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
+        }
         Ok(self.pixels.len())
     }
     fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
@@ -265,6 +270,33 @@ fn source_snapshot_reuse_checks_bytes_dimensions_and_recovers_after_failed_input
     );
     processor.dispose().unwrap();
     assert_eq!(processor.preparation.stats().4, 0);
+}
+
+#[test]
+fn source_snapshot_is_discarded_when_input_length_fails_before_call_setup() {
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut io = Io::new(4);
+    let request = ResizeRequest {
+        source_width: 4,
+        source_height: 1,
+        output: output(3),
+    };
+    processor.resize(request, &mut io).unwrap();
+    assert_eq!((io.copies, io.comparisons), (1, 0));
+
+    io.fail_input_len = true;
+    assert_eq!(
+        processor.resize(request, &mut io).unwrap_err(),
+        Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData)
+    );
+
+    io.fail_input_len = false;
+    processor.resize(request, &mut io).unwrap();
+    assert_eq!(
+        (io.copies, io.comparisons),
+        (2, 0),
+        "a failure before Call must discard the retained source snapshot"
+    );
 }
 
 #[test]
