@@ -79,24 +79,14 @@ impl LanczosResizePlan {
         policy: SupportPolicy,
         budget: &mut CapacityBudget,
     ) -> Result<Self, Failure> {
-        let inner = match policy {
-            SupportPolicy::Fixed => ConvolutionResizePlan::try_new(
-                source,
-                output,
-                anchor,
-                &filter::FixedLanczos::<RADIUS>::new(),
-                policy,
-                budget,
-            )?,
-            SupportPolicy::ScaleAware => ConvolutionResizePlan::try_new(
-                source,
-                output,
-                anchor,
-                &filter::Lanczos::new(NonZeroU32::new(RADIUS).unwrap()),
-                policy,
-                budget,
-            )?,
-        };
+        let inner = ConvolutionResizePlan::try_new(
+            source,
+            output,
+            anchor,
+            &filter::FixedLanczos::<RADIUS>::new(),
+            policy,
+            budget,
+        )?;
         Ok(Self { inner })
     }
 
@@ -252,22 +242,13 @@ pub fn resize_lanczos2_rgba8_into(
     anchor: ResizeAnchor,
     support_policy: SupportPolicy,
 ) {
-    match support_policy {
-        SupportPolicy::Fixed => resize_convolution_rgba8_into(
-            source,
-            output,
-            anchor,
-            filter::FixedLanczos::<2>::new(),
-            support_policy,
-        ),
-        SupportPolicy::ScaleAware => resize_lanczos_rgba8_into(
-            source,
-            output,
-            anchor,
-            NonZeroU32::new(2).unwrap(),
-            support_policy,
-        ),
-    }
+    resize_convolution_rgba8_into(
+        source,
+        output,
+        anchor,
+        filter::FixedLanczos::<2>::new(),
+        support_policy,
+    );
 }
 
 /// Lanczos3 convenience wrapper for packed RGBA8.
@@ -277,22 +258,13 @@ pub fn resize_lanczos3_rgba8_into(
     anchor: ResizeAnchor,
     support_policy: SupportPolicy,
 ) {
-    match support_policy {
-        SupportPolicy::Fixed => resize_convolution_rgba8_into(
-            source,
-            output,
-            anchor,
-            filter::FixedLanczos::<3>::new(),
-            support_policy,
-        ),
-        SupportPolicy::ScaleAware => resize_lanczos_rgba8_into(
-            source,
-            output,
-            anchor,
-            NonZeroU32::new(3).unwrap(),
-            support_policy,
-        ),
-    }
+    resize_convolution_rgba8_into(
+        source,
+        output,
+        anchor,
+        filter::FixedLanczos::<3>::new(),
+        support_policy,
+    );
 }
 
 /// Lanczos2 row-band convenience wrapper for packed RGBA8.
@@ -304,26 +276,15 @@ pub fn resize_lanczos2_rgba8_rows_into(
     anchor: ResizeAnchor,
     support_policy: SupportPolicy,
 ) {
-    match support_policy {
-        SupportPolicy::Fixed => resize_convolution_rgba8_rows_into(
-            source,
-            output,
-            full_output_dimensions,
-            y_start,
-            anchor,
-            filter::FixedLanczos::<2>::new(),
-            support_policy,
-        ),
-        SupportPolicy::ScaleAware => resize_lanczos_rgba8_rows_into(
-            source,
-            output,
-            full_output_dimensions,
-            y_start,
-            anchor,
-            NonZeroU32::new(2).unwrap(),
-            support_policy,
-        ),
-    }
+    resize_convolution_rgba8_rows_into(
+        source,
+        output,
+        full_output_dimensions,
+        y_start,
+        anchor,
+        filter::FixedLanczos::<2>::new(),
+        support_policy,
+    );
 }
 
 /// Lanczos3 row-band convenience wrapper for packed RGBA8.
@@ -335,24 +296,13 @@ pub fn resize_lanczos3_rgba8_rows_into(
     anchor: ResizeAnchor,
     support_policy: SupportPolicy,
 ) {
-    match support_policy {
-        SupportPolicy::Fixed => resize_convolution_rgba8_rows_into(
-            source,
-            output,
-            full_output_dimensions,
-            y_start,
-            anchor,
-            filter::FixedLanczos::<3>::new(),
-            support_policy,
-        ),
-        SupportPolicy::ScaleAware => resize_lanczos_rgba8_rows_into(
-            source,
-            output,
-            full_output_dimensions,
-            y_start,
-            anchor,
-            NonZeroU32::new(3).unwrap(),
-            support_policy,
-        ),
-    }
+    resize_convolution_rgba8_rows_into(
+        source,
+        output,
+        full_output_dimensions,
+        y_start,
+        anchor,
+        filter::FixedLanczos::<3>::new(),
+        support_policy,
+    );
 }
