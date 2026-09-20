@@ -7,7 +7,7 @@ starts. There is no baseline-writing or candidate-promotion command.
 
 ## Prepare before the quiet phase
 
-Build each requested revision in its own clean worktree with the same toolchain:
+Prepare each requested revision in its own clean worktree with the same toolchain:
 
 ```sh
 node scripts/build-paired-benchmarks.mjs /absolute/clean-worktree /absolute/new-build-directory

@@ -29,14 +29,7 @@ pub(crate) fn run(lease: &Lease, registry: &Registry, args: &[String]) -> Result
                 .into(),
         ));
     }
-    let build = BuildIdentity {
-        revision: env!("DITHERETTE_BENCH_REVISION").into(),
-        dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
-        rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
-        tool_version: env!("CARGO_PKG_VERSION").into(),
-        configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
-        recorded: env!("DITHERETTE_BENCH_RECORDED_BUILD") == "true",
-    };
+    let build = crate::build_identity();
     if build.dirty
         || build.revision != request.executable.revision
         || content_digest(

@@ -53,6 +53,16 @@ fn main() -> io::Result<()> {
         MatchPolicy::OklabEuclidean,
         MatchPolicy::CielabEuclidean,
         MatchPolicy::YcbcrEuclidean,
+        MatchPolicy::SrgbCompuphase,
+        MatchPolicy::SrgbRec601,
+        MatchPolicy::SrgbRec709,
+        MatchPolicy::OklchEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::OklchHueArc,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchEuclidean,
+        MatchPolicy::CielchCircularHue,
+        MatchPolicy::CielchHueArc,
     ] {
         for alpha in [
             AlphaPolicy::Preserve { threshold: 0.5 },

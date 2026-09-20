@@ -193,7 +193,17 @@ export async function browserChecks(wasmUrl) {
 		'linear-rgb-euclidean',
 		'oklab-euclidean',
 		'cielab-euclidean',
-		'ycbcr-euclidean'
+		'ycbcr-euclidean',
+		'srgb-compuphase',
+		'srgb-rec601',
+		'srgb-rec709',
+		'oklch-euclidean',
+		'oklch-circular-hue',
+		'oklch-hue-arc',
+		'cielab-ciede2000',
+		'cielch-euclidean',
+		'cielch-circular-hue',
+		'cielch-hue-arc'
 	]) {
 		const indexed = processor.quantize({ ...quantizeRequest, matching });
 		equal([...indexed.indices], [0, 2], `${matching} indices`);
@@ -206,6 +216,55 @@ export async function browserChecks(wasmUrl) {
 		equal(indexed.warnings, [], 'quantize warnings');
 		savedIndexed = indexed;
 		quantizeCases++;
+		const neutral = processor.quantize({
+			...quantizeRequest,
+			matching,
+			source: { width: 1, height: 1, data: new Uint8Array([128, 128, 128, 255]) },
+			palette: [
+				{ kind: 'color', rgb: [0, 0, 0] },
+				{ kind: 'color', rgb: [255, 255, 255] }
+			]
+		});
+		equal(
+			[...neutral.indices],
+			[matching === 'linear-rgb-euclidean' ? 0 : 1],
+			`${matching} neutral`
+		);
+	}
+	// Hand-calculated byte-score winners from the frozen quantize fixtures.
+	for (const [matching, rgbs, expected] of [
+		[
+			'srgb-compuphase',
+			[
+				[17, 0, 0],
+				[0, 0, 14]
+			],
+			1
+		],
+		[
+			'srgb-rec601',
+			[
+				[15, 0, 0],
+				[0, 0, 25]
+			],
+			0
+		],
+		[
+			'srgb-rec709',
+			[
+				[15, 0, 0],
+				[0, 0, 25]
+			],
+			1
+		]
+	]) {
+		const indexed = processor.quantize({
+			...quantizeRequest,
+			matching,
+			source: { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 255]) },
+			palette: rgbs.map((rgb) => ({ kind: 'color', rgb }))
+		});
+		equal([...indexed.indices], [expected], `${matching} weighted winner`);
 	}
 	const transparent = processor.quantize({
 		...quantizeRequest,
@@ -226,8 +285,8 @@ export async function browserChecks(wasmUrl) {
 		'authoritative indexed warnings'
 	);
 	await error(
-		() => processor.quantize({ ...quantizeRequest, matching: 'oklch-hue-arc' }),
-		'unsupported-operation',
+		() => processor.quantize({ ...quantizeRequest, matching: 'oklch-ciede2000' }),
+		'invalid-settings',
 		'matching'
 	);
 	await error(

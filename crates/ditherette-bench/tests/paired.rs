@@ -6,6 +6,21 @@ mod model;
 use model::fixture;
 
 #[test]
+fn build_info_uses_binary_supplied_provenance() {
+    let build = BuildIdentity {
+        revision: "a".repeat(40),
+        dirty: false,
+        rustc: "rustc fixture".into(),
+        tool_version: "fixture".into(),
+        configuration: "recorded compiler recipe".into(),
+        recorded: true,
+    };
+    let info: serde_json::Value =
+        serde_json::from_str(&build_info_json(build.clone()).unwrap()).unwrap();
+    assert_eq!(info["build"], serde_json::to_value(build).unwrap());
+}
+
+#[test]
 fn fresh_pairs_confirm_per_case_regressions_without_promoting_code() {
     let (prepared, mut trials) = fixture();
     let original = prepared.accepted.identity.clone();

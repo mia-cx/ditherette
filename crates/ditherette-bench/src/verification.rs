@@ -49,12 +49,23 @@ pub struct CoordinateReport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreReport {
+    pub differing_scores: usize,
+    pub max_abs_delta: f64,
+    pub mean_abs_delta: f64,
+    pub rms_delta: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PairComparison {
     pub exact: bool,
     pub within_rgba_bounds: bool,
     pub metadata_mismatches: Vec<String>,
     pub differing_indices: Option<usize>,
     pub coordinates: Option<CoordinateReport>,
+    /// Exact bit differences and numeric deltas for scalar scores. No image distance applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scores: Option<ScoreReport>,
     pub rgba: Option<VerificationReport>,
 }
 
@@ -203,6 +214,7 @@ fn operation_matches(operation: Operation, pixels: &Pixels) -> bool {
                 Pixels::Indexed8 { .. }
             )
             | (Operation::Color, Pixels::Color { .. })
+            | (Operation::MetricScores, Pixels::Scores { .. })
     )
 }
 
@@ -220,6 +232,7 @@ fn compare(
     }
     let mut differing_indices = None;
     let mut coordinates = None;
+    let mut scores = None;
     match (&left.pixels, &right.pixels) {
         (
             Pixels::Indexed8 {
@@ -268,6 +281,15 @@ fn compare(
             coordinates = Some(coordinate_error(a, b));
         }
         (Pixels::Rgba8 { .. }, Pixels::Rgba8 { .. }) => {}
+        (Pixels::Scores { values: a }, Pixels::Scores { values: b }) => {
+            let error = coordinate_error(a, b);
+            scores = Some(ScoreReport {
+                differing_scores: error.differing_coordinates,
+                max_abs_delta: error.max_abs_delta,
+                mean_abs_delta: error.mean_abs_delta,
+                rms_delta: error.rms_delta,
+            });
+        }
         _ => mismatches.push("pixel-format".into()),
     }
     let rgba = match (render_rgba(left), render_rgba(right)) {
@@ -284,7 +306,10 @@ fn compare(
     };
     let coordinates_exact = coordinates
         .as_ref()
-        .is_none_or(|value| value.differing_coordinates == 0);
+        .is_none_or(|value| value.differing_coordinates == 0)
+        && scores
+            .as_ref()
+            .is_none_or(|value| value.differing_scores == 0);
     let exact = mismatches.is_empty()
         && differing_indices.is_none_or(|count| count == 0)
         && coordinates_exact
@@ -296,6 +321,7 @@ fn compare(
         metadata_mismatches: mismatches,
         differing_indices,
         coordinates,
+        scores,
         rgba,
     }
 }
@@ -330,6 +356,15 @@ pub fn render_rgba(output: &VerificationOutput) -> Result<Option<Vec<u8>>, Strin
         .map_err(|_| "dimensions overflow storage")?;
     let bytes = pixels.checked_mul(4).ok_or("RGBA length overflow")?;
     match &output.pixels {
+        Pixels::Scores { values } => {
+            if values.len() != pixels {
+                return Err("score count differs from fixture dimensions".into());
+            }
+            if values.iter().any(|value| !value.is_finite()) {
+                return Err("non-finite metric score".into());
+            }
+            Ok(None)
+        }
         Pixels::Rgba8 { data } => {
             if data.len() != bytes {
                 return Err("RGBA length differs from dimensions".into());

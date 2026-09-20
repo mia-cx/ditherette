@@ -44,6 +44,8 @@ pub enum CallScope {
     NativeCompleteCall,
     /// Packed forward conversion into caller-owned coordinates; preparation and inverse are untimed.
     NativeForwardConversion,
+    /// Preconverted cyclic pairs into preallocated scores; no conversion or allocation is timed.
+    NativeMetricScores,
     CompleteCall,
     Initialization,
 }
@@ -124,6 +126,16 @@ pub struct BuildIdentity {
     pub tool_version: String,
     pub configuration: String,
     pub recorded: bool,
+}
+
+/// Read-only preparation metadata. The caller holds the normal benchmark execution guard.
+pub fn build_info_json(build: BuildIdentity) -> std::io::Result<String> {
+    let bytes = std::fs::read(std::env::current_exe()?)?;
+    serde_json::to_string(&serde_json::json!({
+        "build": build,
+        "executable": crate::verification::content_digest(&bytes),
+    }))
+    .map_err(std::io::Error::other)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

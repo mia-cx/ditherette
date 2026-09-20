@@ -89,6 +89,7 @@ pub enum PixelFormat {
     Rgba8,
     Indexed8,
     Color32,
+    Score32,
 }
 
 impl fmt::Display for PixelFormat {
@@ -97,6 +98,7 @@ impl fmt::Display for PixelFormat {
             Self::Rgba8 => formatter.write_str("rgba8"),
             Self::Indexed8 => formatter.write_str("indexed8"),
             Self::Color32 => formatter.write_str("color32"),
+            Self::Score32 => formatter.write_str("score32"),
         }
     }
 }

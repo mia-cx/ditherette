@@ -20,7 +20,7 @@ use ditherette_bench::{
 };
 use ditherette_bench_api::{verification::*, ResizeParams};
 use ditherette_wasm::{
-    bench_subjects::{quantize as adapters, BenchSubject},
+    bench_subjects::{quantize as adapters, scores, BenchSubject},
     image::{ImageDimensions, ImageView, Rgba8},
     prod::{color::packed::Converter, contract::request::QuantizeRequest},
 };
@@ -42,14 +42,7 @@ pub(crate) fn run(registry: &Registry, args: &[String]) -> Result<(), BenchError
             "native worker rejects browser assets".into(),
         ));
     }
-    let build = BuildIdentity {
-        revision: env!("DITHERETTE_BENCH_REVISION").into(),
-        dirty: env!("DITHERETTE_BENCH_DIRTY") != "false",
-        rustc: env!("DITHERETTE_BENCH_RUSTC").into(),
-        tool_version: env!("CARGO_PKG_VERSION").into(),
-        configuration: env!("DITHERETTE_BENCH_CONFIGURATION").into(),
-        recorded: env!("DITHERETTE_BENCH_RECORDED_BUILD") == "true",
-    };
+    let build = crate::build_identity();
     if !build.recorded {
         return Err(BenchError::Config(
             "paired trials require a fresh compiler-recorded build; use scripts/build-paired-benchmarks.mjs"
@@ -179,6 +172,7 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
             ));
         };
         let callable = match operation {
+            native::NativeOperation::MetricScores { metric } => metric.prod_subject() == subject_id,
             native::NativeOperation::Quantize { .. } => {
                 adapters::quantize_function(subject_id).is_some()
             }
@@ -236,6 +230,11 @@ fn validate_native(case: &PairCase, registry: &Registry, role: Role) -> Result<(
 }
 
 enum TypedWorkload<'a> {
+    Scores {
+        run: scores::ScoreFn,
+        pairs: Vec<scores::ScorePair>,
+        values: Vec<f32>,
+    },
     Quantize {
         run: adapters::QuantizeFn,
         request: QuantizeRequest<'a>,
@@ -250,6 +249,11 @@ enum TypedWorkload<'a> {
 impl Workload for TypedWorkload<'_> {
     fn run(&mut self) -> Result<(), BenchError> {
         match self {
+            Self::Scores { run, pairs, values } => {
+                scores::score_into(std::hint::black_box(pairs.as_slice()), values, *run);
+                // Every batch writes observable scores, including throughput iterations.
+                std::hint::black_box(values.as_slice());
+            }
             Self::Quantize { run, request } => {
                 // Complete result construction and disposal remain inside every call.
                 drop(std::hint::black_box(
@@ -269,6 +273,9 @@ impl Workload for TypedWorkload<'_> {
         Ok(())
     }
     fn consume(&self) {
+        if let Self::Scores { values, .. } = self {
+            std::hint::black_box(values);
+        }
         if let Self::Color { coordinates, .. } = self {
             std::hint::black_box(coordinates);
         }
@@ -299,6 +306,12 @@ fn run_typed(
     let reference_output = verify(&case.reference_subject)?;
     let before = verify(subject_id)?;
     let mut workload = match operation {
+        native::NativeOperation::MetricScores { metric } => TypedWorkload::Scores {
+            run: metric.prod_function(),
+            pairs: scores::prepare_pairs(parameters.source(), *metric)
+                .map_err(|e| BenchError::Runtime(e.to_string()))?,
+            values: vec![0.0; case.rgba.len() / 4],
+        },
         native::NativeOperation::Quantize { .. } => TypedWorkload::Quantize {
             run: adapters::quantize_function(subject_id).expect("validated native callable"),
             request: adapters::quantize_request(&parameters)
@@ -528,6 +541,22 @@ mod tests {
         validate_native(&case, &registry, Role::Candidate).unwrap();
         case.candidate_subject = "spec:quantize:request:v1".into();
         assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+
+        for metric in scores::MetricFamily::ALL {
+            let operation = native::NativeOperation::MetricScores { metric };
+            case.identity = operation.identity(source, &case.rgba).unwrap();
+            case.reference_subject = operation.reference_subject().into();
+            case.measurement.scope = operation.scope();
+            case.native = Some(operation);
+            case.accepted_subject = metric.prod_subject().into();
+            case.candidate_subject = metric.prod_subject().into();
+            validate_native(&case, &registry, Role::Candidate).unwrap();
+            case.candidate_subject = adapters::QUANTIZE_SUBJECT.into();
+            assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+            case.candidate_subject = metric.prod_subject().into();
+            case.measurement.scope = CallScope::NativeForwardConversion;
+            assert!(validate_native(&case, &registry, Role::Candidate).is_err());
+        }
     }
 
     #[test]

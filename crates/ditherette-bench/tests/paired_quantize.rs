@@ -29,6 +29,16 @@ fn full_quantize_settings_and_forward_space_are_bound() {
         MatchPolicy::OklabEuclidean,
         MatchPolicy::CielabEuclidean,
         MatchPolicy::YcbcrEuclidean,
+        MatchPolicy::SrgbCompuphase,
+        MatchPolicy::SrgbRec601,
+        MatchPolicy::SrgbRec709,
+        MatchPolicy::OklchEuclidean,
+        MatchPolicy::OklchCircularHue,
+        MatchPolicy::OklchHueArc,
+        MatchPolicy::CielabCiede2000,
+        MatchPolicy::CielchEuclidean,
+        MatchPolicy::CielchCircularHue,
+        MatchPolicy::CielchHueArc,
     ] {
         let mut changed = original.clone();
         changed.matching = matching;
@@ -67,6 +77,8 @@ fn full_quantize_settings_and_forward_space_are_bound() {
         WorkingSpace::Oklab,
         WorkingSpace::Cielab,
         WorkingSpace::Ycbcr,
+        WorkingSpace::Oklch,
+        WorkingSpace::Cielch,
     ] {
         let operation = NativeOperation::ColorForward { space };
         assert_eq!(
@@ -78,11 +90,6 @@ fn full_quantize_settings_and_forward_space_are_bound() {
             Operation::Color
         );
     }
-    assert!(NativeOperation::ColorForward {
-        space: WorkingSpace::Oklch
-    }
-    .identity(source, &rgba)
-    .is_err());
 }
 
 #[test]

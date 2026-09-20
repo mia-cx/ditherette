@@ -121,7 +121,7 @@ fn packed_triplets_match_frozen_bits_and_preserve_landed_four_channel_api() {
 }
 
 #[test]
-fn all_ordinary_modes_match_indices_palette_alpha_and_warning_bytes() {
+fn all_matching_modes_match_indices_palette_alpha_and_warning_bytes() {
     let source: Vec<u8> = (0..256u32)
         .flat_map(|n| [n as u8, (n * 73) as u8, (255 - n) as u8, n as u8])
         .collect();
@@ -143,7 +143,7 @@ fn all_ordinary_modes_match_indices_palette_alpha_and_warning_bytes() {
         oversized[..256].to_vec(),
         oversized,
     ];
-    for (matching, ..) in MODES {
+    for matching in all_matching() {
         for palette in &palettes {
             for alpha in [
                 AlphaPolicy::Preserve { threshold: 0.0 },
@@ -191,22 +191,119 @@ fn exact_ties_and_transparent_threshold_keep_original_indices() {
 }
 
 #[test]
-fn unsupported_matching_is_not_silently_euclidean() {
-    let palette = [PaletteEntry::Transparent {}];
-    let request = request(
-        &[0, 0, 0, 255],
-        &palette,
-        MatchPolicy::OklchHueArc,
-        AlphaPolicy::Preserve { threshold: 0.0 },
+fn every_metric_retains_duplicate_ties_and_exact_preparation_budget() {
+    let palette = [PaletteEntry::Color { rgb: [73; 3] }; 2];
+    let alpha = AlphaPolicy::Premultiplied {};
+    for matching in all_matching() {
+        let capacity =
+            prod::quantize::PreparedQuantizer::required_capacity_bytes(&palette, alpha, matching)
+                .unwrap();
+        let prepared =
+            prod::quantize::PreparedQuantizer::try_new(&palette, alpha, matching, capacity)
+                .unwrap();
+        assert_eq!(prepared.capacity_bytes(), capacity);
+        assert!(prod::quantize::PreparedQuantizer::try_new(
+            &palette,
+            alpha,
+            matching,
+            capacity - 1
+        )
+        .is_err());
+        assert_eq!(
+            prod::quantize::quantize(
+                request(&[73, 73, 73, 255], &palette, matching, alpha),
+                u64::MAX
+            )
+            .unwrap()
+            .indices
+            .data(),
+            [0]
+        );
+    }
+}
+
+fn all_matching() -> [MatchPolicy; 15] {
+    use MatchPolicy::*;
+    [
+        SrgbEuclidean,
+        LinearRgbEuclidean,
+        OklabEuclidean,
+        CielabEuclidean,
+        YcbcrEuclidean,
+        SrgbCompuphase,
+        SrgbRec601,
+        SrgbRec709,
+        OklchEuclidean,
+        OklchCircularHue,
+        OklchHueArc,
+        CielabCiede2000,
+        CielchEuclidean,
+        CielchCircularHue,
+        CielchHueArc,
+    ]
+}
+
+#[test]
+fn packed_cylindrical_conversion_retains_frozen_neutral_and_hue_bits() {
+    for (space, reference) in [
+        (
+            OrdinarySpace::Oklch,
+            spec::contract::request::WorkingSpace::Oklch,
+        ),
+        (
+            OrdinarySpace::Cielch,
+            spec::contract::request::WorkingSpace::Cielch,
+        ),
+    ] {
+        let converter = Converter::new(space);
+        for n in 0..4096u32 {
+            let rgb = if n < 256 {
+                [n as u8; 3]
+            } else {
+                [(n * 73) as u8, (n * 31 + n / 256) as u8, (n * 17) as u8]
+            };
+            let actual = converter.coordinates(rgb);
+            assert_eq!(
+                actual.map(f32::to_bits),
+                spec::color::rgb8_to_coordinates(rgb, reference).map(f32::to_bits)
+            );
+            assert!(actual[2] >= 0.0 && actual[2] < std::f32::consts::TAU);
+            if n < 256 {
+                assert_eq!([actual[1].to_bits(), actual[2].to_bits()], [0, 0]);
+            }
+        }
+    }
+}
+
+#[test]
+fn specialized_scores_match_known_vectors_and_frozen_f32_bits() {
+    use prod::quantize::metric::distance_score;
+    for (a, b, expected) in [
+        ([50.0, 2.6772, -79.7751], [50.0, 0.0, -82.7485], 2.0425),
+        ([50.0, 0.0, 0.0], [50.0, -1.0, 2.0], 2.3669),
+        ([50.0, 2.49, -0.001], [50.0, -2.49, 0.0009], 7.1792),
+        ([50.0, 2.49, -0.001], [50.0, -2.49, 0.0011], 7.2195),
+    ] {
+        let actual = distance_score(a, b, MatchPolicy::CielabCiede2000);
+        assert!((actual - expected).abs() < 0.0001);
+    }
+    for matching in all_matching() {
+        let reference = serde_json::from_value(serde_json::to_value(matching).unwrap()).unwrap();
+        for (a, b) in [
+            ([0.5, 0.0, 0.0], [0.5, 0.25, 3.0]),
+            ([0.5, 0.2, 0.05], [0.5, 0.1, std::f32::consts::TAU - 0.05]),
+            ([0.5, 0.1, 0.0], [0.5, 0.2, std::f32::consts::FRAC_PI_2]),
+        ] {
+            assert_eq!(
+                distance_score(a, b, matching).to_bits(),
+                spec::quantize::metric::distance_score(a, b, reference).to_bits()
+            );
+        }
+    }
+    let a = [0.5, 0.1, 0.0];
+    let b = [0.5, 0.2, std::f32::consts::FRAC_PI_2];
+    assert_ne!(
+        distance_score(a, b, MatchPolicy::OklchCircularHue),
+        distance_score(a, b, MatchPolicy::OklchHueArc)
     );
-    let prod::quantize::QuantizeError::Preparation(failure) =
-        prod::quantize::quantize(request, u64::MAX).unwrap_err()
-    else {
-        panic!("unsupported matching must be a preparation failure");
-    };
-    assert_eq!(
-        failure.code,
-        prod::contract::error::ErrorCode::UnsupportedOperation
-    );
-    assert_eq!(failure.path, "matching");
 }

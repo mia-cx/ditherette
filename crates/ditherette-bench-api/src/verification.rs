@@ -11,6 +11,7 @@ pub struct Digest256(pub [u8; 32]);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Operation {
+    MetricScores,
     Resize,
     Color,
     Perturb,
@@ -123,6 +124,11 @@ pub struct Warning {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "format", rename_all = "kebab-case")]
 pub enum Pixels {
+    /// One scalar score per fixture position, not an image or rendered color.
+    Scores {
+        #[serde(with = "float_bits", rename = "score_bits")]
+        values: Vec<f32>,
+    },
     Rgba8 {
         data: Vec<u8>,
     },

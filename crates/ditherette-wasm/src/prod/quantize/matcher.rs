@@ -1,5 +1,8 @@
 //! Frozen direct-scan matching, wired to the landed production converter.
 
+use super::metric::distance_score;
+pub use super::metric::euclidean3_squared;
+use crate::prod::contract::request::MatchPolicy;
 use crate::prod::palette::{allocation::Budget, PreparationError};
 use crate::prod::{color::packed::Converter, palette::PreparedPalette};
 
@@ -12,6 +15,7 @@ pub struct PaletteColor {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PaletteMatcher {
     pub colors: Vec<PaletteColor>,
+    pub matching: MatchPolicy,
 }
 
 impl PaletteMatcher {
@@ -19,6 +23,7 @@ impl PaletteMatcher {
     pub(crate) fn prepare(
         palette: &PreparedPalette,
         converter: &Converter,
+        matching: MatchPolicy,
         budget: &mut Budget,
     ) -> Result<Self, PreparationError> {
         let mut colors = Vec::new();
@@ -27,15 +32,15 @@ impl PaletteMatcher {
             index: entry.index,
             coordinates: converter.coordinates(entry.rgb),
         }));
-        Ok(Self { colors })
+        Ok(Self { colors, matching })
     }
 
     /// Exact score ties keep the first entry. Transparent-only pixels bypass this scan.
     pub fn nearest(&self, coordinates: [f32; 3]) -> PaletteColor {
         let mut best = self.colors[0];
-        let mut best_score = euclidean3_squared(coordinates, best.coordinates);
+        let mut best_score = distance_score(coordinates, best.coordinates, self.matching);
         for &candidate in &self.colors[1..] {
-            let score = euclidean3_squared(coordinates, candidate.coordinates);
+            let score = distance_score(coordinates, candidate.coordinates, self.matching);
             if score < best_score {
                 best = candidate;
                 best_score = score;
@@ -43,12 +48,4 @@ impl PaletteMatcher {
         }
         best
     }
-}
-
-/// Squared Euclidean distance, copied without arithmetic changes from the frozen metric.
-pub fn euclidean3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let d0 = a[0] - b[0];
-    let d1 = a[1] - b[1];
-    let d2 = a[2] - b[2];
-    d0 * d0 + d1 * d1 + d2 * d2
 }

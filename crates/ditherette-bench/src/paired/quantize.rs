@@ -32,11 +32,16 @@ impl QuantizeSettings {
             MatchPolicy::OklabEuclidean => spec::MatchPolicy::OklabEuclidean,
             MatchPolicy::CielabEuclidean => spec::MatchPolicy::CielabEuclidean,
             MatchPolicy::YcbcrEuclidean => spec::MatchPolicy::YcbcrEuclidean,
-            _ => {
-                return Err(io::Error::other(
-                    "quantize benchmarks support five ordinary Euclidean spaces only",
-                ))
-            }
+            MatchPolicy::SrgbCompuphase => spec::MatchPolicy::SrgbCompuphase,
+            MatchPolicy::SrgbRec601 => spec::MatchPolicy::SrgbRec601,
+            MatchPolicy::SrgbRec709 => spec::MatchPolicy::SrgbRec709,
+            MatchPolicy::OklchEuclidean => spec::MatchPolicy::OklchEuclidean,
+            MatchPolicy::OklchCircularHue => spec::MatchPolicy::OklchCircularHue,
+            MatchPolicy::OklchHueArc => spec::MatchPolicy::OklchHueArc,
+            MatchPolicy::CielabCiede2000 => spec::MatchPolicy::CielabCiede2000,
+            MatchPolicy::CielchEuclidean => spec::MatchPolicy::CielchEuclidean,
+            MatchPolicy::CielchCircularHue => spec::MatchPolicy::CielchCircularHue,
+            MatchPolicy::CielchHueArc => spec::MatchPolicy::CielchHueArc,
         };
         let alpha = match self.alpha {
             AlphaPolicy::Preserve { threshold } => spec::AlphaPolicy::Preserve { threshold },

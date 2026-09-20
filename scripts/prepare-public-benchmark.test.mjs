@@ -6,10 +6,57 @@ import path from 'node:path';
 import test from 'node:test';
 import {
 	assertBuildEnvironment,
+	buildFreshPackage,
 	cleanRevision,
 	fileInventory,
 	sourceInventory
 } from './prepare-public-benchmark.mjs';
+
+test('each role rebuilds only the crate release Wasm outputs before package compilation', async (t) => {
+	const directory = await mkdtemp(path.join(tmpdir(), 'ditherette-fresh-build-'));
+	t.after(() => rm(directory, { recursive: true, force: true }));
+	const crate = path.join(directory, 'crates/ditherette-wasm');
+	await mkdir(crate, { recursive: true });
+	await writeFile(path.join(directory, 'rust-toolchain.toml'), 'channel = "1.97.0"\n');
+	await writeFile(
+		path.join(crate, 'rust-toolchain-threads.toml'),
+		'channel = "nightly-2024-08-02"\n'
+	);
+	const calls = [];
+	const run = (program, args, cwd) => calls.push({ program, args, cwd });
+	const expected = ['scalar', 'threads'].map((variant, index) => ({
+		program: 'cargo',
+		args: [
+			index === 0 ? '+1.97.0' : '+nightly-2024-08-02',
+			'clean',
+			'--package',
+			'ditherette-wasm',
+			'--release',
+			'--target',
+			'wasm32-unknown-unknown',
+			'--target-dir',
+			path.join(crate, 'target', variant)
+		],
+		cwd: crate
+	}));
+	expected.push({ program: 'pnpm', args: ['--filter', 'ditherette', 'build'], cwd: directory });
+	await buildFreshPackage(directory, run);
+	await buildFreshPackage(directory, run);
+	assert.deepEqual(calls, [...expected, ...expected]);
+
+	for (const failingVariant of ['scalar', 'threads']) {
+		const attempted = [];
+		await assert.rejects(
+			buildFreshPackage(directory, (program, args) => {
+				attempted.push(program);
+				if (args.at(-1) === path.join(crate, 'target', failingVariant))
+					throw new Error('clean failed');
+			}),
+			/clean failed/
+		);
+		assert.ok(attempted.every((program) => program === 'cargo'));
+	}
+});
 
 test('source provenance rejects dirty input and records every tracked byte', async (t) => {
 	const directory = await mkdtemp(path.join(tmpdir(), 'ditherette-source-provenance-'));
