@@ -46,6 +46,9 @@ function fixture(operation) {
 			CRATE,
 			'crates/ditherette-bench',
 			'crates/ditherette-bench-api',
+			...(existsSync(join(ROOT, 'crates/ditherette-bench-oracle'))
+				? ['crates/ditherette-bench-oracle']
+				: []),
 			POLICY,
 			'.github/workflows'
 		]) {
