@@ -10,7 +10,7 @@ The reference slices are intentionally a separate prerequisite phase. This follo
 
 ## Index
 
-PR #160 merged as `de9158cc` after full local validation, exact-head review, and all CI, including the normal freeze check. Isolated guard-test amendment #167 previously merged as `e5359b83` with Mia's explicit exception for that amendment only. PR #161 is retargeted to main and restacking with local runtime fixes. The stop-before-review instruction below records the earlier consolidation checkpoint, not the current authorization.
+PRs #160, #161, and #162 merged as `de9158cc`, `a80ce69c`, and `39fc28c0`. Each passed exact-head review, CI, and the normal freeze check. Isolated guard-test amendment #167 previously merged as `e5359b83` with Mia's exception for that amendment only. PR #163 now restacks onto main. The stop-before-review instruction below records the earlier consolidation checkpoint, not the current authorization.
 
 On 2026-09-20, Mia approved consolidation and deferred review. The active package stack is #160 → #161 → #162 → #163. Release tooling #164 and optional website integration #165 branch from #163. The original PR branches and discussions remain available. Supersession does not mean merged, reviewed, or newly validated.
 
@@ -84,10 +84,10 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Merged `a80ce69c`; runtime checks pass, known WebKit release hold retained | [#161](https://github.com/mia-cx/ditherette/pull/161) |
 | [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165) |
 | [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165) |
-| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Consolidated; review deferred | [#162](https://github.com/mia-cx/ditherette/pull/162) |
-| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Final net consolidated; JS target and release remain held | [#162](https://github.com/mia-cx/ditherette/pull/162), [#163](https://github.com/mia-cx/ditherette/pull/163) |
+| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Merged `39fc28c0`; package conformance passes, WebKit threaded release hold retained | [#162](https://github.com/mia-cx/ditherette/pull/162) |
+| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Validation tooling merged `39fc28c0`; #163 in review, JS target and release held | [#162](https://github.com/mia-cx/ditherette/pull/162), [#163](https://github.com/mia-cx/ditherette/pull/163) |
 | [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Release tooling consolidated; publication held | [#164](https://github.com/mia-cx/ditherette/pull/164) |
-| [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Consolidated; review deferred | [#162](https://github.com/mia-cx/ditherette/pull/162) |
+| [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Validation tooling merged `39fc28c0`; no fresh release certification | [#162](https://github.com/mia-cx/ditherette/pull/162) |
 | [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Held; excluded from package consolidation | [#133](https://github.com/mia-cx/ditherette/pull/133) |
 | [S45](#s45) | Prepare the held TypeScript-retirement PR | [S44](#s44) | Held; benchmark-provider portion retained in #163 | [#134](https://github.com/mia-cx/ditherette/pull/134) |
 

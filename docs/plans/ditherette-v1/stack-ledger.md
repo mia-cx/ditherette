@@ -1,5 +1,11 @@
 # Ditherette v1 implementation stack
 
+## Verification merged on 2026-09-20; performance next
+
+PR #162 merged as `39fc28c0` from `5ceaa701`. Issues #82, #83, and #85 closed. The parent verified all CI, exact-head Pullfrog approval, five resolved threads, and the final diagnostic fix. The normal frozen check passes. Scalar browser checks pass 17/17, threaded Chromium/Firefox 12/12, automatic policy 23/23, and focused transport tests 15/15. Bounded capped diagnostics preserve exact raw evidence without full pixel JSON or PNG copies. This does not certify new timings or remove release holds.
+
+PR #163 was retargeted before the merge. Local preparation `d0dd0fc7` passes 35 Rust integration tests, four decoder tests, and six Node compact-wire tests. It includes the historical nearest scalar reproduction record and public source retention refs. Final restacking carries #162's mismatch diagnostic fix. PR #165's fresh package build, six Chromium fixtures, and typecheck pass. Disposable targets were cleaned; evidence and package artifacts remain outside Git.
+
 ## Runtime merged on 2026-09-20; verification next
 
 PR #161 merged as `a80ce69c` from `df1f5a44`. Issues #72–#74 and #76–#79 closed, local main fast-forwarded, and #162 was retargeted before the merge. The parent verified exact-head approval, all CI, zero unresolved threads, 439 native Wasm and 121 benchmark correctness passes, and reran 18 public/runtime checks. The agent's interface suite passes 42 tests. The known external WebKit lifecycle failures remain active release holds, not passing checks.
