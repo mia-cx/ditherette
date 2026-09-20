@@ -126,6 +126,7 @@ test('trusted base rejects checkpoint, checker, workflow, and added helper repla
 test('content identity survives unrelated history, but a new parent cannot bless edited bytes', () =>
 	fixture((root) => {
 		git(root, 'init', '--quiet');
+		git(root, 'config', 'maintenance.auto', 'false');
 		git(root, 'config', 'user.name', 'Freeze fixture');
 		git(root, 'config', 'user.email', 'fixture@example.invalid');
 		git(root, 'add', '.');
