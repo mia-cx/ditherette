@@ -83,16 +83,20 @@ fn indexed_hooks_report_finished_rows_and_abort_before_the_next() {
                 placement: Placement::Everywhere {},
             })
             .unwrap();
-            check_rows(3, |output, progress| {
-                execute_with_progress(
-                    &prepared,
-                    &mut [[0.0; 3]; 9],
-                    source,
-                    output,
-                    policy,
-                    progress,
-                )
-            });
+            for cache_size in [0, 128] {
+                let mut cache = vec![0; cache_size];
+                check_rows(3, |output, progress| {
+                    execute_with_progress(
+                        &prepared,
+                        &mut [[0.0; 3]; 9],
+                        &mut cache,
+                        source,
+                        output,
+                        policy,
+                        progress,
+                    )
+                });
+            }
         }
     }
 }

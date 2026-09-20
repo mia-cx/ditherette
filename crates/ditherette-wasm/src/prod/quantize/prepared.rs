@@ -1,6 +1,9 @@
 //! Fallible prepared ownership and allocation-free indexed execution.
 
-use super::matcher::{PaletteColor, PaletteMatcher};
+use super::{
+    cache::RgbCache,
+    matcher::{PaletteColor, PaletteMatcher},
+};
 use crate::{
     image::{
         contracts::{IndexedImage, PaletteEntry},
@@ -77,6 +80,15 @@ impl PreparedQuantizer {
         &self.palette
     }
 
+    /// RGB matching is unreachable when alpha policy fixes every output index.
+    pub(crate) fn can_match_rgb(&self) -> bool {
+        !self.palette.visible.is_empty()
+            && match self.palette.preserved_alpha() {
+                Some((threshold, _)) => threshold < u8::MAX,
+                None => true,
+            }
+    }
+
     /// Borrow the ordered visible coordinates for palette-mixing kernels.
     pub(crate) fn matcher(&self) -> &PaletteMatcher {
         &self.matcher
@@ -135,15 +147,111 @@ impl PreparedQuantizer {
     }
 
     fn quantize_row_into(&self, source: &[u8], output: &mut [u8]) {
+        self.quantize_row_with(source, output, |rgb| {
+            self.matcher.nearest(self.converter.coordinates(rgb)).index
+        });
+    }
+
+    fn quantize_row_with(
+        &self,
+        source: &[u8],
+        output: &mut [u8],
+        mut nearest: impl FnMut([u8; 3]) -> u8,
+    ) {
+        if let Some((threshold, index)) = self.palette.preserved_alpha() {
+            if self.palette.visible.is_empty() {
+                output.fill(index);
+                return;
+            }
+            for (source, output) in source.chunks_exact(4).zip(output) {
+                *output = if source[3] <= threshold {
+                    index
+                } else {
+                    nearest([source[0], source[1], source[2]])
+                };
+            }
+            return;
+        }
         for (source, output) in source.chunks_exact(4).zip(output) {
             let rgba = [source[0], source[1], source[2], source[3]];
             *output = match self.palette.prepare_pixel(rgba) {
                 PalettePixel::Index(index) => index,
-                PalettePixel::Color(rgb) => {
-                    self.matcher.nearest(self.converter.coordinates(rgb)).index
-                }
+                PalettePixel::Color(rgb) => nearest(rgb),
             };
         }
+    }
+
+    /// Runs a fresh exact-byte cache across all rows, using only caller-reserved scratch.
+    /// Empty scratch retains the allocation-free direct scan. Rebinding clears all cached entries.
+    /// Nonempty scratch must contain a power-of-two number of entries, at most 262,144.
+    pub fn quantize_cached_with_progress(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        output: &mut [u8],
+        entries: &mut [u64],
+        mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+    ) -> Result<(), crate::prod::contract::failure::Failure> {
+        if entries.is_empty() {
+            return self.quantize_with_progress(source, output, progress);
+        }
+        let dimensions = source.dimensions();
+        assert_eq!(
+            output.len(),
+            dimensions.pixel_count().expect("valid dimensions")
+        );
+        let mut cache = RgbCache::new(entries);
+        for (y, output) in output
+            .chunks_exact_mut(dimensions.width_usize())
+            .enumerate()
+        {
+            self.quantize_row_with(
+                source.row(y as u32).expect("valid source row"),
+                output,
+                |rgb| {
+                    cache.nearest(rgb, || {
+                        self.matcher.nearest(self.converter.coordinates(rgb)).index
+                    })
+                },
+            );
+            progress(y as u32 + 1)?;
+        }
+        Ok(())
+    }
+
+    /// Shares immutable palette data while each worker owns its exact RGB cache.
+    pub(crate) fn quantize_cached_bands_into(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        output: &mut [u8],
+        work: &mut RowBandBuffers<u64>,
+        progress: &mut impl FnMut(u64) -> Result<(), crate::prod::contract::failure::Failure>,
+    ) -> Result<(), crate::prod::contract::failure::Failure> {
+        work.execute(
+            output,
+            source.dimensions().width_usize(),
+            &|band, output, entries| {
+                if entries.is_empty() {
+                    self.quantize_rows_into(source, band, output);
+                } else {
+                    let mut cache = RgbCache::new(entries);
+                    for (y, output) in (band.y_start()..band.y_end())
+                        .zip(output.chunks_exact_mut(source.dimensions().width_usize()))
+                    {
+                        self.quantize_row_with(
+                            source.row(y).expect("valid source row"),
+                            output,
+                            |rgb| {
+                                cache.nearest(rgb, || {
+                                    self.matcher.nearest(self.converter.coordinates(rgb)).index
+                                })
+                            },
+                        );
+                    }
+                }
+                Ok(u64::from(band.height()))
+            },
+            progress,
+        )
     }
 
     /// Reports each completed row without changing per-pixel traversal or arithmetic.
@@ -171,5 +279,26 @@ impl PreparedQuantizer {
     /// Moves palette metadata into a complete native result; no copies or allocations occur.
     pub fn into_indexed(self, indices: ImageBuf<PaletteIndex8>) -> IndexedImage {
         self.palette.into_indexed(indices)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::image::contracts::PaletteEntry;
+
+    #[test]
+    fn fixed_index_palettes_never_need_rgb_matching() {
+        let transparent = [PaletteEntry::Transparent {}];
+        let visible = [PaletteEntry::Color { rgb: [1, 2, 3] }];
+        let prepare = |palette, alpha| {
+            PreparedQuantizer::try_new(palette, alpha, MatchPolicy::SrgbEuclidean, u64::MAX)
+                .unwrap()
+        };
+
+        assert!(!prepare(&transparent, AlphaPolicy::Premultiplied {}).can_match_rgb());
+        assert!(!prepare(&visible, AlphaPolicy::Preserve { threshold: 255.0 }).can_match_rgb());
+        assert!(prepare(&visible, AlphaPolicy::Preserve { threshold: 254.9 }).can_match_rgb());
+        assert!(prepare(&visible, AlphaPolicy::Premultiplied {}).can_match_rgb());
     }
 }

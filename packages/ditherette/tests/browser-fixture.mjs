@@ -297,6 +297,9 @@ export async function browserChecks(wasmUrl) {
 		'invalid-settings',
 		'alpha.threshold'
 	);
+	const changed = structuredClone(quantizeRequest);
+	changed.source.data[0] ^= 1;
+	processor.quantize(changed);
 	const set = Uint8Array.prototype.set;
 	let copies = 0;
 	try {

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createDitherette, DitheretteError } from '../dist/index.js';
 import { createScalarBindings } from '../dist/wasm/scalar/ditherette_wasm.factory.js';
+import { initializeProcessor } from '../dist/scalar.js';
 
 // Node is a development fixture host, not a supported public runtime.
 const bytes = await readFile(
@@ -20,8 +21,8 @@ const request = (data = new Uint8Array([17, 31, 47, 127])) => ({
 const diagnostic = (code, path) => (error) =>
 	error instanceof DitheretteError && error.code === code && error.path === path;
 
-// An identity resize owns only its preparation record and eight pixel bytes.
-// Probe that compiled record layout; the per-filter heap formulas remain independent below.
+// A 1x1 -> 2x1 nearest resize owns its preparation record, 12 pixel bytes and 12 map bytes.
+// Identity has no preparation now. Probe a real resize; other filter formulas stay independent.
 const resizeOverhead = await (async () => {
 	let low = overhead;
 	let high = overhead + 1024;
@@ -30,7 +31,6 @@ const resizeOverhead = await (async () => {
 		const processor = await createDitherette({ wasm: module, memoryLimitBytes: limit });
 		try {
 			const value = request();
-			value.output.width = 1;
 			processor.resize(value);
 			high = limit;
 		} catch (error) {
@@ -40,8 +40,60 @@ const resizeOverhead = await (async () => {
 			processor.dispose();
 		}
 	}
-	return low - 8;
+	return low - 24;
 })();
+
+test('identity resize returns the input object and aliases its bytes', async () => {
+	const value = request();
+	value.output.width = 1;
+	const processor = await createDitherette({ wasm: module, memoryLimitBytes: overhead + 4 });
+	try {
+		const result = processor.resize(value);
+		assert.equal(result, value.source);
+		result.data.fill(0);
+		assert.deepEqual([...value.source.data], [0, 0, 0, 0]);
+		assert.deepEqual(processor.resize(value).data, value.source.data);
+		value.source.data[0] = 99;
+		assert.equal(processor.resize(value).data[0], 99);
+	} finally {
+		processor.dispose();
+	}
+});
+
+test('identity bypass validates requests and preserves lifecycle without entering Wasm', () => {
+	const processor = initializeProcessor({
+		privateInitialize: () => 0,
+		privateDispose: () => 0,
+		privateResize: () => assert.fail('identity must not enter Wasm')
+	}, 1);
+	const value = request(new Uint8Array([9, 17, 31, 47, 127, 9]).subarray(1, 5));
+	value.output.width = 1;
+	for (const algorithm of ['nearest', 'area', 'bilinear', 'bicubic', 'lanczos2', 'lanczos3', 'trilinear']) {
+		value.output.resize = algorithm === 'area' ? { algorithm } : {
+			algorithm, anchor: 'center',
+			...(['bicubic', 'lanczos2', 'lanczos3'].includes(algorithm) ? { support: 'fixed' } : {})
+		};
+		assert.equal(processor.resize(value), value.source);
+	}
+	const events = [];
+	value.onProgress = event => {
+		events.push(event);
+		assert.throws(() => processor.resize(value), diagnostic('reentrant-call', 'instance'));
+		assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
+	};
+	assert.equal(processor.resize(value), value.source);
+	assert.deepEqual(events, [
+		{ stage: 'prepare', completed: 0, total: 1 },
+		{ stage: 'complete', completed: 1, total: 1 }
+	]);
+	value.onProgress = () => { throw new Error('callback failed'); };
+	assert.throws(() => processor.resize(value), diagnostic('callback', 'onProgress'));
+	delete value.onProgress;
+	assert.equal(processor.resize(value), value.source);
+	assert.throws(() => processor.resize({ ...value, version: 0 }), diagnostic('invalid-request', 'version'));
+	processor.dispose();
+	assert.throws(() => processor.resize(value), diagnostic('disposed', 'instance'));
+});
 
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
 	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.
@@ -67,6 +119,9 @@ test('public trilinear preserves intermediate rounding and recovers from budget 
 	const small = { ...value, source: { width: 1, height: 1, data: new Uint8Array([7, 8, 9, 0]) } };
 	assert.deepEqual([...short.resize(small).data], [7, 8, 9, 0]);
 	for (const phase of [1, 2]) {
+		const changed = structuredClone(value);
+		changed.source.data[0] ^= 1;
+		processor.resize(changed);
 		const originalSet = Uint8Array.prototype.set;
 		let calls = 0;
 		Uint8Array.prototype.set = function (...args) {
@@ -144,6 +199,9 @@ test('public area and bilinear preserve hidden RGB, alpha, exact budgets, and re
 		const output = processor.resize(value);
 		assert.deepEqual([...output.data], [100, 50, 150, 128]);
 		assert.deepEqual([...backing], [9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
+		const changed = structuredClone(value);
+		changed.source.data[0] ^= 1;
+		processor.resize(changed);
 		const originalSet = Uint8Array.prototype.set;
 		let calls = 0;
 		try {
@@ -224,6 +282,9 @@ test('public convolution preserves alpha and output ownership with bounded prepa
 			assert.deepEqual([...backing], [9, 200, 0, 100, 0, 0, 100, 200, 255, 9]);
 			const originalSet = Uint8Array.prototype.set;
 			for (const phase of [1, 2]) {
+				const changed = structuredClone(value);
+				changed.source.data[0] ^= 1;
+				processor.resize(changed);
 				let calls = 0;
 				try {
 					Uint8Array.prototype.set = function (...args) {
@@ -411,6 +472,9 @@ test('caught input/result copy failures recover through the public boundary with
 		['input', 'source.data'],
 		['result', 'output']
 	]) {
+		const changed = request();
+		changed.source.data[0] ^= 1;
+		processor.resize(changed);
 		const set = Uint8Array.prototype.set;
 		const fault = t.mock.method(Uint8Array.prototype, 'set', function (...args) {
 			const intoWasm = this.buffer === raw.memory.buffer;

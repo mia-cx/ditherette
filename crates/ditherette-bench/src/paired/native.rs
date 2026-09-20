@@ -29,6 +29,9 @@ pub enum NativeOperation {
     Perturb {
         settings: super::fields::PerturbPolicy,
     },
+    PerturbComponent {
+        settings: super::fields::PerturbPolicy,
+    },
     Separable {
         settings: super::fields::SeparableSettings,
     },
@@ -54,7 +57,9 @@ impl NativeOperation {
             Self::Process { settings } => settings.reference_request(source, rgba),
             Self::Diffusion { settings } => settings.reference_request(source, rgba),
             Self::Yliluoma { settings } => settings.reference_request(source, rgba),
-            Self::Perturb { settings } => super::fields::perturb_request(*settings, source, rgba),
+            Self::Perturb { settings } | Self::PerturbComponent { settings } => {
+                super::fields::perturb_request(*settings, source, rgba)
+            }
             Self::Separable { settings } => settings.reference_request(source, rgba),
             Self::FieldComponent { component } => {
                 let request = ReferenceRequest::FieldComponent {
@@ -112,7 +117,7 @@ impl NativeOperation {
             Self::Process { .. } => "spec:process:request:v1",
             Self::Diffusion { .. } => "spec:dither-and-quantize:request:v1",
             Self::Yliluoma { .. } => "spec:dither-and-quantize:request:v1",
-            Self::Perturb { .. } => "spec:perturb:request:v1",
+            Self::Perturb { .. } | Self::PerturbComponent { .. } => "spec:perturb:request:v1",
             Self::Separable { .. } => "spec:dither-and-quantize:request:v1",
             Self::FieldComponent { component } => component.reference_subject(),
             Self::Quantize { .. } => "spec:quantize:request:v1",
@@ -136,9 +141,13 @@ impl NativeOperation {
             Self::Diffusion { .. } => super::CallScope::NativeCompleteCall,
             Self::Yliluoma { .. } => super::CallScope::NativeCompleteCall,
             Self::Perturb { .. } | Self::Separable { .. } => super::CallScope::NativeCompleteCall,
+            Self::PerturbComponent { .. } => super::CallScope::NativePerturbKernel,
             Self::FieldComponent { component } => match component {
                 ditherette_wasm::bench_subjects::fields::Component::Inverse { .. } => {
                     super::CallScope::NativeInverseConversion
+                }
+                ditherette_wasm::bench_subjects::fields::Component::Reconstruct { .. } => {
+                    super::CallScope::NativeWideReconstruction
                 }
                 ditherette_wasm::bench_subjects::fields::Component::Field { .. } => {
                     super::CallScope::NativeFieldEvaluation

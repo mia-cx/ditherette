@@ -152,6 +152,13 @@ impl Boundary for NativeBoundary<'_> {
         destination.copy_from_slice(self.0);
         Ok(())
     }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        if compare && destination == self.0 {
+            return Ok(true);
+        }
+        Boundary::copy_input(self, destination)?;
+        Ok(false)
+    }
     fn complete(
         &mut self,
         bytes: &[u8],
@@ -168,6 +175,9 @@ impl QuantizeBoundary for NativeBoundary<'_> {
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         destination.copy_from_slice(self.0);
         Ok(())
+    }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        Boundary::snapshot_input(self, destination, compare)
     }
     fn complete(
         &mut self,

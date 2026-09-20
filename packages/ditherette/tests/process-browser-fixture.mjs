@@ -285,6 +285,9 @@ export async function processBrowserChecks({
 	try {
 		const expected = exact.process(value);
 		for (const failAt of [1, 2, 3]) {
+			const changed = structuredClone(value);
+			changed.source.data[0] ^= 1;
+			exact.process(changed);
 			copies = 0;
 			Uint8Array.prototype.set = function (...args) {
 				if (++copies === failAt) {

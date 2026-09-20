@@ -198,6 +198,9 @@ test('both field result shapes enforce exact budgets before output and recover f
 		const expected = processor[method](value());
 		try {
 			for (let failAt = 1; failAt <= count; failAt++) {
+				const changed = value();
+				changed.source.data[0] ^= 1;
+				processor[method](changed);
 				let copy = 0;
 				Uint8Array.prototype.set = function (...args) {
 					if (++copy === failAt) throw new RangeError('copy');

@@ -210,6 +210,9 @@ test('public diffusion enforces the exact budget before output and recovers from
 	const expected = processor.ditherAndQuantize(request());
 	try {
 		for (let failAt = 1; failAt <= 3; failAt++) {
+			const changed = request();
+			changed.source.data[0] ^= 1;
+			processor.ditherAndQuantize(changed);
 			let copy = 0;
 			Uint8Array.prototype.set = function (...args) {
 				if (++copy === failAt) throw new RangeError('copy');

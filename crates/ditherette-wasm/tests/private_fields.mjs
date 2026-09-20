@@ -104,6 +104,9 @@ test('512 repeated field failures retain constant handles and memory, shared ree
 	for (let cycle = 0; cycle < 512; cycle++) {
 		for (const fused of [false, true]) {
 			for (let failAt = 1; failAt <= (fused ? 3 : 2); failAt++) {
+				// Prime these bytes, then force snapshotInput to reach the injected source copy.
+				assert.equal(invoke(bindings, fused).status, 0);
+				input[0] ^= 1;
 				let copies = 0;
 				Uint8Array.prototype.set = function (...args) {
 					if (++copies === failAt) {

@@ -165,6 +165,19 @@ impl Boundary for Io<'_, '_> {
         }
         Ok(())
     }
+    fn snapshot_input(&mut self, output: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        let row = self.source.dimensions().width() as usize * 4;
+        if compare
+            && output
+                .chunks_exact(row)
+                .enumerate()
+                .all(|(y, bytes)| bytes == self.source.row(y as u32).unwrap())
+        {
+            return Ok(true);
+        }
+        self.copy_input(output)?;
+        Ok(false)
+    }
     fn complete(&mut self, bytes: &[u8], dimensions: ImageDimensions) -> Result<(), Failure> {
         for (y, source) in bytes
             .chunks_exact(dimensions.width() as usize * 4)
