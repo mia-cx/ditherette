@@ -10,6 +10,8 @@ The reference slices are intentionally a separate prerequisite phase. This follo
 
 ## Index
 
+Babysitting resumed after consolidation. PR #160's oracle identity fix is pushed as `0f28d9d7`; merging waits for the separate guard-test policy decision. The stop-before-review instruction below records the earlier consolidation checkpoint, not the current authorization.
+
 On 2026-09-20, Mia approved consolidation and deferred review. The active package stack is #160 → #161 → #162 → #163. Release tooling #164 and optional website integration #165 branch from #163. The original PR branches and discussions remain available. Supersession does not mean merged, reviewed, or newly validated.
 
 The progress and PR columns below identify the replacements. Historical measurements below still refer to their original commits. Known findings travel with the replacement PR descriptions. The website default switch #133 and legacy retirement #134 remain held outside this package stack.
@@ -68,26 +70,26 @@ Existing optimized kernels and the frozen reference remain unchanged. Historical
 | [S23](#s23) | Implement and optimize scalar trilinear resize | [S21](#s21) | Merged `1aae2e78` | [#112](https://github.com/mia-cx/ditherette/pull/112) |
 | [S24](#s24) | Implement packed-color direct quantization | [S19](#s19), [S20](#s20) | Merged `5a2c6244` | [#113](https://github.com/mia-cx/ditherette/pull/113) |
 | [S25](#s25) | Complete weighted and perceptual matching | [S24](#s24) | Merged `9bcf3f7c`; cleanup verified | [#114](https://github.com/mia-cx/ditherette/pull/114) |
-| [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | Consolidated; review deferred | [#160](https://github.com/mia-cx/ditherette/pull/160)
-| [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Consolidated; review deferred | [#160](https://github.com/mia-cx/ditherette/pull/160)
-| [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Consolidated; review deferred | [#160](https://github.com/mia-cx/ditherette/pull/160)
-| [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) | Consolidated; review deferred | [#160](https://github.com/mia-cx/ditherette/pull/160)
-| [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | Consolidated; review deferred | [#160](https://github.com/mia-cx/ditherette/pull/160)
-| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161)
-| [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161)
-| [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161)
-| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161)
-| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161)
-| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161)
-| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161)
-| [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165)
-| [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165)
-| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Consolidated; review deferred | [#162](https://github.com/mia-cx/ditherette/pull/162)
-| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Final net consolidated; JS target and release remain held | [#162](https://github.com/mia-cx/ditherette/pull/162), [#163](https://github.com/mia-cx/ditherette/pull/163)
-| [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Release tooling consolidated; publication held | [#164](https://github.com/mia-cx/ditherette/pull/164)
-| [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Consolidated; review deferred | [#162](https://github.com/mia-cx/ditherette/pull/162)
-| [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Held; excluded from package consolidation | [#133](https://github.com/mia-cx/ditherette/pull/133)
-| [S45](#s45) | Prepare the held TypeScript-retirement PR | [S44](#s44) | Held; benchmark-provider portion retained in #163 | [#134](https://github.com/mia-cx/ditherette/pull/134)
+| [S26](#s26) | Implement scalar Bayer and random perturbation | [S25](#s25) | Babysitting `0f28d9d7`; oracle fix passes, guard-test policy approval pending | [#160](https://github.com/mia-cx/ditherette/pull/160) |
+| [S27](#s27) | Implement scalar blue-noise perturbation | [S26](#s26) | Babysitting `0f28d9d7`; oracle fix passes, guard-test policy approval pending | [#160](https://github.com/mia-cx/ditherette/pull/160) |
+| [S28](#s28) | Implement all scalar diffusion modes with bounded scratch | [S25](#s25), [S26](#s26) | Babysitting `0f28d9d7`; oracle fix passes, guard-test policy approval pending | [#160](https://github.com/mia-cx/ditherette/pull/160) |
+| [S29](#s29) | Implement and optimize scalar Yliluoma mixing | [S25](#s25), [S26](#s26) | Babysitting `0f28d9d7`; oracle fix passes, guard-test policy approval pending | [#160](https://github.com/mia-cx/ditherette/pull/160) |
+| [S30](#s30) | Complete end-to-end process across every supported mode | [S23](#s23), [S22](#s22), [S25](#s25), [S27](#s27), [S28](#s28), [S29](#s29) | Babysitting `0f28d9d7`; oracle fix passes, guard-test policy approval pending | [#160](https://github.com/mia-cx/ditherette/pull/160) |
+| [S31](#s31) | Memoize prepared palettes and resize plans within budget | [S30](#s30) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S32](#s32) | Memoize shared image stages atomically | [S31](#s31) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S33](#s33) | Add public progress and callback failure semantics | [S32](#s32) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S34](#s34) | Implement optional threaded initialization and teardown | [S33](#s33) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S35](#s35) | Benchmark optional resize and color row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S36](#s36) | Benchmark optional quantize and field row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S37](#s37) | Evaluate optional Yliluoma row bands | [S34](#s34) | Consolidated; review deferred | [#161](https://github.com/mia-cx/ditherette/pull/161) |
+| [S38](#s38) | Integrate the complete package behind the website flag | [S30](#s30) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165) |
+| [S39](#s39) | Implement website cancellation and faithful fallback | [S38](#s38), [S34](#s34) | Optional integration consolidated; review deferred | [#165](https://github.com/mia-cx/ditherette/pull/165) |
+| [S40](#s40) | Run package browser, memory, and lifecycle conformance | [S35](#s35), [S36](#s36), [S37](#s37), [S39](#s39) | Consolidated; review deferred | [#162](https://github.com/mia-cx/ditherette/pull/162) |
+| [S41](#s41) | Tune complete calls and assemble fresh performance evidence | [S40](#s40), [S20](#s20) | Final net consolidated; JS target and release remain held | [#162](https://github.com/mia-cx/ditherette/pull/162), [#163](https://github.com/mia-cx/ditherette/pull/163) |
+| [S42](#s42) | Build reproducible tarballs and publication automation | [S34](#s34), [S40](#s40) | Release tooling consolidated; publication held | [#164](https://github.com/mia-cx/ditherette/pull/164) |
+| [S43](#s43) | Join and verify the complete unmerged implementation stack | [S41](#s41), [S42](#s42) | Consolidated; review deferred | [#162](https://github.com/mia-cx/ditherette/pull/162) |
+| [S44](#s44) | Prepare the held Wasm-default rollout PR | [S43](#s43) | Held; excluded from package consolidation | [#133](https://github.com/mia-cx/ditherette/pull/133) |
+| [S45](#s45) | Prepare the held TypeScript-retirement PR | [S44](#s44) | Held; benchmark-provider portion retained in #163 | [#134](https://github.com/mia-cx/ditherette/pull/134) |
 
 ## Available parallel work
 

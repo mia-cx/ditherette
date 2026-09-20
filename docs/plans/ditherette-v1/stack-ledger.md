@@ -1,5 +1,15 @@
 # Ditherette v1 implementation stack
 
+## Babysitting resumed on 2026-09-20; guard-test approval pending
+
+Mia authorizes babysitting and merging the consolidated stack. The earlier stop after consolidation is lifted. Website rollout #133 and legacy retirement #134 remain held; no publication or deployment is authorized.
+
+PR #160 is at `0f28d9d7`. Its oracle now uses the coordinator's existing retained-palette identity for quantize, dither-and-quantize and process. The agent reproduced six failures in eight frozen-oracle tests before the fix. All eight pass afterward, including the parent's independent run. The agent's package-interface baseline passed its scalar build, TypeScript check and 33 tests. A prepared frozen-oracle Wasm execution of a public 5×7 diffusion case passes identity and exact-output assertions. No green/merge-ready claim is made.
+
+The frozen-policy check intentionally rejects #160's additional oracle directory in `guard.test.mjs`; tests belong to the protected policy inventory. This is not an unrelated CI failure. Mia was asked to approve a separate conditional fixture-copy amendment and an explicit exception for that amendment's policy check. Frozen spec and guard enforcement remain unchanged. No exception or merge has occurred.
+
+Downstream oracle-identity failures belong to this same core fix. Runtime, performance and release findings remain assigned to their replacement PRs. The parent's temporary benchmark target was cleared after its focused test, reclaiming 1.4 GiB. At the policy pause, the remaining validation and scalar compiler targets were cleared too; external oracle/fixture files remain available. The worktree is clean and no watcher runs.
+
 ## Consolidated stack on 2026-09-20; review deferred
 
 Mia approved five package PRs and separate optional website integration. This task stops after consolidation. No reviews, benchmark campaigns, merges, publication, or rollout follow it.
