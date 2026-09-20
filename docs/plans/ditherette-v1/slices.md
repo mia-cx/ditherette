@@ -10,7 +10,7 @@ The reference slices are intentionally a separate prerequisite phase. This follo
 
 ## Index
 
-Babysitting resumed after consolidation. PR #160's oracle identity fix is pushed as `0f28d9d7`. Mia approved isolated guard-test amendment #167 and its policy-check exception. Core validation continues locally; #160 receives no exception and waits for #167 to land. The stop-before-review instruction below records the earlier consolidation checkpoint, not the current authorization.
+Babysitting resumed after consolidation. PR #160's oracle identity fix is pushed as `0f28d9d7`. Isolated guard-test amendment #167 merged as `e5359b83` with Mia's explicit policy-check exception. Core validation continues against the amended main; #160 receives no exception. The stop-before-review instruction below records the earlier consolidation checkpoint, not the current authorization.
 
 On 2026-09-20, Mia approved consolidation and deferred review. The active package stack is #160 → #161 → #162 → #163. Release tooling #164 and optional website integration #165 branch from #163. The original PR branches and discussions remain available. Supersession does not mean merged, reviewed, or newly validated.
 

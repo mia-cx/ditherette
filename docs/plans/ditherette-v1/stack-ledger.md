@@ -1,14 +1,14 @@
 # Ditherette v1 implementation stack
 
-## Babysitting resumed on 2026-09-20; isolated guard amendment approved
+## Babysitting resumed on 2026-09-20; isolated guard amendment merged
 
 Mia authorizes babysitting and merging the consolidated stack. The earlier stop after consolidation is lifted. Website rollout #133 and legacy retirement #134 remain held; no publication or deployment is authorized.
 
 PR #160 is at `0f28d9d7`. Its oracle now uses the coordinator's existing retained-palette identity for quantize, dither-and-quantize and process. The agent reproduced six failures in eight frozen-oracle tests before the fix. All eight pass afterward, including the parent's independent run. The agent's package-interface baseline passed its scalar build, TypeScript check and 33 tests. A prepared frozen-oracle Wasm execution of a public 5×7 diffusion case passes identity and exact-output assertions. No green/merge-ready claim is made.
 
-The frozen-policy check intentionally rejects #160's additional oracle directory in `guard.test.mjs`; tests belong to the protected policy inventory. This is not an unrelated CI failure. Mia approved the isolated conditional fixture-copy amendment and its policy-check exception. PR #167 carries exactly three added lines at `107d0594`; all 15 guard tests pass. Frozen spec and guard enforcement remain unchanged. The exception applies only to #167. No merge has occurred; #160 must pass the normal check after #167 lands.
+The frozen-policy check intentionally rejected #160's additional oracle directory in `guard.test.mjs`; tests belong to the protected policy inventory. Mia approved isolated conditional fixture-copy amendment #167 and its policy-check exception. It merged as `e5359b83` from `107d0594`, with exactly three added lines. All 15 guard tests, nonexcepted CI, and exact-head Pullfrog review pass; zero review threads remain. Frozen spec and guard enforcement remain unchanged. Issue #166 closed and local main fast-forwarded. The exception applies only to #167; #160 must pass the normal check.
 
-Downstream oracle-identity failures belong to this same core fix. Runtime, performance and release findings remain assigned to their replacement PRs. Core validation has resumed with the exact conditional amendment merged locally at `9f9bb6e3`; both the 15 guard tests and trusted guard pass. A native rebuild exhausted the separate `/tmp` filesystem. Its disposable target was cleared and validation moves to a bounded disk-backed target. PR #167 has its own watcher. PR #161's three runtime/package findings are being fixed locally without pushing ahead of #160.
+Downstream oracle-identity failures belong to this same core fix. Runtime, performance and release findings remain assigned to their replacement PRs. Core validation resumed with the exact conditional amendment merged locally; both the 15 guard tests and trusted guard pass. A native rebuild exhausted the separate `/tmp` filesystem. Its disposable target was cleared and validation moved to a bounded disk-backed target. PR #167's finished syntax target was cleared, reclaiming 373.1 MiB; its clean worktree is detached at merged main. PR #161's three runtime/package findings are being fixed locally without pushing ahead of #160.
 
 ## Consolidated stack on 2026-09-20; review deferred
 
