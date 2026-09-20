@@ -1,0 +1,92 @@
+name: Publish ditherette
+
+on:
+  push:
+    tags: ['v0.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ditherette-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'mia-cx/ditherette'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - name: Install pinned build and publication tools
+        run: |
+          npm install --global npm@11.17.0 pnpm@11.13.0
+          pnpm install --frozen-lockfile
+          rustup show
+          rustup toolchain install nightly-2024-08-02 --profile minimal --component rust-src --target wasm32-unknown-unknown
+          cargo fetch --locked --manifest-path tools/spec-freeze/syntax/Cargo.toml
+          cargo fetch --locked --manifest-path crates/ditherette-bench-oracle/Cargo.toml
+          cargo fetch --locked --manifest-path crates/ditherette-bench/Cargo.toml
+          pnpm --filter ditherette exec playwright install --with-deps chromium firefox webkit
+      - name: Check release contract and prepare the exact tarball
+        run: |
+          pnpm --filter ditherette test:release
+          node --input-type=module -e 'import { validateReleaseTag } from "./packages/ditherette/scripts/release-contract.mjs"; import { readFile } from "node:fs/promises"; validateReleaseTag(JSON.parse(await readFile("packages/ditherette/package.json")).version, process.env.GITHUB_REF_NAME);'
+          mkdir -p target
+          node packages/ditherette/scripts/release.mjs prepare "$GITHUB_WORKSPACE/target/release" | tee target/release-build.log
+          node scripts/prepare-benchmark-oracle.mjs "$GITHUB_WORKSPACE/target/release-oracle"
+          cargo run --locked --release --manifest-path crates/ditherette-bench/Cargo.toml --example yliluoma_conformance -- "$GITHUB_WORKSPACE/target/yliluoma-conformance.json"
+          node --input-type=module <<'JS' >> "$GITHUB_ENV"
+          import { readFile } from 'node:fs/promises';
+          const root = process.env.GITHUB_WORKSPACE;
+          const report = JSON.parse(await readFile('target/release/release-report.json'));
+          console.log(`DITHERETTE_TEST_TARBALL=${root}/target/release/ditherette.tgz`);
+          console.log(`DITHERETTE_TEST_TARBALL_SHA256=${report.tarball.sha256}`);
+          console.log(`DITHERETTE_BENCH_ORACLE=${root}/target/release-oracle`);
+          console.log(`DITHERETTE_BENCH_YLILUOMA_FIXTURES=${root}/target/yliluoma-conformance.json`);
+          console.log(`DITHERETTE_BENCH_AUTO_BUNDLE=${root}/target/release/conformance-bundle.json`);
+          JS
+      - name: Crate and public interface conformance
+        run: |
+          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml
+          cargo test --locked --release --manifest-path crates/ditherette-wasm/Cargo.toml --features threads
+          pnpm --filter ditherette test:interface
+          pnpm --filter ditherette test:staging
+          pnpm --filter ditherette-wasm test:glue:built
+      - name: Installed scalar conformance in all three engines
+        run: pnpm --filter ditherette-wasm test:conformance | tee target/release-scalar.log
+      - name: Installed threaded conformance in supported engines
+        env:
+          DITHERETTE_TEST_ENGINES: chromium,firefox
+        run: |
+          pnpm --filter ditherette-wasm test:conformance:threads | tee target/release-threads.log
+          pnpm --filter ditherette-wasm test:conformance:automatic | tee target/release-automatic.log
+      - name: Verify source, tag, artifact, sizes, and recorded release holds
+        run: node packages/ditherette/scripts/release.mjs publish-check "$GITHUB_WORKSPACE/target/release" "$GITHUB_REF_NAME"
+      - name: Publish the tested tarball through trusted publishing
+        run: npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts
+      - name: Record coverage limits
+        if: always()
+        run: echo 'Pinned WebKit 26.4 threaded cleanup and S41 performance gates require acceptance; scalar WebKit is tested. Recorded release holds block publication.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ditherette-release-${{ github.sha }}
+          path: |
+            target/release/ditherette.tgz
+            target/release/release-report.json
+            target/release-*.log
+          retention-days: 30
