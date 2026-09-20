@@ -63,10 +63,10 @@ impl PackedSpace {
     }
 }
 
-/// One call's existing byte tables. No heap allocation or new conversion arithmetic.
+/// Borrows process-wide immutable byte tables without heap allocation or changed arithmetic.
 pub struct Converter {
     target: ColorSpaceF32,
-    tables: ColorTables,
+    tables: &'static ColorTables,
 }
 
 impl Converter {
@@ -82,7 +82,7 @@ impl Converter {
         };
         Self {
             target,
-            tables: ColorTables::new(),
+            tables: ColorTables::shared(),
         }
     }
 

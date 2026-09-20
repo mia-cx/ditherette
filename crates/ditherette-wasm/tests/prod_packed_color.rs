@@ -3,6 +3,7 @@ use ditherette_wasm::{
     prod::color::packed::{Converter, PackedSpace},
     spec::{self, contract::request::WorkingSpace},
 };
+use std::thread;
 
 #[test]
 fn packed_image_matches_frozen_bits_for_every_space_stride_and_gray_endpoint() {
@@ -63,5 +64,41 @@ fn packed_image_matches_frozen_bits_for_every_space_stride_and_gray_endpoint() {
             }
             assert_eq!(bytes, original);
         }
+    }
+}
+
+#[test]
+fn packed_conversion_remains_exact_when_converters_initialize_concurrently() {
+    let spaces = [
+        (PackedSpace::Srgb, WorkingSpace::Srgb),
+        (PackedSpace::LinearRgb, WorkingSpace::LinearRgb),
+        (PackedSpace::Oklab, WorkingSpace::Oklab),
+        (PackedSpace::Oklch, WorkingSpace::Oklch),
+        (PackedSpace::Cielab, WorkingSpace::Cielab),
+        (PackedSpace::Cielch, WorkingSpace::Cielch),
+        (PackedSpace::Ycbcr, WorkingSpace::Ycbcr),
+    ];
+    let workers = (0..8)
+        .map(|worker| {
+            thread::spawn(move || {
+                for index in 0..256u16 {
+                    let rgb = [
+                        index as u8,
+                        index.wrapping_mul(73) as u8,
+                        index.wrapping_mul(151) as u8,
+                    ];
+                    for (space, reference) in spaces {
+                        assert_eq!(
+                            Converter::new(space).coordinates(rgb).map(f32::to_bits),
+                            spec::color::rgb8_to_coordinates(rgb, reference).map(f32::to_bits),
+                            "worker {worker}, pixel {index}, space {space:?}"
+                        );
+                    }
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    for worker in workers {
+        worker.join().expect("color converter worker should finish");
     }
 }
