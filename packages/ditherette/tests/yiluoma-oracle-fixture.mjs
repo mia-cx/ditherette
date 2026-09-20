@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { fileInventory } from '../../../scripts/prepare-public-benchmark.mjs';
 import { frozenBrowserReference } from '../../../scripts/benchmark-public-browser.mjs';
+import { verifyContent } from '../../../tools/spec-freeze/content.mjs';
 
 /** Verify the actual frozen-only build inputs and bytes before serving an oracle context. */
 export async function prepareYliluomaOracle(directory) {
@@ -16,10 +17,8 @@ export async function prepareYliluomaOracle(directory) {
 	const manifest = JSON.parse(await readFile(join(oracle, 'manifest.json'), 'utf8'));
 	const root = fileURLToPath(new URL('../../../', import.meta.url));
 	const digest = (bytes) => [...createHash('sha256').update(bytes).digest()];
-	assert.equal(
-		manifest.frozen.artifact,
-		'sha256:17ba3be371e8491de2cb3faf51aef474868fd93391f8c77850a755b92cddbebe'
-	);
+	const checkpoint = JSON.parse(await readFile(join(root, 'tools/spec-freeze/checkpoint.json'), 'utf8'));
+	assert.deepEqual(manifest.frozen, verifyContent(root, checkpoint));
 	assert.equal(manifest.target, 'wasm32-unknown-unknown');
 	assert.deepEqual(manifest.profile, {
 		release: true,
