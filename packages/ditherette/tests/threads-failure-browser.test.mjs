@@ -9,7 +9,8 @@ test('installed threaded startup cleans real partial workers before fallback or 
 		{
 			partialWorkersObserved: 4,
 			preferredFallback: true,
-			requiredInitializationError: true
+			requiredInitializationError: true,
+			requiredAllocationDiagnostic: true
 		},
 		{ isolated: true, assets: threadTestAssets, driver: threadedFailureDriver }
 	));

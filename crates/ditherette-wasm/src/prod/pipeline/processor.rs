@@ -58,7 +58,7 @@ pub trait Boundary {
         false
     }
     /// Construct the complete result from Rust-selected offsets without a Wasm output buffer.
-    /// The caller precharges exactly four output bytes per pixel before any allocation.
+    /// The returned JS-owned output does not consume this processor's private budget.
     fn complete_sparse(
         &mut self,
         _column_offsets: &[u8],
@@ -120,6 +120,14 @@ struct Plan {
 }
 
 impl Processor {
+    fn finish_call<T>(&mut self, result: Result<T, Failure>) -> Result<T, Failure> {
+        self.state = State::Ready;
+        if result.is_err() {
+            self.preparation.discard_source();
+        }
+        result
+    }
+
     /// Observe the private candidate without changing other stage selections.
     #[cfg(any(test, feature = "bench-subjects"))]
     pub fn execution_policy(&self) -> super::execution::ExecutionPolicy {
@@ -279,8 +287,7 @@ impl Processor {
             &mut self.peak_capacity,
             &mut self.preparation,
         );
-        self.state = State::Ready;
-        result
+        self.finish_call(result)
     }
 
     /// Snapshot current input and materialize palette-free, durable RGBA8 within the budget.
@@ -318,8 +325,7 @@ impl Processor {
             &mut self.peak_capacity,
             &mut self.preparation,
         );
-        self.state = State::Ready;
-        result
+        self.finish_call(result)
     }
 
     /// Separable modes quantize a complete RGBA8 intermediate; diffusion uses three work rows.
@@ -401,8 +407,7 @@ impl Processor {
             }
             _ => unreachable!("supported family checked before entering running state"),
         };
-        self.state = State::Ready;
-        result
+        self.finish_call(result)
     }
 
     /// Quantize into durable indexed output after complete call-owned capacity preflight.
@@ -442,8 +447,7 @@ impl Processor {
             &mut self.peak_capacity,
             &mut self.preparation,
         );
-        self.state = State::Ready;
-        result
+        self.finish_call(result)
     }
 
     /// Runs a call with injectable reservation failures for independent ownership fixtures.
@@ -462,8 +466,7 @@ impl Processor {
         }
         self.state = State::Running;
         let result = self.run(request, boundary, allocator);
-        self.state = State::Ready;
-        result
+        self.finish_call(result)
     }
 
     fn run<B: Boundary, A: Allocator>(
@@ -499,13 +502,7 @@ impl Processor {
                     0,
                 ],
                 0,
-                // Direct output owns the same mandatory bytes outside Wasm until handoff.
-                overhead
-                    + if direct_output {
-                        plan.output_len as u64
-                    } else {
-                        0
-                    },
+                overhead,
                 self.memory_limit,
                 &mut self.peak_capacity,
                 allocator,

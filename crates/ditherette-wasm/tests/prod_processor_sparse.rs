@@ -665,12 +665,17 @@ fn sparse_copy_callback_and_validation_failures_recover() {
 }
 
 #[test]
-fn direct_sparse_output_charges_pixels_but_reserves_only_offsets() {
+fn direct_sparse_output_excludes_returned_js_bytes() {
     let request = request((64, 64), (4, 4), Anchor::Center);
     let mut io = Io::new(64, 64);
     let mut fallback = Processor::new(1 << 20, 0).unwrap();
     let expected = fallback.resize(request, &mut io).unwrap();
     let limit = fallback.peak_capacity_bytes();
+    let output_bytes = ImageDimensions::new(request.output.width, request.output.height)
+        .unwrap()
+        .storage_len::<Rgba8>()
+        .unwrap();
+    let direct_limit = limit - u64::try_from(output_bytes).unwrap();
     io.direct_output = true;
     struct Reservations {
         sizes: Vec<usize>,
@@ -687,7 +692,7 @@ fn direct_sparse_output_charges_pixels_but_reserves_only_offsets() {
         sizes: Vec::new(),
         extra: 0,
     };
-    let mut direct = Processor::new(limit, 0).unwrap();
+    let mut direct = Processor::new(direct_limit, 0).unwrap();
     assert_eq!(
         direct
             .resize_with_allocator(request, &mut io, &mut reservations)
@@ -701,16 +706,16 @@ fn direct_sparse_output_charges_pixels_but_reserves_only_offsets() {
     );
     assert_eq!(
         direct.peak_capacity_bytes(),
-        limit,
-        "64 output bytes remain charged"
+        direct_limit,
+        "the returned JS output does not consume the private budget"
     );
     let completions = io.direct_completions;
-    let mut short = Processor::new(limit - 1, 0).unwrap();
+    let mut short = Processor::new(direct_limit - 1, 0).unwrap();
     assert_eq!(
         short.resize(request, &mut io).unwrap_err().code,
         ErrorCode::MemoryLimit
     );
-    let mut excess = Processor::new(limit, 0).unwrap();
+    let mut excess = Processor::new(direct_limit, 0).unwrap();
     reservations.extra = 1;
     assert_eq!(
         excess

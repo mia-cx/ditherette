@@ -75,12 +75,17 @@ test('identity bypass validates requests and preserves lifecycle without enterin
 		};
 		assert.equal(processor.resize(value), value.source);
 	}
+	const events = [];
 	value.onProgress = event => {
-		assert.deepEqual(event, { stage: 'complete' });
+		events.push(event);
 		assert.throws(() => processor.resize(value), diagnostic('reentrant-call', 'instance'));
 		assert.throws(() => processor.dispose(), diagnostic('reentrant-call', 'instance'));
 	};
 	assert.equal(processor.resize(value), value.source);
+	assert.deepEqual(events, [
+		{ stage: 'prepare', completed: 0, total: 1 },
+		{ stage: 'complete', completed: 1, total: 1 }
+	]);
 	value.onProgress = () => { throw new Error('callback failed'); };
 	assert.throws(() => processor.resize(value), diagnostic('callback', 'onProgress'));
 	delete value.onProgress;

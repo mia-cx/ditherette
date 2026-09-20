@@ -63,6 +63,9 @@ test('private Yliluoma preserves strict borrowed controls, caught copies, reentr
 		const before = state();
 		for (let cycle = 0; cycle < 64; cycle++) {
 			for (let failAt = 1; failAt <= 3; failAt++) {
+				// Equal snapshots skip input copying; mutate one byte to reach the caught source copy.
+				const original = bytes[0];
+				bytes[0] ^= 1;
 				const set = Uint8Array.prototype.set;
 				let copies = 0;
 				Uint8Array.prototype.set = function (...args) {
@@ -77,6 +80,7 @@ test('private Yliluoma preserves strict borrowed controls, caught copies, reentr
 					assert.equal(invoke().status, 9);
 				} finally {
 					Uint8Array.prototype.set = set;
+					bytes[0] = original;
 				}
 				assert.equal(bindings.privateErrorPath(), failAt === 1 ? 4 : 8);
 				assert.deepEqual([...invoke().output.indices], [1, 0, 0, 1]);

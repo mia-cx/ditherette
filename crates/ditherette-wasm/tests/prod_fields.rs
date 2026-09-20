@@ -308,46 +308,73 @@ fn strided_bands_preserve_every_field_space_strength_and_adaptive_byte_boundary(
 }
 
 #[test]
-fn placement_edges_and_smoothstep_match_frozen_bits() {
-    let dimensions = ImageDimensions::new(3, 2).unwrap();
-    let data = bytes(3, 2, 16);
-    let source = ImageView::<Rgba8>::new(&data, dimensions, RowStride::new(16).unwrap()).unwrap();
-    for space in SPACES {
-        let oracle = reference_space(space);
-        assert_eq!(
-            prod::dither::placement::coordinate_domain(space).ranges(),
-            spec::dither::placement::coordinate_domain(oracle).ranges()
-        );
-        for y in 0..2 {
-            for x in 0..3 {
-                for radius in [1, 2, 32768] {
-                    let contrast =
-                        spec::dither::placement::contrast_at(source, x, y, oracle, radius);
-                    assert_eq!(
-                        prod::dither::placement::contrast_at(source, x, y, space, radius).to_bits(),
-                        contrast.to_bits()
-                    );
-                    for (threshold, softness) in [(0.0, 0.0), (contrast as f32, 10.0), (100.0, 0.0)]
-                    {
-                        let placement = Placement::Adaptive {
-                            radius,
-                            threshold,
-                            softness,
-                        };
+fn placement_matrix_matches_frozen_bits() {
+    for (width, height) in [(1, 1), (1, 7), (7, 1), (3, 5), (8, 9)] {
+        let dimensions = ImageDimensions::new(width, height).unwrap();
+        let stride = width as usize * 4 + 7;
+        let mut data = vec![213; stride * height as usize];
+        for y in 0..height {
+            for x in 0..width {
+                let offset = y as usize * stride + x as usize * 4;
+                data[offset..offset + 4].copy_from_slice(&[
+                    (x * 73 + y * 17 + 11) as u8,
+                    (x * 31 + y * 99 + 43) as u8,
+                    (x * 117 + y * 41 + 19) as u8,
+                    [0, 127, 128, 255][(x + y) as usize % 4],
+                ]);
+            }
+        }
+        let source =
+            ImageView::<Rgba8>::new(&data, dimensions, RowStride::new(stride).unwrap()).unwrap();
+        for space in SPACES {
+            let oracle = reference_space(space);
+            assert_eq!(
+                prod::dither::placement::coordinate_domain(space).ranges(),
+                spec::dither::placement::coordinate_domain(oracle).ranges()
+            );
+            for radius in [1, 2, height + 3, u32::MAX] {
+                for y in (0..height)
+                    .chain((0..height).rev())
+                    .chain([height - 1, 0, height / 2])
+                {
+                    for x in (0..width).rev() {
+                        let contrast =
+                            spec::dither::placement::contrast_at(source, x, y, oracle, radius);
                         assert_eq!(
-                            prod::dither::placement::placement_mask_at(
-                                source, x, y, space, placement
-                            )
-                            .to_bits(),
-                            spec::dither::placement::placement_mask_at(
-                                source,
-                                x,
-                                y,
-                                oracle,
-                                reference_placement(placement)
-                            )
-                            .to_bits()
+                            prod::dither::placement::contrast_at(source, x, y, space, radius)
+                                .to_bits(),
+                            contrast.to_bits(),
+                            "{space:?}, {width}x{height}, r{radius}, ({x},{y})"
                         );
+                        for (threshold, softness) in [
+                            (0.0, 0.0),
+                            (5.0, 10.0),
+                            (100.0, 0.0),
+                            (contrast as f32, 0.0),
+                            (contrast as f32, 0.0001),
+                            (f32::MAX, f32::MAX),
+                        ] {
+                            let placement = Placement::Adaptive {
+                                radius,
+                                threshold,
+                                softness,
+                            };
+                            assert_eq!(
+                                prod::dither::placement::placement_mask_at(
+                                    source, x, y, space, placement
+                                )
+                                .to_bits(),
+                                spec::dither::placement::placement_mask_at(
+                                    source,
+                                    x,
+                                    y,
+                                    oracle,
+                                    reference_placement(placement)
+                                )
+                                .to_bits(),
+                                "{space:?}, {width}x{height}, r{radius}, ({x},{y}), {threshold}:{softness}"
+                            );
+                        }
                     }
                 }
             }

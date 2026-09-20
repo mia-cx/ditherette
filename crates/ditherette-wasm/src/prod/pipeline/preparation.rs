@@ -137,6 +137,12 @@ impl std::fmt::Debug for Store {
 }
 
 impl Store {
+    /// Failed calls never retain a source snapshot or its reusable identity.
+    pub(super) fn discard_source(&mut self) {
+        self.scratch.buffers[0] = Vec::new();
+        self.scratch.source = None;
+    }
+
     /// Resolve one request stage without changing semantic preparation or image identities.
     pub(super) fn row_policy(
         &self,

@@ -80,6 +80,15 @@ impl PreparedQuantizer {
         &self.palette
     }
 
+    /// RGB matching is unreachable when alpha policy fixes every output index.
+    pub(crate) fn can_match_rgb(&self) -> bool {
+        !self.palette.visible.is_empty()
+            && match self.palette.preserved_alpha() {
+                Some((threshold, _)) => threshold < u8::MAX,
+                None => true,
+            }
+    }
+
     /// Borrow the ordered visible coordinates for palette-mixing kernels.
     pub(crate) fn matcher(&self) -> &PaletteMatcher {
         &self.matcher
@@ -270,5 +279,26 @@ impl PreparedQuantizer {
     /// Moves palette metadata into a complete native result; no copies or allocations occur.
     pub fn into_indexed(self, indices: ImageBuf<PaletteIndex8>) -> IndexedImage {
         self.palette.into_indexed(indices)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::image::contracts::PaletteEntry;
+
+    #[test]
+    fn fixed_index_palettes_never_need_rgb_matching() {
+        let transparent = [PaletteEntry::Transparent {}];
+        let visible = [PaletteEntry::Color { rgb: [1, 2, 3] }];
+        let prepare = |palette, alpha| {
+            PreparedQuantizer::try_new(palette, alpha, MatchPolicy::SrgbEuclidean, u64::MAX)
+                .unwrap()
+        };
+
+        assert!(!prepare(&transparent, AlphaPolicy::Premultiplied {}).can_match_rgb());
+        assert!(!prepare(&visible, AlphaPolicy::Preserve { threshold: 255.0 }).can_match_rgb());
+        assert!(prepare(&visible, AlphaPolicy::Preserve { threshold: 254.9 }).can_match_rgb());
+        assert!(prepare(&visible, AlphaPolicy::Premultiplied {}).can_match_rgb());
     }
 }

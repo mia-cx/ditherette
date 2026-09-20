@@ -3,18 +3,78 @@ import { execFileSync } from 'node:child_process';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const runtimeEntry = 'chrome/juggler/content/content/Runtime.js';
-const constructor = 'this._debugger = new Debugger();';
 const allowWasm = 'this._debugger.allowUnobservedWasm = true;';
+
+function debuggerLayout(source) {
+	const sourceFile = ts.createSourceFile('Runtime.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+	if (sourceFile.parseDiagnostics.length) return null;
+	const isDebugger = (node) => ts.isPropertyAccessExpression(node) && node.name.text === '_debugger';
+	const isThisDebugger = (node) => isDebugger(node) && node.expression.kind === ts.SyntaxKind.ThisKeyword;
+	const isAssignment = (node) => ts.isExpressionStatement(node) && ts.isBinaryExpression(node.expression) &&
+		node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+	const isConstructor = (statement) => {
+		if (!isAssignment(statement) || !isThisDebugger(statement.expression.left)) return false;
+		const right = statement.expression.right;
+		return ts.isNewExpression(right) && ts.isIdentifier(right.expression) && right.expression.text === 'Debugger' &&
+			(!right.arguments || right.arguments.length === 0);
+	};
+	const isAllowAssignment = (statement) => {
+		if (!isAssignment(statement)) return false;
+		const left = statement.expression.left;
+		return ts.isPropertyAccessExpression(left) && left.name.text === 'allowUnobservedWasm' &&
+			isThisDebugger(left.expression) && statement.expression.right.kind === ts.SyntaxKind.TrueKeyword;
+	};
+	const isAllowTarget = (statement) => isAssignment(statement) && ts.isPropertyAccessExpression(statement.expression.left) &&
+		statement.expression.left.name.text === 'allowUnobservedWasm' && isThisDebugger(statement.expression.left.expression);
+	const isAddDebuggee = (node) => ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+		node.expression.name.text === 'addDebuggee' && isDebugger(node.expression.expression);
+	const constructors = [];
+	const debuggerAssignments = [];
+	const allowAssignments = [];
+	let invalidAllowAssignment = false;
+	const blocks = [];
+	const debuggeeCalls = [];
+	function visit(node) {
+		if (isAssignment(node)) {
+			if (isDebugger(node.expression.left)) {
+				debuggerAssignments.push(node);
+				if (isConstructor(node)) constructors.push(node);
+			}
+			if (isAllowTarget(node)) {
+				allowAssignments.push(node);
+				if (!isAllowAssignment(node)) invalidAllowAssignment = true;
+			}
+		}
+		if (isAddDebuggee(node)) debuggeeCalls.push(node);
+		if (ts.isBlock(node)) blocks.push(node);
+		node.forEachChild(visit);
+	}
+	visit(sourceFile);
+	if (debuggerAssignments.length !== 1 || constructors.length !== 1 || allowAssignments.length > 1 || invalidAllowAssignment) return null;
+	const constructor = constructors[0];
+	const allow = allowAssignments[0];
+	const matchingBlock = blocks.find((block) => {
+		const statements = [...block.statements];
+		const constructorIndex = statements.indexOf(constructor);
+		if (constructorIndex < 0) return false;
+		return allow ? statements[constructorIndex + 1] === allow : true;
+	});
+	if (!matchingBlock || (allow && debuggeeCalls.some((call) => call.pos < allow.pos)) ||
+		(!allow && debuggeeCalls.some((call) => call.pos < constructor.pos))) return null;
+	return { constructorEnd: constructor.end, patched: Boolean(allow) };
+}
 
 /** Keep Juggler automation while allowing Firefox to optimize the measured Wasm. */
 export function enableOptimizedWasm(source) {
-	if (source.includes(allowWasm)) return source;
-	if (source.split(constructor).length !== 2) {
+	const layout = debuggerLayout(source);
+	if (!layout) {
 		throw new Error('Unrecognized Juggler runtime; inspect its Debugger setup before benchmarking.');
 	}
-	return source.replace(constructor, `${constructor}\n    ${allowWasm}`);
+	if (layout.patched) return source;
+	return `${source.slice(0, layout.constructorEnd)}\n    ${allowWasm}${source.slice(layout.constructorEnd)}`;
 }
 
 /** Prepare a separate Firefox tree before snapshotting it for a paired trial. Requires unzip/zip. */
@@ -29,7 +89,7 @@ export async function prepareFirefoxBenchmark(executable, destination) {
 	}
 	await mkdir(path.dirname(target), { recursive: true });
 	await mkdir(target);
-	await cp(original, target, { recursive: true });
+	await cp(original, target, { recursive: true, verbatimSymlinks: true });
 	const archive = path.join(target, 'omni.ja');
 	const hash = async () => createHash('sha256').update(await readFile(archive)).digest('hex');
 	const before = await hash();
@@ -40,7 +100,7 @@ export async function prepareFirefoxBenchmark(executable, destination) {
 		const filename = path.join(scratch, runtimeEntry);
 		await mkdir(path.dirname(filename), { recursive: true });
 		await writeFile(filename, patched);
-		execFileSync('zip', ['-q', '-u', archive, runtimeEntry], { cwd: scratch });
+		execFileSync('zip', ['-q', archive, runtimeEntry], { cwd: scratch });
 		await rm(scratch, { recursive: true });
 	}
 	const actual = execFileSync('unzip', ['-p', archive, runtimeEntry], { encoding: 'utf8' });
