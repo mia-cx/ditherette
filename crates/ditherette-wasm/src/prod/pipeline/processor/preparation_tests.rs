@@ -24,12 +24,18 @@ const PALETTE: [PaletteEntry; 2] = [
 struct Io {
     pixels: Vec<u8>,
     fail: bool,
+    fail_input: bool,
+    copies: usize,
+    comparisons: usize,
 }
 impl Io {
     fn new(width: usize) -> Self {
         Self {
             pixels: vec![255; width * 4],
             fail: false,
+            fail_input: false,
+            copies: 0,
+            comparisons: 0,
         }
     }
 }
@@ -39,8 +45,24 @@ impl Boundary for Io {
         Ok(self.pixels.len())
     }
     fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
+        self.copies += 1;
+        if self.fail_input {
+            to.fill(91);
+            return Err(Failure::new(
+                ErrorCode::WasmMemoryUnavailable,
+                ErrorPath::SourceData,
+            ));
+        }
         to.copy_from_slice(&self.pixels);
         Ok(())
+    }
+    fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        self.comparisons += usize::from(compare);
+        if compare && to == self.pixels {
+            return Ok(true);
+        }
+        Boundary::copy_input(self, to)?;
+        Ok(false)
     }
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Self::Output, Failure> {
         if self.fail {
@@ -59,6 +81,9 @@ impl QuantizeBoundary for Io {
     }
     fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
         Boundary::copy_input(self, to)
+    }
+    fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        Boundary::snapshot_input(self, to, compare)
     }
     fn complete(
         &mut self,
@@ -107,6 +132,139 @@ impl Allocator for NoAllocation {
     fn reserve(&mut self, _: &mut Vec<u8>, _: usize) -> Result<(), Failure> {
         panic!("warm buffers must not reserve")
     }
+}
+
+#[test]
+fn identity_process_uses_the_same_image_storage_as_direct_quantize() {
+    let mut io = Io::new(4096);
+    let mut direct = Processor::new(4 << 20, 0).unwrap();
+    let expected = direct
+        .quantize(
+            QuantizeRequest {
+                source_width: 4096,
+                ..quantize(&PALETTE)
+            },
+            &mut io,
+        )
+        .unwrap();
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut request = process(&PALETTE);
+    request.source_width = 4096;
+    request.recipe.output = output(4096);
+    assert_eq!(processor.process(request, &mut io).unwrap(), expected);
+    // Process has a larger request record, but must not allocate another RGBA image.
+    assert!(
+        processor.peak_capacity_bytes() <= direct.peak_capacity_bytes() + 1024,
+        "identity process {} vs direct {}",
+        processor.peak_capacity_bytes(),
+        direct.peak_capacity_bytes()
+    );
+}
+
+#[test]
+fn cache_invalidation_follows_source_resize_perturb_and_palette_dependencies() {
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut io = Io::new(4);
+    io.pixels = vec![
+        8, 40, 90, 255, 90, 150, 210, 255, 250, 210, 160, 255, 20, 220, 80, 255,
+    ];
+    let mut request = process(&PALETTE);
+    let mut perturb = PerturbPolicy {
+        field: Field::Bayer {
+            size: BayerSize::Two,
+        },
+        space: WorkingSpace::Srgb,
+        strength: 0.1,
+        placement: Placement::Everywhere {},
+    };
+    request.recipe.dither = DitherPolicy::Separable { perturb };
+    processor.process(request, &mut io).unwrap();
+    let reversed = [PALETTE[1], PALETTE[0]];
+    for change in 0..5 {
+        match change {
+            0 => {}                           // Final hit skips every upstream lookup.
+            1 => request.palette = &reversed, // Perturbed pixels survive palette changes.
+            2 => {
+                perturb.field = Field::Random { seed: 7 };
+                request.recipe.dither = DitherPolicy::Separable { perturb };
+            } // Resized pixels survive perturbation changes.
+            3 => request.recipe.output = output(2),
+            _ => io.pixels.fill(0),
+        }
+        let hits = processor.preparation.image_stats().1;
+        let actual = processor.process(request, &mut io).unwrap();
+        assert_eq!(
+            processor.preparation.image_stats().1 - hits,
+            u64::from(change < 3)
+        );
+        let expected = Processor::new(4 << 20, 0)
+            .unwrap()
+            .process(request, &mut io)
+            .unwrap();
+        assert_eq!(actual, expected, "changed tier {change}");
+    }
+}
+
+#[test]
+fn source_snapshot_reuse_checks_bytes_dimensions_and_recovers_after_failed_input_and_output() {
+    let mut processor = Processor::new(4 << 20, 0).unwrap();
+    let mut io = Io::new(4);
+    let first = processor.quantize(quantize(&PALETTE), &mut io).unwrap();
+    assert_eq!(io.copies, 1);
+    assert_eq!(
+        processor.quantize(quantize(&PALETTE), &mut io).unwrap(),
+        first
+    );
+    assert_eq!((io.copies, io.comparisons), (1, 1));
+    // Equal storage length does not make different source geometry interchangeable.
+    let square = QuantizeRequest {
+        source_width: 2,
+        source_height: 2,
+        ..quantize(&PALETTE)
+    };
+    processor.quantize(square, &mut io).unwrap();
+    assert_eq!((io.copies, io.comparisons), (2, 1));
+    io.pixels[15] = 0;
+    let changed = processor.quantize(square, &mut io).unwrap();
+    let fresh = Processor::new(4 << 20, 0)
+        .unwrap()
+        .quantize(
+            square,
+            &mut Io {
+                pixels: io.pixels.clone(),
+                ..Io::new(4)
+            },
+        )
+        .unwrap();
+    assert_eq!(changed, fresh);
+    assert_eq!((io.copies, io.comparisons), (3, 2));
+
+    io.pixels[0] = 17;
+    io.fail_input = true;
+    assert_eq!(
+        processor.quantize(square, &mut io).unwrap_err().path,
+        ErrorPath::SourceData
+    );
+    assert_eq!(processor.preparation.stats().4, 0);
+    io.fail_input = false;
+    let comparisons = io.comparisons;
+    processor.quantize(square, &mut io).unwrap();
+    assert_eq!(
+        io.comparisons, comparisons,
+        "failed input discards the identity and snapshot"
+    );
+    io.fail = true;
+    processor.quantize(square, &mut io).unwrap_err();
+    assert_eq!(processor.preparation.stats().4, 0);
+    io.fail = false;
+    let comparisons = io.comparisons;
+    processor.quantize(square, &mut io).unwrap();
+    assert_eq!(
+        io.comparisons, comparisons,
+        "failed output cannot publish source reuse"
+    );
+    processor.dispose().unwrap();
+    assert_eq!(processor.preparation.stats().4, 0);
 }
 
 #[test]
@@ -218,8 +376,56 @@ fn final_copy_failures_drop_pending_and_active_scratch_but_keep_previous_hits() 
         processor.process(process(&reversed), &mut io).unwrap(),
         [0; 3]
     );
-    assert_eq!(processor.preparation.stats().0, 6);
-    assert_eq!(processor.preparation.stats().2, 12);
+    // The failed call discarded the source snapshot. Its next revision cannot reuse
+    // old image stages without an owned source to verify, but preparation survives.
+    assert_eq!(processor.preparation.stats().0, 7);
+    assert_eq!(processor.preparation.stats().2, 13);
+}
+
+#[test]
+fn rgb_cache_scratch_never_publishes_after_failed_calls_or_palette_changes() {
+    use crate::prod::{
+        pipeline::execution::{ExecutionStage, RowBandPolicy},
+        tiling::WorkerBudget,
+    };
+    for bands in [
+        None,
+        Some(RowBandPolicy {
+            height: 32,
+            workers: WorkerBudget::new(4),
+            active_workers: 4,
+        }),
+    ] {
+        let mut processor = Processor::new(1 << 20, 0).unwrap();
+        processor
+            .set_execution_stage(ExecutionStage::Indexed, bands)
+            .unwrap();
+        let mut io = Io::new(4096);
+        let request = QuantizeRequest {
+            source_width: 64,
+            source_height: 64,
+            ..quantize(&PALETTE)
+        };
+        io.fail = true;
+        assert!(processor.quantize(request, &mut io).is_err());
+        assert_eq!(processor.preparation.stats().0, 0);
+        assert_eq!(processor.preparation.stats().4, 0);
+        io.fail = false;
+        assert_eq!(processor.quantize(request, &mut io).unwrap(), vec![1; 4096]);
+        let entries = processor.preparation.stats().0;
+        let reversed = [PALETTE[1], PALETTE[0]];
+        let changed = QuantizeRequest {
+            palette: &reversed,
+            ..request
+        };
+        io.fail = true;
+        assert!(processor.quantize(changed, &mut io).is_err());
+        assert_eq!(processor.preparation.stats().0, entries);
+        io.fail = false;
+        assert_eq!(processor.quantize(changed, &mut io).unwrap(), vec![0; 4096]);
+        assert_eq!(processor.quantize(request, &mut io).unwrap(), vec![1; 4096]);
+        assert!(processor.peak_capacity_bytes() <= 1 << 20);
+    }
 }
 
 #[test]
@@ -318,6 +524,7 @@ fn actual_cross_method_calls_hit_materialized_stages_for_every_family() {
         let mut returned = Io {
             pixels: resized,
             fail: false,
+            ..Io::new(0)
         };
         let quantize = QuantizeRequest {
             source_width: 3,
@@ -331,11 +538,7 @@ fn actual_cross_method_calls_hit_materialized_stages_for_every_family() {
         );
         assert_eq!(
             processor.preparation.image_stats().1,
-            hits + if matches!(dither, DitherPolicy::Separable { .. }) {
-                2
-            } else {
-                1
-            }
+            hits + 1 // Final hits no longer need intermediate lookups.
         );
         processor.preparation.evict_preparation();
         let hits = processor.preparation.image_stats().1;
@@ -399,6 +602,9 @@ fn indexed_hits_own_complete_metadata_after_matcher_eviction_and_output_mutation
         }
         fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
             Boundary::copy_input(&mut self.0, to)
+        }
+        fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
+            Boundary::snapshot_input(&mut self.0, to, compare)
         }
         fn complete(
             &mut self,

@@ -13,6 +13,7 @@ pub mod quantize;
 pub mod reference;
 mod resize_budgeted;
 mod resize_calls;
+pub mod scalar;
 pub mod scores;
 mod trilinear;
 pub mod verification;
@@ -205,6 +206,7 @@ pub fn bench_subjects() -> Vec<BenchSubject> {
     subjects.extend(yiluoma::subjects());
     subjects.extend(process::subjects());
     subjects.extend(preparation::subjects());
+    subjects.extend(scalar::subjects());
     subjects
 }
 

@@ -1,6 +1,9 @@
 //! Borrowed, caught quantize boundary sharing the scalar processor's lifecycle.
 
-use super::processor::{copy_input, dimension, input_length, restore_ready, status, take_ready};
+use super::processor::{
+    copy_input, dimension, gather_input, input_length, restore_ready, snapshot_input, status,
+    take_ready,
+};
 use crate::{
     image::{
         contracts::{PaletteEntry, WarningCode},
@@ -124,6 +127,29 @@ impl QuantizeBoundary for JsQuantizeBoundary<'_> {
     }
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         copy_input(destination, self.input)
+            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+    }
+    fn supports_sparse_input(&self) -> bool {
+        true
+    }
+    fn gather_input(
+        &mut self,
+        destination: &mut [u8],
+        column_offsets: &[u8],
+        row_offsets: &[u8],
+        source_len: usize,
+    ) -> Result<(), Failure> {
+        gather_input(
+            destination,
+            column_offsets,
+            row_offsets,
+            self.input,
+            source_len,
+        )
+        .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+    }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        snapshot_input(destination, self.input, compare)
             .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
     }
     fn complete(

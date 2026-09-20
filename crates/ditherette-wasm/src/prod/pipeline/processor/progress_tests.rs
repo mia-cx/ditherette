@@ -25,6 +25,7 @@ struct Io {
     fail_copy: bool,
     fail_stage: Option<Stage>,
     fail_after_work: bool,
+    compared_source: bool,
     time: u64,
     events: Vec<Progress>,
     caller: std::thread::ThreadId,
@@ -42,6 +43,7 @@ impl Io {
             fail_copy: false,
             fail_stage: None,
             fail_after_work: false,
+            compared_source: false,
             time: 0,
             events: Vec::new(),
             caller: std::thread::current().id(),
@@ -89,6 +91,14 @@ impl Boundary for Io {
         destination.copy_from_slice(&self.input);
         Ok(())
     }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        self.compared_source = compare;
+        if compare && destination == self.input {
+            return Ok(true);
+        }
+        Boundary::copy_input(self, destination)?;
+        Ok(false)
+    }
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         if self.fail_copy {
             return Err(Failure::new(
@@ -111,6 +121,9 @@ impl QuantizeBoundary for Io {
     }
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         Boundary::copy_input(self, destination)
+    }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        Boundary::snapshot_input(self, destination, compare)
     }
     fn complete(
         &mut self,
@@ -211,10 +224,45 @@ fn automatic_field_calls_preserve_scalar_bytes_metadata_and_cache_identity() {
             assert_eq!(run(&mut candidate, &mut io).unwrap(), expected);
             assert_eq!(io.metadata, metadata);
             #[cfg(feature = "threads")]
-            assert!(
-                candidate.peak_capacity_bytes() > scalar_peak,
-                "automatic worker ownership is charged"
-            );
+            {
+                // Bounded band tables can use less heap than the scalar table.
+                let (scalar_rgb, worker_rgb) = if method == 0 {
+                    (0, 0)
+                } else {
+                    use crate::prod::quantize::cache::recommended_entries;
+                    let dimensions =
+                        ImageDimensions::new(request.source_width, request.source_height).unwrap();
+                    let policy = crate::prod::pipeline::row_fields::measured_indexed(
+                        dimensions,
+                        request,
+                        if method == 1 {
+                            DitherPolicy::Separable { perturb: field }
+                        } else {
+                            DitherPolicy::None {}
+                        },
+                        crate::prod::pipeline::execution::worker_budget(),
+                    )
+                    .unwrap();
+                    let workers = policy.workers.active_workers(
+                        policy.active_workers,
+                        dimensions.height().div_ceil(policy.height),
+                    );
+                    (
+                        recommended_entries(dimensions.pixel_count().unwrap(), u64::MAX) as u64 * 8,
+                        recommended_entries(
+                            dimensions.width_usize()
+                                * dimensions.height().min(policy.height) as usize,
+                            u64::MAX,
+                        ) as u64
+                            * 8
+                            * u64::from(workers),
+                    )
+                };
+                assert!(
+                    candidate.peak_capacity_bytes() - worker_rgb > scalar_peak - scalar_rgb,
+                    "automatic worker ownership is charged independently of optional RGB tables"
+                );
+            }
             #[cfg(not(feature = "threads"))]
             assert_eq!(candidate.peak_capacity_bytes(), scalar_peak);
             let retained = candidate.preparation.stats().0;
@@ -503,6 +551,10 @@ fn all_methods_complete_after_copy_before_publication_and_recover_from_callbacks
             io.fail_stage = None;
             io.reset();
             assert_eq!(run(&mut processor, &mut io, method).unwrap(), expected);
+            assert!(
+                !io.compared_source,
+                "failed completion discards source reuse"
+            );
         }
     }
 }

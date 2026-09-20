@@ -91,6 +91,9 @@ export async function yiluomaBrowserChecks({ vectors, wasm, wasmUrl }) {
 		processor.ditherAndQuantize(recursive);
 		equal(reads, 1, 'single control read');
 		for (let failAt = 1; failAt <= 3; failAt++) {
+			const changed = request();
+			changed.source.data[0] ^= 1;
+			processor.ditherAndQuantize(changed);
 			const set = Uint8Array.prototype.set;
 			let copies = 0;
 			Uint8Array.prototype.set = function (...args) {

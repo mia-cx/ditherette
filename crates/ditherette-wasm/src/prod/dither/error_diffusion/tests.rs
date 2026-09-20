@@ -66,3 +66,22 @@ fn baseline_constructor_adapters_use_landed_converter_without_reordering() {
         }
     }
 }
+
+#[test]
+fn finite_matching_checks_candidates_after_an_exact_match() {
+    use crate::prod::quantize::matcher::{PaletteColor, PaletteMatcher};
+
+    let first = PaletteColor {
+        index: 7,
+        coordinates: [0.0; 3],
+    };
+    let mut matcher = PaletteMatcher {
+        colors: vec![first, PaletteColor { index: 9, ..first }],
+        matching: MatchPolicy::SrgbEuclidean,
+    };
+    assert_eq!(matcher.nearest_finite([0.0; 3]), Some(first));
+
+    matcher.colors[1].coordinates[0] = f32::MAX;
+    assert!(super::nearest_finite(&matcher, [0.0; 3]).is_err());
+    assert_eq!(matcher.nearest_finite([0.0; 3]), None);
+}

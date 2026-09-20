@@ -17,11 +17,13 @@ use crate::{
                 MAX_SOURCE_SIDE,
             },
         },
-        dither::placement::placement_mask_at,
+        dither::placement::{
+            placement_mask_with_converter, AdaptivePlacementRows, AdaptivePlacementWork,
+        },
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
         quantize::{
+            cache::{recommended_entries, RgbCache},
             matcher::{PaletteColor, PaletteMatcher},
-            metric::distance_score,
             PreparedQuantizer,
         },
     },
@@ -69,9 +71,24 @@ pub fn diffuse(
         .reserve(&mut indices, count)
         .map_err(DiffusionError::Preparation)?;
     indices.resize(count, 0);
-    prepared
-        .execute(layout.source, &mut indices, policy)
-        .map_err(DiffusionError::Execution)?;
+    let mut placement = AdaptivePlacementWork::try_new(
+        layout.output.width(),
+        policy.placement,
+        memory_limit - budget.used,
+    );
+    execute_with_placement_progress(
+        &prepared.quantizer,
+        &mut prepared.work,
+        &mut prepared.rgb_cache,
+        placement
+            .as_mut()
+            .map_or(&mut [], AdaptivePlacementWork::scratch),
+        layout.source,
+        &mut indices,
+        policy,
+        |_| Ok(()),
+    )
+    .map_err(DiffusionError::Execution)?;
     Ok(prepared.into_indexed(
         ImageBuf::from_vec_packed(indices, layout.output).expect("reserved output storage"),
     ))
@@ -147,6 +164,7 @@ fn nonnegative(value: f32, path: ErrorPath) -> Result<(), Failure> {
 pub struct PreparedDiffusion {
     quantizer: PreparedQuantizer,
     work: Vec<[f32; 3]>,
+    rgb_cache: Vec<u64>,
 }
 
 impl PreparedDiffusion {
@@ -187,12 +205,24 @@ impl PreparedDiffusion {
         let mut work = Vec::new();
         budget.reserve(&mut work, work_len)?;
         work.resize(work_len, [0.0; 3]);
-        Ok(Self { quantizer, work })
+        let entries = recommended_entries(work_len, limit - budget.used);
+        let mut rgb_cache = Vec::new();
+        if entries > 0 && budget.reserve(&mut rgb_cache, entries).is_ok() {
+            rgb_cache.resize(entries, 0);
+        } else {
+            rgb_cache = Vec::new();
+        }
+        Ok(Self {
+            quantizer,
+            work,
+            rgb_cache,
+        })
     }
 
-    /// Actual work capacity alone depends on width, regardless of source height.
+    /// Actual row and optional RGB cache capacities depend on width, not source height.
     pub fn scratch_capacity_bytes(&self) -> u64 {
-        (self.work.capacity() * size_of::<[f32; 3]>()) as u64
+        (self.work.capacity() * size_of::<[f32; 3]>()
+            + self.rgb_cache.capacity() * size_of::<u64>()) as u64
     }
 
     /// Actual owned record, quantizer tables, palette metadata, and work capacities.
@@ -218,7 +248,14 @@ impl PreparedDiffusion {
         indices: &mut [u8],
         policy: DiffusionPolicy,
     ) -> Result<(), Failure> {
-        execute_with_scratch(&self.quantizer, &mut self.work, source, indices, policy)
+        execute_with_scratch(
+            &self.quantizer,
+            &mut self.work,
+            &mut self.rgb_cache,
+            source,
+            indices,
+            policy,
+        )
     }
 }
 
@@ -226,28 +263,63 @@ impl PreparedDiffusion {
 pub(crate) fn execute_with_scratch(
     quantizer: &PreparedQuantizer,
     work: &mut [[f32; 3]],
+    rgb_cache: &mut [u64],
     source: ImageView<'_, Rgba8>,
     indices: &mut [u8],
     policy: DiffusionPolicy,
 ) -> Result<(), Failure> {
-    execute_with_progress(quantizer, work, source, indices, policy, |_| Ok(()))
+    execute_with_progress(quantizer, work, rgb_cache, source, indices, policy, |_| {
+        Ok(())
+    })
 }
 
 /// Reports completed rows without resetting or replaying the continuous feedback traversal.
 pub(crate) fn execute_with_progress(
     quantizer: &PreparedQuantizer,
     work: &mut [[f32; 3]],
+    rgb_cache: &mut [u64],
     source: ImageView<'_, Rgba8>,
     indices: &mut [u8],
     policy: DiffusionPolicy,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    BorrowedDiffusion { quantizer, work }.execute(source, indices, policy, progress)
+    execute_with_placement_progress(
+        quantizer,
+        work,
+        rgb_cache,
+        &mut [],
+        source,
+        indices,
+        policy,
+        progress,
+    )
+}
+
+/// Uses capacity-accounted optional placement rows without changing diffusion work or progress.
+pub(crate) fn execute_with_placement_progress(
+    quantizer: &PreparedQuantizer,
+    work: &mut [[f32; 3]],
+    rgb_cache: &mut [u64],
+    placement_scratch: &mut [[f32; 3]],
+    source: ImageView<'_, Rgba8>,
+    indices: &mut [u8],
+    policy: DiffusionPolicy,
+    progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let rgb_cache = (policy.feedback == DiffusionFeedback::SrgbBytes && !rgb_cache.is_empty())
+        .then(|| RgbCache::new(rgb_cache));
+    BorrowedDiffusion {
+        quantizer,
+        work,
+        rgb_cache,
+    }
+    .execute(source, indices, policy, placement_scratch, progress)
 }
 
 struct BorrowedDiffusion<'a> {
     quantizer: &'a PreparedQuantizer,
     work: &'a mut [[f32; 3]],
+    rgb_cache: Option<RgbCache<'a>>,
 }
 
 impl BorrowedDiffusion<'_> {
@@ -256,60 +328,112 @@ impl BorrowedDiffusion<'_> {
         source: ImageView<'_, Rgba8>,
         indices: &mut [u8],
         policy: DiffusionPolicy,
+        placement_scratch: &mut [[f32; 3]],
         mut progress: impl FnMut(u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         let width = source.dimensions().width_usize();
         let height = source.dimensions().height_usize();
         assert_eq!(self.work.len(), width * ROWS);
         assert_eq!(indices.len(), width * height);
+        let quantizer = self.quantizer;
+        let mut placement_rows = match policy.placement {
+            Placement::Adaptive { radius, .. } if !placement_scratch.is_empty() => {
+                Some(AdaptivePlacementRows::new(
+                    source,
+                    quantizer.converter(),
+                    quantizer.matcher().matching.space(),
+                    radius,
+                    placement_scratch,
+                ))
+            }
+            _ => None,
+        };
+        let palette = self.quantizer.palette();
+        let fixed_alpha = if palette.visible.is_empty() {
+            let PalettePixel::Index(index) = palette.prepare_pixel([0; 4]) else {
+                unreachable!("transparent-only palette has no visible matching");
+            };
+            Some((255, index))
+        } else {
+            palette.preserved_alpha()
+        };
         for y in 0..height.min(ROWS) {
             self.fill_row(source, y, policy.feedback);
         }
         for y in 0..height {
+            let placement_row = placement_rows
+                .as_mut()
+                .map(|rows| rows.prepare_row(y as u32));
             let reverse = policy.serpentine && y % 2 == 1;
+            let row = source.row(y as u32).expect("validated source row");
+            let work_rows: [usize; ROWS] = std::array::from_fn(|dy| ((y + dy) % ROWS) * width);
+            let alpha_rows: [Option<&[u8]>; ROWS] = std::array::from_fn(|dy| {
+                if fixed_alpha.is_some() && y + dy < height {
+                    source.row((y + dy) as u32)
+                } else {
+                    None
+                }
+            });
             for step in 0..width {
                 let x = if reverse { width - 1 - step } else { step };
                 let offset = y * width + x;
-                if let PalettePixel::Index(index) =
-                    self.quantizer.palette().prepare_pixel(rgba(source, x, y))
+                if let Some((_, index)) =
+                    fixed_alpha.filter(|&(cutoff, _)| row[x * 4 + 3] <= cutoff)
                 {
                     indices[offset] = index;
                     continue;
                 }
-                let current = self.work[(y % ROWS) * width + x];
+                let current = self.work[work_rows[0] + x];
                 if current.iter().any(|value| !value.is_finite()) {
                     return Err(arithmetic(ErrorPath::DiffusionWork));
                 }
                 let matcher = self.quantizer.matcher();
-                let (selected, error) = match policy.feedback {
+                let (index, error) = match policy.feedback {
                     DiffusionFeedback::SrgbBytes => {
                         let rgb = current
                             .map(|channel| f64::from(channel).round().clamp(0.0, 255.0) as u8);
-                        let selected =
-                            nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))?;
-                        let start = usize::from(selected.index) * 4;
+                        let miss = || {
+                            nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))
+                                .map(|selected| selected.index)
+                        };
+                        let index = match &mut self.rgb_cache {
+                            Some(cache) => cache.try_nearest(rgb, miss)?,
+                            None => miss()?,
+                        };
+                        let start = usize::from(index) * 4;
                         let error: [f64; 3] = std::array::from_fn(|axis| {
                             f64::from(rgb[axis])
                                 - f64::from(self.quantizer.palette().palette.rgba[start + axis])
                         });
-                        (selected, error)
+                        (index, error)
                     }
                     DiffusionFeedback::Matching => {
                         let selected = nearest_finite(matcher, current)?;
                         let error = std::array::from_fn(|axis| {
                             f64::from(current[axis]) - f64::from(selected.coordinates[axis])
                         });
-                        (selected, error)
+                        (selected.index, error)
                     }
                 };
-                indices[offset] = selected.index;
-                let mask = placement_mask_at(
-                    source,
-                    x as u32,
-                    y as u32,
-                    matcher.matching.space(),
-                    policy.placement,
-                );
+                indices[offset] = index;
+                let mask = match (&placement_row, policy.placement) {
+                    (
+                        Some(row),
+                        Placement::Adaptive {
+                            threshold,
+                            softness,
+                            ..
+                        },
+                    ) => row.mask_at(x as u32, threshold, softness),
+                    _ => placement_mask_with_converter(
+                        source,
+                        x as u32,
+                        y as u32,
+                        matcher.matching.space(),
+                        policy.placement,
+                        self.quantizer.converter(),
+                    ),
+                };
                 let strength_mask = f64::from(policy.strength) * f64::from(mask);
                 for tap in policy.kernel.taps() {
                     let dx = if reverse { -tap.dx } else { tap.dx };
@@ -320,15 +444,13 @@ impl BorrowedDiffusion<'_> {
                     if target_x >= width || target_y >= height {
                         continue;
                     }
-                    if matches!(
-                        self.quantizer
-                            .palette()
-                            .prepare_pixel(rgba(source, target_x, target_y)),
-                        PalettePixel::Index(_)
-                    ) {
+                    if fixed_alpha.is_some_and(|(cutoff, _)| {
+                        alpha_rows[tap.dy as usize].expect("validated target row")[target_x * 4 + 3]
+                            <= cutoff
+                    }) {
                         continue;
                     }
-                    let target = (target_y % ROWS) * width + target_x;
+                    let target = work_rows[tap.dy as usize] + target_x;
                     let weight = f64::from(tap.weight) * strength_mask;
                     for axis in 0..3 {
                         let updated =
@@ -373,19 +495,9 @@ fn nearest_finite(
     matcher: &PaletteMatcher,
     coordinates: [f32; 3],
 ) -> Result<PaletteColor, Failure> {
-    let mut best = matcher.colors[0];
-    let mut best_score = f32::INFINITY;
-    for &candidate in &matcher.colors {
-        let score = distance_score(coordinates, candidate.coordinates, matcher.matching);
-        if !score.is_finite() {
-            return Err(arithmetic(ErrorPath::DiffusionDistance));
-        }
-        if score < best_score {
-            best = candidate;
-            best_score = score;
-        }
-    }
-    Ok(best)
+    matcher
+        .nearest_finite(coordinates)
+        .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))
 }
 
 fn arithmetic(path: ErrorPath) -> Failure {

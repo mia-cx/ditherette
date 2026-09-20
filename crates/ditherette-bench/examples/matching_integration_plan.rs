@@ -152,6 +152,7 @@ fn experiment(public: bool, existing: bool, notes: String) -> io::Result<Experim
                     | NativeOperation::FieldComponent { .. }
                     | NativeOperation::Yliluoma { .. }
                     | NativeOperation::Perturb { .. }
+                    | NativeOperation::PerturbComponent { .. }
                     | NativeOperation::Separable { .. } => {
                         unreachable!("S25 has no field controls")
                     }

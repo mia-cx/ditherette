@@ -196,7 +196,7 @@ export interface ProcessRequest {
 export interface Ditherette {
 	/** Apply the full recipe, preserving the same RGBA8 boundaries as staged calls. */
 	process(request: ProcessRequest): IndexedImage;
-	/** Return durable JS-owned RGBA8, independent of later calls and disposal. */
+	/** Return the source itself at unchanged dimensions; otherwise return independent JS-owned RGBA8. */
 	resize(request: ResizeRequest): Rgba8Image;
 	/** Match source pixels to the supplied palette without resizing or dithering. */
 	quantize(request: QuantizeRequest): IndexedImage;

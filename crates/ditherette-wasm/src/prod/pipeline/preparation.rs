@@ -13,11 +13,11 @@ use crate::{
     image::ImageDimensions,
     prod::{
         contract::{
-            cache::{source_identity, Identity},
+            cache::Identity,
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             lifecycle::{MAX_CACHE_BYTES, MAX_CACHE_ENTRIES},
-            request::{Output, Source},
+            request::Output,
         },
         quantize::PreparedQuantizer,
         resize::common::allocation::CapacityBudget,
@@ -85,6 +85,7 @@ impl Entry {
 pub(super) struct Scratch {
     pub buffers: [Vec<u8>; 4],
     pub diffusion: Vec<[f32; 3]>,
+    source: Option<(ImageDimensions, Identity)>,
 }
 
 impl Scratch {
@@ -103,6 +104,7 @@ pub(super) struct Store {
     entries: [Option<Entry>; MAX_CACHE_ENTRIES],
     scratch: Scratch,
     clock: u64,
+    source_revision: u64,
     hits: u64,
     misses: u64,
     image_hits: u64,
@@ -117,6 +119,7 @@ impl Default for Store {
             entries: std::array::from_fn(|_| None),
             scratch: Scratch::default(),
             clock: 0,
+            source_revision: 0,
             hits: 0,
             misses: 0,
             image_hits: 0,
@@ -300,6 +303,7 @@ pub(super) struct Call<'a> {
     images: [Option<Entry>; 3],
     image_hits: [bool; 3],
     pub scratch: Scratch,
+    source_ready: bool,
     success: bool,
     limit: u64,
     overhead: u64,
@@ -323,6 +327,26 @@ impl<'a> Call<'a> {
 
     pub(super) fn release_working_capacity(&mut self, bytes: u64) {
         self.overhead -= bytes;
+    }
+
+    /// Optional work uses only spare capacity after mandatory preparation and current retention.
+    pub(super) fn available_working_capacity(&self) -> u64 {
+        self.limit
+            .saturating_sub(self.active_capacity() + self.store.capacity())
+    }
+
+    /// Charges an optional allocation against the complete live ownership without evicting data.
+    pub(super) fn charge_optional_capacity(
+        &mut self,
+        bytes: u64,
+        peak: &mut u64,
+    ) -> Result<(), Failure> {
+        if bytes > self.available_working_capacity() {
+            return Err(memory_limit());
+        }
+        self.overhead += bytes;
+        *peak = (*peak).max(self.active_capacity() + self.store.capacity());
+        Ok(())
     }
 
     pub(super) const fn record_bytes() -> u64 {
@@ -350,16 +374,18 @@ impl<'a> Call<'a> {
             images: std::array::from_fn(|_| None),
             image_hits: [false; 3],
             scratch: std::mem::take(&mut store.scratch),
+            source_ready: false,
             store,
             success: false,
             limit,
             overhead,
         };
         call.prepare(palette, resize, lengths, diffusion_len, peak, allocator)?;
+        call.source_ready = true;
         Ok(call)
     }
 
-    /// Reserve only the owned input snapshot before content-key lookup.
+    /// Reserve only the owned input snapshot before dependency-key lookup.
     pub(super) fn snapshot<A: Allocator>(
         store: &'a mut Store,
         source_len: usize,
@@ -381,7 +407,54 @@ impl<'a> Call<'a> {
         )
     }
 
-    /// After source hashing and available image hits, reserve the remaining execution.
+    /// Verify current bytes before reusing the source's dependency revision.
+    /// The boundary copies on a mismatch. Source bytes stay immutable throughout execution.
+    pub(super) fn source(
+        &mut self,
+        dimensions: ImageDimensions,
+        snapshot: impl FnOnce(&mut [u8], bool) -> Result<bool, Failure>,
+    ) -> Result<Identity, Failure> {
+        let previous = self
+            .scratch
+            .source
+            .take()
+            .filter(|(size, _)| *size == dimensions);
+        let equal = snapshot(&mut self.scratch.buffers[0], previous.is_some())?;
+        let identity = match previous {
+            Some((_, identity)) if equal => identity,
+            _ => {
+                // Public staged calls may return a retained RGBA image as their next input.
+                // Verify that owned image exactly before adopting its dependency identity.
+                let retained = self.store.entries.iter().flatten().find_map(|entry| {
+                    let Value::Image(images) = &entry.value else {
+                        return None;
+                    };
+                    let image = &images[0];
+                    (matches!(image.metadata, Metadata::Rgba)
+                        && image.dimensions == dimensions
+                        && image.bytes == self.scratch.buffers[0])
+                        .then_some(entry.key)
+                });
+                if let Some(identity) = retained {
+                    identity
+                } else {
+                    // Never recycle revisions, including after failed calls or scratch eviction.
+                    self.store.source_revision = self
+                        .store
+                        .source_revision
+                        .checked_add(1)
+                        .ok_or_else(|| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
+                    let mut bytes = [0; 32];
+                    bytes[..8].copy_from_slice(&self.store.source_revision.to_le_bytes());
+                    Identity(bytes)
+                }
+            }
+        };
+        self.scratch.source = Some((dimensions, identity));
+        Ok(identity)
+    }
+
+    /// After source verification and available image hits, reserve the remaining execution.
     pub(super) fn prepare<A: Allocator>(
         &mut self,
         palette: Option<QuantizeRequest<'_>>,
@@ -392,6 +465,9 @@ impl<'a> Call<'a> {
         allocator: &mut A,
     ) -> Result<(), Failure> {
         let call = self;
+        if call.scratch.buffers[0].len() != lengths[0] {
+            call.scratch.source = None;
+        }
         let limit = call.limit;
         let overhead = call.overhead
             + call
@@ -459,13 +535,14 @@ impl<'a> Call<'a> {
         };
         // These buffers were idle on entry. Release excess capacity before evicting any plan.
         if planned(call)? + call.store.capacity() > limit {
-            // The first buffer may already hold the hashed input snapshot.
+            // The first buffer may already hold the verified input snapshot.
             for buffer in &mut call.scratch.buffers[1..] {
                 *buffer = Vec::new();
             }
             call.scratch.diffusion = Vec::new();
-            if call.scratch.buffers[0].is_empty() {
+            if !call.source_ready {
                 call.scratch.buffers[0] = Vec::new();
+                call.scratch.source = None;
             }
             if let Some(entry) = &mut call.resize {
                 entry.drop_scratch();
@@ -629,32 +706,12 @@ impl<'a> Call<'a> {
         (palette, resize, images, &mut self.scratch)
     }
 
-    pub(super) fn content(
-        &self,
-        slot: usize,
-        buffer: usize,
-        dimensions: ImageDimensions,
-    ) -> Identity {
-        if let Some(image) = self.image(slot) {
-            let Metadata::Rgba { content } = image.metadata else {
-                unreachable!()
-            };
-            return content;
-        }
-        source_identity(Source {
-            width: dimensions.width(),
-            height: dimensions.height(),
-            data: &self.scratch.buffers[buffer],
-        })
-    }
-
     pub(super) fn retain_rgba(
         &mut self,
         slot: usize,
         key: Identity,
         buffer: usize,
         dimensions: ImageDimensions,
-        content: Identity,
         peak: &mut u64,
     ) {
         if self.image(slot).is_some() {
@@ -663,7 +720,7 @@ impl<'a> Call<'a> {
         let image = ImageStage {
             dimensions,
             bytes: std::mem::take(&mut self.scratch.buffers[buffer]),
-            metadata: Metadata::Rgba { content },
+            metadata: Metadata::Rgba,
         };
         if let Err(image) = self.stage_image(slot, key, image, peak) {
             self.scratch.buffers[buffer] = image.bytes;
@@ -867,7 +924,11 @@ impl Drop for Call<'_> {
             }
         }
         if self.success {
-            for buffer in &mut self.scratch.buffers {
+            // Keep initialized source bytes with their identity; all other scratch is disposable.
+            if self.scratch.source.is_none() {
+                self.scratch.buffers[0].clear();
+            }
+            for buffer in &mut self.scratch.buffers[1..] {
                 buffer.clear();
             }
             self.scratch.diffusion.clear();
@@ -878,14 +939,6 @@ impl Drop for Call<'_> {
 
 fn memory_limit() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
-}
-
-pub(super) fn source_key(bytes: &[u8], dimensions: ImageDimensions) -> Identity {
-    source_identity(Source {
-        width: dimensions.width(),
-        height: dimensions.height(),
-        data: bytes,
-    })
 }
 
 #[cfg(test)]
@@ -916,10 +969,61 @@ mod tests {
         ImageStage {
             dimensions: ImageDimensions::new((bytes.len() / 4) as u32, 1).unwrap(),
             bytes,
-            metadata: Metadata::Rgba {
-                content: Identity([byte; 32]),
-            },
+            metadata: Metadata::Rgba,
         }
+    }
+
+    #[test]
+    fn source_identity_follows_snapshot_ownership_and_idle_pressure() {
+        let mut store = Store::default();
+        let dimensions = ImageDimensions::new(16, 1).unwrap();
+        let mut peak = 0;
+        let mut call =
+            Call::snapshot(&mut store, 64, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
+        let identity = call
+            .source(dimensions, |bytes, compare| {
+                assert!(!compare);
+                bytes.fill(7);
+                Ok(false)
+            })
+            .unwrap();
+        assert_ne!(identity, Identity([0; 32]));
+        call.finish(Ok(())).unwrap();
+        assert_eq!(store.scratch.source, Some((dimensions, identity)));
+        let capacity = store.capacity();
+        let mut call =
+            Call::snapshot(&mut store, 64, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
+        assert_eq!(
+            call.source(dimensions, |bytes, compare| {
+                assert!(compare);
+                assert_eq!(bytes, [7; 64]);
+                Ok(true)
+            })
+            .unwrap(),
+            identity
+        );
+        call.finish(Ok(())).unwrap();
+        assert_eq!(
+            store.capacity(),
+            capacity,
+            "reuse adds no source allocation"
+        );
+
+        // Initial preflight drops an oversized idle snapshot before copying a smaller source.
+        let smaller = ImageDimensions::new(1, 1).unwrap();
+        let mut call =
+            Call::snapshot(&mut store, 4, 0, 4, &mut peak, &mut SystemAllocator).unwrap();
+        assert_eq!(call.scratch.capacity(), 4);
+        call.source(smaller, |bytes, compare| {
+            assert!(!compare);
+            bytes.fill(2);
+            Ok(false)
+        })
+        .unwrap();
+        call.finish(Ok(())).unwrap();
+        store.room(4, 4).unwrap();
+        assert!(store.scratch.source.is_none());
+        assert_eq!(store.capacity(), 0);
     }
 
     #[test]
@@ -949,12 +1053,7 @@ mod tests {
         let image = call.image(0).unwrap();
         assert_eq!(image.bytes, [1; 16]);
         assert_eq!(image.dimensions.width(), 4);
-        assert!(matches!(
-            image.metadata,
-            Metadata::Rgba {
-                content: Identity([1, ..])
-            }
-        ));
+        assert!(matches!(image.metadata, Metadata::Rgba));
         call.store.room(limit, limit).unwrap();
         assert_eq!(call.store.stats().0, 0);
         assert_eq!(call.image(0).unwrap().bytes, [1; 16]);

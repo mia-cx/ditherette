@@ -1,5 +1,6 @@
 //! Native direct quantization. Public processor integration is separate.
 
+pub(crate) mod cache;
 pub mod matcher;
 pub mod metric;
 pub mod prepared;
@@ -59,7 +60,27 @@ pub fn quantize(
         .reserve(&mut indices, count)
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
-    prepared.quantize_into(layout.source, &mut indices);
+    let available = memory_limit - budget.used;
+    let entries = cache::recommended_entries(
+        count,
+        available.saturating_sub(size_of::<Vec<u64>>() as u64),
+    );
+    if entries == 0 {
+        prepared.quantize_into(layout.source, &mut indices);
+    } else {
+        let mut cache = Vec::new();
+        let mut cache_budget = Budget::new(available, size_of::<Vec<u64>>() as u64)
+            .expect("recommended cache fits remaining budget");
+        if cache_budget.reserve(&mut cache, entries).is_ok() {
+            cache.resize(entries, 0);
+            prepared
+                .quantize_cached_with_progress(layout.source, &mut indices, &mut cache, |_| Ok(()))
+                .expect("disabled progress cannot fail");
+        } else {
+            drop(cache);
+            prepared.quantize_into(layout.source, &mut indices);
+        }
+    }
     let indices = ImageBuf::<PaletteIndex8>::from_vec_packed(indices, layout.output)
         .expect("validated dimensions and reserved index length");
     Ok(prepared.into_indexed(indices))

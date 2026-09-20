@@ -90,6 +90,9 @@ export async function fieldBrowserChecks({ vectors, wasmUrl }) {
 		]) {
 			const expected = processor[method](request);
 			for (let failAt = 1; failAt <= copies; failAt++) {
+				const changed = structuredClone(request);
+				changed.source.data[0] ^= 1;
+				processor[method](changed);
 				const set = Uint8Array.prototype.set;
 				let copy = 0,
 					failure;

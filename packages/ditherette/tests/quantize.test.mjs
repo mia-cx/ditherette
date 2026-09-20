@@ -272,6 +272,9 @@ test('quantize exact budget and one-under preserve the public allocation failure
 	assert.ok(copies <= 1, 'Only the input snapshot may precede remaining preflight');
 	const processor = await createDitherette({ wasm: module, memoryLimitBytes: low });
 	for (const failAt of [1, 2, 3]) {
+		const changed = request();
+		changed.source.data[0] ^= 1;
+		processor.quantize(changed);
 		let copy = 0;
 		Uint8Array.prototype.set = function (...args) {
 			if (++copy === failAt) throw new RangeError('copy');

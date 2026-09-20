@@ -18,6 +18,9 @@ pub enum Component {
     Inverse {
         space: WorkingSpace,
     },
+    Reconstruct {
+        space: WorkingSpace,
+    },
     Field {
         field: Field,
     },
@@ -33,6 +36,7 @@ pub enum Component {
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
     Inverse,
+    Reconstruct,
     Field,
     Placement,
     SourceConversion,
@@ -42,6 +46,7 @@ impl Component {
     fn kind(self) -> Kind {
         match self {
             Self::Inverse { .. } => Kind::Inverse,
+            Self::Reconstruct { .. } => Kind::Reconstruct,
             Self::Field { .. } => Kind::Field,
             Self::Placement { .. } => Kind::Placement,
             Self::SourceConversion { .. } => Kind::SourceConversion,
@@ -51,6 +56,7 @@ impl Component {
     pub fn reference_subject(self) -> &'static str {
         match self.kind() {
             Kind::Inverse => "spec:color:inverse:f32-image-v1",
+            Kind::Reconstruct => "spec:color:reconstruct:wide-offsets-v1",
             Kind::Field => "spec:field:thresholds:global-v1",
             Kind::Placement => "spec:placement:adaptive:mask-v1",
             Kind::SourceConversion => "spec:color:source:construction-inclusive-v1",
@@ -60,6 +66,7 @@ impl Component {
     pub fn prod_subject(self) -> &'static str {
         match self.kind() {
             Kind::Inverse => "prod:color:inverse:f32-image-v1",
+            Kind::Reconstruct => "prod:color:reconstruct:wide-offsets-v1",
             Kind::Field => "prod:field:thresholds:global-v1",
             Kind::Placement => "prod:placement:adaptive:mask-v1",
             Kind::SourceConversion => "prod:color:source:construction-inclusive-v1",
@@ -68,6 +75,11 @@ impl Component {
 
     pub fn semantics(self) -> SemanticIdentity {
         let (operation, recipe, space) = match self {
+            Self::Reconstruct { space } => (
+                Operation::ColorInverse,
+                "f64-reconstruction-frozen-forward-half-domain-offsets-byte-alpha",
+                Some(space),
+            ),
             Self::Inverse { space } => (
                 Operation::ColorInverse,
                 "f32-image-inverse-frozen-forward-byte-alpha",
@@ -101,7 +113,9 @@ impl Component {
         let (field, space, placement) = match self {
             Self::Field { field } => (field, WorkingSpace::Srgb, Placement::Everywhere {}),
             Self::Placement { space, placement } => (Field::Random { seed: 0 }, space, placement),
-            Self::Inverse { space } | Self::SourceConversion { space } => {
+            Self::Inverse { space }
+            | Self::Reconstruct { space }
+            | Self::SourceConversion { space } => {
                 (Field::Random { seed: 0 }, space, Placement::Everywhere {})
             }
         };
@@ -126,6 +140,7 @@ pub struct PreparedComponent<'a> {
     component: Component,
     source: Source<'a>,
     coordinates: Vec<f32>,
+    wide_coordinates: Vec<[f64; 3]>,
     values: Vec<f32>,
     rgba: Vec<u8>,
 }
@@ -143,11 +158,34 @@ impl<'a> PreparedComponent<'a> {
         } else {
             Vec::new()
         };
+        let wide_coordinates = if let Component::Reconstruct { space } = component {
+            let ranges = spec::dither::placement::coordinate_domain(space).ranges();
+            source
+                .data
+                .chunks_exact(4)
+                .enumerate()
+                .map(|(index, pixel)| {
+                    let converted =
+                        spec::color::rgb8_to_coordinates([pixel[0], pixel[1], pixel[2]], space);
+                    std::array::from_fn(|axis| {
+                        f64::from(converted[axis])
+                            + ((index + axis) % 5) as f64 * f64::from(ranges[axis]) * 0.5
+                            - f64::from(ranges[axis])
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         Ok(Self {
             component,
             source,
             coordinates,
-            values: if matches!(component, Component::Inverse { .. }) {
+            wide_coordinates,
+            values: if matches!(
+                component,
+                Component::Inverse { .. } | Component::Reconstruct { .. }
+            ) {
                 Vec::new()
             } else {
                 vec![
@@ -160,7 +198,10 @@ impl<'a> PreparedComponent<'a> {
                         }
                 ]
             },
-            rgba: if matches!(component, Component::Inverse { .. }) {
+            rgba: if matches!(
+                component,
+                Component::Inverse { .. } | Component::Reconstruct { .. }
+            ) {
                 vec![0; source.data.len()]
             } else {
                 Vec::new()
@@ -169,7 +210,12 @@ impl<'a> PreparedComponent<'a> {
     }
 
     pub fn run_production(&mut self) {
-        self.run(true);
+        self.run_selected(true);
+    }
+
+    /// Run the selected frozen or production component with identical prepared storage.
+    pub fn run_selected(&mut self, production: bool) {
+        self.run(production);
         std::hint::black_box(self.values.as_slice());
         std::hint::black_box(self.rgba.as_slice());
     }
@@ -181,6 +227,23 @@ impl<'a> PreparedComponent<'a> {
             ImageView::<Rgba8>::packed(self.source.data, dimensions).expect("validated source");
         if let Component::Inverse { space } = self.component {
             inverse_image(&self.coordinates, source, &mut self.rgba, space, production);
+            return;
+        }
+        if let Component::Reconstruct { space } = self.component {
+            for ((coordinates, alpha), pixel) in self
+                .wide_coordinates
+                .iter()
+                .zip(self.source.data.chunks_exact(4))
+                .zip(self.rgba.chunks_exact_mut(4))
+            {
+                let rgb = if production {
+                    prod::color::reconstruct::coordinates_to_rgb8(*coordinates, prod_space(space))
+                } else {
+                    spec::color::reconstruct::coordinates_to_rgb8(*coordinates, space)
+                };
+                pixel[..3].copy_from_slice(&rgb);
+                pixel[3] = alpha[3];
+            }
             return;
         }
         for y in 0..self.source.height {
@@ -217,7 +280,7 @@ impl<'a> PreparedComponent<'a> {
                         self.values[index as usize * 3..index as usize * 3 + 3]
                             .copy_from_slice(&converted);
                     }
-                    Component::Inverse { .. } => unreachable!(),
+                    Component::Inverse { .. } | Component::Reconstruct { .. } => unreachable!(),
                 }
             }
         }
@@ -225,7 +288,7 @@ impl<'a> PreparedComponent<'a> {
 
     pub fn output(&self) -> VerificationOutput {
         let pixels = match self.component {
-            Component::Inverse { .. } => Pixels::Rgba8 {
+            Component::Inverse { .. } | Component::Reconstruct { .. } => Pixels::Rgba8 {
                 data: self.rgba.clone(),
             },
             Component::SourceConversion { space } => Pixels::Color {
@@ -249,7 +312,7 @@ impl<'a> PreparedComponent<'a> {
     }
 }
 
-fn threshold(field: Field, x: u32, y: u32, index: u64, production: bool) -> f32 {
+pub(super) fn threshold(field: Field, x: u32, y: u32, index: u64, production: bool) -> f32 {
     match field {
         Field::Random { seed } => {
             if production {
@@ -403,7 +466,14 @@ fn output(
 
 pub(super) fn subjects() -> Vec<BenchSubject> {
     use super::reference::ReferenceFn;
-    let entries: [(Component, ReferenceFn, ReferenceFn); 4] = [
+    let entries: [(Component, ReferenceFn, ReferenceFn); 5] = [
+        (
+            Component::Reconstruct {
+                space: WorkingSpace::Srgb,
+            },
+            |r| output(r, Kind::Reconstruct, false),
+            |r| output(r, Kind::Reconstruct, true),
+        ),
         (
             Component::Inverse {
                 space: WorkingSpace::Srgb,
@@ -454,7 +524,7 @@ pub(super) fn subjects() -> Vec<BenchSubject> {
                         }),
                         capabilities: SubjectCapabilities {
                             pixel_formats: vec![match component.kind() {
-                                Kind::Inverse => PixelFormat::Rgba8,
+                                Kind::Inverse | Kind::Reconstruct => PixelFormat::Rgba8,
                                 Kind::SourceConversion => PixelFormat::Color32,
                                 _ => PixelFormat::Score32,
                             }],
