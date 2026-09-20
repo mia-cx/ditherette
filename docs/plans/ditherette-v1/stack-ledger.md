@@ -1,10 +1,10 @@
 # Ditherette v1 implementation stack
 
-## S25 provenance fix; validation underway; S26 preview pending on 2026-09-20
+## S25 provenance fix; validation underway; S26 approved pending S25 merge on 2026-09-20
 
-S25 local fix `f97965d7` atop `ccbb80a2` implements one recorded build and passes binary-callsite metadata to shared helpers—not library stamping or a two-pass build. Both native and paired complete recipes remain; the preparer uses the builder while retaining digests and source checks. Parent review and seven provenance tests pass. Terra is beginning full validation with real native preparation and non-timing three-browser/47-fixture checks; no push yet.
+S25 local fix `f97965d7` atop `ccbb80a2` implements one recorded build and passes binary-callsite metadata to shared helpers. It does not use library stamping or a two-pass build. Both native and paired complete recipes remain; the preparer uses the builder while retaining digests and source checks. Parent review and seven provenance tests pass. Terra’s full validation is underway with real native preparation and non-timing three-browser/47-fixture checks; no push yet.
 
-S26 preview head `59036e1a` has unresolved source conflicts in `crates/ditherette-bench/src/browser_worker.rs`, `packages/ditherette/src/scalar.ts`, and `packages/ditherette/src/validation.ts`, a documentation conflict in `packages/ditherette/README.md`, and a config conflict in `packages/ditherette/package.json`; no decisions are made. Parent verified five targets absent and clean unpushed `ccbb80a2`; Cargo freed 1.4 GiB. S25 target cleanup is complete.
+S26 head `59036e1a` has the same three source conflicts, plus documentation and config conflicts; Mia approved their composition preserving Bayer/random APIs, browser validation, cross-realm and trilinear handling, and existing docs/scripts. The synthetic provenance check retains the S25 binary metadata fix, so no automatic-merge provenance fix is needed. PR #115 waits for the S25 merge. Parent verified five targets absent and clean unpushed `ccbb80a2`; Cargo freed 1.4 GiB. The prior pause cleanup is complete.
 
 ## S24 merged; S25 approved restack on 2026-09-20
 
