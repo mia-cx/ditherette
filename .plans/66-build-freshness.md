@@ -75,14 +75,14 @@ Both workers exited, the scoped process audit was empty, and the quiet phase end
 The coordinator retains the interrupted attempt and will not reuse its accepted samples.
 This follow-up changes tooling only so identical overlays can apply to accepted and candidate production trees.
 
-`scripts/prepare-native-benchmark.mjs NEW_OUTPUT_DIRECTORY ABSOLUTE_TARGET_DIRECTORY` reads the clean revision and complete source inventory.
-It runs pinned Cargo with package-scoped release cleanup for `ditherette-bench`, `ditherette-bench-api`, and `ditherette-wasm`.
-The following build keeps the recipe `--bins --examples --release --locked` in the same explicit target.
+`scripts/prepare-native-benchmark.mjs NEW_OUTPUT_DIRECTORY ABSOLUTE_NEW_BUILD_DIRECTORY` reads the clean revision and complete source inventory.
+It delegates to `scripts/build-paired-benchmarks.mjs`, which creates the supplied new build directory and its nested target directory.
+That recorder uses pinned Cargo with `--locked --release --bins --target` and captures the dependency plus final-binary compiler recipe.
 External dependencies remain cached; no immutable artifact directory is a cleanup target.
 
-Both binaries expose `build-info`, reusing `BuildIdentity::current()` and the existing SHA-256 digest type.
+Both binaries expose `build-info`, constructing `BuildIdentity` at their final binary compile sites before passing it to shared helpers with the existing SHA-256 digest type.
 The command holds `BenchmarkGuard` without requiring quiet attestation and returns before registry or workload initialization.
-Native and browser trial handlers use the same identity constructor without changing timing or processing logic.
+Native and browser trial handlers use the same binary-local identity without changing timing or processing logic.
 Preparation copies both binaries into a new directory, marks them read-only, and validates their metadata and hashes.
 It checks source bytes again before writing `build-provenance.json`; failure leaves no successful handoff file.
 

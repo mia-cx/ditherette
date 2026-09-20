@@ -32,7 +32,7 @@ The existing five Euclidean pairs and legacy color APIs retain their behavior.
 Exact baseline commit: `17b2bb003a48fe3151dc7277e88f0dd55d8bf87b`. No optimization follows in this task.
 
 Thirteen focused tests pass across `prod_quantize`, `prod_quantize_allocation`, and `prod_processor_quantize`.
-The complete-result matrix covers fifteen matching tags, five palettes, and five alpha policies, including truncation and fractional thresholds.
+The complete-result matrix covers fifteen matching tags, five palettes, and three alpha policies, including truncation and fractional thresholds.
 Packed cylindrical output matches frozen f32 bits for 4,096 colors in each space, including every byte gray.
 Known CIEDE2000 neutral/hue-boundary vectors and distinct chord/arc scores pass; duplicate ties and exact preparation budgets pass for every tag.
 Existing S24 allocation-failure fixtures still pass. The matching tag increases inline matcher ownership, which existing size-based accounting includes.
