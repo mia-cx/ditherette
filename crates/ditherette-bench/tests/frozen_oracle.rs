@@ -396,7 +396,7 @@ fn process_identity_binds_normalized_recipe_palette_source_and_output() {
         assert!(oracle.execute().is_err(), "stale identity at {pointer}");
     }
 
-    // A palette tail can leave output unchanged while still changing full request identity.
+    // The frozen contract keeps only the first 256 palette entries in its identity.
     let mut tail = wire.clone();
     tail["operation"]["settings"]["palette"] = json!(vec![json!({"kind":"transparent"}); 257]);
     let (before, pixels) = frozen_process(&tail).unwrap();
@@ -404,10 +404,10 @@ fn process_identity_binds_normalized_recipe_palette_source_and_output() {
     tail["operation"]["settings"]["palette"][256] = json!({"kind":"color","rgb":[1,2,3]});
     let (after, same_pixels) = frozen_process(&tail).unwrap();
     assert_eq!(pixels, same_pixels);
-    assert_ne!(before.settings, after.settings);
+    assert_eq!(before.settings, after.settings);
     let oracle: OracleRequest = serde_json::from_value(tail).unwrap();
-    assert_eq!(oracle.case_identity().unwrap(), after);
-    assert!(oracle.execute().is_err());
+    assert_eq!(oracle.case_identity().unwrap(), before);
+    assert_eq!(oracle.execute().unwrap().case, before);
 }
 
 #[test]
