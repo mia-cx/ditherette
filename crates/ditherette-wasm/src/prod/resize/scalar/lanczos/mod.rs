@@ -5,6 +5,9 @@
 
 mod filter;
 
+#[cfg(test)]
+mod tests;
+
 use std::num::NonZeroU32;
 
 use crate::image::{ImageDimensions, ImageView, ImageViewMut, Rgba8};

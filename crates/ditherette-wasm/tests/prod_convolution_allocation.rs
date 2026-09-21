@@ -158,6 +158,8 @@ impl Plan {
 fn caller_scratch_convolution_bands_count_support_overlap_and_preserve_scalar_bytes() {
     use ditherette_wasm::prod::tiling::RowBandPlan;
     for (sw, sh, ow, oh) in [
+        (16, 14, 8, 7),
+        (17, 13, 12, 10),
         (101, 100, 31, 47),
         (11, 9, 3, 2),
         (7, 5, 11, 9),
@@ -376,6 +378,8 @@ fn fallible_paths_match_landed_outputs_without_execution_allocations() {
         ResizeAnchor::BottomRight,
     ];
     for (sw, sh, ow, oh) in [
+        (16, 14, 8, 7),
+        (17, 13, 12, 10),
         (7, 5, 11, 9),
         (11, 9, 3, 2),
         (5, 7, 5, 7),
@@ -405,11 +409,18 @@ fn fallible_paths_match_landed_outputs_without_execution_allocations() {
                     .unwrap();
                     assert_eq!(budget.used(), plan.capacity_bytes());
                     let scratch_len = plan.scratch_elements();
-                    let expected_scratch = if sw != ow
-                        && sh != oh
+                    let fixed_lanczos3 = mode == 3
+                        && policy == SupportPolicy::Fixed
                         && sw > ow
-                        && sw * sh >= 10_000
-                        && policy == SupportPolicy::ScaleAware
+                        && sh > oh
+                        && sw <= 2 * ow
+                        && sh <= 2 * oh;
+                    let expected_scratch = if fixed_lanczos3
+                        || (sw != ow
+                            && sh != oh
+                            && sw > ow
+                            && sw * sh >= 10_000
+                            && policy == SupportPolicy::ScaleAware)
                     {
                         sh as usize * ow as usize * 4
                     } else {

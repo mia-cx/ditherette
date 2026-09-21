@@ -27,6 +27,41 @@ use ditherette_wasm::{
 };
 
 #[test]
+fn fixed_lanczos3_separable_shrink_stays_within_one_rgba_level_of_frozen_spec() {
+    for (sw, sh, ow, oh) in [(16, 14, 8, 7), (17, 13, 12, 10), (128, 80, 64, 73)] {
+        let source_dimensions = ImageDimensions::new(sw, sh).unwrap();
+        let output_dimensions = ImageDimensions::new(ow, oh).unwrap();
+        let mut source = patterned_rgba_source(source_dimensions);
+        for (index, pixel) in source.chunks_exact_mut(4).enumerate() {
+            pixel[3] = (index * 37) as u8;
+        }
+        for (spec_anchor, prod_anchor) in anchors() {
+            let mut expected = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+            let mut actual = expected.clone();
+            resize_spec_lanczos3_into(
+                ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
+                ImageViewMut::packed(&mut expected, output_dimensions).unwrap(),
+                spec_anchor,
+                SpecSupportPolicy::Fixed,
+            );
+            resize_prod_lanczos3_into(
+                ImageView::packed(&source, source_dimensions).unwrap(),
+                ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                prod_anchor,
+                ProdSupportPolicy::Fixed,
+            );
+            assert!(
+                actual
+                    .iter()
+                    .zip(&expected)
+                    .all(|(a, b)| a.abs_diff(*b) <= 1),
+                "{sw}x{sh}->{ow}x{oh}, {prod_anchor:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn prod_bicubic_matches_spec_for_anchor_and_policy_matrix() {
     assert_matches_spec(
         |source, spec_output, prod_output, spec_anchor, prod_anchor, spec_policy, prod_policy| {

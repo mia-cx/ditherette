@@ -67,6 +67,7 @@ pub struct ConvolutionResizePlan {
     source_dimensions: ImageDimensions,
     output_dimensions: ImageDimensions,
     support_policy: SupportPolicy,
+    pub(super) allows_fixed_separable_shrink: bool,
     pub(super) x_taps: Vec<Vec<AxisTap>>,
     pub(super) y_taps: Vec<Vec<AxisTap>>,
 }
@@ -90,6 +91,7 @@ impl ConvolutionResizePlan {
             source_dimensions,
             output_dimensions,
             support_policy,
+            allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
             x_taps: Vec::new(),
             y_taps: Vec::new(),
         };
@@ -141,6 +143,7 @@ impl ConvolutionResizePlan {
                 source_dimensions,
                 output_dimensions,
                 support_policy,
+                allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
                 x_taps: Vec::new(),
                 y_taps: Vec::new(),
             });
@@ -166,6 +169,7 @@ impl ConvolutionResizePlan {
             source_dimensions,
             output_dimensions,
             support_policy,
+            allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
             x_taps,
             y_taps,
         })
@@ -185,7 +189,7 @@ impl ConvolutionResizePlan {
             .sum()
     }
 
-    /// Caller-owned f64 elements needed by the unchanged full-call dispatch.
+    /// Caller-owned f64 elements needed by the full-call dispatch.
     pub fn scratch_elements(&self) -> Result<usize, Failure> {
         if self.same_height() || self.same_width() || !super::kernel::should_use_x_then_y(self) {
             return Ok(0);
@@ -246,6 +250,7 @@ impl ConvolutionResizePlan {
             source_dimensions,
             output_dimensions,
             support_policy,
+            allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
             x_taps,
             y_taps,
         }
