@@ -229,6 +229,17 @@ fn perturb_rows(
 ) -> Result<(), crate::prod::contract::failure::Failure> {
     let dimensions = source.dimensions();
     assert!(rows.y_end() <= dimensions.height());
+    if space == WorkingSpace::Srgb && matches!(placement, Placement::Everywhere {}) {
+        return perturb_srgb_rows(
+            source,
+            output,
+            strength,
+            rows,
+            output_y_start,
+            field,
+            progress,
+        );
+    }
     let ranges = coordinate_domain(space).ranges().map(f64::from);
     let converter = Converter::new(PackedSpace::from_working(space));
     let mut cached = match placement {
@@ -278,4 +289,92 @@ fn perturb_rows(
         progress(y + 1)?;
     }
     Ok(())
+}
+
+// Dispatch sRGB/Everywhere once, preserving the f32 coordinate and f64 byte boundaries.
+fn perturb_srgb_rows(
+    source: ImageView<'_, Rgba8>,
+    mut output: ImageViewMut<'_, Rgba8>,
+    strength: f32,
+    rows: RowBand,
+    output_y_start: u32,
+    field: impl Fn(u32, u32, u64) -> f32,
+    mut progress: impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let coordinates = crate::prod::color::srgb::byte_coordinates();
+    let width = source.dimensions().width();
+    for y in rows.y_start()..rows.y_end() {
+        let source_row = source.row(y).expect("source row is in bounds");
+        let output_row = output
+            .row_mut(y - output_y_start)
+            .expect("output row is in bounds");
+        for (x, (pixel, output_pixel)) in source_row
+            .chunks_exact(4)
+            .zip(output_row.chunks_exact_mut(4))
+            .enumerate()
+        {
+            let global_index = u64::from(y) * u64::from(width) + x as u64;
+            let threshold = field(x as u32, y, global_index);
+            let amount = f64::from(threshold) * f64::from(strength) * FIELD_SCALE;
+            if amount == 0.0 {
+                output_pixel.copy_from_slice(pixel);
+                continue;
+            }
+            for channel in 0..3 {
+                let perturbed = f64::from(coordinates[pixel[channel] as usize]) + amount;
+                output_pixel[channel] = (perturbed.clamp(0.0, 1.0) * 255.0).round() as u8;
+            }
+            output_pixel[3] = pixel[3];
+        }
+        progress(y + 1)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn srgb_specialization_preserves_all_bytes_at_rounding_and_strength_boundaries() {
+        let dimensions = ImageDimensions::new(256, 1).unwrap();
+        let source: Vec<u8> = (0..=255u8)
+            .flat_map(|value| [value, value.wrapping_mul(73), 255 - value, value])
+            .collect();
+        let source = ImageView::packed(&source, dimensions).unwrap();
+        let mut actual = vec![0; 1024];
+        let mut expected = actual.clone();
+        let half_byte = 2.0f32 / 255.0;
+        for threshold in [
+            -0.5,
+            -half_byte,
+            0.0,
+            f32::from_bits(half_byte.to_bits() - 1),
+            half_byte,
+            f32::from_bits(half_byte.to_bits() + 1),
+            0.5,
+        ] {
+            for strength in [0.0, f32::from_bits(1), 0.7, 1.0, 2.0, f32::MAX] {
+                perturb_by_field_rows_into(
+                    source,
+                    ImageViewMut::packed(&mut actual, dimensions).unwrap(),
+                    WorkingSpace::Srgb,
+                    strength,
+                    Placement::Everywhere {},
+                    RowBand::new(0, 1).unwrap(),
+                    |_, _, _| threshold,
+                );
+                crate::spec::dither::perturb::perturb_by_field_rows_into(
+                    source,
+                    ImageViewMut::packed(&mut expected, dimensions).unwrap(),
+                    crate::spec::contract::request::WorkingSpace::Srgb,
+                    strength,
+                    crate::spec::contract::request::Placement::Everywhere {},
+                    crate::spec::tiling::contract::RowBand::new(0, 1).unwrap(),
+                    |_, _, _| threshold,
+                );
+                assert_eq!(actual, expected, "{threshold}, {strength}");
+            }
+        }
+    }
 }
