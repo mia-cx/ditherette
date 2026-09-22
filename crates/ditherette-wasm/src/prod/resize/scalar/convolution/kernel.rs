@@ -59,19 +59,35 @@ pub(super) fn work_rows(plan: &ConvolutionResizePlan) -> u32 {
 
 pub(super) fn resize_with_progress(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    scratch: Option<&mut [f64]>,
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    if source
+        .data()
+        .chunks_exact(rgba8::RGBA8_CHANNELS)
+        .all(|pixel| pixel[3] == u8::MAX)
+    {
+        resize_with_progress_channels::<3>(source, output, plan, scratch, progress)
+    } else {
+        resize_with_progress_channels::<4>(source, output, plan, scratch, progress)
+    }
+}
+
+fn resize_with_progress_channels<const CHANNELS: usize>(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
     scratch: Option<&mut [f64]>,
     progress: &mut impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    let source_width = source.dimensions().width_usize();
-    let output_width = output.dimensions().width_usize();
-    let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
-    let output_row_byte_len = output_width * rgba8::RGBA8_CHANNELS;
+    let source_row_byte_len = source.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
+    let output_row_byte_len = output.dimensions().width_usize() * rgba8::RGBA8_CHANNELS;
     let source_data = source.data();
 
     if plan.same_height() {
-        resize_horizontal_only_into(
+        resize_horizontal_only_into::<CHANNELS>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -83,7 +99,7 @@ pub(super) fn resize_with_progress(
     }
 
     if plan.same_width() {
-        resize_vertical_only_into(
+        resize_vertical_only_into::<CHANNELS>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -95,7 +111,7 @@ pub(super) fn resize_with_progress(
     }
 
     if should_use_x_then_y(plan) {
-        resize_x_then_y_into(
+        resize_x_then_y_into::<CHANNELS>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -118,7 +134,7 @@ pub(super) fn resize_with_progress(
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
             .zip(&plan.x_taps)
         {
-            write_convolution_pixel(
+            write_convolution_pixel::<CHANNELS>(
                 output_pixel,
                 source_data,
                 source_row_byte_len,
@@ -147,6 +163,8 @@ pub(super) fn resize_rows_with_scratch_into(
     y_start: u32,
     scratch: Option<&mut [f64]>,
 ) {
+    // Row-band callers reuse the full source for every band. Keep this path at four channels so
+    // threaded execution never rescans the complete image once per worker assignment.
     let source_width = source.dimensions().width_usize();
     let output_width = plan.output_dimensions().width_usize();
     let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
@@ -157,7 +175,7 @@ pub(super) fn resize_rows_with_scratch_into(
     if plan.same_height() {
         let start = y_start * source_row_byte_len;
         let source_slice = &source_data[start..];
-        resize_horizontal_only_into(
+        resize_horizontal_only_into::<{ rgba8::RGBA8_CHANNELS }>(
             source_slice,
             output.data_mut(),
             source_row_byte_len,
@@ -171,7 +189,7 @@ pub(super) fn resize_rows_with_scratch_into(
 
     if plan.same_width() {
         let band_height = output.dimensions().height_usize();
-        resize_vertical_only_into(
+        resize_vertical_only_into::<{ rgba8::RGBA8_CHANNELS }>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -186,7 +204,7 @@ pub(super) fn resize_rows_with_scratch_into(
     let band_height = output.dimensions().height_usize();
     let y_taps = &plan.y_taps[y_start..y_start + band_height];
     if should_use_x_then_y(plan) {
-        resize_x_then_y_rows_into(
+        resize_x_then_y_rows_into::<{ rgba8::RGBA8_CHANNELS }>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -207,7 +225,7 @@ pub(super) fn resize_rows_with_scratch_into(
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
             .zip(&plan.x_taps)
         {
-            write_convolution_pixel(
+            write_convolution_pixel::<{ rgba8::RGBA8_CHANNELS }>(
                 output_pixel,
                 source_data,
                 source_row_byte_len,
@@ -237,7 +255,7 @@ pub(super) fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
             >= X_THEN_Y_MIN_SOURCE_PIXELS
 }
 
-fn resize_x_then_y_into(
+fn resize_x_then_y_into<const CHANNELS: usize>(
     source: &[u8],
     output: &mut [u8],
     source_row_byte_len: usize,
@@ -249,7 +267,7 @@ fn resize_x_then_y_into(
 ) -> Result<(), Failure> {
     let source_height = source.len() / source_row_byte_len;
     let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
-    let scratch_row_len = output_row_byte_len;
+    let scratch_row_len = output_width * CHANNELS;
     let mut owned_scratch;
     let scratch = match scratch {
         Some(scratch) => scratch,
@@ -264,11 +282,9 @@ fn resize_x_then_y_into(
         .zip(scratch.chunks_exact_mut(scratch_row_len))
         .enumerate()
     {
-        for (scratch_pixel, x_taps) in scratch_row
-            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
-            .zip(x_taps_by_output)
+        for (scratch_pixel, x_taps) in scratch_row.chunks_exact_mut(CHANNELS).zip(x_taps_by_output)
         {
-            write_horizontal_scratch_pixel(scratch_pixel, source_row, x_taps);
+            write_horizontal_scratch_pixel::<CHANNELS>(scratch_pixel, source_row, x_taps);
         }
         progress(y as u32 + 1)?;
     }
@@ -280,11 +296,11 @@ fn resize_x_then_y_into(
     {
         for output_x in 0..output_width {
             let output_start = output_x * rgba8::RGBA8_CHANNELS;
-            write_vertical_scratch_pixel(
+            write_vertical_scratch_pixel::<CHANNELS>(
                 &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS],
                 &scratch,
                 scratch_row_len,
-                output_start,
+                output_x * CHANNELS,
                 y_taps,
             );
         }
@@ -293,7 +309,7 @@ fn resize_x_then_y_into(
     Ok(())
 }
 
-fn resize_x_then_y_rows_into(
+fn resize_x_then_y_rows_into<const CHANNELS: usize>(
     source: &[u8],
     output: &mut [u8],
     source_row_byte_len: usize,
@@ -303,7 +319,7 @@ fn resize_x_then_y_rows_into(
     scratch: Option<&mut [f64]>,
 ) {
     let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
-    let scratch_row_len = output_row_byte_len;
+    let scratch_row_len = output_width * CHANNELS;
     let support = source_rows(y_taps_by_output);
     let first_source_y = support.start;
     let scratch_height = support.len();
@@ -322,11 +338,9 @@ fn resize_x_then_y_rows_into(
         .take(scratch_height)
         .zip(scratch.chunks_exact_mut(scratch_row_len))
     {
-        for (scratch_pixel, x_taps) in scratch_row
-            .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
-            .zip(x_taps_by_output)
+        for (scratch_pixel, x_taps) in scratch_row.chunks_exact_mut(CHANNELS).zip(x_taps_by_output)
         {
-            write_horizontal_scratch_pixel(scratch_pixel, source_row, x_taps);
+            write_horizontal_scratch_pixel::<CHANNELS>(scratch_pixel, source_row, x_taps);
         }
     }
 
@@ -336,11 +350,11 @@ fn resize_x_then_y_rows_into(
     {
         for output_x in 0..output_width {
             let output_start = output_x * rgba8::RGBA8_CHANNELS;
-            write_vertical_scratch_pixel_with_base(
+            write_vertical_scratch_pixel_with_base::<CHANNELS>(
                 &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS],
                 &scratch,
                 scratch_row_len,
-                output_start,
+                output_x * CHANNELS,
                 y_taps,
                 first_source_y,
             );
@@ -363,8 +377,12 @@ pub(super) fn source_rows(y_taps_by_output: &[Vec<AxisTap>]) -> std::ops::Range<
     first..last + 1
 }
 
-fn write_horizontal_scratch_pixel(output_pixel: &mut [f64], source_row: &[u8], x_taps: &[AxisTap]) {
-    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+fn write_horizontal_scratch_pixel<const CHANNELS: usize>(
+    output_pixel: &mut [f64],
+    source_row: &[u8],
+    x_taps: &[AxisTap],
+) {
+    let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
 
     for x_tap in x_taps {
@@ -372,24 +390,24 @@ fn write_horizontal_scratch_pixel(output_pixel: &mut [f64], source_row: &[u8], x
         let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
         total_weight += x_tap.weight;
-        for channel in 0..rgba8::RGBA8_CHANNELS {
+        for channel in 0..CHANNELS {
             accumulated[channel] += f64::from(source_pixel[channel]) * x_tap.weight;
         }
     }
 
-    for channel in 0..rgba8::RGBA8_CHANNELS {
+    for channel in 0..CHANNELS {
         output_pixel[channel] = accumulated[channel] / total_weight;
     }
 }
 
-fn write_vertical_scratch_pixel(
+fn write_vertical_scratch_pixel<const CHANNELS: usize>(
     output_pixel: &mut [u8],
     scratch: &[f64],
     scratch_row_len: usize,
     output_start: usize,
     y_taps: &[AxisTap],
 ) {
-    write_vertical_scratch_pixel_with_base(
+    write_vertical_scratch_pixel_with_base::<CHANNELS>(
         output_pixel,
         scratch,
         scratch_row_len,
@@ -399,7 +417,7 @@ fn write_vertical_scratch_pixel(
     );
 }
 
-fn write_vertical_scratch_pixel_with_base(
+fn write_vertical_scratch_pixel_with_base<const CHANNELS: usize>(
     output_pixel: &mut [u8],
     scratch: &[f64],
     scratch_row_len: usize,
@@ -407,15 +425,15 @@ fn write_vertical_scratch_pixel_with_base(
     y_taps: &[AxisTap],
     first_source_y: usize,
 ) {
-    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
 
     for y_tap in y_taps {
         let scratch_start = (y_tap.index - first_source_y) * scratch_row_len + output_start;
-        let scratch_pixel = &scratch[scratch_start..scratch_start + rgba8::RGBA8_CHANNELS];
+        let scratch_pixel = &scratch[scratch_start..scratch_start + CHANNELS];
 
         total_weight += y_tap.weight;
-        for channel in 0..rgba8::RGBA8_CHANNELS {
+        for channel in 0..CHANNELS {
             accumulated[channel] += scratch_pixel[channel] * y_tap.weight;
         }
     }
@@ -423,7 +441,7 @@ fn write_vertical_scratch_pixel_with_base(
     write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
-fn resize_horizontal_only_into(
+fn resize_horizontal_only_into<const CHANNELS: usize>(
     source: &[u8],
     output: &mut [u8],
     source_row_byte_len: usize,
@@ -440,14 +458,14 @@ fn resize_horizontal_only_into(
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
             .zip(x_taps_by_output)
         {
-            write_horizontal_convolution_pixel(output_pixel, source_row, x_taps);
+            write_horizontal_convolution_pixel::<CHANNELS>(output_pixel, source_row, x_taps);
         }
         progress(y as u32 + 1)?;
     }
     Ok(())
 }
 
-fn resize_vertical_only_into(
+fn resize_vertical_only_into<const CHANNELS: usize>(
     source: &[u8],
     output: &mut [u8],
     source_row_byte_len: usize,
@@ -464,7 +482,7 @@ fn resize_vertical_only_into(
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
             .enumerate()
         {
-            write_vertical_convolution_pixel(
+            write_vertical_convolution_pixel::<CHANNELS>(
                 output_pixel,
                 source,
                 source_row_byte_len,
@@ -477,12 +495,12 @@ fn resize_vertical_only_into(
     Ok(())
 }
 
-fn write_horizontal_convolution_pixel(
+fn write_horizontal_convolution_pixel<const CHANNELS: usize>(
     output_pixel: &mut [u8],
     source_row: &[u8],
     x_taps: &[AxisTap],
 ) {
-    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
 
     for x_tap in x_taps {
@@ -490,7 +508,7 @@ fn write_horizontal_convolution_pixel(
         let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
         total_weight += x_tap.weight;
-        for channel in 0..rgba8::RGBA8_CHANNELS {
+        for channel in 0..CHANNELS {
             accumulated[channel] += f64::from(source_pixel[channel]) * x_tap.weight;
         }
     }
@@ -498,14 +516,14 @@ fn write_horizontal_convolution_pixel(
     write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
-fn write_vertical_convolution_pixel(
+fn write_vertical_convolution_pixel<const CHANNELS: usize>(
     output_pixel: &mut [u8],
     source: &[u8],
     source_row_byte_len: usize,
     output_x: usize,
     y_taps: &[AxisTap],
 ) {
-    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
     let source_x_start = output_x * rgba8::RGBA8_CHANNELS;
 
@@ -514,7 +532,7 @@ fn write_vertical_convolution_pixel(
         let source_pixel = &source[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
         total_weight += y_tap.weight;
-        for channel in 0..rgba8::RGBA8_CHANNELS {
+        for channel in 0..CHANNELS {
             accumulated[channel] += f64::from(source_pixel[channel]) * y_tap.weight;
         }
     }
@@ -522,7 +540,7 @@ fn write_vertical_convolution_pixel(
     write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
-fn write_convolution_pixel(
+fn write_convolution_pixel<const CHANNELS: usize>(
     output_pixel: &mut [u8],
     source: &[u8],
     source_row_byte_len: usize,
@@ -530,30 +548,48 @@ fn write_convolution_pixel(
     y_taps: &[AxisTap],
 ) {
     if let (Some(x_taps), Some(y_taps)) = (as_fixed_taps::<4>(x_taps), as_fixed_taps::<4>(y_taps)) {
-        write_fixed_convolution_pixel(output_pixel, source, source_row_byte_len, x_taps, y_taps);
+        write_fixed_convolution_pixel::<CHANNELS, 4>(
+            output_pixel,
+            source,
+            source_row_byte_len,
+            x_taps,
+            y_taps,
+        );
         return;
     }
 
     if let (Some(x_taps), Some(y_taps)) = (as_fixed_taps::<6>(x_taps), as_fixed_taps::<6>(y_taps)) {
-        write_fixed_convolution_pixel(output_pixel, source, source_row_byte_len, x_taps, y_taps);
+        write_fixed_convolution_pixel::<CHANNELS, 6>(
+            output_pixel,
+            source,
+            source_row_byte_len,
+            x_taps,
+            y_taps,
+        );
         return;
     }
 
-    write_variable_convolution_pixel(output_pixel, source, source_row_byte_len, x_taps, y_taps);
+    write_variable_convolution_pixel::<CHANNELS>(
+        output_pixel,
+        source,
+        source_row_byte_len,
+        x_taps,
+        y_taps,
+    );
 }
 
 fn as_fixed_taps<const TAP_COUNT: usize>(taps: &[AxisTap]) -> Option<&[AxisTap; TAP_COUNT]> {
     taps.try_into().ok()
 }
 
-fn write_fixed_convolution_pixel<const TAP_COUNT: usize>(
+fn write_fixed_convolution_pixel<const CHANNELS: usize, const TAP_COUNT: usize>(
     output_pixel: &mut [u8],
     source: &[u8],
     source_row_byte_len: usize,
     x_taps: &[AxisTap; TAP_COUNT],
     y_taps: &[AxisTap; TAP_COUNT],
 ) {
-    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
 
     for y_tap in y_taps {
@@ -565,7 +601,7 @@ fn write_fixed_convolution_pixel<const TAP_COUNT: usize>(
             let source_pixel = &source[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
             total_weight += weight;
-            for channel in 0..rgba8::RGBA8_CHANNELS {
+            for channel in 0..CHANNELS {
                 accumulated[channel] += f64::from(source_pixel[channel]) * weight;
             }
         }
@@ -574,14 +610,14 @@ fn write_fixed_convolution_pixel<const TAP_COUNT: usize>(
     write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
-fn write_variable_convolution_pixel(
+fn write_variable_convolution_pixel<const CHANNELS: usize>(
     output_pixel: &mut [u8],
     source: &[u8],
     source_row_byte_len: usize,
     x_taps: &[AxisTap],
     y_taps: &[AxisTap],
 ) {
-    let mut accumulated = [0.0; rgba8::RGBA8_CHANNELS];
+    let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
 
     for y_tap in y_taps {
@@ -593,7 +629,7 @@ fn write_variable_convolution_pixel(
             let source_pixel = &source[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
             total_weight += weight;
-            for channel in 0..rgba8::RGBA8_CHANNELS {
+            for channel in 0..CHANNELS {
                 accumulated[channel] += f64::from(source_pixel[channel]) * weight;
             }
         }
@@ -602,13 +638,16 @@ fn write_variable_convolution_pixel(
     write_accumulated_pixel(output_pixel, accumulated, total_weight);
 }
 
-fn write_accumulated_pixel(
+fn write_accumulated_pixel<const CHANNELS: usize>(
     output_pixel: &mut [u8],
-    accumulated: [f64; rgba8::RGBA8_CHANNELS],
+    accumulated: [f64; CHANNELS],
     total_weight: f64,
 ) {
-    for channel in 0..rgba8::RGBA8_CHANNELS {
+    for channel in 0..CHANNELS {
         output_pixel[channel] = round_byte(accumulated[channel] / total_weight);
+    }
+    if CHANNELS == 3 {
+        output_pixel[3] = u8::MAX;
     }
 }
 
