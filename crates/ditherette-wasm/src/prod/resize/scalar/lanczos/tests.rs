@@ -91,7 +91,7 @@ fn fourfold_blocks_account_scratch_and_recover_through_partial_final_block() {
     )
     .unwrap();
     let length = plan.scratch_elements().unwrap();
-    assert_eq!(length, 262 * 32 * 4);
+    assert_eq!(length, 70 * 32 * 4);
     // Worker bands retain the previous direct kernel and need no scratch at 4x.
     assert_eq!(plan.row_scratch_elements(0, 100).unwrap(), 0);
     let mut scratch = budget.vector::<f64>(length).unwrap();
@@ -126,8 +126,8 @@ fn fourfold_blocks_account_scratch_and_recover_through_partial_final_block() {
     )
     .unwrap_err();
     assert_eq!(error.code, ErrorCode::Callback);
-    assert_eq!(&actual[..32 * 64 * 4], &expected[..32 * 64 * 4]);
-    assert!(actual[32 * 64 * 4..].iter().all(|&byte| byte == 0));
+    assert_eq!(&actual[..32 * 16 * 4], &expected[..32 * 16 * 4]);
+    assert!(actual[32 * 16 * 4..].iter().all(|&byte| byte == 0));
     let mut events = Vec::new();
     resize_lanczos_with_progress(
         source,
@@ -141,11 +141,11 @@ fn fourfold_blocks_account_scratch_and_recover_through_partial_final_block() {
     )
     .unwrap();
     assert_eq!(actual, expected);
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), 8);
     assert_eq!(events[0].0, 0);
-    assert!(events[1].0 > 64 && events[1].0 < events[2].0);
-    assert_eq!(events[2].0, events[2].1);
-    assert!(events[2].0 > 500 && events[2].0 <= 100 + 2 * 262);
+    assert!(events.windows(2).all(|pair| pair[0].0 < pair[1].0));
+    assert_eq!(events[7].0, events[7].1);
+    assert!(events[7].0 > 500 && events[7].0 <= 100 + 7 * 70);
 }
 
 #[test]

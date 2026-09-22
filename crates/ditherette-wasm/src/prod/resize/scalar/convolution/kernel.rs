@@ -12,14 +12,20 @@ use super::{
 };
 
 const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
-pub(super) const FIXED_BLOCK_HEIGHT: usize = 64;
+fn fixed_block_height(plan: &ConvolutionResizePlan) -> usize {
+    if fixed_shrink_within(plan, 2) {
+        64
+    } else {
+        16
+    }
+}
 
-/// Bound the source interval of 64 output rows, including radius-3 support.
+/// Bound one output block's source interval, including radius-3 support.
 pub(super) fn fixed_block_source_rows(plan: &ConvolutionResizePlan) -> usize {
     let source_height = u64::from(plan.source_dimensions().height());
     let output_height = u64::from(plan.output_dimensions().height());
-    ((source_height * FIXED_BLOCK_HEIGHT as u64).div_ceil(output_height) + 6).min(source_height)
-        as usize
+    ((source_height * fixed_block_height(plan) as u64).div_ceil(output_height) + 6)
+        .min(source_height) as usize
 }
 
 // CLOSE(perf): Scratch ownership tuning depended on a winning separable path;
@@ -62,7 +68,7 @@ pub(super) fn work_rows(plan: &ConvolutionResizePlan) -> u32 {
         return plan.output_dimensions().height()
             + plan
                 .y_taps
-                .chunks(FIXED_BLOCK_HEIGHT)
+                .chunks(fixed_block_height(plan))
                 .map(|taps| source_rows(taps).len() as u32)
                 .sum::<u32>();
     }
@@ -311,9 +317,10 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize>(
         }
     };
     let mut completed = 0;
+    let block_height = fixed_block_height(plan);
     for (output_block, y_taps) in output
-        .chunks_mut(output_row_byte_len * FIXED_BLOCK_HEIGHT)
-        .zip(plan.y_taps.chunks(FIXED_BLOCK_HEIGHT))
+        .chunks_mut(output_row_byte_len * block_height)
+        .zip(plan.y_taps.chunks(block_height))
     {
         let support_rows = source_rows(y_taps).len();
         debug_assert!(support_rows <= fixed_block_source_rows(plan));
@@ -802,7 +809,7 @@ mod tests {
                 let mut expected = vec![0; width as usize * height as usize * 4];
                 let mut actual = expected.clone();
                 let mut scratch = vec![f64::NAN; plan.scratch_elements().unwrap()];
-                for taps in plan.y_taps.chunks(FIXED_BLOCK_HEIGHT) {
+                for taps in plan.y_taps.chunks(fixed_block_height(&plan)) {
                     assert!(source_rows(taps).len() <= fixed_block_source_rows(&plan));
                     assert!(source_rows(taps).len() * width as usize * 4 <= scratch.len());
                 }
