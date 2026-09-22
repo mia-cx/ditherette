@@ -229,7 +229,7 @@ pub(super) fn resize_rows_with_scratch_into(
     let band_height = output.dimensions().height_usize();
     let y_taps = &plan.y_taps[y_start..y_start + band_height];
     if should_use_x_then_y(plan) {
-        resize_x_then_y_rows_into::<{ rgba8::RGBA8_CHANNELS }>(
+        resize_x_then_y_rows_into::<{ rgba8::RGBA8_CHANNELS }, false>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -308,7 +308,9 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize>(
     {
         let support_rows = source_rows(y_taps).len();
         debug_assert!(support_rows <= FIXED_BLOCK_SOURCE_ROWS);
-        resize_x_then_y_rows_into::<CHANNELS>(
+        // Fixed Lanczos3 already accepts bounded regrouping. Store raw horizontal
+        // sums and normalize once after the vertical pass within this block.
+        resize_x_then_y_rows_into::<CHANNELS, true>(
             source,
             output_block,
             source_row_byte_len,
@@ -352,7 +354,7 @@ fn resize_x_then_y_into<const CHANNELS: usize>(
     {
         for (scratch_pixel, x_taps) in scratch_row.chunks_exact_mut(CHANNELS).zip(x_taps_by_output)
         {
-            write_horizontal_scratch_pixel::<CHANNELS>(scratch_pixel, source_row, x_taps);
+            write_horizontal_scratch_pixel::<CHANNELS, false>(scratch_pixel, source_row, x_taps);
         }
         progress(y as u32 + 1)?;
     }
@@ -377,7 +379,7 @@ fn resize_x_then_y_into<const CHANNELS: usize>(
     Ok(())
 }
 
-fn resize_x_then_y_rows_into<const CHANNELS: usize>(
+fn resize_x_then_y_rows_into<const CHANNELS: usize, const RAW_SUMS: bool>(
     source: &[u8],
     output: &mut [u8],
     source_row_byte_len: usize,
@@ -408,7 +410,7 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize>(
     {
         for (scratch_pixel, x_taps) in scratch_row.chunks_exact_mut(CHANNELS).zip(x_taps_by_output)
         {
-            write_horizontal_scratch_pixel::<CHANNELS>(scratch_pixel, source_row, x_taps);
+            write_horizontal_scratch_pixel::<CHANNELS, RAW_SUMS>(scratch_pixel, source_row, x_taps);
         }
     }
 
@@ -418,6 +420,14 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize>(
     {
         for output_x in 0..output_width {
             let output_start = output_x * rgba8::RGBA8_CHANNELS;
+            let x_weight = if RAW_SUMS {
+                x_taps_by_output[output_x]
+                    .iter()
+                    .map(|tap| tap.weight)
+                    .sum()
+            } else {
+                1.0
+            };
             write_vertical_scratch_pixel_with_base::<CHANNELS>(
                 &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS],
                 &scratch,
@@ -425,6 +435,7 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize>(
                 output_x * CHANNELS,
                 y_taps,
                 first_source_y,
+                x_weight,
             );
         }
     }
@@ -445,7 +456,7 @@ pub(super) fn source_rows(y_taps_by_output: &[Vec<AxisTap>]) -> std::ops::Range<
     first..last + 1
 }
 
-fn write_horizontal_scratch_pixel<const CHANNELS: usize>(
+fn write_horizontal_scratch_pixel<const CHANNELS: usize, const RAW_SUMS: bool>(
     output_pixel: &mut [f64],
     source_row: &[u8],
     x_taps: &[AxisTap],
@@ -457,14 +468,20 @@ fn write_horizontal_scratch_pixel<const CHANNELS: usize>(
         let source_start = x_tap.index * rgba8::RGBA8_CHANNELS;
         let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
 
-        total_weight += x_tap.weight;
+        if !RAW_SUMS {
+            total_weight += x_tap.weight;
+        }
         for channel in 0..CHANNELS {
             accumulated[channel] += f64::from(source_pixel[channel]) * x_tap.weight;
         }
     }
 
     for channel in 0..CHANNELS {
-        output_pixel[channel] = accumulated[channel] / total_weight;
+        output_pixel[channel] = if RAW_SUMS {
+            accumulated[channel]
+        } else {
+            accumulated[channel] / total_weight
+        };
     }
 }
 
@@ -482,6 +499,7 @@ fn write_vertical_scratch_pixel<const CHANNELS: usize>(
         output_start,
         y_taps,
         0,
+        1.0,
     );
 }
 
@@ -492,6 +510,7 @@ fn write_vertical_scratch_pixel_with_base<const CHANNELS: usize>(
     output_start: usize,
     y_taps: &[AxisTap],
     first_source_y: usize,
+    x_weight: f64,
 ) {
     let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
@@ -506,7 +525,7 @@ fn write_vertical_scratch_pixel_with_base<const CHANNELS: usize>(
         }
     }
 
-    write_accumulated_pixel(output_pixel, accumulated, total_weight);
+    write_accumulated_pixel(output_pixel, accumulated, x_weight * total_weight);
 }
 
 fn resize_horizontal_only_into<const CHANNELS: usize>(
@@ -752,13 +771,13 @@ mod tests {
     }
 
     #[test]
-    fn fixed_blocks_preserve_full_separable_arithmetic() {
+    fn raw_fixed_blocks_preserve_patterned_fixture_across_blocks() {
         for anchor in [
             ResizeAnchor::TopLeft,
             ResizeAnchor::Center,
             ResizeAnchor::BottomRight,
         ] {
-            for (width, height) in [(64, 100), (77, 120), (96, 150)] {
+            for (width, height) in [(64, 100), (77, 120), (96, 150), (64, 183)] {
                 let source_dimensions = ImageDimensions::new(128, 200).unwrap();
                 let output_dimensions = ImageDimensions::new(width, height).unwrap();
                 let plan = ConvolutionResizePlan::new(

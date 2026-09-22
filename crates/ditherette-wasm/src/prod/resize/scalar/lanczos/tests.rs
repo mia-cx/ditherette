@@ -186,6 +186,20 @@ fn fixed_blocks_bound_scratch_and_recover_after_later_block_cancellation() {
         &plan,
         0,
     );
+    let normalized = expected.clone();
+    resize_lanczos_with_progress(
+        source,
+        ImageViewMut::packed(&mut expected, output_dimensions).unwrap(),
+        &plan,
+        &mut scratch,
+        &mut |_, _| Ok(()),
+    )
+    .unwrap();
+    assert!(expected
+        .iter()
+        .zip(&normalized)
+        .all(|(a, b)| a.abs_diff(*b) <= 1));
+    scratch.fill(f64::NAN);
     let mut actual = vec![0; expected.len()];
     let error = resize_lanczos_with_progress(
         source,
