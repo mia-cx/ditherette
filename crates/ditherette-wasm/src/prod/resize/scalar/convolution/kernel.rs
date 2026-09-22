@@ -118,11 +118,22 @@ pub(super) fn resize_with_progress(
     scratch: Option<&mut [f64]>,
     progress: &mut impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    if source
+    let opaque = source
         .data()
         .chunks_exact(rgba8::RGBA8_CHANNELS)
-        .all(|pixel| pixel[3] == u8::MAX)
-    {
+        .all(|pixel| pixel[3] == u8::MAX);
+    resize_with_progress_known_opacity(source, output, plan, scratch, opaque, progress)
+}
+
+pub(super) fn resize_with_progress_known_opacity(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    scratch: Option<&mut [f64]>,
+    opaque: bool,
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    if opaque {
         resize_with_progress_channels::<3>(source, output, plan, scratch, progress)
     } else {
         resize_with_progress_channels::<4>(source, output, plan, scratch, progress)
@@ -238,13 +249,38 @@ pub(super) fn resize_packed_rgba8_rows_with_convolution_filter_into(
 
 pub(super) fn resize_rows_with_scratch_into(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    y_start: u32,
+    scratch: Option<&mut [f64]>,
+) {
+    resize_rows_with_scratch_known_opacity_into(source, output, plan, y_start, scratch, false);
+}
+
+pub(super) fn resize_rows_with_scratch_known_opacity_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    y_start: u32,
+    scratch: Option<&mut [f64]>,
+    opaque: bool,
+) {
+    if opaque {
+        resize_rows_with_scratch_channels_into::<3>(source, output, plan, y_start, scratch);
+    } else {
+        resize_rows_with_scratch_channels_into::<{ rgba8::RGBA8_CHANNELS }>(
+            source, output, plan, y_start, scratch,
+        );
+    }
+}
+
+fn resize_rows_with_scratch_channels_into<const CHANNELS: usize>(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
     y_start: u32,
     scratch: Option<&mut [f64]>,
 ) {
-    // Row-band callers reuse the full source for every band. Keep this path at four channels so
-    // threaded execution never rescans the complete image once per worker assignment.
     let source_width = source.dimensions().width_usize();
     let output_width = plan.output_dimensions().width_usize();
     let source_row_byte_len = source_width * rgba8::RGBA8_CHANNELS;
@@ -255,7 +291,7 @@ pub(super) fn resize_rows_with_scratch_into(
     if plan.same_height() {
         let start = y_start * source_row_byte_len;
         let source_slice = &source_data[start..];
-        resize_horizontal_only_into::<{ rgba8::RGBA8_CHANNELS }>(
+        resize_horizontal_only_into::<CHANNELS>(
             source_slice,
             output.data_mut(),
             source_row_byte_len,
@@ -269,7 +305,7 @@ pub(super) fn resize_rows_with_scratch_into(
 
     if plan.same_width() {
         let band_height = output.dimensions().height_usize();
-        resize_vertical_only_into::<{ rgba8::RGBA8_CHANNELS }>(
+        resize_vertical_only_into::<CHANNELS>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -284,7 +320,7 @@ pub(super) fn resize_rows_with_scratch_into(
     let band_height = output.dimensions().height_usize();
     let y_taps = &plan.y_taps[y_start..y_start + band_height];
     if should_use_x_then_y(plan) {
-        resize_x_then_y_rows_into::<{ rgba8::RGBA8_CHANNELS }, false>(
+        resize_x_then_y_rows_into::<CHANNELS, false>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -306,7 +342,7 @@ pub(super) fn resize_rows_with_scratch_into(
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
             .zip(&plan.x_taps)
         {
-            write_convolution_pixel::<{ rgba8::RGBA8_CHANNELS }>(
+            write_convolution_pixel::<CHANNELS>(
                 output_pixel,
                 source_data,
                 source_row_byte_len,

@@ -537,6 +537,7 @@ impl Processor {
         let parent = call.source(plan.source, |bytes, compare| {
             boundary.snapshot_input(bytes, compare)
         })?;
+        let source_opaque = call.source_opaque();
         if plan.source == plan.output {
             let result = boundary.complete(&call.scratch.buffers[0], plan.output);
             return call.finish(progress.finish(result, boundary.progress()));
@@ -570,22 +571,27 @@ impl Processor {
         let output = ImageViewMut::<Rgba8>::packed(output, plan.output)
             .map_err(|_| Failure::new(ErrorCode::Runtime, ErrorPath::Control))?;
         if enabled {
-            metadata.expect("requested resize").execute_with_progress(
-                source,
-                output,
-                &mut |completed, total| {
-                    progress.report(
-                        boundary.progress(),
-                        Stage::Resize,
-                        u64::from(completed),
-                        u64::from(total),
-                    )
-                },
-            )?;
-        } else {
             metadata
                 .expect("requested resize")
-                .execute(source, output)?;
+                .execute_with_progress_known_opacity(
+                    source,
+                    output,
+                    source_opaque,
+                    &mut |completed, total| {
+                        progress.report(
+                            boundary.progress(),
+                            Stage::Resize,
+                            u64::from(completed),
+                            u64::from(total),
+                        )
+                    },
+                )?;
+        } else {
+            metadata.expect("requested resize").execute_known_opacity(
+                source,
+                output,
+                source_opaque,
+            )?;
         }
         call.retain_rgba(0, key, 1, plan.output, &mut self.peak_capacity);
         let bytes = call

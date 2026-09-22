@@ -165,10 +165,23 @@ pub fn resize_convolution_rgba8_with_plan_into(
 /// The caller reserves every simultaneously live band's capacity before dispatch.
 pub fn resize_convolution_rgba8_rows_with_plan_and_scratch_into(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    y_start: u32,
+    scratch: &mut [f64],
+) -> Result<(), Failure> {
+    resize_convolution_rgba8_rows_with_plan_and_scratch_known_opacity_into(
+        source, output, plan, y_start, scratch, false,
+    )
+}
+
+pub(crate) fn resize_convolution_rgba8_rows_with_plan_and_scratch_known_opacity_into(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
     y_start: u32,
     scratch: &mut [f64],
+    source_opaque: bool,
 ) -> Result<(), Failure> {
     assert_eq!(source.dimensions(), plan.source_dimensions());
     assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
@@ -189,12 +202,13 @@ pub fn resize_convolution_rgba8_rows_with_plan_and_scratch_into(
             .copy_from_slice(&source.data()[start..end]);
         return Ok(());
     }
-    kernel::resize_rows_with_scratch_into(
+    kernel::resize_rows_with_scratch_known_opacity_into(
         source,
         output,
         plan,
         y_start,
         Some(&mut scratch[..required]),
+        source_opaque,
     );
     Ok(())
 }
@@ -213,9 +227,31 @@ pub fn resize_convolution_rgba8_with_plan_and_scratch_into(
 /// Counts filtered source rows plus output rows for the existing x-then-y dispatch.
 pub(crate) fn resize_convolution_with_progress(
     source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &ConvolutionResizePlan,
+    scratch: &mut [f64],
+    progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let source_opaque = source
+        .data()
+        .chunks_exact(rgba8::RGBA8_CHANNELS)
+        .all(|pixel| pixel[3] == u8::MAX);
+    resize_convolution_with_progress_known_opacity(
+        source,
+        output,
+        plan,
+        scratch,
+        source_opaque,
+        progress,
+    )
+}
+
+pub(crate) fn resize_convolution_with_progress_known_opacity(
+    source: ImageView<'_, Rgba8>,
     mut output: ImageViewMut<'_, Rgba8>,
     plan: &ConvolutionResizePlan,
     scratch: &mut [f64],
+    source_opaque: bool,
     progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
     if source.dimensions() != plan.source_dimensions()
@@ -243,11 +279,12 @@ pub(crate) fn resize_convolution_with_progress(
     }
     let total = kernel::work_rows(plan);
     progress(0, total)?;
-    kernel::resize_with_progress(
+    kernel::resize_with_progress_known_opacity(
         source,
         output,
         plan,
         Some(&mut scratch[..required]),
+        source_opaque,
         &mut |completed| progress(completed, total),
     )
 }

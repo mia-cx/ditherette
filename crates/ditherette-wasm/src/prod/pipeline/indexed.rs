@@ -94,6 +94,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         })?;
         (call, Some(source))
     };
+    let source_opaque = !sparse && call.source_opaque();
     let resize_key = resize
         .zip(source)
         .map(|(output, source)| identity::stage(Some(source), StageOptions::Resize { output }))
@@ -243,16 +244,21 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             let source = ImageView::packed(source, source_dimensions).expect("owned source");
             let output = ImageViewMut::packed(resized, output_dimensions).expect("reserved resize");
             if enabled {
-                prepared.execute_with_progress(source, output, &mut |completed, total| {
-                    progress.report(
-                        boundary.progress(),
-                        Stage::Resize,
-                        u64::from(completed),
-                        u64::from(total),
-                    )
-                })?;
+                prepared.execute_with_progress_known_opacity(
+                    source,
+                    output,
+                    source_opaque,
+                    &mut |completed, total| {
+                        progress.report(
+                            boundary.progress(),
+                            Stage::Resize,
+                            u64::from(completed),
+                            u64::from(total),
+                        )
+                    },
+                )?;
             } else {
-                prepared.execute(source, output)?;
+                prepared.execute_known_opacity(source, output, source_opaque)?;
             }
         }
     }

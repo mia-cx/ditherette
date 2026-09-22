@@ -85,7 +85,13 @@ impl Entry {
 pub(super) struct Scratch {
     pub buffers: [Vec<u8>; 4],
     pub diffusion: Vec<[f32; 3]>,
-    source: Option<(ImageDimensions, Identity)>,
+    source: Option<(ImageDimensions, SourceMetadata)>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SourceMetadata {
+    identity: Identity,
+    opaque: bool,
 }
 
 impl Scratch {
@@ -426,8 +432,8 @@ impl<'a> Call<'a> {
             .take()
             .filter(|(size, _)| *size == dimensions);
         let equal = snapshot(&mut self.scratch.buffers[0], previous.is_some())?;
-        let identity = match previous {
-            Some((_, identity)) if equal => identity,
+        let source = match previous {
+            Some((_, source)) if equal => source,
             _ => {
                 // Public staged calls may return a retained RGBA image as their next input.
                 // Verify that owned image exactly before adopting its dependency identity.
@@ -441,7 +447,7 @@ impl<'a> Call<'a> {
                         && image.bytes == self.scratch.buffers[0])
                         .then_some(entry.key)
                 });
-                if let Some(identity) = retained {
+                let identity = if let Some(identity) = retained {
                     identity
                 } else {
                     // Never recycle revisions, including after failed calls or scratch eviction.
@@ -453,11 +459,25 @@ impl<'a> Call<'a> {
                     let mut bytes = [0; 32];
                     bytes[..8].copy_from_slice(&self.store.source_revision.to_le_bytes());
                     Identity(bytes)
+                };
+                SourceMetadata {
+                    identity,
+                    opaque: self.scratch.buffers[0]
+                        .chunks_exact(4)
+                        .all(|pixel| pixel[3] == u8::MAX),
                 }
             }
         };
-        self.scratch.source = Some((dimensions, identity));
-        Ok(identity)
+        self.scratch.source = Some((dimensions, source));
+        Ok(source.identity)
+    }
+
+    pub(super) fn source_opaque(&self) -> bool {
+        self.scratch
+            .source
+            .expect("source bytes were verified for this call")
+            .1
+            .opaque
     }
 
     /// After source verification and available image hits, reserve the remaining execution.
@@ -986,16 +1006,18 @@ mod tests {
         let mut peak = 0;
         let mut call =
             Call::snapshot(&mut store, 64, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
-        let identity = call
+        let source = call
             .source(dimensions, |bytes, compare| {
                 assert!(!compare);
                 bytes.fill(7);
                 Ok(false)
             })
             .unwrap();
-        assert_ne!(identity, Identity([0; 32]));
+        assert_ne!(source, Identity([0; 32]));
+        assert!(!call.source_opaque());
         call.finish(Ok(())).unwrap();
-        assert_eq!(store.scratch.source, Some((dimensions, identity)));
+        assert_eq!(store.scratch.source.unwrap().0, dimensions);
+        assert_eq!(store.scratch.source.unwrap().1.identity, source);
         let capacity = store.capacity();
         let mut call =
             Call::snapshot(&mut store, 64, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
@@ -1006,7 +1028,7 @@ mod tests {
                 Ok(true)
             })
             .unwrap(),
-            identity
+            source
         );
         call.finish(Ok(())).unwrap();
         assert_eq!(
@@ -1030,6 +1052,49 @@ mod tests {
         store.room(4, 4).unwrap();
         assert!(store.scratch.source.is_none());
         assert_eq!(store.capacity(), 0);
+    }
+
+    #[test]
+    fn source_opacity_follows_exact_snapshot_verification() {
+        let mut store = Store::default();
+        let dimensions = ImageDimensions::new(2, 1).unwrap();
+        let mut peak = 0;
+        let mut call =
+            Call::snapshot(&mut store, 8, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
+        let opaque = call
+            .source(dimensions, |bytes, compare| {
+                assert!(!compare);
+                bytes.copy_from_slice(&[1, 2, 3, 255, 4, 5, 6, 255]);
+                Ok(false)
+            })
+            .unwrap();
+        assert!(call.source_opaque());
+        call.finish(Ok(())).unwrap();
+
+        let mut call =
+            Call::snapshot(&mut store, 8, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
+        assert_eq!(
+            call.source(dimensions, |_, compare| {
+                assert!(compare);
+                Ok(true)
+            })
+            .unwrap(),
+            opaque
+        );
+        assert!(call.source_opaque());
+        call.finish(Ok(())).unwrap();
+
+        let mut call =
+            Call::snapshot(&mut store, 8, 0, 4096, &mut peak, &mut SystemAllocator).unwrap();
+        let changed = call
+            .source(dimensions, |bytes, compare| {
+                assert!(compare);
+                bytes[7] = 254;
+                Ok(false)
+            })
+            .unwrap();
+        assert_ne!(changed, opaque);
+        assert!(!call.source_opaque());
     }
 
     #[test]

@@ -444,19 +444,21 @@ impl PreparedResize {
         }
     }
 
-    pub(super) fn execute(
+    pub(super) fn execute_known_opacity(
         &mut self,
         source: ImageView<'_, Rgba8>,
         output: ImageViewMut<'_, Rgba8>,
+        source_opaque: bool,
     ) -> Result<(), Failure> {
-        self.execute_with_progress(source, output, &mut |_, _| Ok(()))
+        self.execute_with_progress_known_opacity(source, output, source_opaque, &mut |_, _| Ok(()))
     }
 
     /// Reuses each prepared kernel and reports only work that its chosen path performs.
-    pub(super) fn execute_with_progress(
+    pub(super) fn execute_with_progress_known_opacity(
         &mut self,
         source: ImageView<'_, Rgba8>,
         mut output: ImageViewMut<'_, Rgba8>,
+        source_opaque: bool,
         progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         let height = output.dimensions().height();
@@ -541,23 +543,25 @@ impl PreparedResize {
                 if let Some(result) = scratch.execute(
                     &mut output,
                     &|band, output, scratch| {
-                        bicubic::resize_bicubic_rgba8_rows_with_plan_and_scratch_into(
+                        bicubic::resize_bicubic_rgba8_rows_with_plan_and_scratch_known_opacity_into(
                             source,
                             output,
                             plan,
                             band.y_start(),
                             scratch,
+                            source_opaque,
                         )
                     },
                     progress,
                 ) {
                     return result;
                 }
-                bicubic::resize_bicubic_with_progress(
+                bicubic::resize_bicubic_with_progress_known_opacity(
                     source,
                     output,
                     plan,
                     scratch.scalar(),
+                    source_opaque,
                     progress,
                 )?
             }
@@ -565,23 +569,25 @@ impl PreparedResize {
                 if let Some(result) = scratch.execute(
                     &mut output,
                     &|band, output, scratch| {
-                        lanczos::resize_lanczos_rgba8_rows_with_plan_and_scratch_into(
+                        lanczos::resize_lanczos_rgba8_rows_with_plan_and_scratch_known_opacity_into(
                             source,
                             output,
                             plan,
                             band.y_start(),
                             scratch,
+                            source_opaque,
                         )
                     },
                     progress,
                 ) {
                     return result;
                 }
-                lanczos::resize_lanczos_with_progress(
+                lanczos::resize_lanczos_with_progress_known_opacity(
                     source,
                     output,
                     plan,
                     scratch.scalar(),
+                    source_opaque,
                     progress,
                 )?
             }
