@@ -12,6 +12,10 @@ use super::{
 };
 
 const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
+pub(super) const FIXED_BLOCK_HEIGHT: usize = 32;
+
+// A <=2x shrink spans at most two source rows per output row, plus radius-3 support.
+pub(super) const FIXED_BLOCK_SOURCE_ROWS: usize = 2 * FIXED_BLOCK_HEIGHT + 6;
 
 // CLOSE(perf): Scratch ownership tuning depended on a winning separable path;
 // the tested Lanczos3 y-then-x scratch row preserved bounded correctness but
@@ -49,6 +53,14 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
 }
 
 pub(super) fn work_rows(plan: &ConvolutionResizePlan) -> u32 {
+    if should_use_fixed_blocks(plan) {
+        return plan.output_dimensions().height()
+            + plan
+                .y_taps
+                .chunks(FIXED_BLOCK_HEIGHT)
+                .map(|taps| source_rows(taps).len() as u32)
+                .sum::<u32>();
+    }
     plan.output_dimensions().height()
         + if !plan.same_height() && !plan.same_width() && should_use_x_then_y(plan) {
             plan.source_dimensions().height()
@@ -105,6 +117,19 @@ fn resize_with_progress_channels<const CHANNELS: usize>(
             source_row_byte_len,
             output_row_byte_len,
             &plan.y_taps,
+            progress,
+        )?;
+        return Ok(());
+    }
+
+    if should_use_fixed_blocks(plan) {
+        resize_x_then_y_blocks_into::<CHANNELS>(
+            source_data,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            plan,
+            scratch,
             progress,
         )?;
         return Ok(());
@@ -253,6 +278,49 @@ pub(super) fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
         && source_dimensions.width() > plan.output_dimensions().width()
         && u64::from(source_dimensions.width()) * u64::from(source_dimensions.height())
             >= X_THEN_Y_MIN_SOURCE_PIXELS
+}
+
+pub(super) fn should_use_fixed_blocks(plan: &ConvolutionResizePlan) -> bool {
+    plan.support_policy() == SupportPolicy::Fixed && should_use_x_then_y(plan)
+}
+
+fn resize_x_then_y_blocks_into<const CHANNELS: usize>(
+    source: &[u8],
+    output: &mut [u8],
+    source_row_byte_len: usize,
+    output_row_byte_len: usize,
+    plan: &ConvolutionResizePlan,
+    scratch: Option<&mut [f64]>,
+    progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let mut owned_scratch;
+    let scratch = match scratch {
+        Some(scratch) => scratch,
+        None => {
+            owned_scratch = vec![0.0; plan.scratch_elements().expect("valid scratch geometry")];
+            &mut owned_scratch
+        }
+    };
+    let mut completed = 0;
+    for (output_block, y_taps) in output
+        .chunks_mut(output_row_byte_len * FIXED_BLOCK_HEIGHT)
+        .zip(plan.y_taps.chunks(FIXED_BLOCK_HEIGHT))
+    {
+        let support_rows = source_rows(y_taps).len();
+        debug_assert!(support_rows <= FIXED_BLOCK_SOURCE_ROWS);
+        resize_x_then_y_rows_into::<CHANNELS>(
+            source,
+            output_block,
+            source_row_byte_len,
+            output_row_byte_len,
+            &plan.x_taps,
+            y_taps,
+            Some(scratch),
+        );
+        completed += (support_rows + y_taps.len()) as u32;
+        progress(completed)?;
+    }
+    Ok(())
 }
 
 fn resize_x_then_y_into<const CHANNELS: usize>(
@@ -659,7 +727,87 @@ fn round_byte(value: f64) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::round_byte;
+    use super::*;
+    use crate::image::ImageDimensions;
+    use crate::prod::resize::scalar::convolution::{ReconstructionKernel, ResizeAnchor};
+
+    struct RadiusThree;
+    impl ReconstructionKernel for RadiusThree {
+        fn radius(&self) -> f64 {
+            3.0
+        }
+        fn weight(&self, distance: f64) -> f64 {
+            if distance == 0.0 {
+                return 1.0;
+            }
+            if distance.abs() >= 3.0 {
+                return 0.0;
+            }
+            let x = distance * std::f64::consts::PI;
+            (x.sin() / x) * ((x / 3.0).sin() / (x / 3.0))
+        }
+        fn allows_fixed_separable_shrink(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn fixed_blocks_preserve_full_separable_arithmetic() {
+        for anchor in [
+            ResizeAnchor::TopLeft,
+            ResizeAnchor::Center,
+            ResizeAnchor::BottomRight,
+        ] {
+            for (width, height) in [(64, 100), (77, 120), (96, 150)] {
+                let source_dimensions = ImageDimensions::new(128, 200).unwrap();
+                let output_dimensions = ImageDimensions::new(width, height).unwrap();
+                let plan = ConvolutionResizePlan::new(
+                    source_dimensions,
+                    output_dimensions,
+                    anchor,
+                    &RadiusThree,
+                    SupportPolicy::Fixed,
+                );
+                let mut source = (0..128 * 200 * 4)
+                    .map(|i| ((i * 47 + i / 13) % 256) as u8)
+                    .collect::<Vec<_>>();
+                let mut expected = vec![0; width as usize * height as usize * 4];
+                let mut actual = expected.clone();
+                let mut scratch = vec![f64::NAN; plan.scratch_elements().unwrap()];
+                for taps in plan.y_taps.chunks(FIXED_BLOCK_HEIGHT) {
+                    assert!(source_rows(taps).len() <= FIXED_BLOCK_SOURCE_ROWS);
+                    assert!(source_rows(taps).len() * width as usize * 4 <= scratch.len());
+                }
+                for opaque in [false, true] {
+                    if opaque {
+                        for pixel in source.chunks_exact_mut(4) {
+                            pixel[3] = 255;
+                        }
+                    }
+                    resize_x_then_y_into::<4>(
+                        &source,
+                        &mut expected,
+                        128 * 4,
+                        width as usize * 4,
+                        &plan.x_taps,
+                        &plan.y_taps,
+                        None,
+                        &mut |_| Ok(()),
+                    )
+                    .unwrap();
+                    resize_with_progress(
+                        ImageView::packed(&source, source_dimensions).unwrap(),
+                        ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                        &plan,
+                        Some(&mut scratch),
+                        &mut |_| Ok(()),
+                    )
+                    .unwrap();
+                    assert_eq!(actual, expected, "{width}x{height}, opaque={opaque}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn byte_rounding_matches_clamp_and_round_at_every_boundary() {

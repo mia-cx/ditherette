@@ -194,8 +194,14 @@ impl ConvolutionResizePlan {
         if self.same_height() || self.same_width() || !super::kernel::should_use_x_then_y(self) {
             return Ok(0);
         }
-        self.source_dimensions
-            .height_usize()
+        let source_rows = if super::kernel::should_use_fixed_blocks(self) {
+            self.source_dimensions
+                .height_usize()
+                .min(super::kernel::FIXED_BLOCK_SOURCE_ROWS)
+        } else {
+            self.source_dimensions.height_usize()
+        };
+        source_rows
             .checked_mul(self.output_dimensions.width_usize())
             .and_then(|n| n.checked_mul(crate::image::rgba8::RGBA8_CHANNELS))
             .ok_or_else(memory_limit)
