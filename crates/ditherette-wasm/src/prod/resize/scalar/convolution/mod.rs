@@ -44,8 +44,10 @@ pub use plan::ConvolutionResizePlan;
 // x-then-y sums. The accepted Celeste 50% browser run gained roughly 12% warm
 // speed with 193 changed palette pixels out of 2.7M. Reordered f64 sums can
 // change RGBA byte rounding; this path does not promise exact oracle bytes.
-// Fixed Lanczos3 uses contiguous 64-row output blocks. Scratch covers at most
-// 134 source rows; overlapping support rows are recomputed between blocks.
+// Scalar fixed Lanczos3 uses contiguous 64-row output blocks through <=4x shrink.
+// Scratch covers ceil(64 * source_height / output_height) + 6 source rows, capped
+// at source height. Overlapping support rows are recomputed between blocks.
+// Row bands retain the accepted <=2x separable dispatch.
 // REJECT(perf): Streaming x-then-y scratch rows preserved bounded correctness
 // but regressed `ditherette-bench run lanczos3-scale-aware` representative
 // downscales by roughly 30-56% versus the accepted full-scratch x-then-y path.

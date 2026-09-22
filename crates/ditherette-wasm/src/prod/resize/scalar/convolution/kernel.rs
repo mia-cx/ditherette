@@ -14,8 +14,13 @@ use super::{
 const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
 pub(super) const FIXED_BLOCK_HEIGHT: usize = 64;
 
-// A <=2x shrink spans at most two source rows per output row, plus radius-3 support.
-pub(super) const FIXED_BLOCK_SOURCE_ROWS: usize = 2 * FIXED_BLOCK_HEIGHT + 6;
+/// Bound the source interval of 64 output rows, including radius-3 support.
+pub(super) fn fixed_block_source_rows(plan: &ConvolutionResizePlan) -> usize {
+    let source_height = u64::from(plan.source_dimensions().height());
+    let output_height = u64::from(plan.output_dimensions().height());
+    ((source_height * FIXED_BLOCK_HEIGHT as u64).div_ceil(output_height) + 6).min(source_height)
+        as usize
+}
 
 // CLOSE(perf): Scratch ownership tuning depended on a winning separable path;
 // the tested Lanczos3 y-then-x scratch row preserved bounded correctness but
@@ -263,15 +268,8 @@ pub(super) fn resize_rows_with_scratch_into(
 
 pub(super) fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
     let source_dimensions = plan.source_dimensions();
-    let output_dimensions = plan.output_dimensions();
     // Accepted Lanczos3 tradeoff: reordered f64 sums can change final byte rounding.
-    if plan.support_policy() == SupportPolicy::Fixed
-        && plan.allows_fixed_separable_shrink
-        && source_dimensions.width() > output_dimensions.width()
-        && source_dimensions.height() > output_dimensions.height()
-        && u64::from(source_dimensions.width()) <= 2 * u64::from(output_dimensions.width())
-        && u64::from(source_dimensions.height()) <= 2 * u64::from(output_dimensions.height())
-    {
+    if fixed_shrink_within(plan, 2) {
         return true;
     }
     plan.support_policy() == SupportPolicy::ScaleAware
@@ -281,7 +279,18 @@ pub(super) fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
 }
 
 pub(super) fn should_use_fixed_blocks(plan: &ConvolutionResizePlan) -> bool {
-    plan.support_policy() == SupportPolicy::Fixed && should_use_x_then_y(plan)
+    fixed_shrink_within(plan, 4)
+}
+
+fn fixed_shrink_within(plan: &ConvolutionResizePlan, max_ratio: u64) -> bool {
+    let source = plan.source_dimensions();
+    let output = plan.output_dimensions();
+    plan.support_policy() == SupportPolicy::Fixed
+        && plan.allows_fixed_separable_shrink
+        && source.width() > output.width()
+        && source.height() > output.height()
+        && u64::from(source.width()) <= max_ratio * u64::from(output.width())
+        && u64::from(source.height()) <= max_ratio * u64::from(output.height())
 }
 
 fn resize_x_then_y_blocks_into<const CHANNELS: usize>(
@@ -307,7 +316,7 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize>(
         .zip(plan.y_taps.chunks(FIXED_BLOCK_HEIGHT))
     {
         let support_rows = source_rows(y_taps).len();
-        debug_assert!(support_rows <= FIXED_BLOCK_SOURCE_ROWS);
+        debug_assert!(support_rows <= fixed_block_source_rows(plan));
         // Fixed Lanczos3 already accepts bounded regrouping. Store raw horizontal
         // sums and normalize once after the vertical pass within this block.
         resize_x_then_y_rows_into::<CHANNELS, true>(
@@ -794,7 +803,7 @@ mod tests {
                 let mut actual = expected.clone();
                 let mut scratch = vec![f64::NAN; plan.scratch_elements().unwrap()];
                 for taps in plan.y_taps.chunks(FIXED_BLOCK_HEIGHT) {
-                    assert!(source_rows(taps).len() <= FIXED_BLOCK_SOURCE_ROWS);
+                    assert!(source_rows(taps).len() <= fixed_block_source_rows(&plan));
                     assert!(source_rows(taps).len() * width as usize * 4 <= scratch.len());
                 }
                 for opaque in [false, true] {

@@ -191,13 +191,15 @@ impl ConvolutionResizePlan {
 
     /// Caller-owned f64 elements needed by the full-call dispatch.
     pub fn scratch_elements(&self) -> Result<usize, Failure> {
-        if self.same_height() || self.same_width() || !super::kernel::should_use_x_then_y(self) {
+        if self.same_height()
+            || self.same_width()
+            || (!super::kernel::should_use_fixed_blocks(self)
+                && !super::kernel::should_use_x_then_y(self))
+        {
             return Ok(0);
         }
         let source_rows = if super::kernel::should_use_fixed_blocks(self) {
-            self.source_dimensions
-                .height_usize()
-                .min(super::kernel::FIXED_BLOCK_SOURCE_ROWS)
+            super::kernel::fixed_block_source_rows(self)
         } else {
             self.source_dimensions.height_usize()
         };

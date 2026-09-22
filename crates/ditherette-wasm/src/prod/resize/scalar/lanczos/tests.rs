@@ -17,8 +17,11 @@ fn fixed_separable_dispatch_is_lanczos3_only_and_bounded_on_both_axes() {
     for (sw, sh, ow, oh, separable) in [
         (16, 14, 8, 7, true),
         (17, 13, 12, 10, true),
-        (17, 14, 8, 7, false),
-        (16, 15, 8, 7, false),
+        (17, 14, 8, 7, true),
+        (16, 15, 8, 7, true),
+        (32, 28, 8, 7, true),
+        (33, 28, 8, 7, false),
+        (32, 29, 8, 7, false),
         (16, 14, 16, 7, false),
         (16, 14, 8, 14, false),
         (16, 14, 17, 15, false),
@@ -65,6 +68,84 @@ fn fixed_separable_dispatch_is_lanczos3_only_and_bounded_on_both_axes() {
         );
         assert_eq!(lanczos2.scratch_elements().unwrap(), 0);
     }
+}
+
+#[test]
+fn fourfold_blocks_account_scratch_and_recover_through_partial_final_block() {
+    let source_dimensions = ImageDimensions::new(128, 400).unwrap();
+    let output_dimensions = ImageDimensions::new(32, 100).unwrap();
+    let required = LanczosResizePlan::required_bytes(
+        source_dimensions,
+        output_dimensions,
+        NonZeroU32::new(3).unwrap(),
+        SupportPolicy::Fixed,
+    )
+    .unwrap();
+    let mut budget = CapacityBudget::new(required);
+    let plan = LanczosResizePlan::try_new3(
+        source_dimensions,
+        output_dimensions,
+        ResizeAnchor::Center,
+        SupportPolicy::Fixed,
+        &mut budget,
+    )
+    .unwrap();
+    let length = plan.scratch_elements().unwrap();
+    assert_eq!(length, 262 * 32 * 4);
+    // Worker bands retain the previous direct kernel and need no scratch at 4x.
+    assert_eq!(plan.row_scratch_elements(0, 100).unwrap(), 0);
+    let mut scratch = budget.vector::<f64>(length).unwrap();
+    scratch.resize(length, f64::NAN);
+    assert!(budget.used() <= required);
+    let bytes = (0..128 * 400 * 4)
+        .map(|i| (i % 251) as u8)
+        .collect::<Vec<_>>();
+    let source = ImageView::packed(&bytes, source_dimensions).unwrap();
+    let mut expected = vec![0; 32 * 100 * 4];
+    resize_lanczos_with_progress(
+        source,
+        ImageViewMut::packed(&mut expected, output_dimensions).unwrap(),
+        &plan,
+        &mut scratch,
+        &mut |_, _| Ok(()),
+    )
+    .unwrap();
+    scratch.fill(f64::NAN);
+    let mut actual = vec![0; expected.len()];
+    let error = resize_lanczos_with_progress(
+        source,
+        ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+        &plan,
+        &mut scratch,
+        &mut |done, _| {
+            if done > 0 {
+                return Err(Failure::new(ErrorCode::Callback, ErrorPath::OnProgress));
+            }
+            Ok(())
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Callback);
+    assert_eq!(&actual[..32 * 64 * 4], &expected[..32 * 64 * 4]);
+    assert!(actual[32 * 64 * 4..].iter().all(|&byte| byte == 0));
+    let mut events = Vec::new();
+    resize_lanczos_with_progress(
+        source,
+        ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+        &plan,
+        &mut scratch,
+        &mut |done, total| {
+            events.push((done, total));
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].0, 0);
+    assert!(events[1].0 > 64 && events[1].0 < events[2].0);
+    assert_eq!(events[2].0, events[2].1);
+    assert!(events[2].0 > 500 && events[2].0 <= 100 + 2 * 262);
 }
 
 #[test]
