@@ -51,9 +51,8 @@ impl PaletteMatcher {
             MatchPolicy::OklchCircularHue | MatchPolicy::CielchCircularHue => {
                 self.scan(coordinates, circular_hue3_squared)
             }
-            MatchPolicy::OklchHueArc | MatchPolicy::CielchHueArc => {
-                self.scan(coordinates, hue_arc3_squared)
-            }
+            MatchPolicy::OklchHueArc => self.scan_normalized_hue_arc(coordinates),
+            MatchPolicy::CielchHueArc => self.scan(coordinates, hue_arc3_squared),
             MatchPolicy::SrgbCompuphase => self.scan(coordinates, |a, b| {
                 weighted_rgb_squared(a, b, WeightedRgbMetric::CompuPhase)
             }),
@@ -117,6 +116,21 @@ impl PaletteMatcher {
         Some(best)
     }
 
+    // Direct Oklch coordinates have normalized hues, so the shortest arc only
+    // needs one comparison. Diffusion keeps the general finite scan above.
+    fn scan_normalized_hue_arc(&self, coordinates: [f32; 3]) -> PaletteColor {
+        let mut best = self.colors[0];
+        let mut best_score = normalized_hue_arc3_squared(coordinates, best.coordinates);
+        for &candidate in &self.colors[1..] {
+            let score = normalized_hue_arc3_squared(coordinates, candidate.coordinates);
+            if score < best_score {
+                best = candidate;
+                best_score = score;
+            }
+        }
+        best
+    }
+
     // Each function item/closure produces its own scan, with no per-candidate policy dispatch.
     fn scan(
         &self,
@@ -133,5 +147,110 @@ impl PaletteMatcher {
             }
         }
         best
+    }
+}
+
+#[inline(always)]
+fn normalized_hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
+    let delta_lightness = a[0] - b[0];
+    let delta_chroma = a[1] - b[1];
+    let delta_hue = (a[2] - b[2]).abs();
+    let shortest_hue = if delta_hue > std::f32::consts::PI {
+        std::f32::consts::TAU - delta_hue
+    } else {
+        delta_hue
+    };
+    let hue_arc = a[1].min(b[1]) * shortest_hue;
+    delta_lightness * delta_lightness + delta_chroma * delta_chroma + hue_arc * hue_arc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prod::color::packed::{Converter, PackedSpace};
+
+    #[test]
+    fn normalized_hue_arc_matches_reference_for_rgb_derived_oklch() {
+        let converter = Converter::new(PackedSpace::Oklch);
+        for n in 0..4096u32 {
+            let a = converter.coordinates([
+                (n * 73) as u8,
+                (n * 31 + n / 256) as u8,
+                (n * 17 + 113) as u8,
+            ]);
+            let b = converter.coordinates([
+                (n * 19 + 7) as u8,
+                (n * 47 + 29) as u8,
+                (n * 101 + n / 64) as u8,
+            ]);
+            assert_eq!(
+                normalized_hue_arc3_squared(a, b).to_bits(),
+                hue_arc3_squared(a, b).to_bits(),
+                "RGB-derived pair {n}: {a:?}, {b:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn normalized_hue_arc_matches_reference_at_normalized_hue_edges() {
+        let below_tau = f32::from_bits(std::f32::consts::TAU.to_bits() - 1);
+        let above_pi = f32::from_bits(std::f32::consts::PI.to_bits() + 1);
+        for (a, b) in [
+            ([0.5, 0.0, 0.0], [0.5, 0.0, below_tau]),
+            ([0.25, 0.2, 0.0], [0.75, 0.1, below_tau]),
+            ([0.5, 0.2, 0.0], [0.5, 0.1, std::f32::consts::PI]),
+            ([0.5, 0.2, 0.0], [0.5, 0.1, above_pi]),
+            ([0.5, 0.1, below_tau], [0.5, 0.2, 0.0]),
+        ] {
+            assert_eq!(
+                normalized_hue_arc3_squared(a, b).to_bits(),
+                hue_arc3_squared(a, b).to_bits(),
+                "{a:?}, {b:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn specialized_scan_matches_reference_and_keeps_the_first_tie() {
+        let converter = Converter::new(PackedSpace::Oklch);
+        let palette_rgbs = [
+            [255, 0, 0],
+            [0, 255, 0],
+            [0, 0, 255],
+            [127, 127, 127],
+            [255, 0, 0],
+        ];
+        let colors = palette_rgbs
+            .into_iter()
+            .enumerate()
+            .map(|(index, rgb)| PaletteColor {
+                index: index as u8,
+                coordinates: converter.coordinates(rgb),
+            })
+            .collect::<Vec<_>>();
+        let matcher = PaletteMatcher {
+            colors: colors.clone(),
+            matching: MatchPolicy::OklchHueArc,
+        };
+
+        for n in 0..1024u32 {
+            let coordinates = converter.coordinates([
+                (n * 73) as u8,
+                (n * 31 + n / 256) as u8,
+                (n * 17 + 113) as u8,
+            ]);
+            let mut expected = colors[0];
+            let mut expected_score = hue_arc3_squared(coordinates, expected.coordinates);
+            for &candidate in &colors[1..] {
+                let score = hue_arc3_squared(coordinates, candidate.coordinates);
+                if score < expected_score {
+                    expected = candidate;
+                    expected_score = score;
+                }
+            }
+            assert_eq!(matcher.nearest(coordinates), expected);
+        }
+
+        assert_eq!(matcher.nearest(colors[0].coordinates).index, 0);
     }
 }
