@@ -29,7 +29,8 @@ fn fixed_separable_dispatch_is_lanczos3_only_and_bounded_on_both_axes() {
         let source = ImageDimensions::new(sw, sh).unwrap();
         let output = ImageDimensions::new(ow, oh).unwrap();
         let expected = if separable {
-            sh as usize * ow as usize * 4
+            let block_height = if sw <= 2 * ow && sh <= 2 * oh { 64 } else { 16 };
+            sh as usize * ow as usize * 4 + ow as usize + block_height
         } else {
             0
         };
@@ -200,7 +201,7 @@ fn fourfold_blocks_account_scratch_and_recover_through_partial_final_block() {
     )
     .unwrap();
     let length = plan.scratch_elements().unwrap();
-    assert_eq!(length, 70 * 32 * 4);
+    assert_eq!(length, 70 * 32 * 4 + 32 + 16);
     // Worker bands retain the previous direct kernel and need no scratch at 4x.
     assert_eq!(plan.row_scratch_elements(0, 100).unwrap(), 0);
     let mut scratch = budget.vector::<f64>(length).unwrap();
@@ -237,6 +238,8 @@ fn fourfold_blocks_account_scratch_and_recover_through_partial_final_block() {
     assert_eq!(error.code, ErrorCode::Callback);
     assert_eq!(&actual[..32 * 16 * 4], &expected[..32 * 16 * 4]);
     assert!(actual[32 * 16 * 4..].iter().all(|&byte| byte == 0));
+    // Recovery must replace stale image data and both cached weight totals.
+    scratch.fill(f64::NAN);
     let mut events = Vec::new();
     resize_lanczos_with_progress(
         source,
@@ -360,7 +363,7 @@ fn fixed_blocks_bound_scratch_and_recover_after_later_block_cancellation() {
     )
     .unwrap();
     let length = plan.scratch_elements().unwrap();
-    assert_eq!(length, 134 * 64 * 4);
+    assert_eq!(length, 134 * 64 * 4 + 64 + 64);
     assert!(length < plan.row_scratch_elements(0, 100).unwrap());
     let mut scratch = budget.vector::<f64>(length).unwrap();
     scratch.resize(length, f64::NAN);
@@ -407,6 +410,7 @@ fn fixed_blocks_bound_scratch_and_recover_after_later_block_cancellation() {
     assert_eq!(error.code, ErrorCode::Callback);
     assert_eq!(&actual[..64 * 64 * 4], &expected[..64 * 64 * 4]);
     assert!(actual[64 * 64 * 4..].iter().all(|&byte| byte == 0));
+    scratch.fill(f64::NAN);
     let mut events = Vec::new();
     resize_lanczos_with_progress(
         source,

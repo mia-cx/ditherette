@@ -222,6 +222,7 @@ impl ConvolutionResizePlan {
         source_rows
             .checked_mul(self.output_dimensions.width_usize())
             .and_then(|n| n.checked_mul(crate::image::rgba8::RGBA8_CHANNELS))
+            .and_then(|n| n.checked_add(super::kernel::block_weight_elements(self)))
             .ok_or_else(memory_limit)
     }
 

@@ -413,14 +413,17 @@ fn fallible_paths_match_landed_outputs_without_execution_allocations() {
                         && policy == SupportPolicy::Fixed
                         && sw > ow
                         && sh > oh
-                        && sw <= 2 * ow
-                        && sh <= 2 * oh;
-                    let expected_scratch = if fixed_lanczos3
-                        || (sw != ow
-                            && sh != oh
-                            && sw > ow
-                            && sw * sh >= 10_000
-                            && policy == SupportPolicy::ScaleAware)
+                        && sw <= 4 * ow
+                        && sh <= 4 * oh;
+                    let expected_scratch = if fixed_lanczos3 {
+                        let block_height = if sw <= 2 * ow && sh <= 2 * oh { 64 } else { 16 };
+                        let rows = ((sh * block_height).div_ceil(oh) + 6).min(sh);
+                        (rows * ow * 4 + ow + block_height) as usize
+                    } else if sw != ow
+                        && sh != oh
+                        && sw > ow
+                        && sw * sh >= 10_000
+                        && policy == SupportPolicy::ScaleAware
                     {
                         sh as usize * ow as usize * 4
                     } else {
@@ -450,7 +453,17 @@ fn fallible_paths_match_landed_outputs_without_execution_allocations() {
                     let after = ALLOCATIONS.with(Cell::get);
                     result.unwrap();
                     assert_eq!(before, after, "execution allocated");
-                    assert!(scratch.iter().all(|value| value.is_finite()));
+                    if fixed_lanczos3 {
+                        let block_height = if sw <= 2 * ow && sh <= 2 * oh { 64 } else { 16 };
+                        let suffix = scratch_len - ow as usize - block_height;
+                        // Unused support rows and unused y-total slots may retain NaNs.
+                        assert!(scratch
+                            [suffix..suffix + ow as usize + block_height.min(oh as usize)]
+                            .iter()
+                            .all(|value| value.is_finite()));
+                    } else {
+                        assert!(scratch.iter().all(|value| value.is_finite()));
+                    }
                     assert_eq!(actual, expected, "mode {mode}, {source_dimensions:?} -> {output_dimensions:?}, {anchor:?}, {policy:?}");
                 }
             }

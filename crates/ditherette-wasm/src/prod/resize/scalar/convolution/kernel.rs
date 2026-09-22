@@ -27,6 +27,15 @@ fn block_height(plan: &ConvolutionResizePlan) -> usize {
     }
 }
 
+/// Fixed raw-sum blocks retain one total per output column and current block row.
+pub(super) fn block_weight_elements(plan: &ConvolutionResizePlan) -> usize {
+    if should_use_fixed_blocks(plan) {
+        plan.output_dimensions().width_usize() + block_height(plan)
+    } else {
+        0
+    }
+}
+
 /// Count actual block support, or conservatively bound it before taps are planned.
 pub(super) fn block_source_rows(plan: &ConvolutionResizePlan) -> usize {
     let source_height = u64::from(plan.source_dimensions().height());
@@ -283,6 +292,7 @@ pub(super) fn resize_rows_with_scratch_into(
             &plan.x_taps,
             y_taps,
             scratch,
+            None,
         );
         return;
     }
@@ -364,6 +374,21 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize, const RAW_SUMS: bool>(
     };
     let mut completed = 0;
     let block_height = block_height(plan);
+    let weight_elements = if RAW_SUMS {
+        plan.x_taps.len() + block_height
+    } else {
+        0
+    };
+    let (scratch, weights) = scratch.split_at_mut(scratch.len() - weight_elements);
+    let (x_weights, y_weights) = if RAW_SUMS {
+        let (x_weights, y_weights) = weights.split_at_mut(plan.x_taps.len());
+        for (weight, taps) in x_weights.iter_mut().zip(&plan.x_taps) {
+            *weight = taps.iter().map(|tap| tap.weight).sum();
+        }
+        (x_weights, y_weights)
+    } else {
+        weights.split_at_mut(0)
+    };
     for (output_block, y_taps) in output
         .chunks_mut(output_row_byte_len * block_height)
         .zip(plan.y_taps.chunks(block_height))
@@ -372,6 +397,11 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize, const RAW_SUMS: bool>(
         debug_assert!(
             support_rows * plan.output_dimensions().width_usize() * CHANNELS <= scratch.len()
         );
+        if RAW_SUMS {
+            for (weight, taps) in y_weights.iter_mut().zip(y_taps) {
+                *weight = taps.iter().fold(0.0, |total, tap| total + tap.weight);
+            }
+        }
         // Fixed Lanczos3 uses raw sums; scale-aware filters retain normalized scratch.
         resize_x_then_y_rows_into::<CHANNELS, RAW_SUMS>(
             source,
@@ -381,6 +411,7 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize, const RAW_SUMS: bool>(
             &plan.x_taps,
             y_taps,
             Some(scratch),
+            RAW_SUMS.then_some((&*x_weights, &*y_weights)),
         );
         completed += (support_rows + y_taps.len()) as u32;
         progress(completed)?;
@@ -450,6 +481,7 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize, const RAW_SUMS: bool>(
     x_taps_by_output: &[Vec<AxisTap>],
     y_taps_by_output: &[Vec<AxisTap>],
     scratch: Option<&mut [f64]>,
+    weights: Option<(&[f64], &[f64])>,
 ) {
     let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
     let scratch_row_len = output_width * CHANNELS;
@@ -477,21 +509,20 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize, const RAW_SUMS: bool>(
         }
     }
 
-    for (output_row, y_taps) in output
+    for (output_y, (output_row, y_taps)) in output
         .chunks_exact_mut(output_row_byte_len)
         .zip(y_taps_by_output)
+        .enumerate()
     {
         for output_x in 0..output_width {
             let output_start = output_x * rgba8::RGBA8_CHANNELS;
-            let x_weight = if RAW_SUMS {
-                x_taps_by_output[output_x]
-                    .iter()
-                    .map(|tap| tap.weight)
-                    .sum()
+            let (x_weight, y_weight) = if RAW_SUMS {
+                let (x_weights, y_weights) = weights.expect("raw blocks cache axis weights");
+                (x_weights[output_x], y_weights[output_y])
             } else {
-                1.0
+                (1.0, 0.0)
             };
-            write_vertical_scratch_pixel_with_base::<CHANNELS>(
+            write_vertical_scratch_pixel_with_base::<CHANNELS, RAW_SUMS>(
                 &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS],
                 &scratch,
                 scratch_row_len,
@@ -499,6 +530,7 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize, const RAW_SUMS: bool>(
                 y_taps,
                 first_source_y,
                 x_weight,
+                y_weight,
             );
         }
     }
@@ -555,7 +587,7 @@ fn write_vertical_scratch_pixel<const CHANNELS: usize>(
     output_start: usize,
     y_taps: &[AxisTap],
 ) {
-    write_vertical_scratch_pixel_with_base::<CHANNELS>(
+    write_vertical_scratch_pixel_with_base::<CHANNELS, false>(
         output_pixel,
         scratch,
         scratch_row_len,
@@ -563,10 +595,11 @@ fn write_vertical_scratch_pixel<const CHANNELS: usize>(
         y_taps,
         0,
         1.0,
+        0.0,
     );
 }
 
-fn write_vertical_scratch_pixel_with_base<const CHANNELS: usize>(
+fn write_vertical_scratch_pixel_with_base<const CHANNELS: usize, const CACHED_WEIGHT: bool>(
     output_pixel: &mut [u8],
     scratch: &[f64],
     scratch_row_len: usize,
@@ -574,15 +607,18 @@ fn write_vertical_scratch_pixel_with_base<const CHANNELS: usize>(
     y_taps: &[AxisTap],
     first_source_y: usize,
     x_weight: f64,
+    y_weight: f64,
 ) {
     let mut accumulated = [0.0; CHANNELS];
-    let mut total_weight = 0.0;
+    let mut total_weight = y_weight;
 
     for y_tap in y_taps {
         let scratch_start = (y_tap.index - first_source_y) * scratch_row_len + output_start;
         let scratch_pixel = &scratch[scratch_start..scratch_start + CHANNELS];
 
-        total_weight += y_tap.weight;
+        if !CACHED_WEIGHT {
+            total_weight += y_tap.weight;
+        }
         for channel in 0..CHANNELS {
             accumulated[channel] += scratch_pixel[channel] * y_tap.weight;
         }
@@ -830,6 +866,80 @@ mod tests {
         }
         fn allows_fixed_separable_shrink(&self) -> bool {
             true
+        }
+    }
+
+    #[test]
+    fn cached_raw_block_totals_match_per_pixel_totals_exactly() {
+        let source_dimensions = ImageDimensions::new(128, 200).unwrap();
+        for anchor in [
+            ResizeAnchor::TopLeft,
+            ResizeAnchor::Center,
+            ResizeAnchor::BottomRight,
+        ] {
+            for (width, height) in [(32, 50), (43, 71), (64, 100), (77, 120), (96, 150)] {
+                let output_dimensions = ImageDimensions::new(width, height).unwrap();
+                let plan = ConvolutionResizePlan::new(
+                    source_dimensions,
+                    output_dimensions,
+                    anchor,
+                    &RadiusThree,
+                    SupportPolicy::Fixed,
+                );
+                let mut source = (0..128 * 200 * 4)
+                    .map(|i| ((i * 47 + i / 13) % 256) as u8)
+                    .collect::<Vec<_>>();
+                let row_len = width as usize * 4;
+                let mut expected = vec![0; row_len * height as usize];
+                let mut actual = expected.clone();
+                let mut reference_scratch = vec![0.0; row_len * 200];
+                let mut scratch = vec![f64::NAN; plan.scratch_elements().unwrap()];
+                for opaque in [false, true] {
+                    if opaque {
+                        for pixel in source.chunks_exact_mut(4) {
+                            pixel[3] = 255;
+                        }
+                    }
+                    // Prior raw-block arithmetic, with totals summed independently per pixel.
+                    for (source_row, scratch_row) in source
+                        .chunks_exact(128 * 4)
+                        .zip(reference_scratch.chunks_exact_mut(row_len))
+                    {
+                        for (pixel, taps) in scratch_row.chunks_exact_mut(4).zip(&plan.x_taps) {
+                            write_horizontal_scratch_pixel::<4, true>(pixel, source_row, taps);
+                        }
+                    }
+                    for (output_row, y_taps) in expected.chunks_exact_mut(row_len).zip(&plan.y_taps)
+                    {
+                        for (x, (pixel, x_taps)) in
+                            output_row.chunks_exact_mut(4).zip(&plan.x_taps).enumerate()
+                        {
+                            write_vertical_scratch_pixel_with_base::<4, false>(
+                                pixel,
+                                &reference_scratch,
+                                row_len,
+                                x * 4,
+                                y_taps,
+                                0,
+                                x_taps.iter().map(|tap| tap.weight).sum(),
+                                0.0,
+                            );
+                        }
+                    }
+                    resize_with_progress(
+                        ImageView::packed(&source, source_dimensions).unwrap(),
+                        ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                        &plan,
+                        Some(&mut scratch),
+                        &mut |_| Ok(()),
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        actual, expected,
+                        "{width}x{height}, {anchor:?}, opaque={opaque}"
+                    );
+                }
+            }
         }
     }
 
