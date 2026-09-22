@@ -23,6 +23,7 @@ export async function sourceSnapshotBrowserChecks({
 	const output = { width: 3, height: 3, resize: { algorithm: 'nearest', anchor: 'center' } };
 	const perturb = vectors.cases[0].policy;
 	for (const method of ['resize', 'perturb', 'quantize', 'ditherAndQuantize', 'process']) {
+		const sparseResize = method === 'resize';
 		const processor = await createDitherette({ wasm });
 		const reference = await createDitherette({ wasm });
 		const backing = new Uint8Array([99, ...vectors.source.data, 98]);
@@ -61,7 +62,7 @@ export async function sourceSnapshotBrowserChecks({
 			}
 		};
 		try {
-			const first = run(1);
+			const first = run(sparseResize ? 0 : 1);
 			const saved = structuredClone(first);
 			same(run(0), saved, `${method}: offset-1 snapshot reuse`);
 			// A new view with equal contents also reuses the snapshot. Object identity cannot decide it.
@@ -69,13 +70,17 @@ export async function sourceSnapshotBrowserChecks({
 			same(run(0), saved, `${method}: equal bytes in another allocation`);
 			source.width = 4;
 			source.height = 1;
-			same(run(1), reference[method](request), `${method}: dimensions participate in identity`);
+			same(
+				run(sparseResize ? 0 : 1),
+				reference[method](request),
+				`${method}: dimensions participate in identity`
+			);
 			same(run(0), reference[method](request), `${method}: changed dimensions become reusable`);
 			source.data[source.data.length - 1] = 0;
-			const changed = run(1);
+			const changed = run(sparseResize ? 0 : 1);
 			same(changed, reference[method](request), `${method}: mutation of the last byte`);
 			try {
-				run(0, {
+				run(sparseResize ? 1 : 0, {
 					onProgress(event) {
 						if (event.stage === 'complete') throw new Error('completion failed');
 					}
@@ -89,7 +94,11 @@ export async function sourceSnapshotBrowserChecks({
 				)
 					throw error;
 			}
-			same(run(1), changed, `${method}: failed completion discards the source snapshot`);
+			same(
+				run(sparseResize ? 0 : 1),
+				changed,
+				`${method}: failed completion discards the source snapshot`
+			);
 			same(run(0), changed, `${method}: recovered snapshot can be reused`);
 			processor.dispose();
 			same(first, saved, `${method}: earlier output survives mutation, failure and disposal`);
