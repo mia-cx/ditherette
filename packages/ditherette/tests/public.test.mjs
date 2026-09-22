@@ -31,6 +31,7 @@ const resizeOverhead = await (async () => {
 		const processor = await createDitherette({ wasm: module, memoryLimitBytes: limit });
 		try {
 			const value = request();
+			value.onProgress = () => {}; // Keep full Wasm storage in this budget probe.
 			processor.resize(value);
 			high = limit;
 		} catch (error) {
@@ -457,6 +458,7 @@ test('unexpected initialization allocation failures are structured and do not po
 });
 
 test('caught input/result copy failures recover through the public boundary without externref growth', async (t) => {
+	const copiedRequest = () => ({ ...request(), onProgress() {} });
 	let raw;
 	const instantiate = WebAssembly.instantiate;
 	const capture = t.mock.method(WebAssembly, 'instantiate', async (...args) => {
@@ -467,12 +469,12 @@ test('caught input/result copy failures recover through the public boundary with
 	const processor = await createDitherette({ wasm: module });
 	capture.mock.restore();
 	const capacity = raw.__wbindgen_externrefs.length;
-	const previous = processor.resize(request());
+	const previous = processor.resize(copiedRequest());
 	for (const [phase, path] of [
 		['input', 'source.data'],
 		['result', 'output']
 	]) {
-		const changed = request();
+		const changed = copiedRequest();
 		changed.source.data[0] ^= 1;
 		processor.resize(changed);
 		const set = Uint8Array.prototype.set;
@@ -486,10 +488,10 @@ test('caught input/result copy failures recover through the public boundary with
 			return Reflect.apply(set, this, args);
 		});
 		for (let attempt = 0; attempt < 16; attempt++) {
-			assert.throws(() => processor.resize(request()), diagnostic('wasm-memory-unavailable', path));
+			assert.throws(() => processor.resize(copiedRequest()), diagnostic('wasm-memory-unavailable', path));
 		}
 		fault.mock.restore();
-		assert.equal(processor.resize(request()).data[0], 17);
+		assert.equal(processor.resize(copiedRequest()).data[0], 17);
 		assert.equal(raw.__wbindgen_externrefs.length, capacity);
 		assert.equal(previous.data[0], 17);
 	}

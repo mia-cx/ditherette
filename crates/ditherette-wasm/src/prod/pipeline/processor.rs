@@ -482,11 +482,11 @@ impl Processor {
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
+        // Callback calls retain the existing Wasm execution and resize progress.
+        let direct_output = !enabled && boundary.supports_sparse_output();
         if boundary.supports_sparse_input()
-            && resize::sparse_nearest(plan.source_len, plan.output_len, plan.resize)
+            && resize::sparse_nearest(plan.source_len, plan.output_len, plan.resize, direct_output)
         {
-            // Callback calls retain resize progress before durable output construction.
-            let direct_output = !enabled && boundary.supports_sparse_output();
             let mut call = super::preparation::Call::new(
                 &mut self.preparation,
                 None,
