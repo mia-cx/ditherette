@@ -49,6 +49,9 @@ pub use plan::ConvolutionResizePlan;
 // output_height) + 6 source rows, capped at source height. Overlapping support
 // rows are recomputed between blocks.
 // Row bands retain the accepted <=2x separable dispatch.
+// Scale-aware Lanczos2/3 two-axis shrinking also uses blocks, preserving each
+// normalized horizontal sum. Scratch covers the largest planned block support;
+// preflight uses a conservative bound that includes widened filter support.
 // REJECT(perf): Streaming x-then-y scratch rows preserved bounded correctness
 // but regressed `ditherette-bench run lanczos3-scale-aware` representative
 // downscales by roughly 30-56% versus the accepted full-scratch x-then-y path.

@@ -50,6 +50,10 @@ impl<const RADIUS: u32> ReconstructionKernel for FixedLanczos<RADIUS> {
 }
 
 impl ReconstructionKernel for Lanczos {
+    fn allows_scale_aware_blocks(&self) -> bool {
+        self.radius == 2.0 || self.radius == 3.0
+    }
+
     fn allows_fixed_separable_shrink(&self) -> bool {
         self.radius == 3.0
     }

@@ -12,19 +12,38 @@ use super::{
 };
 
 const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
-fn fixed_block_height(plan: &ConvolutionResizePlan) -> usize {
-    if fixed_shrink_within(plan, 2) {
+fn block_height(plan: &ConvolutionResizePlan) -> usize {
+    let source = plan.source_dimensions();
+    let output = plan.output_dimensions();
+    if u64::from(source.width()) <= 2 * u64::from(output.width())
+        && u64::from(source.height()) <= 2 * u64::from(output.height())
+    {
         64
     } else {
         16
     }
 }
 
-/// Bound one output block's source interval, including radius-3 support.
-pub(super) fn fixed_block_source_rows(plan: &ConvolutionResizePlan) -> usize {
+/// Count actual block support, or conservatively bound it before taps are planned.
+pub(super) fn block_source_rows(plan: &ConvolutionResizePlan) -> usize {
     let source_height = u64::from(plan.source_dimensions().height());
     let output_height = u64::from(plan.output_dimensions().height());
-    ((source_height * fixed_block_height(plan) as u64).div_ceil(output_height) + 6)
+    let support_rows = if plan.support_policy() == SupportPolicy::ScaleAware {
+        if !plan.y_taps.is_empty() {
+            return plan
+                .y_taps
+                .chunks(block_height(plan))
+                .map(|taps| source_rows(taps).len())
+                .max()
+                .unwrap_or(0);
+        }
+        (2.0 * plan.scale_aware_block_radius * source_height as f64 / output_height as f64).ceil()
+            as u64
+            + 2
+    } else {
+        6
+    };
+    ((source_height * block_height(plan) as u64).div_ceil(output_height) + support_rows)
         .min(source_height) as usize
 }
 
@@ -64,11 +83,11 @@ pub(super) fn resize_packed_rgba8_with_convolution_filter_into(
 }
 
 pub(super) fn work_rows(plan: &ConvolutionResizePlan) -> u32 {
-    if should_use_fixed_blocks(plan) {
+    if should_use_blocks(plan) {
         return plan.output_dimensions().height()
             + plan
                 .y_taps
-                .chunks(fixed_block_height(plan))
+                .chunks(block_height(plan))
                 .map(|taps| source_rows(taps).len() as u32)
                 .sum::<u32>();
     }
@@ -134,7 +153,20 @@ fn resize_with_progress_channels<const CHANNELS: usize>(
     }
 
     if should_use_fixed_blocks(plan) {
-        resize_x_then_y_blocks_into::<CHANNELS>(
+        resize_x_then_y_blocks_into::<CHANNELS, true>(
+            source_data,
+            output.data_mut(),
+            source_row_byte_len,
+            output_row_byte_len,
+            plan,
+            scratch,
+            progress,
+        )?;
+        return Ok(());
+    }
+
+    if should_use_scale_aware_blocks(plan) {
+        resize_x_then_y_blocks_into::<CHANNELS, false>(
             source_data,
             output.data_mut(),
             source_row_byte_len,
@@ -288,6 +320,17 @@ pub(super) fn should_use_fixed_blocks(plan: &ConvolutionResizePlan) -> bool {
     fixed_shrink_within(plan, 4)
 }
 
+pub(super) fn should_use_blocks(plan: &ConvolutionResizePlan) -> bool {
+    should_use_fixed_blocks(plan) || should_use_scale_aware_blocks(plan)
+}
+
+fn should_use_scale_aware_blocks(plan: &ConvolutionResizePlan) -> bool {
+    plan.support_policy() == SupportPolicy::ScaleAware
+        && plan.scale_aware_block_radius > 0.0
+        && plan.source_dimensions().height() > plan.output_dimensions().height()
+        && should_use_x_then_y(plan)
+}
+
 fn fixed_shrink_within(plan: &ConvolutionResizePlan, max_ratio: u64) -> bool {
     let source = plan.source_dimensions();
     let output = plan.output_dimensions();
@@ -299,7 +342,7 @@ fn fixed_shrink_within(plan: &ConvolutionResizePlan, max_ratio: u64) -> bool {
         && u64::from(source.height()) <= max_ratio * u64::from(output.height())
 }
 
-fn resize_x_then_y_blocks_into<const CHANNELS: usize>(
+fn resize_x_then_y_blocks_into<const CHANNELS: usize, const RAW_SUMS: bool>(
     source: &[u8],
     output: &mut [u8],
     source_row_byte_len: usize,
@@ -317,16 +360,17 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize>(
         }
     };
     let mut completed = 0;
-    let block_height = fixed_block_height(plan);
+    let block_height = block_height(plan);
     for (output_block, y_taps) in output
         .chunks_mut(output_row_byte_len * block_height)
         .zip(plan.y_taps.chunks(block_height))
     {
         let support_rows = source_rows(y_taps).len();
-        debug_assert!(support_rows <= fixed_block_source_rows(plan));
-        // Fixed Lanczos3 already accepts bounded regrouping. Store raw horizontal
-        // sums and normalize once after the vertical pass within this block.
-        resize_x_then_y_rows_into::<CHANNELS, true>(
+        debug_assert!(
+            support_rows * plan.output_dimensions().width_usize() * CHANNELS <= scratch.len()
+        );
+        // Fixed Lanczos3 uses raw sums; scale-aware filters retain normalized scratch.
+        resize_x_then_y_rows_into::<CHANNELS, RAW_SUMS>(
             source,
             output_block,
             source_row_byte_len,
@@ -809,8 +853,8 @@ mod tests {
                 let mut expected = vec![0; width as usize * height as usize * 4];
                 let mut actual = expected.clone();
                 let mut scratch = vec![f64::NAN; plan.scratch_elements().unwrap()];
-                for taps in plan.y_taps.chunks(fixed_block_height(&plan)) {
-                    assert!(source_rows(taps).len() <= fixed_block_source_rows(&plan));
+                for taps in plan.y_taps.chunks(block_height(&plan)) {
+                    assert!(source_rows(taps).len() <= block_source_rows(&plan));
                     assert!(source_rows(taps).len() * width as usize * 4 <= scratch.len());
                 }
                 for opaque in [false, true] {
