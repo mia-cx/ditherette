@@ -625,6 +625,17 @@ fn write_horizontal_scratch_pixel<const CHANNELS: usize, const RAW_SUMS: bool>(
     source_row: &[u8],
     x_taps: &[AxisTap],
 ) {
+    if RAW_SUMS {
+        if let Some(x_taps) = as_fixed_taps::<6>(x_taps) {
+            write_horizontal_raw_six_tap_scratch_pixel::<CHANNELS>(
+                output_pixel,
+                source_row,
+                x_taps,
+            );
+            return;
+        }
+    }
+
     let mut accumulated = [0.0; CHANNELS];
     let mut total_weight = 0.0;
 
@@ -647,6 +658,35 @@ fn write_horizontal_scratch_pixel<const CHANNELS: usize, const RAW_SUMS: bool>(
             accumulated[channel] / total_weight
         };
     }
+}
+
+#[inline(always)]
+fn accumulate_horizontal_raw_tap<const CHANNELS: usize>(
+    accumulated: &mut [f64; CHANNELS],
+    source_row: &[u8],
+    x_tap: &AxisTap,
+) {
+    let source_start = x_tap.index * rgba8::RGBA8_CHANNELS;
+    let source_pixel = &source_row[source_start..source_start + rgba8::RGBA8_CHANNELS];
+    for channel in 0..CHANNELS {
+        accumulated[channel] += f64::from(source_pixel[channel]) * x_tap.weight;
+    }
+}
+
+fn write_horizontal_raw_six_tap_scratch_pixel<const CHANNELS: usize>(
+    output_pixel: &mut [f64],
+    source_row: &[u8],
+    x_taps: &[AxisTap; 6],
+) {
+    let mut accumulated = [0.0; CHANNELS];
+    accumulate_horizontal_raw_tap(&mut accumulated, source_row, &x_taps[0]);
+    accumulate_horizontal_raw_tap(&mut accumulated, source_row, &x_taps[1]);
+    accumulate_horizontal_raw_tap(&mut accumulated, source_row, &x_taps[2]);
+    accumulate_horizontal_raw_tap(&mut accumulated, source_row, &x_taps[3]);
+    accumulate_horizontal_raw_tap(&mut accumulated, source_row, &x_taps[4]);
+    accumulate_horizontal_raw_tap(&mut accumulated, source_row, &x_taps[5]);
+
+    output_pixel[..CHANNELS].copy_from_slice(&accumulated);
 }
 
 fn write_vertical_scratch_pixel<const CHANNELS: usize>(
@@ -917,6 +957,56 @@ mod tests {
     use super::*;
     use crate::image::ImageDimensions;
     use crate::prod::resize::scalar::convolution::{ReconstructionKernel, ResizeAnchor};
+
+    fn assert_six_tap_raw_sum_matches_loop<const CHANNELS: usize>() {
+        let source = (0..8 * rgba8::RGBA8_CHANNELS)
+            .map(|i| ((i * 47 + 19) % 256) as u8)
+            .collect::<Vec<_>>();
+        let taps = [
+            AxisTap {
+                index: 0,
+                weight: -0.03125,
+            },
+            AxisTap {
+                index: 2,
+                weight: 0.15625,
+            },
+            AxisTap {
+                index: 3,
+                weight: 0.875,
+            },
+            AxisTap {
+                index: 4,
+                weight: 0.078125,
+            },
+            AxisTap {
+                index: 6,
+                weight: -0.09375,
+            },
+            AxisTap {
+                index: 7,
+                weight: 0.015625,
+            },
+        ];
+        let mut expected = [0.0; CHANNELS];
+        for tap in &taps {
+            let start = tap.index * rgba8::RGBA8_CHANNELS;
+            for channel in 0..CHANNELS {
+                expected[channel] += f64::from(source[start + channel]) * tap.weight;
+            }
+        }
+        let mut actual = [f64::NAN; CHANNELS];
+
+        write_horizontal_raw_six_tap_scratch_pixel::<CHANNELS>(&mut actual, &source, &taps);
+
+        assert_eq!(actual.map(f64::to_bits), expected.map(f64::to_bits));
+    }
+
+    #[test]
+    fn six_tap_raw_sum_preserves_accumulation_order() {
+        assert_six_tap_raw_sum_matches_loop::<3>();
+        assert_six_tap_raw_sum_matches_loop::<4>();
+    }
 
     struct RadiusThree;
     impl ReconstructionKernel for RadiusThree {
