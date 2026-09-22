@@ -291,7 +291,11 @@ export function exerciseThreadedPair() {
 	}
 	same([...first.perturb(requests[1][1]).data], vectors.cases[0].rgba, 'Frozen field output.');
 	const oversized = { ...requests[0][1], output: { ...output, width: 256, height: 256 } };
-	rejects(() => first.resize(oversized), 'memory-limit', 'memoryLimitBytes');
+	rejects(
+		() => first.resize({ ...oversized, onProgress() {} }),
+		'memory-limit',
+		'memoryLimitBytes'
+	);
 	if (second.resize(oversized).data.length !== 256 * 256 * 4)
 		throw new Error('Independent budget was lost.');
 	first.dispose();
