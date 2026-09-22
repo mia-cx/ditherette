@@ -13,6 +13,9 @@ use super::{
 
 const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
 fn block_height(plan: &ConvolutionResizePlan) -> usize {
+    if plan.support_policy() == SupportPolicy::ScaleAware {
+        return 64;
+    }
     let source = plan.source_dimensions();
     let output = plan.output_dimensions();
     if u64::from(source.width()) <= 2 * u64::from(output.width())

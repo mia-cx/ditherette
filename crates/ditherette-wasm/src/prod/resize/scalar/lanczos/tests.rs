@@ -73,7 +73,7 @@ fn fixed_separable_dispatch_is_lanczos3_only_and_bounded_on_both_axes() {
 #[test]
 fn scale_aware_blocks_keep_normalized_bytes_budget_and_recovery() {
     for radius in [2, 3] {
-        for (source_height, output_width, block_height) in [(400, 32, 16), (200, 64, 64)] {
+        for (source_height, output_width, block_height) in [(400, 32, 64), (200, 64, 64)] {
             let source_dimensions = ImageDimensions::new(128, source_height).unwrap();
             let output_dimensions = ImageDimensions::new(output_width, 100).unwrap();
             let required = LanczosResizePlan::required_bytes(

@@ -203,9 +203,9 @@ fn prepared_resize_hooks_preserve_paths_bytes_counts_and_recovery() {
                     ResizePolicy::Lanczos2 { .. } | ResizePolicy::Lanczos3 { .. }
                 )
             {
-                // Three output blocks recount their overlapping filter support.
-                assert_eq!(events.len(), 4);
-                assert!(total > sh + oh);
+                // This output fits one 64-row block with complete source support.
+                assert_eq!(events.len(), 2);
+                assert_eq!(total, sh + oh);
             }
             if sw == 129 && matches!(policy, ResizePolicy::Trilinear { .. }) {
                 assert!(total > sh + oh * 2);
