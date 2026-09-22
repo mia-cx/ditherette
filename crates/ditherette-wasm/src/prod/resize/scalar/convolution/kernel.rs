@@ -389,6 +389,7 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize, const RAW_SUMS: bool>(
     } else {
         weights.split_at_mut(0)
     };
+    let mut prepared_support = None;
     for (output_block, y_taps) in output
         .chunks_mut(output_row_byte_len * block_height)
         .zip(plan.y_taps.chunks(block_height))
@@ -402,15 +403,23 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize, const RAW_SUMS: bool>(
                 *weight = taps.iter().fold(0.0, |total, tap| total + tap.weight);
             }
         }
-        // Fixed Lanczos3 uses raw sums; scale-aware filters retain normalized scratch.
-        resize_x_then_y_rows_into::<CHANNELS, RAW_SUMS>(
+        let support = source_rows(y_taps);
+        prepare_horizontal_scratch_rows::<CHANNELS, RAW_SUMS>(
             source,
-            output_block,
             source_row_byte_len,
-            output_row_byte_len,
             &plan.x_taps,
+            scratch,
+            support.clone(),
+            prepared_support,
+        );
+        prepared_support = Some(support.clone());
+        // Fixed Lanczos3 uses raw sums; scale-aware filters retain normalized scratch.
+        write_x_then_y_rows_from_scratch::<CHANNELS, RAW_SUMS>(
+            output_block,
+            output_row_byte_len,
             y_taps,
-            Some(scratch),
+            scratch,
+            support.start,
             RAW_SUMS.then_some((&*x_weights, &*y_weights)),
         );
         completed += (support_rows + y_taps.len()) as u32;
@@ -486,7 +495,6 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize, const RAW_SUMS: bool>(
     let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
     let scratch_row_len = output_width * CHANNELS;
     let support = source_rows(y_taps_by_output);
-    let first_source_y = support.start;
     let scratch_height = support.len();
     let mut owned_scratch;
     let scratch = match scratch {
@@ -497,17 +505,78 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize, const RAW_SUMS: bool>(
         }
     };
 
-    for (source_row, scratch_row) in source
-        .chunks_exact(source_row_byte_len)
-        .skip(first_source_y)
-        .take(scratch_height)
-        .zip(scratch.chunks_exact_mut(scratch_row_len))
-    {
+    prepare_horizontal_scratch_rows::<CHANNELS, RAW_SUMS>(
+        source,
+        source_row_byte_len,
+        x_taps_by_output,
+        scratch,
+        support.clone(),
+        None,
+    );
+    write_x_then_y_rows_from_scratch::<CHANNELS, RAW_SUMS>(
+        output,
+        output_row_byte_len,
+        y_taps_by_output,
+        scratch,
+        support.start,
+        weights,
+    );
+}
+
+/// Retain horizontally filtered rows shared with the previous output block and
+/// calculate only the newly exposed source rows. Returns the number calculated.
+fn prepare_horizontal_scratch_rows<const CHANNELS: usize, const RAW_SUMS: bool>(
+    source: &[u8],
+    source_row_byte_len: usize,
+    x_taps_by_output: &[Vec<AxisTap>],
+    scratch: &mut [f64],
+    support: std::ops::Range<usize>,
+    prepared_support: Option<std::ops::Range<usize>>,
+) -> usize {
+    let scratch_row_len = x_taps_by_output.len() * CHANNELS;
+    let overlap = prepared_support
+        .as_ref()
+        .map(|prepared| prepared.start.max(support.start)..prepared.end.min(support.end))
+        .filter(|range| !range.is_empty());
+
+    if let (Some(prepared), Some(overlap)) = (prepared_support.as_ref(), overlap.as_ref()) {
+        let source_start = (overlap.start - prepared.start) * scratch_row_len;
+        let source_end = source_start + overlap.len() * scratch_row_len;
+        let destination_start = (overlap.start - support.start) * scratch_row_len;
+        scratch.copy_within(source_start..source_end, destination_start);
+    }
+
+    let mut calculated = 0;
+    for source_y in support.clone() {
+        if overlap
+            .as_ref()
+            .is_some_and(|range| range.contains(&source_y))
+        {
+            continue;
+        }
+        let source_start = source_y * source_row_byte_len;
+        let source_row = &source[source_start..source_start + source_row_byte_len];
+        let scratch_start = (source_y - support.start) * scratch_row_len;
+        let scratch_row = &mut scratch[scratch_start..scratch_start + scratch_row_len];
         for (scratch_pixel, x_taps) in scratch_row.chunks_exact_mut(CHANNELS).zip(x_taps_by_output)
         {
             write_horizontal_scratch_pixel::<CHANNELS, RAW_SUMS>(scratch_pixel, source_row, x_taps);
         }
+        calculated += 1;
     }
+    calculated
+}
+
+fn write_x_then_y_rows_from_scratch<const CHANNELS: usize, const RAW_SUMS: bool>(
+    output: &mut [u8],
+    output_row_byte_len: usize,
+    y_taps_by_output: &[Vec<AxisTap>],
+    scratch: &[f64],
+    first_source_y: usize,
+    weights: Option<(&[f64], &[f64])>,
+) {
+    let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
+    let scratch_row_len = output_width * CHANNELS;
 
     for (output_y, (output_row, y_taps)) in output
         .chunks_exact_mut(output_row_byte_len)
@@ -999,6 +1068,60 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn adjacent_blocks_reuse_their_exact_horizontal_support_overlap() {
+        let source_dimensions = ImageDimensions::new(128, 200).unwrap();
+        let output_dimensions = ImageDimensions::new(64, 100).unwrap();
+        let plan = ConvolutionResizePlan::new(
+            source_dimensions,
+            output_dimensions,
+            ResizeAnchor::Center,
+            &RadiusThree,
+            SupportPolicy::Fixed,
+        );
+        let source = (0..128 * 200 * 4)
+            .map(|i| ((i * 47 + i / 13) % 256) as u8)
+            .collect::<Vec<_>>();
+        let mut scratch = vec![f64::NAN; plan.scratch_elements().unwrap()];
+        let mut blocks = plan.y_taps.chunks(block_height(&plan));
+        let first = source_rows(blocks.next().unwrap());
+        let second = source_rows(blocks.next().unwrap());
+        let overlap = first.start.max(second.start)..first.end.min(second.end);
+
+        let first_calculated = prepare_horizontal_scratch_rows::<4, true>(
+            &source,
+            128 * 4,
+            &plan.x_taps,
+            &mut scratch,
+            first.clone(),
+            None,
+        );
+        let second_calculated = prepare_horizontal_scratch_rows::<4, true>(
+            &source,
+            128 * 4,
+            &plan.x_taps,
+            &mut scratch,
+            second.clone(),
+            Some(first.clone()),
+        );
+
+        assert!(!overlap.is_empty());
+        assert_eq!(first_calculated, first.len());
+        assert_eq!(second_calculated, second.len() - overlap.len());
+
+        let row_len = 64 * 4;
+        let mut expected = vec![f64::NAN; second.len() * row_len];
+        prepare_horizontal_scratch_rows::<4, true>(
+            &source,
+            128 * 4,
+            &plan.x_taps,
+            &mut expected,
+            second.clone(),
+            None,
+        );
+        assert_eq!(&scratch[..second.len() * row_len], expected);
     }
 
     #[test]
