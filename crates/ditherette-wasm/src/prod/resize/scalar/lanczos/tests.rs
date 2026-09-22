@@ -170,7 +170,7 @@ fn fixed_blocks_bound_scratch_and_recover_after_later_block_cancellation() {
     )
     .unwrap();
     let length = plan.scratch_elements().unwrap();
-    assert_eq!(length, 70 * 64 * 4);
+    assert_eq!(length, 134 * 64 * 4);
     assert!(length < plan.row_scratch_elements(0, 100).unwrap());
     let mut scratch = budget.vector::<f64>(length).unwrap();
     scratch.resize(length, f64::NAN);
@@ -233,10 +233,10 @@ fn fixed_blocks_bound_scratch_and_recover_after_later_block_cancellation() {
     let total = events[0].1;
     assert!(total > 300, "repeated block support counts as work");
     let mut expected_done = vec![0];
-    for start in (0..100).step_by(32) {
-        let height = (100 - start).min(32);
+    for start in (0..100).step_by(64) {
+        let height = (100 - start).min(64);
         let support_rows = plan.row_scratch_elements(start, height).unwrap() / (64 * 4);
-        assert!(support_rows <= 70);
+        assert!(support_rows <= 134);
         expected_done.push(expected_done.last().unwrap() + support_rows as u32 + height);
     }
     assert_eq!(total, *expected_done.last().unwrap());

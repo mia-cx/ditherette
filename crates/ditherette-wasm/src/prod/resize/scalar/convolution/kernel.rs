@@ -12,7 +12,7 @@ use super::{
 };
 
 const X_THEN_Y_MIN_SOURCE_PIXELS: u64 = 10_000;
-pub(super) const FIXED_BLOCK_HEIGHT: usize = 32;
+pub(super) const FIXED_BLOCK_HEIGHT: usize = 64;
 
 // A <=2x shrink spans at most two source rows per output row, plus radius-3 support.
 pub(super) const FIXED_BLOCK_SOURCE_ROWS: usize = 2 * FIXED_BLOCK_HEIGHT + 6;
