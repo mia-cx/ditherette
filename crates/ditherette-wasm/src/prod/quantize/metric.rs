@@ -53,7 +53,7 @@ pub fn hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
 /// so Sterbenz's lemma makes both exact, preserving the original f32 remainder.
 /// Larger and nonfinite deltas retain the general operation.
 #[inline]
-fn hue_remainder(mut delta: f32) -> f32 {
+pub(super) fn hue_remainder(mut delta: f32) -> f32 {
     const TAU: f32 = std::f32::consts::TAU;
     if delta < 4.0 * TAU {
         if delta >= 2.0 * TAU {
