@@ -154,7 +154,7 @@ impl PaletteMatcher {
 /// force a nonfinite squared delta or hue term, independent of NaN propagation
 /// through these comparisons. Finite signed-zero choices disappear on squaring.
 #[inline(always)]
-fn finite_hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
+pub(super) fn finite_hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     let delta_lightness = a[0] - b[0];
     let delta_chroma = a[1] - b[1];
     let delta_hue = hue_remainder((a[2] - b[2]).abs());

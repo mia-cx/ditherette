@@ -2,7 +2,7 @@
 
 use super::{
     cache::RgbCache,
-    matcher::{PaletteColor, PaletteMatcher},
+    matcher::{finite_hue_arc3_squared, PaletteColor, PaletteMatcher},
 };
 use crate::{
     image::{
@@ -18,11 +18,20 @@ use crate::{
 };
 use std::mem::size_of;
 
+const HUE_COORDINATE_BOUND: f32 = 65_536.0;
+
+fn hue_coordinates_bounded(coordinates: [f32; 3]) -> bool {
+    coordinates
+        .iter()
+        .all(|value| value.abs() <= HUE_COORDINATE_BOUND)
+}
+
 /// Owned palette and matching data. No source buffer or alpha float plane is retained.
 pub struct PreparedQuantizer {
     palette: PreparedPalette,
     matcher: PaletteMatcher,
     converter: Converter,
+    bounded_hue_palette: bool,
 }
 
 impl PreparedQuantizer {
@@ -62,10 +71,18 @@ impl PreparedQuantizer {
             OrdinarySpace::from_matching(matching).expect("every matching tag has coordinates"),
         );
         let matcher = PaletteMatcher::prepare(&palette, &converter, matching, &mut budget)?;
+        let bounded_hue_palette = matches!(
+            matching,
+            MatchPolicy::OklchHueArc | MatchPolicy::CielchHueArc
+        ) && matcher
+            .colors
+            .iter()
+            .all(|color| hue_coordinates_bounded(color.coordinates));
         Ok(Self {
             palette,
             matcher,
             converter,
+            bounded_hue_palette,
         })
     }
 
@@ -96,6 +113,32 @@ impl PreparedQuantizer {
 
     pub(crate) fn converter(&self) -> &Converter {
         &self.converter
+    }
+
+    /// Prunes hue work only when every full score is provably finite.
+    /// With both coordinates bounded by B, the L/C base is at most 8*B² and
+    /// the squared hue term is below 16*B². Their sum cannot overflow f32.
+    /// The rounded sum of nonnegative terms cannot fall below the L/C base,
+    /// so base >= best cannot improve the first strict minimum.
+    pub(crate) fn nearest_finite(&self, coordinates: [f32; 3]) -> Option<PaletteColor> {
+        if !self.bounded_hue_palette || !hue_coordinates_bounded(coordinates) {
+            return self.matcher.nearest_finite(coordinates);
+        }
+        let mut best = self.matcher.colors[0];
+        let mut best_score = f32::INFINITY;
+        for &candidate in &self.matcher.colors {
+            let dl = coordinates[0] - candidate.coordinates[0];
+            let dc = coordinates[1] - candidate.coordinates[1];
+            if dl * dl + dc * dc >= best_score {
+                continue;
+            }
+            let score = finite_hue_arc3_squared(coordinates, candidate.coordinates);
+            if score < best_score {
+                best = candidate;
+                best_score = score;
+            }
+        }
+        Some(best)
     }
 
     /// Writes one index per source pixel. The caller supplies validated output storage.
@@ -286,6 +329,107 @@ impl PreparedQuantizer {
 mod tests {
     use super::*;
     use crate::image::contracts::PaletteEntry;
+
+    #[test]
+    fn bounded_hue_selection_matches_full_scan_and_fallback_at_domain_edges() {
+        let mut palette: Vec<_> = (0..63_u32)
+            .map(|n| PaletteEntry::Color {
+                rgb: [(n * 73) as u8, (n * 31 + 17) as u8, (n * 113 + 53) as u8],
+            })
+            .collect();
+        palette.push(palette[0]);
+        let outside = f32::from_bits(HUE_COORDINATE_BOUND.to_bits() + 1);
+        for matching in [
+            MatchPolicy::OklchHueArc,
+            MatchPolicy::CielchHueArc,
+            MatchPolicy::OklabEuclidean,
+        ] {
+            let prepared = PreparedQuantizer::try_new(
+                &palette,
+                AlphaPolicy::Premultiplied {},
+                matching,
+                u64::MAX,
+            )
+            .unwrap();
+            assert_eq!(
+                prepared.bounded_hue_palette,
+                matching != MatchPolicy::OklabEuclidean
+            );
+            let check = |coordinates| {
+                assert_eq!(
+                    prepared.nearest_finite(coordinates),
+                    prepared.matcher.nearest_finite(coordinates),
+                    "{matching:?}, {coordinates:?}"
+                )
+            };
+            let mut bits = 0x78ab_c901u32;
+            let mut next = || {
+                bits ^= bits << 13;
+                bits ^= bits >> 17;
+                bits ^= bits << 5;
+                bits
+            };
+            for n in 0..10_000 {
+                let coordinates = std::array::from_fn(|axis| {
+                    let bits = next();
+                    match n % 3 {
+                        0 => f32::from_bits(bits),
+                        1 => bits as i32 as f32 * (if axis == 2 { 2e-8 } else { 1e-9 }),
+                        _ => bits as i32 as f32 * 3e-5,
+                    }
+                });
+                check(coordinates);
+            }
+            for axis in 0..3 {
+                for edge in [
+                    0.0,
+                    -0.0,
+                    HUE_COORDINATE_BOUND,
+                    -HUE_COORDINATE_BOUND,
+                    outside,
+                    -outside,
+                    f32::MAX,
+                    -f32::MAX,
+                    f32::INFINITY,
+                    f32::NEG_INFINITY,
+                    f32::NAN,
+                ] {
+                    let mut coordinates = [0.5, -0.25, -12.0];
+                    coordinates[axis] = edge;
+                    check(coordinates);
+                }
+            }
+            assert_eq!(
+                prepared
+                    .nearest_finite(prepared.matcher.colors[0].coordinates)
+                    .unwrap()
+                    .index,
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn bounds_reject_nonfinite_and_outside_coordinates() {
+        for axis in 0..3 {
+            for value in [
+                f32::NAN,
+                f32::INFINITY,
+                f32::NEG_INFINITY,
+                f32::from_bits(HUE_COORDINATE_BOUND.to_bits() + 1),
+                -f32::MAX,
+            ] {
+                let mut coordinates = [0.0; 3];
+                coordinates[axis] = value;
+                assert!(!hue_coordinates_bounded(coordinates));
+            }
+        }
+        assert!(hue_coordinates_bounded([
+            HUE_COORDINATE_BOUND,
+            -HUE_COORDINATE_BOUND,
+            -0.0
+        ]));
+    }
 
     #[test]
     fn fixed_index_palettes_never_need_rgb_matching() {

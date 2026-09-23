@@ -403,6 +403,47 @@ fn complete_diffusion_matches_all_kernels_feedbacks_metrics_scans_alpha_and_plac
 }
 
 #[test]
+fn prepared_hue_pruning_matches_frozen_with_custom_palettes_and_feedback_drift() {
+    let mut palette: Vec<_> = (0..63_u32)
+        .map(|n| PaletteEntry::Color {
+            rgb: [
+                (n * 73 + 17) as u8,
+                (n * 31 + 99) as u8,
+                (n * 117 + 41) as u8,
+            ],
+        })
+        .collect();
+    palette.push(palette[0]);
+    let source: Vec<u8> = (0..17 * 13)
+        .flat_map(|n| {
+            [
+                (n * 19 + 31) as u8,
+                (n * 71 + 11) as u8,
+                (n * 113 + 93) as u8,
+                255,
+            ]
+        })
+        .collect();
+    for matching in [MatchPolicy::OklchHueArc, MatchPolicy::CielchHueArc] {
+        for kernel in KERNELS {
+            for strength in [0.75, 2.0] {
+                let mut input = request(&source, 17, 13);
+                input.quantize.palette = &palette;
+                input.quantize.matching = matching;
+                input.dither = DitherPolicy::Diffusion {
+                    kernel,
+                    feedback: DiffusionFeedback::Matching,
+                    strength,
+                    serpentine: true,
+                    placement: Placement::Everywhere {},
+                };
+                compare(input);
+            }
+        }
+    }
+}
+
+#[test]
 fn ring_capacity_is_three_rows_and_reuse_clears_prior_work() {
     use production::prepared::{DiffusionPolicy, PreparedDiffusion};
     let alpha = AlphaPolicy::Preserve { threshold: 0.0 };
