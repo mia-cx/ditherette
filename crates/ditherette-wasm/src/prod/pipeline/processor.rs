@@ -709,3 +709,5 @@ mod band_tests;
 mod preparation_tests;
 #[cfg(test)]
 mod progress_tests;
+#[cfg(all(test, not(feature = "threads")))]
+mod sparse_convolution_tests;

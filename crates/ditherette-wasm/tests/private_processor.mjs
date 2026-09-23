@@ -422,6 +422,29 @@ test('convolution ABI preserves landed output for every policy and anchor and re
 	bindings.privateDispose();
 });
 
+test('severe fixed Lanczos shrink gathers exact support without a full source copy', async () => {
+	const { bindings, raw } = await fresh(1 << 20);
+	const anchors = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+	for (const offset of [0, 1, 4]) {
+		const backing = Uint8Array.from({ length: 65 * 49 * 4 + 4 }, (_, i) => (i * 73 + Math.floor(i / 251)) & 255);
+		const input = backing.subarray(offset, offset + 65 * 49 * 4);
+		for (const [name, algorithm] of [['lanczos2', 4], ['lanczos3', 5]]) {
+			for (const [anchor, label] of anchors.entries()) {
+				const expected = bindings.resizeRgba8(input, 65, 49, 4, 3, name, label, 'fixed', false);
+				for (let repeat = 0; repeat < 2; repeat++) {
+					const sink = {};
+					assert.equal(withCopyFailure(raw, 'input', () => bindings.privateResize(input, 65, 49, 4, 3, algorithm, anchor, 0, sink)), 0);
+					assert.deepEqual(sink.value.data, expected);
+				}
+				const dense = { onProgress() {} };
+				assert.equal(bindings.privateResize(input, 65, 49, 4, 3, algorithm, anchor, 0, dense), 0);
+				assert.deepEqual(dense.value.data, expected, 'cached plan retains original coordinates for dense callback calls');
+			}
+		}
+	}
+	bindings.privateDispose();
+});
+
 test('trilinear exact budget, mip rounding, caught failures, and recovery use the borrowed ABI', async () => {
 	// 4x1→1x1 owns 20 input/output bytes, three 20-byte Wasm MipLevel headers,
 	// 16+8+4 mip bytes, four f64 accumulators, and the owned preparation record.
