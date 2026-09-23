@@ -2,7 +2,7 @@
 
 use super::{
     cache::RgbCache,
-    matcher::{finite_hue_arc3_squared, PaletteColor, PaletteMatcher},
+    matcher::{finite_hue_arc3_squared, normalized_hue_arc3_squared, PaletteColor, PaletteMatcher},
 };
 use crate::{
     image::{
@@ -124,6 +124,15 @@ impl PreparedQuantizer {
         if !self.bounded_hue_palette || !hue_coordinates_bounded(coordinates) {
             return self.matcher.nearest_finite(coordinates);
         }
+        Some(self.nearest_bounded_hue(coordinates, finite_hue_arc3_squared))
+    }
+
+    /// The caller proves every full score is finite before pruning its nonnegative base.
+    fn nearest_bounded_hue(
+        &self,
+        coordinates: [f32; 3],
+        distance: impl Fn([f32; 3], [f32; 3]) -> f32,
+    ) -> PaletteColor {
         let mut best = self.matcher.colors[0];
         let mut best_score = f32::INFINITY;
         for &candidate in &self.matcher.colors {
@@ -132,13 +141,13 @@ impl PreparedQuantizer {
             if dl * dl + dc * dc >= best_score {
                 continue;
             }
-            let score = finite_hue_arc3_squared(coordinates, candidate.coordinates);
+            let score = distance(coordinates, candidate.coordinates);
             if score < best_score {
                 best = candidate;
                 best_score = score;
             }
         }
-        Some(best)
+        best
     }
 
     /// Writes one index per source pixel. The caller supplies validated output storage.
@@ -190,9 +199,35 @@ impl PreparedQuantizer {
     }
 
     fn quantize_row_into(&self, source: &[u8], output: &mut [u8]) {
-        self.quantize_row_with(source, output, |rgb| {
-            self.matcher.nearest(self.converter.coordinates(rgb)).index
-        });
+        if self.bounded_hue_palette {
+            self.quantize_row_with(source, output, |rgb| self.nearest_rgb_hue(rgb));
+        } else {
+            self.quantize_row_with(source, output, |rgb| {
+                self.matcher.nearest(self.converter.coordinates(rgb)).index
+            });
+        }
+    }
+
+    /// Packed RGB conversion produces bounded coordinates with normalized hues.
+    /// Prepared palettes use the same conversion, so the normalized metric is exact.
+    /// Fixed-index pixels bypass this helper in `quantize_row_with`.
+    fn nearest_rgb_hue(&self, rgb: [u8; 3]) -> u8 {
+        self.nearest_bounded_hue(self.converter.coordinates(rgb), normalized_hue_arc3_squared)
+            .index
+    }
+
+    fn quantize_cached_row_into(&self, source: &[u8], output: &mut [u8], cache: &mut RgbCache<'_>) {
+        if self.bounded_hue_palette {
+            self.quantize_row_with(source, output, |rgb| {
+                cache.nearest(rgb, || self.nearest_rgb_hue(rgb))
+            });
+        } else {
+            self.quantize_row_with(source, output, |rgb| {
+                cache.nearest(rgb, || {
+                    self.matcher.nearest(self.converter.coordinates(rgb)).index
+                })
+            });
+        }
     }
 
     fn quantize_row_with(
@@ -247,14 +282,10 @@ impl PreparedQuantizer {
             .chunks_exact_mut(dimensions.width_usize())
             .enumerate()
         {
-            self.quantize_row_with(
+            self.quantize_cached_row_into(
                 source.row(y as u32).expect("valid source row"),
                 output,
-                |rgb| {
-                    cache.nearest(rgb, || {
-                        self.matcher.nearest(self.converter.coordinates(rgb)).index
-                    })
-                },
+                &mut cache,
             );
             progress(y as u32 + 1)?;
         }
@@ -280,14 +311,10 @@ impl PreparedQuantizer {
                     for (y, output) in (band.y_start()..band.y_end())
                         .zip(output.chunks_exact_mut(source.dimensions().width_usize()))
                     {
-                        self.quantize_row_with(
+                        self.quantize_cached_row_into(
                             source.row(y).expect("valid source row"),
                             output,
-                            |rgb| {
-                                cache.nearest(rgb, || {
-                                    self.matcher.nearest(self.converter.coordinates(rgb)).index
-                                })
-                            },
+                            &mut cache,
                         );
                     }
                 }
@@ -329,6 +356,54 @@ impl PreparedQuantizer {
 mod tests {
     use super::*;
     use crate::image::contracts::PaletteEntry;
+
+    #[test]
+    fn rgb_hue_pruning_preserves_original_selection_and_palette_ties() {
+        let mut bits = 0xa8c3_0e51u32;
+        let mut rgb = || {
+            bits ^= bits << 13;
+            bits ^= bits >> 17;
+            bits ^= bits << 5;
+            [bits as u8, (bits >> 8) as u8, (bits >> 16) as u8]
+        };
+        for count in [1, 2, 16, 63, 255, 256] {
+            let mut palette: Vec<_> = (0..count)
+                .map(|_| PaletteEntry::Color { rgb: rgb() })
+                .collect();
+            palette[count - 1] = palette[0];
+            for matching in [MatchPolicy::OklchHueArc, MatchPolicy::CielchHueArc] {
+                let prepared = PreparedQuantizer::try_new(
+                    &palette,
+                    AlphaPolicy::Premultiplied {},
+                    matching,
+                    u64::MAX,
+                )
+                .unwrap();
+                for input in palette
+                    .iter()
+                    .map(|entry| match entry {
+                        PaletteEntry::Color { rgb } => *rgb,
+                        PaletteEntry::Transparent {} => unreachable!(),
+                    })
+                    .chain((0..256).map(|byte| [byte as u8; 3]))
+                    .chain((0..4096).map(|_| rgb()))
+                {
+                    assert_eq!(
+                        prepared.nearest_rgb_hue(input),
+                        prepared
+                            .matcher
+                            .nearest(prepared.converter.coordinates(input))
+                            .index,
+                        "{matching:?}, {count} entries, {input:?}",
+                    );
+                }
+                let PaletteEntry::Color { rgb: first } = palette[0] else {
+                    unreachable!()
+                };
+                assert_eq!(prepared.nearest_rgb_hue(first), 0);
+            }
+        }
+    }
 
     #[test]
     fn bounded_hue_selection_matches_full_scan_and_fallback_at_domain_edges() {

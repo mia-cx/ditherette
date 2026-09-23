@@ -170,7 +170,7 @@ pub(super) fn finite_hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
 }
 
 #[inline(always)]
-fn normalized_hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
+pub(super) fn normalized_hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     let delta_lightness = a[0] - b[0];
     let delta_chroma = a[1] - b[1];
     let delta_hue = (a[2] - b[2]).abs();
@@ -323,24 +323,26 @@ mod tests {
     }
 
     #[test]
-    fn normalized_hue_arc_matches_reference_for_rgb_derived_oklch() {
-        let converter = Converter::new(PackedSpace::Oklch);
-        for n in 0..4096u32 {
-            let a = converter.coordinates([
-                (n * 73) as u8,
-                (n * 31 + n / 256) as u8,
-                (n * 17 + 113) as u8,
-            ]);
-            let b = converter.coordinates([
-                (n * 19 + 7) as u8,
-                (n * 47 + 29) as u8,
-                (n * 101 + n / 64) as u8,
-            ]);
-            assert_eq!(
-                normalized_hue_arc3_squared(a, b).to_bits(),
-                hue_arc3_squared(a, b).to_bits(),
-                "RGB-derived pair {n}: {a:?}, {b:?}"
-            );
+    fn normalized_hue_arc_matches_reference_for_rgb_derived_hue_spaces() {
+        for space in [PackedSpace::Oklch, PackedSpace::Cielch] {
+            let converter = Converter::new(space);
+            for n in 0..4096u32 {
+                let a = converter.coordinates([
+                    (n * 73) as u8,
+                    (n * 31 + n / 256) as u8,
+                    (n * 17 + 113) as u8,
+                ]);
+                let b = converter.coordinates([
+                    (n * 19 + 7) as u8,
+                    (n * 47 + 29) as u8,
+                    (n * 101 + n / 64) as u8,
+                ]);
+                assert_eq!(
+                    normalized_hue_arc3_squared(a, b).to_bits(),
+                    hue_arc3_squared(a, b).to_bits(),
+                    "RGB-derived pair {n}: {a:?}, {b:?}"
+                );
+            }
         }
     }
 

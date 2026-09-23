@@ -123,39 +123,47 @@ mod tests {
             PaletteEntry::Color { rgb: [0; 3] },
             PaletteEntry::Color { rgb: [255; 3] },
         ];
-        let prepared = PreparedQuantizer::try_new(
-            &palette,
-            AlphaPolicy::Premultiplied {},
-            MatchPolicy::SrgbRec709,
-            u64::MAX,
-        )
-        .unwrap();
         let dimensions = ImageDimensions::new(64, 32).unwrap();
         let source: Vec<u8> = (0..2048u32)
             .flat_map(|n| [(n * 73) as u8, (n * 31) as u8, (n * 17) as u8, 255])
             .collect();
         let view = ImageView::<Rgba8>::packed(&source, dimensions).unwrap();
         let mut expected = vec![0; 2048];
-        prepared.quantize_into(view, &mut expected);
-        for entries in [0, 128] {
-            let workers = WorkerBudget::new(4);
-            let required =
-                RowBandBuffers::<u64>::required_bytes(dimensions, 7, workers, 4, &|_| Ok(entries))
+        for matching in [
+            MatchPolicy::SrgbRec709,
+            MatchPolicy::OklchHueArc,
+            MatchPolicy::CielchHueArc,
+        ] {
+            let prepared = PreparedQuantizer::try_new(
+                &palette,
+                AlphaPolicy::Premultiplied {},
+                matching,
+                u64::MAX,
+            )
+            .unwrap();
+            prepared.quantize_into(view, &mut expected);
+            for entries in [0, 128] {
+                let workers = WorkerBudget::new(4);
+                let required =
+                    RowBandBuffers::<u64>::required_bytes(dimensions, 7, workers, 4, &|_| {
+                        Ok(entries)
+                    })
                     .unwrap();
-            let mut bands =
-                RowBandBuffers::try_new(dimensions, 7, workers, 4, required, &|_| Ok(entries))
+                let mut bands =
+                    RowBandBuffers::try_new(dimensions, 7, workers, 4, required, &|_| Ok(entries))
+                        .unwrap();
+                assert_eq!(bands.capacity_bytes(), required);
+                let mut actual = vec![0; 2048];
+                let mut completed = 0;
+                prepared
+                    .quantize_cached_bands_into(view, &mut actual, &mut bands, &mut |rows| {
+                        completed = rows;
+                        Ok(())
+                    })
                     .unwrap();
-            assert_eq!(bands.capacity_bytes(), required);
-            let mut actual = vec![0; 2048];
-            let mut completed = 0;
-            prepared
-                .quantize_cached_bands_into(view, &mut actual, &mut bands, &mut |rows| {
-                    completed = rows;
-                    Ok(())
-                })
-                .unwrap();
-            assert_eq!(actual, expected);
-            assert_eq!(completed, 32);
+                assert_eq!(actual, expected, "{matching:?}");
+                assert_eq!(completed, 32);
+            }
         }
     }
 }
