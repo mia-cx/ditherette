@@ -36,6 +36,10 @@ impl Lanczos {
 }
 
 impl<const RADIUS: u32> ReconstructionKernel for FixedLanczos<RADIUS> {
+    fn allows_fixed_separable_shrink(&self) -> bool {
+        RADIUS == 3
+    }
+
     fn radius(&self) -> f64 {
         f64::from(RADIUS)
     }
@@ -46,6 +50,10 @@ impl<const RADIUS: u32> ReconstructionKernel for FixedLanczos<RADIUS> {
 }
 
 impl ReconstructionKernel for Lanczos {
+    fn allows_fixed_separable_shrink(&self) -> bool {
+        self.radius == 3.0
+    }
+
     fn radius(&self) -> f64 {
         self.radius
     }

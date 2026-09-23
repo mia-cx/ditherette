@@ -16,6 +16,12 @@ pub trait ReconstructionKernel {
 
     /// Return the unnormalized kernel weight at `distance` source pixels.
     fn weight(&self, distance: f64) -> f64;
+
+    /// Opt into reordered separable sums for fixed-support shrinking by up to 2x per axis.
+    /// Lanczos3 accepts bounded rounding differences; custom kernels retain direct accumulation.
+    fn allows_fixed_separable_shrink(&self) -> bool {
+        false
+    }
 }
 
 pub(super) fn axis_kernel_scale(

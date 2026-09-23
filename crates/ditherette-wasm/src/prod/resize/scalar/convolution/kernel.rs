@@ -1,7 +1,7 @@
 //! Packed RGBA8 convolution kernel.
 //!
-//! The kernel consumes preplanned x/y support taps and preserves the direct
-//! y-major, x-minor contribution grouping used by the scalar convolution oracle.
+//! The kernel consumes preplanned x/y support taps. Direct paths preserve the
+//! oracle's contribution grouping; separable paths accept bounded rounding differences.
 
 use crate::image::{rgba8, ImageView, ImageViewMut, Rgba8};
 use crate::prod::contract::failure::Failure;
@@ -220,6 +220,17 @@ pub(super) fn resize_rows_with_scratch_into(
 
 pub(super) fn should_use_x_then_y(plan: &ConvolutionResizePlan) -> bool {
     let source_dimensions = plan.source_dimensions();
+    let output_dimensions = plan.output_dimensions();
+    // Accepted Lanczos3 tradeoff: reordered f64 sums can change final byte rounding.
+    if plan.support_policy() == SupportPolicy::Fixed
+        && plan.allows_fixed_separable_shrink
+        && source_dimensions.width() > output_dimensions.width()
+        && source_dimensions.height() > output_dimensions.height()
+        && u64::from(source_dimensions.width()) <= 2 * u64::from(output_dimensions.width())
+        && u64::from(source_dimensions.height()) <= 2 * u64::from(output_dimensions.height())
+    {
+        return true;
+    }
     plan.support_policy() == SupportPolicy::ScaleAware
         && source_dimensions.width() > plan.output_dimensions().width()
         && u64::from(source_dimensions.width()) * u64::from(source_dimensions.height())

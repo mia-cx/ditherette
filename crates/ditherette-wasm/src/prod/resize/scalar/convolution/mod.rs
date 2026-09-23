@@ -40,6 +40,11 @@ pub use plan::ConvolutionResizePlan;
 // preserves exact small-image tests and bounded benchmark correctness, while
 // improving scale-aware bicubic/Lanczos downscales by roughly 60-86% for square
 // fixtures and up to roughly 645% for strong Lanczos3 minification.
+// ACCEPT(perf): Fixed Lanczos3 shrinking by >1x and <=2x on both axes uses
+// x-then-y sums. The accepted Celeste 50% browser run gained roughly 12% warm
+// speed with 193 changed palette pixels out of 2.7M. Reordered f64 sums can
+// change RGBA byte rounding; this path does not promise exact oracle bytes.
+// Full-call scratch costs source height * output width * 4 * size_of::<f64>().
 // REJECT(perf): Streaming x-then-y scratch rows preserved bounded correctness
 // but regressed `ditherette-bench run lanczos3-scale-aware` representative
 // downscales by roughly 30-56% versus the accepted full-scratch x-then-y path.
