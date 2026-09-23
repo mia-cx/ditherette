@@ -94,6 +94,19 @@ struct SourceMetadata {
     opaque: bool,
 }
 
+fn opaque_rgba8(bytes: &[u8]) -> bool {
+    const PAIR_ALPHA_MASK: u64 = 0xff00_0000_ff00_0000;
+    let mut pairs = bytes.chunks_exact(8);
+    if !pairs.by_ref().all(|pair| {
+        u64::from_le_bytes(pair.try_into().expect("two RGBA pixels")) & PAIR_ALPHA_MASK
+            == PAIR_ALPHA_MASK
+    }) {
+        return false;
+    }
+    let tail = pairs.remainder();
+    tail.is_empty() || tail[3] == u8::MAX
+}
+
 impl Scratch {
     fn capacity(&self) -> u64 {
         self.buffers
@@ -462,9 +475,7 @@ impl<'a> Call<'a> {
                 };
                 SourceMetadata {
                     identity,
-                    opaque: self.scratch.buffers[0]
-                        .chunks_exact(4)
-                        .all(|pixel| pixel[3] == u8::MAX),
+                    opaque: opaque_rgba8(&self.scratch.buffers[0]),
                 }
             }
         };
@@ -1052,6 +1063,40 @@ mod tests {
         store.room(4, 4).unwrap();
         assert!(store.scratch.source.is_none());
         assert_eq!(store.capacity(), 0);
+    }
+
+    #[test]
+    fn source_opacity_ignores_rgb_and_checks_packed_pairs_and_tail() {
+        for pixels in [1, 2, 3, 4, 17] {
+            let mut store = Store::default();
+            let dimensions = ImageDimensions::new(pixels as u32, 1).unwrap();
+            let mut peak = 0;
+            for transparent in [None, Some(0), Some(pixels - 1)] {
+                let mut call = Call::snapshot(
+                    &mut store,
+                    pixels * 4,
+                    0,
+                    4096,
+                    &mut peak,
+                    &mut SystemAllocator,
+                )
+                .unwrap();
+                call.source(dimensions, |bytes, _| {
+                    for (index, pixel) in bytes.chunks_exact_mut(4).enumerate() {
+                        pixel.copy_from_slice(&[
+                            index as u8,
+                            (index * 73) as u8,
+                            255 - index as u8,
+                            if transparent == Some(index) { 254 } else { 255 },
+                        ]);
+                    }
+                    Ok(false)
+                })
+                .unwrap();
+                assert_eq!(call.source_opaque(), transparent.is_none());
+                call.finish(Ok(())).unwrap();
+            }
+        }
     }
 
     #[test]
