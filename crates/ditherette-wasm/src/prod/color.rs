@@ -20,6 +20,7 @@ pub mod ycbcr;
 
 #[cfg(feature = "threads")]
 use rayon::prelude::*;
+use std::sync::OnceLock;
 
 use crate::{
     image::{ImageDimensions, ImageFormat, ImageView, Rgba8},
@@ -119,8 +120,8 @@ pub fn rgba8_to_color_space_f32_into(
     assert_eq!(output.len(), color_output_len(dimensions));
 
     let band = RowBand::new(0, dimensions.height()).expect("image height should be non-zero");
-    let tables = ColorTables::new();
-    rgba8_to_color_space_f32_rows_with_tables_into(source, target, band, output, &tables);
+    let tables = ColorTables::shared();
+    rgba8_to_color_space_f32_rows_with_tables_into(source, target, band, output, tables);
 }
 
 /// Materializes one absolute output row band into a full-image output buffer.
@@ -138,8 +139,8 @@ pub fn rgba8_to_color_space_f32_rows_into(
     assert_eq!(output.len(), color_output_len(dimensions));
     assert!(row_band.y_end() <= dimensions.height());
 
-    let tables = ColorTables::new();
-    rgba8_to_color_space_f32_rows_with_tables_into(source, target, row_band, output, &tables);
+    let tables = ColorTables::shared();
+    rgba8_to_color_space_f32_rows_with_tables_into(source, target, row_band, output, tables);
 }
 
 fn rgba8_to_color_space_f32_rows_with_tables_into(
@@ -222,7 +223,7 @@ pub fn rgba8_to_color_space_f32_parallel_with_band_height_into(
 
     let row_len = dimensions.width_usize() * Rgba8::CHANNEL_COUNT;
     let band_len = row_len * row_band_height;
-    let tables = ColorTables::new();
+    let tables = ColorTables::shared();
 
     output
         .par_chunks_mut(band_len)
@@ -243,7 +244,13 @@ struct ColorTables {
     linear: [f32; 256],
 }
 
+static COLOR_TABLES: OnceLock<ColorTables> = OnceLock::new();
+
 impl ColorTables {
+    fn shared() -> &'static Self {
+        COLOR_TABLES.get_or_init(Self::new)
+    }
+
     fn new() -> Self {
         let mut unit = [0.0; 256];
         let mut linear = [0.0; 256];

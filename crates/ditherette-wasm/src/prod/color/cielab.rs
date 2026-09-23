@@ -5,6 +5,7 @@ use crate::image::{Cielab32, ImageFormat, ImageView, ImageViewMut, Rgba8};
 use super::common::{linear_to_srgb_unit, D65_XN, D65_YN, D65_ZN};
 
 /// Reconstructs sRGB bytes from finite D65 CIELAB coordinates, clipping only final encoded RGB.
+#[inline(always)]
 pub fn cielab_to_rgb8([lightness, a, b]: [f32; 3]) -> [u8; 3] {
     let fy = (lightness + 16.0) / 116.0;
     let fx = fy + a / 500.0;
