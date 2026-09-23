@@ -236,6 +236,29 @@ fn wide_byte_encoding_matches_random_inputs_and_field_strengths() {
     }
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn coarse_byte_bins_preserve_output_at_every_bucket_boundary() {
+    for bin in 0..=4096 {
+        let boundary = bin as f64 / 4096.0;
+        for value in [
+            boundary.next_down(),
+            boundary,
+            boundary.next_up(),
+            (bin as f64 + 0.5) / 4096.0,
+        ] {
+            assert_eq!(
+                prod::color::reconstruct::coordinates_to_rgb8([value; 3], WorkingSpace::LinearRgb),
+                spec::color::reconstruct::coordinates_to_rgb8(
+                    [value; 3],
+                    spec::contract::request::WorkingSpace::LinearRgb
+                ),
+                "{value:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn inverse_image_adapters_copy_alpha_and_leave_padding_untouched() {
     let dimensions = ImageDimensions::new(3, 2).unwrap();

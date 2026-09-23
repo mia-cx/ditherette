@@ -31,7 +31,7 @@ fn encode_linear_byte(channel: f64) -> u8 {
     if !(0.003_130_8..1.0).contains(&channel) {
         return encoded_byte(encode_linear(channel));
     }
-    let index = BYTE_TRANSITIONS.partition_point(|&threshold| threshold <= channel);
+    let index = byte_transition_index(channel);
     let near_lower = index > 0 && channel - BYTE_TRANSITIONS[index - 1] <= TRANSITION_GUARD;
     let near_upper = BYTE_TRANSITIONS
         .get(index)
@@ -42,6 +42,41 @@ fn encode_linear_byte(channel: f64) -> u8 {
         index as u8
     }
 }
+
+fn byte_transition_index(channel: f64) -> usize {
+    // Power-of-two scaling is exact in the caller's positive normal input range.
+    let bin = (channel * BYTE_BIN_COUNT as f64) as usize;
+    let lower = usize::from(BYTE_BINS[bin]);
+    lower
+        + usize::from(
+            BYTE_TRANSITIONS
+                .get(lower)
+                .is_some_and(|&threshold| threshold <= channel),
+        )
+}
+
+const BYTE_BIN_COUNT: usize = 4096;
+const BYTE_BINS: [u8; BYTE_BIN_COUNT] = {
+    let width = 1.0 / BYTE_BIN_COUNT as f64;
+    let mut transition = 1;
+    while transition < BYTE_TRANSITIONS.len() {
+        // Every bin contains at most one transition, including after future table edits.
+        assert!(BYTE_TRANSITIONS[transition] - BYTE_TRANSITIONS[transition - 1] > width);
+        transition += 1;
+    }
+    let mut bins = [0; BYTE_BIN_COUNT];
+    let mut bin = 0;
+    transition = 0;
+    while bin < BYTE_BIN_COUNT {
+        let lower = bin as f64 / BYTE_BIN_COUNT as f64;
+        while transition < BYTE_TRANSITIONS.len() && BYTE_TRANSITIONS[transition] <= lower {
+            transition += 1;
+        }
+        bins[bin] = transition as u8;
+        bin += 1;
+    }
+    bins
+};
 
 // Analytical inverse sRGB at (byte + 0.5) / 255, for byte = 0..254.
 // Guarded on the executing target; these constants alone do not establish exactness.
@@ -383,5 +418,35 @@ fn inverse_lab_f(value: f64) -> f64 {
         value * value * value
     } else {
         (116.0 * value - 16.0) / KAPPA
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coarse_byte_bins_match_the_original_partition_search() {
+        let check = |channel: f64| {
+            if (0.003_130_8..1.0).contains(&channel) {
+                assert_eq!(
+                    byte_transition_index(channel),
+                    BYTE_TRANSITIONS.partition_point(|&threshold| threshold <= channel),
+                    "{channel:?}"
+                );
+            }
+        };
+        for bin in 0..=BYTE_BIN_COUNT {
+            let boundary = bin as f64 / BYTE_BIN_COUNT as f64;
+            check(boundary);
+            check(boundary.next_down());
+            check(boundary.next_up());
+            check((bin as f64 + 0.5) / BYTE_BIN_COUNT as f64);
+        }
+        for transition in BYTE_TRANSITIONS {
+            check(transition.next_down());
+            check(transition);
+            check(transition.next_up());
+        }
     }
 }
