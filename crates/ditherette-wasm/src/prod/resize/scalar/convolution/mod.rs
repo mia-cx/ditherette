@@ -47,7 +47,8 @@ pub use plan::ConvolutionResizePlan;
 // Scalar fixed Lanczos3 uses 64-row output blocks through <=2x shrink and 16-row
 // blocks through <=4x. Scratch covers ceil(block_height * source_height /
 // output_height) + 6 source rows, capped at source height. Overlapping support
-// rows are recomputed between blocks. A scratch suffix holds output-width x totals
+// rows are retained and moved between blocks. Custom fixed kernels use their own
+// support diameter instead of six rows. A scratch suffix holds output-width x totals
 // and block-height y totals, preserving the raw-sum tap order.
 // Row bands retain the accepted <=2x separable dispatch.
 // Scale-aware Lanczos2/3 two-axis shrinking uses 64-row blocks, preserving each
