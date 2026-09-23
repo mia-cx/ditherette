@@ -115,19 +115,38 @@ pub fn resize_bicubic_rgba8_rows_with_plan_and_scratch_into(
     )
 }
 
-/// Reports actual row work from the shared convolution kernel using caller-owned scratch.
-pub(crate) fn resize_bicubic_with_progress(
+pub(crate) fn resize_bicubic_rgba8_rows_with_plan_and_scratch_known_opacity_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &BicubicResizePlan,
+    y_start: u32,
+    scratch: &mut [f64],
+    source_opaque: bool,
+) -> Result<(), Failure> {
+    super::convolution::resize_convolution_rgba8_rows_with_plan_and_scratch_known_opacity_into(
+        source,
+        output,
+        &plan.inner,
+        y_start,
+        scratch,
+        source_opaque,
+    )
+}
+
+pub(crate) fn resize_bicubic_with_progress_known_opacity(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
     plan: &BicubicResizePlan,
     scratch: &mut [f64],
+    source_opaque: bool,
     progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
-    super::convolution::resize_convolution_with_progress(
+    super::convolution::resize_convolution_with_progress_known_opacity(
         source,
         output,
         &plan.inner,
         scratch,
+        source_opaque,
         progress,
     )
 }

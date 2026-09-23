@@ -513,9 +513,15 @@ fn sparse_samples_match_frozen_nearest_for_every_anchor_and_scale_plan() {
         ((64, 64), (1, 17)),  // One output column.
         ((64, 64), (17, 1)),  // One output row.
         ((64, 64), (1, 1)),   // One sampled pixel.
+        ((8, 6), (12, 9)),    // Fractional upscale.
+        ((7, 5), (21, 15)),   // Integer upscale.
+        ((2, 8), (12, 2)),    // Mixed axes with more output pixels.
+        ((8, 2), (2, 12)),    // Transposed mixed upscale.
+        ((1, 1), (17, 9)),    // One source pixel.
     ] {
         let mut processor = Processor::new(1_000_000, 0).unwrap();
         let mut io = Io::new(source.0, source.1);
+        io.direct_output = true;
         for (anchor, oracle) in [
             (Anchor::TopLeft, ResizeAnchor::TopLeft),
             (Anchor::Top, ResizeAnchor::Top),
@@ -537,6 +543,91 @@ fn sparse_samples_match_frozen_nearest_for_every_anchor_and_scale_plan() {
         assert_eq!(io.gather_offset_bytes, (output.0 + output.1) as usize * 4);
         assert!(io.snapshots.is_empty());
     }
+}
+
+#[test]
+fn nearest_upscale_gather_requires_direct_output_and_more_total_pixels() {
+    for output in [(12, 2), (8, 2), (6, 2)] {
+        for direct in [false, true] {
+            let mut processor = Processor::new(1 << 20, 0).unwrap();
+            let mut io = Io::new(2, 8);
+            io.direct_output = direct;
+            let request = request((2, 8), output, Anchor::BottomRight);
+            assert_eq!(
+                processor.resize(request, &mut io).unwrap(),
+                expected(&io.input, request, ResizeAnchor::BottomRight)
+            );
+            let gathers = usize::from(direct && output.0 * output.1 > 16);
+            assert_eq!(io.direct_completions, gathers);
+            assert_eq!(io.gathers, gathers);
+            assert_eq!(io.snapshots.len(), 1 - gathers);
+        }
+    }
+}
+
+#[test]
+fn direct_upscale_failures_and_callback_fallback_recover() {
+    let request = request((8, 6), (12, 9), Anchor::Center);
+    let mut io = Io::new(8, 6);
+    io.direct_output = true;
+    let mut processor = Processor::new(1 << 20, 0).unwrap();
+    let durable = processor.resize(request, &mut io).unwrap();
+    let limit = processor.peak_capacity_bytes();
+    let before = io.direct_completions;
+    let mut short = Processor::new(limit - 1, 0).unwrap();
+    assert_eq!(
+        short.resize(request, &mut io).unwrap_err().code,
+        ErrorCode::MemoryLimit
+    );
+    assert_eq!(io.direct_completions, before);
+    let smaller = Output {
+        width: 9,
+        height: 6,
+        ..request.output
+    };
+    assert!(short
+        .resize(
+            ResizeRequest {
+                output: smaller,
+                ..request
+            },
+            &mut io
+        )
+        .is_ok());
+    for phase in 0..5 {
+        io.fail_gather = phase == 0;
+        io.fail_complete = phase == 1;
+        io.fail_stage = match phase {
+            2 => Some(Stage::Prepare),
+            3 => Some(Stage::Resize),
+            4 => Some(Stage::Complete),
+            _ => None,
+        };
+        let gathers = io.gathers;
+        assert_eq!(
+            processor.resize(request, &mut io).unwrap_err().code,
+            if phase < 2 {
+                ErrorCode::WasmMemoryUnavailable
+            } else {
+                ErrorCode::Callback
+            }
+        );
+        assert_eq!(io.gathers, gathers + usize::from(phase < 2));
+        io.fail_gather = false;
+        io.fail_complete = false;
+        io.fail_stage = None;
+        assert_eq!(processor.resize(request, &mut io).unwrap(), durable);
+    }
+    assert!(
+        !io.snapshots.is_empty(),
+        "callback calls retain the Wasm source snapshot"
+    );
+    io.input[0] ^= 255;
+    assert_eq!(
+        processor.resize(request, &mut io).unwrap(),
+        expected(&io.input, request, ResizeAnchor::Center)
+    );
+    assert_ne!(processor.resize(request, &mut io).unwrap(), durable);
 }
 
 #[test]

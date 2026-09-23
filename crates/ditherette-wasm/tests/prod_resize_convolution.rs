@@ -62,6 +62,151 @@ fn fixed_lanczos3_separable_shrink_stays_within_one_rgba_level_of_frozen_spec() 
 }
 
 #[test]
+fn fourfold_lanczos3_blocks_bound_delta_from_direct_and_frozen() {
+    let mut changed_pixels = 0;
+    let mut changed_channels = 0;
+    let mut max_delta = 0;
+    for (sw, sh, ow, oh) in [(128, 400, 32, 100), (127, 399, 32, 100)] {
+        let source_dimensions = ImageDimensions::new(sw, sh).unwrap();
+        let output_dimensions = ImageDimensions::new(ow, oh).unwrap();
+        let mut source = patterned_rgba_source(source_dimensions);
+        for opaque in [true, false] {
+            if !opaque {
+                for (i, pixel) in source.chunks_exact_mut(4).enumerate() {
+                    pixel[3] = (i * 37) as u8;
+                }
+            }
+            for (spec_anchor, prod_anchor) in anchors() {
+                let mut frozen = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+                let mut direct = frozen.clone();
+                let mut actual = frozen.clone();
+                resize_spec_lanczos3_into(
+                    ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
+                    ImageViewMut::packed(&mut frozen, output_dimensions).unwrap(),
+                    spec_anchor,
+                    SpecSupportPolicy::Fixed,
+                );
+                resize_prod_lanczos3_rows_into(
+                    ImageView::packed(&source, source_dimensions).unwrap(),
+                    ImageViewMut::packed(&mut direct, output_dimensions).unwrap(),
+                    output_dimensions,
+                    0,
+                    prod_anchor,
+                    ProdSupportPolicy::Fixed,
+                );
+                assert_eq!(direct, frozen, "worker bands retain direct arithmetic");
+                resize_prod_lanczos3_into(
+                    ImageView::packed(&source, source_dimensions).unwrap(),
+                    ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                    prod_anchor,
+                    ProdSupportPolicy::Fixed,
+                );
+                changed_pixels += actual
+                    .chunks_exact(4)
+                    .zip(frozen.chunks_exact(4))
+                    .filter(|(a, b)| a != b)
+                    .count();
+                changed_channels += actual.iter().zip(&frozen).filter(|(a, b)| a != b).count();
+                max_delta = max_delta.max(
+                    actual
+                        .iter()
+                        .zip(&frozen)
+                        .map(|(a, b)| a.abs_diff(*b))
+                        .max()
+                        .unwrap(),
+                );
+            }
+        }
+    }
+    assert_eq!(changed_pixels, 4495);
+    assert_eq!(changed_channels, 4715);
+    assert_eq!(max_delta, 1);
+}
+
+#[test]
+fn raw_fixed_lanczos3_scratch_has_a_bounded_fixture_delta() {
+    let source_dimensions = ImageDimensions::new(128, 80).unwrap();
+    let output_dimensions = ImageDimensions::new(64, 73).unwrap();
+    let mut source = patterned_rgba_source(source_dimensions);
+    for (index, pixel) in source.chunks_exact_mut(4).enumerate() {
+        pixel[3] = (index * 37) as u8;
+    }
+    let mut expected = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    let mut actual = expected.clone();
+    resize_spec_lanczos3_into(
+        ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
+        ImageViewMut::packed(&mut expected, output_dimensions).unwrap(),
+        SpecResizeAnchor::Center,
+        SpecSupportPolicy::Fixed,
+    );
+    resize_prod_lanczos3_into(
+        ImageView::packed(&source, source_dimensions).unwrap(),
+        ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+        ProdResizeAnchor::Center,
+        ProdSupportPolicy::Fixed,
+    );
+    let changed_channels = actual.iter().zip(&expected).filter(|(a, b)| a != b).count();
+    let changed_pixels = actual
+        .chunks_exact(4)
+        .zip(expected.chunks_exact(4))
+        .filter(|(a, b)| a != b)
+        .count();
+    let max_delta = actual
+        .iter()
+        .zip(&expected)
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap();
+    assert_eq!(changed_pixels, 708);
+    assert_eq!(changed_channels, 708);
+    assert_eq!(max_delta, 1);
+    resize_prod_lanczos3_rows_into(
+        ImageView::packed(&source, source_dimensions).unwrap(),
+        ImageViewMut::packed(&mut expected, output_dimensions).unwrap(),
+        output_dimensions,
+        0,
+        ProdResizeAnchor::Center,
+        ProdSupportPolicy::Fixed,
+    );
+    let changed_channels = actual.iter().zip(&expected).filter(|(a, b)| a != b).count();
+    let changed_pixels = actual
+        .chunks_exact(4)
+        .zip(expected.chunks_exact(4))
+        .filter(|(a, b)| a != b)
+        .count();
+    let max_delta = actual
+        .iter()
+        .zip(&expected)
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap();
+    // The row-band path retains PR181's normalized horizontal arithmetic.
+    assert_eq!(changed_pixels, 396);
+    assert_eq!(changed_channels, 396);
+    assert_eq!(max_delta, 1);
+}
+
+#[test]
+fn raw_fixed_lanczos3_scratch_preserves_uniform_alpha_exactly() {
+    let source_dimensions = ImageDimensions::new(127, 95).unwrap();
+    let output_dimensions = ImageDimensions::new(80, 60).unwrap();
+    for alpha in [0, 1, 63, 127, 191, 254, 255] {
+        let mut source = patterned_rgba_source(source_dimensions);
+        for pixel in source.chunks_exact_mut(4) {
+            pixel[3] = alpha;
+        }
+        let mut output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+        resize_prod_lanczos3_into(
+            ImageView::packed(&source, source_dimensions).unwrap(),
+            ImageViewMut::packed(&mut output, output_dimensions).unwrap(),
+            ProdResizeAnchor::Center,
+            ProdSupportPolicy::Fixed,
+        );
+        assert!(output.chunks_exact(4).all(|pixel| pixel[3] == alpha));
+    }
+}
+
+#[test]
 fn opaque_lanczos3_keeps_direct_and_separable_rgb_bytes() {
     for (sw, sh, ow, oh) in [
         (32, 24, 8, 6),   // direct 25%

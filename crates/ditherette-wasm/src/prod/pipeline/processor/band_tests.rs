@@ -307,6 +307,53 @@ fn complete_resize_bands_preserve_scalar_bytes_progress_and_failure_publication(
 }
 
 #[test]
+fn opaque_convolution_bands_reuse_source_metadata_and_match_scalar_bytes() {
+    for resize in [
+        ResizePolicy::Bicubic {
+            anchor: Anchor::Center,
+            support: Support::ScaleAware,
+        },
+        ResizePolicy::Lanczos2 {
+            anchor: Anchor::BottomRight,
+            support: Support::Fixed,
+        },
+        ResizePolicy::Lanczos3 {
+            anchor: Anchor::TopLeft,
+            support: Support::ScaleAware,
+        },
+    ] {
+        let request = ResizeRequest {
+            source_width: 71,
+            source_height: 53,
+            output: Output {
+                width: 19,
+                height: 17,
+                resize,
+            },
+        };
+        let mut input: Vec<u8> = (0..71 * 53 * 4).map(|n| (n * 73 + n / 11) as u8).collect();
+        for pixel in input.chunks_exact_mut(4) {
+            pixel[3] = u8::MAX;
+        }
+        let mut io = Io {
+            input,
+            events: Vec::new(),
+            caller: std::thread::current().id(),
+            fail: false,
+        };
+        let expected = Processor::new(1 << 20, 0)
+            .unwrap()
+            .resize(request, &mut io)
+            .unwrap();
+        let mut candidate = Processor::new(1 << 20, 0).unwrap();
+        candidate.set_execution_policy(policy(3, 2)).unwrap();
+        let actual = candidate.resize(request, &mut io).unwrap();
+        assert_eq!(actual, expected, "{resize:?}");
+        assert!(actual.chunks_exact(4).all(|pixel| pixel[3] == u8::MAX));
+    }
+}
+
+#[test]
 fn complete_resize_falls_back_under_scalar_budget_and_recovers_after_pressure() {
     let request = ResizeRequest {
         source_width: 101,

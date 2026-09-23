@@ -48,9 +48,15 @@ const SPARSE_NEAREST_SOURCE_RATIO: usize = 4;
 // Larger separable calls benefit from retained perturb stages; Yliluoma stays conservative.
 const SPARSE_NEAREST_STAGE_CACHE_SOURCE_RATIO: usize = 16;
 
-pub(super) fn sparse_nearest(source_len: usize, output_len: usize, policy: ResizePolicy) -> bool {
+pub(super) fn sparse_nearest(
+    source_len: usize,
+    output_len: usize,
+    policy: ResizePolicy,
+    direct_output: bool,
+) -> bool {
     matches!(policy, ResizePolicy::Nearest { .. })
-        && output_len <= source_len / SPARSE_NEAREST_SOURCE_RATIO
+        && (output_len <= source_len / SPARSE_NEAREST_SOURCE_RATIO
+            || (direct_output && output_len > source_len))
 }
 
 pub(super) fn sparse_nearest_for_process(
@@ -131,20 +137,33 @@ mod sparse_policy_tests {
     }
 
     #[test]
-    fn half_size_nearest_is_included_but_identity_upscale_and_other_filters_are_not() {
+    fn nearest_gathers_small_outputs_and_direct_upscales_only() {
         let nearest = ResizePolicy::Nearest {
             anchor: Anchor::Center,
         };
         let source_bytes = 64 * 64 * 4;
-        assert!(sparse_nearest(source_bytes, 32 * 32 * 4, nearest));
-        assert!(!sparse_nearest(source_bytes, (32 * 32 + 1) * 4, nearest));
-        assert!(!sparse_nearest(source_bytes, source_bytes, nearest));
-        assert!(!sparse_nearest(source_bytes, 96 * 96 * 4, nearest));
-        assert!(!sparse_nearest(
-            source_bytes,
-            32 * 32 * 4,
-            ResizePolicy::Area {}
-        ));
+        for direct in [false, true] {
+            assert!(sparse_nearest(source_bytes, 32 * 32 * 4, nearest, direct));
+            assert!(!sparse_nearest(
+                source_bytes,
+                (32 * 32 + 1) * 4,
+                nearest,
+                direct
+            ));
+            assert!(!sparse_nearest(source_bytes, source_bytes, nearest, direct));
+            assert_eq!(
+                sparse_nearest(source_bytes, 96 * 96 * 4, nearest, direct),
+                direct
+            );
+            for output_bytes in [32 * 32 * 4, 96 * 96 * 4] {
+                assert!(!sparse_nearest(
+                    source_bytes,
+                    output_bytes,
+                    ResizePolicy::Area {},
+                    direct
+                ));
+            }
+        }
     }
 }
 
@@ -425,19 +444,21 @@ impl PreparedResize {
         }
     }
 
-    pub(super) fn execute(
+    pub(super) fn execute_known_opacity(
         &mut self,
         source: ImageView<'_, Rgba8>,
         output: ImageViewMut<'_, Rgba8>,
+        source_opaque: bool,
     ) -> Result<(), Failure> {
-        self.execute_with_progress(source, output, &mut |_, _| Ok(()))
+        self.execute_with_progress_known_opacity(source, output, source_opaque, &mut |_, _| Ok(()))
     }
 
     /// Reuses each prepared kernel and reports only work that its chosen path performs.
-    pub(super) fn execute_with_progress(
+    pub(super) fn execute_with_progress_known_opacity(
         &mut self,
         source: ImageView<'_, Rgba8>,
         mut output: ImageViewMut<'_, Rgba8>,
+        source_opaque: bool,
         progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         let height = output.dimensions().height();
@@ -522,23 +543,25 @@ impl PreparedResize {
                 if let Some(result) = scratch.execute(
                     &mut output,
                     &|band, output, scratch| {
-                        bicubic::resize_bicubic_rgba8_rows_with_plan_and_scratch_into(
+                        bicubic::resize_bicubic_rgba8_rows_with_plan_and_scratch_known_opacity_into(
                             source,
                             output,
                             plan,
                             band.y_start(),
                             scratch,
+                            source_opaque,
                         )
                     },
                     progress,
                 ) {
                     return result;
                 }
-                bicubic::resize_bicubic_with_progress(
+                bicubic::resize_bicubic_with_progress_known_opacity(
                     source,
                     output,
                     plan,
                     scratch.scalar(),
+                    source_opaque,
                     progress,
                 )?
             }
@@ -546,23 +569,25 @@ impl PreparedResize {
                 if let Some(result) = scratch.execute(
                     &mut output,
                     &|band, output, scratch| {
-                        lanczos::resize_lanczos_rgba8_rows_with_plan_and_scratch_into(
+                        lanczos::resize_lanczos_rgba8_rows_with_plan_and_scratch_known_opacity_into(
                             source,
                             output,
                             plan,
                             band.y_start(),
                             scratch,
+                            source_opaque,
                         )
                     },
                     progress,
                 ) {
                     return result;
                 }
-                lanczos::resize_lanczos_with_progress(
+                lanczos::resize_lanczos_with_progress_known_opacity(
                     source,
                     output,
                     plan,
                     scratch.scalar(),
+                    source_opaque,
                     progress,
                 )?
             }

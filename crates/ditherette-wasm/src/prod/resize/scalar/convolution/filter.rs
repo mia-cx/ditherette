@@ -22,6 +22,11 @@ pub trait ReconstructionKernel {
     fn allows_fixed_separable_shrink(&self) -> bool {
         false
     }
+
+    /// Opt into bounded scratch blocks without changing scale-aware accumulation order.
+    fn allows_scale_aware_blocks(&self) -> bool {
+        false
+    }
 }
 
 pub(super) fn axis_kernel_scale(

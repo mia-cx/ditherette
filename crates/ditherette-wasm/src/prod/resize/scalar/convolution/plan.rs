@@ -68,6 +68,8 @@ pub struct ConvolutionResizePlan {
     output_dimensions: ImageDimensions,
     support_policy: SupportPolicy,
     pub(super) allows_fixed_separable_shrink: bool,
+    pub(super) kernel_radius: f64,
+    pub(super) scale_aware_block_radius: f64,
     pub(super) x_taps: Vec<Vec<AxisTap>>,
     pub(super) y_taps: Vec<Vec<AxisTap>>,
 }
@@ -92,6 +94,12 @@ impl ConvolutionResizePlan {
             output_dimensions,
             support_policy,
             allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
+            kernel_radius: kernel.radius(),
+            scale_aware_block_radius: if kernel.allows_scale_aware_blocks() {
+                kernel.radius()
+            } else {
+                0.0
+            },
             x_taps: Vec::new(),
             y_taps: Vec::new(),
         };
@@ -144,6 +152,12 @@ impl ConvolutionResizePlan {
                 output_dimensions,
                 support_policy,
                 allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
+                kernel_radius: kernel.radius(),
+                scale_aware_block_radius: if kernel.allows_scale_aware_blocks() {
+                    kernel.radius()
+                } else {
+                    0.0
+                },
                 x_taps: Vec::new(),
                 y_taps: Vec::new(),
             });
@@ -170,6 +184,12 @@ impl ConvolutionResizePlan {
             output_dimensions,
             support_policy,
             allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
+            kernel_radius: kernel.radius(),
+            scale_aware_block_radius: if kernel.allows_scale_aware_blocks() {
+                kernel.radius()
+            } else {
+                0.0
+            },
             x_taps,
             y_taps,
         })
@@ -191,13 +211,22 @@ impl ConvolutionResizePlan {
 
     /// Caller-owned f64 elements needed by the full-call dispatch.
     pub fn scratch_elements(&self) -> Result<usize, Failure> {
-        if self.same_height() || self.same_width() || !super::kernel::should_use_x_then_y(self) {
+        if self.same_height()
+            || self.same_width()
+            || (!super::kernel::should_use_blocks(self)
+                && !super::kernel::should_use_x_then_y(self))
+        {
             return Ok(0);
         }
-        self.source_dimensions
-            .height_usize()
+        let source_rows = if super::kernel::should_use_blocks(self) {
+            super::kernel::block_source_rows(self)
+        } else {
+            self.source_dimensions.height_usize()
+        };
+        source_rows
             .checked_mul(self.output_dimensions.width_usize())
             .and_then(|n| n.checked_mul(crate::image::rgba8::RGBA8_CHANNELS))
+            .and_then(|n| n.checked_add(super::kernel::block_weight_elements(self)))
             .ok_or_else(memory_limit)
     }
 
@@ -251,6 +280,12 @@ impl ConvolutionResizePlan {
             output_dimensions,
             support_policy,
             allows_fixed_separable_shrink: kernel.allows_fixed_separable_shrink(),
+            kernel_radius: kernel.radius(),
+            scale_aware_block_radius: if kernel.allows_scale_aware_blocks() {
+                kernel.radius()
+            } else {
+                0.0
+            },
             x_taps,
             y_taps,
         }

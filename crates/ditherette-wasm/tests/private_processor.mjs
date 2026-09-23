@@ -21,7 +21,7 @@ async function fresh(limit) {
 
 const source = () => new Uint8Array([10, 20, 30, 0, 40, 50, 60, 255]);
 function invoke(bindings, input, ...shape) {
-	const sink = { value: undefined };
+	const sink = shape[5] ?? { value: undefined };
 	const status = bindings.privateResize(input, ...shape.slice(0, 4), 0, shape[4], 0, sink);
 	if (status !== 0) {
 		assert.equal(sink.value, undefined, 'failed calls never publish a result');
@@ -30,7 +30,8 @@ function invoke(bindings, input, ...shape) {
 	assert.ok(sink.value);
 	return sink.value;
 }
-const resize = (bindings, input = source()) => invoke(bindings, input, 2, 1, 3, 2, 4);
+// Exercise the full Wasm path for copy failures and owned-buffer budget checks.
+const resize = (bindings, input = source()) => invoke(bindings, input, 2, 1, 3, 2, 4, { onProgress() {} });
 
 // Determine the compiled preparation record using a nonidentity resize.
 // The coordinate-map and source/output capacity formula above stays independent.
@@ -72,7 +73,7 @@ test('generated private input ABI borrows externref and catches both borrowed-sl
 
 test('sparse nearest gathers exact Rust-selected pixels from aligned and unaligned views', async () => {
 	const { bindings, raw } = await fresh(1 << 20);
-	for (const [width, height, outWidth, outHeight] of [[40, 32, 20, 16], [41, 33, 20, 16], [40, 32, 10, 8], [43, 37, 7, 5], [2, 128, 4, 2], [64, 64, 1, 17], [64, 64, 17, 1], [64, 64, 1, 1]]) {
+	for (const [width, height, outWidth, outHeight] of [[40, 32, 20, 16], [41, 33, 20, 16], [40, 32, 10, 8], [43, 37, 7, 5], [2, 128, 4, 2], [64, 64, 1, 17], [64, 64, 17, 1], [64, 64, 1, 1], [8, 6, 12, 9], [7, 5, 19, 13], [2, 8, 12, 2], [8, 2, 2, 12]]) {
 		for (const offset of [0, 1, 4]) {
 			const backing = Uint8Array.from({ length: width * height * 4 + 8 }, (_, i) => (i * 73 + Math.floor(i / 251)) & 255);
 			const input = backing.subarray(offset, offset + width * height * 4);
@@ -118,6 +119,35 @@ test('sparse nearest observes mutations across full-source transitions and durab
 	bindings.privateDispose();
 	assert.equal(durable.data[0], 0);
 	assert.equal(sparse(), 10);
+});
+
+test('nearest upscale uses direct JS output while progress keeps Wasm copies', async () => {
+	const { bindings, raw } = await fresh(1 << 20);
+	const input = new Uint8Array(8 * 6 * 4).fill(47);
+	const run = sink => bindings.privateResize(input, 8, 6, 12, 9, 0, 4, 0, sink);
+	const direct = {};
+	const original = Uint8Array.prototype.set;
+	Uint8Array.prototype.set = function () { throw new Error('direct output needs no bulk copy'); };
+	try { assert.equal(run(direct), 0); }
+	finally { Uint8Array.prototype.set = original; }
+	assert.notEqual(direct.value.data.buffer, raw.memory.buffer);
+	assert.notEqual(direct.value.data.buffer, input.buffer);
+	const gather = DataView.prototype.getUint32;
+	DataView.prototype.getUint32 = function () { throw new Error('fixture offset read failed'); };
+	try {
+		const failed = {};
+		assert.equal(run(failed), 9);
+		assert.equal(failed.value, undefined);
+		const progress = { onProgress() {} };
+		assert.equal(run(progress), 0, 'callback path executes inside Wasm without gathering');
+		assert.deepEqual(progress.value.data, direct.value.data);
+	} finally { DataView.prototype.getUint32 = gather; }
+	input.fill(99);
+	const recovered = {};
+	assert.equal(run(recovered), 0);
+	assert.ok(recovered.value.data.every(value => value === 99));
+	bindings.privateDispose();
+	assert.ok(direct.value.data.every(value => value === 47));
 });
 
 test('direct sparse output allocates once without a Wasm output or bulk copy and catches allocation failure', async () => {

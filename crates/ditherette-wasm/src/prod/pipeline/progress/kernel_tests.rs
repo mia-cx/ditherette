@@ -167,23 +167,26 @@ fn prepared_resize_hooks_preserve_paths_bytes_counts_and_recovery() {
         let output_dimensions = ImageDimensions::new(ow, oh).unwrap();
         let source: Vec<u8> = (0..sw * sh * 4).map(|n| (n * 73 + 17) as u8).collect();
         let view = ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap();
+        let source_opaque = source.chunks_exact(4).all(|pixel| pixel[3] == u8::MAX);
         for policy in policies {
             let mut prepared =
                 PreparedResize::new(source_dimensions, output_dimensions, policy, 1 << 24).unwrap();
             let capacity = prepared.capacity_bytes();
             let mut expected = vec![203; (ow * oh * 4) as usize];
             prepared
-                .execute(
+                .execute_known_opacity(
                     view,
                     ImageViewMut::packed(&mut expected, output_dimensions).unwrap(),
+                    source_opaque,
                 )
                 .unwrap();
             let mut actual = vec![203; expected.len()];
             let mut events = Vec::new();
             prepared
-                .execute_with_progress(
+                .execute_with_progress_known_opacity(
                     view,
                     ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                    source_opaque,
                     &mut |completed, total| {
                         assert!(completed <= total);
                         events.push((completed, total));
@@ -203,6 +206,8 @@ fn prepared_resize_hooks_preserve_paths_bytes_counts_and_recovery() {
                     ResizePolicy::Lanczos2 { .. } | ResizePolicy::Lanczos3 { .. }
                 )
             {
+                // This output fits one 64-row block with complete source support.
+                assert_eq!(events.len(), 2);
                 assert_eq!(total, sh + oh);
             }
             if sw == 129 && matches!(policy, ResizePolicy::Trilinear { .. }) {
@@ -210,9 +215,10 @@ fn prepared_resize_hooks_preserve_paths_bytes_counts_and_recovery() {
             }
             let failure = Failure::new(ErrorCode::Callback, ErrorPath::OnProgress);
             assert_eq!(
-                prepared.execute_with_progress(
+                prepared.execute_with_progress_known_opacity(
                     view,
                     ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                    source_opaque,
                     &mut |done, _| {
                         if done > 0 {
                             Err(failure)
@@ -224,9 +230,10 @@ fn prepared_resize_hooks_preserve_paths_bytes_counts_and_recovery() {
                 Err(failure)
             );
             prepared
-                .execute(
+                .execute_known_opacity(
                     view,
                     ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                    source_opaque,
                 )
                 .unwrap();
             assert_eq!(actual, expected);

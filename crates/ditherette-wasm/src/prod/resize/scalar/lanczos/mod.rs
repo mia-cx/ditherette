@@ -171,7 +171,26 @@ pub fn resize_lanczos_rgba8_rows_with_plan_and_scratch_into(
     )
 }
 
+pub(crate) fn resize_lanczos_rgba8_rows_with_plan_and_scratch_known_opacity_into(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &LanczosResizePlan,
+    y_start: u32,
+    scratch: &mut [f64],
+    source_opaque: bool,
+) -> Result<(), Failure> {
+    super::convolution::resize_convolution_rgba8_rows_with_plan_and_scratch_known_opacity_into(
+        source,
+        output,
+        &plan.inner,
+        y_start,
+        scratch,
+        source_opaque,
+    )
+}
+
 /// Reports actual row work from the shared convolution kernel using caller-owned scratch.
+#[cfg(test)]
 pub(crate) fn resize_lanczos_with_progress(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -184,6 +203,24 @@ pub(crate) fn resize_lanczos_with_progress(
         output,
         &plan.inner,
         scratch,
+        progress,
+    )
+}
+
+pub(crate) fn resize_lanczos_with_progress_known_opacity(
+    source: ImageView<'_, Rgba8>,
+    output: ImageViewMut<'_, Rgba8>,
+    plan: &LanczosResizePlan,
+    scratch: &mut [f64],
+    source_opaque: bool,
+    progress: &mut impl FnMut(u32, u32) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    super::convolution::resize_convolution_with_progress_known_opacity(
+        source,
+        output,
+        &plan.inner,
+        scratch,
+        source_opaque,
         progress,
     )
 }
