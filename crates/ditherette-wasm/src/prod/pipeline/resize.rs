@@ -294,9 +294,7 @@ impl PreparedResize {
             return Ok(0);
         }
         match policy {
-            ResizePolicy::Nearest { .. } => Ok(
-                nearest::NearestResizePlan::required_capacity_bytes(source, output),
-            ),
+            ResizePolicy::Nearest { .. } => Ok(Self::required_nearest_bytes(source, output)),
             ResizePolicy::Area {} => area::AreaResizePlan::required_bytes(source, output),
             ResizePolicy::Bilinear { anchor } => bilinear::BilinearResizePlan::required_bytes(
                 source,
@@ -340,18 +338,7 @@ impl PreparedResize {
             return Ok(Self::Identity);
         }
         match policy {
-            ResizePolicy::Nearest { anchor } => {
-                nearest::NearestResizePlan::try_new(source, output, nearest_anchor(anchor), limit)
-                    .map(|plan| Self::Nearest(plan, Vec::new().into()))
-                    .map_err(|error| match error {
-                        nearest::PlanAllocationError::MemoryLimit => {
-                            Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
-                        }
-                        nearest::PlanAllocationError::Allocation => {
-                            Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Wasm)
-                        }
-                    })
-            }
+            ResizePolicy::Nearest { anchor } => Self::new_nearest(source, output, anchor, limit),
             ResizePolicy::Area {} => {
                 let plan = area::AreaResizePlan::try_new(source, output, &mut budget)?;
                 let mut scratch = budget.vector(plan.scratch_elements())?;
@@ -414,6 +401,30 @@ impl PreparedResize {
                 anchor,
             }),
         }
+    }
+
+    /// The landed nearest planner's bound, without dispatching through unrelated filters.
+    pub(super) fn required_nearest_bytes(source: ImageDimensions, output: ImageDimensions) -> u64 {
+        nearest::NearestResizePlan::required_capacity_bytes(source, output)
+    }
+
+    /// Builds nonidentity nearest metadata with the same fallible constructor and errors.
+    pub(super) fn new_nearest(
+        source: ImageDimensions,
+        output: ImageDimensions,
+        anchor: Anchor,
+        limit: u64,
+    ) -> Result<Self, Failure> {
+        nearest::NearestResizePlan::try_new(source, output, nearest_anchor(anchor), limit)
+            .map(|plan| Self::Nearest(plan, Vec::new().into()))
+            .map_err(|error| match error {
+                nearest::PlanAllocationError::MemoryLimit => {
+                    Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
+                }
+                nearest::PlanAllocationError::Allocation => {
+                    Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::Wasm)
+                }
+            })
     }
 
     pub(super) fn capacity_bytes(&self) -> u64 {
@@ -508,12 +519,14 @@ impl PreparedResize {
         policy: Option<super::execution::RowBandPolicy>,
         limit: u64,
     ) -> Result<(), Failure> {
+        if matches!(self, Self::Nearest(..)) {
+            return self.select_nearest_bands(output, policy, limit);
+        }
         let retained = self.capacity_bytes() - self.scratch_capacity_bytes();
         let limit = limit
             .checked_sub(retained)
             .ok_or_else(|| Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes))?;
         match self {
-            Self::Nearest(_, scratch) => scratch.select(output, policy, 0, limit, &|_| Ok(0)),
             Self::Area(plan, scratch) => {
                 scratch.select(output, policy, plan.scratch_elements(), limit, &|_| {
                     Ok(plan.scratch_elements())
@@ -536,6 +549,22 @@ impl PreparedResize {
             }
             _ => Ok(()),
         }
+    }
+
+    /// Retains the nearest plan and applies the resolved scalar or developer band policy.
+    pub(super) fn select_nearest_bands(
+        &mut self,
+        output: ImageDimensions,
+        policy: Option<super::execution::RowBandPolicy>,
+        limit: u64,
+    ) -> Result<(), Failure> {
+        let Self::Nearest(plan, scratch) = self else {
+            unreachable!("nearest band preparation")
+        };
+        let limit = limit
+            .checked_sub(plan.capacity_bytes())
+            .ok_or_else(|| Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes))?;
+        scratch.select(output, policy, 0, limit, &|_| Ok(0))
     }
 
     pub(super) fn execute_known_opacity(

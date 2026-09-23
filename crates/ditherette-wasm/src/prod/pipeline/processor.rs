@@ -526,26 +526,42 @@ impl Processor {
         if boundary.supports_sparse_input()
             && resize::sparse_nearest(plan.source_len, plan.output_len, plan.resize, direct_output)
         {
-            let mut call = super::preparation::Call::new(
-                &mut self.preparation,
-                None,
-                Some(super::preparation::ResizePreparation {
-                    source: plan.source,
-                    output: request.output,
-                }),
-                // Zeroing the snapshot length invalidates its full-source identity.
-                [
-                    0,
-                    if direct_output { 0 } else { plan.output_len },
-                    resize::sparse_nearest_offset_bytes(plan.output),
-                    0,
-                ],
+            let resize = super::preparation::ResizePreparation {
+                source: plan.source,
+                output: request.output,
+            };
+            // Zeroing the snapshot length invalidates its full-source identity.
+            let lengths = [
                 0,
-                overhead,
-                self.memory_limit,
-                &mut self.peak_capacity,
-                allocator,
-            )?;
+                if direct_output { 0 } else { plan.output_len },
+                resize::sparse_nearest_offset_bytes(plan.output),
+                0,
+            ];
+            let specialized =
+                cfg!(all(target_arch = "wasm32", not(feature = "threads"))) && direct_output;
+            let mut call = if specialized {
+                super::preparation::Call::sparse_nearest(
+                    &mut self.preparation,
+                    resize,
+                    lengths,
+                    overhead,
+                    self.memory_limit,
+                    &mut self.peak_capacity,
+                    allocator,
+                )?
+            } else {
+                super::preparation::Call::new(
+                    &mut self.preparation,
+                    None,
+                    Some(resize),
+                    lengths,
+                    0,
+                    overhead,
+                    self.memory_limit,
+                    &mut self.peak_capacity,
+                    allocator,
+                )?
+            };
             let (_, metadata, scratch) = call.parts();
             let [_, output, offsets, _] = &mut scratch.buffers;
             let (columns, rows) = metadata
