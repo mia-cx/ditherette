@@ -48,6 +48,45 @@ const SPARSE_NEAREST_SOURCE_RATIO: usize = 4;
 // Larger separable calls benefit from retained perturb stages; Yliluoma stays conservative.
 const SPARSE_NEAREST_STAGE_CACHE_SOURCE_RATIO: usize = 16;
 
+/// Bound gathered storage to small fixed-support scalar outputs on both axes.
+const SPARSE_CONVOLUTION_MIN_SHRINK: u32 = 16;
+
+pub(super) struct SparseConvolution {
+    pub dimensions: ImageDimensions,
+    pub slots: usize,
+    pub offset_bytes: usize,
+}
+
+pub(super) fn sparse_convolution(
+    source: ImageDimensions,
+    output: ImageDimensions,
+    policy: ResizePolicy,
+) -> Option<SparseConvolution> {
+    if cfg!(feature = "threads")
+        || output.width() > source.width() / SPARSE_CONVOLUTION_MIN_SHRINK
+        || output.height() > source.height() / SPARSE_CONVOLUTION_MIN_SHRINK
+    {
+        return None;
+    }
+    let slots = match policy {
+        ResizePolicy::Lanczos2 {
+            support: Support::Fixed,
+            ..
+        } => 4,
+        ResizePolicy::Lanczos3 {
+            support: Support::Fixed,
+            ..
+        } => 6,
+        _ => return None,
+    };
+    let dimensions = ImageDimensions::new(output.width() * slots, output.height() * slots).unwrap();
+    Some(SparseConvolution {
+        dimensions,
+        slots: slots as usize,
+        offset_bytes: (dimensions.width_usize() + dimensions.height_usize()) * 4,
+    })
+}
+
 pub(super) fn sparse_nearest(
     source_len: usize,
     output_len: usize,
@@ -84,6 +123,36 @@ mod sparse_policy_tests {
     use crate::prod::contract::request::{
         BayerSize, Diffusion, DiffusionFeedback, Field, PerturbPolicy, Placement, WorkingSpace,
     };
+
+    #[test]
+    fn sparse_convolution_requires_fixed_support_and_sixteenfold_shrink_on_both_axes() {
+        let source = ImageDimensions::new(320, 240).unwrap();
+        let fixed = ResizePolicy::Lanczos3 {
+            anchor: Anchor::Center,
+            support: Support::Fixed,
+        };
+        assert_eq!(
+            sparse_convolution(source, ImageDimensions::new(20, 15).unwrap(), fixed).is_some(),
+            !cfg!(feature = "threads")
+        );
+        for output in [(21, 15), (20, 16), (320, 15), (20, 240)] {
+            assert!(sparse_convolution(
+                source,
+                ImageDimensions::new(output.0, output.1).unwrap(),
+                fixed
+            )
+            .is_none());
+        }
+        assert!(sparse_convolution(
+            source,
+            ImageDimensions::new(16, 12).unwrap(),
+            ResizePolicy::Lanczos3 {
+                anchor: Anchor::Center,
+                support: Support::ScaleAware
+            }
+        )
+        .is_none());
+    }
 
     #[test]
     fn fused_half_size_gathers_none_and_diffusion_but_keeps_cached_dither_stages() {
@@ -180,6 +249,31 @@ pub(super) fn supported(policy: ResizePolicy) -> Result<(), Failure> {
 }
 
 impl PreparedResize {
+    pub(super) fn write_convolution_source_offsets<'a>(
+        &self,
+        slots: usize,
+        offsets: &'a mut [u8],
+    ) -> (&'a [u8], &'a [u8]) {
+        let Self::Lanczos(plan, _) = self else {
+            unreachable!("validated sparse Lanczos policy")
+        };
+        plan.write_sparse_offsets(slots, offsets)
+    }
+
+    pub(super) fn execute_sparse_convolution(
+        &mut self,
+        source: ImageView<'_, Rgba8>,
+        output: ImageViewMut<'_, Rgba8>,
+        slots: usize,
+        columns: &[u8],
+        rows: &[u8],
+    ) -> Result<(), Failure> {
+        let Self::Lanczos(plan, _) = self else {
+            unreachable!("validated sparse Lanczos policy")
+        };
+        plan.resize_sparse_fixed(source, output, slots, columns, rows)
+    }
+
     pub(super) fn write_nearest_source_offsets<'a>(
         &self,
         offsets: &'a mut [u8],

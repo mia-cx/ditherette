@@ -25,7 +25,7 @@ export async function browserChecks(wasmUrl) {
 	});
 	if (crossOriginIsolated) throw new Error('Scalar fixture must not require isolation headers.');
 	const processor = await createDitherette();
-	// Covers the preparation-control records while rejecting the 40,400-byte source below.
+	// Covers preparation-control records while rejecting requests with mandatory storage above 32 KiB.
 	const boundedMemoryLimit = 32 * 1024;
 	const anchors = [
 		'top-left',
@@ -110,7 +110,8 @@ export async function browserChecks(wasmUrl) {
 			const bounded = await createDitherette({ memoryLimitBytes: boundedMemoryLimit });
 			const oversized = {
 				...value,
-				source: { width: 101, height: 100, data: new Uint8Array(101 * 100 * 4) }
+				source: { width: 101, height: 100, data: new Uint8Array(101 * 100 * 4) },
+				output: { ...value.output, width: 100, height: 99 }
 			};
 			await error(() => bounded.resize(oversized), 'memory-limit', 'memoryLimitBytes');
 			value.source = {

@@ -118,6 +118,28 @@ impl LanczosResizePlan {
         self.inner.row_scratch_elements(y_start, height)
     }
 
+    /// Encode original fixed-support tap coordinates for compact input gathering.
+    pub(crate) fn write_sparse_offsets<'a>(
+        &self,
+        slots: usize,
+        offsets: &'a mut [u8],
+    ) -> (&'a [u8], &'a [u8]) {
+        self.inner.write_sparse_offsets(slots, offsets)
+    }
+
+    /// Execute gathered support with original weights, restoring cached indices on return.
+    pub(crate) fn resize_sparse_fixed(
+        &mut self,
+        source: ImageView<'_, Rgba8>,
+        output: ImageViewMut<'_, Rgba8>,
+        slots: usize,
+        columns: &[u8],
+        rows: &[u8],
+    ) -> Result<(), Failure> {
+        self.inner
+            .resize_sparse_fixed(source, output, slots, columns, rows)
+    }
+
     /// Builds reusable coordinate metadata for packed RGBA8 Lanczos resize.
     pub fn new(
         source_dimensions: ImageDimensions,

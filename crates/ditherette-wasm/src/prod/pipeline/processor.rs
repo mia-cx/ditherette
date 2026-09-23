@@ -482,6 +482,45 @@ impl Processor {
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
+        if !enabled && boundary.supports_sparse_input() {
+            if let Some(sparse) = resize::sparse_convolution(plan.source, plan.output, plan.resize)
+            {
+                let compact_len = sparse
+                    .dimensions
+                    .storage_len::<Rgba8>()
+                    .expect("bounded compact source");
+                let mut call = super::preparation::Call::new(
+                    &mut self.preparation,
+                    None,
+                    Some(super::preparation::ResizePreparation {
+                        source: plan.source,
+                        output: request.output,
+                    }),
+                    [0, plan.output_len, sparse.offset_bytes, compact_len],
+                    0,
+                    overhead,
+                    self.memory_limit,
+                    &mut self.peak_capacity,
+                    allocator,
+                )?;
+                let (_, metadata, scratch) = call.parts();
+                let [_, output, offsets, compact] = &mut scratch.buffers;
+                let prepared = metadata.expect("requested sparse Lanczos");
+                let (columns, rows) =
+                    prepared.write_convolution_source_offsets(sparse.slots, offsets);
+                boundary.gather_input(compact, columns, rows, plan.source_len)?;
+                prepared.execute_sparse_convolution(
+                    ImageView::<Rgba8>::packed(compact, sparse.dimensions)
+                        .expect("prepared compact source"),
+                    ImageViewMut::<Rgba8>::packed(output, plan.output).expect("prepared output"),
+                    sparse.slots,
+                    columns,
+                    rows,
+                )?;
+                let result = boundary.complete(output, plan.output);
+                return call.finish(progress.finish(result, None));
+            }
+        }
         // Callback calls retain the existing Wasm execution and resize progress.
         let direct_output = !enabled && boundary.supports_sparse_output();
         if boundary.supports_sparse_input()
@@ -670,3 +709,5 @@ mod band_tests;
 mod preparation_tests;
 #[cfg(test)]
 mod progress_tests;
+#[cfg(all(test, not(feature = "threads")))]
+mod sparse_convolution_tests;

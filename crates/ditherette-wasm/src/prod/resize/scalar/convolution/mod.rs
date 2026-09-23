@@ -10,6 +10,7 @@ mod coordinates;
 pub mod filter;
 mod kernel;
 mod plan;
+mod sparse;
 
 use crate::{
     image::{rgba8, ImageView, ImageViewMut, Rgba8},
