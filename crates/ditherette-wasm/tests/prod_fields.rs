@@ -135,6 +135,130 @@ fn f32_inverses_and_wide_reconstruction_keep_their_separate_oracles() {
     }
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn wide_byte_encoding_preserves_rounding_boundaries_and_clipped_values() {
+    let check = |coordinates, space| {
+        assert_eq!(
+            prod::color::reconstruct::coordinates_to_rgb8(coordinates, space),
+            spec::color::reconstruct::coordinates_to_rgb8(coordinates, reference_space(space)),
+            "{coordinates:?}, {space:?}"
+        );
+    };
+    for byte in 0..255 {
+        let encoded = (f64::from(byte) + 0.5) / 255.0;
+        let linear = if encoded <= 0.04045 {
+            encoded / 12.92
+        } else {
+            ((encoded + 0.055) / 1.055).powf(2.4)
+        };
+        for offset in -4i64..=4 {
+            let value = f64::from_bits(linear.to_bits().checked_add_signed(offset).unwrap());
+            check([value; 3], WorkingSpace::LinearRgb);
+        }
+        for offset in [-2e-9, -1e-9, -5e-10, 0.0, 5e-10, 1e-9, 2e-9] {
+            check([linear + offset; 3], WorkingSpace::LinearRgb);
+        }
+    }
+    for value in [
+        f64::NEG_INFINITY,
+        -f64::MAX,
+        -1.0,
+        -f64::from_bits(1),
+        -0.0,
+        0.0,
+        f64::from_bits(1),
+        0.003_130_8,
+        f64::from_bits(1.0f64.to_bits() - 1),
+        1.0,
+        f64::from_bits(1.0f64.to_bits() + 1),
+        f64::from(f32::MAX),
+        f64::MAX,
+        f64::INFINITY,
+        f64::NAN,
+    ] {
+        for space in SPACES {
+            check([value; 3], space);
+            check([0.5, value, -value], space);
+        }
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn wide_byte_encoding_matches_random_inputs_and_field_strengths() {
+    let mut state = 0x7a12_b543_11c8_d9efu64;
+    let mut next = || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        state
+    };
+    for _ in 0..65_536 {
+        let bits = next();
+        let unit = (bits >> 11) as f64 / (1u64 << 53) as f64;
+        let coordinates = [f64::from_bits(bits), unit, unit * 2.0 - 0.5];
+        assert_eq!(
+            prod::color::reconstruct::coordinates_to_rgb8(coordinates, WorkingSpace::LinearRgb),
+            spec::color::reconstruct::coordinates_to_rgb8(
+                coordinates,
+                spec::contract::request::WorkingSpace::LinearRgb
+            )
+        );
+    }
+    for space in SPACES {
+        let oracle = reference_space(space);
+        let widths = prod::dither::placement::coordinate_domain(space)
+            .ranges()
+            .map(f64::from);
+        for _ in 0..256 {
+            let bits = next();
+            let rgb = [bits as u8, (bits >> 8) as u8, (bits >> 16) as u8];
+            let source = prod::color::packed::rgb8_to_coordinates(rgb, space).map(f64::from);
+            let offset = ((bits >> 32) as u32 as f64 / u32::MAX as f64) - 0.5;
+            for strength in [
+                0.0,
+                f64::from(f32::from_bits(1)),
+                0.7,
+                2.0,
+                f64::from(f32::MAX),
+            ] {
+                let coordinates = std::array::from_fn(|axis| {
+                    source[axis] + offset * strength * 0.25 * widths[axis]
+                });
+                assert_eq!(
+                    prod::color::reconstruct::coordinates_to_rgb8(coordinates, space),
+                    spec::color::reconstruct::coordinates_to_rgb8(coordinates, oracle),
+                    "{coordinates:?}, {space:?}, {strength}"
+                );
+            }
+        }
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
+fn coarse_byte_bins_preserve_output_at_every_bucket_boundary() {
+    for bin in 0..=4096 {
+        let boundary = bin as f64 / 4096.0;
+        for value in [
+            boundary.next_down(),
+            boundary,
+            boundary.next_up(),
+            (bin as f64 + 0.5) / 4096.0,
+        ] {
+            assert_eq!(
+                prod::color::reconstruct::coordinates_to_rgb8([value; 3], WorkingSpace::LinearRgb),
+                spec::color::reconstruct::coordinates_to_rgb8(
+                    [value; 3],
+                    spec::contract::request::WorkingSpace::LinearRgb
+                ),
+                "{value:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn inverse_image_adapters_copy_alpha_and_leave_padding_untouched() {
     let dimensions = ImageDimensions::new(3, 2).unwrap();
@@ -244,7 +368,8 @@ fn reference_field(kind: usize, x: u32, y: u32, index: u64) -> f32 {
     }
 }
 
-#[test]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[cfg_attr(not(target_arch = "wasm32"), test)]
 fn strided_bands_preserve_every_field_space_strength_and_adaptive_byte_boundary() {
     for (width, height) in [(1, 1), (1, 4), (5, 3)] {
         let dimensions = ImageDimensions::new(width, height).unwrap();
