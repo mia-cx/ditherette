@@ -170,6 +170,51 @@ mod tests {
     use crate::prod::color::packed::{Converter, PackedSpace};
 
     #[test]
+    fn finite_hue_scan_preserves_ties_and_late_invalid_scores() {
+        let reference = |a: [f32; 3], b: [f32; 3]| {
+            let dl = a[0] - b[0];
+            let dc = a[1] - b[1];
+            let dh = (a[2] - b[2]).abs().rem_euclid(std::f32::consts::TAU);
+            let arc = a[1].min(b[1]) * dh.min(std::f32::consts::TAU - dh);
+            dl * dl + dc * dc + arc * arc
+        };
+        let converter = Converter::new(PackedSpace::Oklch);
+        let colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 0, 0]]
+            .into_iter()
+            .enumerate()
+            .map(|(index, rgb)| PaletteColor {
+                index: index as u8,
+                coordinates: converter.coordinates(rgb),
+            })
+            .collect::<Vec<_>>();
+        for matching in [MatchPolicy::OklchHueArc, MatchPolicy::CielchHueArc] {
+            let mut matcher = PaletteMatcher {
+                colors: colors.clone(),
+                matching,
+            };
+            for n in 0..4096_u32 {
+                let coordinates = [0.5, n as f32 * 0.001 - 1.0, n as f32 * 0.01 - 20.0];
+                assert_eq!(
+                    matcher.nearest_finite(coordinates),
+                    matcher.scan_finite(coordinates, reference)
+                );
+            }
+            assert_eq!(
+                matcher.nearest_finite(colors[0].coordinates).unwrap().index,
+                0
+            );
+            for hue in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+                assert_eq!(matcher.nearest_finite([0.5, 0.2, hue]), None);
+            }
+            matcher.colors.push(PaletteColor {
+                index: 4,
+                coordinates: [f32::MAX, f32::MAX, 0.0],
+            });
+            assert_eq!(matcher.nearest_finite(colors[0].coordinates), None);
+        }
+    }
+
+    #[test]
     fn normalized_hue_arc_matches_reference_for_rgb_derived_oklch() {
         let converter = Converter::new(PackedSpace::Oklch);
         for n in 0..4096u32 {

@@ -11,6 +11,54 @@ use ditherette_wasm::{
     spec,
 };
 
+#[test]
+fn diffusion_hue_scores_match_frozen_bits() {
+    let check = |a, b| {
+        assert_eq!(
+            prod::quantize::metric::hue_arc3_squared(a, b).to_bits(),
+            spec::quantize::metric::hue_arc3_squared(a, b).to_bits(),
+            "{a:?}, {b:?}"
+        );
+    };
+    let tau = std::f32::consts::TAU;
+    let mut hues = vec![
+        0.0,
+        -0.0,
+        f32::from_bits(1),
+        -0.25,
+        -17.0 * tau,
+        f32::MAX,
+        -f32::MAX,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NAN,
+    ];
+    for turns in [1.0, 2.0, 3.0, 4.0] {
+        let bits = (turns * tau).to_bits();
+        for offset in -2_i32..=2 {
+            let hue = f32::from_bits(bits.wrapping_add_signed(offset));
+            hues.extend([hue, -hue]);
+        }
+    }
+    for &left in &hues {
+        for &right in &hues {
+            check([0.5, 0.25, left], [0.75, 0.1, right]);
+            check([-1.0, -0.5, left], [2.0, 0.0, right]);
+        }
+    }
+    let mut bits = 0x87a9_4cd1u32;
+    let mut next = || {
+        bits ^= bits << 13;
+        bits ^= bits >> 17;
+        bits ^= bits << 5;
+        f32::from_bits(bits)
+    };
+    for n in 0..100_000 {
+        check([0.25, -0.1, next()], [0.75, 0.2, next()]);
+        check([0.25, -0.1, n as f32 * 0.001 - 50.0], [0.75, 0.2, next()]);
+    }
+}
+
 const MODES: [(
     MatchPolicy,
     OrdinarySpace,
