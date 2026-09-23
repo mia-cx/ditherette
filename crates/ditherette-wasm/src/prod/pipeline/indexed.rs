@@ -264,6 +264,19 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     }
     if let Some(perturb) = policy {
         if !perturbed_hit {
+            let bayer = if bands.is_none() {
+                perturb::BayerBytes::try_new(
+                    output_dimensions,
+                    perturb,
+                    call.available_working_capacity(),
+                )
+            } else {
+                None
+            };
+            let bayer_capacity = bayer
+                .as_ref()
+                .map_or(0, perturb::BayerBytes::capacity_bytes);
+            call.charge_optional_capacity(bayer_capacity, peak)?;
             let (_, _, images, scratch) = call.image_parts();
             let [source, resized, perturbed, _] = &mut scratch.buffers;
             let rgba = images[0].map_or_else(
@@ -304,6 +317,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                         placement
                             .as_mut()
                             .map_or(&mut [], AdaptivePlacementWork::scratch),
+                        bayer.as_ref(),
                         |completed| report(u64::from(completed)),
                     )?;
                 }
@@ -317,9 +331,12 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     placement
                         .as_mut()
                         .map_or(&mut [], AdaptivePlacementWork::scratch),
+                    bayer.as_ref(),
                     |_| Ok(()),
                 )?;
             }
+            drop(bayer);
+            call.release_working_capacity(bayer_capacity);
         }
     }
     let can_match_rgb = call.parts().0.expect("requested palette").can_match_rgb();

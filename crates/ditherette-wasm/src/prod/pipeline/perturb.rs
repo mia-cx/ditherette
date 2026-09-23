@@ -4,15 +4,16 @@ use std::mem::size_of;
 
 use super::processor::{dimensions, Allocator, Boundary};
 use crate::{
-    image::{ImageView, ImageViewMut, Rgba8},
+    image::{ImageDimensions, ImageView, ImageViewMut, Rgba8},
     prod::{
         contract::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             lifecycle::Stage,
-            request::{BayerSize, Field, PerturbPolicy, Placement},
+            request::{BayerSize, Field, PerturbPolicy, Placement, WorkingSpace},
         },
         dither::{blue_noise, ordered, placement::AdaptivePlacementWork, random_noise},
+        resize::common::allocation::CapacityBudget,
         tiling::{RowBand, RowBandBuffers},
     },
 };
@@ -28,6 +29,95 @@ pub struct PerturbRequest {
 /// The literal forward adapter owns one temporary converter at a time, including its byte tables.
 pub(super) const fn working_capacity_bytes() -> u64 {
     size_of::<crate::prod::color::packed::Converter>() as u64
+}
+
+/// Optional call-local Bayer byte transforms; budget or allocation misses keep the scalar loop.
+pub(super) struct BayerBytes {
+    cells: Vec<u8>,
+    width: usize,
+}
+
+impl BayerBytes {
+    pub(super) fn try_new(
+        dimensions: ImageDimensions,
+        policy: PerturbPolicy,
+        available: u64,
+    ) -> Option<Self> {
+        if cfg!(feature = "threads")
+            || policy.space != WorkingSpace::Srgb
+            || !matches!(policy.placement, Placement::Everywhere {})
+            || policy.strength == 0.0
+        {
+            return None;
+        }
+        let Field::Bayer { size } = policy.field else {
+            return None;
+        };
+        let width = match size {
+            BayerSize::Two => 2,
+            BayerSize::Four => 4,
+            BayerSize::Eight => 8,
+            BayerSize::Sixteen => 16,
+        };
+        let entries = width * width * 256;
+        // Require at least three channel lookups per prepared table entry.
+        if u64::from(dimensions.width()) * u64::from(dimensions.height()) < entries as u64 {
+            return None;
+        }
+        let heap = available.checked_sub(size_of::<Self>() as u64)?;
+        let mut cells = CapacityBudget::new(heap).vector::<u8>(entries).ok()?;
+        let coordinates = crate::prod::color::srgb::byte_coordinates();
+        for cell in 0..width * width {
+            let threshold = field_value(
+                policy.field,
+                (cell % width) as u32,
+                (cell / width) as u32,
+                0,
+            );
+            let amount = f64::from(threshold) * f64::from(policy.strength) * 0.25;
+            for (byte, &coordinate) in coordinates.iter().enumerate() {
+                cells.push(if amount == 0.0 {
+                    byte as u8
+                } else {
+                    let perturbed = f64::from(coordinate) + amount;
+                    (perturbed.clamp(0.0, 1.0) * 255.0).round() as u8
+                });
+            }
+        }
+        Some(Self { cells, width })
+    }
+
+    pub(super) fn capacity_bytes(&self) -> u64 {
+        size_of::<Self>() as u64 + self.cells.capacity() as u64
+    }
+
+    fn execute(
+        &self,
+        source: ImageView<'_, Rgba8>,
+        mut output: ImageViewMut<'_, Rgba8>,
+        mut progress: impl FnMut(u32) -> Result<(), Failure>,
+    ) -> Result<(), Failure> {
+        assert_eq!(source.dimensions(), output.dimensions());
+        let mask = self.width - 1;
+        for y in 0..source.dimensions().height() {
+            let source = source.row(y).expect("validated source row");
+            let output = output.row_mut(y).expect("validated output row");
+            for (x, (pixel, target)) in source
+                .chunks_exact(4)
+                .zip(output.chunks_exact_mut(4))
+                .enumerate()
+            {
+                let cell = (y as usize & mask) * self.width + (x & mask);
+                let table = &self.cells[cell * 256..(cell + 1) * 256];
+                target[0] = table[pixel[0] as usize];
+                target[1] = table[pixel[1] as usize];
+                target[2] = table[pixel[2] as usize];
+                target[3] = pixel[3];
+            }
+            progress(y + 1)?;
+        }
+        Ok(())
+    }
 }
 
 pub(super) fn validate(policy: PerturbPolicy) -> Result<(), Failure> {
@@ -68,8 +158,12 @@ pub(super) fn execute_with_scratch(
     output: ImageViewMut<'_, Rgba8>,
     policy: PerturbPolicy,
     scratch: &mut [[f32; 3]],
+    bayer: Option<&BayerBytes>,
     progress: impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    if let Some(bayer) = bayer {
+        return bayer.execute(source, output, progress);
+    }
     crate::prod::dither::perturb::perturb_by_field_with_scratch(
         source,
         output,
@@ -190,6 +284,17 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         .as_ref()
         .map_or(0, AdaptivePlacementWork::capacity_bytes);
     call.charge_optional_capacity(placement_capacity, peak)?;
+    let bayer = if bands.is_none() {
+        BayerBytes::try_new(
+            dimensions,
+            request.perturb,
+            call.available_working_capacity(),
+        )
+    } else {
+        None
+    };
+    let bayer_capacity = bayer.as_ref().map_or(0, BayerBytes::capacity_bytes);
+    call.charge_optional_capacity(bayer_capacity, peak)?;
     let [source, output, _, _] = &mut call.scratch.buffers;
     let source = ImageView::packed(source, dimensions).expect("validated source storage");
     if bands.is_some() || enabled {
@@ -218,6 +323,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
                 placement
                     .as_mut()
                     .map_or(&mut [], AdaptivePlacementWork::scratch),
+                bayer.as_ref(),
                 |completed| report(u64::from(completed)),
             )?;
         }
@@ -230,9 +336,12 @@ pub(super) fn run<B: Boundary, A: Allocator>(
             placement
                 .as_mut()
                 .map_or(&mut [], AdaptivePlacementWork::scratch),
+            bayer.as_ref(),
             |_| Ok(()),
         )?;
     }
+    drop(bayer);
+    call.release_working_capacity(bayer_capacity);
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);
@@ -247,4 +356,132 @@ pub(super) fn run<B: Boundary, A: Allocator>(
 
 fn memory_limit() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
+}
+
+#[cfg(all(test, not(feature = "threads")))]
+mod tests {
+    use super::*;
+    use crate::image::RowStride;
+
+    const SIZES: [(BayerSize, u32); 4] = [
+        (BayerSize::Two, 2),
+        (BayerSize::Four, 4),
+        (BayerSize::Eight, 8),
+        (BayerSize::Sixteen, 16),
+    ];
+
+    fn policy(size: BayerSize, strength: f32) -> PerturbPolicy {
+        PerturbPolicy {
+            field: Field::Bayer { size },
+            space: WorkingSpace::Srgb,
+            strength,
+            placement: Placement::Everywhere {},
+        }
+    }
+
+    #[test]
+    fn bayer_tables_are_optional_and_charge_actual_capacity() {
+        for (size, width) in SIZES {
+            let cells = width * width;
+            let dimensions = ImageDimensions::new(256, cells).unwrap();
+            let bytes = size_of::<BayerBytes>() as u64 + u64::from(cells) * 256;
+            let settings = policy(size, 0.7);
+            let work = BayerBytes::try_new(dimensions, settings, bytes).unwrap();
+            assert_eq!(work.capacity_bytes(), bytes);
+            assert!(BayerBytes::try_new(dimensions, settings, bytes - 1).is_none());
+            assert!(BayerBytes::try_new(dimensions, settings, 0).is_none());
+            assert!(BayerBytes::try_new(dimensions, policy(size, 0.0), bytes).is_none());
+            assert!(BayerBytes::try_new(
+                ImageDimensions::new(255, cells).unwrap(),
+                settings,
+                bytes
+            )
+            .is_none());
+            for excluded in [
+                PerturbPolicy {
+                    field: Field::Random { seed: 0 },
+                    ..settings
+                },
+                PerturbPolicy {
+                    field: Field::BlueNoise {},
+                    ..settings
+                },
+                PerturbPolicy {
+                    space: WorkingSpace::Oklab,
+                    ..settings
+                },
+                PerturbPolicy {
+                    placement: Placement::Adaptive {
+                        radius: 1,
+                        threshold: 0.0,
+                        softness: 1.0,
+                    },
+                    ..settings
+                },
+            ] {
+                assert!(BayerBytes::try_new(dimensions, excluded, bytes).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn bayer_tables_preserve_generic_bytes_strides_alpha_and_row_errors() {
+        for (size, matrix_width) in SIZES {
+            // Every Bayer cell visits every source byte; odd extents also cross tile boundaries.
+            let width = matrix_width * 256 + 1;
+            let height = matrix_width + 1;
+            let dimensions = ImageDimensions::new(width, height).unwrap();
+            let stride = RowStride::new(width as usize * 4 + 7).unwrap();
+            let mut bytes = vec![203; stride.elements() * height as usize];
+            for y in 0..height as usize {
+                for x in 0..width as usize {
+                    let byte = (x / matrix_width as usize) as u8;
+                    bytes[y * stride.elements() + x * 4..y * stride.elements() + x * 4 + 4]
+                        .copy_from_slice(&[byte, byte.wrapping_mul(73), 255 - byte, byte]);
+                }
+            }
+            let source = ImageView::new(&bytes, dimensions, stride).unwrap();
+            let mut actual = vec![203; bytes.len()];
+            let mut expected = actual.clone();
+            for strength in [f32::from_bits(1), 0.7, 1.0, 2.0, 2.0 / 255.0, f32::MAX] {
+                let settings = policy(size, strength);
+                let work = BayerBytes::try_new(dimensions, settings, u64::MAX).unwrap();
+                let mut rows = Vec::new();
+                work.execute(
+                    source,
+                    ImageViewMut::new(&mut actual, dimensions, stride).unwrap(),
+                    |row| {
+                        rows.push(row);
+                        Ok(())
+                    },
+                )
+                .unwrap();
+                crate::prod::dither::perturb::perturb_by_field_rows_into(
+                    source,
+                    ImageViewMut::new(&mut expected, dimensions, stride).unwrap(),
+                    WorkingSpace::Srgb,
+                    strength,
+                    Placement::Everywhere {},
+                    RowBand::new(0, height).unwrap(),
+                    |x, y, index| field_value(settings.field, x, y, index),
+                );
+                assert_eq!(actual, expected, "{size:?}, {strength}");
+                assert_eq!(rows, (1..=height).collect::<Vec<_>>());
+            }
+            actual.fill(203);
+            let failure = Failure::new(ErrorCode::Callback, ErrorPath::Output);
+            let work = BayerBytes::try_new(dimensions, policy(size, 0.7), u64::MAX).unwrap();
+            assert_eq!(
+                work.execute(
+                    source,
+                    ImageViewMut::new(&mut actual, dimensions, stride).unwrap(),
+                    |_| Err(failure)
+                ),
+                Err(failure)
+            );
+            assert!(actual[stride.elements()..]
+                .iter()
+                .all(|&value| value == 203));
+        }
+    }
 }
