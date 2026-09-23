@@ -265,7 +265,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     if let Some(perturb) = policy {
         if !perturbed_hit {
             let bayer = if bands.is_none() {
-                perturb::Bayer2Bytes::try_new(
+                perturb::BayerBytes::try_new(
                     output_dimensions,
                     perturb,
                     call.available_working_capacity(),
@@ -275,7 +275,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             };
             let bayer_capacity = bayer
                 .as_ref()
-                .map_or(0, perturb::Bayer2Bytes::capacity_bytes);
+                .map_or(0, perturb::BayerBytes::capacity_bytes);
             call.charge_optional_capacity(bayer_capacity, peak)?;
             let (_, _, images, scratch) = call.image_parts();
             let [source, resized, perturbed, _] = &mut scratch.buffers;
