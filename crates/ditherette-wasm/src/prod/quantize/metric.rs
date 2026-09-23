@@ -42,10 +42,72 @@ pub fn circular_hue3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
 pub fn hue_arc3_squared(a: [f32; 3], b: [f32; 3]) -> f32 {
     let delta_lightness = a[0] - b[0];
     let delta_chroma = a[1] - b[1];
-    let delta_hue = (a[2] - b[2]).abs().rem_euclid(std::f32::consts::TAU);
+    let delta_hue = hue_remainder((a[2] - b[2]).abs());
     let shortest_hue = delta_hue.min(std::f32::consts::TAU - delta_hue);
     let hue_arc = a[1].min(b[1]) * shortest_hue;
     delta_lightness * delta_lightness + delta_chroma * delta_chroma + hue_arc * hue_arc
+}
+
+/// Reduces nonnegative hue deltas without a general remainder below four turns.
+/// TAU's doubling is exact. Each subtraction has an operand ratio in [1, 2],
+/// so Sterbenz's lemma makes both exact, preserving the original f32 remainder.
+/// Larger and nonfinite deltas retain the general operation.
+#[inline]
+pub(super) fn hue_remainder(mut delta: f32) -> f32 {
+    const TAU: f32 = std::f32::consts::TAU;
+    if delta < 4.0 * TAU {
+        if delta >= 2.0 * TAU {
+            delta -= 2.0 * TAU;
+        }
+        if delta >= TAU {
+            delta -= TAU;
+        }
+        delta
+    } else {
+        delta.rem_euclid(TAU)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hue_remainder;
+
+    #[test]
+    fn binary_remainder_matches_general_operation_bits() {
+        let check = |value: f32| {
+            let delta = value.abs();
+            assert_eq!(
+                hue_remainder(delta).to_bits(),
+                delta.rem_euclid(std::f32::consts::TAU).to_bits(),
+                "{delta:?}"
+            );
+        };
+        for turns in [1.0, 2.0, 3.0, 4.0] {
+            let bits = (turns * std::f32::consts::TAU).to_bits();
+            for offset in -16_i32..=16 {
+                check(f32::from_bits(bits.wrapping_add_signed(offset)));
+            }
+        }
+        for value in [
+            0.0,
+            -0.0,
+            f32::from_bits(1),
+            f32::MIN_POSITIVE,
+            f32::MAX,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+        ] {
+            check(value);
+        }
+        let mut bits = 0x5a17_93cdu32;
+        for _ in 0..1_000_000 {
+            bits ^= bits << 13;
+            bits ^= bits >> 17;
+            bits ^= bits << 5;
+            check(f32::from_bits(bits));
+        }
+    }
 }
 
 /// RGB-specific weighted distance over normalized gamma-encoded sRGB channels.

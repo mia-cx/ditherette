@@ -407,7 +407,10 @@ impl BorrowedDiffusion<'_> {
                         (index, error)
                     }
                     DiffusionFeedback::Matching => {
-                        let selected = nearest_finite(matcher, current)?;
+                        let selected = self
+                            .quantizer
+                            .nearest_finite(current)
+                            .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))?;
                         let error = std::array::from_fn(|axis| {
                             f64::from(current[axis]) - f64::from(selected.coordinates[axis])
                         });
