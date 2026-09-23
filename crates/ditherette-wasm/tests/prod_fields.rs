@@ -20,6 +20,49 @@ const SPACES: [WorkingSpace; 7] = [
     WorkingSpace::Ycbcr,
 ];
 
+#[test]
+fn srgb_specialization_preserves_all_bytes_at_rounding_and_strength_boundaries() {
+    let dimensions = ImageDimensions::new(256, 1).unwrap();
+    let source: Vec<u8> = (0..=255u8)
+        .flat_map(|value| [value, value.wrapping_mul(73), 255 - value, value])
+        .collect();
+    let source = ImageView::packed(&source, dimensions).unwrap();
+    let mut actual = vec![0; 1024];
+    let mut expected = actual.clone();
+    let half_byte = 2.0f32 / 255.0;
+    for threshold in [
+        -0.5,
+        -half_byte,
+        0.0,
+        f32::from_bits(half_byte.to_bits() - 1),
+        half_byte,
+        f32::from_bits(half_byte.to_bits() + 1),
+        0.5,
+    ] {
+        for strength in [0.0, f32::from_bits(1), 0.7, 1.0, 2.0, f32::MAX] {
+            prod::dither::perturb::perturb_by_field_rows_into(
+                source,
+                ImageViewMut::packed(&mut actual, dimensions).unwrap(),
+                WorkingSpace::Srgb,
+                strength,
+                Placement::Everywhere {},
+                RowBand::new(0, 1).unwrap(),
+                |_, _, _| threshold,
+            );
+            spec::dither::perturb::perturb_by_field_rows_into(
+                source,
+                ImageViewMut::packed(&mut expected, dimensions).unwrap(),
+                spec::contract::request::WorkingSpace::Srgb,
+                strength,
+                spec::contract::request::Placement::Everywhere {},
+                spec::tiling::contract::RowBand::new(0, 1).unwrap(),
+                |_, _, _| threshold,
+            );
+            assert_eq!(actual, expected, "{threshold}, {strength}");
+        }
+    }
+}
+
 fn reference_space(space: WorkingSpace) -> spec::contract::request::WorkingSpace {
     serde_json::from_value(serde_json::to_value(space).unwrap()).unwrap()
 }

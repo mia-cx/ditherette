@@ -1,6 +1,11 @@
-//! Literal f32 inverse fragments from the frozen srgb reference.
+//! Shared sRGB byte coordinates and literal f32 reconstruction from the frozen reference.
 
 use crate::image::{ImageFormat, ImageView, ImageViewMut, Rgba8, Srgb32};
+
+/// Borrows the same normalized byte coordinates used by the packed converter.
+pub(crate) fn byte_coordinates() -> &'static [f32; 256] {
+    &super::ColorTables::shared().unit
+}
 
 /// Reconstruct RGB bytes from finite sRGB coordinates, clipping each channel.
 /// Byte rounding uses nearest integer, with half-way values rounded upward.

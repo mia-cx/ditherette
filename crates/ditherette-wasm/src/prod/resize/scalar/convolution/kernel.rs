@@ -597,8 +597,42 @@ fn write_accumulated_pixel(
     total_weight: f64,
 ) {
     for channel in 0..rgba8::RGBA8_CHANNELS {
-        output_pixel[channel] = (accumulated[channel] / total_weight)
-            .clamp(0.0, 255.0)
-            .round() as u8;
+        output_pixel[channel] = round_byte(accumulated[channel] / total_weight);
+    }
+}
+
+#[inline]
+fn round_byte(value: f64) -> u8 {
+    let truncated = value as u8;
+    truncated.saturating_add(u8::from(value - f64::from(truncated) >= 0.5))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::round_byte;
+
+    #[test]
+    fn byte_rounding_matches_clamp_and_round_at_every_boundary() {
+        for integer in -1..=256 {
+            for value in [f64::from(integer), f64::from(integer) + 0.5] {
+                for neighbor in [value.next_down(), value, value.next_up()] {
+                    assert_eq!(
+                        round_byte(neighbor),
+                        neighbor.clamp(0.0, 255.0).round() as u8,
+                        "{neighbor:?}"
+                    );
+                }
+            }
+        }
+        for value in [
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NAN,
+            -0.0,
+            f64::MIN,
+            f64::MAX,
+        ] {
+            assert_eq!(round_byte(value), value.clamp(0.0, 255.0).round() as u8);
+        }
     }
 }
