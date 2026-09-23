@@ -708,3 +708,134 @@ fn yliluoma_preflight_and_caught_failures_recover_without_an_intermediate_buffer
 }
 #[path = "support/budget.rs"]
 mod budget_support;
+
+#[test]
+fn bayer2_byte_table_preserves_bounded_standalone_and_indexed_results() {
+    struct Pixels(Vec<u8>);
+    impl RgbaBoundary for Pixels {
+        type Output = Vec<u8>;
+        fn input_len(&mut self) -> Result<usize, Failure> {
+            Ok(self.0.len())
+        }
+        fn copy_input(&mut self, target: &mut [u8]) -> Result<(), Failure> {
+            target.copy_from_slice(&self.0);
+            Ok(())
+        }
+        fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
+            Ok(bytes.to_vec())
+        }
+    }
+    impl QuantizeBoundary for Pixels {
+        type Output = Vec<u8>;
+        fn input_len(&mut self) -> Result<usize, Failure> {
+            Ok(self.0.len())
+        }
+        fn copy_input(&mut self, target: &mut [u8]) -> Result<(), Failure> {
+            target.copy_from_slice(&self.0);
+            Ok(())
+        }
+        fn complete(
+            &mut self,
+            bytes: &[u8],
+            _: ImageDimensions,
+            _: IndexedMetadataRef<'_>,
+        ) -> Result<Vec<u8>, Failure> {
+            Ok(bytes.to_vec())
+        }
+    }
+    let dimensions = ImageDimensions::new(65, 17).unwrap();
+    let mut pixels = Pixels(
+        (0..65 * 17usize)
+            .flat_map(|i| {
+                [
+                    i as u8,
+                    (i * 73) as u8,
+                    (i * 31) as u8,
+                    [0, 127, 128, 255][i % 4],
+                ]
+            })
+            .collect(),
+    );
+    for strength in [0.0, f32::from_bits(1), 0.7, 1.0, 2.0, f32::MAX] {
+        let perturb = PerturbPolicy {
+            field: Field::Bayer {
+                size: BayerSize::Two,
+            },
+            space: WorkingSpace::Srgb,
+            strength,
+            placement: Placement::Everywhere {},
+        };
+        let expected_rgba = spec::dither::perturb::perturb(
+            ditherette_wasm::image::ImageView::packed(&pixels.0, dimensions).unwrap(),
+            serde_json::from_value(serde_json::to_value(perturb).unwrap()).unwrap(),
+        )
+        .unwrap();
+        let expected_indexed = spec::quantize::quantize(spec::contract::request::QuantizeRequest {
+            version: 1,
+            source: spec::contract::request::Source {
+                width: 65,
+                height: 17,
+                data: expected_rgba.data(),
+            },
+            palette: &PALETTE,
+            alpha: spec::contract::request::AlphaPolicy::Preserve { threshold: 127.0 },
+            matching: spec::contract::request::MatchPolicy::SrgbEuclidean,
+        })
+        .unwrap();
+        for indexed in [false, true] {
+            let run = |processor: &mut Processor, pixels: &mut Pixels| {
+                if indexed {
+                    processor.dither_and_quantize(
+                        QuantizeRequest {
+                            source_width: 65,
+                            source_height: 17,
+                            palette: &PALETTE,
+                            alpha: AlphaPolicy::Preserve { threshold: 127.0 },
+                            matching: MatchPolicy::SrgbEuclidean,
+                        },
+                        DitherPolicy::Separable { perturb },
+                        pixels,
+                    )
+                } else {
+                    processor.perturb(
+                        PerturbRequest {
+                            source_width: 65,
+                            source_height: 17,
+                            perturb,
+                        },
+                        pixels,
+                    )
+                }
+            };
+            let expected = if indexed {
+                expected_indexed.indices.data()
+            } else {
+                expected_rgba.data()
+            };
+            let mut processor = Processor::new(1 << 20, 0).unwrap();
+            assert_eq!(run(&mut processor, &mut pixels).unwrap(), expected);
+            assert_eq!(
+                run(&mut processor, &mut pixels).unwrap(),
+                expected,
+                "cached result"
+            );
+            let minimum = budget_support::minimum(processor.peak_capacity_bytes(), |limit| {
+                Processor::new(limit, 0)
+                    .and_then(|mut p| run(&mut p, &mut pixels))
+                    .is_ok()
+            });
+            let mut fallback = Processor::new(minimum, 0).unwrap();
+            assert_eq!(
+                run(&mut fallback, &mut pixels).unwrap(),
+                expected,
+                "optional table must not raise the required budget"
+            );
+            assert!(fallback.peak_capacity_bytes() <= minimum);
+            let mut under = Processor::new(minimum - 1, 0).unwrap();
+            assert_eq!(
+                run(&mut under, &mut pixels).unwrap_err().code,
+                ErrorCode::MemoryLimit
+            );
+        }
+    }
+}
