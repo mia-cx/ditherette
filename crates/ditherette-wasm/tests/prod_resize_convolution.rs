@@ -62,6 +62,73 @@ fn fixed_lanczos3_separable_shrink_stays_within_one_rgba_level_of_frozen_spec() 
 }
 
 #[test]
+fn opaque_lanczos3_keeps_direct_and_separable_rgb_bytes() {
+    for (sw, sh, ow, oh) in [
+        (32, 24, 8, 6),   // direct 25%
+        (32, 24, 16, 12), // x-then-y 50%
+        (32, 24, 24, 18), // x-then-y 75%
+    ] {
+        let source_dimensions = ImageDimensions::new(sw, sh).unwrap();
+        let output_dimensions = ImageDimensions::new(ow, oh).unwrap();
+        let opaque = patterned_rgba_source(source_dimensions);
+        let mut translucent = opaque.clone();
+        for (index, pixel) in translucent.chunks_exact_mut(4).enumerate() {
+            pixel[3] = (index * 37) as u8;
+        }
+
+        let mut opaque_output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+        let mut translucent_output = opaque_output.clone();
+        resize_prod_lanczos3_into(
+            ImageView::packed(&opaque, source_dimensions).unwrap(),
+            ImageViewMut::packed(&mut opaque_output, output_dimensions).unwrap(),
+            ProdResizeAnchor::Center,
+            ProdSupportPolicy::Fixed,
+        );
+        resize_prod_lanczos3_into(
+            ImageView::packed(&translucent, source_dimensions).unwrap(),
+            ImageViewMut::packed(&mut translucent_output, output_dimensions).unwrap(),
+            ProdResizeAnchor::Center,
+            ProdSupportPolicy::Fixed,
+        );
+
+        for (opaque_pixel, translucent_pixel) in opaque_output
+            .chunks_exact(4)
+            .zip(translucent_output.chunks_exact(4))
+        {
+            assert_eq!(&opaque_pixel[..3], &translucent_pixel[..3]);
+            assert_eq!(opaque_pixel[3], u8::MAX);
+        }
+    }
+}
+
+#[test]
+fn nonopaque_direct_lanczos3_still_matches_frozen_spec() {
+    let source_dimensions = ImageDimensions::new(32, 24).unwrap();
+    let output_dimensions = ImageDimensions::new(8, 6).unwrap();
+    let mut source = patterned_rgba_source(source_dimensions);
+    for (index, pixel) in source.chunks_exact_mut(4).enumerate() {
+        pixel[3] = (index * 37) as u8;
+    }
+    let mut expected = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+    let mut actual = expected.clone();
+
+    resize_spec_lanczos3_into(
+        ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
+        ImageViewMut::<Rgba8>::packed(&mut expected, output_dimensions).unwrap(),
+        SpecResizeAnchor::Center,
+        SpecSupportPolicy::Fixed,
+    );
+    resize_prod_lanczos3_into(
+        ImageView::packed(&source, source_dimensions).unwrap(),
+        ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+        ProdResizeAnchor::Center,
+        ProdSupportPolicy::Fixed,
+    );
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
 fn prod_bicubic_matches_spec_for_anchor_and_policy_matrix() {
     assert_matches_spec(
         |source, spec_output, prod_output, spec_anchor, prod_anchor, spec_policy, prod_policy| {
@@ -176,27 +243,35 @@ fn assert_matches_spec(
             ImageDimensions::new(5, 5).unwrap(),
         ),
     ] {
-        let source = patterned_rgba_source(source_dimensions);
+        let opaque = patterned_rgba_source(source_dimensions);
+        let mut nonopaque = opaque.clone();
+        for (index, pixel) in nonopaque.chunks_exact_mut(4).enumerate() {
+            pixel[3] = (index * 37) as u8;
+        }
 
-        for (spec_anchor, prod_anchor) in anchors() {
-            for (spec_policy, prod_policy) in support_policies() {
-                let mut spec_output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
-                let mut prod_output = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+        for (source_kind, source) in [("opaque", opaque), ("nonopaque", nonopaque)] {
+            for (spec_anchor, prod_anchor) in anchors() {
+                for (spec_policy, prod_policy) in support_policies() {
+                    let mut spec_output =
+                        vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+                    let mut prod_output =
+                        vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
 
-                resize(
-                    ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
-                    ImageViewMut::<Rgba8>::packed(&mut spec_output, output_dimensions).unwrap(),
-                    ImageViewMut::<Rgba8>::packed(&mut prod_output, output_dimensions).unwrap(),
-                    spec_anchor,
-                    prod_anchor,
-                    spec_policy,
-                    prod_policy,
-                );
+                    resize(
+                        ImageView::<Rgba8>::packed(&source, source_dimensions).unwrap(),
+                        ImageViewMut::<Rgba8>::packed(&mut spec_output, output_dimensions).unwrap(),
+                        ImageViewMut::<Rgba8>::packed(&mut prod_output, output_dimensions).unwrap(),
+                        spec_anchor,
+                        prod_anchor,
+                        spec_policy,
+                        prod_policy,
+                    );
 
-                assert_eq!(
-                    prod_output, spec_output,
-                    "output {output_dimensions:?}, anchor {spec_anchor:?}, policy {spec_policy:?}"
-                );
+                    assert_eq!(
+                        prod_output, spec_output,
+                        "{source_kind} output {output_dimensions:?}, anchor {spec_anchor:?}, policy {spec_policy:?}"
+                    );
+                }
             }
         }
     }
