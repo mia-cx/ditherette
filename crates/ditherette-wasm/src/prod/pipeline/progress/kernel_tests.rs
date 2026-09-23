@@ -32,11 +32,25 @@ fn check_rows(
     .unwrap();
     assert_eq!(actual, expected);
     assert_eq!(rows, [1, 2, 3, 4]);
-    actual.fill(203);
     let failure = Failure::new(ErrorCode::Callback, ErrorPath::OnProgress);
-    assert_eq!(run(&mut actual, &mut |_| Err(failure)), Err(failure));
-    assert_eq!(&actual[..row_bytes], &expected[..row_bytes]);
-    assert!(actual[row_bytes..].iter().all(|&byte| byte == 203));
+    for fail_at in [1, 3] {
+        actual.fill(203);
+        assert_eq!(
+            run(&mut actual, &mut |row| {
+                if row == fail_at {
+                    Err(failure)
+                } else {
+                    Ok(())
+                }
+            }),
+            Err(failure)
+        );
+        let written = row_bytes * fail_at as usize;
+        assert_eq!(&actual[..written], &expected[..written]);
+        assert!(actual[written..].iter().all(|&byte| byte == 203));
+        run(&mut actual, &mut |_| Ok(())).unwrap();
+        assert_eq!(actual, expected);
+    }
 }
 
 #[test]
@@ -74,28 +88,30 @@ fn indexed_hooks_report_finished_rows_and_abort_before_the_next() {
         Diffusion::SierraLite,
         Diffusion::Atkinson,
     ] {
-        for serpentine in [false, true] {
-            let policy = DiffusionPolicy::new(DitherPolicy::Diffusion {
-                kernel,
-                feedback: DiffusionFeedback::SrgbBytes,
-                strength: 1.0,
-                serpentine,
-                placement: Placement::Everywhere {},
-            })
-            .unwrap();
-            for cache_size in [0, 128] {
-                let mut cache = vec![0; cache_size];
-                check_rows(3, |output, progress| {
-                    execute_with_progress(
-                        &prepared,
-                        &mut [[0.0; 3]; 9],
-                        &mut cache,
-                        source,
-                        output,
-                        policy,
-                        progress,
-                    )
-                });
+        for feedback in [DiffusionFeedback::SrgbBytes, DiffusionFeedback::Matching] {
+            for serpentine in [false, true] {
+                let policy = DiffusionPolicy::new(DitherPolicy::Diffusion {
+                    kernel,
+                    feedback,
+                    strength: 1.0,
+                    serpentine,
+                    placement: Placement::Everywhere {},
+                })
+                .unwrap();
+                for cache_size in [0, 128] {
+                    let mut cache = vec![0; cache_size];
+                    check_rows(3, |output, progress| {
+                        execute_with_progress(
+                            &prepared,
+                            &mut [[0.0; 3]; 9],
+                            &mut cache,
+                            source,
+                            output,
+                            policy,
+                            progress,
+                        )
+                    });
+                }
             }
         }
     }
