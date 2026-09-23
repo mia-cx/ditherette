@@ -18,7 +18,8 @@ use crate::{
             },
         },
         dither::placement::{
-            placement_mask_with_converter, AdaptivePlacementRows, AdaptivePlacementWork,
+            placement_mask_with_converter, AdaptivePlacementRow, AdaptivePlacementRows,
+            AdaptivePlacementWork,
         },
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
         quantize::{
@@ -364,110 +365,125 @@ impl BorrowedDiffusion<'_> {
             let placement_row = placement_rows
                 .as_mut()
                 .map(|rows| rows.prepare_row(y as u32));
-            let reverse = policy.serpentine && y % 2 == 1;
-            let row = source.row(y as u32).expect("validated source row");
-            let work_rows: [usize; ROWS] = std::array::from_fn(|dy| ((y + dy) % ROWS) * width);
-            let alpha_rows: [Option<&[u8]>; ROWS] = std::array::from_fn(|dy| {
-                if fixed_alpha.is_some() && y + dy < height {
-                    source.row((y + dy) as u32)
-                } else {
-                    None
-                }
-            });
-            for step in 0..width {
-                let x = if reverse { width - 1 - step } else { step };
-                let offset = y * width + x;
-                if let Some((_, index)) =
-                    fixed_alpha.filter(|&(cutoff, _)| row[x * 4 + 3] <= cutoff)
-                {
-                    indices[offset] = index;
-                    continue;
-                }
-                let current = self.work[work_rows[0] + x];
-                if current.iter().any(|value| !value.is_finite()) {
-                    return Err(arithmetic(ErrorPath::DiffusionWork));
-                }
-                let matcher = self.quantizer.matcher();
-                let (index, error) = match policy.feedback {
-                    DiffusionFeedback::SrgbBytes => {
-                        let rgb = current.map(rounded_srgb_byte);
-                        let miss = || {
-                            nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))
-                                .map(|selected| selected.index)
-                        };
-                        let index = match &mut self.rgb_cache {
-                            Some(cache) => cache.try_nearest(rgb, miss)?,
-                            None => miss()?,
-                        };
-                        let start = usize::from(index) * 4;
-                        let error: [f64; 3] = std::array::from_fn(|axis| {
-                            f64::from(rgb[axis])
-                                - f64::from(self.quantizer.palette().palette.rgba[start + axis])
-                        });
-                        (index, error)
-                    }
-                    DiffusionFeedback::Matching => {
-                        let selected = self
-                            .quantizer
-                            .nearest_finite(current)
-                            .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))?;
-                        let error = std::array::from_fn(|axis| {
-                            f64::from(current[axis]) - f64::from(selected.coordinates[axis])
-                        });
-                        (selected.index, error)
-                    }
-                };
-                indices[offset] = index;
-                let mask = match (&placement_row, policy.placement) {
-                    (
-                        Some(row),
-                        Placement::Adaptive {
-                            threshold,
-                            softness,
-                            ..
-                        },
-                    ) => row.mask_at(x as u32, threshold, softness),
-                    _ => placement_mask_with_converter(
-                        source,
-                        x as u32,
-                        y as u32,
-                        matcher.matching.space(),
-                        policy.placement,
-                        self.quantizer.converter(),
-                    ),
-                };
-                let strength_mask = f64::from(policy.strength) * f64::from(mask);
-                for tap in policy.kernel.taps() {
-                    let dx = if reverse { -tap.dx } else { tap.dx };
-                    let Some(target_x) = x.checked_add_signed(dx as isize) else {
-                        continue;
-                    };
-                    let target_y = y + tap.dy as usize;
-                    if target_x >= width || target_y >= height {
-                        continue;
-                    }
-                    if fixed_alpha.is_some_and(|(cutoff, _)| {
-                        alpha_rows[tap.dy as usize].expect("validated target row")[target_x * 4 + 3]
-                            <= cutoff
-                    }) {
-                        continue;
-                    }
-                    let target = work_rows[tap.dy as usize] + target_x;
-                    let weight = f64::from(tap.weight) * strength_mask;
-                    for axis in 0..3 {
-                        let updated =
-                            (f64::from(self.work[target][axis]) + error[axis] * weight) as f32;
-                        if !updated.is_finite() {
-                            return Err(arithmetic(ErrorPath::DiffusionWork));
-                        }
-                        self.work[target][axis] = updated;
-                    }
-                }
-            }
+            self.execute_row(source, indices, policy, fixed_alpha, y, placement_row)?;
             if y + ROWS < height {
                 self.fill_row(source, y + ROWS, policy.feedback);
             }
             progress(y as u32 + 1)?;
+        }
+        Ok(())
+    }
+
+    // Keep the recurrent scan in one compiled row function, independent of progress callers.
+    #[inline(never)]
+    fn execute_row(
+        &mut self,
+        source: ImageView<'_, Rgba8>,
+        indices: &mut [u8],
+        policy: DiffusionPolicy,
+        fixed_alpha: Option<(u8, u8)>,
+        y: usize,
+        placement_row: Option<AdaptivePlacementRow<'_>>,
+    ) -> Result<(), Failure> {
+        let width = source.dimensions().width_usize();
+        let height = source.dimensions().height_usize();
+        let reverse = policy.serpentine && y % 2 == 1;
+        let row = source.row(y as u32).expect("validated source row");
+        let work_rows: [usize; ROWS] = std::array::from_fn(|dy| ((y + dy) % ROWS) * width);
+        let alpha_rows: [Option<&[u8]>; ROWS] = std::array::from_fn(|dy| {
+            if fixed_alpha.is_some() && y + dy < height {
+                source.row((y + dy) as u32)
+            } else {
+                None
+            }
+        });
+        for step in 0..width {
+            let x = if reverse { width - 1 - step } else { step };
+            let offset = y * width + x;
+            if let Some((_, index)) = fixed_alpha.filter(|&(cutoff, _)| row[x * 4 + 3] <= cutoff) {
+                indices[offset] = index;
+                continue;
+            }
+            let current = self.work[work_rows[0] + x];
+            if current.iter().any(|value| !value.is_finite()) {
+                return Err(arithmetic(ErrorPath::DiffusionWork));
+            }
+            let matcher = self.quantizer.matcher();
+            let (index, error) = match policy.feedback {
+                DiffusionFeedback::SrgbBytes => {
+                    let rgb = current.map(rounded_srgb_byte);
+                    let miss = || {
+                        nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))
+                            .map(|selected| selected.index)
+                    };
+                    let index = match &mut self.rgb_cache {
+                        Some(cache) => cache.try_nearest(rgb, miss)?,
+                        None => miss()?,
+                    };
+                    let start = usize::from(index) * 4;
+                    let error: [f64; 3] = std::array::from_fn(|axis| {
+                        f64::from(rgb[axis])
+                            - f64::from(self.quantizer.palette().palette.rgba[start + axis])
+                    });
+                    (index, error)
+                }
+                DiffusionFeedback::Matching => {
+                    let selected = self
+                        .quantizer
+                        .nearest_finite(current)
+                        .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))?;
+                    let error = std::array::from_fn(|axis| {
+                        f64::from(current[axis]) - f64::from(selected.coordinates[axis])
+                    });
+                    (selected.index, error)
+                }
+            };
+            indices[offset] = index;
+            let mask = match (&placement_row, policy.placement) {
+                (
+                    Some(row),
+                    Placement::Adaptive {
+                        threshold,
+                        softness,
+                        ..
+                    },
+                ) => row.mask_at(x as u32, threshold, softness),
+                _ => placement_mask_with_converter(
+                    source,
+                    x as u32,
+                    y as u32,
+                    matcher.matching.space(),
+                    policy.placement,
+                    self.quantizer.converter(),
+                ),
+            };
+            let strength_mask = f64::from(policy.strength) * f64::from(mask);
+            for tap in policy.kernel.taps() {
+                let dx = if reverse { -tap.dx } else { tap.dx };
+                let Some(target_x) = x.checked_add_signed(dx as isize) else {
+                    continue;
+                };
+                let target_y = y + tap.dy as usize;
+                if target_x >= width || target_y >= height {
+                    continue;
+                }
+                if fixed_alpha.is_some_and(|(cutoff, _)| {
+                    alpha_rows[tap.dy as usize].expect("validated target row")[target_x * 4 + 3]
+                        <= cutoff
+                }) {
+                    continue;
+                }
+                let target = work_rows[tap.dy as usize] + target_x;
+                let weight = f64::from(tap.weight) * strength_mask;
+                for axis in 0..3 {
+                    let updated =
+                        (f64::from(self.work[target][axis]) + error[axis] * weight) as f32;
+                    if !updated.is_finite() {
+                        return Err(arithmetic(ErrorPath::DiffusionWork));
+                    }
+                    self.work[target][axis] = updated;
+                }
+            }
         }
         Ok(())
     }
