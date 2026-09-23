@@ -4,6 +4,16 @@ const length = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length').ge
 const tag = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag).get;
 const buffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer').get;
 const offset = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteOffset').get;
+const arrayBufferLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get;
+
+function ordinaryBuffer(view) {
+	try {
+		arrayBufferLength.call(buffer.call(view));
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 export function inputLength(source) {
 	if (tag.call(source) !== 'Uint8Array') throw new TypeError('Expected Uint8Array.');
@@ -54,6 +64,34 @@ export function gatherInput(destination, columnOffsets, rowOffsets, source, sour
 	}
 }
 
+// Direct aligned scalar upscales can copy an already-gathered row without rereading source bytes.
+function gatherRepeatedRows(destination, columnOffsets, rowOffsets, source, sourceLength) {
+	if (inputLength(source) !== sourceLength) {
+		throw new TypeError('Input storage changed during the call.');
+	}
+	const columnBytes = length.call(columnOffsets);
+	const rowBytes = length.call(rowOffsets);
+	const columns = new DataView(buffer.call(columnOffsets), offset.call(columnOffsets), columnBytes);
+	const rows = new DataView(buffer.call(rowOffsets), offset.call(rowOffsets), rowBytes);
+	const input = new Uint32Array(buffer.call(source), offset.call(source), sourceLength / 4);
+	const output = new Uint32Array(buffer.call(destination), offset.call(destination), length.call(destination) / 4);
+	const width = columnBytes / 4;
+	let index = 0;
+	let previousRow = -1;
+	for (let y = 0; y < rowBytes; y += 4) {
+		const row = rows.getUint32(y, true);
+		if (row === previousRow) {
+			Uint32Array.prototype.copyWithin.call(output, index, index - width, index);
+			index += width;
+			continue;
+		}
+		for (let x = 0; x < columnBytes; x += 4) {
+			output[index++] = input[(row + columns.getUint32(x, true)) / 4];
+		}
+		previousRow = row;
+	}
+}
+
 // Compare the current view's bytes, including its offset, before trusting the owned snapshot.
 export function snapshotInput(destination, source, compare) {
 	const size = inputLength(source);
@@ -98,7 +136,12 @@ export function completeSparseResult(columnOffsets, rowOffsets, source, sourceLe
 		return 2; // Output allocation failed.
 	}
 	try {
-		gatherInput(data, columnOffsets, rowOffsets, source, sourceLength);
+		// Shared source bytes can change concurrently; shared offsets identify threaded Wasm.
+		if (outputLength > sourceLength && offset.call(source) % 4 === 0 && ordinaryBuffer(source) && ordinaryBuffer(rowOffsets)) {
+			gatherRepeatedRows(data, columnOffsets, rowOffsets, source, sourceLength);
+		} else {
+			gatherInput(data, columnOffsets, rowOffsets, source, sourceLength);
+		}
 	} catch {
 		return 1; // Source gathering failed; no partial result reaches the sink.
 	}
