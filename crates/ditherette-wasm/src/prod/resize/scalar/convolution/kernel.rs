@@ -53,7 +53,7 @@ pub(super) fn block_source_rows(plan: &ConvolutionResizePlan) -> usize {
             as u64
             + 2
     } else {
-        6
+        ((2.0 * plan.kernel_radius).ceil() as u64).min(source_height)
     };
     ((source_height * block_height(plan) as u64).div_ceil(output_height) + support_rows)
         .min(source_height) as usize
@@ -1062,6 +1062,61 @@ mod tests {
         fn allows_fixed_separable_shrink(&self) -> bool {
             true
         }
+    }
+
+    #[test]
+    fn wide_custom_fixed_kernel_fits_preflight_and_execution_scratch() {
+        use crate::prod::resize::common::allocation::CapacityBudget;
+
+        struct Wide;
+        impl ReconstructionKernel for Wide {
+            fn radius(&self) -> f64 {
+                10.0
+            }
+            fn weight(&self, distance: f64) -> f64 {
+                if distance.abs() < 10.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            fn allows_fixed_separable_shrink(&self) -> bool {
+                true
+            }
+        }
+        let source_dimensions = ImageDimensions::new(128, 200).unwrap();
+        let output_dimensions = ImageDimensions::new(64, 100).unwrap();
+        let required = ConvolutionResizePlan::required_bytes(
+            source_dimensions,
+            output_dimensions,
+            &Wide,
+            SupportPolicy::Fixed,
+        )
+        .unwrap();
+        let mut budget = CapacityBudget::new(required);
+        let plan = ConvolutionResizePlan::try_new(
+            source_dimensions,
+            output_dimensions,
+            ResizeAnchor::Center,
+            &Wide,
+            SupportPolicy::Fixed,
+            &mut budget,
+        )
+        .unwrap();
+        let len = plan.scratch_elements().unwrap();
+        let mut scratch = budget.vector::<f64>(len).unwrap();
+        scratch.resize(len, f64::NAN);
+        let source = vec![127; 128 * 200 * 4];
+        let mut output = vec![0; 64 * 100 * 4];
+        resize_with_progress(
+            ImageView::packed(&source, source_dimensions).unwrap(),
+            ImageViewMut::packed(&mut output, output_dimensions).unwrap(),
+            &plan,
+            Some(&mut scratch),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        assert!(output.iter().all(|&byte| byte == 127));
     }
 
     #[test]
