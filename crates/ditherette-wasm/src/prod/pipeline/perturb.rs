@@ -26,7 +26,7 @@ pub struct PerturbRequest {
     pub perturb: PerturbPolicy,
 }
 
-/// The literal forward adapter owns one temporary converter at a time, including its byte tables.
+/// The literal forward adapter owns one temporary converter record at a time; its byte tables are shared statics.
 pub(super) const fn working_capacity_bytes() -> u64 {
     size_of::<crate::prod::color::packed::Converter>() as u64
 }

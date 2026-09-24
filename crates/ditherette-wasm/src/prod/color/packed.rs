@@ -24,7 +24,7 @@ pub enum PackedSpace {
     Ycbcr,
 }
 
-/// Compatibility name for the original five-space native adapter.
+/// Alias kept for existing callers and tests; identical to [`PackedSpace`].
 pub type OrdinarySpace = PackedSpace;
 
 impl PackedSpace {
@@ -42,7 +42,7 @@ impl PackedSpace {
     }
 
     /// Maps every valid tagged matching recipe to its coordinate space.
-    /// The optional return preserves the S24 native adapter interface.
+    /// Every tag maps today; the `Option` return is kept for existing callers.
     pub const fn from_matching(matching: MatchPolicy) -> Option<Self> {
         match matching {
             MatchPolicy::SrgbEuclidean

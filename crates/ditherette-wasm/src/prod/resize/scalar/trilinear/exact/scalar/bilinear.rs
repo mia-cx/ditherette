@@ -1,9 +1,8 @@
-//! Spec bilinear resize.
+//! Exact f64 bilinear sampling of trilinear mip levels.
 //!
 //! Bilinear resize is expressed as a direct separable triangle-filter sum per
-//! output pixel. The filter widens during minification, making the oracle a
-//! mathematically clear triangle resampler rather than a production two-tap fast
-//! path.
+//! output pixel. The filter widens during minification. It mirrors the spec's
+//! direct evaluation order, unlike the landed f32 separable bilinear kernel.
 
 use crate::{
     image::{ImageFormat, ImageView, ImageViewMut},

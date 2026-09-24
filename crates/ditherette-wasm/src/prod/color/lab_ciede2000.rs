@@ -1,8 +1,8 @@
-//! CIELAB plus CIEDE2000 distance spec.
+//! CIELAB plus CIEDE2000 distance.
 //!
 //! Conversion into Lab uses the same D65 CIELAB coordinates as `cielab`. The
 //! distance function implements Sharma et al. CIEDE2000 with unit weighting
-//! factors, suitable for later nearest-palette matching.
+//! factors and backs the `CielabCiede2000` palette-matching metric.
 
 pub fn ciede2000(lab1: [f32; 3], lab2: [f32; 3]) -> f32 {
     let [l1, a1, b1] = lab1;

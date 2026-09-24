@@ -22,7 +22,7 @@ use super::placement::{
 
 const FIELD_SCALE: f64 = 0.25;
 
-/// Each active field worker can own one temporary converter, including its byte tables.
+/// Each active field worker can own one temporary converter record; its byte tables are shared statics.
 /// The enclosing call charges this in addition to row metadata, source, and output.
 pub const fn band_working_capacity_bytes(active_workers: u32) -> u64 {
     std::mem::size_of::<crate::prod::color::packed::Converter>() as u64 * active_workers as u64

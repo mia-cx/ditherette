@@ -1,8 +1,7 @@
 # Production resize rules
 
 Canonical `scalar/nearest/` contains the landed optimized implementation and its shared planning helpers.
-The S19 generic incremental experiment remains in Git history, not compiled production.
-Historical S19 baseline and measurement records remain unchanged.
+Anchors and continuous coordinate mapping shared by every filter live in `common/alignment.rs`.
 
 This directory contains optimized internal resize kernels. These rules are kept
 here so they are visible while grepping or editing prod resize code. See

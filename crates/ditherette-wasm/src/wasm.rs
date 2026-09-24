@@ -1,9 +1,8 @@
 //! Wasm-facing exports for the fresh crate.
 //!
-//! These exports are intentionally staged while the Rust-side prod pipeline is
-//! wired into the app. Public UI code should prefer coarse pipeline exports once
-//! `processRgba8` exists, but staged exports are useful for lazy materialization,
-//! memoization, and browser/Wasm benchmarks.
+//! The package calls the `private*` processor exports in `wasm/`. The staged
+//! exports here (`resizeRgba8`, `processRgba8`, `convertColorSpace`) and the
+//! benchmark loops serve the legacy website adapter and browser/Wasm benchmarks.
 
 pub mod fields;
 pub mod process;
@@ -92,8 +91,8 @@ pub fn convert_color_space(
 
 /// Resize an RGBA8/sRGB image with the production scalar resize kernels.
 ///
-/// `parallelization_policy` is accepted for API stability; this scalar
-/// checkpoint ignores it until production tiling policy exists.
+/// With threaded Wasm, `parallelization_policy` enables the measured nearest
+/// row-band tiling policy and the pooled diagnostic execution modes.
 #[wasm_bindgen(js_name = resizeRgba8)]
 pub fn resize_rgba8(
     input: &[u8],
@@ -119,12 +118,10 @@ pub fn resize_rgba8(
     )
 }
 
-/// Execute the coarse RGBA8 processing pipeline inside Wasm.
+/// Resize from app-style serialized settings and return RGBA8.
 ///
-/// This is the full-pipeline shell from the parallelization plan. It accepts the
-/// app-style serialized processing settings and currently executes the scalar
-/// resize stage, returning RGBA8 for preview. Later stages can be inserted here
-/// without changing the JS/Wasm boundary shape.
+/// This staged export runs only the scalar resize stage. Complete processing
+/// lives in the package's `privateProcess` path.
 #[wasm_bindgen(js_name = processRgba8)]
 pub fn process_rgba8(
     input: &[u8],

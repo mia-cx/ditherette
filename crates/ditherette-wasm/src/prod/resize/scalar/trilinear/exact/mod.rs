@@ -1,4 +1,4 @@
-//! Exact f64 dependencies private to the missing trilinear recipe.
+//! Exact f64 area and bilinear stages private to production trilinear.
 //! Landed fractional area/bilinear use different accumulation precision.
 
 pub(super) mod common {

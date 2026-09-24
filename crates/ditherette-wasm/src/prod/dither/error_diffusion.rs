@@ -1,4 +1,5 @@
-//! Error-diffusion dithering specs.
+//! Production error-diffusion dithering. `prepared` holds the processor kernel;
+//! the full-image functions here remain for benchmarks and parity tests.
 
 use crate::image::{ImageFormat, ImageView, ImageViewMut, PaletteIndex8};
 

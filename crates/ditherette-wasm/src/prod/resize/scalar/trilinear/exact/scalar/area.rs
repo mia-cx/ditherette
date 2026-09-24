@@ -1,9 +1,8 @@
-//! Spec exact area resize.
+//! Exact f64 area reduction for trilinear mip levels.
 //!
 //! Area resize treats each output pixel as a rectangle in source pixel space and
-//! computes the coverage-weighted average of every source pixel it overlaps. The
-//! implementation is intentionally direct so it can serve as an oracle for exact
-//! coverage/integration behavior.
+//! computes the coverage-weighted average of every source pixel it overlaps. It
+//! mirrors the spec's direct evaluation order so mip levels stay byte-identical.
 
 use crate::{
     image::{ImageFormat, ImageView, ImageViewMut},
