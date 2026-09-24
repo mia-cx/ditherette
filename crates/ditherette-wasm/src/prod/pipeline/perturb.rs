@@ -43,8 +43,9 @@ impl BayerBytes {
         policy: PerturbPolicy,
         available: u64,
     ) -> Option<Self> {
-        if cfg!(feature = "threads")
-            || policy.space != WorkingSpace::Srgb
+        // Callers skip byte tables whenever row bands run, so threaded builds reach this
+        // only on the same scalar path as scalar builds.
+        if policy.space != WorkingSpace::Srgb
             || !matches!(policy.placement, Placement::Everywhere {})
             || policy.strength == 0.0
         {
@@ -358,7 +359,7 @@ fn memory_limit() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
 }
 
-#[cfg(all(test, not(feature = "threads")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::image::RowStride;
