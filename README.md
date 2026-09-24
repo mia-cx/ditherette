@@ -31,10 +31,10 @@ pnpm dev
 Rebuild the package after changing its wrapper or Rust implementation. See the
 [package build prerequisites](packages/ditherette/README.md).
 
-The complete package path is off by default. To exercise it during development:
+The scalar Wasm package processes images by default. To exercise the legacy path during development:
 
 ```sh
-VITE_DITHERETTE_WASM_PROCESS=true pnpm dev
+VITE_DITHERETTE_WASM_PROCESS=false pnpm dev
 ```
 
 Production builds ignore this flag. This path accepts integer crops and reports

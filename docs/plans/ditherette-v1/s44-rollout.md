@@ -1,6 +1,6 @@
-# Held scalar-default rollout
+# Scalar-default rollout
 
-This is S44 preparation for issue #86, not rollout approval. Keep this PR unmerged and undeployed until Mia accepts stability. The [S43 release blockers](../../../.plans/85-release-readiness.md#required-release-blockers) remain open.
+Mia now authorizes landing S44 and its S45 retirement descendant after review and checks pass. Package publishing, release tags, and deployment remain separate actions. The evidence below records the original held preparation; its historical blockers are not a current release verdict.
 
 ## Intended configuration
 
@@ -20,15 +20,15 @@ The developer override is distinct from automatic fallback. It permits legacy di
 
 ## Activation and rollback
 
-Mia's stability acceptance is required before enabling this change. Passing these focused tests does not clear the 18 confirmed performance regression cells or 21 missing scalar release cells. Capped-output transport failure, unapproved bilinear drift, noisy comparisons, and threaded WebKit cleanup also remain blockers. S43 records the remaining size, publisher, visual, and retirement holds.
+The original S43 preparation recorded performance and release blockers. Subsequent performance work, including #149 and #211, landed before this rebase. Mia explicitly authorizes merging the remaining website stack; this does not authorize a separate deployment or package release.
 
 Before an authorized rollout, record the currently deployed website's immutable build/deployment identifier and retain that complete artifact. That deployment, not this branch's Git parent by assumption, is the rollback target.
 
 If an accepted rollout needs rollback, restore that previous website build through the normal deployment process. Restore its worker, JavaScript, and Wasm assets together. Reload open pages so their workers and page-session fallback state belong to the restored build. A production environment variable cannot select TypeScript, and fallback is not a substitute for deployment rollback.
 
-No deployment, merge, package publication, release tag, or activation occurs during S44 preparation. S45 retirement remains a separate held descendant PR.
+S45 retirement remains a separate descendant PR and follows S44 onto main after its own checks pass.
 
-## Validation and evidence reuse
+## Historical preparation evidence
 
 Parent is S43 PR132 at `15300c0dc461265fcef2bd72096de5202836706b`. The gate and focused tests are commit `dd78f749eaf3b9519f1743ba662c4ee293c26794`. The production override test first fails with the old TypeScript output, then passes after the one-line change.
 
