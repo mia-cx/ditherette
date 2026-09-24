@@ -118,6 +118,11 @@ export type ProcessedImage = {
 	updatedAt: number;
 };
 
+export type QuantizeResult = Pick<
+	ProcessedImage,
+	'indices' | 'palette' | 'transparentIndex' | 'warnings'
+>;
+
 export type WorkerLoadSourceRequest = {
 	id: number;
 	type: 'load-source';
@@ -132,8 +137,6 @@ export type WorkerProcessRequest = {
 	settings: ProcessingSettings;
 	palette: EnabledPaletteColor[];
 	settingsHash: string;
-	/** Internal page-session decision after a reported package initialization failure. */
-	typeScriptFallback?: boolean;
 };
 
 export type WorkerCancelRequest = {
@@ -169,20 +172,10 @@ export type WorkerFailure = {
 	id: number;
 	type: 'error';
 	message: string;
+	restartWorker?: boolean;
 };
 
-export type WorkerFallback = {
-	id: number;
-	type: 'fallback';
-	message: string;
-};
-
-export type WorkerResponse =
-	| WorkerProgress
-	| WorkerSourceLoaded
-	| WorkerComplete
-	| WorkerFailure
-	| WorkerFallback;
+export type WorkerResponse = WorkerProgress | WorkerSourceLoaded | WorkerComplete | WorkerFailure;
 
 export function clampOutputDimension(value: number): number {
 	if (!Number.isFinite(value)) return 1;

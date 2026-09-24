@@ -20,9 +20,9 @@ import { ProcessorWorkerPipeline } from './worker-pipeline';
 
 vi.mock('./db', () => ({ saveProcessedImage: vi.fn(async () => undefined) }));
 
-vi.mock('./package-fallback', async (importOriginal) => ({
-	...(await importOriginal<typeof import('./package-fallback')>()),
-	initializePackageProcessor: vi.fn(async () => ({
+vi.mock('ditherette', async (importOriginal) => ({
+	...(await importOriginal<typeof import('ditherette')>()),
+	createDitherette: vi.fn(async () => ({
 		process: () => ({
 			width: 1,
 			height: 1,
@@ -115,27 +115,33 @@ describe('website processing scheduling', () => {
 		expect(metrics?.memory).toBeUndefined();
 		expect(processingMetricsHistory.get()).toHaveLength(1);
 	});
-	it('retains initialization fallback across worker replacement but ignores stale activation', async () => {
+	it('keeps initialization errors visible and retries through a fresh worker module registry', async () => {
 		const first = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
 		const worker = ControlledWorker.instances[0];
 		const load = worker.messages[0];
 		if (load.type !== 'load-source') throw new Error('Expected source load.');
 		worker.receive({ id: load.id, type: 'source-loaded', sourceId: load.sourceId });
-		worker.receive({ id: load.id - 1, type: 'fallback', message: 'Stale initialization failure' });
-		expect(worker.messages.at(-1)).not.toHaveProperty('typeScriptFallback', true);
-		worker.receive({ id: load.id, type: 'fallback', message: 'Using page-session fallback' });
-		expect(worker.messages.at(-1)).toHaveProperty('typeScriptFallback', true);
-		expect(processingProgress.get()?.stage).toBe('Using page-session fallback');
-		cancelProcessing();
+		const retained = processedImage.get();
+		worker.receive({
+			id: load.id,
+			type: 'error',
+			message: 'Wasm could not initialize. Try processing again.',
+			restartWorker: true
+		});
 		await first;
+		expect(processingError.get()).toBe('Wasm could not initialize. Try processing again.');
+		expect(processedImage.get()).toBe(retained);
 		const second = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
+		expect(worker.terminate).toHaveBeenCalledOnce();
 		const replacement = ControlledWorker.instances[1];
 		const nextLoad = replacement.messages[0];
-		if (nextLoad.type !== 'load-source') throw new Error('Expected new source load.');
+		if (nextLoad.type !== 'load-source') throw new Error('Expected source reload.');
 		replacement.receive({ id: nextLoad.id, type: 'source-loaded', sourceId: nextLoad.sourceId });
-		expect(replacement.messages.at(-1)).toHaveProperty('typeScriptFallback', true);
+		expect(replacement.messages.at(-1)).toMatchObject({ type: 'process', sourceId: load.sourceId });
+		expect(replacement.messages.at(-1)?.id).not.toBe(load.id);
+		expect(processingError.get()).toBeUndefined();
 		cancelProcessing();
 		await second;
 	});
@@ -183,12 +189,19 @@ describe('website processing scheduling', () => {
 		const first = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
 		const worker = ControlledWorker.instances[0];
-		const oldId = worker.messages[0].id;
+		const load = worker.messages[0];
+		if (load.type !== 'load-source') throw new Error('Expected source load.');
+		const oldId = load.id;
+		worker.receive({ id: oldId, type: 'source-loaded', sourceId: load.sourceId });
 		worker.receive({ id: oldId, type: 'error', message: 'Visible processing failure' });
 		await first;
 		expect(processingError.get()).toBe('Visible processing failure');
 		const second = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(ControlledWorker.instances).toHaveLength(1);
+		expect(worker.messages.filter(({ type }) => type === 'load-source')).toHaveLength(1);
+		expect(worker.messages.at(-1)).toMatchObject({ type: 'process', sourceId: load.sourceId });
 		const activeProgress = processingProgress.get();
 		worker.receive({ id: oldId, type: 'progress', progress: 'malformed' });
 		expect(processingProgress.get()).toBe(activeProgress);

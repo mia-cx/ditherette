@@ -298,12 +298,7 @@ export function validateWorkerRequest(value: unknown): WorkerRequest {
 			sourceId: assertString(value.sourceId, 'Worker source id'),
 			settings: validateProcessingSettings(value.settings),
 			palette,
-			settingsHash: assertString(value.settingsHash, 'Worker settings hash'),
-			...(value.typeScriptFallback === undefined
-				? {}
-				: {
-						typeScriptFallback: assertBoolean(value.typeScriptFallback, 'Worker fallback decision')
-					})
+			settingsHash: assertString(value.settingsHash, 'Worker settings hash')
 		};
 	}
 	throw new Error('Worker request type is invalid.');
@@ -469,8 +464,10 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 			throw new Error('Worker progress exceeds total work.');
 		return value as WorkerResponse;
 	}
-	if (value.type === 'error' || value.type === 'fallback') {
+	if (value.type === 'error') {
 		if (typeof value.message !== 'string') throw new Error('Worker error response is invalid.');
+		if (value.restartWorker !== undefined && typeof value.restartWorker !== 'boolean')
+			throw new Error('Worker error restart flag is invalid.');
 		return value as WorkerResponse;
 	}
 	if (value.type === 'source-loaded') {
