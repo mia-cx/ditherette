@@ -9,7 +9,8 @@ use crate::{
         contract::{
             error::{DitheretteError, ErrorCode},
             request::{
-                BayerSize as RequestBayerSize, DitherPolicy, DitherQuantizeRequest, Request,
+                BayerSize as RequestBayerSize, DitherPolicy, DitherQuantizeRequest, Placement,
+                Request,
             },
         },
         palette::{allocation::Budget, PalettePixel, PreparationError},
@@ -73,7 +74,7 @@ pub fn dither_yiluoma_into(
     prepared: &PreparedQuantizer,
     indices: &mut [u8],
     size: BayerSize,
-    placement: crate::prod::contract::request::Placement,
+    placement: Placement,
 ) {
     dither_yiluoma_with_progress(source, prepared, indices, size, placement, |_| Ok(()))
         .expect("disabled progress cannot fail");
@@ -85,7 +86,7 @@ pub(crate) fn dither_yiluoma_with_progress(
     prepared: &PreparedQuantizer,
     indices: &mut [u8],
     size: BayerSize,
-    placement: crate::prod::contract::request::Placement,
+    placement: Placement,
     progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
     let band = crate::prod::tiling::RowBand::new(0, source.dimensions().height())
@@ -99,7 +100,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
     prepared: &PreparedQuantizer,
     indices: &mut [u8],
     size: BayerSize,
-    placement: crate::prod::contract::request::Placement,
+    placement: Placement,
     band: crate::prod::tiling::RowBand,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
@@ -120,9 +121,14 @@ pub(super) fn dither_yiluoma_band_with_progress(
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
                     let coordinates = rgb8_to_coordinates(rgb, matching.space());
-                    let nearest = matcher.nearest(coordinates);
-                    let mask = placement_mask_at(source, x, y, matching.space(), placement);
-                    let target = adaptive_target(coordinates, nearest.coordinates, mask);
+                    // Everywhere has mask 1, so the target is the source and nearest is unused.
+                    let target = if matches!(placement, Placement::Everywhere {}) {
+                        coordinates
+                    } else {
+                        let nearest = matcher.nearest(coordinates);
+                        let mask = placement_mask_at(source, x, y, matching.space(), placement);
+                        adaptive_target(coordinates, nearest.coordinates, mask)
+                    };
                     let mix =
                         best_matched_mix(target, matcher, (size.width() * size.width()) as u32);
                     ordered_mix_index(mix, x, y, size)
