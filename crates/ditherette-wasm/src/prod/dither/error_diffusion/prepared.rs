@@ -24,7 +24,6 @@ use crate::{
         palette::{allocation::Budget, PalettePixel, PreparationError, PreparedPalette},
         quantize::{
             cache::{recommended_entries, RgbCache},
-            matcher::{PaletteColor, PaletteMatcher},
             PreparedQuantizer,
         },
     },
@@ -412,9 +411,12 @@ impl BorrowedDiffusion<'_> {
             let (index, error) = match policy.feedback {
                 DiffusionFeedback::SrgbBytes => {
                     let rgb = current.map(rounded_srgb_byte);
+                    // Byte coordinates are bounded, so hue-arc palettes may use pruned matching.
                     let miss = || {
-                        nearest_finite(matcher, self.quantizer.converter().coordinates(rgb))
+                        self.quantizer
+                            .nearest_finite(self.quantizer.converter().coordinates(rgb))
                             .map(|selected| selected.index)
+                            .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))
                     };
                     let index = match &mut self.rgb_cache {
                         Some(cache) => cache.try_nearest(rgb, miss)?,
@@ -513,15 +515,6 @@ fn rgba(source: ImageView<'_, Rgba8>, x: usize, y: usize) -> [u8; 4] {
 #[inline(always)]
 pub(super) fn rounded_srgb_byte(channel: f32) -> u8 {
     (f64::from(channel) + 0.5) as u8
-}
-
-fn nearest_finite(
-    matcher: &PaletteMatcher,
-    coordinates: [f32; 3],
-) -> Result<PaletteColor, Failure> {
-    matcher
-        .nearest_finite(coordinates)
-        .ok_or_else(|| arithmetic(ErrorPath::DiffusionDistance))
 }
 
 fn arithmetic(path: ErrorPath) -> Failure {
