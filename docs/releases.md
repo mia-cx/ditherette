@@ -8,6 +8,8 @@ The merged commit runs conformance again. npm publication builds and tests its e
 
 Ordinary pushes, tags, unrelated PR merges, and unchanged versions cannot publish or deploy. Unconsumed changesets defer their affected release until the next release PR. No GitHub releases or release assets are created. Temporary Actions artifacts retain verification evidence.
 
+Release planning runs for every push without a shared queue. Only release-PR updates and each delivery target are serialized. PR updates read the latest main; superseded target versions fail their version check.
+
 ## First-release setup
 
 - Set `RELEASE_PR_TOKEN` to a repository-scoped token with contents and pull-request write access. GitHub Actions must be allowed to create pull requests. Using a separate token lets generated release PRs trigger normal CI.

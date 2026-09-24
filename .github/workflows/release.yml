@@ -7,21 +7,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ditherette-release
-  cancel-in-progress: false
-
 jobs:
   version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: write
-      pull-requests: write
     outputs:
       release: ${{ steps.plan.outputs.release }}
       npm: ${{ steps.plan.outputs.npm }}
       web: ${{ steps.plan.outputs.web }}
+      pending: ${{ steps.plan.outputs.pending }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,8 +33,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --paginate --slurp | node scripts/release-plan.mjs
+
+  release-pr:
+    needs: version
+    if: needs.version.outputs.pending == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ditherette-release-pr
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Superseded PR-update jobs must always collect the latest pending changesets.
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm install --global pnpm@11.13.1
+      - run: pnpm install --frozen-lockfile
       - name: Require release PR credentials
-        if: steps.plan.outputs.pending == 'true'
         env:
           RELEASE_PR_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
         run: |
@@ -49,7 +65,6 @@ jobs:
             exit 1
           fi
       - name: Open or update the release pull request
-        if: steps.plan.outputs.pending == 'true'
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2
         with:
           github-token: ${{ secrets.RELEASE_PR_TOKEN }}
@@ -82,6 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: production
+    concurrency:
+      group: ditherette-website
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:

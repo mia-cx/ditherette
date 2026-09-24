@@ -37,6 +37,7 @@ for (const target of ['ditherette-web', 'ditherette']) {
 			await cp(join(root, path), join(fixture, path));
 		}
 		await symlink(join(root, 'node_modules'), join(fixture, 'node_modules'), 'dir');
+		await writeFile(join(fixture, '.gitignore'), 'node_modules\nstatus.json\noutputs\n');
 		const beforeWeb = JSON.parse(await readFile(join(fixture, 'package.json'))).version;
 		const beforeNpm = JSON.parse(
 			await readFile(join(fixture, 'packages/ditherette/package.json'))
@@ -100,5 +101,35 @@ for (const target of ['ditherette-web', 'ditherette']) {
 		]);
 		run(process.execPath, [cli, 'status', '--output', join(fixture, 'status.json')]);
 		assert.deepEqual(JSON.parse(await readFile(join(fixture, 'status.json'))).releases, []);
+		const sha = run('git', ['rev-parse', 'HEAD']).trim();
+		run('git', ['checkout', '--detach', sha]);
+		run('git', ['update-ref', 'refs/remotes/origin/main', sha]);
+		run('git', ['branch', '-D', 'main']);
+		const repository = 'mia-cx/ditherette';
+		const pullRequest = {
+			merged_at: '2026-09-24T00:00:00Z',
+			merge_commit_sha: sha,
+			base: { ref: 'main', repo: { full_name: repository } },
+			head: { ref: 'changeset-release/main', repo: { full_name: repository } }
+		};
+		const plan = execFileSync(process.execPath, [join(root, 'scripts/release-plan.mjs')], {
+			cwd: fixture,
+			encoding: 'utf8',
+			input: JSON.stringify([[pullRequest]]),
+			stdio: ['pipe', 'pipe', 'pipe'],
+			env: {
+				...process.env,
+				GITHUB_ACTIONS: 'true',
+				GITHUB_SHA: sha,
+				GITHUB_REPOSITORY: repository,
+				GITHUB_EVENT_NAME: 'push',
+				GITHUB_REF: 'refs/heads/main',
+				GITHUB_OUTPUT: join(fixture, 'outputs')
+			}
+		});
+		assert.match(plan, /^release=true$/m);
+		assert.match(plan, /^web=true$/m);
+		assert.match(plan, target === 'ditherette' ? /^npm=true$/m : /^npm=false$/m);
+		assert.match(plan, /^pending=false$/m);
 	});
 }

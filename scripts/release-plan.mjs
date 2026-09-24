@@ -88,6 +88,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 		let pending;
 		try {
 			const status = join(temporary, 'status.json');
+			// SHA checkouts in Actions omit the local branch required by Changesets.
+			// Create it only in detached CI checkouts; never move an existing branch.
+			if (
+				process.env.GITHUB_ACTIONS === 'true' &&
+				git('rev-parse', '--abbrev-ref', 'HEAD') === 'HEAD' &&
+				git('for-each-ref', '--format=%(refname)', 'refs/heads/main') === ''
+			) {
+				assert.equal(git('rev-parse', 'HEAD'), sha);
+				git('update-ref', 'refs/heads/main', sha, '0'.repeat(40));
+			}
 			execFileSync(
 				process.execPath,
 				['node_modules/@changesets/cli/bin.js', 'status', '--output', status],
