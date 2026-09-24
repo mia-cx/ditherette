@@ -130,8 +130,9 @@ Rejected bilinear directions worth remembering:
    optimizing.
 2. **Add a manifest profile.** Include representative app scales, identity, and
    any diagnostic edge cases separately enough that they are visible in results.
-3. **Benchmark the one-shot public path.** Add a planned/hot subject only if the
-   app actually reuses plans.
+3. **Benchmark the product path.** Use the budgeted subjects that mirror
+   `PreparedResize::new`. Add a planned/hot subject only if the app actually
+   reuses plans.
 4. **Normalize the prod boundary.** Assume packed RGBA8 internally; convert before
    prod resize rather than branching inside kernels.
 5. **Add the cheapest bypasses first.** Caller-level identity, filter-local
