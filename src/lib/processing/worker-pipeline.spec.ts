@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDitherette, DitheretteError } from 'ditherette';
-import { ProcessorWorkerPipeline, transferablesForWorkerResponse } from './worker-pipeline';
+import {
+	PackageInitializationError,
+	ProcessorWorkerPipeline,
+	transferablesForWorkerResponse
+} from './worker-pipeline';
 import type { DitherSettings, EnabledPaletteColor, OutputSettings, WorkerRequest } from './types';
 
 class TestImageData implements ImageData {
@@ -114,7 +118,8 @@ describe('ProcessorWorkerPipeline', () => {
 			const pipeline = loadedPipeline();
 			await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toMatchObject({
 				message: 'Wasm could not initialize. Try processing again.',
-				cause: error
+				cause: error,
+				constructor: PackageInitializationError
 			});
 			expect(processor.process).not.toHaveBeenCalled();
 			expect(await pipeline.handleAsync(processRequest({ id: 3 }), () => undefined)).toMatchObject({

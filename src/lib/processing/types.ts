@@ -172,6 +172,7 @@ export type WorkerFailure = {
 	id: number;
 	type: 'error';
 	message: string;
+	restartWorker?: boolean;
 };
 
 export type WorkerResponse = WorkerProgress | WorkerSourceLoaded | WorkerComplete | WorkerFailure;

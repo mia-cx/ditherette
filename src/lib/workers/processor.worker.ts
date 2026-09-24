@@ -1,6 +1,7 @@
 import { validateWorkerRequest } from '$lib/processing/schemas';
 import type { WorkerResponse } from '$lib/processing/types';
 import {
+	PackageInitializationError,
 	ProcessorWorkerPipeline,
 	transferablesForWorkerResponse
 } from '$lib/processing/worker-pipeline';
@@ -66,7 +67,8 @@ async function handleRequest(
 		workerSelf.postMessage({
 			id: request.id,
 			type: 'error',
-			message: error instanceof Error ? error.message : 'Processing failed'
+			message: error instanceof Error ? error.message : 'Processing failed',
+			restartWorker: error instanceof PackageInitializationError
 		} satisfies WorkerResponse);
 	}
 }

@@ -126,7 +126,8 @@ describe('website processing scheduling', () => {
 		worker.receive({
 			id: load.id,
 			type: 'error',
-			message: 'Wasm could not initialize. Try processing again.'
+			message: 'Wasm could not initialize. Try processing again.',
+			restartWorker: true
 		});
 		await first;
 		expect(processingError.get()).toBe('Wasm could not initialize. Try processing again.');
@@ -188,12 +189,19 @@ describe('website processing scheduling', () => {
 		const first = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
 		const worker = ControlledWorker.instances[0];
-		const oldId = worker.messages[0].id;
+		const load = worker.messages[0];
+		if (load.type !== 'load-source') throw new Error('Expected source load.');
+		const oldId = load.id;
+		worker.receive({ id: oldId, type: 'source-loaded', sourceId: load.sourceId });
 		worker.receive({ id: oldId, type: 'error', message: 'Visible processing failure' });
 		await first;
 		expect(processingError.get()).toBe('Visible processing failure');
 		const second = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(ControlledWorker.instances).toHaveLength(1);
+		expect(worker.messages.filter(({ type }) => type === 'load-source')).toHaveLength(1);
+		expect(worker.messages.at(-1)).toMatchObject({ type: 'process', sourceId: load.sourceId });
 		const activeProgress = processingProgress.get();
 		worker.receive({ id: oldId, type: 'progress', progress: 'malformed' });
 		expect(processingProgress.get()).toBe(activeProgress);

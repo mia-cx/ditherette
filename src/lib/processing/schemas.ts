@@ -466,6 +466,8 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 	}
 	if (value.type === 'error') {
 		if (typeof value.message !== 'string') throw new Error('Worker error response is invalid.');
+		if (value.restartWorker !== undefined && typeof value.restartWorker !== 'boolean')
+			throw new Error('Worker error restart flag is invalid.');
 		return value as WorkerResponse;
 	}
 	if (value.type === 'source-loaded') {

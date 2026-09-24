@@ -93,13 +93,16 @@ export class ProcessorWorkerPipeline {
 	}
 }
 
+/** Signals that a fresh worker must clear cached module or Wasm initialization failures. */
+export class PackageInitializationError extends Error {}
+
 async function initializePackageProcessor() {
 	const message = 'Wasm could not initialize. Try processing again.';
 	let module;
 	try {
 		module = await import('ditherette');
 	} catch (error) {
-		throw new Error(message, { cause: error });
+		throw new PackageInitializationError(message, { cause: error });
 	}
 	try {
 		return await module.createDitherette();
@@ -108,7 +111,7 @@ async function initializePackageProcessor() {
 			error instanceof module.DitheretteError &&
 			(error.code === 'initialization' || error.code === 'capability')
 		)
-			throw new Error(message, { cause: error });
+			throw new PackageInitializationError(message, { cause: error });
 		throw error;
 	}
 }
