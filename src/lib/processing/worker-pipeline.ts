@@ -1,5 +1,5 @@
 import type { Ditherette, Progress } from 'ditherette';
-import { timingSink } from './metrics';
+import type { ProcessingStageTiming } from './metrics';
 import { packageProcessRequest, packageQuantizeResult } from './package-adapter';
 import { clampOutputSize, type WorkerRequest, type WorkerResponse } from './types';
 
@@ -31,14 +31,17 @@ export class ProcessorWorkerPipeline {
 		if (request.type !== 'process') return this.handle(request);
 		if (this.#canceledIds.has(request.id)) return undefined;
 		const startedAt = performance.now();
-		const timings = timingSink();
+		const timings: ProcessingStageTiming[] = [];
+		const mark = (name: string, start: number) => {
+			timings.push({ name, ms: Math.max(0, performance.now() - start) });
+		};
 		const { id, sourceId, settings, palette, settingsHash } = request;
 		if (!this.#sourceCache || this.#sourceCache.sourceId !== sourceId)
 			throw new Error('Worker source is not loaded.');
 		progress('Sizing output', 0.05);
 		const size = clampOutputSize(settings.output.width, settings.output.height);
 		const mapped = packageProcessRequest(this.#sourceCache.source, palette, settings, size);
-		timings.mark('package request adapter', startedAt);
+		mark('package request adapter', startedAt);
 		const initializeStart = performance.now();
 		this.#package ??= initializePackageProcessor().catch((error: unknown) => {
 			this.#package = undefined;
@@ -46,7 +49,7 @@ export class ProcessorWorkerPipeline {
 		});
 		const processor = await this.#package;
 		if (this.#canceledIds.has(id)) return undefined;
-		timings.mark('package initialization wait', initializeStart);
+		mark('package initialization wait', initializeStart);
 		const processStart = performance.now();
 		const output = processor.process({
 			...mapped.request,
@@ -57,12 +60,14 @@ export class ProcessorWorkerPipeline {
 				});
 			}
 		});
-		timings.mark('package process', processStart);
+		mark('package process', processStart);
 		const adapterStart = performance.now();
 		const result = packageQuantizeResult(output, palette, mapped.warnings);
 		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
-		timings.mark('package output adapter', adapterStart);
+		mark('package output adapter', adapterStart);
 		const completedAt = performance.now();
+		const crop = settings.output.crop;
+		const cropKey = crop ? `${crop.x},${crop.y},${crop.width},${crop.height}` : '0,0,full,full';
 		return {
 			id,
 			type: 'complete',
@@ -78,11 +83,11 @@ export class ProcessorWorkerPipeline {
 				id,
 				settingsHash,
 				sourceId,
-				scopeKey: `package|${sourceId}|${size.width}x${size.height}|${settings.output.resize}|${JSON.stringify(settings.output.crop)}`,
+				scopeKey: `package|${sourceId}|${size.width}x${size.height}|${settings.output.resize}|${cropKey}|grade:identity`,
 				startedAt,
 				completedAt,
 				totalMs: completedAt - startedAt,
-				timings: timings.values,
+				timings,
 				outputPixels: size.width * size.height,
 				colorSpace: settings.colorSpace,
 				dither: settings.dither.algorithm,

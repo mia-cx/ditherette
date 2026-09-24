@@ -20,9 +20,9 @@ import { ProcessorWorkerPipeline } from './worker-pipeline';
 
 vi.mock('./db', () => ({ saveProcessedImage: vi.fn(async () => undefined) }));
 
-vi.mock('./package-fallback', async (importOriginal) => ({
-	...(await importOriginal<typeof import('./package-fallback')>()),
-	initializePackageProcessor: vi.fn(async () => ({
+vi.mock('ditherette', async (importOriginal) => ({
+	...(await importOriginal<typeof import('ditherette')>()),
+	createDitherette: vi.fn(async () => ({
 		process: () => ({
 			width: 1,
 			height: 1,
