@@ -159,7 +159,8 @@ fn adjacent_levels_share_one_chain_in_the_memory_budget() {
         PreparedTrilinear::<Rgba8>::try_new(source, output, ProdAnchor::Center, 1_000_000).unwrap();
     // One chain has 129x97, 65x49, 33x25, 17x13, and 9x7 storage-rounded levels.
     // The lower level is 17x13. Its prefix is retained, not computed a second time.
-    let pixels = 129 * 97 + 65 * 49 + 33 * 25 + 17 * 13 + 9 * 7;
+    // Level 0 is the borrowed source, so only the reduced levels own storage.
+    let pixels = 65 * 49 + 33 * 25 + 17 * 13 + 9 * 7;
     let buffers = (pixels + 2 * 13 * 11) * 4;
     let heap = (LIVE_BYTES.with(Cell::get) - before) as usize;
     assert!(heap >= buffers);

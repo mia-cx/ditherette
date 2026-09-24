@@ -1,5 +1,6 @@
 //! Full native preparation before source import. Every buffer stays owned until drop.
 //! One storage-rounded chain supplies both adjacent levels without duplicate reductions.
+//! Level 0 is the borrowed source itself; the owned chain starts at the first reduction.
 
 use std::mem::size_of;
 
@@ -30,15 +31,19 @@ pub struct PreparedTrilinear<F: ImageFormat> {
     output: ImageDimensions,
     anchor: ResizeAnchor,
     blend: f64,
+    /// Reduced levels 1.. of the chain; level 0 is the source.
     levels: Vec<MipLevel<F>>,
+    /// Chain lengths including the source; zero when no level is sampled or blended.
     lower_count: usize,
+    upper_count: usize,
     lower_output: Vec<F::Storage>,
     upper_output: Vec<F::Storage>,
     accumulated: Vec<f64>,
     capacity: u64,
 }
 
-impl<F: ImageFormat> PreparedTrilinear<F>
+// Format markers are uninhabited `Copy` enums; the bound lets the source view act as level 0.
+impl<F: ImageFormat + Copy> PreparedTrilinear<F>
 where
     F::Storage: ResizeSample,
 {
@@ -51,8 +56,12 @@ where
         let mut bytes = size_of::<Self>() as u64;
         add(&mut bytes, F::CHANNEL_COUNT, size_of::<f64>())?;
         let count = lower.max(upper);
-        add(&mut bytes, count, size_of::<MipLevel<F>>())?;
-        for dimensions in chain_dimensions(source, count) {
+        add(
+            &mut bytes,
+            count.saturating_sub(1),
+            size_of::<MipLevel<F>>(),
+        )?;
+        for dimensions in chain_dimensions(source, count).skip(1) {
             add(
                 &mut bytes,
                 storage_len::<F>(dimensions)?,
@@ -102,6 +111,7 @@ where
             blend,
             levels,
             lower_count,
+            upper_count,
             lower_output,
             upper_output,
             accumulated,
@@ -142,15 +152,9 @@ where
             .iter()
             .map(|level| level.dimensions.height())
             .sum();
-        let total = chain_rows
-            + self.output.height()
-                * if self.lower_count < self.levels.len() {
-                    3
-                } else {
-                    1
-                };
+        let total = chain_rows + self.output.height() * if self.upper_count != 0 { 3 } else { 1 };
         progress(0, total)?;
-        if self.levels.is_empty() {
+        if self.lower_count == 0 {
             resize_bilinear_with_scratch_into(source, output, self.anchor, &mut self.accumulated);
             return progress(total, total);
         }
@@ -160,8 +164,8 @@ where
             &mut self.accumulated,
             &mut |completed| progress(completed, total),
         )?;
-        let lower = self.levels[self.lower_count - 1].view();
-        if self.lower_count == self.levels.len() {
+        let lower = level(&source, &self.levels, self.lower_count - 1);
+        if self.upper_count == 0 {
             resize_bilinear_with_scratch_into(lower, output, self.anchor, &mut self.accumulated);
             return progress(total, total);
         }
@@ -173,7 +177,7 @@ where
         );
         progress(chain_rows + self.output.height(), total)?;
         resize_bilinear_with_scratch_into(
-            self.levels.last().unwrap().view(),
+            level(&source, &self.levels, self.upper_count - 1),
             ImageViewMut::<F>::packed(&mut self.upper_output, self.output).unwrap(),
             self.anchor,
             &mut self.accumulated,
@@ -245,8 +249,8 @@ fn reserve_chain<F: ImageFormat>(
 where
     F::Storage: ResizeSample,
 {
-    let mut chain = budget.vector(count)?;
-    for dimensions in chain_dimensions(source, count) {
+    let mut chain = budget.vector(count.saturating_sub(1))?;
+    for dimensions in chain_dimensions(source, count).skip(1) {
         let len = storage_len::<F>(dimensions)?;
         let mut data = budget.vector(len)?;
         data.resize(len, F::Storage::default());
@@ -255,7 +259,19 @@ where
     Ok(chain)
 }
 
-fn fill_chain<F: ImageFormat>(
+/// Chain level `index`, where level 0 is the borrowed source.
+fn level<'a, F: ImageFormat + Copy>(
+    source: &ImageView<'a, F>,
+    chain: &'a [MipLevel<F>],
+    index: usize,
+) -> ImageView<'a, F> {
+    match index {
+        0 => *source,
+        _ => chain[index - 1].view(),
+    }
+}
+
+fn fill_chain<F: ImageFormat + Copy>(
     source: &ImageView<'_, F>,
     chain: &mut [MipLevel<F>],
     accumulated: &mut [f64],
@@ -264,17 +280,11 @@ fn fill_chain<F: ImageFormat>(
 where
     F::Storage: ResizeSample,
 {
-    let row_len = source.dimensions().width_usize() * F::CHANNEL_COUNT;
-    for y in 0..source.dimensions().height() {
-        let start = y as usize * row_len;
-        chain[0].data[start..start + row_len].copy_from_slice(source.row(y).unwrap());
-        progress(y + 1)?;
-    }
-    let mut completed = source.dimensions().height();
-    for index in 1..chain.len() {
+    let mut completed = 0;
+    for index in 0..chain.len() {
         let (previous, next) = chain.split_at_mut(index);
         resize_area_with_scratch_into(
-            previous[index - 1].view(),
+            previous.last().map_or(*source, MipLevel::view),
             ImageViewMut::<F>::packed(&mut next[0].data, next[0].dimensions).unwrap(),
             accumulated,
         );
