@@ -85,7 +85,6 @@ pub(super) fn resize_with_progress(
         .chunks_exact_mut(output_row_byte_len)
         .enumerate()
     {
-        vertical_row.fill(0.0);
         accumulate_vertical_row(
             source_data,
             source_row_byte_len,
@@ -154,7 +153,6 @@ pub(super) fn resize_rows_with_scratch_into(
             continue;
         }
 
-        vertical_row.fill(0.0);
         accumulate_vertical_row(
             source_data,
             source_row_byte_len,
@@ -225,20 +223,36 @@ fn resize_horizontal_only_into(
 // copied `AxisOverlap` y layout.
 // NOTE(perf): This planned coverage path handles fractional resizes. Exact
 // integer down/up scales bypass it above and remain byte-exact.
+/// Overwrites `vertical_row`. The first span is stored directly instead of added to a
+/// zero-filled row: overlaps are positive, so `0.0 + x == x` bit for bit.
 fn accumulate_vertical_row(
     source_data: &[u8],
     source_row_byte_len: usize,
     vertical_row: &mut [f32],
     y_spans: &[super::plan::AxisOverlap],
 ) {
-    for y_span in y_spans {
+    let Some((first, rest)) = y_spans.split_first() else {
+        vertical_row.fill(0.0);
+        return;
+    };
+    let source_row = |span: &super::plan::AxisOverlap| {
+        let source_start = span.source_index * source_row_byte_len;
+        &source_data[source_start..source_start + source_row_byte_len]
+    };
+    let y_weight = first.overlap as f32;
+    for (vertical_pixel, source_pixel) in vertical_row
+        .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
+        .zip(source_row(first).chunks_exact(rgba8::RGBA8_CHANNELS))
+    {
+        for channel in 0..rgba8::RGBA8_CHANNELS {
+            vertical_pixel[channel] = f32::from(source_pixel[channel]) * y_weight;
+        }
+    }
+    for y_span in rest {
         let y_weight = y_span.overlap as f32;
-        let source_start = y_span.source_index * source_row_byte_len;
-        let source_row = &source_data[source_start..source_start + source_row_byte_len];
-
         for (vertical_pixel, source_pixel) in vertical_row
             .chunks_exact_mut(rgba8::RGBA8_CHANNELS)
-            .zip(source_row.chunks_exact(rgba8::RGBA8_CHANNELS))
+            .zip(source_row(y_span).chunks_exact(rgba8::RGBA8_CHANNELS))
         {
             accumulate_weighted_pixel(vertical_pixel, source_pixel, y_weight);
         }

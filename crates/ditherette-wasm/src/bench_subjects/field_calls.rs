@@ -13,7 +13,7 @@ use crate::{
         contract::{failure::Failure, request as prod},
         pipeline::{
             perturb::PerturbRequest,
-            processor::{Boundary, Processor},
+            processor::{Boundary, InputBoundary, Processor},
             quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
         },
     },
@@ -143,8 +143,7 @@ pub fn processor() -> Result<Processor, BenchSubjectError> {
 }
 
 pub(super) struct NativeBoundary<'a>(pub(super) &'a [u8]);
-impl Boundary for NativeBoundary<'_> {
-    type Output = ImageBuf<Rgba8>;
+impl InputBoundary for NativeBoundary<'_> {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.0.len())
     }
@@ -156,9 +155,13 @@ impl Boundary for NativeBoundary<'_> {
         if compare && destination == self.0 {
             return Ok(true);
         }
-        Boundary::copy_input(self, destination)?;
+        InputBoundary::copy_input(self, destination)?;
         Ok(false)
     }
+}
+
+impl Boundary for NativeBoundary<'_> {
+    type Output = ImageBuf<Rgba8>;
     fn complete(
         &mut self,
         bytes: &[u8],
@@ -169,16 +172,6 @@ impl Boundary for NativeBoundary<'_> {
 }
 impl QuantizeBoundary for NativeBoundary<'_> {
     type Output = IndexedImage;
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        Ok(self.0.len())
-    }
-    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
-        destination.copy_from_slice(self.0);
-        Ok(())
-    }
-    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
-        Boundary::snapshot_input(self, destination, compare)
-    }
     fn complete(
         &mut self,
         indices: &[u8],

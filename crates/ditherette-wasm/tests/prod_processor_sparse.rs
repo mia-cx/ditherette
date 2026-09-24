@@ -12,7 +12,7 @@ use ditherette_wasm::{
         },
         pipeline::{
             process::ProcessRequest,
-            processor::{Allocator, Boundary, Processor, ResizeRequest},
+            processor::{Allocator, Boundary, InputBoundary, Processor, ResizeRequest},
             progress::Callback,
             quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
         },
@@ -69,9 +69,7 @@ impl Callback for Io {
     }
 }
 
-impl Boundary for Io {
-    type Output = Vec<u8>;
-
+impl InputBoundary for Io {
     fn progress(&mut self) -> Option<&mut dyn Callback> {
         self.fail_stage.map(|_| self as &mut dyn Callback)
     }
@@ -90,29 +88,12 @@ impl Boundary for Io {
         if compare && destination == self.input {
             return Ok(true);
         }
-        Boundary::copy_input(self, destination)?;
+        InputBoundary::copy_input(self, destination)?;
         Ok(false)
     }
 
     fn supports_sparse_input(&self) -> bool {
         self.sparse
-    }
-
-    fn supports_sparse_output(&self) -> bool {
-        self.direct_output
-    }
-
-    fn complete_sparse(
-        &mut self,
-        columns: &[u8],
-        rows: &[u8],
-        source_len: usize,
-        dimensions: ImageDimensions,
-    ) -> Result<Vec<u8>, Failure> {
-        self.direct_completions += 1;
-        let mut bytes = vec![0; dimensions.storage_len::<Rgba8>().unwrap()];
-        Boundary::gather_input(self, &mut bytes, columns, rows, source_len)?;
-        Boundary::complete(self, &bytes, dimensions)
     }
 
     fn gather_input(
@@ -145,6 +126,27 @@ impl Boundary for Io {
         }
         Ok(())
     }
+}
+
+impl Boundary for Io {
+    type Output = Vec<u8>;
+
+    fn supports_sparse_output(&self) -> bool {
+        self.direct_output
+    }
+
+    fn complete_sparse(
+        &mut self,
+        columns: &[u8],
+        rows: &[u8],
+        source_len: usize,
+        dimensions: ImageDimensions,
+    ) -> Result<Vec<u8>, Failure> {
+        self.direct_completions += 1;
+        let mut bytes = vec![0; dimensions.storage_len::<Rgba8>().unwrap()];
+        InputBoundary::gather_input(self, &mut bytes, columns, rows, source_len)?;
+        Boundary::complete(self, &bytes, dimensions)
+    }
 
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         if self.fail_complete {
@@ -160,30 +162,6 @@ impl Boundary for Io {
 impl QuantizeBoundary for Io {
     type Output = IndexedImage;
 
-    fn progress(&mut self) -> Option<&mut dyn Callback> {
-        Boundary::progress(self)
-    }
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        Boundary::input_len(self)
-    }
-    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
-        Boundary::copy_input(self, destination)
-    }
-    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
-        Boundary::snapshot_input(self, destination, compare)
-    }
-    fn supports_sparse_input(&self) -> bool {
-        self.sparse
-    }
-    fn gather_input(
-        &mut self,
-        destination: &mut [u8],
-        columns: &[u8],
-        rows: &[u8],
-        source_len: usize,
-    ) -> Result<(), Failure> {
-        Boundary::gather_input(self, destination, columns, rows, source_len)
-    }
     fn complete(
         &mut self,
         bytes: &[u8],

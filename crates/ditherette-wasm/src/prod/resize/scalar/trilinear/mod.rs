@@ -1,4 +1,4 @@
-//! Spec trilinear resize.
+//! Production trilinear resize.
 //!
 //! Trilinear is a mip-level policy: build an area-filtered mip pyramid, resize
 //! from the two mip levels surrounding the requested minification with bilinear,

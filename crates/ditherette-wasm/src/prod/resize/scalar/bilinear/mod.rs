@@ -9,8 +9,7 @@ use crate::{
     prod::resize::common,
 };
 
-pub mod alignment;
-mod coordinates;
+pub use crate::prod::resize::common::alignment;
 mod filter;
 mod kernel;
 mod plan;
@@ -86,7 +85,11 @@ pub fn resize_bilinear_rgba8_rows_with_plan_into(
     common::rgba8::assert_packed_source(source, "bilinear");
     common::rgba8::assert_packed_output(&output, "bilinear");
     assert_eq!(source.dimensions(), plan.source_dimensions());
-    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        plan.output_dimensions(),
+        y_start,
+    );
     kernel::resize_packed_rgba8_rows_with_triangle_filter_into(source, output, plan, y_start);
 }
 
@@ -106,7 +109,11 @@ pub fn resize_bilinear_rgba8_rows_with_plan_and_scratch_into(
     common::rgba8::assert_packed_source(source, "bilinear");
     common::rgba8::assert_packed_output(&output, "bilinear");
     assert_eq!(source.dimensions(), plan.source_dimensions());
-    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        plan.output_dimensions(),
+        y_start,
+    );
     let required = plan.scratch_elements();
     if scratch.len() < required {
         return Err(Failure::new(
@@ -174,17 +181,4 @@ pub(crate) fn resize_bilinear_with_progress(
         return progress(output.dimensions().height());
     }
     kernel::resize_with_progress(source, output, plan, scratch, progress)
-}
-
-fn assert_row_band_matches_plan(
-    band_dimensions: crate::image::ImageDimensions,
-    full_output_dimensions: crate::image::ImageDimensions,
-    y_start: u32,
-) {
-    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
-    assert!(
-        y_start <= full_output_dimensions.height()
-            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
-        "row band must fit inside full output dimensions"
-    );
 }

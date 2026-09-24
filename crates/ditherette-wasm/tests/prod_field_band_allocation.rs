@@ -111,7 +111,7 @@ fn field_workers_charge_live_converters_before_reservations_and_recover_after_ea
         }
         let mut output = vec![213; 220];
         let mut indices = vec![213; 55];
-        let run = |work: &mut RowBandBuffers<()>,
+        let run = |work: &mut RowBandBuffers<[f32; 3]>,
                    output: &mut [u8],
                    progress: &mut dyn FnMut(u64) -> Result<(), Failure>| {
             perturb::perturb_by_field_bands_into(

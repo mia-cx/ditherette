@@ -1,15 +1,19 @@
 //! Frozen scalar request composition using existing fallible palette preparation.
 
-use super::super::{ordered::BayerSize, placement::placement_mask_at};
-use super::{adaptive_target, best_matched_mix, ordered_mix_index};
+use super::super::{
+    ordered::BayerSize,
+    placement::{placement_mask_with_converter, AdaptivePlacementRows},
+};
+use super::{adaptive_target, best_matched_mix, ordered_mix_index, MixCache};
 use crate::{
     image::{contracts::IndexedImage, ImageBuf, PaletteIndex8},
     prod::{
-        color::packed::{rgb8_to_coordinates, Converter},
+        color::packed::{Converter, PackedSpace},
         contract::{
             error::{DitheretteError, ErrorCode},
             request::{
-                BayerSize as RequestBayerSize, DitherPolicy, DitherQuantizeRequest, Request,
+                BayerSize as RequestBayerSize, DitherPolicy, DitherQuantizeRequest, Placement,
+                Request,
             },
         },
         palette::{allocation::Budget, PalettePixel, PreparationError},
@@ -73,34 +77,62 @@ pub fn dither_yiluoma_into(
     prepared: &PreparedQuantizer,
     indices: &mut [u8],
     size: BayerSize,
-    placement: crate::prod::contract::request::Placement,
+    placement: Placement,
 ) {
-    dither_yiluoma_with_progress(source, prepared, indices, size, placement, |_| Ok(()))
-        .expect("disabled progress cannot fail");
+    dither_yiluoma_with_progress(
+        source,
+        prepared,
+        indices,
+        size,
+        placement,
+        &mut [],
+        &mut [],
+        |_| Ok(()),
+    )
+    .expect("disabled progress cannot fail");
 }
 
 /// Reports completed rows within the same ordered-mixture traversal.
+/// Optional scratch never changes output. Adaptive placement reuses converted rows when
+/// `placement_rows` holds three source-width rows; Everywhere memoizes mixtures when `mixes`
+/// holds a power-of-two table. Empty scratch keeps the allocation-free direct path.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn dither_yiluoma_with_progress(
     source: crate::image::ImageView<'_, crate::image::Rgba8>,
     prepared: &PreparedQuantizer,
     indices: &mut [u8],
     size: BayerSize,
-    placement: crate::prod::contract::request::Placement,
+    placement: Placement,
+    placement_rows: &mut [[f32; 3]],
+    mixes: &mut [u64],
     progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
     let band = crate::prod::tiling::RowBand::new(0, source.dimensions().height())
         .expect("validated source height");
-    dither_yiluoma_band_with_progress(source, prepared, indices, size, placement, band, progress)
+    dither_yiluoma_band_with_progress(
+        source,
+        prepared,
+        indices,
+        size,
+        placement,
+        band,
+        placement_rows,
+        mixes,
+        progress,
+    )
 }
 
 /// Writes one disjoint output band while retaining absolute coordinates and full-source reads.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn dither_yiluoma_band_with_progress(
     source: crate::image::ImageView<'_, crate::image::Rgba8>,
     prepared: &PreparedQuantizer,
     indices: &mut [u8],
     size: BayerSize,
-    placement: crate::prod::contract::request::Placement,
+    placement: Placement,
     band: crate::prod::tiling::RowBand,
+    placement_rows: &mut [[f32; 3]],
+    mixes: &mut [u64],
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
     let dimensions = source.dimensions();
@@ -109,28 +141,180 @@ pub(super) fn dither_yiluoma_band_with_progress(
         indices.len(),
         band.height() as usize * dimensions.width_usize()
     );
-    let matching = prepared.matcher().matching;
+    let space = prepared.matcher().matching.space();
     let palette = prepared.palette();
     let matcher = prepared.matcher();
-    for y in band.y_start()..band.y_end() {
-        for x in 0..dimensions.width() {
+    let levels = (size.width() * size.width()) as u32;
+    let converter = Converter::new(PackedSpace::from_working(space));
+    let mut rows = match placement {
+        Placement::Adaptive { radius, .. } if !placement_rows.is_empty() => Some(
+            AdaptivePlacementRows::new(source, &converter, space, radius, placement_rows),
+        ),
+        _ => None,
+    };
+    let mut mixes = match placement {
+        Placement::Everywhere {} if !mixes.is_empty() => Some(MixCache::new(mixes, levels)),
+        _ => None,
+    };
+    for (y, indices) in
+        (band.y_start()..band.y_end()).zip(indices.chunks_exact_mut(dimensions.width_usize()))
+    {
+        let row = rows.as_mut().map(|rows| rows.prepare_row(y));
+        for (x, index) in (0..dimensions.width()).zip(indices) {
             let pixel = source.pixel(x, y).expect("source pixel is in bounds");
-            let rgba = [pixel[0], pixel[1], pixel[2], pixel[3]];
-            let index = match palette.prepare_pixel(rgba) {
+            *index = match palette.prepare_pixel([pixel[0], pixel[1], pixel[2], pixel[3]]) {
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
-                    let coordinates = rgb8_to_coordinates(rgb, matching.space());
-                    let nearest = matcher.nearest(coordinates);
-                    let mask = placement_mask_at(source, x, y, matching.space(), placement);
-                    let target = adaptive_target(coordinates, nearest.coordinates, mask);
-                    let mix =
-                        best_matched_mix(target, matcher, (size.width() * size.width()) as u32);
+                    let search = || best_matched_mix(converter.coordinates(rgb), matcher, levels);
+                    // Everywhere has mask 1, so the target is the source and nearest is unused.
+                    let mix = match placement {
+                        Placement::Everywhere {} => match &mut mixes {
+                            Some(mixes) => mixes.mix(rgb, search),
+                            None => search(),
+                        },
+                        Placement::Adaptive {
+                            threshold,
+                            softness,
+                            ..
+                        } => {
+                            let coordinates = converter.coordinates(rgb);
+                            let nearest = matcher.nearest(coordinates);
+                            let mask = match &row {
+                                Some(row) => row.mask_at(x, threshold, softness),
+                                None => placement_mask_with_converter(
+                                    source, x, y, space, placement, &converter,
+                                ),
+                            };
+                            let target = adaptive_target(coordinates, nearest.coordinates, mask);
+                            best_matched_mix(target, matcher, levels)
+                        }
+                    };
                     ordered_mix_index(mix, x, y, size)
                 }
             };
-            indices[(y - band.y_start()) as usize * dimensions.width_usize() + x as usize] = index;
         }
         progress(y + 1)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        image::{contracts::PaletteEntry, ImageDimensions, ImageView},
+        prod::contract::request::{AlphaPolicy, MatchPolicy},
+    };
+
+    #[test]
+    fn adaptive_rows_match_direct_neighbor_conversion() {
+        let dimensions = ImageDimensions::new(9, 7).unwrap();
+        let bytes = (0..9 * 7 * 4)
+            .map(|i| ((i * 37 + i / 5 * 11) % 256) as u8)
+            .collect::<Vec<_>>();
+        let source = ImageView::packed(&bytes, dimensions).unwrap();
+        let palette = [[12, 40, 200], [250, 250, 250], [0, 0, 0], [200, 60, 30]]
+            .map(|rgb| PaletteEntry::Color { rgb });
+        for matching in [
+            MatchPolicy::SrgbEuclidean,
+            MatchPolicy::OklchCircularHue,
+            MatchPolicy::CielabCiede2000,
+        ] {
+            for alpha in [
+                AlphaPolicy::Premultiplied {},
+                AlphaPolicy::Preserve { threshold: 90.0 },
+            ] {
+                let prepared =
+                    PreparedQuantizer::try_new(&palette, alpha, matching, 1 << 20).unwrap();
+                for radius in [1, 2, 9] {
+                    let placement = Placement::Adaptive {
+                        radius,
+                        threshold: 4.0,
+                        softness: 3.0,
+                    };
+                    let run = |rows: &mut [[f32; 3]]| {
+                        let mut indices = vec![0; 9 * 7];
+                        dither_yiluoma_with_progress(
+                            source,
+                            &prepared,
+                            &mut indices,
+                            BayerSize::Four,
+                            placement,
+                            rows,
+                            &mut [],
+                            |_| Ok(()),
+                        )
+                        .unwrap();
+                        indices
+                    };
+                    assert_eq!(
+                        run(&mut [[f32::NAN; 3]; 27]),
+                        run(&mut []),
+                        "{matching:?} {alpha:?} radius={radius}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn memoized_everywhere_mixtures_match_direct_search() {
+        let dimensions = ImageDimensions::new(40, 31).unwrap();
+        // Few distinct colors repeat across the image; alpha varies so preparation matters.
+        let bytes = (0..40 * 31)
+            .flat_map(|i| {
+                let c = (i % 23) as u8;
+                [
+                    c * 11,
+                    255 - c * 7,
+                    c * 5 + 40,
+                    if i % 7 == 0 { 90 } else { 255 },
+                ]
+            })
+            .collect::<Vec<_>>();
+        let source = ImageView::packed(&bytes, dimensions).unwrap();
+        let palette = [
+            [12, 40, 200],
+            [250, 250, 250],
+            [0, 0, 0],
+            [200, 60, 30],
+            [90, 200, 90],
+        ]
+        .map(|rgb| PaletteEntry::Color { rgb });
+        for matching in [
+            MatchPolicy::SrgbEuclidean,
+            MatchPolicy::SrgbRec709,
+            MatchPolicy::OklchHueArc,
+            MatchPolicy::CielabCiede2000,
+        ] {
+            for alpha in [
+                AlphaPolicy::Premultiplied {},
+                AlphaPolicy::Preserve { threshold: 100.0 },
+            ] {
+                let prepared =
+                    PreparedQuantizer::try_new(&palette, alpha, matching, 1 << 20).unwrap();
+                for size in [BayerSize::Two, BayerSize::Eight, BayerSize::Sixteen] {
+                    let run = |mixes: &mut [u64]| {
+                        let mut indices = vec![0; 40 * 31];
+                        dither_yiluoma_with_progress(
+                            source,
+                            &prepared,
+                            &mut indices,
+                            size,
+                            Placement::Everywhere {},
+                            &mut [],
+                            mixes,
+                            |_| Ok(()),
+                        )
+                        .unwrap();
+                        indices
+                    };
+                    let direct = run(&mut []);
+                    // A tiny table forces collisions; stale scratch must not leak into results.
+                    assert_eq!(run(&mut [u64::MAX; 4]), direct, "{matching:?} {alpha:?}");
+                    assert_eq!(run(&mut vec![0; 1024]), direct, "{matching:?} {alpha:?}");
+                }
+            }
+        }
+    }
 }

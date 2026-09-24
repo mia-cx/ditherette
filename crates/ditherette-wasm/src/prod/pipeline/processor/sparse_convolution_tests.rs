@@ -1,4 +1,4 @@
-use super::{Boundary, Processor, ResizeRequest};
+use super::{Boundary, InputBoundary, Processor, ResizeRequest};
 use crate::{
     image::ImageDimensions,
     prod::contract::{
@@ -16,8 +16,7 @@ struct Io {
     gathers: usize,
 }
 
-impl Boundary for Io {
-    type Output = Vec<u8>;
+impl InputBoundary for Io {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.pixels.len())
     }
@@ -59,6 +58,10 @@ impl Boundary for Io {
         assert!(pixels.next().is_none());
         Ok(())
     }
+}
+
+impl Boundary for Io {
+    type Output = Vec<u8>;
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         Ok(bytes.to_vec())
     }

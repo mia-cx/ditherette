@@ -9,7 +9,7 @@ use crate::prod::{
     },
     pipeline::{
         execution::{ExecutionPolicy, RowBandPolicy},
-        processor::{Boundary, Processor, ResizeRequest},
+        processor::{Boundary, InputBoundary, Processor, ResizeRequest},
     },
     tiling::{WorkerBudget, MAX_WORKER_BUDGET},
 };
@@ -153,8 +153,7 @@ struct Io<'a, 'b> {
     output: ImageViewMut<'b, Rgba8>,
 }
 
-impl Boundary for Io<'_, '_> {
-    type Output = ();
+impl InputBoundary for Io<'_, '_> {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.source.dimensions().storage_len::<Rgba8>().unwrap())
     }
@@ -178,6 +177,10 @@ impl Boundary for Io<'_, '_> {
         self.copy_input(output)?;
         Ok(false)
     }
+}
+
+impl Boundary for Io<'_, '_> {
+    type Output = ();
     fn complete(&mut self, bytes: &[u8], dimensions: ImageDimensions) -> Result<(), Failure> {
         for (y, source) in bytes
             .chunks_exact(dimensions.width() as usize * 4)

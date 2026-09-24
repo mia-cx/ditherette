@@ -125,8 +125,11 @@ test('scalar resize uses the narrow sparse-nearest ABI only without progress', (
 });
 
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
-	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.
-	const capacity = 3 * 20 + 16 + 8 + 4 + 32 + 16 + 4;
+	// Wasm mip headers for the two reduced levels (level 0 is the borrowed source), chain
+	// bytes, f64 channels, axis tap plans (x 3 u32 starts + 6 16-byte taps, y 2 + 4),
+	// and imported source/output capacities.
+	const plans = 3 * 4 + 6 * 16 + 2 * 4 + 4 * 16;
+	const capacity = 2 * 20 + 8 + 4 + 32 + plans + 16 + 4;
 	const processor = await createDitherette({
 		wasm: module,
 		memoryLimitBytes: resizeOverhead + capacity

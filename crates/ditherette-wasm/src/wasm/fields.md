@@ -38,10 +38,11 @@ Yliluoma placement paths are 27 through 30. Matrix size uses path 36; the interv
 Capacity checks include source/output buffers, owned records, and one temporary existing Converter with its tables.
 Separable calls also count the RGBA8 intermediate and the existing prepared quantizer capacities.
 Diffusion calls count the existing prepared quantizer, three source-initialized f32 work rows, and scalar scan controls.
-Yliluoma counts prepared quantizer capacities but needs no intermediate or mixture table.
+Yliluoma counts prepared quantizer capacities. Its optional exact-RGB mixture table (Everywhere) and
+adaptive coordinate rows are charged as optional working capacity and skipped when they do not fit.
 All processing buffers are reserved before the caught source import. Failure drops temporary ownership and restores Ready.
 The final caught void helpers construct the complete durable JS result before assigning the sink.
-No cache or callback publication is added here.
+Progress callbacks and the retained preparation store follow the processor rules in `processor.md`.
 
 Private fixtures derive exact budgets from the current artifact, not a hardcoded structure size.
 The repeated-failure fixture verifies constant externref slots, live handles, and Wasm memory high-water capacity across 512 cycles.

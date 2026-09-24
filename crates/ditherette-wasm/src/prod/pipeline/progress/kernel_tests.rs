@@ -79,6 +79,8 @@ fn indexed_hooks_report_finished_rows_and_abort_before_the_next() {
             output,
             BayerSize::Four,
             Placement::Everywhere {},
+            &mut [],
+            &mut [],
             progress,
         )
     });

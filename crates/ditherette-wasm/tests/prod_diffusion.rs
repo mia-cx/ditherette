@@ -8,7 +8,7 @@ use ditherette_wasm::{
         pipeline::quantize::IndexedMetadataRef,
         pipeline::{
             processor::{Allocator, Processor},
-            quantize::{QuantizeBoundary, QuantizeRequest as ProcessorRequest},
+            quantize::{InputBoundary, QuantizeBoundary, QuantizeRequest as ProcessorRequest},
         },
     },
 };
@@ -44,8 +44,7 @@ impl<'a> Boundary<'a> {
     }
 }
 
-impl QuantizeBoundary for Boundary<'_> {
-    type Output = IndexedImage;
+impl InputBoundary for Boundary<'_> {
     fn progress(&mut self) -> Option<&mut dyn ditherette_wasm::prod::pipeline::progress::Callback> {
         self.progress.then_some(self)
     }
@@ -63,6 +62,10 @@ impl QuantizeBoundary for Boundary<'_> {
         destination.copy_from_slice(self.data);
         Ok(())
     }
+}
+
+impl QuantizeBoundary for Boundary<'_> {
+    type Output = IndexedImage;
     fn complete(
         &mut self,
         indices: &[u8],

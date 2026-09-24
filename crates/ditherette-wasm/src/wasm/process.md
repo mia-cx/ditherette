@@ -14,7 +14,8 @@ The adapter takes the instance before palette getters or caught copy helpers.
 Every expected error restores readiness. The processor preflights simultaneous
 resize preparation, matching/diffusion preparation, source, resized RGBA8,
 optional perturbed RGBA8, indices, and boundary records before input copying.
-Only final indexed completion publishes JS output. No callback or cache work runs.
+Only final indexed completion publishes JS output. Progress callbacks and the
+retained preparation store follow the processor rules in `processor.md`.
 
 The public wrapper maps settings failures into `recipe.output`, `recipe.alpha`,
 `recipe.match`, and `recipe.dither`. Source, palette, lifecycle, memory, and

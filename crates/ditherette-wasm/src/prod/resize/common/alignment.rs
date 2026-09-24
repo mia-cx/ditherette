@@ -1,7 +1,11 @@
-//! Production convolution alignment helpers.
+//! Production resize anchors and continuous coordinate mapping.
 //!
-//! This duplicates the spec anchor vocabulary so production convolution filters
-//! stay independent from the oracle while preserving identical coordinate math.
+//! This duplicates the spec anchor vocabulary so production filters stay
+//! independent from the oracle while preserving identical coordinate math.
+//! Every production filter shares these types; nearest keeps its own integer
+//! coordinate formulas next to its kernels.
+
+use std::ops::RangeInclusive;
 
 /// One-dimensional anchor used when mapping output coordinates to source positions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,7 +19,7 @@ pub enum AxisAlignment {
 }
 
 /// Two-dimensional resize anchor composed from x/y axis alignments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ResizeAnchor {
     /// Align both axes at their start edges.
     TopLeft,
@@ -26,6 +30,7 @@ pub enum ResizeAnchor {
     /// Align the horizontal axis at the start edge and center vertically.
     Left,
     /// Align pixel centers on both axes.
+    #[default]
     Center,
     /// Align the horizontal axis at the end edge and center vertically.
     Right,
@@ -54,8 +59,29 @@ impl ResizeAnchor {
     }
 }
 
-impl Default for ResizeAnchor {
-    fn default() -> Self {
-        Self::Center
+// NOTE(perf): Filter plans cache axis positions; keep this helper direct-evaluated
+// because prior-art incremental coordinate updates changed exact output.
+
+/// Maps one output coordinate to a continuous source pixel-index position.
+/// Source pixel centers live at integer coordinates `0, 1, 2, ...`.
+pub fn map_axis_position(
+    output_coordinate: u32,
+    source_len: u32,
+    output_len: u32,
+    alignment: AxisAlignment,
+) -> f64 {
+    let output = f64::from(output_coordinate);
+    let source_len = f64::from(source_len);
+    let output_len = f64::from(output_len);
+
+    match alignment {
+        AxisAlignment::Start => output * source_len / output_len,
+        AxisAlignment::Center => (output + 0.5) * source_len / output_len - 0.5,
+        AxisAlignment::End => (output + 1.0) * source_len / output_len - 1.0,
     }
+}
+
+/// Integer source coordinates within `support` of `position`, before weights and clamping.
+pub fn support_range(position: f64, support: f64) -> RangeInclusive<i64> {
+    (position - support).floor() as i64..=(position + support).ceil() as i64
 }

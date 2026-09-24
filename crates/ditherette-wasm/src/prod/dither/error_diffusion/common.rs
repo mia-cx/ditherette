@@ -1,4 +1,4 @@
-//! Shared helpers for spec dithering algorithms.
+//! Shared helpers for the full-image error-diffusion functions.
 
 use crate::image::{ImageFormat, ImageView, ImageViewMut, PaletteIndex8};
 

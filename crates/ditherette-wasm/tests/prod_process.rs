@@ -13,7 +13,7 @@ use ditherette_wasm::{
         pipeline::{
             process::ProcessRequest,
             processor::{Allocator, Processor},
-            quantize::QuantizeBoundary,
+            quantize::{InputBoundary, QuantizeBoundary},
         },
     },
     spec,
@@ -36,8 +36,7 @@ struct Boundary<'a> {
     failure: u8,
     data: Option<&'a [u8]>,
 }
-impl QuantizeBoundary for Boundary<'_> {
-    type Output = IndexedImage;
+impl InputBoundary for Boundary<'_> {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.data.unwrap_or(&SOURCE).len())
     }
@@ -52,6 +51,10 @@ impl QuantizeBoundary for Boundary<'_> {
         destination.copy_from_slice(self.data.unwrap_or(&SOURCE));
         Ok(())
     }
+}
+
+impl QuantizeBoundary for Boundary<'_> {
+    type Output = IndexedImage;
     fn complete(
         &mut self,
         indices: &[u8],
@@ -76,12 +79,6 @@ impl QuantizeBoundary for Boundary<'_> {
 
 impl ditherette_wasm::prod::pipeline::processor::Boundary for Boundary<'_> {
     type Output = Vec<u8>;
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        QuantizeBoundary::input_len(self)
-    }
-    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
-        QuantizeBoundary::copy_input(self, destination)
-    }
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         Ok(bytes.to_vec())
     }

@@ -6,7 +6,7 @@ use ditherette_wasm::{
             failure::{ErrorPath, Failure},
             request::{Anchor, Output, ResizePolicy, Support},
         },
-        pipeline::processor::{Boundary, Processor, ResizeRequest},
+        pipeline::processor::{Boundary, InputBoundary, Processor, ResizeRequest},
     },
     spec::resize::{common::alignment::ResizeAnchor, scalar::nearest::resize_nearest_into},
 };
@@ -80,8 +80,7 @@ struct Io {
     fail_complete: bool,
 }
 
-impl Boundary for Io {
-    type Output = Vec<u8>;
+impl InputBoundary for Io {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.input.len())
     }
@@ -96,6 +95,10 @@ impl Boundary for Io {
         destination.copy_from_slice(&self.input);
         Ok(())
     }
+}
+
+impl Boundary for Io {
+    type Output = Vec<u8>;
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         self.complete_calls += 1;
         if self.fail_complete {
@@ -148,8 +151,7 @@ fn wider_quantize_drops_idle_bytes_before_reserving_their_replacement() {
         },
     };
     struct Input(usize);
-    impl QuantizeBoundary for Input {
-        type Output = ();
+    impl InputBoundary for Input {
         fn input_len(&mut self) -> Result<usize, Failure> {
             Ok(self.0 * 4)
         }
@@ -157,6 +159,9 @@ fn wider_quantize_drops_idle_bytes_before_reserving_their_replacement() {
             destination.fill(255);
             Ok(())
         }
+    }
+    impl QuantizeBoundary for Input {
+        type Output = ();
         fn complete(
             &mut self,
             _: &[u8],
@@ -204,8 +209,7 @@ fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
         },
     };
     struct Input(usize);
-    impl QuantizeBoundary for Input {
-        type Output = ();
+    impl InputBoundary for Input {
         fn input_len(&mut self) -> Result<usize, Failure> {
             Ok(self.0 * 4)
         }
@@ -213,6 +217,9 @@ fn wider_diffusion_drops_idle_rows_before_reserving_their_replacement() {
             destination.fill(255);
             Ok(())
         }
+    }
+    impl QuantizeBoundary for Input {
+        type Output = ();
         fn complete(
             &mut self,
             _: &[u8],

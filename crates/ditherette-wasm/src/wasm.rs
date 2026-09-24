@@ -1,9 +1,8 @@
 //! Wasm-facing exports for the fresh crate.
 //!
-//! These exports are intentionally staged while the Rust-side prod pipeline is
-//! wired into the app. Public UI code should prefer coarse pipeline exports once
-//! `processRgba8` exists, but staged exports are useful for lazy materialization,
-//! memoization, and browser/Wasm benchmarks.
+//! The package calls the `private*` processor exports in `wasm/`. The staged
+//! exports here (`resizeRgba8`, `processRgba8`, `convertColorSpace`) and the
+//! benchmark loops serve the legacy website adapter and browser/Wasm benchmarks.
 
 pub mod fields;
 pub mod process;
@@ -25,24 +24,25 @@ use crate::{
         color::{
             rgba8_to_color_space_f32, rgba8_to_color_space_f32_with_policy_into, ColorSpaceF32,
         },
-        resize::scalar::{
-            area::resize_area_rgba8_into,
-            bicubic::{
-                resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_into,
-                resize_bicubic_rgba8_rows_with_plan_into, BicubicResizePlan,
-            },
-            bilinear::{
-                alignment::ResizeAnchor as BilinearResizeAnchor, resize_bilinear_rgba8_into,
-            },
-            convolution::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},
-            lanczos::{
-                resize_lanczos2_rgba8_into, resize_lanczos2_rgba8_rows_into,
-                resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
-                resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
-            },
-            nearest::{
-                alignment::ResizeAnchor as NearestResizeAnchor, resize_nearest_rgba8_into,
-                resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
+        resize::{
+            common::alignment::ResizeAnchor,
+            scalar::{
+                area::resize_area_rgba8_into,
+                bicubic::{
+                    resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_into,
+                    resize_bicubic_rgba8_rows_with_plan_into, BicubicResizePlan,
+                },
+                bilinear::resize_bilinear_rgba8_into,
+                convolution::SupportPolicy,
+                lanczos::{
+                    resize_lanczos2_rgba8_into, resize_lanczos2_rgba8_rows_into,
+                    resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
+                    resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
+                },
+                nearest::{
+                    resize_nearest_rgba8_into, resize_nearest_rgba8_rows_with_plan_into,
+                    NearestResizePlan,
+                },
             },
         },
     },
@@ -91,8 +91,8 @@ pub fn convert_color_space(
 
 /// Resize an RGBA8/sRGB image with the production scalar resize kernels.
 ///
-/// `parallelization_policy` is accepted for API stability; this scalar
-/// checkpoint ignores it until production tiling policy exists.
+/// With threaded Wasm, `parallelization_policy` enables the measured nearest
+/// row-band tiling policy and the pooled diagnostic execution modes.
 #[wasm_bindgen(js_name = resizeRgba8)]
 pub fn resize_rgba8(
     input: &[u8],
@@ -118,12 +118,10 @@ pub fn resize_rgba8(
     )
 }
 
-/// Execute the coarse RGBA8 processing pipeline inside Wasm.
+/// Resize from app-style serialized settings and return RGBA8.
 ///
-/// This is the full-pipeline shell from the parallelization plan. It accepts the
-/// app-style serialized processing settings and currently executes the scalar
-/// resize stage, returning RGBA8 for preview. Later stages can be inserted here
-/// without changing the JS/Wasm boundary shape.
+/// This staged export runs only the scalar resize stage. Complete processing
+/// lives in the package's `privateProcess` path.
 #[wasm_bindgen(js_name = processRgba8)]
 pub fn process_rgba8(
     input: &[u8],
@@ -183,16 +181,25 @@ pub fn benchmark_color_space(
     let source = ImageView::<Rgba8>::packed(input, dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut output = vec![0.0; dimensions.storage_len::<Rgba8>().unwrap()];
-    let config = WasmBenchmarkConfig {
+    let config = WasmBenchmarkConfig::new(
         sample_size,
-        measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
-        warm_up_time_ms: positive_or_default(warm_up_time_ms, 1_000.0),
+        measurement_time_ms,
+        warm_up_time_ms,
         warm_up_iterations,
-        target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
+        target_sample_time_ms,
         live_stats,
-        row_band_height: row_band_height.max(1) as usize,
-    };
-    let result = run_color_benchmark(source, target, mode, &mut output, config, reporter.as_ref())?;
+        row_band_height,
+    );
+    let result = run_benchmark(config, reporter.as_ref(), |batch_size| {
+        Ok(run_color_batch(
+            source,
+            target,
+            mode,
+            &mut output,
+            batch_size,
+            config.row_band_height,
+        ))
+    })?;
 
     Ok(benchmark_result_json(
         result.batch_size,
@@ -243,24 +250,26 @@ pub fn benchmark_resize_rgba8(
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut output = vec![0; output_len];
 
-    let config = WasmBenchmarkConfig {
+    let config = WasmBenchmarkConfig::new(
         sample_size,
-        measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
-        warm_up_time_ms: positive_or_default(warm_up_time_ms, 1_000.0),
+        measurement_time_ms,
+        warm_up_time_ms,
         warm_up_iterations,
-        target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
+        target_sample_time_ms,
         live_stats,
-        row_band_height: row_band_height.max(1) as usize,
-    };
-    let result = run_resize_benchmark(
-        source,
-        output_dimensions,
-        resize,
-        parallelization_policy,
-        &mut output,
-        config,
-        reporter.as_ref(),
-    )?;
+        row_band_height,
+    );
+    let result = run_benchmark(config, reporter.as_ref(), |batch_size| {
+        run_resize_batch(
+            source,
+            output_dimensions,
+            resize,
+            parallelization_policy,
+            &mut output,
+            batch_size,
+            config.row_band_height,
+        )
+    })?;
 
     Ok(benchmark_result_json(
         result.batch_size,
@@ -425,9 +434,7 @@ fn resize_rgba8_scalar(
 #[derive(Clone, Copy)]
 struct WasmResize {
     filter: WasmResizeFilter,
-    nearest_anchor: NearestResizeAnchor,
-    bilinear_anchor: BilinearResizeAnchor,
-    convolution_anchor: ConvolutionResizeAnchor,
+    anchor: ResizeAnchor,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
     execution_mode: ResizeExecutionMode,
@@ -473,9 +480,7 @@ impl WasmResize {
             parse_support_policy_and_execution(support_policy)?;
         Ok(Self {
             filter,
-            nearest_anchor: nearest_anchor(anchor)?,
-            bilinear_anchor: bilinear_anchor(anchor)?,
-            convolution_anchor: convolution_anchor(anchor)?,
+            anchor: resize_anchor(anchor)?,
             support_policy,
             plan_scope,
             execution_mode,
@@ -518,14 +523,14 @@ impl WasmResize {
                 source,
                 output_dimensions,
                 output,
-                self.nearest_anchor,
+                self.anchor,
                 row_band_height,
             ),
             WasmResizeFilter::Bicubic => resize_bicubic_rgba8_pooled_direct_into(
                 source,
                 output_dimensions,
                 output,
-                self.convolution_anchor,
+                self.anchor,
                 self.support_policy,
                 self.plan_scope,
                 row_band_height,
@@ -534,7 +539,7 @@ impl WasmResize {
                 source,
                 output_dimensions,
                 output,
-                self.convolution_anchor,
+                self.anchor,
                 NonZeroU32::new(2).unwrap(),
                 self.support_policy,
                 self.plan_scope,
@@ -544,7 +549,7 @@ impl WasmResize {
                 source,
                 output_dimensions,
                 output,
-                self.convolution_anchor,
+                self.anchor,
                 NonZeroU32::new(3).unwrap(),
                 self.support_policy,
                 self.plan_scope,
@@ -593,30 +598,21 @@ impl WasmResize {
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
         match self.filter {
             WasmResizeFilter::Nearest => {
-                resize_nearest_rgba8_into(source, output_view, self.nearest_anchor)
+                resize_nearest_rgba8_into(source, output_view, self.anchor)
             }
             WasmResizeFilter::Area => resize_area_rgba8_into(source, output_view),
             WasmResizeFilter::Bilinear => {
-                resize_bilinear_rgba8_into(source, output_view, self.bilinear_anchor)
+                resize_bilinear_rgba8_into(source, output_view, self.anchor)
             }
-            WasmResizeFilter::Bicubic => resize_bicubic_rgba8_into(
-                source,
-                output_view,
-                self.convolution_anchor,
-                self.support_policy,
-            ),
-            WasmResizeFilter::Lanczos2 => resize_lanczos2_rgba8_into(
-                source,
-                output_view,
-                self.convolution_anchor,
-                self.support_policy,
-            ),
-            WasmResizeFilter::Lanczos3 => resize_lanczos3_rgba8_into(
-                source,
-                output_view,
-                self.convolution_anchor,
-                self.support_policy,
-            ),
+            WasmResizeFilter::Bicubic => {
+                resize_bicubic_rgba8_into(source, output_view, self.anchor, self.support_policy)
+            }
+            WasmResizeFilter::Lanczos2 => {
+                resize_lanczos2_rgba8_into(source, output_view, self.anchor, self.support_policy)
+            }
+            WasmResizeFilter::Lanczos3 => {
+                resize_lanczos3_rgba8_into(source, output_view, self.anchor, self.support_policy)
+            }
         }
         Ok(())
     }
@@ -701,7 +697,7 @@ fn resize_bicubic_rgba8_pooled_direct_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
-    anchor: ConvolutionResizeAnchor,
+    anchor: ResizeAnchor,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
     row_band_height: usize,
@@ -744,7 +740,7 @@ fn resize_lanczos_rgba8_pooled_direct_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
-    anchor: ConvolutionResizeAnchor,
+    anchor: ResizeAnchor,
     radius: NonZeroU32,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
@@ -798,7 +794,7 @@ fn resize_nearest_rgba8_pooled_direct_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
-    anchor: NearestResizeAnchor,
+    anchor: ResizeAnchor,
     row_band_height: usize,
 ) -> Result<(), JsValue> {
     let plan = NearestResizePlan::new(source.dimensions(), output_dimensions, anchor);
@@ -866,6 +862,29 @@ struct WasmBenchmarkConfig {
     row_band_height: usize,
 }
 
+impl WasmBenchmarkConfig {
+    /// Apply the harness defaults to non-positive or non-finite timing arguments.
+    fn new(
+        sample_size: u32,
+        measurement_time_ms: f64,
+        warm_up_time_ms: f64,
+        warm_up_iterations: u32,
+        target_sample_time_ms: f64,
+        live_stats: bool,
+        row_band_height: u32,
+    ) -> Self {
+        Self {
+            sample_size,
+            measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
+            warm_up_time_ms: positive_or_default(warm_up_time_ms, 1_000.0),
+            warm_up_iterations,
+            target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
+            live_stats,
+            row_band_height: row_band_height.max(1) as usize,
+        }
+    }
+}
+
 #[derive(Default)]
 struct WarmupProgress {
     elapsed_ms: f64,
@@ -912,13 +931,12 @@ impl ColorBenchmarkMode {
     }
 }
 
-fn run_color_benchmark(
-    source: ImageView<'_, Rgba8>,
-    target: ColorSpaceF32,
-    mode: ColorBenchmarkMode,
-    output: &mut [f32],
+/// Calibrate a batch size during warmup, then time batches until the sample or time budget ends.
+/// `run_batch` executes `batch_size` subject calls and returns the elapsed milliseconds.
+fn run_benchmark(
     config: WasmBenchmarkConfig,
     reporter: Option<&Function>,
+    mut run_batch: impl FnMut(u32) -> Result<f64, JsValue>,
 ) -> Result<WasmBenchmarkResult, JsValue> {
     const MAX_BATCH_SIZE: u32 = 1 << 20;
 
@@ -928,14 +946,7 @@ fn run_color_benchmark(
     let mut best_batch_size = batch_size;
     let mut best_batch_elapsed = f64::INFINITY;
     while warmup.needs_more(config) {
-        let elapsed = run_color_batch(
-            source,
-            target,
-            mode,
-            output,
-            batch_size,
-            config.row_band_height,
-        );
+        let elapsed = run_batch(batch_size)?;
         if (elapsed - config.target_sample_time_ms).abs()
             < (best_batch_elapsed - config.target_sample_time_ms).abs()
         {
@@ -975,14 +986,7 @@ fn run_color_benchmark(
     while samples_ns.len() < config.sample_size as usize
         && measurement_elapsed < config.measurement_time_ms
     {
-        let elapsed_ms = run_color_batch(
-            source,
-            target,
-            mode,
-            output,
-            batch_size,
-            config.row_band_height,
-        );
+        let elapsed_ms = run_batch(batch_size)?;
         let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
         samples_ns.push(sample_ns);
         total_iterations += u64::from(batch_size);
@@ -1120,105 +1124,6 @@ fn calibrated_batch_size(
     }
     let next = (f64::from(batch_size) * target_ms / elapsed_ms).round() as u32;
     next.clamp(1, max_batch_size)
-}
-
-fn run_resize_benchmark(
-    source: ImageView<'_, Rgba8>,
-    output_dimensions: ImageDimensions,
-    resize: WasmResize,
-    parallelization_policy: bool,
-    output: &mut [u8],
-    config: WasmBenchmarkConfig,
-    reporter: Option<&Function>,
-) -> Result<WasmBenchmarkResult, JsValue> {
-    const MAX_BATCH_SIZE: u32 = 1 << 20;
-
-    let mut batch_size = 1;
-    let warmup_started = performance_now();
-    let mut warmup = WarmupProgress::default();
-    let mut best_batch_size = batch_size;
-    let mut best_batch_elapsed = f64::INFINITY;
-    while warmup.needs_more(config) {
-        let elapsed = run_resize_batch(
-            source,
-            output_dimensions,
-            resize,
-            parallelization_policy,
-            output,
-            batch_size,
-            config.row_band_height,
-        )?;
-        if (elapsed - config.target_sample_time_ms).abs()
-            < (best_batch_elapsed - config.target_sample_time_ms).abs()
-        {
-            best_batch_size = batch_size;
-            best_batch_elapsed = elapsed;
-        }
-        warmup.record(batch_size, performance_now() - warmup_started);
-        report_event(
-            reporter,
-            &format!(
-                "{{\"kind\":\"warmup-batch\",\"batchSize\":{batch_size},\"batchElapsedMs\":{elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6}}}",
-                warmup_elapsed = warmup.elapsed_ms
-            ),
-        )?;
-
-        batch_size = calibrated_batch_size(
-            batch_size,
-            elapsed,
-            config.target_sample_time_ms,
-            MAX_BATCH_SIZE,
-        );
-    }
-    batch_size = best_batch_size;
-    report_event(
-        reporter,
-        &format!(
-            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}",
-            warmup_elapsed = warmup.elapsed_ms,
-            warmup_iterations = warmup.iterations
-        ),
-    )?;
-
-    let measurement_started = performance_now();
-    let mut measurement_elapsed = 0.0;
-    let mut samples_ns = Vec::with_capacity(config.sample_size as usize);
-    let mut total_iterations = 0u64;
-    while samples_ns.len() < config.sample_size as usize
-        && measurement_elapsed < config.measurement_time_ms
-    {
-        let elapsed_ms = run_resize_batch(
-            source,
-            output_dimensions,
-            resize,
-            parallelization_policy,
-            output,
-            batch_size,
-            config.row_band_height,
-        )?;
-        let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
-        samples_ns.push(sample_ns);
-        total_iterations += u64::from(batch_size);
-        measurement_elapsed = performance_now() - measurement_started;
-        if config.live_stats {
-            report_event(
-                reporter,
-                &format!(
-                    "{{\"kind\":\"measurement-progress\",\"samplesDone\":{},\"sampleSize\":{},\"elapsedMs\":{measurement_elapsed:.6},\"measurementTimeMs\":{:.6},\"totalIterations\":{total_iterations},\"batchSize\":{batch_size},\"samplesNs\":[{}]}}",
-                    samples_ns.len(),
-                    config.sample_size,
-                    config.measurement_time_ms,
-                    join_samples(&samples_ns)
-                ),
-            )?;
-        }
-    }
-
-    Ok(WasmBenchmarkResult {
-        batch_size,
-        total_iterations,
-        samples_ns,
-    })
 }
 
 fn run_resize_batch(
@@ -1368,47 +1273,17 @@ fn parse_support_policy_and_execution(
     }
 }
 
-fn nearest_anchor(value: &str) -> Result<NearestResizeAnchor, JsValue> {
+fn resize_anchor(value: &str) -> Result<ResizeAnchor, JsValue> {
     match value {
-        "" | "center" => Ok(NearestResizeAnchor::Center),
-        "top-left" => Ok(NearestResizeAnchor::TopLeft),
-        "top" => Ok(NearestResizeAnchor::Top),
-        "top-right" => Ok(NearestResizeAnchor::TopRight),
-        "left" => Ok(NearestResizeAnchor::Left),
-        "right" => Ok(NearestResizeAnchor::Right),
-        "bottom-left" => Ok(NearestResizeAnchor::BottomLeft),
-        "bottom" => Ok(NearestResizeAnchor::Bottom),
-        "bottom-right" => Ok(NearestResizeAnchor::BottomRight),
-        _ => Err(JsValue::from_str("unsupported resize anchor")),
-    }
-}
-
-fn bilinear_anchor(value: &str) -> Result<BilinearResizeAnchor, JsValue> {
-    match value {
-        "" | "center" => Ok(BilinearResizeAnchor::Center),
-        "top-left" => Ok(BilinearResizeAnchor::TopLeft),
-        "top" => Ok(BilinearResizeAnchor::Top),
-        "top-right" => Ok(BilinearResizeAnchor::TopRight),
-        "left" => Ok(BilinearResizeAnchor::Left),
-        "right" => Ok(BilinearResizeAnchor::Right),
-        "bottom-left" => Ok(BilinearResizeAnchor::BottomLeft),
-        "bottom" => Ok(BilinearResizeAnchor::Bottom),
-        "bottom-right" => Ok(BilinearResizeAnchor::BottomRight),
-        _ => Err(JsValue::from_str("unsupported resize anchor")),
-    }
-}
-
-fn convolution_anchor(value: &str) -> Result<ConvolutionResizeAnchor, JsValue> {
-    match value {
-        "" | "center" => Ok(ConvolutionResizeAnchor::Center),
-        "top-left" => Ok(ConvolutionResizeAnchor::TopLeft),
-        "top" => Ok(ConvolutionResizeAnchor::Top),
-        "top-right" => Ok(ConvolutionResizeAnchor::TopRight),
-        "left" => Ok(ConvolutionResizeAnchor::Left),
-        "right" => Ok(ConvolutionResizeAnchor::Right),
-        "bottom-left" => Ok(ConvolutionResizeAnchor::BottomLeft),
-        "bottom" => Ok(ConvolutionResizeAnchor::Bottom),
-        "bottom-right" => Ok(ConvolutionResizeAnchor::BottomRight),
+        "" | "center" => Ok(ResizeAnchor::Center),
+        "top-left" => Ok(ResizeAnchor::TopLeft),
+        "top" => Ok(ResizeAnchor::Top),
+        "top-right" => Ok(ResizeAnchor::TopRight),
+        "left" => Ok(ResizeAnchor::Left),
+        "right" => Ok(ResizeAnchor::Right),
+        "bottom-left" => Ok(ResizeAnchor::BottomLeft),
+        "bottom" => Ok(ResizeAnchor::Bottom),
+        "bottom-right" => Ok(ResizeAnchor::BottomRight),
         _ => Err(JsValue::from_str("unsupported resize anchor")),
     }
 }

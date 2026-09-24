@@ -17,7 +17,7 @@ use ditherette_wasm::{
             process::ProcessRequest,
             processor::Processor,
             progress::Callback,
-            quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
+            quantize::{IndexedMetadataRef, InputBoundary, QuantizeBoundary, QuantizeRequest},
         },
         tiling::WorkerBudget,
     },
@@ -61,8 +61,7 @@ impl Callback for Boundary<'_> {
     }
 }
 
-impl QuantizeBoundary for Boundary<'_> {
-    type Output = IndexedImage;
+impl InputBoundary for Boundary<'_> {
     fn progress(&mut self) -> Option<&mut dyn Callback> {
         Some(self)
     }
@@ -86,6 +85,10 @@ impl QuantizeBoundary for Boundary<'_> {
         self.copy_input(destination)?;
         Ok(false)
     }
+}
+
+impl QuantizeBoundary for Boundary<'_> {
+    type Output = IndexedImage;
     fn complete(
         &mut self,
         indices: &[u8],

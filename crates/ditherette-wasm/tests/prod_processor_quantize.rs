@@ -12,7 +12,7 @@ use ditherette_wasm::{
         pipeline::quantize::IndexedMetadataRef,
         pipeline::{
             processor::{Allocator, Processor},
-            quantize::{QuantizeBoundary, QuantizeRequest},
+            quantize::{InputBoundary, QuantizeBoundary, QuantizeRequest},
         },
     },
     spec,
@@ -24,8 +24,7 @@ struct Boundary<'a> {
     fail_copy: bool,
     fail_complete: bool,
 }
-impl QuantizeBoundary for Boundary<'_> {
-    type Output = IndexedImage;
+impl InputBoundary for Boundary<'_> {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(self.source.len())
     }
@@ -40,6 +39,10 @@ impl QuantizeBoundary for Boundary<'_> {
         destination.copy_from_slice(self.source);
         Ok(())
     }
+}
+
+impl QuantizeBoundary for Boundary<'_> {
+    type Output = IndexedImage;
     fn complete(
         &mut self,
         indices: &[u8],

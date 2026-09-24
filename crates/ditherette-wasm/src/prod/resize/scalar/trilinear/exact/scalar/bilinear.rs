@@ -1,14 +1,16 @@
-//! Spec bilinear resize.
+//! Exact f64 bilinear sampling of trilinear mip levels.
 //!
 //! Bilinear resize is expressed as a direct separable triangle-filter sum per
-//! output pixel. The filter widens during minification, making the oracle a
-//! mathematically clear triangle resampler rather than a production two-tap fast
-//! path.
+//! output pixel. The filter widens during minification. It mirrors the spec's
+//! direct evaluation order, unlike the landed f32 separable bilinear kernel;
+//! per-axis weights are planned once instead of per output pixel.
 
 use crate::{
     image::{ImageFormat, ImageView, ImageViewMut},
     prod::resize::scalar::trilinear::exact::common::{
-        alignment::ResizeAnchor, coordinates::map_axis_position, sample::ResizeSample,
+        alignment::{map_axis_position, support_range, AxisAlignment, ResizeAnchor},
+        sample::ResizeSample,
+        taps::{AxisPlan, AxisTap},
     },
 };
 
@@ -21,71 +23,86 @@ pub fn resize_bilinear_into<F>(
     F: ImageFormat,
     F::Storage: ResizeSample,
 {
+    let (source_dimensions, output_dimensions) = (source.dimensions(), output.dimensions());
+    let (x_alignment, y_alignment) = anchor.axes();
+    let mut x = AxisPlan::default();
+    let mut y = AxisPlan::default();
+    plan_bilinear_axis(
+        &mut x,
+        source_dimensions.width(),
+        output_dimensions.width(),
+        x_alignment,
+    );
+    plan_bilinear_axis(
+        &mut y,
+        source_dimensions.height(),
+        output_dimensions.height(),
+        y_alignment,
+    );
     let mut accumulated = vec![0.0; F::CHANNEL_COUNT];
-    resize_bilinear_with_scratch_into(source, output, anchor, &mut accumulated);
+    resize_bilinear_planned_into(source, output, &x, &y, &mut accumulated);
 }
 
-pub fn resize_bilinear_with_scratch_into<F>(
+/// Nonzero triangle weights around one output position, clamped and in source order.
+pub fn bilinear_taps(
+    source_len: u32,
+    output_len: u32,
+    output: u32,
+    alignment: AxisAlignment,
+) -> impl Iterator<Item = AxisTap> {
+    let scale = (f64::from(source_len) / f64::from(output_len)).max(1.0);
+    let position = map_axis_position(output, source_len, output_len, alignment);
+    support_range(position, scale).filter_map(move |source| {
+        let weight = triangle_weight((source as f64 - position) / scale);
+        (weight != 0.0).then(|| AxisTap {
+            index: source.clamp(0, i64::from(source_len) - 1) as u32,
+            weight,
+        })
+    })
+}
+
+/// Fill `plan` with every output coordinate's triangle weights for one axis.
+pub fn plan_bilinear_axis(
+    plan: &mut AxisPlan,
+    source_len: u32,
+    output_len: u32,
+    alignment: AxisAlignment,
+) {
+    plan.fill(output_len, |output| {
+        bilinear_taps(source_len, output_len, output, alignment)
+    });
+}
+
+/// Applies planned x/y weights: y outer, x inner, weight `x * y`, normalized by their sum.
+pub fn resize_bilinear_planned_into<F>(
     source: ImageView<'_, F>,
     mut output: ImageViewMut<'_, F>,
-    anchor: ResizeAnchor,
+    x: &AxisPlan,
+    y: &AxisPlan,
     accumulated: &mut [f64],
 ) where
     F: ImageFormat,
     F::Storage: ResizeSample,
 {
-    let source_dimensions = source.dimensions();
-    let output_dimensions = output.dimensions();
-    let (x_alignment, y_alignment) = anchor.axes();
-    let x_scale =
-        (f64::from(source_dimensions.width()) / f64::from(output_dimensions.width())).max(1.0);
-    let y_scale =
-        (f64::from(source_dimensions.height()) / f64::from(output_dimensions.height())).max(1.0);
-
-    for output_y in 0..output_dimensions.height() {
-        let source_y_position = map_axis_position(
-            output_y,
-            source_dimensions.height(),
-            output_dimensions.height(),
-            y_alignment,
-        );
+    for output_y in 0..output.dimensions().height() {
+        let y_taps = y.taps(output_y as usize);
         let output_row = output
             .row_mut(output_y)
             .expect("output y from dimensions should stay in bounds");
 
-        for output_x in 0..output_dimensions.width() {
-            let source_x_position = map_axis_position(
-                output_x,
-                source_dimensions.width(),
-                output_dimensions.width(),
-                x_alignment,
-            );
-            let output_start = output_x as usize * F::CHANNEL_COUNT;
-            let output_pixel = &mut output_row[output_start..output_start + F::CHANNEL_COUNT];
+        for (output_x, output_pixel) in output_row.chunks_exact_mut(F::CHANNEL_COUNT).enumerate() {
+            let x_taps = x.taps(output_x);
             accumulated.fill(0.0);
             let mut total_weight = 0.0;
 
-            for source_y in support_range(source_y_position, y_scale) {
-                let y_weight = triangle_weight((source_y as f64 - source_y_position) / y_scale);
-                if y_weight == 0.0 {
-                    continue;
-                }
-                let clamped_y =
-                    clamp_i64(source_y, 0, i64::from(source_dimensions.height()) - 1) as u32;
+            for y_tap in y_taps {
                 let source_row = source
-                    .row(clamped_y)
+                    .row(y_tap.index)
                     .expect("clamped source y should stay in bounds");
 
-                for source_x in support_range(source_x_position, x_scale) {
-                    let x_weight = triangle_weight((source_x as f64 - source_x_position) / x_scale);
-                    if x_weight == 0.0 {
-                        continue;
-                    }
-
-                    let weight = x_weight * y_weight;
-                    let clamped_x =
-                        clamp_i64(source_x, 0, i64::from(source_dimensions.width()) - 1) as usize;
-                    let source_start = clamped_x * F::CHANNEL_COUNT;
+                for x_tap in x_taps {
+                    let weight = x_tap.weight * y_tap.weight;
+                    let source_start = x_tap.index as usize * F::CHANNEL_COUNT;
                     let source_pixel = &source_row[source_start..source_start + F::CHANNEL_COUNT];
 
                     total_weight += weight;
@@ -102,19 +119,10 @@ pub fn resize_bilinear_with_scratch_into<F>(
     }
 }
 
-fn support_range(position: f64, scale: f64) -> std::ops::RangeInclusive<i64> {
-    let support = scale;
-    (position - support).floor() as i64..=(position + support).ceil() as i64
-}
-
 fn triangle_weight(distance: f64) -> f64 {
     if distance.abs() < 1.0 {
         1.0 - distance.abs()
     } else {
         0.0
     }
-}
-
-fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
-    value.clamp(min, max)
 }

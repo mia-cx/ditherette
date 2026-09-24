@@ -22,7 +22,7 @@ use super::placement::{
 
 const FIELD_SCALE: f64 = 0.25;
 
-/// Each active field worker can own one temporary converter, including its byte tables.
+/// Each active field worker can own one temporary converter record; its byte tables are shared statics.
 /// The enclosing call charges this in addition to row metadata, source, and output.
 pub const fn band_working_capacity_bytes(active_workers: u32) -> u64 {
     std::mem::size_of::<crate::prod::color::packed::Converter>() as u64 * active_workers as u64
@@ -55,20 +55,68 @@ pub fn try_band_buffers(
     workers: WorkerBudget,
     requested_workers: u32,
     limit: u64,
-) -> Result<RowBandBuffers<()>, Failure> {
+) -> Result<RowBandBuffers<[f32; 3]>, Failure> {
+    try_band_buffers_with_rows(
+        dimensions,
+        band_height,
+        workers,
+        requested_workers,
+        limit,
+        Placement::Everywhere {},
+        0,
+    )
+    .map(|(buffers, _)| buffers)
+}
+
+/// Like [`try_band_buffers`], plus three source-width coordinate rows per worker for adaptive
+/// placement when they fit in `optional` bytes beyond `limit`. Returns the extra bytes used,
+/// which the caller charges as optional capacity; zero keeps direct neighbor conversion.
+pub fn try_band_buffers_with_rows(
+    dimensions: ImageDimensions,
+    band_height: u32,
+    workers: WorkerBudget,
+    requested_workers: u32,
+    limit: u64,
+    placement: Placement,
+    optional: u64,
+) -> Result<(RowBandBuffers<[f32; 3]>, u64), Failure> {
     let required =
         required_band_capacity_bytes(dimensions, band_height, workers, requested_workers)?;
     CapacityBudget::new(limit).check_additional(required)?;
     let bands = bands_for_output_height(dimensions, band_height).expect("validated band height");
     let active = workers.active_workers(requested_workers, bands.len() as u32);
-    RowBandBuffers::try_new(
-        dimensions,
-        band_height,
-        workers,
-        requested_workers,
-        limit - band_working_capacity_bytes(active),
-        &|_| Ok(0),
-    )
+    let limit = limit - band_working_capacity_bytes(active);
+    let buffers = |rows: usize, limit: u64| {
+        RowBandBuffers::try_new(
+            dimensions,
+            band_height,
+            workers,
+            requested_workers,
+            limit,
+            &|_| Ok(rows),
+        )
+    };
+    if matches!(placement, Placement::Adaptive { .. }) {
+        let rows = dimensions.width_usize() * AdaptivePlacementRows::ROW_COUNT;
+        // Each worker owns its coordinate rows plus the live row-cache records on its stack,
+        // matching the scalar AdaptivePlacementWork charge.
+        let per_worker = (rows as u64)
+            .checked_mul(std::mem::size_of::<[f32; 3]>() as u64)
+            .and_then(|bytes| {
+                bytes.checked_add(
+                    (std::mem::size_of::<AdaptivePlacementRows<'_>>()
+                        + std::mem::size_of::<super::placement::AdaptivePlacementRow<'_>>())
+                        as u64,
+                )
+            });
+        let extra = per_worker.and_then(|bytes| bytes.checked_mul(u64::from(active)));
+        if let Some(extra) = extra.filter(|&extra| extra <= optional) {
+            if let Some(Ok(buffers)) = limit.checked_add(extra).map(|limit| buffers(rows, limit)) {
+                return Ok((buffers, extra));
+            }
+        }
+    }
+    Ok((buffers(0, limit)?, 0))
 }
 
 /// Executes preflighted disjoint bands while preserving the full immutable source.
@@ -79,7 +127,7 @@ pub fn perturb_by_field_bands_into(
     space: WorkingSpace,
     strength: f32,
     placement: Placement,
-    work: &mut RowBandBuffers<()>,
+    work: &mut RowBandBuffers<[f32; 3]>,
     field: impl Fn(u32, u32, u64) -> f32 + Sync,
     progress: &mut impl FnMut(u64) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
@@ -87,7 +135,7 @@ pub fn perturb_by_field_bands_into(
     work.execute(
         output,
         width as usize * 4,
-        &|band, output, _| {
+        &|band, output, rows| {
             let dimensions = ImageDimensions::new(width, band.height()).expect("validated band");
             perturb_by_field_band_into(
                 source,
@@ -96,6 +144,7 @@ pub fn perturb_by_field_bands_into(
                 strength,
                 placement,
                 band,
+                rows,
                 &field,
             );
             Ok(u64::from(band.height()))
@@ -189,6 +238,8 @@ pub(crate) fn perturb_by_field_with_scratch(
 
 /// Writes only a band-local output view while retaining full-source adaptive reads.
 /// Output row zero corresponds to `rows.y_start()`; field coordinates remain absolute.
+/// Adaptive placement reuses converted rows when `scratch` holds three source-width rows;
+/// empty scratch keeps the allocation-free per-pixel neighbor conversion.
 pub fn perturb_by_field_band_into(
     source: ImageView<'_, Rgba8>,
     output: ImageViewMut<'_, Rgba8>,
@@ -196,6 +247,7 @@ pub fn perturb_by_field_band_into(
     strength: f32,
     placement: Placement,
     rows: RowBand,
+    scratch: &mut [[f32; 3]],
     field: impl Fn(u32, u32, u64) -> f32,
 ) {
     assert_eq!(source.dimensions().width(), output.dimensions().width());
@@ -208,7 +260,7 @@ pub fn perturb_by_field_band_into(
         placement,
         rows,
         rows.y_start(),
-        &mut [],
+        scratch,
         field,
         |_| Ok(()),
     )

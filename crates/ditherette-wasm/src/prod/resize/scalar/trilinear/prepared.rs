@@ -1,13 +1,19 @@
 //! Full native preparation before source import. Every buffer stays owned until drop.
 //! One storage-rounded chain supplies both adjacent levels without duplicate reductions.
+//! Level 0 is the borrowed source itself; the owned chain starts at the first reduction.
 
 use std::mem::size_of;
 
 use super::{
     exact::{
-        common::{alignment::ResizeAnchor, sample::ResizeSample},
+        common::{
+            alignment::ResizeAnchor,
+            sample::ResizeSample,
+            taps::{area_taps_per_output, bilinear_taps_per_output, AxisPlan},
+        },
         scalar::{
-            area::resize_area_with_scratch_into, bilinear::resize_bilinear_with_scratch_into,
+            area::{plan_area_axis, resize_area_planned_into},
+            bilinear::{plan_bilinear_axis, resize_bilinear_planned_into},
         },
     },
     half_rounded_up, minification_factor, MipLevel,
@@ -30,15 +36,22 @@ pub struct PreparedTrilinear<F: ImageFormat> {
     output: ImageDimensions,
     anchor: ResizeAnchor,
     blend: f64,
+    /// Reduced levels 1.. of the chain; level 0 is the source.
     levels: Vec<MipLevel<F>>,
+    /// Chain lengths including the source; zero when no level is sampled or blended.
     lower_count: usize,
+    upper_count: usize,
     lower_output: Vec<F::Storage>,
     upper_output: Vec<F::Storage>,
     accumulated: Vec<f64>,
+    /// Per-axis tap plans, refilled for each reduction and sampling stage.
+    x_plan: AxisPlan,
+    y_plan: AxisPlan,
     capacity: u64,
 }
 
-impl<F: ImageFormat> PreparedTrilinear<F>
+// Format markers are uninhabited `Copy` enums; the bound lets the source view act as level 0.
+impl<F: ImageFormat + Copy> PreparedTrilinear<F>
 where
     F::Storage: ResizeSample,
 {
@@ -51,8 +64,12 @@ where
         let mut bytes = size_of::<Self>() as u64;
         add(&mut bytes, F::CHANNEL_COUNT, size_of::<f64>())?;
         let count = lower.max(upper);
-        add(&mut bytes, count, size_of::<MipLevel<F>>())?;
-        for dimensions in chain_dimensions(source, count) {
+        add(
+            &mut bytes,
+            count.saturating_sub(1),
+            size_of::<MipLevel<F>>(),
+        )?;
+        for dimensions in chain_dimensions(source, count).skip(1) {
             add(
                 &mut bytes,
                 storage_len::<F>(dimensions)?,
@@ -67,6 +84,11 @@ where
                     size_of::<F::Storage>(),
                 )?;
             }
+        }
+        for (outputs, taps) in plan_capacity(source, output, lower, upper) {
+            bytes = AxisPlan::required_bytes(outputs, taps)
+                .and_then(|plan| bytes.checked_add(plan))
+                .ok_or_else(memory_limit)?;
         }
         Ok(bytes)
     }
@@ -95,6 +117,14 @@ where
         upper_output.resize(output_len, F::Storage::default());
         let mut accumulated = budget.vector(F::CHANNEL_COUNT)?;
         accumulated.resize(F::CHANNEL_COUNT, 0.0);
+        // required_bytes already proved every plan size fits; these conversions cannot fail.
+        let [x_plan, y_plan] = plan_capacity(source, output, lower_count, upper_count).map(
+            |(outputs, taps)| -> Result<AxisPlan, Failure> {
+                let size = |value: u64| usize::try_from(value).map_err(|_| memory_limit());
+                AxisPlan::try_reserve(&mut budget, size(outputs)?, size(taps)?)
+            },
+        );
+        let (x_plan, y_plan) = (x_plan?, y_plan?);
         Ok(Self {
             source,
             output,
@@ -102,9 +132,12 @@ where
             blend,
             levels,
             lower_count,
+            upper_count,
             lower_output,
             upper_output,
             accumulated,
+            x_plan,
+            y_plan,
             capacity: record + budget.used(),
         })
     }
@@ -142,41 +175,54 @@ where
             .iter()
             .map(|level| level.dimensions.height())
             .sum();
-        let total = chain_rows
-            + self.output.height()
-                * if self.lower_count < self.levels.len() {
-                    3
-                } else {
-                    1
-                };
+        let total = chain_rows + self.output.height() * if self.upper_count != 0 { 3 } else { 1 };
         progress(0, total)?;
-        if self.levels.is_empty() {
-            resize_bilinear_with_scratch_into(source, output, self.anchor, &mut self.accumulated);
+        let Self {
+            anchor,
+            levels,
+            lower_count,
+            upper_count,
+            lower_output,
+            upper_output,
+            accumulated,
+            x_plan,
+            y_plan,
+            ..
+        } = self;
+        let output_dimensions = self.output;
+        if *lower_count == 0 {
+            sample(source, output, *anchor, x_plan, y_plan, accumulated);
             return progress(total, total);
         }
         fill_chain(
             &source,
-            &mut self.levels,
-            &mut self.accumulated,
+            levels,
+            x_plan,
+            y_plan,
+            accumulated,
             &mut |completed| progress(completed, total),
         )?;
-        let lower = self.levels[self.lower_count - 1].view();
-        if self.lower_count == self.levels.len() {
-            resize_bilinear_with_scratch_into(lower, output, self.anchor, &mut self.accumulated);
+        let lower = level(&source, levels, *lower_count - 1);
+        if *upper_count == 0 {
+            sample(lower, output, *anchor, x_plan, y_plan, accumulated);
             return progress(total, total);
         }
-        resize_bilinear_with_scratch_into(
+        sample(
             lower,
-            ImageViewMut::<F>::packed(&mut self.lower_output, self.output).unwrap(),
-            self.anchor,
-            &mut self.accumulated,
+            ImageViewMut::<F>::packed(lower_output, output_dimensions).unwrap(),
+            *anchor,
+            x_plan,
+            y_plan,
+            accumulated,
         );
-        progress(chain_rows + self.output.height(), total)?;
-        resize_bilinear_with_scratch_into(
-            self.levels.last().unwrap().view(),
-            ImageViewMut::<F>::packed(&mut self.upper_output, self.output).unwrap(),
-            self.anchor,
-            &mut self.accumulated,
+        progress(chain_rows + output_dimensions.height(), total)?;
+        sample(
+            level(&source, levels, *upper_count - 1),
+            ImageViewMut::<F>::packed(upper_output, output_dimensions).unwrap(),
+            *anchor,
+            x_plan,
+            y_plan,
+            accumulated,
         );
         progress(chain_rows + self.output.height() * 2, total)?;
         let row_len = self.output.width_usize() * F::CHANNEL_COUNT;
@@ -245,8 +291,8 @@ fn reserve_chain<F: ImageFormat>(
 where
     F::Storage: ResizeSample,
 {
-    let mut chain = budget.vector(count)?;
-    for dimensions in chain_dimensions(source, count) {
+    let mut chain = budget.vector(count.saturating_sub(1))?;
+    for dimensions in chain_dimensions(source, count).skip(1) {
         let len = storage_len::<F>(dimensions)?;
         let mut data = budget.vector(len)?;
         data.resize(len, F::Storage::default());
@@ -255,33 +301,112 @@ where
     Ok(chain)
 }
 
-fn fill_chain<F: ImageFormat>(
+/// Chain level `index`, where level 0 is the borrowed source.
+fn level<'a, F: ImageFormat + Copy>(
+    source: &ImageView<'a, F>,
+    chain: &'a [MipLevel<F>],
+    index: usize,
+) -> ImageView<'a, F> {
+    match index {
+        0 => *source,
+        _ => chain[index - 1].view(),
+    }
+}
+
+/// Plan both axes for one exact bilinear stage, then sample it.
+fn sample<F: ImageFormat>(
+    from: ImageView<'_, F>,
+    to: ImageViewMut<'_, F>,
+    anchor: ResizeAnchor,
+    x_plan: &mut AxisPlan,
+    y_plan: &mut AxisPlan,
+    accumulated: &mut [f64],
+) where
+    F::Storage: ResizeSample,
+{
+    let (x_alignment, y_alignment) = anchor.axes();
+    let (source, output) = (from.dimensions(), to.dimensions());
+    plan_bilinear_axis(x_plan, source.width(), output.width(), x_alignment);
+    plan_bilinear_axis(y_plan, source.height(), output.height(), y_alignment);
+    resize_bilinear_planned_into(from, to, x_plan, y_plan, accumulated);
+}
+
+fn fill_chain<F: ImageFormat + Copy>(
     source: &ImageView<'_, F>,
     chain: &mut [MipLevel<F>],
+    x_plan: &mut AxisPlan,
+    y_plan: &mut AxisPlan,
     accumulated: &mut [f64],
     progress: &mut impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure>
 where
     F::Storage: ResizeSample,
 {
-    let row_len = source.dimensions().width_usize() * F::CHANNEL_COUNT;
-    for y in 0..source.dimensions().height() {
-        let start = y as usize * row_len;
-        chain[0].data[start..start + row_len].copy_from_slice(source.row(y).unwrap());
-        progress(y + 1)?;
-    }
-    let mut completed = source.dimensions().height();
-    for index in 1..chain.len() {
+    let mut completed = 0;
+    for index in 0..chain.len() {
         let (previous, next) = chain.split_at_mut(index);
-        resize_area_with_scratch_into(
-            previous[index - 1].view(),
-            ImageViewMut::<F>::packed(&mut next[0].data, next[0].dimensions).unwrap(),
+        let from = previous.last().map_or(*source, MipLevel::view);
+        let (source_dimensions, output_dimensions) = (from.dimensions(), next[0].dimensions);
+        plan_area_axis(x_plan, source_dimensions.width(), output_dimensions.width());
+        plan_area_axis(
+            y_plan,
+            source_dimensions.height(),
+            output_dimensions.height(),
+        );
+        resize_area_planned_into(
+            from,
+            ImageViewMut::<F>::packed(&mut next[0].data, output_dimensions).unwrap(),
+            x_plan,
+            y_plan,
             accumulated,
         );
-        completed += next[0].dimensions.height();
+        completed += output_dimensions.height();
         progress(completed)?;
     }
     Ok(())
+}
+
+/// Per-axis `(outputs, taps)` capacity covering every chain reduction and sampling stage.
+/// Tap counts use proven per-output bounds, so capacity does not depend on the anchor.
+/// Counts saturate so an impossible size fails the caller's checked byte total.
+fn plan_capacity(
+    source: ImageDimensions,
+    output: ImageDimensions,
+    lower: usize,
+    upper: usize,
+) -> [(u64, u64); 2] {
+    let mut capacity = [(0, 0); 2];
+    let mut cover =
+        |from: ImageDimensions, to: ImageDimensions, per_output: fn(u32, u32) -> usize| {
+            for (axis, (source_len, output_len)) in
+                [(from.width(), to.width()), (from.height(), to.height())]
+                    .into_iter()
+                    .enumerate()
+            {
+                let outputs = u64::from(output_len);
+                let taps = outputs.saturating_mul(per_output(source_len, output_len) as u64);
+                capacity[axis].0 = capacity[axis].0.max(outputs);
+                capacity[axis].1 = capacity[axis].1.max(taps);
+            }
+        };
+    let count = lower.max(upper);
+    for (from, to) in chain_dimensions(source, count).zip(chain_dimensions(source, count).skip(1)) {
+        cover(from, to, area_taps_per_output);
+    }
+    let sampled = if lower == 0 {
+        [Some(source), None]
+    } else {
+        [
+            chain_dimensions(source, lower).last(),
+            (upper != 0)
+                .then(|| chain_dimensions(source, upper).last())
+                .flatten(),
+        ]
+    };
+    for from in sampled.into_iter().flatten() {
+        cover(from, output, bilinear_taps_per_output);
+    }
+    capacity
 }
 
 fn storage_len<F: ImageFormat>(dimensions: ImageDimensions) -> Result<usize, Failure> {

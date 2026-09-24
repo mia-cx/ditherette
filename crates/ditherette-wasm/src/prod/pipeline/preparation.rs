@@ -91,7 +91,8 @@ pub(super) struct Scratch {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct SourceMetadata {
     identity: Identity,
-    opaque: bool,
+    /// Scanned on first use; only known-opacity resize kernels need it.
+    opaque: Option<bool>,
 }
 
 fn opaque_rgba8(bytes: &[u8]) -> bool {
@@ -523,7 +524,7 @@ impl<'a> Call<'a> {
                 };
                 SourceMetadata {
                     identity,
-                    opaque: opaque_rgba8(&self.scratch.buffers[0]),
+                    opaque: None,
                 }
             }
         };
@@ -531,12 +532,24 @@ impl<'a> Call<'a> {
         Ok(source.identity)
     }
 
-    pub(super) fn source_opaque(&self) -> bool {
-        self.scratch
+    /// Scans the verified source once per identity and keeps the answer for warm calls.
+    pub(super) fn source_opaque(&mut self) -> bool {
+        let (_, metadata) = self
+            .scratch
             .source
-            .expect("source bytes were verified for this call")
-            .1
+            .as_mut()
+            .expect("source bytes were verified for this call");
+        *metadata
             .opaque
+            .get_or_insert_with(|| opaque_rgba8(&self.scratch.buffers[0]))
+    }
+
+    /// Opacity is needed only when the prepared resize runs a known-opacity kernel.
+    pub(super) fn resize_source_opaque(&mut self) -> bool {
+        self.parts()
+            .1
+            .is_some_and(|resize| resize.uses_source_opacity())
+            && self.source_opaque()
     }
 
     /// After source verification and available image hits, reserve the remaining execution.

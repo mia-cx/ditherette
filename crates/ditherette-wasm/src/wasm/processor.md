@@ -13,7 +13,9 @@ Trilinear uses its exact production implementation, with one shared storage-roun
 |---|---|
 | `privateInitialize(limit: number): number` | Return zero or a failure status; preflight before priming fixed boundary storage |
 | `privateResize(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, algorithm: number, anchor: number, support: number, sink: object): number` | Borrow both JS handles; write `sink.value` only after complete durable result construction |
+| `privateResizeNearestSparse(input: Uint8Array, sw: number, sh: number, ow: number, oh: number, anchor: number, sink: object): number` | Scalar nearest resize that gathers only Rust-selected source pixels directly into the JS result |
 | `privateQuantize(input: Uint8Array, width: number, height: number, palette: number[], matching: number, alphaMode: number, threshold: number, matte: number, sink: object): number` | Borrow input, compact palette, and sink; publish complete JS-owned indexed output after every copy succeeds |
+| `privateThreadCount(availableParallelism: number): number` | Threaded builds only: default worker pool size, `clamp(cpus / 2, 1, 8)` |
 | `privateDispose(): number` | Idempotently release processor ownership; reject active-call recursion |
 | `privateErrorPath(): number` | Read immediately after a failure status |
 | `privateMemoryOverhead(): number` | Private fixture/accounting observation, excluded from the public wrapper |
@@ -60,6 +62,9 @@ memory-limit, wasm-memory-unavailable, disposed, reentrant-call, callback, runti
 ## Direct quantization
 
 Matching tags `0` through `4` select Euclidean sRGB, linear RGB, Oklab, CIELAB, and YCbCr respectively.
+Tags `5` through `7` select CompuPhase, Rec. 601, and Rec. 709 weighted sRGB.
+Tags `8` through `10` select Oklch Euclidean, circular-hue, and hue-arc; `11` selects CIEDE2000;
+`12` through `14` select CIELCH Euclidean, circular-hue, and hue-arc.
 Other raw matching values return unsupported-operation at `matching`.
 Alpha mode `0` preserves using the f64 threshold, `1` uses premultiplied RGB, and `2` uses a matte.
 Preserve requires matte zero. Premultiplied requires threshold and matte zero. Matte requires threshold zero.
@@ -105,7 +110,8 @@ Initialization preflights before creating and dropping one numeric JsValue to pr
 A trap specifically during privateInitialize maps to wasm-memory-unavailable and discards the failed factory.
 The generated Wasm initializer remains a separate package loading phase.
 
-Dispose drops all processor-owned images/cache/scratch. This slice retains none between calls.
+Dispose drops all processor-owned images/cache/scratch. Between calls the processor retains its
+preparation store: source metadata, prepared palettes and resize plans, and cached stage images.
 The fixed wasm-bindgen slab is module runtime bookkeeping and has no shrink API.
 The wrapper drops factory references on disposal; neither Rust nor the wrapper claims Wasm pages shrink immediately.
 

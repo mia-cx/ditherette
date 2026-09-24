@@ -26,7 +26,7 @@ pub struct PerturbRequest {
     pub perturb: PerturbPolicy,
 }
 
-/// The literal forward adapter owns one temporary converter at a time, including its byte tables.
+/// The literal forward adapter owns one temporary converter record at a time; its byte tables are shared statics.
 pub(super) const fn working_capacity_bytes() -> u64 {
     size_of::<crate::prod::color::packed::Converter>() as u64
 }
@@ -43,8 +43,9 @@ impl BayerBytes {
         policy: PerturbPolicy,
         available: u64,
     ) -> Option<Self> {
-        if cfg!(feature = "threads")
-            || policy.space != WorkingSpace::Srgb
+        // Callers skip byte tables whenever row bands run, so threaded builds reach this
+        // only on the same scalar path as scalar builds.
+        if policy.space != WorkingSpace::Srgb
             || !matches!(policy.placement, Placement::Everywhere {})
             || policy.strength == 0.0
         {
@@ -182,7 +183,7 @@ pub(super) fn execute_bands(
     source: ImageView<'_, Rgba8>,
     output: &mut [u8],
     policy: PerturbPolicy,
-    work: &mut RowBandBuffers<()>,
+    work: &mut RowBandBuffers<[f32; 3]>,
     progress: &mut impl FnMut(u64) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
     crate::prod::dither::perturb::perturb_by_field_bands_into(
@@ -270,7 +271,13 @@ pub(super) fn run<B: Boundary, A: Allocator>(
         .map_or(0, |plan| plan.additional_capacity());
     call.charge_working_capacity(band_capacity, peak)?;
     call.prepare(None, None, [len, len, 0, 0], 0, peak, allocator)?;
-    let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
+    let bands = band_plan
+        .as_ref()
+        .map(|plan| plan.allocate(request.perturb.placement, call.available_working_capacity()))
+        .transpose()?;
+    let band_rows_capacity = bands.as_ref().map_or(0, |(_, rows)| *rows);
+    call.charge_optional_capacity(band_rows_capacity, peak)?;
+    let mut bands = bands.map(|(buffers, _)| buffers);
     let mut placement = if bands.is_none() {
         AdaptivePlacementWork::try_new(
             dimensions.width(),
@@ -345,7 +352,7 @@ pub(super) fn run<B: Boundary, A: Allocator>(
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);
-    call.release_working_capacity(band_capacity);
+    call.release_working_capacity(band_capacity + band_rows_capacity);
     call.retain_rgba(1, key, 1, dimensions, peak);
     let bytes = call
         .image(1)
@@ -358,7 +365,7 @@ fn memory_limit() -> Failure {
     Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
 }
 
-#[cfg(all(test, not(feature = "threads")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::image::RowStride;

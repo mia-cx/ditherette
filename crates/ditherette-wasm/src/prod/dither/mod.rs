@@ -1,4 +1,4 @@
-//! Native separable fields and literal full-image diffusion baseline.
+//! Production dithering: separable fields, perturbation, error diffusion, and Yliluoma mixing.
 
 pub mod blue_noise;
 pub mod error_diffusion;

@@ -94,7 +94,6 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         })?;
         (call, Some(source))
     };
-    let source_opaque = !sparse && call.source_opaque();
     let resize_key = resize
         .zip(source)
         .map(|(output, source)| identity::stage(Some(source), StageOptions::Resize { output }))
@@ -210,12 +209,24 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             )
         })
         .transpose()?;
-    let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
+    let bands = band_plan
+        .as_ref()
+        .map(|plan| {
+            plan.allocate(
+                policy.map_or(Placement::Everywhere {}, |perturb| perturb.placement),
+                call.available_working_capacity(),
+            )
+        })
+        .transpose()?;
+    let band_rows_capacity = bands.as_ref().map_or(0, |(_, rows)| *rows);
+    call.charge_optional_capacity(band_rows_capacity, peak)?;
+    let mut bands = bands.map(|(buffers, _)| buffers);
     let placement_policy = match dither {
         DitherPolicy::Diffusion { placement, .. } => placement,
         DitherPolicy::Separable { perturb } if !perturbed_hit && bands.is_none() => {
             perturb.placement
         }
+        DitherPolicy::Yliluoma { placement, .. } if mixing.is_none() => placement,
         _ => Placement::Everywhere {},
     };
     let mut placement = AdaptivePlacementWork::try_new(
@@ -228,6 +239,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         .map_or(0, AdaptivePlacementWork::capacity_bytes);
     call.charge_optional_capacity(placement_capacity, peak)?;
     if resize.is_some() && !resized_hit {
+        let source_opaque = !sparse && call.resize_source_opaque();
         let (_, prepared, scratch) = call.parts();
         let [source, resized, _, _] = &mut scratch.buffers;
         let prepared = prepared.expect("requested resize");
@@ -340,16 +352,26 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         }
     }
     let can_match_rgb = call.parts().0.expect("requested palette").can_match_rgb();
-    let mut rgb_cache = if can_match_rgb
+    // Scalar Yliluoma Everywhere memoizes whole mixtures in the same exact-RGB table shape.
+    let mixes_by_rgb = mixing.is_none()
         && matches!(
             dither,
-            DitherPolicy::None {}
-                | DitherPolicy::Separable { .. }
-                | DitherPolicy::Diffusion {
-                    feedback: DiffusionFeedback::SrgbBytes,
-                    ..
-                }
-        ) {
+            DitherPolicy::Yliluoma {
+                placement: Placement::Everywhere {},
+                ..
+            }
+        );
+    let mut rgb_cache = if can_match_rgb
+        && (mixes_by_rgb
+            || matches!(
+                dither,
+                DitherPolicy::None {}
+                    | DitherPolicy::Separable { .. }
+                    | DitherPolicy::Diffusion {
+                        feedback: DiffusionFeedback::SrgbBytes,
+                        ..
+                    }
+            )) {
         cache::Work::try_new(
             output_dimensions,
             row_policy.filter(|_| bands.is_some()),
@@ -424,7 +446,10 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             DiffusionPolicy::new(dither)?,
             |_| Ok(()),
         )?,
-        DitherPolicy::Yliluoma { size, placement } => {
+        DitherPolicy::Yliluoma {
+            size,
+            placement: mix_placement,
+        } => {
             use crate::prod::dither::ordered::BayerSize as Matrix;
             let matrix = match size {
                 BayerSize::Two => Matrix::Two,
@@ -432,21 +457,44 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 BayerSize::Eight => Matrix::Eight,
                 BayerSize::Sixteen => Matrix::Sixteen,
             };
+            let placement_rows: &mut [[f32; 3]] = placement
+                .as_mut()
+                .map_or(&mut [], AdaptivePlacementWork::scratch);
+            let mixes: &mut [u64] = match &mut rgb_cache {
+                Some(cache::Work::Scalar(entries)) => entries,
+                _ => &mut [],
+            };
             if let Some(work) = &mut mixing {
-                work.execute(view, prepared, indices, matrix, placement, &mut report_row)?;
+                work.execute(
+                    view,
+                    prepared,
+                    indices,
+                    matrix,
+                    mix_placement,
+                    &mut report_row,
+                )?;
             } else if enabled {
                 crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
                     view,
                     prepared,
                     indices,
                     matrix,
-                    placement,
+                    mix_placement,
+                    placement_rows,
+                    mixes,
                     &mut report_row,
                 )?;
             } else {
-                crate::prod::dither::yiluoma::dither_yiluoma_into(
-                    view, prepared, indices, matrix, placement,
-                );
+                crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
+                    view,
+                    prepared,
+                    indices,
+                    matrix,
+                    mix_placement,
+                    placement_rows,
+                    mixes,
+                    |_| Ok(()),
+                )?;
             }
         }
         _ if rgb_cache.is_some() => {
@@ -469,7 +517,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);
-    call.release_working_capacity(band_capacity);
+    call.release_working_capacity(band_capacity + band_rows_capacity);
     drop(mixing);
     call.release_working_capacity(mixing_capacity);
     if let Some(key) = resize_key {

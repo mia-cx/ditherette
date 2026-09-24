@@ -1,8 +1,10 @@
 //! Production color-space materialization.
 //!
-//! These kernels convert browser RGBA8/sRGB pixels into packed four-channel
-//! color buffers used by pipeline caches. The first three channels are the
-//! requested color space; alpha is preserved as a normalized `0..=1` f32 value.
+//! These kernels convert browser RGBA8/sRGB pixels into four-channel f32 color
+//! buffers for the staged `convertColorSpace` export and its benchmarks. The
+//! processor pipeline converts through `color::packed::Converter` instead. The
+//! first three channels are the requested color space; alpha is preserved as a
+//! normalized `0..=1` f32 value.
 
 pub mod lab_ciede2000;
 pub mod packed;

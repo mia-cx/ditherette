@@ -68,7 +68,11 @@ pub fn resize_nearest_rgba8_rows_with_plan_into(
     y_start: u32,
 ) {
     assert_eq!(source.dimensions(), plan.source_dimensions);
-    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions, y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        plan.output_dimensions,
+        y_start,
+    );
     common::rgba8::assert_packed_source(source, "nearest");
     common::rgba8::assert_packed_output(&output, "nearest");
     let y_end = y_start + output.dimensions().height();
@@ -102,17 +106,4 @@ pub fn resize_nearest_rgba8_with_plan_into(
     }
 
     packed::resize_with_plan_into(source.data(), source.dimensions(), output.data_mut(), plan);
-}
-
-fn assert_row_band_matches_plan(
-    band_dimensions: crate::image::ImageDimensions,
-    full_output_dimensions: crate::image::ImageDimensions,
-    y_start: u32,
-) {
-    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
-    assert!(
-        y_start <= full_output_dimensions.height()
-            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
-        "row band must fit inside full output dimensions"
-    );
 }

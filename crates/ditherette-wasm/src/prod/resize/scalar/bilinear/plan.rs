@@ -8,8 +8,7 @@ use crate::prod::{contract::failure::Failure, resize::common::allocation::Capaci
 use std::mem::size_of;
 
 use super::{
-    alignment::{self, ResizeAnchor},
-    coordinates::{map_axis_position, support_range},
+    alignment::{self, map_axis_position, support_range, ResizeAnchor},
     filter::triangle_weight,
 };
 

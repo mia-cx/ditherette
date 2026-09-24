@@ -15,7 +15,7 @@ use ditherette_wasm::{
         pipeline::{
             perturb::PerturbRequest,
             process::ProcessRequest,
-            processor::{Boundary as RgbaBoundary, Processor},
+            processor::{Boundary as RgbaBoundary, InputBoundary, Processor},
             progress::Callback,
             quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
         },
@@ -51,8 +51,7 @@ impl Callback for Boundary<'_> {
         Ok(())
     }
 }
-impl RgbaBoundary for Boundary<'_> {
-    type Output = Vec<u8>;
+impl InputBoundary for Boundary<'_> {
     fn progress(&mut self) -> Option<&mut dyn Callback> {
         if self.enabled {
             Some(self)
@@ -67,6 +66,10 @@ impl RgbaBoundary for Boundary<'_> {
         bytes.copy_from_slice(self.source);
         Ok(())
     }
+}
+
+impl RgbaBoundary for Boundary<'_> {
+    type Output = Vec<u8>;
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         self.completions += 1;
         Ok(bytes.to_vec())
@@ -74,15 +77,6 @@ impl RgbaBoundary for Boundary<'_> {
 }
 impl QuantizeBoundary for Boundary<'_> {
     type Output = Vec<u8>;
-    fn progress(&mut self) -> Option<&mut dyn Callback> {
-        RgbaBoundary::progress(self)
-    }
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        RgbaBoundary::input_len(self)
-    }
-    fn copy_input(&mut self, bytes: &mut [u8]) -> Result<(), Failure> {
-        RgbaBoundary::copy_input(self, bytes)
-    }
     fn complete(
         &mut self,
         bytes: &[u8],

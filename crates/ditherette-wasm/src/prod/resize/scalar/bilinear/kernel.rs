@@ -86,7 +86,6 @@ pub(super) fn resize_with_progress(
     let output_data = output.data_mut();
 
     for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
-        vertical_row.fill(0.0);
         let y_weight_sum = accumulate_vertical(source_data, source_row_len, vertical_row, y_taps);
 
         let output_row_start = output_y * output_row_len;
@@ -139,7 +138,6 @@ pub(super) fn resize_rows_with_scratch_into(
     if source_width == output_width {
         for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
             let output_y = y_start + local_y;
-            vertical_row.fill(0.0);
             let y_weight_sum = accumulate_vertical(
                 source_data,
                 source_row_len,
@@ -176,7 +174,6 @@ pub(super) fn resize_rows_with_scratch_into(
 
     for (local_y, output_row) in output_data.chunks_exact_mut(output_row_len).enumerate() {
         let output_y = y_start + local_y;
-        vertical_row.fill(0.0);
         let y_weight_sum = accumulate_vertical(
             source_data,
             source_row_len,
@@ -209,7 +206,6 @@ fn resize_height_only(
     progress: &mut impl FnMut(u32) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
     for (output_y, y_taps) in plan.y_taps.iter().enumerate() {
-        vertical_row.fill(0.0);
         let y_weight_sum = accumulate_vertical(source, source_row_len, vertical_row, y_taps);
         let output_start = output_y * output_row_len;
         let output_row = &mut output[output_start..output_start + output_row_len];
@@ -257,15 +253,33 @@ fn resize_width_only(
 // separable scratch row is closer to the direct oracle but materially slower;
 // the benchmark profile enforces bounded color-distance correctness for the
 // single production bilinear path instead of byte-for-byte f64 grouping.
+/// Overwrites `vertical_row`. The first tap is stored directly instead of added to a
+/// zero-filled row: weights are positive, so `0.0 + x == x` bit for bit.
 fn accumulate_vertical(
     source: &[u8],
     source_row_len: usize,
     vertical_row: &mut [f32],
     y_taps: &[AxisTap],
 ) -> f32 {
+    let Some((first, rest)) = y_taps.split_first() else {
+        vertical_row.fill(0.0);
+        return 0.0;
+    };
     let mut y_weight_sum = 0.0;
+    let y_weight = first.weight as f32;
+    y_weight_sum += y_weight;
+    let source_start = first.index * source_row_len;
+    for (vertical_pixel, source_pixel) in vertical_row
+        .chunks_exact_mut(RGBA8_CHANNELS)
+        .zip(source[source_start..source_start + source_row_len].chunks_exact(RGBA8_CHANNELS))
+    {
+        vertical_pixel[0] = f32::from(source_pixel[0]) * y_weight;
+        vertical_pixel[1] = f32::from(source_pixel[1]) * y_weight;
+        vertical_pixel[2] = f32::from(source_pixel[2]) * y_weight;
+        vertical_pixel[3] = f32::from(source_pixel[3]) * y_weight;
+    }
 
-    for y_tap in y_taps {
+    for y_tap in rest {
         let y_weight = y_tap.weight as f32;
         y_weight_sum += y_weight;
         let source_start = y_tap.index * source_row_len;

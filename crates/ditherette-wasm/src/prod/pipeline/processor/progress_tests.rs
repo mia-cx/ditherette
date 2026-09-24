@@ -1,4 +1,4 @@
-use super::{Boundary, Processor, ResizeRequest};
+use super::{Boundary, InputBoundary, Processor, ResizeRequest};
 use crate::image::ImageDimensions;
 use crate::prod::contract::{
     error::ErrorCode,
@@ -75,8 +75,7 @@ impl Callback for Io {
         }
     }
 }
-impl Boundary for Io {
-    type Output = Vec<u8>;
+impl InputBoundary for Io {
     fn progress(&mut self) -> Option<&mut dyn Callback> {
         if self.enabled {
             Some(self)
@@ -96,9 +95,13 @@ impl Boundary for Io {
         if compare && destination == self.input {
             return Ok(true);
         }
-        Boundary::copy_input(self, destination)?;
+        InputBoundary::copy_input(self, destination)?;
         Ok(false)
     }
+}
+
+impl Boundary for Io {
+    type Output = Vec<u8>;
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         if self.fail_copy {
             return Err(Failure::new(
@@ -113,18 +116,6 @@ impl Boundary for Io {
 }
 impl QuantizeBoundary for Io {
     type Output = Vec<u8>;
-    fn progress(&mut self) -> Option<&mut dyn Callback> {
-        Boundary::progress(self)
-    }
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        Boundary::input_len(self)
-    }
-    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
-        Boundary::copy_input(self, destination)
-    }
-    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
-        Boundary::snapshot_input(self, destination, compare)
-    }
     fn complete(
         &mut self,
         bytes: &[u8],

@@ -6,9 +6,11 @@ local perf-loop history.
 
 ## Benchmarking rules that made the work reliable
 
-- **Measure the product path.** Prod benchmark subjects call the public one-shot
-  resize APIs (`resize_*_rgba8_into`) because the app does not repeatedly resize
-  with the same dimensions.
+- **Measure the product path.** The package reaches resize through the
+  processor's `PreparedResize::new` (budgeted `*Plan::try_new` plus caller-owned
+  scratch). The budgeted bench subjects (`bench_subjects/resize_budgeted.rs`)
+  match that path; the one-shot `resize_*_rgba8_into` subjects remain for
+  staged exports. The app does not repeatedly resize with the same dimensions.
 - **Use manifest profiles as source of truth.** Run `ditherette-bench run
   nearest`, `run area`, or `run bilinear`; do not hand-roll scale/fixture flags
   for acceptance.
@@ -128,8 +130,9 @@ Rejected bilinear directions worth remembering:
    optimizing.
 2. **Add a manifest profile.** Include representative app scales, identity, and
    any diagnostic edge cases separately enough that they are visible in results.
-3. **Benchmark the one-shot public path.** Add a planned/hot subject only if the
-   app actually reuses plans.
+3. **Benchmark the product path.** Use the budgeted subjects that mirror
+   `PreparedResize::new`. Add a planned/hot subject only if the app actually
+   reuses plans.
 4. **Normalize the prod boundary.** Assume packed RGBA8 internally; convert before
    prod resize rather than branching inside kernels.
 5. **Add the cheapest bypasses first.** Caller-level identity, filter-local
