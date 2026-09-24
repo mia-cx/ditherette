@@ -148,3 +148,76 @@ fn find_ordered_mix(
 
     best
 }
+
+const MIX_VALID: u64 = 1 << 24;
+const MIX_RGB_MASK: u64 = 0x00ff_ffff;
+
+/// Exact memo of Everywhere mixtures keyed by alpha-prepared RGB, in caller-owned scratch.
+/// With Everywhere the target is the source color, so the search is a pure function of RGB
+/// for one prepared palette, metric, and Bayer size. Position only picks an index afterward.
+pub(crate) struct MixCache<'a> {
+    entries: &'a mut [u64],
+    levels: u32,
+}
+
+impl<'a> MixCache<'a> {
+    /// Entries must be a power of two. Rebinding clears any earlier call's mixtures.
+    pub(crate) fn new(entries: &'a mut [u64], levels: u32) -> Self {
+        assert!(entries.len().is_power_of_two());
+        assert!(levels <= 256, "Bayer levels fit the packed high count");
+        entries.fill(0);
+        Self { entries, levels }
+    }
+
+    /// Returns the cached mixture for `rgb`, running `search` only on a miss.
+    #[inline]
+    pub(crate) fn mix(&mut self, rgb: [u8; 3], search: impl FnOnce() -> PaletteMix) -> PaletteMix {
+        let key = u32::from(rgb[0]) << 16 | u32::from(rgb[1]) << 8 | u32::from(rgb[2]);
+        let slot = (key.wrapping_mul(0x9e37_79b1) >> 8) as usize & (self.entries.len() - 1);
+        let entry = self.entries[slot];
+        if entry & (MIX_VALID | MIX_RGB_MASK) == MIX_VALID | u64::from(key) {
+            let high_count = (entry >> 41) as u32;
+            return PaletteMix {
+                low_index: (entry >> 25) as u8,
+                high_index: (entry >> 33) as u8,
+                // The search derives every ratio with this same expression.
+                high_ratio: high_count as f32 / self.levels as f32,
+            };
+        }
+        let mix = search();
+        let high_count = (mix.high_ratio * self.levels as f32).round() as u64;
+        debug_assert_eq!(
+            (high_count as f32 / self.levels as f32).to_bits(),
+            mix.high_ratio.to_bits()
+        );
+        self.entries[slot] = MIX_VALID
+            | u64::from(key)
+            | u64::from(mix.low_index) << 25
+            | u64::from(mix.high_index) << 33
+            | high_count << 41;
+        mix
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn packed_high_counts_restore_every_ratio_bit_for_bit() {
+        for levels in [4, 16, 64, 256] {
+            let mut entries = vec![0; 1024];
+            let mut cache = MixCache::new(&mut entries, levels);
+            for high_count in 0..=levels {
+                let rgb = [high_count as u8, (high_count >> 8) as u8, 7];
+                let mix = PaletteMix {
+                    low_index: 3,
+                    high_index: 250,
+                    high_ratio: high_count as f32 / levels as f32,
+                };
+                assert_eq!(cache.mix(rgb, || mix), mix);
+                assert_eq!(cache.mix(rgb, || unreachable!("hit")), mix);
+            }
+        }
+    }
+}

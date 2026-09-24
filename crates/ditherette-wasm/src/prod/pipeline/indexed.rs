@@ -341,16 +341,26 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         }
     }
     let can_match_rgb = call.parts().0.expect("requested palette").can_match_rgb();
-    let mut rgb_cache = if can_match_rgb
+    // Scalar Yliluoma Everywhere memoizes whole mixtures in the same exact-RGB table shape.
+    let mixes_by_rgb = mixing.is_none()
         && matches!(
             dither,
-            DitherPolicy::None {}
-                | DitherPolicy::Separable { .. }
-                | DitherPolicy::Diffusion {
-                    feedback: DiffusionFeedback::SrgbBytes,
-                    ..
-                }
-        ) {
+            DitherPolicy::Yliluoma {
+                placement: Placement::Everywhere {},
+                ..
+            }
+        );
+    let mut rgb_cache = if can_match_rgb
+        && (mixes_by_rgb
+            || matches!(
+                dither,
+                DitherPolicy::None {}
+                    | DitherPolicy::Separable { .. }
+                    | DitherPolicy::Diffusion {
+                        feedback: DiffusionFeedback::SrgbBytes,
+                        ..
+                    }
+            )) {
         cache::Work::try_new(
             output_dimensions,
             row_policy.filter(|_| bands.is_some()),
@@ -439,6 +449,10 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             let placement_rows: &mut [[f32; 3]] = placement
                 .as_mut()
                 .map_or(&mut [], AdaptivePlacementWork::scratch);
+            let mixes: &mut [u64] = match &mut rgb_cache {
+                Some(cache::Work::Scalar(entries)) => entries,
+                _ => &mut [],
+            };
             if let Some(work) = &mut mixing {
                 work.execute(
                     view,
@@ -456,6 +470,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     matrix,
                     mix_placement,
                     placement_rows,
+                    mixes,
                     &mut report_row,
                 )?;
             } else {
@@ -466,6 +481,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     matrix,
                     mix_placement,
                     placement_rows,
+                    mixes,
                     |_| Ok(()),
                 )?;
             }
