@@ -1,8 +1,9 @@
-name: Package conformance
+name: Build and test
 
 on:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -12,7 +13,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: package-conformance-${{ github.event.pull_request.number || github.ref }}
+  group: package-conformance-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -30,8 +31,10 @@ jobs:
           node-version: '24.19.0'
       - name: Install pinned package manager and dependencies
         run: |
-          npm install --global pnpm@11.13.0
+          npm install --global pnpm@11.13.1
           pnpm install --frozen-lockfile
+      - name: Check release automation
+        run: pnpm test:release
       - name: Install configured Rust toolchains
         run: |
           rustup show
@@ -79,11 +82,21 @@ jobs:
         run: pnpm --filter ditherette-wasm test:conformance:threads | tee target/conformance-threads.log
       - name: Actual automatic policies in Chromium and Firefox
         run: pnpm --filter ditherette-wasm test:conformance:automatic | tee target/conformance-automatic.log
-      - name: Website cancellation and faithful fallback
+      - name: Website types and tests
         run: |
-          pnpm exec svelte-kit sync
-          pnpm exec vitest run --project server src/lib/processing/client.spec.ts src/lib/processing/worker-pipeline.spec.ts src/lib/processing/package-fallback.spec.ts src/lib/processing/schemas.spec.ts src/lib/stores/app.spec.ts
-          pnpm exec vitest run --project client src/lib/processing/package-pipeline.browser.spec.ts src/lib/processing/package-fallback.browser.spec.ts
+          pnpm check
+          pnpm exec vitest run
+      - name: Build website and test production output
+        run: |
+          pnpm build:web
+          pnpm exec playwright test
+      - name: Retain tested website for the release workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .svelte-kit/cloudflare
+          include-hidden-files: true
+          retention-days: 1
       - name: Report coverage limits
         if: always()
         run: |

@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      npm: ${{ steps.plan.outputs.npm }}
+      web: ${{ steps.plan.outputs.web }}
+      pending: ${{ steps.plan.outputs.pending }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm install --global pnpm@11.13.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:release
+      - name: Identify merged release and changed versions
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --paginate --slurp | node scripts/release-plan.mjs
+
+  release-pr:
+    needs: version
+    if: needs.version.outputs.pending == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ditherette-release-pr
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Superseded PR-update jobs must always collect the latest pending changesets.
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm install --global pnpm@11.13.1
+      - run: pnpm install --frozen-lockfile
+      - name: Require release PR credentials
+        env:
+          RELEASE_PR_TOKEN: ${{ secrets.RELEASE_PR_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_PR_TOKEN" ]; then
+            echo '::error::Configure RELEASE_PR_TOKEN with repository contents and pull-request write access so generated release PRs trigger CI.'
+            exit 1
+          fi
+      - name: Open or update the release pull request
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2
+        with:
+          github-token: ${{ secrets.RELEASE_PR_TOKEN }}
+          version-script: pnpm release:version
+          commit-message: 'chore(release): version packages'
+          pr-title: 'chore(release): version packages'
+          pr-base-branch: main
+          create-github-releases: false
+          push-git-tags: false
+
+  checks:
+    needs: version
+    if: needs.version.outputs.release == 'true' && (needs.version.outputs.npm == 'true' || needs.version.outputs.web == 'true')
+    uses: ./.github/workflows/package-conformance.yml
+
+  npm:
+    needs: [version, checks]
+    if: needs.version.outputs.npm == 'true'
+    uses: ./.github/workflows/package-publish.yml
+    permissions:
+      contents: read
+      id-token: write
+
+  website:
+    needs: [version, checks, npm]
+    if: >-
+      !cancelled() && needs.version.outputs.web == 'true' &&
+      needs.checks.result == 'success' &&
+      (needs.npm.result == 'success' || needs.npm.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    concurrency:
+      group: ditherette-website
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - run: npm install --global pnpm@11.13.1
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: website-${{ github.sha }}
+          path: .svelte-kit/cloudflare
+      - name: Reject superseded website releases
+        run: node scripts/release-plan.mjs current web
+      - name: Deploy the tested website
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --env production

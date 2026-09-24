@@ -109,8 +109,14 @@ export function sizeReview(sizes, policy) {
 }
 
 export function requirePublication(policy, findings, environment, version, revision) {
-	validateReleaseTag(version, environment.GITHUB_REF_NAME);
-	assert.equal(environment.GITHUB_REF_TYPE, 'tag');
+	validateReleaseTag(version, `v${version}`);
+	assert.equal(environment.GITHUB_EVENT_NAME, 'push');
+	assert.equal(environment.GITHUB_REF, 'refs/heads/main');
+	assert.equal(
+		environment.DITHERETTE_RELEASE_MERGE,
+		'true',
+		'A verified Changesets merge is required.'
+	);
 	assert.equal(environment.GITHUB_ACTIONS, 'true');
 	assert.equal(environment.GITHUB_REPOSITORY, 'mia-cx/ditherette');
 	assert.equal(environment.GITHUB_SHA, revision, 'Publish only the tested source revision.');

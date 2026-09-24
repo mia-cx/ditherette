@@ -1,4 +1,5 @@
 packages:
+  - '.'
   - crates/ditherette-wasm
   - packages/ditherette
 engineStrict: true
