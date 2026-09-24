@@ -409,7 +409,7 @@ function validateProcessingMetrics(value: unknown): ProcessingMetricsSample | un
 	if (value === undefined) return undefined;
 	if (!isObject(value)) throw new Error('Worker metrics are invalid.');
 	const cache = isObject(value.cache) ? value.cache : undefined;
-	if (!cache) throw new Error('Worker metrics cache is invalid.');
+	if (value.cache !== undefined && !cache) throw new Error('Worker metrics cache is invalid.');
 	const timings = Array.isArray(value.timings) ? value.timings.map(validateTiming) : [];
 	const warnings = Array.isArray(value.warnings)
 		? value.warnings.filter((warning): warning is string => typeof warning === 'string')
@@ -423,11 +423,13 @@ function validateProcessingMetrics(value: unknown): ProcessingMetricsSample | un
 		completedAt: assertFiniteTimestamp(value.completedAt, 'Worker metrics completion'),
 		totalMs: assertFiniteNonNegativeNumber(value.totalMs, 'Worker metrics total'),
 		timings,
-		cache: {
-			delta: validateCacheSnapshot(cache.delta),
-			lifetime: validateCacheSnapshot(cache.lifetime)
-		},
-		memory: validateMemoryShape(value.memory),
+		cache: cache
+			? {
+					delta: validateCacheSnapshot(cache.delta),
+					lifetime: validateCacheSnapshot(cache.lifetime)
+				}
+			: undefined,
+		memory: value.memory === undefined ? undefined : validateMemoryShape(value.memory),
 		outputPixels: assertFiniteNonNegativeNumber(value.outputPixels, 'Worker metrics output pixels'),
 		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker metrics color space'),
 		dither: assertOneOf(value.dither, DITHER_IDS, 'Worker metrics dither'),

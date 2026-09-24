@@ -68,8 +68,8 @@ export type ProcessingMetricsSample = {
 	completedAt: number;
 	totalMs: number;
 	timings: ProcessingStageTiming[];
-	cache: ProcessingCacheMetrics;
-	memory: ProcessingMemoryShape;
+	cache?: ProcessingCacheMetrics;
+	memory?: ProcessingMemoryShape;
 	outputPixels: number;
 	colorSpace: ColorSpaceId;
 	dither: DitherId;

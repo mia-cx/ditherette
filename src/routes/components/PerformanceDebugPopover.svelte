@@ -98,10 +98,7 @@
 				<div class="flex items-start justify-between gap-3">
 					<div>
 						<h2 class="text-sm font-semibold">Processing metrics</h2>
-						<p class="text-muted-foreground">
-							Rolling stats reset per source + output branch; cached compute timings replay cold
-							cost.
-						</p>
+						<p class="text-muted-foreground">Rolling stats reset per source + output branch.</p>
 					</div>
 					<Button size="sm" variant="outline" onclick={clearProcessingMetrics}>Reset</Button>
 				</div>
@@ -123,12 +120,22 @@
 						<h3 class="font-medium">Latest</h3>
 						<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
 							{@render Metric('Actual total', formatMs(latest.totalMs))}
-							{@render Metric('Cold est.', formatMs(latest.totalMs + replayedComputeMs()))}
-							{@render Metric('Resize', stageTimingLabel('resize compute', 'resize cache lookup'))}
-							{@render Metric(
-								'Quantize',
-								stageTimingLabel('quantize compute', 'quantize cache lookup')
-							)}
+							{#if latest.cache}
+								{@render Metric('Cold est.', formatMs(latest.totalMs + replayedComputeMs()))}
+								{@render Metric(
+									'Resize',
+									stageTimingLabel('resize compute', 'resize cache lookup')
+								)}
+								{@render Metric(
+									'Quantize',
+									stageTimingLabel('quantize compute', 'quantize cache lookup')
+								)}
+							{:else}
+								{@render Metric(
+									'Package process',
+									formatMs(latest.timings.find((timing) => timing.name === 'package process')?.ms)
+								)}
+							{/if}
 						</div>
 					</section>
 
@@ -162,53 +169,57 @@
 						</div>
 					</section>
 
-					<Separator />
+					{#if latest.cache}
+						<Separator />
 
-					<section class="grid gap-2 sm:grid-cols-2">
-						<div class="grid gap-1">
-							<h3 class="font-medium">Cache delta</h3>
-							{@render Stat(
-								'Resize',
-								`${latest.cache.delta.resizedHits} hit / ${latest.cache.delta.resizedMisses} miss`
-							)}
-							{@render Stat(
-								'Derived',
-								`${latest.cache.delta.derivedHits} hit / ${latest.cache.delta.derivedMisses} miss`
-							)}
-							{@render Stat(
-								'Palette vectors',
-								`${latest.cache.delta.paletteVectorHits} hit / ${latest.cache.delta.paletteVectorMisses} miss`
-							)}
-							{@render Stat(
-								'Evicted',
-								`${latest.cache.delta.derivedEvictions} derived / ${latest.cache.delta.resizedEvictions} resize`
-							)}
-						</div>
-						<div class="grid gap-1">
-							<h3 class="font-medium">Cache lifetime</h3>
-							{@render Stat('Branches', `${latest.cache.lifetime.branchCount}`)}
-							{@render Stat(
-								'Branch bytes',
-								`${formatBytes(latest.cache.lifetime.branchBytes)} / ${formatBytes(latest.cache.lifetime.branchMaxBytes)}`
-							)}
-							{@render Stat('Resize hits', `${latest.cache.lifetime.resizedHits}`)}
-							{@render Stat('Derived hits', `${latest.cache.lifetime.derivedHits}`)}
-						</div>
-					</section>
+						<section class="grid gap-2 sm:grid-cols-2">
+							<div class="grid gap-1">
+								<h3 class="font-medium">Cache delta</h3>
+								{@render Stat(
+									'Resize',
+									`${latest.cache.delta.resizedHits} hit / ${latest.cache.delta.resizedMisses} miss`
+								)}
+								{@render Stat(
+									'Derived',
+									`${latest.cache.delta.derivedHits} hit / ${latest.cache.delta.derivedMisses} miss`
+								)}
+								{@render Stat(
+									'Palette vectors',
+									`${latest.cache.delta.paletteVectorHits} hit / ${latest.cache.delta.paletteVectorMisses} miss`
+								)}
+								{@render Stat(
+									'Evicted',
+									`${latest.cache.delta.derivedEvictions} derived / ${latest.cache.delta.resizedEvictions} resize`
+								)}
+							</div>
+							<div class="grid gap-1">
+								<h3 class="font-medium">Cache lifetime</h3>
+								{@render Stat('Branches', `${latest.cache.lifetime.branchCount}`)}
+								{@render Stat(
+									'Branch bytes',
+									`${formatBytes(latest.cache.lifetime.branchBytes)} / ${formatBytes(latest.cache.lifetime.branchMaxBytes)}`
+								)}
+								{@render Stat('Resize hits', `${latest.cache.lifetime.resizedHits}`)}
+								{@render Stat('Derived hits', `${latest.cache.lifetime.derivedHits}`)}
+							</div>
+						</section>
+					{/if}
 
-					<Separator />
+					{#if latest.memory}
+						<Separator />
 
-					<section class="grid gap-1">
-						<h3 class="font-medium">Memory shape</h3>
-						<div class="grid gap-1 sm:grid-cols-2">
-							{@render Stat('Source RGBA', formatBytes(latest.memory.sourceBytes))}
-							{@render Stat('Resized RGBA', formatBytes(latest.memory.resizedBytes))}
-							{@render Stat('Indices', formatBytes(latest.memory.indexBytes))}
-							{@render Stat('Color vectors', formatBytes(latest.memory.vectorBytes))}
-							{@render Stat('Dither work', formatBytes(latest.memory.ditherWorkBytes))}
-							{@render Stat('Branch cache', formatBytes(latest.memory.branchCacheBytes))}
-						</div>
-					</section>
+						<section class="grid gap-1">
+							<h3 class="font-medium">Memory shape</h3>
+							<div class="grid gap-1 sm:grid-cols-2">
+								{@render Stat('Source RGBA', formatBytes(latest.memory.sourceBytes))}
+								{@render Stat('Resized RGBA', formatBytes(latest.memory.resizedBytes))}
+								{@render Stat('Indices', formatBytes(latest.memory.indexBytes))}
+								{@render Stat('Color vectors', formatBytes(latest.memory.vectorBytes))}
+								{@render Stat('Dither work', formatBytes(latest.memory.ditherWorkBytes))}
+								{@render Stat('Branch cache', formatBytes(latest.memory.branchCacheBytes))}
+							</div>
+						</section>
+					{/if}
 				{:else}
 					<p class="rounded border border-dashed border-border p-3 text-muted-foreground">
 						Process an image to collect timing and cache metrics.

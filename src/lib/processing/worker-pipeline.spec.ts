@@ -291,8 +291,8 @@ describe('ProcessorWorkerPipeline', () => {
 			resize: 'nearest'
 		});
 		expect(response.metrics?.timings.length).toBeGreaterThan(0);
-		expect(response.metrics?.cache.delta.resizedMisses).toBe(1);
-		expect(response.metrics?.memory.resizedBytes).toBe(8);
+		expect(response.metrics?.cache?.delta.resizedMisses).toBe(1);
+		expect(response.metrics?.memory?.resizedBytes).toBe(8);
 	});
 
 	it('splits quantize metrics into color conversion and dither matching stages', () => {
@@ -342,8 +342,8 @@ describe('ProcessorWorkerPipeline', () => {
 		const response = pipeline.handle(processRequest({ id: 3 }), () => undefined);
 
 		if (!response || response.type !== 'complete') throw new Error('Expected complete response.');
-		expect(response.metrics?.cache.delta.resizedHits).toBe(1);
-		expect(response.metrics?.cache.delta.derivedHits).toBeGreaterThan(0);
+		expect(response.metrics?.cache?.delta.resizedHits).toBe(1);
+		expect(response.metrics?.cache?.delta.derivedHits).toBeGreaterThan(0);
 		expect(response.metrics?.timings).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({ name: 'resize compute', ms: firstResizeMs, replayed: true }),
