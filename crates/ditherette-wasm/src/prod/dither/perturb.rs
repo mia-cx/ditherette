@@ -98,9 +98,20 @@ pub fn try_band_buffers_with_rows(
     };
     if matches!(placement, Placement::Adaptive { .. }) {
         let rows = dimensions.width_usize() * AdaptivePlacementRows::ROW_COUNT;
-        let extra = u64::from(active) * (rows * std::mem::size_of::<[f32; 3]>()) as u64;
-        if extra <= optional {
-            if let Ok(buffers) = buffers(rows, limit + extra) {
+        // Each worker owns its coordinate rows plus the live row-cache records on its stack,
+        // matching the scalar AdaptivePlacementWork charge.
+        let per_worker = (rows as u64)
+            .checked_mul(std::mem::size_of::<[f32; 3]>() as u64)
+            .and_then(|bytes| {
+                bytes.checked_add(
+                    (std::mem::size_of::<AdaptivePlacementRows<'_>>()
+                        + std::mem::size_of::<super::placement::AdaptivePlacementRow<'_>>())
+                        as u64,
+                )
+            });
+        let extra = per_worker.and_then(|bytes| bytes.checked_mul(u64::from(active)));
+        if let Some(extra) = extra.filter(|&extra| extra <= optional) {
+            if let Some(Ok(buffers)) = limit.checked_add(extra).map(|limit| buffers(rows, limit)) {
                 return Ok((buffers, extra));
             }
         }
