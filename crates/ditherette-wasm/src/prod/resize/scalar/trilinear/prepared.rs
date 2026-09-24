@@ -86,8 +86,8 @@ where
             }
         }
         for (outputs, taps) in plan_capacity(source, output, lower, upper) {
-            bytes = bytes
-                .checked_add(AxisPlan::required_bytes(outputs, taps))
+            bytes = AxisPlan::required_bytes(outputs, taps)
+                .and_then(|plan| bytes.checked_add(plan))
                 .ok_or_else(memory_limit)?;
         }
         Ok(bytes)
@@ -117,10 +117,14 @@ where
         upper_output.resize(output_len, F::Storage::default());
         let mut accumulated = budget.vector(F::CHANNEL_COUNT)?;
         accumulated.resize(F::CHANNEL_COUNT, 0.0);
-        let [(x_outputs, x_taps), (y_outputs, y_taps)] =
-            plan_capacity(source, output, lower_count, upper_count);
-        let x_plan = AxisPlan::try_reserve(&mut budget, x_outputs, x_taps)?;
-        let y_plan = AxisPlan::try_reserve(&mut budget, y_outputs, y_taps)?;
+        // required_bytes already proved every plan size fits; these conversions cannot fail.
+        let [x_plan, y_plan] = plan_capacity(source, output, lower_count, upper_count).map(
+            |(outputs, taps)| -> Result<AxisPlan, Failure> {
+                let size = |value: u64| usize::try_from(value).map_err(|_| memory_limit());
+                AxisPlan::try_reserve(&mut budget, size(outputs)?, size(taps)?)
+            },
+        );
+        let (x_plan, y_plan) = (x_plan?, y_plan?);
         Ok(Self {
             source,
             output,
@@ -364,12 +368,13 @@ where
 
 /// Per-axis `(outputs, taps)` capacity covering every chain reduction and sampling stage.
 /// Tap counts use proven per-output bounds, so capacity does not depend on the anchor.
+/// Counts saturate so an impossible size fails the caller's checked byte total.
 fn plan_capacity(
     source: ImageDimensions,
     output: ImageDimensions,
     lower: usize,
     upper: usize,
-) -> [(usize, usize); 2] {
+) -> [(u64, u64); 2] {
     let mut capacity = [(0, 0); 2];
     let mut cover =
         |from: ImageDimensions, to: ImageDimensions, per_output: fn(u32, u32) -> usize| {
@@ -378,11 +383,10 @@ fn plan_capacity(
                     .into_iter()
                     .enumerate()
             {
-                let outputs = output_len as usize;
+                let outputs = u64::from(output_len);
+                let taps = outputs.saturating_mul(per_output(source_len, output_len) as u64);
                 capacity[axis].0 = capacity[axis].0.max(outputs);
-                capacity[axis].1 = capacity[axis]
-                    .1
-                    .max(outputs * per_output(source_len, output_len));
+                capacity[axis].1 = capacity[axis].1.max(taps);
             }
         };
     let count = lower.max(upper);

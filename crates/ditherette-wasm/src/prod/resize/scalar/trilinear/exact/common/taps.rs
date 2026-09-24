@@ -25,9 +25,12 @@ pub struct AxisPlan {
 }
 
 impl AxisPlan {
-    /// Heap bytes reserved for `outputs` coordinates and `taps` contributions.
-    pub fn required_bytes(outputs: usize, taps: usize) -> u64 {
-        ((outputs + 1) * size_of::<u32>() + taps * size_of::<AxisTap>()) as u64
+    /// Heap bytes reserved for `outputs` coordinates and `taps` contributions, or `None` on overflow.
+    pub fn required_bytes(outputs: u64, taps: u64) -> Option<u64> {
+        outputs
+            .checked_add(1)?
+            .checked_mul(size_of::<u32>() as u64)?
+            .checked_add(taps.checked_mul(size_of::<AxisTap>() as u64)?)
     }
 
     /// Reserve through the caller's ledger before any source bytes are read.
