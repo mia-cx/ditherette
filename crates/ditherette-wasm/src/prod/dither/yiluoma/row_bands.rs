@@ -91,6 +91,7 @@ impl YliluomaBands {
                     size,
                     placement,
                     band,
+                    &mut [],
                     |_| Ok(()),
                 )?;
                 Ok(u64::from(band.height()))

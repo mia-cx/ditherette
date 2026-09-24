@@ -216,6 +216,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         DitherPolicy::Separable { perturb } if !perturbed_hit && bands.is_none() => {
             perturb.placement
         }
+        DitherPolicy::Yliluoma { placement, .. } if mixing.is_none() => placement,
         _ => Placement::Everywhere {},
     };
     let mut placement = AdaptivePlacementWork::try_new(
@@ -424,7 +425,10 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             DiffusionPolicy::new(dither)?,
             |_| Ok(()),
         )?,
-        DitherPolicy::Yliluoma { size, placement } => {
+        DitherPolicy::Yliluoma {
+            size,
+            placement: mix_placement,
+        } => {
             use crate::prod::dither::ordered::BayerSize as Matrix;
             let matrix = match size {
                 BayerSize::Two => Matrix::Two,
@@ -432,21 +436,38 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 BayerSize::Eight => Matrix::Eight,
                 BayerSize::Sixteen => Matrix::Sixteen,
             };
+            let placement_rows: &mut [[f32; 3]] = placement
+                .as_mut()
+                .map_or(&mut [], AdaptivePlacementWork::scratch);
             if let Some(work) = &mut mixing {
-                work.execute(view, prepared, indices, matrix, placement, &mut report_row)?;
+                work.execute(
+                    view,
+                    prepared,
+                    indices,
+                    matrix,
+                    mix_placement,
+                    &mut report_row,
+                )?;
             } else if enabled {
                 crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
                     view,
                     prepared,
                     indices,
                     matrix,
-                    placement,
+                    mix_placement,
+                    placement_rows,
                     &mut report_row,
                 )?;
             } else {
-                crate::prod::dither::yiluoma::dither_yiluoma_into(
-                    view, prepared, indices, matrix, placement,
-                );
+                crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
+                    view,
+                    prepared,
+                    indices,
+                    matrix,
+                    mix_placement,
+                    placement_rows,
+                    |_| Ok(()),
+                )?;
             }
         }
         _ if rgb_cache.is_some() => {
