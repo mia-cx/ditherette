@@ -36,7 +36,13 @@ for (const target of ['ditherette-web', 'ditherette']) {
 			await mkdir(dirname(join(fixture, path)), { recursive: true });
 			await cp(join(root, path), join(fixture, path));
 		}
-		await symlink(join(root, 'node_modules'), join(fixture, 'node_modules'), 'dir');
+		// Expose the CLI without making Changesets detect Prettier in this isolated fixture.
+		await mkdir(join(fixture, 'node_modules/@changesets'), { recursive: true });
+		await symlink(
+			join(root, 'node_modules/@changesets/cli'),
+			join(fixture, 'node_modules/@changesets/cli'),
+			'dir'
+		);
 		await writeFile(join(fixture, '.gitignore'), 'node_modules\nstatus.json\noutputs\n');
 		const beforeWeb = JSON.parse(await readFile(join(fixture, 'package.json'))).version;
 		const beforeNpm = JSON.parse(
