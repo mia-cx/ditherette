@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 
-/** The 0.x version is the beta signal; release tags have no prerelease suffix. */
+/** Ordinary 0.x releases use latest; explicitly qualified release candidates use rc. */
+export function releaseChannel(version) {
+	assert.match(version, /^0\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-rc\.(?:0|[1-9]\d*))?$/);
+	return version.includes('-rc.') ? 'rc' : 'latest';
+}
+
+/** Git tags must identify the exact package and crate version. */
 export function validateReleaseTag(version, tag) {
-	assert.match(version, /^0\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/);
+	releaseChannel(version);
 	assert.equal(tag, `v${version}`, 'Tag must exactly match the package and crate version.');
 }
 
@@ -17,7 +23,11 @@ export function validateManifest(manifest) {
 	assert.deepEqual(manifest.exports, {
 		'.': { types: './dist/index.d.ts', import: './dist/index.js' }
 	});
-	assert.deepEqual(manifest.publishConfig, { access: 'public', tag: 'latest', provenance: true });
+	assert.deepEqual(manifest.publishConfig, {
+		access: 'public',
+		tag: releaseChannel(manifest.version),
+		provenance: true
+	});
 	assert.deepEqual(manifest.files, ['dist', 'README.md', 'LICENSE']);
 	assert.equal(manifest.repository.url, 'https://github.com/mia-cx/ditherette.git');
 	assert.equal(manifest.repository.directory, 'packages/ditherette');
@@ -110,6 +120,11 @@ export function sizeReview(sizes, policy) {
 
 export function requirePublication(policy, findings, environment, version, revision) {
 	validateReleaseTag(version, `v${version}`);
+	assert.equal(
+		releaseChannel(version),
+		'latest',
+		'Release candidates require separate qualification.'
+	);
 	assert.equal(environment.GITHUB_EVENT_NAME, 'push');
 	assert.equal(environment.GITHUB_REF, 'refs/heads/main');
 	assert.equal(

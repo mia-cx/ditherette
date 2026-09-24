@@ -4,6 +4,7 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { releaseChannel } from '../packages/ditherette/scripts/release-contract.mjs';
 
 export const releasePackages = {
 	npm: 'packages/ditherette/package.json',
@@ -26,13 +27,14 @@ export function isReleaseMerge(pullRequests, { sha, repository }) {
 /** Manifest edits only release an app when its stable version increases. */
 export function versionIncreased(before, after) {
 	const parse = (version) => {
-		assert.match(version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
-		return version.split('.').map(BigInt);
+		assert.match(version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-rc\.(0|[1-9]\d*))?$/);
+		return version.split('-')[0].split('.').map(BigInt);
 	};
 	const previous = parse(before);
 	const current = parse(after);
+	assert.ok(!after.includes('-'), 'Automatic releases must not be release candidates.');
 	const first = current.findIndex((part, index) => part !== previous[index]);
-	if (first === -1) return false;
+	if (first === -1) return before.includes('-rc.');
 	assert.ok(current[first] > previous[first], 'Release versions must increase.');
 	return true;
 }
@@ -43,7 +45,8 @@ export function releasePlan(pullRequests, context, versions, pending = []) {
 	const release =
 		context.event === 'push' &&
 		context.ref === 'refs/heads/main' &&
-		isReleaseMerge(pullRequests, context);
+		isReleaseMerge(pullRequests, context) &&
+		releaseChannel(versions.npm[1]) === 'latest';
 	return Object.fromEntries([
 		['release', release],
 		...Object.entries(versions).map(([name, [before, after]]) => [

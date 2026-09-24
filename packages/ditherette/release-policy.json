@@ -7,9 +7,9 @@
 			"brotli": 471
 		},
 		"README.md": {
-			"raw": 15218,
-			"gzip": 6135,
-			"brotli": 5113
+			"raw": 16040,
+			"gzip": 6466,
+			"brotli": 5385
 		},
 		"dist/errors.d.ts": {
 			"raw": 578,
@@ -27,19 +27,19 @@
 			"brotli": 283
 		},
 		"dist/index.js": {
-			"raw": 1948,
-			"gzip": 693,
-			"brotli": 592
+			"raw": 2287,
+			"gzip": 755,
+			"brotli": 627
 		},
 		"dist/scalar.d.ts": {
-			"raw": 951,
-			"gzip": 495,
-			"brotli": 394
+			"raw": 1064,
+			"gzip": 525,
+			"brotli": 420
 		},
 		"dist/scalar.js": {
-			"raw": 10864,
-			"gzip": 2357,
-			"brotli": 2003
+			"raw": 11635,
+			"gzip": 2464,
+			"brotli": 2112
 		},
 		"dist/thread-worker.d.ts": {
 			"raw": 11,
@@ -62,9 +62,9 @@
 			"brotli": 418
 		},
 		"dist/types.d.ts": {
-			"raw": 7461,
-			"gzip": 2356,
-			"brotli": 1972
+			"raw": 7484,
+			"gzip": 2382,
+			"brotli": 1988
 		},
 		"dist/types.js": {
 			"raw": 11,
@@ -82,8 +82,8 @@
 			"brotli": 2026
 		},
 		"dist/validation-process.d.ts": {
-			"raw": 1021,
-			"gzip": 484,
+			"raw": 1066,
+			"gzip": 496,
 			"brotli": 386
 		},
 		"dist/validation-process.js": {
@@ -92,14 +92,14 @@
 			"brotli": 725
 		},
 		"dist/validation.d.ts": {
-			"raw": 1849,
-			"gzip": 698,
-			"brotli": 548
+			"raw": 2077,
+			"gzip": 779,
+			"brotli": 614
 		},
 		"dist/validation.js": {
-			"raw": 13663,
-			"gzip": 3352,
-			"brotli": 2886
+			"raw": 16076,
+			"gzip": 3822,
+			"brotli": 3294
 		},
 		"dist/wasm/scalar/LICENSE": {
 			"raw": 1069,
@@ -107,14 +107,14 @@
 			"brotli": 471
 		},
 		"dist/wasm/scalar/README.md": {
-			"raw": 1492,
-			"gzip": 738,
-			"brotli": 600
+			"raw": 1486,
+			"gzip": 752,
+			"brotli": 615
 		},
 		"dist/wasm/scalar/ditherette_wasm.d.ts": {
-			"raw": 10041,
-			"gzip": 2644,
-			"brotli": 2208
+			"raw": 10309,
+			"gzip": 2640,
+			"brotli": 2216
 		},
 		"dist/wasm/scalar/ditherette_wasm.factory.d.ts": {
 			"raw": 159,
@@ -122,44 +122,44 @@
 			"brotli": 109
 		},
 		"dist/wasm/scalar/ditherette_wasm.factory.js": {
-			"raw": 21616,
-			"gzip": 3977,
-			"brotli": 3471
+			"raw": 22879,
+			"gzip": 4118,
+			"brotli": 3632
 		},
 		"dist/wasm/scalar/ditherette_wasm.js": {
-			"raw": 25896,
-			"gzip": 5496,
-			"brotli": 4769
+			"raw": 27153,
+			"gzip": 5612,
+			"brotli": 4884
 		},
 		"dist/wasm/scalar/ditherette_wasm_bg.wasm": {
-			"raw": 380928,
-			"gzip": 167411,
-			"brotli": 134397
+			"raw": 447703,
+			"gzip": 195187,
+			"brotli": 155981
 		},
 		"dist/wasm/scalar/ditherette_wasm_bg.wasm.d.ts": {
-			"raw": 2873,
-			"gzip": 458,
-			"brotli": 395
+			"raw": 2997,
+			"gzip": 460,
+			"brotli": 403
 		},
 		"dist/wasm/scalar/package.json": {
-			"raw": 380,
-			"gzip": 220,
-			"brotli": 186
+			"raw": 385,
+			"gzip": 224,
+			"brotli": 190
 		},
-		"dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/copy_helpers.js": {
-			"raw": 915,
-			"gzip": 419,
-			"brotli": 335
+		"dist/wasm/scalar/snippets/ditherette-wasm-7b3366660ebe4c12/src/wasm/copy_helpers.js": {
+			"raw": 6175,
+			"gzip": 1609,
+			"brotli": 1380
 		},
-		"dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/progress_helpers.js": {
+		"dist/wasm/scalar/snippets/ditherette-wasm-7b3366660ebe4c12/src/wasm/progress_helpers.js": {
 			"raw": 787,
 			"gzip": 436,
 			"brotli": 356
 		},
-		"dist/wasm/scalar/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/quantize_helpers.js": {
-			"raw": 1268,
-			"gzip": 572,
-			"brotli": 468
+		"dist/wasm/scalar/snippets/ditherette-wasm-7b3366660ebe4c12/src/wasm/quantize_helpers.js": {
+			"raw": 1288,
+			"gzip": 585,
+			"brotli": 479
 		},
 		"dist/wasm/threads/LICENSE": {
 			"raw": 1069,
@@ -167,14 +167,14 @@
 			"brotli": 471
 		},
 		"dist/wasm/threads/README.md": {
-			"raw": 1492,
-			"gzip": 738,
-			"brotli": 600
+			"raw": 1486,
+			"gzip": 752,
+			"brotli": 615
 		},
 		"dist/wasm/threads/ditherette_wasm.d.ts": {
-			"raw": 11528,
-			"gzip": 2950,
-			"brotli": 2487
+			"raw": 11380,
+			"gzip": 2878,
+			"brotli": 2438
 		},
 		"dist/wasm/threads/ditherette_wasm.factory.d.ts": {
 			"raw": 404,
@@ -182,44 +182,44 @@
 			"brotli": 188
 		},
 		"dist/wasm/threads/ditherette_wasm.factory.js": {
-			"raw": 26621,
-			"gzip": 4967,
-			"brotli": 4342
+			"raw": 27519,
+			"gzip": 5077,
+			"brotli": 4439
 		},
 		"dist/wasm/threads/ditherette_wasm.js": {
-			"raw": 30647,
-			"gzip": 6519,
-			"brotli": 5656
+			"raw": 31283,
+			"gzip": 6559,
+			"brotli": 5704
 		},
 		"dist/wasm/threads/ditherette_wasm_bg.wasm": {
-			"raw": 548630,
-			"gzip": 202542,
-			"brotli": 160932
+			"raw": 625739,
+			"gzip": 230877,
+			"brotli": 181904
 		},
 		"dist/wasm/threads/ditherette_wasm_bg.wasm.d.ts": {
 			"raw": 3474,
-			"gzip": 565,
-			"brotli": 504
+			"gzip": 559,
+			"brotli": 496
 		},
 		"dist/wasm/threads/package.json": {
-			"raw": 380,
-			"gzip": 220,
-			"brotli": 186
+			"raw": 385,
+			"gzip": 224,
+			"brotli": 190
 		},
-		"dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/copy_helpers.js": {
-			"raw": 915,
-			"gzip": 419,
-			"brotli": 335
+		"dist/wasm/threads/snippets/ditherette-wasm-7b3366660ebe4c12/src/wasm/copy_helpers.js": {
+			"raw": 6175,
+			"gzip": 1609,
+			"brotli": 1380
 		},
-		"dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/progress_helpers.js": {
+		"dist/wasm/threads/snippets/ditherette-wasm-7b3366660ebe4c12/src/wasm/progress_helpers.js": {
 			"raw": 787,
 			"gzip": 436,
 			"brotli": 356
 		},
-		"dist/wasm/threads/snippets/ditherette-wasm-e853852a04d98cf8/src/wasm/quantize_helpers.js": {
-			"raw": 1268,
-			"gzip": 572,
-			"brotli": 468
+		"dist/wasm/threads/snippets/ditherette-wasm-7b3366660ebe4c12/src/wasm/quantize_helpers.js": {
+			"raw": 1288,
+			"gzip": 585,
+			"brotli": 479
 		},
 		"dist/wasm/threads/snippets/wasm-bindgen-rayon-38edf6e439f6d70d/src/workerHelpers.no-bundler.js": {
 			"raw": 2947,
@@ -237,19 +237,16 @@
 			"brotli": 1016
 		},
 		"package.json": {
-			"raw": 1971,
-			"gzip": 738,
-			"brotli": 619
+			"raw": 2131,
+			"gzip": 761,
+			"brotli": 650
 		},
 		"$tarball": {
-			"raw": 1190912,
-			"gzip": 407888,
-			"brotli": 277574
+			"raw": 1358336,
+			"gzip": 467608,
+			"brotli": 315843
 		}
 	},
 	"maximumGrowth": 0.1,
-	"holds": [
-		"Initial package size budget awaits review.",
-		"S41 release gates, including retained WebKit threaded cleanup, remain unresolved."
-	]
+	"holds": ["S41 release gates, including retained WebKit threaded cleanup, remain unresolved."]
 }

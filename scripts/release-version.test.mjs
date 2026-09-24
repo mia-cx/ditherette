@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { replaceCrateVersion, synchronizeCrateVersion } from './release-version.mjs';
+import { replaceCrateVersion, synchronizeReleaseVersion } from './release-version.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -36,17 +36,25 @@ for (const target of ['ditherette-web', 'ditherette']) {
 			await mkdir(dirname(join(fixture, path)), { recursive: true });
 			await cp(join(root, path), join(fixture, path));
 		}
-		await symlink(join(root, 'node_modules'), join(fixture, 'node_modules'), 'dir');
+		// Expose the CLI without making Changesets detect Prettier in this isolated fixture.
+		await mkdir(join(fixture, 'node_modules/@changesets'), { recursive: true });
+		await symlink(
+			join(root, 'node_modules/@changesets/cli'),
+			join(fixture, 'node_modules/@changesets/cli'),
+			'dir'
+		);
 		await writeFile(join(fixture, '.gitignore'), 'node_modules\nstatus.json\noutputs\n');
 		const beforeWeb = JSON.parse(await readFile(join(fixture, 'package.json'))).version;
 		const beforeNpm = JSON.parse(
 			await readFile(join(fixture, 'packages/ditherette/package.json'))
 		).version;
 		const patchVersion = (version) =>
-			version
-				.split('.')
-				.map((part, index) => (index === 2 ? String(Number(part) + 1) : part))
-				.join('.');
+			version.includes('-rc.')
+				? version.split('-')[0]
+				: version
+						.split('.')
+						.map((part, index) => (index === 2 ? String(Number(part) + 1) : part))
+						.join('.');
 		const run = (program, args) =>
 			execFileSync(program, args, { cwd: fixture, encoding: 'utf8', stdio: 'pipe' });
 		run('git', ['init', '-b', 'main']);
@@ -71,11 +79,12 @@ for (const target of ['ditherette-web', 'ditherette']) {
 		const status = JSON.parse(await readFile(join(fixture, 'status.json')));
 		assert.ok(status.releases.some(({ name }) => name === target));
 		run(process.execPath, [cli, 'version']);
-		await synchronizeCrateVersion(fixture);
+		await synchronizeReleaseVersion(fixture);
 		const web = JSON.parse(await readFile(join(fixture, 'package.json')));
 		const npm = JSON.parse(await readFile(join(fixture, 'packages/ditherette/package.json')));
 		assert.equal(web.private, true);
 		assert.equal(npm.version, target === 'ditherette' ? patchVersion(beforeNpm) : beforeNpm);
+		assert.equal(npm.publishConfig.tag, npm.version.includes('-rc.') ? 'rc' : 'latest');
 		// A package patch also bumps its website consumer, without tying their version numbers.
 		assert.equal(web.version, patchVersion(beforeWeb));
 		for (const path of [
@@ -127,9 +136,10 @@ for (const target of ['ditherette-web', 'ditherette']) {
 				GITHUB_OUTPUT: join(fixture, 'outputs')
 			}
 		});
-		assert.match(plan, /^release=true$/m);
-		assert.match(plan, /^web=true$/m);
-		assert.match(plan, target === 'ditherette' ? /^npm=true$/m : /^npm=false$/m);
+		const rc = npm.version.includes('-rc.');
+		assert.match(plan, rc ? /^release=false$/m : /^release=true$/m);
+		assert.match(plan, rc ? /^web=false$/m : /^web=true$/m);
+		assert.match(plan, !rc && target === 'ditherette' ? /^npm=true$/m : /^npm=false$/m);
 		assert.match(plan, /^pending=false$/m);
 	});
 }
