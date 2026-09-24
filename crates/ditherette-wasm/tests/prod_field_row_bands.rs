@@ -67,18 +67,33 @@ fn disjoint_field_outputs_keep_global_draws_and_full_source_adaptive_neighbors()
                         spec::tiling::RowBand::new(0, 7).unwrap(),
                         noise,
                     );
-                    for (workers, band_height) in [(1, 1), (2, 2), (4, 3), (4, 11)] {
+                    for (workers, band_height, rows) in [
+                        (1, 1, false),
+                        (2, 2, false),
+                        (4, 3, false),
+                        (4, 11, false),
+                        (1, 1, true),
+                        (2, 2, true),
+                        (4, 3, true),
+                    ] {
                         let counts: Vec<_> = (0..35).map(|_| AtomicUsize::new(0)).collect();
                         let mut guarded = vec![211; 142];
                         let output = &mut guarded[1..141];
-                        let mut work = prod::dither::perturb::try_band_buffers(
+                        // Row scratch only changes how adaptive neighbors are converted.
+                        let (mut work, extra) = prod::dither::perturb::try_band_buffers_with_rows(
                             dimensions,
                             band_height,
                             WorkerBudget::new(workers),
                             workers,
-                            u64::MAX,
+                            u64::MAX / 2,
+                            placement,
+                            if rows { u64::MAX / 2 } else { 0 },
                         )
                         .unwrap();
+                        assert_eq!(
+                            extra > 0,
+                            rows && matches!(placement, Placement::Adaptive { .. })
+                        );
                         let caller = std::thread::current().id();
                         let mut completed = 0;
                         prod::dither::perturb::perturb_by_field_bands_into(

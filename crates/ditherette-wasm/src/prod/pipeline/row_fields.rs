@@ -147,14 +147,22 @@ impl Plan {
     }
 
     /// The caller preflights this allocation with every other live call buffer first.
-    pub(super) fn allocate(&self) -> Result<RowBandBuffers<()>, Failure> {
+    /// Adaptive fields also get per-worker coordinate rows when `optional` bytes allow;
+    /// the returned extra bytes must be charged as optional capacity.
+    pub(super) fn allocate(
+        &self,
+        placement: Placement,
+        optional: u64,
+    ) -> Result<(RowBandBuffers<[f32; 3]>, u64), Failure> {
         if self.field {
-            perturb::try_band_buffers(
+            perturb::try_band_buffers_with_rows(
                 self.dimensions,
                 self.policy.height,
                 self.policy.workers,
                 self.policy.active_workers,
                 self.required,
+                placement,
+                optional,
             )
         } else {
             RowBandBuffers::try_new(
@@ -165,6 +173,7 @@ impl Plan {
                 self.required,
                 &|_| Ok(0),
             )
+            .map(|buffers| (buffers, 0))
         }
     }
 }

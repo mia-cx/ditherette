@@ -178,13 +178,13 @@ impl PreparedQuantizer {
         }
     }
 
-    /// Executes preflighted row work with shared preparation and no worker scratch.
+    /// Executes preflighted row work with shared preparation; any worker scratch is unused.
     /// Completed-row callbacks run on the caller after each joined batch.
-    pub fn quantize_bands_into(
+    pub fn quantize_bands_into<T: Send>(
         &self,
         source: ImageView<'_, Rgba8>,
         output: &mut [u8],
-        work: &mut RowBandBuffers<()>,
+        work: &mut RowBandBuffers<T>,
         progress: &mut impl FnMut(u64) -> Result<(), crate::prod::contract::failure::Failure>,
     ) -> Result<(), crate::prod::contract::failure::Failure> {
         work.execute(

@@ -209,7 +209,18 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
             )
         })
         .transpose()?;
-    let mut bands = band_plan.as_ref().map(|plan| plan.allocate()).transpose()?;
+    let bands = band_plan
+        .as_ref()
+        .map(|plan| {
+            plan.allocate(
+                policy.map_or(Placement::Everywhere {}, |perturb| perturb.placement),
+                call.available_working_capacity(),
+            )
+        })
+        .transpose()?;
+    let band_rows_capacity = bands.as_ref().map_or(0, |(_, rows)| *rows);
+    call.charge_optional_capacity(band_rows_capacity, peak)?;
+    let mut bands = bands.map(|(buffers, _)| buffers);
     let placement_policy = match dither {
         DitherPolicy::Diffusion { placement, .. } => placement,
         DitherPolicy::Separable { perturb } if !perturbed_hit && bands.is_none() => {
@@ -506,7 +517,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);
-    call.release_working_capacity(band_capacity);
+    call.release_working_capacity(band_capacity + band_rows_capacity);
     drop(mixing);
     call.release_working_capacity(mixing_capacity);
     if let Some(key) = resize_key {
