@@ -44,9 +44,9 @@ export function gatherInput(destination, columnOffsets, rowOffsets, source, sour
 		const output = new Uint32Array(buffer.call(destination), destinationOffset, size / 4);
 		let index = 0;
 		for (let y = 0; y < rowBytes; y += 4) {
-			const row = rows.getUint32(y, true);
+			const rowWord = rows.getUint32(y, true) >>> 2;
 			for (let x = 0; x < columnBytes; x += 4) {
-				output[index++] = input[(row + columns.getUint32(x, true)) / 4];
+				output[index++] = input[rowWord + (columns.getUint32(x, true) >>> 2)];
 			}
 		}
 		return;
