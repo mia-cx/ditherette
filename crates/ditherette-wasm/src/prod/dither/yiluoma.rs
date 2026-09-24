@@ -8,7 +8,16 @@ pub(crate) use request::dither_yiluoma_with_progress;
 pub use request::{dither_yiluoma, dither_yiluoma_into};
 
 use super::ordered::{bayer_value, BayerSize};
-use crate::prod::quantize::{matcher::PaletteMatcher, metric::distance_score};
+use crate::prod::{
+    contract::request::MatchPolicy,
+    quantize::{
+        matcher::PaletteMatcher,
+        metric::{
+            ciede2000_distance, circular_hue3_squared, euclidean3_squared, hue_arc3_squared,
+            weighted_rgb_squared, WeightedRgbMetric,
+        },
+    },
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaletteMix {
@@ -43,7 +52,41 @@ pub fn ordered_mix_index(mix: PaletteMix, x: u32, y: u32, size: BayerSize) -> u8
 
 /// Exhaustively searches visible palette pairs with the selected matching metric.
 /// Returned indices are original retained palette indices, not compact visible offsets.
+/// The metric is chosen once per search, so each candidate runs one monomorphized score.
 pub fn best_matched_mix(color: [f32; 3], matcher: &PaletteMatcher, levels: u32) -> PaletteMix {
+    match matcher.matching {
+        MatchPolicy::SrgbEuclidean
+        | MatchPolicy::LinearRgbEuclidean
+        | MatchPolicy::OklabEuclidean
+        | MatchPolicy::OklchEuclidean
+        | MatchPolicy::CielabEuclidean
+        | MatchPolicy::CielchEuclidean
+        | MatchPolicy::YcbcrEuclidean => search(color, matcher, levels, euclidean3_squared),
+        MatchPolicy::OklchCircularHue | MatchPolicy::CielchCircularHue => {
+            search(color, matcher, levels, circular_hue3_squared)
+        }
+        MatchPolicy::OklchHueArc | MatchPolicy::CielchHueArc => {
+            search(color, matcher, levels, hue_arc3_squared)
+        }
+        MatchPolicy::SrgbCompuphase => search(color, matcher, levels, |a, b| {
+            weighted_rgb_squared(a, b, WeightedRgbMetric::CompuPhase)
+        }),
+        MatchPolicy::SrgbRec601 => search(color, matcher, levels, |a, b| {
+            weighted_rgb_squared(a, b, WeightedRgbMetric::Rec601)
+        }),
+        MatchPolicy::SrgbRec709 => search(color, matcher, levels, |a, b| {
+            weighted_rgb_squared(a, b, WeightedRgbMetric::Rec709)
+        }),
+        MatchPolicy::CielabCiede2000 => search(color, matcher, levels, ciede2000_distance),
+    }
+}
+
+fn search(
+    color: [f32; 3],
+    matcher: &PaletteMatcher,
+    levels: u32,
+    distance: impl Fn([f32; 3], [f32; 3]) -> f32,
+) -> PaletteMix {
     find_ordered_mix(
         color,
         matcher.colors.len(),
@@ -52,7 +95,7 @@ pub fn best_matched_mix(color: [f32; 3], matcher: &PaletteMatcher, levels: u32) 
             (entry.index, entry.coordinates)
         },
         levels,
-        |left, right| distance_score(left, right, matcher.matching),
+        distance,
     )
 }
 
