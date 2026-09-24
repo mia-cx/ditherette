@@ -567,6 +567,11 @@ impl PreparedResize {
         scratch.select(output, policy, 0, limit, &|_| Ok(0))
     }
 
+    /// Only the convolution kernels specialize on source opacity; others ignore the flag.
+    pub(super) fn uses_source_opacity(&self) -> bool {
+        matches!(self, Self::Bicubic(..) | Self::Lanczos(..))
+    }
+
     pub(super) fn execute_known_opacity(
         &mut self,
         source: ImageView<'_, Rgba8>,

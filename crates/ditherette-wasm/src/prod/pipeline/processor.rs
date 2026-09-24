@@ -655,7 +655,6 @@ impl Processor {
         let parent = call.source(plan.source, |bytes, compare| {
             boundary.snapshot_input(bytes, compare)
         })?;
-        let source_opaque = call.source_opaque();
         if plan.source == plan.output {
             let result = boundary.complete(&call.scratch.buffers[0], plan.output);
             return call.finish(progress.finish(result, boundary.progress()));
@@ -682,6 +681,7 @@ impl Processor {
             &mut self.peak_capacity,
             allocator,
         )?;
+        let source_opaque = call.resize_source_opaque();
         let (_, metadata, scratch) = call.parts();
         let [source, output, _, _] = &mut scratch.buffers;
         let source = ImageView::<Rgba8>::packed(source, plan.source)

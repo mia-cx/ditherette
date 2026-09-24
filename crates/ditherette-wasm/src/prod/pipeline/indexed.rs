@@ -94,7 +94,6 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         })?;
         (call, Some(source))
     };
-    let source_opaque = !sparse && call.source_opaque();
     let resize_key = resize
         .zip(source)
         .map(|(output, source)| identity::stage(Some(source), StageOptions::Resize { output }))
@@ -229,6 +228,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         .map_or(0, AdaptivePlacementWork::capacity_bytes);
     call.charge_optional_capacity(placement_capacity, peak)?;
     if resize.is_some() && !resized_hit {
+        let source_opaque = !sparse && call.resize_source_opaque();
         let (_, prepared, scratch) = call.parts();
         let [source, resized, _, _] = &mut scratch.buffers;
         let prepared = prepared.expect("requested resize");
