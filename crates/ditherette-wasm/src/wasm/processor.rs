@@ -226,6 +226,60 @@ pub fn private_resize(
     result.map_or_else(status, |_| 0)
 }
 
+/// Narrow scalar ABI for no-progress nearest calls that gather directly into JS output.
+#[cfg(not(feature = "threads"))]
+#[wasm_bindgen(js_name = privateResizeNearestSparse)]
+pub fn private_resize_nearest_sparse(
+    input: &Uint8Array,
+    source_width: f64,
+    source_height: f64,
+    output_width: f64,
+    output_height: f64,
+    anchor: f64,
+    result_sink: &JsValue,
+) -> u32 {
+    let mut processor = match take_ready() {
+        Ok(processor) => processor,
+        Err(error) => return status(error),
+    };
+    let result = (|| {
+        let request = ResizeRequest {
+            source_width: dimension(
+                source_width,
+                MAX_SOURCE_SIDE,
+                ErrorCode::InvalidImage,
+                ErrorPath::SourceWidth,
+            )?,
+            source_height: dimension(
+                source_height,
+                MAX_SOURCE_SIDE,
+                ErrorCode::InvalidImage,
+                ErrorPath::SourceHeight,
+            )?,
+            output: Output {
+                width: dimension(
+                    output_width,
+                    MAX_OUTPUT_SIDE,
+                    ErrorCode::InvalidSettings,
+                    ErrorPath::OutputWidth,
+                )?,
+                height: dimension(
+                    output_height,
+                    MAX_OUTPUT_SIDE,
+                    ErrorCode::InvalidSettings,
+                    ErrorPath::OutputHeight,
+                )?,
+                resize: ResizePolicy::Nearest {
+                    anchor: parse_anchor(anchor)?,
+                },
+            },
+        };
+        processor.resize_sparse_nearest(request, &mut JsBoundary::new(input, result_sink)?)
+    })();
+    restore_ready(processor);
+    result.map_or_else(status, |_| 0)
+}
+
 /// Drops processor ownership idempotently. Fixed Wasm/glue capacity remains module-owned.
 #[wasm_bindgen(js_name = privateDispose)]
 pub fn private_dispose() -> u32 {

@@ -63,12 +63,33 @@ function withCopyFailure(raw, phase, run) {
 test('generated private input ABI borrows externref and catches both borrowed-slice helpers', async () => {
 	const glue = await readFile(glueUrl, 'utf8');
 	const body = glue.match(/export function privateResize\([^]*?\n}/)?.[0];
+	const sparseBody = glue.match(/export function privateResizeNearestSparse\([^]*?\n}/)?.[0];
 	assert.ok(body, 'privateResize export');
+	assert.ok(sparseBody, 'privateResizeNearestSparse export');
 	assert.doesNotMatch(body, /__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/);
+	assert.doesNotMatch(sparseBody, /__wbindgen_malloc|passArray|\.slice\(|addToExternrefTable|new Uint8Array/);
 	assert.match(body, /wasm\.privateResize\(input,/);
+	assert.match(sparseBody, /wasm\.privateResizeNearestSparse\(input,/);
 	for (const name of ['snapshotInput', 'gatherInput', 'completeResult', 'completeSparseResult', 'inputLength']) {
 		assert.match(glue, new RegExp(`handleError\\(function[^]*?\\b${name}\\(`), `${name} uses catch glue`);
 	}
+});
+
+test('narrow sparse nearest export matches the generic private ABI and observes mutations', async () => {
+	const { bindings } = await fresh(1 << 20);
+	const input = Uint8Array.from({ length: 43 * 37 * 4 }, (_, i) => (i * 73 + 11) & 255);
+	for (const [width, height, anchor] of [[21, 18, 0], [7, 5, 4], [1, 1, 8]]) {
+		const generic = {};
+		const narrow = {};
+		assert.equal(bindings.privateResize(input, 43, 37, width, height, 0, anchor, 0, generic), 0);
+		assert.equal(bindings.privateResizeNearestSparse(input, 43, 37, width, height, anchor, narrow), 0);
+		assert.deepEqual(narrow.value, generic.value);
+	}
+	input[0] = 199;
+	const changed = {};
+	assert.equal(bindings.privateResizeNearestSparse(input, 43, 37, 1, 1, 0, changed), 0);
+	assert.equal(changed.value.data[0], 199);
+	bindings.privateDispose();
 });
 
 test('sparse nearest gathers exact Rust-selected pixels from aligned and unaligned views', async () => {
