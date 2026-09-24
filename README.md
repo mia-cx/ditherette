@@ -31,13 +31,7 @@ pnpm dev
 Rebuild the package after changing its wrapper or Rust implementation. See the
 [package build prerequisites](packages/ditherette/README.md).
 
-The scalar Wasm package processes images by default. To exercise the legacy path during development:
-
-```sh
-VITE_DITHERETTE_WASM_PROCESS=false pnpm dev
-```
-
-Production builds ignore this flag. This path accepts integer crops and reports
+The scalar Wasm package processes all images. This path accepts integer crops and reports
 unsupported fractional crops through the existing error display. It filters the
 packed cropped image, so filter edges clamp to that crop.
 
@@ -55,8 +49,8 @@ To create a production version of your app:
 pnpm build
 ```
 
-The website build first builds the public workspace package and reuses its scalar
-artifacts for the historical resize path.
+The website build first builds the public workspace package. Standalone historical
+benchmark tools retain their own staged scalar artifacts.
 
 You can preview the production build with `npm run preview`.
 

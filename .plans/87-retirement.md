@@ -1,5 +1,16 @@
 # #87 Held TypeScript retirement
 
+## Current acceptance, September 24, 2026
+
+Mia has authorized babysitting and merging the remaining rollout and retirement
+stack. S44 is merged as `3dd8343d1978004c5d5fea849dfd7709b2588364`.
+This retirement preserves its package processing timings and Perf panel support.
+Initialization failures replace the worker to clear cached module failures;
+ordinary processing errors retain the initialized processor and loaded source.
+The website now uses the scalar package exclusively, with no legacy override.
+The prior holds and evidence below describe the original preparation state, not
+the current merge authorization. Deployment and package publishing are separate.
+
 Parent S44 PR133 is `impl/v1-s44-rollout` at `76bf1f8938c14a1a4cde290d45c61a280f7434d2`. This is a separate held retirement diff. Actual rollout acceptance and unresolved release gates remain prerequisites to activation.
 
 ## TODOs
