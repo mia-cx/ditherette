@@ -94,8 +94,9 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 		/Baseline file\.raw must be finite/
 	);
 	const environment = {
-		GITHUB_REF_NAME: 'v0.1.0',
-		GITHUB_REF_TYPE: 'tag',
+		GITHUB_EVENT_NAME: 'push',
+		GITHUB_REF: 'refs/heads/main',
+		DITHERETTE_RELEASE_MERGE: 'true',
 		GITHUB_ACTIONS: 'true',
 		GITHUB_REPOSITORY: 'mia-cx/ditherette',
 		GITHUB_SHA: 'source'
@@ -112,7 +113,9 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 	);
 	assert.throws(() => requirePublication(policy, ['size growth'], environment, '0.1.0', 'source'));
 	for (const change of [
-		{ GITHUB_REF_TYPE: 'branch' },
+		{ GITHUB_REF: 'refs/tags/v0.1.0' },
+		{ GITHUB_EVENT_NAME: 'pull_request' },
+		{ DITHERETTE_RELEASE_MERGE: undefined },
 		{ GITHUB_REPOSITORY: 'other/repo' },
 		{ GITHUB_ACTIONS: undefined },
 		{ GITHUB_SHA: 'different' }
@@ -122,13 +125,13 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 		);
 });
 
-test('tag workflow validates the tested tarball before protected provenance publication', async () => {
+test('release workflow validates the tested tarball before protected provenance publication', async () => {
 	const workflow = await readFile(
 		new URL('../../../.github/workflows/package-publish.yml', import.meta.url),
 		'utf8'
 	);
 	for (const required of [
-		'v0.*.*',
+		'workflow_call:',
 		'environment: npm-publish',
 		'id-token: write',
 		'shell: bash',
@@ -136,6 +139,8 @@ test('tag workflow validates the tested tarball before protected provenance publ
 		'release.mjs prepare',
 		'test:conformance',
 		'publish-check',
+		'release-plan.mjs',
+		'release-registry.mjs',
 		'npm publish target/release/ditherette.tgz --access public --tag latest --provenance --ignore-scripts'
 	])
 		assert.ok(workflow.includes(required), required);
