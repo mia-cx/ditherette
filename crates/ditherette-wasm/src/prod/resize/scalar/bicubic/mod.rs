@@ -202,3 +202,66 @@ pub fn resize_bicubic_rgba8_with_plan_into(
 ) {
     resize_convolution_rgba8_with_plan_into(source, output, &plan.inner);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scale_aware_blocks_bound_scratch_and_match_full_band_bytes() {
+        for (source_height, output_width) in [(400, 32), (200, 64)] {
+            let source_dimensions = ImageDimensions::new(128, source_height).unwrap();
+            let output_dimensions = ImageDimensions::new(output_width, 100).unwrap();
+            let required = BicubicResizePlan::required_bytes(
+                source_dimensions,
+                output_dimensions,
+                SupportPolicy::ScaleAware,
+            )
+            .unwrap();
+            let mut budget = CapacityBudget::new(required);
+            let plan = BicubicResizePlan::try_new(
+                source_dimensions,
+                output_dimensions,
+                ResizeAnchor::Center,
+                SupportPolicy::ScaleAware,
+                &mut budget,
+            )
+            .unwrap();
+            let length = plan.scratch_elements().unwrap();
+            assert!(length < plan.row_scratch_elements(0, 100).unwrap());
+            let mut scratch = budget.vector::<f64>(length).unwrap();
+            scratch.resize(length, f64::NAN);
+            assert!(budget.used() <= required);
+
+            let mut bytes = (0..128 * source_height * 4)
+                .map(|i| (i % 251) as u8)
+                .collect::<Vec<_>>();
+            for opaque in [false, true] {
+                if opaque {
+                    for pixel in bytes.chunks_exact_mut(4) {
+                        pixel[3] = u8::MAX;
+                    }
+                }
+                let source = ImageView::packed(&bytes, source_dimensions).unwrap();
+                let mut expected = vec![0; output_dimensions.storage_len::<Rgba8>().unwrap()];
+                resize_bicubic_rgba8_rows_with_plan_into(
+                    source,
+                    ImageViewMut::packed(&mut expected, output_dimensions).unwrap(),
+                    &plan,
+                    0,
+                );
+                let mut actual = vec![0; expected.len()];
+                resize_bicubic_with_progress_known_opacity(
+                    source,
+                    ImageViewMut::packed(&mut actual, output_dimensions).unwrap(),
+                    &plan,
+                    &mut scratch,
+                    opaque,
+                    &mut |_, _| Ok(()),
+                )
+                .unwrap();
+                assert_eq!(actual, expected, "opaque={opaque}, height={source_height}");
+            }
+        }
+    }
+}

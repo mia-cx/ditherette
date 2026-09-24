@@ -8,6 +8,10 @@ pub(super) const CATMULL_ROM: CatmullRom = CatmullRom;
 pub(super) struct CatmullRom;
 
 impl ReconstructionKernel for CatmullRom {
+    fn allows_scale_aware_blocks(&self) -> bool {
+        true
+    }
+
     fn radius(&self) -> f64 {
         2.0
     }
