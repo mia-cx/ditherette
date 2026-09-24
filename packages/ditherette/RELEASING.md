@@ -1,73 +1,61 @@
 # Releasing ditherette
 
-Publication remains blocked by `release-policy.json`. Its current holds require
-initial size-budget review and resolution of the S41 release gates. This document
-does not approve either. Human owners also configure the protected `npm-publish`
-environment and the npm trusted publisher before any release.
+The public package is the unscoped `ditherette` browser ESM package. The npm
+package and Rust crate share a version. Scalar processing is the default;
+optional threads remain experimental. The recorded S41/WebKit hold blocks
+ordinary publication, while the first approved RC uses the separate procedure
+below.
 
 ## Prepare and inspect
 
-Use a clean, fixed checkout. Keep that checkout unchanged while retaining its
-release evidence. The package owns publication; its build delegates both ordinary
-Wasm variants to the crate's pinned build scripts.
+Use a clean checkout at the exact commit to release. Keep evidence outside the
+repository, and pass a destination that does not yet exist.
 
 ```sh
 pnpm install --frozen-lockfile
-mkdir -p "$PWD/target"
-node packages/ditherette/scripts/release.mjs prepare "$PWD/target/release"
-node packages/ditherette/scripts/release.mjs verify "$PWD/target/release" v0.1.0
+node packages/ditherette/scripts/release.mjs prepare /path/to/evidence
+node packages/ditherette/scripts/release.mjs verify /path/to/evidence v0.1.0-rc.0
 ```
 
-The destination must be new. Preparation checks committed source bytes, compiler
-pins, public exports, both Wasm variants, and an offline installation of the exact
-tarball. It rejects benchmark exports and stale developer payloads.
+Preparation builds both Wasm variants with pinned tools, packs the public
+archive, installs that archive offline, and compares every installed file with
+the packed bytes. The report records source and archive digests plus raw, gzip,
+and brotli sizes. It rejects stale developer files and build overrides.
 
-`release-report.json` records source and artifact SHA-256 digests, actual tool
-versions, and every installed file's raw, gzip-9, and Brotli-11 sizes. Tarball raw
-size means the uncompressed tar archive. Its gzip size is the actual `.tgz` size;
-its Brotli size compresses that same tar archive. Compression figures describe
-payloads, not browser memory or measured network latency.
+The first RC's reviewed tar baseline is 1,358,336 raw bytes, 467,608 gzip
+bytes, and 315,843 brotli bytes. The size gate flags new files and growth
+above 10% from this baseline. Review and record any later baseline change.
 
-Review each new file and every raw or compressed increase above 10% against
-`release-policy.json`. An absent baseline blocks publication. A reviewed baseline
-update belongs in source control with its rationale; changing the numbers alone
-does not resolve an outstanding hold.
+## First RC bootstrap
 
-## Tag-driven publication
+Mia approved a one-time local publication of `0.1.0-rc.0` without provenance
+because the unregistered package cannot use trusted publishing yet. From the
+same verified checkout, publish the exact tested archive under `rc`:
 
-Decision #36 defines `0.x` as beta without a prerelease suffix. The public npm
-package and private Rust crate share an exact version. A `v0.x.x` tag must match
-that version. The package publishes to `latest`, with scalar and threaded assets
-inside one unscoped MIT browser-ESM package.
+```sh
+npm publish /path/to/evidence/ditherette.tgz --access public --tag rc --provenance=false --ignore-scripts
+```
 
-The tag workflow builds once, then runs existing native and installed-browser
-conformance commands against that tarball. It verifies source, sizes, version,
-and recorded holds again immediately before publication. Root imports stay inert;
-raw bindings remain private and no public backend selector is added.
+Confirm the registry version, `rc` dist tag, archive integrity, and installation
+of `ditherette@rc`. This does not release the website or move `latest`. Configure
+the npm trusted publisher after the package exists.
 
-Scalar Chromium, Firefox, and WebKit are covered. Threaded Chromium and Firefox
-are covered. Pinned WebKit threaded cleanup remains a separate release gate.
+## Ordinary releases
 
-Publication uses GitHub OIDC through npm trusted publishing, not a stored npm
-token. Bind the trusted publisher to this repository, `package-publish.yml`, and
-the protected `npm-publish` environment. Configure required human reviewers in
-that environment. npm's trusted-publisher requirements and automatic provenance
-are documented in [npm's guide](https://docs.npmjs.com/trusted-publishers/).
-GitHub documents [environment protection rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+Ordinary `0.x.x` releases are the beta channel and use `latest`. Changesets
+opens a release PR from `main`. Merging that PR triggers conformance and
+publishes only versions that increased. The package release rebuilds and
+verifies its exact archive, checks the size budget and recorded holds, then
+publishes through GitHub OIDC with npm provenance. The website deploys only
+when its own version increases and its release checks pass.
 
-The first publication requires an external npm setup step: the package must
-exist on the registry before its trusted-publisher connection can be configured.
-Complete that package bootstrap and trust configuration with an authorized
-maintainer before creating a release tag; this repository does not automate or
-authorize that account action. The npm CLI documents the package prerequisite
-and trust permissions in [`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
+The npm trusted publisher must name `mia-cx/ditherette`, the calling workflow
+`release.yml`, and the protected `npm-publish` environment. npm documents the
+package prerequisite in [its trusted publishing guide](https://docs.npmjs.com/trusted-publishers/).
+The remaining S41/WebKit hold must be resolved before an ordinary release.
+Changesets promotion from the RC restores the `latest` package tag and aligns
+the Rust crate version.
 
-The workflow currently uses direct `npm publish`, so the trusted publisher must
-allow that action. Newer trust configurations allow staged publication by
-default, but staging requires a separate human approval before the package goes
-live. Choosing staged publication would require a separately approved workflow
-and release-procedure change; it is not silently substituted here.
-
-The checked tools are Node 24.19.0, pnpm 11.13.1, npm 11.17.0, wasm-pack 0.15.0,
-Rust 1.97.0, and the genuine `nightly-2024-08-02` threaded compiler. The frozen
-build guard remains authoritative for compiler identity and flags.
+The checked tools are Node 24.19.0, pnpm 11.13.1, npm 11.17.0, wasm-pack
+0.15.0, Rust 1.97.0, and the genuine `nightly-2024-08-02` threaded compiler.
+The frozen build guard checks compiler identity and flags.
