@@ -73,7 +73,11 @@ pub fn resize_area_rgba8_rows_with_plan_into(
     y_start: u32,
 ) {
     assert_eq!(source.dimensions(), plan.source_dimensions);
-    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions, y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        plan.output_dimensions,
+        y_start,
+    );
     common::rgba8::assert_packed_source(source, "area");
     common::rgba8::assert_packed_output(&output, "area");
 
@@ -98,7 +102,11 @@ pub fn resize_area_rgba8_rows_with_plan_and_scratch_into(
         failure::{ErrorPath, Failure},
     };
     assert_eq!(source.dimensions(), plan.source_dimensions);
-    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions, y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        plan.output_dimensions,
+        y_start,
+    );
     common::rgba8::assert_packed_source(source, "area");
     common::rgba8::assert_packed_output(&output, "area");
     let required = plan.scratch_elements();
@@ -209,17 +217,4 @@ fn resize_area_rows_fast_path_into(
             full_output_dimensions,
             y_start,
         )
-}
-
-fn assert_row_band_matches_plan(
-    band_dimensions: crate::image::ImageDimensions,
-    full_output_dimensions: crate::image::ImageDimensions,
-    y_start: u32,
-) {
-    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
-    assert!(
-        y_start <= full_output_dimensions.height()
-            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
-        "row band must fit inside full output dimensions"
-    );
 }

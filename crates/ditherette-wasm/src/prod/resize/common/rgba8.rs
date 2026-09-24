@@ -206,3 +206,17 @@ fn copy_output_row(output: &mut [u8], from_start: usize, to_start: usize, byte_l
         destination.copy_from_nonoverlapping(source, byte_len);
     }
 }
+
+/// Assert that a full-width output band starting at absolute row `y_start` fits the plan.
+pub(crate) fn assert_row_band_matches_plan(
+    band_dimensions: ImageDimensions,
+    full_output_dimensions: ImageDimensions,
+    y_start: u32,
+) {
+    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
+    assert!(
+        y_start <= full_output_dimensions.height()
+            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
+        "row band must fit inside full output dimensions"
+    );
+}

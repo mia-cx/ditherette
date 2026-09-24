@@ -8,7 +8,8 @@
 use crate::{
     image::{ImageFormat, ImageView, ImageViewMut},
     prod::resize::scalar::trilinear::exact::common::{
-        alignment::ResizeAnchor, coordinates::map_axis_position, sample::ResizeSample,
+        alignment::{map_axis_position, support_range, ResizeAnchor},
+        sample::ResizeSample,
     },
 };
 
@@ -100,11 +101,6 @@ pub fn resize_bilinear_with_scratch_into<F>(
             }
         }
     }
-}
-
-fn support_range(position: f64, scale: f64) -> std::ops::RangeInclusive<i64> {
-    let support = scale;
-    (position - support).floor() as i64..=(position + support).ceil() as i64
 }
 
 fn triangle_weight(distance: f64) -> f64 {

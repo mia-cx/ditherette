@@ -107,7 +107,7 @@ fn run(
                 let plan = bilinear::BilinearResizePlan::try_new(
                     source_dimensions,
                     output_dimensions,
-                    prod_bilinear_anchor(params),
+                    prod_anchor(params),
                     &mut budget,
                 )?;
                 let mut scratch = budget.vector(plan.scratch_elements())?;
@@ -123,7 +123,7 @@ fn run(
                 let plan = bicubic::BicubicResizePlan::try_new(
                     source_dimensions,
                     output_dimensions,
-                    prod_convolution_anchor(params),
+                    prod_anchor(params),
                     policy,
                     &mut budget,
                 )?;
@@ -145,7 +145,7 @@ fn run(
                 let plan = prepare(
                     source_dimensions,
                     output_dimensions,
-                    prod_convolution_anchor(params),
+                    prod_anchor(params),
                     policy,
                     &mut budget,
                 )?;

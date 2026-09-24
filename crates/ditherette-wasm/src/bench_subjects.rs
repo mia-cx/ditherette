@@ -30,24 +30,18 @@ use ditherette_bench_api::{
 
 use crate::{
     image::{ImageDimensions, ImageView, ImageViewMut, Rgba8, RowStride},
-    prod::resize::scalar::{
-        area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
-        bicubic::resize_bicubic_rgba8_into as resize_prod_bicubic_rgba8_into,
-        bilinear::{
-            alignment::ResizeAnchor as ProdBilinearResizeAnchor,
-            resize_bilinear_rgba8_into as resize_prod_bilinear_rgba8_into,
-        },
-        convolution::{
-            ResizeAnchor as ProdConvolutionResizeAnchor,
-            SupportPolicy as ProdConvolutionSupportPolicy,
-        },
-        lanczos::{
-            resize_lanczos2_rgba8_into as resize_prod_lanczos2_rgba8_into,
-            resize_lanczos3_rgba8_into as resize_prod_lanczos3_rgba8_into,
-        },
-        nearest::{
-            alignment::ResizeAnchor as CandidateNearestResizeAnchor,
-            resize_nearest_rgba8_into as resize_candidate_nearest_rgba8_into,
+    prod::resize::{
+        common::alignment::ResizeAnchor as ProdResizeAnchor,
+        scalar::{
+            area::resize_area_rgba8_into as resize_prod_area_rgba8_into,
+            bicubic::resize_bicubic_rgba8_into as resize_prod_bicubic_rgba8_into,
+            bilinear::resize_bilinear_rgba8_into as resize_prod_bilinear_rgba8_into,
+            convolution::SupportPolicy as ProdConvolutionSupportPolicy,
+            lanczos::{
+                resize_lanczos2_rgba8_into as resize_prod_lanczos2_rgba8_into,
+                resize_lanczos3_rgba8_into as resize_prod_lanczos3_rgba8_into,
+            },
+            nearest::resize_nearest_rgba8_into as resize_candidate_nearest_rgba8_into,
         },
     },
     spec::resize::{
@@ -294,7 +288,7 @@ fn resize_candidate_nearest_subject(
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        resize_candidate_nearest_rgba8_into(source, output, candidate_nearest_anchor(params));
+        resize_candidate_nearest_rgba8_into(source, output, prod_anchor(params));
     })
 }
 
@@ -330,7 +324,7 @@ fn resize_prod_bilinear_subject(
     params: &ResizeParams,
 ) -> Result<(), BenchSubjectError> {
     with_views(input, output, |source, output| {
-        resize_prod_bilinear_rgba8_into(source, output, prod_bilinear_anchor(params));
+        resize_prod_bilinear_rgba8_into(source, output, prod_anchor(params));
     })
 }
 
@@ -363,7 +357,7 @@ fn resize_prod_bicubic_fixed_subject(
         resize_prod_bicubic_rgba8_into(
             source,
             output,
-            prod_convolution_anchor(params),
+            prod_anchor(params),
             ProdConvolutionSupportPolicy::Fixed,
         );
     })
@@ -378,7 +372,7 @@ fn resize_prod_bicubic_scale_aware_subject(
         resize_prod_bicubic_rgba8_into(
             source,
             output,
-            prod_convolution_anchor(params),
+            prod_anchor(params),
             ProdConvolutionSupportPolicy::ScaleAware,
         );
     })
@@ -413,7 +407,7 @@ fn resize_prod_lanczos2_fixed_subject(
         resize_prod_lanczos2_rgba8_into(
             source,
             output,
-            prod_convolution_anchor(params),
+            prod_anchor(params),
             ProdConvolutionSupportPolicy::Fixed,
         );
     })
@@ -428,7 +422,7 @@ fn resize_prod_lanczos2_scale_aware_subject(
         resize_prod_lanczos2_rgba8_into(
             source,
             output,
-            prod_convolution_anchor(params),
+            prod_anchor(params),
             ProdConvolutionSupportPolicy::ScaleAware,
         );
     })
@@ -463,7 +457,7 @@ fn resize_prod_lanczos3_fixed_subject(
         resize_prod_lanczos3_rgba8_into(
             source,
             output,
-            prod_convolution_anchor(params),
+            prod_anchor(params),
             ProdConvolutionSupportPolicy::Fixed,
         );
     })
@@ -478,7 +472,7 @@ fn resize_prod_lanczos3_scale_aware_subject(
         resize_prod_lanczos3_rgba8_into(
             source,
             output,
-            prod_convolution_anchor(params),
+            prod_anchor(params),
             ProdConvolutionSupportPolicy::ScaleAware,
         );
     })
@@ -521,55 +515,17 @@ fn with_views<T>(
     Ok(resize(source, output))
 }
 
-fn candidate_nearest_anchor(params: &ResizeParams) -> CandidateNearestResizeAnchor {
+fn prod_anchor(params: &ResizeParams) -> ProdResizeAnchor {
     match params.anchor {
-        ditherette_bench_api::ResizeAnchorParam::TopLeft => CandidateNearestResizeAnchor::TopLeft,
-        ditherette_bench_api::ResizeAnchorParam::Top => CandidateNearestResizeAnchor::Top,
-        ditherette_bench_api::ResizeAnchorParam::TopRight => CandidateNearestResizeAnchor::TopRight,
-        ditherette_bench_api::ResizeAnchorParam::Left => CandidateNearestResizeAnchor::Left,
-        ditherette_bench_api::ResizeAnchorParam::Center => CandidateNearestResizeAnchor::Center,
-        ditherette_bench_api::ResizeAnchorParam::Right => CandidateNearestResizeAnchor::Right,
-        ditherette_bench_api::ResizeAnchorParam::BottomLeft => {
-            CandidateNearestResizeAnchor::BottomLeft
-        }
-        ditherette_bench_api::ResizeAnchorParam::Bottom => CandidateNearestResizeAnchor::Bottom,
-        ditherette_bench_api::ResizeAnchorParam::BottomRight => {
-            CandidateNearestResizeAnchor::BottomRight
-        }
-    }
-}
-
-fn prod_bilinear_anchor(params: &ResizeParams) -> ProdBilinearResizeAnchor {
-    match params.anchor {
-        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdBilinearResizeAnchor::TopLeft,
-        ditherette_bench_api::ResizeAnchorParam::Top => ProdBilinearResizeAnchor::Top,
-        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdBilinearResizeAnchor::TopRight,
-        ditherette_bench_api::ResizeAnchorParam::Left => ProdBilinearResizeAnchor::Left,
-        ditherette_bench_api::ResizeAnchorParam::Center => ProdBilinearResizeAnchor::Center,
-        ditherette_bench_api::ResizeAnchorParam::Right => ProdBilinearResizeAnchor::Right,
-        ditherette_bench_api::ResizeAnchorParam::BottomLeft => ProdBilinearResizeAnchor::BottomLeft,
-        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdBilinearResizeAnchor::Bottom,
-        ditherette_bench_api::ResizeAnchorParam::BottomRight => {
-            ProdBilinearResizeAnchor::BottomRight
-        }
-    }
-}
-
-fn prod_convolution_anchor(params: &ResizeParams) -> ProdConvolutionResizeAnchor {
-    match params.anchor {
-        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdConvolutionResizeAnchor::TopLeft,
-        ditherette_bench_api::ResizeAnchorParam::Top => ProdConvolutionResizeAnchor::Top,
-        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdConvolutionResizeAnchor::TopRight,
-        ditherette_bench_api::ResizeAnchorParam::Left => ProdConvolutionResizeAnchor::Left,
-        ditherette_bench_api::ResizeAnchorParam::Center => ProdConvolutionResizeAnchor::Center,
-        ditherette_bench_api::ResizeAnchorParam::Right => ProdConvolutionResizeAnchor::Right,
-        ditherette_bench_api::ResizeAnchorParam::BottomLeft => {
-            ProdConvolutionResizeAnchor::BottomLeft
-        }
-        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdConvolutionResizeAnchor::Bottom,
-        ditherette_bench_api::ResizeAnchorParam::BottomRight => {
-            ProdConvolutionResizeAnchor::BottomRight
-        }
+        ditherette_bench_api::ResizeAnchorParam::TopLeft => ProdResizeAnchor::TopLeft,
+        ditherette_bench_api::ResizeAnchorParam::Top => ProdResizeAnchor::Top,
+        ditherette_bench_api::ResizeAnchorParam::TopRight => ProdResizeAnchor::TopRight,
+        ditherette_bench_api::ResizeAnchorParam::Left => ProdResizeAnchor::Left,
+        ditherette_bench_api::ResizeAnchorParam::Center => ProdResizeAnchor::Center,
+        ditherette_bench_api::ResizeAnchorParam::Right => ProdResizeAnchor::Right,
+        ditherette_bench_api::ResizeAnchorParam::BottomLeft => ProdResizeAnchor::BottomLeft,
+        ditherette_bench_api::ResizeAnchorParam::Bottom => ProdResizeAnchor::Bottom,
+        ditherette_bench_api::ResizeAnchorParam::BottomRight => ProdResizeAnchor::BottomRight,
     }
 }
 

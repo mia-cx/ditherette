@@ -14,8 +14,7 @@ use crate::prod::{
 };
 
 use super::{
-    alignment::{self, ResizeAnchor},
-    coordinates::{map_axis_position, support_range},
+    alignment::{self, map_axis_position, support_range, ResizeAnchor},
     filter::{axis_kernel_scale, ReconstructionKernel, SupportPolicy},
 };
 

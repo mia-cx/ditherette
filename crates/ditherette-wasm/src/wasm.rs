@@ -25,24 +25,25 @@ use crate::{
         color::{
             rgba8_to_color_space_f32, rgba8_to_color_space_f32_with_policy_into, ColorSpaceF32,
         },
-        resize::scalar::{
-            area::resize_area_rgba8_into,
-            bicubic::{
-                resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_into,
-                resize_bicubic_rgba8_rows_with_plan_into, BicubicResizePlan,
-            },
-            bilinear::{
-                alignment::ResizeAnchor as BilinearResizeAnchor, resize_bilinear_rgba8_into,
-            },
-            convolution::{ResizeAnchor as ConvolutionResizeAnchor, SupportPolicy},
-            lanczos::{
-                resize_lanczos2_rgba8_into, resize_lanczos2_rgba8_rows_into,
-                resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
-                resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
-            },
-            nearest::{
-                alignment::ResizeAnchor as NearestResizeAnchor, resize_nearest_rgba8_into,
-                resize_nearest_rgba8_rows_with_plan_into, NearestResizePlan,
+        resize::{
+            common::alignment::ResizeAnchor,
+            scalar::{
+                area::resize_area_rgba8_into,
+                bicubic::{
+                    resize_bicubic_rgba8_into, resize_bicubic_rgba8_rows_into,
+                    resize_bicubic_rgba8_rows_with_plan_into, BicubicResizePlan,
+                },
+                bilinear::resize_bilinear_rgba8_into,
+                convolution::SupportPolicy,
+                lanczos::{
+                    resize_lanczos2_rgba8_into, resize_lanczos2_rgba8_rows_into,
+                    resize_lanczos3_rgba8_into, resize_lanczos3_rgba8_rows_into,
+                    resize_lanczos_rgba8_rows_with_plan_into, LanczosResizePlan,
+                },
+                nearest::{
+                    resize_nearest_rgba8_into, resize_nearest_rgba8_rows_with_plan_into,
+                    NearestResizePlan,
+                },
             },
         },
     },
@@ -425,9 +426,7 @@ fn resize_rgba8_scalar(
 #[derive(Clone, Copy)]
 struct WasmResize {
     filter: WasmResizeFilter,
-    nearest_anchor: NearestResizeAnchor,
-    bilinear_anchor: BilinearResizeAnchor,
-    convolution_anchor: ConvolutionResizeAnchor,
+    anchor: ResizeAnchor,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
     execution_mode: ResizeExecutionMode,
@@ -473,9 +472,7 @@ impl WasmResize {
             parse_support_policy_and_execution(support_policy)?;
         Ok(Self {
             filter,
-            nearest_anchor: nearest_anchor(anchor)?,
-            bilinear_anchor: bilinear_anchor(anchor)?,
-            convolution_anchor: convolution_anchor(anchor)?,
+            anchor: resize_anchor(anchor)?,
             support_policy,
             plan_scope,
             execution_mode,
@@ -518,14 +515,14 @@ impl WasmResize {
                 source,
                 output_dimensions,
                 output,
-                self.nearest_anchor,
+                self.anchor,
                 row_band_height,
             ),
             WasmResizeFilter::Bicubic => resize_bicubic_rgba8_pooled_direct_into(
                 source,
                 output_dimensions,
                 output,
-                self.convolution_anchor,
+                self.anchor,
                 self.support_policy,
                 self.plan_scope,
                 row_band_height,
@@ -534,7 +531,7 @@ impl WasmResize {
                 source,
                 output_dimensions,
                 output,
-                self.convolution_anchor,
+                self.anchor,
                 NonZeroU32::new(2).unwrap(),
                 self.support_policy,
                 self.plan_scope,
@@ -544,7 +541,7 @@ impl WasmResize {
                 source,
                 output_dimensions,
                 output,
-                self.convolution_anchor,
+                self.anchor,
                 NonZeroU32::new(3).unwrap(),
                 self.support_policy,
                 self.plan_scope,
@@ -593,30 +590,21 @@ impl WasmResize {
             .map_err(|error| JsValue::from_str(&error.to_string()))?;
         match self.filter {
             WasmResizeFilter::Nearest => {
-                resize_nearest_rgba8_into(source, output_view, self.nearest_anchor)
+                resize_nearest_rgba8_into(source, output_view, self.anchor)
             }
             WasmResizeFilter::Area => resize_area_rgba8_into(source, output_view),
             WasmResizeFilter::Bilinear => {
-                resize_bilinear_rgba8_into(source, output_view, self.bilinear_anchor)
+                resize_bilinear_rgba8_into(source, output_view, self.anchor)
             }
-            WasmResizeFilter::Bicubic => resize_bicubic_rgba8_into(
-                source,
-                output_view,
-                self.convolution_anchor,
-                self.support_policy,
-            ),
-            WasmResizeFilter::Lanczos2 => resize_lanczos2_rgba8_into(
-                source,
-                output_view,
-                self.convolution_anchor,
-                self.support_policy,
-            ),
-            WasmResizeFilter::Lanczos3 => resize_lanczos3_rgba8_into(
-                source,
-                output_view,
-                self.convolution_anchor,
-                self.support_policy,
-            ),
+            WasmResizeFilter::Bicubic => {
+                resize_bicubic_rgba8_into(source, output_view, self.anchor, self.support_policy)
+            }
+            WasmResizeFilter::Lanczos2 => {
+                resize_lanczos2_rgba8_into(source, output_view, self.anchor, self.support_policy)
+            }
+            WasmResizeFilter::Lanczos3 => {
+                resize_lanczos3_rgba8_into(source, output_view, self.anchor, self.support_policy)
+            }
         }
         Ok(())
     }
@@ -701,7 +689,7 @@ fn resize_bicubic_rgba8_pooled_direct_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
-    anchor: ConvolutionResizeAnchor,
+    anchor: ResizeAnchor,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
     row_band_height: usize,
@@ -744,7 +732,7 @@ fn resize_lanczos_rgba8_pooled_direct_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
-    anchor: ConvolutionResizeAnchor,
+    anchor: ResizeAnchor,
     radius: NonZeroU32,
     support_policy: SupportPolicy,
     plan_scope: ResizePlanScope,
@@ -798,7 +786,7 @@ fn resize_nearest_rgba8_pooled_direct_into(
     source: ImageView<'_, Rgba8>,
     output_dimensions: ImageDimensions,
     output: &mut [u8],
-    anchor: NearestResizeAnchor,
+    anchor: ResizeAnchor,
     row_band_height: usize,
 ) -> Result<(), JsValue> {
     let plan = NearestResizePlan::new(source.dimensions(), output_dimensions, anchor);
@@ -1368,47 +1356,17 @@ fn parse_support_policy_and_execution(
     }
 }
 
-fn nearest_anchor(value: &str) -> Result<NearestResizeAnchor, JsValue> {
+fn resize_anchor(value: &str) -> Result<ResizeAnchor, JsValue> {
     match value {
-        "" | "center" => Ok(NearestResizeAnchor::Center),
-        "top-left" => Ok(NearestResizeAnchor::TopLeft),
-        "top" => Ok(NearestResizeAnchor::Top),
-        "top-right" => Ok(NearestResizeAnchor::TopRight),
-        "left" => Ok(NearestResizeAnchor::Left),
-        "right" => Ok(NearestResizeAnchor::Right),
-        "bottom-left" => Ok(NearestResizeAnchor::BottomLeft),
-        "bottom" => Ok(NearestResizeAnchor::Bottom),
-        "bottom-right" => Ok(NearestResizeAnchor::BottomRight),
-        _ => Err(JsValue::from_str("unsupported resize anchor")),
-    }
-}
-
-fn bilinear_anchor(value: &str) -> Result<BilinearResizeAnchor, JsValue> {
-    match value {
-        "" | "center" => Ok(BilinearResizeAnchor::Center),
-        "top-left" => Ok(BilinearResizeAnchor::TopLeft),
-        "top" => Ok(BilinearResizeAnchor::Top),
-        "top-right" => Ok(BilinearResizeAnchor::TopRight),
-        "left" => Ok(BilinearResizeAnchor::Left),
-        "right" => Ok(BilinearResizeAnchor::Right),
-        "bottom-left" => Ok(BilinearResizeAnchor::BottomLeft),
-        "bottom" => Ok(BilinearResizeAnchor::Bottom),
-        "bottom-right" => Ok(BilinearResizeAnchor::BottomRight),
-        _ => Err(JsValue::from_str("unsupported resize anchor")),
-    }
-}
-
-fn convolution_anchor(value: &str) -> Result<ConvolutionResizeAnchor, JsValue> {
-    match value {
-        "" | "center" => Ok(ConvolutionResizeAnchor::Center),
-        "top-left" => Ok(ConvolutionResizeAnchor::TopLeft),
-        "top" => Ok(ConvolutionResizeAnchor::Top),
-        "top-right" => Ok(ConvolutionResizeAnchor::TopRight),
-        "left" => Ok(ConvolutionResizeAnchor::Left),
-        "right" => Ok(ConvolutionResizeAnchor::Right),
-        "bottom-left" => Ok(ConvolutionResizeAnchor::BottomLeft),
-        "bottom" => Ok(ConvolutionResizeAnchor::Bottom),
-        "bottom-right" => Ok(ConvolutionResizeAnchor::BottomRight),
+        "" | "center" => Ok(ResizeAnchor::Center),
+        "top-left" => Ok(ResizeAnchor::TopLeft),
+        "top" => Ok(ResizeAnchor::Top),
+        "top-right" => Ok(ResizeAnchor::TopRight),
+        "left" => Ok(ResizeAnchor::Left),
+        "right" => Ok(ResizeAnchor::Right),
+        "bottom-left" => Ok(ResizeAnchor::BottomLeft),
+        "bottom" => Ok(ResizeAnchor::Bottom),
+        "bottom-right" => Ok(ResizeAnchor::BottomRight),
         _ => Err(JsValue::from_str("unsupported resize anchor")),
     }
 }

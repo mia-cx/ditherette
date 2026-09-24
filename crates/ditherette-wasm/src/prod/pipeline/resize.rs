@@ -16,7 +16,7 @@ use crate::{
             request::{Anchor, DitherPolicy, ResizePolicy, Support},
         },
         resize::{
-            common::allocation::CapacityBudget,
+            common::{alignment::ResizeAnchor, allocation::CapacityBudget},
             scalar::{
                 area, bicubic, bilinear, convolution, lanczos, nearest,
                 trilinear::PreparedTrilinear,
@@ -296,11 +296,9 @@ impl PreparedResize {
         match policy {
             ResizePolicy::Nearest { .. } => Ok(Self::required_nearest_bytes(source, output)),
             ResizePolicy::Area {} => area::AreaResizePlan::required_bytes(source, output),
-            ResizePolicy::Bilinear { anchor } => bilinear::BilinearResizePlan::required_bytes(
-                source,
-                output,
-                bilinear_anchor(anchor),
-            ),
+            ResizePolicy::Bilinear { anchor } => {
+                bilinear::BilinearResizePlan::required_bytes(source, output, resize_anchor(anchor))
+            }
             ResizePolicy::Bicubic { support, .. } => bicubic::BicubicResizePlan::required_bytes(
                 source,
                 output,
@@ -349,7 +347,7 @@ impl PreparedResize {
                 let plan = bilinear::BilinearResizePlan::try_new(
                     source,
                     output,
-                    bilinear_anchor(anchor),
+                    resize_anchor(anchor),
                     &mut budget,
                 )?;
                 let mut scratch = budget.vector(plan.scratch_elements())?;
@@ -360,7 +358,7 @@ impl PreparedResize {
                 let plan = bicubic::BicubicResizePlan::try_new(
                     source,
                     output,
-                    convolution_anchor(anchor),
+                    resize_anchor(anchor),
                     convolution_support(support),
                     &mut budget,
                 )?;
@@ -379,7 +377,7 @@ impl PreparedResize {
                 let plan = constructor(
                     source,
                     output,
-                    convolution_anchor(anchor),
+                    resize_anchor(anchor),
                     convolution_support(support),
                     &mut budget,
                 )?;
@@ -391,7 +389,7 @@ impl PreparedResize {
             ResizePolicy::Trilinear { anchor } => PreparedTrilinear::try_new(
                 source,
                 output,
-                bilinear_anchor(anchor),
+                resize_anchor(anchor),
                 limit + TRILINEAR_RECORD_BYTES,
             )
             .map(|scratch| Self::Trilinear {
@@ -415,7 +413,7 @@ impl PreparedResize {
         anchor: Anchor,
         limit: u64,
     ) -> Result<Self, Failure> {
-        nearest::NearestResizePlan::try_new(source, output, nearest_anchor(anchor), limit)
+        nearest::NearestResizePlan::try_new(source, output, resize_anchor(anchor), limit)
             .map(|plan| Self::Nearest(plan, Vec::new().into()))
             .map_err(|error| match error {
                 nearest::PlanAllocationError::MemoryLimit => {
@@ -503,7 +501,7 @@ impl PreparedResize {
                 *scratch = Some(PreparedTrilinear::try_new(
                     *source,
                     *output,
-                    bilinear_anchor(*anchor),
+                    resize_anchor(*anchor),
                     limit + TRILINEAR_RECORD_BYTES,
                 )?);
             }
@@ -742,38 +740,8 @@ fn restore_vector<T: Default + Clone>(
     Ok(())
 }
 
-fn nearest_anchor(anchor: Anchor) -> nearest::alignment::ResizeAnchor {
-    use nearest::alignment::ResizeAnchor as A;
-    match anchor {
-        Anchor::TopLeft => A::TopLeft,
-        Anchor::Top => A::Top,
-        Anchor::TopRight => A::TopRight,
-        Anchor::Left => A::Left,
-        Anchor::Center => A::Center,
-        Anchor::Right => A::Right,
-        Anchor::BottomLeft => A::BottomLeft,
-        Anchor::Bottom => A::Bottom,
-        Anchor::BottomRight => A::BottomRight,
-    }
-}
-
-fn bilinear_anchor(anchor: Anchor) -> bilinear::alignment::ResizeAnchor {
-    use bilinear::alignment::ResizeAnchor as A;
-    match anchor {
-        Anchor::TopLeft => A::TopLeft,
-        Anchor::Top => A::Top,
-        Anchor::TopRight => A::TopRight,
-        Anchor::Left => A::Left,
-        Anchor::Center => A::Center,
-        Anchor::Right => A::Right,
-        Anchor::BottomLeft => A::BottomLeft,
-        Anchor::Bottom => A::Bottom,
-        Anchor::BottomRight => A::BottomRight,
-    }
-}
-
-fn convolution_anchor(anchor: Anchor) -> convolution::ResizeAnchor {
-    use convolution::ResizeAnchor as A;
+fn resize_anchor(anchor: Anchor) -> ResizeAnchor {
+    use ResizeAnchor as A;
     match anchor {
         Anchor::TopLeft => A::TopLeft,
         Anchor::Top => A::Top,

@@ -13,7 +13,7 @@ pub(super) fn subject() -> BenchSubject {
                 let mut prepared = PreparedTrilinear::<Rgba8>::try_new(
                     source.dimensions(),
                     output.dimensions(),
-                    prod_bilinear_anchor(params),
+                    prod_anchor(params),
                     u64::MAX,
                 )?;
                 prepared.execute(source, output)

@@ -5,8 +5,7 @@
 //! importing the oracle, while specializing the implementation to the production
 //! packed-RGBA8 boundary.
 
-pub mod alignment;
-mod coordinates;
+pub use crate::prod::resize::common::alignment;
 pub mod filter;
 mod kernel;
 mod plan;
@@ -107,7 +106,11 @@ pub fn resize_convolution_rgba8_rows_into<K>(
 {
     common::rgba8::assert_packed_source(source, "convolution");
     common::rgba8::assert_packed_output(&output, "convolution");
-    assert_row_band_matches_plan(output.dimensions(), full_output_dimensions, y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        full_output_dimensions,
+        y_start,
+    );
     let plan = ConvolutionResizePlan::new(
         source.dimensions(),
         full_output_dimensions,
@@ -127,7 +130,11 @@ pub fn resize_convolution_rgba8_rows_with_plan_into(
 ) {
     common::rgba8::assert_packed_source(source, "convolution");
     common::rgba8::assert_packed_output(&output, "convolution");
-    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        plan.output_dimensions(),
+        y_start,
+    );
     // Fallible identity plans need no taps. Copy only the requested logical row band.
     if plan.is_identity() && plan.x_taps.is_empty() {
         assert_eq!(source.dimensions(), plan.source_dimensions());
@@ -186,7 +193,11 @@ pub(crate) fn resize_convolution_rgba8_rows_with_plan_and_scratch_known_opacity_
     source_opaque: bool,
 ) -> Result<(), Failure> {
     assert_eq!(source.dimensions(), plan.source_dimensions());
-    assert_row_band_matches_plan(output.dimensions(), plan.output_dimensions(), y_start);
+    common::rgba8::assert_row_band_matches_plan(
+        output.dimensions(),
+        plan.output_dimensions(),
+        y_start,
+    );
     common::rgba8::assert_packed_source(source, "convolution");
     common::rgba8::assert_packed_output(&output, "convolution");
     let required = plan.row_scratch_elements(y_start, output.dimensions().height())?;
@@ -289,17 +300,4 @@ pub(crate) fn resize_convolution_with_progress_known_opacity(
         source_opaque,
         &mut |completed| progress(completed, total),
     )
-}
-
-fn assert_row_band_matches_plan(
-    band_dimensions: crate::image::ImageDimensions,
-    full_output_dimensions: crate::image::ImageDimensions,
-    y_start: u32,
-) {
-    assert_eq!(band_dimensions.width(), full_output_dimensions.width());
-    assert!(
-        y_start <= full_output_dimensions.height()
-            && band_dimensions.height() <= full_output_dimensions.height() - y_start,
-        "row band must fit inside full output dimensions"
-    );
 }

@@ -2,8 +2,7 @@
 //! Landed fractional area/bilinear use different accumulation precision.
 
 pub(super) mod common {
-    pub use crate::prod::resize::scalar::bilinear::alignment;
-    pub mod coordinates;
+    pub use crate::prod::resize::common::alignment;
     pub mod sample;
 }
 
