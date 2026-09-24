@@ -96,6 +96,34 @@ test('identity bypass validates requests and preserves lifecycle without enterin
 	assert.throws(() => processor.resize(value), diagnostic('disposed', 'instance'));
 });
 
+test('scalar resize uses the narrow sparse-nearest ABI only without progress', () => {
+	const calls = [];
+	const output = { width: 2, height: 1, data: new Uint8Array(8) };
+	const bindings = {
+		privateInitialize: () => 0,
+		privateDispose: () => 0,
+		privateResizeNearestSparse: (...args) => {
+			calls.push('sparse');
+			args.at(-1).value = output;
+			return 0;
+		},
+		privateResize: (...args) => {
+			calls.push('generic');
+			args.at(-1).value = output;
+			return 0;
+		}
+	};
+	const processor = initializeProcessor(bindings, 1 << 20);
+	assert.equal(processor.resize(request()), output);
+	const progress = request();
+	progress.onProgress = () => {};
+	assert.equal(processor.resize(progress), output);
+	const area = request();
+	area.output.resize = { algorithm: 'area' };
+	assert.equal(processor.resize(area), output);
+	assert.deepEqual(calls, ['sparse', 'generic', 'generic']);
+});
+
 test('public trilinear preserves intermediate rounding and recovers from budget and copy failures', async () => {
 	// Wasm mip headers, chain bytes, f64 channels, and imported source/output capacities.
 	const capacity = 3 * 20 + 16 + 8 + 4 + 32 + 16 + 4;

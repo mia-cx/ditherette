@@ -469,6 +469,69 @@ impl Processor {
         self.finish_call(result)
     }
 
+    /// Scalar adapter fast path for direct-output sparse nearest calls.
+    ///
+    /// The adapter proves eligibility before entering this narrow call graph. All other
+    /// resize requests continue through [`Self::resize`].
+    #[cfg(not(feature = "threads"))]
+    pub fn resize_sparse_nearest<B: Boundary>(
+        &mut self,
+        request: ResizeRequest,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        match self.state {
+            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => {
+                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
+            }
+            State::Ready => {}
+        }
+        self.state = State::Running;
+        let result = self.run_sparse_nearest(request, boundary, &mut SystemAllocator);
+        self.finish_call(result)
+    }
+
+    #[cfg(not(feature = "threads"))]
+    fn run_sparse_nearest<B: Boundary, A: Allocator>(
+        &mut self,
+        request: ResizeRequest,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        let plan = Plan::new(request, boundary.input_len()?)?;
+        if boundary.progress().is_some()
+            || !boundary.supports_sparse_input()
+            || !boundary.supports_sparse_output()
+            || !resize::sparse_nearest(plan.source_len, plan.output_len, plan.resize, true)
+        {
+            return Err(Failure::new(ErrorCode::InvalidSettings, ErrorPath::Control));
+        }
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        self.peak_capacity = overhead;
+        PreparedResize::required_bytes(plan.source, plan.output, plan.resize)?;
+        let resize = super::preparation::ResizePreparation {
+            source: plan.source,
+            output: request.output,
+        };
+        let lengths = [0, 0, resize::sparse_nearest_offset_bytes(plan.output), 0];
+        let mut call = super::preparation::Call::sparse_nearest(
+            &mut self.preparation,
+            resize,
+            lengths,
+            overhead,
+            self.memory_limit,
+            &mut self.peak_capacity,
+            allocator,
+        )?;
+        let (_, metadata, scratch) = call.parts();
+        let [_, _, offsets, _] = &mut scratch.buffers;
+        let (columns, rows) = metadata
+            .expect("requested nearest resize")
+            .write_nearest_source_offsets(offsets);
+        let result = boundary.complete_sparse(columns, rows, plan.source_len, plan.output);
+        call.finish(result)
+    }
+
     fn run<B: Boundary, A: Allocator>(
         &mut self,
         request: ResizeRequest,

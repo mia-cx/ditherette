@@ -16,10 +16,13 @@ import { normalizeInitInput, validateResize, validateQuantize } from './validati
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
 import { processErrorPath, validateProcess } from './validation-process.js';
 
-export type Bindings = Pick<ReturnType<
+type ScalarBindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
->, 'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
-	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize'>;
+>;
+export type Bindings = Pick<ScalarBindings,
+	'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
+	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize'> &
+	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse'>>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
 
@@ -228,17 +231,31 @@ class Processor implements Ditherette {
 			const result: ResultSink<Rgba8Image> = { value: undefined, onProgress: input.onProgress };
 			let status: number;
 			try {
-				status = bindings.privateResize(
-					input.data,
-					input.sourceWidth,
-					input.sourceHeight,
-					input.outputWidth,
-					input.outputHeight,
-					input.algorithm,
-					input.anchor,
-					input.support,
-					result
-				);
+				const sourcePixels = input.sourceWidth * input.sourceHeight;
+				const outputPixels = input.outputWidth * input.outputHeight;
+				const sparseNearest = input.algorithm === 0 && input.onProgress === undefined &&
+					(outputPixels <= sourcePixels / 4 || outputPixels > sourcePixels);
+				status = sparseNearest && bindings.privateResizeNearestSparse
+					? bindings.privateResizeNearestSparse(
+						input.data,
+						input.sourceWidth,
+						input.sourceHeight,
+						input.outputWidth,
+						input.outputHeight,
+						input.anchor,
+						result
+					)
+					: bindings.privateResize(
+						input.data,
+						input.sourceWidth,
+						input.sourceHeight,
+						input.outputWidth,
+						input.outputHeight,
+						input.algorithm,
+						input.anchor,
+						input.support,
+						result
+					);
 			} catch (error) {
 				throw this.#trap(error);
 			}
