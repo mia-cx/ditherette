@@ -184,16 +184,25 @@ pub fn benchmark_color_space(
     let source = ImageView::<Rgba8>::packed(input, dimensions)
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut output = vec![0.0; dimensions.storage_len::<Rgba8>().unwrap()];
-    let config = WasmBenchmarkConfig {
+    let config = WasmBenchmarkConfig::new(
         sample_size,
-        measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
-        warm_up_time_ms: positive_or_default(warm_up_time_ms, 1_000.0),
+        measurement_time_ms,
+        warm_up_time_ms,
         warm_up_iterations,
-        target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
+        target_sample_time_ms,
         live_stats,
-        row_band_height: row_band_height.max(1) as usize,
-    };
-    let result = run_color_benchmark(source, target, mode, &mut output, config, reporter.as_ref())?;
+        row_band_height,
+    );
+    let result = run_benchmark(config, reporter.as_ref(), |batch_size| {
+        Ok(run_color_batch(
+            source,
+            target,
+            mode,
+            &mut output,
+            batch_size,
+            config.row_band_height,
+        ))
+    })?;
 
     Ok(benchmark_result_json(
         result.batch_size,
@@ -244,24 +253,26 @@ pub fn benchmark_resize_rgba8(
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let mut output = vec![0; output_len];
 
-    let config = WasmBenchmarkConfig {
+    let config = WasmBenchmarkConfig::new(
         sample_size,
-        measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
-        warm_up_time_ms: positive_or_default(warm_up_time_ms, 1_000.0),
+        measurement_time_ms,
+        warm_up_time_ms,
         warm_up_iterations,
-        target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
+        target_sample_time_ms,
         live_stats,
-        row_band_height: row_band_height.max(1) as usize,
-    };
-    let result = run_resize_benchmark(
-        source,
-        output_dimensions,
-        resize,
-        parallelization_policy,
-        &mut output,
-        config,
-        reporter.as_ref(),
-    )?;
+        row_band_height,
+    );
+    let result = run_benchmark(config, reporter.as_ref(), |batch_size| {
+        run_resize_batch(
+            source,
+            output_dimensions,
+            resize,
+            parallelization_policy,
+            &mut output,
+            batch_size,
+            config.row_band_height,
+        )
+    })?;
 
     Ok(benchmark_result_json(
         result.batch_size,
@@ -854,6 +865,29 @@ struct WasmBenchmarkConfig {
     row_band_height: usize,
 }
 
+impl WasmBenchmarkConfig {
+    /// Apply the harness defaults to non-positive or non-finite timing arguments.
+    fn new(
+        sample_size: u32,
+        measurement_time_ms: f64,
+        warm_up_time_ms: f64,
+        warm_up_iterations: u32,
+        target_sample_time_ms: f64,
+        live_stats: bool,
+        row_band_height: u32,
+    ) -> Self {
+        Self {
+            sample_size,
+            measurement_time_ms: positive_or_default(measurement_time_ms, 5_000.0),
+            warm_up_time_ms: positive_or_default(warm_up_time_ms, 1_000.0),
+            warm_up_iterations,
+            target_sample_time_ms: positive_or_default(target_sample_time_ms, 1.0),
+            live_stats,
+            row_band_height: row_band_height.max(1) as usize,
+        }
+    }
+}
+
 #[derive(Default)]
 struct WarmupProgress {
     elapsed_ms: f64,
@@ -900,13 +934,12 @@ impl ColorBenchmarkMode {
     }
 }
 
-fn run_color_benchmark(
-    source: ImageView<'_, Rgba8>,
-    target: ColorSpaceF32,
-    mode: ColorBenchmarkMode,
-    output: &mut [f32],
+/// Calibrate a batch size during warmup, then time batches until the sample or time budget ends.
+/// `run_batch` executes `batch_size` subject calls and returns the elapsed milliseconds.
+fn run_benchmark(
     config: WasmBenchmarkConfig,
     reporter: Option<&Function>,
+    mut run_batch: impl FnMut(u32) -> Result<f64, JsValue>,
 ) -> Result<WasmBenchmarkResult, JsValue> {
     const MAX_BATCH_SIZE: u32 = 1 << 20;
 
@@ -916,14 +949,7 @@ fn run_color_benchmark(
     let mut best_batch_size = batch_size;
     let mut best_batch_elapsed = f64::INFINITY;
     while warmup.needs_more(config) {
-        let elapsed = run_color_batch(
-            source,
-            target,
-            mode,
-            output,
-            batch_size,
-            config.row_band_height,
-        );
+        let elapsed = run_batch(batch_size)?;
         if (elapsed - config.target_sample_time_ms).abs()
             < (best_batch_elapsed - config.target_sample_time_ms).abs()
         {
@@ -963,14 +989,7 @@ fn run_color_benchmark(
     while samples_ns.len() < config.sample_size as usize
         && measurement_elapsed < config.measurement_time_ms
     {
-        let elapsed_ms = run_color_batch(
-            source,
-            target,
-            mode,
-            output,
-            batch_size,
-            config.row_band_height,
-        );
+        let elapsed_ms = run_batch(batch_size)?;
         let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
         samples_ns.push(sample_ns);
         total_iterations += u64::from(batch_size);
@@ -1108,105 +1127,6 @@ fn calibrated_batch_size(
     }
     let next = (f64::from(batch_size) * target_ms / elapsed_ms).round() as u32;
     next.clamp(1, max_batch_size)
-}
-
-fn run_resize_benchmark(
-    source: ImageView<'_, Rgba8>,
-    output_dimensions: ImageDimensions,
-    resize: WasmResize,
-    parallelization_policy: bool,
-    output: &mut [u8],
-    config: WasmBenchmarkConfig,
-    reporter: Option<&Function>,
-) -> Result<WasmBenchmarkResult, JsValue> {
-    const MAX_BATCH_SIZE: u32 = 1 << 20;
-
-    let mut batch_size = 1;
-    let warmup_started = performance_now();
-    let mut warmup = WarmupProgress::default();
-    let mut best_batch_size = batch_size;
-    let mut best_batch_elapsed = f64::INFINITY;
-    while warmup.needs_more(config) {
-        let elapsed = run_resize_batch(
-            source,
-            output_dimensions,
-            resize,
-            parallelization_policy,
-            output,
-            batch_size,
-            config.row_band_height,
-        )?;
-        if (elapsed - config.target_sample_time_ms).abs()
-            < (best_batch_elapsed - config.target_sample_time_ms).abs()
-        {
-            best_batch_size = batch_size;
-            best_batch_elapsed = elapsed;
-        }
-        warmup.record(batch_size, performance_now() - warmup_started);
-        report_event(
-            reporter,
-            &format!(
-                "{{\"kind\":\"warmup-batch\",\"batchSize\":{batch_size},\"batchElapsedMs\":{elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6}}}",
-                warmup_elapsed = warmup.elapsed_ms
-            ),
-        )?;
-
-        batch_size = calibrated_batch_size(
-            batch_size,
-            elapsed,
-            config.target_sample_time_ms,
-            MAX_BATCH_SIZE,
-        );
-    }
-    batch_size = best_batch_size;
-    report_event(
-        reporter,
-        &format!(
-            "{{\"kind\":\"warmup-finished\",\"batchSize\":{batch_size},\"batchElapsedMs\":{best_batch_elapsed:.6},\"elapsedMs\":{warmup_elapsed:.6},\"iterations\":{warmup_iterations}}}",
-            warmup_elapsed = warmup.elapsed_ms,
-            warmup_iterations = warmup.iterations
-        ),
-    )?;
-
-    let measurement_started = performance_now();
-    let mut measurement_elapsed = 0.0;
-    let mut samples_ns = Vec::with_capacity(config.sample_size as usize);
-    let mut total_iterations = 0u64;
-    while samples_ns.len() < config.sample_size as usize
-        && measurement_elapsed < config.measurement_time_ms
-    {
-        let elapsed_ms = run_resize_batch(
-            source,
-            output_dimensions,
-            resize,
-            parallelization_policy,
-            output,
-            batch_size,
-            config.row_band_height,
-        )?;
-        let sample_ns = elapsed_ms.max(0.0) * 1_000_000.0 / f64::from(batch_size);
-        samples_ns.push(sample_ns);
-        total_iterations += u64::from(batch_size);
-        measurement_elapsed = performance_now() - measurement_started;
-        if config.live_stats {
-            report_event(
-                reporter,
-                &format!(
-                    "{{\"kind\":\"measurement-progress\",\"samplesDone\":{},\"sampleSize\":{},\"elapsedMs\":{measurement_elapsed:.6},\"measurementTimeMs\":{:.6},\"totalIterations\":{total_iterations},\"batchSize\":{batch_size},\"samplesNs\":[{}]}}",
-                    samples_ns.len(),
-                    config.sample_size,
-                    config.measurement_time_ms,
-                    join_samples(&samples_ns)
-                ),
-            )?;
-        }
-    }
-
-    Ok(WasmBenchmarkResult {
-        batch_size,
-        total_iterations,
-        samples_ns,
-    })
 }
 
 fn run_resize_batch(
