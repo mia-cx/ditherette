@@ -11,7 +11,7 @@ use ditherette_wasm::{
         pipeline::{
             processor::Processor,
             progress::Callback,
-            quantize::{IndexedMetadataRef, QuantizeBoundary, QuantizeRequest},
+            quantize::{IndexedMetadataRef, InputBoundary, QuantizeBoundary, QuantizeRequest},
         },
     },
     spec::contract::lifecycle as frozen,
@@ -39,8 +39,7 @@ impl Callback for Boundary {
         Ok(())
     }
 }
-impl QuantizeBoundary for Boundary {
-    type Output = Vec<u8>;
+impl InputBoundary for Boundary {
     fn progress(&mut self) -> Option<&mut dyn Callback> {
         Some(self)
     }
@@ -51,6 +50,10 @@ impl QuantizeBoundary for Boundary {
         destination.fill(255);
         Ok(())
     }
+}
+
+impl QuantizeBoundary for Boundary {
+    type Output = Vec<u8>;
     fn complete(
         &mut self,
         bytes: &[u8],

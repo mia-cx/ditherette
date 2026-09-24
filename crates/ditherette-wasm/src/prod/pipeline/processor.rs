@@ -1,4 +1,5 @@
-//! Private resize ownership around landed packed kernels and fallible preparation.
+//! Private processor owning resize, process, perturb, quantize, and dither calls
+//! around landed packed kernels and fallible preparation.
 //!
 //! Request, initialization, and lifecycle rules follow the copied contract.
 //! Failures use static codes/paths instead of allocating diagnostic strings.
@@ -40,9 +41,9 @@ impl Allocator for SystemAllocator {
     }
 }
 
-/// Borrowed input and durable output boundary. Every JavaScript call is caught by the adapter.
-pub trait Boundary {
-    type Output;
+/// Borrowed RGBA8 input and progress shared by every processor method.
+/// Every JavaScript call is caught by the adapter.
+pub trait InputBoundary {
     /// Borrow this call's optional caught callback without allocating a handle.
     fn progress(&mut self) -> Option<&mut dyn super::progress::Callback> {
         None
@@ -52,21 +53,6 @@ pub trait Boundary {
     /// Opt into copying only Rust-selected RGBA8 pixels from borrowed input.
     fn supports_sparse_input(&self) -> bool {
         false
-    }
-    /// Opt into gathering directly into an independent durable result when progress is disabled.
-    fn supports_sparse_output(&self) -> bool {
-        false
-    }
-    /// Construct the complete result from Rust-selected offsets without a Wasm output buffer.
-    /// The returned JS-owned output does not consume this processor's private budget.
-    fn complete_sparse(
-        &mut self,
-        _column_offsets: &[u8],
-        _row_offsets: &[u8],
-        _source_len: usize,
-        _dimensions: ImageDimensions,
-    ) -> Result<Self::Output, Failure> {
-        Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
     }
     /// Gather the sum of column and row byte offsets encoded as little-endian u32 values.
     /// Recheck source length before reading; every call must observe current source bytes.
@@ -84,6 +70,26 @@ pub trait Boundary {
     fn snapshot_input(&mut self, destination: &mut [u8], _compare: bool) -> Result<bool, Failure> {
         self.copy_input(destination)?;
         Ok(false)
+    }
+}
+
+/// Durable RGBA8 output for resize and process calls.
+pub trait Boundary: InputBoundary {
+    type Output;
+    /// Opt into gathering directly into an independent durable result when progress is disabled.
+    fn supports_sparse_output(&self) -> bool {
+        false
+    }
+    /// Construct the complete result from Rust-selected offsets without a Wasm output buffer.
+    /// The returned JS-owned output does not consume this processor's private budget.
+    fn complete_sparse(
+        &mut self,
+        _column_offsets: &[u8],
+        _row_offsets: &[u8],
+        _source_len: usize,
+        _dimensions: ImageDimensions,
+    ) -> Result<Self::Output, Failure> {
+        Err(Failure::new(ErrorCode::Runtime, ErrorPath::Control))
     }
     /// Constructs the complete durable result. Nothing is published if this fails.
     fn complete(

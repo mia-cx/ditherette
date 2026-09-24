@@ -15,7 +15,7 @@ use ditherette_wasm::{
         pipeline::quantize::IndexedMetadataRef,
         pipeline::{
             perturb::PerturbRequest,
-            processor::{Allocator, Boundary as RgbaBoundary, Processor},
+            processor::{Allocator, Boundary as RgbaBoundary, InputBoundary, Processor},
             quantize::{QuantizeBoundary, QuantizeRequest},
         },
     },
@@ -70,14 +70,17 @@ impl Boundary {
         }
     }
 }
-impl RgbaBoundary for Boundary {
-    type Output = Vec<u8>;
+impl InputBoundary for Boundary {
     fn input_len(&mut self) -> Result<usize, Failure> {
         Ok(SOURCE.len())
     }
     fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
         self.copy(destination)
     }
+}
+
+impl RgbaBoundary for Boundary {
+    type Output = Vec<u8>;
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         self.finish()?;
         Ok(bytes.to_vec())
@@ -85,12 +88,6 @@ impl RgbaBoundary for Boundary {
 }
 impl QuantizeBoundary for Boundary {
     type Output = IndexedImage;
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        Ok(SOURCE.len())
-    }
-    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
-        self.copy(destination)
-    }
     fn complete(
         &mut self,
         indices: &[u8],
@@ -712,8 +709,7 @@ mod budget_support;
 #[test]
 fn bayer_byte_tables_preserve_bounded_standalone_and_indexed_results() {
     struct Pixels(Vec<u8>);
-    impl RgbaBoundary for Pixels {
-        type Output = Vec<u8>;
+    impl InputBoundary for Pixels {
         fn input_len(&mut self) -> Result<usize, Failure> {
             Ok(self.0.len())
         }
@@ -721,19 +717,15 @@ fn bayer_byte_tables_preserve_bounded_standalone_and_indexed_results() {
             target.copy_from_slice(&self.0);
             Ok(())
         }
+    }
+    impl RgbaBoundary for Pixels {
+        type Output = Vec<u8>;
         fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
             Ok(bytes.to_vec())
         }
     }
     impl QuantizeBoundary for Pixels {
         type Output = Vec<u8>;
-        fn input_len(&mut self) -> Result<usize, Failure> {
-            Ok(self.0.len())
-        }
-        fn copy_input(&mut self, target: &mut [u8]) -> Result<(), Failure> {
-            target.copy_from_slice(&self.0);
-            Ok(())
-        }
         fn complete(
             &mut self,
             bytes: &[u8],

@@ -22,7 +22,7 @@ use crate::{
                 MAX_SOURCE_SIDE,
             },
         },
-        pipeline::processor::{Boundary, Processor, ResizeRequest},
+        pipeline::processor::{Boundary, InputBoundary, Processor, ResizeRequest},
     },
 };
 
@@ -332,8 +332,7 @@ impl<'a> JsBoundary<'a> {
     }
 }
 
-impl Boundary for JsBoundary<'_> {
-    type Output = ();
+impl InputBoundary for JsBoundary<'_> {
     fn progress(&mut self) -> Option<&mut dyn crate::prod::pipeline::progress::Callback> {
         self.progress
             .as_mut()
@@ -351,6 +350,30 @@ impl Boundary for JsBoundary<'_> {
     fn supports_sparse_input(&self) -> bool {
         true
     }
+    fn gather_input(
+        &mut self,
+        destination: &mut [u8],
+        column_offsets: &[u8],
+        row_offsets: &[u8],
+        source_len: usize,
+    ) -> Result<(), Failure> {
+        gather_input(
+            destination,
+            column_offsets,
+            row_offsets,
+            self.input,
+            source_len,
+        )
+        .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+    }
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        snapshot_input(destination, self.input, compare)
+            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
+    }
+}
+
+impl Boundary for JsBoundary<'_> {
+    type Output = ();
     fn supports_sparse_output(&self) -> bool {
         true
     }
@@ -381,26 +404,6 @@ impl Boundary for JsBoundary<'_> {
                 ErrorPath::Output,
             )),
         }
-    }
-    fn gather_input(
-        &mut self,
-        destination: &mut [u8],
-        column_offsets: &[u8],
-        row_offsets: &[u8],
-        source_len: usize,
-    ) -> Result<(), Failure> {
-        gather_input(
-            destination,
-            column_offsets,
-            row_offsets,
-            self.input,
-            source_len,
-        )
-        .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
-    }
-    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
-        snapshot_input(destination, self.input, compare)
-            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
     }
     fn complete(&mut self, bytes: &[u8], dimensions: ImageDimensions) -> Result<(), Failure> {
         complete_result(

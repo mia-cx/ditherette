@@ -2,7 +2,7 @@
 
 use super::{
     processor::{dimension, restore_ready, status, take_ready, JsBoundary},
-    quantize::{parse_alpha, parse_matching, read_palette, JsQuantizeBoundary, PALETTE_SLOTS},
+    quantize::{parse_alpha, parse_matching, read_palette, PALETTE_SLOTS},
 };
 use crate::{
     image::contracts::PaletteEntry,
@@ -106,7 +106,7 @@ pub fn private_dither_and_quantize(
                 alpha,
             },
             dither,
-            &mut JsQuantizeBoundary::new(input, result_sink)?,
+            &mut JsBoundary::new(input, result_sink)?,
         )
     })();
     restore_ready(processor);

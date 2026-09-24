@@ -1,9 +1,6 @@
 //! Borrowed, caught quantize boundary sharing the scalar processor's lifecycle.
 
-use super::processor::{
-    copy_input, dimension, gather_input, input_length, restore_ready, snapshot_input, status,
-    take_ready,
-};
+use super::processor::{dimension, restore_ready, status, take_ready, JsBoundary};
 use crate::{
     image::{
         contracts::{PaletteEntry, WarningCode},
@@ -89,68 +86,18 @@ pub fn private_quantize(
                 alpha,
                 matching,
             },
-            &mut JsQuantizeBoundary::new(input, result_sink)?,
+            &mut JsBoundary::new(input, result_sink)?,
         )
     })();
     restore_ready(processor);
     result.map_or_else(status, |_| 0)
 }
 
-pub(super) struct JsQuantizeBoundary<'a> {
-    pub(super) input: &'a Uint8Array,
-    pub(super) result_sink: &'a JsValue,
-    progress: Option<super::progress::JsProgress<'a>>,
-}
-impl<'a> JsQuantizeBoundary<'a> {
-    pub(super) fn new(input: &'a Uint8Array, result_sink: &'a JsValue) -> Result<Self, Failure> {
-        Ok(Self {
-            input,
-            result_sink,
-            progress: super::progress::JsProgress::new(result_sink)?,
-        })
-    }
-}
-impl QuantizeBoundary for JsQuantizeBoundary<'_> {
+/// The shared JS input boundary also publishes indexed results.
+impl QuantizeBoundary for JsBoundary<'_> {
     type Output = ();
-    fn progress(&mut self) -> Option<&mut dyn crate::prod::pipeline::progress::Callback> {
-        self.progress
-            .as_mut()
-            .map(|progress| progress as &mut dyn crate::prod::pipeline::progress::Callback)
-    }
     fn capacity_bytes(&self) -> u64 {
         (std::mem::size_of::<[PaletteEntry; PALETTE_SLOTS]>() + std::mem::size_of::<Self>()) as u64
-    }
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        input_length(self.input)
-            .map(|n| n as usize)
-            .map_err(|_| Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData))
-    }
-    fn copy_input(&mut self, destination: &mut [u8]) -> Result<(), Failure> {
-        copy_input(destination, self.input)
-            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
-    }
-    fn supports_sparse_input(&self) -> bool {
-        true
-    }
-    fn gather_input(
-        &mut self,
-        destination: &mut [u8],
-        column_offsets: &[u8],
-        row_offsets: &[u8],
-        source_len: usize,
-    ) -> Result<(), Failure> {
-        gather_input(
-            destination,
-            column_offsets,
-            row_offsets,
-            self.input,
-            source_len,
-        )
-        .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
-    }
-    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
-        snapshot_input(destination, self.input, compare)
-            .map_err(|_| Failure::new(ErrorCode::WasmMemoryUnavailable, ErrorPath::SourceData))
     }
     fn complete(
         &mut self,

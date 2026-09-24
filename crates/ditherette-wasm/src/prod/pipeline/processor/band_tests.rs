@@ -1,4 +1,4 @@
-use super::{Boundary, Processor, ResizeRequest};
+use super::{Boundary, InputBoundary, Processor, ResizeRequest};
 use crate::{
     image::ImageDimensions,
     prod::{
@@ -37,8 +37,7 @@ impl Callback for Io {
     }
 }
 
-impl Boundary for Io {
-    type Output = Vec<u8>;
+impl InputBoundary for Io {
     fn progress(&mut self) -> Option<&mut dyn Callback> {
         Some(self)
     }
@@ -49,6 +48,10 @@ impl Boundary for Io {
         output.copy_from_slice(&self.input);
         Ok(())
     }
+}
+
+impl Boundary for Io {
+    type Output = Vec<u8>;
     fn complete(&mut self, output: &[u8], _: ImageDimensions) -> Result<Vec<u8>, Failure> {
         Ok(output.to_vec())
     }
@@ -56,15 +59,6 @@ impl Boundary for Io {
 
 impl crate::prod::pipeline::quantize::QuantizeBoundary for Io {
     type Output = Vec<u8>;
-    fn progress(&mut self) -> Option<&mut dyn Callback> {
-        Boundary::progress(self)
-    }
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        Boundary::input_len(self)
-    }
-    fn copy_input(&mut self, output: &mut [u8]) -> Result<(), Failure> {
-        Boundary::copy_input(self, output)
-    }
     fn complete(
         &mut self,
         output: &[u8],

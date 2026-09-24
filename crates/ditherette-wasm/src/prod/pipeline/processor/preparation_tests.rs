@@ -1,4 +1,4 @@
-use super::{Allocator, Boundary, Processor, ResizeRequest};
+use super::{Allocator, Boundary, InputBoundary, Processor, ResizeRequest};
 use crate::image::ImageDimensions;
 use crate::prod::contract::{
     error::ErrorCode,
@@ -41,8 +41,7 @@ impl Io {
         }
     }
 }
-impl Boundary for Io {
-    type Output = Vec<u8>;
+impl InputBoundary for Io {
     fn input_len(&mut self) -> Result<usize, Failure> {
         if self.fail_input_len {
             return Err(Failure::new(ErrorCode::InvalidImage, ErrorPath::SourceData));
@@ -66,9 +65,13 @@ impl Boundary for Io {
         if compare && to == self.pixels {
             return Ok(true);
         }
-        Boundary::copy_input(self, to)?;
+        InputBoundary::copy_input(self, to)?;
         Ok(false)
     }
+}
+
+impl Boundary for Io {
+    type Output = Vec<u8>;
     fn complete(&mut self, bytes: &[u8], _: ImageDimensions) -> Result<Self::Output, Failure> {
         if self.fail {
             return Err(Failure::new(
@@ -81,15 +84,6 @@ impl Boundary for Io {
 }
 impl QuantizeBoundary for Io {
     type Output = Vec<u8>;
-    fn input_len(&mut self) -> Result<usize, Failure> {
-        Boundary::input_len(self)
-    }
-    fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
-        Boundary::copy_input(self, to)
-    }
-    fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
-        Boundary::snapshot_input(self, to, compare)
-    }
     fn complete(
         &mut self,
         bytes: &[u8],
@@ -627,17 +621,19 @@ fn actual_cross_method_calls_hit_materialized_stages_for_every_family() {
 fn indexed_hits_own_complete_metadata_after_matcher_eviction_and_output_mutation() {
     use crate::image::contracts::{NormalizedPalette, ProcessWarning};
     struct MetadataIo(Io);
-    impl QuantizeBoundary for MetadataIo {
-        type Output = (Vec<u8>, NormalizedPalette, Vec<ProcessWarning>);
+    impl InputBoundary for MetadataIo {
         fn input_len(&mut self) -> Result<usize, Failure> {
-            Boundary::input_len(&mut self.0)
+            InputBoundary::input_len(&mut self.0)
         }
         fn copy_input(&mut self, to: &mut [u8]) -> Result<(), Failure> {
-            Boundary::copy_input(&mut self.0, to)
+            InputBoundary::copy_input(&mut self.0, to)
         }
         fn snapshot_input(&mut self, to: &mut [u8], compare: bool) -> Result<bool, Failure> {
-            Boundary::snapshot_input(&mut self.0, to, compare)
+            InputBoundary::snapshot_input(&mut self.0, to, compare)
         }
+    }
+    impl QuantizeBoundary for MetadataIo {
+        type Output = (Vec<u8>, NormalizedPalette, Vec<ProcessWarning>);
         fn complete(
             &mut self,
             bytes: &[u8],
