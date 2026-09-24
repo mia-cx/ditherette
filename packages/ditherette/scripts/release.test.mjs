@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
 	requirePublication,
+	releaseChannel,
 	sizeReview,
 	validateFiles,
 	validateManifest,
@@ -10,12 +11,22 @@ import {
 } from './release-contract.mjs';
 
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url)));
-test('release identity is unscoped browser ESM and exact stable 0.x tags', () => {
+test('release identity is unscoped browser ESM with separate ordinary and RC tags', () => {
 	validateManifest(manifest);
 	validateReleaseTag('0.1.0', 'v0.1.0');
+	validateReleaseTag('0.1.0-rc.0', 'v0.1.0-rc.0');
+	assert.equal(releaseChannel('0.1.0'), 'latest');
+	assert.equal(releaseChannel('0.1.0-rc.12'), 'rc');
+	validateManifest({
+		...manifest,
+		version: '0.1.0',
+		publishConfig: { ...manifest.publishConfig, tag: 'latest' }
+	});
 	for (const [version, tag] of [
 		['0.1.0', 'v0.1.1'],
 		['0.1.0-beta.1', 'v0.1.0-beta.1'],
+		['0.1.0-rc.01', 'v0.1.0-rc.01'],
+		['0.1.0-rc.0+local', 'v0.1.0-rc.0+local'],
 		['1.0.0', 'v1.0.0'],
 		['0.01.0', 'v0.01.0'],
 		['0.1.0', 'refs/tags/v0.1.0']
@@ -32,6 +43,13 @@ test('release identity is unscoped browser ESM and exact stable 0.x tags', () =>
 		{ publishConfig: { ...manifest.publishConfig, tag: 'beta' } }
 	])
 		assert.throws(() => validateManifest({ ...manifest, ...change }));
+	assert.throws(() =>
+		validateManifest({
+			...manifest,
+			version: '0.1.0-rc.0',
+			publishConfig: { ...manifest.publishConfig, tag: 'latest' }
+		})
+	);
 });
 
 test('packed asset validation preserves both builds and excludes source/developer payload', () => {
@@ -102,6 +120,10 @@ test('ten-percent size boundary and unresolved publication holds fail closed', (
 		GITHUB_SHA: 'source'
 	};
 	requirePublication(policy, [], environment, '0.1.0', 'source');
+	assert.throws(
+		() => requirePublication(policy, [], environment, '0.1.0-rc.0', 'source'),
+		/separate qualification/
+	);
 	assert.throws(() =>
 		requirePublication(
 			{ ...policy, holds: ['pending approval'] },

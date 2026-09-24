@@ -1,6 +1,6 @@
 {
 	"name": "ditherette",
-	"version": "0.1.0",
+	"version": "0.1.0-rc.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/mia-cx/ditherette.git",
@@ -10,7 +10,7 @@
 	"bugs": "https://github.com/mia-cx/ditherette/issues",
 	"publishConfig": {
 		"access": "public",
-		"tag": "latest",
+		"tag": "rc",
 		"provenance": true
 	},
 	"description": "Browser image processing with scalar and optional threaded WebAssembly.",

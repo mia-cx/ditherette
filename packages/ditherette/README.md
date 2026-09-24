@@ -1,9 +1,11 @@
 # ditherette
 
 An MIT-licensed browser ESM image processor with scalar execution and optional threaded acceleration.
-The `0.x` version signals beta status; releases use ordinary versions such as `0.1.0`, without a prerelease suffix.
-For browser applications and bundlers, depend on `ditherette` at `^0.1.0`. Node and CommonJS are not supported consumer targets.
-Publication remains held while the recorded release gates await acceptance.
+The `0.x` version signals beta status. Ordinary releases use versions such as `0.1.0`. Explicit release candidates use `-rc.N` and the npm `rc` tag, leaving `latest` unchanged.
+
+The first candidate is `0.1.0-rc.0`. Install it with `npm install ditherette@rc`. Scalar processing is the default. Optional threads remain experimental, including the retained WebKit threaded-cleanup limitation. RC acceptance does not clear the recorded stable-release holds.
+For browser applications and bundlers, depend on `ditherette` at `^0.1.0` after the ordinary release. Node and CommonJS are not supported consumer targets.
+Ordinary publication remains held while the recorded release gates await acceptance.
 
 ```ts
 import { createDitherette, DitheretteError } from 'ditherette';

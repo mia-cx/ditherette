@@ -59,6 +59,17 @@ test('only changed versions release their targets, ordinary pushes and manifest-
 		});
 	assert.equal(versionIncreased('0.1.0', '0.1.0'), false);
 	assert.equal(versionIncreased('0.1.0', '0.2.0'), true);
+	assert.equal(versionIncreased('0.9.0', '1.0.0'), true);
+	assert.equal(versionIncreased('0.1.0-rc.0', '0.1.0'), true);
+	assert.equal(versionIncreased('0.1.0-rc.2', '0.2.0'), true);
+	assert.throws(() => versionIncreased('0.1.0', '0.1.0-rc.0'));
+	assert.deepEqual(
+		releasePlan([merged], context, {
+			npm: ['0.1.0', '0.1.0-rc.0'],
+			web: ['0.0.1', '0.0.2']
+		}),
+		{ release: false, npm: false, web: false }
+	);
 	assert.throws(() => versionIncreased('0.2.0', '0.1.0'));
 	assert.throws(() => versionIncreased('0.1.0', '0.1.1-beta.1'));
 	requireCurrentVersion('0.1.0', '0.1.0');

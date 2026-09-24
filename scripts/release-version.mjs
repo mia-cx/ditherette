@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateReleaseTag } from '../packages/ditherette/scripts/release-contract.mjs';
+import {
+	releaseChannel,
+	validateReleaseTag
+} from '../packages/ditherette/scripts/release-contract.mjs';
 
 /** Update only the public crate entry; unrelated lockfile versions remain untouched. */
 export function replaceCrateVersion(source, version, lockfile = false) {
@@ -14,8 +17,16 @@ export function replaceCrateVersion(source, version, lockfile = false) {
 	return source.replace(pattern, `$1${version}$2`);
 }
 
-export async function synchronizeCrateVersion(root) {
-	const { version } = JSON.parse(await readFile(resolve(root, 'packages/ditherette/package.json')));
+/** Keep the npm channel and Rust versions aligned after Changesets versions the package. */
+export async function synchronizeReleaseVersion(root) {
+	const manifestPath = resolve(root, 'packages/ditherette/package.json');
+	const manifest = JSON.parse(await readFile(manifestPath));
+	const { version } = manifest;
+	const tag = releaseChannel(version);
+	if (manifest.publishConfig.tag !== tag) {
+		manifest.publishConfig.tag = tag;
+		await writeFile(manifestPath, `${JSON.stringify(manifest, null, '\t')}\n`);
+	}
 	for (const [path, lockfile] of [
 		['crates/ditherette-wasm/Cargo.toml', false],
 		['crates/ditherette-wasm/Cargo.lock', true],
@@ -29,5 +40,5 @@ export async function synchronizeCrateVersion(root) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	await synchronizeCrateVersion(process.cwd());
+	await synchronizeReleaseVersion(process.cwd());
 }

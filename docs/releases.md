@@ -20,6 +20,12 @@ Release planning runs for every push without a shared queue. Only release-PR upd
 
 No initial changeset accompanies this automation. Merging it does not initiate a release.
 
+## Release candidates
+
+The first npm candidate is `0.1.0-rc.0`, published only under `rc`. It does not change the website version or deploy the website. The stable Changesets workflow refuses automatic publication and deployment while the npm version is an RC. Promotion to the corresponding ordinary version is supported.
+
+The RC scope is scalar processing by default, with optional threads experimental. The retained WebKit threaded-cleanup limitation remains documented. Stable release holds, provenance requirements, archive verification, and the existing size-growth gate remain intact. Candidate preparation does not authorize publication without a separately qualified publication path.
+
 ## Reruns
 
 Rerun the original failed workflow. Each release checks that main still has the same version before publication or deployment. A superseded version fails instead of moving production backward. npm reruns skip publication only when registry integrity matches the exact tested archive; mismatches and registry errors fail.
