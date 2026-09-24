@@ -391,6 +391,54 @@ impl<'a> Call<'a> {
         peak: &mut u64,
         allocator: &mut A,
     ) -> Result<Self, Failure> {
+        Self::new_kind::<false, A>(
+            store,
+            palette,
+            resize,
+            lengths,
+            diffusion_len,
+            overhead,
+            limit,
+            peak,
+            allocator,
+        )
+    }
+
+    /// Shares all ownership rules while omitting unused palette/filter construction code.
+    /// Only scalar, direct-output sparse nearest calls enter this specialization.
+    pub(super) fn sparse_nearest<A: Allocator>(
+        store: &'a mut Store,
+        resize: ResizePreparation,
+        lengths: [usize; 4],
+        overhead: u64,
+        limit: u64,
+        peak: &mut u64,
+        allocator: &mut A,
+    ) -> Result<Self, Failure> {
+        Self::new_kind::<true, A>(
+            store,
+            None,
+            Some(resize),
+            lengths,
+            0,
+            overhead,
+            limit,
+            peak,
+            allocator,
+        )
+    }
+
+    fn new_kind<const NEAREST: bool, A: Allocator>(
+        store: &'a mut Store,
+        palette: Option<QuantizeRequest<'_>>,
+        resize: Option<ResizePreparation>,
+        lengths: [usize; 4],
+        diffusion_len: usize,
+        overhead: u64,
+        limit: u64,
+        peak: &mut u64,
+        allocator: &mut A,
+    ) -> Result<Self, Failure> {
         let mut call = Self {
             palette_hit: false,
             resize_hit: false,
@@ -405,7 +453,7 @@ impl<'a> Call<'a> {
             limit,
             overhead,
         };
-        call.prepare(palette, resize, lengths, diffusion_len, peak, allocator)?;
+        call.prepare_kind::<NEAREST, A>(palette, resize, lengths, diffusion_len, peak, allocator)?;
         call.source_ready = true;
         Ok(call)
     }
@@ -501,6 +549,20 @@ impl<'a> Call<'a> {
         peak: &mut u64,
         allocator: &mut A,
     ) -> Result<(), Failure> {
+        self.prepare_kind::<false, A>(palette, resize, lengths, diffusion_len, peak, allocator)
+    }
+
+    fn prepare_kind<const NEAREST: bool, A: Allocator>(
+        &mut self,
+        palette: Option<QuantizeRequest<'_>>,
+        resize: Option<ResizePreparation>,
+        lengths: [usize; 4],
+        diffusion_len: usize,
+        peak: &mut u64,
+        allocator: &mut A,
+    ) -> Result<(), Failure> {
+        let palette = if NEAREST { None } else { palette };
+        let diffusion_len = if NEAREST { 0 } else { diffusion_len };
         let call = self;
         if call.scratch.buffers[0].len() != lengths[0] {
             call.scratch.source = None;
@@ -542,12 +604,16 @@ impl<'a> Call<'a> {
             .unwrap_or(0);
         let resize_required = resize
             .map(|request| {
-                PreparedResize::required_bytes(
-                    request.source,
-                    ImageDimensions::new(request.output.width, request.output.height)
-                        .expect("validated dimensions"),
-                    request.output.resize,
-                )
+                let output = ImageDimensions::new(request.output.width, request.output.height)
+                    .expect("validated dimensions");
+                (if NEAREST {
+                    Ok(PreparedResize::required_nearest_bytes(
+                        request.source,
+                        output,
+                    ))
+                } else {
+                    PreparedResize::required_bytes(request.source, output, request.output.resize)
+                })
                 .map(|bytes| bytes + size_of::<PreparedResize>() as u64)
             })
             .transpose()?
@@ -636,13 +702,28 @@ impl<'a> Call<'a> {
             } else {
                 let mut record = CapacityBudget::new(budget).vector::<PreparedResize>(1)?;
                 let record_bytes = (record.capacity() * size_of::<PreparedResize>()) as u64;
-                record.push(PreparedResize::new(
-                    request.source,
-                    ImageDimensions::new(request.output.width, request.output.height)
-                        .expect("validated dimensions"),
-                    request.output.resize,
-                    budget - record_bytes,
-                )?);
+                let output = ImageDimensions::new(request.output.width, request.output.height)
+                    .expect("validated dimensions");
+                record.push(if NEAREST {
+                    let crate::prod::contract::request::ResizePolicy::Nearest { anchor } =
+                        request.output.resize
+                    else {
+                        unreachable!("sparse nearest preparation")
+                    };
+                    PreparedResize::new_nearest(
+                        request.source,
+                        output,
+                        anchor,
+                        budget - record_bytes,
+                    )?
+                } else {
+                    PreparedResize::new(
+                        request.source,
+                        output,
+                        request.output.resize,
+                        budget - record_bytes,
+                    )?
+                });
                 call.resize = Some(Entry {
                     key: resize_key.unwrap(),
                     used: 0,
@@ -660,12 +741,14 @@ impl<'a> Call<'a> {
                 request.output.resize,
                 super::execution::worker_budget(),
             );
-            record[0].select_bands(
-                output,
-                call.store
-                    .row_policy(super::execution::ExecutionStage::Resize, measured),
-                budget - record_bytes,
-            )?;
+            let policy = call
+                .store
+                .row_policy(super::execution::ExecutionStage::Resize, measured);
+            if NEAREST {
+                record[0].select_nearest_bands(output, policy, budget - record_bytes)?;
+            } else {
+                record[0].select_bands(output, policy, budget - record_bytes)?;
+            }
         }
         let owned = overhead
             + call.store.capacity()
@@ -984,6 +1067,123 @@ mod tests {
     use crate::prod::contract::request::{Anchor, ResizePolicy};
     use crate::prod::pipeline::processor::SystemAllocator;
     use crate::prod::pipeline::stages::Metadata;
+
+    #[test]
+    fn sparse_nearest_specialization_preserves_preparation_ownership_and_offsets() {
+        let anchors = [
+            Anchor::TopLeft,
+            Anchor::Top,
+            Anchor::TopRight,
+            Anchor::Left,
+            Anchor::Center,
+            Anchor::Right,
+            Anchor::BottomLeft,
+            Anchor::Bottom,
+            Anchor::BottomRight,
+        ];
+        let source = ImageDimensions::new(64, 48).unwrap();
+        for (width, height) in [(1, 1), (4, 3), (7, 5), (16, 12), (32, 24), (96, 72)] {
+            let dimensions = ImageDimensions::new(width, height).unwrap();
+            let offsets = super::super::resize::sparse_nearest_offset_bytes(dimensions);
+            let overhead = size_of::<Store>() as u64 + Call::record_bytes();
+            let minimum = overhead
+                + offsets as u64
+                + size_of::<PreparedResize>() as u64
+                + PreparedResize::required_nearest_bytes(source, dimensions);
+            for anchor in anchors {
+                let request = ResizePreparation {
+                    source,
+                    output: Output {
+                        width,
+                        height,
+                        resize: ResizePolicy::Nearest { anchor },
+                    },
+                };
+                for limit in [minimum - 1, minimum, minimum + 16384] {
+                    let mut stores = [Store::default(), Store::default()];
+                    let band = super::super::execution::RowBandPolicy {
+                        height: 2,
+                        workers: crate::prod::tiling::WorkerBudget::new(1),
+                        active_workers: 1,
+                    };
+                    for (success, policy) in [
+                        (false, None),
+                        (true, Some(band)),
+                        (true, Some(band)),
+                        (false, None),
+                        (true, None),
+                    ] {
+                        let results = stores
+                            .iter_mut()
+                            .enumerate()
+                            .map(|(index, store)| {
+                                store.execution.resize = policy;
+                                store.execution_overrides =
+                                    super::super::execution::ExecutionStage::Resize.mask();
+                                let mut bytes = Vec::new();
+                                let mut peak = 0;
+                                let call = if index == 0 {
+                                    Call::new(
+                                        store,
+                                        None,
+                                        Some(request),
+                                        [0, 0, offsets, 0],
+                                        0,
+                                        overhead,
+                                        limit,
+                                        &mut peak,
+                                        &mut SystemAllocator,
+                                    )
+                                } else {
+                                    Call::sparse_nearest(
+                                        store,
+                                        request,
+                                        [0, 0, offsets, 0],
+                                        overhead,
+                                        limit,
+                                        &mut peak,
+                                        &mut SystemAllocator,
+                                    )
+                                };
+                                let result = call.and_then(|mut call| {
+                                    let (_, plan, scratch) = call.parts();
+                                    let plan = plan.unwrap();
+                                    if policy.is_none() || limit == minimum {
+                                        assert_eq!(plan.scratch_capacity_bytes(), 0);
+                                    } else if limit > minimum {
+                                        assert!(plan.scratch_capacity_bytes() > 0);
+                                    }
+                                    let (columns, rows) =
+                                        plan.write_nearest_source_offsets(&mut scratch.buffers[2]);
+                                    bytes.extend_from_slice(columns);
+                                    bytes.extend_from_slice(rows);
+                                    call.finish(if success { Ok(()) } else { Err(memory_limit()) })
+                                });
+                                (result, bytes, peak)
+                            })
+                            .collect::<Vec<_>>();
+                        assert_eq!(results[0], results[1]);
+                        assert_eq!(stores[0].stats(), stores[1].stats());
+                        assert_eq!(stores[0].scratch.source, stores[1].scratch.source);
+                        assert_eq!(
+                            stores[0]
+                                .entries
+                                .iter()
+                                .flatten()
+                                .map(|entry| entry.key)
+                                .collect::<Vec<_>>(),
+                            stores[1]
+                                .entries
+                                .iter()
+                                .flatten()
+                                .map(|entry| entry.key)
+                                .collect::<Vec<_>>()
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     fn image_call(store: &mut Store, length: usize, limit: u64) -> Call<'_> {
         Call::new(
