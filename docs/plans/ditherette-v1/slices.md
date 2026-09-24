@@ -2,7 +2,7 @@
 
 Status: approved on 2026-09-07. [Read the parent PRD and execution contract](README.md).
 
-All slices are AFK for code preparation. S44 and S45 produce held PRs; their operational gates remain unsatisfied until Mia accepts the rollout.
+All slices are AFK for code preparation. Mia now authorizes landing S44 and S45 after review and checks pass. Their original preparation gates below remain historical; deployment and publication remain separate.
 
 Dependencies below are code prerequisites. They unblock when validated commits are in the dependent branch, without merging. Original dependencies stay documented even after native GitHub blocking edges are cleared.
 

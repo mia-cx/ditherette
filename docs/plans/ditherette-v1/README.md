@@ -24,7 +24,7 @@ Keep landed production kernels and shared helpers. Complete and freeze readable 
 Only missing implementations start as literal copies in mirrored `prod/` modules. Improve production using measured evidence.
 Deliver the remaining work as unmerged stacked and parallel PRs.
 
-Mia authorized end-to-end implementation after reviewing this PRD and its slices. Operational holds below remain in force.
+Mia authorized end-to-end implementation after reviewing this PRD and its slices. She now authorizes landing the S44/S45 website stack after review and checks pass. Deployment and package publication remain separate; the original operational holds below record the preparation policy.
 
 ## User stories
 

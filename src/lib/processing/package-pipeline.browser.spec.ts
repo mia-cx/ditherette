@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeBlob } from './image-decode';
 import { encodeIndexedPng } from './png';
 import { processedToImageData } from './render';
@@ -11,6 +11,10 @@ import {
 import type { ColorSpaceId, DitherId, ProcessedImage, ProcessingSettings } from './types';
 import { ProcessorWorkerPipeline } from './worker-pipeline';
 
+beforeEach(() => {
+	vi.stubEnv('DEV', false);
+	vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'false');
+});
 afterEach(() => vi.unstubAllEnvs());
 
 const uploaded: ProcessedImage = {
@@ -76,8 +80,6 @@ const settings: ProcessingSettings = {
 
 describe('installed package website integration', () => {
 	it('preserves the website byte-field strength at a palette decision boundary', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(
 			{
@@ -115,8 +117,6 @@ describe('installed package website integration', () => {
 	});
 
 	it('accepts every website color and dither combination through the public package', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(
 			{
@@ -176,8 +176,6 @@ describe('installed package website integration', () => {
 	});
 
 	it('decodes an upload, packs the crop, processes settings, and renders and exports persisted indices', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
 		const blob = encodeIndexedPng(uploaded);
 		const decoded = await decodeBlob(blob);
 		const sourceRecord = validateSourceImageRecord({
@@ -245,8 +243,6 @@ describe('installed package website integration', () => {
 	});
 
 	it('uses the packed crop boundary for filtering and exposes fractional crop refusal', async () => {
-		vi.stubEnv('DEV', true);
-		vi.stubEnv('VITE_DITHERETTE_WASM_PROCESS', 'true');
 		const decoded = await decodeBlob(encodeIndexedPng(uploaded));
 		const pipeline = new ProcessorWorkerPipeline();
 		pipeline.handle(

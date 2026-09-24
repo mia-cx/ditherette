@@ -200,7 +200,7 @@ export class ProcessorWorkerPipeline {
 	): Promise<WorkerResponse | undefined> {
 		if (request.type !== 'process') return this.handle(request, progress);
 		if (this.#canceledIds.has(request.id)) return undefined;
-		if (import.meta.env.DEV && import.meta.env.VITE_DITHERETTE_WASM_PROCESS === 'true') {
+		if (!import.meta.env.DEV || import.meta.env.VITE_DITHERETTE_WASM_PROCESS !== 'false') {
 			if (request.typeScriptFallback) {
 				const source = this.sourceFor(request.sourceId);
 				if (!faithfulTypeScriptFallback(source, request.palette, request.settings))
@@ -334,11 +334,15 @@ export class ProcessorWorkerPipeline {
 		request: Extract<WorkerRequest, { type: 'process' }>,
 		progress: ProgressSink
 	): Promise<WorkerResponse | undefined> {
+		const startedAt = performance.now();
+		const timings = timingSink();
 		const { id, sourceId, settings, palette, settingsHash } = request;
 		const source = this.sourceFor(sourceId);
 		progress('Sizing output', PROGRESS.queued);
 		const size = clampOutputSize(settings.output.width, settings.output.height);
 		const mapped = packageProcessRequest(source, palette, settings, size);
+		timings.mark('package request adapter', startedAt);
+		const initializeStart = performance.now();
 		this.#package ??= initializePackageProcessor();
 		let processor;
 		try {
@@ -349,19 +353,23 @@ export class ProcessorWorkerPipeline {
 			throw error;
 		}
 		if (this.#canceledIds.has(id)) return undefined;
-		const result = packageQuantizeResult(
-			processor.process({
-				...mapped.request,
-				onProgress({ stage, completed, total }) {
-					progress(stage, stage === 'complete' ? 1 : total ? (completed ?? 0) / total : 0, {
-						completed,
-						total
-					});
-				}
-			}),
-			palette,
-			mapped.warnings
-		);
+		timings.mark('package initialization wait', initializeStart);
+		const processStart = performance.now();
+		const output = processor.process({
+			...mapped.request,
+			onProgress({ stage, completed, total }) {
+				progress(stage, stage === 'complete' ? 1 : total ? (completed ?? 0) / total : 0, {
+					completed,
+					total
+				});
+			}
+		});
+		timings.mark('package process', processStart);
+		const adapterStart = performance.now();
+		const result = packageQuantizeResult(output, palette, mapped.warnings);
+		const warnings = size.warning ? [size.warning, ...result.warnings] : result.warnings;
+		timings.mark('package output adapter', adapterStart);
+		const completedAt = performance.now();
 		return {
 			id,
 			type: 'complete',
@@ -369,9 +377,24 @@ export class ProcessorWorkerPipeline {
 				...result,
 				width: size.width,
 				height: size.height,
-				warnings: size.warning ? [size.warning, ...result.warnings] : result.warnings,
+				warnings,
 				settingsHash,
 				updatedAt: Date.now()
+			},
+			metrics: {
+				id,
+				settingsHash,
+				sourceId,
+				scopeKey: `package|${pipelineBranchKey({ sourceId, width: size.width, height: size.height, resize: settings.output.resize, crop: settings.output.crop, gradeKey: IDENTITY_GRADE_KEY })}`,
+				startedAt,
+				completedAt,
+				totalMs: completedAt - startedAt,
+				timings: timings.values,
+				outputPixels: size.width * size.height,
+				colorSpace: settings.colorSpace,
+				dither: settings.dither.algorithm,
+				resize: settings.output.resize,
+				warnings
 			}
 		};
 	}

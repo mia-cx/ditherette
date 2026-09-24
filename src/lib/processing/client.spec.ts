@@ -7,14 +7,33 @@ import {
 } from './client';
 import {
 	outputSettings,
+	clearProcessingMetrics,
+	currentProcessingMetrics,
+	processingMetricsHistory,
 	processedImage,
 	processingError,
 	processingProgress,
 	sourceImageData
 } from '$lib/stores/app';
 import type { ProcessedImage, WorkerRequest } from './types';
+import { ProcessorWorkerPipeline } from './worker-pipeline';
 
-// The browser transport is the boundary. Stores, scheduling, validation, and persistence calls stay real.
+vi.mock('./db', () => ({ saveProcessedImage: vi.fn(async () => undefined) }));
+
+vi.mock('./package-fallback', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./package-fallback')>()),
+	initializePackageProcessor: vi.fn(async () => ({
+		process: () => ({
+			width: 1,
+			height: 1,
+			indices: new Uint8Array([0]),
+			palette: { rgba: new Uint8Array([0, 0, 0, 255]) },
+			warnings: []
+		})
+	}))
+}));
+
+// Browser transport and persistence are mocked. Stores, scheduling, and validation stay real.
 class ControlledWorker {
 	static instances: ControlledWorker[] = [];
 	onmessage?: (event: MessageEvent<unknown>) => void;
@@ -57,6 +76,7 @@ beforeEach(() => {
 	processedImage.set(preview());
 	processingError.set(undefined);
 	processingProgress.set(undefined);
+	clearProcessingMetrics();
 	outputSettings.set({ ...outputSettings.get(), width: 1, height: 1 });
 });
 
@@ -67,6 +87,34 @@ afterEach(() => {
 });
 
 describe('website processing scheduling', () => {
+	it('records package worker timings through response validation and client completion', async () => {
+		const pending = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		const pipeline = new ProcessorWorkerPipeline();
+		const load = worker.messages[0];
+		worker.receive(await pipeline.handleAsync(load, () => undefined));
+		const request = worker.messages.at(-1)!;
+		expect(request.type).toBe('process');
+		const response = await pipeline.handleAsync(request, () => undefined);
+		worker.receive(response);
+		await pending;
+		expect(processingError.get()).toBeUndefined();
+		const metrics = currentProcessingMetrics.get();
+		expect(metrics?.settingsHash).toBe(currentSettingsHash());
+		expect(metrics?.outputPixels).toBe(1);
+		expect(metrics?.timings.map(({ name }) => name)).toEqual(
+			expect.arrayContaining([
+				'package request adapter',
+				'package initialization wait',
+				'package process',
+				'package output adapter'
+			])
+		);
+		expect(metrics?.cache).toBeUndefined();
+		expect(metrics?.memory).toBeUndefined();
+		expect(processingMetricsHistory.get()).toHaveLength(1);
+	});
 	it('retains initialization fallback across worker replacement but ignores stale activation', async () => {
 		const first = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
