@@ -450,14 +450,24 @@ fn resize_x_then_y_blocks_into<const CHANNELS: usize, const RAW_SUMS: bool>(
         );
         prepared_support = Some(support.clone());
         // Fixed Lanczos3 uses raw sums; scale-aware filters retain normalized scratch.
-        write_x_then_y_rows_from_scratch::<CHANNELS, RAW_SUMS>(
-            output_block,
-            output_row_byte_len,
-            y_taps,
-            scratch,
-            support.start,
-            RAW_SUMS.then_some((&*x_weights, &*y_weights)),
-        );
+        if RAW_SUMS {
+            write_x_then_y_rows_from_scratch::<CHANNELS, RAW_SUMS>(
+                output_block,
+                output_row_byte_len,
+                y_taps,
+                scratch,
+                support.start,
+                Some((&*x_weights, &*y_weights)),
+            );
+        } else {
+            write_x_then_y_scale_aware_tiles_from_scratch::<CHANNELS>(
+                output_block,
+                output_row_byte_len,
+                y_taps,
+                scratch,
+                support.start,
+            );
+        }
         completed += (support_rows + y_taps.len()) as u32;
         progress(completed)?;
     }
@@ -549,14 +559,24 @@ fn resize_x_then_y_rows_into<const CHANNELS: usize, const RAW_SUMS: bool>(
         support.clone(),
         None,
     );
-    write_x_then_y_rows_from_scratch::<CHANNELS, RAW_SUMS>(
-        output,
-        output_row_byte_len,
-        y_taps_by_output,
-        scratch,
-        support.start,
-        weights,
-    );
+    if RAW_SUMS {
+        write_x_then_y_rows_from_scratch::<CHANNELS, RAW_SUMS>(
+            output,
+            output_row_byte_len,
+            y_taps_by_output,
+            scratch,
+            support.start,
+            weights,
+        );
+    } else {
+        write_x_then_y_scale_aware_tiles_from_scratch::<CHANNELS>(
+            output,
+            output_row_byte_len,
+            y_taps_by_output,
+            scratch,
+            support.start,
+        );
+    }
 }
 
 /// Retain horizontally filtered rows shared with the previous output block and
@@ -637,6 +657,55 @@ fn write_x_then_y_rows_from_scratch<const CHANNELS: usize, const RAW_SUMS: bool>
                 x_weight,
                 y_weight,
             );
+        }
+    }
+}
+
+fn write_x_then_y_scale_aware_tiles_from_scratch<const CHANNELS: usize>(
+    output: &mut [u8],
+    output_row_byte_len: usize,
+    y_taps_by_output: &[Vec<AxisTap>],
+    scratch: &[f64],
+    first_source_y: usize,
+) {
+    const X_TILE: usize = 4;
+    let output_width = output_row_byte_len / rgba8::RGBA8_CHANNELS;
+    let scratch_row_len = output_width * CHANNELS;
+
+    for (output_row, y_taps) in output
+        .chunks_exact_mut(output_row_byte_len)
+        .zip(y_taps_by_output)
+    {
+        for tile_x in (0..output_width).step_by(X_TILE) {
+            let tile_width = (output_width - tile_x).min(X_TILE);
+            let mut accumulated = [[0.0; CHANNELS]; X_TILE];
+            let mut total_weight = 0.0;
+
+            for y_tap in y_taps {
+                let scratch_start =
+                    (y_tap.index - first_source_y) * scratch_row_len + tile_x * CHANNELS;
+                let scratch_tile = &scratch[scratch_start..scratch_start + tile_width * CHANNELS];
+
+                total_weight += y_tap.weight;
+                for (tile_output, scratch_pixel) in accumulated[..tile_width]
+                    .iter_mut()
+                    .zip(scratch_tile.chunks_exact(CHANNELS))
+                {
+                    for channel in 0..CHANNELS {
+                        tile_output[channel] += scratch_pixel[channel] * y_tap.weight;
+                    }
+                }
+            }
+
+            for (tile_offset, tile_output) in accumulated[..tile_width].iter().enumerate() {
+                let output_x = tile_x + tile_offset;
+                let output_start = output_x * rgba8::RGBA8_CHANNELS;
+                write_accumulated_pixel(
+                    &mut output_row[output_start..output_start + rgba8::RGBA8_CHANNELS],
+                    *tile_output,
+                    total_weight,
+                );
+            }
         }
     }
 }
@@ -1042,6 +1111,77 @@ mod tests {
     fn six_tap_raw_sum_preserves_accumulation_order() {
         assert_six_tap_raw_sum_matches_loop::<3>();
         assert_six_tap_raw_sum_matches_loop::<4>();
+    }
+
+    fn assert_vertical_tiles_match_per_pixel_tail<const CHANNELS: usize, const RAW_SUMS: bool>() {
+        let width = 7;
+        let first_source_y = 5;
+        let scratch = (0..3 * width * CHANNELS)
+            .map(|i| ((i * 47 + 19) % 257) as f64 / 3.0)
+            .collect::<Vec<_>>();
+        let y_taps = vec![
+            AxisTap {
+                index: 5,
+                weight: -0.125,
+            },
+            AxisTap {
+                index: 6,
+                weight: 0.75,
+            },
+            AxisTap {
+                index: 7,
+                weight: 0.375,
+            },
+        ];
+        let x_weights = (0..width)
+            .map(|x| 0.875 + x as f64 / 32.0)
+            .collect::<Vec<_>>();
+        let y_weights = [y_taps.iter().map(|tap| tap.weight).sum::<f64>()];
+        let weights = RAW_SUMS.then_some((&*x_weights, &y_weights[..]));
+        let mut expected = vec![0; width * rgba8::RGBA8_CHANNELS];
+        let mut actual = expected.clone();
+
+        for output_x in 0..width {
+            let output_start = output_x * rgba8::RGBA8_CHANNELS;
+            write_vertical_scratch_pixel_with_base::<CHANNELS, RAW_SUMS>(
+                &mut expected[output_start..output_start + rgba8::RGBA8_CHANNELS],
+                &scratch,
+                width * CHANNELS,
+                output_x * CHANNELS,
+                &y_taps,
+                first_source_y,
+                if RAW_SUMS { x_weights[output_x] } else { 1.0 },
+                if RAW_SUMS { y_weights[0] } else { 0.0 },
+            );
+        }
+        if RAW_SUMS {
+            write_x_then_y_rows_from_scratch::<CHANNELS, RAW_SUMS>(
+                &mut actual,
+                width * rgba8::RGBA8_CHANNELS,
+                &[y_taps],
+                &scratch,
+                first_source_y,
+                weights,
+            );
+        } else {
+            write_x_then_y_scale_aware_tiles_from_scratch::<CHANNELS>(
+                &mut actual,
+                width * rgba8::RGBA8_CHANNELS,
+                &[y_taps],
+                &scratch,
+                first_source_y,
+            );
+        }
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn vertical_tiles_preserve_fixed_and_scale_aware_tail_bytes() {
+        assert_vertical_tiles_match_per_pixel_tail::<3, false>();
+        assert_vertical_tiles_match_per_pixel_tail::<4, false>();
+        assert_vertical_tiles_match_per_pixel_tail::<3, true>();
+        assert_vertical_tiles_match_per_pixel_tail::<4, true>();
     }
 
     struct RadiusThree;
