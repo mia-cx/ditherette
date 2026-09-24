@@ -2,11 +2,15 @@
 //!
 //! Area resize treats each output pixel as a rectangle in source pixel space and
 //! computes the coverage-weighted average of every source pixel it overlaps. It
-//! mirrors the spec's direct evaluation order so mip levels stay byte-identical.
+//! mirrors the spec's direct evaluation order so mip levels stay byte-identical;
+//! per-axis overlaps are planned once instead of per output pixel.
 
 use crate::{
     image::{ImageFormat, ImageView, ImageViewMut},
-    prod::resize::scalar::trilinear::exact::common::sample::ResizeSample,
+    prod::resize::scalar::trilinear::exact::common::{
+        sample::ResizeSample,
+        taps::{AxisPlan, AxisTap},
+    },
 };
 
 /// Resizes `source` into `output` using exact source-area coverage averaging.
@@ -15,13 +19,46 @@ where
     F: ImageFormat,
     F::Storage: ResizeSample,
 {
+    let (source_dimensions, output_dimensions) = (source.dimensions(), output.dimensions());
+    let mut x = AxisPlan::default();
+    let mut y = AxisPlan::default();
+    plan_area_axis(&mut x, source_dimensions.width(), output_dimensions.width());
+    plan_area_axis(
+        &mut y,
+        source_dimensions.height(),
+        output_dimensions.height(),
+    );
     let mut accumulated = vec![0.0; F::CHANNEL_COUNT];
-    resize_area_with_scratch_into(source, output, &mut accumulated);
+    resize_area_planned_into(source, output, &x, &y, &mut accumulated);
 }
 
-pub fn resize_area_with_scratch_into<F>(
+/// Nonzero source overlaps of one output interval, clamped and in source order.
+pub fn area_taps(source_len: u32, output_len: u32, output: u32) -> impl Iterator<Item = AxisTap> {
+    let scale = f64::from(source_len) / f64::from(output_len);
+    let start = f64::from(output) * scale;
+    let end = f64::from(output + 1) * scale;
+    (start.floor() as i64..end.ceil() as i64).filter_map(move |source| {
+        let overlap = interval_overlap(start, end, source as f64, source as f64 + 1.0);
+        (overlap != 0.0).then(|| AxisTap {
+            index: source.clamp(0, i64::from(source_len) - 1) as u32,
+            weight: overlap,
+        })
+    })
+}
+
+/// Fill `plan` with every output coordinate's area overlaps for one axis.
+pub fn plan_area_axis(plan: &mut AxisPlan, source_len: u32, output_len: u32) {
+    plan.fill(output_len, |output| {
+        area_taps(source_len, output_len, output)
+    });
+}
+
+/// Applies planned x/y overlaps: y outer, x inner, weight `x * y / area` as the spec does.
+pub fn resize_area_planned_into<F>(
     source: ImageView<'_, F>,
     mut output: ImageViewMut<'_, F>,
+    x: &AxisPlan,
+    y: &AxisPlan,
     accumulated: &mut [f64],
 ) where
     F: ImageFormat,
@@ -34,51 +71,23 @@ pub fn resize_area_with_scratch_into<F>(
     let output_area = x_scale * y_scale;
 
     for output_y in 0..output_dimensions.height() {
-        let source_y_start = f64::from(output_y) * y_scale;
-        let source_y_end = f64::from(output_y + 1) * y_scale;
+        let y_taps = y.taps(output_y as usize);
         let output_row = output
             .row_mut(output_y)
             .expect("output y from dimensions should stay in bounds");
 
-        for output_x in 0..output_dimensions.width() {
-            let source_x_start = f64::from(output_x) * x_scale;
-            let source_x_end = f64::from(output_x + 1) * x_scale;
-            let output_start = output_x as usize * F::CHANNEL_COUNT;
-            let output_pixel = &mut output_row[output_start..output_start + F::CHANNEL_COUNT];
+        for (output_x, output_pixel) in output_row.chunks_exact_mut(F::CHANNEL_COUNT).enumerate() {
+            let x_taps = x.taps(output_x);
             accumulated.fill(0.0);
 
-            for source_y in source_y_start.floor() as i64..source_y_end.ceil() as i64 {
-                let y_overlap = interval_overlap(
-                    source_y_start,
-                    source_y_end,
-                    source_y as f64,
-                    source_y as f64 + 1.0,
-                );
-                if y_overlap == 0.0 {
-                    continue;
-                }
-
-                let clamped_y =
-                    clamp_i64(source_y, 0, i64::from(source_dimensions.height()) - 1) as u32;
+            for y_tap in y_taps {
                 let source_row = source
-                    .row(clamped_y)
+                    .row(y_tap.index)
                     .expect("clamped source y should stay in bounds");
 
-                for source_x in source_x_start.floor() as i64..source_x_end.ceil() as i64 {
-                    let x_overlap = interval_overlap(
-                        source_x_start,
-                        source_x_end,
-                        source_x as f64,
-                        source_x as f64 + 1.0,
-                    );
-                    if x_overlap == 0.0 {
-                        continue;
-                    }
-
-                    let clamped_x =
-                        clamp_i64(source_x, 0, i64::from(source_dimensions.width()) - 1) as usize;
-                    let weight = x_overlap * y_overlap / output_area;
-                    let source_start = clamped_x * F::CHANNEL_COUNT;
+                for x_tap in x_taps {
+                    let weight = x_tap.weight * y_tap.weight / output_area;
+                    let source_start = x_tap.index as usize * F::CHANNEL_COUNT;
                     let source_pixel = &source_row[source_start..source_start + F::CHANNEL_COUNT];
 
                     for channel in 0..F::CHANNEL_COUNT {
@@ -96,8 +105,4 @@ pub fn resize_area_with_scratch_into<F>(
 
 fn interval_overlap(a_start: f64, a_end: f64, b_start: f64, b_end: f64) -> f64 {
     (a_end.min(b_end) - a_start.max(b_start)).max(0.0)
-}
-
-fn clamp_i64(value: i64, min: i64, max: i64) -> i64 {
-    value.clamp(min, max)
 }

@@ -161,7 +161,10 @@ fn adjacent_levels_share_one_chain_in_the_memory_budget() {
     // The lower level is 17x13. Its prefix is retained, not computed a second time.
     // Level 0 is the borrowed source, so only the reduced levels own storage.
     let pixels = 65 * 49 + 33 * 25 + 17 * 13 + 9 * 7;
-    let buffers = (pixels + 2 * 13 * 11) * 4;
+    // Axis plans hold the widest stage: x 65 outputs with 3 area taps each (129 -> 65),
+    // y 49 outputs with 3 each (97 -> 49). Starts are u32, taps are 16 bytes.
+    let plans = (65 + 1) * 4 + 65 * 3 * 16 + (49 + 1) * 4 + 49 * 3 * 16;
+    let buffers = (pixels + 2 * 13 * 11) * 4 + plans;
     let heap = (LIVE_BYTES.with(Cell::get) - before) as usize;
     assert!(heap >= buffers);
     assert!(
@@ -288,6 +291,38 @@ fn every_preparation_failure_releases_chains_and_exact_budget_rejects_before_all
                 live,
                 "leak at reservation {after}"
             );
+        }
+    }
+}
+
+#[test]
+fn planned_stages_stay_exact_and_within_reserved_capacity_across_shapes() {
+    // Axis plans reserve proven per-output tap bounds; debug builds assert they never grow.
+    for (sw, sh) in [(3, 2), (5, 11), (23, 17), (40, 9), (61, 64)] {
+        for (ow, oh) in [(1, 1), (2, 5), (7, 3), (13, 13), (29, 41)] {
+            let source = ImageDimensions::new(sw, sh).unwrap();
+            let output = ImageDimensions::new(ow, oh).unwrap();
+            let bytes: Vec<u8> = (0..sw * sh * 4).map(|n| (n * 97 + n / 7) as u8).collect();
+            for (anchor, spec_anchor) in ANCHORS {
+                let mut expected = vec![0; (ow * oh * 4) as usize];
+                oracle(
+                    ImageView::<Rgba8>::packed(&bytes, source).unwrap(),
+                    ImageViewMut::packed(&mut expected, output).unwrap(),
+                    spec_anchor,
+                );
+                let budget = PreparedTrilinear::<Rgba8>::required_bytes(source, output).unwrap();
+                let mut prepared =
+                    PreparedTrilinear::<Rgba8>::try_new(source, output, anchor, budget).unwrap();
+                let mut actual = vec![0; expected.len()];
+                prepared
+                    .execute(
+                        ImageView::<Rgba8>::packed(&bytes, source).unwrap(),
+                        ImageViewMut::packed(&mut actual, output).unwrap(),
+                    )
+                    .unwrap();
+                assert_eq!(actual, expected, "{sw}x{sh}->{ow}x{oh}, {anchor:?}");
+                assert_eq!(prepared.capacity_bytes(), budget);
+            }
         }
     }
 }

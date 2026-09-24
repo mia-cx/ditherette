@@ -467,9 +467,11 @@ test('severe fixed Lanczos shrink gathers exact support without a full source co
 });
 
 test('trilinear exact budget, mip rounding, caught failures, and recovery use the borrowed ABI', async () => {
-	// 4x1→1x1 owns 20 input/output bytes, three 20-byte Wasm MipLevel headers,
-	// 16+8+4 mip bytes, four f64 accumulators, and the owned preparation record.
-	const capacity = resizeRecordBytes + 20 + 3 * 20 + 16 + 8 + 4 + 32;
+	// 4x1→1x1 owns 20 input/output bytes, two 20-byte Wasm MipLevel headers (level 0 is
+	// the borrowed source), 8+4 mip bytes, four f64 accumulators, the owned preparation
+	// record, and axis tap plans: x 3 u32 starts + 6 16-byte taps, y 2 starts + 4 taps.
+	const plans = 3 * 4 + 6 * 16 + 2 * 4 + 4 * 16;
+	const capacity = resizeRecordBytes + 20 + 2 * 20 + 8 + 4 + 32 + plans;
 	const initial = await fresh(null);
 	assert.equal(initial.bindings.privateInitialize(initial.overhead + capacity), 0);
 	const { bindings, raw } = initial;
