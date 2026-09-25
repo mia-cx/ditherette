@@ -5,6 +5,10 @@
 
 use crate::image::{contracts::Rgba8Image, ImageBuf, ImageDimensions, ImageView, Rgba8};
 
+/// Carrier values are bounded to `±CARRIER_LIMIT` after every step. Ordinary chains never
+/// reach it; it keeps extreme ones, like 30 exposure boosts, from overflowing to infinity.
+pub const CARRIER_LIMIT: f32 = 64.0;
+
 /// Straight RGB triples in row-major order, plus the source alpha byte for each pixel.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EffectImage {
@@ -36,6 +40,13 @@ impl EffectImage {
             dimensions,
             rgb,
             alpha,
+        }
+    }
+
+    /// Clamps every channel to `±CARRIER_LIMIT`. The executor calls it after each step.
+    pub fn bound(&mut self) {
+        for rgb in &mut self.rgb {
+            *rgb = rgb.map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
         }
     }
 

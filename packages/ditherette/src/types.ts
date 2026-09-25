@@ -209,7 +209,7 @@ export interface LevelsEffect {
 
 /**
  * Curves: a smooth, overshoot-free tone curve through 2 to 16 `[x, y]` points from 0 through 1,
- * with x strictly increasing. Values outside the first and last x take the end y values.
+ * each x at least 0.001 above the previous one. Values outside the first and last x take the end y values.
  * Neutral is `[[0, 0], [1, 1]]`.
  */
 export interface CurvesEffect {

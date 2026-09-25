@@ -10,7 +10,7 @@ Reshape tone per channel with a smooth curve through a few control points, like 
 { "effect": "curves", "enabled": true, "channel": "rgb", "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] }
 ```
 
-`points` holds 2 to 16 `[x, y]` pairs in encoded sRGB units, x strictly increasing. `channel` is `rgb`, `red`, `green`, or `blue`.
+`points` holds 2 to 16 `[x, y]` pairs in encoded sRGB units, each x at least 0.001 above the one before. `channel` is `rgb`, `red`, `green`, or `blue`.
 
 ## Algorithm / semantic rule
 
@@ -40,7 +40,8 @@ Clamping outside the first and last point makes the curve flat there, matching e
 ## Edge cases
 
 - Fewer than 2 or more than 16 points fail at `effects.i.points`.
-- A non-increasing x fails at `effects.i.points.j.0`; out-of-range coordinates fail at `.0` or `.1`.
+- An x less than 0.001 above the previous one fails at `effects.i.points.j.0`; out-of-range coordinates fail at `.0` or `.1`.
+  Closer knots would overflow `c3 = (m0 + m1 - 2d) / h²` and turn the pixel into NaN.
 
 ## Production obligations
 

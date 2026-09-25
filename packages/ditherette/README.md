@@ -116,7 +116,7 @@ Built-in effects:
 | `effect` | Arguments |
 | --- | --- |
 | `levels` | `channel` (`rgb`, `red`, `green`, `blue`), `input` and `output` black/white points from 0 to 1, `gamma` from 0.1 to 10 (above 1 brightens) |
-| `curves` | `channel`, `points`: 2 to 16 `[x, y]` pairs from 0 to 1 with rising x, joined by a smooth curve that never overshoots |
+| `curves` | `channel`, `points`: 2 to 16 `[x, y]` pairs from 0 to 1, x rising by at least 0.001, joined by a smooth curve that never overshoots |
 | `brightness-contrast` | `brightness` and `contrast` from -1 to 1; contrast scales around mid-grey by `4^contrast` |
 | `exposure` | `stops` from -4 to 4, in linear light |
 | `white-balance` | `temperature` (warmer is positive) and `tint` (more magenta is positive), from -1 to 1 |

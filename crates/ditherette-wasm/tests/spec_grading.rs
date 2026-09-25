@@ -235,3 +235,29 @@ fn invalid_grading_arguments_name_their_field() {
         "effects.0.hue"
     );
 }
+
+#[test]
+fn close_knots_are_rejected_and_long_chains_stay_finite() {
+    let data = ramp();
+    let curve = json!({ "effect": "curves", "enabled": true, "channel": "red",
+        "points": [[0, 0], [1e-25, 0.5], [1, 1]] });
+    assert_eq!(
+        run(&data, json!([curve])).unwrap_err().path,
+        "effects.0.points.1.0"
+    );
+
+    // 33 boosts overflowed to infinity before the carrier bound; greys must stay light, not black.
+    let mut chain: Vec<Value> =
+        vec![json!({ "effect": "exposure", "enabled": true, "stops": 4 }); 33];
+    chain.push(json!({ "effect": "hue-saturation", "enabled": true, "hue": 10, "saturation": 0, "lightness": 0 }));
+    let grey = vec![128u8, 128, 128, 255].repeat(16);
+    let output = run(&grey, Value::Array(chain)).unwrap();
+    assert!(
+        output
+            .data()
+            .chunks(4)
+            .all(|pixel| pixel[..3].iter().all(|&c| c == 255)),
+        "{:?}",
+        &output.data()[..4]
+    );
+}

@@ -78,7 +78,7 @@ Production may fold, fuse, tabulate, or parallelize effects, but exact modes mus
 
 - Unknown effect names and unknown fields fail with the step's index, never silently skip.
 - Arguments are finite and inside each effect's documented domain.
-- Effects map finite coordinates to finite coordinates.
+- Effects map finite coordinates to finite coordinates. The executor bounds the carrier to `±64` after each step, so a long chain cannot overflow.
 - Validation completes before any pixel work or output allocation.
 - A chain holds at most 64 steps, so decoding and validation stay bounded.
 - Effects see the palette quantization keeps: the first 256 entries.
