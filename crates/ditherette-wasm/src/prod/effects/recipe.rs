@@ -9,7 +9,8 @@ use serde_json::Value;
 use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
-    chain::{Effect, EffectContext, Needs, Step},
+    chain::{ChannelFn, Effect, EffectContext, Needs, Step},
+    channel::Channel,
     image::EffectImage,
     levels::Levels,
 };
@@ -40,6 +41,12 @@ impl Effect for BuiltinEffect {
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
         match self {
             Self::Levels(effect) => effect.apply(image, context),
+        }
+    }
+
+    fn channel_map(&self) -> Option<(Channel, &dyn ChannelFn)> {
+        match self {
+            Self::Levels(effect) => effect.channel_map(),
         }
     }
 }

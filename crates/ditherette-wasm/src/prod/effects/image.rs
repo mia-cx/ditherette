@@ -5,6 +5,8 @@
 
 use crate::image::{contracts::Rgba8Image, ImageBuf, ImageDimensions, ImageView, Rgba8};
 
+use super::table::ChannelTables;
+
 /// Straight RGB triples in row-major order, plus the source alpha byte for each pixel.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EffectImage {
@@ -51,10 +53,37 @@ impl EffectImage {
     }
 }
 
+impl EffectImage {
+    /// Decodes packed RGBA8 through tabulated leading per-channel effects.
+    pub fn from_packed(data: &[u8], dimensions: ImageDimensions, tables: &ChannelTables) -> Self {
+        let (rgb, alpha) = data
+            .chunks_exact(4)
+            .map(|pixel| {
+                (
+                    std::array::from_fn(|channel| tables.unit(channel, pixel[channel])),
+                    pixel[Rgba8::A],
+                )
+            })
+            .unzip();
+        Self {
+            dimensions,
+            rgb,
+            alpha,
+        }
+    }
+
+    /// Writes clipped, rounded RGB into packed RGBA8, leaving its alpha bytes alone.
+    pub fn write_rgb(&self, data: &mut [u8]) {
+        for (pixel, rgb) in data.chunks_exact_mut(4).zip(&self.rgb) {
+            pixel[..3].copy_from_slice(&rgb.map(byte));
+        }
+    }
+}
+
 fn unit(byte: u8) -> f32 {
     byte as f32 / 255.0
 }
 
-fn byte(unit: f32) -> u8 {
+pub(super) fn byte(unit: f32) -> u8 {
     (unit.clamp(0.0, 1.0) * 255.0).round() as u8
 }

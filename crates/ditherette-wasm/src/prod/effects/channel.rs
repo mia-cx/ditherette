@@ -23,3 +23,15 @@ impl Channel {
         }
     }
 }
+
+impl Channel {
+    /// Whether RGB channel `index` (0 red, 1 green, 2 blue) is changed.
+    pub const fn selects(self, index: usize) -> bool {
+        match self {
+            Self::Rgb => true,
+            Self::Red => index == 0,
+            Self::Green => index == 1,
+            Self::Blue => index == 2,
+        }
+    }
+}

@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-use super::image::EffectImage;
+use super::{channel::Channel, image::EffectImage};
 
 /// Shared inputs an effect may read. Ordinary effects read neither field.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -54,6 +54,17 @@ pub trait Effect {
 
     /// Transforms RGB in place. Arguments and context are already validated.
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>);
+
+    /// `Some` when each selected channel maps independently of the others.
+    /// Production tabulates such runs for byte input; the result must equal `apply`.
+    fn channel_map(&self) -> Option<(Channel, &dyn ChannelFn)> {
+        None
+    }
+}
+
+/// The scalar map a per-channel effect applies to each selected channel.
+pub trait ChannelFn {
+    fn map(&self, value: f32) -> f32;
 }
 
 impl<E: Effect + ?Sized> Effect for Box<E> {
@@ -67,6 +78,10 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
         (**self).apply(image, context)
+    }
+
+    fn channel_map(&self) -> Option<(Channel, &dyn ChannelFn)> {
+        (**self).channel_map()
     }
 }
 
