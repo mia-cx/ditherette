@@ -134,7 +134,6 @@ export function verifyExtensionRoot(root, v1) {
 export function verifyContent(root, checkpoint) {
 	const actual = inventory(root, [...FROZEN_ROOTS, GENERATOR]);
 	const recorded = expectedFiles(checkpoint);
-	if (checkpoint.extensions?.length) verifyExtensionRoot(root, v1Files(checkpoint));
 	if (JSON.stringify(actual) !== JSON.stringify(recorded)) {
 		const expected = new Map(recorded.map((entry) => [entry.path, entry]));
 		const found = new Map(actual.map((entry) => [entry.path, entry]));
@@ -143,6 +142,7 @@ export function verifyContent(root, checkpoint) {
 		);
 		throw new Error(`Frozen content changed:\n${changed.join('\n')}`);
 	}
+	if (checkpoint.extensions?.length) verifyExtensionRoot(root, v1Files(checkpoint));
 	return checkpoint.amendment?.identity ?? checkpoint.identity;
 }
 
