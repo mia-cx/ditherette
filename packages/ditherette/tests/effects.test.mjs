@@ -216,3 +216,107 @@ test('invalid effects fail with indexed paths before any work', () =>
 		);
 		assert.deepEqual(apply(processor, [halve, double]).data, ramp().data, 'instance stays usable');
 	}));
+
+const grading = {
+	curves: {
+		effect: 'curves',
+		enabled: true,
+		channel: 'rgb',
+		points: [
+			[0, 0],
+			[0.3, 0.2],
+			[0.7, 0.85],
+			[1, 1]
+		]
+	},
+	'brightness-contrast': {
+		effect: 'brightness-contrast',
+		enabled: true,
+		brightness: 0.05,
+		contrast: 0.3
+	},
+	exposure: { effect: 'exposure', enabled: true, stops: 0.5 },
+	'white-balance': { effect: 'white-balance', enabled: true, temperature: 0.4, tint: -0.2 },
+	'hue-saturation': {
+		effect: 'hue-saturation',
+		enabled: true,
+		hue: 40,
+		saturation: 0.3,
+		lightness: 0.1
+	}
+};
+const neutral = {
+	curves: {
+		...grading.curves,
+		points: [
+			[0, 0],
+			[1, 1]
+		]
+	},
+	'brightness-contrast': { ...grading['brightness-contrast'], brightness: 0, contrast: 0 },
+	exposure: { ...grading.exposure, stops: 0 },
+	'white-balance': { ...grading['white-balance'], temperature: 0, tint: 0 },
+	'hue-saturation': { ...grading['hue-saturation'], hue: 0, saturation: 0, lightness: 0 }
+};
+
+test('every grading effect runs, keeps alpha, and is exact when neutral', () =>
+	withProcessor((processor) => {
+		const source = ramp();
+		for (const [name, effect] of Object.entries(grading)) {
+			const graded = apply(processor, [effect]);
+			assert.notDeepEqual(graded.data, source.data, name);
+			for (let index = 3; index < source.data.length; index += 4)
+				assert.equal(graded.data[index], source.data[index], name);
+			assert.deepEqual(apply(processor, [neutral[name]]).data, source.data, `${name} neutral`);
+		}
+		const chain = Object.values(grading);
+		const composed = processor.process({
+			source: ramp(),
+			palette,
+			recipe: { version: 2, effects: chain, ...terminal }
+		});
+		const staged = processor.process({
+			source: apply(processor, chain),
+			palette,
+			recipe: { version: 1, ...terminal }
+		});
+		assert.deepEqual(composed, staged);
+	}));
+
+test('grading arguments are validated with indexed paths', () =>
+	withProcessor((processor) => {
+		const fails = (effect, path) =>
+			assert.throws(
+				() => apply(processor, [halve, effect]),
+				(error) => error.code === 'invalid-settings' && error.path === path,
+				path
+			);
+		fails({ ...grading.curves, points: [[0, 0]] }, 'effects.1.points');
+		fails(
+			{
+				...grading.curves,
+				points: [
+					[0, 0],
+					[0.5, 1],
+					[0.5, 1]
+				]
+			},
+			'effects.1.points.2.0'
+		);
+		fails(
+			{
+				...grading.curves,
+				points: [
+					[0, 0],
+					[1, 2]
+				]
+			},
+			'effects.1.points.1.1'
+		);
+		fails({ ...grading.curves, points: [[0, 0], [1]] }, 'effects.1.points.1');
+		fails({ ...grading['brightness-contrast'], contrast: 1.5 }, 'effects.1.contrast');
+		fails({ ...grading.exposure, stops: -5 }, 'effects.1.stops');
+		fails({ ...grading['white-balance'], temperature: Number.NaN }, 'effects.1.temperature');
+		fails({ ...grading['hue-saturation'], hue: 200 }, 'effects.1.hue');
+		fails({ ...grading['hue-saturation'], lightness: undefined }, 'effects.1.lightness');
+	}));

@@ -22,7 +22,7 @@ against benchmarks. Chains, ordering, repetition, bypass, and serialization alre
 - [x] Record the grading extension in the freeze checkpoint.
 - [x] Prod: copy the effects, conformance tests.
 - [x] Prod: benchmark, then optimize with evidence.
-- [ ] Package: types, validation, docs, tests, changeset.
+- [x] Package: types, validation, docs, tests, changeset.
 - [ ] Final validation.
 
 ## Notes
