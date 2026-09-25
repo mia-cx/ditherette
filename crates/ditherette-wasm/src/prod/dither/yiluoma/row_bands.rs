@@ -80,6 +80,20 @@ impl YliluomaBands {
         placement: Placement,
         progress: &mut impl FnMut(u32) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
+        self.execute_indexed(source, prepared, indices, size, placement, None, progress)
+    }
+
+    /// Share one caller-accounted index across every worker.
+    pub(crate) fn execute_indexed(
+        &mut self,
+        source: ImageView<'_, Rgba8>,
+        prepared: &PreparedQuantizer,
+        indices: &mut [u8],
+        size: BayerSize,
+        placement: Placement,
+        index: Option<&super::index::MixIndex>,
+        progress: &mut impl FnMut(u32) -> Result<(), Failure>,
+    ) -> Result<(), Failure> {
         self.buffers.execute(
             indices,
             source.dimensions().width_usize(),
@@ -93,6 +107,7 @@ impl YliluomaBands {
                     band,
                     &mut [],
                     &mut [],
+                    index,
                     |_| Ok(()),
                 )?;
                 Ok(u64::from(band.height()))

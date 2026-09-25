@@ -61,7 +61,7 @@ pub(super) fn subjects() -> Vec<BenchSubject> {
     vec![BenchSubject::Conformance(ConformanceBenchSubject {
         descriptor: SubjectDescriptor {
             id: SubjectId::parse(YLILUOMA_SUBJECT).expect("literal ID"),
-            display_name: "scalar Yliluoma literal complete native call".into(),
+            display_name: "scalar Yliluoma complete native call".into(),
             source_file: "crates/ditherette-wasm/src/prod/dither/yiluoma/request.rs".into(),
             source_line: 1,
             default_oracle: Some(
