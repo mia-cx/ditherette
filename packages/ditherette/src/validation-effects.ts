@@ -115,7 +115,10 @@ function shiftPair(value: unknown, path: string): [number, number] {
 		Reflect.ownKeys(value).some((key) => !['0', '1', 'length'].includes(String(key)))
 	)
 		throw new DitheretteError('invalid-settings', path, 'Expected a [u, v] pair.');
-	return [bounded(value[0], -0.5, 0.5, `${path}.0`), bounded(value[1], -0.5, 0.5, `${path}.1`)];
+	return [
+		bounded(Object.hasOwn(value, 0) ? value[0] : undefined, -0.5, 0.5, `${path}.0`),
+		bounded(Object.hasOwn(value, 1) ? value[1] : undefined, -0.5, 0.5, `${path}.1`)
+	];
 }
 
 /** Mirrors the Rust `RecolourRecipe::validate`, field by field and in the same order. */
