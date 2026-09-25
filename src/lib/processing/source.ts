@@ -19,11 +19,10 @@ import {
 } from './db';
 import { decodeBlob } from './image-decode';
 import { cancelProcessing, currentSettingsHash, scheduleProcessing } from './client';
-import { fitOutputSizeToBounds } from './types';
+import { clampOutputScale, fitOutputSizeToBounds } from './types';
 import { validateSourceBlob } from './image-metadata';
 import type { SourceImageRecord } from './types';
 
-export const MIN_SCALE_FACTOR = 0.05;
 let sourceGeneration = 0;
 let lastSourceTimestamp = 0;
 
@@ -72,7 +71,7 @@ export async function setSourceFile(file: File) {
 	await throwIfSourceSuperseded(generation, record);
 	setSourceMetadata(record);
 	const settings = outputSettings.get();
-	const scaleFactor = Math.min(1, Math.max(MIN_SCALE_FACTOR, settings.scaleFactor ?? 1));
+	const scaleFactor = clampOutputScale(settings.scaleFactor ?? 1, decoded.width, decoded.height);
 	const size = fitOutputSizeToBounds(
 		Math.max(1, Math.round(decoded.width * scaleFactor)),
 		Math.max(1, Math.round(decoded.height * scaleFactor))

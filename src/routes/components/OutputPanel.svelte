@@ -5,7 +5,7 @@
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { RESIZE_MODES } from './output-options';
 	import { outputSettings, sourceMeta, updateOutputSettings } from '$lib/stores/app';
-	import { fitOutputSizeToBounds } from '$lib/processing/types';
+	import { clampOutputScale, fitOutputSizeToBounds } from '$lib/processing/types';
 
 	type Props = {
 		hasImage?: boolean;
@@ -14,8 +14,8 @@
 
 	let { hasImage = false, hideHeading = false }: Props = $props();
 
-	const MIN_SCALE = 0.05;
-	const MAX_SCALE = 1;
+	const SLIDER_MIN_SCALE = 0.05;
+	const SLIDER_MAX_SCALE = 1;
 	const SCALE_STEP = 0.0001;
 	const initial = outputSettings.get();
 	let width = $state<number>(initial.width);
@@ -35,6 +35,7 @@
 			? validRatio(baseDimensions.width, baseDimensions.height)
 			: validRatio(width, height)
 	);
+	const maximumScale = $derived(clampScale(Number.MAX_VALUE));
 	$effect(() =>
 		outputSettings.subscribe((settings) => {
 			width = settings.width;
@@ -48,6 +49,7 @@
 
 	$effect(() => {
 		if (!baseDimensions) return;
+		scaleFactor = clampScale(scaleFactor);
 		const dimensions = dimensionsForScale(scaleFactor);
 		if (width !== dimensions.width || height !== dimensions.height) {
 			width = dimensions.width;
@@ -56,8 +58,7 @@
 	});
 
 	$effect(() => {
-		const dimensions = dimensionsForAspect(width, height, enforcedAspectRatio);
-		const clamped = fitOutputSizeToBounds(dimensions.width, dimensions.height);
+		const clamped = fitOutputSizeToBounds(width, height);
 		updateOutputSettings({
 			width: clamped.width,
 			height: clamped.height,
@@ -81,13 +82,14 @@
 		return clampScale(nextFactor);
 	}
 
-	function dimensionsForAspect(nextWidth: number, nextHeight: number, aspect: number) {
+	function dimensionsForAspect(nextWidth: number, aspect: number) {
 		const safeWidth = Math.max(1, Math.round(nextWidth || 1));
 		return { width: safeWidth, height: Math.max(1, Math.round(safeWidth / aspect)) };
 	}
 
 	function clampScale(value: number) {
-		return Math.max(MIN_SCALE, Math.min(MAX_SCALE, value || 1));
+		const base = baseDimensions ?? { width, height };
+		return clampOutputScale(value, base.width, base.height);
 	}
 
 	function dimensionsForScale(value: number) {
@@ -99,6 +101,7 @@
 	}
 
 	function setScale(value: number) {
+		if (!Number.isFinite(value) || value <= 0) return;
 		scaleFactor = clampScale(value);
 		const dimensions = dimensionsForScale(scaleFactor);
 		width = dimensions.width;
@@ -106,7 +109,7 @@
 	}
 
 	function setWidth(value: number) {
-		const dimensions = dimensionsForAspect(value, height, enforcedAspectRatio);
+		const dimensions = dimensionsForAspect(value, enforcedAspectRatio);
 		setScale(factorFromDimensions(dimensions.width, dimensions.height));
 	}
 
@@ -135,9 +138,9 @@
 			<Label for="scale-ratio" class="text-xs text-muted-foreground">Scale</Label>
 			<Slider
 				type="single"
-				bind:value={scaleFactor}
-				min={MIN_SCALE}
-				max={MAX_SCALE}
+				value={Math.max(SLIDER_MIN_SCALE, Math.min(SLIDER_MAX_SCALE, scaleFactor))}
+				min={SLIDER_MIN_SCALE}
+				max={SLIDER_MAX_SCALE}
 				step={SCALE_STEP}
 				disabled={!hasImage}
 				aria-label="Output scale factor"
@@ -149,13 +152,17 @@
 					class="h-8 bg-background pr-5 text-right font-mono text-xs tabular-nums"
 					type="number"
 					inputmode="decimal"
-					min={MIN_SCALE}
-					max={MAX_SCALE}
-					step={SCALE_STEP}
-					value={Number.isFinite(scaleFactor) ? Number(scaleFactor.toFixed(4)) : 1}
+					min={Number.MIN_VALUE}
+					max={maximumScale}
+					step="any"
+					value={scaleFactor}
 					disabled={!hasImage}
 					onkeydown={commitOnEnter}
-					onchange={(event) => setScale(Number((event.currentTarget as HTMLInputElement).value))}
+					onchange={(event) => {
+						const input = event.currentTarget as HTMLInputElement;
+						setScale(input.valueAsNumber);
+						input.value = String(scaleFactor);
+					}}
 				/>
 				<span
 					class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"
