@@ -16,7 +16,7 @@ use crate::{
 };
 use std::mem::size_of;
 
-/// Owns scheduling metadata only. Workers borrow one palette and perform the unchanged literal search.
+/// Owns scheduling metadata only. Workers share one palette and optional exact mix index.
 pub struct YliluomaBands {
     buffers: RowBandBuffers<()>,
 }

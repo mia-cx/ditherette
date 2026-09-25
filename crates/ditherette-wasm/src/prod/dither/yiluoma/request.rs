@@ -24,7 +24,8 @@ use crate::{
 use std::mem::size_of;
 
 /// Validates and executes the frozen scalar Yliluoma recipe with bounded owned allocations.
-/// Source bytes are borrowed. Preparation, metadata, indices, and one temporary converter count toward the limit.
+/// Source bytes are borrowed. Preparation, metadata, indices, and the optional mix index
+/// count toward the limit; insufficient spare memory keeps the literal scan.
 pub fn dither_yiluoma(
     request: DitherQuantizeRequest<'_>,
     memory_limit: u64,

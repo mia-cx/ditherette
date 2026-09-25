@@ -1,4 +1,4 @@
-//! Literal frozen Yliluoma mix search, target adaptation, and ordered selection.
+//! Exact Yliluoma mix search, target adaptation, and ordered selection.
 //! Shared palette matching and Bayer ranks remain their existing production implementations.
 
 pub(crate) mod index;
