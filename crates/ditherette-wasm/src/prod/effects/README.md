@@ -22,3 +22,21 @@ Criterion, `crit_effects`, native x86-64 release, quiet host, 2026-09-25:
 | `levels-x3` | Picking_at_thread 3462×2309 | 238.0 ms | 7.32 ms | 33× |
 
 Production time includes copying the source. It no longer grows with the number of per-channel steps.
+
+### Public package, scalar Wasm
+
+Node 24 (V8), 3462×2309 synthetic source, `process` to 480×320 area resize, Oklab matching, no dither. Median of five, milliseconds:
+
+| Chain | `applyEffects` cold | warm | `process` cold | warm |
+| --- | ---: | ---: | ---: | ---: |
+| none (recipe v1) | | | 54.5 | 4.9 |
+| `levels` | 43.3 | 16.2 | 61.0 | 16.7 |
+| `levels-x3` | 36.5 | 12.9 | 59.0 | 16.5 |
+
+Cold calls use a fresh processor. Warm `applyEffects` returns the retained result after verifying the source.
+Warm recipe-v2 `process` reapplies the chain to verify its snapshot, then hits the downstream caches.
+That verification costs about 11 ms here. Keeping a raw-source snapshot would turn it into one comparison, at the price of one more retained source-sized buffer.
+
+Memory: `applyEffects` holds the source snapshot and one output buffer, like `perturb`.
+Recipe-v2 `process` adds one source-sized comparison buffer to the v1 budget.
+Neither allocates the continuous carrier while every enabled step tabulates.
