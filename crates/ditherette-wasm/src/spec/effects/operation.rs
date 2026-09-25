@@ -124,7 +124,7 @@ pub fn process(request: ProcessRequestV2<'_>) -> Result<IndexedImage, Ditherette
     })
 }
 
-/// Decodes a recipe-v2 JSON object. Effect decoding errors name `recipe.effects[i]`.
+/// Decodes a recipe-v2 JSON object. Effect decoding errors name `recipe.effects.i`.
 pub fn decode_recipe_v2(json: &str) -> Result<RecipeV2, DitheretteError> {
     let value: Value = serde_json::from_str(json).map_err(|_| malformed())?;
     if let Some(effects) = value.get("effects") {

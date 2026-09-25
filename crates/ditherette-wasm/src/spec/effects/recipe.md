@@ -18,7 +18,7 @@ It is also the serializable recipe form callers store and replay.
 ## Algorithm / semantic rule
 
 The array is parsed first, then each element is decoded on its own.
-The first element that fails reports `effects[i]` with serde's explanation, such as an unknown effect name or field.
+The first element that fails reports `effects.i` with serde's explanation, such as an unknown effect name or field.
 Decoding checks shape only. Argument ranges are checked by `Effect::validate`.
 
 Registered effects:

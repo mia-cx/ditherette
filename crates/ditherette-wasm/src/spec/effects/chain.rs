@@ -44,7 +44,7 @@ pub struct Needs {
 
 /// One colour operation. Implement this to add an effect.
 pub trait Effect {
-    /// Checks arguments only. `path` names this step, such as `effects[2]`.
+    /// Checks arguments only. `path` names this step, such as `effects.2`.
     fn validate(&self, path: &str) -> Result<(), DitheretteError>;
 
     /// Context this effect reads. The executor checks it before any pixel work.
@@ -84,7 +84,7 @@ pub fn validate_chain<E: Effect>(
     context: &EffectContext<'_>,
 ) -> Result<(), DitheretteError> {
     for (index, step) in steps.iter().enumerate() {
-        step.effect.validate(&format!("effects[{index}]"))?;
+        step.effect.validate(&format!("effects.{index}"))?;
     }
     for (index, step) in steps.iter().enumerate().filter(|(_, step)| step.enabled) {
         let needs = step.effect.needs();
@@ -131,6 +131,6 @@ fn missing(index: usize, path: &str, what: &str) -> DitheretteError {
     DitheretteError::new(
         ErrorCode::InvalidRequest,
         path,
-        format!("Effect effects[{index}] requires {what}."),
+        format!("Effect effects.{index} requires {what}."),
     )
 }

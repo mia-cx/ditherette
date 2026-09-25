@@ -647,7 +647,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/chain.md",
 						"mode": "100644",
-						"sha256": "aa51a9dd033d8b1c4991029c853bd675c283407335b06fdf1073bf09509230a0"
+						"sha256": "9d8f60ef9942ba933ad5069afccddb0b37e6e34b2a496f82d9e856ddf20062c6"
 					}
 				},
 				{
@@ -656,7 +656,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/chain.rs",
 						"mode": "100644",
-						"sha256": "3fd3074abd37bcb171e6688c693d414157bc2867710b23d0955ae64e5043ad30"
+						"sha256": "e72683346da47b66799ae6a2f044331015af061bc63f511bf8f5db312f817e83"
 					}
 				},
 				{
@@ -701,7 +701,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/levels.md",
 						"mode": "100644",
-						"sha256": "b542d06dd4e382a7faf2496ebc35e8d834778971626b067688f3de935a8f393c"
+						"sha256": "85fa067c5e7b13f2b9a8d1d538759ac1e3ff304c9d078fdcef4b72a70c42d493"
 					}
 				},
 				{
@@ -737,7 +737,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
 						"mode": "100644",
-						"sha256": "cdcf138893c1473777c1d9cf27f44bc218441840d3206917c679dd3c2b890b42"
+						"sha256": "98139c323083d1f3386f66a2cd8b550839b64ed044b64b9b317cdc518eef6b82"
 					}
 				},
 				{
@@ -746,7 +746,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
 						"mode": "100644",
-						"sha256": "a2725eaeff337dc27499ba988fc3f9719e546437e789cd6240bf3592847f2f4c"
+						"sha256": "09faf7f1183da23e73caa360f63133d3ba62d270f563223e929abecfc51c60df"
 					}
 				},
 				{
@@ -755,7 +755,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
 						"mode": "100644",
-						"sha256": "17b426e0e6ccc499f896aa70f50eaac9e083bf42f8a2fd3a31835edc0e1c7886"
+						"sha256": "5debd738e3476d3b3563dac563e081981b586532d46aa53d46d9a16f0cd0700e"
 					}
 				},
 				{
@@ -781,7 +781,7 @@
 					}
 				}
 			],
-			"contentSha256": "cec7a3ee0e524af74b2c256523f5da17d48051a11496f05c0698c1a15d151f11"
+			"contentSha256": "1f1ffb7de1a32a5290d212c309f43712b3fef2aae7a48cad68c6e15763cb2349"
 		}
 	]
 }
