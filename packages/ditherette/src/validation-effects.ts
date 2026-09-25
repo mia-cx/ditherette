@@ -72,8 +72,8 @@ function curvePoints(value: unknown, path: string): [number, number][] {
 			Reflect.ownKeys(point).some((key) => !['0', '1', 'length'].includes(String(key)))
 		)
 			throw new DitheretteError('invalid-settings', pointPath, 'Expected an [x, y] pair.');
-		const x = bounded(point[0], 0, 1, `${pointPath}.0`);
-		const y = bounded(point[1], 0, 1, `${pointPath}.1`);
+		const x = bounded(Object.hasOwn(point, 0) ? point[0] : undefined, 0, 1, `${pointPath}.0`);
+		const y = bounded(Object.hasOwn(point, 1) ? point[1] : undefined, 0, 1, `${pointPath}.1`);
 		if (index > 0 && Math.fround(x - points[index - 1][0]) < minGap)
 			throw new DitheretteError(
 				'invalid-settings',

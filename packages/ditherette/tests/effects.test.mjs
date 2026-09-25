@@ -325,6 +325,11 @@ test('grading arguments are validated with indexed paths', () =>
 			'effects.1.points.1.0'
 		);
 		fails({ ...grading.curves, points: [[0, 0], [1]] }, 'effects.1.points.1');
+		const inherited = Object.setPrototypeOf(
+			new Array(2),
+			Object.assign(Object.create(Array.prototype), { 0: 0, 1: 0 })
+		);
+		fails({ ...grading.curves, points: [inherited, [1, 1]] }, 'effects.1.points.0.0');
 		fails({ ...grading['brightness-contrast'], contrast: 1.5 }, 'effects.1.contrast');
 		fails({ ...grading.exposure, stops: -5 }, 'effects.1.stops');
 		fails({ ...grading['white-balance'], temperature: Number.NaN }, 'effects.1.temperature');
