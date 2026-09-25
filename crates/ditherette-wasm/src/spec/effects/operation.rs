@@ -27,6 +27,8 @@ use super::{
     chain::{apply_chain, validate_chain, EffectContext},
     image::EffectImage,
     recipe::{decode_steps, EffectStep},
+    recolour::RecolourRecipe,
+    recolour_analysis::analyze,
 };
 
 /// Version of the standalone `apply_effects` request shape.
@@ -53,6 +55,41 @@ pub fn apply_effects(request: EffectsRequest<'_>) -> Result<Rgba8Image, Ditheret
     let mut image = EffectImage::from_rgba8(source);
     apply_chain(&mut image, request.effects, &request.context)?;
     Ok(image.to_rgba8())
+}
+
+/// Analysis request: the image a recolour step would receive is `source` after `effects`.
+#[derive(Debug, Clone, Copy)]
+pub struct AnalyzeRequest<'a> {
+    pub version: u32,
+    pub source: Source<'a>,
+    pub effects: &'a [EffectStep],
+    pub context: EffectContext<'a>,
+}
+
+/// Runs `effects` on the source, then analyses the result against the context palette and space.
+/// The recipe equals what a recipe-less `recolour` step appended to `effects` would derive.
+pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, DitheretteError> {
+    if request.version != EFFECTS_VERSION {
+        return Err(unsupported("version"));
+    }
+    validate_chain(request.effects, &request.context)?;
+    if request.context.colors().next().is_none() {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidRequest,
+            "context.palette",
+            "Analysis requires a visible palette colour.",
+        ));
+    }
+    if request.context.space.is_none() {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidRequest,
+            "context.space",
+            "Analysis requires a working space.",
+        ));
+    }
+    let mut image = EffectImage::from_rgba8(source_view(request.source)?);
+    apply_chain(&mut image, request.effects, &request.context)?;
+    Ok(analyze(&image, &request.context))
 }
 
 /// Recipe v1's terminal settings plus the ordered effects that precede them.

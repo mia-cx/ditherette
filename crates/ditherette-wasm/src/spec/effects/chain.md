@@ -12,7 +12,7 @@ It returns `Ok(())` or the first validation error.
 ## Algorithm / semantic rule
 
 1. Reject more than 64 steps at `effects`. Then validate every step's arguments in array order, enabled or not. The error path is `effects.i` or deeper.
-2. For each enabled step, check the context it `needs`. A palette need requires at least one visible colour among the first 256 entries, the palette quantization keeps; a space need requires a working space.
+2. For each enabled step, check the context it `needs`, then let the step check its arguments against that context (`check_context`). A palette need requires at least one visible colour among the first 256 entries, the palette quantization keeps; a space need requires a working space.
 3. Apply enabled steps in array order. Each step reads the image the previous step wrote, bounded to `±64` per channel.
 
 Disabled steps do no pixel work and need no context. Duplicate steps run once per occurrence with their own arguments.

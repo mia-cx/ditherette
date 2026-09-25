@@ -31,6 +31,7 @@ Registered effects:
 | `exposure` | [exposure.md](exposure.md) |
 | `white-balance` | [white_balance.md](white_balance.md) |
 | `hue-saturation` | [hue_saturation.md](hue_saturation.md) |
+| `recolour` | [recolour.md](recolour.md) |
 
 ## Why this works this way
 

@@ -38,6 +38,8 @@ Ordinary effects need neither. `process` derives both from its own palette and `
 | [exposure.rs](exposure.md) | Exposure in stops |
 | [white_balance.rs](white_balance.md) | Temperature and tint |
 | [hue_saturation.rs](hue_saturation.md) | Oklab hue, saturation, and lightness |
+| [recolour.rs](recolour.md) | Palette-aware recolouring: recipe, application, strength |
+| [recolour_analysis.rs](recolour_analysis.md) | Deterministic image-and-palette analysis |
 
 ## Domain model
 
