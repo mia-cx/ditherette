@@ -193,7 +193,7 @@ fn tabulated_prefixes_feed_the_carrier_exactly() {
             let context = prod::EffectContext::default();
             prod::apply_chain(&mut stepwise, &chain, &context).unwrap();
             let mut folded = data.clone();
-            prod::apply_in_place(&mut folded, dimensions, &chain, &context);
+            prod::apply_in_place(&mut folded, dimensions, &chain, &context).unwrap();
             assert_eq!(folded, stepwise.to_rgba8().data());
         }
     }

@@ -3,6 +3,8 @@
 //! A leading run of per-channel effects is tabulated per input byte. When that
 //! run is the whole chain, no continuous carrier is allocated at all.
 
+use std::collections::TryReserveError;
+
 use crate::{
     image::{contracts::Rgba8Image, ImageBuf, ImageDimensions, ImageView, Rgba8},
     prod::contract::{
@@ -43,9 +45,29 @@ pub fn apply_effects(request: EffectsRequest<'_>) -> Result<Rgba8Image, Ditheret
         source.dimensions(),
         request.effects,
         &request.context,
-    );
+    )
+    .map_err(|_| {
+        DitheretteError::new(
+            ErrorCode::WasmMemoryUnavailable,
+            "wasm",
+            "The effect carrier could not be allocated.",
+        )
+    })?;
     Ok(ImageBuf::from_vec_packed(data, source.dimensions())
         .expect("packed source length matches its dimensions"))
+}
+
+/// Bytes `apply_in_place` allocates beyond `data`: zero when every enabled step tabulates.
+pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) -> u64 {
+    let tabulates = steps
+        .iter()
+        .filter(|step| step.enabled)
+        .all(|step| step.effect.channel_map().is_some());
+    if tabulates {
+        0
+    } else {
+        EffectImage::carrier_bytes(u64::from(dimensions.width()) * u64::from(dimensions.height()))
+    }
 }
 
 /// Applies an already validated chain to packed RGBA8. Alpha bytes are never written.
@@ -54,7 +76,7 @@ pub fn apply_in_place<E: Effect>(
     dimensions: ImageDimensions,
     steps: &[Step<E>],
     context: &EffectContext<'_>,
-) {
+) -> Result<(), TryReserveError> {
     let enabled: Vec<&E> = steps
         .iter()
         .filter(|step| step.enabled)
@@ -78,13 +100,14 @@ pub fn apply_in_place<E: Effect>(
                 pixel[2] = blue[pixel[2] as usize];
             }
         }
-        return;
+        return Ok(());
     }
-    let mut image = EffectImage::from_packed(data, dimensions, &tables);
+    let mut image = EffectImage::try_from_packed(data, dimensions, &tables)?;
     for effect in &enabled[tabulated..] {
         effect.apply(&mut image, context);
     }
     image.write_rgb(data);
+    Ok(())
 }
 
 fn source_view(source: Source<'_>) -> Result<ImageView<'_, Rgba8>, DitheretteError> {

@@ -53,6 +53,7 @@ impl Callback for JsProgress<'_> {
             Stage::Quantize => 5,
             Stage::DitherAndQuantize => 6,
             Stage::Complete => 7,
+            Stage::Effects => 8,
         };
         report_progress(
             self.sink,

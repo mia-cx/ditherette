@@ -258,13 +258,52 @@ impl Processor {
         boundary: &mut B,
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
-        match self.state {
-            State::Disposed => return Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
-            State::Running => {
-                return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance))
-            }
-            State::Ready => {}
+        self.process_owning(request, boundary, allocator, 0)
+    }
+
+    /// Recipe v2: apply `effects` to the source, then run `process` on the result.
+    /// Effects read the request palette and the matching working space as context.
+    pub fn process_effects<B: super::quantize::QuantizeBoundary>(
+        &mut self,
+        request: super::process::ProcessRequest<'_>,
+        effects: &[crate::prod::effects::EffectStep],
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.process_effects_with_allocator(request, effects, boundary, &mut SystemAllocator)
+    }
+
+    /// Injectable reservations for recipe v2. A chain with no enabled step is exactly `process`.
+    pub fn process_effects_with_allocator<B: super::quantize::QuantizeBoundary, A: Allocator>(
+        &mut self,
+        request: super::process::ProcessRequest<'_>,
+        effects: &[crate::prod::effects::EffectStep],
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        self.require_ready()?;
+        let context = crate::prod::effects::EffectContext {
+            palette: request.palette,
+            space: Some(request.recipe.matching.space()),
+        };
+        super::effects::validate(effects, &context)?;
+        if !effects.iter().any(|step| step.enabled) {
+            return self.process_owning(request, boundary, allocator, 0);
         }
+        let source = dimensions(request.source_width, request.source_height, true)?;
+        let extra = super::effects::process_capacity_bytes(effects, source);
+        let mut effected = super::effects::EffectedInput::new(boundary, effects, context, source);
+        self.process_owning(request, &mut effected, allocator, extra)
+    }
+
+    /// Shared `process` body. `extra` charges adapter-owned bytes for the whole call.
+    fn process_owning<B: super::quantize::QuantizeBoundary, A: Allocator>(
+        &mut self,
+        request: super::process::ProcessRequest<'_>,
+        boundary: &mut B,
+        allocator: &mut A,
+        extra: u64,
+    ) -> Result<B::Output, Failure> {
+        self.require_ready()?;
         self.state = State::Running;
         // Call bookkeeping includes preparation handles and all four scratch Vec records.
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
@@ -282,7 +321,8 @@ impl Processor {
             } else {
                 0
             }
-            + boundary.capacity_bytes();
+            + boundary.capacity_bytes()
+            + extra;
         self.peak_capacity = overhead;
         let result = super::process::run(
             request,
@@ -294,6 +334,46 @@ impl Processor {
             &mut self.preparation,
         );
         self.finish_call(result)
+    }
+
+    /// Snapshot current input and apply the ordered effect chain, returning durable RGBA8.
+    pub fn apply_effects<B: Boundary>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        boundary: &mut B,
+    ) -> Result<B::Output, Failure> {
+        self.apply_effects_with_allocator(request, boundary, &mut SystemAllocator)
+    }
+
+    /// Injectable reservations preserve the same recoverable lifecycle as perturb.
+    pub fn apply_effects_with_allocator<B: Boundary, A: Allocator>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<B::Output, Failure> {
+        self.require_ready()?;
+        self.state = State::Running;
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        self.peak_capacity = overhead;
+        let result = super::effects::run(
+            request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+            &mut self.preparation,
+        );
+        self.finish_call(result)
+    }
+
+    fn require_ready(&self) -> Result<(), Failure> {
+        match self.state {
+            State::Disposed => Err(Failure::new(ErrorCode::Disposed, ErrorPath::Instance)),
+            State::Running => Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance)),
+            State::Ready => Ok(()),
+        }
     }
 
     /// Snapshot current input and materialize palette-free, durable RGBA8 within the budget.

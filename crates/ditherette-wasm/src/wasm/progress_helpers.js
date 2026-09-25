@@ -1,5 +1,5 @@
 // Rust catches these scalar/void imports without retaining returned JS handles.
-const stages = ['prepare', 'resize', 'alpha', 'color', 'perturb', 'quantize', 'dither-and-quantize', 'complete'];
+const stages = ['prepare', 'resize', 'alpha', 'color', 'perturb', 'quantize', 'dither-and-quantize', 'complete', 'effects'];
 
 export function progressEnabled(sink) {
 	if (sink.onProgress === undefined) return false;
