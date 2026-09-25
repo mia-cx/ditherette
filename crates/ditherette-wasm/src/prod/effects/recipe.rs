@@ -9,9 +9,14 @@ use serde_json::Value;
 use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
+    brightness_contrast::BrightnessContrast,
     chain::{Effect, EffectContext, Needs, Step},
+    curves::Curves,
+    exposure::Exposure,
+    hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    white_balance::WhiteBalance,
 };
 
 /// Every effect the crate compiles in. The JSON tag is `effect`.
@@ -19,6 +24,11 @@ use super::{
 #[serde(tag = "effect", rename_all = "kebab-case")]
 pub enum BuiltinEffect {
     Levels(Levels),
+    Curves(Curves),
+    BrightnessContrast(BrightnessContrast),
+    Exposure(Exposure),
+    WhiteBalance(WhiteBalance),
+    HueSaturation(HueSaturation),
 }
 
 /// One serialized chain entry: the effect's tagged object plus `enabled`.
@@ -28,30 +38,55 @@ impl Effect for BuiltinEffect {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
         match self {
             Self::Levels(effect) => effect.validate(path),
+            Self::Curves(effect) => effect.validate(path),
+            Self::BrightnessContrast(effect) => effect.validate(path),
+            Self::Exposure(effect) => effect.validate(path),
+            Self::WhiteBalance(effect) => effect.validate(path),
+            Self::HueSaturation(effect) => effect.validate(path),
         }
     }
 
     fn needs(&self) -> Needs {
         match self {
             Self::Levels(effect) => effect.needs(),
+            Self::Curves(effect) => effect.needs(),
+            Self::BrightnessContrast(effect) => effect.needs(),
+            Self::Exposure(effect) => effect.needs(),
+            Self::WhiteBalance(effect) => effect.needs(),
+            Self::HueSaturation(effect) => effect.needs(),
         }
     }
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
         match self {
             Self::Levels(effect) => effect.apply(image, context),
+            Self::Curves(effect) => effect.apply(image, context),
+            Self::BrightnessContrast(effect) => effect.apply(image, context),
+            Self::Exposure(effect) => effect.apply(image, context),
+            Self::WhiteBalance(effect) => effect.apply(image, context),
+            Self::HueSaturation(effect) => effect.apply(image, context),
         }
     }
 
     fn per_channel(&self) -> bool {
         match self {
             Self::Levels(effect) => effect.per_channel(),
+            Self::Curves(effect) => effect.per_channel(),
+            Self::BrightnessContrast(effect) => effect.per_channel(),
+            Self::Exposure(effect) => effect.per_channel(),
+            Self::WhiteBalance(effect) => effect.per_channel(),
+            Self::HueSaturation(effect) => effect.per_channel(),
         }
     }
 
     fn map_channel(&self, channel: usize, value: f32) -> f32 {
         match self {
             Self::Levels(effect) => effect.map_channel(channel, value),
+            Self::Curves(effect) => effect.map_channel(channel, value),
+            Self::BrightnessContrast(effect) => effect.map_channel(channel, value),
+            Self::Exposure(effect) => effect.map_channel(channel, value),
+            Self::WhiteBalance(effect) => effect.map_channel(channel, value),
+            Self::HueSaturation(effect) => effect.map_channel(channel, value),
         }
     }
 }
