@@ -17,9 +17,9 @@ against benchmarks. Chains, ordering, repetition, bypass, and serialization alre
 ## TODOs
 
 - [x] Prod trait: replace `channel_map` with `per_channel` + `map_channel` so effects with different per-channel maps tabulate.
-- [ ] Spec: continuous colour-space helpers (`space.rs`) and the five effects with docs.
-- [ ] Spec tests: formulas, neutral identity, monotone curves, hue rotation, validation paths.
-- [ ] Record the grading extension in the freeze checkpoint.
+- [x] Spec: continuous colour-space helpers (`space.rs`) and the five effects with docs.
+- [x] Spec tests: formulas, neutral identity, monotone curves, hue rotation, validation paths.
+- [x] Record the grading extension in the freeze checkpoint.
 - [ ] Prod: copy the effects, conformance tests.
 - [ ] Prod: benchmark, then optimize with evidence.
 - [ ] Package: types, validation, docs, tests, changeset.

@@ -782,6 +782,173 @@
 				}
 			],
 			"contentSha256": "d6df3f2b97f2f257767eddbb80b7337eeba44af971901f258288fb3b9261a849"
+		},
+		{
+			"name": "effects-grading",
+			"summary": "Grading effects: curves, brightness-contrast, exposure, white balance, hue-saturation, and continuous colour-space helpers (#106).",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/brightness_contrast.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/brightness_contrast.md",
+						"mode": "100644",
+						"sha256": "d647bc957e2c28671a52fdc241d71646fab371f21b94ffabd1dcf87325bf58f7"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/brightness_contrast.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/brightness_contrast.rs",
+						"mode": "100644",
+						"sha256": "f3f59d6bc365112a8abefb07ec7c3a7f175ef4d5fc10d675096452b6023c888e"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "ee9162bdd2fa562de10717fe8d65f154d4f76bbcf5da184a35bc153d9b341ecd"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "54ecf23cbf21cdee924b20eff74bdbb25685aadadc35f2d5a36ffc22768a19eb"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/exposure.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/exposure.md",
+						"mode": "100644",
+						"sha256": "a0d05d00531b313f9ad243daf3723e53c2c2501b96ed282276ee80cc9c00a2c9"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/exposure.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/exposure.rs",
+						"mode": "100644",
+						"sha256": "2b5a642b4e703069a886d85bfee59f820782e6a43963c6ab06e333c02fd6cea5"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/hue_saturation.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/hue_saturation.md",
+						"mode": "100644",
+						"sha256": "b292309b9b1775710d5a9a6f7138638511a8e64de449f424dd929b1052ae42d1"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/hue_saturation.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/hue_saturation.rs",
+						"mode": "100644",
+						"sha256": "aa913453952e1f77c87b7cdee2b2e7880d3f6874c83fe325adb585395dc7a048"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "2b555aa4d2679fcb021155671b87f843f875cd6178d872214d9fcac4d5b41411"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "efcbec7588b1d9c8ee32889822f38714ccf76e6d5d87be2ebd4f3ab4cdd66b27"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "09faf7f1183da23e73caa360f63133d3ba62d270f563223e929abecfc51c60df"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "e98f95bfd79083274a1e154ade5eb944d0e271799ef81eb9fea0c4a193948d4c"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "5debd738e3476d3b3563dac563e081981b586532d46aa53d46d9a16f0cd0700e"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "868ccb77e07a5e7340417f27824fcf814f7324ccef8f475c97c3f396c5ee3a54"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/space.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/space.md",
+						"mode": "100644",
+						"sha256": "9e752e107645bba561f532f5d4c5f2bdaa01009197d9aa9087adbb9223e07ac1"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/space.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/space.rs",
+						"mode": "100644",
+						"sha256": "2308017949f135796fedff177c9410d352ee26f79c0f7ffdd10d1a149e634b09"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "41bb004c6cdcfba274979da563815762dfa269ae7d3897959e74ef614bc3c6c3"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "5452a330edbb8deaec898c43b417e464fba8e31f118216908e4178b1841e2bb5"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/white_balance.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/white_balance.md",
+						"mode": "100644",
+						"sha256": "b54dffbf693a70d4d272893d71fc11398a17e1c945b925b985ccbbe54aa6c42c"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/white_balance.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/white_balance.rs",
+						"mode": "100644",
+						"sha256": "118fa89eaeed4f3afccc3c60cfc0ff2193323976dc0fbedf92f47110b097a250"
+					}
+				}
+			],
+			"contentSha256": "c47f05816ca9ae2238f6cd8adb17830507cfee4a7d838f501db6b721b52c2176"
 		}
 	]
 }
