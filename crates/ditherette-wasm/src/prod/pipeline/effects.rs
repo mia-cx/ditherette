@@ -23,8 +23,8 @@ use crate::{
         },
         effects::{
             apply_in_place, carrier_after, carrier_bytes, chain::validate_chain,
-            recolour::RecolourRecipe, recolour_analysis, resolve_recolour, EffectContext,
-            EffectImage, EffectStep,
+            operation::BOOKKEEPING_BYTES, recolour::RecolourRecipe, recolour_analysis,
+            resolve_recolour, EffectContext, EffectImage, EffectStep,
         },
     },
 };
@@ -151,7 +151,7 @@ pub(super) fn analyze<B: InputBoundary, A: Allocator>(
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
     // The carrier always exists here; earlier steps may add scratch; analysis adds its samples.
     let carrier = carrier_bytes(request.effects, dimensions)
-        .max(EffectImage::carrier_bytes(pixels))
+        .max(EffectImage::carrier_bytes(pixels) + BOOKKEEPING_BYTES)
         + recolour_analysis::ANALYSIS_BYTES;
     call.charge_working_capacity(carrier, peak)?;
     call.prepare(None, None, [len, 0, 0, 0], 0, peak, allocator)?;
