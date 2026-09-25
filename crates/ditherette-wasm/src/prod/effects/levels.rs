@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext},
+    chain::{check_bounded, ChannelFn, Effect, EffectContext},
     channel::Channel,
     image::EffectImage,
 };
@@ -32,9 +32,9 @@ pub struct Levels {
     pub output: Points,
 }
 
-impl Levels {
+impl ChannelFn for Levels {
     /// Maps one channel value: normalize and clip the input range, shape, then scale to the output range.
-    pub fn map(&self, value: f32) -> f32 {
+    fn map(&self, value: f32) -> f32 {
         let t =
             ((value - self.input.black) / (self.input.white - self.input.black)).clamp(0.0, 1.0);
         let shaped = if self.gamma == 1.0 {
@@ -66,5 +66,9 @@ impl Effect for Levels {
         for rgb in &mut image.rgb {
             self.channel.apply(rgb, |value| self.map(value));
         }
+    }
+
+    fn channel_map(&self) -> Option<(Channel, &dyn ChannelFn)> {
+        Some((self.channel, self))
     }
 }

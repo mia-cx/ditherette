@@ -148,3 +148,53 @@ fn invalid_chains_fail_identically() {
         assert_same(&invalid, width, height, &data);
     }
 }
+
+/// Not per-channel: forces the continuous carrier after a tabulated prefix.
+struct Swap;
+
+impl prod::Effect for Swap {
+    fn validate(
+        &self,
+        _path: &str,
+    ) -> Result<(), ditherette_wasm::prod::contract::error::DitheretteError> {
+        Ok(())
+    }
+
+    fn apply(&self, image: &mut prod::EffectImage, _context: &prod::EffectContext<'_>) {
+        for rgb in &mut image.rgb {
+            *rgb = [rgb[2] * 1.5 - 0.2, rgb[0], rgb[1]];
+        }
+    }
+}
+
+#[test]
+fn tabulated_prefixes_feed_the_carrier_exactly() {
+    let mut rng = Rng(99);
+    for (width, height, data) in fixtures(&mut rng) {
+        for _ in 0..20 {
+            let mut chain: Vec<prod::Step<Box<dyn prod::Effect>>> = Vec::new();
+            for _ in 0..rng.next() % 6 {
+                let effect: Box<dyn prod::Effect> = if rng.next() % 3 == 0 {
+                    Box::new(Swap)
+                } else {
+                    let step = prod::decode_effects(&json!([random_effect(&mut rng)]).to_string())
+                        .unwrap()
+                        .remove(0);
+                    Box::new(step.effect)
+                };
+                chain.push(prod::Step {
+                    enabled: rng.next() % 5 != 0,
+                    effect,
+                });
+            }
+            let dimensions = ditherette_wasm::image::ImageDimensions::new(width, height).unwrap();
+            let view = ditherette_wasm::image::ImageView::packed(&data, dimensions).unwrap();
+            let mut stepwise = prod::EffectImage::from_rgba8(view);
+            let context = prod::EffectContext::default();
+            prod::apply_chain(&mut stepwise, &chain, &context).unwrap();
+            let mut folded = data.clone();
+            prod::apply_in_place(&mut folded, dimensions, &chain, &context);
+            assert_eq!(folded, stepwise.to_rgba8().data());
+        }
+    }
+}

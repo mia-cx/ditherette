@@ -9,8 +9,9 @@ pub mod image;
 pub mod levels;
 pub mod operation;
 pub mod recipe;
+pub mod table;
 
-pub use chain::{apply_chain, Effect, EffectContext, Needs, Step};
+pub use chain::{apply_chain, ChannelFn, Effect, EffectContext, Needs, Step};
 pub use image::EffectImage;
-pub use operation::{apply_effects, EffectsRequest};
+pub use operation::{apply_effects, apply_in_place, EffectsRequest};
 pub use recipe::{decode_effects, BuiltinEffect, EffectStep};
