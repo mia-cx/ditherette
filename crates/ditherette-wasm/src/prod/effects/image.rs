@@ -5,6 +5,8 @@
 
 use crate::image::{contracts::Rgba8Image, ImageBuf, ImageDimensions, ImageView, Rgba8};
 
+use std::{collections::TryReserveError, mem::size_of};
+
 use super::table::ChannelTables;
 
 /// Straight RGB triples in row-major order, plus the source alpha byte for each pixel.
@@ -55,21 +57,33 @@ impl EffectImage {
 
 impl EffectImage {
     /// Decodes packed RGBA8 through tabulated leading per-channel effects.
-    pub fn from_packed(data: &[u8], dimensions: ImageDimensions, tables: &ChannelTables) -> Self {
-        let (rgb, alpha) = data
-            .chunks_exact(4)
-            .map(|pixel| {
-                (
-                    std::array::from_fn(|channel| tables.unit(channel, pixel[channel])),
-                    pixel[Rgba8::A],
-                )
-            })
-            .unzip();
-        Self {
+    /// Allocation failure is reported rather than aborting.
+    pub fn try_from_packed(
+        data: &[u8],
+        dimensions: ImageDimensions,
+        tables: &ChannelTables,
+    ) -> Result<Self, TryReserveError> {
+        let pixels = data.len() / 4;
+        let mut rgb = Vec::new();
+        let mut alpha = Vec::new();
+        rgb.try_reserve_exact(pixels)?;
+        alpha.try_reserve_exact(pixels)?;
+        for pixel in data.chunks_exact(4) {
+            rgb.push(std::array::from_fn(|channel| {
+                tables.unit(channel, pixel[channel])
+            }));
+            alpha.push(pixel[Rgba8::A]);
+        }
+        Ok(Self {
             dimensions,
             rgb,
             alpha,
-        }
+        })
+    }
+
+    /// Bytes `try_from_packed` allocates for `pixels` pixels.
+    pub const fn carrier_bytes(pixels: u64) -> u64 {
+        pixels * (size_of::<[f32; 3]>() + size_of::<u8>()) as u64
     }
 
     /// Writes clipped, rounded RGB into packed RGBA8, leaving its alpha bytes alone.

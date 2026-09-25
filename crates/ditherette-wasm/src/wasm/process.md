@@ -21,3 +21,12 @@ The public wrapper maps settings failures into `recipe.output`, `recipe.alpha`,
 `recipe.match`, and `recipe.dither`. Source, palette, lifecycle, memory, and
 final result-copy failures keep their existing paths. In particular, a failed
 final result copy remains `output`, not `recipe.output`.
+
+## Recipe v2
+
+`privateProcessEffects` takes the same arguments plus `effects`, a JSON string, before `resultSink`.
+Version must equal two. The wrapper has already validated the effects with indexed paths.
+Rust decodes and validates them again; a rejection reports private path 39, `effects`.
+Effects read the request palette and the matching working space. Paths 40 and 41 report a missing palette colour or space.
+The processor applies effects while `process` snapshots its source, so progress reports `effects` after `prepare`.
+A chain with no enabled step runs exactly the v1 `process` path.

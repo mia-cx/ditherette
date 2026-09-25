@@ -240,16 +240,7 @@ fn parse_policy(
         2.0 if parameter == 0.0 => Field::BlueNoise {},
         _ => return Err(invalid(ErrorPath::PerturbField)),
     };
-    let space = match space {
-        0.0 => WorkingSpace::Srgb,
-        1.0 => WorkingSpace::LinearRgb,
-        2.0 => WorkingSpace::Oklab,
-        3.0 => WorkingSpace::Oklch,
-        4.0 => WorkingSpace::Cielab,
-        5.0 => WorkingSpace::Cielch,
-        6.0 => WorkingSpace::Ycbcr,
-        _ => return Err(invalid(ErrorPath::PerturbSpace)),
-    };
+    let space = parse_space(space).ok_or_else(|| invalid(ErrorPath::PerturbSpace))?;
     let strength = scalar(strength, ErrorPath::PerturbStrength)?;
     let placement = parse_placement(
         placement,
@@ -314,4 +305,18 @@ fn scalar(value: f64, path: ErrorPath) -> Result<f32, Failure> {
 
 fn invalid(path: ErrorPath) -> Failure {
     Failure::new(ErrorCode::InvalidSettings, path)
+}
+
+/// Wrapper-owned working-space tags, in the package's declaration order.
+pub(super) fn parse_space(space: f64) -> Option<WorkingSpace> {
+    Some(match space {
+        0.0 => WorkingSpace::Srgb,
+        1.0 => WorkingSpace::LinearRgb,
+        2.0 => WorkingSpace::Oklab,
+        3.0 => WorkingSpace::Oklch,
+        4.0 => WorkingSpace::Cielab,
+        5.0 => WorkingSpace::Cielch,
+        6.0 => WorkingSpace::Ycbcr,
+        _ => return None,
+    })
 }

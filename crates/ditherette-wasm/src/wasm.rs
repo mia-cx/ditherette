@@ -4,6 +4,7 @@
 //! exports here (`resizeRgba8`, `processRgba8`, `convertColorSpace`) and the
 //! benchmark loops serve the legacy website adapter and browser/Wasm benchmarks.
 
+pub mod effects;
 pub mod fields;
 pub mod process;
 pub mod processor;
