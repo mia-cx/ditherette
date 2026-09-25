@@ -62,7 +62,7 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
     let tabulates = steps
         .iter()
         .filter(|step| step.enabled)
-        .all(|step| step.effect.channel_map().is_some());
+        .all(|step| step.effect.per_channel());
     if tabulates {
         0
     } else {
@@ -84,13 +84,9 @@ pub fn apply_in_place<E: Effect>(
         .collect();
     let tabulated = enabled
         .iter()
-        .take_while(|effect| effect.channel_map().is_some())
+        .take_while(|effect| effect.per_channel())
         .count();
-    let tables = ChannelTables::new(
-        enabled[..tabulated]
-            .iter()
-            .filter_map(|effect| effect.channel_map()),
-    );
+    let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
     if tabulated == enabled.len() {
         if tabulated > 0 {
             let [red, green, blue] = tables.bytes();

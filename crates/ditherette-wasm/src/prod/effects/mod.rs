@@ -11,7 +11,7 @@ pub mod operation;
 pub mod recipe;
 pub mod table;
 
-pub use chain::{apply_chain, ChannelFn, Effect, EffectContext, Needs, Step};
+pub use chain::{apply_chain, Effect, EffectContext, Needs, Step};
 pub use image::EffectImage;
 pub use operation::{apply_effects, apply_in_place, carrier_bytes, EffectsRequest};
 pub use recipe::{decode_effects, BuiltinEffect, EffectStep};
