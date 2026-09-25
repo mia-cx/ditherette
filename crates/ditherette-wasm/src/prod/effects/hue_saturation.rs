@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::prod::contract::error::DitheretteError;
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext, PixelMap},
+    chain::{check_bounded, Effect, EffectContext},
     image::EffectImage,
     space::{from_linear, linear_to_oklab, oklab_to_linear, to_linear},
 };
@@ -66,9 +66,14 @@ impl HueSaturation {
 
 impl Effect for HueSaturation {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.hue, -180.0, 180.0, format!("{path}.hue"))?;
-        check_bounded(self.saturation, -1.0, 1.0, format!("{path}.saturation"))?;
-        check_bounded(self.lightness, -1.0, 1.0, format!("{path}.lightness"))
+        check_bounded(self.hue, -180.0, 180.0, format_args!("{path}.hue"))?;
+        check_bounded(
+            self.saturation,
+            -1.0,
+            1.0,
+            format_args!("{path}.saturation"),
+        )?;
+        check_bounded(self.lightness, -1.0, 1.0, format_args!("{path}.lightness"))
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {
@@ -81,11 +86,14 @@ impl Effect for HueSaturation {
         }
     }
 
-    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
+    fn pointwise(&self) -> bool {
+        true
+    }
+
+    fn map_pixel(&self, rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
         if self.neutral() {
-            return Some(Box::new(|rgb| rgb));
+            return rgb;
         }
-        let turn = self.turn();
-        Some(Box::new(move |rgb| self.map_linear(turn, to_linear(rgb))))
+        self.map_linear(self.turn(), to_linear(rgb))
     }
 }

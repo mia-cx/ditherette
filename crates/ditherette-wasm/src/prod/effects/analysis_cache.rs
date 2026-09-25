@@ -52,19 +52,23 @@ impl AnalysisCache {
         {
             let mut entries = self.0.borrow_mut();
             if let Some(index) = entries.published.iter().position(|(k, _)| *k == key) {
+                // Moving the hit to the end reuses the list's own capacity.
                 let entry = entries.published.remove(index);
-                let recipe = entry.1.clone();
+                let recipe = entry.1.try_clone();
                 entries.published.push(entry);
-                return Ok(recipe);
+                return recipe;
             }
             if let Some((_, recipe)) = entries.pending.iter().find(|(k, _)| *k == key) {
-                return Ok(recipe.clone());
+                return recipe.try_clone();
             }
         }
         let recipe = analyze(image, context)?;
         let mut entries = self.0.borrow_mut();
-        if entries.pending.len() < CAPACITY {
-            entries.pending.push((key, recipe.clone()));
+        // Caching is optional: if either reservation fails, the call still has its recipe.
+        if entries.pending.len() < CAPACITY && entries.pending.try_reserve(1).is_ok() {
+            if let Ok(copy) = recipe.try_clone() {
+                entries.pending.push((key, copy));
+            }
         }
         Ok(recipe)
     }
@@ -73,7 +77,8 @@ impl AnalysisCache {
     pub fn settle(&mut self, success: bool) {
         let entries = self.0.get_mut();
         let pending = std::mem::take(&mut entries.pending);
-        if !success {
+        // A failed reservation only drops these optional entries.
+        if !success || entries.published.try_reserve(pending.len()).is_err() {
             return;
         }
         for entry in pending {

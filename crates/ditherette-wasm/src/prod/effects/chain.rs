@@ -4,6 +4,8 @@
 //! needs, then applies enabled steps in array order. It knows nothing about
 //! individual effects, so new effects never change sequencing.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -49,8 +51,41 @@ pub struct Needs {
     pub space: bool,
 }
 
-/// One pixel's map, prepared once per call.
-pub type PixelMap<'a> = Box<dyn Fn([f32; 3]) -> [f32; 3] + 'a>;
+/// A request path formatted on the stack. Built-in paths stay far below its 64 bytes;
+/// anything longer is cut short rather than allocated.
+pub struct StackPath {
+    bytes: [u8; 64],
+    len: usize,
+}
+
+impl StackPath {
+    pub fn new(args: fmt::Arguments<'_>) -> Self {
+        let mut path = Self {
+            bytes: [0; 64],
+            len: 0,
+        };
+        // Overflow only truncates; paths are ASCII, so the cut stays on a character boundary.
+        let _ = fmt::write(&mut path, args);
+        path
+    }
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.bytes[..self.len]).unwrap_or("effects")
+    }
+}
+
+impl fmt::Write for StackPath {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        let room = self.bytes.len() - self.len;
+        let taken = text.len().min(room);
+        self.bytes[self.len..self.len + taken].copy_from_slice(&text.as_bytes()[..taken]);
+        self.len += taken;
+        if taken < text.len() {
+            return Err(fmt::Error);
+        }
+        Ok(())
+    }
+}
 
 /// One colour operation. Implement this to add an effect.
 pub trait Effect {
@@ -91,14 +126,15 @@ pub trait Effect {
         0
     }
 
-    /// A prepared per-pixel map when each output pixel depends only on the same input pixel.
-    /// Production memoizes chains of such effects by input colour. It must equal `apply`.
-    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
-        self.per_channel().then(|| {
-            Box::new(move |rgb: [f32; 3]| {
-                std::array::from_fn(|channel| self.map_channel(channel, rgb[channel]))
-            }) as PixelMap<'s>
-        })
+    /// True when each output pixel depends only on the same input pixel.
+    /// Production memoizes chains of such effects by input colour.
+    fn pointwise(&self) -> bool {
+        self.per_channel()
+    }
+
+    /// One pixel's map. Called only when `pointwise` is true; it must equal `apply` on that pixel.
+    fn map_pixel(&self, rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
+        std::array::from_fn(|channel| self.map_channel(channel, rgb[channel]))
     }
 }
 
@@ -135,8 +171,12 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
         (**self).working_bytes()
     }
 
-    fn pixel_map<'s>(&'s self, context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
-        (**self).pixel_map(context)
+    fn pointwise(&self) -> bool {
+        (**self).pointwise()
+    }
+
+    fn map_pixel(&self, rgb: [f32; 3], context: &EffectContext<'_>) -> [f32; 3] {
+        (**self).map_pixel(rgb, context)
     }
 }
 
@@ -161,7 +201,8 @@ pub fn validate_chain<E: Effect>(
         ));
     }
     for (index, step) in steps.iter().enumerate() {
-        step.effect.validate(&format!("effects.{index}"))?;
+        step.effect
+            .validate(StackPath::new(format_args!("effects.{index}")).as_str())?;
     }
     for (index, step) in steps.iter().enumerate().filter(|(_, step)| step.enabled) {
         let needs = step.effect.needs();
@@ -175,8 +216,10 @@ pub fn validate_chain<E: Effect>(
         if needs.space && context.space.is_none() {
             return Err(missing(index, "context.space", "a working space"));
         }
-        step.effect
-            .check_context(context, &format!("effects.{index}"))?;
+        step.effect.check_context(
+            context,
+            StackPath::new(format_args!("effects.{index}")).as_str(),
+        )?;
     }
     Ok(())
 }
@@ -196,13 +239,19 @@ pub fn apply_chain<E: Effect>(
 }
 
 /// Rejects NaN, infinities, and values outside `min..=max` with an argument path.
-pub fn check_bounded(value: f32, min: f32, max: f32, path: String) -> Result<(), DitheretteError> {
+/// Production formats `path` only on failure, so validating a valid chain never allocates.
+pub fn check_bounded(
+    value: f32,
+    min: f32,
+    max: f32,
+    path: fmt::Arguments<'_>,
+) -> Result<(), DitheretteError> {
     if value.is_finite() && (min..=max).contains(&value) {
         return Ok(());
     }
     Err(DitheretteError::new(
         ErrorCode::InvalidSettings,
-        path,
+        path.to_string(),
         format!("Value must be finite and between {min} and {max}."),
     ))
 }

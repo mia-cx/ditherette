@@ -6,6 +6,8 @@
 
 use std::f32::consts::PI;
 
+use std::collections::TryReserveError;
+
 use serde::{Deserialize, Serialize};
 
 use crate::prod::contract::{
@@ -14,12 +16,15 @@ use crate::prod::contract::{
 };
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext, Needs, PixelMap},
+    chain::{check_bounded, Effect, EffectContext, Needs, StackPath},
     curves::{Curves, Spline},
     image::EffectImage,
     recolour_analysis::{analyze, ANALYSIS_BYTES},
     space::{from_opponent, to_opponent},
 };
+
+/// The identity tone curve.
+pub const IDENTITY_TONE: [[f32; 2]; 2] = [[0.0, 0.0], [1.0, 1.0]];
 
 /// Most hue groups one recipe may hold.
 pub const MAX_GROUPS: usize = 12;
@@ -59,32 +64,59 @@ pub struct RecolourRecipe {
 }
 
 impl RecolourRecipe {
-    /// Leaves every colour where it is.
-    pub fn identity(space: WorkingSpace) -> Self {
-        Self {
+    /// The recipe that leaves every colour where it is, reserving its tone points fallibly.
+    pub fn try_identity(space: WorkingSpace) -> Result<Self, TryReserveError> {
+        let mut tone = Vec::new();
+        tone.try_reserve_exact(2)?;
+        tone.extend_from_slice(&IDENTITY_TONE);
+        Ok(Self {
             space,
-            tone: vec![[0.0, 0.0], [1.0, 1.0]],
+            tone,
             chroma: 1.0,
             shift: [0.0, 0.0],
             groups: Vec::new(),
-        }
+        })
+    }
+
+    /// A copy whose vectors reserve fallibly.
+    pub fn try_clone(&self) -> Result<Self, TryReserveError> {
+        let mut tone = Vec::new();
+        tone.try_reserve_exact(self.tone.len())?;
+        tone.extend_from_slice(&self.tone);
+        let mut groups = Vec::new();
+        groups.try_reserve_exact(self.groups.len())?;
+        groups.extend_from_slice(&self.groups);
+        Ok(Self {
+            space: self.space,
+            tone,
+            chroma: self.chroma,
+            shift: self.shift,
+            groups,
+        })
     }
 
     /// True for the identity recipe, which application skips rather than round-trip.
+    /// Compares fields in place, so it never allocates.
     pub fn is_identity(&self) -> bool {
-        *self == Self::identity(self.space)
+        self.tone == IDENTITY_TONE
+            && self.chroma == 1.0
+            && self.shift == [0.0, 0.0]
+            && self.groups.is_empty()
     }
 
     /// Checks every field against its documented domain, naming the failing field.
     pub fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        Curves::validate_points(&self.tone, &format!("{path}.tone"))?;
-        check_bounded(self.chroma, 0.0, 2.0, format!("{path}.chroma"))?;
+        Curves::validate_points(
+            &self.tone,
+            StackPath::new(format_args!("{path}.tone")).as_str(),
+        )?;
+        check_bounded(self.chroma, 0.0, 2.0, format_args!("{path}.chroma"))?;
         for (axis, value) in self.shift.iter().enumerate() {
             check_bounded(
                 *value,
                 -MAX_SHIFT,
                 MAX_SHIFT,
-                format!("{path}.shift.{axis}"),
+                format_args!("{path}.shift.{axis}"),
             )?;
         }
         if self.groups.len() > MAX_GROUPS {
@@ -95,11 +127,12 @@ impl RecolourRecipe {
             ));
         }
         for (index, group) in self.groups.iter().enumerate() {
-            let at = format!("{path}.groups.{index}");
-            check_bounded(group.hue, 0.0, 360.0, format!("{at}.hue"))?;
-            check_bounded(group.width, 1.0, 180.0, format!("{at}.width"))?;
-            check_bounded(group.turn, -180.0, 180.0, format!("{at}.turn"))?;
-            check_bounded(group.chroma, 0.0, 2.0, format!("{at}.chroma"))?;
+            let at = StackPath::new(format_args!("{path}.groups.{index}"));
+            let at = at.as_str();
+            check_bounded(group.hue, 0.0, 360.0, format_args!("{at}.hue"))?;
+            check_bounded(group.width, 1.0, 180.0, format_args!("{at}.width"))?;
+            check_bounded(group.turn, -180.0, 180.0, format_args!("{at}.turn"))?;
+            check_bounded(group.chroma, 0.0, 2.0, format_args!("{at}.chroma"))?;
         }
         Ok(())
     }
@@ -174,9 +207,9 @@ pub struct Recolour {
 
 impl Effect for Recolour {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.strength, 0.0, 1.0, format!("{path}.strength"))?;
+        check_bounded(self.strength, 0.0, 1.0, format_args!("{path}.strength"))?;
         match &self.recipe {
-            Some(recipe) => recipe.validate(&format!("{path}.recipe")),
+            Some(recipe) => recipe.validate(StackPath::new(format_args!("{path}.recipe")).as_str()),
             None => Ok(()),
         }
     }
@@ -212,26 +245,22 @@ impl Effect for Recolour {
     }
 
     /// Pointwise once its recipe is known. Production resolves recipe-less steps first.
-    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
-        if self.strength == 0.0 {
-            return Some(Box::new(|rgb| rgb));
+    fn pointwise(&self) -> bool {
+        self.strength == 0.0 || self.recipe.is_some()
+    }
+
+    fn map_pixel(&self, rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
+        let recipe = match &self.recipe {
+            Some(recipe) if self.strength != 0.0 && !recipe.is_identity() => recipe,
+            _ => return rgb,
+        };
+        let adjusted = recipe.map(&Spline::new(&recipe.tone), rgb);
+        if self.strength == 1.0 {
+            return adjusted;
         }
-        let recipe = self.recipe.as_ref()?;
-        if recipe.is_identity() {
-            return Some(Box::new(|rgb| rgb));
-        }
-        let tone = Spline::new(&recipe.tone);
-        let strength = self.strength;
-        Some(Box::new(move |rgb: [f32; 3]| {
-            let adjusted = recipe.map(&tone, rgb);
-            if strength == 1.0 {
-                adjusted
-            } else {
-                std::array::from_fn(|channel| {
-                    rgb[channel] + strength * (adjusted[channel] - rgb[channel])
-                })
-            }
-        }))
+        std::array::from_fn(|channel| {
+            rgb[channel] + self.strength * (adjusted[channel] - rgb[channel])
+        })
     }
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {

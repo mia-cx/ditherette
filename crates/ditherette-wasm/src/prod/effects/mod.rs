@@ -21,7 +21,7 @@ pub mod space;
 pub mod table;
 pub mod white_balance;
 
-pub use chain::{apply_chain, Effect, EffectContext, Needs, PixelMap, Step};
+pub use chain::{apply_chain, Effect, EffectContext, Needs, Step};
 pub use image::EffectImage;
 pub use operation::{
     analyze_recolour, apply_effects, apply_in_place, carrier_after, carrier_bytes,

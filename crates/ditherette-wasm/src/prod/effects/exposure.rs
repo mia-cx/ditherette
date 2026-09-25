@@ -31,7 +31,12 @@ impl Exposure {
 
 impl Effect for Exposure {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.stops, -MAX_STOPS, MAX_STOPS, format!("{path}.stops"))
+        check_bounded(
+            self.stops,
+            -MAX_STOPS,
+            MAX_STOPS,
+            format_args!("{path}.stops"),
+        )
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {
