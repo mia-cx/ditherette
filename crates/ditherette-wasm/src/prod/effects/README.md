@@ -44,6 +44,34 @@ It also hoists the turn's sine and cosine out of the pixel loop (about 2% on its
 | `hue-saturation` | Picking_at_thread 3462×2309 | 560.0 ms | 385.8 ms | −31% |
 | `grade+hue` | Picking_at_thread 3462×2309 | 670.2 ms | 494.1 ms | −26% |
 
+### Colour memo for byte-input carrier effects (selected)
+
+After a tabulated run, a pixel's carrier value depends only on its three bytes, so a carrier effect's output does too.
+`memo::try_memoized` keeps a direct-mapped table of 16,384 colours (256 KiB, charged as scratch) and checks the full key on every hit.
+Hue-saturation and recolour use it when they read byte input. Photos repeat colours locally; illustrations repeat them everywhere.
+
+| Chain | Fixture | Copy | Selected | Change |
+| --- | --- | ---: | ---: | ---: |
+| `hue-saturation` | Celeste_Insta_selfie 800×800 | 42.2 ms | 6.1 ms | −86% |
+| `grade+hue` | Celeste_Insta_selfie 800×800 | 50.5 ms | 15.6 ms | −69% |
+| `hue-saturation` | Picking_at_thread 3462×2309 | 560.0 ms | 124.7 ms | −78% |
+| `grade+hue` | Picking_at_thread 3462×2309 | 670.2 ms | 254.2 ms | −62% |
+| `recolour-apply` | Celeste_Insta_selfie 800×800 | 86.5 ms | 8.2 ms | −90% |
+| `recolour-apply` | Picking_at_thread 3462×2309 | 1061 ms | 188.6 ms | −82% |
+
+`recolour-apply` applies the fixture's own analysed recipe (8-colour palette, Oklab); it includes the tabulated linear decode.
+
+### Recolour analysis (selected)
+
+Each sample's hue, chroma, and neutral ramp are computed once instead of once per sector, keeping the reference's multiplication and summation order.
+
+| Fixture | Copy | Selected | Change |
+| --- | ---: | ---: | ---: |
+| Celeste_Insta_selfie 800×800 | 26.3 ms | 19.1 ms | −27% |
+| Picking_at_thread 3462×2309 | 57.4 ms | 43.8 ms | −24% |
+
+Analysis reads at most 2¹⁸ samples, so its cost flattens for large images. The processor also caches analyses by exactly what they read; a repeated analysis costs one SHA-256 pass over the samples.
+
 ### Considered, not taken
 
 - Encoding through a byte-threshold search instead of `powf` when hue-saturation is last. Exact only if `byte(linear_to_srgb_unit(v))` is monotone for every `f32` on every target, which the libm contract does not promise.

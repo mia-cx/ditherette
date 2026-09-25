@@ -118,6 +118,18 @@ impl Effect for BuiltinEffect {
         }
     }
 
+    fn working_bytes(&self) -> u64 {
+        match self {
+            Self::Levels(effect) => effect.working_bytes(),
+            Self::Curves(effect) => effect.working_bytes(),
+            Self::BrightnessContrast(effect) => effect.working_bytes(),
+            Self::Exposure(effect) => effect.working_bytes(),
+            Self::WhiteBalance(effect) => effect.working_bytes(),
+            Self::HueSaturation(effect) => effect.working_bytes(),
+            Self::Recolour(effect) => effect.working_bytes(),
+        }
+    }
+
     fn apply_tabulated(
         &self,
         data: &[u8],
