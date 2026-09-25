@@ -99,6 +99,7 @@ function processorMock() {
 		perturb: vi.fn(),
 		ditherAndQuantize: vi.fn(),
 		applyEffects: vi.fn(),
+		analyzeRecolour: vi.fn(),
 		dispose: vi.fn()
 	};
 }
