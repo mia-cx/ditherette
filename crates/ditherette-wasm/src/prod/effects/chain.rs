@@ -16,7 +16,7 @@ use crate::{
 
 use std::collections::TryReserveError;
 
-use super::{image::EffectImage, table::ChannelTables};
+use super::{analysis_cache::AnalysisCache, image::EffectImage, table::ChannelTables};
 
 /// Most steps one chain may hold, enabled or not.
 pub const MAX_EFFECTS: usize = 64;
@@ -28,6 +28,8 @@ pub struct EffectContext<'a> {
     pub palette: &'a [PaletteEntry],
     /// The working space final quantization matches in.
     pub space: Option<WorkingSpace>,
+    /// Production-only memo for recipe-less recolour steps. `None` analyses every time.
+    pub analyses: Option<&'a AnalysisCache>,
 }
 
 impl EffectContext<'_> {

@@ -136,6 +136,7 @@ fn assert_same(effects: &Value, width: u32, height: u32, data: &[u8]) {
         context: prod::EffectContext {
             palette: &PALETTE,
             space: Some(PROD_SPACES[(data.len() / 4) % PROD_SPACES.len()]),
+            analyses: None,
         },
     });
     match (expected, actual) {
@@ -283,6 +284,7 @@ fn analysis_matches_the_reference_in_every_space() {
                     context: prod::EffectContext {
                         palette: &palette,
                         space: Some(prod_space),
+                        analyses: None,
                     },
                 })
                 .unwrap();

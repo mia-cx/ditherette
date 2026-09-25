@@ -104,7 +104,10 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
     }
     let mut image = EffectImage::from_rgba8(source_view(request.source)?);
     apply_chain(&mut image, request.effects, &request.context)?;
-    Ok(analyze(&image, &request.context))
+    Ok(match request.context.analyses {
+        Some(cache) => cache.analyze(&image, &request.context),
+        None => analyze(&image, &request.context),
+    })
 }
 
 /// Applies an already validated chain to packed RGBA8. Alpha bytes are never written.
@@ -114,15 +117,7 @@ pub fn apply_in_place<E: Effect>(
     steps: &[Step<E>],
     context: &EffectContext<'_>,
 ) -> Result<(), TryReserveError> {
-    let enabled: Vec<&E> = steps
-        .iter()
-        .filter(|step| step.enabled)
-        .map(|step| &step.effect)
-        .collect();
-    let tabulated = enabled
-        .iter()
-        .take_while(|effect| effect.per_channel())
-        .count();
+    let (enabled, tabulated) = plan(steps);
     let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
     if tabulated == enabled.len() {
         if tabulated > 0 {
@@ -135,24 +130,63 @@ pub fn apply_in_place<E: Effect>(
         }
         return Ok(());
     }
-    let first = enabled[tabulated];
-    let (mut image, rest) = match first.apply_tabulated(data, dimensions, &tables, context) {
-        Some(image) => {
-            let mut image = image?;
-            image.bound();
-            (image, tabulated + 1)
-        }
-        None => (
-            EffectImage::try_from_packed(data, dimensions, &tables)?,
-            tabulated,
-        ),
-    };
+    carrier(data, dimensions, &enabled, tabulated, &tables, context)?.write_rgb(data);
+    Ok(())
+}
+
+/// The continuous carrier after an already validated chain: what a step appended to it receives.
+pub fn carrier_after<E: Effect>(
+    data: &[u8],
+    dimensions: ImageDimensions,
+    steps: &[Step<E>],
+    context: &EffectContext<'_>,
+) -> Result<EffectImage, TryReserveError> {
+    let (enabled, tabulated) = plan(steps);
+    let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
+    carrier(data, dimensions, &enabled, tabulated, &tables, context)
+}
+
+/// Enabled effects in order, and how many lead as a tabulated per-channel run.
+fn plan<E: Effect>(steps: &[Step<E>]) -> (Vec<&E>, usize) {
+    let enabled: Vec<&E> = steps
+        .iter()
+        .filter(|step| step.enabled)
+        .map(|step| &step.effect)
+        .collect();
+    let tabulated = enabled
+        .iter()
+        .take_while(|effect| effect.per_channel())
+        .count();
+    (enabled, tabulated)
+}
+
+/// Builds the carrier through the tables, then applies the rest, bounding after each step.
+fn carrier<E: Effect>(
+    data: &[u8],
+    dimensions: ImageDimensions,
+    enabled: &[&E],
+    tabulated: usize,
+    tables: &ChannelTables,
+    context: &EffectContext<'_>,
+) -> Result<EffectImage, TryReserveError> {
+    let first = enabled.get(tabulated);
+    let (mut image, rest) =
+        match first.and_then(|first| first.apply_tabulated(data, dimensions, tables, context)) {
+            Some(image) => {
+                let mut image = image?;
+                image.bound();
+                (image, tabulated + 1)
+            }
+            None => (
+                EffectImage::try_from_packed(data, dimensions, tables)?,
+                tabulated,
+            ),
+        };
     for effect in &enabled[rest..] {
         effect.apply(&mut image, context);
         image.bound();
     }
-    image.write_rgb(data);
-    Ok(())
+    Ok(image)
 }
 
 fn source_view(source: Source<'_>) -> Result<ImageView<'_, Rgba8>, DitheretteError> {

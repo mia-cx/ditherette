@@ -96,10 +96,7 @@ pub fn analyze(image: &EffectImage, context: &EffectContext<'_>) -> RecolourReci
 fn sample(image: &EffectImage, space: WorkingSpace) -> Vec<Sample> {
     let width = image.dimensions.width_usize();
     let height = image.dimensions.height() as usize;
-    let mut step = 1;
-    while (width.div_ceil(step) * height.div_ceil(step)) as u64 > MAX_SAMPLES {
-        step += 1;
-    }
+    let step = sample_step(width, height);
     let mut samples = Vec::new();
     for y in (0..height).step_by(step) {
         for x in (0..width).step_by(step) {
@@ -114,6 +111,15 @@ fn sample(image: &EffectImage, space: WorkingSpace) -> Vec<Sample> {
         }
     }
     samples
+}
+
+/// The coarsest grid step with at most `MAX_SAMPLES` samples. The analysis cache hashes this grid.
+pub fn sample_step(width: usize, height: usize) -> usize {
+    let mut step = 1;
+    while (width.div_ceil(step) * height.div_ceil(step)) as u64 > MAX_SAMPLES {
+        step += 1;
+    }
+    step
 }
 
 /// Lightness at weighted quantile `p`: samples sorted by lightness, the first whose
