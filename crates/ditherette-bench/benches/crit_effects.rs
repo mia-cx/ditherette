@@ -107,6 +107,7 @@ fn criterion_effects(criterion: &mut Criterion) {
                     context: prod::EffectContext {
                         palette: &PALETTE,
                         space: None,
+            analyses: None,
                     },
                 })
                 .expect("prod applies")

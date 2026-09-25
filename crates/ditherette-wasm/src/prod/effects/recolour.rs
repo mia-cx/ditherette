@@ -209,7 +209,11 @@ impl Effect for Recolour {
         }
         match &self.recipe {
             Some(recipe) => recipe.apply(image, self.strength),
-            None => analyze(image, context).apply(image, self.strength),
+            None => match context.analyses {
+                Some(cache) => cache.analyze(image, context),
+                None => analyze(image, context),
+            }
+            .apply(image, self.strength),
         }
     }
 }

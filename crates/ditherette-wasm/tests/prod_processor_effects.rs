@@ -10,7 +10,7 @@ use ditherette_wasm::{
             error::ErrorCode,
             failure::{ErrorPath, Failure},
             lifecycle::{Progress, Stage},
-            request::RecipeV1,
+            request::{RecipeV1, WorkingSpace},
         },
         effects as prod_effects,
         pipeline::{
@@ -311,4 +311,162 @@ fn invalid_effects_fail_before_any_work_and_leave_the_instance_usable() {
         )
         .unwrap();
     assert_eq!(output, spec_effects(&data, &chain()));
+}
+
+fn recolour_chain(before: serde_json::Value, after: serde_json::Value) -> serde_json::Value {
+    let mut chain = vec![before];
+    chain.push(json!({ "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null }));
+    chain.push(after);
+    serde_json::Value::Array(chain)
+}
+
+fn levels_gamma(gamma: f32) -> serde_json::Value {
+    json!({ "effect": "levels", "enabled": true, "channel": "rgb",
+        "input": { "black": 0.0, "white": 1.0 }, "gamma": gamma,
+        "output": { "black": 0.0, "white": 1.0 } })
+}
+
+#[test]
+fn recolour_analyses_are_cached_by_what_they_read() {
+    let data = ramp();
+    let mut processor = processor();
+    let space = WorkingSpace::Oklab;
+    let run = |processor: &mut Processor, chain: &serde_json::Value| {
+        let effects = prod_effects::decode_effects(&chain.to_string()).unwrap();
+        let expected = spec::effects::apply_effects(spec::effects::EffectsRequest {
+            version: 1,
+            source: Source {
+                width: WIDTH,
+                height: HEIGHT,
+                data: &data,
+            },
+            effects: &spec::effects::decode_effects(&chain.to_string()).unwrap(),
+            context: spec::effects::EffectContext {
+                palette: &PALETTE,
+                space: Some(ditherette_wasm::spec::contract::request::WorkingSpace::Oklab),
+            },
+        })
+        .unwrap()
+        .into_vec();
+        let mut io = Io {
+            data: &data,
+            events: None,
+        };
+        let actual = processor
+            .apply_effects(
+                EffectsRequest {
+                    source_width: WIDTH,
+                    source_height: HEIGHT,
+                    effects: &effects,
+                    context: prod_effects::EffectContext {
+                        palette: &PALETTE,
+                        space: Some(space),
+                        analyses: None,
+                    },
+                },
+                &mut io,
+            )
+            .unwrap();
+        assert_eq!(actual, expected, "{chain}");
+    };
+    run(
+        &mut processor,
+        &recolour_chain(levels_gamma(1.2), levels_gamma(0.9)),
+    );
+    assert_eq!(processor.cached_analyses(), 1);
+    // A different effect after the recolour step reuses its analysis.
+    run(
+        &mut processor,
+        &recolour_chain(levels_gamma(1.2), levels_gamma(1.7)),
+    );
+    assert_eq!(processor.cached_analyses(), 1);
+    // A different effect before it changes what analysis reads.
+    run(
+        &mut processor,
+        &recolour_chain(levels_gamma(2.0), levels_gamma(1.7)),
+    );
+    assert_eq!(processor.cached_analyses(), 2);
+
+    // Standalone analysis of the same prefix is a hit and returns the same recipe as the reference.
+    let prefix = prod_effects::decode_effects(&json!([levels_gamma(2.0)]).to_string()).unwrap();
+    let mut io = Io {
+        data: &data,
+        events: None,
+    };
+    let recipe = processor
+        .analyze_recolour(
+            EffectsRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                effects: &prefix,
+                context: prod_effects::EffectContext {
+                    palette: &PALETTE,
+                    space: Some(space),
+                    analyses: None,
+                },
+            },
+            &mut io,
+        )
+        .unwrap();
+    assert_eq!(processor.cached_analyses(), 2);
+    let expected = spec::effects::analyze_recolour(spec::effects::AnalyzeRequest {
+        version: 1,
+        source: Source {
+            width: WIDTH,
+            height: HEIGHT,
+            data: &data,
+        },
+        effects: &spec::effects::decode_effects(&json!([levels_gamma(2.0)]).to_string()).unwrap(),
+        context: spec::effects::EffectContext {
+            palette: &PALETTE,
+            space: Some(ditherette_wasm::spec::contract::request::WorkingSpace::Oklab),
+        },
+    })
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(&recipe).unwrap(),
+        serde_json::to_value(&expected).unwrap()
+    );
+
+    // Process v2 with the recolour step matches the reference and reuses the analysis too.
+    let recipe_v2 = spec::effects::decode_recipe_v2(
+        &json!({ "version": 2, "effects": recolour_chain(levels_gamma(2.0), levels_gamma(1.7)),
+            "output": { "width": 7, "height": 5, "resize": { "algorithm": "area" } },
+            "alpha": { "mode": "preserve", "threshold": 127.5 }, "match": "oklab-euclidean",
+            "dither": { "family": "none" } })
+        .to_string(),
+    )
+    .unwrap();
+    let expected = spec::effects::process(spec::effects::ProcessRequestV2 {
+        source: Source {
+            width: WIDTH,
+            height: HEIGHT,
+            data: &data,
+        },
+        palette: &PALETTE,
+        recipe: &recipe_v2,
+    })
+    .unwrap();
+    let effects = prod_effects::decode_effects(
+        &recolour_chain(levels_gamma(2.0), levels_gamma(1.7)).to_string(),
+    )
+    .unwrap();
+    let mut io = Io {
+        data: &data,
+        events: None,
+    };
+    let actual = processor
+        .process_effects(
+            ProcessRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                palette: &PALETTE,
+                recipe: prod_recipe(&recipe_v2),
+            },
+            &effects,
+            &mut io,
+        )
+        .unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(processor.cached_analyses(), 2);
 }

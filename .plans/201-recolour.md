@@ -26,7 +26,7 @@ after it never re-analyse.
 - [x] Spec tests.
 - [x] Record the recolour extension in the freeze checkpoint.
 - [x] Prod: copy, conformance tests.
-- [ ] Prod: analysis cache keyed by chain prefix; processor + Wasm `privateAnalyzeRecolour`.
+- [x] Prod: analysis cache keyed by chain prefix; processor + Wasm `privateAnalyzeRecolour`.
 - [ ] Prod: benchmark and optimize with evidence.
 - [ ] Package: `analyzeRecolour`, `recolour` effect type, validation, docs, tests, changeset.
 - [ ] Evaluation: treated vs untreated metrics across fixtures and palettes; record costs.
