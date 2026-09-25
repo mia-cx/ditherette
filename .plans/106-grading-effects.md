@@ -8,11 +8,11 @@ against benchmarks. Chains, ordering, repetition, bypass, and serialization alre
 
 ## Acceptance criteria
 
-- [ ] Initial inventory settled and documented: levels (from #202), curves, brightness-contrast, exposure, white-balance, hue-saturation.
-- [ ] Each effect defines precision, working space, argument domains, neutral values, and alpha handling.
-- [ ] Recipes serialize deterministically and reproduce results; presets are just stored recipes.
-- [ ] Package/website boundary documented: the package owns effect semantics; the website owns editor state and presets.
-- [ ] Production equals the reference byte-for-byte; costs measured.
+- [x] Initial inventory settled and documented: levels (from #202), curves, brightness-contrast, exposure, white-balance, hue-saturation.
+- [x] Each effect defines precision, working space, argument domains, neutral values, and alpha handling.
+- [x] Recipes serialize deterministically and reproduce results; presets are just stored recipes.
+- [x] Package/website boundary documented: the package owns effect semantics; the website owns editor state and presets.
+- [x] Production equals the reference byte-for-byte; costs measured.
 
 ## TODOs
 
@@ -23,6 +23,9 @@ against benchmarks. Chains, ordering, repetition, bypass, and serialization alre
 - [x] Prod: copy the effects, conformance tests.
 - [x] Prod: benchmark, then optimize with evidence.
 - [x] Package: types, validation, docs, tests, changeset.
-- [ ] Final validation.
+- [x] Final validation.
 
 ## Notes
+- Hue-saturation works in Oklab via an a/b rotation; lightness blends the whole Oklab colour toward white or black.
+- Curves use Fritsch–Butland monotone cubic tangents; knots evaluate exactly.
+- The freeze syntax guard rejects the token `path` inside macro calls, so registry dispatch uses explicit match arms.
