@@ -21,10 +21,10 @@ after it never re-analyse.
 ## TODOs
 
 - [x] Spec: lightness–opponent coordinates for every working space.
-- [ ] Spec: recipe, application, strength, and context checks (`recolour.rs`).
-- [ ] Spec: deterministic analysis (`recolour_analysis.rs`) and standalone `analyze_recolour`.
-- [ ] Spec tests.
-- [ ] Record the recolour extension in the freeze checkpoint.
+- [x] Spec: recipe, application, strength, and context checks (`recolour.rs`).
+- [x] Spec: deterministic analysis (`recolour_analysis.rs`) and standalone `analyze_recolour`.
+- [x] Spec tests.
+- [x] Record the recolour extension in the freeze checkpoint.
 - [ ] Prod: copy, conformance tests.
 - [ ] Prod: analysis cache keyed by chain prefix; processor + Wasm `privateAnalyzeRecolour`.
 - [ ] Prod: benchmark and optimize with evidence.
