@@ -9,6 +9,7 @@ use crate::spec::contract::request::WorkingSpace;
 
 use super::{
     chain::EffectContext,
+    curves::MIN_GAP,
     image::EffectImage,
     recolour::{window, Group, RecolourRecipe, NEUTRAL_CHROMA},
     space::to_opponent,
@@ -142,7 +143,7 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
     levels.dedup();
     let (low, high) = (xs[0], xs[4]);
     let (palette_low, palette_high) = (levels[0], levels[levels.len() - 1]);
-    if high - low < 1e-3 || palette_high - palette_low < 1e-3 {
+    if high - low < MIN_GAP || palette_high - palette_low < MIN_GAP {
         return vec![[0.0, 0.0], [1.0, 1.0]];
     }
     let ranks = [0.0, 0.25, 0.5, 0.75, 1.0];
@@ -166,7 +167,9 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
     let mut curve: Vec<[f32; 2]> = Vec::new();
     for [x, y] in points {
         match curve.last() {
-            Some(&[last_x, last_y]) if x > last_x => curve.push([x, y.max(last_y).clamp(0.0, 1.0)]),
+            Some(&[last_x, last_y]) if x - last_x >= MIN_GAP => {
+                curve.push([x, y.max(last_y).clamp(0.0, 1.0)])
+            }
             Some(_) => {}
             None => curve.push([x, y.clamp(0.0, 1.0)]),
         }
