@@ -17,9 +17,13 @@ use super::{
     chain::{check_bounded, Effect, EffectContext, Needs},
     curves::{Curves, Spline},
     image::EffectImage,
-    recolour_analysis::analyze,
-    space::{from_opponent, to_opponent},
+    memo::{try_memoized, MEMO_BYTES},
+    recolour_analysis::{analyze, ANALYSIS_BYTES},
+    space::{from_opponent, srgb_unit_to_linear, to_opponent, to_opponent_decoded},
+    table::ChannelTables,
 };
+use crate::image::ImageDimensions;
+use std::collections::TryReserveError;
 
 /// Most hue groups one recipe may hold.
 pub const MAX_GROUPS: usize = 12;
@@ -124,7 +128,11 @@ impl RecolourRecipe {
 
     /// One carrier pixel through tone, shift, chroma, and groups, in the recipe's space.
     pub fn map(&self, tone: &Spline, rgb: [f32; 3]) -> [f32; 3] {
-        let [lightness, u, v] = to_opponent(rgb, self.space);
+        self.map_opponent(tone, to_opponent(rgb, self.space))
+    }
+
+    /// `map` after the forward conversion, so a caller can supply it from tables.
+    fn map_opponent(&self, tone: &Spline, [lightness, u, v]: [f32; 3]) -> [f32; 3] {
         let lightness = tone.eval(lightness);
         let u = (u + self.shift[0]) * self.chroma;
         let v = (v + self.shift[1]) * self.chroma;
@@ -201,6 +209,62 @@ impl Effect for Recolour {
             )),
             _ => Ok(()),
         }
+    }
+
+    fn working_bytes(&self) -> u64 {
+        MEMO_BYTES
+            + if self.recipe.is_none() {
+                ANALYSIS_BYTES
+            } else {
+                0
+            }
+    }
+
+    /// Byte input maps each distinct colour once, decoding through per-channel linear tables.
+    fn apply_tabulated(
+        &self,
+        data: &[u8],
+        dimensions: ImageDimensions,
+        tables: &ChannelTables,
+        context: &EffectContext<'_>,
+    ) -> Option<Result<EffectImage, TryReserveError>> {
+        if self.strength == 0.0 {
+            return None;
+        }
+        let analysed;
+        let recipe = match &self.recipe {
+            Some(recipe) => recipe,
+            None => {
+                let carrier = match EffectImage::try_from_packed(data, dimensions, tables) {
+                    Ok(carrier) => carrier,
+                    Err(error) => return Some(Err(error)),
+                };
+                analysed = match context.analyses {
+                    Some(cache) => cache.analyze(&carrier, context),
+                    None => analyze(&carrier, context),
+                };
+                &analysed
+            }
+        };
+        if recipe.is_identity() {
+            return None;
+        }
+        let tone = Spline::new(&recipe.tone);
+        let linear = tables.map(srgb_unit_to_linear);
+        let strength = self.strength;
+        Some(try_memoized(data, dimensions, |bytes| {
+            let rgb: [f32; 3] = std::array::from_fn(|channel| tables.unit(channel, bytes[channel]));
+            let decoded = std::array::from_fn(|channel| linear.unit(channel, bytes[channel]));
+            let adjusted =
+                recipe.map_opponent(&tone, to_opponent_decoded(rgb, decoded, recipe.space));
+            if strength == 1.0 {
+                adjusted
+            } else {
+                std::array::from_fn(|channel| {
+                    rgb[channel] + strength * (adjusted[channel] - rgb[channel])
+                })
+            }
+        }))
     }
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {

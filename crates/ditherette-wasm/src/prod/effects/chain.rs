@@ -85,6 +85,11 @@ pub trait Effect {
         value
     }
 
+    /// Scratch bytes `apply_tabulated` allocates beyond the carrier, for memory accounting.
+    fn working_bytes(&self) -> u64 {
+        0
+    }
+
     /// Builds the carrier and applies this effect in one pass, straight from packed RGBA8
     /// seen through the preceding per-channel `tables`. `None` means use the ordinary carrier.
     /// The result must equal `apply` on the carrier those tables would produce.
@@ -126,6 +131,10 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
 
     fn map_channel(&self, channel: usize, value: f32) -> f32 {
         (**self).map_channel(channel, value)
+    }
+
+    fn working_bytes(&self) -> u64 {
+        (**self).working_bytes()
     }
 
     fn apply_tabulated(

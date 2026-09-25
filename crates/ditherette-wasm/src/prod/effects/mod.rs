@@ -12,6 +12,7 @@ pub mod exposure;
 pub mod hue_saturation;
 pub mod image;
 pub mod levels;
+pub mod memo;
 pub mod operation;
 pub mod recipe;
 pub mod recolour;

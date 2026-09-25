@@ -146,7 +146,10 @@ pub(super) fn analyze<B: InputBoundary, A: Allocator>(
         boundary.snapshot_input(bytes, compare)
     })?;
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
-    let carrier = EffectImage::carrier_bytes(pixels);
+    // The carrier always exists here; earlier steps may add scratch; analysis adds its samples.
+    let carrier = carrier_bytes(request.effects, dimensions)
+        .max(EffectImage::carrier_bytes(pixels))
+        + recolour_analysis::ANALYSIS_BYTES;
     call.charge_working_capacity(carrier, peak)?;
     call.prepare(None, None, [len, 0, 0, 0], 0, peak, allocator)?;
     progress.report(boundary.progress(), Stage::Effects, 0, pixels)?;

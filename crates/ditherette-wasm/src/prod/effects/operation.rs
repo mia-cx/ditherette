@@ -66,10 +66,16 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
         .filter(|step| step.enabled)
         .all(|step| step.effect.per_channel());
     if tabulates {
-        0
-    } else {
-        EffectImage::carrier_bytes(u64::from(dimensions.width()) * u64::from(dimensions.height()))
+        return 0;
     }
+    let scratch = steps
+        .iter()
+        .filter(|step| step.enabled)
+        .map(|step| step.effect.working_bytes())
+        .max()
+        .unwrap_or(0);
+    EffectImage::carrier_bytes(u64::from(dimensions.width()) * u64::from(dimensions.height()))
+        + scratch
 }
 
 /// Analysis request: the image a recolour step would receive is `source` after `effects`.

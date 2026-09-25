@@ -7,6 +7,7 @@ use crate::prod::contract::error::DitheretteError;
 use super::{
     chain::{check_bounded, Effect, EffectContext},
     image::EffectImage,
+    memo::{try_memoized, MEMO_BYTES},
     space::{from_linear, linear_to_oklab, oklab_to_linear, srgb_unit_to_linear, to_linear},
     table::ChannelTables,
 };
@@ -97,9 +98,13 @@ impl Effect for HueSaturation {
         }
         let turn = self.turn();
         let linear = tables.map(srgb_unit_to_linear);
-        Some(EffectImage::try_from_pixels(data, dimensions, |pixel| {
-            let decoded = std::array::from_fn(|channel| linear.unit(channel, pixel[channel]));
+        Some(try_memoized(data, dimensions, |rgb| {
+            let decoded = std::array::from_fn(|channel| linear.unit(channel, rgb[channel]));
             self.map_linear(turn, decoded)
         }))
+    }
+
+    fn working_bytes(&self) -> u64 {
+        MEMO_BYTES
     }
 }

@@ -43,6 +43,12 @@ const MAX_SHIFT_LENGTH: f32 = 0.1;
 /// Palette colours this close to neutral count as exactly neutral.
 const PALETTE_NEUTRAL: f32 = 0.001;
 
+/// Upper bound on analysis working memory: samples, the sorted lightness copy, and sector inputs.
+pub const ANALYSIS_BYTES: u64 = MAX_SAMPLES
+    * (std::mem::size_of::<Sample>()
+        + std::mem::size_of::<(f32, f32)>()
+        + std::mem::size_of::<(f32, f32, f32, f32)>()) as u64;
+
 /// One read pixel: working-space coordinates and its alpha weight in `(0, 1]`.
 struct Sample {
     opponent: [f32; 3],
@@ -246,6 +252,21 @@ struct Sector {
 }
 
 fn sectors(samples: &[Sample], palette: &[[f32; 3]], shift: [f32; 2]) -> Vec<Sector> {
+    // Each sample's hue, chroma, and ramp are the same for every sector, so compute them once.
+    // The weight product keeps the reference's order: window, then ramp, then alpha weight.
+    let coloured: Vec<(f32, f32, f32, f32)> = samples
+        .iter()
+        .filter_map(|sample| {
+            let u = sample.opponent[1] + shift[0];
+            let v = sample.opponent[2] + shift[1];
+            let chroma = u.hypot(v);
+            let ramp = (chroma / NEUTRAL_CHROMA).min(1.0);
+            (ramp != 0.0).then(|| {
+                let hue = v.atan2(u).to_degrees().rem_euclid(360.0);
+                (hue, ramp, sample.weight, chroma)
+            })
+        })
+        .collect();
     (0..SECTORS)
         .map(|index| {
             let hue = index as f32 * (360.0 / SECTORS as f32);
@@ -256,16 +277,8 @@ fn sectors(samples: &[Sample], palette: &[[f32; 3]], shift: [f32; 2]) -> Vec<Sec
                 chroma: 1.0,
             };
             let (mut mass, mut weighted_chroma) = (0.0, 0.0);
-            for sample in samples {
-                let u = sample.opponent[1] + shift[0];
-                let v = sample.opponent[2] + shift[1];
-                let chroma = u.hypot(v);
-                let ramp = (chroma / NEUTRAL_CHROMA).min(1.0);
-                if ramp == 0.0 {
-                    continue;
-                }
-                let sample_hue = v.atan2(u).to_degrees().rem_euclid(360.0);
-                let weight = window(sample_hue, &group) * ramp * sample.weight;
+            for &(sample_hue, ramp, sample_weight, chroma) in &coloured {
+                let weight = window(sample_hue, &group) * ramp * sample_weight;
                 mass += weight;
                 weighted_chroma += weight * chroma;
             }
