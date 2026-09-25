@@ -31,34 +31,41 @@ pub enum BuiltinEffect {
     HueSaturation(HueSaturation),
 }
 
-/// Dispatches one trait call to whichever built-in this is.
-macro_rules! each {
-    ($self:ident, $effect:ident => $call:expr) => {
-        match $self {
-            Self::Levels($effect) => $call,
-            Self::Curves($effect) => $call,
-            Self::BrightnessContrast($effect) => $call,
-            Self::Exposure($effect) => $call,
-            Self::WhiteBalance($effect) => $call,
-            Self::HueSaturation($effect) => $call,
-        }
-    };
-}
-
 /// One serialized chain entry: the effect's tagged object plus `enabled`.
 pub type EffectStep = Step<BuiltinEffect>;
 
 impl Effect for BuiltinEffect {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        each!(self, effect => effect.validate(path))
+        match self {
+            Self::Levels(effect) => effect.validate(path),
+            Self::Curves(effect) => effect.validate(path),
+            Self::BrightnessContrast(effect) => effect.validate(path),
+            Self::Exposure(effect) => effect.validate(path),
+            Self::WhiteBalance(effect) => effect.validate(path),
+            Self::HueSaturation(effect) => effect.validate(path),
+        }
     }
 
     fn needs(&self) -> Needs {
-        each!(self, effect => effect.needs())
+        match self {
+            Self::Levels(effect) => effect.needs(),
+            Self::Curves(effect) => effect.needs(),
+            Self::BrightnessContrast(effect) => effect.needs(),
+            Self::Exposure(effect) => effect.needs(),
+            Self::WhiteBalance(effect) => effect.needs(),
+            Self::HueSaturation(effect) => effect.needs(),
+        }
     }
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
-        each!(self, effect => effect.apply(image, context))
+        match self {
+            Self::Levels(effect) => effect.apply(image, context),
+            Self::Curves(effect) => effect.apply(image, context),
+            Self::BrightnessContrast(effect) => effect.apply(image, context),
+            Self::Exposure(effect) => effect.apply(image, context),
+            Self::WhiteBalance(effect) => effect.apply(image, context),
+            Self::HueSaturation(effect) => effect.apply(image, context),
+        }
     }
 }
 

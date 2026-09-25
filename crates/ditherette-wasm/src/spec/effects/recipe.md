@@ -35,7 +35,7 @@ Registered effects:
 ## Why this works this way
 
 A closed enum makes every built-in visible in one place and keeps decoding strict.
-Adding an effect is one module, one variant, and one arm in the `each!` dispatch. Sequencing lives in [chain.md](chain.md) and does not change.
+Adding an effect is one module, one variant, and one arm in each dispatch method. Sequencing lives in [chain.md](chain.md) and does not change.
 
 ## Correctness invariants
 

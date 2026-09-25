@@ -24,19 +24,24 @@ impl HueSaturation {
         self.hue == 0.0 && self.saturation == 0.0 && self.lightness == 0.0
     }
 
-    /// Rotates and scales the Oklab opponent axes, then moves lightness toward white or black.
+    /// Rotates and scales the Oklab opponent axes, then blends toward white or black.
     pub fn map(&self, rgb: [f32; 3]) -> [f32; 3] {
         let (sin, cos) = self.hue.to_radians().sin_cos();
         let scale = 1.0 + self.saturation;
         let [l, a, b] = linear_to_oklab(to_linear(rgb));
-        let l = if self.lightness >= 0.0 {
-            l + (1.0 - l) * self.lightness
+        let turned = [l, (a * cos - b * sin) * scale, (a * sin + b * cos) * scale];
+        from_linear(oklab_to_linear(self.blend(turned)))
+    }
+
+    /// Positive lightness blends toward Oklab white `[1, 0, 0]`, negative toward black `[0, 0, 0]`.
+    fn blend(&self, [l, a, b]: [f32; 3]) -> [f32; 3] {
+        if self.lightness >= 0.0 {
+            let keep = 1.0 - self.lightness;
+            [l + (1.0 - l) * self.lightness, a * keep, b * keep]
         } else {
-            l * (1.0 + self.lightness)
-        };
-        let a2 = (a * cos - b * sin) * scale;
-        let b2 = (a * sin + b * cos) * scale;
-        from_linear(oklab_to_linear([l, a2, b2]))
+            let keep = 1.0 + self.lightness;
+            [l * keep, a * keep, b * keep]
+        }
     }
 }
 

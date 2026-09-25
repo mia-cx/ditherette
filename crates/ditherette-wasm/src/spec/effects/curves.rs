@@ -61,13 +61,14 @@ impl Spline {
         }
     }
 
-    /// Clamps `x` to the first and last point, then evaluates the segment containing it.
+    /// Clamps `x` to the first and last point, then evaluates the segment starting at or before it.
+    /// Every control point is hit exactly: a knot starts its own segment, and the last one is returned directly.
     pub fn eval(&self, x: f32) -> f32 {
         let last = self.points.len() - 1;
         let x = x.clamp(self.points[0][0], self.points[last][0]);
-        let k = (0..last)
-            .find(|&k| x <= self.points[k + 1][0])
-            .expect("x is clamped to the last point");
+        let Some(k) = (0..last).find(|&k| x < self.points[k + 1][0]) else {
+            return self.points[last][1];
+        };
         let [x0, y0] = self.points[k];
         let [x1, y1] = self.points[k + 1];
         let (h, secant) = (x1 - x0, (y1 - y0) / (x1 - x0));

@@ -17,8 +17,9 @@ Turn hues, boost or mute colour, and lighten or darken, like a Hue/Saturation pa
 For each pixel, in `f32`:
 
 1. Convert carrier RGB to linear light, then Oklab `[L, a, b]` ([space.md](space.md)).
-2. Lightness moves toward white or black: `L + (1 - L) * lightness` when `lightness >= 0`, else `L * (1 + lightness)`.
-3. With `(sin, cos)` of the hue in radians and `k = 1 + saturation`: `a' = (a cos - b sin) k`, `b' = (a sin + b cos) k`.
+2. With `(sin, cos)` of the hue in radians and `k = 1 + saturation`: `a' = (a cos - b sin) k`, `b' = (a sin + b cos) k`.
+3. Blend the whole colour toward Oklab white `[1, 0, 0]` when `lightness >= 0`, keeping `1 - lightness` of `a'` and `b'` and moving `L` by `(1 - L) * lightness`.
+   For negative lightness, scale all three coordinates by `1 + lightness`, toward black.
 4. Convert back to linear light and encode. Nothing is clipped.
 
 All-zero arguments skip the conversion entirely.
@@ -27,7 +28,7 @@ All-zero arguments skip the conversion entirely.
 
 Oklab is built so that equal hue turns look equal and turning a hue keeps its lightness. HSL hue shifts in sRGB visibly darken yellows and brighten blues.
 Rotating the `a`/`b` axes is the same as adding to Oklch hue, without the angle wrap.
-Saturation `-1` removes all colour; `+1` doubles chroma. Lightness mirrors Photoshop's blend toward white or black.
+Saturation `-1` removes all colour; `+1` doubles chroma. Lightness mirrors Photoshop's blend toward white or black, so `+1` is white and `-1` is black.
 
 ## Correctness invariants
 
