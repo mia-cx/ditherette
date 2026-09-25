@@ -217,6 +217,17 @@ export function fitOutputSizeToBounds(width: number, height: number) {
 	return clampOutputSize(nextWidth, nextHeight);
 }
 
+/** Keep a positive scale within the output side and pixel limits before resizing. */
+export function clampOutputScale(value: number, width: number, height: number): number {
+	const scale = Number.isFinite(value) && value > 0 ? value : 1;
+	return Math.min(
+		scale,
+		MAX_OUTPUT_SIDE / width,
+		MAX_OUTPUT_SIDE / height,
+		Math.sqrt(MAX_OUTPUT_PIXELS / (width * height))
+	);
+}
+
 export function validateSourceImageSize(width: number, height: number) {
 	if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) {
 		throw new Error('Image dimensions could not be read.');
