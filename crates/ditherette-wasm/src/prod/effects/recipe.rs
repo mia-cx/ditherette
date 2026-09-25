@@ -57,7 +57,7 @@ pub fn decode_effects(json: &str) -> Result<Vec<EffectStep>, DitheretteError> {
     decode_steps(value, "effects")
 }
 
-/// Decodes each array element separately so errors name `effects[i]`.
+/// Decodes each array element separately so errors name `effects.i`.
 fn decode_steps(value: Value, path: &str) -> Result<Vec<EffectStep>, DitheretteError> {
     let Value::Array(items) = value else {
         return Err(DitheretteError::new(
@@ -71,7 +71,7 @@ fn decode_steps(value: Value, path: &str) -> Result<Vec<EffectStep>, DitheretteE
         .enumerate()
         .map(|(index, item)| {
             serde_json::from_value(item)
-                .map_err(|error| malformed(&format!("{path}[{index}]"), error))
+                .map_err(|error| malformed(&format!("{path}.{index}"), error))
         })
         .collect()
 }

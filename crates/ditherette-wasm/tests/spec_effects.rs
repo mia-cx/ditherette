@@ -277,15 +277,15 @@ fn decoding_and_validation_name_the_failing_step() {
     );
     assert_eq!(
         (unknown.code, unknown.path.as_str()),
-        (ErrorCode::InvalidSettings, "effects[1]")
+        (ErrorCode::InvalidSettings, "effects.1")
     );
     assert!(unknown.message.contains("levles"), "{}", unknown.message);
     let mut typo = levels((0.0, 1.0), 1.0, (0.0, 1.0));
     typo["gama"] = json!(1);
-    assert_eq!(error(json!([typo])).path, "effects[0]");
+    assert_eq!(error(json!([typo])).path, "effects.0");
     let mut no_toggle = levels((0.0, 1.0), 1.0, (0.0, 1.0));
     no_toggle.as_object_mut().unwrap().remove("enabled");
-    assert_eq!(error(json!([no_toggle])).path, "effects[0]");
+    assert_eq!(error(json!([no_toggle])).path, "effects.0");
     assert_eq!(error(json!({ "effect": "levels" })).path, "effects");
 
     let invalid = |value: serde_json::Value, disabled: bool| {
@@ -296,15 +296,15 @@ fn decoding_and_validation_name_the_failing_step() {
     for disabled in [false, true] {
         assert_eq!(
             invalid(levels((0.5, 0.5), 1.0, (0.0, 1.0)), disabled).path,
-            "effects[1].input"
+            "effects.1.input"
         );
         assert_eq!(
             invalid(levels((0.0, 1.0), 20.0, (0.0, 1.0)), disabled).path,
-            "effects[1].gamma"
+            "effects.1.gamma"
         );
         assert_eq!(
             invalid(levels((0.0, 1.0), 1.0, (0.0, 1.5)), disabled).path,
-            "effects[1].output.white"
+            "effects.1.output.white"
         );
     }
     let nan = vec![Step {
@@ -316,7 +316,7 @@ fn decoding_and_validation_name_the_failing_step() {
             }
         }),
     }];
-    assert_eq!(run(&data, &nan).unwrap_err().path, "effects[0].gamma");
+    assert_eq!(run(&data, &nan).unwrap_err().path, "effects.0.gamma");
     let version = apply_effects(EffectsRequest {
         version: 2,
         source: source(&data),
@@ -425,7 +425,7 @@ fn process_v2_validates_effects_under_recipe_before_any_work() {
         recipe: &bad,
     })
     .unwrap_err();
-    assert_eq!(error.path, "recipe.effects[0].gamma");
+    assert_eq!(error.path, "recipe.effects.0.gamma");
     let v1 = RecipeV2 {
         version: 1,
         ..base.clone()
@@ -444,5 +444,5 @@ fn process_v2_validates_effects_under_recipe_before_any_work() {
         &json!({ "version": 2, "effects": [{ "effect": "blur", "enabled": true }] }).to_string(),
     )
     .unwrap_err();
-    assert_eq!(decode.path, "recipe.effects[0]");
+    assert_eq!(decode.path, "recipe.effects.0");
 }

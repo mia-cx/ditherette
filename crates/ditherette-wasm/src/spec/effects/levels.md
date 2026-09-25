@@ -37,7 +37,7 @@ Output black may exceed output white, which inverts the channel.
 
 ## Edge cases
 
-- `input.black >= input.white` is rejected at `effects[i].input`.
+- `input.black >= input.white` is rejected at `effects.i.input`.
 - Every point must be finite and in `[0,1]`. Gamma must be finite and in `[0.1,10]`.
 
 ## Production obligations
