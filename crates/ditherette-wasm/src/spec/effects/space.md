@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Effects that work in linear light or Oklab convert the carrier here. The v1 colour spec converts bytes and clips; these conversions keep every value.
+Effects that work in linear light, Oklab, or the quantization working space convert the carrier here. The v1 colour spec converts bytes and clips; these conversions keep every value.
 
 ## Inputs and outputs
 
@@ -14,7 +14,19 @@ Triples of `f32`. Carrier RGB is encoded sRGB units; linear RGB is linear light;
 Values below the linear-segment threshold, including negatives, use the linear segment. Values above 1 use the power segment.
 
 `linear_to_oklab` and `oklab_to_linear` repeat the matrices from [oklab.md](../color/oklab.md), with signed cube roots and cubes.
-Nothing is clipped at any step.
+`linear_to_cielab` and `cielab_to_linear` repeat [cielab.md](../color/cielab.md): the D65 matrix, `f`, and its inverse.
+
+`to_opponent` gives lightness plus two opponent axes in the selected working space, with neutral colours at zero:
+
+| Space | Coordinates |
+| --- | --- |
+| `srgb`, `ycbcr` | BT.601 luma and centred Cb/Cr on encoded RGB: `Y`, `(B - Y) / 1.772`, `(R - Y) / 1.402` |
+| `linear-rgb` | BT.709 luma and chroma on linear light: `Y`, `(B - Y) / 1.8556`, `(R - Y) / 1.5748` |
+| `oklab`, `oklch` | Oklab `L, a, b` |
+| `cielab`, `cielch` | CIELAB `L*, a*, b*`, each divided by 100 |
+
+Cylindrical spaces use their cartesian form: turning a hue is a rotation of the opponent plane either way.
+`from_opponent` applies the inverse formulas. Nothing is clipped at any step.
 
 ## Why this works this way
 
