@@ -3,13 +3,19 @@
 //! Exact modes must match the reference byte-for-byte. See `README.md` for
 //! optimizations and their evidence.
 
+pub mod brightness_contrast;
 pub mod chain;
 pub mod channel;
+pub mod curves;
+pub mod exposure;
+pub mod hue_saturation;
 pub mod image;
 pub mod levels;
 pub mod operation;
 pub mod recipe;
+pub mod space;
 pub mod table;
+pub mod white_balance;
 
 pub use chain::{apply_chain, Effect, EffectContext, Needs, Step};
 pub use image::EffectImage;

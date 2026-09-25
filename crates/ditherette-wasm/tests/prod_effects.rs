@@ -52,7 +52,8 @@ fn fixtures(rng: &mut Rng) -> Vec<(u32, u32, Vec<u8>)> {
     ]
 }
 
-fn random_effect(rng: &mut Rng) -> Value {
+/// Levels only: the per-channel effect the carrier-path test mixes with `Swap`.
+fn random_levels(rng: &mut Rng) -> Value {
     let black = rng.unit() * 0.6;
     let white = black + 0.05 + rng.unit() * (0.95 - black);
     let gamma = if rng.next() % 2 == 0 {
@@ -68,6 +69,31 @@ fn random_effect(rng: &mut Rng) -> Value {
         "gamma": gamma,
         "output": { "black": rng.unit(), "white": rng.unit() },
     })
+}
+
+/// Any built-in with random in-range arguments; about one in four is neutral.
+fn random_effect(rng: &mut Rng) -> Value {
+    let enabled = rng.next() % 5 != 0;
+    let neutral = rng.next() % 4 == 0;
+    let signed = |rng: &mut Rng| if neutral { 0.0 } else { rng.unit() * 2.0 - 1.0 };
+    match rng.next() % 6 {
+        0 => random_levels(rng),
+        1 => {
+            let count = 2 + rng.next() % 5;
+            let points: Vec<[f32; 2]> = (0..count)
+                .map(|i| [i as f32 / (count - 1) as f32, rng.unit()])
+                .collect();
+            json!({ "effect": "curves", "enabled": enabled,
+                "channel": rng.pick(&["rgb", "red", "green", "blue"]), "points": points })
+        }
+        2 => json!({ "effect": "brightness-contrast", "enabled": enabled,
+            "brightness": signed(rng), "contrast": signed(rng) }),
+        3 => json!({ "effect": "exposure", "enabled": enabled, "stops": signed(rng) * 4.0 }),
+        4 => json!({ "effect": "white-balance", "enabled": enabled,
+            "temperature": signed(rng), "tint": signed(rng) }),
+        _ => json!({ "effect": "hue-saturation", "enabled": enabled,
+            "hue": signed(rng) * 180.0, "saturation": signed(rng), "lightness": signed(rng) }),
+    }
 }
 
 fn assert_same(effects: &Value, width: u32, height: u32, data: &[u8]) {
@@ -125,7 +151,7 @@ fn random_chains_match_the_reference() {
     let mut rng = Rng(0x5eed_ef1e_c7);
     for (width, height, data) in fixtures(&mut rng) {
         assert_same(&json!([]), width, height, &data);
-        for _ in 0..40 {
+        for _ in 0..150 {
             let count = rng.next() % 6;
             let effects: Vec<Value> = (0..count).map(|_| random_effect(&mut rng)).collect();
             assert_same(&Value::Array(effects), width, height, &data);
@@ -177,7 +203,7 @@ fn tabulated_prefixes_feed_the_carrier_exactly() {
                 let effect: Box<dyn prod::Effect> = if rng.next() % 3 == 0 {
                     Box::new(Swap)
                 } else {
-                    let step = prod::decode_effects(&json!([random_effect(&mut rng)]).to_string())
+                    let step = prod::decode_effects(&json!([random_levels(&mut rng)]).to_string())
                         .unwrap()
                         .remove(0);
                     Box::new(step.effect)
