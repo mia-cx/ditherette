@@ -7,14 +7,16 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    image::contracts::PaletteEntry,
+    image::{contracts::PaletteEntry, ImageDimensions},
     prod::contract::{
         error::{DitheretteError, ErrorCode},
         request::{WorkingSpace, MAX_PALETTE_ENTRIES},
     },
 };
 
-use super::image::EffectImage;
+use std::collections::TryReserveError;
+
+use super::{image::EffectImage, table::ChannelTables};
 
 /// Most steps one chain may hold, enabled or not.
 pub const MAX_EFFECTS: usize = 64;
@@ -71,6 +73,19 @@ pub trait Effect {
     fn map_channel(&self, _channel: usize, value: f32) -> f32 {
         value
     }
+
+    /// Builds the carrier and applies this effect in one pass, straight from packed RGBA8
+    /// seen through the preceding per-channel `tables`. `None` means use the ordinary carrier.
+    /// The result must equal `apply` on the carrier those tables would produce.
+    fn apply_tabulated(
+        &self,
+        _data: &[u8],
+        _dimensions: ImageDimensions,
+        _tables: &ChannelTables,
+        _context: &EffectContext<'_>,
+    ) -> Option<Result<EffectImage, TryReserveError>> {
+        None
+    }
 }
 
 impl<E: Effect + ?Sized> Effect for Box<E> {
@@ -92,6 +107,16 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
 
     fn map_channel(&self, channel: usize, value: f32) -> f32 {
         (**self).map_channel(channel, value)
+    }
+
+    fn apply_tabulated(
+        &self,
+        data: &[u8],
+        dimensions: ImageDimensions,
+        tables: &ChannelTables,
+        context: &EffectContext<'_>,
+    ) -> Option<Result<EffectImage, TryReserveError>> {
+        (**self).apply_tabulated(data, dimensions, tables, context)
     }
 }
 

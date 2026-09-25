@@ -5,8 +5,12 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::TryReserveError;
 
-use crate::prod::contract::error::{DitheretteError, ErrorCode};
+use crate::{
+    image::ImageDimensions,
+    prod::contract::error::{DitheretteError, ErrorCode},
+};
 
 use super::{
     brightness_contrast::BrightnessContrast,
@@ -16,6 +20,7 @@ use super::{
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    table::ChannelTables,
     white_balance::WhiteBalance,
 };
 
@@ -87,6 +92,27 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.map_channel(channel, value),
             Self::WhiteBalance(effect) => effect.map_channel(channel, value),
             Self::HueSaturation(effect) => effect.map_channel(channel, value),
+        }
+    }
+
+    fn apply_tabulated(
+        &self,
+        data: &[u8],
+        dimensions: ImageDimensions,
+        tables: &ChannelTables,
+        context: &EffectContext<'_>,
+    ) -> Option<Result<EffectImage, TryReserveError>> {
+        match self {
+            Self::Levels(effect) => effect.apply_tabulated(data, dimensions, tables, context),
+            Self::Curves(effect) => effect.apply_tabulated(data, dimensions, tables, context),
+            Self::BrightnessContrast(effect) => {
+                effect.apply_tabulated(data, dimensions, tables, context)
+            }
+            Self::Exposure(effect) => effect.apply_tabulated(data, dimensions, tables, context),
+            Self::WhiteBalance(effect) => effect.apply_tabulated(data, dimensions, tables, context),
+            Self::HueSaturation(effect) => {
+                effect.apply_tabulated(data, dimensions, tables, context)
+            }
         }
     }
 }

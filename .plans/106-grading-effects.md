@@ -21,7 +21,7 @@ against benchmarks. Chains, ordering, repetition, bypass, and serialization alre
 - [x] Spec tests: formulas, neutral identity, monotone curves, hue rotation, validation paths.
 - [x] Record the grading extension in the freeze checkpoint.
 - [x] Prod: copy the effects, conformance tests.
-- [ ] Prod: benchmark, then optimize with evidence.
+- [x] Prod: benchmark, then optimize with evidence.
 - [ ] Package: types, validation, docs, tests, changeset.
 - [ ] Final validation.
 

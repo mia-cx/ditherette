@@ -23,6 +23,32 @@ Criterion, `crit_effects`, native x86-64 release, quiet host, 2026-09-25:
 
 Production time includes copying the source. It no longer grows with the number of per-channel steps.
 
+The grading effects from #106 join the same fold. `grade` is exposure, white balance, curves, and brightness-contrast:
+
+| Chain | Fixture | Reference | Production | Speedup |
+| --- | --- | ---: | ---: | ---: |
+| `grade` | Celeste_Insta_selfie 800×800 | 52.0 ms | 0.55 ms | 95× |
+| `grade` | Picking_at_thread 3462×2309 | 683.5 ms | 7.38 ms | 93× |
+
+### Tabulated linear decode for hue-saturation (selected)
+
+Hue-saturation mixes channels, so it runs on the carrier: per pixel, three sRGB decodes, three cube roots, and three encodes.
+When it directly follows byte input, or a tabulated run, each channel has at most 256 carrier values.
+`Effect::apply_tabulated` lets it decode through a per-channel linear table while building the carrier, which removes three `powf` per pixel.
+It also hoists the turn's sine and cosine out of the pixel loop (about 2% on its own).
+
+| Chain | Fixture | Copy | Selected | Change |
+| --- | --- | ---: | ---: | ---: |
+| `hue-saturation` | Celeste_Insta_selfie 800×800 | 42.2 ms | 28.6 ms | −32% |
+| `grade+hue` | Celeste_Insta_selfie 800×800 | 50.5 ms | 37.4 ms | −26% |
+| `hue-saturation` | Picking_at_thread 3462×2309 | 560.0 ms | 385.8 ms | −31% |
+| `grade+hue` | Picking_at_thread 3462×2309 | 670.2 ms | 494.1 ms | −26% |
+
+### Considered, not taken
+
+- Encoding through a byte-threshold search instead of `powf` when hue-saturation is last. Exact only if `byte(linear_to_srgb_unit(v))` is monotone for every `f32` on every target, which the libm contract does not promise.
+- Parallel carrier rows under `threads`. Exact and embarrassingly parallel, but the threaded execution policy has no effect budget yet.
+
 ### Public package, scalar Wasm
 
 Node 24 (V8), 3462×2309 synthetic source, `process` to 480×320 area resize, Oklab matching, no dither. Median of five, milliseconds:
