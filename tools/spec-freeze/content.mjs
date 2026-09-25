@@ -56,7 +56,8 @@ function applyChanges(expected, changes, label, permitted = () => true) {
 	for (const change of changes) {
 		if (changed.has(change.path)) throw new Error(`Duplicate checkpoint ${label}: ${change.path}`);
 		changed.add(change.path);
-		if (!permitted(change)) throw new Error(`Checkpoint ${label} cannot change v1 file: ${change.path}`);
+		if (!permitted(change))
+			throw new Error(`Checkpoint ${label} cannot change v1 file: ${change.path}`);
 		const before = expected.get(change.path) ?? null;
 		if (JSON.stringify(before) !== JSON.stringify(change.before))
 			throw new Error(`Invalid checkpoint ${label} base: ${change.path}`);
@@ -70,19 +71,23 @@ function applyChanges(expected, changes, label, permitted = () => true) {
 	return [...expected.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-export function expectedFiles(checkpoint) {
+/** The amended v1 closure, before any extension. */
+export function v1Files(checkpoint) {
 	if (contentDigest(checkpoint.files) !== checkpoint.contentSha256)
 		throw new Error('Invalid original checkpoint content digest');
-	let files = checkpoint.files;
-	if (checkpoint.amendment) {
-		files = applyChanges(
-			new Map(files.map((entry) => [entry.path, entry])),
-			checkpoint.amendment.changes,
-			'amendment'
-		);
-		if (contentDigest(files) !== checkpoint.amendment.contentSha256)
-			throw new Error('Invalid amended checkpoint content digest');
-	}
+	if (!checkpoint.amendment) return checkpoint.files;
+	const files = applyChanges(
+		new Map(checkpoint.files.map((entry) => [entry.path, entry])),
+		checkpoint.amendment.changes,
+		'amendment'
+	);
+	if (contentDigest(files) !== checkpoint.amendment.contentSha256)
+		throw new Error('Invalid amended checkpoint content digest');
+	return files;
+}
+
+export function expectedFiles(checkpoint) {
+	let files = v1Files(checkpoint);
 	// Extensions add later reference domains. They keep every v1 byte except the
 	// module registration root, so v1 conformance identities stay valid.
 	const v1 = new Set(files.map(({ path }) => path));
@@ -99,10 +104,37 @@ export function expectedFiles(checkpoint) {
 	return files;
 }
 
+/**
+ * An extended `spec/mod.rs` must be the v1 bytes plus `pub mod <name>;` lines for
+ * names v1 does not already use. Anything else could reroute a v1 module.
+ */
+export function verifyExtensionRoot(root, v1) {
+	const recorded = v1.find(({ path }) => path === EXTENSION_ROOT);
+	const prefix = `${CRATE}/src/spec/`;
+	const names = new Set(
+		v1
+			.filter(({ path }) => path.startsWith(prefix))
+			.map(({ path }) =>
+				path
+					.slice(prefix.length)
+					.split('/')[0]
+					.replace(/\.(rs|md)$/, '')
+			)
+	);
+	const lines = readFileSync(checkedPath(root, EXTENSION_ROOT), 'utf8').split('\n');
+	const original = lines.filter((line) => {
+		const name = /^pub mod ([a-z_][a-z0-9_]*);$/.exec(line)?.[1];
+		return !name || names.has(name);
+	});
+	if (sha256(original.join('\n')) !== recorded.sha256)
+		throw new Error(`Extension root may only add module declarations: ${EXTENSION_ROOT}`);
+}
+
 /** Compare against recorded bytes, never a merge base or the current parent. */
 export function verifyContent(root, checkpoint) {
 	const actual = inventory(root, [...FROZEN_ROOTS, GENERATOR]);
 	const recorded = expectedFiles(checkpoint);
+	if (checkpoint.extensions?.length) verifyExtensionRoot(root, v1Files(checkpoint));
 	if (JSON.stringify(actual) !== JSON.stringify(recorded)) {
 		const expected = new Map(recorded.map((entry) => [entry.path, entry]));
 		const found = new Map(actual.map((entry) => [entry.path, entry]));

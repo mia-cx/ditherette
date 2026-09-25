@@ -172,7 +172,10 @@ test('extensions add reference domains but cannot change v1 bytes', () =>
 		const added = `${CRATE}/src/spec/zz_extension/mod.rs`;
 		mkdirSync(dirname(join(root, added)), { recursive: true });
 		writeFileSync(join(root, added), '//! Extension fixture.\n');
-		writeFileSync(join(root, rootModule), `${readFileSync(join(root, rootModule))}pub mod zz_extension;\n`);
+		writeFileSync(
+			join(root, rootModule),
+			`${readFileSync(join(root, rootModule))}pub mod zz_extension;\n`
+		);
 		assert.throws(() => verifyContent(root, checkpoint), /Frozen content changed/);
 		const extended = extend(root, checkpoint, 'fixture', 'Adds one module.');
 		assert.deepEqual(
@@ -192,6 +195,18 @@ test('extensions add reference domains but cannot change v1 bytes', () =>
 		const forged = structuredClone(extended);
 		forged.extensions.at(-1).contentSha256 = '0'.repeat(64);
 		assert.throws(() => verifyContent(root, forged), /Invalid checkpoint extension digest/);
+
+		// Byte-identical v1 files can still be bypassed by rerouting a module in the root.
+		const rerouted = readFileSync(join(root, rootModule), 'utf8').replace(
+			'pub mod pipeline;',
+			'pub mod pipeline { pub use super::zz_extension::*; }'
+		);
+		mutation(root, rootModule, rerouted, () => {
+			assert.throws(
+				() => extend(root, checkpoint, 'reroute', 'Reroutes v1.'),
+				/may only add module declarations/
+			);
+		});
 	}));
 
 test('syntax rejects both directions, aliases, shared/adapter bridges, and source injection', () =>

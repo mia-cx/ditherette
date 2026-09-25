@@ -20,8 +20,10 @@ the amended digest. An unrelated downstream file cannot enter the closure.
 Later reference domains, such as `src/spec/effects`, enter through ordered
 `extensions` records. Each record lists exact additions and replacements plus the
 resulting closure digest. An extension may add files, replace files added by an
-earlier extension, and replace `src/spec/mod.rs` to register its modules. It
-cannot change or delete any other v1 file. Validation therefore still returns
+earlier extension, and replace `src/spec/mod.rs` to register its modules. That
+replacement must equal the v1 bytes plus `pub mod <name>;` lines for names v1
+does not use, so it cannot reroute a v1 module. An extension cannot change or
+delete any other v1 file. Validation therefore still returns
 the amended v1 identity, and v1 conformance artifacts stay valid.
 
 Record a reviewed domain with `node tools/spec-freeze/extend.mjs <name> <summary>`.

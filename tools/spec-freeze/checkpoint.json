@@ -647,7 +647,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/chain.md",
 						"mode": "100644",
-						"sha256": "9d8f60ef9942ba933ad5069afccddb0b37e6e34b2a496f82d9e856ddf20062c6"
+						"sha256": "9d51f1dbdee559bdef5122b39ec939d980d2a21b3e797e2577de1bd26be50269"
 					}
 				},
 				{
@@ -656,7 +656,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/chain.rs",
 						"mode": "100644",
-						"sha256": "e72683346da47b66799ae6a2f044331015af061bc63f511bf8f5db312f817e83"
+						"sha256": "7a77fea5ca8409236d0fd7a079ff9bc7378ee3a5dce32bd6c6f1100ba8423199"
 					}
 				},
 				{
@@ -728,7 +728,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/operation.md",
 						"mode": "100644",
-						"sha256": "e1f96b4411c73169b822d997f4b7365aa41563f64ecb0c3ff2185d1d47d952d2"
+						"sha256": "dbd544a15c87c77404af1f83e5031293534c35b64d5f99a804bd79bfa021c2ac"
 					}
 				},
 				{
@@ -764,7 +764,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
 						"mode": "100644",
-						"sha256": "9e5afc8f133195981f16040b4cef14e9ce5c47cc9cdf8dff28255b2e5f6046d4"
+						"sha256": "41bb004c6cdcfba274979da563815762dfa269ae7d3897959e74ef614bc3c6c3"
 					}
 				},
 				{
@@ -781,7 +781,7 @@
 					}
 				}
 			],
-			"contentSha256": "1f1ffb7de1a32a5290d212c309f43712b3fef2aae7a48cad68c6e15763cb2349"
+			"contentSha256": "d6df3f2b97f2f257767eddbb80b7337eeba44af971901f258288fb3b9261a849"
 		}
 	]
 }

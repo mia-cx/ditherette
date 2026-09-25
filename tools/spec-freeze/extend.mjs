@@ -1,7 +1,15 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { contentDigest, expectedFiles, FROZEN_ROOTS, GENERATOR, inventory } from './content.mjs';
+import {
+	contentDigest,
+	expectedFiles,
+	FROZEN_ROOTS,
+	GENERATOR,
+	inventory,
+	v1Files,
+	verifyExtensionRoot
+} from './content.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const CHECKPOINT = join(ROOT, 'tools/spec-freeze/checkpoint.json');
@@ -22,6 +30,7 @@ export function extend(root, checkpoint, name, summary) {
 		.filter((path) => JSON.stringify(recorded.get(path)) !== JSON.stringify(found.get(path)))
 		.map((path) => ({ path, before: recorded.get(path) ?? null, after: found.get(path) ?? null }));
 	if (changes.length === 0) throw new Error('No reference changes to record');
+	verifyExtensionRoot(root, v1Files(checkpoint));
 	const extensions = [
 		...(checkpoint.extensions ?? []),
 		{ name, summary, changes, contentSha256: contentDigest(actual) }
