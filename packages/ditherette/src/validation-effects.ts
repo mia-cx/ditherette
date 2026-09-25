@@ -12,6 +12,8 @@ import {
 import type { Rgba8Image } from './types.js';
 
 const channels = ['rgb', 'red', 'green', 'blue'];
+/** Mirrors the Rust `MAX_EFFECTS`. */
+const maxEffects = 64;
 
 /** Context an enabled effect reads. The processor supplies it; ordinary effects need none. */
 interface Needs {
@@ -84,6 +86,12 @@ export function validateEffects(value: unknown, path: string) {
 	if (!Array.isArray(value))
 		throw new DitheretteError('invalid-settings', path, 'Expected an array of effects.');
 	const count = value.length;
+	if (count > maxEffects)
+		throw new DitheretteError(
+			'invalid-settings',
+			path,
+			`A chain holds at most ${maxEffects} effects.`
+		);
 	const steps: Record<string, unknown>[] = [];
 	const needs = { palette: false, space: false };
 	for (let index = 0; index < count; index++) {

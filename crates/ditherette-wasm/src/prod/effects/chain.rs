@@ -10,9 +10,12 @@ use crate::{
     image::contracts::PaletteEntry,
     prod::contract::{
         error::{DitheretteError, ErrorCode},
-        request::WorkingSpace,
+        request::{WorkingSpace, MAX_PALETTE_ENTRIES},
     },
 };
+
+/// Most steps one chain may hold, enabled or not.
+pub const MAX_EFFECTS: usize = 64;
 
 use super::{channel::Channel, image::EffectImage};
 
@@ -26,9 +29,11 @@ pub struct EffectContext<'a> {
 }
 
 impl EffectContext<'_> {
-    /// Visible palette colours in caller order, including duplicates.
+    /// Visible colours among the first 256 entries, the palette quantization keeps.
+    /// Caller order and duplicates are preserved.
     pub fn colors(&self) -> impl Iterator<Item = [u8; 3]> + '_ {
-        self.palette.iter().filter_map(|entry| match entry {
+        let retained = &self.palette[..self.palette.len().min(MAX_PALETTE_ENTRIES)];
+        retained.iter().filter_map(|entry| match entry {
             PaletteEntry::Color { rgb } => Some(*rgb),
             PaletteEntry::Transparent {} => None,
         })
@@ -98,6 +103,13 @@ pub fn validate_chain<E: Effect>(
     steps: &[Step<E>],
     context: &EffectContext<'_>,
 ) -> Result<(), DitheretteError> {
+    if steps.len() > MAX_EFFECTS {
+        return Err(DitheretteError::new(
+            ErrorCode::InvalidSettings,
+            "effects",
+            format!("A chain holds at most {MAX_EFFECTS} effects."),
+        ));
+    }
     for (index, step) in steps.iter().enumerate() {
         step.effect.validate(&format!("effects.{index}"))?;
     }

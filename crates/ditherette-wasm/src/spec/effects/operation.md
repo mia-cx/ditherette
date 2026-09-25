@@ -51,6 +51,7 @@ Effects run before resize, on the full source, so resize and dither settings can
 
 - Every validation step runs before pixel work, so an invalid terminal setting fails before effects run.
 - `version` in `recipe` must be 2. A v1 recipe goes to the frozen v1 `process`.
+- The package reports finer paths for shape errors, such as `effects.0.enabled`, where this reference reports `effects.0` with serde's message.
 
 ## Production obligations
 

@@ -74,6 +74,8 @@ Production may fold, fuse, tabulate, or parallelize effects, but exact modes mus
 - Arguments are finite and inside each effect's documented domain.
 - Effects map finite coordinates to finite coordinates.
 - Validation completes before any pixel work or output allocation.
+- A chain holds at most 64 steps, so decoding and validation stay bounded.
+- Effects see the palette quantization keeps: the first 256 entries.
 
 ## Production obligations
 

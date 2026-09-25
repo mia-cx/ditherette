@@ -102,7 +102,7 @@ const indexed = processor.process({
 ```
 
 Effects run in array order. Each step sees the unrounded result of the one before it; the chain rounds to RGBA8 once, at the end.
-Repeat an effect as often as you like; each instance keeps its own arguments.
+Repeat an effect as often as you like, up to 64 steps; each instance keeps its own arguments.
 `enabled: false` keeps a step in the recipe without running it. Disabled steps are still validated.
 Alpha is never changed. With no enabled step, `applyEffects` returns the source itself.
 

@@ -446,3 +446,33 @@ fn process_v2_validates_effects_under_recipe_before_any_work() {
     .unwrap_err();
     assert_eq!(decode.path, "recipe.effects.0");
 }
+
+#[test]
+fn chains_are_capped_and_see_only_the_retained_palette() {
+    let data = ramp();
+    let neutral = levels((0.0, 1.0), 1.0, (0.0, 1.0));
+    let long = steps(serde_json::Value::Array(vec![neutral.clone(); 64]));
+    assert_eq!(run(&data, &long).unwrap().data(), data.as_slice());
+    let too_long = steps(serde_json::Value::Array(vec![neutral; 65]));
+    assert_eq!(run(&data, &too_long).unwrap_err().path, "effects");
+
+    // Quantization keeps the first 256 entries, so a colour at index 256 is not context.
+    let mut palette = vec![PaletteEntry::Transparent {}; 256];
+    palette.push(PaletteEntry::Color { rgb: [1, 2, 3] });
+    let context = EffectContext {
+        palette: &palette,
+        space: Some(WorkingSpace::Oklab),
+    };
+    assert_eq!(context.colors().count(), 0);
+    let probe = vec![Step {
+        enabled: true,
+        effect: PaletteProbe,
+    }];
+    let dimensions = run(&data, &[]).unwrap().dimensions();
+    let view = ditherette_wasm::image::ImageView::packed(&data, dimensions).unwrap();
+    let mut image = EffectImage::from_rgba8(view);
+    assert_eq!(
+        apply_chain(&mut image, &probe, &context).unwrap_err().path,
+        "context.palette"
+    );
+}

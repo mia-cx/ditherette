@@ -285,11 +285,19 @@ impl Processor {
             palette: request.palette,
             space: Some(request.recipe.matching.space()),
         };
-        super::effects::validate(effects, &context)?;
+        let preflight = super::effects::validate(effects, &context)
+            .and_then(|()| dimensions(request.source_width, request.source_height, true));
+        let source = match preflight {
+            Ok(source) => source,
+            Err(error) => {
+                // Same recovery as a failed v1 call: drop the snapshot, reset the peak.
+                self.peak_capacity = Self::bookkeeping_bytes(self.boundary_capacity);
+                return self.finish_call(Err(error));
+            }
+        };
         if !effects.iter().any(|step| step.enabled) {
             return self.process_owning(request, boundary, allocator, 0);
         }
-        let source = dimensions(request.source_width, request.source_height, true)?;
         let extra = super::effects::process_capacity_bytes(effects, source);
         let mut effected = super::effects::EffectedInput::new(boundary, effects, context, source);
         self.process_owning(request, &mut effected, allocator, extra)
