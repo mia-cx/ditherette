@@ -7,7 +7,7 @@ Semantics, argument domains, and error paths are documented there. `tests/prod_e
 
 ### Per-channel table folding (selected)
 
-A leading run of enabled per-channel effects (`Effect::channel_map`) is tabulated once per chain: 256 `f32` entries per channel.
+A leading run of enabled per-channel effects (`Effect::per_channel`) is tabulated once per chain: 256 `f32` entries per channel.
 Every pixel with channel byte `k` starts at `k / 255` and passes through the same scalar maps, so the table is exact.
 When the run is the whole chain, the tables are rounded to bytes and the image is rewritten in place with three lookups per pixel. No continuous carrier is allocated.
 Otherwise the tables seed the carrier and the remaining effects run normally.
