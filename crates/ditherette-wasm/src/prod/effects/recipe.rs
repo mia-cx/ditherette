@@ -20,6 +20,7 @@ use super::{
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    recolour::Recolour,
     table::ChannelTables,
     white_balance::WhiteBalance,
 };
@@ -34,6 +35,7 @@ pub enum BuiltinEffect {
     Exposure(Exposure),
     WhiteBalance(WhiteBalance),
     HueSaturation(HueSaturation),
+    Recolour(Recolour),
 }
 
 /// One serialized chain entry: the effect's tagged object plus `enabled`.
@@ -48,6 +50,23 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.validate(path),
             Self::WhiteBalance(effect) => effect.validate(path),
             Self::HueSaturation(effect) => effect.validate(path),
+            Self::Recolour(effect) => effect.validate(path),
+        }
+    }
+
+    fn check_context(
+        &self,
+        context: &EffectContext<'_>,
+        path: &str,
+    ) -> Result<(), DitheretteError> {
+        match self {
+            Self::Levels(effect) => effect.check_context(context, path),
+            Self::Curves(effect) => effect.check_context(context, path),
+            Self::BrightnessContrast(effect) => effect.check_context(context, path),
+            Self::Exposure(effect) => effect.check_context(context, path),
+            Self::WhiteBalance(effect) => effect.check_context(context, path),
+            Self::HueSaturation(effect) => effect.check_context(context, path),
+            Self::Recolour(effect) => effect.check_context(context, path),
         }
     }
 
@@ -59,6 +78,7 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.needs(),
             Self::WhiteBalance(effect) => effect.needs(),
             Self::HueSaturation(effect) => effect.needs(),
+            Self::Recolour(effect) => effect.needs(),
         }
     }
 
@@ -70,6 +90,7 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.apply(image, context),
             Self::WhiteBalance(effect) => effect.apply(image, context),
             Self::HueSaturation(effect) => effect.apply(image, context),
+            Self::Recolour(effect) => effect.apply(image, context),
         }
     }
 
@@ -81,6 +102,7 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.per_channel(),
             Self::WhiteBalance(effect) => effect.per_channel(),
             Self::HueSaturation(effect) => effect.per_channel(),
+            Self::Recolour(effect) => effect.per_channel(),
         }
     }
 
@@ -92,6 +114,7 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.map_channel(channel, value),
             Self::WhiteBalance(effect) => effect.map_channel(channel, value),
             Self::HueSaturation(effect) => effect.map_channel(channel, value),
+            Self::Recolour(effect) => effect.map_channel(channel, value),
         }
     }
 
@@ -113,6 +136,7 @@ impl Effect for BuiltinEffect {
             Self::HueSaturation(effect) => {
                 effect.apply_tabulated(data, dimensions, tables, context)
             }
+            Self::Recolour(effect) => effect.apply_tabulated(data, dimensions, tables, context),
         }
     }
 }
