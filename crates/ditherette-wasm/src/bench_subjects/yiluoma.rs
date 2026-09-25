@@ -11,7 +11,7 @@ use ditherette_bench_api::{
 };
 use prod::contract::request::{BayerSize, DitherPolicy, DitherQuantizeRequest};
 
-pub const YLILUOMA_SUBJECT: &str = "prod:dither-and-quantize:yliluoma:literal-v1";
+pub const YLILUOMA_SUBJECT: &str = "prod:dither-and-quantize:yliluoma:indexed-v1";
 pub type YliluomaFn =
     for<'a> fn(DitherQuantizeRequest<'a>) -> Result<IndexedImage, BenchSubjectError>;
 
@@ -60,7 +60,7 @@ pub fn yiluoma_request<'a>(
 pub(super) fn subjects() -> Vec<BenchSubject> {
     vec![BenchSubject::Conformance(ConformanceBenchSubject {
         descriptor: SubjectDescriptor {
-            id: SubjectId::parse(YLILUOMA_SUBJECT).expect("literal ID"),
+            id: SubjectId::parse(YLILUOMA_SUBJECT).expect("valid subject ID"),
             display_name: "scalar Yliluoma complete native call".into(),
             source_file: "crates/ditherette-wasm/src/prod/dither/yiluoma/request.rs".into(),
             source_line: 1,
