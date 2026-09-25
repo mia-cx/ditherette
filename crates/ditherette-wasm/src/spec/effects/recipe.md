@@ -26,11 +26,16 @@ Registered effects:
 | `effect` | Module |
 | --- | --- |
 | `levels` | [levels.md](levels.md) |
+| `curves` | [curves.md](curves.md) |
+| `brightness-contrast` | [brightness_contrast.md](brightness_contrast.md) |
+| `exposure` | [exposure.md](exposure.md) |
+| `white-balance` | [white_balance.md](white_balance.md) |
+| `hue-saturation` | [hue_saturation.md](hue_saturation.md) |
 
 ## Why this works this way
 
 A closed enum makes every built-in visible in one place and keeps decoding strict.
-Adding an effect is one module, one variant, and one arm in each dispatch method. Sequencing lives in [chain.md](chain.md) and does not change.
+Adding an effect is one module, one variant, and one arm in the `each!` dispatch. Sequencing lives in [chain.md](chain.md) and does not change.
 
 ## Correctness invariants
 

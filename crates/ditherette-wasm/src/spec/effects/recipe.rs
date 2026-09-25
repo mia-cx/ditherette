@@ -9,9 +9,14 @@ use serde_json::Value;
 use crate::spec::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
+    brightness_contrast::BrightnessContrast,
     chain::{Effect, EffectContext, Needs, Step},
+    curves::Curves,
+    exposure::Exposure,
+    hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    white_balance::WhiteBalance,
 };
 
 /// Every effect the crate compiles in. The JSON tag is `effect`.
@@ -19,6 +24,25 @@ use super::{
 #[serde(tag = "effect", rename_all = "kebab-case")]
 pub enum BuiltinEffect {
     Levels(Levels),
+    Curves(Curves),
+    BrightnessContrast(BrightnessContrast),
+    Exposure(Exposure),
+    WhiteBalance(WhiteBalance),
+    HueSaturation(HueSaturation),
+}
+
+/// Dispatches one trait call to whichever built-in this is.
+macro_rules! each {
+    ($self:ident, $effect:ident => $call:expr) => {
+        match $self {
+            Self::Levels($effect) => $call,
+            Self::Curves($effect) => $call,
+            Self::BrightnessContrast($effect) => $call,
+            Self::Exposure($effect) => $call,
+            Self::WhiteBalance($effect) => $call,
+            Self::HueSaturation($effect) => $call,
+        }
+    };
 }
 
 /// One serialized chain entry: the effect's tagged object plus `enabled`.
@@ -26,21 +50,15 @@ pub type EffectStep = Step<BuiltinEffect>;
 
 impl Effect for BuiltinEffect {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        match self {
-            Self::Levels(effect) => effect.validate(path),
-        }
+        each!(self, effect => effect.validate(path))
     }
 
     fn needs(&self) -> Needs {
-        match self {
-            Self::Levels(effect) => effect.needs(),
-        }
+        each!(self, effect => effect.needs())
     }
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
-        match self {
-            Self::Levels(effect) => effect.apply(image, context),
-        }
+        each!(self, effect => effect.apply(image, context))
     }
 }
 
