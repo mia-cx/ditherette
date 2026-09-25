@@ -2,10 +2,14 @@ import { DitheretteError } from './errors.js';
 import type { ErrorCode } from './errors.js';
 import { field, object, validateResize } from './validation.js';
 import { validateDitherAndQuantize } from './validation-fields.js';
+import { requireContext, validateEffects } from './validation-effects.js';
 
 /** Settings live inside recipe; source, palette, lifecycle, and result-copy failures do not. */
 export function processErrorPath(path: string, code: ErrorCode): string {
 	if (path === 'version') return 'recipe.version';
+	if (path === 'effects' || path.startsWith('effects.')) return `recipe.${path}`;
+	if (path === 'context.palette') return 'palette';
+	if (path === 'context.space') return 'recipe.match';
 	if (path === 'matching') return 'recipe.match';
 	if (path === 'perturb' || path.startsWith('perturb.')) return `recipe.dither.${path}`;
 	if (
@@ -29,23 +33,28 @@ export function validateProcess(value: unknown) {
 			'invalid-request',
 			'request'
 		);
+		const rawRecipe = field(request, 'recipe');
+		const version =
+			typeof rawRecipe === 'object' && rawRecipe !== null
+				? field(rawRecipe as Record<string, unknown>, 'version')
+				: undefined;
 		const recipe = object(
-			field(request, 'recipe'),
-			['version', 'output', 'alpha', 'match', 'dither'],
+			rawRecipe,
+			['version', ...(version === 2 ? ['effects'] : []), 'output', 'alpha', 'match', 'dither'],
 			'invalid-settings',
 			'recipe'
 		);
-		const version = field(recipe, 'version');
-		if (version !== 1)
+		if (version !== 1 && version !== 2)
 			throw new DitheretteError('invalid-request', 'recipe.version', 'Unsupported recipe version.');
+		const effects = version === 2 ? validateEffects(field(recipe, 'effects'), 'effects') : undefined;
 		const resized = validateResize({
-			version,
+			version: 1,
 			source: field(request, 'source'),
 			output: field(recipe, 'output'),
 			onProgress: field(request, 'onProgress')
 		});
 		const quantize = validateDitherAndQuantize({
-			version,
+			version: 1,
 			source: { width: resized.sourceWidth, height: resized.sourceHeight, data: resized.data },
 			palette: field(request, 'palette'),
 			alpha: field(recipe, 'alpha'),
@@ -53,7 +62,13 @@ export function validateProcess(value: unknown) {
 			dither: field(recipe, 'dither'),
 			onProgress: resized.onProgress
 		});
-		return { ...resized, ...quantize };
+		// The matching metric always supplies the working space; only the palette can be missing.
+		if (effects)
+			requireContext(effects.needs, quantize.palette, true, {
+				palette: 'context.palette',
+				space: 'context.space'
+			});
+		return { ...resized, ...quantize, version, effects };
 	} catch (error) {
 		if (error instanceof DitheretteError)
 			throw new DitheretteError(

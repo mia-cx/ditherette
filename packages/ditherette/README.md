@@ -81,6 +81,45 @@ Input, palette, memory, and result-copy errors keep their existing paths.
 The landed resize kernels retain their documented frozen-reference differences;
 process does not claim to remove them.
 
+## Effects
+
+```ts
+const levels = {
+	effect: 'levels',
+	enabled: true,
+	channel: 'rgb',
+	input: { black: 0.05, white: 0.95 },
+	gamma: 1.2,
+	output: { black: 0, white: 1 }
+} as const;
+
+const graded = processor.applyEffects({ version: 1, source, effects: [levels] });
+const indexed = processor.process({
+	source,
+	palette,
+	recipe: { version: 2, effects: [levels], output, alpha, match: 'oklab-euclidean', dither }
+});
+```
+
+Effects run in array order. Each step sees the unrounded result of the one before it; the chain rounds to RGBA8 once, at the end.
+Repeat an effect as often as you like; each instance keeps its own arguments.
+`enabled: false` keeps a step in the recipe without running it. Disabled steps are still validated.
+Alpha is never changed. With no enabled step, `applyEffects` returns the source itself.
+
+Recipe version 2 adds `effects` to the version 1 settings. Effects run first, on the source, then resize, dither, and quantize.
+It equals `applyEffects` followed by a version 1 `process`, but the effect result stays in Wasm.
+Effects read the request palette and the working space of `match`. Standalone calls pass them as `context: { palette, space }`.
+Colour effects cannot run after quantization; no recipe field places them there.
+
+Built-in effects:
+
+| `effect` | Arguments |
+| --- | --- |
+| `levels` | `channel` (`rgb`, `red`, `green`, `blue`), `input` and `output` black/white points from 0 to 1, `gamma` from 0.1 to 10 (above 1 brightens) |
+
+Errors name the step, such as `effects.2.gamma`, or `recipe.effects.2.gamma` inside `process`.
+Progress reports an `effects` stage between `prepare` and `resize`.
+
 ## Direct quantization
 
 ```ts
@@ -238,7 +277,7 @@ The failing disposal and host-termination checks remain active. Scalar processin
 
 ## Public contract
 
-All five synchronous processing methods, private caches, progress delivery, and optional pool initialization are available.
+All six synchronous processing methods, private caches, progress delivery, and optional pool initialization are available.
 Progress completion follows durable output construction. A thrown callback fails the call without publishing new cache entries.
 Progress uses typed stages and measurable counts, with within-stage callbacks throttled to 50 ms.
 The package exports no raw bindings, backend selection, cache controls, or processor counters.
