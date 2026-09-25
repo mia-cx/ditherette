@@ -11,12 +11,12 @@ after it never re-analyse.
 
 ## Acceptance criteria
 
-- [ ] Public Rust/Wasm operations for standalone analysis and application, no website dependency.
-- [ ] Fixtures show analysis responding to image content, palette (custom, full vs restricted), and working space.
-- [ ] Recipes inspect, edit, and reapply deterministically; zero strength preserves the input.
-- [ ] Gradients keep intermediate colours before quantization; works with every dither family in the same space.
-- [ ] Treated vs untreated comparison across images and palettes (detail, separation, shifts, texture); analysis and application costs recorded separately.
-- [ ] #202 criterion 4: recolouring composes with earlier effects, respects the enabled palette, and downstream edits reuse the analysis.
+- [x] Public Rust/Wasm operations for standalone analysis and application, no website dependency.
+- [x] Fixtures show analysis responding to image content, palette (custom, full vs restricted), and working space.
+- [x] Recipes inspect, edit, and reapply deterministically; zero strength preserves the input.
+- [x] Gradients keep intermediate colours before quantization; works with every dither family in the same space.
+- [x] Treated vs untreated comparison across images and palettes (detail, separation, shifts, texture); analysis and application costs recorded separately.
+- [x] #202 criterion 4: recolouring composes with earlier effects, respects the enabled palette, and downstream edits reuse the analysis.
 
 ## TODOs
 
@@ -30,6 +30,10 @@ after it never re-analyse.
 - [x] Prod: benchmark and optimize with evidence.
 - [x] Package: `analyzeRecolour`, `recolour` effect type, validation, docs, tests, changeset.
 - [x] Evaluation: treated vs untreated metrics across fixtures and palettes; record costs.
-- [ ] Final validation.
+- [x] Final validation.
 
 ## Notes
+- Palette reach is the support function of the palette's convex hull in the opponent plane: what dithered mixtures can average to.
+- First evaluation showed full tone stretches moved every image; treatment now compresses only out-of-range tones and scales redistribution by palette sparsity.
+- Analysis cache keys hash exactly what analysis reads, so hits work across applyEffects, process, and analyzeRecolour.
+- Built-in chains resolve recipe-less recolour steps first, then memoize the whole pointwise chain per input colour.
