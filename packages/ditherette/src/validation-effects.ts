@@ -54,11 +54,52 @@ function channel(value: unknown, path: string): string {
 	return value;
 }
 
+/** 2 to 16 exact `[x, y]` pairs in `[0, 1]` with strictly increasing x, as Rust validates them. */
+function curvePoints(value: unknown, path: string): [number, number][] {
+	if (!Array.isArray(value) || value.length < 2 || value.length > 16)
+		throw new DitheretteError('invalid-settings', path, 'Expected 2 to 16 points.');
+	const count = value.length;
+	const points: [number, number][] = [];
+	for (let index = 0; index < count; index++) {
+		const pointPath = `${path}.${index}`;
+		const point: unknown = Object.hasOwn(value, index) ? value[index] : undefined;
+		if (
+			!Array.isArray(point) ||
+			point.length !== 2 ||
+			Reflect.ownKeys(point).some((key) => !['0', '1', 'length'].includes(String(key)))
+		)
+			throw new DitheretteError('invalid-settings', pointPath, 'Expected an [x, y] pair.');
+		const x = bounded(point[0], 0, 1, `${pointPath}.0`);
+		const y = bounded(point[1], 0, 1, `${pointPath}.1`);
+		if (index > 0 && x <= points[index - 1][0])
+			throw new DitheretteError(
+				'invalid-settings',
+				`${pointPath}.0`,
+				'Point x values must strictly increase.'
+			);
+		points.push([x, y]);
+	}
+	return points;
+}
+
+/** Named arguments that are each a bounded f32, in validation order. */
+function scalars(ranges: Record<string, readonly [number, number]>): Builtin['normalize'] {
+	return (effect, path) =>
+		Object.fromEntries(
+			Object.entries(ranges).map(([key, [minimum, maximum]]) => [
+				key,
+				bounded(field(effect, key), minimum, maximum, `${path}.${key}`)
+			])
+		);
+}
+
+const none = { palette: false, space: false } as const;
+
 /** The static registry. Keys mirror the Rust `BuiltinEffect` tags. */
 const builtins: Record<string, Builtin> = {
 	levels: {
 		keys: ['channel', 'input', 'gamma', 'output'],
-		needs: { palette: false, space: false },
+		needs: none,
 		normalize(effect, path) {
 			const selected = channel(field(effect, 'channel'), `${path}.channel`);
 			const input = points(field(effect, 'input'), `${path}.input`);
@@ -75,6 +116,34 @@ const builtins: Record<string, Builtin> = {
 				output: points(field(effect, 'output'), `${path}.output`)
 			};
 		}
+	},
+	curves: {
+		keys: ['channel', 'points'],
+		needs: none,
+		normalize: (effect, path) => ({
+			channel: channel(field(effect, 'channel'), `${path}.channel`),
+			points: curvePoints(field(effect, 'points'), `${path}.points`)
+		})
+	},
+	'brightness-contrast': {
+		keys: ['brightness', 'contrast'],
+		needs: none,
+		normalize: scalars({ brightness: [-1, 1], contrast: [-1, 1] })
+	},
+	exposure: {
+		keys: ['stops'],
+		needs: none,
+		normalize: scalars({ stops: [-4, 4] })
+	},
+	'white-balance': {
+		keys: ['temperature', 'tint'],
+		needs: none,
+		normalize: scalars({ temperature: [-1, 1], tint: [-1, 1] })
+	},
+	'hue-saturation': {
+		keys: ['hue', 'saturation', 'lightness'],
+		needs: none,
+		normalize: scalars({ hue: [-180, 180], saturation: [-1, 1], lightness: [-1, 1] })
 	}
 };
 

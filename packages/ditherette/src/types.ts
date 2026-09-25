@@ -208,10 +208,63 @@ export interface LevelsEffect {
 }
 
 /**
+ * Curves: a smooth, overshoot-free tone curve through 2 to 16 `[x, y]` points from 0 through 1,
+ * with x strictly increasing. Values outside the first and last x take the end y values.
+ * Neutral is `[[0, 0], [1, 1]]`.
+ */
+export interface CurvesEffect {
+	readonly effect: 'curves';
+	readonly enabled: boolean;
+	readonly channel: EffectChannel;
+	readonly points: readonly (readonly [number, number])[];
+}
+
+/** Contrast from -1 through 1 scales around mid-grey by `4^contrast`; brightness from -1 through 1 adds. */
+export interface BrightnessContrastEffect {
+	readonly effect: 'brightness-contrast';
+	readonly enabled: boolean;
+	readonly brightness: number;
+	readonly contrast: number;
+}
+
+/** Exposure in stops from -4 through 4, applied in linear light. */
+export interface ExposureEffect {
+	readonly effect: 'exposure';
+	readonly enabled: boolean;
+	readonly stops: number;
+}
+
+/** Temperature (warm is positive) and tint (magenta is positive), each from -1 through 1. */
+export interface WhiteBalanceEffect {
+	readonly effect: 'white-balance';
+	readonly enabled: boolean;
+	readonly temperature: number;
+	readonly tint: number;
+}
+
+/**
+ * Hue turn in degrees from -180 through 180, with saturation and lightness from -1 through 1,
+ * computed in Oklab. Saturation -1 is greyscale; lightness 1 is white and -1 is black.
+ */
+export interface HueSaturationEffect {
+	readonly effect: 'hue-saturation';
+	readonly enabled: boolean;
+	readonly hue: number;
+	readonly saturation: number;
+	readonly lightness: number;
+}
+
+/**
  * One step of an ordered effect chain. Steps run in array order on unrounded colour;
  * repeated effects keep their own arguments. A disabled step is validated but skipped.
  */
-export type Effect = LevelsEffect;
+export type Effect =
+	| LevelsEffect
+	| CurvesEffect
+	| BrightnessContrastEffect
+	| ExposureEffect
+	| WhiteBalanceEffect
+	| HueSaturationEffect;
 
 /** Shared inputs some effects read. Ordinary effects need neither. */
 export interface EffectContext {
