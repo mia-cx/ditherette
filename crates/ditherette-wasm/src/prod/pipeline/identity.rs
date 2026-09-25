@@ -13,9 +13,10 @@ use crate::{
         failure::{ErrorPath, Failure},
         request::{
             AlphaPolicy, DitherPolicy, MatchPolicy, Output, PerturbPolicy, Placement, ResizePolicy,
-            MAX_PALETTE_ENTRIES, RECIPE_VERSION,
+            WorkingSpace, MAX_PALETTE_ENTRIES, RECIPE_VERSION,
         },
     },
+    prod::effects::{Effect, EffectContext, EffectStep, Needs},
 };
 
 struct HashWriter(Sha256);
@@ -73,6 +74,54 @@ pub fn palette(
             },
             parent: None,
             version: RECIPE_VERSION,
+        },
+    )
+}
+
+/// Hashes enabled effects in caller order under their parent image identity.
+/// Disabled steps cannot change pixels, so they do not change the key. Context
+/// joins the key only when an enabled effect reads it.
+pub fn effects(
+    parent: Identity,
+    steps: &[EffectStep],
+    context: &EffectContext<'_>,
+) -> Result<Identity, Failure> {
+    struct Enabled<'a>(&'a [EffectStep]);
+    impl Serialize for Enabled<'_> {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.collect_seq(
+                self.0
+                    .iter()
+                    .filter(|step| step.enabled)
+                    .map(|step| &step.effect),
+            )
+        }
+    }
+    #[derive(Serialize)]
+    struct Effects<'a> {
+        effects: Enabled<'a>,
+        palette: Option<Identity>,
+        parent: Identity,
+        space: Option<WorkingSpace>,
+    }
+    let needs = steps
+        .iter()
+        .filter(|step| step.enabled)
+        .map(|step| step.effect.needs())
+        .fold(Needs::default(), |all, needs| Needs {
+            palette: all.palette || needs.palette,
+            space: all.space || needs.space,
+        });
+    hash(
+        b"ditherette-effects-v1\0",
+        &Effects {
+            effects: Enabled(steps),
+            palette: needs
+                .palette
+                .then(|| palette_content(context.palette))
+                .transpose()?,
+            parent,
+            space: context.space.filter(|_| needs.space),
         },
     )
 }

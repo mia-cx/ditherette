@@ -32,6 +32,7 @@ export type ResizeAnchor =
 export interface Progress {
 	readonly stage:
 		| 'prepare'
+		| 'effects'
 		| 'resize'
 		| 'alpha'
 		| 'color'
@@ -183,11 +184,70 @@ export interface RecipeV1 {
 	readonly dither: DitherAndQuantizeRequest['dither'];
 }
 
+/** Encoded sRGB channels a per-channel effect changes. */
+export type EffectChannel = 'rgb' | 'red' | 'green' | 'blue';
+
+/** A black/white pair in encoded sRGB units, each from 0 through 1. */
+export interface LevelsPoints {
+	readonly black: number;
+	readonly white: number;
+}
+
+/**
+ * Levels: clip to the input range, bend midtones by `gamma` (0.1 through 10, above 1 brightens),
+ * then scale to the output range. Output black above output white inverts the channel.
+ * Neutral is input 0..1, gamma 1, output 0..1.
+ */
+export interface LevelsEffect {
+	readonly effect: 'levels';
+	readonly enabled: boolean;
+	readonly channel: EffectChannel;
+	readonly input: LevelsPoints;
+	readonly gamma: number;
+	readonly output: LevelsPoints;
+}
+
+/**
+ * One step of an ordered effect chain. Steps run in array order on unrounded colour;
+ * repeated effects keep their own arguments. A disabled step is validated but skipped.
+ */
+export type Effect = LevelsEffect;
+
+/** Shared inputs some effects read. Ordinary effects need neither. */
+export interface EffectContext {
+	readonly palette?: readonly PaletteEntry[];
+	/** The working space final quantization will match in. */
+	readonly space?: WorkingSpace;
+}
+
+/** Apply an ordered effect chain and return full-colour RGBA8 at the source size. */
+export interface ApplyEffectsRequest {
+	readonly version: 1;
+	readonly source: Rgba8Image;
+	readonly effects: readonly Effect[];
+	readonly context?: EffectContext;
+	/** Completion follows durable output construction and precedes successful cache publication. */
+	readonly onProgress?: (progress: Progress) => void;
+}
+
+/**
+ * Recipe v1 plus the effects that run first, on the source, before resize.
+ * Effects read the request palette and the working space of `match` as their context.
+ */
+export interface RecipeV2 {
+	readonly version: 2;
+	readonly effects: readonly Effect[];
+	readonly output: ResizeRequest['output'];
+	readonly alpha: AlphaPolicy;
+	readonly match: Matching;
+	readonly dither: DitherAndQuantizeRequest['dither'];
+}
+
 /** Resize and dither in Wasm, copying only the final durable indexed result back. */
 export interface ProcessRequest {
 	readonly source: Rgba8Image;
 	readonly palette: readonly PaletteEntry[];
-	readonly recipe: RecipeV1;
+	readonly recipe: RecipeV1 | RecipeV2;
 	/** Completion follows durable output construction and precedes successful cache publication. */
 	readonly onProgress?: (progress: Progress) => void;
 }
@@ -196,6 +256,8 @@ export interface ProcessRequest {
 export interface Ditherette {
 	/** Apply the full recipe, preserving the same RGBA8 boundaries as staged calls. */
 	process(request: ProcessRequest): IndexedImage;
+	/** Return the source itself when no step is enabled; otherwise return independent JS-owned RGBA8. */
+	applyEffects(request: ApplyEffectsRequest): Rgba8Image;
 	/** Return the source itself at unchanged dimensions; otherwise return independent JS-owned RGBA8. */
 	resize(request: ResizeRequest): Rgba8Image;
 	/** Match source pixels to the supplied palette without resizing or dithering. */

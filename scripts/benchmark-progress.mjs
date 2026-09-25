@@ -1,5 +1,6 @@
 const stages = new Set([
 	'prepare',
+	'effects',
 	'resize',
 	'alpha',
 	'color',

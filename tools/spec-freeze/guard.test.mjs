@@ -24,6 +24,7 @@ import {
 	verifyDependencies,
 	verifySyntax
 } from './build.mjs';
+import { extend } from './extend.mjs';
 import { POLICY, WORKFLOW, verifyPolicy } from './guard.mjs';
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -164,6 +165,49 @@ test('checkpoint preserves the original identity and binds only approved amendme
 	changed.amendment.changes[0].after.sha256 = '0'.repeat(64);
 	assert.throws(() => verifyContent(ROOT, changed), /Invalid amended checkpoint content digest/);
 });
+
+test('extensions add reference domains but cannot change v1 bytes', () =>
+	fixture((root) => {
+		const rootModule = `${CRATE}/src/spec/mod.rs`;
+		const added = `${CRATE}/src/spec/zz_extension/mod.rs`;
+		mkdirSync(dirname(join(root, added)), { recursive: true });
+		writeFileSync(join(root, added), '//! Extension fixture.\n');
+		writeFileSync(
+			join(root, rootModule),
+			`${readFileSync(join(root, rootModule))}pub mod zz_extension;\n`
+		);
+		assert.throws(() => verifyContent(root, checkpoint), /Frozen content changed/);
+		const extended = extend(root, checkpoint, 'fixture', 'Adds one module.');
+		assert.deepEqual(
+			extended.extensions.at(-1).changes.map(({ path }) => path),
+			[rootModule, added]
+		);
+		assert.deepEqual(verifyContent(root, extended), verifyContent(ROOT, checkpoint));
+		assert.throws(() => extend(root, extended, 'fixture', 'Again.'), /already recorded/);
+
+		const common = `${CRATE}/src/spec/color/common.rs`;
+		mutation(root, common, `${readFileSync(join(root, common))}\n// extension edit\n`, () => {
+			assert.throws(
+				() => extend(root, extended, 'edit', 'Edits v1.'),
+				/cannot change v1 file: .*common\.rs/
+			);
+		});
+		const forged = structuredClone(extended);
+		forged.extensions.at(-1).contentSha256 = '0'.repeat(64);
+		assert.throws(() => verifyContent(root, forged), /Invalid checkpoint extension digest/);
+
+		// Byte-identical v1 files can still be bypassed by rerouting a module in the root.
+		const rerouted = readFileSync(join(root, rootModule), 'utf8').replace(
+			'pub mod pipeline;',
+			'pub mod pipeline { pub use super::zz_extension::*; }'
+		);
+		mutation(root, rootModule, rerouted, () => {
+			assert.throws(
+				() => extend(root, checkpoint, 'reroute', 'Reroutes v1.'),
+				/may only add module declarations/
+			);
+		});
+	}));
 
 test('syntax rejects both directions, aliases, shared/adapter bridges, and source injection', () =>
 	fixture((root) => {

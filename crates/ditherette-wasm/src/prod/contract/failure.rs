@@ -45,6 +45,9 @@ pub enum ErrorPath {
     DitherSize = 36,
     RecipeVersion = 37,
     OnProgress = 38,
+    Effects = 39,
+    ContextPalette = 40,
+    ContextSpace = 41,
 }
 
 /// A small value usable even when Rust cannot allocate an error string.
