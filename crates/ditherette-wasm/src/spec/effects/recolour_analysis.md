@@ -21,26 +21,28 @@ Every point of the hull is an average of palette colours, which is what ditherin
 
 **Tone.** Take weighted lightness quantiles at 1%, 25%, 50%, 75%, and 99%, and the palette's distinct lightness levels.
 If either spans less than 0.001, keep the identity curve.
-Otherwise each target is half the linear map of the 1%–99% range onto the palette's lightness range, and half the palette's own lightness quantile at rank 0, ¼, ½, ¾, 1.
-Points sit at the quantiles, plus `x = 0` and `x = 1` when the range does not reach them. Knots closer than 0.001 are dropped; y never decreases.
+Clamp the 1%–99% range into the palette's lightness range, and map lightness linearly between the two, extended to 0 and 1 and clamped to the palette range. Tones the palette already covers stay put.
+Palettes with `n` lightness levels also pull each quartile toward the palette's own level at the same rank, by `0.5 × min(1, 4 / n)`: sparse palettes place detail on their steps, rich ones barely change.
+Knots closer than 0.001 are dropped; y never decreases. A curve within 1e-4 of identity becomes the identity curve.
 
 **Shift.** If neutral lies inside the palette hull (reach ≥ 0 every 5°), no shift. Otherwise greys cannot be mixed: shift the opponent axes half-way toward the palette centroid, at most 0.1 long.
 
 **Sectors.** Six hue sectors, every 60°, 60° wide. For each: coloured mass (alpha weight × window × neutral ramp, after the shift), mean chroma, and reach at its centre.
 
-**Chroma.** The mass-weighted mean of `min(1.5, reach / chroma)` over sectors, clamped to `[0, 1.25]`. A grey image keeps 1.
+**Chroma.** The mass-weighted mean of `min(1.25, reach / chroma)` over sectors, clamped to `[0, 1.15]`, and snapped to 1 within 0.02. A grey image keeps 1.
 
 **Groups.** For each sector with at least 2% of the coloured mass:
 if reach at its centre is below half its mean chroma after the overall scale, turn toward the nearest direction within 45° that reaches that far, trying +5°, −5°, +10°, … in order.
-Its chroma is `min(1.5, reach / chroma) / overall`, clamped to `[0.25, 1.2]`, measured at the turned direction.
-Together the two scales boost a hue at most 1.5×: enough to keep muted colours from collapsing onto grey entries, without repainting the image.
+Its chroma is `min(1.25, reach / chroma) / overall`, clamped to `[0.25, 1.1]`, measured at the turned direction.
+Together the two scales boost a hue at most about 1.27×: enough to keep muted colours from collapsing onto grey entries, without repainting the image.
 Groups with no turn and a chroma within 0.02 of 1 are omitted.
 
 ## Why this works this way
 
 Pulling each pixel to its nearest palette entry is quantization, and it throws away the mixtures dithering can show.
 The hull is the right model of what a palette can represent through dithering. It is also cheap: one dot product per palette colour.
-Mapping tones half linearly and half by the palette's own levels spreads detail across the lightness steps the palette has.
+Compressing only out-of-range tones leaves images alone when a rich palette already fits them; the evaluation showed a full stretch moved every image for no gain.
+Sparse palettes gain from placing detail on the steps they have.
 Muting the hues the palette cannot mix avoids noisy dithering there. Turning them toward reachable hues keeps them distinct instead of letting them collapse to grey.
 Every choice is bounded and explicit, so the recipe stays predictable and easy to edit.
 

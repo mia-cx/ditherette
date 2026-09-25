@@ -24,11 +24,13 @@ pub const SECTOR_WIDTH: f32 = 60.0;
 const TONE_QUANTILES: [f32; 5] = [0.01, 0.25, 0.5, 0.75, 0.99];
 /// Share of each tone target taken from the palette's own lightness distribution.
 const PALETTE_TONE_SHARE: f32 = 0.5;
+/// Palettes with this many lightness levels or fewer take the full share; richer ones less.
+const SPARSE_LEVELS: f32 = 4.0;
 /// Overall saturation bounds, and per-hue bounds relative to it.
-const MAX_CHROMA: f32 = 1.25;
-const GROUP_CHROMA: (f32, f32) = (0.25, 1.2);
+const MAX_CHROMA: f32 = 1.15;
+const GROUP_CHROMA: (f32, f32) = (0.25, 1.1);
 /// Largest reach-over-chroma ratio counted, so a vivid palette cannot oversaturate a muted image.
-const MAX_FIT: f32 = 1.5;
+const MAX_FIT: f32 = 1.25;
 /// A hue sector below this share of coloured image mass gets no group.
 const MIN_SECTOR_MASS: f32 = 0.02;
 /// A direction counts as reachable when the palette's hull extends this far relative to the image.
@@ -136,10 +138,11 @@ fn palette_quantile(levels: &[f32], p: f32) -> f32 {
     levels[below] + (position - below as f32) * (levels[above] - levels[below])
 }
 
-/// Maps the image's 1%–99% tone range onto the palette's lightness range, half linearly and
-/// half following the palette's own lightness distribution, so detail lands where the palette
-/// has levels. Flat images or single-lightness palettes keep the identity curve.
+/// Fits the image's 1%–99% tone range into the palette's lightness range, compressing only
+/// what falls outside it. Sparse palettes also pull the quartiles toward their own levels, so
+/// detail lands on lightness steps the palette has. A curve within 1e-4 of identity is identity.
 fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
+    let identity = vec![[0.0, 0.0], [1.0, 1.0]];
     let mut sorted: Vec<(f32, f32)> = samples
         .iter()
         .map(|sample| (sample.opponent[0], sample.weight))
@@ -156,26 +159,30 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
     let (low, high) = (xs[0], xs[4]);
     let (palette_low, palette_high) = (levels[0], levels[levels.len() - 1]);
     if high - low < MIN_GAP || palette_high - palette_low < MIN_GAP {
-        return vec![[0.0, 0.0], [1.0, 1.0]];
+        return identity;
     }
+    let (mut target_low, mut target_high) = (
+        low.clamp(palette_low, palette_high),
+        high.clamp(palette_low, palette_high),
+    );
+    if target_high - target_low < MIN_GAP {
+        (target_low, target_high) = (palette_low, palette_high);
+    }
+    let linear = |x: f32| {
+        (target_low + (x - low) / (high - low) * (target_high - target_low))
+            .clamp(palette_low, palette_high)
+    };
+    let share = PALETTE_TONE_SHARE * (SPARSE_LEVELS / levels.len() as f32).min(1.0);
     let ranks = [0.0, 0.25, 0.5, 0.75, 1.0];
-    let targets: Vec<f32> = xs
-        .iter()
-        .zip(ranks)
-        .map(|(&x, rank)| {
-            let linear = palette_low + (x - low) / (high - low) * (palette_high - palette_low);
-            let distributed = palette_quantile(&levels, rank);
-            linear + PALETTE_TONE_SHARE * (distributed - linear)
-        })
-        .collect();
-    let mut points = Vec::new();
-    if low > 0.0 {
-        points.push([0.0, targets[0]]);
-    }
-    points.extend(xs.iter().zip(&targets).map(|(&x, &y)| [x, y]));
-    if high < 1.0 {
-        points.push([1.0, targets[4]]);
-    }
+    let mut points = vec![[0.0, linear(0.0)]];
+    points.extend(xs.iter().zip(ranks).map(|(&x, rank)| {
+        let fitted = linear(x);
+        [
+            x,
+            fitted + share * (palette_quantile(&levels, rank) - fitted),
+        ]
+    }));
+    points.push([1.0, linear(1.0)]);
     let mut curve: Vec<[f32; 2]> = Vec::new();
     for [x, y] in points {
         match curve.last() {
@@ -185,6 +192,15 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
             Some(_) => {}
             None => curve.push([x, y.clamp(0.0, 1.0)]),
         }
+    }
+    if curve.last().is_some_and(|&[x, _]| x < 1.0) {
+        // The 99% quantile sat within one gap of 1; extend flat so the curve spans [0, 1].
+        let &[_, y] = curve.last().unwrap();
+        curve.pop();
+        curve.push([1.0, y]);
+    }
+    if curve.iter().all(|[x, y]| (x - y).abs() < 1e-4) {
+        return identity;
     }
     curve
 }
@@ -261,7 +277,7 @@ fn sectors(samples: &[Sample], palette: &[[f32; 3]], shift: [f32; 2]) -> Vec<Sec
         .collect()
 }
 
-/// Reach over image chroma, capped at 1.5, averaged by coloured mass and clamped to `[0, 1.25]`.
+/// Reach over image chroma, capped at 1.25, averaged by coloured mass and clamped to `[0, 1.15]`.
 /// A grey image keeps 1.
 fn overall_chroma(sectors: &[Sector]) -> f32 {
     let mass: f32 = sectors.iter().map(|sector| sector.mass).sum();
@@ -273,7 +289,13 @@ fn overall_chroma(sectors: &[Sector]) -> f32 {
         .filter(|sector| sector.mass > 0.0)
         .map(|sector| sector.mass * (sector.reach.max(0.0) / sector.chroma).min(MAX_FIT))
         .sum();
-    (fit / mass).clamp(0.0, MAX_CHROMA)
+    let chroma = (fit / mass).clamp(0.0, MAX_CHROMA);
+    // Within 2% of neutral is no change worth a round trip.
+    if (chroma - 1.0).abs() <= 0.02 {
+        1.0
+    } else {
+        chroma
+    }
 }
 
 /// One group per sector holding enough coloured mass. A sector the palette cannot reach turns
