@@ -382,6 +382,31 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     };
     let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
     call.charge_optional_capacity(rgb_cache_capacity, peak)?;
+    let mix_index = if let DitherPolicy::Yliluoma { size, .. } = dither {
+        if !can_match_rgb
+            || output_dimensions.pixel_count().expect("validated output")
+                < crate::prod::dither::yiluoma::index::MIN_INDEX_PIXELS
+        {
+            None
+        } else {
+            let available = call.available_working_capacity();
+            let levels = match size {
+                BayerSize::Two => 4,
+                BayerSize::Four => 16,
+                BayerSize::Eight => 64,
+                BayerSize::Sixteen => 256,
+            };
+            crate::prod::dither::yiluoma::index::MixIndex::try_new(
+                call.parts().0.expect("requested palette").matcher(),
+                levels,
+                available,
+            )
+        }
+    } else {
+        None
+    };
+    let mix_index_capacity = mix_index.as_ref().map_or(0, |index| index.capacity_bytes());
+    call.charge_optional_capacity(mix_index_capacity, peak)?;
     let (prepared, _, images, scratch) = call.image_parts();
     let prepared = prepared.expect("requested palette");
     let [source, resized, perturbed, indices] = &mut scratch.buffers;
@@ -465,16 +490,17 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 _ => &mut [],
             };
             if let Some(work) = &mut mixing {
-                work.execute(
+                work.execute_indexed(
                     view,
                     prepared,
                     indices,
                     matrix,
                     mix_placement,
+                    mix_index.as_ref(),
                     &mut report_row,
                 )?;
             } else if enabled {
-                crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
+                crate::prod::dither::yiluoma::dither_yiluoma_with_progress_indexed(
                     view,
                     prepared,
                     indices,
@@ -482,10 +508,11 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     mix_placement,
                     placement_rows,
                     mixes,
+                    mix_index.as_ref(),
                     &mut report_row,
                 )?;
             } else {
-                crate::prod::dither::yiluoma::dither_yiluoma_with_progress(
+                crate::prod::dither::yiluoma::dither_yiluoma_with_progress_indexed(
                     view,
                     prepared,
                     indices,
@@ -493,6 +520,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                     mix_placement,
                     placement_rows,
                     mixes,
+                    mix_index.as_ref(),
                     |_| Ok(()),
                 )?;
             }
@@ -514,6 +542,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     }
     drop(rgb_cache);
     call.release_working_capacity(rgb_cache_capacity);
+    drop(mix_index);
+    call.release_working_capacity(mix_index_capacity);
     drop(placement);
     call.release_working_capacity(placement_capacity);
     drop(bands);

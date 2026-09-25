@@ -1,10 +1,13 @@
-//! Literal frozen Yliluoma mix search, target adaptation, and ordered selection.
+//! Exact Yliluoma mix search, target adaptation, and ordered selection.
 //! Shared palette matching and Bayer ranks remain their existing production implementations.
 
+pub(crate) mod index;
 pub(crate) mod policy;
 mod request;
 pub mod row_bands;
+#[cfg(test)]
 pub(crate) use request::dither_yiluoma_with_progress;
+pub(crate) use request::dither_yiluoma_with_progress_indexed;
 pub use request::{dither_yiluoma, dither_yiluoma_into};
 
 use super::ordered::{bayer_value, BayerSize};

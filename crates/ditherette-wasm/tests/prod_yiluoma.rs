@@ -80,6 +80,45 @@ fn request<'a>(
     }
 }
 
+#[test]
+fn oklab_index_uses_spare_budget_and_low_budget_keeps_literal_output() {
+    use ditherette_wasm::image::contracts::PaletteEntry;
+    use prod::contract::request::{AlphaPolicy, BayerSize, DitherPolicy, Placement};
+    let width = 40;
+    let height = 32;
+    let data = (0..width * height)
+        .flat_map(|pixel| {
+            [
+                (pixel * 17) as u8,
+                (pixel * 39 + 1) as u8,
+                (pixel * 73 + 2) as u8,
+                255,
+            ]
+        })
+        .collect::<Vec<_>>();
+    let palette = [
+        PaletteEntry::Color { rgb: [0, 0, 0] },
+        PaletteEntry::Color {
+            rgb: [255, 255, 255],
+        },
+        PaletteEntry::Color { rgb: [220, 50, 30] },
+        PaletteEntry::Color { rgb: [20, 200, 90] },
+        PaletteEntry::Color { rgb: [40, 80, 230] },
+    ];
+    let mut request = request(&data, width, height, &palette);
+    request.quantize.alpha = AlphaPolicy::Premultiplied {};
+    request.quantize.matching = MatchPolicy::OklabEuclidean;
+    request.dither = DitherPolicy::Yliluoma {
+        size: BayerSize::Four,
+        placement: Placement::Everywhere {},
+    };
+    let low = yiluoma::dither_yiluoma(request, 5_000).unwrap();
+    let high = yiluoma::dither_yiluoma(request, 1 << 20).unwrap();
+    assert_eq!(low.indices.data(), high.indices.data());
+    assert_eq!(low.palette, high.palette);
+    assert_eq!(low.warnings, high.warnings);
+}
+
 fn oracle(
     request: prod::contract::request::DitherQuantizeRequest<'_>,
 ) -> ditherette_wasm::image::contracts::IndexedImage {

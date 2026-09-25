@@ -4,6 +4,7 @@ use super::super::{
     ordered::BayerSize,
     placement::{placement_mask_with_converter, AdaptivePlacementRows},
 };
+use super::index::MixIndex;
 use super::{adaptive_target, best_matched_mix, ordered_mix_index, MixCache};
 use crate::{
     image::{contracts::IndexedImage, ImageBuf, PaletteIndex8},
@@ -23,7 +24,8 @@ use crate::{
 use std::mem::size_of;
 
 /// Validates and executes the frozen scalar Yliluoma recipe with bounded owned allocations.
-/// Source bytes are borrowed. Preparation, metadata, indices, and one temporary converter count toward the limit.
+/// Source bytes are borrowed. Preparation, metadata, indices, and the optional mix index
+/// count toward the limit; insufficient spare memory keeps the literal scan.
 pub fn dither_yiluoma(
     request: DitherQuantizeRequest<'_>,
     memory_limit: u64,
@@ -64,7 +66,27 @@ pub fn dither_yiluoma(
         .reserve(&mut indices, count)
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
-    dither_yiluoma_into(layout.source, &prepared, &mut indices, size, placement);
+    let index = (count >= super::index::MIN_INDEX_PIXELS && prepared.can_match_rgb())
+        .then(|| {
+            MixIndex::try_new(
+                prepared.matcher(),
+                (size.width() * size.width()) as u32,
+                memory_limit - budget.used,
+            )
+        })
+        .flatten();
+    dither_yiluoma_with_progress_indexed(
+        layout.source,
+        &prepared,
+        &mut indices,
+        size,
+        placement,
+        &mut [],
+        &mut [],
+        index.as_ref(),
+        |_| Ok(()),
+    )
+    .expect("disabled progress cannot fail");
     let indices = ImageBuf::<PaletteIndex8>::from_vec_packed(indices, layout.output)
         .expect("validated dimensions and reserved index length");
     Ok(prepared.into_indexed(indices))
@@ -107,6 +129,32 @@ pub(crate) fn dither_yiluoma_with_progress(
     mixes: &mut [u64],
     progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
+    dither_yiluoma_with_progress_indexed(
+        source,
+        prepared,
+        indices,
+        size,
+        placement,
+        placement_rows,
+        mixes,
+        None,
+        progress,
+    )
+}
+
+/// Uses optional caller-accounted index storage; an absent index keeps the literal scan.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn dither_yiluoma_with_progress_indexed(
+    source: crate::image::ImageView<'_, crate::image::Rgba8>,
+    prepared: &PreparedQuantizer,
+    indices: &mut [u8],
+    size: BayerSize,
+    placement: Placement,
+    placement_rows: &mut [[f32; 3]],
+    mixes: &mut [u64],
+    mix_index: Option<&MixIndex>,
+    progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
+) -> Result<(), crate::prod::contract::failure::Failure> {
     let band = crate::prod::tiling::RowBand::new(0, source.dimensions().height())
         .expect("validated source height");
     dither_yiluoma_band_with_progress(
@@ -118,6 +166,7 @@ pub(crate) fn dither_yiluoma_with_progress(
         band,
         placement_rows,
         mixes,
+        mix_index,
         progress,
     )
 }
@@ -133,6 +182,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
     band: crate::prod::tiling::RowBand,
     placement_rows: &mut [[f32; 3]],
     mixes: &mut [u64],
+    mix_index: Option<&MixIndex>,
     mut progress: impl FnMut(u32) -> Result<(), crate::prod::contract::failure::Failure>,
 ) -> Result<(), crate::prod::contract::failure::Failure> {
     let dimensions = source.dimensions();
@@ -165,7 +215,13 @@ pub(super) fn dither_yiluoma_band_with_progress(
             *index = match palette.prepare_pixel([pixel[0], pixel[1], pixel[2], pixel[3]]) {
                 PalettePixel::Index(index) => index,
                 PalettePixel::Color(rgb) => {
-                    let search = || best_matched_mix(converter.coordinates(rgb), matcher, levels);
+                    let search = || {
+                        let coordinates = converter.coordinates(rgb);
+                        mix_index.map_or_else(
+                            || best_matched_mix(coordinates, matcher, levels),
+                            |index| index.best(coordinates, matcher),
+                        )
+                    };
                     // Everywhere has mask 1, so the target is the source and nearest is unused.
                     let mix = match placement {
                         Placement::Everywhere {} => match &mut mixes {
@@ -186,7 +242,10 @@ pub(super) fn dither_yiluoma_band_with_progress(
                                 ),
                             };
                             let target = adaptive_target(coordinates, nearest.coordinates, mask);
-                            best_matched_mix(target, matcher, levels)
+                            mix_index.map_or_else(
+                                || best_matched_mix(target, matcher, levels),
+                                |index| index.best(target, matcher),
+                            )
                         }
                     };
                     ordered_mix_index(mix, x, y, size)
@@ -313,6 +372,85 @@ mod tests {
                     // A tiny table forces collisions; stale scratch must not leak into results.
                     assert_eq!(run(&mut [u64::MAX; 4]), direct, "{matching:?} {alpha:?}");
                     assert_eq!(run(&mut vec![0; 1024]), direct, "{matching:?} {alpha:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn indexed_pipeline_matches_literal_with_alpha_and_adaptive_placement() {
+        let dimensions = ImageDimensions::new(13, 9).unwrap();
+        let bytes = (0..13 * 9)
+            .flat_map(|i| {
+                [
+                    (i * 71) as u8,
+                    (i * 37 + 8) as u8,
+                    (i * 113 + 12) as u8,
+                    [0, 127, 255][i % 3],
+                ]
+            })
+            .collect::<Vec<_>>();
+        let source = ImageView::packed(&bytes, dimensions).unwrap();
+        let palette = [
+            PaletteEntry::Color { rgb: [0, 0, 0] },
+            PaletteEntry::Color {
+                rgb: [255, 255, 255],
+            },
+            PaletteEntry::Transparent {},
+            PaletteEntry::Color { rgb: [220, 40, 80] },
+            PaletteEntry::Color {
+                rgb: [20, 190, 230],
+            },
+        ];
+        for alpha in [
+            AlphaPolicy::Preserve { threshold: 127.0 },
+            AlphaPolicy::Premultiplied {},
+        ] {
+            let prepared =
+                PreparedQuantizer::try_new(&palette, alpha, MatchPolicy::OklabEuclidean, 1 << 20)
+                    .unwrap();
+            for size in [
+                BayerSize::Two,
+                BayerSize::Four,
+                BayerSize::Eight,
+                BayerSize::Sixteen,
+            ] {
+                let levels = (size.width() * size.width()) as u32;
+                let index = MixIndex::try_new(prepared.matcher(), levels, 1 << 20).unwrap();
+                for placement in [
+                    Placement::Everywhere {},
+                    Placement::Adaptive {
+                        radius: 2,
+                        threshold: 4.0,
+                        softness: 3.0,
+                    },
+                ] {
+                    let mut expected = vec![0; 13 * 9];
+                    let mut actual = expected.clone();
+                    dither_yiluoma_with_progress(
+                        source,
+                        &prepared,
+                        &mut expected,
+                        size,
+                        placement,
+                        &mut [],
+                        &mut [],
+                        |_| Ok(()),
+                    )
+                    .unwrap();
+                    dither_yiluoma_with_progress_indexed(
+                        source,
+                        &prepared,
+                        &mut actual,
+                        size,
+                        placement,
+                        &mut [],
+                        &mut [],
+                        Some(&index),
+                        |_| Ok(()),
+                    )
+                    .unwrap();
+                    assert_eq!(actual, expected, "{alpha:?} {size:?} {placement:?}");
                 }
             }
         }
