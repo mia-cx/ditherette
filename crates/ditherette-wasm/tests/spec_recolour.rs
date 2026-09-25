@@ -460,3 +460,27 @@ fn recolour_arguments_and_context_are_validated() {
     let clear: Vec<u8> = data.chunks(4).flat_map(|p| [p[0], p[1], p[2], 0]).collect();
     assert!(analyze(&clear, &palette, WorkingSpace::Oklab, &[]).is_identity());
 }
+
+#[test]
+fn grey_images_have_no_colour_to_fit_in_any_space() {
+    let ramp: Vec<u8> = (0..SIZE * SIZE)
+        .flat_map(|i| {
+            let value = (i % 256) as u8;
+            [value, value, value, 255]
+        })
+        .collect();
+    let palette = colors(&[[0, 0, 0], [255, 255, 255], [237, 28, 36], [40, 80, 158]]);
+    for space in [
+        WorkingSpace::Srgb,
+        WorkingSpace::LinearRgb,
+        WorkingSpace::Oklab,
+        WorkingSpace::Oklch,
+        WorkingSpace::Cielab,
+        WorkingSpace::Cielch,
+        WorkingSpace::Ycbcr,
+    ] {
+        let recipe = analyze(&ramp, &palette, space, &[]);
+        assert_eq!((recipe.chroma, recipe.groups.len()), (1.0, 0), "{space:?}");
+        assert_eq!(recipe.shift, [0.0, 0.0], "{space:?}");
+    }
+}

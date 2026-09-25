@@ -240,10 +240,12 @@ impl Effect for Recolour {
         }
         match &self.recipe {
             Some(recipe) => recipe.apply(image, self.strength),
+            // Built-in chains resolve recipes before this runs; only caller-defined chains reach it.
             None => match context.analyses {
                 Some(cache) => cache.analyze(image, context),
                 None => analyze(image, context),
             }
+            .expect("analysis samples fit the charged working memory")
             .apply(image, self.strength),
         }
     }

@@ -1108,7 +1108,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/recolour_analysis.md",
 						"mode": "100644",
-						"sha256": "ccd3cadf1ec9d55a7bdf3a9aa2aba4c922f618d0dca0e2b15b968ec2739c11c4"
+						"sha256": "d72b553997280d89aabe4cf682e827dd53e59034e0089a35860a4463d554ab4c"
 					}
 				},
 				{
@@ -1117,7 +1117,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/recolour_analysis.rs",
 						"mode": "100644",
-						"sha256": "0b75ce9d34ab932a7d07f1efc8f209717115523b0329a75dfef7091d83c2de55"
+						"sha256": "e59fce6c519098802c43e2e24a3bfcc758386f7f2deb05b95a6e3c687a524e83"
 					}
 				},
 				{
@@ -1160,7 +1160,7 @@
 					}
 				}
 			],
-			"contentSha256": "7d5bd0ec2e7dccc4c14066f2b07a304ea9b9bb577b061775e825d138020f5a3b"
+			"contentSha256": "6fb582c12073a5775c71c8542973aad864b7df0c0d3646a8d4b7aac901e34636"
 		}
 	]
 }

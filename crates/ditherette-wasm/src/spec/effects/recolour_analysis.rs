@@ -40,8 +40,8 @@ const MAX_TURN: f32 = 45.0;
 /// The shift moves image colours this share of the way toward the palette centroid.
 const SHIFT_SHARE: f32 = 0.5;
 const MAX_SHIFT_LENGTH: f32 = 0.1;
-/// Palette colours this close to neutral count as exactly neutral.
-const PALETTE_NEUTRAL: f32 = 0.001;
+/// Colours this close to neutral count as exactly neutral, in the image and the palette.
+const NEUTRAL_SNAP: f32 = 0.001;
 
 /// One read pixel: working-space coordinates and its alpha weight in `(0, 1]`.
 struct Sample {
@@ -64,13 +64,10 @@ pub fn analyze(image: &EffectImage, context: &EffectContext<'_>) -> RecolourReci
     let palette: Vec<[f32; 3]> = colors
         .iter()
         .map(|rgb| {
-            let [lightness, u, v] = to_opponent(rgb.map(|channel| channel as f32 / 255.0), space);
-            // Byte greys carry f32 residue off neutral in perceptual spaces; treat them as grey.
-            if u.hypot(v) < PALETTE_NEUTRAL {
-                [lightness, 0.0, 0.0]
-            } else {
-                [lightness, u, v]
-            }
+            snap_neutral(to_opponent(
+                rgb.map(|channel| channel as f32 / 255.0),
+                space,
+            ))
         })
         .collect();
     let samples = sample(image, space);
@@ -91,6 +88,15 @@ pub fn analyze(image: &EffectImage, context: &EffectContext<'_>) -> RecolourReci
     }
 }
 
+/// Byte greys carry `f32` residue off neutral in perceptual spaces; treat them as grey.
+fn snap_neutral([lightness, u, v]: [f32; 3]) -> [f32; 3] {
+    if u.hypot(v) < NEUTRAL_SNAP {
+        [lightness, 0.0, 0.0]
+    } else {
+        [lightness, u, v]
+    }
+}
+
 /// Visible pixels on the coarsest grid step `s` with `ceil(w/s) * ceil(h/s) <= MAX_SAMPLES`,
 /// in row-major order. Zero-alpha pixels are skipped; others weigh `alpha / 255`.
 fn sample(image: &EffectImage, space: WorkingSpace) -> Vec<Sample> {
@@ -107,7 +113,7 @@ fn sample(image: &EffectImage, space: WorkingSpace) -> Vec<Sample> {
             let alpha = image.alpha[index];
             if alpha > 0 {
                 samples.push(Sample {
-                    opponent: to_opponent(image.rgb[index], space),
+                    opponent: snap_neutral(to_opponent(image.rgb[index], space)),
                     weight: alpha as f32 / 255.0,
                 });
             }

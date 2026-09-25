@@ -85,6 +85,15 @@ impl InputBoundary for Io<'_> {
         destination.copy_from_slice(self.data);
         Ok(())
     }
+
+    /// Compares like the Wasm boundary, so warm calls exercise snapshot reuse.
+    fn snapshot_input(&mut self, destination: &mut [u8], compare: bool) -> Result<bool, Failure> {
+        if compare && destination == self.data {
+            return Ok(true);
+        }
+        destination.copy_from_slice(self.data);
+        Ok(false)
+    }
 }
 
 impl Boundary for Io<'_> {
@@ -211,6 +220,7 @@ fn process_effects_matches_the_reference_for_every_dither_family() {
     ];
     let effects = prod_effects::decode_effects(&chain().to_string()).unwrap();
     let mut processor = processor();
+    let mut cold = true;
     for dither in dithers {
         let recipe = recipe(dither.clone());
         let expected = spec::effects::process(spec::effects::ProcessRequestV2 {
@@ -223,8 +233,10 @@ fn process_effects_matches_the_reference_for_every_dither_family() {
             recipe: &recipe,
         })
         .unwrap();
-        // Twice: the second call exercises the effected snapshot comparison and warm caches.
+        // The source and chain never change, so every call after the very first reuses the
+        // retained source and skips the effects entirely, whatever the dither.
         for _ in 0..2 {
+            let warm = !std::mem::replace(&mut cold, false);
             let mut io = Io {
                 data: &data,
                 events: Some(Events::default()),
@@ -246,10 +258,14 @@ fn process_effects_matches_the_reference_for_every_dither_family() {
             let effects_at = events.iter().position(|stage| *stage == Stage::Effects);
             assert_eq!(events.first(), Some(&Stage::Prepare), "{dither}");
             assert_eq!(events.last(), Some(&Stage::Complete), "{dither}");
-            assert!(
-                effects_at.is_some_and(|index| index > 0),
-                "{dither}: {events:?}"
-            );
+            if warm {
+                assert_eq!(effects_at, None, "{dither}: {events:?}");
+            } else {
+                assert!(
+                    effects_at.is_some_and(|index| index > 0),
+                    "{dither}: {events:?}"
+                );
+            }
         }
     }
 }

@@ -98,7 +98,7 @@ pub fn resolve_recolour(
         let recipe = match context.analyses {
             Some(cache) => cache.analyze(&image, context),
             None => analyze(&image, context),
-        };
+        }?;
         resolved[index].effect = BuiltinEffect::Recolour(Recolour {
             strength,
             recipe: Some(recipe),
@@ -147,10 +147,11 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
     .map_err(|_| unavailable())?;
     let image = carrier_after(source.data(), source.dimensions(), &steps, &request.context)
         .map_err(|_| unavailable())?;
-    Ok(match request.context.analyses {
+    match request.context.analyses {
         Some(cache) => cache.analyze(&image, &request.context),
         None => analyze(&image, &request.context),
-    })
+    }
+    .map_err(|_| unavailable())
 }
 
 /// Applies an already validated chain to packed RGBA8. Alpha bytes are never written.

@@ -298,7 +298,7 @@ export interface RecolourEffect {
 export interface AnalyzeRecolourRequest {
 	readonly version: 1;
 	readonly source: Rgba8Image;
-	/** Steps before the recolour step. Defaults to none. */
+	/** Steps before the recolour step; pass `[]` when there are none. */
 	readonly effects: readonly Effect[];
 	/** The palette and working space the recipe should fit. Both are required. */
 	readonly context: { readonly palette: readonly PaletteEntry[]; readonly space: WorkingSpace };
