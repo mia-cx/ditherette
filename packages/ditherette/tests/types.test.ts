@@ -217,3 +217,13 @@ const effectsInV1: ProcessRequest['recipe'] = { ...complete.recipe, effects };
 // @ts-expect-error Every step states whether it is enabled.
 const missingToggle: import('../src/index.js').Effect = { ...effects[0], enabled: undefined };
 void [effectsInV1, missingToggle];
+const grade: import('../src/index.js').Effect[] = [
+	{ effect: 'curves', enabled: true, channel: 'rgb', points: [[0, 0], [0.5, 0.6], [1, 1]] },
+	{ effect: 'brightness-contrast', enabled: true, brightness: 0, contrast: 0.2 },
+	{ effect: 'exposure', enabled: false, stops: -1 },
+	{ effect: 'white-balance', enabled: true, temperature: 0.3, tint: 0 },
+	{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: -0.2, lightness: 0 }
+];
+// @ts-expect-error Curve points are [x, y] pairs.
+const flatCurve: import('../src/index.js').CurvesEffect['points'] = [0, 1];
+void [grade, flatCurve];

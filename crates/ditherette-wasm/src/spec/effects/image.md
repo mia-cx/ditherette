@@ -26,6 +26,8 @@ Keeping alpha out of the carrier means no effect can change transparency by acci
 
 - `from_rgba8` followed by `to_rgba8` returns the source bytes for every byte value.
 - Values outside `[0,1]` survive between effects and clip only at `to_rgba8`.
+- After every step the executor clamps channels to `±64` (`bound`). Real chains stay far inside it.
+  Without it, a legal chain of repeated boosts can overflow to infinity and then NaN.
 - Hidden RGB under zero alpha is processed like any other RGB.
 
 ## Edge cases

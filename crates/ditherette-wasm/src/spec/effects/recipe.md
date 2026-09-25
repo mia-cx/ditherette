@@ -26,6 +26,11 @@ Registered effects:
 | `effect` | Module |
 | --- | --- |
 | `levels` | [levels.md](levels.md) |
+| `curves` | [curves.md](curves.md) |
+| `brightness-contrast` | [brightness_contrast.md](brightness_contrast.md) |
+| `exposure` | [exposure.md](exposure.md) |
+| `white-balance` | [white_balance.md](white_balance.md) |
+| `hue-saturation` | [hue_saturation.md](hue_saturation.md) |
 
 ## Why this works this way
 

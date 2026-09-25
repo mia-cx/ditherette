@@ -116,6 +116,14 @@ Built-in effects:
 | `effect` | Arguments |
 | --- | --- |
 | `levels` | `channel` (`rgb`, `red`, `green`, `blue`), `input` and `output` black/white points from 0 to 1, `gamma` from 0.1 to 10 (above 1 brightens) |
+| `curves` | `channel`, `points`: 2 to 16 `[x, y]` pairs from 0 to 1, x rising by at least 0.001, joined by a smooth curve that never overshoots |
+| `brightness-contrast` | `brightness` and `contrast` from -1 to 1; contrast scales around mid-grey by `4^contrast` |
+| `exposure` | `stops` from -4 to 4, in linear light |
+| `white-balance` | `temperature` (warmer is positive) and `tint` (more magenta is positive), from -1 to 1 |
+| `hue-saturation` | `hue` in degrees from -180 to 180, `saturation` and `lightness` from -1 to 1, in Oklab |
+
+All values are in encoded sRGB units unless noted. Neutral arguments leave pixels untouched.
+A preset is a stored `effects` array: this package owns what each effect does, and the caller owns labels, editor state, and where presets live.
 
 Errors name the step, such as `effects.2.gamma`, or `recipe.effects.2.gamma` inside `process`.
 Progress reports an `effects` stage between `prepare` and `resize`.

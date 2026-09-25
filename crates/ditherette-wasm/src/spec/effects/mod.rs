@@ -2,12 +2,18 @@
 //!
 //! See `spec.md` for the carrier, ordering, placement, and plugin boundary.
 
+pub mod brightness_contrast;
 pub mod chain;
 pub mod channel;
+pub mod curves;
+pub mod exposure;
+pub mod hue_saturation;
 pub mod image;
 pub mod levels;
 pub mod operation;
 pub mod recipe;
+pub mod space;
+pub mod white_balance;
 
 pub use chain::{apply_chain, Effect, EffectContext, Needs, Step};
 pub use image::EffectImage;

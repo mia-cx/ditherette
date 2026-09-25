@@ -7,17 +7,19 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    image::contracts::PaletteEntry,
+    image::{contracts::PaletteEntry, ImageDimensions},
     prod::contract::{
         error::{DitheretteError, ErrorCode},
         request::{WorkingSpace, MAX_PALETTE_ENTRIES},
     },
 };
 
+use std::collections::TryReserveError;
+
+use super::{image::EffectImage, table::ChannelTables};
+
 /// Most steps one chain may hold, enabled or not.
 pub const MAX_EFFECTS: usize = 64;
-
-use super::{channel::Channel, image::EffectImage};
 
 /// Shared inputs an effect may read. Ordinary effects read neither field.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -60,16 +62,30 @@ pub trait Effect {
     /// Transforms RGB in place. Arguments and context are already validated.
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>);
 
-    /// `Some` when each selected channel maps independently of the others.
-    /// Production tabulates such runs for byte input; the result must equal `apply`.
-    fn channel_map(&self) -> Option<(Channel, &dyn ChannelFn)> {
+    /// True when each output channel depends only on the same input channel.
+    /// Production tabulates runs of such effects for byte input.
+    fn per_channel(&self) -> bool {
+        false
+    }
+
+    /// One channel's map (0 red, 1 green, 2 blue). Called only when `per_channel` is true;
+    /// it must equal what `apply` does to that channel.
+    fn map_channel(&self, _channel: usize, value: f32) -> f32 {
+        value
+    }
+
+    /// Builds the carrier and applies this effect in one pass, straight from packed RGBA8
+    /// seen through the preceding per-channel `tables`. `None` means use the ordinary carrier.
+    /// The result must equal `apply` on the carrier those tables would produce.
+    fn apply_tabulated(
+        &self,
+        _data: &[u8],
+        _dimensions: ImageDimensions,
+        _tables: &ChannelTables,
+        _context: &EffectContext<'_>,
+    ) -> Option<Result<EffectImage, TryReserveError>> {
         None
     }
-}
-
-/// The scalar map a per-channel effect applies to each selected channel.
-pub trait ChannelFn {
-    fn map(&self, value: f32) -> f32;
 }
 
 impl<E: Effect + ?Sized> Effect for Box<E> {
@@ -85,8 +101,22 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
         (**self).apply(image, context)
     }
 
-    fn channel_map(&self) -> Option<(Channel, &dyn ChannelFn)> {
-        (**self).channel_map()
+    fn per_channel(&self) -> bool {
+        (**self).per_channel()
+    }
+
+    fn map_channel(&self, channel: usize, value: f32) -> f32 {
+        (**self).map_channel(channel, value)
+    }
+
+    fn apply_tabulated(
+        &self,
+        data: &[u8],
+        dimensions: ImageDimensions,
+        tables: &ChannelTables,
+        context: &EffectContext<'_>,
+    ) -> Option<Result<EffectImage, TryReserveError>> {
+        (**self).apply_tabulated(data, dimensions, tables, context)
     }
 }
 
@@ -138,6 +168,7 @@ pub fn apply_chain<E: Effect>(
     validate_chain(steps, context)?;
     for step in steps.iter().filter(|step| step.enabled) {
         step.effect.apply(image, context);
+        image.bound();
     }
     Ok(())
 }
