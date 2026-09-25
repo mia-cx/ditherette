@@ -28,7 +28,7 @@ after it never re-analyse.
 - [x] Prod: copy, conformance tests.
 - [x] Prod: analysis cache keyed by chain prefix; processor + Wasm `privateAnalyzeRecolour`.
 - [x] Prod: benchmark and optimize with evidence.
-- [ ] Package: `analyzeRecolour`, `recolour` effect type, validation, docs, tests, changeset.
+- [x] Package: `analyzeRecolour`, `recolour` effect type, validation, docs, tests, changeset.
 - [ ] Evaluation: treated vs untreated metrics across fixtures and palettes; record costs.
 - [ ] Final validation.
 

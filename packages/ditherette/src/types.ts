@@ -254,6 +254,57 @@ export interface HueSaturationEffect {
 	readonly lightness: number;
 }
 
+/** Adjusts colours near one hue: weight 1 at `hue`, 0 at `width` degrees away. */
+export interface RecolourGroup {
+	/** Degrees, 0 through 360, in the working space's opponent plane. */
+	readonly hue: number;
+	/** Half-width in degrees, 1 through 180. */
+	readonly width: number;
+	/** Hue turn in degrees at full weight, -180 through 180. */
+	readonly turn: number;
+	/** Chroma scale at full weight, 0 through 2. */
+	readonly chroma: number;
+}
+
+/**
+ * An inspectable, editable recolouring treatment. `analyzeRecolour` returns one; edit any field
+ * and pass it back as a `recolour` step's `recipe`. It applies only in the space it names.
+ */
+export interface RecolourRecipe {
+	readonly space: WorkingSpace;
+	/** Lightness curve, with the same rules as `curves` points. */
+	readonly tone: readonly (readonly [number, number])[];
+	/** Scale for both opponent axes after `shift`, 0 through 2. */
+	readonly chroma: number;
+	/** Offset added to the opponent axes first, each -0.5 through 0.5. */
+	readonly shift: readonly [number, number];
+	/** At most 12 hue-targeted adjustments. */
+	readonly groups: readonly RecolourGroup[];
+}
+
+/**
+ * Fits colour to what the palette can show, directly or through dithered mixtures, before
+ * quantization. With `recipe: null` it analyses the image reaching it against the context
+ * palette and space. `strength` blends from the input (0) to the full treatment (1).
+ */
+export interface RecolourEffect {
+	readonly effect: 'recolour';
+	readonly enabled: boolean;
+	readonly strength: number;
+	readonly recipe: RecolourRecipe | null;
+}
+
+/** Analyse the image a recolour step would receive: `source` after `effects`. */
+export interface AnalyzeRecolourRequest {
+	readonly version: 1;
+	readonly source: Rgba8Image;
+	/** Steps before the recolour step. Defaults to none. */
+	readonly effects: readonly Effect[];
+	/** The palette and working space the recipe should fit. Both are required. */
+	readonly context: { readonly palette: readonly PaletteEntry[]; readonly space: WorkingSpace };
+	readonly onProgress?: (progress: Progress) => void;
+}
+
 /**
  * One step of an ordered effect chain. Steps run in array order on unrounded colour;
  * repeated effects keep their own arguments. A disabled step is validated but skipped.
@@ -264,7 +315,8 @@ export type Effect =
 	| BrightnessContrastEffect
 	| ExposureEffect
 	| WhiteBalanceEffect
-	| HueSaturationEffect;
+	| HueSaturationEffect
+	| RecolourEffect;
 
 /** Shared inputs some effects read. Ordinary effects need neither. */
 export interface EffectContext {
@@ -311,6 +363,8 @@ export interface Ditherette {
 	process(request: ProcessRequest): IndexedImage;
 	/** Return the source itself when no step is enabled; otherwise return independent JS-owned RGBA8. */
 	applyEffects(request: ApplyEffectsRequest): Rgba8Image;
+	/** Derive a fresh, editable recolouring recipe. Repeated inputs reuse the processor's cached analysis. */
+	analyzeRecolour(request: AnalyzeRecolourRequest): RecolourRecipe;
 	/** Return the source itself at unchanged dimensions; otherwise return independent JS-owned RGBA8. */
 	resize(request: ResizeRequest): Rgba8Image;
 	/** Match source pixels to the supplied palette without resizing or dithering. */

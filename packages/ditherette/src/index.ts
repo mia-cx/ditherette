@@ -7,6 +7,7 @@ export { DitheretteError } from './errors.js';
 export type { ErrorCode } from './errors.js';
 export type {
 	AlphaPolicy,
+	AnalyzeRecolourRequest,
 	ApplyEffectsRequest,
 	BrightnessContrastEffect,
 	CurvesEffect,
@@ -17,6 +18,9 @@ export type {
 	HueSaturationEffect,
 	LevelsEffect,
 	LevelsPoints,
+	RecolourEffect,
+	RecolourGroup,
+	RecolourRecipe,
 	WhiteBalanceEffect,
 	RecipeV2,
 	IndexedImage,
