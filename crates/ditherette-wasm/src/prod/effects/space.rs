@@ -130,19 +130,6 @@ pub fn to_opponent(rgb: [f32; 3], space: WorkingSpace) -> [f32; 3] {
     }
 }
 
-/// `to_opponent` with the linear-light decode supplied, for callers that tabulated it.
-/// `linear` must equal `to_linear(rgb)`; spaces on encoded RGB ignore it.
-pub fn to_opponent_decoded(rgb: [f32; 3], linear: [f32; 3], space: WorkingSpace) -> [f32; 3] {
-    match space {
-        WorkingSpace::Srgb | WorkingSpace::Ycbcr => to_luma_chroma(rgb, 0.299, 0.114),
-        WorkingSpace::LinearRgb => to_luma_chroma(linear, 0.2126, 0.0722),
-        WorkingSpace::Oklab | WorkingSpace::Oklch => linear_to_oklab(linear),
-        WorkingSpace::Cielab | WorkingSpace::Cielch => {
-            linear_to_cielab(linear).map(|coordinate| coordinate / 100.0)
-        }
-    }
-}
-
 /// The exact inverse formulas of `to_opponent`, back to unclipped carrier RGB.
 pub fn from_opponent(opponent: [f32; 3], space: WorkingSpace) -> [f32; 3] {
     match space {

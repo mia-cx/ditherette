@@ -5,23 +5,18 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::TryReserveError;
 
-use crate::{
-    image::ImageDimensions,
-    prod::contract::error::{DitheretteError, ErrorCode},
-};
+use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
     brightness_contrast::BrightnessContrast,
-    chain::{Effect, EffectContext, Needs, Step},
+    chain::{Effect, EffectContext, Needs, PixelMap, Step},
     curves::Curves,
     exposure::Exposure,
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
     recolour::Recolour,
-    table::ChannelTables,
     white_balance::WhiteBalance,
 };
 
@@ -130,25 +125,15 @@ impl Effect for BuiltinEffect {
         }
     }
 
-    fn apply_tabulated(
-        &self,
-        data: &[u8],
-        dimensions: ImageDimensions,
-        tables: &ChannelTables,
-        context: &EffectContext<'_>,
-    ) -> Option<Result<EffectImage, TryReserveError>> {
+    fn pixel_map<'s>(&'s self, context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
         match self {
-            Self::Levels(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::Curves(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::BrightnessContrast(effect) => {
-                effect.apply_tabulated(data, dimensions, tables, context)
-            }
-            Self::Exposure(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::WhiteBalance(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::HueSaturation(effect) => {
-                effect.apply_tabulated(data, dimensions, tables, context)
-            }
-            Self::Recolour(effect) => effect.apply_tabulated(data, dimensions, tables, context),
+            Self::Levels(effect) => effect.pixel_map(context),
+            Self::Curves(effect) => effect.pixel_map(context),
+            Self::BrightnessContrast(effect) => effect.pixel_map(context),
+            Self::Exposure(effect) => effect.pixel_map(context),
+            Self::WhiteBalance(effect) => effect.pixel_map(context),
+            Self::HueSaturation(effect) => effect.pixel_map(context),
+            Self::Recolour(effect) => effect.pixel_map(context),
         }
     }
 }

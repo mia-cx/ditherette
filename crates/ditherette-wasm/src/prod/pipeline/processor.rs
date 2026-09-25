@@ -116,6 +116,8 @@ pub struct Processor {
     preparation: super::preparation::Store,
     /// Recolour analyses shared by every effect call. Its fixed bound is in the bookkeeping.
     analyses: crate::prod::effects::analysis_cache::AnalysisCache,
+    /// Raw source of the last successful recipe-v2 `process`, charged only by the next one.
+    effects_source: Option<super::effects::EffectsSource>,
 }
 
 #[derive(Clone, Copy)]
@@ -128,6 +130,13 @@ struct Plan {
 }
 
 impl Processor {
+    /// Every call starts here. Only recipe-v2 `process` keeps the retained raw source, and it
+    /// takes it before this runs, so no other call holds that buffer uncharged.
+    fn begin(&mut self) {
+        self.state = State::Running;
+        self.effects_source = None;
+    }
+
     fn finish_call<T>(&mut self, result: Result<T, Failure>) -> Result<T, Failure> {
         self.state = State::Ready;
         if result.is_err() {
@@ -220,6 +229,7 @@ impl Processor {
             state: State::Ready,
             preparation: super::preparation::Store::default(),
             analyses: Default::default(),
+            effects_source: None,
         })
     }
 
@@ -309,12 +319,21 @@ impl Processor {
         };
         let preflight = super::effects::validate(effects, &context)
             .and_then(|()| dimensions(request.source_width, request.source_height, true));
+        let previous = self.effects_source.take();
+        let preflight = preflight.and_then(|source| {
+            super::effects::EffectsSource::key(effects, &context).map(|key| (source, key))
+        });
         let result = match preflight {
-            Ok(source) => {
+            Ok((source, key)) => {
                 let extra = super::effects::process_capacity_bytes(effects, source);
-                let mut effected =
-                    super::effects::EffectedInput::new(boundary, effects, context, source);
-                self.process_owning(request, &mut effected, allocator, extra)
+                let mut effected = super::effects::EffectedInput::new(
+                    boundary, effects, context, source, key, previous,
+                );
+                let result = self.process_owning(request, &mut effected, allocator, extra);
+                if result.is_ok() {
+                    self.effects_source = Some(effected.into_source());
+                }
+                result
             }
             Err(error) => self.fail_preflight(error),
         };
@@ -355,7 +374,7 @@ impl Processor {
         allocator: &mut A,
     ) -> Result<crate::prod::effects::recolour::RecolourRecipe, Failure> {
         self.require_ready()?;
-        self.state = State::Running;
+        self.begin();
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
@@ -389,7 +408,7 @@ impl Processor {
         extra: u64,
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
-        self.state = State::Running;
+        self.begin();
         // Call bookkeeping includes preparation handles and all four scratch Vec records.
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::process::ProcessRequest<'_>>() as u64
@@ -438,7 +457,7 @@ impl Processor {
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
-        self.state = State::Running;
+        self.begin();
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         let analyses = std::mem::take(&mut self.analyses);
@@ -494,7 +513,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         let result = super::perturb::run(
@@ -543,7 +562,7 @@ impl Processor {
         if matches!(dither, DitherPolicy::None {}) {
             return self.quantize_with_allocator(request, boundary, allocator);
         }
-        self.state = State::Running;
+        self.begin();
         let mode_capacity = if matches!(dither, DitherPolicy::Diffusion { .. }) {
             size_of::<crate::prod::dither::error_diffusion::prepared::DiffusionPolicy>() as u64
                 + size_of::<DitherPolicy>() as u64
@@ -614,7 +633,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
             + boundary.capacity_bytes();
@@ -645,7 +664,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let result = self.run(request, boundary, allocator);
         self.finish_call(result)
     }
@@ -667,7 +686,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let result = self.run_sparse_nearest(request, boundary, &mut SystemAllocator);
         self.finish_call(result)
     }

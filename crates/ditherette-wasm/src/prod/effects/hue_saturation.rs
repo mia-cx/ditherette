@@ -5,14 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::prod::contract::error::DitheretteError;
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext},
+    chain::{check_bounded, Effect, EffectContext, PixelMap},
     image::EffectImage,
-    memo::{try_memoized, MEMO_BYTES},
-    space::{from_linear, linear_to_oklab, oklab_to_linear, srgb_unit_to_linear, to_linear},
-    table::ChannelTables,
+    space::{from_linear, linear_to_oklab, oklab_to_linear, to_linear},
 };
-use crate::image::ImageDimensions;
-use std::collections::TryReserveError;
 
 /// Hue in degrees, saturation and lightness in `[-1, 1]`. Neutral is all zero.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -85,26 +81,11 @@ impl Effect for HueSaturation {
         }
     }
 
-    /// Byte input has at most 256 carrier values per channel, so their linear decode is a table.
-    fn apply_tabulated(
-        &self,
-        data: &[u8],
-        dimensions: ImageDimensions,
-        tables: &ChannelTables,
-        _context: &EffectContext<'_>,
-    ) -> Option<Result<EffectImage, TryReserveError>> {
+    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
         if self.neutral() {
-            return None;
+            return Some(Box::new(|rgb| rgb));
         }
         let turn = self.turn();
-        let linear = tables.map(srgb_unit_to_linear);
-        Some(try_memoized(data, dimensions, |rgb| {
-            let decoded = std::array::from_fn(|channel| linear.unit(channel, rgb[channel]));
-            self.map_linear(turn, decoded)
-        }))
-    }
-
-    fn working_bytes(&self) -> u64 {
-        MEMO_BYTES
+        Some(Box::new(move |rgb| self.map_linear(turn, to_linear(rgb))))
     }
 }

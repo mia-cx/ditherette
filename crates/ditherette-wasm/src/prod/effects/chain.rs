@@ -7,16 +7,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    image::{contracts::PaletteEntry, ImageDimensions},
+    image::contracts::PaletteEntry,
     prod::contract::{
         error::{DitheretteError, ErrorCode},
         request::{WorkingSpace, MAX_PALETTE_ENTRIES},
     },
 };
 
-use std::collections::TryReserveError;
-
-use super::{analysis_cache::AnalysisCache, image::EffectImage, table::ChannelTables};
+use super::{analysis_cache::AnalysisCache, image::EffectImage};
 
 /// Most steps one chain may hold, enabled or not.
 pub const MAX_EFFECTS: usize = 64;
@@ -50,6 +48,9 @@ pub struct Needs {
     pub palette: bool,
     pub space: bool,
 }
+
+/// One pixel's map, prepared once per call.
+pub type PixelMap<'a> = Box<dyn Fn([f32; 3]) -> [f32; 3] + 'a>;
 
 /// One colour operation. Implement this to add an effect.
 pub trait Effect {
@@ -85,22 +86,19 @@ pub trait Effect {
         value
     }
 
-    /// Scratch bytes `apply_tabulated` allocates beyond the carrier, for memory accounting.
+    /// Scratch bytes `apply` allocates beyond the carrier and memo, for memory accounting.
     fn working_bytes(&self) -> u64 {
         0
     }
 
-    /// Builds the carrier and applies this effect in one pass, straight from packed RGBA8
-    /// seen through the preceding per-channel `tables`. `None` means use the ordinary carrier.
-    /// The result must equal `apply` on the carrier those tables would produce.
-    fn apply_tabulated(
-        &self,
-        _data: &[u8],
-        _dimensions: ImageDimensions,
-        _tables: &ChannelTables,
-        _context: &EffectContext<'_>,
-    ) -> Option<Result<EffectImage, TryReserveError>> {
-        None
+    /// A prepared per-pixel map when each output pixel depends only on the same input pixel.
+    /// Production memoizes chains of such effects by input colour. It must equal `apply`.
+    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
+        self.per_channel().then(|| {
+            Box::new(move |rgb: [f32; 3]| {
+                std::array::from_fn(|channel| self.map_channel(channel, rgb[channel]))
+            }) as PixelMap<'s>
+        })
     }
 }
 
@@ -137,14 +135,8 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
         (**self).working_bytes()
     }
 
-    fn apply_tabulated(
-        &self,
-        data: &[u8],
-        dimensions: ImageDimensions,
-        tables: &ChannelTables,
-        context: &EffectContext<'_>,
-    ) -> Option<Result<EffectImage, TryReserveError>> {
-        (**self).apply_tabulated(data, dimensions, tables, context)
+    fn pixel_map<'s>(&'s self, context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
+        (**self).pixel_map(context)
     }
 }
 
