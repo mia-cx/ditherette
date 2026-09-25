@@ -227,3 +227,16 @@ const grade: import('../src/index.js').Effect[] = [
 // @ts-expect-error Curve points are [x, y] pairs.
 const flatCurve: import('../src/index.js').CurvesEffect['points'] = [0, 1];
 void [grade, flatCurve];
+processor.then((instance) => {
+	const recipe: import('../src/index.js').RecolourRecipe = instance.analyzeRecolour({
+		version: 1,
+		source: request.source,
+		effects: [],
+		context: { palette: quantize.palette, space: 'oklab' }
+	});
+	const step: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 1, recipe };
+	const auto: import('../src/index.js').Effect = { effect: 'recolour', enabled: true, strength: 0.5, recipe: null };
+	void [step, auto];
+	// @ts-expect-error Analysis needs a working space.
+	instance.analyzeRecolour({ version: 1, source: request.source, effects: [], context: { palette: quantize.palette } });
+});

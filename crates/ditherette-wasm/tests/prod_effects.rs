@@ -15,6 +15,16 @@ const PALETTE: [PaletteEntry; 3] = [
     },
 ];
 
+/// Every working space, so recolour steps analyse and apply in each across fixtures.
+const SPACES: [ditherette_wasm::spec::contract::request::WorkingSpace; 7] = {
+    use ditherette_wasm::spec::contract::request::WorkingSpace::*;
+    [Srgb, LinearRgb, Oklab, Oklch, Cielab, Cielch, Ycbcr]
+};
+const PROD_SPACES: [ditherette_wasm::prod::contract::request::WorkingSpace; 7] = {
+    use ditherette_wasm::prod::contract::request::WorkingSpace::*;
+    [Srgb, LinearRgb, Oklab, Oklch, Cielab, Cielch, Ycbcr]
+};
+
 /// Deterministic xorshift so failures reproduce.
 struct Rng(u64);
 
@@ -76,7 +86,7 @@ fn random_effect(rng: &mut Rng) -> Value {
     let enabled = rng.next() % 5 != 0;
     let neutral = rng.next() % 4 == 0;
     let signed = |rng: &mut Rng| if neutral { 0.0 } else { rng.unit() * 2.0 - 1.0 };
-    match rng.next() % 6 {
+    match rng.next() % 7 {
         0 => random_levels(rng),
         1 => {
             let count = 2 + rng.next() % 5;
@@ -91,8 +101,10 @@ fn random_effect(rng: &mut Rng) -> Value {
         3 => json!({ "effect": "exposure", "enabled": enabled, "stops": signed(rng) * 4.0 }),
         4 => json!({ "effect": "white-balance", "enabled": enabled,
             "temperature": signed(rng), "tint": signed(rng) }),
-        _ => json!({ "effect": "hue-saturation", "enabled": enabled,
+        5 => json!({ "effect": "hue-saturation", "enabled": enabled,
             "hue": signed(rng) * 180.0, "saturation": signed(rng), "lightness": signed(rng) }),
+        _ => json!({ "effect": "recolour", "enabled": enabled,
+            "strength": if neutral { 0.0 } else { rng.unit() }, "recipe": null }),
     }
 }
 
@@ -110,7 +122,7 @@ fn assert_same(effects: &Value, width: u32, height: u32, data: &[u8]) {
         effects: &spec_steps,
         context: spec::EffectContext {
             palette: &PALETTE,
-            space: None,
+            space: Some(SPACES[(data.len() / 4) % SPACES.len()]),
         },
     });
     let actual = prod::apply_effects(prod::EffectsRequest {
@@ -123,7 +135,8 @@ fn assert_same(effects: &Value, width: u32, height: u32, data: &[u8]) {
         effects: &prod_steps,
         context: prod::EffectContext {
             palette: &PALETTE,
-            space: None,
+            space: Some(PROD_SPACES[(data.len() / 4) % PROD_SPACES.len()]),
+            analyses: None,
         },
     });
     match (expected, actual) {
@@ -221,6 +234,66 @@ fn tabulated_prefixes_feed_the_carrier_exactly() {
             let mut folded = data.clone();
             prod::apply_in_place(&mut folded, dimensions, &chain, &context).unwrap();
             assert_eq!(folded, stepwise.to_rgba8().data());
+        }
+    }
+}
+
+#[test]
+fn analysis_matches_the_reference_in_every_space() {
+    let mut rng = Rng(2024);
+    let palettes: [&[[u8; 3]]; 3] = [
+        &[[0, 0, 0], [85, 85, 85], [170, 170, 170], [255, 255, 255]],
+        &[[96, 0, 24], [237, 28, 36], [255, 127, 39], [249, 221, 59]],
+        &[
+            [15, 56, 15],
+            [48, 98, 48],
+            [139, 172, 15],
+            [155, 188, 15],
+            [40, 80, 158],
+        ],
+    ];
+    for (width, height, data) in fixtures(&mut rng).into_iter().skip(1) {
+        for colors in palettes {
+            let palette: Vec<PaletteEntry> = colors
+                .iter()
+                .map(|&rgb| PaletteEntry::Color { rgb })
+                .collect();
+            for (space, prod_space) in SPACES.into_iter().zip(PROD_SPACES) {
+                let expected = spec::analyze_recolour(spec::AnalyzeRequest {
+                    version: 1,
+                    source: Source {
+                        width,
+                        height,
+                        data: &data,
+                    },
+                    effects: &[],
+                    context: spec::EffectContext {
+                        palette: &palette,
+                        space: Some(space),
+                    },
+                })
+                .unwrap();
+                let actual = prod::analyze_recolour(prod::AnalyzeRequest {
+                    version: 1,
+                    source: ProdSource {
+                        width,
+                        height,
+                        data: &data,
+                    },
+                    effects: &[],
+                    context: prod::EffectContext {
+                        palette: &palette,
+                        space: Some(prod_space),
+                        analyses: None,
+                    },
+                })
+                .unwrap();
+                assert_eq!(
+                    serde_json::to_string(&actual).unwrap(),
+                    serde_json::to_string(&expected).unwrap(),
+                    "{space:?}"
+                );
+            }
         }
     }
 }

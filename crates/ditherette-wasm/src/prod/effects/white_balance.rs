@@ -41,8 +41,13 @@ impl WhiteBalance {
 
 impl Effect for WhiteBalance {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.temperature, -1.0, 1.0, format!("{path}.temperature"))?;
-        check_bounded(self.tint, -1.0, 1.0, format!("{path}.tint"))
+        check_bounded(
+            self.temperature,
+            -1.0,
+            1.0,
+            format_args!("{path}.temperature"),
+        )?;
+        check_bounded(self.tint, -1.0, 1.0, format_args!("{path}.tint"))
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {

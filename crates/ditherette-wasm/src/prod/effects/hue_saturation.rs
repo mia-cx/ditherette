@@ -7,11 +7,8 @@ use crate::prod::contract::error::DitheretteError;
 use super::{
     chain::{check_bounded, Effect, EffectContext},
     image::EffectImage,
-    space::{from_linear, linear_to_oklab, oklab_to_linear, srgb_unit_to_linear, to_linear},
-    table::ChannelTables,
+    space::{from_linear, linear_to_oklab, oklab_to_linear, to_linear},
 };
-use crate::image::ImageDimensions;
-use std::collections::TryReserveError;
 
 /// Hue in degrees, saturation and lightness in `[-1, 1]`. Neutral is all zero.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -69,9 +66,14 @@ impl HueSaturation {
 
 impl Effect for HueSaturation {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.hue, -180.0, 180.0, format!("{path}.hue"))?;
-        check_bounded(self.saturation, -1.0, 1.0, format!("{path}.saturation"))?;
-        check_bounded(self.lightness, -1.0, 1.0, format!("{path}.lightness"))
+        check_bounded(self.hue, -180.0, 180.0, format_args!("{path}.hue"))?;
+        check_bounded(
+            self.saturation,
+            -1.0,
+            1.0,
+            format_args!("{path}.saturation"),
+        )?;
+        check_bounded(self.lightness, -1.0, 1.0, format_args!("{path}.lightness"))
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {
@@ -84,22 +86,14 @@ impl Effect for HueSaturation {
         }
     }
 
-    /// Byte input has at most 256 carrier values per channel, so their linear decode is a table.
-    fn apply_tabulated(
-        &self,
-        data: &[u8],
-        dimensions: ImageDimensions,
-        tables: &ChannelTables,
-        _context: &EffectContext<'_>,
-    ) -> Option<Result<EffectImage, TryReserveError>> {
+    fn pointwise(&self) -> bool {
+        true
+    }
+
+    fn map_pixel(&self, rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
         if self.neutral() {
-            return None;
+            return rgb;
         }
-        let turn = self.turn();
-        let linear = tables.map(srgb_unit_to_linear);
-        Some(EffectImage::try_from_pixels(data, dimensions, |pixel| {
-            let decoded = std::array::from_fn(|channel| linear.unit(channel, pixel[channel]));
-            self.map_linear(turn, decoded)
-        }))
+        self.map_linear(self.turn(), to_linear(rgb))
     }
 }

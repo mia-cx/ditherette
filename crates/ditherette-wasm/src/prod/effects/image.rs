@@ -83,7 +83,7 @@ impl EffectImage {
     pub fn try_from_pixels(
         data: &[u8],
         dimensions: ImageDimensions,
-        rgb_of: impl Fn(&[u8]) -> [f32; 3],
+        mut rgb_of: impl FnMut(&[u8]) -> [f32; 3],
     ) -> Result<Self, TryReserveError> {
         let pixels = data.len() / 4;
         let mut rgb = Vec::new();

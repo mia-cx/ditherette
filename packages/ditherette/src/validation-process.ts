@@ -1,7 +1,7 @@
 import { DitheretteError } from './errors.js';
 import type { ErrorCode } from './errors.js';
-import { field, object, validateResize } from './validation.js';
-import { validateDitherAndQuantize } from './validation-fields.js';
+import { field, matchingModes, object, validateResize } from './validation.js';
+import { spaces, validateDitherAndQuantize } from './validation-fields.js';
 import { requireContext, validateEffects } from './validation-effects.js';
 
 /** Settings live inside recipe; source, palette, lifecycle, and result-copy failures do not. */
@@ -22,6 +22,11 @@ export function processErrorPath(path: string, code: ErrorCode): string {
 	if (code === 'invalid-settings' && (path === 'output' || path.startsWith('output.')))
 		return `recipe.${path}`;
 	return path;
+}
+
+/** The working space a validated matching tag reads, mirroring Rust `MatchPolicy::space`. */
+function matchingSpace(matching: string): string {
+	return spaces.find((space) => matching.startsWith(`${space}-`))!;
 }
 
 /** Normalize the recipe once under the instance guard, reusing both staged validators. */
@@ -64,7 +69,8 @@ export function validateProcess(value: unknown) {
 		});
 		// The matching metric always supplies the working space; only the palette can be missing.
 		if (effects)
-			requireContext(effects.needs, quantize.palette, true, {
+			requireContext(effects, quantize.palette, matchingSpace(matchingModes[quantize.matching]), {
+				effects: 'effects',
 				palette: 'context.palette',
 				space: 'context.space'
 			});

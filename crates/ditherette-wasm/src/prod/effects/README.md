@@ -30,19 +30,43 @@ The grading effects from #106 join the same fold. `grade` is exposure, white bal
 | `grade` | Celeste_Insta_selfie 800×800 | 52.0 ms | 0.55 ms | 95× |
 | `grade` | Picking_at_thread 3462×2309 | 683.5 ms | 7.38 ms | 93× |
 
-### Tabulated linear decode for hue-saturation (selected)
+### Pointwise colour memo (selected)
 
-Hue-saturation mixes channels, so it runs on the carrier: per pixel, three sRGB decodes, three cube roots, and three encodes.
-When it directly follows byte input, or a tabulated run, each channel has at most 256 carrier values.
-`Effect::apply_tabulated` lets it decode through a per-channel linear table while building the carrier, which removes three `powf` per pixel.
-It also hoists the turn's sine and cosine out of the pixel loop (about 2% on its own).
+Every built-in is pointwise once its arguments are known: each output pixel depends only on the same input pixel.
+After the tabulated run, a pixel's carrier value is a pure function of its three input bytes, so the rest of the chain is too.
+`memo::try_memoized` keeps a direct-mapped table of 16,384 colours (256 KiB, charged as scratch), checks the full key on every hit, and runs the remaining chain once per miss.
+Each miss calls `Effect::map_pixel` for every remaining step. Nothing is boxed or heap-allocated per call: splines are inline, so every allocation an effects call makes is reserved fallibly (`tests/prod_effects_allocation.rs` fails each one in turn). Preparing maps once per call in boxed closures was 4–12% faster on misses, but those boxes could not fail gracefully.
+Photos repeat colours locally; illustrations repeat them everywhere. Effects without a pixel map, such as future spatial effects, keep the carrier path.
 
-| Chain | Fixture | Copy | Selected | Change |
+A recipe-less `recolour` step is global, since it analyses the whole image reaching it. `resolve_recolour` first replaces each one with the recipe it would derive: it builds the carrier up to that step (memoized too), analyses it through the cache, and substitutes the result. The resolved chain is pointwise end to end.
+
+Criterion `crit_effects`, same host and fixtures, 8-colour palette, Oklab:
+
+| Chain | Fixture | Reference | Production | Speedup |
 | --- | --- | ---: | ---: | ---: |
-| `hue-saturation` | Celeste_Insta_selfie 800×800 | 42.2 ms | 28.6 ms | −32% |
-| `grade+hue` | Celeste_Insta_selfie 800×800 | 50.5 ms | 37.4 ms | −26% |
-| `hue-saturation` | Picking_at_thread 3462×2309 | 560.0 ms | 385.8 ms | −31% |
-| `grade+hue` | Picking_at_thread 3462×2309 | 670.2 ms | 494.1 ms | −26% |
+| `hue-saturation` | Celeste_Insta_selfie 800×800 | 42.3 ms | 6.7 ms | 6.3× |
+| `grade+hue` | Celeste_Insta_selfie 800×800 | 59.5 ms | 7.4 ms | 8.0× |
+| `recolour-apply` | Celeste_Insta_selfie 800×800 | 86.9 ms | 9.5 ms | 9.1× |
+| `recolour+grade` | Celeste_Insta_selfie 800×800 | 139.0 ms | 29.7 ms | 4.7× |
+| `hue-saturation` | Picking_at_thread 3462×2309 | 547.0 ms | 141.1 ms | 3.9× |
+| `grade+hue` | Picking_at_thread 3462×2309 | 752.6 ms | 164.8 ms | 4.6× |
+| `recolour-apply` | Picking_at_thread 3462×2309 | 1078 ms | 225.7 ms | 4.8× |
+| `recolour+grade` | Picking_at_thread 3462×2309 | 1453 ms | 359.3 ms | 4.0× |
+
+`recolour-apply` applies the fixture's own analysed recipe. `recolour+grade` is an automatic recolour step followed by exposure and curves, analysis included and uncached.
+The memo supersedes an earlier per-effect table of linear decodes for hue-saturation (−31% on its own), which is removed.
+
+### Recolour analysis (selected)
+
+Each sample's hue, chroma, and neutral ramp are computed once instead of once per sector, keeping the reference's multiplication and summation order.
+Resolution builds the analysed carrier through the tables and memo as well.
+
+| Fixture | Reference | Production | Change |
+| --- | ---: | ---: | ---: |
+| Celeste_Insta_selfie 800×800 | 25.7 ms | 17.8 ms | −31% |
+| Picking_at_thread 3462×2309 | 55.3 ms | 44.8 ms | −19% |
+
+Analysis reads at most 2¹⁸ samples, so its cost flattens for large images. The processor also caches analyses by exactly what they read; a repeat costs one SHA-256 pass over the samples.
 
 ### Considered, not taken
 
@@ -55,14 +79,16 @@ Node 24 (V8), 3462×2309 synthetic source, `process` to 480×320 area resize, Ok
 
 | Chain | `applyEffects` cold | warm | `process` cold | warm |
 | --- | ---: | ---: | ---: | ---: |
-| none (recipe v1) | | | 54.5 | 4.9 |
-| `levels` | 43.3 | 16.2 | 61.0 | 16.7 |
-| `levels-x3` | 36.5 | 12.9 | 59.0 | 16.5 |
+| none (recipe v1) | | | 53.0 | 5.1 |
+| `levels` | 41.6 | 10.5 | 73.7 | 5.0 |
+| `levels-x3` | 37.7 | 11.0 | 76.4 | 4.9 |
+| automatic `recolour` | 475.4 | 19.4 | 515.0 | 4.9 |
 
 Cold calls use a fresh processor. Warm `applyEffects` returns the retained result after verifying the source.
-Warm recipe-v2 `process` reapplies the chain to verify its snapshot, then hits the downstream caches.
-That verification costs about 11 ms here. Keeping a raw-source snapshot would turn it into one comparison, at the price of one more retained source-sized buffer.
+Warm recipe-v2 `process` keeps the raw source from its last successful call. When the source and the enabled chain repeat, it skips the effects and hands `process` the same effected snapshot, so every downstream cache hits.
+Any other call drops that raw snapshot at its start, so it is charged only by the recipe-v2 call that owns it.
 
 Memory: `applyEffects` holds the source snapshot and one output buffer, like `perturb`.
-Recipe-v2 `process` adds one source-sized comparison buffer to the v1 budget.
-Neither allocates the continuous carrier while every enabled step tabulates.
+Recipe-v2 `process` adds the retained raw snapshot to the v1 budget.
+A chain that does not fully tabulate adds the carrier (13 bytes per pixel) and the 256 KiB colour memo; automatic recolouring adds its bounded analysis samples.
+The analysis cache has a fixed bound in the processor bookkeeping.

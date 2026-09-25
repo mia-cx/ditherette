@@ -114,6 +114,10 @@ pub struct Processor {
     peak_capacity: u64,
     state: State,
     preparation: super::preparation::Store,
+    /// Recolour analyses shared by every effect call. Its fixed bound is in the bookkeeping.
+    analyses: crate::prod::effects::analysis_cache::AnalysisCache,
+    /// Raw source of the last successful recipe-v2 `process`, charged only by the next one.
+    effects_source: Option<super::effects::EffectsSource>,
 }
 
 #[derive(Clone, Copy)]
@@ -126,6 +130,13 @@ struct Plan {
 }
 
 impl Processor {
+    /// Every call starts here. Only recipe-v2 `process` keeps the retained raw source, and it
+    /// takes it before this runs, so no other call holds that buffer uncharged.
+    fn begin(&mut self) {
+        self.state = State::Running;
+        self.effects_source = None;
+    }
+
     fn finish_call<T>(&mut self, result: Result<T, Failure>) -> Result<T, Failure> {
         self.state = State::Ready;
         if result.is_err() {
@@ -193,6 +204,7 @@ impl Processor {
     /// Compiler stack frames and fixed module overhead are outside this ownership accounting.
     pub const fn bookkeeping_bytes(boundary_capacity: u64) -> u64 {
         (size_of::<Self>() + size_of::<Plan>()) as u64
+            + crate::prod::effects::analysis_cache::AnalysisCache::capacity_bytes()
             + super::preparation::Call::record_bytes()
             + size_of::<super::progress::Control>() as u64
             + boundary_capacity
@@ -216,7 +228,14 @@ impl Processor {
             peak_capacity: overhead,
             state: State::Ready,
             preparation: super::preparation::Store::default(),
+            analyses: Default::default(),
+            effects_source: None,
         })
+    }
+
+    /// Published recolour analyses. A diagnostic for tests and benchmarks.
+    pub fn cached_analyses(&self) -> usize {
+        self.analyses.len()
     }
 
     /// Private accounting observation for conformance and benchmark adapters.
@@ -230,6 +249,8 @@ impl Processor {
             return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance));
         }
         self.preparation = super::preparation::Store::default();
+        self.analyses = Default::default();
+        self.effects_source = None;
         self.state = State::Disposed;
         Ok(())
     }
@@ -281,26 +302,103 @@ impl Processor {
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
+        if !effects.iter().any(|step| step.enabled) {
+            let context = crate::prod::effects::EffectContext {
+                palette: request.palette,
+                space: Some(request.recipe.matching.space()),
+                analyses: None,
+            };
+            if let Err(error) = super::effects::validate(effects, &context) {
+                return self.fail_preflight(error);
+            }
+            return self.process_owning(request, boundary, allocator, 0);
+        }
+        let analyses = std::mem::take(&mut self.analyses);
         let context = crate::prod::effects::EffectContext {
             palette: request.palette,
             space: Some(request.recipe.matching.space()),
+            analyses: Some(&analyses),
         };
         let preflight = super::effects::validate(effects, &context)
             .and_then(|()| dimensions(request.source_width, request.source_height, true));
-        let source = match preflight {
-            Ok(source) => source,
-            Err(error) => {
-                // Same recovery as a failed v1 call: drop the snapshot, reset the peak.
-                self.peak_capacity = Self::bookkeeping_bytes(self.boundary_capacity);
-                return self.finish_call(Err(error));
+        let previous = self.effects_source.take();
+        let preflight = preflight.and_then(|source| {
+            super::effects::EffectsSource::key(effects, &context).map(|key| (source, key))
+        });
+        let result = match preflight {
+            Ok((source, key)) => {
+                let extra = super::effects::process_capacity_bytes(effects, source);
+                let mut effected = super::effects::EffectedInput::new(
+                    boundary, effects, context, source, key, previous,
+                );
+                let result = self.process_owning(request, &mut effected, allocator, extra);
+                if result.is_ok() {
+                    self.effects_source = Some(effected.into_source());
+                }
+                result
             }
+            Err(error) => self.fail_preflight(error),
         };
-        if !effects.iter().any(|step| step.enabled) {
-            return self.process_owning(request, boundary, allocator, 0);
-        }
-        let extra = super::effects::process_capacity_bytes(effects, source);
-        let mut effected = super::effects::EffectedInput::new(boundary, effects, context, source);
-        self.process_owning(request, &mut effected, allocator, extra)
+        self.restore_analyses(analyses, result.is_ok());
+        result
+    }
+
+    /// Same recovery as a failed v1 call: drop the snapshot and reset the peak.
+    fn fail_preflight<T>(&mut self, error: Failure) -> Result<T, Failure> {
+        self.peak_capacity = Self::bookkeeping_bytes(self.boundary_capacity);
+        self.finish_call(Err(error))
+    }
+
+    /// Returns the analysis cache after a call, publishing its new analyses only on success.
+    fn restore_analyses(
+        &mut self,
+        mut analyses: crate::prod::effects::analysis_cache::AnalysisCache,
+        success: bool,
+    ) {
+        analyses.settle(success);
+        self.analyses = analyses;
+    }
+
+    /// Analyse the image a recolour step would receive: the source after `effects`.
+    pub fn analyze_recolour<B: InputBoundary>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        boundary: &mut B,
+    ) -> Result<crate::prod::effects::recolour::RecolourRecipe, Failure> {
+        self.analyze_recolour_with_allocator(request, boundary, &mut SystemAllocator)
+    }
+
+    /// Injectable reservations for analysis. Only the recipe leaves the call.
+    pub fn analyze_recolour_with_allocator<B: InputBoundary, A: Allocator>(
+        &mut self,
+        request: super::effects::EffectsRequest<'_>,
+        boundary: &mut B,
+        allocator: &mut A,
+    ) -> Result<crate::prod::effects::recolour::RecolourRecipe, Failure> {
+        self.require_ready()?;
+        self.begin();
+        let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
+        self.peak_capacity = overhead;
+        let analyses = std::mem::take(&mut self.analyses);
+        let request = super::effects::EffectsRequest {
+            context: crate::prod::effects::EffectContext {
+                analyses: Some(&analyses),
+                ..request.context
+            },
+            ..request
+        };
+        let result = super::effects::analyze(
+            request,
+            boundary,
+            allocator,
+            self.memory_limit,
+            overhead,
+            &mut self.peak_capacity,
+            &mut self.preparation,
+        );
+        let result = self.finish_call(result);
+        self.restore_analyses(analyses, result.is_ok());
+        result
     }
 
     /// Shared `process` body. `extra` charges adapter-owned bytes for the whole call.
@@ -312,7 +410,7 @@ impl Processor {
         extra: u64,
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
-        self.state = State::Running;
+        self.begin();
         // Call bookkeeping includes preparation handles and all four scratch Vec records.
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::process::ProcessRequest<'_>>() as u64
@@ -361,9 +459,17 @@ impl Processor {
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
-        self.state = State::Running;
+        self.begin();
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
+        let analyses = std::mem::take(&mut self.analyses);
+        let request = super::effects::EffectsRequest {
+            context: crate::prod::effects::EffectContext {
+                analyses: Some(&analyses),
+                ..request.context
+            },
+            ..request
+        };
         let result = super::effects::run(
             request,
             boundary,
@@ -373,7 +479,9 @@ impl Processor {
             &mut self.peak_capacity,
             &mut self.preparation,
         );
-        self.finish_call(result)
+        let result = self.finish_call(result);
+        self.restore_analyses(analyses, result.is_ok());
+        result
     }
 
     fn require_ready(&self) -> Result<(), Failure> {
@@ -407,7 +515,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity);
         self.peak_capacity = overhead;
         let result = super::perturb::run(
@@ -456,7 +564,7 @@ impl Processor {
         if matches!(dither, DitherPolicy::None {}) {
             return self.quantize_with_allocator(request, boundary, allocator);
         }
-        self.state = State::Running;
+        self.begin();
         let mode_capacity = if matches!(dither, DitherPolicy::Diffusion { .. }) {
             size_of::<crate::prod::dither::error_diffusion::prepared::DiffusionPolicy>() as u64
                 + size_of::<DitherPolicy>() as u64
@@ -527,7 +635,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let overhead = Self::bookkeeping_bytes(self.boundary_capacity)
             + size_of::<super::quantize::QuantizeRequest<'_>>() as u64
             + boundary.capacity_bytes();
@@ -558,7 +666,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let result = self.run(request, boundary, allocator);
         self.finish_call(result)
     }
@@ -580,7 +688,7 @@ impl Processor {
             }
             State::Ready => {}
         }
-        self.state = State::Running;
+        self.begin();
         let result = self.run_sparse_nearest(request, boundary, &mut SystemAllocator);
         self.finish_call(result)
     }

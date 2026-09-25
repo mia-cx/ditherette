@@ -336,3 +336,141 @@ test('grading arguments are validated with indexed paths', () =>
 		fails({ ...grading['hue-saturation'], hue: 200 }, 'effects.1.hue');
 		fails({ ...grading['hue-saturation'], lightness: undefined }, 'effects.1.lightness');
 	}));
+
+const warm = [
+	{ kind: 'color', rgb: [96, 0, 24] },
+	{ kind: 'color', rgb: [237, 28, 36] },
+	{ kind: 'color', rgb: [255, 127, 39] },
+	{ kind: 'color', rgb: [249, 221, 59] }
+];
+const auto = (strength = 1) => ({ effect: 'recolour', enabled: true, strength, recipe: null });
+
+test('analyzeRecolour returns an editable recipe that reproduces automatic recolouring', () =>
+	withProcessor((processor) => {
+		const context = { palette: warm, space: 'oklab' };
+		const recipe = processor.analyzeRecolour({ version: 1, source: ramp(), effects: [], context });
+		assert.equal(recipe.space, 'oklab');
+		assert.ok(Array.isArray(recipe.tone) && recipe.tone.length >= 2);
+		const automatic = apply(processor, [auto(0.7)], { context });
+		const explicit = apply(processor, [{ ...auto(0.7), recipe }], { context });
+		assert.deepEqual(explicit.data, automatic.data);
+		assert.deepEqual(apply(processor, [auto(0)], { context }).data, ramp().data);
+		const grey = apply(processor, [{ ...auto(), recipe: { ...recipe, chroma: 0, groups: [] } }], {
+			context
+		});
+		for (let index = 0; index < grey.data.length; index += 4) {
+			const [r, g, b] = grey.data.subarray(index, index + 3);
+			assert.ok(Math.max(r, g, b) - Math.min(r, g, b) <= 1);
+		}
+		const cielab = processor.analyzeRecolour({
+			version: 1,
+			source: ramp(),
+			effects: [],
+			context: { ...context, space: 'cielab' }
+		});
+		assert.equal(cielab.space, 'cielab');
+		assert.notDeepEqual(
+			processor.analyzeRecolour({
+				version: 1,
+				source: ramp(),
+				effects: [],
+				context: { palette: palette, space: 'oklab' }
+			}),
+			recipe
+		);
+		// Analysis sees the image after earlier effects.
+		const after = processor.analyzeRecolour({
+			version: 1,
+			source: ramp(),
+			effects: [double],
+			context
+		});
+		assert.deepEqual(
+			apply(processor, [double, { ...auto(), recipe: after }], { context }).data,
+			apply(processor, [double, auto()], { context }).data
+		);
+	}));
+
+test('recolour composes into process v2 with the request palette and match space', () =>
+	withProcessor((processor) => {
+		const recipe = { version: 2, effects: [halve, auto()], ...terminal, match: 'oklab-euclidean' };
+		const composed = processor.process({ source: ramp(), palette: warm, recipe });
+		const staged = processor.process({
+			source: apply(processor, [halve, auto()], { context: { palette: warm, space: 'oklab' } }),
+			palette: warm,
+			recipe: { version: 1, ...terminal, match: 'oklab-euclidean' }
+		});
+		assert.deepEqual(composed, staged);
+	}));
+
+test('recolour context and recipe errors name their fields', () =>
+	withProcessor((processor) => {
+		const recipe = processor.analyzeRecolour({
+			version: 1,
+			source: ramp(),
+			effects: [],
+			context: { palette: warm, space: 'oklab' }
+		});
+		const fails = (run, code, path) =>
+			assert.throws(run, (error) => error.code === code && error.path === path, path);
+		fails(() => apply(processor, [auto()]), 'invalid-request', 'context.palette');
+		fails(
+			() => apply(processor, [auto()], { context: { palette: warm } }),
+			'invalid-request',
+			'context.space'
+		);
+		fails(
+			() => apply(processor, [{ ...auto(), recipe }], { context: { space: 'cielab' } }),
+			'invalid-settings',
+			'effects.0.recipe.space'
+		);
+		fails(
+			() =>
+				apply(processor, [{ ...auto(), recipe: { ...recipe, chroma: 3 } }], {
+					context: { space: 'oklab' }
+				}),
+			'invalid-settings',
+			'effects.0.recipe.chroma'
+		);
+		fails(
+			() => apply(processor, [auto(2)], { context: { palette: warm, space: 'oklab' } }),
+			'invalid-settings',
+			'effects.0.strength'
+		);
+		fails(
+			() =>
+				processor.analyzeRecolour({
+					version: 1,
+					source: ramp(),
+					effects: [],
+					context: { space: 'oklab' }
+				}),
+			'invalid-request',
+			'context.palette'
+		);
+		fails(
+			() =>
+				processor.process({
+					source: ramp(),
+					palette: warm,
+					recipe: {
+						version: 2,
+						effects: [{ ...auto(), recipe }],
+						...terminal,
+						match: 'cielab-euclidean'
+					}
+				}),
+			'invalid-settings',
+			'recipe.effects.0.recipe.space'
+		);
+		fails(
+			() =>
+				processor.process({
+					source: ramp(),
+					palette: [{ kind: 'transparent' }],
+					recipe: { version: 2, effects: [auto()], ...terminal }
+				}),
+			'invalid-request',
+			'palette'
+		);
+	}));

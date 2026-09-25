@@ -5,12 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::TryReserveError;
 
-use crate::{
-    image::ImageDimensions,
-    prod::contract::error::{DitheretteError, ErrorCode},
-};
+use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
     brightness_contrast::BrightnessContrast,
@@ -20,7 +16,7 @@ use super::{
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
-    table::ChannelTables,
+    recolour::Recolour,
     white_balance::WhiteBalance,
 };
 
@@ -34,6 +30,7 @@ pub enum BuiltinEffect {
     Exposure(Exposure),
     WhiteBalance(WhiteBalance),
     HueSaturation(HueSaturation),
+    Recolour(Recolour),
 }
 
 /// One serialized chain entry: the effect's tagged object plus `enabled`.
@@ -48,6 +45,23 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.validate(path),
             Self::WhiteBalance(effect) => effect.validate(path),
             Self::HueSaturation(effect) => effect.validate(path),
+            Self::Recolour(effect) => effect.validate(path),
+        }
+    }
+
+    fn check_context(
+        &self,
+        context: &EffectContext<'_>,
+        path: &str,
+    ) -> Result<(), DitheretteError> {
+        match self {
+            Self::Levels(effect) => effect.check_context(context, path),
+            Self::Curves(effect) => effect.check_context(context, path),
+            Self::BrightnessContrast(effect) => effect.check_context(context, path),
+            Self::Exposure(effect) => effect.check_context(context, path),
+            Self::WhiteBalance(effect) => effect.check_context(context, path),
+            Self::HueSaturation(effect) => effect.check_context(context, path),
+            Self::Recolour(effect) => effect.check_context(context, path),
         }
     }
 
@@ -59,6 +73,7 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.needs(),
             Self::WhiteBalance(effect) => effect.needs(),
             Self::HueSaturation(effect) => effect.needs(),
+            Self::Recolour(effect) => effect.needs(),
         }
     }
 
@@ -70,6 +85,7 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.apply(image, context),
             Self::WhiteBalance(effect) => effect.apply(image, context),
             Self::HueSaturation(effect) => effect.apply(image, context),
+            Self::Recolour(effect) => effect.apply(image, context),
         }
     }
 
@@ -81,6 +97,7 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.per_channel(),
             Self::WhiteBalance(effect) => effect.per_channel(),
             Self::HueSaturation(effect) => effect.per_channel(),
+            Self::Recolour(effect) => effect.per_channel(),
         }
     }
 
@@ -92,27 +109,43 @@ impl Effect for BuiltinEffect {
             Self::Exposure(effect) => effect.map_channel(channel, value),
             Self::WhiteBalance(effect) => effect.map_channel(channel, value),
             Self::HueSaturation(effect) => effect.map_channel(channel, value),
+            Self::Recolour(effect) => effect.map_channel(channel, value),
         }
     }
 
-    fn apply_tabulated(
-        &self,
-        data: &[u8],
-        dimensions: ImageDimensions,
-        tables: &ChannelTables,
-        context: &EffectContext<'_>,
-    ) -> Option<Result<EffectImage, TryReserveError>> {
+    fn working_bytes(&self) -> u64 {
         match self {
-            Self::Levels(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::Curves(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::BrightnessContrast(effect) => {
-                effect.apply_tabulated(data, dimensions, tables, context)
-            }
-            Self::Exposure(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::WhiteBalance(effect) => effect.apply_tabulated(data, dimensions, tables, context),
-            Self::HueSaturation(effect) => {
-                effect.apply_tabulated(data, dimensions, tables, context)
-            }
+            Self::Levels(effect) => effect.working_bytes(),
+            Self::Curves(effect) => effect.working_bytes(),
+            Self::BrightnessContrast(effect) => effect.working_bytes(),
+            Self::Exposure(effect) => effect.working_bytes(),
+            Self::WhiteBalance(effect) => effect.working_bytes(),
+            Self::HueSaturation(effect) => effect.working_bytes(),
+            Self::Recolour(effect) => effect.working_bytes(),
+        }
+    }
+
+    fn pointwise(&self) -> bool {
+        match self {
+            Self::Levels(effect) => effect.pointwise(),
+            Self::Curves(effect) => effect.pointwise(),
+            Self::BrightnessContrast(effect) => effect.pointwise(),
+            Self::Exposure(effect) => effect.pointwise(),
+            Self::WhiteBalance(effect) => effect.pointwise(),
+            Self::HueSaturation(effect) => effect.pointwise(),
+            Self::Recolour(effect) => effect.pointwise(),
+        }
+    }
+
+    fn map_pixel(&self, rgb: [f32; 3], context: &EffectContext<'_>) -> [f32; 3] {
+        match self {
+            Self::Levels(effect) => effect.map_pixel(rgb, context),
+            Self::Curves(effect) => effect.map_pixel(rgb, context),
+            Self::BrightnessContrast(effect) => effect.map_pixel(rgb, context),
+            Self::Exposure(effect) => effect.map_pixel(rgb, context),
+            Self::WhiteBalance(effect) => effect.map_pixel(rgb, context),
+            Self::HueSaturation(effect) => effect.map_pixel(rgb, context),
+            Self::Recolour(effect) => effect.map_pixel(rgb, context),
         }
     }
 }

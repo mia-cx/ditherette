@@ -48,8 +48,18 @@ impl Levels {
 
 impl Effect for Levels {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.input.black, 0.0, 1.0, format!("{path}.input.black"))?;
-        check_bounded(self.input.white, 0.0, 1.0, format!("{path}.input.white"))?;
+        check_bounded(
+            self.input.black,
+            0.0,
+            1.0,
+            format_args!("{path}.input.black"),
+        )?;
+        check_bounded(
+            self.input.white,
+            0.0,
+            1.0,
+            format_args!("{path}.input.white"),
+        )?;
         if self.input.black >= self.input.white {
             return Err(DitheretteError::new(
                 ErrorCode::InvalidSettings,
@@ -57,9 +67,24 @@ impl Effect for Levels {
                 "Input black must be below input white.",
             ));
         }
-        check_bounded(self.gamma, GAMMA_MIN, GAMMA_MAX, format!("{path}.gamma"))?;
-        check_bounded(self.output.black, 0.0, 1.0, format!("{path}.output.black"))?;
-        check_bounded(self.output.white, 0.0, 1.0, format!("{path}.output.white"))
+        check_bounded(
+            self.gamma,
+            GAMMA_MIN,
+            GAMMA_MAX,
+            format_args!("{path}.gamma"),
+        )?;
+        check_bounded(
+            self.output.black,
+            0.0,
+            1.0,
+            format_args!("{path}.output.black"),
+        )?;
+        check_bounded(
+            self.output.white,
+            0.0,
+            1.0,
+            format_args!("{path}.output.white"),
+        )
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {

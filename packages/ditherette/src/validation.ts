@@ -321,7 +321,8 @@ export function validateResize(value: unknown) {
 	}
 }
 
-const matchingModes = [
+/** Private matching tags, in ABI order. */
+export const matchingModes = [
 	'srgb-euclidean',
 	'linear-rgb-euclidean',
 	'oklab-euclidean',

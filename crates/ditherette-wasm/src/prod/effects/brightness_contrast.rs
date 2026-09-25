@@ -29,8 +29,13 @@ impl BrightnessContrast {
 
 impl Effect for BrightnessContrast {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        check_bounded(self.brightness, -1.0, 1.0, format!("{path}.brightness"))?;
-        check_bounded(self.contrast, -1.0, 1.0, format!("{path}.contrast"))
+        check_bounded(
+            self.brightness,
+            -1.0,
+            1.0,
+            format_args!("{path}.brightness"),
+        )?;
+        check_bounded(self.contrast, -1.0, 1.0, format_args!("{path}.contrast"))
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {
