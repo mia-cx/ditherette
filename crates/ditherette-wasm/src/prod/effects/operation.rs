@@ -98,8 +98,15 @@ pub fn apply_in_place<E: Effect>(
         }
         return Ok(());
     }
-    let mut image = EffectImage::try_from_packed(data, dimensions, &tables)?;
-    for effect in &enabled[tabulated..] {
+    let first = enabled[tabulated];
+    let (mut image, rest) = match first.apply_tabulated(data, dimensions, &tables, context) {
+        Some(image) => (image?, tabulated + 1),
+        None => (
+            EffectImage::try_from_packed(data, dimensions, &tables)?,
+            tabulated,
+        ),
+    };
+    for effect in &enabled[rest..] {
         effect.apply(&mut image, context);
     }
     image.write_rgb(data);

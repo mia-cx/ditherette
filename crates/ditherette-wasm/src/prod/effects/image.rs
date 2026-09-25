@@ -63,15 +63,24 @@ impl EffectImage {
         dimensions: ImageDimensions,
         tables: &ChannelTables,
     ) -> Result<Self, TryReserveError> {
+        Self::try_from_pixels(data, dimensions, |pixel| {
+            std::array::from_fn(|channel| tables.unit(channel, pixel[channel]))
+        })
+    }
+
+    /// Builds the carrier from packed RGBA8, one `rgb(pixel)` call per pixel.
+    pub fn try_from_pixels(
+        data: &[u8],
+        dimensions: ImageDimensions,
+        rgb_of: impl Fn(&[u8]) -> [f32; 3],
+    ) -> Result<Self, TryReserveError> {
         let pixels = data.len() / 4;
         let mut rgb = Vec::new();
         let mut alpha = Vec::new();
         rgb.try_reserve_exact(pixels)?;
         alpha.try_reserve_exact(pixels)?;
         for pixel in data.chunks_exact(4) {
-            rgb.push(std::array::from_fn(|channel| {
-                tables.unit(channel, pixel[channel])
-            }));
+            rgb.push(rgb_of(pixel));
             alpha.push(pixel[Rgba8::A]);
         }
         Ok(Self {
