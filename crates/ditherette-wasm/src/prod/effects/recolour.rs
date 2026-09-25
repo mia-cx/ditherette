@@ -14,16 +14,12 @@ use crate::prod::contract::{
 };
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext, Needs},
+    chain::{check_bounded, Effect, EffectContext, Needs, PixelMap},
     curves::{Curves, Spline},
     image::EffectImage,
-    memo::{try_memoized, MEMO_BYTES},
     recolour_analysis::{analyze, ANALYSIS_BYTES},
-    space::{from_opponent, srgb_unit_to_linear, to_opponent, to_opponent_decoded},
-    table::ChannelTables,
+    space::{from_opponent, to_opponent},
 };
-use crate::image::ImageDimensions;
-use std::collections::TryReserveError;
 
 /// Most hue groups one recipe may hold.
 pub const MAX_GROUPS: usize = 12;
@@ -128,11 +124,7 @@ impl RecolourRecipe {
 
     /// One carrier pixel through tone, shift, chroma, and groups, in the recipe's space.
     pub fn map(&self, tone: &Spline, rgb: [f32; 3]) -> [f32; 3] {
-        self.map_opponent(tone, to_opponent(rgb, self.space))
-    }
-
-    /// `map` after the forward conversion, so a caller can supply it from tables.
-    fn map_opponent(&self, tone: &Spline, [lightness, u, v]: [f32; 3]) -> [f32; 3] {
+        let [lightness, u, v] = to_opponent(rgb, self.space);
         let lightness = tone.eval(lightness);
         let u = (u + self.shift[0]) * self.chroma;
         let v = (v + self.shift[1]) * self.chroma;
@@ -212,51 +204,26 @@ impl Effect for Recolour {
     }
 
     fn working_bytes(&self) -> u64 {
-        MEMO_BYTES
-            + if self.recipe.is_none() {
-                ANALYSIS_BYTES
-            } else {
-                0
-            }
+        if self.recipe.is_none() {
+            ANALYSIS_BYTES
+        } else {
+            0
+        }
     }
 
-    /// Byte input maps each distinct colour once, decoding through per-channel linear tables.
-    fn apply_tabulated(
-        &self,
-        data: &[u8],
-        dimensions: ImageDimensions,
-        tables: &ChannelTables,
-        context: &EffectContext<'_>,
-    ) -> Option<Result<EffectImage, TryReserveError>> {
+    /// Pointwise once its recipe is known. Production resolves recipe-less steps first.
+    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
         if self.strength == 0.0 {
-            return None;
+            return Some(Box::new(|rgb| rgb));
         }
-        let analysed;
-        let recipe = match &self.recipe {
-            Some(recipe) => recipe,
-            None => {
-                let carrier = match EffectImage::try_from_packed(data, dimensions, tables) {
-                    Ok(carrier) => carrier,
-                    Err(error) => return Some(Err(error)),
-                };
-                analysed = match context.analyses {
-                    Some(cache) => cache.analyze(&carrier, context),
-                    None => analyze(&carrier, context),
-                };
-                &analysed
-            }
-        };
+        let recipe = self.recipe.as_ref()?;
         if recipe.is_identity() {
-            return None;
+            return Some(Box::new(|rgb| rgb));
         }
         let tone = Spline::new(&recipe.tone);
-        let linear = tables.map(srgb_unit_to_linear);
         let strength = self.strength;
-        Some(try_memoized(data, dimensions, |bytes| {
-            let rgb: [f32; 3] = std::array::from_fn(|channel| tables.unit(channel, bytes[channel]));
-            let decoded = std::array::from_fn(|channel| linear.unit(channel, bytes[channel]));
-            let adjusted =
-                recipe.map_opponent(&tone, to_opponent_decoded(rgb, decoded, recipe.space));
+        Some(Box::new(move |rgb: [f32; 3]| {
+            let adjusted = recipe.map(&tone, rgb);
             if strength == 1.0 {
                 adjusted
             } else {

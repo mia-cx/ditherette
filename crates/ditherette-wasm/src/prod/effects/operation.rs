@@ -1,7 +1,8 @@
 //! Standalone `apply_effects` and the in-place kernel the processor shares.
 //!
 //! A leading run of per-channel effects is tabulated per input byte. When that
-//! run is the whole chain, no continuous carrier is allocated at all.
+//! run is the whole chain, no continuous carrier is allocated at all. After it,
+//! a chain of pointwise effects is memoized by input colour.
 
 use std::collections::TryReserveError;
 
@@ -14,10 +15,11 @@ use crate::{
 };
 
 use super::{
-    chain::{apply_chain, validate_chain, Effect, EffectContext, Step},
-    image::EffectImage,
-    recipe::EffectStep,
-    recolour::RecolourRecipe,
+    chain::{validate_chain, Effect, EffectContext, Step},
+    image::{EffectImage, CARRIER_LIMIT},
+    memo::{try_memoized, MEMO_BYTES},
+    recipe::{BuiltinEffect, EffectStep},
+    recolour::{Recolour, RecolourRecipe},
     recolour_analysis::analyze,
     table::ChannelTables,
 };
@@ -42,19 +44,15 @@ pub fn apply_effects(request: EffectsRequest<'_>) -> Result<Rgba8Image, Ditheret
     validate_chain(request.effects, &request.context)?;
     let source = source_view(request.source)?;
     let mut data = source.data().to_vec();
-    apply_in_place(
-        &mut data,
+    let steps = resolve_recolour(
+        &data,
         source.dimensions(),
         request.effects,
         &request.context,
     )
-    .map_err(|_| {
-        DitheretteError::new(
-            ErrorCode::WasmMemoryUnavailable,
-            "wasm",
-            "The effect carrier could not be allocated.",
-        )
-    })?;
+    .map_err(|_| unavailable())?;
+    apply_in_place(&mut data, source.dimensions(), &steps, &request.context)
+        .map_err(|_| unavailable())?;
     Ok(ImageBuf::from_vec_packed(data, source.dimensions())
         .expect("packed source length matches its dimensions"))
 }
@@ -75,7 +73,38 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
         .max()
         .unwrap_or(0);
     EffectImage::carrier_bytes(u64::from(dimensions.width()) * u64::from(dimensions.height()))
+        + MEMO_BYTES
         + scratch
+}
+
+/// Replaces each enabled recipe-less `recolour` step with the recipe it would derive from the
+/// carrier reaching it, in order. The result is pointwise everywhere, so it memoizes.
+pub fn resolve_recolour(
+    data: &[u8],
+    dimensions: ImageDimensions,
+    steps: &[EffectStep],
+    context: &EffectContext<'_>,
+) -> Result<Vec<EffectStep>, TryReserveError> {
+    let mut resolved = steps.to_vec();
+    for index in 0..resolved.len() {
+        let BuiltinEffect::Recolour(recolour) = &resolved[index].effect else {
+            continue;
+        };
+        if !resolved[index].enabled || recolour.recipe.is_some() || recolour.strength == 0.0 {
+            continue;
+        }
+        let strength = recolour.strength;
+        let image = carrier_after(data, dimensions, &resolved[..index], context)?;
+        let recipe = match context.analyses {
+            Some(cache) => cache.analyze(&image, context),
+            None => analyze(&image, context),
+        };
+        resolved[index].effect = BuiltinEffect::Recolour(Recolour {
+            strength,
+            recipe: Some(recipe),
+        });
+    }
+    Ok(resolved)
 }
 
 /// Analysis request: the image a recolour step would receive is `source` after `effects`.
@@ -108,8 +137,16 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
             "Analysis requires a working space.",
         ));
     }
-    let mut image = EffectImage::from_rgba8(source_view(request.source)?);
-    apply_chain(&mut image, request.effects, &request.context)?;
+    let source = source_view(request.source)?;
+    let steps = resolve_recolour(
+        source.data(),
+        source.dimensions(),
+        request.effects,
+        &request.context,
+    )
+    .map_err(|_| unavailable())?;
+    let image = carrier_after(source.data(), source.dimensions(), &steps, &request.context)
+        .map_err(|_| unavailable())?;
     Ok(match request.context.analyses {
         Some(cache) => cache.analyze(&image, &request.context),
         None => analyze(&image, &request.context),
@@ -167,6 +204,7 @@ fn plan<E: Effect>(steps: &[Step<E>]) -> (Vec<&E>, usize) {
 }
 
 /// Builds the carrier through the tables, then applies the rest, bounding after each step.
+/// When every remaining effect is pointwise, each distinct input colour runs the chain once.
 fn carrier<E: Effect>(
     data: &[u8],
     dimensions: ImageDimensions,
@@ -175,20 +213,25 @@ fn carrier<E: Effect>(
     tables: &ChannelTables,
     context: &EffectContext<'_>,
 ) -> Result<EffectImage, TryReserveError> {
-    let first = enabled.get(tabulated);
-    let (mut image, rest) =
-        match first.and_then(|first| first.apply_tabulated(data, dimensions, tables, context)) {
-            Some(image) => {
-                let mut image = image?;
-                image.bound();
-                (image, tabulated + 1)
+    let rest = &enabled[tabulated..];
+    if rest.is_empty() {
+        return EffectImage::try_from_packed(data, dimensions, tables);
+    }
+    if let Some(maps) = rest
+        .iter()
+        .map(|effect| effect.pixel_map(context))
+        .collect::<Option<Vec<_>>>()
+    {
+        return try_memoized(data, dimensions, |bytes| {
+            let mut rgb = std::array::from_fn(|channel| tables.unit(channel, bytes[channel]));
+            for map in &maps {
+                rgb = map(rgb).map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
             }
-            None => (
-                EffectImage::try_from_packed(data, dimensions, tables)?,
-                tabulated,
-            ),
-        };
-    for effect in &enabled[rest..] {
+            rgb
+        });
+    }
+    let mut image = EffectImage::try_from_packed(data, dimensions, tables)?;
+    for effect in rest {
         effect.apply(&mut image, context);
         image.bound();
     }
@@ -210,6 +253,14 @@ fn source_view(source: Source<'_>) -> Result<ImageView<'_, Rgba8>, DitheretteErr
             "RGBA8 byte length does not match dimensions.",
         )
     })
+}
+
+fn unavailable() -> DitheretteError {
+    DitheretteError::new(
+        ErrorCode::WasmMemoryUnavailable,
+        "wasm",
+        "The effect carrier could not be allocated.",
+    )
 }
 
 fn unsupported(path: &str) -> DitheretteError {

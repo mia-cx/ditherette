@@ -470,3 +470,74 @@ fn recolour_analyses_are_cached_by_what_they_read() {
     assert_eq!(actual, expected);
     assert_eq!(processor.cached_analyses(), 2);
 }
+
+#[test]
+fn warm_process_v2_never_reuses_a_stale_effected_source() {
+    let first = ramp();
+    let mut second = ramp();
+    second[4] ^= 0x40;
+    let recipe = recipe(json!({ "family": "none" }));
+    let spec_for = |data: &[u8], recipe: &spec::effects::RecipeV2| {
+        spec::effects::process(spec::effects::ProcessRequestV2 {
+            source: Source {
+                width: WIDTH,
+                height: HEIGHT,
+                data,
+            },
+            palette: &PALETTE,
+            recipe,
+        })
+        .unwrap()
+    };
+    let mut other = recipe.clone();
+    other.effects[0] = spec::effects::decode_effects(&json!([levels_gamma(3.0)]).to_string())
+        .unwrap()
+        .remove(0);
+    let mut processor = processor();
+    let run = |processor: &mut Processor, data: &[u8], recipe: &spec::effects::RecipeV2| {
+        let effects =
+            prod_effects::decode_effects(&serde_json::to_string(&recipe.effects).unwrap()).unwrap();
+        let mut io = Io { data, events: None };
+        processor
+            .process_effects(
+                ProcessRequest {
+                    source_width: WIDTH,
+                    source_height: HEIGHT,
+                    palette: &PALETTE,
+                    recipe: prod_recipe(recipe),
+                },
+                &effects,
+                &mut io,
+            )
+            .unwrap()
+    };
+    for (data, recipe) in [
+        (&first, &recipe),
+        (&first, &recipe),
+        (&second, &recipe),
+        (&second, &other),
+        (&first, &other),
+    ] {
+        assert_eq!(run(&mut processor, data, recipe), spec_for(data, recipe));
+    }
+    // Another call in between replaces the process snapshot; v2 must not trust it.
+    let mut io = Io {
+        data: &second,
+        events: None,
+    };
+    processor
+        .process(
+            ProcessRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                palette: &PALETTE,
+                recipe: prod_recipe(&recipe),
+            },
+            &mut io,
+        )
+        .unwrap();
+    assert_eq!(
+        run(&mut processor, &first, &other),
+        spec_for(&first, &other)
+    );
+}

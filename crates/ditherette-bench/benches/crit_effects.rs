@@ -80,6 +80,15 @@ fn chains() -> Vec<(&'static str, serde_json::Value)> {
             json!([{ "effect": "hue-saturation", "enabled": true, "hue": 25, "saturation": 0.3, "lightness": 0.05 }]),
         ),
         (
+            "recolour+grade",
+            json!([
+                { "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null },
+                { "effect": "exposure", "enabled": true, "stops": 0.3 },
+                { "effect": "curves", "enabled": true, "channel": "rgb",
+                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+            ]),
+        ),
+        (
             "grade+hue",
             json!([
                 { "effect": "curves", "enabled": true, "channel": "rgb",

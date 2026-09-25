@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext},
+    chain::{check_bounded, Effect, EffectContext, PixelMap},
     channel::Channel,
     image::EffectImage,
 };
@@ -130,6 +130,14 @@ impl Effect for Curves {
 
     fn per_channel(&self) -> bool {
         true
+    }
+
+    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
+        let spline = Spline::new(&self.points);
+        Some(Box::new(move |mut rgb| {
+            self.channel.apply(&mut rgb, |value| spline.eval(value));
+            rgb
+        }))
     }
 
     fn map_channel(&self, channel: usize, value: f32) -> f32 {

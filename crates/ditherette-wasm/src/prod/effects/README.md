@@ -30,47 +30,43 @@ The grading effects from #106 join the same fold. `grade` is exposure, white bal
 | `grade` | Celeste_Insta_selfie 800×800 | 52.0 ms | 0.55 ms | 95× |
 | `grade` | Picking_at_thread 3462×2309 | 683.5 ms | 7.38 ms | 93× |
 
-### Tabulated linear decode for hue-saturation (selected)
+### Pointwise colour memo (selected)
 
-Hue-saturation mixes channels, so it runs on the carrier: per pixel, three sRGB decodes, three cube roots, and three encodes.
-When it directly follows byte input, or a tabulated run, each channel has at most 256 carrier values.
-`Effect::apply_tabulated` lets it decode through a per-channel linear table while building the carrier, which removes three `powf` per pixel.
-It also hoists the turn's sine and cosine out of the pixel loop (about 2% on its own).
+Every built-in is pointwise once its arguments are known: each output pixel depends only on the same input pixel.
+After the tabulated run, a pixel's carrier value is a pure function of its three input bytes, so the rest of the chain is too.
+`memo::try_memoized` keeps a direct-mapped table of 16,384 colours (256 KiB, charged as scratch), checks the full key on every hit, and runs the remaining chain once per miss.
+Each effect prepares its map once per call (`Effect::pixel_map`): the hue turn's sine and cosine, a curve's spline, a recipe's tone curve.
+Photos repeat colours locally; illustrations repeat them everywhere. Effects without a pixel map, such as future spatial effects, keep the carrier path.
 
-| Chain | Fixture | Copy | Selected | Change |
+A recipe-less `recolour` step is global, since it analyses the whole image reaching it. `resolve_recolour` first replaces each one with the recipe it would derive: it builds the carrier up to that step (memoized too), analyses it through the cache, and substitutes the result. The resolved chain is pointwise end to end.
+
+Criterion `crit_effects`, same host and fixtures, 8-colour palette, Oklab:
+
+| Chain | Fixture | Reference | Production | Speedup |
 | --- | --- | ---: | ---: | ---: |
-| `hue-saturation` | Celeste_Insta_selfie 800×800 | 42.2 ms | 28.6 ms | −32% |
-| `grade+hue` | Celeste_Insta_selfie 800×800 | 50.5 ms | 37.4 ms | −26% |
-| `hue-saturation` | Picking_at_thread 3462×2309 | 560.0 ms | 385.8 ms | −31% |
-| `grade+hue` | Picking_at_thread 3462×2309 | 670.2 ms | 494.1 ms | −26% |
+| `hue-saturation` | Celeste_Insta_selfie 800×800 | 42.3 ms | 6.4 ms | 6.6× |
+| `grade+hue` | Celeste_Insta_selfie 800×800 | 59.5 ms | 7.2 ms | 8.3× |
+| `recolour-apply` | Celeste_Insta_selfie 800×800 | 86.9 ms | 8.6 ms | 10× |
+| `recolour+grade` | Celeste_Insta_selfie 800×800 | 139.0 ms | 26.7 ms | 5.2× |
+| `hue-saturation` | Picking_at_thread 3462×2309 | 547.0 ms | 135.7 ms | 4.0× |
+| `grade+hue` | Picking_at_thread 3462×2309 | 752.6 ms | 161.1 ms | 4.7× |
+| `recolour-apply` | Picking_at_thread 3462×2309 | 1078 ms | 209.6 ms | 5.1× |
+| `recolour+grade` | Picking_at_thread 3462×2309 | 1453 ms | 320.8 ms | 4.5× |
 
-### Colour memo for byte-input carrier effects (selected)
-
-After a tabulated run, a pixel's carrier value depends only on its three bytes, so a carrier effect's output does too.
-`memo::try_memoized` keeps a direct-mapped table of 16,384 colours (256 KiB, charged as scratch) and checks the full key on every hit.
-Hue-saturation and recolour use it when they read byte input. Photos repeat colours locally; illustrations repeat them everywhere.
-
-| Chain | Fixture | Copy | Selected | Change |
-| --- | --- | ---: | ---: | ---: |
-| `hue-saturation` | Celeste_Insta_selfie 800×800 | 42.2 ms | 6.1 ms | −86% |
-| `grade+hue` | Celeste_Insta_selfie 800×800 | 50.5 ms | 15.6 ms | −69% |
-| `hue-saturation` | Picking_at_thread 3462×2309 | 560.0 ms | 124.7 ms | −78% |
-| `grade+hue` | Picking_at_thread 3462×2309 | 670.2 ms | 254.2 ms | −62% |
-| `recolour-apply` | Celeste_Insta_selfie 800×800 | 86.5 ms | 8.2 ms | −90% |
-| `recolour-apply` | Picking_at_thread 3462×2309 | 1061 ms | 188.6 ms | −82% |
-
-`recolour-apply` applies the fixture's own analysed recipe (8-colour palette, Oklab); it includes the tabulated linear decode.
+`recolour-apply` applies the fixture's own analysed recipe. `recolour+grade` is an automatic recolour step followed by exposure and curves, analysis included and uncached.
+The memo supersedes an earlier per-effect table of linear decodes for hue-saturation (−31% on its own), which is removed.
 
 ### Recolour analysis (selected)
 
 Each sample's hue, chroma, and neutral ramp are computed once instead of once per sector, keeping the reference's multiplication and summation order.
+Resolution builds the analysed carrier through the tables and memo as well.
 
-| Fixture | Copy | Selected | Change |
+| Fixture | Reference | Production | Change |
 | --- | ---: | ---: | ---: |
-| Celeste_Insta_selfie 800×800 | 26.3 ms | 19.1 ms | −27% |
-| Picking_at_thread 3462×2309 | 57.4 ms | 43.8 ms | −24% |
+| Celeste_Insta_selfie 800×800 | 25.7 ms | 15.5 ms | −40% |
+| Picking_at_thread 3462×2309 | 55.3 ms | 42.2 ms | −24% |
 
-Analysis reads at most 2¹⁸ samples, so its cost flattens for large images. The processor also caches analyses by exactly what they read; a repeated analysis costs one SHA-256 pass over the samples.
+Analysis reads at most 2¹⁸ samples, so its cost flattens for large images. The processor also caches analyses by exactly what they read; a repeat costs one SHA-256 pass over the samples.
 
 ### Considered, not taken
 
