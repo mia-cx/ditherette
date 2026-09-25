@@ -44,6 +44,31 @@ fn chains() -> Vec<(&'static str, serde_json::Value)> {
                 levels("blue", (0.2, 1.0), 0.8, (0.0, 1.0)),
             ]),
         ),
+        (
+            "grade",
+            json!([
+                { "effect": "exposure", "enabled": true, "stops": 0.4 },
+                { "effect": "white-balance", "enabled": true, "temperature": 0.2, "tint": -0.1 },
+                { "effect": "curves", "enabled": true, "channel": "rgb",
+                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+                { "effect": "brightness-contrast", "enabled": true, "brightness": 0.02, "contrast": 0.2 },
+            ]),
+        ),
+        (
+            "hue-saturation",
+            json!([{ "effect": "hue-saturation", "enabled": true, "hue": 25, "saturation": 0.3, "lightness": 0.05 }]),
+        ),
+        (
+            "grade+hue",
+            json!([
+                { "effect": "curves", "enabled": true, "channel": "rgb",
+                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+                { "effect": "hue-saturation", "enabled": true, "hue": 25, "saturation": 0.3, "lightness": 0.05 },
+                { "effect": "levels", "enabled": true, "channel": "rgb",
+                  "input": { "black": 0.02, "white": 0.98 }, "gamma": 1.1,
+                  "output": { "black": 0, "white": 1 } },
+            ]),
+        ),
     ]
 }
 
