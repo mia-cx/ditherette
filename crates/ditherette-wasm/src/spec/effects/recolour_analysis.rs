@@ -26,7 +26,9 @@ const TONE_QUANTILES: [f32; 5] = [0.01, 0.25, 0.5, 0.75, 0.99];
 const PALETTE_TONE_SHARE: f32 = 0.5;
 /// Overall saturation bounds, and per-hue bounds relative to it.
 const MAX_CHROMA: f32 = 1.25;
-const GROUP_CHROMA: (f32, f32) = (0.25, 1.5);
+const GROUP_CHROMA: (f32, f32) = (0.25, 1.2);
+/// Largest reach-over-chroma ratio counted, so a vivid palette cannot oversaturate a muted image.
+const MAX_FIT: f32 = 1.5;
 /// A hue sector below this share of coloured image mass gets no group.
 const MIN_SECTOR_MASS: f32 = 0.02;
 /// A direction counts as reachable when the palette's hull extends this far relative to the image.
@@ -36,6 +38,8 @@ const MAX_TURN: f32 = 45.0;
 /// The shift moves image colours this share of the way toward the palette centroid.
 const SHIFT_SHARE: f32 = 0.5;
 const MAX_SHIFT_LENGTH: f32 = 0.1;
+/// Palette colours this close to neutral count as exactly neutral.
+const PALETTE_NEUTRAL: f32 = 0.001;
 
 /// One read pixel: working-space coordinates and its alpha weight in `(0, 1]`.
 struct Sample {
@@ -57,7 +61,15 @@ pub fn analyze(image: &EffectImage, context: &EffectContext<'_>) -> RecolourReci
     }
     let palette: Vec<[f32; 3]> = colors
         .iter()
-        .map(|rgb| to_opponent(rgb.map(|channel| channel as f32 / 255.0), space))
+        .map(|rgb| {
+            let [lightness, u, v] = to_opponent(rgb.map(|channel| channel as f32 / 255.0), space);
+            // Byte greys carry f32 residue off neutral in perceptual spaces; treat them as grey.
+            if u.hypot(v) < PALETTE_NEUTRAL {
+                [lightness, 0.0, 0.0]
+            } else {
+                [lightness, u, v]
+            }
+        })
         .collect();
     let samples = sample(image, space);
     if samples.is_empty() || palette.is_empty() {
@@ -249,7 +261,7 @@ fn sectors(samples: &[Sample], palette: &[[f32; 3]], shift: [f32; 2]) -> Vec<Sec
         .collect()
 }
 
-/// Reach over image chroma, capped at 2, averaged by coloured mass and clamped to `[0, 1.25]`.
+/// Reach over image chroma, capped at 1.5, averaged by coloured mass and clamped to `[0, 1.25]`.
 /// A grey image keeps 1.
 fn overall_chroma(sectors: &[Sector]) -> f32 {
     let mass: f32 = sectors.iter().map(|sector| sector.mass).sum();
@@ -259,7 +271,7 @@ fn overall_chroma(sectors: &[Sector]) -> f32 {
     let fit: f32 = sectors
         .iter()
         .filter(|sector| sector.mass > 0.0)
-        .map(|sector| sector.mass * (sector.reach.max(0.0) / sector.chroma).min(2.0))
+        .map(|sector| sector.mass * (sector.reach.max(0.0) / sector.chroma).min(MAX_FIT))
         .sum();
     (fit / mass).clamp(0.0, MAX_CHROMA)
 }
@@ -287,7 +299,7 @@ fn groups(sectors: &[Sector], palette: &[[f32; 3]], chroma: f32) -> Vec<Group> {
                 .find(|&turn| reachable(turn))
                 .unwrap_or(0.0)
         };
-        let fit = (reach(palette, sector.hue + turn).max(0.0) / sector.chroma).min(2.0);
+        let fit = (reach(palette, sector.hue + turn).max(0.0) / sector.chroma).min(MAX_FIT);
         let group_chroma = (fit / chroma).clamp(GROUP_CHROMA.0, GROUP_CHROMA.1);
         if turn != 0.0 || (group_chroma - 1.0).abs() > 0.02 {
             groups.push(Group {

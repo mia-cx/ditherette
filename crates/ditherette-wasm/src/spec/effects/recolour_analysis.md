@@ -13,7 +13,7 @@ An `EffectImage` (the image reaching the recolour step) and a context with palet
 Coordinates are [space.md](space.md)'s lightness–opponent form in the context space. Constants are in `recolour_analysis.rs`.
 
 **Samples.** Read visible pixels on the coarsest grid step with at most 2¹⁸ samples, row-major. Alpha 0 is skipped; others weigh `alpha / 255`.
-**Palette.** Visible colours among the first 256 entries, exact duplicates removed.
+**Palette.** Visible colours among the first 256 entries, exact duplicates removed. A colour within 0.001 of neutral counts as exactly neutral, since byte greys carry `f32` residue in perceptual spaces.
 With no sample or no palette colour, return the identity recipe.
 
 **Reach.** For a hue direction `θ`, the palette's reach is `max_j (u_j cos θ + v_j sin θ)`: the support function of its convex hull.
@@ -28,11 +28,12 @@ Points sit at the quantiles, plus `x = 0` and `x = 1` when the range does not re
 
 **Sectors.** Six hue sectors, every 60°, 60° wide. For each: coloured mass (alpha weight × window × neutral ramp, after the shift), mean chroma, and reach at its centre.
 
-**Chroma.** The mass-weighted mean of `min(2, reach / chroma)` over sectors, clamped to `[0, 1.25]`. A grey image keeps 1.
+**Chroma.** The mass-weighted mean of `min(1.5, reach / chroma)` over sectors, clamped to `[0, 1.25]`. A grey image keeps 1.
 
 **Groups.** For each sector with at least 2% of the coloured mass:
 if reach at its centre is below half its mean chroma after the overall scale, turn toward the nearest direction within 45° that reaches that far, trying +5°, −5°, +10°, … in order.
-Its chroma is `min(2, reach / chroma) / overall`, clamped to `[0.25, 1.5]`, measured at the turned direction.
+Its chroma is `min(1.5, reach / chroma) / overall`, clamped to `[0.25, 1.2]`, measured at the turned direction.
+Together the two scales boost a hue at most 1.5×: enough to keep muted colours from collapsing onto grey entries, without repainting the image.
 Groups with no turn and a chroma within 0.02 of 1 are omitted.
 
 ## Why this works this way
