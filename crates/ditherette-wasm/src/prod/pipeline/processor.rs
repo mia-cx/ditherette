@@ -249,6 +249,8 @@ impl Processor {
             return Err(Failure::new(ErrorCode::ReentrantCall, ErrorPath::Instance));
         }
         self.preparation = super::preparation::Store::default();
+        self.analyses = Default::default();
+        self.effects_source = None;
         self.state = State::Disposed;
         Ok(())
     }

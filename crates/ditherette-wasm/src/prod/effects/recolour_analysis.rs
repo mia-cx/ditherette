@@ -5,6 +5,8 @@
 //! image's tone range, overall saturation, and each hue's saturation to that
 //! reach, instead of pulling pixels toward individual palette entries.
 
+use std::collections::TryReserveError;
+
 use crate::prod::contract::request::WorkingSpace;
 
 use super::{
@@ -40,8 +42,8 @@ const MAX_TURN: f32 = 45.0;
 /// The shift moves image colours this share of the way toward the palette centroid.
 const SHIFT_SHARE: f32 = 0.5;
 const MAX_SHIFT_LENGTH: f32 = 0.1;
-/// Palette colours this close to neutral count as exactly neutral.
-const PALETTE_NEUTRAL: f32 = 0.001;
+/// Colours this close to neutral count as exactly neutral, in the image and the palette.
+const NEUTRAL_SNAP: f32 = 0.001;
 
 /// Upper bound on analysis working memory: samples, the sorted lightness copy, and sector inputs.
 pub const ANALYSIS_BYTES: u64 = MAX_SAMPLES
@@ -57,7 +59,11 @@ struct Sample {
 
 /// Derives a recipe for `image` in the context's space. Context palette and space are validated.
 /// Returns the identity recipe when there is nothing to fit: no visible pixel or palette colour.
-pub fn analyze(image: &EffectImage, context: &EffectContext<'_>) -> RecolourRecipe {
+/// Production reserves its sample buffers fallibly; an allocation failure is reported, not aborted.
+pub fn analyze(
+    image: &EffectImage,
+    context: &EffectContext<'_>,
+) -> Result<RecolourRecipe, TryReserveError> {
     let space = context
         .space
         .expect("recolour analysis requires a working space");
@@ -70,53 +76,60 @@ pub fn analyze(image: &EffectImage, context: &EffectContext<'_>) -> RecolourReci
     let palette: Vec<[f32; 3]> = colors
         .iter()
         .map(|rgb| {
-            let [lightness, u, v] = to_opponent(rgb.map(|channel| channel as f32 / 255.0), space);
-            // Byte greys carry f32 residue off neutral in perceptual spaces; treat them as grey.
-            if u.hypot(v) < PALETTE_NEUTRAL {
-                [lightness, 0.0, 0.0]
-            } else {
-                [lightness, u, v]
-            }
+            snap_neutral(to_opponent(
+                rgb.map(|channel| channel as f32 / 255.0),
+                space,
+            ))
         })
         .collect();
-    let samples = sample(image, space);
+    let samples = sample(image, space)?;
     if samples.is_empty() || palette.is_empty() {
-        return RecolourRecipe::identity(space);
+        return Ok(RecolourRecipe::identity(space));
     }
-    let tone = tone(&samples, &palette);
+    let tone = tone(&samples, &palette)?;
     let shift = shift(&palette);
-    let sectors = sectors(&samples, &palette, shift);
+    let sectors = sectors(&samples, &palette, shift)?;
     let chroma = overall_chroma(&sectors);
     let groups = groups(&sectors, &palette, chroma);
-    RecolourRecipe {
+    Ok(RecolourRecipe {
         space,
         tone,
         chroma,
         shift,
         groups,
+    })
+}
+
+/// Byte greys carry `f32` residue off neutral in perceptual spaces; treat them as grey.
+fn snap_neutral([lightness, u, v]: [f32; 3]) -> [f32; 3] {
+    if u.hypot(v) < NEUTRAL_SNAP {
+        [lightness, 0.0, 0.0]
+    } else {
+        [lightness, u, v]
     }
 }
 
 /// Visible pixels on the coarsest grid step `s` with `ceil(w/s) * ceil(h/s) <= MAX_SAMPLES`,
 /// in row-major order. Zero-alpha pixels are skipped; others weigh `alpha / 255`.
-fn sample(image: &EffectImage, space: WorkingSpace) -> Vec<Sample> {
+fn sample(image: &EffectImage, space: WorkingSpace) -> Result<Vec<Sample>, TryReserveError> {
     let width = image.dimensions.width_usize();
     let height = image.dimensions.height() as usize;
     let step = sample_step(width, height);
     let mut samples = Vec::new();
+    samples.try_reserve_exact(width.div_ceil(step) * height.div_ceil(step))?;
     for y in (0..height).step_by(step) {
         for x in (0..width).step_by(step) {
             let index = y * width + x;
             let alpha = image.alpha[index];
             if alpha > 0 {
                 samples.push(Sample {
-                    opponent: to_opponent(image.rgb[index], space),
+                    opponent: snap_neutral(to_opponent(image.rgb[index], space)),
                     weight: alpha as f32 / 255.0,
                 });
             }
         }
     }
-    samples
+    Ok(samples)
 }
 
 /// The coarsest grid step with at most `MAX_SAMPLES` samples. The analysis cache hashes this grid.
@@ -153,12 +166,15 @@ fn palette_quantile(levels: &[f32], p: f32) -> f32 {
 /// Fits the image's 1%–99% tone range into the palette's lightness range, compressing only
 /// what falls outside it. Sparse palettes also pull the quartiles toward their own levels, so
 /// detail lands on lightness steps the palette has. A curve within 1e-4 of identity is identity.
-fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
+fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryReserveError> {
     let identity = vec![[0.0, 0.0], [1.0, 1.0]];
-    let mut sorted: Vec<(f32, f32)> = samples
-        .iter()
-        .map(|sample| (sample.opponent[0], sample.weight))
-        .collect();
+    let mut sorted: Vec<(f32, f32)> = Vec::new();
+    sorted.try_reserve_exact(samples.len())?;
+    sorted.extend(
+        samples
+            .iter()
+            .map(|sample| (sample.opponent[0], sample.weight)),
+    );
     sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
     let total: f32 = sorted.iter().map(|(_, weight)| weight).sum();
     let xs = TONE_QUANTILES.map(|p| quantile(&sorted, total, p).clamp(0.0, 1.0));
@@ -171,7 +187,7 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
     let (low, high) = (xs[0], xs[4]);
     let (palette_low, palette_high) = (levels[0], levels[levels.len() - 1]);
     if high - low < MIN_GAP || palette_high - palette_low < MIN_GAP {
-        return identity;
+        return Ok(identity);
     }
     let (mut target_low, mut target_high) = (
         low.clamp(palette_low, palette_high),
@@ -212,9 +228,9 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Vec<[f32; 2]> {
         curve.push([1.0, y]);
     }
     if curve.iter().all(|[x, y]| (x - y).abs() < 1e-4) {
-        return identity;
+        return Ok(identity);
     }
-    curve
+    Ok(curve)
 }
 
 /// How far the palette's convex hull reaches from neutral in hue direction `degrees`.
@@ -251,23 +267,26 @@ struct Sector {
     reach: f32,
 }
 
-fn sectors(samples: &[Sample], palette: &[[f32; 3]], shift: [f32; 2]) -> Vec<Sector> {
+fn sectors(
+    samples: &[Sample],
+    palette: &[[f32; 3]],
+    shift: [f32; 2],
+) -> Result<Vec<Sector>, TryReserveError> {
     // Each sample's hue, chroma, and ramp are the same for every sector, so compute them once.
     // The weight product keeps the reference's order: window, then ramp, then alpha weight.
-    let coloured: Vec<(f32, f32, f32, f32)> = samples
-        .iter()
-        .filter_map(|sample| {
-            let u = sample.opponent[1] + shift[0];
-            let v = sample.opponent[2] + shift[1];
-            let chroma = u.hypot(v);
-            let ramp = (chroma / NEUTRAL_CHROMA).min(1.0);
-            (ramp != 0.0).then(|| {
-                let hue = v.atan2(u).to_degrees().rem_euclid(360.0);
-                (hue, ramp, sample.weight, chroma)
-            })
+    let mut coloured: Vec<(f32, f32, f32, f32)> = Vec::new();
+    coloured.try_reserve_exact(samples.len())?;
+    coloured.extend(samples.iter().filter_map(|sample| {
+        let u = sample.opponent[1] + shift[0];
+        let v = sample.opponent[2] + shift[1];
+        let chroma = u.hypot(v);
+        let ramp = (chroma / NEUTRAL_CHROMA).min(1.0);
+        (ramp != 0.0).then(|| {
+            let hue = v.atan2(u).to_degrees().rem_euclid(360.0);
+            (hue, ramp, sample.weight, chroma)
         })
-        .collect();
-    (0..SECTORS)
+    }));
+    Ok((0..SECTORS)
         .map(|index| {
             let hue = index as f32 * (360.0 / SECTORS as f32);
             let group = Group {
@@ -293,7 +312,7 @@ fn sectors(samples: &[Sample], palette: &[[f32; 3]], shift: [f32; 2]) -> Vec<Sec
                 reach: reach(palette, hue),
             }
         })
-        .collect()
+        .collect())
 }
 
 /// Reach over image chroma, capped at 1.25, averaged by coloured mass and clamped to `[0, 1.15]`.

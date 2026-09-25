@@ -4,7 +4,7 @@
 //! and the space. Any unchanged recolour stage therefore hits, whichever call reaches it, and
 //! edits after it never re-analyse. New entries publish only when the call succeeds.
 
-use std::{cell::RefCell, mem::size_of};
+use std::{cell::RefCell, collections::TryReserveError, mem::size_of};
 
 use sha2::{Digest, Sha256};
 
@@ -33,16 +33,21 @@ struct Entries {
 pub struct AnalysisCache(RefCell<Entries>);
 
 impl AnalysisCache {
-    /// Upper bound on owned bytes: both lists full of recipes at their largest.
+    /// Upper bound on owned bytes: while settling, published holds up to twice its capacity
+    /// before trimming, alongside a full pending list, each recipe at its largest.
     pub const fn capacity_bytes() -> u64 {
         let recipe = size_of::<(Key, RecolourRecipe)>()
             + MAX_POINTS * size_of::<[f32; 2]>()
             + MAX_GROUPS * size_of::<Group>();
-        (2 * CAPACITY * recipe + size_of::<Self>()) as u64
+        (3 * CAPACITY * recipe + size_of::<Self>()) as u64
     }
 
     /// The recipe `analyze` would derive for `image`, from the cache when its inputs repeat.
-    pub fn analyze(&self, image: &EffectImage, context: &EffectContext<'_>) -> RecolourRecipe {
+    pub fn analyze(
+        &self,
+        image: &EffectImage,
+        context: &EffectContext<'_>,
+    ) -> Result<RecolourRecipe, TryReserveError> {
         let key = key(image, context);
         {
             let mut entries = self.0.borrow_mut();
@@ -50,18 +55,18 @@ impl AnalysisCache {
                 let entry = entries.published.remove(index);
                 let recipe = entry.1.clone();
                 entries.published.push(entry);
-                return recipe;
+                return Ok(recipe);
             }
             if let Some((_, recipe)) = entries.pending.iter().find(|(k, _)| *k == key) {
-                return recipe.clone();
+                return Ok(recipe.clone());
             }
         }
-        let recipe = analyze(image, context);
+        let recipe = analyze(image, context)?;
         let mut entries = self.0.borrow_mut();
         if entries.pending.len() < CAPACITY {
             entries.pending.push((key, recipe.clone()));
         }
-        recipe
+        Ok(recipe)
     }
 
     /// Publishes this call's analyses on success and drops them on failure.
@@ -100,10 +105,11 @@ fn key(image: &EffectImage, context: &EffectContext<'_>) -> Key {
     hash.update((height as u64).to_le_bytes());
     let space = context.space.map_or(u8::MAX, space_tag);
     hash.update([space]);
+    // Length first, so the palette and sample records cannot shift into each other.
+    hash.update((context.colors().count() as u64).to_le_bytes());
     for color in context.colors() {
         hash.update(color);
     }
-    hash.update([u8::MAX; 4]);
     let step = sample_step(width, height);
     for y in (0..height).step_by(step) {
         for x in (0..width).step_by(step) {

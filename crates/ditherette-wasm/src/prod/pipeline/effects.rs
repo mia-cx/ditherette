@@ -164,7 +164,8 @@ pub(super) fn analyze<B: InputBoundary, A: Allocator>(
     let recipe = match request.context.analyses {
         Some(cache) => cache.analyze(&image, &request.context),
         None => recolour_analysis::analyze(&image, &request.context),
-    };
+    }
+    .map_err(|_| unavailable())?;
     drop(image);
     call.release_working_capacity(carrier);
     progress.report(boundary.progress(), Stage::Effects, pixels, pixels)?;

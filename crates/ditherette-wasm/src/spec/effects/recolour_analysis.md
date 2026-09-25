@@ -13,7 +13,8 @@ An `EffectImage` (the image reaching the recolour step) and a context with palet
 Coordinates are [space.md](space.md)'s lightness–opponent form in the context space. Constants are in `recolour_analysis.rs`.
 
 **Samples.** Read visible pixels on the coarsest grid step with at most 2¹⁸ samples, row-major. Alpha 0 is skipped; others weigh `alpha / 255`.
-**Palette.** Visible colours among the first 256 entries, exact duplicates removed. A colour within 0.001 of neutral counts as exactly neutral, since byte greys carry `f32` residue in perceptual spaces.
+**Palette.** Visible colours among the first 256 entries, exact duplicates removed.
+In both samples and palette, a colour within 0.001 of neutral counts as exactly neutral, since byte greys carry `f32` residue in perceptual spaces.
 With no sample or no palette colour, return the identity recipe.
 
 **Reach.** For a hue direction `θ`, the palette's reach is `max_j (u_j cos θ + v_j sin θ)`: the support function of its convex hull.
@@ -55,6 +56,7 @@ Every choice is bounded and explicit, so the recipe stays predictable and easy t
 ## Edge cases
 
 - Transparent-only images and palettes without visible colours give the identity recipe.
+- A grey image has no coloured mass: chroma stays 1 and no groups are made, in every space.
 - A single-lightness palette keeps the identity tone curve.
 - A grey palette has zero reach in every hue, so chroma becomes 0: the image turns grey before quantization.
 
