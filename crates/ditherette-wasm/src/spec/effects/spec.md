@@ -31,7 +31,13 @@ Ordinary effects need neither. `process` derives both from its own palette and `
 | [channel.rs](channel.md) | Channel selection shared by per-channel effects |
 | [recipe.rs](recipe.md) | Serializable built-in registry, decoding, and validation |
 | [operation.rs](operation.md) | Standalone `apply_effects` and recipe-v2 `process` |
+| [space.rs](space.md) | Unclipped linear-light and Oklab conversions |
 | [levels.rs](levels.md) | Levels |
+| [curves.rs](curves.md) | Monotone tone curves |
+| [brightness_contrast.rs](brightness_contrast.md) | Brightness and contrast |
+| [exposure.rs](exposure.md) | Exposure in stops |
+| [white_balance.rs](white_balance.md) | Temperature and tint |
+| [hue_saturation.rs](hue_saturation.md) | Oklab hue, saturation, and lightness |
 
 ## Domain model
 
