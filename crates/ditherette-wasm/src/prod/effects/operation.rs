@@ -15,8 +15,8 @@ use crate::{
 };
 
 use super::{
-    chain::{validate_chain, Effect, EffectContext, PixelMap, Step, MAX_EFFECTS},
-    curves::{Spline, MAX_POINTS},
+    chain::{validate_chain, Effect, EffectContext, Needs, Step, MAX_EFFECTS},
+    curves::MAX_POINTS,
     image::{EffectImage, CARRIER_LIMIT},
     memo::{try_memoized, MEMO_BYTES},
     recipe::{BuiltinEffect, EffectStep},
@@ -65,11 +65,9 @@ pub const BOOKKEEPING_BYTES: u64 = {
     let step = size_of::<EffectStep>()
         + MAX_POINTS * size_of::<[f32; 2]>()
         + MAX_GROUPS * size_of::<Group>();
-    // A boxed map captures at most a spline or a recipe reference, a turn, and a strength.
-    let map = size_of::<&EffectStep>() + size_of::<PixelMap<'static>>() + size_of::<Spline>() + 64;
     let palette =
         MAX_PALETTE_ENTRIES * (size_of::<[u8; 3]>() + size_of::<[f32; 3]>() + size_of::<f32>());
-    (MAX_EFFECTS * (step + map) + palette + 4 * step) as u64
+    (MAX_EFFECTS * (step + size_of::<&EffectStep>()) + palette + 4 * step) as u64
 };
 
 /// Bytes an effects call allocates beyond `data`. A chain that fully tabulates needs only the
@@ -94,32 +92,110 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
         + BOOKKEEPING_BYTES
 }
 
+/// A step as it runs: the caller's own effect, or a recolour step with the recipe it derived.
+/// Borrowing the rest means resolution copies no curve points or recipes.
+pub enum Resolved<'a> {
+    Given(&'a BuiltinEffect),
+    Recolour(Recolour),
+}
+
+impl Effect for Resolved<'_> {
+    fn validate(&self, path: &str) -> Result<(), DitheretteError> {
+        match self {
+            Self::Given(effect) => effect.validate(path),
+            Self::Recolour(effect) => effect.validate(path),
+        }
+    }
+
+    fn needs(&self) -> Needs {
+        match self {
+            Self::Given(effect) => effect.needs(),
+            Self::Recolour(effect) => effect.needs(),
+        }
+    }
+
+    fn check_context(
+        &self,
+        context: &EffectContext<'_>,
+        path: &str,
+    ) -> Result<(), DitheretteError> {
+        match self {
+            Self::Given(effect) => effect.check_context(context, path),
+            Self::Recolour(effect) => effect.check_context(context, path),
+        }
+    }
+
+    fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
+        match self {
+            Self::Given(effect) => effect.apply(image, context),
+            Self::Recolour(effect) => effect.apply(image, context),
+        }
+    }
+
+    fn per_channel(&self) -> bool {
+        match self {
+            Self::Given(effect) => effect.per_channel(),
+            Self::Recolour(effect) => effect.per_channel(),
+        }
+    }
+
+    fn map_channel(&self, channel: usize, value: f32) -> f32 {
+        match self {
+            Self::Given(effect) => effect.map_channel(channel, value),
+            Self::Recolour(effect) => effect.map_channel(channel, value),
+        }
+    }
+
+    fn working_bytes(&self) -> u64 {
+        match self {
+            Self::Given(effect) => effect.working_bytes(),
+            Self::Recolour(effect) => effect.working_bytes(),
+        }
+    }
+
+    fn pointwise(&self) -> bool {
+        match self {
+            Self::Given(effect) => effect.pointwise(),
+            Self::Recolour(effect) => effect.pointwise(),
+        }
+    }
+
+    fn map_pixel(&self, rgb: [f32; 3], context: &EffectContext<'_>) -> [f32; 3] {
+        match self {
+            Self::Given(effect) => effect.map_pixel(rgb, context),
+            Self::Recolour(effect) => effect.map_pixel(rgb, context),
+        }
+    }
+}
+
 /// Replaces each enabled recipe-less `recolour` step with the recipe it would derive from the
 /// carrier reaching it, in order. The result is pointwise everywhere, so it memoizes.
-pub fn resolve_recolour(
+pub fn resolve_recolour<'a>(
     data: &[u8],
     dimensions: ImageDimensions,
-    steps: &[EffectStep],
+    steps: &'a [EffectStep],
     context: &EffectContext<'_>,
-) -> Result<Vec<EffectStep>, TryReserveError> {
+) -> Result<Vec<Step<Resolved<'a>>>, TryReserveError> {
     let mut resolved = Vec::new();
     resolved.try_reserve_exact(steps.len())?;
-    resolved.extend_from_slice(steps);
+    resolved.extend(steps.iter().map(|step| Step {
+        enabled: step.enabled,
+        effect: Resolved::Given(&step.effect),
+    }));
     for index in 0..resolved.len() {
-        let BuiltinEffect::Recolour(recolour) = &resolved[index].effect else {
+        let Resolved::Given(BuiltinEffect::Recolour(recolour)) = resolved[index].effect else {
             continue;
         };
         if !resolved[index].enabled || recolour.recipe.is_some() || recolour.strength == 0.0 {
             continue;
         }
-        let strength = recolour.strength;
         let image = carrier_after(data, dimensions, &resolved[..index], context)?;
         let recipe = match context.analyses {
             Some(cache) => cache.analyze(&image, context),
             None => analyze(&image, context),
         }?;
-        resolved[index].effect = BuiltinEffect::Recolour(Recolour {
-            strength,
+        resolved[index].effect = Resolved::Recolour(Recolour {
+            strength: recolour.strength,
             recipe: Some(recipe),
         });
     }
@@ -240,14 +316,13 @@ fn carrier<E: Effect>(
     if rest.is_empty() {
         return EffectImage::try_from_packed(data, dimensions, tables);
     }
-    let mut maps = Vec::new();
-    maps.try_reserve_exact(rest.len())?;
-    maps.extend(rest.iter().map_while(|effect| effect.pixel_map(context)));
-    if maps.len() == rest.len() {
+    if rest.iter().all(|effect| effect.pointwise()) {
         return try_memoized(data, dimensions, |bytes| {
             let mut rgb = std::array::from_fn(|channel| tables.unit(channel, bytes[channel]));
-            for map in &maps {
-                rgb = map(rgb).map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
+            for effect in rest {
+                rgb = effect
+                    .map_pixel(rgb, context)
+                    .map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
             }
             rgb
         });

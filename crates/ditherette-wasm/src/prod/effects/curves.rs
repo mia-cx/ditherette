@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext, PixelMap},
+    chain::{check_bounded, Effect, EffectContext, StackPath},
     channel::Channel,
     image::EffectImage,
 };
@@ -102,8 +102,8 @@ impl Curves {
             ));
         }
         for (index, [x, y]) in points.iter().enumerate() {
-            check_bounded(*x, 0.0, 1.0, format!("{path}.{index}.0"))?;
-            check_bounded(*y, 0.0, 1.0, format!("{path}.{index}.1"))?;
+            check_bounded(*x, 0.0, 1.0, format_args!("{path}.{index}.0"))?;
+            check_bounded(*y, 0.0, 1.0, format_args!("{path}.{index}.1"))?;
             if index > 0 && *x - points[index - 1][0] < MIN_GAP {
                 return Err(DitheretteError::new(
                     ErrorCode::InvalidSettings,
@@ -118,7 +118,10 @@ impl Curves {
 
 impl Effect for Curves {
     fn validate(&self, path: &str) -> Result<(), DitheretteError> {
-        Self::validate_points(&self.points, &format!("{path}.points"))
+        Self::validate_points(
+            &self.points,
+            StackPath::new(format_args!("{path}.points")).as_str(),
+        )
     }
 
     fn apply(&self, image: &mut EffectImage, _context: &EffectContext<'_>) {
@@ -132,12 +135,11 @@ impl Effect for Curves {
         true
     }
 
-    fn pixel_map<'s>(&'s self, _context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
+    /// Builds the inline spline once per pixel rather than once per channel.
+    fn map_pixel(&self, mut rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
         let spline = Spline::new(&self.points);
-        Some(Box::new(move |mut rgb| {
-            self.channel.apply(&mut rgb, |value| spline.eval(value));
-            rgb
-        }))
+        self.channel.apply(&mut rgb, |value| spline.eval(value));
+        rgb
     }
 
     fn map_channel(&self, channel: usize, value: f32) -> f32 {

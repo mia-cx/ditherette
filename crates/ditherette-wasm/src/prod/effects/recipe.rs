@@ -10,7 +10,7 @@ use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
     brightness_contrast::BrightnessContrast,
-    chain::{Effect, EffectContext, Needs, PixelMap, Step},
+    chain::{Effect, EffectContext, Needs, Step},
     curves::Curves,
     exposure::Exposure,
     hue_saturation::HueSaturation,
@@ -125,15 +125,27 @@ impl Effect for BuiltinEffect {
         }
     }
 
-    fn pixel_map<'s>(&'s self, context: &'s EffectContext<'_>) -> Option<PixelMap<'s>> {
+    fn pointwise(&self) -> bool {
         match self {
-            Self::Levels(effect) => effect.pixel_map(context),
-            Self::Curves(effect) => effect.pixel_map(context),
-            Self::BrightnessContrast(effect) => effect.pixel_map(context),
-            Self::Exposure(effect) => effect.pixel_map(context),
-            Self::WhiteBalance(effect) => effect.pixel_map(context),
-            Self::HueSaturation(effect) => effect.pixel_map(context),
-            Self::Recolour(effect) => effect.pixel_map(context),
+            Self::Levels(effect) => effect.pointwise(),
+            Self::Curves(effect) => effect.pointwise(),
+            Self::BrightnessContrast(effect) => effect.pointwise(),
+            Self::Exposure(effect) => effect.pointwise(),
+            Self::WhiteBalance(effect) => effect.pointwise(),
+            Self::HueSaturation(effect) => effect.pointwise(),
+            Self::Recolour(effect) => effect.pointwise(),
+        }
+    }
+
+    fn map_pixel(&self, rgb: [f32; 3], context: &EffectContext<'_>) -> [f32; 3] {
+        match self {
+            Self::Levels(effect) => effect.map_pixel(rgb, context),
+            Self::Curves(effect) => effect.map_pixel(rgb, context),
+            Self::BrightnessContrast(effect) => effect.map_pixel(rgb, context),
+            Self::Exposure(effect) => effect.map_pixel(rgb, context),
+            Self::WhiteBalance(effect) => effect.map_pixel(rgb, context),
+            Self::HueSaturation(effect) => effect.map_pixel(rgb, context),
+            Self::Recolour(effect) => effect.map_pixel(rgb, context),
         }
     }
 }

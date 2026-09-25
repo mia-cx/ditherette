@@ -13,7 +13,7 @@ use super::{
     chain::EffectContext,
     curves::MIN_GAP,
     image::EffectImage,
-    recolour::{window, Group, RecolourRecipe, NEUTRAL_CHROMA},
+    recolour::{window, Group, RecolourRecipe, IDENTITY_TONE, NEUTRAL_CHROMA},
     space::to_opponent,
 };
 
@@ -68,29 +68,29 @@ pub fn analyze(
         .space
         .expect("recolour analysis requires a working space");
     let mut colors: Vec<[u8; 3]> = Vec::new();
+    colors.try_reserve_exact(context.colors().count())?;
     for color in context.colors() {
         if !colors.contains(&color) {
             colors.push(color);
         }
     }
-    let palette: Vec<[f32; 3]> = colors
-        .iter()
-        .map(|rgb| {
-            snap_neutral(to_opponent(
-                rgb.map(|channel| channel as f32 / 255.0),
-                space,
-            ))
-        })
-        .collect();
+    let mut palette: Vec<[f32; 3]> = Vec::new();
+    palette.try_reserve_exact(colors.len())?;
+    palette.extend(colors.iter().map(|rgb| {
+        snap_neutral(to_opponent(
+            rgb.map(|channel| channel as f32 / 255.0),
+            space,
+        ))
+    }));
     let samples = sample(image, space)?;
     if samples.is_empty() || palette.is_empty() {
-        return Ok(RecolourRecipe::identity(space));
+        return RecolourRecipe::try_identity(space);
     }
     let tone = tone(&samples, &palette)?;
     let shift = shift(&palette);
     let sectors = sectors(&samples, &palette, shift)?;
     let chroma = overall_chroma(&sectors);
-    let groups = groups(&sectors, &palette, chroma);
+    let groups = groups(&sectors, &palette, chroma)?;
     Ok(RecolourRecipe {
         space,
         tone,
@@ -167,7 +167,12 @@ fn palette_quantile(levels: &[f32], p: f32) -> f32 {
 /// what falls outside it. Sparse palettes also pull the quartiles toward their own levels, so
 /// detail lands on lightness steps the palette has. A curve within 1e-4 of identity is identity.
 fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryReserveError> {
-    let identity = vec![[0.0, 0.0], [1.0, 1.0]];
+    let identity = || {
+        let mut curve = Vec::new();
+        curve.try_reserve_exact(2)?;
+        curve.extend_from_slice(&IDENTITY_TONE);
+        Ok(curve)
+    };
     let mut sorted: Vec<(f32, f32)> = Vec::new();
     sorted.try_reserve_exact(samples.len())?;
     sorted.extend(
@@ -178,16 +183,15 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryRe
     sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
     let total: f32 = sorted.iter().map(|(_, weight)| weight).sum();
     let xs = TONE_QUANTILES.map(|p| quantile(&sorted, total, p).clamp(0.0, 1.0));
-    let mut levels: Vec<f32> = palette
-        .iter()
-        .map(|color| color[0].clamp(0.0, 1.0))
-        .collect();
+    let mut levels: Vec<f32> = Vec::new();
+    levels.try_reserve_exact(palette.len())?;
+    levels.extend(palette.iter().map(|color| color[0].clamp(0.0, 1.0)));
     levels.sort_by(f32::total_cmp);
     levels.dedup();
     let (low, high) = (xs[0], xs[4]);
     let (palette_low, palette_high) = (levels[0], levels[levels.len() - 1]);
     if high - low < MIN_GAP || palette_high - palette_low < MIN_GAP {
-        return Ok(identity);
+        return identity();
     }
     let (mut target_low, mut target_high) = (
         low.clamp(palette_low, palette_high),
@@ -202,16 +206,17 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryRe
     };
     let share = PALETTE_TONE_SHARE * (SPARSE_LEVELS / levels.len() as f32).min(1.0);
     let ranks = [0.0, 0.25, 0.5, 0.75, 1.0];
-    let mut points = vec![[0.0, linear(0.0)]];
-    points.extend(xs.iter().zip(ranks).map(|(&x, rank)| {
+    let mut points = [[0.0, linear(0.0)]; TONE_QUANTILES.len() + 2];
+    for (point, (&x, rank)) in points[1..].iter_mut().zip(xs.iter().zip(ranks)) {
         let fitted = linear(x);
-        [
+        *point = [
             x,
             fitted + share * (palette_quantile(&levels, rank) - fitted),
-        ]
-    }));
-    points.push([1.0, linear(1.0)]);
+        ];
+    }
+    points[TONE_QUANTILES.len() + 1] = [1.0, linear(1.0)];
     let mut curve: Vec<[f32; 2]> = Vec::new();
+    curve.try_reserve_exact(points.len())?;
     for [x, y] in points {
         match curve.last() {
             Some(&[last_x, last_y]) if x - last_x >= MIN_GAP => {
@@ -228,7 +233,7 @@ fn tone(samples: &[Sample], palette: &[[f32; 3]]) -> Result<Vec<[f32; 2]>, TryRe
         curve.push([1.0, y]);
     }
     if curve.iter().all(|[x, y]| (x - y).abs() < 1e-4) {
-        return Ok(identity);
+        return identity();
     }
     Ok(curve)
 }
@@ -286,33 +291,34 @@ fn sectors(
             (hue, ramp, sample.weight, chroma)
         })
     }));
-    Ok((0..SECTORS)
-        .map(|index| {
-            let hue = index as f32 * (360.0 / SECTORS as f32);
-            let group = Group {
-                hue,
-                width: SECTOR_WIDTH,
-                turn: 0.0,
-                chroma: 1.0,
-            };
-            let (mut mass, mut weighted_chroma) = (0.0, 0.0);
-            for &(sample_hue, ramp, sample_weight, chroma) in &coloured {
-                let weight = window(sample_hue, &group) * ramp * sample_weight;
-                mass += weight;
-                weighted_chroma += weight * chroma;
-            }
-            Sector {
-                hue,
-                mass,
-                chroma: if mass > 0.0 {
-                    weighted_chroma / mass
-                } else {
-                    0.0
-                },
-                reach: reach(palette, hue),
-            }
-        })
-        .collect())
+    let mut sectors = Vec::new();
+    sectors.try_reserve_exact(SECTORS)?;
+    sectors.extend((0..SECTORS).map(|index| {
+        let hue = index as f32 * (360.0 / SECTORS as f32);
+        let group = Group {
+            hue,
+            width: SECTOR_WIDTH,
+            turn: 0.0,
+            chroma: 1.0,
+        };
+        let (mut mass, mut weighted_chroma) = (0.0, 0.0);
+        for &(sample_hue, ramp, sample_weight, chroma) in &coloured {
+            let weight = window(sample_hue, &group) * ramp * sample_weight;
+            mass += weight;
+            weighted_chroma += weight * chroma;
+        }
+        Sector {
+            hue,
+            mass,
+            chroma: if mass > 0.0 {
+                weighted_chroma / mass
+            } else {
+                0.0
+            },
+            reach: reach(palette, hue),
+        }
+    }));
+    Ok(sectors)
 }
 
 /// Reach over image chroma, capped at 1.25, averaged by coloured mass and clamped to `[0, 1.15]`.
@@ -339,12 +345,17 @@ fn overall_chroma(sectors: &[Sector]) -> f32 {
 /// One group per sector holding enough coloured mass. A sector the palette cannot reach turns
 /// toward the nearest reachable direction within 45 degrees (positive first on ties); its chroma
 /// then fits the reach there, relative to the overall scale. Neutral groups are omitted.
-fn groups(sectors: &[Sector], palette: &[[f32; 3]], chroma: f32) -> Vec<Group> {
+fn groups(
+    sectors: &[Sector],
+    palette: &[[f32; 3]],
+    chroma: f32,
+) -> Result<Vec<Group>, TryReserveError> {
     let mass: f32 = sectors.iter().map(|sector| sector.mass).sum();
     if mass == 0.0 || chroma == 0.0 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let mut groups = Vec::new();
+    groups.try_reserve_exact(sectors.len())?;
     for sector in sectors {
         if sector.mass / mass < MIN_SECTOR_MASS {
             continue;
@@ -370,5 +381,5 @@ fn groups(sectors: &[Sector], palette: &[[f32; 3]], chroma: f32) -> Vec<Group> {
             });
         }
     }
-    groups
+    Ok(groups)
 }

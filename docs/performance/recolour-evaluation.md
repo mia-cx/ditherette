@@ -72,8 +72,8 @@ Native x86-64 release, Criterion `crit_effects`, 8-colour palette, Oklab. Analys
 
 | Work | 800×800 | 3462×2309 |
 | --- | ---: | ---: |
-| Analysis | 15.5 ms | 42.2 ms |
-| Application of a known recipe | 8.6 ms | 209.6 ms |
+| Analysis | 17.8 ms | 44.8 ms |
+| Application of a known recipe | 9.5 ms | 225.7 ms |
 
 Analysis reads at most 2¹⁸ samples, so it grows slowly with image size. Application runs once per distinct colour through a memo, so flat illustrations are cheaper than photos.
 
