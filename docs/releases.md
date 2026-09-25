@@ -12,9 +12,9 @@ Release planning runs for every push without a shared queue. Only release-PR upd
 
 ## First-release setup
 
-- Set `RELEASE_PR_TOKEN` to a repository-scoped token with contents and pull-request write access. GitHub Actions must be allowed to create pull requests. Using a separate token lets generated release PRs trigger normal CI.
+- Set the `CHANGESETS_RELEASE_TOKEN` organization Actions secret with access to this repository. Its token needs contents and pull-request write access. GitHub Actions must be allowed to create pull requests. Using a separate token lets generated release PRs trigger normal CI.
 - Configure the `production` GitHub environment with `CLOUDFLARE_API_TOKEN` and the `CLOUDFLARE_ACCOUNT_ID` variable. The token needs permission to deploy the existing Worker and its custom domain. Deployment uses Wrangler's existing `production` environment for `ditherette.mia.cx`.
-- Configure the `npm-publish` GitHub environment and npm trusted publishing for `mia-cx/ditherette`, calling workflow `release.yml`, environment `npm-publish`. npm validates the calling workflow when a reusable workflow publishes. No npm token is stored in this pipeline.
+- Configure the `npm-publish` GitHub environment and npm trusted publishing for `mia-cx/ditherette`, calling workflow `release.yml`. The npm publisher's environment field is optional; if set, use `npm-publish`. npm validates the calling workflow when a reusable workflow publishes. No npm token is stored in this pipeline.
 - The first candidate uses an approved local npm bootstrap without provenance because trusted publishing needs the package to exist first. Build and verify the exact archive before publishing it under `rc`. Configure trusted publishing before an ordinary release.
 - Resolve the remaining S41/WebKit hold in `packages/ditherette/release-policy.json` before ordinary publication. The first candidate's package size has been reviewed, and the 10% size-growth gate stays in place.
 
