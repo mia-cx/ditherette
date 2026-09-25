@@ -79,14 +79,16 @@ Node 24 (V8), 3462×2309 synthetic source, `process` to 480×320 area resize, Ok
 
 | Chain | `applyEffects` cold | warm | `process` cold | warm |
 | --- | ---: | ---: | ---: | ---: |
-| none (recipe v1) | | | 54.5 | 4.9 |
-| `levels` | 43.3 | 16.2 | 61.0 | 16.7 |
-| `levels-x3` | 36.5 | 12.9 | 59.0 | 16.5 |
+| none (recipe v1) | | | 53.0 | 5.1 |
+| `levels` | 41.6 | 10.5 | 73.7 | 5.0 |
+| `levels-x3` | 37.7 | 11.0 | 76.4 | 4.9 |
+| automatic `recolour` | 475.4 | 19.4 | 515.0 | 4.9 |
 
 Cold calls use a fresh processor. Warm `applyEffects` returns the retained result after verifying the source.
-Warm recipe-v2 `process` reapplies the chain to verify its snapshot, then hits the downstream caches.
-That verification costs about 11 ms here. Keeping a raw-source snapshot would turn it into one comparison, at the price of one more retained source-sized buffer.
+Warm recipe-v2 `process` keeps the raw source from its last successful call. When the source and the enabled chain repeat, it skips the effects and hands `process` the same effected snapshot, so every downstream cache hits.
+Any other call drops that raw snapshot at its start, so it is charged only by the recipe-v2 call that owns it.
 
 Memory: `applyEffects` holds the source snapshot and one output buffer, like `perturb`.
-Recipe-v2 `process` adds one source-sized comparison buffer to the v1 budget.
-Neither allocates the continuous carrier while every enabled step tabulates.
+Recipe-v2 `process` adds the retained raw snapshot to the v1 budget.
+A chain that does not fully tabulate adds the carrier (13 bytes per pixel) and the 256 KiB colour memo; automatic recolouring adds its bounded analysis samples.
+The analysis cache has a fixed bound in the processor bookkeeping.
