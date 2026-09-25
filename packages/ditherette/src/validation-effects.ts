@@ -167,8 +167,11 @@ export function validateApplyEffects(value: unknown) {
 			'context'
 		);
 		const rawPalette = field(context, 'palette');
+		// An empty palette supplies no colours, exactly like an omitted one.
 		const palette =
-			rawPalette === undefined ? undefined : paletteCodes(rawPalette, 'context.palette');
+			rawPalette === undefined || (Array.isArray(rawPalette) && rawPalette.length === 0)
+				? undefined
+				: paletteCodes(rawPalette, 'context.palette');
 		const rawSpace = field(context, 'space');
 		const space = rawSpace === undefined ? NO_SPACE : spaces.indexOf(rawSpace as string);
 		if (rawSpace !== undefined && (typeof rawSpace !== 'string' || space < 0))

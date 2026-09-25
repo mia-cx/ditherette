@@ -184,7 +184,16 @@ test('invalid effects fail with indexed paths before any work', () =>
 		fails({ ...base, effects: {} }, 'invalid-settings', 'effects');
 		fails({ ...base, effects: Array(65).fill(halve) }, 'invalid-settings', 'effects');
 		fails({ ...base, effects: [], context: { space: 'hsv' } }, 'invalid-settings', 'context.space');
-		fails({ ...base, effects: [], context: { palette: [] } }, 'invalid-palette', 'context.palette');
+		assert.deepEqual(
+			processor.applyEffects({ ...base, effects: [halve, double], context: { palette: [] } }).data,
+			ramp().data,
+			'an empty palette is no palette'
+		);
+		fails(
+			{ ...base, effects: [], context: { palette: [{ kind: 'colour' }] } },
+			'invalid-palette',
+			'context.palette.0.kind'
+		);
 		fails({ ...base, effects: [], context: { mood: 1 } }, 'invalid-settings', 'context.mood');
 		fails({ ...base, version: 2, effects: [] }, 'invalid-request', 'version');
 		assert.throws(
