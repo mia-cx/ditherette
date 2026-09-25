@@ -23,7 +23,7 @@ The constants are copied rather than imported because the v1 module exposes only
 
 ## Correctness invariants
 
-- Finite input gives finite output.
+- Input inside the carrier bound (`±64`) gives finite output.
 - The round trips are not exact in `f32`. Effects with neutral arguments skip the conversion rather than rely on it.
 
 ## Edge cases

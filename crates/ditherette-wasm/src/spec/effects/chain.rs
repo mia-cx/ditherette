@@ -123,6 +123,7 @@ pub fn apply_chain<E: Effect>(
     validate_chain(steps, context)?;
     for step in steps.iter().filter(|step| step.enabled) {
         step.effect.apply(image, context);
+        image.bound();
     }
     Ok(())
 }

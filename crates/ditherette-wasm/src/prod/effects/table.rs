@@ -3,7 +3,10 @@
 //! Every pixel with channel byte `k` starts at `k / 255` and passes through the
 //! same scalar maps, so one 256-entry table per channel reproduces the run exactly.
 
-use super::{chain::Effect, image::byte};
+use super::{
+    chain::Effect,
+    image::{byte, CARRIER_LIMIT},
+};
 
 /// Continuous channel values after the run, indexed by channel then input byte.
 pub struct ChannelTables([[f32; 256]; 3]);
@@ -15,7 +18,9 @@ impl ChannelTables {
         for effect in effects {
             for (channel, table) in tables.iter_mut().enumerate() {
                 for value in table.iter_mut() {
-                    *value = effect.map_channel(channel, *value);
+                    *value = effect
+                        .map_channel(channel, *value)
+                        .clamp(-CARRIER_LIMIT, CARRIER_LIMIT);
                 }
             }
         }

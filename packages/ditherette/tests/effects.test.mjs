@@ -313,6 +313,17 @@ test('grading arguments are validated with indexed paths', () =>
 			},
 			'effects.1.points.1.1'
 		);
+		fails(
+			{
+				...grading.curves,
+				points: [
+					[0, 0],
+					[1e-25, 0.5],
+					[1, 1]
+				]
+			},
+			'effects.1.points.1.0'
+		);
 		fails({ ...grading.curves, points: [[0, 0], [1]] }, 'effects.1.points.1');
 		fails({ ...grading['brightness-contrast'], contrast: 1.5 }, 'effects.1.contrast');
 		fails({ ...grading.exposure, stops: -5 }, 'effects.1.stops');

@@ -54,7 +54,10 @@ function channel(value: unknown, path: string): string {
 	return value;
 }
 
-/** 2 to 16 exact `[x, y]` pairs in `[0, 1]` with strictly increasing x, as Rust validates them. */
+/** Mirrors the Rust `curves::MIN_GAP`, compared as f32 like Rust. */
+const minGap = Math.fround(0.001);
+
+/** 2 to 16 exact `[x, y]` pairs in `[0, 1]`, x rising by at least 0.001, as Rust validates them. */
 function curvePoints(value: unknown, path: string): [number, number][] {
 	if (!Array.isArray(value) || value.length < 2 || value.length > 16)
 		throw new DitheretteError('invalid-settings', path, 'Expected 2 to 16 points.');
@@ -71,11 +74,11 @@ function curvePoints(value: unknown, path: string): [number, number][] {
 			throw new DitheretteError('invalid-settings', pointPath, 'Expected an [x, y] pair.');
 		const x = bounded(point[0], 0, 1, `${pointPath}.0`);
 		const y = bounded(point[1], 0, 1, `${pointPath}.1`);
-		if (index > 0 && x <= points[index - 1][0])
+		if (index > 0 && Math.fround(x - points[index - 1][0]) < minGap)
 			throw new DitheretteError(
 				'invalid-settings',
 				`${pointPath}.0`,
-				'Point x values must strictly increase.'
+				'Point x values must increase by at least 0.001.'
 			);
 		points.push([x, y]);
 	}

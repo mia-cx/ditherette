@@ -13,6 +13,8 @@ use super::{
 /// Fewest and most control points one curve accepts.
 pub const MIN_POINTS: usize = 2;
 pub const MAX_POINTS: usize = 16;
+/// Smallest gap between neighbouring x values. Closer knots make the cubic's `1 / h²` overflow.
+pub const MIN_GAP: f32 = 0.001;
 
 /// Per-channel curve. `points` are `[x, y]` pairs in encoded sRGB units.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -93,11 +95,11 @@ impl Curves {
         for (index, [x, y]) in points.iter().enumerate() {
             check_bounded(*x, 0.0, 1.0, format!("{path}.{index}.0"))?;
             check_bounded(*y, 0.0, 1.0, format!("{path}.{index}.1"))?;
-            if index > 0 && *x <= points[index - 1][0] {
+            if index > 0 && *x - points[index - 1][0] < MIN_GAP {
                 return Err(DitheretteError::new(
                     ErrorCode::InvalidSettings,
                     format!("{path}.{index}.0"),
-                    "Point x values must strictly increase.",
+                    format!("Point x values must increase by at least {MIN_GAP}."),
                 ));
             }
         }
