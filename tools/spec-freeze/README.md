@@ -15,6 +15,19 @@ S11, and S14 fixes. The resulting 110-file closure has digest
 Validation checks the original inventory, each recorded before/after entry, and
 the amended digest. An unrelated downstream file cannot enter the closure.
 
+## Reference extensions
+
+Later reference domains, such as `src/spec/effects`, enter through ordered
+`extensions` records. Each record lists exact additions and replacements plus the
+resulting closure digest. An extension may add files, replace files added by an
+earlier extension, and replace `src/spec/mod.rs` to register its modules. It
+cannot change or delete any other v1 file. Validation therefore still returns
+the amended v1 identity, and v1 conformance artifacts stay valid.
+
+Record a reviewed domain with `node tools/spec-freeze/extend.mjs <name> <summary>`.
+The resulting checkpoint edit is a policy change: the trusted-base check fails
+until a maintainer approves it, exactly like an amendment.
+
 ## Shared dependency audit
 
 The frozen closure includes every file under `src/spec` and `src/image` in
