@@ -557,3 +557,56 @@ fn warm_process_v2_never_reuses_a_stale_effected_source() {
         spec_for(&first, &other)
     );
 }
+
+#[test]
+fn recolour_calls_fit_exactly_their_preflighted_budget() {
+    let data = ramp();
+    let chain = recolour_chain(levels_gamma(1.2), levels_gamma(0.8));
+    let effects = prod_effects::decode_effects(&chain.to_string()).unwrap();
+    let prefix = prod_effects::decode_effects(&json!([levels_gamma(1.2)]).to_string()).unwrap();
+    let context = prod_effects::EffectContext {
+        palette: &PALETTE,
+        space: Some(WorkingSpace::Oklab),
+        analyses: None,
+    };
+    let calls: [&dyn Fn(&mut Processor) -> Result<(), Failure>; 2] = [
+        &|processor| {
+            let mut io = Io {
+                data: &data,
+                events: None,
+            };
+            let request = EffectsRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                effects: &effects,
+                context,
+            };
+            processor.apply_effects(request, &mut io).map(drop)
+        },
+        &|processor| {
+            let mut io = Io {
+                data: &data,
+                events: None,
+            };
+            let request = EffectsRequest {
+                source_width: WIDTH,
+                source_height: HEIGHT,
+                effects: &prefix,
+                context,
+            };
+            processor.analyze_recolour(request, &mut io).map(drop)
+        },
+    ];
+    for call in calls {
+        let mut generous = processor();
+        call(&mut generous).unwrap();
+        let peak = generous.peak_capacity_bytes();
+        let mut exact = Processor::new(peak, 0).unwrap();
+        call(&mut exact).unwrap();
+        let mut short = Processor::new(peak - 1, 0).unwrap();
+        assert_eq!(
+            call(&mut short).unwrap_err(),
+            Failure::new(ErrorCode::MemoryLimit, ErrorPath::MemoryLimitBytes)
+        );
+    }
+}

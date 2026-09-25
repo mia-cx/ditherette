@@ -4,22 +4,23 @@
 //! run is the whole chain, no continuous carrier is allocated at all. After it,
 //! a chain of pointwise effects is memoized by input colour.
 
-use std::collections::TryReserveError;
+use std::{collections::TryReserveError, mem::size_of};
 
 use crate::{
     image::{contracts::Rgba8Image, ImageBuf, ImageDimensions, ImageView, Rgba8},
     prod::contract::{
         error::{DitheretteError, ErrorCode},
-        request::{validate_dimensions, Source, MAX_SOURCE_SIDE},
+        request::{validate_dimensions, Source, MAX_PALETTE_ENTRIES, MAX_SOURCE_SIDE},
     },
 };
 
 use super::{
-    chain::{validate_chain, Effect, EffectContext, Step},
+    chain::{validate_chain, Effect, EffectContext, PixelMap, Step, MAX_EFFECTS},
+    curves::{Spline, MAX_POINTS},
     image::{EffectImage, CARRIER_LIMIT},
     memo::{try_memoized, MEMO_BYTES},
     recipe::{BuiltinEffect, EffectStep},
-    recolour::{Recolour, RecolourRecipe},
+    recolour::{Group, Recolour, RecolourRecipe, MAX_GROUPS},
     recolour_analysis::analyze,
     table::ChannelTables,
 };
@@ -57,14 +58,29 @@ pub fn apply_effects(request: EffectsRequest<'_>) -> Result<Rgba8Image, Ditheret
         .expect("packed source length matches its dimensions"))
 }
 
-/// Bytes `apply_in_place` allocates beyond `data`: zero when every enabled step tabulates.
+/// Upper bound on the small allocations an effects call makes besides the carrier and memo:
+/// the resolved step copy, the enabled-step list, prepared pixel maps, and analysis's palette
+/// tables, sectors, groups, and recipes. Every count is capped by validation.
+pub const BOOKKEEPING_BYTES: u64 = {
+    let step = size_of::<EffectStep>()
+        + MAX_POINTS * size_of::<[f32; 2]>()
+        + MAX_GROUPS * size_of::<Group>();
+    // A boxed map captures at most a spline or a recipe reference, a turn, and a strength.
+    let map = size_of::<&EffectStep>() + size_of::<PixelMap<'static>>() + size_of::<Spline>() + 64;
+    let palette =
+        MAX_PALETTE_ENTRIES * (size_of::<[u8; 3]>() + size_of::<[f32; 3]>() + size_of::<f32>());
+    (MAX_EFFECTS * (step + map) + palette + 4 * step) as u64
+};
+
+/// Bytes an effects call allocates beyond `data`. A chain that fully tabulates needs only the
+/// bookkeeping; otherwise add the carrier, the colour memo, and the largest step scratch.
 pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) -> u64 {
     let tabulates = steps
         .iter()
         .filter(|step| step.enabled)
         .all(|step| step.effect.per_channel());
     if tabulates {
-        return 0;
+        return BOOKKEEPING_BYTES;
     }
     let scratch = steps
         .iter()
@@ -75,6 +91,7 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
     EffectImage::carrier_bytes(u64::from(dimensions.width()) * u64::from(dimensions.height()))
         + MEMO_BYTES
         + scratch
+        + BOOKKEEPING_BYTES
 }
 
 /// Replaces each enabled recipe-less `recolour` step with the recipe it would derive from the
@@ -85,7 +102,9 @@ pub fn resolve_recolour(
     steps: &[EffectStep],
     context: &EffectContext<'_>,
 ) -> Result<Vec<EffectStep>, TryReserveError> {
-    let mut resolved = steps.to_vec();
+    let mut resolved = Vec::new();
+    resolved.try_reserve_exact(steps.len())?;
+    resolved.extend_from_slice(steps);
     for index in 0..resolved.len() {
         let BuiltinEffect::Recolour(recolour) = &resolved[index].effect else {
             continue;
@@ -161,7 +180,7 @@ pub fn apply_in_place<E: Effect>(
     steps: &[Step<E>],
     context: &EffectContext<'_>,
 ) -> Result<(), TryReserveError> {
-    let (enabled, tabulated) = plan(steps);
+    let (enabled, tabulated) = plan(steps)?;
     let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
     if tabulated == enabled.len() {
         if tabulated > 0 {
@@ -185,23 +204,26 @@ pub fn carrier_after<E: Effect>(
     steps: &[Step<E>],
     context: &EffectContext<'_>,
 ) -> Result<EffectImage, TryReserveError> {
-    let (enabled, tabulated) = plan(steps);
+    let (enabled, tabulated) = plan(steps)?;
     let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
     carrier(data, dimensions, &enabled, tabulated, &tables, context)
 }
 
 /// Enabled effects in order, and how many lead as a tabulated per-channel run.
-fn plan<E: Effect>(steps: &[Step<E>]) -> (Vec<&E>, usize) {
-    let enabled: Vec<&E> = steps
-        .iter()
-        .filter(|step| step.enabled)
-        .map(|step| &step.effect)
-        .collect();
+fn plan<E: Effect>(steps: &[Step<E>]) -> Result<(Vec<&E>, usize), TryReserveError> {
+    let mut enabled = Vec::new();
+    enabled.try_reserve_exact(steps.len())?;
+    enabled.extend(
+        steps
+            .iter()
+            .filter(|step| step.enabled)
+            .map(|step| &step.effect),
+    );
     let tabulated = enabled
         .iter()
         .take_while(|effect| effect.per_channel())
         .count();
-    (enabled, tabulated)
+    Ok((enabled, tabulated))
 }
 
 /// Builds the carrier through the tables, then applies the rest, bounding after each step.
@@ -218,11 +240,10 @@ fn carrier<E: Effect>(
     if rest.is_empty() {
         return EffectImage::try_from_packed(data, dimensions, tables);
     }
-    if let Some(maps) = rest
-        .iter()
-        .map(|effect| effect.pixel_map(context))
-        .collect::<Option<Vec<_>>>()
-    {
+    let mut maps = Vec::new();
+    maps.try_reserve_exact(rest.len())?;
+    maps.extend(rest.iter().map_while(|effect| effect.pixel_map(context)));
+    if maps.len() == rest.len() {
         return try_memoized(data, dimensions, |bytes| {
             let mut rgb = std::array::from_fn(|channel| tables.unit(channel, bytes[channel]));
             for map in &maps {
