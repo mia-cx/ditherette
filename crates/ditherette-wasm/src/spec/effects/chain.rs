@@ -57,6 +57,15 @@ pub trait Effect {
         Needs::default()
     }
 
+    /// Checks arguments against a context that already meets `needs`, for an enabled step.
+    fn check_context(
+        &self,
+        _context: &EffectContext<'_>,
+        _path: &str,
+    ) -> Result<(), DitheretteError> {
+        Ok(())
+    }
+
     /// Transforms RGB in place. Arguments and context are already validated.
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>);
 }
@@ -68,6 +77,14 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
 
     fn needs(&self) -> Needs {
         (**self).needs()
+    }
+
+    fn check_context(
+        &self,
+        context: &EffectContext<'_>,
+        path: &str,
+    ) -> Result<(), DitheretteError> {
+        (**self).check_context(context, path)
     }
 
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
@@ -110,6 +127,8 @@ pub fn validate_chain<E: Effect>(
         if needs.space && context.space.is_none() {
             return Err(missing(index, "context.space", "a working space"));
         }
+        step.effect
+            .check_context(context, &format!("effects.{index}"))?;
     }
     Ok(())
 }
