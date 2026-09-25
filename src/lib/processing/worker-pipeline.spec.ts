@@ -98,6 +98,7 @@ function processorMock() {
 		quantize: vi.fn(),
 		perturb: vi.fn(),
 		ditherAndQuantize: vi.fn(),
+		applyEffects: vi.fn(),
 		dispose: vi.fn()
 	};
 }
