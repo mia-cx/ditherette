@@ -358,6 +358,44 @@ function rgbCode(value: unknown, code: ErrorCode, path: string): number {
 	return packed;
 }
 
+/** Private code for a transparent entry; visible entries are packed 24-bit RGB. */
+export const TRANSPARENT_CODE = 16_777_216;
+
+/** Compact codes for a nonempty palette: the first 256 entries, plus a tail marker when truncated. */
+export function paletteCodes(rawPalette: unknown, path: string): number[] {
+	if (!Array.isArray(rawPalette))
+		throw new DitheretteError('invalid-palette', path, 'Expected a nonempty palette array.');
+	const count = rawPalette.length;
+	if (!Number.isInteger(count) || count < 1 || count > 4_294_967_295)
+		throw new DitheretteError('invalid-palette', path, 'Expected a nonempty palette array.');
+	const palette: number[] = [];
+	for (let index = 0; index < count; index++) {
+		const entryPath = `${path}.${index}`;
+		const entry = object(
+			Object.hasOwn(rawPalette, index) ? rawPalette[index] : undefined,
+			['kind', 'rgb'],
+			'invalid-palette',
+			entryPath
+		);
+		const kind = field(entry, 'kind');
+		let code: number;
+		if (kind === 'transparent') {
+			if (Object.hasOwn(entry, 'rgb'))
+				throw new DitheretteError(
+					'invalid-palette',
+					`${entryPath}.rgb`,
+					'Transparent has no RGB fields.'
+				);
+			code = TRANSPARENT_CODE;
+		} else if (kind === 'color')
+			code = rgbCode(field(entry, 'rgb'), 'invalid-palette', `${entryPath}.rgb`);
+		else throw new DitheretteError('invalid-palette', `${entryPath}.kind`, 'Unknown palette entry.');
+		if (index < 256) palette.push(code);
+	}
+	if (count > 256) palette.push(TRANSPARENT_CODE); // Tail marker is never retained as a normalized palette entry.
+	return palette;
+}
+
 /** Normalize the frozen quantize contract once, retaining only its bounded palette prefix. */
 export function validateQuantize(value: unknown) {
 	try {
@@ -416,37 +454,7 @@ export function validateQuantize(value: unknown) {
 				alphaMode = 2;
 			}
 		} else throw new DitheretteError('invalid-settings', 'alpha.mode', 'Unknown alpha mode.');
-		const rawPalette = field(request, 'palette');
-		if (!Array.isArray(rawPalette))
-			throw new DitheretteError('invalid-palette', 'palette', 'Expected a nonempty palette array.');
-		const count = rawPalette.length;
-		if (!Number.isInteger(count) || count < 1 || count > 4_294_967_295)
-			throw new DitheretteError('invalid-palette', 'palette', 'Expected a nonempty palette array.');
-		const palette: number[] = [];
-		for (let index = 0; index < count; index++) {
-			const path = `palette.${index}`;
-			const entry = object(
-				Object.hasOwn(rawPalette, index) ? rawPalette[index] : undefined,
-				['kind', 'rgb'],
-				'invalid-palette',
-				path
-			);
-			const kind = field(entry, 'kind');
-			let code: number;
-			if (kind === 'transparent') {
-				if (Object.hasOwn(entry, 'rgb'))
-					throw new DitheretteError(
-						'invalid-palette',
-						`${path}.rgb`,
-						'Transparent has no RGB fields.'
-					);
-				code = 16_777_216;
-			} else if (kind === 'color')
-				code = rgbCode(field(entry, 'rgb'), 'invalid-palette', `${path}.rgb`);
-			else throw new DitheretteError('invalid-palette', `${path}.kind`, 'Unknown palette entry.');
-			if (index < 256) palette.push(code);
-		}
-		if (count > 256) palette.push(16_777_216); // Tail marker is never retained as a normalized palette entry.
+		const palette = paletteCodes(field(request, 'palette'), 'palette');
 		const source = object(
 			field(request, 'source'),
 			['width', 'height', 'data'],

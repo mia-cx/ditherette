@@ -10,18 +10,21 @@ import type {
 	PerturbRequest,
 	DitherAndQuantizeRequest,
 	ProcessRequest,
-	Progress
+	Progress,
+	ApplyEffectsRequest
 } from './types.js';
 import { normalizeInitInput, validateResize, validateQuantize } from './validation.js';
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
 import { processErrorPath, validateProcess } from './validation-process.js';
+import { validateApplyEffects } from './validation-effects.js';
 
 type ScalarBindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
 >;
 export type Bindings = Pick<ScalarBindings,
 	'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
-	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize'> &
+	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize' |
+	'privateApplyEffects' | 'privateProcessEffects'> &
 	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse'>>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
@@ -81,7 +84,10 @@ const errorPaths = [
 	'dither.arithmetic',
 	'dither.size',
 	'recipe.version',
-	'onProgress'
+	'onProgress',
+	'effects',
+	'context.palette',
+	'context.space'
 ];
 const errorMessages: Record<ErrorCode, string> = {
 	'invalid-request': 'Invalid processing request.',
@@ -175,38 +181,76 @@ class Processor implements Ditherette {
 			const input = validateProcess(request);
 			const policy = input.dither;
 			const result: ResultSink<IndexedImage> = { value: undefined, onProgress: input.onProgress };
+			const terminal = [
+				input.data,
+				input.sourceWidth,
+				input.sourceHeight,
+				input.palette,
+				input.version,
+				input.outputWidth,
+				input.outputHeight,
+				input.algorithm,
+				input.anchor,
+				input.support,
+				input.matching,
+				input.alphaMode,
+				input.threshold,
+				input.matte,
+				policy.family,
+				policy.field,
+				policy.parameter,
+				policy.space,
+				policy.strength,
+				policy.placement,
+				policy.radius,
+				policy.threshold,
+				policy.softness
+			] as const;
 			let status: number;
 			try {
-				status = bindings.privateProcess(
+				status = input.effects
+					? bindings.privateProcessEffects(...terminal, input.effects.json, result)
+					: bindings.privateProcess(...terminal, result);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status, 'process');
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
+	applyEffects(request: ApplyEffectsRequest): Rgba8Image {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateApplyEffects(request);
+			if (!input.effects.enabled) {
+				try {
+					input.onProgress?.({ stage: 'prepare', completed: 0, total: 1 });
+					input.onProgress?.({ stage: 'complete', completed: 1, total: 1 });
+				} catch {
+					throw new DitheretteError('callback', 'onProgress', errorMessages.callback);
+				}
+				return input.source;
+			}
+			const result: ResultSink<Rgba8Image> = { value: undefined, onProgress: input.onProgress };
+			let status: number;
+			try {
+				status = bindings.privateApplyEffects(
 					input.data,
 					input.sourceWidth,
 					input.sourceHeight,
+					input.effects.json,
 					input.palette,
-					1,
-					input.outputWidth,
-					input.outputHeight,
-					input.algorithm,
-					input.anchor,
-					input.support,
-					input.matching,
-					input.alphaMode,
-					input.threshold,
-					input.matte,
-					policy.family,
-					policy.field,
-					policy.parameter,
-					policy.space,
-					policy.strength,
-					policy.placement,
-					policy.radius,
-					policy.threshold,
-					policy.softness,
+					input.space,
 					result
 				);
 			} catch (error) {
 				throw this.#trap(error);
 			}
-			if (status !== 0) throw failure(bindings, status, 'process');
+			if (status !== 0) throw failure(bindings, status);
 			return result.value!;
 		} finally {
 			this.#active = false;

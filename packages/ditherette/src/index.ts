@@ -7,6 +7,13 @@ export { DitheretteError } from './errors.js';
 export type { ErrorCode } from './errors.js';
 export type {
 	AlphaPolicy,
+	ApplyEffectsRequest,
+	Effect,
+	EffectChannel,
+	EffectContext,
+	LevelsEffect,
+	LevelsPoints,
+	RecipeV2,
 	IndexedImage,
 	Matching,
 	PaletteEntry,

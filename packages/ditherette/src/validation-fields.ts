@@ -8,7 +8,8 @@ import {
 	validateQuantize
 } from './validation.js';
 
-const spaces = ['srgb', 'linear-rgb', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr'];
+/** Private working-space tags, in ABI order. */
+export const spaces = ['srgb', 'linear-rgb', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr'];
 const sizes = ['2', '4', '8', '16'];
 const maximumF32 = 3.4028234663852886e38;
 

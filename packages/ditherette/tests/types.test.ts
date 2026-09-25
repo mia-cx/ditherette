@@ -196,3 +196,24 @@ const strengthMix: DitherAndQuantizeRequest['dither'] = {
 void yliluoma;
 void numericMix;
 void strengthMix;
+const effects: import('../src/index.js').Effect[] = [
+	{
+		effect: 'levels',
+		enabled: true,
+		channel: 'rgb',
+		input: { black: 0.05, white: 0.95 },
+		gamma: 1.2,
+		output: { black: 0, white: 1 }
+	}
+];
+const graded: ProcessRequest = { ...complete, recipe: { ...complete.recipe, version: 2, effects } };
+processor.then((instance) => {
+	const image: Rgba8Image = instance.applyEffects({ version: 1, source: request.source, effects });
+	const indexed: IndexedImage = instance.process(graded);
+	void [image, indexed];
+});
+// @ts-expect-error Recipe v1 has no effects; use version 2.
+const effectsInV1: ProcessRequest['recipe'] = { ...complete.recipe, effects };
+// @ts-expect-error Every step states whether it is enabled.
+const missingToggle: import('../src/index.js').Effect = { ...effects[0], enabled: undefined };
+void [effectsInV1, missingToggle];
