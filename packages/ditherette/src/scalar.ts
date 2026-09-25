@@ -11,12 +11,14 @@ import type {
 	DitherAndQuantizeRequest,
 	ProcessRequest,
 	Progress,
-	ApplyEffectsRequest
+	ApplyEffectsRequest,
+	AnalyzeRecolourRequest,
+	RecolourRecipe
 } from './types.js';
 import { normalizeInitInput, validateResize, validateQuantize } from './validation.js';
 import { validatePerturb, validateDitherAndQuantize } from './validation-fields.js';
 import { processErrorPath, validateProcess } from './validation-process.js';
-import { validateApplyEffects } from './validation-effects.js';
+import { validateAnalyzeRecolour, validateApplyEffects } from './validation-effects.js';
 
 type ScalarBindings = ReturnType<
 	typeof import('./wasm/scalar/ditherette_wasm.factory.js').createScalarBindings
@@ -24,7 +26,7 @@ type ScalarBindings = ReturnType<
 export type Bindings = Pick<ScalarBindings,
 	'privateInitialize' | 'privateDispose' | 'privateErrorPath' | 'privateProcess' |
 	'privateResize' | 'privateQuantize' | 'privatePerturb' | 'privateDitherAndQuantize' |
-	'privateApplyEffects' | 'privateProcessEffects'> &
+	'privateApplyEffects' | 'privateProcessEffects' | 'privateAnalyzeRecolour'> &
 	Partial<Pick<ScalarBindings, 'privateResizeNearestSparse'>>;
 
 type ResultSink<T> = { value?: T; onProgress?: (progress: Progress) => void };
@@ -239,6 +241,33 @@ class Processor implements Ditherette {
 			let status: number;
 			try {
 				status = bindings.privateApplyEffects(
+					input.data,
+					input.sourceWidth,
+					input.sourceHeight,
+					input.effects.json,
+					input.palette,
+					input.space,
+					result
+				);
+			} catch (error) {
+				throw this.#trap(error);
+			}
+			if (status !== 0) throw failure(bindings, status);
+			return result.value!;
+		} finally {
+			this.#active = false;
+		}
+	}
+
+	analyzeRecolour(request: AnalyzeRecolourRequest): RecolourRecipe {
+		const bindings = this.#requireIdle();
+		this.#active = true;
+		try {
+			const input = validateAnalyzeRecolour(request);
+			const result: ResultSink<RecolourRecipe> = { value: undefined, onProgress: input.onProgress };
+			let status: number;
+			try {
+				status = bindings.privateAnalyzeRecolour(
 					input.data,
 					input.sourceWidth,
 					input.sourceHeight,

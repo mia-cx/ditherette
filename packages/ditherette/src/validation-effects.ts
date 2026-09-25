@@ -16,16 +16,25 @@ const channels = ['rgb', 'red', 'green', 'blue'];
 const maxEffects = 64;
 
 /** Context an enabled effect reads. The processor supplies it; ordinary effects need none. */
-interface Needs {
+export interface Needs {
 	readonly palette: boolean;
 	readonly space: boolean;
 }
 
 interface Builtin {
 	readonly keys: readonly string[];
-	readonly needs: Needs;
+	/** Context the normalized effect reads when enabled. */
+	needs(effect: Record<string, unknown>): Needs;
 	/** Returns fresh canonical arguments, reading each caller property once. */
 	normalize(effect: Record<string, unknown>, path: string): Record<string, unknown>;
+}
+
+/** One enabled step's context requirements, checked in order like the Rust executor. */
+export interface Requirement {
+	readonly index: number;
+	readonly needs: Needs;
+	/** The working space an explicit recolour recipe was analysed in. */
+	readonly recipeSpace?: string;
 }
 
 /** Round to f32 first, so bounds checks see exactly the value Rust decodes. */
@@ -96,7 +105,55 @@ function scalars(ranges: Record<string, readonly [number, number]>): Builtin['no
 		);
 }
 
-const none = { palette: false, space: false } as const;
+const none = () => ({ palette: false, space: false });
+
+/** Exact `[u, v]` shift within `±0.5`. */
+function shiftPair(value: unknown, path: string): [number, number] {
+	if (
+		!Array.isArray(value) ||
+		value.length !== 2 ||
+		Reflect.ownKeys(value).some((key) => !['0', '1', 'length'].includes(String(key)))
+	)
+		throw new DitheretteError('invalid-settings', path, 'Expected a [u, v] pair.');
+	return [bounded(value[0], -0.5, 0.5, `${path}.0`), bounded(value[1], -0.5, 0.5, `${path}.1`)];
+}
+
+/** Mirrors the Rust `RecolourRecipe::validate`, field by field and in the same order. */
+function recolourRecipe(value: unknown, path: string) {
+	const recipe = object(
+		value,
+		['space', 'tone', 'chroma', 'shift', 'groups'],
+		'invalid-settings',
+		path
+	);
+	const space = field(recipe, 'space');
+	if (typeof space !== 'string' || !spaces.includes(space))
+		throw new DitheretteError('invalid-settings', `${path}.space`, 'Unknown working space.');
+	const tone = curvePoints(field(recipe, 'tone'), `${path}.tone`);
+	const chroma = bounded(field(recipe, 'chroma'), 0, 2, `${path}.chroma`);
+	const shift = shiftPair(field(recipe, 'shift'), `${path}.shift`);
+	const rawGroups = field(recipe, 'groups');
+	if (!Array.isArray(rawGroups) || rawGroups.length > 12)
+		throw new DitheretteError('invalid-settings', `${path}.groups`, 'Expected at most 12 groups.');
+	const count = rawGroups.length;
+	const groups = [];
+	for (let index = 0; index < count; index++) {
+		const at = `${path}.groups.${index}`;
+		const group = object(
+			Object.hasOwn(rawGroups, index) ? rawGroups[index] : undefined,
+			['hue', 'width', 'turn', 'chroma'],
+			'invalid-settings',
+			at
+		);
+		groups.push({
+			hue: bounded(field(group, 'hue'), 0, 360, `${at}.hue`),
+			width: bounded(field(group, 'width'), 1, 180, `${at}.width`),
+			turn: bounded(field(group, 'turn'), -180, 180, `${at}.turn`),
+			chroma: bounded(field(group, 'chroma'), 0, 2, `${at}.chroma`)
+		});
+	}
+	return { space, tone, chroma, shift, groups };
+}
 
 /** The static registry. Keys mirror the Rust `BuiltinEffect` tags. */
 const builtins: Record<string, Builtin> = {
@@ -147,6 +204,18 @@ const builtins: Record<string, Builtin> = {
 		keys: ['hue', 'saturation', 'lightness'],
 		needs: none,
 		normalize: scalars({ hue: [-180, 180], saturation: [-1, 1], lightness: [-1, 1] })
+	},
+	recolour: {
+		keys: ['strength', 'recipe'],
+		needs: (effect) => ({ palette: effect.recipe === null, space: true }),
+		normalize: (effect, path) => {
+			const strength = bounded(field(effect, 'strength'), 0, 1, `${path}.strength`);
+			const recipe = field(effect, 'recipe');
+			return {
+				strength,
+				recipe: recipe === null ? null : recolourRecipe(recipe, `${path}.recipe`)
+			};
+		}
 	}
 };
 
@@ -165,7 +234,7 @@ export function validateEffects(value: unknown, path: string) {
 			`A chain holds at most ${maxEffects} effects.`
 		);
 	const steps: Record<string, unknown>[] = [];
-	const needs = { palette: false, space: false };
+	const requirements: Requirement[] = [];
 	for (let index = 0; index < count; index++) {
 		const stepPath = `${path}.${index}`;
 		const raw = Object.hasOwn(value, index) ? value[index] : undefined;
@@ -185,37 +254,69 @@ export function validateEffects(value: unknown, path: string) {
 		const enabled = field(effect, 'enabled');
 		if (typeof enabled !== 'boolean')
 			throw new DitheretteError('invalid-settings', `${stepPath}.enabled`, 'Expected a boolean.');
-		steps.push({ effect: name, enabled, ...builtin.normalize(effect, stepPath) });
+		const normalized = builtin.normalize(effect, stepPath);
+		steps.push({ effect: name, enabled, ...normalized });
 		if (enabled) {
-			needs.palette ||= builtin.needs.palette;
-			needs.space ||= builtin.needs.space;
+			const recipe = normalized.recipe as { space: string } | null | undefined;
+			requirements.push({ index, needs: builtin.needs(normalized), recipeSpace: recipe?.space });
 		}
 	}
-	return { json: JSON.stringify(steps), enabled: steps.some((step) => step.enabled), needs };
+	return { json: JSON.stringify(steps), enabled: steps.some((step) => step.enabled), requirements };
 }
+
+export type ValidatedEffects = ReturnType<typeof validateEffects>;
 
 /** Private tag for "no working space supplied". */
 const NO_SPACE = -1;
 
-/** Reject missing context before any Wasm work. `palette` holds private palette codes. */
+/**
+ * Reject missing or mismatched context before any Wasm work, step by step like Rust.
+ * `palette` holds private palette codes; `space` is the context's working-space name.
+ */
 export function requireContext(
-	needs: Needs,
+	effects: ValidatedEffects,
 	palette: readonly number[] | undefined,
-	space: boolean,
-	paths: { readonly palette: string; readonly space: string }
+	space: string | undefined,
+	paths: { readonly effects: string; readonly palette: string; readonly space: string }
 ): void {
-	if (needs.palette && !palette?.some((code) => code !== TRANSPARENT_CODE))
+	for (const { index, needs, recipeSpace } of effects.requirements) {
+		if (needs.palette && !palette?.some((code) => code !== TRANSPARENT_CODE))
+			throw new DitheretteError(
+				'invalid-request',
+				paths.palette,
+				`Effect effects.${index} requires a visible palette colour.`
+			);
+		if (needs.space && space === undefined)
+			throw new DitheretteError(
+				'invalid-request',
+				paths.space,
+				`Effect effects.${index} requires a working space.`
+			);
+		if (recipeSpace !== undefined && recipeSpace !== space)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${paths.effects}.${index}.recipe.space`,
+				'The recipe was analysed in a different working space than this context.'
+			);
+	}
+}
+
+/** Normalize `analyzeRecolour`: an `applyEffects` request whose context must hold a colour and a space. */
+export function validateAnalyzeRecolour(value: unknown) {
+	const input = validateApplyEffects(value);
+	if (!input.palette?.some((code) => code !== TRANSPARENT_CODE))
 		throw new DitheretteError(
 			'invalid-request',
-			paths.palette,
-			'An enabled effect requires a visible palette colour.'
+			'context.palette',
+			'Analysis requires a visible palette colour.'
 		);
-	if (needs.space && !space)
+	if (input.space === NO_SPACE)
 		throw new DitheretteError(
 			'invalid-request',
-			paths.space,
-			'An enabled effect requires a working space.'
+			'context.space',
+			'Analysis requires a working space.'
 		);
+	return input;
 }
 
 /** Normalize `applyEffects` once under the instance guard. */
@@ -248,7 +349,8 @@ export function validateApplyEffects(value: unknown) {
 		const space = rawSpace === undefined ? NO_SPACE : spaces.indexOf(rawSpace as string);
 		if (rawSpace !== undefined && (typeof rawSpace !== 'string' || space < 0))
 			throw new DitheretteError('invalid-settings', 'context.space', 'Unknown working space.');
-		requireContext(effects.needs, palette, space !== NO_SPACE, {
+		requireContext(effects, palette, space === NO_SPACE ? undefined : spaces[space], {
+			effects: 'effects',
 			palette: 'context.palette',
 			space: 'context.space'
 		});
