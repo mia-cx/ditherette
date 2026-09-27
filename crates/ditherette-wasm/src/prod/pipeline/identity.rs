@@ -315,6 +315,26 @@ pub fn stage(parent: Option<Identity>, options: StageOptions) -> Result<Identity
     )
 }
 
+/// Recipe-v2 coverage resize must never alias a v1 packed-RGBA resize image.
+pub fn coverage_resize(parent: Identity, output: Output) -> Result<Identity, Failure> {
+    #[derive(Serialize)]
+    struct Options {
+        output: SortedOutput,
+        stage: &'static str,
+    }
+    hash(
+        b"ditherette-coverage-v2\0",
+        &Stage {
+            options: Options {
+                output: output.into(),
+                stage: "coverage-resize",
+            },
+            parent: Some(parent),
+            version: 2,
+        },
+    )
+}
+
 /// Shared Alpha → Color → Indexed composition, independent of the calling public method.
 pub fn indexed(
     parent: Identity,

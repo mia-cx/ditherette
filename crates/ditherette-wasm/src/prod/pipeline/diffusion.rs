@@ -43,6 +43,6 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     .map_err(preparation_failure)?;
     super::indexed::run(
         request, dimensions, dimensions, None, dither, boundary, allocator, limit, overhead, peak,
-        store,
+        store, false,
     )
 }

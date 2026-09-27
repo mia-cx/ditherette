@@ -271,7 +271,7 @@ fn process_effects_matches_the_reference_for_every_dither_family() {
 }
 
 #[test]
-fn disabled_chains_are_exactly_v1_process() {
+fn disabled_chains_still_use_v2_coverage_resize() {
     let data = ramp();
     let mut effects = prod_effects::decode_effects(&chain().to_string()).unwrap();
     for step in &mut effects {
@@ -288,11 +288,24 @@ fn disabled_chains_are_exactly_v1_process() {
         data: &data,
         events: None,
     };
-    let v2 = processor()
+    let actual = processor()
         .process_effects(request, &effects, &mut io)
         .unwrap();
-    let v1 = processor().process(request, &mut io).unwrap();
-    assert_eq!(v2, v1);
+    let mut reference = recipe;
+    for step in &mut reference.effects {
+        step.enabled = false;
+    }
+    let expected = spec::effects::process(spec::effects::ProcessRequestV2 {
+        source: Source {
+            width: WIDTH,
+            height: HEIGHT,
+            data: &data,
+        },
+        palette: &PALETTE,
+        recipe: &reference,
+    })
+    .unwrap();
+    assert_eq!(actual, expected);
 }
 
 #[test]

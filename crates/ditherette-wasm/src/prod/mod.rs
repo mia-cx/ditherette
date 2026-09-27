@@ -5,6 +5,7 @@
 
 pub mod color;
 pub mod contract;
+pub mod coverage;
 pub mod dither;
 pub mod effects;
 pub mod palette;
