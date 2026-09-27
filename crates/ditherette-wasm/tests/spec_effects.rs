@@ -70,6 +70,13 @@ fn levels(input: (f32, f32), gamma: f32, output: (f32, f32)) -> serde_json::Valu
     })
 }
 
+fn as_levels(step: &EffectStep) -> Levels {
+    match &step.effect {
+        BuiltinEffect::Levels(levels) => *levels,
+        other => panic!("expected levels, got {other:?}"),
+    }
+}
+
 fn byte(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
@@ -137,7 +144,7 @@ fn repeated_instances_keep_independent_arguments() {
     let second = levels((0.0, 1.0), 2.0, (0.2, 0.8));
     let chain = steps(json!([first, second]));
     let output = run(&data, &chain).unwrap();
-    let [BuiltinEffect::Levels(a), BuiltinEffect::Levels(b)] = [&chain[0].effect, &chain[1].effect];
+    let (a, b) = (as_levels(&chain[0]), as_levels(&chain[1]));
     for (input, output) in data.chunks(4).zip(output.data().chunks(4)) {
         let map = |value: u8| byte(b.map(a.map(value as f32 / 255.0)));
         assert_eq!(
@@ -311,9 +318,7 @@ fn decoding_and_validation_name_the_failing_step() {
         enabled: true,
         effect: BuiltinEffect::Levels(Levels {
             gamma: f32::NAN,
-            ..match &steps(json!([levels((0.0, 1.0), 1.0, (0.0, 1.0))]))[0].effect {
-                BuiltinEffect::Levels(levels) => *levels,
-            }
+            ..as_levels(&steps(json!([levels((0.0, 1.0), 1.0, (0.0, 1.0))]))[0])
         }),
     }];
     assert_eq!(run(&data, &nan).unwrap_err().path, "effects.0.gamma");

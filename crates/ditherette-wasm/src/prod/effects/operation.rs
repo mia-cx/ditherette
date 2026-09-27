@@ -62,7 +62,7 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
     let tabulates = steps
         .iter()
         .filter(|step| step.enabled)
-        .all(|step| step.effect.channel_map().is_some());
+        .all(|step| step.effect.per_channel());
     if tabulates {
         0
     } else {
@@ -84,13 +84,9 @@ pub fn apply_in_place<E: Effect>(
         .collect();
     let tabulated = enabled
         .iter()
-        .take_while(|effect| effect.channel_map().is_some())
+        .take_while(|effect| effect.per_channel())
         .count();
-    let tables = ChannelTables::new(
-        enabled[..tabulated]
-            .iter()
-            .filter_map(|effect| effect.channel_map()),
-    );
+    let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
     if tabulated == enabled.len() {
         if tabulated > 0 {
             let [red, green, blue] = tables.bytes();
@@ -102,9 +98,21 @@ pub fn apply_in_place<E: Effect>(
         }
         return Ok(());
     }
-    let mut image = EffectImage::try_from_packed(data, dimensions, &tables)?;
-    for effect in &enabled[tabulated..] {
+    let first = enabled[tabulated];
+    let (mut image, rest) = match first.apply_tabulated(data, dimensions, &tables, context) {
+        Some(image) => {
+            let mut image = image?;
+            image.bound();
+            (image, tabulated + 1)
+        }
+        None => (
+            EffectImage::try_from_packed(data, dimensions, &tables)?,
+            tabulated,
+        ),
+    };
+    for effect in &enabled[rest..] {
         effect.apply(&mut image, context);
+        image.bound();
     }
     image.write_rgb(data);
     Ok(())

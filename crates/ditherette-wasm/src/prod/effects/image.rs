@@ -9,6 +9,10 @@ use std::{collections::TryReserveError, mem::size_of};
 
 use super::table::ChannelTables;
 
+/// Carrier values are bounded to `±CARRIER_LIMIT` after every step. Ordinary chains never
+/// reach it; it keeps extreme ones, like 30 exposure boosts, from overflowing to infinity.
+pub const CARRIER_LIMIT: f32 = 64.0;
+
 /// Straight RGB triples in row-major order, plus the source alpha byte for each pixel.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EffectImage {
@@ -43,6 +47,13 @@ impl EffectImage {
         }
     }
 
+    /// Clamps every channel to `±CARRIER_LIMIT`. The executor calls it after each step.
+    pub fn bound(&mut self) {
+        for rgb in &mut self.rgb {
+            *rgb = rgb.map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
+        }
+    }
+
     /// Clips each channel to `[0,1]`, scales by 255, and rounds half away from zero.
     pub fn to_rgba8(&self) -> Rgba8Image {
         let mut data = Vec::with_capacity(self.rgb.len() * 4);
@@ -63,15 +74,24 @@ impl EffectImage {
         dimensions: ImageDimensions,
         tables: &ChannelTables,
     ) -> Result<Self, TryReserveError> {
+        Self::try_from_pixels(data, dimensions, |pixel| {
+            std::array::from_fn(|channel| tables.unit(channel, pixel[channel]))
+        })
+    }
+
+    /// Builds the carrier from packed RGBA8, one `rgb(pixel)` call per pixel.
+    pub fn try_from_pixels(
+        data: &[u8],
+        dimensions: ImageDimensions,
+        rgb_of: impl Fn(&[u8]) -> [f32; 3],
+    ) -> Result<Self, TryReserveError> {
         let pixels = data.len() / 4;
         let mut rgb = Vec::new();
         let mut alpha = Vec::new();
         rgb.try_reserve_exact(pixels)?;
         alpha.try_reserve_exact(pixels)?;
         for pixel in data.chunks_exact(4) {
-            rgb.push(std::array::from_fn(|channel| {
-                tables.unit(channel, pixel[channel])
-            }));
+            rgb.push(rgb_of(pixel));
             alpha.push(pixel[Rgba8::A]);
         }
         Ok(Self {
