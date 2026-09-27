@@ -145,9 +145,25 @@ describe('website processing scheduling', () => {
 		cancelProcessing();
 		await second;
 	});
-	it('invalidates stale events immediately and replaces active work after the slider debounce', async () => {
+	it('keeps a briefly busy worker and cancels its superseded job', async () => {
 		const pending = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		const id = worker.messages[0].id;
+		outputSettings.set({ ...outputSettings.get(), width: 2 });
+		scheduleProcessing(180);
+		await vi.advanceTimersByTimeAsync(180);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(ControlledWorker.instances).toHaveLength(1);
+		expect(worker.messages).toContainEqual({ id, type: 'cancel' });
+		await pending;
+	});
+
+	it('invalidates stale events immediately and replaces long-running work after the slider debounce', async () => {
+		const pending = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		// Past REPLACE_BUSY_WORKER_AFTER_MS, the running job may take much longer than a fresh worker.
+		await vi.advanceTimersByTimeAsync(501);
 		const old = ControlledWorker.instances[0];
 		const id = old.messages[0].id;
 		const retained = processedImage.get();

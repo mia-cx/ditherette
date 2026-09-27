@@ -111,8 +111,9 @@ export async function loadSourceImage(): Promise<SourceImageRecord | undefined> 
 	return record === undefined ? undefined : validateSourceImageRecord(record);
 }
 
+/** Save a result the worker response already validated. Loading validates it again. */
 export async function saveProcessedImage(record: ProcessedImage) {
-	await withStore('readwrite', (store) => store.put(validateProcessedImage(record), PROCESSED_KEY));
+	await withStore('readwrite', (store) => store.put(record, PROCESSED_KEY));
 }
 
 export async function clearPersistedProcessedImage() {
