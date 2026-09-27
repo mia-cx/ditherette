@@ -34,6 +34,7 @@
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 	import RevealIcon from './RevealIcon.svelte';
 	import SideBySideIcon from './SideBySideIcon.svelte';
+	import { cropping, previewCommands, type PreviewCommands } from './preview-commands';
 
 	type Point = { x: number; y: number };
 	type ViewAnchor = { sourceX: number; sourceY: number };
@@ -221,6 +222,23 @@
 	function pixelRatio() {
 		return typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
 	}
+
+	// Menus and shortcuts drive this preview while it is mounted.
+	$effect(() => {
+		const commands: PreviewCommands = {
+			zoomIn,
+			zoomOut,
+			fit: resetView,
+			actualSize: zoomActualSize,
+			toggleCrop: () => void toggleCropMode()
+		};
+		previewCommands.set(commands);
+		return () => {
+			if (previewCommands.get() === commands) previewCommands.set(undefined);
+		};
+	});
+
+	$effect(() => cropping.set(cropMode));
 
 	function clampZoom(value: number) {
 		return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value || 1));

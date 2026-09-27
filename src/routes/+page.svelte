@@ -28,7 +28,6 @@
 	import { effectLayers } from '$lib/stores/effects';
 	import PipelinePanel from './components/effects/PipelinePanel.svelte';
 	import Studio from './components/studio/Studio.svelte';
-	import WindowsMenu from './components/studio/WindowsMenu.svelte';
 	import { startAutoProcessing } from '$lib/processing/client';
 	import {
 		clearAllImageData,
@@ -121,6 +120,7 @@
 <div class="flex min-h-svh flex-col bg-background lg:h-svh">
 	<AppBar
 		hasImage={$hasImage}
+		studio={studio.current}
 		onChooseImage={chooseImage}
 		onClear={clearImageData}
 		extras={appBarExtras}
@@ -155,9 +155,6 @@
 </div>
 
 {#snippet appBarExtras()}
-	{#if studio.current}
-		<WindowsMenu />
-	{/if}
 	<PerformanceDebugPopover />
 {/snippet}
 

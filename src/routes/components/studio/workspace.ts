@@ -121,6 +121,13 @@ export function resetLayout() {
 	if (api) defaultLayout(api);
 }
 
+/** Bring a window forward, opening it where the default layout puts it if it is closed. */
+export function showWindow(id: WindowId) {
+	const open = studioApi.get()?.getPanel(id);
+	if (open) open.api.setActive();
+	else toggleWindow(id);
+}
+
 /** Open a closed window where the default layout puts it, or close an open one. */
 export function toggleWindow(id: WindowId) {
 	const api = studioApi.get();
