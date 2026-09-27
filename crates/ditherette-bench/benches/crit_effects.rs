@@ -9,16 +9,37 @@ use criterion::{criterion_group, Criterion, SamplingMode, Throughput};
 use ditherette_bench::lease::{require_quiet, BenchmarkGuard};
 use ditherette_wasm::{
     image::contracts::PaletteEntry,
-    prod::{contract::request::Source as ProdSource, effects as prod},
-    spec::{contract::request::Source, effects as spec},
+    prod::{
+        contract::request::{Source as ProdSource, WorkingSpace as ProdSpace},
+        effects as prod,
+    },
+    spec::{
+        contract::request::{Source, WorkingSpace as SpecSpace},
+        effects as spec,
+    },
 };
 use serde_json::json;
 
 const FIXTURES: &[&str] = &["Celeste_Insta_selfie.png", "Picking_at_thread.jpg"];
-const PALETTE: [PaletteEntry; 2] = [
+/// Black, white, and six hues, so recolouring has real reach to fit.
+const PALETTE: [PaletteEntry; 8] = [
     PaletteEntry::Color { rgb: [0, 0, 0] },
     PaletteEntry::Color {
         rgb: [255, 255, 255],
+    },
+    PaletteEntry::Color { rgb: [237, 28, 36] },
+    PaletteEntry::Color {
+        rgb: [255, 127, 39],
+    },
+    PaletteEntry::Color {
+        rgb: [249, 221, 59],
+    },
+    PaletteEntry::Color {
+        rgb: [14, 185, 104],
+    },
+    PaletteEntry::Color { rgb: [40, 80, 158] },
+    PaletteEntry::Color {
+        rgb: [120, 12, 153],
     },
 ];
 
@@ -59,6 +80,15 @@ fn chains() -> Vec<(&'static str, serde_json::Value)> {
             json!([{ "effect": "hue-saturation", "enabled": true, "hue": 25, "saturation": 0.3, "lightness": 0.05 }]),
         ),
         (
+            "recolour+grade",
+            json!([
+                { "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null },
+                { "effect": "exposure", "enabled": true, "stops": 0.3 },
+                { "effect": "curves", "enabled": true, "channel": "rgb",
+                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+            ]),
+        ),
+        (
             "grade+hue",
             json!([
                 { "effect": "curves", "enabled": true, "channel": "rgb",
@@ -75,7 +105,27 @@ fn chains() -> Vec<(&'static str, serde_json::Value)> {
 fn criterion_effects(criterion: &mut Criterion) {
     for name in FIXTURES {
         let fixture = load_fixture(name);
-        for (chain, effects) in chains() {
+        let recipe = spec::analyze_recolour(spec::AnalyzeRequest {
+            version: 1,
+            source: Source {
+                width: fixture.width,
+                height: fixture.height,
+                data: &fixture.rgba,
+            },
+            effects: &[],
+            context: spec::EffectContext {
+                palette: &PALETTE,
+                space: Some(SpecSpace::Oklab),
+            },
+        })
+        .expect("fixture analyses");
+        bench_analysis(criterion, &fixture);
+        let mut chains = chains();
+        chains.push((
+            "recolour-apply",
+            json!([{ "effect": "recolour", "enabled": true, "strength": 1, "recipe": recipe }]),
+        ));
+        for (chain, effects) in chains {
             let json = effects.to_string();
             let spec_steps = spec::decode_effects(&json).expect("chain decodes");
             let prod_steps = prod::decode_effects(&json).expect("chain decodes");
@@ -90,7 +140,7 @@ fn criterion_effects(criterion: &mut Criterion) {
                     effects: &spec_steps,
                     context: spec::EffectContext {
                         palette: &PALETTE,
-                        space: None,
+                        space: Some(SpecSpace::Oklab),
                     },
                 })
                 .expect("spec applies")
@@ -106,7 +156,8 @@ fn criterion_effects(criterion: &mut Criterion) {
                     effects: &prod_steps,
                     context: prod::EffectContext {
                         palette: &PALETTE,
-                        space: None,
+                        space: Some(ProdSpace::Oklab),
+                        analyses: None,
                     },
                 })
                 .expect("prod applies")
@@ -126,6 +177,56 @@ fn criterion_effects(criterion: &mut Criterion) {
             group.finish();
         }
     }
+}
+
+/// Analysis alone: reference and production on the same image, no cache.
+fn bench_analysis(criterion: &mut Criterion, fixture: &Fixture) {
+    let run_spec = || {
+        spec::analyze_recolour(spec::AnalyzeRequest {
+            version: 1,
+            source: Source {
+                width: fixture.width,
+                height: fixture.height,
+                data: black_box(&fixture.rgba),
+            },
+            effects: &[],
+            context: spec::EffectContext {
+                palette: &PALETTE,
+                space: Some(SpecSpace::Oklab),
+            },
+        })
+        .expect("spec analyses")
+    };
+    let run_prod = || {
+        prod::analyze_recolour(prod::AnalyzeRequest {
+            version: 1,
+            source: ProdSource {
+                width: fixture.width,
+                height: fixture.height,
+                data: black_box(&fixture.rgba),
+            },
+            effects: &[],
+            context: prod::EffectContext {
+                palette: &PALETTE,
+                space: Some(ProdSpace::Oklab),
+                analyses: None,
+            },
+        })
+        .expect("prod analyses")
+    };
+    assert_eq!(
+        serde_json::to_value(run_prod()).unwrap(),
+        serde_json::to_value(run_spec()).unwrap()
+    );
+    let mut group =
+        criterion.benchmark_group(format!("effects/recolour-analysis/{}", fixture.name));
+    group.sample_size(20);
+    group.measurement_time(Duration::from_secs(5));
+    group.warm_up_time(Duration::from_secs(1));
+    group.sampling_mode(SamplingMode::Flat);
+    group.bench_function("spec", |bencher| bencher.iter(|| black_box(run_spec())));
+    group.bench_function("prod", |bencher| bencher.iter(|| black_box(run_prod())));
+    group.finish();
 }
 
 struct Fixture {

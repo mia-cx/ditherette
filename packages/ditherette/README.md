@@ -121,9 +121,34 @@ Built-in effects:
 | `exposure` | `stops` from -4 to 4, in linear light |
 | `white-balance` | `temperature` (warmer is positive) and `tint` (more magenta is positive), from -1 to 1 |
 | `hue-saturation` | `hue` in degrees from -180 to 180, `saturation` and `lightness` from -1 to 1, in Oklab |
+| `recolour` | `strength` from 0 to 1, `recipe`: an analysed recipe or `null` to analyse automatically |
 
 All values are in encoded sRGB units unless noted. Neutral arguments leave pixels untouched.
 A preset is a stored `effects` array: this package owns what each effect does, and the caller owns labels, editor state, and where presets live.
+
+### Recolouring for a palette
+
+```ts
+const recipe = processor.analyzeRecolour({
+	version: 1,
+	source,
+	effects: [],
+	context: { palette, space: 'oklab' }
+});
+const prepared = processor.applyEffects({
+	version: 1,
+	source,
+	effects: [{ effect: 'recolour', enabled: true, strength: 0.8, recipe }],
+	context: { space: 'oklab' }
+});
+```
+
+`recolour` fits an image to what the palette can show, directly or through dithered mixtures: it compresses tones the palette cannot reach, mutes or turns hues it cannot mix, and nudges muted colours so they do not collapse onto greys.
+It changes little when a rich palette already fits. The output stays full colour; quantization happens later, as usual.
+
+The recipe is plain data: a lightness `tone` curve, an opponent `shift` and `chroma` scale, and hue `groups`, all in the working space it names. Inspect it, edit any field, and pass it back.
+`strength` blends from the input (0, exact) to the full recipe (1). With `recipe: null`, the step analyses the image reaching it, using the context palette and space; inside `process`, those are the request palette and the space of `match`.
+A recipe applies only in the space it was analysed in. Analyses are cached by exactly what they read, so edits after a recolour step, a new strength, or different dither settings never re-analyse.
 
 Errors name the step, such as `effects.2.gamma`, or `recipe.effects.2.gamma` inside `process`.
 Progress reports an `effects` stage between `prepare` and `resize`.
@@ -285,7 +310,7 @@ The failing disposal and host-termination checks remain active. Scalar processin
 
 ## Public contract
 
-All six synchronous processing methods, private caches, progress delivery, and optional pool initialization are available.
+All seven synchronous processing methods, private caches, progress delivery, and optional pool initialization are available.
 Progress completion follows durable output construction. A thrown callback fails the call without publishing new cache entries.
 Progress uses typed stages and measurable counts, with within-stage callbacks throttled to 50 ms.
 The package exports no raw bindings, backend selection, cache controls, or processor counters.

@@ -31,11 +31,6 @@ impl ChannelTables {
         self.0[channel][input as usize]
     }
 
-    /// Every entry passed through `map`, for effects that start with a per-channel transform.
-    pub fn map(&self, map: impl Fn(f32) -> f32) -> Self {
-        Self(self.0.map(|table| table.map(&map)))
-    }
-
     /// Final bytes when the run is the whole chain: one clip and round per entry.
     pub fn bytes(&self) -> [[u8; 256]; 3] {
         self.0.map(|table| table.map(byte))
