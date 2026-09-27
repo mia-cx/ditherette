@@ -18,6 +18,8 @@ import {
 	type WorkerResponse
 } from './types';
 import type { ProcessingMetricsSample } from './metrics';
+import type { Effect } from 'ditherette';
+import { MAX_EFFECT_LAYERS, isEffectStep } from '$lib/effects/catalog';
 
 const RESIZE_MODES = [
 	'nearest',
@@ -185,12 +187,20 @@ function validateDitherSettings(value: unknown): DitherSettings {
 	};
 }
 
+/** The package checks step arguments; the worker boundary checks the list shape. */
+function validateEffectSteps(value: unknown): Effect[] {
+	if (!Array.isArray(value) || value.length > MAX_EFFECT_LAYERS || !value.every(isEffectStep))
+		throw new Error('Worker effect steps are invalid.');
+	return value;
+}
+
 function validateProcessingSettings(value: unknown): ProcessingSettings {
 	if (!isObject(value)) throw new Error('Worker request settings are invalid.');
 	return {
 		output: validateOutputSettings(value.output),
 		dither: validateDitherSettings(value.dither),
-		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker color space')
+		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker color space'),
+		effects: validateEffectSteps(value.effects)
 	};
 }
 

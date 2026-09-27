@@ -13,6 +13,7 @@
 		sourceMeta
 	} from '$lib/stores/app';
 	import { processingIdentityHash } from '$lib/processing/hash';
+	import { activeEffectSteps } from '$lib/stores/effects';
 	import type { ProcessedImage } from '$lib/processing/types';
 	import DownloadIcon from 'phosphor-svelte/lib/DownloadSimple';
 
@@ -24,6 +25,7 @@
 			output: $outputSettings,
 			dither: $ditherSettings,
 			colorSpace: $colorSpace,
+			effects: $activeEffectSteps,
 			paletteName: $activePalette.name,
 			paletteSource: $activePalette.source,
 			palette: $selectedPalette,

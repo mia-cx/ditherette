@@ -1,3 +1,4 @@
+import type { Effect } from 'ditherette';
 import type { ProcessingMetricsSample } from './metrics';
 
 export const MAX_OUTPUT_PIXELS = 67_108_864;
@@ -96,6 +97,8 @@ export type ProcessingSettings = {
 	output: OutputSettings;
 	dither: DitherSettings;
 	colorSpace: ColorSpaceId;
+	/** Enabled effect steps, in pipeline order. They run on the source before resize. */
+	effects: readonly Effect[];
 };
 
 export type SourceImageRecord = {

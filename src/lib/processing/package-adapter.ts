@@ -4,6 +4,7 @@ import type {
 	Placement,
 	ProcessRequest,
 	RecipeV1,
+	RecipeV2,
 	Rgba8Image,
 	WorkingSpace
 } from 'ditherette';
@@ -154,6 +155,16 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 	}
 }
 
+/** An empty pipeline keeps recipe v1, so its output and caches match the website before effects. */
+function packageRecipe(
+	settings: ProcessingSettings,
+	stages: Omit<RecipeV1, 'version'>
+): RecipeV1 | RecipeV2 {
+	return settings.effects.length
+		? { version: 2, effects: settings.effects, ...stages }
+		: { version: 1, ...stages };
+}
+
 /** Translate controls for a synchronous public call. Contiguous crops borrow bytes; Rust owns the snapshot. */
 export function packageProcessRequest(
 	source: Pick<ImageData, 'width' | 'height' | 'data'>,
@@ -181,13 +192,12 @@ export function packageProcessRequest(
 				if (!color.rgb) throw new Error(`Palette color ${color.name} needs RGB.`);
 				return { kind: 'color', rgb: [color.rgb.r, color.rgb.g, color.rgb.b] };
 			}),
-			recipe: {
-				version: 1,
+			recipe: packageRecipe(settings, {
 				output: { width: size.width, height: size.height, resize: RESIZE[settings.output.resize] },
 				alpha,
 				match: MATCHING[settings.colorSpace],
 				dither: packageDither(settings)
-			}
+			})
 		},
 		warnings: matte?.warning ? [matte.warning] : []
 	};

@@ -28,7 +28,8 @@ const settings: ProcessingSettings = {
 		seed: 1,
 		useColorSpace: false
 	},
-	colorSpace: 'srgb'
+	colorSpace: 'srgb',
+	effects: []
 };
 const source = { width: 1, height: 1, data: new Uint8ClampedArray([0, 0, 0, 255]) };
 
@@ -63,6 +64,16 @@ describe('website package request', () => {
 			}
 		});
 		expect(warnings).toEqual([]);
+	});
+	it('runs effect steps through recipe v2, before resize', () => {
+		const effects = [{ effect: 'exposure', enabled: true, stops: 1 }] as const;
+		const { request } = packageProcessRequest(
+			source,
+			palette,
+			{ ...settings, effects },
+			settings.output
+		);
+		expect(request.recipe).toMatchObject({ version: 2, effects, match: 'srgb-euclidean' });
 	});
 	it.each([
 		['nearest', { algorithm: 'nearest', anchor: 'center' }],

@@ -63,8 +63,16 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 	}
 };
 
+/** The package accepts at most 64 steps. */
+export const MAX_EFFECT_LAYERS = 64;
+
 export const EFFECT_KINDS = Object.keys(EFFECTS) as EffectKind[];
 
-export function isEffectKind(value: unknown): value is EffectKind {
-	return typeof value === 'string' && Object.hasOwn(EFFECTS, value);
+/** A step naming a built-in effect. The package validates its arguments when it runs. */
+export function isEffectStep(value: unknown): value is Effect {
+	if (!value || typeof value !== 'object') return false;
+	const { effect, enabled } = value as Record<string, unknown>;
+	return (
+		typeof effect === 'string' && Object.hasOwn(EFFECTS, effect) && typeof enabled === 'boolean'
+	);
 }

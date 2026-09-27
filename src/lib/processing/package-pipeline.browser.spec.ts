@@ -69,7 +69,8 @@ const settings: ProcessingSettings = {
 		seed: 1,
 		useColorSpace: false
 	},
-	colorSpace: 'srgb'
+	colorSpace: 'srgb',
+	effects: []
 };
 
 describe('installed package website integration', () => {
@@ -105,6 +106,38 @@ describe('installed package website integration', () => {
 			// Bayer(0,0) is -3/8. The website's scale 96 gives 118 at 100%, 136 at 50%.
 			expect(response.image.indices).toEqual(new Uint8Array([expected]));
 		}
+	});
+
+	it('runs enabled effect steps before quantization', async () => {
+		const pipeline = new ProcessorWorkerPipeline();
+		pipeline.handle({
+			id: 1,
+			type: 'load-source',
+			sourceId: 'effects',
+			source: new ImageData(new Uint8ClampedArray([40, 40, 40, 255]), 1, 1)
+		});
+		const indices = [];
+		for (const effects of [[], [{ effect: 'exposure', enabled: true, stops: 4 }] as const]) {
+			const response = await pipeline.handleAsync(
+				{
+					id: 2,
+					type: 'process',
+					sourceId: 'effects',
+					settings: {
+						...settings,
+						output: { ...settings.output, width: 1, height: 1, crop: undefined },
+						effects
+					},
+					palette: uploaded.palette.slice(0, 2),
+					settingsHash: `effects-${effects.length}`
+				},
+				() => undefined
+			);
+			if (response?.type !== 'complete') throw new Error('Expected effect output.');
+			indices.push(response.image.indices[0]);
+		}
+		// Dark grey matches black; four stops brighter it matches white.
+		expect(indices).toEqual([0, 1]);
 	});
 
 	it('accepts every website color and dither combination through the public package', async () => {
