@@ -76,6 +76,7 @@ function outputIdentity(output: OutputSettings): JsonValue {
 		matteKey: output.matteKey,
 		autoSizeOnUpload: output.autoSizeOnUpload,
 		scaleFactor: output.scaleFactor,
+		anchor: output.anchor,
 		crop: output.crop
 			? {
 					x: output.crop.x,

@@ -114,8 +114,38 @@ function rgbToOklch(r: number, g: number, b: number): Vector {
 	return [l, c, h];
 }
 
-export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId): Vector {
-	switch (mode) {
+/** Modes this matcher implements. It draws the Dither window's preview swatch; Wasm does real matching. */
+type PreviewMode =
+	| 'srgb'
+	| 'linear-rgb'
+	| 'weighted-rgb'
+	| 'weighted-rgb-601'
+	| 'weighted-rgb-709'
+	| 'oklab'
+	| 'cielab'
+	| 'oklch';
+
+/** Each color space previews with itself, or with the closest mode this matcher implements. */
+const PREVIEW_MODE: Record<ColorSpaceId, PreviewMode> = {
+	srgb: 'srgb',
+	'linear-rgb': 'linear-rgb',
+	'weighted-rgb': 'weighted-rgb',
+	'weighted-rgb-601': 'weighted-rgb-601',
+	'weighted-rgb-709': 'weighted-rgb-709',
+	oklab: 'oklab',
+	cielab: 'cielab',
+	'cielab-ciede2000': 'cielab',
+	oklch: 'oklch',
+	'oklch-euclidean': 'oklch',
+	'oklch-circular-hue': 'oklch',
+	cielch: 'cielab',
+	'cielch-euclidean': 'cielab',
+	'cielch-circular-hue': 'cielab',
+	ycbcr: 'weighted-rgb-601'
+};
+
+export function vectorForRgb(r: number, g: number, b: number, space: ColorSpaceId): Vector {
+	switch (PREVIEW_MODE[space]) {
 		case 'srgb':
 		case 'weighted-rgb':
 			return [r, g, b];
@@ -137,9 +167,10 @@ export function vectorForRgb(r: number, g: number, b: number, mode: ColorSpaceId
 
 export function createPaletteMatcher(
 	colors: EnabledPaletteColor[],
-	mode: ColorSpaceId,
+	space: ColorSpaceId,
 	options: PaletteMatcherOptions = {}
 ): PaletteMatcher {
+	const mode = PREVIEW_MODE[space];
 	const visible = colors.filter((color) => color.rgb && color.kind !== 'transparent');
 	if (visible.length === 0) {
 		return {

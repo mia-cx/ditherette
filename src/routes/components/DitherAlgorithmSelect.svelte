@@ -49,7 +49,7 @@
 	}: Props = $props();
 
 	let algorithmSearch = $state('');
-	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion']);
+	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion', 'mixing']);
 	let fieldFilters = $state<DitherField[]>(['none', 'ordered', 'noise', 'kernel']);
 	let filterSheetOpen = $state(false);
 	let desktopFilterSections = $state<string[]>(
@@ -95,6 +95,7 @@
 	function methodLabel(method: DitherMethod) {
 		if (method === 'error-diffusion') return 'Error diffusion';
 		if (method === 'threshold') return 'Threshold';
+		if (method === 'mixing') return 'Pattern mixing';
 		return 'None';
 	}
 

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { packageProcessRequest, packageQuantizeResult } from './package-adapter';
-import type { ColorSpaceId, EnabledPaletteColor, ProcessingSettings, ResizeId } from './types';
+import type {
+	ColorSpaceId,
+	DitherId,
+	EnabledPaletteColor,
+	ProcessingSettings,
+	ResizeId
+} from './types';
 
 const palette: EnabledPaletteColor[] = [
 	{ name: 'Black', key: '#000000', rgb: { r: 0, g: 0, b: 0 }, kind: 'custom', enabled: true }
@@ -83,7 +89,10 @@ describe('website package request', () => {
 		['lanczos2', { algorithm: 'lanczos2', anchor: 'center', support: 'fixed' }],
 		['lanczos2-scale-aware', { algorithm: 'lanczos2', anchor: 'center', support: 'scale-aware' }],
 		['lanczos3', { algorithm: 'lanczos3', anchor: 'center', support: 'fixed' }],
-		['lanczos3-scale-aware', { algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' }]
+		['lanczos3-scale-aware', { algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' }],
+		['bicubic', { algorithm: 'bicubic', anchor: 'center', support: 'fixed' }],
+		['bicubic-scale-aware', { algorithm: 'bicubic', anchor: 'center', support: 'scale-aware' }],
+		['trilinear', { algorithm: 'trilinear', anchor: 'center' }]
 	] satisfies [ResizeId, object][])('maps resize %s', (resize, expected) => {
 		expect(
 			packageProcessRequest(
@@ -102,7 +111,14 @@ describe('website package request', () => {
 		['oklch', 'oklch-hue-arc', 'oklch'],
 		['weighted-rgb', 'srgb-compuphase', 'srgb'],
 		['weighted-rgb-601', 'srgb-rec601', 'srgb'],
-		['weighted-rgb-709', 'srgb-rec709', 'srgb']
+		['weighted-rgb-709', 'srgb-rec709', 'srgb'],
+		['cielab-ciede2000', 'cielab-ciede2000', 'cielab'],
+		['oklch-euclidean', 'oklch-euclidean', 'oklch'],
+		['oklch-circular-hue', 'oklch-circular-hue', 'oklch'],
+		['cielch', 'cielch-hue-arc', 'cielch'],
+		['cielch-euclidean', 'cielch-euclidean', 'cielch'],
+		['cielch-circular-hue', 'cielch-circular-hue', 'cielch'],
+		['ycbcr', 'ycbcr-euclidean', 'ycbcr']
 	] satisfies [ColorSpaceId, string, string][])(
 		'maps %s matching and vector dither coordinates',
 		(colorSpace, match, space) => {
@@ -128,6 +144,40 @@ describe('website package request', () => {
 			});
 		}
 	);
+	it('pins the resize at the chosen anchor, except area', () => {
+		const resizeWith = (resize: ResizeId) =>
+			packageProcessRequest(
+				source,
+				palette,
+				{ ...settings, output: { ...settings.output, resize, anchor: 'bottom-right' } },
+				settings.output
+			).request.recipe.output.resize;
+		expect(resizeWith('lanczos3')).toEqual({
+			algorithm: 'lanczos3',
+			anchor: 'bottom-right',
+			support: 'fixed'
+		});
+		expect(resizeWith('area')).toEqual({ algorithm: 'area' });
+	});
+	it('maps blue noise, Atkinson, and Yliluoma, which ignores strength', () => {
+		const ditherWith = (algorithm: DitherId, strength = 50) =>
+			packageProcessRequest(
+				source,
+				palette,
+				{ ...settings, dither: { ...settings.dither, algorithm, strength } },
+				settings.output
+			).request.recipe.dither;
+		expect(ditherWith('blue-noise')).toMatchObject({
+			family: 'separable',
+			perturb: { field: { algorithm: 'blue-noise' } }
+		});
+		expect(ditherWith('atkinson')).toMatchObject({ family: 'diffusion', kernel: 'atkinson' });
+		expect(ditherWith('yliluoma-8', 0)).toEqual({
+			family: 'yliluoma',
+			size: '8',
+			placement: { mode: 'everywhere' }
+		});
+	});
 	it.each(['bayer-2', 'bayer-4', 'bayer-8', 'bayer-16'] as const)(
 		'converts the current 96-byte field scale for %s',
 		(algorithm) => {

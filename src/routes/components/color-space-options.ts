@@ -58,6 +58,30 @@ export const COLOR_SPACES = [
 		latex: String.raw`d^2 = 0.2126\Delta R^2 + 0.7152\Delta G^2 + 0.0722\Delta B^2`
 	},
 	{
+		id: 'oklch',
+		label: 'OKLCH',
+		short:
+			'OKLab as lightness, chroma, and hue. Hue differences count in proportion to the smaller chroma, so near-grays match on lightness while saturated colors keep their hue.',
+		math: 'd² = ΔL² + ΔC² + (min(C₁,C₂)·|Δh|)²',
+		latex: String.raw`d^2 = \Delta L^2 + \Delta C^2 + (\min(C_1, C_2)\,\lvert\Delta h\rvert)^2`
+	},
+	{
+		id: 'oklch-circular-hue',
+		label: 'OKLCH · circular hue',
+		short:
+			'OKLCH with hue measured as a chord across the hue circle, scaled by both chromas. Close to OKLab distance, but hue and chroma stay separate terms.',
+		math: 'd² = ΔL² + ΔC² + (2·√(C₁C₂)·sin(Δh/2))²',
+		latex: String.raw`d^2 = \Delta L^2 + \Delta C^2 + \left(2\sqrt{C_1 C_2}\,\sin\tfrac{\Delta h}{2}\right)^2`
+	},
+	{
+		id: 'oklch-euclidean',
+		label: 'OKLCH · Euclidean',
+		short:
+			'Compares lightness, chroma, and hue angle as plain numbers. Hue does not wrap, so reds just either side of 0° count as far apart.',
+		math: 'd² = ΔL² + ΔC² + Δh² (h in radians, unwrapped)',
+		latex: String.raw`d^2 = \Delta L^2 + \Delta C^2 + \Delta h^2`
+	},
+	{
 		id: 'cielab',
 		label: 'CIELAB ΔE76',
 		short:
@@ -66,11 +90,42 @@ export const COLOR_SPACES = [
 		latex: String.raw`\Delta E_{ab}^{*} = \sqrt{\Delta L^{*2} + \Delta a^{*2} + \Delta b^{*2}}`
 	},
 	{
-		id: 'oklch',
-		label: 'OKLCH',
+		id: 'cielab-ciede2000',
+		label: 'CIELAB ΔE2000',
 		short:
-			'OKLab expressed as lightness, chroma, and hue. Useful for reasoning about hue/chroma directly, with circular hue distance instead of flat a/b axes.',
-		math: 'd uses ΔL, ΔC, and circular Δh',
-		latex: String.raw`d^2 = \Delta L^2 + \Delta C^2 + w_h\,\Delta h_{circ}^2`
+			'The CIE 2000 color difference. It corrects CIELAB in blues, grays, and saturated colors, which makes it the most careful perceptual match here, and the slowest.',
+		math: 'ΔE₀₀ = √((ΔL′/S_L)² + (ΔC′/S_C)² + (ΔH′/S_H)² + R_T·(ΔC′/S_C)·(ΔH′/S_H))',
+		latex: String.raw`\Delta E_{00} = \sqrt{\left(\tfrac{\Delta L'}{S_L}\right)^2 + \left(\tfrac{\Delta C'}{S_C}\right)^2 + \left(\tfrac{\Delta H'}{S_H}\right)^2 + R_T \tfrac{\Delta C'}{S_C}\tfrac{\Delta H'}{S_H}}`
+	},
+	{
+		id: 'cielch',
+		label: 'CIELCh',
+		short:
+			'CIELAB as lightness, chroma, and hue. Like OKLCH, hue differences count in proportion to the smaller chroma.',
+		math: 'd² = ΔL*² + ΔC*² + (min(C₁,C₂)·|Δh|)²',
+		latex: String.raw`d^2 = \Delta L^{*2} + \Delta C^{*2} + (\min(C_1, C_2)\,\lvert\Delta h\rvert)^2`
+	},
+	{
+		id: 'cielch-circular-hue',
+		label: 'CIELCh · circular hue',
+		short: 'CIELCh with hue measured as a chord across the hue circle, scaled by both chromas.',
+		math: 'd² = ΔL*² + ΔC*² + (2·√(C₁C₂)·sin(Δh/2))²',
+		latex: String.raw`d^2 = \Delta L^{*2} + \Delta C^{*2} + \left(2\sqrt{C_1 C_2}\,\sin\tfrac{\Delta h}{2}\right)^2`
+	},
+	{
+		id: 'cielch-euclidean',
+		label: 'CIELCh · Euclidean',
+		short:
+			'Compares CIELCh lightness, chroma, and hue angle as plain numbers. Hue does not wrap across 0°.',
+		math: 'd² = ΔL*² + ΔC*² + Δh² (h in radians, unwrapped)',
+		latex: String.raw`d^2 = \Delta L^{*2} + \Delta C^{*2} + \Delta h^2`
+	},
+	{
+		id: 'ycbcr',
+		label: 'YCbCr',
+		short:
+			'Full-range BT.601 luma and chroma, as video codecs use. Brightness and color are separate axes, measured with equal weight.',
+		math: 'd² = ΔY² + ΔCb² + ΔCr²',
+		latex: String.raw`d^2 = \Delta Y^2 + \Delta C_b^2 + \Delta C_r^2`
 	}
 ] as const satisfies readonly ColorSpaceOption[];
