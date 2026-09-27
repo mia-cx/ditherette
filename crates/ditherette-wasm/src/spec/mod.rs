@@ -8,6 +8,7 @@ pub mod adapters;
 pub mod color;
 pub mod contract;
 pub mod dither;
+pub mod effects;
 pub mod palette;
 pub mod pipeline;
 pub mod quantize;

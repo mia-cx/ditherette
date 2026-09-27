@@ -119,6 +119,7 @@ pub fn initialize(
 #[serde(rename_all = "kebab-case")]
 pub enum Stage {
     Prepare,
+    Effects,
     Resize,
     Alpha,
     Color,

@@ -635,5 +635,153 @@
 			"mode": "100644",
 			"sha256": "19f2100b27b75765f5e4cb412cc8e3525c18eaaf598e2520770c9bd83c0762e6"
 		}
+	],
+	"extensions": [
+		{
+			"name": "effects-v1",
+			"summary": "Ordered effects reference: continuous image, Effect trait, executor, registry, levels, apply_effects, and recipe-v2 process (#202).",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/chain.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/chain.md",
+						"mode": "100644",
+						"sha256": "9d51f1dbdee559bdef5122b39ec939d980d2a21b3e797e2577de1bd26be50269"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/chain.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/chain.rs",
+						"mode": "100644",
+						"sha256": "7a77fea5ca8409236d0fd7a079ff9bc7378ee3a5dce32bd6c6f1100ba8423199"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/channel.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/channel.md",
+						"mode": "100644",
+						"sha256": "c713777750cf11ab489a909507c438550ff4e84226fb6e1a674af48633decd80"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/channel.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/channel.rs",
+						"mode": "100644",
+						"sha256": "f8bf20ac48f11c62044c062fecd8e4273b83c31ace76ee82d608febf428e012f"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/image.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/image.md",
+						"mode": "100644",
+						"sha256": "574cac72c429d05239fca65bacec5cdaf30bf9ef90ea8809c8d54e72feb2b771"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/image.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/image.rs",
+						"mode": "100644",
+						"sha256": "20616ce7908b8b0e530a4fbafbe799c8dd3d0bc736547bf0406ecdc3333bb63d"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/levels.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/levels.md",
+						"mode": "100644",
+						"sha256": "85fa067c5e7b13f2b9a8d1d538759ac1e3ff304c9d078fdcef4b72a70c42d493"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/levels.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/levels.rs",
+						"mode": "100644",
+						"sha256": "dbc42cc04ce60018b3b4ee78f99e3912354e346b5886dfc94b2f364958281444"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "2b555aa4d2679fcb021155671b87f843f875cd6178d872214d9fcac4d5b41411"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/operation.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.md",
+						"mode": "100644",
+						"sha256": "dbd544a15c87c77404af1f83e5031293534c35b64d5f99a804bd79bfa021c2ac"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+						"mode": "100644",
+						"sha256": "98139c323083d1f3386f66a2cd8b550839b64ed044b64b9b317cdc518eef6b82"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "09faf7f1183da23e73caa360f63133d3ba62d270f563223e929abecfc51c60df"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "5debd738e3476d3b3563dac563e081981b586532d46aa53d46d9a16f0cd0700e"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "41bb004c6cdcfba274979da563815762dfa269ae7d3897959e74ef614bc3c6c3"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "9e7b826981d757c97f8da0b7d2c635c86aaeb85fb08f6be4df6303f6b410b80b"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "256127f6b3a72318f88be0f97ea21254284e50195fd7e1a6a4caafdc6895c1b9"
+					}
+				}
+			],
+			"contentSha256": "d6df3f2b97f2f257767eddbb80b7337eeba44af971901f258288fb3b9261a849"
+		}
 	]
 }
