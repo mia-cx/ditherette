@@ -230,11 +230,14 @@
 			zoomOut,
 			fit: resetView,
 			actualSize: zoomActualSize,
-			toggleCrop: () => void toggleCropMode()
+			toggleCrop: () => void toggleCropMode(),
+			clearCrop
 		};
 		previewCommands.set(commands);
 		return () => {
-			if (previewCommands.get() === commands) previewCommands.set(undefined);
+			if (previewCommands.get() !== commands) return;
+			previewCommands.set(undefined);
+			cropping.set(false);
 		};
 	});
 

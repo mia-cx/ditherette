@@ -7,6 +7,8 @@ export type PreviewCommands = {
 	fit(): void;
 	actualSize(): void;
 	toggleCrop(): void;
+	/** Clear the crop, including an unapplied crop draft. */
+	clearCrop(): void;
 };
 
 /** The mounted preview's commands; undefined while no preview is mounted. */

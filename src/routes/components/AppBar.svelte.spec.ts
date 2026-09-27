@@ -10,7 +10,8 @@ const commands = {
 	zoomOut: vi.fn(),
 	fit: vi.fn(),
 	actualSize: vi.fn(),
-	toggleCrop: vi.fn()
+	toggleCrop: vi.fn(),
+	clearCrop: vi.fn()
 };
 
 beforeEach(() => {

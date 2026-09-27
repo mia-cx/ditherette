@@ -29,7 +29,7 @@
 		type PreviewMode
 	} from '$lib/stores/app';
 	import { addEffect, effectLayers } from '$lib/stores/effects';
-	import { loadThemeChoice, setThemeChoice, themeChoice, type ThemeChoice } from '$lib/theme';
+	import { setThemeChoice, startTheme, themeChoice, type ThemeChoice } from '$lib/theme';
 	import { COLOR_SPACES } from './color-space-options';
 	import { DITHER_ALGORITHMS } from './dither-options';
 	import { RESIZE_MODES } from './output-options';
@@ -56,7 +56,7 @@
 	let mac = $state(true);
 	onMount(() => {
 		mac = /Mac|iPhone|iPad/.test(navigator.userAgent);
-		loadThemeChoice();
+		return startTheme();
 	});
 
 	const PREVIEW_MODES = [
@@ -143,7 +143,10 @@
 				>
 				<MenubarItem
 					disabled={!$outputSettings.crop}
-					onSelect={() => updateOutputSettings({ crop: undefined })}>Clear crop</MenubarItem
+					onSelect={() =>
+						$previewCommands
+							? $previewCommands.clearCrop()
+							: updateOutputSettings({ crop: undefined })}>Clear crop</MenubarItem
 				>
 			</MenubarContent>
 		</MenubarMenu>
