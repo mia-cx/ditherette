@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
 	import type { DockviewApi } from 'dockview-core';
 	import Dock from '$lib/components/dock/Dock.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -23,18 +22,14 @@
 	type Props = { onChooseImage: () => void; onSelectFile: (file: File) => void };
 	let { onChooseImage, onSelectFile }: Props = $props();
 
-	let stop: (() => void) | undefined;
-
 	function ready(api: DockviewApi) {
 		const stopStudio = startStudio(api);
 		const unsubscribe = effectLayers.subscribe((layers) => syncEffectWindows(api, layers));
-		stop = () => {
+		return () => {
 			unsubscribe();
 			stopStudio();
 		};
 	}
-
-	onDestroy(() => stop?.());
 </script>
 
 <Dock

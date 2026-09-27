@@ -16,7 +16,8 @@
 		panels: Readonly<Record<string, Snippet<[DockParams]>>>;
 		/** Shown when every window is closed. */
 		empty?: Snippet<[DockParams]>;
-		onready: (api: DockviewApi) => void;
+		/** Set up against the API; the returned cleanup runs before the dock is disposed. */
+		onready: (api: DockviewApi) => (() => void) | void;
 		class?: string;
 	};
 	let { panels, empty, onready, class: className = '' }: Props = $props();
@@ -88,8 +89,11 @@
 		// Lay out at the real size first, so the first layout keeps its initial widths.
 		const { width, height } = container!.getBoundingClientRect();
 		dock.layout(width, height);
-		onready(dock.api);
-		return () => dock.dispose();
+		const cleanup = onready(dock.api);
+		return () => {
+			cleanup?.();
+			dock.dispose();
+		};
 	});
 </script>
 

@@ -89,18 +89,26 @@ export function startStudio(api: DockviewApi) {
 	}
 	const syncOpen = () => openWindows.set(new Set(api.panels.map((panel) => panel.id)));
 	let timer: ReturnType<typeof setTimeout> | undefined;
+	// Snapshot on every change and write it later, so teardown can still save the latest one.
+	let pending: SerializedDockview | undefined;
+	const save = () => {
+		clearTimeout(timer);
+		if (pending) studioLayout.set(pending);
+		pending = undefined;
+	};
 	const listeners = [
 		api.onDidAddPanel(syncOpen),
 		api.onDidRemovePanel(syncOpen),
 		api.onDidLayoutChange(() => {
+			pending = api.toJSON();
 			clearTimeout(timer);
-			timer = setTimeout(() => studioLayout.set(api.toJSON()), PERSIST_DELAY_MS);
+			timer = setTimeout(save, PERSIST_DELAY_MS);
 		})
 	];
 	syncOpen();
 	studioApi.set(api);
 	return () => {
-		clearTimeout(timer);
+		save();
 		for (const listener of listeners) listener.dispose();
 		studioApi.set(undefined);
 	};

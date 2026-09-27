@@ -46,11 +46,11 @@ it('opens one window per effect instance and titles it with the instance name', 
 	await expect.poll(tabTitles).not.toContain('Shadows');
 });
 
-it('restores the saved layout, including effect windows', async () => {
+it('restores the latest layout, even when the studio closes before saving', async () => {
 	const first = await renderStudio();
 	await addEffect('Curves');
-	await expect.poll(() => JSON.stringify(studioLayout.get())).toContain('effect:');
 	await first.unmount();
+	expect(JSON.stringify(studioLayout.get())).toContain('effect:');
 
 	await renderStudio();
 	await expect.poll(tabTitles).toEqual(expect.arrayContaining(['Preview', 'Effects', 'Curves']));

@@ -33,3 +33,17 @@ export function evaluateCurve(points: readonly CurvePoint[], value: number): num
 	const c3 = (m0 + m1 - 2 * slope) / (width * width);
 	return ys[k]! + s * (m0 + s * (c2 + s * c3));
 }
+
+/** 2 to 16 `[x, y]` points in `[0, 1]`, each x at least the minimum gap above the previous one. */
+export function isValidCurve(points: readonly (readonly number[])[]): boolean {
+	return (
+		points.length >= 2 &&
+		points.length <= MAX_CURVE_POINTS &&
+		points.every(
+			(point, index) =>
+				point.length === 2 &&
+				point.every((coordinate) => coordinate >= 0 && coordinate <= 1) &&
+				(index === 0 || point[0]! - points[index - 1]![0]! >= MIN_CURVE_POINT_GAP)
+		)
+	);
+}
