@@ -27,14 +27,17 @@ const BYTE_MAX: f64 = 255.0;
 
 /// Resizes like v1 `resize`, except that filtering kernels weight colour by coverage.
 ///
-/// Nearest and fully opaque sources return exactly the v1 result. Other sources
+/// Nearest, an unchanged size, and fully opaque sources return exactly the v1 result. Other sources
 /// filter premultiplied colour, then divide by the filtered alpha. Kernels with
 /// negative lobes also clamp alpha to the range of their main lobe, so ringing
 /// cannot invent coverage in transparent areas.
 pub fn resize(request: ResizeRequest<'_>) -> Result<Rgba8Image, DitheretteError> {
     let layout = Request::Resize(request).validate()?;
     let policy = request.output.resize;
-    if matches!(policy, ResizePolicy::Nearest { .. }) || is_opaque(layout.source) {
+    if matches!(policy, ResizePolicy::Nearest { .. })
+        || layout.source.dimensions() == layout.output
+        || is_opaque(layout.source)
+    {
         return resize::resize(request);
     }
     let carrier = premultiply(layout.source);

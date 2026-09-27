@@ -71,6 +71,15 @@ fn nearest_and_opaque_sources_match_v1_exactly() {
             assert_eq!(covered.data(), v1.data(), "{resize_policy:?} {output:?}");
         }
     }
+    for resize_policy in policies() {
+        assert_eq!(
+            coverage::resize(request(&translucent, 9, 9, (9, 9), resize_policy))
+                .unwrap()
+                .data(),
+            translucent,
+            "{resize_policy:?} keeps an equal-size image"
+        );
+    }
     let nearest = ResizePolicy::Nearest {
         anchor: Anchor::Center,
     };

@@ -1181,7 +1181,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/coverage/resize.md",
 						"mode": "100644",
-						"sha256": "5ac3aba48430344698f0fa493c7f234c6a966eb30df279f3125a8e476c369411"
+						"sha256": "48dfddcb33c1320d2d7a1d4fd8035d9e00defb885558e51a4be27a87a006e797"
 					}
 				},
 				{
@@ -1190,7 +1190,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/coverage/resize.rs",
 						"mode": "100644",
-						"sha256": "a7caea0775bf8c9ec5c30b16675543d496bdc92245efa08d7027f8e0494fe89e"
+						"sha256": "61bf0151cb04a4c79e4674cf9269e244697c41623390a1e8def56d35016ed0ec"
 					}
 				},
 				{
@@ -1255,7 +1255,7 @@
 					}
 				}
 			],
-			"contentSha256": "c82c7926f16803295ec8f2265f92b54b39c8ca26fb616326c910e2ba9ef0cc46"
+			"contentSha256": "8084f106b059b2bb86b5c11a85aea6b138fbf8fe6d10ac4f9bd28c46c8414f21"
 		}
 	]
 }

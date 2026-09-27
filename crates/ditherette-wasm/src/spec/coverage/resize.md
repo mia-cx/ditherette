@@ -11,7 +11,7 @@ The v1 `ResizeRequest`: RGBA8 source, output size, and resize policy. Returns ow
 ## Algorithm / semantic rule
 
 1. Validate the request exactly like v1 `resize`.
-2. If the policy is nearest, or every source alpha is 255, return v1 `resize`.
+2. If the policy is nearest, the output size equals the source size, or every source alpha is 255, return v1 `resize`, which is an exact copy at equal size.
 3. Premultiply into four `f32` channels: `c * (a / 255)` for each colour channel, computed in `f64` and stored as `f32`; alpha stays `a`.
 4. Run the policy's v1 kernel, unchanged, on that carrier with the same anchor and support. `f32` storage keeps every intermediate unrounded, including trilinear mips.
 5. For bicubic and Lanczos, find each output pixel's main lobe: source taps whose distance from the mapped position is below one kernel unit on both axes (scaled like the kernel's support, clamped at edges). Clamp the filtered alpha to the lowest and highest source alpha among those taps.
@@ -26,14 +26,14 @@ Opaque sources skip the carrier, so their bytes stay identical to v1.
 
 ## Correctness invariants
 
-- Nearest and fully opaque sources equal v1 `resize` byte for byte.
+- Nearest, equal-size, and fully opaque requests equal v1 `resize` byte for byte.
 - A fully transparent source pixel's RGB never affects any output byte.
 - Where every main-lobe tap is fully transparent, bicubic and Lanczos output `[0, 0, 0, 0]`.
 - Output alpha never exceeds the largest source alpha in the main lobe.
 
 ## Edge cases
 
-- A fully transparent source resizes to all `[0, 0, 0, 0]`.
+- At any other size, a fully transparent source resizes to all `[0, 0, 0, 0]`.
 - A single translucent pixel sends the whole image through the carrier; opaque regions may then differ from v1 by rounding only.
 
 ## Production obligations
