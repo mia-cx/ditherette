@@ -19,6 +19,8 @@ worker-configuration.d.ts
 
 # Test and coverage output
 coverage/
+# Source domains named coverage are code, not coverage reports.
+!crates/ditherette-wasm/src/*/coverage/
 playwright-report/
 test-results/
 blob-report/

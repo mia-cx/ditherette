@@ -7,7 +7,7 @@ A caller supplies an array of effect instances. Each enabled instance transforms
 The chain either returns full-colour RGBA8 or feeds the existing terminal resize and dither/quantize stage.
 
 This domain owns the continuous working image, the effect extension contract, the ordered executor, recipe decoding and validation, and every built-in effect's colour math.
-It does not own resizing, palette normalization, matching, dithering, or encoding. Those remain the v1 reference.
+It does not own resizing, palette normalization, matching, dithering, or encoding. Those remain the v1 reference, except that recipe v2 resizes through the coverage reference first.
 
 ## Inputs and outputs
 

@@ -36,6 +36,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     overhead: u64,
     peak: &mut u64,
     store: &mut Store,
+    coverage_enabled: bool,
 ) -> Result<B::Output, Failure> {
     // Process has no measured S36 complete-call class; explicit developer bands still apply.
     let measured = if resize.is_none() {
@@ -94,9 +95,24 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         })?;
         (call, Some(source))
     };
+    let coverage = coverage_enabled
+        && !sparse
+        && resize.is_some_and(|output| {
+            !matches!(
+                output.resize,
+                crate::prod::contract::request::ResizePolicy::Nearest { .. }
+            )
+        })
+        && !call.source_opaque();
     let resize_key = resize
         .zip(source)
-        .map(|(output, source)| identity::stage(Some(source), StageOptions::Resize { output }))
+        .map(|(output, source)| {
+            if coverage {
+                identity::coverage_resize(source, output)
+            } else {
+                identity::stage(Some(source), StageOptions::Resize { output })
+            }
+        })
         .transpose()?;
     let rgba_key = resize_key.or(source);
     let policy = match dither {
@@ -168,10 +184,21 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         .as_ref()
         .map_or(0, |plan| plan.additional_capacity());
     call.charge_working_capacity(band_capacity, peak)?;
+    let coverage_capacity = if coverage && resize.is_some() && !resized_hit {
+        crate::prod::coverage::required_bytes(
+            source_dimensions,
+            output_dimensions,
+            resize.expect("coverage resize").resize,
+        )?
+    } else {
+        0
+    };
+    call.charge_working_capacity(coverage_capacity, peak)?;
     call.prepare(
         Some(request),
         resize
             .filter(|_| !resized_hit)
+            .filter(|_| !coverage)
             .map(|output| ResizePreparation {
                 source: source_dimensions,
                 output,
@@ -240,10 +267,13 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     call.charge_optional_capacity(placement_capacity, peak)?;
     if resize.is_some() && !resized_hit {
         let source_opaque = !sparse && call.resize_source_opaque();
+        let coverage_limit = call
+            .available_working_capacity()
+            .saturating_add(coverage_capacity);
         let (_, prepared, scratch) = call.parts();
         let [source, resized, _, _] = &mut scratch.buffers;
-        let prepared = prepared.expect("requested resize");
         if sparse {
+            let prepared = prepared.expect("requested resize");
             let (columns, rows) = prepared.write_nearest_source_offsets(source);
             boundary.gather_input(resized, columns, rows, source_len)?;
             progress.report(
@@ -252,7 +282,25 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 u64::from(output_dimensions.height()),
                 u64::from(output_dimensions.height()),
             )?;
+        } else if coverage {
+            let source = ImageView::packed(source, source_dimensions).expect("owned source");
+            let output = ImageViewMut::packed(resized, output_dimensions).expect("reserved resize");
+            crate::prod::coverage::resize(
+                source,
+                output,
+                resize.expect("coverage resize").resize,
+                coverage_limit,
+                &mut |completed, total| {
+                    progress.report(
+                        boundary.progress(),
+                        Stage::Resize,
+                        u64::from(completed),
+                        u64::from(total),
+                    )
+                },
+            )?;
         } else {
+            let prepared = prepared.expect("requested resize");
             let source = ImageView::packed(source, source_dimensions).expect("owned source");
             let output = ImageViewMut::packed(resized, output_dimensions).expect("reserved resize");
             if enabled {
@@ -273,6 +321,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
                 prepared.execute_known_opacity(source, output, source_opaque)?;
             }
         }
+        call.release_working_capacity(coverage_capacity);
     }
     if let Some(perturb) = policy {
         if !perturbed_hit {

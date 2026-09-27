@@ -1161,6 +1161,101 @@
 				}
 			],
 			"contentSha256": "6fb582c12073a5775c71c8542973aad864b7df0c0d3646a8d4b7aac901e34636"
+		},
+		{
+			"name": "coverage-resize",
+			"summary": "Recipe v2 resizes colour weighted by coverage; alpha keeps its main-lobe range",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/coverage/mod.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/coverage/mod.rs",
+						"mode": "100644",
+						"sha256": "c9bce8f15b90443205c6db46f7ae7069b0495438a366602f381cc0c7fd7e3c99"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/coverage/resize.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/coverage/resize.md",
+						"mode": "100644",
+						"sha256": "2acc97c6da0447e5f51e2f2b5e7d4cee1cee9a771c654e03c9c0fdd8a3a3c056"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/coverage/resize.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/coverage/resize.rs",
+						"mode": "100644",
+						"sha256": "61bf0151cb04a4c79e4674cf9269e244697c41623390a1e8def56d35016ed0ec"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/coverage/spec.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/coverage/spec.md",
+						"mode": "100644",
+						"sha256": "bfb12284e2ea7925361187f56e824313ffb87985a57e35be1243e06eb73c7238"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/operation.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.md",
+						"mode": "100644",
+						"sha256": "dbd544a15c87c77404af1f83e5031293534c35b64d5f99a804bd79bfa021c2ac"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.md",
+						"mode": "100644",
+						"sha256": "2495fdb2f7431944847bddfb0e525c4d701ac2dd9e031d9baaf3275282a63298"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+						"mode": "100644",
+						"sha256": "d5c6e8f2be975c9df9a03b87dc0314b02a7f162d86ffb1368d4968d2ac8aa927"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/operation.rs",
+						"mode": "100644",
+						"sha256": "2fc24ffb29f5735ffc4bc26de8e0e9150494a922e957efd457a381e317d773d1"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "fca403c670fadd6720fb420f987fe5b14cd6b89c33d90bf93c25c5afde44ba4e"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "b00fe4c09158664caeac0ec71d548c94a5758b24149eaf33c64c267f9d5f7b51"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "256127f6b3a72318f88be0f97ea21254284e50195fd7e1a6a4caafdc6895c1b9"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/mod.rs",
+						"mode": "100644",
+						"sha256": "cf0a2e7ffd2f09e2f02377005003f15fbf4d45137d7406f8d8d059b07a9811e4"
+					}
+				}
+			],
+			"contentSha256": "347314bb65e4a7e98c8a495c98eda1511fbbc087285ae5326859de7d8911e4d1"
 		}
 	]
 }

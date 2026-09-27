@@ -56,7 +56,8 @@ describe('website package request', () => {
 			source: { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 255]) },
 			palette: [{ kind: 'color', rgb: [0, 0, 0] }],
 			recipe: {
-				version: 1,
+				version: 2,
+				effects: [],
 				output: { width: 1, height: 1, resize: { algorithm: 'nearest', anchor: 'center' } },
 				alpha: { mode: 'preserve', threshold: 0 },
 				match: 'srgb-euclidean',

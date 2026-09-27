@@ -279,10 +279,10 @@ impl Processor {
         boundary: &mut B,
         allocator: &mut A,
     ) -> Result<B::Output, Failure> {
-        self.process_owning(request, boundary, allocator, 0)
+        self.process_owning(request, boundary, allocator, 0, false)
     }
 
-    /// Recipe v2: apply `effects` to the source, then run `process` on the result.
+    /// Recipe v2: apply `effects`, coverage-resize, then run the terminal dither stages.
     /// Effects read the request palette and the matching working space as context.
     pub fn process_effects<B: super::quantize::QuantizeBoundary>(
         &mut self,
@@ -293,7 +293,7 @@ impl Processor {
         self.process_effects_with_allocator(request, effects, boundary, &mut SystemAllocator)
     }
 
-    /// Injectable reservations for recipe v2. A chain with no enabled step is exactly `process`.
+    /// Injectable reservations for recipe v2. Disabled chains still use coverage resize.
     pub fn process_effects_with_allocator<B: super::quantize::QuantizeBoundary, A: Allocator>(
         &mut self,
         request: super::process::ProcessRequest<'_>,
@@ -311,7 +311,7 @@ impl Processor {
             if let Err(error) = super::effects::validate(effects, &context) {
                 return self.fail_preflight(error);
             }
-            return self.process_owning(request, boundary, allocator, 0);
+            return self.process_owning(request, boundary, allocator, 0, true);
         }
         let analyses = std::mem::take(&mut self.analyses);
         let context = crate::prod::effects::EffectContext {
@@ -331,7 +331,7 @@ impl Processor {
                 let mut effected = super::effects::EffectedInput::new(
                     boundary, effects, context, source, key, previous,
                 );
-                let result = self.process_owning(request, &mut effected, allocator, extra);
+                let result = self.process_owning(request, &mut effected, allocator, extra, true);
                 if result.is_ok() {
                     self.effects_source = Some(effected.into_source());
                 }
@@ -408,6 +408,7 @@ impl Processor {
         boundary: &mut B,
         allocator: &mut A,
         extra: u64,
+        coverage: bool,
     ) -> Result<B::Output, Failure> {
         self.require_ready()?;
         self.begin();
@@ -438,6 +439,7 @@ impl Processor {
             overhead,
             &mut self.peak_capacity,
             &mut self.preparation,
+            coverage,
         );
         self.finish_call(result)
     }

@@ -5,6 +5,7 @@ use ditherette_wasm::{
             error::{DitheretteError, ErrorCode},
             request::*,
         },
+        coverage,
         effects::{
             apply_chain, apply_effects, decode_effects, decode_recipe_v2, levels::Levels, process,
             BuiltinEffect, Effect, EffectContext, EffectImage, EffectStep, EffectsRequest, Needs,
@@ -351,7 +352,7 @@ fn recipe(effects: serde_json::Value, dither: serde_json::Value) -> RecipeV2 {
 }
 
 #[test]
-fn process_v2_equals_effects_then_v1_process_for_every_dither_family() {
+fn process_v2_equals_effects_then_coverage_then_v1_process_for_every_dither_family() {
     let data = ramp();
     let effects = json!([
         levels((0.1, 0.8), 1.3, (0.0, 1.0)),
@@ -377,14 +378,32 @@ fn process_v2_equals_effects_then_v1_process_for_every_dither_family() {
         })
         .unwrap();
         let effected = run(&data, &recipe.effects).unwrap();
-        let staged = pipeline::process(ProcessRequest {
+        let resized = coverage::resize(ResizeRequest {
+            version: 1,
             source: Source {
                 width: 16,
                 height: 16,
                 data: effected.data(),
             },
+            output: recipe.output,
+        })
+        .unwrap();
+        let staged = pipeline::process(ProcessRequest {
+            source: Source {
+                width: 7,
+                height: 5,
+                data: resized.data(),
+            },
             palette: &PALETTE,
-            recipe: recipe.terminal(),
+            recipe: RecipeV1 {
+                output: Output {
+                    resize: ResizePolicy::Nearest {
+                        anchor: Anchor::Center,
+                    },
+                    ..recipe.output
+                },
+                ..recipe.terminal()
+            },
         })
         .unwrap();
         assert_eq!(composed, staged, "{dither}");
@@ -402,13 +421,31 @@ fn process_v2_equals_effects_then_v1_process_for_every_dither_family() {
             recipe: &untreated,
         })
         .unwrap();
-        let v1 = pipeline::process(ProcessRequest {
+        let covered = coverage::resize(ResizeRequest {
+            version: 1,
             source: source(&data),
-            palette: &PALETTE,
-            recipe: recipe.terminal(),
+            output: recipe.output,
         })
         .unwrap();
-        assert_eq!(plain, v1, "{dither}");
+        let staged_plain = pipeline::process(ProcessRequest {
+            source: Source {
+                width: 7,
+                height: 5,
+                data: covered.data(),
+            },
+            palette: &PALETTE,
+            recipe: RecipeV1 {
+                output: Output {
+                    resize: ResizePolicy::Nearest {
+                        anchor: Anchor::Center,
+                    },
+                    ..recipe.output
+                },
+                ..recipe.terminal()
+            },
+        })
+        .unwrap();
+        assert_eq!(plain, staged_plain, "{dither}");
     }
 }
 

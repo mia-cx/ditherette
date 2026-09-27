@@ -107,7 +107,8 @@ Repeat an effect as often as you like, up to 64 steps; each instance keeps its o
 Alpha is never changed. With no enabled step, `applyEffects` returns the source itself.
 
 Recipe version 2 adds `effects` to the version 1 settings. Effects run first, on the source, then resize, dither, and quantize.
-It equals `applyEffects` followed by a version 1 `process`, but the effect result stays in Wasm.
+Version 2 also resizes by coverage: filtering kernels weight colour by alpha, so colour hidden under transparent pixels never bleeds into edges, and bicubic and Lanczos cannot ring alpha into empty areas. Nearest and fully opaque images resize exactly as in version 1. Version 1 and the standalone `resize` keep sampling channels independently.
+For nearest and opaque images it equals `applyEffects` followed by a version 1 `process`; the effect result stays in Wasm either way.
 Effects read the request palette and the working space of `match`. Standalone calls pass them as `context: { palette, space }`.
 Colour effects cannot run after quantization; no recipe field places them there.
 `isEffect(value)` reports whether one step would be accepted, without loading Wasm; use it to vet saved steps.

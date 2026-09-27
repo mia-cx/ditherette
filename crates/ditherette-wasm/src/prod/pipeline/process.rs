@@ -37,6 +37,7 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     overhead: u64,
     peak: &mut u64,
     store: &mut Store,
+    coverage: bool,
 ) -> Result<B::Output, Failure> {
     if request.recipe.version != 1 {
         return Err(Failure::new(
@@ -99,5 +100,6 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         overhead,
         peak,
         store,
+        coverage,
     )
 }
