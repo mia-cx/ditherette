@@ -1,6 +1,7 @@
 import { atom } from 'nanostores';
 import { persistentAtom } from '@nanostores/persistent';
 import type { DockviewApi, SerializedDockview } from 'dockview-core';
+import { clearCollapsed } from '$lib/components/dock/dock';
 import { effectLayers, type EffectLayer } from '$lib/stores/effects';
 
 /** The studio's fixed windows, in Windows-menu order. Their ids double as component names. */
@@ -49,33 +50,38 @@ function windowOptions(id: WindowId) {
 	return { id, component: id, title };
 }
 
-/** Preview in the middle, effects on the left, processing stages tabbed on the right. */
+/** Preview in the middle, processing stages tabbed on the left, effects on the right. */
 function defaultLayout(api: DockviewApi) {
+	clearCollapsed();
 	api.clear();
 	api.addPanel(windowOptions('preview'));
 	api.addPanel({
-		...windowOptions('effects'),
-		position: { referencePanel: 'preview', direction: 'left' },
-		initialWidth: columnWidth(api, EFFECTS_WIDTH)
-	});
-	api.addPanel({
 		...windowOptions('dimensions'),
-		position: { referencePanel: 'preview', direction: 'right' },
+		position: { referencePanel: 'preview', direction: 'left' },
 		initialWidth: columnWidth(api, STAGES_WIDTH)
 	});
-	for (const id of ['dither', 'color-space'] as const)
-		api.addPanel({
-			...windowOptions(id),
-			position: { referencePanel: 'dimensions', direction: 'within' },
-			inactive: true
-		});
+	api.addPanel({
+		...windowOptions('dither'),
+		position: { referencePanel: 'dimensions', direction: 'within' },
+		inactive: true
+	});
 	api.addPanel({
 		...windowOptions('palette'),
 		position: { referencePanel: 'dimensions', direction: 'below' }
 	});
+	api.addPanel({
+		...windowOptions('color-space'),
+		position: { referencePanel: 'palette', direction: 'within' },
+		inactive: true
+	});
+	api.addPanel({
+		...windowOptions('effects'),
+		position: { referencePanel: 'preview', direction: 'right' },
+		initialWidth: columnWidth(api, EFFECTS_WIDTH)
+	});
 	// Initial widths are ignored while the dock is still empty, so size the side columns last.
-	api.getPanel('effects')?.group.api.setSize({ width: columnWidth(api, EFFECTS_WIDTH) });
 	api.getPanel('dimensions')?.group.api.setSize({ width: columnWidth(api, STAGES_WIDTH) });
+	api.getPanel('effects')?.group.api.setSize({ width: columnWidth(api, EFFECTS_WIDTH) });
 }
 
 /** Restore the saved layout, or dock the default one when there is none or it no longer loads. */
