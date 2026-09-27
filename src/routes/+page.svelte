@@ -16,17 +16,19 @@
 		AccordionContent
 	} from '$lib/components/ui/accordion';
 	import { Badge } from '$lib/components/ui/badge';
-	import { ResizablePaneGroup, ResizablePane, ResizableHandle } from '$lib/components/ui/resizable';
+	import { MediaQuery } from 'svelte/reactivity';
 	import {
 		colorSpace,
 		ditherSettings,
 		hasImage,
 		outputSettings,
-		previewSettings,
 		processedImage,
-		uiSettings,
-		updatePreviewSettings
+		uiSettings
 	} from '$lib/stores/app';
+	import { effectLayers } from '$lib/stores/effects';
+	import PipelinePanel from './components/effects/PipelinePanel.svelte';
+	import Studio from './components/studio/Studio.svelte';
+	import WindowsMenu from './components/studio/WindowsMenu.svelte';
 	import { startAutoProcessing } from '$lib/processing/client';
 	import {
 		clearAllImageData,
@@ -38,17 +40,14 @@
 	import { DITHER_ALGORITHMS } from './components/dither-options';
 	import { RESIZE_MODES } from './components/output-options';
 
-	const DEFAULT_DESKTOP_PANE_LAYOUT = [56, 44] as const;
-
 	let openSections = $state<string[]>(
 		uiSettings.get().controlAccordionSections ?? ['dimensions', 'dither', 'color']
 	);
 	let fileInput = $state<HTMLInputElement>();
 	let uploadError = $state<string>();
 
-	const desktopPaneLayout = $derived(
-		validDesktopPaneLayout($previewSettings.desktopPaneLayout) ?? DEFAULT_DESKTOP_PANE_LAYOUT
-	);
+	// The studio needs room for docked windows; smaller screens stack the same controls.
+	const studio = new MediaQuery('min-width: 1024px', true);
 
 	const outputBadge = $derived(
 		`${$processedImage?.width ?? $outputSettings.width}×${$processedImage?.height ?? $outputSettings.height} · ${RESIZE_MODES.find((mode) => mode.id === $outputSettings.resize)?.label ?? 'Resize'}`
@@ -107,22 +106,6 @@
 			input.value = '';
 		}
 	}
-
-	function validDesktopPaneLayout(layout: unknown): [number, number] | undefined {
-		if (!Array.isArray(layout) || layout.length !== 2) return undefined;
-		const [preview, controls] = layout;
-		if (typeof preview !== 'number' || typeof controls !== 'number') return undefined;
-		if (!Number.isFinite(preview) || !Number.isFinite(controls)) return undefined;
-		return [preview, controls];
-	}
-
-	function persistDesktopPaneLayout(layout: number[]) {
-		const next = validDesktopPaneLayout(layout.map((size) => Math.round(size * 100) / 100));
-		if (!next) return;
-		const current = validDesktopPaneLayout(previewSettings.get().desktopPaneLayout);
-		if (current?.[0] === next[0] && current[1] === next[1]) return;
-		updatePreviewSettings({ desktopPaneLayout: next });
-	}
 </script>
 
 <svelte:head><title>ditherette</title></svelte:head>
@@ -149,40 +132,21 @@
 		</p>
 	{/if}
 
-	<main class="flex flex-1 flex-col overflow-hidden">
-		<div class="flex flex-1 flex-col gap-4 lg:hidden">
-			<ComparisonPreview
-				defaultMode="ab-reveal"
-				hasImage={$hasImage}
-				minHeightClass="min-h-[320px] md:min-h-[420px]"
-				onChooseImage={chooseImage}
-				onSelectFile={(file) => void loadImageFile(file)}
-			/>
-			{@render controls('gap-4')}
-		</div>
-
-		<div class="hidden flex-1 overflow-hidden lg:block">
-			<ResizablePaneGroup
-				direction="vertical"
-				class="h-full"
-				onLayoutChange={persistDesktopPaneLayout}
-			>
-				<ResizablePane defaultSize={desktopPaneLayout[0]} minSize={25}>
-					<ComparisonPreview
-						hasImage={$hasImage}
-						minHeightClass="h-full"
-						onChooseImage={chooseImage}
-						onSelectFile={(file) => void loadImageFile(file)}
-					/>
-				</ResizablePane>
-				<ResizableHandle withHandle />
-				<ResizablePane defaultSize={desktopPaneLayout[1]} minSize={25}>
-					<div class="h-full overflow-hidden p-0 pt-3">
-						{@render controls('gap-3 h-full overflow-hidden')}
-					</div>
-				</ResizablePane>
-			</ResizablePaneGroup>
-		</div>
+	<main class="flex min-h-0 flex-1 flex-col">
+		{#if studio.current}
+			<Studio onChooseImage={chooseImage} onSelectFile={(file) => void loadImageFile(file)} />
+		{:else}
+			<div class="flex flex-1 flex-col gap-4">
+				<ComparisonPreview
+					defaultMode="ab-reveal"
+					hasImage={$hasImage}
+					minHeightClass="min-h-[320px] md:min-h-[420px]"
+					onChooseImage={chooseImage}
+					onSelectFile={(file) => void loadImageFile(file)}
+				/>
+				{@render stackedControls()}
+			</div>
+		{/if}
 	</main>
 
 	<div class="sticky bottom-0 z-20 lg:static">
@@ -191,63 +155,76 @@
 </div>
 
 {#snippet appBarExtras()}
+	{#if studio.current}
+		<WindowsMenu />
+	{/if}
 	<PerformanceDebugPopover />
 {/snippet}
 
-{#snippet controls(extra: string)}
-	<div class="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] {extra}">
-		<div class="flex min-h-0 flex-col lg:overflow-y-auto">
-			<Accordion type="multiple" bind:value={openSections} class="border border-border bg-card">
-				<AccordionItem value="dimensions">
-					<AccordionTrigger class="px-4">
-						<span class="flex items-center gap-2 text-sm">
-							Dimensions
-							<Badge variant="outline" class="font-mono">{outputBadge}</Badge>
-						</span>
-					</AccordionTrigger>
-					<AccordionContent>
-						<div class="p-4">
-							<OutputPanel hasImage={$hasImage} hideHeading />
-						</div>
-					</AccordionContent>
-				</AccordionItem>
+{#snippet stackedControls()}
+	<div class="grid gap-4">
+		<Accordion type="multiple" bind:value={openSections} class="border border-border bg-card">
+			<AccordionItem value="effects">
+				<AccordionTrigger class="px-4">
+					<span class="flex items-center gap-2 text-sm">
+						Effects
+						<Badge variant="outline" class="font-mono">{$effectLayers.length}</Badge>
+					</span>
+				</AccordionTrigger>
+				<AccordionContent>
+					<div class="p-4">
+						<PipelinePanel />
+					</div>
+				</AccordionContent>
+			</AccordionItem>
 
-				<AccordionItem value="dither">
-					<AccordionTrigger class="px-4">
-						<span class="flex items-center gap-2 text-sm">
-							Dither
-							<Badge variant="secondary">{ditherBadge}</Badge>
-						</span>
-					</AccordionTrigger>
-					<AccordionContent>
-						<div class="p-4">
-							<DitherPanel hideHeading />
-						</div>
-					</AccordionContent>
-				</AccordionItem>
+			<AccordionItem value="dimensions">
+				<AccordionTrigger class="px-4">
+					<span class="flex items-center gap-2 text-sm">
+						Dimensions
+						<Badge variant="outline" class="font-mono">{outputBadge}</Badge>
+					</span>
+				</AccordionTrigger>
+				<AccordionContent>
+					<div class="p-4">
+						<OutputPanel hasImage={$hasImage} hideHeading />
+					</div>
+				</AccordionContent>
+			</AccordionItem>
 
-				<AccordionItem value="color">
-					<AccordionTrigger class="px-4">
-						<span class="flex items-center gap-2 text-sm">
-							Color space
-							<Badge variant="outline">{colorBadge}</Badge>
-						</span>
-					</AccordionTrigger>
-					<AccordionContent>
-						<div class="p-4">
-							<ColorSpacePanel hideHeading />
-						</div>
-					</AccordionContent>
-				</AccordionItem>
-			</Accordion>
-		</div>
+			<AccordionItem value="dither">
+				<AccordionTrigger class="px-4">
+					<span class="flex items-center gap-2 text-sm">
+						Dither
+						<Badge variant="secondary">{ditherBadge}</Badge>
+					</span>
+				</AccordionTrigger>
+				<AccordionContent>
+					<div class="p-4">
+						<DitherPanel hideHeading />
+					</div>
+				</AccordionContent>
+			</AccordionItem>
 
-		<div class="flex min-h-0 flex-col lg:overflow-y-auto">
-			<Card class="flex min-h-0 flex-1 flex-col py-3">
-				<CardContent class="flex min-h-0 flex-1 flex-col">
-					<PalettePanel fillHeight />
-				</CardContent>
-			</Card>
-		</div>
+			<AccordionItem value="color">
+				<AccordionTrigger class="px-4">
+					<span class="flex items-center gap-2 text-sm">
+						Color space
+						<Badge variant="outline">{colorBadge}</Badge>
+					</span>
+				</AccordionTrigger>
+				<AccordionContent>
+					<div class="p-4">
+						<ColorSpacePanel hideHeading />
+					</div>
+				</AccordionContent>
+			</AccordionItem>
+		</Accordion>
+
+		<Card class="py-3">
+			<CardContent>
+				<PalettePanel />
+			</CardContent>
+		</Card>
 	</div>
 {/snippet}

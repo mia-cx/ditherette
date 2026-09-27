@@ -12,7 +12,7 @@
 	let { id, step, fields, onchange }: Props = $props();
 </script>
 
-<div class="grid gap-3">
+<div class="grid grid-cols-1 gap-3">
 	{#each fields as field (field.key)}
 		{@const scale = field.scale ?? 1}
 		<EffectSlider

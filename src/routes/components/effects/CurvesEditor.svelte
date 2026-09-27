@@ -112,7 +112,7 @@
 	}
 </script>
 
-<div class="grid gap-3">
+<div class="grid grid-cols-1 gap-3">
 	<ChannelToggle value={step.channel} onchange={(channel) => onchange({ ...step, channel })} />
 
 	<svg

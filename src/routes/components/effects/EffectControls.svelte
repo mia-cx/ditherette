@@ -34,7 +34,7 @@
 </script>
 
 {#if layer}
-	<section class="grid gap-4" aria-label="{layer.name} controls">
+	<section class="grid grid-cols-1 gap-4" aria-label="{layer.name} controls">
 		{#if header}
 			<div class="flex items-center gap-2">
 				<VisibilityCheckbox

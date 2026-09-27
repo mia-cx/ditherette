@@ -45,8 +45,8 @@
 	import ColorEditDialog from './ColorEditDialog.svelte';
 	import PaletteToolbar from './PaletteToolbar.svelte';
 
-	type Props = { fillHeight?: boolean };
-	let { fillHeight = false }: Props = $props();
+	type Props = { fillHeight?: boolean; hideHeading?: boolean };
+	let { fillHeight = false, hideHeading = false }: Props = $props();
 
 	// Bound select state is intentionally local; effects synchronize it with the persistent nanostore.
 	// eslint-disable-next-line svelte/prefer-writable-derived
@@ -666,6 +666,7 @@
 	<ScrollArea class="min-h-0 flex-1">
 		<div class="flex min-h-full flex-col gap-2">
 			<PaletteToolbar
+				{hideHeading}
 				bind:preset
 				palettes={$palettes}
 				{currentPalette}

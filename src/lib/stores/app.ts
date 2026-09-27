@@ -54,7 +54,6 @@ export type PreviewMode = 'side-by-side' | 'ab-reveal';
 export type PreviewSettings = {
 	mode?: PreviewMode;
 	revealValue?: number;
-	desktopPaneLayout?: [number, number];
 	zoom?: number;
 	panX?: number;
 	panY?: number;
