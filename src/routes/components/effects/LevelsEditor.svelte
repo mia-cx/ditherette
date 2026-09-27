@@ -12,9 +12,11 @@
 	const fromByte = (value: number) => value / BYTE;
 
 	// Input black must stay below input white; output black above white inverts, so it may cross.
+	// A saved pair can sit less than a byte apart, so the gap never pushes past 0..255.
 	function setInput(edge: 'black' | 'white', byte: number) {
 		const other = toByte(edge === 'black' ? step.input.white : step.input.black);
-		const clamped = edge === 'black' ? Math.min(byte, other - 1) : Math.max(byte, other + 1);
+		const gapped = edge === 'black' ? Math.min(byte, other - 1) : Math.max(byte, other + 1);
+		const clamped = Math.min(BYTE, Math.max(0, gapped));
 		onchange({ ...step, input: { ...step.input, [edge]: fromByte(clamped) } });
 	}
 </script>
