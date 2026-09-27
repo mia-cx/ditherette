@@ -25,7 +25,10 @@ export function startTheme() {
 	} catch {
 		// Blocked storage (private mode, sandboxed frames) leaves the System default.
 	}
-	themeChoice.set(stored === 'light' || stored === 'dark' ? stored : 'system');
+	const choice = stored === 'light' || stored === 'dark' ? stored : 'system';
+	themeChoice.set(choice);
+	// app.html applies nothing when its own storage read fails, so apply the choice here too.
+	applyTheme(choice);
 	const media = matchMedia(SYSTEM_DARK);
 	const follow = () => {
 		if (themeChoice.get() === 'system') applyTheme('system');
