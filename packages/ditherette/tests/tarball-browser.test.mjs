@@ -179,7 +179,7 @@ test('installed tarball loads only scalar assets and runs the public contract in
 						globalThis.Worker = worker;
 					}
 				});
-				assert.deepEqual(exports, ['DitheretteError', 'createDitherette']);
+				assert.deepEqual(exports, ['DitheretteError', 'createDitherette', 'isEffect']);
 				assert.ok(
 					requests.every((path) => !/factory|\.wasm|threads/.test(path)),
 					'inert root import'

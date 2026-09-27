@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { createDitherette } from '../dist/index.js';
+import { createDitherette, isEffect } from '../dist/index.js';
 
 const wasm = await WebAssembly.compile(
 	await readFile(new URL('../dist/wasm/scalar/ditherette_wasm_bg.wasm', import.meta.url))
@@ -474,3 +474,26 @@ test('recolour context and recipe errors name their fields', () =>
 			'palette'
 		);
 	}));
+
+test('isEffect vets one step without Wasm', () => {
+	assert.equal(isEffect(halve), true);
+	assert.equal(isEffect({ ...halve, enabled: false }), true);
+	for (const step of [
+		{ effect: 'exposure', enabled: true, stops: 100 },
+		{ ...halve, channel: 'gray' },
+		{ ...halve, input: { black: 0.6, white: 0.4 } },
+		{
+			effect: 'curves',
+			enabled: true,
+			channel: 'rgb',
+			points: [
+				[0.5, 0],
+				[0.5, 1]
+			]
+		},
+		{ ...halve, extra: true },
+		{ effect: 'blur', enabled: true },
+		null
+	])
+		assert.equal(isEffect(step), false, JSON.stringify(step));
+});

@@ -5,6 +5,8 @@ import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	// The website imports the workspace package, whose real path sits outside SvelteKit's allow list.
+	server: { fs: { allow: ['packages'] } },
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

@@ -4,6 +4,7 @@ import { validateOptions } from './validation.js';
 import type { Ditherette, InitOptions } from './types.js';
 
 export { DitheretteError } from './errors.js';
+export { isEffect } from './validation-effects.js';
 export type { ErrorCode } from './errors.js';
 export type {
 	AlphaPolicy,

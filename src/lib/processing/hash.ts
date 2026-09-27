@@ -1,3 +1,4 @@
+import type { Effect } from 'ditherette';
 import type {
 	ColorSpaceId,
 	DitherSettings,
@@ -20,6 +21,7 @@ type ProcessingIdentityInput = {
 	output: OutputSettings;
 	dither: DitherSettings;
 	colorSpace: ColorSpaceId;
+	effects: readonly Effect[];
 	paletteName: string;
 	paletteSource: 'wplace' | 'custom';
 	palette: readonly EnabledPaletteColor[];
@@ -90,6 +92,8 @@ export function processingIdentity(input: ProcessingIdentityInput): JsonValue {
 		output: outputIdentity(input.output),
 		dither: input.dither,
 		colorSpace: input.colorSpace,
+		// Steps are plain JSON built in one key order, so their text identifies them.
+		effects: JSON.stringify(input.effects),
 		palette: {
 			name: input.paletteName,
 			source: input.paletteSource,

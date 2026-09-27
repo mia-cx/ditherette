@@ -78,7 +78,7 @@ function processRequest(overrides: Partial<Extract<WorkerRequest, { type: 'proce
 		id: 2,
 		type: 'process',
 		sourceId: 'source-1',
-		settings: { output, dither, colorSpace: 'srgb' },
+		settings: { output, dither, colorSpace: 'srgb', effects: [] },
 		palette,
 		settingsHash: 'hash',
 		...overrides

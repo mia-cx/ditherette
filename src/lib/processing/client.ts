@@ -15,6 +15,7 @@ import {
 	sourceImageData,
 	sourceMeta
 } from '$lib/stores/app';
+import { activeEffectSteps } from '$lib/stores/effects';
 import { saveProcessedImage } from './db';
 import { processingIdentityHash } from './hash';
 import { validateWorkerResponse } from './schemas';
@@ -101,6 +102,7 @@ export function currentSettingsHash() {
 		output: outputSettings.get(),
 		dither: ditherSettings.get(),
 		colorSpace: colorSpace.get(),
+		effects: activeEffectSteps.get(),
 		paletteName: palette.name,
 		paletteSource: palette.source,
 		palette: selectedPalette.get(),
@@ -160,7 +162,8 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				settings: {
 					output: outputSettings.get(),
 					dither: ditherSettings.get(),
-					colorSpace: colorSpace.get()
+					colorSpace: colorSpace.get(),
+					effects: activeEffectSteps.get()
 				},
 				palette: selectedPalette.get(),
 				settingsHash: hash
@@ -348,6 +351,7 @@ export function startAutoProcessing() {
 	if (stopAuto) return stopAuto;
 	let previousOutputSettings = outputSettings.get();
 	let previousDitherSettings = ditherSettings.get();
+	let previousEffectSteps = JSON.stringify(activeEffectSteps.get());
 	const unsubscribers = [
 		sourceImageData.subscribe(() => scheduleProcessing(0)),
 		outputSettings.subscribe((settings) => {
@@ -361,6 +365,13 @@ export function startAutoProcessing() {
 			scheduleProcessing(delay);
 		}),
 		colorSpace.subscribe(() => scheduleProcessing(0)),
+		activeEffectSteps.listen((steps) => {
+			// Renaming or reordering disabled layers leaves the steps unchanged.
+			const next = JSON.stringify(steps);
+			if (next === previousEffectSteps) return;
+			previousEffectSteps = next;
+			scheduleProcessing(SLIDER_DEBOUNCE_MS);
+		}),
 		paletteEnabled.subscribe(() => scheduleProcessing(0)),
 		activePaletteName.subscribe(() => scheduleProcessing(0)),
 		customPalettes.subscribe(() => scheduleProcessing(0))

@@ -1120,7 +1120,7 @@
 	</div>
 
 	<div
-		class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border bg-background/80 px-2 py-1.5 backdrop-blur"
+		class="@container grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border bg-background/80 px-2 py-1.5 backdrop-blur"
 	>
 		<div class="flex items-center gap-1">
 			<Button
@@ -1236,8 +1236,8 @@
 		</div>
 
 		<div class="flex min-w-0 items-center justify-end gap-1.5 text-xs text-muted-foreground">
-			<Badge variant="outline" class="hidden md:inline-flex">{colorLabel}</Badge>
-			<Badge variant="outline" class="hidden sm:inline-flex">{sizeLabel}</Badge>
+			<Badge variant="outline" class="hidden @2xl:inline-flex">{colorLabel}</Badge>
+			<Badge variant="outline" class="hidden @xl:inline-flex">{sizeLabel}</Badge>
 			<div class="flex items-center border border-border bg-background">
 				<Button
 					size="xs"

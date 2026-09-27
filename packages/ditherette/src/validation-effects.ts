@@ -9,7 +9,7 @@ import {
 	rgbaBytes,
 	TRANSPARENT_CODE
 } from './validation.js';
-import type { Rgba8Image } from './types.js';
+import type { Effect, Rgba8Image } from './types.js';
 
 const channels = ['rgb', 'red', 'green', 'blue'];
 /** Mirrors the Rust `MAX_EFFECTS`. */
@@ -382,5 +382,20 @@ export function validateApplyEffects(value: unknown) {
 			'request',
 			'Effects request could not be normalized.'
 		);
+	}
+}
+
+/**
+ * True when `value` is one effect step `applyEffects` and recipe version 2 accept, disabled or not.
+ * Checks arguments without loading Wasm, so hosts can vet saved steps before sending them.
+ * Palette and working-space requirements are checked per request, not here.
+ */
+export function isEffect(value: unknown): value is Effect {
+	try {
+		validateEffects([value], 'effects');
+		return true;
+	} catch (error) {
+		if (error instanceof DitheretteError) return false;
+		throw error;
 	}
 }

@@ -1,0 +1,66 @@
+@import './dockview-core.css';
+
+/* Dockview reads its look from these variables; each maps to an app token, so both themes follow. */
+.dockview-theme-ditherette {
+	/* Floating windows stay under menus and popovers (z-50) opened from inside them. */
+	--dv-overlay-z-index: 20;
+	--dv-tabs-and-actions-container-font-size: 12px;
+	--dv-tabs-and-actions-container-height: 32px;
+	--dv-tab-font-size: inherit;
+	--dv-tab-margin: 0;
+	--dv-tab-close-icon-size: inherit;
+	--dv-border-radius: 0px;
+	--dv-tab-border-radius: 0px;
+	--dv-sash-border-radius: 0px;
+	--dv-dropdown-border-radius: 0px;
+	--dv-spacing-padding: 0px;
+
+	--dv-group-view-background-color: var(--card);
+	--dv-tabs-and-actions-container-background-color: var(--background);
+	--dv-activegroup-visiblepanel-tab-background-color: var(--card);
+	--dv-activegroup-hiddenpanel-tab-background-color: var(--background);
+	--dv-inactivegroup-visiblepanel-tab-background-color: var(--card);
+	--dv-inactivegroup-hiddenpanel-tab-background-color: var(--background);
+	--dv-activegroup-visiblepanel-tab-color: var(--foreground);
+	--dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+	--dv-inactivegroup-visiblepanel-tab-color: var(--foreground);
+	--dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+	--dv-tab-divider-color: var(--border);
+	--dv-separator-border: var(--border);
+	--dv-paneview-header-border-color: var(--border);
+	--dv-paneview-active-outline-color: var(--ring);
+	--dv-tabs-container-scrollbar-color: var(--border);
+	--dv-scrollbar-background-color: var(--border);
+	--dv-icon-hover-background-color: var(--accent);
+	--dv-context-menu-background-color: var(--popover);
+	--dv-context-menu-color: var(--popover-foreground);
+
+	--dv-sash-color: transparent;
+	--dv-active-sash-color: var(--primary);
+	--dv-active-sash-transition-duration: 0.1s;
+	--dv-active-sash-transition-delay: 0.3s;
+
+	--dv-drag-over-background-color: color-mix(in oklch, var(--primary) 18%, transparent);
+	--dv-drag-over-border-color: var(--primary);
+	--dv-drag-over-border: none;
+	--dv-edge-dock-indicator-color: var(--primary);
+	--dv-smart-guides-color: var(--primary);
+	--dv-smart-guides-preview-color: color-mix(in oklch, var(--primary) 18%, transparent);
+	--dv-dnd-compass-color: var(--foreground);
+	--dv-dnd-compass-cell-color: var(--muted);
+	--dv-dnd-compass-edge-cell-color: var(--accent);
+	--dv-dnd-compass-active-cell-color: var(--primary);
+
+	--dv-floating-border: 1px solid var(--border);
+	--dv-floating-group-border: none;
+	--dv-floating-box-shadow: 0 8px 32px rgb(0 0 0 / 0.2), 0 2px 8px rgb(0 0 0 / 0.12);
+	--dv-floating-group-dragging-opacity: 0.6;
+	--dv-floating-titlebar-height: 22px;
+	--dv-floating-titlebar-background-color: var(--background);
+	--dv-floating-titlebar-border-bottom: var(--dv-floating-border);
+}
+
+/* Mark the focused window's active tab with the brand colour, like a selection. */
+.dockview-theme-ditherette .dv-groupview.dv-active-group .dv-tab.dv-active-tab {
+	box-shadow: inset 0 2px 0 var(--primary);
+}

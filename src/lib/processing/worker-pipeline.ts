@@ -83,7 +83,7 @@ export class ProcessorWorkerPipeline {
 				id,
 				settingsHash,
 				sourceId,
-				scopeKey: `package|${sourceId}|${size.width}x${size.height}|${settings.output.resize}|${cropKey}|grade:identity`,
+				scopeKey: `package|${sourceId}|${size.width}x${size.height}|${settings.output.resize}|${cropKey}|effects:${settings.effects.map((step) => step.effect).join('+') || 'none'}`,
 				startedAt,
 				completedAt,
 				totalMs: completedAt - startedAt,

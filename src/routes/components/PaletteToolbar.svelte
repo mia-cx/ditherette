@@ -19,6 +19,7 @@
 		onDeletePalette: (palette: Palette) => void;
 		onImportPalette: () => void;
 		onExportPalette: () => void;
+		hideHeading?: boolean;
 	};
 
 	let {
@@ -29,7 +30,8 @@
 		onDuplicatePalette,
 		onDeletePalette,
 		onImportPalette,
-		onExportPalette
+		onExportPalette,
+		hideHeading = false
 	}: Props = $props();
 
 	let open = $state(false);
@@ -41,7 +43,9 @@
 </script>
 
 <div class="grid gap-1.5">
-	<h2 class="text-sm font-semibold tracking-tight">Palette</h2>
+	{#if !hideHeading}
+		<h2 class="text-sm font-semibold tracking-tight">Palette</h2>
+	{/if}
 	<Select bind:open bind:value={preset} type="single">
 		<SelectTrigger
 			id="palette-preset"

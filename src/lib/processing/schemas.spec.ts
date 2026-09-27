@@ -238,7 +238,7 @@ describe('processing schemas', () => {
 			id: 1,
 			type: 'process',
 			sourceId: 'source-1',
-			settings: { output, dither, colorSpace: 'oklab' },
+			settings: { output, dither, colorSpace: 'oklab', effects: [] },
 			palette,
 			settingsHash: 'hash'
 		});
@@ -247,6 +247,24 @@ describe('processing schemas', () => {
 		if (request.type !== 'process') throw new Error('Expected process request.');
 		expect(request.settings.output.width).toBe(2);
 		expect(request.settings.colorSpace).toBe('oklab');
+	});
+
+	it('rejects effect steps the package would not accept', () => {
+		expect(() =>
+			validateWorkerRequest({
+				id: 1,
+				type: 'process',
+				sourceId: 'source-1',
+				settings: {
+					output,
+					dither,
+					colorSpace: 'oklab',
+					effects: [{ effect: 'exposure', enabled: true, stops: 100 }]
+				},
+				palette,
+				settingsHash: 'hash'
+			})
+		).toThrow(/effect steps/i);
 	});
 
 	it('accepts worker cancel requests', () => {
