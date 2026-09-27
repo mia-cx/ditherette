@@ -23,6 +23,7 @@
 			max={field.max}
 			step={field.step}
 			unit={field.unit}
+			track={field.track}
 			onchange={(value) => onchange({ ...step, [field.key]: value / scale })}
 		/>
 	{/each}
