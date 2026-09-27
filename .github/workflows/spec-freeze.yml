@@ -36,13 +36,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-        # Only owner and org-member comments count. Each approves one exact policy digest.
+        # A comment approves only when its whole body is one approval line and its author
+        # can administer or maintain this repository. Each approves one exact policy digest.
         run: |
           digests=""
           if test -n "$PR"; then
-            digests=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-              --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER") | .body' \
-              | grep -oE '^/approve-freeze sha256:[0-9a-f]{64}' | cut -d: -f2 | tr '\n' ' ' || true)
+            while read -r login digest; do
+              role=$(gh api "repos/$REPO/collaborators/$login/permission" --jq .role_name)
+              case "$role" in admin | maintain) digests="$digests $digest" ;; esac
+            done < <(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '
+              .[] | select(.body | test("^/approve-freeze sha256:[0-9a-f]{64}\\s*$"))
+              | "\(.user.login) \(.body | capture("sha256:(?<digest>[0-9a-f]{64})").digest)"')
           fi
           echo "digests=$digests" >> "$GITHUB_OUTPUT"
       - name: Validate with exact base policy

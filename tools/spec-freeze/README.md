@@ -144,7 +144,8 @@ approves its exact digest. The failing check prints the comment to post:
 /approve-freeze sha256:<policy digest>
 ```
 
-The workflow reads pull request comments from repository owners and members only.
+A comment counts only when its whole body is the approval line and its author has the
+admin or maintain role on this repository. Organization membership alone is not enough.
 The digest covers the candidate's policy files, checkpoint, dependency record,
 tests, and workflow. Any later edit to those files changes the digest and needs a
 fresh approval. Re-run the `Frozen reference` check after commenting.
