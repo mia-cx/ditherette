@@ -55,3 +55,11 @@ it('restores the latest layout, even when the studio closes before saving', asyn
 	await renderStudio();
 	await expect.poll(tabTitles).toEqual(expect.arrayContaining(['Preview', 'Effects', 'Curves']));
 });
+
+it('replaces a saved layout that no longer loads with the default', async () => {
+	// Storage holds untyped JSON, so a damaged layout arrives the same way.
+	studioLayout.set(JSON.parse('{ "grid": "broken" }'));
+	await renderStudio();
+	await expect.poll(tabTitles).toEqual(expect.arrayContaining(['Preview', 'Effects', 'Palette']));
+	expect(JSON.stringify(studioLayout.get())).toContain('"preview"');
+});

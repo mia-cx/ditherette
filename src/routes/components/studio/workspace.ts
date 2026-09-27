@@ -86,6 +86,8 @@ export function startStudio(api: DockviewApi) {
 		api.fromJSON(saved);
 	} catch {
 		defaultLayout(api);
+		// Replace a missing or unloadable layout now, so the next mount does not retry it.
+		studioLayout.set(api.toJSON());
 	}
 	const syncOpen = () => openWindows.set(new Set(api.panels.map((panel) => panel.id)));
 	let timer: ReturnType<typeof setTimeout> | undefined;
