@@ -15,6 +15,13 @@ function ramp() {
 	return { width: 16, height: 16, data };
 }
 
+/** The ramp at full opacity: recipe v2 resizes it exactly like v1. */
+function opaqueRamp() {
+	const source = ramp();
+	for (let offset = 3; offset < source.data.length; offset += 4) source.data[offset] = 255;
+	return source;
+}
+
 const levels = (input, gamma, output, channel = 'rgb', enabled = true) => ({
 	effect: 'levels',
 	enabled,
@@ -110,18 +117,18 @@ test('results are independent of the source and repeat exactly', () =>
 		assert.notEqual(second.data, first.data);
 	}));
 
-test('process v2 equals applyEffects then process v1, with an effects progress stage', () =>
+test('opaque process v2 equals applyEffects then process v1, with an effects progress stage', () =>
 	withProcessor((processor) => {
 		const effects = [levels([0.1, 0.8], 1.3, [0, 1]), levels([0, 1], 1, [0.3, 0.6], 'blue')];
 		const stages = [];
 		const composed = processor.process({
-			source: ramp(),
+			source: opaqueRamp(),
 			palette,
 			recipe: { version: 2, effects, ...terminal },
 			onProgress: ({ stage }) => stages.push(stage)
 		});
 		const staged = processor.process({
-			source: apply(processor, effects),
+			source: apply(processor, effects, { source: opaqueRamp() }),
 			palette,
 			recipe: { version: 1, ...terminal }
 		});
@@ -131,14 +138,29 @@ test('process v2 equals applyEffects then process v1, with an effects progress s
 		assert.ok(stages.indexOf('effects') < stages.indexOf('resize'), stages.join());
 		assert.equal(stages.at(-1), 'complete');
 		const plain = processor.process({
-			source: ramp(),
+			source: opaqueRamp(),
 			palette,
 			recipe: { version: 2, effects: [], ...terminal }
 		});
 		assert.deepEqual(
 			plain,
-			processor.process({ source: ramp(), palette, recipe: { version: 1, ...terminal } })
+			processor.process({ source: opaqueRamp(), palette, recipe: { version: 1, ...terminal } })
 		);
+	}));
+
+test('process v2 keeps colour hidden under transparent pixels out of filtered resizes', () =>
+	withProcessor((processor) => {
+		const hiding = (rgb) => {
+			const source = ramp();
+			for (let offset = 0; offset < source.data.length; offset += 4)
+				if (source.data[offset + 3] < 64) source.data.set([...rgb, 0], offset);
+			return source;
+		};
+		const run = (recipe, rgb) => processor.process({ source: hiding(rgb), palette, recipe });
+		const v2 = { version: 2, effects: [], ...terminal };
+		const v1 = { version: 1, ...terminal };
+		assert.deepEqual(run(v2, [0, 0, 0]), run(v2, [255, 255, 255]));
+		assert.notDeepEqual(run(v1, [0, 0, 0]), run(v1, [255, 255, 255]));
 	}));
 
 test('invalid effects fail with indexed paths before any work', () =>
@@ -391,12 +413,15 @@ test('analyzeRecolour returns an editable recipe that reproduces automatic recol
 		);
 	}));
 
-test('recolour composes into process v2 with the request palette and match space', () =>
+test('recolour composes into opaque process v2 with the request palette and match space', () =>
 	withProcessor((processor) => {
 		const recipe = { version: 2, effects: [halve, auto()], ...terminal, match: 'oklab-euclidean' };
-		const composed = processor.process({ source: ramp(), palette: warm, recipe });
+		const composed = processor.process({ source: opaqueRamp(), palette: warm, recipe });
 		const staged = processor.process({
-			source: apply(processor, [halve, auto()], { context: { palette: warm, space: 'oklab' } }),
+			source: apply(processor, [halve, auto()], {
+				source: opaqueRamp(),
+				context: { palette: warm, space: 'oklab' }
+			}),
 			palette: warm,
 			recipe: { version: 1, ...terminal, match: 'oklab-euclidean' }
 		});
