@@ -155,14 +155,9 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 	}
 }
 
-/** An empty pipeline keeps recipe v1, so its output and caches match the website before effects. */
-function packageRecipe(
-	settings: ProcessingSettings,
-	stages: Omit<RecipeV1, 'version'>
-): RecipeV1 | RecipeV2 {
-	return settings.effects.length
-		? { version: 2, effects: settings.effects, ...stages }
-		: { version: 1, ...stages };
+/** Always recipe v2: besides effects, it resizes colour weighted by coverage, so transparency never bleeds. */
+function packageRecipe(settings: ProcessingSettings, stages: Omit<RecipeV1, 'version'>): RecipeV2 {
+	return { version: 2, effects: settings.effects, ...stages };
 }
 
 /** Translate controls for a synchronous public call. Contiguous crops borrow bytes; Rust owns the snapshot. */
