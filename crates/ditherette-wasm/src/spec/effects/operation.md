@@ -30,13 +30,15 @@ The two public ways to run a chain: return the full-colour result, or continue i
 1. Reject any version other than 2 at `recipe.version`.
 2. Build the context from the request palette and `match.space()`, then validate the chain against it.
 3. Validate the terminal settings exactly as v1 `process` would.
-4. Run `apply_effects` on the source, then v1 `process` on its RGBA8 output.
+4. Run `apply_effects` on the source, then the coverage-weighted resize ([coverage](../coverage/resize.md)) with the terminal `output` settings.
+5. Run v1 `process` on that RGBA8 image with the same settings, except `output.resize` is centred nearest at the output size, an exact copy.
 
 Inside `process`, effect paths gain a `recipe.` prefix. A missing palette colour reports `palette`.
 
 ## Why this works this way
 
-Defining `process` as a literal composition keeps it reproducible from the public staged calls.
+Defining `process` as a literal composition keeps it reproducible from the staged calls.
+Resizing by coverage before v1 keeps hidden colour under transparent pixels out of the result, while v1 stays frozen; for opaque images and nearest the bytes equal v1 `process`.
 Deriving the context from the recipe means a palette-aware effect always sees the palette and space quantization will use.
 Effects run before resize, on the full source, so resize and dither settings can change without re-running effects.
 

@@ -1,7 +1,7 @@
 //! Public effect operations: standalone `apply_effects` and recipe-v2 `process`.
 //!
-//! `process` is exactly `apply_effects` followed by the frozen v1 `process`
-//! with the recipe's terminal settings. No other composition exists.
+//! `process` is exactly `apply_effects`, then the coverage-weighted resize, then the frozen
+//! v1 `process` at the output size with the recipe's terminal settings.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,11 +15,12 @@ use crate::{
         contract::{
             error::{DitheretteError, ErrorCode},
             request::{
-                validate_dimensions, AlphaPolicy, DitherPolicy, MatchPolicy, Output,
-                ProcessRequest, RecipeV1, Request, Source, MAX_SOURCE_SIDE, RECIPE_VERSION,
+                validate_dimensions, AlphaPolicy, Anchor, DitherPolicy, MatchPolicy, Output,
+                ProcessRequest, RecipeV1, Request, ResizePolicy, ResizeRequest, Source,
+                MAX_SOURCE_SIDE, RECIPE_VERSION,
             },
         },
-        pipeline,
+        coverage, pipeline,
     },
 };
 
@@ -126,7 +127,7 @@ pub struct ProcessRequestV2<'a> {
     pub recipe: &'a RecipeV2,
 }
 
-/// Validates everything, applies effects, then runs the frozen v1 `process`.
+/// Validates everything, applies effects, resizes by coverage, then runs the frozen v1 `process`.
 /// The effects context is this request's palette and the matching working space.
 pub fn process(request: ProcessRequestV2<'_>) -> Result<IndexedImage, DitheretteError> {
     let recipe = request.recipe;
@@ -151,14 +152,33 @@ pub fn process(request: ProcessRequestV2<'_>) -> Result<IndexedImage, Ditherette
         context,
     })
     .map_err(in_recipe)?;
+    let resized = coverage::resize(ResizeRequest {
+        version: RECIPE_VERSION,
+        source: rgba8_source(&effected),
+        output: terminal.recipe.output,
+    })?;
+    // The image already has the output size, so v1 only dithers and quantizes it.
     pipeline::process(ProcessRequest {
-        source: Source {
-            width: effected.dimensions().width(),
-            height: effected.dimensions().height(),
-            data: effected.data(),
+        source: rgba8_source(&resized),
+        recipe: RecipeV1 {
+            output: Output {
+                resize: ResizePolicy::Nearest {
+                    anchor: Anchor::Center,
+                },
+                ..terminal.recipe.output
+            },
+            ..terminal.recipe
         },
         ..terminal
     })
+}
+
+fn rgba8_source(image: &Rgba8Image) -> Source<'_> {
+    Source {
+        width: image.dimensions().width(),
+        height: image.dimensions().height(),
+        data: image.data(),
+    }
 }
 
 /// Decodes a recipe-v2 JSON object. Effect decoding errors name `recipe.effects.i`.
