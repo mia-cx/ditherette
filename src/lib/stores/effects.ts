@@ -50,13 +50,23 @@ function replaceLayer(id: string, change: (layer: EffectLayer) => EffectLayer) {
 	effectLayers.set(effectLayers.get().map((layer) => (layer.id === id ? change(layer) : layer)));
 }
 
+/**
+ * A random 128-bit layer id. `crypto.randomUUID` exists only in secure contexts, so a dev server
+ * opened over plain HTTP from another machine could not add effects with it.
+ */
+function newLayerId() {
+	return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+		byte.toString(16).padStart(2, '0')
+	).join('');
+}
+
 /** Append a neutral instance of `kind`, named after the effect, and return it. */
 export function addEffect(kind: EffectKind): EffectLayer {
 	const layers = effectLayers.get();
 	if (layers.length >= MAX_EFFECT_LAYERS)
 		throw new Error(`The pipeline holds at most ${MAX_EFFECT_LAYERS} effects.`);
 	const layer: EffectLayer = {
-		id: crypto.randomUUID(),
+		id: newLayerId(),
 		name: uniqueName(EFFECTS[kind].label, layers),
 		step: EFFECTS[kind].create()
 	};

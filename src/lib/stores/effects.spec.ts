@@ -44,6 +44,19 @@ describe('effect layers', () => {
 		expect(effectLayers.get().map((layer) => layer.id)).toEqual([curves.id, levels.id]);
 	});
 
+	it('makes ids without secure-context APIs', () => {
+		const randomUUID = crypto.randomUUID;
+		// Pages served over plain HTTP from another host have no randomUUID.
+		Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true });
+		try {
+			const [first, second] = [addEffect('levels'), addEffect('levels')];
+			expect(first.id).toMatch(/^[0-9a-f]{32}$/);
+			expect(first.id).not.toBe(second.id);
+		} finally {
+			Object.defineProperty(crypto, 'randomUUID', { value: randomUUID, configurable: true });
+		}
+	});
+
 	it('never changes a layer into another effect', () => {
 		const levels = addEffect('levels');
 		updateEffect(levels.id, { effect: 'exposure', enabled: true, stops: 1 });
