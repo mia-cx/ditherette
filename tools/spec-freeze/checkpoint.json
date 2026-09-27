@@ -1181,7 +1181,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/coverage/resize.md",
 						"mode": "100644",
-						"sha256": "48dfddcb33c1320d2d7a1d4fd8035d9e00defb885558e51a4be27a87a006e797"
+						"sha256": "59f66583ce933dca6666a279994559b4804bbf8b3682b02643b6bcddd8863bec"
 					}
 				},
 				{
@@ -1255,7 +1255,7 @@
 					}
 				}
 			],
-			"contentSha256": "8084f106b059b2bb86b5c11a85aea6b138fbf8fe6d10ac4f9bd28c46c8414f21"
+			"contentSha256": "ebf8e044f2a2379765432807bc93c54ff0e1f92921e4b288bb0e277a815a0ba3"
 		}
 	]
 }

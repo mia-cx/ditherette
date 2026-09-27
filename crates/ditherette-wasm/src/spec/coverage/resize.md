@@ -27,8 +27,7 @@ Opaque sources skip the carrier, so their bytes stay identical to v1.
 ## Correctness invariants
 
 - Nearest, equal-size, and fully opaque requests equal v1 `resize` byte for byte.
-- A fully transparent source pixel's RGB never affects any output byte.
-- Where every main-lobe tap is fully transparent, bicubic and Lanczos output `[0, 0, 0, 0]`.
+- When the size changes, a fully transparent source pixel's RGB never affects any output byte, and where every main-lobe tap is fully transparent, bicubic and Lanczos output `[0, 0, 0, 0]`. An equal-size request is an exact copy, so it keeps hidden RGB.
 - Output alpha never exceeds the largest source alpha in the main lobe.
 
 ## Edge cases
