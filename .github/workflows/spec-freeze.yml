@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   frozen-reference:
@@ -28,12 +30,30 @@ jobs:
           node-version: '24'
       - name: Install reference compiler
         run: rustup toolchain install 1.97.0 --profile minimal --target wasm32-unknown-unknown
+      - name: Read maintainer policy approvals
+        id: approvals
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        # Only owner and org-member comments count. Each approves one exact policy digest.
+        run: |
+          digests=""
+          if test -n "$PR"; then
+            digests=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+              --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER") | .body' \
+              | grep -oE '^/approve-freeze sha256:[0-9a-f]{64}' | cut -d: -f2 | tr '\n' ' ' || true)
+          fi
+          echo "digests=$digests" >> "$GITHUB_OUTPUT"
       - name: Validate with exact base policy
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+          APPROVED: ${{ steps.approvals.outputs.digests }}
         run: |
           if test -f trusted/tools/spec-freeze/guard.mjs; then
-            node trusted/tools/spec-freeze/guard.mjs --root "$GITHUB_WORKSPACE/candidate" --trusted-root "$GITHUB_WORKSPACE/trusted"
+            approvals=()
+            for digest in $APPROVED; do approvals+=(--approved "$digest"); done
+            node trusted/tools/spec-freeze/guard.mjs --root "$GITHUB_WORKSPACE/candidate" --trusted-root "$GITHUB_WORKSPACE/trusted" "${approvals[@]}"
           elif test "$BASE_SHA" = e0101af71410e7551d8de7ed4d54056e3d7f0fd8; then
             echo 'S18 bootstrap: candidate policy requires explicit human review.'
             node candidate/tools/spec-freeze/guard.mjs
