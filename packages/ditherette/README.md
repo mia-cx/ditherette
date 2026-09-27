@@ -110,6 +110,7 @@ Recipe version 2 adds `effects` to the version 1 settings. Effects run first, on
 It equals `applyEffects` followed by a version 1 `process`, but the effect result stays in Wasm.
 Effects read the request palette and the working space of `match`. Standalone calls pass them as `context: { palette, space }`.
 Colour effects cannot run after quantization; no recipe field places them there.
+`isEffect(value)` reports whether one step would be accepted, without loading Wasm; use it to vet saved steps.
 
 Built-in effects:
 

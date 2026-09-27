@@ -249,7 +249,7 @@ describe('processing schemas', () => {
 		expect(request.settings.colorSpace).toBe('oklab');
 	});
 
-	it('rejects effect steps that name no built-in effect', () => {
+	it('rejects effect steps the package would not accept', () => {
 		expect(() =>
 			validateWorkerRequest({
 				id: 1,
@@ -259,7 +259,7 @@ describe('processing schemas', () => {
 					output,
 					dither,
 					colorSpace: 'oklab',
-					effects: [{ effect: 'blur', enabled: true }]
+					effects: [{ effect: 'exposure', enabled: true, stops: 100 }]
 				},
 				palette,
 				settingsHash: 'hash'

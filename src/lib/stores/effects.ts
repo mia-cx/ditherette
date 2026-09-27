@@ -1,7 +1,7 @@
 import { persistentAtom } from '@nanostores/persistent';
 import { computed } from 'nanostores';
-import type { Effect } from 'ditherette';
-import { EFFECTS, MAX_EFFECT_LAYERS, isEffectStep, type EffectKind } from '$lib/effects/catalog';
+import { isEffect, type Effect } from 'ditherette';
+import { EFFECTS, MAX_EFFECT_LAYERS, type EffectKind } from '$lib/effects/catalog';
 
 /** One named instance in the effect pipeline. The name only labels it; `step` is what runs. */
 export type EffectLayer = {
@@ -15,10 +15,10 @@ export const MAX_EFFECT_NAME_LENGTH = 64;
 function isLayer(value: unknown): value is EffectLayer {
 	if (!value || typeof value !== 'object') return false;
 	const { id, name, step } = value as Record<string, unknown>;
-	return typeof id === 'string' && typeof name === 'string' && isEffectStep(step);
+	return typeof id === 'string' && typeof name === 'string' && isEffect(step);
 }
 
-/** Keep well-formed layers from storage. The package validates step arguments when they run. */
+/** Keep saved layers the package would accept, so a damaged entry cannot block processing. */
 function decodeLayers(encoded: string): EffectLayer[] {
 	try {
 		const value: unknown = JSON.parse(encoded);
