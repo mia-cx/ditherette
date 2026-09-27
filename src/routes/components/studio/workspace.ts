@@ -1,7 +1,7 @@
 import { atom } from 'nanostores';
 import { persistentAtom } from '@nanostores/persistent';
 import type { DockviewApi, SerializedDockview } from 'dockview-core';
-import { clearCollapsed } from '$lib/components/dock/dock';
+import { clearCollapsed, collapseRevision } from '$lib/components/dock/dock';
 import { effectLayers, type EffectLayer } from '$lib/stores/effects';
 
 /** The studio's fixed windows, in Windows-menu order. Their ids double as component names. */
@@ -104,14 +104,16 @@ export function startStudio(api: DockviewApi) {
 		if (pending) studioLayout.set(pending);
 		pending = undefined;
 	};
+	const snapshot = () => {
+		pending = api.toJSON();
+		clearTimeout(timer);
+		timer = setTimeout(save, PERSIST_DELAY_MS);
+	};
 	const listeners = [
 		api.onDidAddPanel(syncOpen),
 		api.onDidRemovePanel(syncOpen),
-		api.onDidLayoutChange(() => {
-			pending = api.toJSON();
-			clearTimeout(timer);
-			timer = setTimeout(save, PERSIST_DELAY_MS);
-		})
+		api.onDidLayoutChange(snapshot),
+		{ dispose: collapseRevision.listen(snapshot) }
 	];
 	syncOpen();
 	studioApi.set(api);
