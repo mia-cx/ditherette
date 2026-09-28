@@ -31,7 +31,7 @@
 		updatePreviewSettings,
 		type PreviewMode
 	} from '$lib/stores/app';
-	import { curvePicker } from '$lib/stores/curve-pick';
+	import { curvePicker, type CurvePicker } from '$lib/stores/curve-pick';
 	import CropIcon from 'phosphor-svelte/lib/Crop';
 	import SlidersHorizontalIcon from 'phosphor-svelte/lib/SlidersHorizontal';
 	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOut';
@@ -263,7 +263,8 @@
 		else clearLockedFrame();
 	}
 
-	function cancelPointerInteraction() {
+	function cancelPointerInteraction(event?: Event) {
+		if (pick && event instanceof PointerEvent && event.pointerId !== pick.pointerId) return;
 		if ((cropResize || cropMove) && cropDraft) cropDraft = normalizeCrop(cropDraft);
 		pick = undefined;
 		pointers = {};
@@ -670,8 +671,8 @@
 		});
 	}
 
-	/** A curve pick in progress: which pointer, and where it went down. */
-	let pick = $state<{ pointerId: number; startY: number }>();
+	/** A curve pick in progress: which pointer and picker own it, and where it went down. */
+	let pick = $state<{ pointerId: number; startY: number; picker: CurvePicker }>();
 
 	/**
 	 * The source colour under a pointer, through the applied crop, zoom, and pan. Every pane frames
@@ -683,12 +684,12 @@
 		const focus = appliedCrop() ?? { x: 0, y: 0, width: image.width, height: image.height };
 		const bounds = pane.getBoundingClientRect();
 		const frame = fitFrame(pane, focus.width, focus.height);
-		const x = Math.floor(
-			focus.x + ((clientX - bounds.left - frame.left) / frame.width) * focus.width
-		);
-		const y = Math.floor(
-			focus.y + ((clientY - bounds.top - frame.top) / frame.height) * focus.height
-		);
+		const frameX = clientX - bounds.left - frame.left;
+		const frameY = clientY - bounds.top - frame.top;
+		if (frameX < 0 || frameY < 0 || frameX >= frame.width || frameY >= frame.height)
+			return undefined;
+		const x = Math.floor(focus.x + (frameX / frame.width) * focus.width);
+		const y = Math.floor(focus.y + (frameY / frame.height) * focus.height);
 		if (x < 0 || y < 0 || x >= image.width || y >= image.height) return undefined;
 		const at = (y * image.width + x) * 4;
 		return [image.data[at]!, image.data[at + 1]!, image.data[at + 2]!] as const;
@@ -699,11 +700,12 @@
 		const picker = $curvePicker;
 		if (picker && !cropMode) {
 			event.preventDefault();
+			if (pick) return;
 			const colour = sourceColourAt(pane, event.clientX, event.clientY);
 			if (!colour) return;
 			pane.setPointerCapture(event.pointerId);
 			picker.pick(colour);
-			pick = { pointerId: event.pointerId, startY: event.clientY };
+			pick = { pointerId: event.pointerId, startY: event.clientY, picker };
 			return;
 		}
 		event.preventDefault();
@@ -727,7 +729,7 @@
 			return;
 		}
 		if (pick?.pointerId === event.pointerId) {
-			$curvePicker?.push(pick.startY - event.clientY);
+			pick.picker.push(pick.startY - event.clientY);
 			return;
 		}
 		if (pointers[event.pointerId]) {
@@ -763,7 +765,7 @@
 	}
 
 	function onPointerUp(event: PointerEvent) {
-		cancelPointerInteraction();
+		cancelPointerInteraction(event);
 		if (
 			event.currentTarget instanceof HTMLElement &&
 			event.currentTarget.hasPointerCapture(event.pointerId)

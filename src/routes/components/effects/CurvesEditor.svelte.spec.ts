@@ -61,6 +61,9 @@ it('picks a point from the preview and pushes it with a vertical drag', async ()
 	const [, picked] = step.curves[0]!.points;
 	expect(picked![0]).toBeGreaterThan(0.4);
 	expect(picked![0]).toBeLessThan(0.6);
+	await expect
+		.element(page.getByRole('button', { name: /^Point 2:/ }))
+		.toHaveAttribute('aria-pressed', 'true');
 
 	picker!.push(40);
 	expect(step.curves[0]!.points[1]![1]).toBeCloseTo(picked![1] + 0.2, 1);

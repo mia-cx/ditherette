@@ -45,6 +45,7 @@
 	);
 
 	let selected = $state(0);
+	let selectedPoint = $state(0);
 	/** `selected` can outlive a removed curve, so everything reads this. */
 	const active = $derived(Math.min(selected, step.curves.length - 1));
 	const curve = $derived(step.curves[active]);
@@ -62,54 +63,69 @@
 	/** A hue input wraps for adjustments; hue remaps read their input straight across. */
 	const periodic = (c: Curve) => c.kind === 'adjust' && c.x.channel === 'hue';
 
+	function replaceAt(index: number, next: Curve) {
+		onchange({ ...step, curves: step.curves.map((curve, at) => (at === index ? next : curve)) });
+	}
+
 	function replace(next: Curve) {
-		onchange({ ...step, curves: step.curves.map((c, index) => (index === active ? next : c)) });
+		grabbed = undefined;
+		replaceAt(active, next);
 	}
 
 	function add() {
+		grabbed = undefined;
 		onchange({ ...step, curves: [...step.curves, NEW_CURVE] });
 		selected = step.curves.length;
+		selectedPoint = 0;
 	}
 
 	function remove() {
+		grabbed = undefined;
 		onchange({ ...step, curves: step.curves.filter((_, index) => index !== active) });
 		selected = Math.max(0, active - 1);
+		selectedPoint = 0;
 	}
 
 	/** Curves apply in list order, so moving one changes the result. */
 	function move(from: number, to: number) {
 		if (from === to || to < 0 || to >= step.curves.length) return;
+		grabbed = undefined;
 		const curves = step.curves.slice();
 		const [moved] = curves.splice(from, 1);
 		curves.splice(to, 0, moved!);
 		onchange({ ...step, curves });
 		selected = to;
+		selectedPoint = 0;
 	}
 	let dragFrom = $state<number>();
 
 	/** Pixels of vertical drag that move a picked point across the whole output range. */
 	const PUSH_PIXELS = 200;
-	let grabbed: { index: number; y: number } | undefined;
+	let grabbed: { curve: number; point: number; y: number } | undefined;
 	const picker: CurvePicker = {
 		pick(rgb) {
 			if (!curve) return;
 			const { points, index } = pickPoint(curve, periodic(curve), channelValue(curve.x, rgb));
-			grabbed = { index, y: points[index]![1] };
-			replace({ ...curve, points });
+			grabbed = { curve: active, point: index, y: points[index]![1] };
+			selectedPoint = index;
+			replaceAt(active, { ...curve, points });
 		},
 		push(up) {
-			if (!curve || !grabbed) return;
+			if (!grabbed || active !== grabbed.curve) return;
+			const pickedCurve = step.curves[grabbed.curve];
+			if (!pickedCurve) return;
 			const points = setPointOutput(
-				curve.points,
-				grabbed.index,
+				pickedCurve.points,
+				grabbed.point,
 				grabbed.y + up / PUSH_PIXELS,
-				periodic(curve)
+				periodic(pickedCurve)
 			);
-			replace({ ...curve, points });
+			replaceAt(grabbed.curve, { ...pickedCurve, points });
 		}
 	};
 	const picking = $derived($curvePicker === picker);
 	onDestroy(() => {
+		grabbed = undefined;
 		if (curvePicker.get() === picker) curvePicker.set(undefined);
 	});
 
@@ -153,7 +169,11 @@
 					if (dragFrom !== undefined) move(dragFrom, index);
 					dragFrom = undefined;
 				}}
-				onclick={() => (selected = index)}
+				onclick={() => {
+					grabbed = undefined;
+					selected = index;
+					selectedPoint = 0;
+				}}
 			>
 				<span class="size-2 {tone(index).swatch}" aria-hidden="true"></span>
 				{curveName(item)}
@@ -181,6 +201,7 @@
 			<CurveGraph
 				{id}
 				points={curve.points}
+				bind:selected={selectedPoint}
 				stroke={tone(active).stroke}
 				neutral={curve.kind === 'remap' ? 'diagonal' : 'flat'}
 				periodic={periodic(curve)}

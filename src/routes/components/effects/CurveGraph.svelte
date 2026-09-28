@@ -31,6 +31,8 @@
 		periodic?: boolean;
 		/** A CSS gradient drawn under the x axis. */
 		spectrum?: string;
+		/** Point selected by the graph or an external picker. */
+		selected?: number;
 	};
 	let {
 		id,
@@ -41,7 +43,8 @@
 		axes = { x: 'Input', y: 'Output' },
 		neutral = 'diagonal',
 		periodic = false,
-		spectrum
+		spectrum,
+		selected = $bindable(0)
 	}: Props = $props();
 
 	/** Points sit on the byte grid, so neighbours stay well above the package's 0.001 x gap. */
@@ -52,7 +55,6 @@
 	const HIT_RADIUS_PX = 10;
 
 	let svg = $state<SVGSVGElement>();
-	let selected = $state(0);
 	let dragging = $state<number>();
 
 	/** `selected` can outlive a shorter curve after a model or channel switch, so fields use this. */
