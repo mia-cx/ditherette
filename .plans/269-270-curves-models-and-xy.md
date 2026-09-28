@@ -17,7 +17,7 @@ wraps when x is a hue.
 
 ## TODOs
 - [x] Layer model: `model` on the curves layer step, channel metadata per model, `packageSteps` and load validation for every model, with tests.
-- [ ] Periodic spline: `evaluatePeriodicCurve` matching the reference's cyclic Fritsch–Butland spline, with tests.
+- [x] Periodic spline: `evaluatePeriodicCurve` matching the reference's cyclic Fritsch–Butland spline, with tests.
 - [ ] Model switcher and per-model channel checkboxes in the curves editor.
 - [ ] Arbitrary XY editor: channel pickers, flat neutral line, hue spectrum, wrapping hue x axis.
 - [ ] Docs and changeset.
@@ -29,3 +29,4 @@ wraps when x is a hue.
   until those merge.
 - The package's `dist` is gitignored; it was rebuilt locally with the repo's wasm-pack.
 - TODO 1: curves layers carry `model`; validation runs the package's `isEffect` on every step a layer turns into. `vitest run src/lib/stores/effects.spec.ts` (7) and `pnpm check` pass. The XY editor branch is a placeholder until TODO 4.
+- TODO 2: `evaluatePeriodicCurve` mirrors `PeriodicSpline` in the reference; `evaluateCurve` now shares its tangent helper. `vitest run src/lib/effects/spline.spec.ts` (5) passes.
