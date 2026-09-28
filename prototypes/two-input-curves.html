@@ -1,14 +1,14 @@
 <!doctype html>
 <!--
-  PROTOTYPE, throwaway. Ticket: "Choose the two-input curve representation and interpolation" (#293).
-  Serve this folder (it loads celeste.png next to it) and open in a browser.
+  PROTOTYPE, throwaway. Tickets: "Choose the two-input curve representation and interpolation" (#293)
+  and "Design the Curves canvas" (#294). Serve this folder (it loads celeste.png next to it).
   The <script id="model"> block is pure and liftable; the rest is page.
 -->
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Prototype: two-input curves</title>
+		<title>Prototype: curves window</title>
 		<style>
 			:root {
 				--bg: #0e0e10;
@@ -28,62 +28,46 @@
 			}
 			body {
 				margin: 0;
-				min-width: 1280px;
 				height: 100vh;
-				display: grid;
-				grid-template-rows: auto minmax(0, 1fr);
+				min-width: 1100px;
+				overflow: hidden;
 			}
-			main {
-				display: grid;
-				grid-template-columns: 440px minmax(0, 1fr) minmax(0, 1fr) 250px;
-				grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-				min-height: 0;
+			body.window #analysis,
+			body.analysis #studio {
+				display: none;
 			}
-			#viewer-section {
-				grid-column: 1;
-				grid-row: 1 / 3;
+			canvas {
+				display: block;
 			}
-			#surface-section {
-				grid-column: 2;
-				grid-row: 1;
+			button,
+			select {
+				font: inherit;
+				font-size: 12px;
+				color: var(--text);
+				background: var(--panel-2);
+				border: 1px solid var(--line);
+				border-radius: 0;
+				height: 24px;
+				padding: 0 8px;
+				cursor: pointer;
 			}
-			#scope-section {
-				grid-column: 3;
-				grid-row: 1;
+			button:hover,
+			select:hover {
+				border-color: #45454d;
 			}
-			#curve-section {
-				grid-column: 2 / 4;
-				grid-row: 2;
-				border-top: 1px solid var(--line);
+			button[aria-pressed='true'] {
+				border-color: var(--primary);
+				color: var(--primary);
 			}
-			#inspector-section {
-				grid-column: 4;
-				grid-row: 1 / 3;
-				border-left: 1px solid var(--line);
+			button:disabled {
+				opacity: 0.4;
+				cursor: default;
 			}
-			header {
+			.seg {
 				display: flex;
-				align-items: baseline;
-				gap: 16px;
-				padding: 10px 16px;
-				border-bottom: 1px solid var(--line);
-				background: var(--panel);
 			}
-			header strong {
-				font-size: 14px;
-			}
-			header span {
-				color: var(--muted);
-			}
-			section {
-				position: relative;
-				border-right: 1px solid var(--line);
-				min-width: 0;
-				display: flex;
-				flex-direction: column;
-			}
-			section:last-child {
-				border-right: 0;
+			.seg button + button {
+				border-left: 0;
 			}
 			.bar {
 				display: flex;
@@ -98,22 +82,18 @@
 			.bar h2 {
 				font-size: 12px;
 				font-weight: 600;
-				margin: 0 8px 0 0;
-				letter-spacing: 0.02em;
-			}
-			.bar .spacer {
-				flex: 1;
+				margin: 0 6px 0 0;
 			}
 			.bar small {
 				color: var(--muted);
+			}
+			.spacer {
+				flex: 1;
 			}
 			.fill {
 				position: relative;
 				flex: 1;
 				min-height: 0;
-			}
-			canvas {
-				display: block;
 			}
 			.fill > canvas {
 				position: absolute;
@@ -121,31 +101,175 @@
 				width: 100%;
 				height: 100%;
 			}
-			button,
-			select {
-				font: inherit;
-				font-size: 12px;
-				color: var(--text);
-				background: var(--panel-2);
-				border: 1px solid var(--line);
-				border-radius: 0;
-				height: 24px;
-				padding: 0 9px;
-				cursor: pointer;
+
+			/* ---------- Studio (window view) ---------- */
+			#studio {
+				height: 100vh;
+				display: grid;
+				grid-template-rows: 32px minmax(0, 1fr);
 			}
-			button:hover,
-			select:hover {
-				border-color: #45454d;
-			}
-			button[aria-pressed='true'] {
-				border-color: var(--primary);
-				color: var(--primary);
-			}
-			.seg {
+			.appbar {
 				display: flex;
+				align-items: center;
+				gap: 18px;
+				padding: 0 14px;
+				background: var(--panel);
+				border-bottom: 1px solid var(--line);
+				font-size: 13px;
 			}
-			.seg button + button {
-				border-left: 0;
+			.appbar b {
+				font-weight: 700;
+			}
+			.appbar span {
+				color: var(--muted);
+			}
+			.stage {
+				position: relative;
+				min-height: 0;
+			}
+			.stage > canvas {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+			}
+			.float {
+				position: absolute;
+				top: 16px;
+				right: 16px;
+				width: 360px;
+				background: var(--panel);
+				border: 1px solid #3a3a41;
+				box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+				display: flex;
+				flex-direction: column;
+			}
+			.float .title {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				height: 30px;
+				padding: 0 6px 0 10px;
+				border-bottom: 1px solid var(--line);
+				font-weight: 600;
+				font-size: 12px;
+			}
+			.chips {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 4px;
+				padding: 8px 10px 6px;
+			}
+			.chip {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				height: 22px;
+				padding: 0 7px;
+				font-size: 11.5px;
+			}
+			.chip i {
+				width: 8px;
+				height: 8px;
+				display: inline-block;
+			}
+			.editor {
+				position: relative;
+				height: 250px;
+				margin: 0 10px;
+				border: 1px solid var(--line);
+			}
+			.editor > canvas {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+			}
+			.controls {
+				display: grid;
+				grid-template-columns: 62px 1fr;
+				gap: 6px 8px;
+				align-items: center;
+				padding: 10px 10px 4px;
+			}
+			.controls label {
+				color: var(--muted);
+				font-size: 12px;
+			}
+			.controls .row {
+				display: flex;
+				gap: 6px;
+				align-items: center;
+			}
+			.controls select {
+				flex: 1;
+				min-width: 0;
+			}
+			.readout {
+				display: flex;
+				gap: 14px;
+				padding: 6px 10px 10px;
+				font-family: var(--mono);
+				font-size: 12px;
+				color: var(--muted);
+				font-variant-numeric: tabular-nums;
+				min-height: 28px;
+			}
+			.readout b {
+				color: var(--text);
+				font-weight: 500;
+			}
+			.hint {
+				color: var(--muted);
+				font-size: 11.5px;
+				padding: 0 10px 10px;
+				margin: 0;
+			}
+
+			/* ---------- Analysis (fullscreen) ---------- */
+			#analysis {
+				height: 100vh;
+				display: grid;
+				grid-template-rows: 40px minmax(0, 1fr);
+			}
+			#analysis header {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				padding: 0 12px;
+				border-bottom: 1px solid var(--line);
+				background: var(--panel);
+			}
+			#analysis main {
+				display: grid;
+				grid-template-columns: 420px minmax(0, 1fr) minmax(0, 1fr);
+				grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+				min-height: 0;
+			}
+			#analysis section {
+				display: flex;
+				flex-direction: column;
+				min-width: 0;
+				border-right: 1px solid var(--line);
+			}
+			#a-viewer {
+				grid-column: 1;
+				grid-row: 1 / 3;
+			}
+			#a-surface {
+				grid-column: 2;
+				grid-row: 1;
+			}
+			#a-scope {
+				grid-column: 3;
+				grid-row: 1;
+				border-right: 0 !important;
+			}
+			#a-curve {
+				grid-column: 2 / 4;
+				grid-row: 2;
+				border-top: 1px solid var(--line);
+				border-right: 0 !important;
 			}
 			.overlay-label {
 				position: absolute;
@@ -158,127 +282,107 @@
 				background: rgba(0, 0, 0, 0.55);
 				pointer-events: none;
 			}
-			.inspector {
-				padding: 12px 14px;
-				overflow: auto;
-			}
-			.inspector h3 {
-				font-size: 11px;
-				font-weight: 600;
-				letter-spacing: 0.06em;
-				text-transform: uppercase;
-				color: var(--muted);
-				margin: 0 0 8px;
-			}
-			dl {
+			.empty-note {
+				position: absolute;
+				inset: 0;
 				display: grid;
-				grid-template-columns: auto 1fr;
-				gap: 5px 12px;
-				margin: 0 0 16px;
-			}
-			dt {
+				place-items: center;
 				color: var(--muted);
-			}
-			dd {
-				margin: 0;
-				font-family: var(--mono);
-				font-variant-numeric: tabular-nums;
-				text-align: right;
-			}
-			.big {
-				font-family: var(--mono);
-				font-size: 26px;
-				font-variant-numeric: tabular-nums;
-				margin: 2px 0 12px;
-			}
-			.hint {
-				color: var(--muted);
-				font-size: 12px;
-				margin: 0 0 8px;
-			}
-			.swatch {
-				display: inline-block;
-				width: 10px;
-				height: 10px;
-				vertical-align: -1px;
-				margin-right: 6px;
-				border: 1px solid rgba(255, 255, 255, 0.25);
+				pointer-events: none;
 			}
 		</style>
 	</head>
-	<body>
-		<header>
-			<strong>Two-input curves</strong>
-			<span>Hue × lightness drives one change. Prototype for choosing how that curve is stored.</span>
-		</header>
+	<body class="window">
+		<!-- ================= Window view ================= -->
+		<div id="studio">
+			<div class="appbar">
+				<b>ditherette</b><span>File</span><span>Edit</span><span>Image</span><span>View</span><span>Window</span>
+			</div>
+			<div class="stage">
+				<canvas id="preview"></canvas>
+				<div class="overlay-label" style="left: 10px">Before</div>
+				<div class="overlay-label" style="left: calc(100% - 400px)">After</div>
+				<div class="float">
+					<div class="title">
+						Curves
+						<span class="spacer"></span>
+						<button id="expand" aria-label="Expand">⤢</button>
+					</div>
+					<div class="chips" id="chips"></div>
+					<div class="editor"><canvas id="editor"></canvas></div>
+					<div class="controls">
+						<label for="x">Reads</label>
+						<div class="row">
+							<select id="x" aria-label="First input"></select>
+							<span style="color: var(--muted)">and</span>
+							<select id="x2" aria-label="Second input"></select>
+						</div>
+						<label for="y">Changes</label>
+						<div class="row">
+							<select id="y" aria-label="Output"></select>
+							<div class="seg" id="kind">
+								<button data-kind="remap">Remap</button>
+								<button data-kind="adjust">Adjust</button>
+							</div>
+						</div>
+					</div>
+					<div class="readout" id="readout"></div>
+				</div>
+			</div>
+		</div>
 
-		<main>
-			<section id="viewer-section">
-				<div class="bar">
-					<h2>Viewer</h2>
-					<small>Click a colour to grab its point, then drag up or down. Drag the yellow line to wipe.</small>
-				</div>
-				<div class="fill" id="viewer-wrap">
-					<canvas id="viewer"></canvas>
-					<div class="overlay-label" style="left: 8px">Before</div>
-					<div class="overlay-label" style="right: 8px">After</div>
-				</div>
-			</section>
-			<section id="surface-section">
-				<div class="bar">
-					<h2>Surface</h2>
-					<small>Drag a point up or down. Drag elsewhere to orbit.</small>
-				</div>
-				<div class="fill"><canvas id="surface"></canvas></div>
-			</section>
-			<section id="scope-section">
-				<div class="bar">
-					<h2>Colour scope</h2>
-					<small>Oklab</small>
-					<span class="spacer"></span>
-					<div class="seg">
-						<button id="scope-before" aria-pressed="false">Before</button>
-						<button id="scope-motion" aria-pressed="true">Motion</button>
+		<!-- ================= Analysis view ================= -->
+		<div id="analysis">
+			<header>
+				<button id="back" aria-label="Back">←</button>
+				<b id="a-title"></b>
+				<span class="spacer"></span>
+				<div class="chips" id="a-chips" style="padding: 0"></div>
+			</header>
+			<main>
+				<section id="a-viewer">
+					<div class="bar"><h2>Viewer</h2></div>
+					<div class="fill">
+						<canvas id="viewer"></canvas>
+						<div class="overlay-label" style="left: 8px">Before</div>
+						<div class="overlay-label" style="right: 8px">After</div>
 					</div>
-				</div>
-				<div class="fill"><canvas id="scope"></canvas></div>
-			</section>
-			<section id="curve-section">
-				<div class="bar">
-					<h2>Curve</h2>
-					<small>Hue × lightness changes</small>
-					<div class="seg" id="outputs">
-						<button data-output="saturation">Saturation</button>
-						<button data-output="hue">Hue</button>
-						<button data-output="lightness">Lightness</button>
+				</section>
+				<section id="a-surface">
+					<div class="bar"><h2>Surface</h2></div>
+					<div class="fill"><canvas id="surface"></canvas></div>
+				</section>
+				<section id="a-scope">
+					<div class="bar">
+						<h2>Colour scope</h2>
+						<span class="spacer"></span>
+						<div class="seg">
+							<button id="scope-before" aria-pressed="false">Before</button>
+							<button id="scope-motion" aria-pressed="true">Motion</button>
+						</div>
 					</div>
-					<span class="spacer"></span>
-					<select id="density" aria-label="Grid density">
-						<option value="6x3">6 × 3 grid</option>
-						<option value="12x5" selected>12 × 5 grid</option>
-						<option value="24x5">24 × 5 grid</option>
-						<option value="36x9">36 × 9 grid</option>
-					</select>
-					<button id="reset">Reset</button>
-				</div>
-				<div class="fill"><canvas id="flat"></canvas></div>
-			</section>
-			<section id="inspector-section">
-				<div class="bar"><h2>Inspector</h2></div>
-				<div class="inspector" id="inspector"></div>
-			</section>
-		</main>
+					<div class="fill"><canvas id="scope"></canvas></div>
+				</section>
+				<section id="a-curve">
+					<div class="bar"><h2>Curve</h2><span class="spacer"></span><span class="readout" id="a-readout" style="padding: 0; min-height: 0"></span></div>
+					<div class="fill"><canvas id="big-editor"></canvas></div>
+				</section>
+			</main>
+		</div>
 
 		<script id="model">
 			/*
-			 * Pure model: no DOM. A two-input curve stored as a control grid: values at hue columns ×
-			 * lightness rows, with movable, insertable column and row positions. Between points it
-			 * follows the package's monotone Fritsch-Butland spline, cyclic along hue, so the surface
-			 * never overshoots its points. Values are normalised: 0.5 is no change.
+			 * Pure model: no DOM. A curve reads one or two channels and changes one.
+			 * One-input curves use the package's monotone Fritsch-Butland spline, cyclic along hue.
+			 * Two-input curves are a control grid with insertable columns; between points the surface
+			 * follows the same spline along each axis, so it never overshoots its points.
+			 * Colours are OKLCH: lightness 0-1, saturation as chroma / MAX_CHROMA, hue in turns.
 			 */
-			const Curve2D = (() => {
+			const Model = (() => {
 				const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 				const wrap = (v) => v - Math.floor(v);
+				const MAX_CHROMA = 0.3;
+				const CONFIDENT_CHROMA = 0.02;
 
 				function tangent(d0, d1, h0, h1) {
 					if (d0 === 0 || d1 === 0 || Math.sign(d0) !== Math.sign(d1)) return 0;
@@ -290,7 +394,6 @@
 					const d = (y1 - y0) / h;
 					return y0 + s * (m0 + s * ((3 * d - 2 * m0 - m1) / h + (s * (m0 + m1 - 2 * d)) / (h * h)));
 				}
-				/** Open monotone spline; clamps outside its ends. */
 				function spline(xs, ys) {
 					const n = xs.length;
 					const h = [];
@@ -308,9 +411,9 @@
 						return hermite(ys[k], ys[k + 1], m[k], m[k + 1], h[k], v - xs[k]);
 					};
 				}
-				/** Cyclic monotone spline over x in [0, 1). */
 				function cyclic(xs, ys) {
 					const n = xs.length;
+					if (n === 1) return () => ys[0];
 					const h = xs.map((x, k) => (k === n - 1 ? xs[0] + 1 - x : xs[k + 1] - x));
 					const d = ys.map((y, k) => (ys[(k + 1) % n] - y) / h[k]);
 					const m = xs.map((_, k) => tangent(d[(k - 1 + n) % n], d[k], h[(k - 1 + n) % n], h[k]));
@@ -324,75 +427,149 @@
 					};
 				}
 
-				/** A neutral grid with evenly spaced columns and rows. */
-				function grid(columns, rows) {
+				const CHANNELS = {
+					lightness: { label: 'Lightness', short: 'Lum', periodic: false },
+					chroma: { label: 'Saturation', short: 'Sat', periodic: false },
+					hue: { label: 'Hue', short: 'Hue', periodic: true }
+				};
+				/** A pixel's channel as 0-1. */
+				function read(channel, L, C, H) {
+					if (channel === 'lightness') return L;
+					if (channel === 'chroma') return clamp(C / MAX_CHROMA, 0, 1);
+					return H;
+				}
+
+				/** Curves are remaps (neutral diagonal) or adjustments (neutral flat at 0.5). */
+				function neutralPoints(kind, periodic) {
+					if (kind === 'remap') return [[0, 0], [1, 1]];
+					return periodic ? [[0, 0.5], [0.5, 0.5]] : [[0, 0.5], [1, 0.5]];
+				}
+				/** A neutral grid; columns wrap when the first input is hue. */
+				function grid(columns, rows, periodic) {
 					return {
-						hues: Array.from({ length: columns }, (_, i) => i / columns),
-						lights: Array.from({ length: rows }, (_, j) => j / (rows - 1)),
+						cols: Array.from({ length: columns }, (_, i) => (periodic ? i / columns : i / (columns - 1))),
+						rows: Array.from({ length: rows }, (_, j) => j / (rows - 1)),
 						values: Array.from({ length: rows }, () => Array(columns).fill(0.5))
 					};
 				}
+				function makeCurve(x, x2, y, kind) {
+					const periodic = CHANNELS[x].periodic;
+					const k = x2 ? 'adjust' : kind;
+					return x2
+						? { x, x2, y, kind: 'adjust', grid: grid(periodic ? 12 : 9, 5, periodic) }
+						: { x, x2: null, y, kind: k, points: neutralPoints(k, periodic && k === 'adjust') };
+				}
+				const canRemap = (c) => !c.x2 && c.x === c.y;
 
-				/** Sample the surface into a hue × lightness table for fast lookup. */
-				const TABLE_HUES = 360;
-				const TABLE_LIGHTS = 101;
-				function table(g) {
-					const rows = g.values.map((row) => cyclic(g.hues, row));
-					const out = new Float32Array(TABLE_HUES * TABLE_LIGHTS);
-					const column = new Array(g.lights.length);
-					for (let i = 0; i < TABLE_HUES; i++) {
-						for (let j = 0; j < rows.length; j++) column[j] = rows[j](i / TABLE_HUES);
-						const f = spline(g.lights, column);
-						for (let l = 0; l < TABLE_LIGHTS; l++) out[l * TABLE_HUES + i] = clamp(f(l / (TABLE_LIGHTS - 1)), 0, 1);
+				// Tables for fast evaluation.
+				const T1 = 1024;
+				const TC = 360;
+				const TR = 101;
+				function compile(c) {
+					if (!c.x2) {
+						const periodic = CHANNELS[c.x].periodic && c.kind === 'adjust';
+						const xs = c.points.map((p) => p[0]);
+						const ys = c.points.map((p) => p[1]);
+						const f = periodic ? cyclic(xs, ys) : spline(xs, ys);
+						const t = new Float32Array(T1 + 1);
+						for (let i = 0; i <= T1; i++) t[i] = f(i / T1);
+						return (a) => {
+							const p = (periodic ? wrap(a) : clamp(a, 0, 1)) * T1;
+							const i = Math.min(T1 - 1, Math.floor(p));
+							return t[i] + (t[i + 1] - t[i]) * (p - i);
+						};
 					}
-					return out;
+					const g = c.grid;
+					const periodic = CHANNELS[c.x].periodic;
+					const rowFns = g.values.map((row) => (periodic ? cyclic(g.cols, row) : spline(g.cols, row)));
+					const t = new Float32Array(TC * TR);
+					const column = new Array(g.rows.length);
+					for (let i = 0; i < TC; i++) {
+						const a = periodic ? i / TC : i / (TC - 1);
+						for (let j = 0; j < rowFns.length; j++) column[j] = rowFns[j](a);
+						const f = spline(g.rows, column);
+						for (let l = 0; l < TR; l++) t[l * TC + i] = clamp(f(l / (TR - 1)), 0, 1);
+					}
+					return (a, b) => {
+						const x = periodic ? wrap(a) * TC : clamp(a, 0, 1) * (TC - 1);
+						const y = clamp(b, 0, 1) * (TR - 1);
+						const x0 = Math.min(periodic ? TC - 1 : TC - 2, Math.floor(x));
+						const x1 = periodic ? (x0 + 1) % TC : x0 + 1;
+						const y0 = Math.min(TR - 2, Math.floor(y));
+						const fx = x - Math.floor(x);
+						const fy = y - y0;
+						const p = t[y0 * TC + x0] * (1 - fx) + t[y0 * TC + x1] * fx;
+						const q = t[(y0 + 1) * TC + x0] * (1 - fx) + t[(y0 + 1) * TC + x1] * fx;
+						return p + (q - p) * fy;
+					};
 				}
-				/** Bilinear lookup; hue wraps. */
-				function lookup(t, hue, light) {
-					const x = wrap(hue) * TABLE_HUES;
-					const y = clamp(light, 0, 1) * (TABLE_LIGHTS - 1);
-					const x0 = Math.floor(x) % TABLE_HUES;
-					const x1 = (x0 + 1) % TABLE_HUES;
-					const y0 = Math.min(TABLE_LIGHTS - 2, Math.floor(y));
-					const fx = x - Math.floor(x);
-					const fy = y - y0;
-					const a = t[y0 * TABLE_HUES + x0] * (1 - fx) + t[y0 * TABLE_HUES + x1] * fx;
-					const b = t[(y0 + 1) * TABLE_HUES + x0] * (1 - fx) + t[(y0 + 1) * TABLE_HUES + x1] * fx;
-					return a + (b - a) * fy;
+				/** The curve's value for a source colour. */
+				function valueFor(c, f, L, C, H) {
+					return c.x2 ? f(read(c.x, L, C, H), read(c.x2, L, C, H)) : f(read(c.x, L, C, H));
 				}
-
-				/** Insert a column at a hue without changing the surface: its values come from the surface. */
-				function insertColumn(g, hue) {
-					const t = table(g);
-					const at = g.hues.findIndex((h) => h > hue);
-					const index = at < 0 ? g.hues.length : at;
-					const hues = [...g.hues];
-					hues.splice(index, 0, hue);
+				/** Insert a grid column without changing the surface. */
+				function insertColumn(c, f, a) {
+					const g = c.grid;
+					const at = g.cols.findIndex((v) => v > a);
+					const index = at < 0 ? g.cols.length : at;
+					const cols = [...g.cols];
+					cols.splice(index, 0, a);
 					const values = g.values.map((row, j) => {
 						const next = [...row];
-						next.splice(index, 0, lookup(t, hue, g.lights[j]));
+						next.splice(index, 0, f(a, g.rows[j]));
 						return next;
 					});
-					return { g: { ...g, hues, values }, index };
+					return { curve: { ...c, grid: { ...g, cols, values } }, index };
 				}
 
-				// Colour: OKLCH (L, C, hue in turns) <-> sRGB.
+				/**
+				 * Apply one curve: it selects on the source colour and edits the current one.
+				 * Remaps set their channel; adjustments shift hue up to a quarter turn, gain saturation
+				 * up to double, or offset lightness up to 0.25. Hue sides fade on near-grey colours.
+				 */
+				function apply(c, v, src, cur) {
+					const [sL, sC, sH] = src;
+					let [L, C, H] = cur;
+					const srcConf = clamp(sC / CONFIDENT_CHROMA, 0, 1);
+					if (c.kind === 'remap') {
+						if (c.y === 'lightness') L = v;
+						else if (c.y === 'chroma') C = v * MAX_CHROMA;
+						else {
+							let d = wrap(v - sH + 0.5) - 0.5;
+							H = wrap(sH + d * srcConf);
+						}
+						return [L, C, H];
+					}
+					let conf = 1;
+					if (c.x === 'hue' || c.x2 === 'hue') conf = srcConf;
+					if (c.y === 'hue') conf = Math.min(conf, clamp(C / CONFIDENT_CHROMA, 0, 1));
+					const w = conf * (2 * v - 1);
+					if (c.y === 'chroma') C = C * (1 + w);
+					else if (c.y === 'hue') H = wrap(H + w * 0.25);
+					else L = clamp(L + w * 0.25, 0, 1);
+					return [L, C, H];
+				}
+				/** How far a value is from neutral, for drawing heights and tags. */
+				const deviation = (c, a, v) => (c.kind === 'remap' ? v - a : v - 0.5);
+
+				// Colour conversion.
 				const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 				const toGamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
-				function rgbToOklab(r, g, b) {
+				function rgbToLch(r, g, b) {
 					r = toLinear(r / 255);
 					g = toLinear(g / 255);
 					b = toLinear(b / 255);
 					const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
 					const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
 					const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-					return [
-						0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-						1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-						0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
-					];
+					const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+					const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+					const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+					return [L, Math.hypot(A, B), wrap(Math.atan2(B, A) / (2 * Math.PI))];
 				}
-				function oklabToRgb(L, A, B, out, o) {
+				function lchToRgb(L, C, H, out, o) {
+					const A = C * Math.cos(2 * Math.PI * H);
+					const B = C * Math.sin(2 * Math.PI * H);
 					const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
 					const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
 					const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
@@ -401,324 +578,128 @@
 					out[o + 2] = 255 * toGamma(clamp(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s, 0, 1));
 				}
 
-				// Hue confidence: full from chroma 0.02, fading to nothing on exact greys.
-				const CONFIDENT_CHROMA = 0.02;
-
-				/**
-				 * The change a curve value makes to one OKLCH colour, per output:
-				 * saturation gains up to double, hue turns up to a quarter turn, lightness offsets up to 0.25.
-				 */
-				function change(output, v, L, C, h) {
-					const w = clamp(C / CONFIDENT_CHROMA, 0, 1) * (2 * v - 1);
-					if (output === 'saturation') return [L, C * (1 + w), h];
-					if (output === 'hue') return [L, C, h + w * 0.25];
-					return [clamp(L + w * 0.25, 0, 1), C, h];
-				}
-
-				return { grid, table, lookup, insertColumn, rgbToOklab, oklabToRgb, change, clamp, wrap };
+				return { CHANNELS, MAX_CHROMA, read, makeCurve, canRemap, compile, valueFor, insertColumn, apply, deviation, rgbToLch, lchToRgb, clamp, wrap, neutralPoints };
 			})();
 		</script>
 
 		<script>
-			// ---------------- Page shell ----------------
 			const $ = (id) => document.getElementById(id);
-			const { grid, table, lookup, insertColumn, rgbToOklab, oklabToRgb, change, clamp, wrap } = Curve2D;
-
-			const HUE_NAMES = [
-				['Red', 29],
-				['Orange', 60],
-				['Yellow', 105],
-				['Green', 142],
-				['Cyan', 195],
-				['Blue', 264],
-				['Purple', 305],
-				['Magenta', 340]
-			];
-			const hueName = (turns) => {
-				const deg = wrap(turns) * 360;
-				let best = HUE_NAMES[0];
-				for (const n of HUE_NAMES) {
-					const d = Math.min(Math.abs(n[1] - deg), 360 - Math.abs(n[1] - deg));
-					const b = Math.min(Math.abs(best[1] - deg), 360 - Math.abs(best[1] - deg));
-					if (d < b) best = n;
-				}
-				return best[0];
+			const { CHANNELS, MAX_CHROMA, read, makeCurve, canRemap, compile, valueFor, insertColumn, apply, deviation, rgbToLch, lchToRgb, clamp, wrap, neutralPoints } = Model;
+			const COLOURS = ['#facc15', '#60a5fa', '#f472b6', '#34d399', '#fb923c', '#c084fc'];
+			const HUE_NAMES = [['Red', 29], ['Orange', 60], ['Yellow', 105], ['Green', 142], ['Cyan', 195], ['Blue', 264], ['Purple', 305], ['Magenta', 340]];
+			const hueName = (t) => {
+				const deg = wrap(t) * 360;
+				return HUE_NAMES.reduce((best, n) => {
+					const d = (a) => Math.min(Math.abs(a - deg), 360 - Math.abs(a - deg));
+					return d(n[1]) < d(best[1]) ? n : best;
+				})[0];
 			};
-			const fmtChange = (output, v) => {
-				const w = 2 * v - 1;
-				if (output === 'saturation') return `${w >= 0 ? '+' : ''}${Math.round(w * 100)}%`;
-				if (output === 'hue') return `${w >= 0 ? '+' : ''}${Math.round(w * 90)}°`;
-				return `${w >= 0 ? '+' : ''}${Math.round(w * 25)} L`;
-			};
-			const OUTPUT_NAMES = { saturation: 'saturation', hue: 'hue', lightness: 'lightness' };
 
+			// ---------------- State ----------------
+			const curve = (x, x2, y, kind, edit) => {
+				const c = makeCurve(x, x2, y, kind);
+				edit?.(c);
+				return c;
+			};
 			const state = {
-				g: grid(12, 5),
-				output: 'saturation',
-				selected: null, // { i, j }
+				curves: [
+					curve('lightness', null, 'lightness', 'remap', (c) => (c.points = [[0, 0.03], [0.28, 0.22], [0.72, 0.8], [1, 1]])),
+					curve('hue', null, 'chroma', 'adjust', (c) => (c.points = [[0, 0.5], [0.08, 0.72], [0.2, 0.5], [0.72, 0.5], [0.78, 0.36], [0.86, 0.5]])),
+					curve('hue', 'lightness', 'chroma', 'adjust', (c) => {
+						c.grid.values[0][1] = 0.95;
+						c.grid.values[1][1] = 0.95;
+						c.grid.values[1][0] = 0.75;
+						c.grid.values[1][2] = 0.7;
+					})
+				],
+				selected: 0,
+				point: null, // 1D: point index; 2D: { i, j }
 				wipe: 0.5,
-				pick: null, // { hue, light } of the last picked colour
+				pick: null,
 				scopeBefore: false,
 				scopeMotion: true
 			};
-			let t = table(state.g);
+			let fns = [];
+			const sel = () => state.curves[state.selected];
+			const nameOf = (c) =>
+				c.x2
+					? `${CHANNELS[c.x].short} × ${CHANNELS[c.x2].short} vs ${CHANNELS[c.y].short}`
+					: c.kind === 'remap'
+						? CHANNELS[c.x].label
+						: `${CHANNELS[c.x].label} vs ${CHANNELS[c.y].short}`;
+			const fmt = (c, a, v) => {
+				if (c.kind === 'remap') {
+					if (c.y === 'hue') return `${Math.round(v * 360)}°`;
+					return `${Math.round(v * 100)}%`;
+				}
+				const w = 2 * v - 1;
+				if (c.y === 'chroma') return `${w >= 0 ? '+' : ''}${Math.round(w * 100)}%`;
+				if (c.y === 'hue') return `${w >= 0 ? '+' : ''}${Math.round(w * 90)}°`;
+				return `${w >= 0 ? '+' : ''}${Math.round(w * 25)} L`;
+			};
+			const fmtInput = (ch, a) => (ch === 'hue' ? `${hueName(a)} ${Math.round(a * 360)}°` : `${Math.round(a * 100)}%`);
 
 			// ---------------- Image ----------------
 			const WORK_HEIGHT = 820;
-			let image = null; // { w, h, src: Uint8ClampedArray, L, C, H: Float32Array, out }
+			let image = null;
 			const img = new Image();
 			img.src = 'celeste.png';
 			img.onload = () => {
-				const scale = WORK_HEIGHT / img.height;
-				const w = Math.round(img.width * scale);
+				const w = Math.round((img.width * WORK_HEIGHT) / img.height);
 				const h = WORK_HEIGHT;
-				const c = new OffscreenCanvas(w, h);
-				const ctx = c.getContext('2d');
+				const cv = new OffscreenCanvas(w, h);
+				const ctx = cv.getContext('2d');
 				ctx.drawImage(img, 0, 0, w, h);
 				const src = ctx.getImageData(0, 0, w, h).data;
 				const n = w * h;
 				const L = new Float32Array(n);
 				const C = new Float32Array(n);
 				const H = new Float32Array(n);
-				for (let p = 0; p < n; p++) {
-					const [l, a, b] = rgbToOklab(src[p * 4], src[p * 4 + 1], src[p * 4 + 2]);
-					L[p] = l;
-					C[p] = Math.hypot(a, b);
-					H[p] = wrap(Math.atan2(b, a) / (2 * Math.PI));
-				}
-				image = { w, h, src, L, C, H, out: new ImageData(w, h) };
-				Scope.setSamples(image);
+				for (let p = 0; p < n; p++) [L[p], C[p], H[p]] = rgbToLch(src[p * 4], src[p * 4 + 1], src[p * 4 + 2]);
+				const before = new OffscreenCanvas(w, h);
+				before.getContext('2d').putImageData(new ImageData(src, w, h), 0, 0);
+				image = { w, h, src, L, C, H, oL: new Float32Array(n), oC: new Float32Array(n), oH: new Float32Array(n), out: new ImageData(w, h), before, after: new OffscreenCanvas(w, h) };
 				update();
 			};
-
 			function applyImage() {
-				if (!image) return;
-				const { L, C, H, out, src } = image;
+				const { L, C, H, oL, oC, oH, out, src } = image;
 				const d = out.data;
+				const curves = state.curves;
 				for (let p = 0, n = L.length; p < n; p++) {
-					const v = lookup(t, H[p], L[p]);
+					const s = [L[p], C[p], H[p]];
+					let cur = s;
+					for (let k = 0; k < curves.length; k++) cur = apply(curves[k], valueFor(curves[k], fns[k], s[0], s[1], s[2]), s, cur);
+					oL[p] = cur[0];
+					oC[p] = cur[1];
+					oH[p] = cur[2];
 					const o = p * 4;
-					if (v === 0.5 || C[p] === 0) {
+					if (cur[0] === s[0] && cur[1] === s[1] && cur[2] === s[2]) {
 						d[o] = src[o];
 						d[o + 1] = src[o + 1];
 						d[o + 2] = src[o + 2];
-					} else {
-						const [l, c, h] = change(state.output, v, L[p], C[p], H[p]);
-						oklabToRgb(l, c * Math.cos(2 * Math.PI * h), c * Math.sin(2 * Math.PI * h), d, o);
-					}
+					} else lchToRgb(cur[0], cur[1], cur[2], d, o);
 					d[o + 3] = 255;
 				}
+				image.after.getContext('2d').putImageData(out, 0, 0);
 			}
 
-			// ---------------- Viewer ----------------
-			const viewer = $('viewer');
-			const beforeCanvas = new OffscreenCanvas(1, 1);
-			const afterCanvas = new OffscreenCanvas(1, 1);
-			function fitCanvas(canvas) {
+			// ---------------- Shared canvas helpers ----------------
+			function fit(canvas) {
 				const r = canvas.getBoundingClientRect();
 				const dpr = window.devicePixelRatio || 1;
-				const w = Math.round(r.width * dpr);
-				const h = Math.round(r.height * dpr);
+				const w = Math.max(1, Math.round(r.width * dpr));
+				const h = Math.max(1, Math.round(r.height * dpr));
 				if (canvas.width !== w || canvas.height !== h) {
 					canvas.width = w;
 					canvas.height = h;
 				}
 				return dpr;
 			}
-			function viewerRect() {
-				const scale = Math.min(viewer.width / image.w, viewer.height / image.h);
-				const w = image.w * scale;
-				const h = image.h * scale;
-				return { x: (viewer.width - w) / 2, y: (viewer.height - h) / 2, w, h, scale };
-			}
-			function drawViewer() {
-				if (!image) return;
-				const dpr = fitCanvas(viewer);
-				if (beforeCanvas.width !== image.w) {
-					beforeCanvas.width = afterCanvas.width = image.w;
-					beforeCanvas.height = afterCanvas.height = image.h;
-					beforeCanvas.getContext('2d').putImageData(new ImageData(image.src, image.w, image.h), 0, 0);
-				}
-				afterCanvas.getContext('2d').putImageData(image.out, 0, 0);
-				const ctx = viewer.getContext('2d');
-				ctx.fillStyle = '#0b0b0d';
-				ctx.fillRect(0, 0, viewer.width, viewer.height);
-				const r = viewerRect();
-				const split = r.x + r.w * state.wipe;
-				ctx.save();
-				ctx.beginPath();
-				ctx.rect(r.x, r.y, split - r.x, r.h);
-				ctx.clip();
-				ctx.drawImage(beforeCanvas, r.x, r.y, r.w, r.h);
-				ctx.restore();
-				ctx.save();
-				ctx.beginPath();
-				ctx.rect(split, r.y, r.x + r.w - split, r.h);
-				ctx.clip();
-				ctx.drawImage(afterCanvas, r.x, r.y, r.w, r.h);
-				ctx.restore();
-				ctx.fillStyle = '#facc15';
-				ctx.fillRect(split - dpr, r.y, 2 * dpr, r.h);
-				ctx.beginPath();
-				ctx.arc(split, r.y + r.h / 2, 7 * dpr, 0, 2 * Math.PI);
-				ctx.fill();
-			}
-			let viewerDrag = null;
-			viewer.addEventListener('pointerdown', (e) => {
-				if (!image) return;
-				const dpr = window.devicePixelRatio || 1;
-				const x = e.offsetX * dpr;
-				const y = e.offsetY * dpr;
-				const r = viewerRect();
-				const split = r.x + r.w * state.wipe;
-				viewer.setPointerCapture(e.pointerId);
-				if (Math.abs(x - split) < 10 * dpr) {
-					viewerDrag = { kind: 'wipe' };
-					return;
-				}
-				const px = Math.floor((x - r.x) / r.scale);
-				const py = Math.floor((y - r.y) / r.scale);
-				if (px < 0 || py < 0 || px >= image.w || py >= image.h) return;
-				const p = py * image.w + px;
-				const hue = image.H[p];
-				const light = image.L[p];
-				const g = state.g;
-				// Nearest point in hue (wrapping) and lightness.
-				let best = null;
-				g.hues.forEach((hh, i) => {
-					let dh = Math.abs(hh - hue);
-					dh = Math.min(dh, 1 - dh);
-					g.lights.forEach((ll, j) => {
-						const d = Math.hypot(dh * 2, ll - light);
-						if (!best || d < best.d) best = { d, i, j };
-					});
-				});
-				state.selected = { i: best.i, j: best.j };
-				state.pick = { hue, light, chroma: image.C[p] };
-				viewerDrag = { kind: 'push', y0: e.offsetY, v0: g.values[best.j][best.i] };
-				update();
-			});
-			viewer.addEventListener('pointermove', (e) => {
-				if (!viewerDrag) return;
-				if (viewerDrag.kind === 'wipe') {
-					const dpr = window.devicePixelRatio || 1;
-					const r = viewerRect();
-					state.wipe = clamp((e.offsetX * dpr - r.x) / r.w, 0, 1);
-					drawViewer();
-					return;
-				}
-				setSelected(viewerDrag.v0 + (viewerDrag.y0 - e.offsetY) / 250);
-			});
-			viewer.addEventListener('pointerup', () => (viewerDrag = null));
-
-			function setSelected(v) {
-				const s = state.selected;
-				if (!s) return;
-				state.g.values[s.j][s.i] = clamp(v, 0, 1);
-				update();
-			}
-
-			// ---------------- Flat grid editor ----------------
-			const flat = $('flat');
-			const PAD = { l: 40, r: 12, t: 12, b: 34 };
-			function flatGeom() {
-				const w = flat.width;
-				const h = flat.height;
-				const dpr = window.devicePixelRatio || 1;
-				const pad = { l: PAD.l * dpr, r: PAD.r * dpr, t: PAD.t * dpr, b: PAD.b * dpr };
-				return { x: pad.l, y: pad.t, w: w - pad.l - pad.r, h: h - pad.t - pad.b, dpr };
-			}
-			const flatX = (G, hue) => G.x + hue * G.w;
-			const flatY = (G, light) => G.y + (1 - light) * G.h;
-			const REFERENCE_CHROMA = 0.1;
-			function drawFlat() {
-				const dpr = fitCanvas(flat);
-				const G = flatGeom();
-				const ctx = flat.getContext('2d');
-				ctx.fillStyle = '#131316';
-				ctx.fillRect(0, 0, flat.width, flat.height);
-				// Background: the colour every hue × lightness becomes, at a fixed chroma.
-				const W = Math.max(1, Math.round(G.w / 2));
-				const H = Math.max(1, Math.round(G.h / 2));
-				const bg = new ImageData(W, H);
-				for (let y = 0; y < H; y++) {
-					const light = 1 - y / (H - 1);
-					for (let x = 0; x < W; x++) {
-						const hue = x / W;
-						const v = lookup(t, hue, light);
-						const [l, c, h] = change(state.output, v, light, REFERENCE_CHROMA, hue);
-						oklabToRgb(l, c * Math.cos(2 * Math.PI * h), c * Math.sin(2 * Math.PI * h), bg.data, (y * W + x) * 4);
-						bg.data[(y * W + x) * 4 + 3] = 255;
-					}
-				}
-				const tmp = new OffscreenCanvas(W, H);
-				tmp.getContext('2d').putImageData(bg, 0, 0);
-				ctx.imageSmoothingEnabled = true;
-				ctx.drawImage(tmp, G.x, G.y, G.w, G.h);
-
-				const g = state.g;
-				// Grid lines through the points.
-				ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-				ctx.lineWidth = dpr;
-				for (const hue of g.hues) {
-					ctx.beginPath();
-					ctx.moveTo(flatX(G, hue), G.y);
-					ctx.lineTo(flatX(G, hue), G.y + G.h);
-					ctx.stroke();
-				}
-				for (const light of g.lights) {
-					ctx.beginPath();
-					ctx.moveTo(G.x, flatY(G, light));
-					ctx.lineTo(G.x + G.w, flatY(G, light));
-					ctx.stroke();
-				}
-				// Picked colour.
-				if (state.pick) {
-					const px = flatX(G, state.pick.hue);
-					const py = flatY(G, state.pick.light);
-					ctx.strokeStyle = '#fff';
-					ctx.lineWidth = 1.5 * dpr;
-					ctx.beginPath();
-					ctx.moveTo(px - 9 * dpr, py);
-					ctx.lineTo(px + 9 * dpr, py);
-					ctx.moveTo(px, py - 9 * dpr);
-					ctx.lineTo(px, py + 9 * dpr);
-					ctx.stroke();
-				}
-				// Points: filled by their change, ringed white, selected in yellow with a value tag.
-				g.values.forEach((row, j) =>
-					row.forEach((v, i) => {
-						const x = flatX(G, g.hues[i]);
-						const y = flatY(G, g.lights[j]);
-						const selected = state.selected && state.selected.i === i && state.selected.j === j;
-						const moved = Math.abs(v - 0.5) > 0.004;
-						ctx.beginPath();
-						ctx.arc(x, y, (selected ? 6 : moved ? 5 : 3.5) * dpr, 0, 2 * Math.PI);
-						ctx.fillStyle = moved ? (v > 0.5 ? '#fff' : '#111') : 'rgba(255,255,255,0.55)';
-						ctx.fill();
-						ctx.lineWidth = (selected ? 2.5 : 1.2) * dpr;
-						ctx.strokeStyle = selected ? '#facc15' : moved ? '#000' : 'rgba(0,0,0,0.5)';
-						ctx.stroke();
-						if (selected) tag(ctx, x, y - 18 * dpr, fmtChange(state.output, v), dpr);
-					})
-				);
-				// Axes.
-				ctx.fillStyle = '#8f8f99';
-				ctx.font = `${11 * dpr}px ui-sans-serif, system-ui`;
-				ctx.textAlign = 'center';
-				ctx.textBaseline = 'top';
-				for (const [name, deg] of HUE_NAMES) {
-					const x = flatX(G, deg / 360);
-					ctx.fillRect(x - 0.5 * dpr, G.y + G.h, dpr, 4 * dpr);
-					ctx.fillText(name, x, G.y + G.h + 7 * dpr);
-				}
-				ctx.textAlign = 'right';
-				ctx.textBaseline = 'middle';
-				for (const p of [0, 25, 50, 75, 100]) ctx.fillText(`${p}%`, G.x - 6 * dpr, flatY(G, p / 100));
-			}
 			function tag(ctx, x, y, text, dpr) {
 				ctx.font = `600 ${11 * dpr}px ui-monospace, Menlo, monospace`;
 				const w = ctx.measureText(text).width + 10 * dpr;
+				x = clamp(x, w / 2 + 2, ctx.canvas.width - w / 2 - 2);
+				y = Math.max(y, 11 * dpr);
 				ctx.fillStyle = '#facc15';
 				ctx.fillRect(x - w / 2, y - 9 * dpr, w, 16 * dpr);
 				ctx.fillStyle = '#111';
@@ -726,45 +707,495 @@
 				ctx.textBaseline = 'middle';
 				ctx.fillText(text, x, y - 1 * dpr);
 			}
-			let flatDrag = null;
-			flat.addEventListener('pointerdown', (e) => {
-				const G = flatGeom();
-				const x = e.offsetX * G.dpr;
-				const y = e.offsetY * G.dpr;
-				const g = state.g;
-				let best = null;
-				g.hues.forEach((hh, i) =>
-					g.lights.forEach((ll, j) => {
-						const d = Math.hypot(flatX(G, hh) - x, flatY(G, ll) - y);
-						if (d < 12 * G.dpr && (!best || d < best.d)) best = { d, i, j };
+			const rgbCss = (L, C, H) => {
+				const o = [0, 0, 0];
+				lchToRgb(L, C, H, o, 0);
+				return `rgb(${o.map(Math.round)})`;
+			};
+			/** A colour for a channel value, used on axis bands. */
+			function axisColour(ch, a) {
+				if (ch === 'hue') return rgbCss(0.72, 0.13, a);
+				if (ch === 'lightness') return rgbCss(a, 0, 0);
+				return rgbCss(0.7, a * 0.2, 0.72);
+			}
+			/** Reference colour at axis values, so every channel shows a sensible colour. */
+			function reference(c, a, b) {
+				let L = 0.68;
+				let C = 0.1;
+				let H = 0.08;
+				const set = (ch, v) => {
+					if (ch === 'lightness') L = 0.12 + v * 0.83;
+					else if (ch === 'chroma') C = v * MAX_CHROMA * 0.6;
+					else H = v;
+				};
+				set(c.x, a);
+				if (c.x2) set(c.x2, b);
+				return [L, C, H];
+			}
+
+			// ---------------- Preview (window view) and viewer (analysis) ----------------
+			function drawImageWipe(canvas, labels) {
+				if (!image) return;
+				const dpr = fit(canvas);
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#0b0b0d';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				const r = imageRect(canvas);
+				const split = r.x + r.w * state.wipe;
+				ctx.save();
+				ctx.beginPath();
+				ctx.rect(r.x, r.y, split - r.x, r.h);
+				ctx.clip();
+				ctx.drawImage(image.before, r.x, r.y, r.w, r.h);
+				ctx.restore();
+				ctx.save();
+				ctx.beginPath();
+				ctx.rect(split, r.y, r.x + r.w - split, r.h);
+				ctx.clip();
+				ctx.drawImage(image.after, r.x, r.y, r.w, r.h);
+				ctx.restore();
+				ctx.fillStyle = '#facc15';
+				ctx.fillRect(split - dpr, r.y, 2 * dpr, r.h);
+				ctx.beginPath();
+				ctx.arc(split, r.y + r.h / 2, 7 * dpr, 0, 2 * Math.PI);
+				ctx.fill();
+				if (labels) {
+					labels[0].style.left = `${r.x / dpr + 8}px`;
+					labels[1].style.left = `${(r.x + r.w) / dpr - 58}px`;
+				}
+			}
+			function imageRect(canvas) {
+				const reserve = canvas.id === 'preview' ? 392 * (window.devicePixelRatio || 1) : 0;
+				const W = canvas.width - reserve;
+				const s = Math.min(W / image.w, canvas.height / image.h) * 0.96;
+				const w = image.w * s;
+				const h = image.h * s;
+				return { x: (W - w) / 2, y: (canvas.height - h) / 2, w, h, s };
+			}
+			function bindImage(canvas) {
+				let drag = null;
+				canvas.addEventListener('pointerdown', (e) => {
+					if (!image) return;
+					const dpr = window.devicePixelRatio || 1;
+					const x = e.offsetX * dpr;
+					const y = e.offsetY * dpr;
+					const r = imageRect(canvas);
+					canvas.setPointerCapture(e.pointerId);
+					if (Math.abs(x - (r.x + r.w * state.wipe)) < 10 * dpr) {
+						drag = { wipe: true };
+						return;
+					}
+					const px = Math.floor((x - r.x) / r.s);
+					const py = Math.floor((y - r.y) / r.s);
+					if (px < 0 || py < 0 || px >= image.w || py >= image.h) return;
+					const p = py * image.w + px;
+					const [L, C, H] = [image.L[p], image.C[p], image.H[p]];
+					state.pick = { L, C, H };
+					const c = sel();
+					const a = read(c.x, L, C, H);
+					if (c.x2) {
+						const b = read(c.x2, L, C, H);
+						let best = null;
+						c.grid.cols.forEach((u, i) => {
+							let du = Math.abs(u - a);
+							if (CHANNELS[c.x].periodic) du = Math.min(du, 1 - du);
+							c.grid.rows.forEach((w, j) => {
+								const d = Math.hypot(du * 2, w - b);
+								if (!best || d < best.d) best = { d, i, j };
+							});
+						});
+						state.point = { i: best.i, j: best.j };
+						drag = { y0: e.offsetY, v0: c.grid.values[best.j][best.i] };
+					} else {
+						// Grab the nearest point, or add one at the picked colour, like Resolve's qualifier click.
+						let k = c.points.findIndex((pt) => Math.abs(pt[0] - a) < 0.025);
+						if (k < 0) {
+							c.points.push([a, fns[state.selected](a)]);
+							c.points.sort((p, q) => p[0] - q[0]);
+							k = c.points.findIndex((pt) => pt[0] === a);
+						}
+						state.point = k;
+						drag = { y0: e.offsetY, v0: c.points[k][1] };
+					}
+					update();
+				});
+				canvas.addEventListener('pointermove', (e) => {
+					if (!drag) return;
+					if (drag.wipe) {
+						const dpr = window.devicePixelRatio || 1;
+						const r = imageRect(canvas);
+						state.wipe = clamp((e.offsetX * dpr - r.x) / r.w, 0, 1);
+						drawImageWipe(canvas);
+						return;
+					}
+					setPointValue(drag.v0 + (drag.y0 - e.offsetY) / 250);
+				});
+				canvas.addEventListener('pointerup', () => (drag = null));
+			}
+			function setPointValue(v) {
+				const c = sel();
+				if (state.point === null) return;
+				if (c.x2) c.grid.values[state.point.j][state.point.i] = clamp(v, 0, 1);
+				else c.points[state.point][1] = clamp(v, 0, 1);
+				update();
+			}
+
+			// ---------------- The editor: one drawing, any size ----------------
+			function geom(canvas) {
+				const dpr = window.devicePixelRatio || 1;
+				const big = canvas.width > 700 * dpr;
+				const pad = { l: (big ? 40 : 30) * dpr, r: 10 * dpr, t: 10 * dpr, b: (big ? 30 : 24) * dpr };
+				return { x: pad.l, y: pad.t, w: canvas.width - pad.l - pad.r, h: canvas.height - pad.t - pad.b, dpr, big };
+			}
+			const gx = (G, a) => G.x + a * G.w;
+			const gy = (G, v) => G.y + (1 - v) * G.h;
+
+			function drawEditor(canvas) {
+				fit(canvas);
+				const G = geom(canvas);
+				const ctx = canvas.getContext('2d');
+				ctx.fillStyle = '#131316';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+				const c = sel();
+				if (c.x2) drawGrid(ctx, G, c);
+				else drawOneInput(ctx, G, c);
+				drawAxes(ctx, G, c);
+			}
+
+			function drawOneInput(ctx, G, c) {
+				const dpr = G.dpr;
+				// Quarter grid.
+				ctx.strokeStyle = '#26262b';
+				ctx.lineWidth = dpr;
+				for (let k = 1; k < 4; k++) {
+					ctx.beginPath();
+					ctx.moveTo(gx(G, k / 4), G.y);
+					ctx.lineTo(gx(G, k / 4), G.y + G.h);
+					ctx.moveTo(G.x, gy(G, k / 4));
+					ctx.lineTo(G.x + G.w, gy(G, k / 4));
+					ctx.stroke();
+				}
+				// Neutral line.
+				ctx.setLineDash([4 * dpr, 4 * dpr]);
+				ctx.strokeStyle = '#4a4a52';
+				ctx.beginPath();
+				if (c.kind === 'remap') {
+					ctx.moveTo(gx(G, 0), gy(G, 0));
+					ctx.lineTo(gx(G, 1), gy(G, 1));
+				} else {
+					ctx.moveTo(G.x, gy(G, 0.5));
+					ctx.lineTo(G.x + G.w, gy(G, 0.5));
+				}
+				ctx.stroke();
+				ctx.setLineDash([]);
+				// Other one-input curves on the same axes, thin, behind.
+				state.curves.forEach((o, k) => {
+					if (k === state.selected || o.x2 || o.x !== c.x || o.kind !== c.kind) return;
+					plot(ctx, G, fns[k], COLOURS[k % COLOURS.length], 1.5 * dpr, 0.55);
+				});
+				// Picked colour marker.
+				if (state.pick) {
+					const a = read(c.x, state.pick.L, state.pick.C, state.pick.H);
+					ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+					ctx.setLineDash([2 * dpr, 3 * dpr]);
+					ctx.beginPath();
+					ctx.moveTo(gx(G, a), G.y);
+					ctx.lineTo(gx(G, a), G.y + G.h);
+					ctx.stroke();
+					ctx.setLineDash([]);
+				}
+				const colour = COLOURS[state.selected % COLOURS.length];
+				plot(ctx, G, fns[state.selected], colour, 2.5 * dpr, 1);
+				c.points.forEach(([a, v], k) => {
+					const on = state.point === k;
+					ctx.beginPath();
+					ctx.arc(gx(G, a), gy(G, v), (on ? 6 : 4.5) * dpr, 0, 2 * Math.PI);
+					ctx.fillStyle = on ? colour : '#131316';
+					ctx.fill();
+					ctx.lineWidth = 2 * dpr;
+					ctx.strokeStyle = colour;
+					ctx.stroke();
+					if (on) tag(ctx, gx(G, a), gy(G, v) - 16 * dpr, fmt(c, a, v), dpr);
+				});
+			}
+			function plot(ctx, G, f, colour, width, alpha) {
+				ctx.globalAlpha = alpha;
+				ctx.strokeStyle = colour;
+				ctx.lineWidth = width;
+				ctx.beginPath();
+				const steps = Math.round(G.w / G.dpr);
+				for (let s = 0; s <= steps; s++) {
+					const a = s / steps;
+					const x = gx(G, a);
+					const y = gy(G, clamp(f(a), 0, 1));
+					s === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+				}
+				ctx.stroke();
+				ctx.globalAlpha = 1;
+			}
+
+			function drawGrid(ctx, G, c) {
+				const dpr = G.dpr;
+				const f = fns[state.selected];
+				const W = Math.max(1, Math.round(G.w / (2 * dpr)));
+				const H = Math.max(1, Math.round(G.h / (2 * dpr)));
+				const bg = new ImageData(W, H);
+				for (let y = 0; y < H; y++)
+					for (let x = 0; x < W; x++) {
+						const a = x / (W - 1);
+						const b = 1 - y / (H - 1);
+						const ref = reference(c, a, b);
+						const out = apply(c, f(a, b), ref, ref);
+						lchToRgb(out[0], out[1], out[2], bg.data, (y * W + x) * 4);
+						bg.data[(y * W + x) * 4 + 3] = 255;
+					}
+				const tmp = new OffscreenCanvas(W, H);
+				tmp.getContext('2d').putImageData(bg, 0, 0);
+				ctx.imageSmoothingEnabled = true;
+				ctx.drawImage(tmp, G.x, G.y, G.w, G.h);
+				const g = c.grid;
+				ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+				ctx.lineWidth = dpr;
+				for (const a of g.cols) {
+					ctx.beginPath();
+					ctx.moveTo(gx(G, a), G.y);
+					ctx.lineTo(gx(G, a), G.y + G.h);
+					ctx.stroke();
+				}
+				for (const b of g.rows) {
+					ctx.beginPath();
+					ctx.moveTo(G.x, gy(G, b));
+					ctx.lineTo(G.x + G.w, gy(G, b));
+					ctx.stroke();
+				}
+				if (state.pick) {
+					const px = gx(G, read(c.x, state.pick.L, state.pick.C, state.pick.H));
+					const py = gy(G, read(c.x2, state.pick.L, state.pick.C, state.pick.H));
+					ctx.strokeStyle = '#fff';
+					ctx.lineWidth = 1.5 * dpr;
+					ctx.beginPath();
+					ctx.moveTo(px - 8 * dpr, py);
+					ctx.lineTo(px + 8 * dpr, py);
+					ctx.moveTo(px, py - 8 * dpr);
+					ctx.lineTo(px, py + 8 * dpr);
+					ctx.stroke();
+				}
+				g.values.forEach((row, j) =>
+					row.forEach((v, i) => {
+						const on = state.point && state.point.i === i && state.point.j === j;
+						const moved = Math.abs(v - 0.5) > 0.004;
+						const x = gx(G, g.cols[i]);
+						const y = gy(G, g.rows[j]);
+						ctx.beginPath();
+						ctx.arc(x, y, (on ? 6 : moved ? 4.5 : 3) * dpr, 0, 2 * Math.PI);
+						ctx.fillStyle = moved ? (v > 0.5 ? '#fff' : '#111') : 'rgba(255,255,255,0.55)';
+						ctx.fill();
+						ctx.lineWidth = (on ? 2.5 : 1.2) * dpr;
+						ctx.strokeStyle = on ? '#facc15' : moved ? '#000' : 'rgba(0,0,0,0.5)';
+						ctx.stroke();
+						if (on) tag(ctx, x, y - 17 * dpr, fmt(c, g.cols[i], v), dpr);
 					})
 				);
-				if (!best) return;
-				state.selected = { i: best.i, j: best.j };
-				flatDrag = { y0: e.offsetY, v0: g.values[best.j][best.i] };
-				flat.setPointerCapture(e.pointerId);
+			}
+
+			function drawAxes(ctx, G, c) {
+				const dpr = G.dpr;
+				// Input band under the plot.
+				const band = 5 * dpr;
+				for (let s = 0; s < G.w; s += dpr) {
+					ctx.fillStyle = axisColour(c.x, s / G.w);
+					ctx.fillRect(G.x + s, G.y + G.h + 2 * dpr, dpr + 0.5, band);
+				}
+				// Output band beside the plot, for remaps and two-input rows.
+				const side = c.x2 || (c.kind === 'remap' ? c.y : null);
+				if (side) {
+					for (let s = 0; s < G.h; s += dpr) {
+						ctx.fillStyle = axisColour(side, 1 - s / G.h);
+						ctx.fillRect(G.x - band - 2 * dpr, G.y + s, band, dpr + 0.5);
+					}
+				}
+				ctx.fillStyle = '#8f8f99';
+				ctx.font = `${10.5 * dpr}px ui-sans-serif, system-ui`;
+				ctx.textBaseline = 'top';
+				ctx.textAlign = 'center';
+				const ly = G.y + G.h + band + 5 * dpr;
+				if (c.x === 'hue') {
+					const names = G.big ? HUE_NAMES : HUE_NAMES.filter((_, k) => k % 2 === 0);
+					for (const [n, deg] of names) ctx.fillText(G.big ? n : n.slice(0, 3), gx(G, deg / 360), ly);
+				} else {
+					ctx.textAlign = 'left';
+					ctx.fillText(`${CHANNELS[c.x].label} 0%`, G.x, ly);
+					ctx.textAlign = 'right';
+					ctx.fillText('100%', G.x + G.w, ly);
+				}
+				ctx.textAlign = 'right';
+				ctx.textBaseline = 'middle';
+				const lx = G.x - (side ? band + 5 : 4) * dpr;
+				if (c.x2 || c.kind === 'remap') {
+					ctx.fillText('100', lx, gy(G, 1) + 5 * dpr);
+					ctx.fillText('0', lx, gy(G, 0) - 5 * dpr);
+				} else {
+					ctx.fillText('+', lx, gy(G, 0.9));
+					ctx.fillText('0', lx, gy(G, 0.5));
+					ctx.fillText('−', lx, gy(G, 0.1));
+				}
+			}
+
+			function bindEditor(canvas) {
+				let drag = null;
+				canvas.addEventListener('pointerdown', (e) => {
+					const G = geom(canvas);
+					const x = e.offsetX * G.dpr;
+					const y = e.offsetY * G.dpr;
+					const c = sel();
+					canvas.setPointerCapture(e.pointerId);
+					if (c.x2) {
+						let best = null;
+						c.grid.cols.forEach((a, i) =>
+							c.grid.rows.forEach((b, j) => {
+								const d = Math.hypot(gx(G, a) - x, gy(G, b) - y);
+								if (d < 12 * G.dpr && (!best || d < best.d)) best = { d, i, j };
+							})
+						);
+						if (!best) return;
+						state.point = { i: best.i, j: best.j };
+						drag = { grid: true, y0: e.offsetY, v0: c.grid.values[best.j][best.i] };
+						update();
+						return;
+					}
+					let k = c.points.findIndex(([a, v]) => Math.hypot(gx(G, a) - x, gy(G, v) - y) < 11 * G.dpr);
+					if (k < 0) {
+						const a = clamp((x - G.x) / G.w, 0, CHANNELS[c.x].periodic && c.kind === 'adjust' ? 0.999 : 1);
+						const v = clamp(1 - (y - G.y) / G.h, 0, 1);
+						c.points.push([a, v]);
+						c.points.sort((p, q) => p[0] - q[0]);
+						k = c.points.findIndex((p) => p[0] === a);
+					}
+					state.point = k;
+					drag = { k };
+					update();
+				});
+				canvas.addEventListener('pointermove', (e) => {
+					if (!drag) return;
+					const G = geom(canvas);
+					const c = sel();
+					if (drag.grid) return setPointValue(drag.v0 + (drag.y0 - e.offsetY) / 200);
+					const pts = c.points;
+					const k = drag.k;
+					const periodic = CHANNELS[c.x].periodic && c.kind === 'adjust';
+					const lo = k === 0 ? 0 : pts[k - 1][0] + 0.005;
+					const hi = k === pts.length - 1 ? (periodic ? 0.999 : 1) : pts[k + 1][0] - 0.005;
+					const fixedEnd = !periodic && (k === 0 || k === pts.length - 1);
+					const a = fixedEnd ? pts[k][0] : clamp((e.offsetX * G.dpr - G.x) / G.w, lo, hi);
+					pts[k] = [a, clamp(1 - (e.offsetY * G.dpr - G.y) / G.h, 0, 1)];
+					update();
+				});
+				canvas.addEventListener('pointerup', () => (drag = null));
+				canvas.addEventListener('dblclick', (e) => {
+					const G = geom(canvas);
+					const c = sel();
+					const x = e.offsetX * G.dpr;
+					const y = e.offsetY * G.dpr;
+					if (c.x2) {
+						const a = clamp((x - G.x) / G.w, 0, 0.9999);
+						if (c.grid.cols.some((u) => Math.abs(u - a) < 0.004)) return;
+						const { curve: next, index } = insertColumn(c, fns[state.selected], a);
+						state.curves[state.selected] = next;
+						state.point = { i: index, j: state.point?.j ?? 2 };
+						return update();
+					}
+					const k = c.points.findIndex(([a, v]) => Math.hypot(gx(G, a) - x, gy(G, v) - y) < 11 * G.dpr);
+					const periodic = CHANNELS[c.x].periodic && c.kind === 'adjust';
+					if (k < 0 || c.points.length <= 2 || (!periodic && (k === 0 || k === c.points.length - 1))) return;
+					c.points.splice(k, 1);
+					state.point = null;
+					update();
+				});
+			}
+
+			// ---------------- Chips and controls (window view) ----------------
+			function renderChips(el, compact) {
+				el.innerHTML = '';
+				state.curves.forEach((c, k) => {
+					const b = document.createElement('button');
+					b.className = 'chip';
+					b.setAttribute('aria-pressed', k === state.selected);
+					b.innerHTML = `<i style="background:${COLOURS[k % COLOURS.length]}"></i>${nameOf(c)}`;
+					b.addEventListener('click', () => {
+						state.selected = k;
+						state.point = null;
+						update();
+					});
+					el.append(b);
+				});
+				if (compact) return;
+				const add = document.createElement('button');
+				add.className = 'chip';
+				add.textContent = '+ Curve';
+				add.addEventListener('click', () => {
+					state.curves.push(makeCurve('hue', null, 'chroma', 'adjust'));
+					state.selected = state.curves.length - 1;
+					state.point = null;
+					update();
+				});
+				el.append(add);
+			}
+			const options = (el, list, value) => {
+				el.innerHTML = list.map(([v, l]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${l}</option>`).join('');
+			};
+			function renderControls() {
+				const c = sel();
+				const all = Object.entries(CHANNELS).map(([k, v]) => [k, v.label]);
+				options($('x'), all, c.x);
+				options($('x2'), [['', 'nothing else'], ...all.filter(([k]) => k !== c.x)], c.x2 ?? '');
+				options($('y'), all, c.y);
+				document.querySelectorAll('#kind button').forEach((b) => {
+					b.setAttribute('aria-pressed', b.dataset.kind === c.kind);
+					b.disabled = b.dataset.kind === 'remap' && !canRemap(c);
+				});
+				const r = $('readout');
+				let html = '';
+				if (c.x2 && state.point) {
+					const g = c.grid;
+					html = `<span>${CHANNELS[c.x].short} <b>${fmtInput(c.x, g.cols[state.point.i])}</b></span><span>${CHANNELS[c.x2].short} <b>${fmtInput(c.x2, g.rows[state.point.j])}</b></span><span>→ <b>${fmt(c, 0, g.values[state.point.j][state.point.i])}</b></span>`;
+				} else if (!c.x2 && state.point !== null && c.points[state.point]) {
+					const [a, v] = c.points[state.point];
+					html = `<span>In <b>${fmtInput(c.x, a)}</b></span><span>Out <b>${fmt(c, a, v)}</b></span>`;
+				}
+				r.innerHTML = html;
+				$('a-readout').innerHTML = html;
+			}
+			const recreate = (patch) => {
+				const c = { ...sel(), ...patch };
+				const kind = !c.x2 && c.x === c.y ? c.kind : 'adjust';
+				state.curves[state.selected] = makeCurve(c.x, c.x2 || null, c.y, kind);
+				state.point = null;
+				update();
+			};
+			$('x').addEventListener('change', (e) => recreate({ x: e.target.value, x2: sel().x2 === e.target.value ? null : sel().x2 }));
+			$('x2').addEventListener('change', (e) => recreate({ x2: e.target.value || null }));
+			$('y').addEventListener('change', (e) => recreate({ y: e.target.value }));
+			$('kind').addEventListener('click', (e) => {
+				const k = e.target.dataset.kind;
+				if (k && !e.target.disabled) recreate({ kind: k });
+			});
+
+			// ---------------- Mode switch ----------------
+			$('expand').addEventListener('click', () => {
+				document.body.className = 'analysis';
 				update();
 			});
-			flat.addEventListener('pointermove', (e) => {
-				if (flatDrag) setSelected(flatDrag.v0 + (flatDrag.y0 - e.offsetY) / 200);
-			});
-			flat.addEventListener('pointerup', () => (flatDrag = null));
-			flat.addEventListener('dblclick', (e) => {
-				const G = flatGeom();
-				const hue = clamp((e.offsetX * G.dpr - G.x) / G.w, 0, 0.9999);
-				if (state.g.hues.some((h) => Math.abs(h - hue) < 0.004)) return;
-				const { g, index } = insertColumn(state.g, hue);
-				state.g = g;
-				state.selected = { i: index, j: state.selected ? state.selected.j : 2 };
+			$('back').addEventListener('click', () => {
+				document.body.className = 'window';
 				update();
 			});
 
-			// ---------------- WebGL helpers ----------------
+			// ---------------- WebGL (analysis view) ----------------
 			const M = {
-				perspective(fovy, aspect, near, far) {
-					const f = 1 / Math.tan(fovy / 2);
-					const nf = 1 / (near - far);
-					return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+				perspective(f, a, n, fr) {
+					const t = 1 / Math.tan(f / 2);
+					const nf = 1 / (n - fr);
+					return [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fr + n) * nf, -1, 0, 0, 2 * fr * n * nf, 0];
 				},
 				lookAt(e, c, u) {
 					let z = [e[0] - c[0], e[1] - c[1], e[2] - c[2]];
@@ -774,13 +1205,7 @@
 					l = Math.hypot(...x);
 					x = x.map((v) => v / l);
 					const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
-					return [
-						x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0,
-						-(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]),
-						-(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]),
-						-(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]),
-						1
-					];
+					return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]), -(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]), -(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]), 1];
 				},
 				mul(a, b) {
 					const o = new Array(16);
@@ -795,19 +1220,12 @@
 				project(m, p, w, h) {
 					const x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
 					const y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
-					const ww = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
-					return [((x / ww) * 0.5 + 0.5) * w, (1 - ((y / ww) * 0.5 + 0.5)) * h];
+					const q = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+					return [((x / q) * 0.5 + 0.5) * w, (1 - ((y / q) * 0.5 + 0.5)) * h];
 				}
 			};
-
-			function glView(canvas, { yaw, pitch, dist, target }) {
-				const gl = canvas.getContext('webgl2', { antialias: true, premultipliedAlpha: false });
-				const vs = `#version 300 es
-					in vec3 pos; in vec4 col; uniform mat4 mvp; uniform float size; out vec4 vcol;
-					void main(){ gl_Position = mvp * vec4(pos,1.0); gl_PointSize = size; vcol = col; }`;
-				const fs = `#version 300 es
-					precision mediump float; in vec4 vcol; uniform bool round; out vec4 o;
-					void main(){ if(round){ vec2 d = gl_PointCoord - 0.5; if(dot(d,d) > 0.25) discard; } o = vcol; }`;
+			function glView(canvas, cam) {
+				const gl = canvas.getContext('webgl2', { antialias: true });
 				const sh = (type, src) => {
 					const s = gl.createShader(type);
 					gl.shaderSource(s, src);
@@ -816,57 +1234,47 @@
 					return s;
 				};
 				const prog = gl.createProgram();
-				gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
-				gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+				gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
+					in vec3 pos; in vec4 col; uniform mat4 mvp; uniform float size; out vec4 v;
+					void main(){ gl_Position = mvp * vec4(pos,1.0); gl_PointSize = size; v = col; }`));
+				gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, `#version 300 es
+					precision mediump float; in vec4 v; uniform bool round; out vec4 o;
+					void main(){ if(round){ vec2 d = gl_PointCoord - 0.5; if(dot(d,d) > 0.25) discard; } o = v; }`));
 				gl.linkProgram(prog);
-				const loc = {
-					pos: gl.getAttribLocation(prog, 'pos'),
-					col: gl.getAttribLocation(prog, 'col'),
-					mvp: gl.getUniformLocation(prog, 'mvp'),
-					size: gl.getUniformLocation(prog, 'size'),
-					round: gl.getUniformLocation(prog, 'round')
-				};
-				const cam = { yaw, pitch, dist, target };
+				const loc = { pos: gl.getAttribLocation(prog, 'pos'), col: gl.getAttribLocation(prog, 'col'), mvp: gl.getUniformLocation(prog, 'mvp'), size: gl.getUniformLocation(prog, 'size'), round: gl.getUniformLocation(prog, 'round') };
 				let dragging = null;
-				let lastInteraction = 0;
-				const view = {
+				let last = 0;
+				return {
 					gl,
 					cam,
 					mvp() {
-						const aspect = canvas.width / canvas.height;
-						const e = [
-							cam.target[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw),
-							cam.target[1] + cam.dist * Math.sin(cam.pitch),
-							cam.target[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw)
-						];
-						return M.mul(M.perspective(0.75, aspect, 0.05, 20), M.lookAt(e, cam.target, [0, 1, 0]));
+						const e = [cam.target[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw), cam.target[1] + cam.dist * Math.sin(cam.pitch), cam.target[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw)];
+						return M.mul(M.perspective(0.75, canvas.width / canvas.height, 0.05, 20), M.lookAt(e, cam.target, [0, 1, 0]));
 					},
 					begin() {
-						fitCanvas(canvas);
+						fit(canvas);
 						gl.viewport(0, 0, canvas.width, canvas.height);
 						gl.clearColor(0.075, 0.075, 0.086, 1);
 						gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-						gl.enable(gl.DEPTH_TEST);
 						gl.enable(gl.BLEND);
 						gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 						gl.useProgram(prog);
 						gl.uniformMatrix4fv(loc.mvp, false, this.mvp());
 					},
-					/** Draw positions (xyz) and colours (rgba 0-1). */
-					draw(mode, positions, colours, { size = 1, round = false, indices = null, depth = true } = {}) {
+					draw(mode, pos, col, { size = 1, round = false, indices = null, depth = true } = {}) {
 						depth ? gl.enable(gl.DEPTH_TEST) : gl.disable(gl.DEPTH_TEST);
 						const vao = gl.createVertexArray();
 						gl.bindVertexArray(vao);
-						const pb = gl.createBuffer();
-						gl.bindBuffer(gl.ARRAY_BUFFER, pb);
-						gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STREAM_DRAW);
-						gl.enableVertexAttribArray(loc.pos);
-						gl.vertexAttribPointer(loc.pos, 3, gl.FLOAT, false, 0, 0);
-						const cb = gl.createBuffer();
-						gl.bindBuffer(gl.ARRAY_BUFFER, cb);
-						gl.bufferData(gl.ARRAY_BUFFER, colours, gl.STREAM_DRAW);
-						gl.enableVertexAttribArray(loc.col);
-						gl.vertexAttribPointer(loc.col, 4, gl.FLOAT, false, 0, 0);
+						const buf = (data, l, n) => {
+							const b = gl.createBuffer();
+							gl.bindBuffer(gl.ARRAY_BUFFER, b);
+							gl.bufferData(gl.ARRAY_BUFFER, data, gl.STREAM_DRAW);
+							gl.enableVertexAttribArray(l);
+							gl.vertexAttribPointer(l, n, gl.FLOAT, false, 0, 0);
+							return b;
+						};
+						const pb = buf(pos, loc.pos, 3);
+						const cb = buf(col, loc.col, 4);
 						gl.uniform1f(loc.size, size * (window.devicePixelRatio || 1));
 						gl.uniform1i(loc.round, round ? 1 : 0);
 						if (indices) {
@@ -875,22 +1283,21 @@
 							gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STREAM_DRAW);
 							gl.drawElements(mode, indices.length, gl.UNSIGNED_INT, 0);
 							gl.deleteBuffer(ib);
-						} else gl.drawArrays(mode, 0, positions.length / 3);
+						} else gl.drawArrays(mode, 0, pos.length / 3);
 						gl.deleteBuffer(pb);
 						gl.deleteBuffer(cb);
 						gl.deleteVertexArray(vao);
 					},
-					/** Orbit on drag unless `grab` claims the pointer. */
 					orbit(grab, onChange) {
 						canvas.addEventListener('pointerdown', (e) => {
-							lastInteraction = performance.now();
+							last = performance.now();
 							if (grab && grab(e)) return;
 							dragging = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch };
 							canvas.setPointerCapture(e.pointerId);
 						});
 						canvas.addEventListener('pointermove', (e) => {
 							if (!dragging) return;
-							lastInteraction = performance.now();
+							last = performance.now();
 							cam.yaw = dragging.yaw - (e.clientX - dragging.x) * 0.008;
 							cam.pitch = clamp(dragging.pitch + (e.clientY - dragging.y) * 0.006, -0.2, 1.45);
 							onChange();
@@ -902,134 +1309,120 @@
 							onChange();
 						});
 					},
-					idle: () => performance.now() - lastInteraction > 2500 && !dragging
+					idle: () => performance.now() - last > 2500 && !dragging
 				};
-				return view;
 			}
 
-			// ---------------- 3D surface ----------------
+			// ---------------- Surface ----------------
 			const surfaceCanvas = $('surface');
 			const Surface = glView(surfaceCanvas, { yaw: -0.38, pitch: 0.5, dist: 2.05, target: [0.03, 0, 0] });
-			const SURF_H = 120;
-			const SURF_L = 40;
-			const HEIGHT = 0.5; // world units for the full change range
-			const surfPos = (hue, light, v) => [hue - 0.5, (v - 0.5) * HEIGHT, 0.5 - light];
+			const HEIGHT = 0.5;
 			let surfaceNodes = [];
+			/** Height and colour of the selected curve at axis values (a across, b deep). */
+			function surfaceAt(c, f, a, b) {
+				const v = c.x2 ? f(a, b) : f(a);
+				const ref = reference(c, a, b);
+				return { v, h: deviation(c, a, v) * HEIGHT, out: apply(c, v, ref, ref) };
+			}
+			const sp = (a, b, h) => [a - 0.5, h, 0.5 - b];
 			function drawSurface() {
+				const c = sel();
+				const f = fns[state.selected];
 				const view = Surface;
 				view.begin();
-				const pos = new Float32Array((SURF_H + 1) * SURF_L * 3);
-				const col = new Float32Array((SURF_H + 1) * SURF_L * 4);
+				const NA = 110;
+				const NB = c.x2 ? 36 : 2;
+				const pos = new Float32Array((NA + 1) * NB * 3);
+				const col = new Float32Array((NA + 1) * NB * 4);
 				const rgb = [0, 0, 0];
-				for (let j = 0; j < SURF_L; j++) {
-					const light = j / (SURF_L - 1);
-					for (let i = 0; i <= SURF_H; i++) {
-						const hue = i / SURF_H;
-						const v = lookup(t, hue, light);
-						const k = j * (SURF_H + 1) + i;
-						pos.set(surfPos(hue, light, v), k * 3);
-						const [l, c, h] = change(state.output, v, 0.35 + light * 0.55, REFERENCE_CHROMA, hue);
-						oklabToRgb(l, c * Math.cos(2 * Math.PI * h), c * Math.sin(2 * Math.PI * h), rgb, 0);
-						// Fake light from the upper left, from the surface slope.
+				for (let j = 0; j < NB; j++) {
+					const b = j / (NB - 1);
+					for (let i = 0; i <= NA; i++) {
+						const a = i / NA;
+						const s = surfaceAt(c, f, a, b);
+						const k = j * (NA + 1) + i;
+						pos.set(sp(a, b, s.h), k * 3);
+						lchToRgb(s.out[0], s.out[1], s.out[2], rgb, 0);
 						const e = 0.01;
-						const dx = ((lookup(t, hue + e, light) - lookup(t, hue - e, light)) * HEIGHT) / (2 * e);
-						const dz = ((lookup(t, hue, Math.min(1, light + e)) - lookup(t, hue, Math.max(0, light - e))) * HEIGHT) / (2 * e);
-						const nl = Math.hypot(dx, 1, dz);
-						const shade = 0.72 + 0.28 * ((-dx * -0.5 + 1 * 0.8 + dz * 0.3) / nl);
+						const dx = (surfaceAt(c, f, Math.min(1, a + e), b).h - surfaceAt(c, f, Math.max(0, a - e), b).h) / (2 * e);
+						const dz = c.x2 ? (surfaceAt(c, f, a, Math.min(1, b + e)).h - surfaceAt(c, f, a, Math.max(0, b - e)).h) / (2 * e) : 0;
+						const shade = 0.72 + (0.28 * (0.5 * dx + 0.8 + 0.3 * dz)) / Math.hypot(dx, 1, dz);
 						col.set([(rgb[0] / 255) * shade, (rgb[1] / 255) * shade, (rgb[2] / 255) * shade, 1], k * 4);
 					}
 				}
 				const idx = [];
-				for (let j = 0; j < SURF_L - 1; j++)
-					for (let i = 0; i < SURF_H; i++) {
-						const a = j * (SURF_H + 1) + i;
-						const b = a + SURF_H + 1;
-						idx.push(a, b, a + 1, a + 1, b, b + 1);
+				for (let j = 0; j < NB - 1; j++)
+					for (let i = 0; i < NA; i++) {
+						const p = j * (NA + 1) + i;
+						const q = p + NA + 1;
+						idx.push(p, q, p + 1, p + 1, q, q + 1);
 					}
 				view.draw(view.gl.TRIANGLES, pos, col, { indices: new Uint32Array(idx) });
-				// Neutral plane outline and floor grid.
 				const lines = [];
-				const lineCol = [];
-				const push = (a, b, c) => {
-					lines.push(...a, ...b);
-					lineCol.push(...c, ...c);
+				const lc = [];
+				const push = (p, q, colr) => {
+					lines.push(...p, ...q);
+					lc.push(...colr, ...colr);
 				};
 				const floor = -HEIGHT / 2 - 0.02;
 				for (let k = 0; k <= 8; k++) {
 					push([-0.5 + k / 8, floor, -0.5], [-0.5 + k / 8, floor, 0.5], [1, 1, 1, 0.08]);
 					push([-0.5, floor, -0.5 + k / 8], [0.5, floor, -0.5 + k / 8], [1, 1, 1, 0.08]);
 				}
-				push([-0.5, 0, -0.5], [0.5, 0, -0.5], [1, 1, 1, 0.3]);
-				push([-0.5, 0, 0.5], [0.5, 0, 0.5], [1, 1, 1, 0.3]);
-				push([-0.5, 0, -0.5], [-0.5, 0, 0.5], [1, 1, 1, 0.3]);
-				push([0.5, 0, -0.5], [0.5, 0, 0.5], [1, 1, 1, 0.3]);
-				// Control grid lines on the surface.
-				const g = state.g;
-				for (const hue of g.hues)
-					for (let j = 0; j < 24; j++) {
-						const l0 = j / 24;
-						const l1 = (j + 1) / 24;
-						push(surfPos(hue, l0, lookup(t, hue, l0) + 0.004), surfPos(hue, l1, lookup(t, hue, l1) + 0.004), [0, 0, 0, 0.35]);
-					}
-				for (const light of g.lights)
-					for (let i = 0; i < 90; i++) {
-						const h0 = i / 90;
-						const h1 = (i + 1) / 90;
-						push(surfPos(h0, light, lookup(t, h0, light) + 0.004), surfPos(h1, light, lookup(t, h1, light) + 0.004), [0, 0, 0, 0.35]);
-					}
-				g.values.forEach((row, j) =>
-					row.forEach((v, i) => {
-						if (Math.abs(v - 0.5) < 0.004) return;
-						const top = surfPos(g.hues[i], g.lights[j], v);
-						push(top, [top[0], 0, top[2]], [1, 1, 1, 0.55]);
-					})
-				);
-				view.draw(view.gl.LINES, new Float32Array(lines), new Float32Array(lineCol));
-				// Points.
+				for (const [p, q] of [[[-0.5, 0, -0.5], [0.5, 0, -0.5]], [[-0.5, 0, 0.5], [0.5, 0, 0.5]], [[-0.5, 0, -0.5], [-0.5, 0, 0.5]], [[0.5, 0, -0.5], [0.5, 0, 0.5]]]) push(p, q, [1, 1, 1, 0.3]);
+				surfaceNodes = [];
 				const np = [];
 				const nc = [];
-				surfaceNodes = [];
-				g.values.forEach((row, j) =>
-					row.forEach((v, i) => {
-						const p = surfPos(g.hues[i], g.lights[j], v);
-						surfaceNodes.push({ i, j, p });
-						const sel = state.selected && state.selected.i === i && state.selected.j === j;
+				if (c.x2) {
+					const g = c.grid;
+					for (const a of g.cols)
+						for (let j = 0; j < 24; j++) push(sp(a, j / 24, surfaceAt(c, f, a, j / 24).h + 0.003), sp(a, (j + 1) / 24, surfaceAt(c, f, a, (j + 1) / 24).h + 0.003), [0, 0, 0, 0.35]);
+					for (const b of g.rows)
+						for (let i = 0; i < 90; i++) push(sp(i / 90, b, surfaceAt(c, f, i / 90, b).h + 0.003), sp((i + 1) / 90, b, surfaceAt(c, f, (i + 1) / 90, b).h + 0.003), [0, 0, 0, 0.35]);
+					g.values.forEach((row, j) =>
+						row.forEach((v, i) => {
+							const p = sp(g.cols[i], g.rows[j], deviation(c, g.cols[i], v) * HEIGHT);
+							if (Math.abs(v - 0.5) > 0.004) push(p, [p[0], 0, p[2]], [1, 1, 1, 0.55]);
+							surfaceNodes.push({ i, j, p });
+							const on = state.point && state.point.i === i && state.point.j === j;
+							np.push(...p);
+							nc.push(...(on ? [0.98, 0.8, 0.08, 1] : [1, 1, 1, 0.95]));
+						})
+					);
+				} else {
+					c.points.forEach(([a, v], k) => {
+						const p = sp(a, 1, deviation(c, a, v) * HEIGHT);
+						surfaceNodes.push({ k, p });
 						np.push(...p);
-						nc.push(...(sel ? [0.98, 0.8, 0.08, 1] : [1, 1, 1, 0.95]));
-					})
-				);
+						nc.push(...(state.point === k ? [0.98, 0.8, 0.08, 1] : [1, 1, 1, 0.95]));
+					});
+				}
+				view.draw(view.gl.LINES, new Float32Array(lines), new Float32Array(lc));
 				view.draw(view.gl.POINTS, new Float32Array(np), new Float32Array(nc), { size: 7, round: true, depth: false });
-				drawSurfaceLabels();
-			}
-			// Axis labels drawn on a 2D overlay canvas.
-			const surfaceLabels = document.createElement('canvas');
-			surfaceLabels.style.pointerEvents = 'none';
-			surfaceCanvas.parentElement.append(surfaceLabels);
-			function drawSurfaceLabels() {
-				const dpr = fitCanvas(surfaceLabels);
-				const ctx = surfaceLabels.getContext('2d');
-				ctx.clearRect(0, 0, surfaceLabels.width, surfaceLabels.height);
-				const m = Surface.mvp();
+				// Labels.
+				const lab = surfaceLabels;
+				const dpr = fit(lab);
+				const ctx = lab.getContext('2d');
+				ctx.clearRect(0, 0, lab.width, lab.height);
+				const m = view.mvp();
 				ctx.font = `${10.5 * dpr}px ui-sans-serif, system-ui`;
 				ctx.textAlign = 'center';
 				ctx.fillStyle = '#b7b7c0';
-				const floor = -HEIGHT / 2 - 0.02;
-				for (const [name, deg] of HUE_NAMES) {
-					const [x, y] = M.project(m, [deg / 360 - 0.5, floor, 0.58], surfaceLabels.width, surfaceLabels.height);
-					ctx.fillText(name, x, y);
+				if (c.x === 'hue') for (const [n, deg] of HUE_NAMES) {
+					const [x, y] = M.project(m, [deg / 360 - 0.5, floor, 0.6], lab.width, lab.height);
+					ctx.fillText(n, x, y);
+				} else {
+					const [x, y] = M.project(m, [0, floor, 0.62], lab.width, lab.height);
+					ctx.fillText(`${CHANNELS[c.x].label} →`, x, y);
 				}
-				const [x0, y0] = M.project(m, [-0.62, floor, 0.5], surfaceLabels.width, surfaceLabels.height);
-				const [x1, y1] = M.project(m, [-0.62, floor, -0.5], surfaceLabels.width, surfaceLabels.height);
-				ctx.fillText('Dark', x0, y0);
-				ctx.fillText('Light', x1, y1);
-				if (state.selected) {
-					const node = surfaceNodes.find((n) => n.i === state.selected.i && n.j === state.selected.j);
-					if (node) {
-						const [x, y] = M.project(m, node.p, surfaceLabels.width, surfaceLabels.height);
-						tag(ctx, x, y - 16 * dpr, fmtChange(state.output, state.g.values[node.j][node.i]), dpr);
-					}
+				if (c.x2) {
+					const [x, y] = M.project(m, [-0.66, floor, 0], lab.width, lab.height);
+					ctx.fillText(`${CHANNELS[c.x2].label} →`, x, y);
 				}
 			}
+			const surfaceLabels = document.createElement('canvas');
+			surfaceLabels.style.pointerEvents = 'none';
+			surfaceCanvas.parentElement.append(surfaceLabels);
 			let surfaceDrag = null;
 			Surface.orbit(
 				(e) => {
@@ -1042,8 +1435,14 @@
 						if (d < 12 * dpr && (!best || d < best.d)) best = { d, n };
 					}
 					if (!best) return false;
-					state.selected = { i: best.n.i, j: best.n.j };
-					surfaceDrag = { y0: e.offsetY, v0: state.g.values[best.n.j][best.n.i] };
+					const c = sel();
+					if (c.x2) {
+						state.point = { i: best.n.i, j: best.n.j };
+						surfaceDrag = { y0: e.offsetY, v0: c.grid.values[best.n.j][best.n.i] };
+					} else {
+						state.point = best.n.k;
+						surfaceDrag = { y0: e.offsetY, v0: c.points[best.n.k][1] };
+					}
 					surfaceCanvas.setPointerCapture(e.pointerId);
 					update();
 					return true;
@@ -1051,85 +1450,73 @@
 				() => requestAnimationFrame(drawSurface)
 			);
 			surfaceCanvas.addEventListener('pointermove', (e) => {
-				if (surfaceDrag) setSelected(surfaceDrag.v0 + (surfaceDrag.y0 - e.offsetY) / 220);
+				if (surfaceDrag) setPointValue(surfaceDrag.v0 + (surfaceDrag.y0 - e.offsetY) / 220);
 			});
 			surfaceCanvas.addEventListener('pointerup', () => (surfaceDrag = null));
 
-			// ---------------- 3D colour scope ----------------
-			const scopeCanvas = $('scope');
+			// ---------------- Scope ----------------
 			const Scope = (() => {
-				const view = glView(scopeCanvas, { yaw: 0.6, pitch: 0.32, dist: 1.75, target: [0, -0.05, 0] });
-				const AB = 3.4; // world units per Oklab a/b unit
-								let samples = null;
+				const view = glView($('scope'), { yaw: 0.6, pitch: 0.32, dist: 1.75, target: [0, -0.05, 0] });
+				const AB = 3.4;
 				view.orbit(null, () => requestAnimationFrame(draw));
-				function setSamples(image) {
-					const n = image.L.length;
-					samples = new Uint32Array(Math.floor(n / 2));
-					for (let k = 0; k < samples.length; k++) samples[k] = k * 2;
-				}
-				const at = (L, C, h) => [C * Math.cos(2 * Math.PI * h) * AB, L - 0.5, C * Math.sin(2 * Math.PI * h) * AB];
+				const at = (L, C, H) => [C * Math.cos(2 * Math.PI * H) * AB, L - 0.5, C * Math.sin(2 * Math.PI * H) * AB];
 				function draw() {
+					if (document.body.className !== 'analysis') return;
 					view.begin();
 					const lines = [];
-					const lineCol = [];
-					const push = (a, b, c) => {
-						lines.push(...a, ...b);
-						lineCol.push(...c, ...c);
+					const lc = [];
+					const push = (p, q, colr) => {
+						lines.push(...p, ...q);
+						lc.push(...colr, ...colr);
 					};
 					push([0, -0.5, 0], [0, 0.5, 0], [1, 1, 1, 0.35]);
-					for (const r of [0.1, 0.2]) {
+					for (const r of [0.1, 0.2])
 						for (let k = 0; k < 64; k++) {
 							const a0 = (k / 64) * 2 * Math.PI;
 							const a1 = ((k + 1) / 64) * 2 * Math.PI;
 							push([Math.cos(a0) * r * AB, -0.5, Math.sin(a0) * r * AB], [Math.cos(a1) * r * AB, -0.5, Math.sin(a1) * r * AB], [1, 1, 1, 0.12]);
 						}
-					}
 					for (const [, deg] of HUE_NAMES) {
 						const a = (deg / 360) * 2 * Math.PI;
-						const [r, g, b] = (() => {
-							const o = [0, 0, 0];
-							oklabToRgb(0.7, 0.14 * Math.cos(a), 0.14 * Math.sin(a), o, 0);
-							return o;
-						})();
-						push([0, -0.5, 0], [Math.cos(a) * 0.2 * AB, -0.5, Math.sin(a) * 0.2 * AB], [r / 255, g / 255, b / 255, 0.6]);
+						const o = [0, 0, 0];
+						lchToRgb(0.7, 0.14, deg / 360, o, 0);
+						push([0, -0.5, 0], [Math.cos(a) * 0.2 * AB, -0.5, Math.sin(a) * 0.2 * AB], [o[0] / 255, o[1] / 255, o[2] / 255, 0.6]);
 					}
-					if (image && samples) {
-						const pos = new Float32Array(samples.length * 3);
-						const col = new Float32Array(samples.length * 4);
+					if (image) {
+						const n = image.L.length;
+						const count = Math.floor(n / 2);
+						const pos = new Float32Array(count * 3);
+						const col = new Float32Array(count * 4);
 						const ghost = [];
-						const ghostCol = [];
-						const out = image.out.data;
-						samples.forEach((p, k) => {
-							const L = image.L[p];
-							const C = image.C[p];
-							const H = image.H[p];
-							const v = lookup(t, H, L);
-							const [l, c, h] = change(state.output, v, L, C, H);
-							const after = at(l, c, h);
+						const gc = [];
+						const d = image.out.data;
+						for (let k = 0; k < count; k++) {
+							const p = k * 2;
+							const after = at(image.oL[p], image.oC[p], image.oH[p]);
 							pos.set(after, k * 3);
-							col.set([out[p * 4] / 255, out[p * 4 + 1] / 255, out[p * 4 + 2] / 255, 0.55], k * 4);
-							const before = at(L, C, H);
+							col.set([d[p * 4] / 255, d[p * 4 + 1] / 255, d[p * 4 + 2] / 255, 0.55], k * 4);
 							if (state.scopeBefore && k % 4 === 0) {
-								ghost.push(...before);
-								ghostCol.push(1, 1, 1, 0.12);
+								ghost.push(...at(image.L[p], image.C[p], image.H[p]));
+								gc.push(1, 1, 1, 0.12);
 							}
-							if (state.scopeMotion && k % 60 === 0 && Math.hypot(after[0] - before[0], after[1] - before[1], after[2] - before[2]) > 0.01)
-								push(before, after, [1, 1, 1, 0.18]);
-						});
-						if (ghost.length) view.draw(view.gl.POINTS, new Float32Array(ghost), new Float32Array(ghostCol), { size: 2, depth: false });
+							if (state.scopeMotion && k % 60 === 0) {
+								const before = at(image.L[p], image.C[p], image.H[p]);
+								if (Math.hypot(after[0] - before[0], after[1] - before[1], after[2] - before[2]) > 0.01) push(before, after, [1, 1, 1, 0.18]);
+							}
+						}
+						if (ghost.length) view.draw(view.gl.POINTS, new Float32Array(ghost), new Float32Array(gc), { size: 2, depth: false });
 						view.draw(view.gl.POINTS, pos, col, { size: 1.6 });
 					}
-					view.draw(view.gl.LINES, new Float32Array(lines), new Float32Array(lineCol), { depth: false });
+					view.draw(view.gl.LINES, new Float32Array(lines), new Float32Array(lc), { depth: false });
 				}
-				function tick() {
-					if (view.idle()) {
+				(function tick() {
+					if (view.idle() && document.body.className === 'analysis') {
 						view.cam.yaw += 0.0025;
 						draw();
 					}
 					requestAnimationFrame(tick);
-				}
-				requestAnimationFrame(tick);
-				return { setSamples, draw };
+				})();
+				return { draw };
 			})();
 			$('scope-before').addEventListener('click', (e) => {
 				state.scopeBefore = !state.scopeBefore;
@@ -1142,106 +1529,32 @@
 				Scope.draw();
 			});
 
-			// ---------------- Inspector ----------------
-			function drawInspector() {
-				const g = state.g;
-				const s = state.selected;
-				const moved = g.values.flat().filter((v) => Math.abs(v - 0.5) > 0.004).length;
-				let html = '<h3>Selected point</h3>';
-				if (s) {
-					const v = g.values[s.j][s.i];
-					const deg = Math.round(g.hues[s.i] * 360);
-					const rgb = [0, 0, 0];
-					const a = g.hues[s.i] * 2 * Math.PI;
-					oklabToRgb(0.35 + g.lights[s.j] * 0.55, 0.1 * Math.cos(a), 0.1 * Math.sin(a), rgb, 0);
-					html += `<div class="big">${fmtChange(state.output, v)}</div>
-						<dl>
-							<dt>Hue</dt><dd><span class="swatch" style="background:rgb(${rgb.map(Math.round)})"></span>${hueName(g.hues[s.i])} ${deg}°</dd>
-							<dt>Lightness</dt><dd>${Math.round(g.lights[s.j] * 100)}%</dd>
-							<dt>Changes</dt><dd>${OUTPUT_NAMES[state.output]}</dd>
-						</dl>`;
-				} else html += '<p class="hint">Click a colour in the viewer, or a point in the curve or surface.</p>';
-				html += `<h3>Stored</h3>
-					<dl>
-						<dt>Grid</dt><dd>${g.hues.length} × ${g.lights.length}</dd>
-						<dt>Values</dt><dd>${g.hues.length * g.lights.length}</dd>
-						<dt>Moved</dt><dd>${moved}</dd>
-					</dl>
-					<h3>Try</h3>
-					<p class="hint">Double-click the curve to add a column at that hue. It doesn't change the surface; it gives you a point there.</p>
-					<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
-						<button data-preset="red-shadows">Deepen the shadows of the reds</button>
-						<button data-preset="orange">Boost oranges, spare reds</button>
-						<button data-preset="letters">Lift the pale blues</button>
-					</div>`;
-				$('inspector').innerHTML = html;
-			}
-			$('inspector').addEventListener('click', (e) => {
-				const p = e.target.dataset.preset;
-				if (!p) return;
-				state.output = 'saturation';
-				if (p === 'red-shadows') {
-					state.g = grid(12, 5);
-					state.g.values[0][1] = 0.95;
-					state.g.values[1][1] = 0.95;
-					state.g.values[1][0] = 0.75;
-					state.g.values[1][2] = 0.7;
-					state.selected = { i: 1, j: 1 };
-				}
-				if (p === 'orange') {
-					state.g = grid(12, 5);
-					for (const deg of [45, 60, 75]) state.g = insertColumn(state.g, deg / 360).g;
-					const i = state.g.hues.findIndex((h) => Math.abs(h - 60 / 360) < 1e-6);
-					state.g.values.forEach((row) => (row[i] = 0.95));
-					state.selected = { i, j: 3 };
-				}
-				if (p === 'letters') {
-					state.output = 'lightness';
-					state.g = grid(12, 5);
-					state.g.values[3][7] = 0.9;
-					state.g.values[4][7] = 0.8;
-					state.g.values[3][6] = 0.7;
-					state.selected = { i: 7, j: 3 };
-				}
-				update();
-			});
-
-			// ---------------- Output, density, reset ----------------
-			$('outputs').addEventListener('click', (e) => {
-				const o = e.target.dataset.output;
-				if (!o) return;
-				state.output = o;
-				update();
-			});
-			$('density').addEventListener('change', (e) => {
-				const [c, r] = e.target.value.split('x').map(Number);
-				state.g = grid(c, r);
-				state.selected = null;
-				update();
-			});
-			$('reset').addEventListener('click', () => {
-				const [c, r] = $('density').value.split('x').map(Number);
-				state.g = grid(c, r);
-				state.selected = null;
-				state.pick = null;
-				update();
-			});
-
-			// ---------------- Update loop ----------------
+			// ---------------- Update ----------------
+			bindImage($('preview'));
+			bindImage($('viewer'));
+			bindEditor($('editor'));
+			bindEditor($('big-editor'));
 			let pending = false;
 			function update() {
 				if (pending) return;
 				pending = true;
 				requestAnimationFrame(() => {
 					pending = false;
-					t = table(state.g);
-					document.querySelectorAll('#outputs button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.output === state.output));
-					applyImage();
-					drawViewer();
-					drawFlat();
-					drawSurface();
-					Scope.draw();
-					drawInspector();
+					fns = state.curves.map(compile);
+					if (image) applyImage();
+					renderControls();
+					if (document.body.className === 'window') {
+						renderChips($('chips'));
+						drawImageWipe($('preview'), document.querySelectorAll('.stage > .overlay-label'));
+						drawEditor($('editor'));
+					} else {
+						renderChips($('a-chips'), true);
+						$('a-title').textContent = nameOf(sel());
+						drawImageWipe($('viewer'));
+						drawEditor($('big-editor'));
+						drawSurface();
+						Scope.draw();
+					}
 				});
 			}
 			window.addEventListener('resize', update);
