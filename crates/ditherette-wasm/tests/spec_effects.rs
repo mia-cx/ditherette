@@ -537,6 +537,24 @@ fn curve(
     })
 }
 
+fn grid_curve(
+    kind: &str,
+    x: (&str, &str),
+    x2: (&str, &str),
+    y: (&str, &str),
+    columns: serde_json::Value,
+    rows: serde_json::Value,
+    values: serde_json::Value,
+) -> serde_json::Value {
+    json!({
+        "kind": kind,
+        "x": channel(x.0, x.1),
+        "x2": channel(x2.0, x2.1),
+        "y": channel(y.0, y.1),
+        "grid": { "columns": columns, "rows": rows, "values": values },
+    })
+}
+
 fn curves(curves: Vec<serde_json::Value>) -> serde_json::Value {
     json!({ "effect": "curves", "enabled": true, "curves": curves })
 }
@@ -747,6 +765,263 @@ fn periodic_spline_wraps_and_hits_knots_without_overshoot() {
         let value = spline.eval(index as f32 / 1000.0);
         assert!((0.2..=0.9).contains(&value), "{index}: {value}");
     }
+}
+
+#[test]
+fn closed_sequences_hit_knots_wrap_smoothly_and_support_two_positions() {
+    use ditherette_wasm::spec::effects::curves::eval_closed_sequence;
+
+    let positions = [0.2, 0.7];
+    let values = [0.1, 0.9];
+    for (&position, &value) in positions.iter().zip(&values) {
+        assert_eq!(
+            eval_closed_sequence(&positions, &values, position).to_bits(),
+            value.to_bits()
+        );
+    }
+    assert_eq!(
+        eval_closed_sequence(&positions, &values, -0.1).to_bits(),
+        eval_closed_sequence(&positions, &values, 0.9).to_bits()
+    );
+    assert!(
+        (eval_closed_sequence(&positions, &values, 0.199_99)
+            - eval_closed_sequence(&positions, &values, 0.200_01))
+        .abs()
+            < 0.000_01
+    );
+    assert!(
+        (eval_closed_sequence(&positions, &values, 0.999_99)
+            - eval_closed_sequence(&positions, &values, 0.000_01))
+        .abs()
+            < 0.000_1
+    );
+}
+
+#[test]
+fn grids_assign_x_to_columns_and_x2_to_rows_in_both_channel_orders() {
+    let values = json!([[0.5, 0.8], [0.2, 0.5]]);
+    let red_then_green = curves(vec![grid_curve(
+        "adjust",
+        ("srgb", "red"),
+        ("srgb", "green"),
+        ("srgb", "blue"),
+        json!([0, 1]),
+        json!([0, 1]),
+        values.clone(),
+    )]);
+    let green_then_red = curves(vec![grid_curve(
+        "adjust",
+        ("srgb", "green"),
+        ("srgb", "red"),
+        ("srgb", "blue"),
+        json!([0, 1]),
+        json!([0, 1]),
+        values,
+    )]);
+
+    let red_then_green = apply_curves(&red_then_green, [0.0, 1.0, 0.5]).0;
+    assert_eq!(red_then_green[..2], [0.0, 1.0]);
+    assert!((red_then_green[2] - 0.2).abs() < f32::EPSILON);
+    let green_then_red = apply_curves(&green_then_red, [0.0, 1.0, 0.5]).0;
+    assert_eq!(green_then_red[..2], [0.0, 1.0]);
+    assert!((green_then_red[2] - 0.8).abs() < f32::EPSILON);
+}
+
+#[test]
+fn grids_use_cyclic_interpolation_for_either_hue_axis() {
+    use ditherette_wasm::spec::effects::model::ColourModel;
+
+    let input = ColourModel::Hsl.from_normalized([0.0, 1.0, 0.5]);
+    let hue_columns = curves(vec![grid_curve(
+        "adjust",
+        ("hsl", "hue"),
+        ("srgb", "green"),
+        ("srgb", "blue"),
+        json!([0, 0.5]),
+        json!([0, 1]),
+        json!([[0.8, 0.2], [0.8, 0.2]]),
+    )]);
+    let hue_rows = curves(vec![grid_curve(
+        "adjust",
+        ("srgb", "green"),
+        ("hsl", "hue"),
+        ("srgb", "blue"),
+        json!([0, 1]),
+        json!([0, 0.5]),
+        json!([[0.8, 0.8], [0.2, 0.2]]),
+    )]);
+
+    for effect in [hue_columns, hue_rows] {
+        let output = apply_curves(&effect, input).0;
+        assert!((output[2] - 0.3).abs() < 0.000_01, "{output:?}");
+    }
+}
+
+#[test]
+fn grids_validate_shape_axes_values_and_strict_variants() {
+    let data = ramp();
+    let valid = || {
+        grid_curve(
+            "adjust",
+            ("srgb", "red"),
+            ("srgb", "green"),
+            ("srgb", "blue"),
+            json!([0, 1]),
+            json!([0, 1]),
+            json!([[0.5, 0.5], [0.5, 0.5]]),
+        )
+    };
+    let mut cases = Vec::new();
+
+    let mut entry = valid();
+    entry["kind"] = json!("remap");
+    cases.push((entry, "effects.0.curves.0.kind"));
+    let mut entry = valid();
+    entry["x2"] = channel("hsv", "lightness");
+    cases.push((entry, "effects.0.curves.0.x2.channel"));
+    let mut entry = valid();
+    entry["x2"] = channel("srgb", "red");
+    cases.push((entry, "effects.0.curves.0.x2"));
+    let mut entry = valid();
+    entry["grid"]["columns"] = json!([0]);
+    cases.push((entry, "effects.0.curves.0.grid.columns"));
+    let mut entry = valid();
+    entry["grid"]["rows"] = json!([0]);
+    cases.push((entry, "effects.0.curves.0.grid.rows"));
+    let mut entry = valid();
+    entry["grid"]["columns"] = json!([0.1, 1]);
+    cases.push((entry, "effects.0.curves.0.grid.columns.0"));
+    let mut entry = valid();
+    entry["grid"]["rows"] = json!([0, 0.9]);
+    cases.push((entry, "effects.0.curves.0.grid.rows.1"));
+    let mut entry = valid();
+    entry["grid"]["values"] = json!([[0.5, 0.5]]);
+    cases.push((entry, "effects.0.curves.0.grid.values"));
+    let mut entry = valid();
+    entry["grid"]["values"][1] = json!([0.5]);
+    cases.push((entry, "effects.0.curves.0.grid.values.1"));
+    let mut entry = valid();
+    entry["grid"]["values"][1][1] = json!(1.1);
+    cases.push((entry, "effects.0.curves.0.grid.values.1.1"));
+
+    let hue_seam = grid_curve(
+        "adjust",
+        ("hsl", "hue"),
+        ("srgb", "green"),
+        ("srgb", "blue"),
+        json!([0.0005, 0.9998]),
+        json!([0, 1]),
+        json!([[0.5, 0.5], [0.5, 0.5]]),
+    );
+    cases.push((hue_seam, "effects.0.curves.0.grid.columns.0"));
+    let hue_endpoint = grid_curve(
+        "adjust",
+        ("srgb", "red"),
+        ("hsl", "hue"),
+        ("srgb", "blue"),
+        json!([0, 1]),
+        json!([0, 1]),
+        json!([[0.5, 0.5], [0.5, 0.5]]),
+    );
+    cases.push((hue_endpoint, "effects.0.curves.0.grid.rows.1"));
+
+    for (entry, path) in cases {
+        let error = run(&data, &steps(json!([curves(vec![entry])]))).unwrap_err();
+        assert_eq!(error.path, path);
+    }
+
+    let mut mixed = valid();
+    mixed["points"] = json!([[0, 0.5], [1, 0.5]]);
+    assert_eq!(
+        decode_effects(&json!([curves(vec![mixed])]).to_string())
+            .unwrap_err()
+            .path,
+        "effects.0"
+    );
+
+    let columns: Vec<_> = (0..48).map(|index| index as f32 / 47.0).collect();
+    let rows: Vec<_> = (0..16).map(|index| index as f32 / 15.0).collect();
+    let values = vec![vec![0.5; columns.len()]; rows.len()];
+    let maximum = grid_curve(
+        "adjust",
+        ("srgb", "red"),
+        ("srgb", "green"),
+        ("srgb", "blue"),
+        json!(columns),
+        json!(rows),
+        json!(values),
+    );
+    run(&data, &steps(json!([curves(vec![maximum])]))).unwrap();
+}
+
+#[test]
+fn neutral_and_ordered_grids_preserve_source_selection() {
+    let carrier = [-64.0, 1.25, 64.0];
+    let neutral = curves(vec![grid_curve(
+        "adjust",
+        ("hsl", "hue"),
+        ("oklch", "hue"),
+        ("cielch", "hue"),
+        json!([0, 0.5]),
+        json!([0, 0.5]),
+        json!([[0.5, 0.5], [0.5, 0.5]]),
+    )]);
+    assert_eq!(
+        apply_curves(&neutral, carrier).0.map(f32::to_bits),
+        carrier.map(f32::to_bits)
+    );
+
+    let ordered = curves(vec![
+        curve(
+            "adjust",
+            ("srgb", "red"),
+            ("srgb", "green"),
+            json!([[0, 1], [1, 1]]),
+        ),
+        grid_curve(
+            "adjust",
+            ("srgb", "green"),
+            ("srgb", "red"),
+            ("srgb", "blue"),
+            json!([0, 1]),
+            json!([0, 1]),
+            json!([[0, 1], [0, 1]]),
+        ),
+    ]);
+    assert_eq!(
+        apply_curves(&ordered, [0.25; 3]).0.map(f32::to_bits),
+        [0.25, 0.75, 0.0].map(f32::to_bits)
+    );
+}
+
+#[test]
+fn grid_hue_confidence_is_the_minimum_of_both_inputs_and_output() {
+    use ditherette_wasm::spec::effects::model::ColourModel;
+
+    let input = [0.51, 0.5, 0.5];
+    let effect = curves(vec![grid_curve(
+        "adjust",
+        ("hsl", "hue"),
+        ("hsv", "hue"),
+        ("oklch", "hue"),
+        json!([0, 0.5]),
+        json!([0, 0.5]),
+        json!([[1, 1], [1, 1]]),
+    )]);
+    let hsl = ColourModel::Hsl.to_normalized(input);
+    let hsv = ColourModel::Hsv.to_normalized(input);
+    let mut oklch = ColourModel::Oklch.to_normalized(input);
+    let weight = ColourModel::Hsl
+        .hue_weight(input, hsl)
+        .min(ColourModel::Hsv.hue_weight(input, hsv))
+        .min(ColourModel::Oklch.hue_weight(input, oklch));
+    oklch[2] = (oklch[2] + weight * 0.5).rem_euclid(1.0);
+    let expected = ColourModel::Oklch.from_normalized(oklch);
+
+    assert_eq!(
+        apply_curves(&effect, input).0.map(f32::to_bits),
+        expected.map(f32::to_bits)
+    );
 }
 
 #[test]

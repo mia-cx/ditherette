@@ -2,97 +2,133 @@
 
 ## Purpose
 
-Remap or adjust named colour-model channels with up to 16 ordered curves.
+Remap or adjust named colour-model channels with up to 16 ordered curves. An adjustment can read one input curve or a two-input control grid.
 
 ## Inputs and outputs
 
+A one-input curve has exactly `kind`, `x`, `y`, and `points`:
+
 ```json
 {
-  "effect": "curves",
-  "enabled": true,
-  "curves": [
-    {
-      "kind": "remap",
-      "x": { "model": "oklch", "channel": "lightness" },
-      "y": { "model": "oklch", "channel": "lightness" },
-      "points": [[0, 0], [0.5, 0.6], [1, 1]]
-    },
-    {
-      "kind": "adjust",
-      "x": { "model": "hsl", "channel": "hue" },
-      "y": { "model": "cielch", "channel": "chroma" },
-      "points": [[0, 0.5], [0.5, 0.8], [1, 0.5]]
-    }
-  ]
+  "kind": "adjust",
+  "x": { "model": "hsl", "channel": "hue" },
+  "y": { "model": "oklch", "channel": "chroma" },
+  "points": [[0, 0.5], [0.5, 0.8], [1, 0.5]]
 }
 ```
 
-Each curve has exactly `kind`, `x`, `y`, and `points`. `x` and `y` select a channel from [model.rs](model.md). The channel name must belong to its model. A `remap` requires the same model and channel on both sides. An `adjust` accepts any valid pair.
+A two-input curve has exactly `kind`, `x`, `x2`, `y`, and `grid`. Its kind must be `adjust`:
 
-The effect accepts zero to 16 curves. Each `points` list contains 2 to 16 `[x, y]` pairs. Coordinates must be finite and in `[0,1]`. Each x must be at least `0.001` above the previous x.
+```json
+{
+  "kind": "adjust",
+  "x": { "model": "hsl", "channel": "hue" },
+  "x2": { "model": "oklch", "channel": "lightness" },
+  "y": { "model": "oklch", "channel": "chroma" },
+  "grid": {
+    "columns": [0, 0.25, 0.5, 0.75],
+    "rows": [0, 0.5, 1],
+    "values": [
+      [0.5, 0.7, 0.5, 0.3],
+      [0.5, 0.9, 0.5, 0.2],
+      [0.5, 0.6, 0.5, 0.4]
+    ]
+  }
+}
+```
 
-## Algorithm / semantic rule
+`x`, `x2`, and `y` select channels from [model.rs](model.md). Each channel name must belong to its model. A two-input curve requires `x2 != x`.
 
-`Spline` is a monotone cubic Hermite spline with Fritsch–Butland tangents, all in `f32`. With secants `d[k] = (y[k+1] - y[k]) / (x[k+1] - x[k])`:
+The effect accepts zero to 16 curves. A one-input `points` list contains 2 to 16 `[x, y]` pairs. A grid contains 2 to 48 columns and 2 to 16 rows. `values[row][column]` belongs to `rows[row]` on `x2` and `columns[column]` on `x`. Every value is finite and in `[0,1]`. Exactly `0.5` is neutral.
 
-- End tangents are the adjacent secant.
-- An interior tangent is zero when its two secants differ in sign or either is zero.
-- Otherwise it is `(w1 + w2) / (w1 / d[k-1] + w2 / d[k])`, where `w1 = 2 h[k] + h[k-1]` and `w2 = h[k] + 2 h[k-1]`.
+## Spline rule
 
-Evaluation clamps the input to the first and last x. At the last x it returns the last y. Other inputs use the first segment whose right end exceeds the input. For `s = x - x[k]`, `c2 = (3d - 2m0 - m1) / h`, and `c3 = (m0 + m1 - 2d) / h²`, the result is `y[k] + s(m0 + s(c2 + s c3))`.
+Every spline is a monotone cubic Hermite spline with Fritsch–Butland tangents. All decoded numbers and arithmetic use `f32`. With secants `d[k] = (v[k+1] - v[k]) / (p[k+1] - p[k])`:
 
-For each pixel, retain `source` and initialise `current = source`. Apply curves in list order:
+- Open end tangents equal the adjacent secant.
+- A knot tangent is zero when its two secants differ in sign or either is zero.
+- Otherwise the tangent is `(w1 + w2) / (w1 / d[k-1] + w2 / d[k])`, where `w1 = 2 h[k] + h[k-1]` and `w2 = h[k] + 2 h[k-1]`.
 
-1. Convert `source` to the X model and read its X channel.
-2. Evaluate that curve's spline at the X value.
-3. Convert `current` to the Y model.
-4. Edit only the Y channel, convert back to the carrier, and store that result as `current`.
+For `s = x - p[k]`, `c2 = (3d - 2m0 - m1) / h`, and `c3 = (m0 + m1 - 2d) / h²`, a segment returns `v[k] + s(m0 + s(c2 + s c3))`.
 
-Every curve reads X from `source`. Earlier curves only affect the accumulated Y-side result. Each curve performs its own conversions, including adjacent curves that use the same model.
+An open sequence clamps its input to its first and last positions. It returns the last value at the last position. Its positions start at `0`, end at `1`, and increase by at least `0.001`.
 
-For a non-hue remap, set Y to the spline result. For a hue remap, find the shortest circular delta from the original hue to the spline target. Multiply it by the original hue confidence, add it to the original hue, and wrap modulo one. Zero confidence leaves `current` unchanged without a Y conversion.
+A hue axis is a closed sequence of unique positions in `[0,1)`. It has no duplicate seam point. Define its final segment as:
 
-For an adjustment with curve result `c` and confidence `w`:
+```text
+p[n] = p[0] + 1
+v[n] = v[0]
+```
 
-- hue adds `w * (c - 0.5)` turns;
-- saturation or chroma multiplies by `1 + w * (2c - 1)`;
-- every other channel adds `w * (c - 0.5)` normalised units.
+Each knot tangent uses the wrapped previous and next secants. Evaluation wraps the input with `rem_euclid(1)`. An input below `p[0]` uses the final segment to `p[0] + 1`. The wrapped seam gap is `1 - p[last] + p[0]` and must be at least `0.001`.
 
-If X is hue, its confidence comes from `source`. If Y is hue, its confidence comes from `current`. When both are hue, use the smaller confidence. Zero confidence leaves `current` unchanged. Hue output wraps modulo one. Other outputs are not clamped before conversion. A curve whose every y is exactly `0.5` is a neutral adjustment and skips all conversion.
+Two positions define two closed segments. Their opposing secants give both knots zero tangents under the same rule.
 
-Every remap uses the ordinary open Fritsch–Butland spline, including a hue remap. The exact identity remap `[[0, 0], [1, 1]]` leaves an unchanged carrier untouched. This preserves the old model-curve behavior.
+One-input curves retain their existing spline form. Every remap uses an open spline, including a hue remap. A hue-input adjustment retains its duplicate endpoint at `0` and `1`, with equal values at those endpoints.
 
-Only an adjustment with a hue X axis uses the cyclic spline. Its first point must have `x = 0`, its last point must have `x = 1`, and those two y values must match exactly. The duplicate last point closes the seam. The seam tangent uses the final and first secants, and evaluation wraps X modulo one.
+## Evaluation rule
 
-## Why this works this way
+For each pixel, retain `source` and initialise `current = source`. Apply curves in list order. Every later curve still reads its inputs from `source`, while its output edits `current`.
 
-Remaps replace a channel value. Adjustments use one shared neutral midpoint for turns, gains, and offsets. Reading every X from the original input makes selection stable while list order controls accumulated edits.
+For a two-input curve:
 
-Fritsch–Butland tangents avoid the ringing of natural cubic splines. The cyclic form avoids a visible corner where hue zero meets hue one.
+1. Convert `source` to `x.model` and read `x_value`.
+2. Convert `source` to `x2.model` and read `x2_value`. The conversion may be reused when both models match.
+3. Evaluate each value row along `columns` at `x_value`, in ascending row order.
+4. Evaluate the resulting row values along `rows` at `x2_value`.
+5. Clamp the grid result to `[0,1]`.
+6. Start the confidence `w` at `1`. If `x` is hue, replace it with the source confidence for `x`.
+7. If `x2` is hue, set `w` to the smaller of itself and the source confidence for `x2`.
+8. Return `current` without a Y conversion when `w == 0`.
+9. Convert `current` to `y.model`.
+10. If `y` is hue, set `w` to the smaller of itself and the current confidence for `y`. Return `current` when it becomes zero.
+11. Apply the adjustment below, then convert the edited Y coordinates back to the carrier.
+
+For an adjustment result `c` and confidence `w`:
+
+- hue becomes `(y + w * (c - 0.5)).rem_euclid(1)`;
+- saturation or chroma becomes `y * (1 + w * (2c - 1))`;
+- every other channel becomes `y + w * (c - 0.5)`.
+
+Do not clamp the edited Y coordinate before conversion. A two-input grid whose values are all exactly `0.5` skips every colour conversion.
+
+One-input evaluation remains unchanged. It reads X from `source`, evaluates `points`, converts `current` to Y, and applies its remap or adjustment. A non-hue remap replaces Y. A hue remap follows the shortest circular delta from the original hue and scales that delta by source hue confidence. The exact identity remap `[[0, 0], [1, 1]]` preserves an unchanged carrier without conversion. A one-input adjustment whose values are all exactly `0.5` also skips every conversion.
+
+## Validation order and paths
+
+Two-input validation checks `kind`, `x`, `x2`, `y`, then `grid`.
+
+- A kind other than `adjust` fails at `effects.i.curves.k.kind`.
+- An invalid second channel fails at `effects.i.curves.k.x2.channel`.
+- An `x2` equal to `x` fails at `effects.i.curves.k.x2`.
+- Missing, extra, or mixed `points` and `grid` fields fail strict curve decoding.
+- Invalid column and row counts fail at `.grid.columns` and `.grid.rows`.
+- Invalid positions fail at `.grid.columns.j` or `.grid.rows.j`.
+- A cyclic seam below `0.001` fails at the axis's first position.
+- A `values` row count unequal to `rows.length` fails at `.grid.values`.
+- A value row width unequal to `columns.length` fails at `.grid.values.r`.
+- A non-finite or out-of-range value fails at `.grid.values.r.c`.
+
+Existing one-input validation order and paths stay unchanged. A remap requires the same `x` and `y`. Point coordinates are finite and in `[0,1]`, with an x gap of at least `0.001`.
 
 ## Correctness invariants
 
 - An empty curve list preserves the carrier exactly.
-- Every non-hue control point maps exactly to its y value.
-- Non-periodic spline output stays within the range of its point y values, up to `f32` rounding.
-- Exact greys ignore remaps or adjustments that depend on a hue coordinate.
-- A colour at half of a hue-confidence threshold receives half the full hue-dependent edit.
+- Every open or closed control knot evaluates to its stored value.
+- Grid evaluation always runs along `x` first and `x2` second.
+- Both grid inputs come from the curve step's original pixel.
+- Earlier curves affect only the accumulated output.
+- Hue confidence is the minimum confidence from every hue-valued side among `x`, `x2`, and `y`.
+- Exact greys ignore adjustments that depend on a hue coordinate.
+- One-input behaviour and validation remain byte-identical.
 - Alpha is unchanged.
-
-## Edge cases
-
-- More than 16 curves fails at `effects.i.curves`.
-- An invalid model-channel pair fails at `effects.i.curves.j.x.channel` or `.y.channel`.
-- A remap with unequal sides fails at `effects.i.curves.j.y`.
-- An invalid point count fails at `effects.i.curves.j.points`.
-- Point bounds and gaps fail at `effects.i.curves.j.points.k.0` or `.1`.
-- A broken hue-input adjustment seam fails at the first or last point coordinate that violates the seam.
-- HSL and HSV consume carrier overshoot when a curve converts through them.
 
 ## Production obligations
 
-Production prepares at most 16 resolved curves and inline splines once per call. It may fold a step into channel tables only when every curve is a remap of the same sRGB or linear-RGB channel. All other valid steps remain pointwise and may use the colour memo. Every path must preserve the reference operation order and output bytes.
+Production may fold a step into channel tables only when every curve is a one-input sRGB or linear-RGB remap. Any two-input curve makes the step pointwise and uses the colour memo. Neutral grids must be removed before any model conversion.
+
+Prepared grid metadata stores resolved channels and grid indices rather than copying maximum grids into every prepared entry. Per-pixel grid evaluation uses fixed `[f32; 16]` row scratch and performs no heap allocation. Every path preserves the reference `f32` operation order and output bytes.
 
 ## Non-goals
 
-Point handles, automatic gamut mapping, masks, two-input curves, and compiled LUTs.
+Point handles, automatic gamut mapping, masks, and compiled two-dimensional lookup tables.

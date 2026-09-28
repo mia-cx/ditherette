@@ -28,7 +28,7 @@ One-input curves keep their current JSON and behavior. The reference defines cyc
 
 ## TODOs
 
-- [ ] Extend the frozen reference contract. Add strict one-input and two-input curve variants, `CurveGrid`, grid validation, open and closed-sequence interpolation, original-input selection, result clamping, neutral-grid skipping, and three-sided hue confidence in `spec/effects/curves.rs`. Update `curves.md` with the exact algorithm and invariants. Add focused reference tests for knots, both axis orders, both hue-axis positions, two-knot cyclic interpolation, seam continuity, validation paths, neutrality, ordering, and hue confidence. Record `effects-two-input-curves` as a new freeze extension replacing the two curves spec files. Reference tests and the local freeze guard pass.
+- [x] Extend the frozen reference contract. Add strict one-input and two-input curve variants, `CurveGrid`, grid validation, open and closed-sequence interpolation, original-input selection, result clamping, neutral-grid skipping, and three-sided hue confidence in `spec/effects/curves.rs`. Update `curves.md` with the exact algorithm and invariants. Add focused reference tests for knots, both axis orders, both hue-axis positions, two-knot cyclic interpolation, seam continuity, validation paths, neutrality, ordering, and hue confidence. Record `effects-two-input-curves` as a new freeze extension replacing the two curves spec files. Reference tests and the local freeze guard pass.
 
 - [ ] Implement the direct production equivalent. Keep prepared metadata compact: retain inline one-input splines, store grid curve indices and resolved channels, and use fixed `[f32; 16]` row-result scratch rather than copying maximum grids into `PreparedPointwise`. Preserve the existing all-remap table path. Route every two-input curve through the pointwise path and colour memo. Skip neutral grids during preparation. Extend allocation coverage and deterministic production tests.
 
@@ -39,6 +39,14 @@ One-input curves keep their current JSON and behavior. The reference defines cyc
 - [ ] Finish validation and freeze approval. Update production documentation where it describes curves fast paths. Run formatting, focused and full Rust tests, package checks, freeze tests, the local guard, and the trusted-base guard. Report the exact approval digest printed by the trusted guard and confirm the extension contains only the two intended spec replacements.
 
 ## Notes
+
+### TODO 1 validation
+
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml`: passed.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_effects`: passed, 27 tests.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_grading`: passed, 6 tests.
+- `node tools/spec-freeze/extend.mjs effects-two-input-curves "Add two-input control-grid curves"`: recorded exactly two replacements, `curves.rs` and `curves.md`.
+- `PATH="$PWD/crates/ditherette-wasm/node_modules/.bin:$PATH" NODE_OPTIONS="--require=/tmp/codex-node-spawn-status.cjs" nice node tools/spec-freeze/guard.mjs`: passed. The temporary shim converts this sandbox's false `EPERM` after a child exits with status 0 into the captured successful result, and injects `CARGO_BUILD_JOBS=2` for Cargo subprocesses. The guard returned frozen artifact `sha256:a5f90b9b3b864c4826748646818bbe1c903de958811f4c5af3345082cf5ad47d`.
 
 ### Exact JSON shape
 
