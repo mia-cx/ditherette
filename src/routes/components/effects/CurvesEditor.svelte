@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Curve, CurvePoints, CurvesEffect } from 'ditherette';
+	import type { Curve, CurvePoints, CurvesEffect, TwoInputCurve } from 'ditherette';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeft';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
 	import EyedropperIcon from 'phosphor-svelte/lib/Eyedropper';
@@ -19,10 +19,12 @@
 		neutralCurve,
 		sameChannel
 	} from '$lib/effects/catalog';
-	import { channelValue, pickPoint, setPointOutput } from '$lib/effects/pick';
+	import { neutralGrid, setGridValue } from '$lib/effects/grid';
+	import { channelValue, pickCell, pickPoint, setPointOutput } from '$lib/effects/pick';
 	import { hueAxis } from '$lib/effects/tone';
 	import { curvePicker, type CurvePicker } from '$lib/stores/curve-pick';
 	import CurveGraph from './CurveGraph.svelte';
+	import CurveGridGraph from './CurveGridGraph.svelte';
 
 	type Props = { id: string; step: CurvesEffect; onchange: (step: CurvesEffect) => void };
 	let { id, step, onchange }: Props = $props();
@@ -50,18 +52,27 @@
 	const active = $derived(Math.min(selected, step.curves.length - 1));
 	const curve = $derived(step.curves[active]);
 
-	/** "Lightness (OKLCH)" for a remap, "Hue vs Chroma (OKLCH)" for an adjustment. */
-	function curveName({ kind, x, y }: Curve) {
-		const [xModel, xName] = channelLabel(x).split(' · ');
-		const [yModel, yName] = channelLabel(y).split(' · ');
-		if (kind === 'remap') return `${xName} (${xModel})`;
-		return xModel === yModel
-			? `${xName} vs ${yName} (${xModel})`
-			: `${xName} (${xModel}) vs ${yName} (${yModel})`;
+	/**
+	 * "Lightness (OKLCH)" for a remap, "Hue vs Chroma (OKLCH)" for an adjustment, and
+	 * "Hue × Lightness vs Chroma (OKLCH)" for a two-input curve.
+	 */
+	function curveName(c: Curve) {
+		const parts = [c.x, ...(c.x2 ? [c.x2] : []), c.y].map((channel) =>
+			channelLabel(channel).split(' · ')
+		);
+		const models = new Set(parts.map(([model]) => model));
+		const name = (index: number) =>
+			models.size === 1 ? parts[index]![1] : `${parts[index]![1]} (${parts[index]![0]})`;
+		const suffix = models.size === 1 ? ` (${parts[0]![0]})` : '';
+		if (c.kind === 'remap') return `${parts[0]![1]} (${parts[0]![0]})`;
+		const inputs = c.x2 ? `${name(0)} × ${name(1)}` : name(0);
+		return `${inputs} vs ${name(parts.length - 1)}${suffix}`;
 	}
 
 	/** A hue input wraps for adjustments; hue remaps read their input straight across. */
 	const periodic = (c: Curve) => c.kind === 'adjust' && c.x.channel === 'hue';
+	/** The selected point of a two-input curve's grid. */
+	let cell = $state({ row: 0, column: 0 });
 
 	function replaceAt(index: number, next: Curve) {
 		onchange({ ...step, curves: step.curves.map((curve, at) => (at === index ? next : curve)) });
@@ -101,10 +112,18 @@
 
 	/** Pixels of vertical drag that move a picked point across the whole output range. */
 	const PUSH_PIXELS = 200;
-	let grabbed: { curve: number; point: number; y: number } | undefined;
+	/** The picked point: its curve, its index or grid cell, and its value when the pick began. */
+	let grabbed:
+		| { curve: number; point: number; y: number; cell?: { row: number; column: number } }
+		| undefined;
 	const picker: CurvePicker = {
 		pick(rgb) {
 			if (!curve) return;
+			if (curve.x2) {
+				cell = pickCell(curve, rgb);
+				grabbed = { curve: active, point: 0, y: curve.grid.values[cell.row]![cell.column]!, cell };
+				return;
+			}
 			const { points, index } = pickPoint(curve, periodic(curve), channelValue(curve.x, rgb));
 			grabbed = { curve: active, point: index, y: points[index]![1] };
 			selectedPoint = index;
@@ -114,12 +133,17 @@
 			if (!grabbed || active !== grabbed.curve) return;
 			const pickedCurve = step.curves[grabbed.curve];
 			if (!pickedCurve) return;
-			const points = setPointOutput(
-				pickedCurve.points,
-				grabbed.point,
-				grabbed.y + up / PUSH_PIXELS,
-				periodic(pickedCurve)
-			);
+			const y = grabbed.y + up / PUSH_PIXELS;
+			if (pickedCurve.x2) {
+				if (!grabbed.cell) return;
+				const value = Math.round(Math.min(1, Math.max(0, y)) * 255) / 255;
+				replaceAt(
+					grabbed.curve,
+					setGridValue(pickedCurve, grabbed.cell.row, grabbed.cell.column, value)
+				);
+				return;
+			}
+			const points = setPointOutput(pickedCurve.points, grabbed.point, y, periodic(pickedCurve));
 			replaceAt(grabbed.curve, { ...pickedCurve, points });
 		}
 	};
@@ -135,20 +159,37 @@
 	/** A curve drawn over one input means nothing over another, so a new input starts neutral. */
 	function setInput(key: string) {
 		const x = channelFor(key);
-		if (curve && x && !sameChannel(x, curve.x)) replace(neutralCurve(x, curve.y));
+		if (!curve || !x || sameChannel(x, curve.x)) return;
+		if (curve.x2 && !sameChannel(x, curve.x2))
+			replace({ kind: 'adjust', x, x2: curve.x2, y: curve.y, grid: neutralGrid(x, curve.x2) });
+		else replace(neutralCurve(x, curve.y));
+	}
+
+	/** A second input turns the curve into a grid over both inputs; none turns it back. */
+	function setSecondInput(key: string) {
+		if (!curve) return;
+		const x2 = channelFor(key);
+		if (!x2) {
+			if (curve.x2) replace(neutralCurve(curve.x, curve.y));
+			return;
+		}
+		if (sameChannel(x2, curve.x) || (curve.x2 && sameChannel(x2, curve.x2))) return;
+		replace({ kind: 'adjust', x: curve.x, x2, y: curve.y, grid: neutralGrid(curve.x, x2) });
+		cell = { row: 0, column: 0 };
 	}
 
 	/** A new output keeps an adjustment's shape; a remap onto another channel becomes a flat adjustment. */
 	function setOutput(key: string) {
 		const y = channelFor(key);
 		if (!curve || !y || sameChannel(y, curve.y)) return;
-		if (curve.kind === 'remap') replace({ kind: 'adjust', x: curve.x, y, points: FLAT });
+		if (curve.x2) replace({ ...curve, y });
+		else if (curve.kind === 'remap') replace({ kind: 'adjust', x: curve.x, y, points: FLAT });
 		else if (sameChannel(curve.x, y)) replace(neutralCurve(curve.x, y));
 		else replace({ ...curve, y });
 	}
 
 	function setKind(kind: string) {
-		if (!curve || kind === curve.kind) return;
+		if (!curve || curve.x2 || kind === curve.kind) return;
 		if (kind === 'remap' && sameChannel(curve.x, curve.y))
 			replace({ ...curve, kind, points: STRAIGHT });
 		if (kind === 'adjust') replace({ ...curve, kind, points: FLAT });
@@ -198,41 +239,72 @@
 
 	{#if curve}
 		{#key active}
-			<CurveGraph
-				{id}
-				points={curve.points}
-				bind:selected={selectedPoint}
-				stroke={tone(active).stroke}
-				neutral={curve.kind === 'remap' ? 'diagonal' : 'flat'}
-				periodic={periodic(curve)}
-				spectrum={curve.x.channel === 'hue' ? hueAxis(curve.x.model) : undefined}
-				behind={step.curves.flatMap((other, index) =>
-					index !== active && other.kind === curve.kind && sameChannel(other.x, curve.x)
-						? [{ points: other.points, stroke: tone(index).stroke }]
-						: []
-				)}
-				axes={{
-					x: channelLabel(curve.x),
-					y: curve.kind === 'remap' ? channelLabel(curve.y) : 'Adjustment'
-				}}
-				onchange={(points: CurvePoints) => replace({ ...curve, points })}
-			/>
+			{#if curve.x2}
+				<CurveGridGraph
+					{id}
+					{curve}
+					bind:selected={cell}
+					onchange={(next: TwoInputCurve) => replace(next)}
+				/>
+			{:else}
+				{@const one = curve}
+				<CurveGraph
+					{id}
+					points={one.points}
+					bind:selected={selectedPoint}
+					stroke={tone(active).stroke}
+					neutral={one.kind === 'remap' ? 'diagonal' : 'flat'}
+					periodic={periodic(one)}
+					spectrum={one.x.channel === 'hue' ? hueAxis(one.x.model) : undefined}
+					behind={step.curves.flatMap((other, index) =>
+						index !== active && !other.x2 && other.kind === one.kind && sameChannel(other.x, one.x)
+							? [{ points: other.points, stroke: tone(index).stroke }]
+							: []
+					)}
+					axes={{
+						x: channelLabel(one.x),
+						y: one.kind === 'remap' ? channelLabel(one.y) : 'Adjustment'
+					}}
+					onchange={(points: CurvePoints) => replace({ ...one, points })}
+				/>
+			{/if}
 		{/key}
 
 		<div class="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2">
-			{#each [{ label: 'Reads', suffix: 'x', value: curve.x, set: setInput }, { label: 'Changes', suffix: 'y', value: curve.y, set: setOutput }] as field (field.suffix)}
-				<Label for="{id}-{field.suffix}" class="text-xs text-muted-foreground">{field.label}</Label>
-				<Select type="single" value={channelKey(field.value)} onValueChange={field.set}>
-					<SelectTrigger id="{id}-{field.suffix}" class="w-full"
-						>{channelLabel(field.value)}</SelectTrigger
-					>
-					<SelectContent class="max-h-80">
-						{#each CURVE_CHANNELS as option (channelKey(option.channel))}
-							<SelectItem value={channelKey(option.channel)}>{option.label}</SelectItem>
-						{/each}
-					</SelectContent>
-				</Select>
-			{/each}
+			<Label for="{id}-x" class="text-xs text-muted-foreground">Reads</Label>
+			<Select type="single" value={channelKey(curve.x)} onValueChange={setInput}>
+				<SelectTrigger id="{id}-x" class="w-full">{channelLabel(curve.x)}</SelectTrigger>
+				<SelectContent class="max-h-80">
+					{#each CURVE_CHANNELS as option (channelKey(option.channel))}
+						<SelectItem value={channelKey(option.channel)}>{option.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
+			<Label for="{id}-x2" class="text-xs text-muted-foreground">And</Label>
+			<Select
+				type="single"
+				value={curve.x2 ? channelKey(curve.x2) : ''}
+				onValueChange={setSecondInput}
+			>
+				<SelectTrigger id="{id}-x2" class="w-full"
+					>{curve.x2 ? channelLabel(curve.x2) : 'Nothing else'}</SelectTrigger
+				>
+				<SelectContent class="max-h-80">
+					<SelectItem value="">Nothing else</SelectItem>
+					{#each CURVE_CHANNELS.filter(({ channel }) => !sameChannel(channel, curve.x)) as option (channelKey(option.channel))}
+						<SelectItem value={channelKey(option.channel)}>{option.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
+			<Label for="{id}-y" class="text-xs text-muted-foreground">Changes</Label>
+			<Select type="single" value={channelKey(curve.y)} onValueChange={setOutput}>
+				<SelectTrigger id="{id}-y" class="w-full">{channelLabel(curve.y)}</SelectTrigger>
+				<SelectContent class="max-h-80">
+					{#each CURVE_CHANNELS as option (channelKey(option.channel))}
+						<SelectItem value={channelKey(option.channel)}>{option.label}</SelectItem>
+					{/each}
+				</SelectContent>
+			</Select>
 			<span class="text-xs text-muted-foreground">Kind</span>
 			<ToggleGroup
 				type="single"
@@ -246,7 +318,7 @@
 				<ToggleGroupItem
 					value="remap"
 					class="flex-1 text-xs"
-					disabled={!sameChannel(curve.x, curve.y)}>Remap</ToggleGroupItem
+					disabled={Boolean(curve.x2) || !sameChannel(curve.x, curve.y)}>Remap</ToggleGroupItem
 				>
 				<ToggleGroupItem value="adjust" class="flex-1 text-xs">Adjust</ToggleGroupItem>
 			</ToggleGroup>

@@ -1,4 +1,5 @@
-import type { ColourChannel, Curve, CurvePoints } from 'ditherette';
+import type { ColourChannel, CurvePoints, OneInputCurve, TwoInputCurve } from 'ditherette';
+import { wraps } from './grid';
 import { coordinates } from '$lib/scopes/colour';
 import { CURVE_MODELS } from './catalog';
 import { MAX_CURVE_POINTS, evaluateCurve, evaluatePeriodicCurve } from './spline';
@@ -23,7 +24,7 @@ export function channelValue(channel: ColourChannel, [r, g, b]: readonly [number
  * Grab the point nearest a picked input value, or add one on the curve there. A full curve always
  * grabs. Returns the new points and the grabbed point's index.
  */
-export function pickPoint(curve: Curve, periodic: boolean, value: number) {
+export function pickPoint(curve: OneInputCurve, periodic: boolean, value: number) {
 	const x = onGrid(value);
 	const { points } = curve;
 	const distance = ([px]: readonly [number, number]) => {
@@ -55,4 +56,22 @@ export function setPointOutput(
 	return points.map(([x, py], other) =>
 		other === index || (seam && (other === 0 || other === points.length - 1)) ? [x, y] : [x, py]
 	);
+}
+
+/** The grid point nearest a picked colour on both of a two-input curve's axes. */
+export function pickCell(curve: TwoInputCurve, rgb: readonly [number, number, number]) {
+	const a = channelValue(curve.x, rgb);
+	const b = channelValue(curve.x2, rgb);
+	const distance = (position: number, value: number, closed: boolean) => {
+		const d = Math.abs(position - value);
+		return closed ? Math.min(d, 1 - d) : d;
+	};
+	let best = { row: 0, column: 0, distance: Infinity };
+	curve.grid.rows.forEach((r, row) =>
+		curve.grid.columns.forEach((c, column) => {
+			const d = Math.hypot(distance(c, a, wraps(curve.x)), distance(r, b, wraps(curve.x2)));
+			if (d < best.distance) best = { row, column, distance: d };
+		})
+	);
+	return { row: best.row, column: best.column };
 }
