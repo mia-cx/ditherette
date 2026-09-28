@@ -21,7 +21,7 @@ wraps when x is a hue.
 - [x] Model switcher and per-model channel checkboxes in the curves editor.
 - [x] Arbitrary XY editor: channel pickers, flat neutral line, hue spectrum, wrapping hue x axis.
 - [x] Docs and changeset.
-- [ ] Validation: `pnpm check`, `vitest run`, ESLint, and a rendered check in Chromium.
+- [x] Validation: `pnpm check`, `vitest run`, ESLint, and a rendered check in Chromium.
 
 ## Notes
 - The web stack (#235 → … → #281) and the curve effects chain (#247 → #277 → #278) both sit on
@@ -32,3 +32,4 @@ wraps when x is a hue.
 - TODO 2: `evaluatePeriodicCurve` mirrors `PeriodicSpline` in the reference; `evaluateCurve` now shares its tangent helper. `vitest run src/lib/effects/spline.spec.ts` (5) passes.
 - TODO 3: `CurveGraph.svelte` holds the shared point editing; `CurvesEditor.svelte` adds the Model picker and per-model checkboxes. Found and fixed: Dockview's floating frame fell back to z-index 999 (its overlay variable refers to itself), covering menus opened inside floating windows. Checked in Chromium: switching to OKLCH, dragging lightness, saved step, Output updates.
 - TODO 4: XY mode with "X reads" and "Y adjusts" pickers over every model channel, a flat neutral line, a hue spectrum under hue x axes, and wrapping points. New floating windows are 640 px tall, capped to the dock, so the graph fits. Checked in Chromium: a point dragged to x 1.1 lands at 0.102, end points stay at 0 and 1 with y 0.5, switching X to OKLab lightness, Output updates without errors.
+- TODO 6: `pnpm check` clean, ESLint clean, `vitest run` 163 passed.
