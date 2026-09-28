@@ -1,6 +1,8 @@
 import type {
+	EffectContext,
 	IndexedImage,
 	Matching,
+	PaletteEntry,
 	Placement,
 	ProcessRequest,
 	RecipeV1,
@@ -203,6 +205,22 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 	}
 }
 
+function packagePalette(palette: EnabledPaletteColor[]): PaletteEntry[] {
+	return palette.map((color) => {
+		if (color.kind === 'transparent') return { kind: 'transparent' };
+		if (!color.rgb) throw new Error(`Palette color ${color.name} needs RGB.`);
+		return { kind: 'color', rgb: [color.rgb.r, color.rgb.g, color.rgb.b] };
+	});
+}
+
+/** The palette and working space a recolour step fits, matching what `process` gives it. */
+export function packageEffectContext(
+	palette: EnabledPaletteColor[],
+	colorSpace: ColorSpaceId
+): EffectContext {
+	return { palette: packagePalette(palette), space: WORKING_SPACE[colorSpace] };
+}
+
 /** Always recipe v2: besides effects, it resizes colour weighted by coverage, so transparency never bleeds. */
 function packageRecipe(settings: ProcessingSettings, stages: Omit<RecipeV1, 'version'>): RecipeV2 {
 	return { version: 2, effects: settings.effects, ...stages };
@@ -230,11 +248,7 @@ export function packageProcessRequest(
 	return {
 		request: {
 			source: croppedSource(source, settings.output.crop),
-			palette: palette.map((color) => {
-				if (color.kind === 'transparent') return { kind: 'transparent' };
-				if (!color.rgb) throw new Error(`Palette color ${color.name} needs RGB.`);
-				return { kind: 'color', rgb: [color.rgb.r, color.rgb.g, color.rgb.b] };
-			}),
+			palette: packagePalette(palette),
 			recipe: packageRecipe(settings, {
 				output: {
 					width: size.width,
