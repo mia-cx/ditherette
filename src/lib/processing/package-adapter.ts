@@ -208,7 +208,7 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 function packagePalette(palette: EnabledPaletteColor[]): PaletteEntry[] {
 	return palette.map((color) => {
 		if (color.kind === 'transparent') return { kind: 'transparent' };
-		if (!color.rgb) throw new Error(`Palette color ${color.name} needs RGB.`);
+		if (!color.rgb) throw new Error(`Palette colour ${color.name} needs RGB.`);
 		return { kind: 'color', rgb: [color.rgb.r, color.rgb.g, color.rgb.b] };
 	});
 }
@@ -304,12 +304,12 @@ function resolveMatteRgb(
 	if (matteRgb) {
 		return {
 			matte: nearestVisibleColor(matteRgb, visible).rgb!,
-			warning: 'Matte color is disabled; using the nearest enabled visible color for alpha matte.'
+			warning: 'Matte colour is disabled; using the nearest enabled visible colour for alpha matte.'
 		};
 	}
 	return {
 		matte: visible[0]!.rgb!,
-		warning: 'Matte color is unavailable; using the first enabled visible color for alpha matte.'
+		warning: 'Matte colour is unavailable; using the first enabled visible colour for alpha matte.'
 	};
 }
 

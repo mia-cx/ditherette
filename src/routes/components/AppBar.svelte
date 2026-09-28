@@ -202,7 +202,7 @@
 					</MenubarSubContent>
 				</MenubarSub>
 				<MenubarSub>
-					<MenubarSubTrigger>Color space</MenubarSubTrigger>
+					<MenubarSubTrigger>Colour space</MenubarSubTrigger>
 					<MenubarSubContent class="min-w-52">
 						<MenubarRadioGroup
 							value={$colorSpace}

@@ -119,7 +119,7 @@ describe('ProcessorWorkerPipeline', () => {
 			vi.mocked(createDitherette).mockRejectedValueOnce(error).mockResolvedValue(processor);
 			const pipeline = loadedPipeline();
 			await expect(pipeline.handleAsync(processRequest(), () => undefined)).rejects.toMatchObject({
-				message: 'Wasm could not initialize. Try processing again.',
+				message: 'Wasm could not initialise. Try processing again.',
 				cause: error,
 				constructor: PackageInitializationError
 			});

@@ -10,7 +10,7 @@ export const WINDOWS = [
 	{ id: 'effects', title: 'Effects' },
 	{ id: 'dimensions', title: 'Dimensions' },
 	{ id: 'dither', title: 'Dither' },
-	{ id: 'color-space', title: 'Color space' },
+	{ id: 'color-space', title: 'Colour space' },
 	{ id: 'palette', title: 'Palette' }
 ] as const;
 export type WindowId = (typeof WINDOWS)[number]['id'];

@@ -22,7 +22,7 @@
 		<Label for="dither-color-space" class="grid gap-0.5 text-left">
 			<span>Dither in selected space</span>
 			<span class="text-xs font-normal text-muted-foreground"
-				>Perturb and diffuse error in the selected color space. Color matching always uses it.</span
+				>Perturb and diffuse error in the selected colour space. Colour matching always uses it.</span
 			>
 		</Label>
 		<Switch

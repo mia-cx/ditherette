@@ -42,7 +42,7 @@ export const DITHER_ALGORITHMS = [
 		field: 'none',
 		sku: 'direct.none',
 		short:
-			'Maps every pixel directly to its nearest palette color. No texture is added, so edges stay clean, but smooth gradients can collapse into harsh flat bands.',
+			'Maps every pixel directly to its nearest palette colour. No texture is added, so edges stay clean, but smooth gradients can collapse into harsh flat bands.',
 		math: 'index = nearestPaletteColor(pixel)',
 		latex: String.raw`q(p) = \operatorname*{arg\,min}_{c \in P} d(p, c)`
 	},
@@ -102,7 +102,7 @@ export const DITHER_ALGORITHMS = [
 		field: 'kernel',
 		sku: 'error-diffusion.kernel.floyd-steinberg',
 		short:
-			'Classic error diffusion that pushes quantization error into four nearby future pixels. Gradients look organic, but texture can form worms and directional streaks.',
+			'Classic error diffusion that pushes quantisation error into four nearby future pixels. Gradients look organic, but texture can form worms and directional streaks.',
 		math: 'error = pixel − quantized; diffuse {→7, ↙3, ↓5, ↘1}/16',
 		latex: String.raw`e = p - q(p),\quad p_n \leftarrow p_n + w_n e`
 	},
@@ -114,7 +114,7 @@ export const DITHER_ALGORITHMS = [
 		field: 'kernel',
 		sku: 'error-diffusion.kernel.sierra',
 		short:
-			'Spreads error across a wider three-row neighborhood. Softer and less speckled than Floyd–Steinberg, at the cost of a slightly blurrier texture.',
+			'Spreads error across a wider three-row neighbourhood. Softer and less speckled than Floyd–Steinberg, at the cost of a slightly blurrier texture.',
 		math: 'error = pixel − quantized; diffuse Sierra weights /32 across three rows',
 		latex: String.raw`e = p - q(p),\quad W = \frac{1}{32}\begin{bmatrix}0&0&0&5&3\\2&4&5&4&2\\0&2&3&2&0\end{bmatrix}`
 	},
@@ -126,7 +126,7 @@ export const DITHER_ALGORITHMS = [
 		field: 'kernel',
 		sku: 'error-diffusion.kernel.sierra-lite',
 		short:
-			'Small diffusion kernel with strong directionality. Fast and punchy, useful when Floyd–Steinberg feels too busy but direct quantization is too banded.',
+			'Small diffusion kernel with strong directionality. Fast and punchy, useful when Floyd–Steinberg feels too busy but direct quantisation is too banded.',
 		math: 'error = pixel − quantized; diffuse {→2, ↙1, ↓1}/4',
 		latex: String.raw`e = p - q(p),\quad W = \frac{1}{4}\{\rightarrow 2,\swarrow 1,\downarrow 1\}`
 	},
@@ -138,7 +138,7 @@ export const DITHER_ALGORITHMS = [
 		field: 'kernel',
 		sku: 'error-diffusion.kernel.atkinson',
 		short:
-			'The classic Macintosh kernel. It passes on only three quarters of the error, so highlights and shadows settle into flat color while midtones keep a crisp, high-contrast texture.',
+			'The classic Macintosh kernel. It passes on only three quarters of the error, so highlights and shadows settle into flat colour while midtones keep a crisp, high-contrast texture.',
 		math: 'error = pixel − quantized; diffuse 1/8 to {→, →→, ↙, ↓, ↘, ↓↓}',
 		latex: String.raw`e = p - q(p),\quad W = \frac{1}{8}\begin{bmatrix}0&0&0&1&1\\0&1&1&1&0\\0&0&1&0&0\end{bmatrix}`
 	},
@@ -168,18 +168,18 @@ export const DITHER_ALGORITHMS = [
 	},
 	yliluoma(
 		2,
-		'Coarse two-color mixing with a visible 2×2 pattern. Flat areas become exact palette blends at a few mixing ratios.'
+		'Coarse two-colour mixing with a visible 2×2 pattern. Flat areas become exact palette blends at a few mixing ratios.'
 	),
 	yliluoma(
 		4,
-		'Two-color mixing over a 4×4 pattern. A good balance between smooth blends and a readable, retro texture.'
+		'Two-colour mixing over a 4×4 pattern. A good balance between smooth blends and a readable, retro texture.'
 	),
 	yliluoma(
 		8,
-		'Two-color mixing over an 8×8 pattern. More mixing ratios make gradients smoother, at a slower search.'
+		'Two-colour mixing over an 8×8 pattern. More mixing ratios make gradients smoother, at a slower search.'
 	),
 	yliluoma(
 		16,
-		'Two-color mixing over a 16×16 pattern. The finest blends and the slowest search; best for small outputs.'
+		'Two-colour mixing over a 16×16 pattern. The finest blends and the slowest search; best for small outputs.'
 	)
 ] as const satisfies readonly DitherOption[];
