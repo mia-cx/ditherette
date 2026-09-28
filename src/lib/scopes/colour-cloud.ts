@@ -1,5 +1,6 @@
 import { LUT_SIZE } from '$lib/processing/source-effects';
 import { coordinates } from './colour';
+import { sampleSource } from './scopes';
 
 /** How many source pixels the 3D scope plots at most. */
 const SAMPLES = 150_000;
@@ -49,17 +50,15 @@ function place(
  * after colour. Without a table, after equals before.
  */
 export function colourCloud(source: ImageData, lut: Uint8Array | undefined) {
-	const pixels = source.width * source.height;
-	const stride = Math.max(1, Math.floor(pixels / SAMPLES));
-	const count = Math.floor(pixels / stride);
+	const { count, rgb } = sampleSource(source, SAMPLES);
 	const before = new Float32Array(count * 3);
 	const after = new Float32Array(count * 3);
 	const colours = new Float32Array(count * 4);
 	const scratch = new Float64Array(3);
 	const mapped = [0, 0, 0];
 	for (let k = 0; k < count; k++) {
-		const offset = k * stride * 4;
-		const [r, g, b] = [source.data[offset]!, source.data[offset + 1]!, source.data[offset + 2]!];
+		const offset = k * 3;
+		const [r, g, b] = [rgb[offset]!, rgb[offset + 1]!, rgb[offset + 2]!];
 		place(r, g, b, before, k * 3, scratch);
 		if (lut) throughLut(lut, r, g, b, mapped);
 		else [mapped[0], mapped[1], mapped[2]] = [r, g, b];

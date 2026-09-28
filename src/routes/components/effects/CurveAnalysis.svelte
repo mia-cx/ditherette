@@ -24,7 +24,8 @@
 	let viewer = $state<HTMLElement>();
 	let wiping = false;
 
-	const curve = $derived(step.curves[Math.min(selected, step.curves.length - 1)]);
+	const active = $derived(Math.min(selected, step.curves.length - 1));
+	const curve = $derived(step.curves[active]);
 
 	$effect(() => {
 		curveAnalysisOpen.set(open);
@@ -32,7 +33,10 @@
 	});
 
 	function replace(next: Curve) {
-		onchange({ ...step, curves: step.curves.map((c, index) => (c === curve ? next : c)) });
+		onchange({
+			...step,
+			curves: step.curves.map((curve, index) => (index === active ? next : curve))
+		});
 	}
 
 	function setWipe(event: PointerEvent) {
@@ -52,10 +56,12 @@
 			</Button>
 			<DialogTitle class="text-sm font-medium">Curves</DialogTitle>
 		</header>
-		<div class="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_22rem] grid-rows-2">
+		<div
+			class="grid min-h-0 grid-cols-1 grid-rows-[minmax(16rem,45dvh)_16rem_16rem_auto] overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_22rem] lg:grid-rows-2 lg:overflow-hidden"
+		>
 			<section
 				bind:this={viewer}
-				class="relative col-start-1 row-span-2 row-start-1 min-h-0 touch-none overflow-hidden border-r border-border bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px]"
+				class="relative min-h-0 min-w-0 touch-none overflow-hidden border-b border-border bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:border-r lg:border-b-0"
 				aria-label="Before and after"
 				onpointerdown={(event) => {
 					wiping = true;
@@ -80,15 +86,21 @@
 					style:left="{wipe * 100}%"
 				></div>
 			</section>
-			<section class="col-start-2 row-start-1 min-h-0 border-r border-b border-border">
+			<section
+				class="min-h-0 min-w-0 border-b border-border lg:col-start-2 lg:row-start-1 lg:border-r"
+			>
 				{#if curve}
 					<CurveSurface {curve} onchange={replace} />
 				{/if}
 			</section>
-			<section class="col-start-2 row-start-2 min-h-0 border-r border-border">
+			<section
+				class="min-h-0 min-w-0 border-b border-border lg:col-start-2 lg:row-start-2 lg:border-r lg:border-b-0"
+			>
 				<ColourScope3d source={$sourceImageData} lut={$sourceEffectsLut} />
 			</section>
-			<section class="col-start-3 row-span-2 row-start-1 min-h-0 overflow-y-auto p-3">
+			<section
+				class="min-h-0 min-w-0 p-3 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:overflow-y-auto"
+			>
 				<CurvesEditor {id} {step} {onchange} expanded bind:selected />
 			</section>
 		</div>

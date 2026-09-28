@@ -57,12 +57,13 @@ function random(seed: number) {
 function sample(
 	width: number,
 	height: number,
+	maxSamples: number,
 	read: (index: number, rgb: Uint8Array, at: number) => boolean
 ): Samples {
 	// An image within the budget keeps every pixel, however wide it is.
-	const whole = width * height <= MAX_SAMPLES;
+	const whole = width * height <= maxSamples;
 	const columns = whole ? width : Math.min(width, MAX_COLUMNS);
-	const rows = whole ? height : Math.min(height, Math.max(1, Math.floor(MAX_SAMPLES / columns)));
+	const rows = whole ? height : Math.min(height, Math.max(1, Math.floor(maxSamples / columns)));
 	const column = new Float32Array(columns * rows);
 	const rgb = new Uint8Array(columns * rows * 3);
 	const next = random(1);
@@ -78,12 +79,11 @@ function sample(
 	return { count, column, rgb };
 }
 
-export function sampleSource({
-	data,
-	width,
-	height
-}: Pick<ImageData, 'data' | 'width' | 'height'>) {
-	return sample(width, height, (index, rgb, at) => {
+export function sampleSource(
+	{ data, width, height }: Pick<ImageData, 'data' | 'width' | 'height'>,
+	maxSamples = MAX_SAMPLES
+) {
+	return sample(width, height, maxSamples, (index, rgb, at) => {
 		const offset = index * 4;
 		if (!data[offset + 3]) return false;
 		rgb[at] = data[offset]!;
@@ -95,7 +95,7 @@ export function sampleSource({
 
 /** Samples the processed indices through their palette, so the colours are exactly the output's. */
 export function sampleOutput({ indices, palette, width, height }: ProcessedImage) {
-	return sample(width, height, (index, rgb, at) => {
+	return sample(width, height, MAX_SAMPLES, (index, rgb, at) => {
 		const colour = palette[indices[index]!];
 		if (!colour?.rgb || colour.kind === 'transparent') return false;
 		rgb[at] = colour.rgb.r;
