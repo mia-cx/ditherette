@@ -24,7 +24,10 @@ export const MAX_EFFECT_NAME_LENGTH = 64;
  */
 function isLayerStep(value: unknown): value is LayerStep {
 	if (!value || typeof value !== 'object') return false;
-	if ((value as { effect?: unknown }).effect !== 'curves') return isEffect(value);
+	const { effect } = value as { effect?: unknown };
+	// Colour-model and channel-to-channel curves only live inside a curves layer.
+	if (effect === 'model-curves' || effect === 'channel-curve') return false;
+	if (effect !== 'curves') return isEffect(value);
 	try {
 		return packageSteps(value as LayerStep).every(isEffect);
 	} catch {

@@ -66,15 +66,9 @@ pub fn dither_yiluoma(
         .reserve(&mut indices, count)
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
-    let index = (count >= super::index::MIN_INDEX_PIXELS && prepared.can_match_rgb())
-        .then(|| {
-            MixIndex::try_new(
-                prepared.matcher(),
-                (size.width() * size.width()) as u32,
-                memory_limit - budget.used,
-            )
-        })
-        .flatten();
+    let levels = (size.width() * size.width()) as u32;
+    let (index, mut mixes) =
+        allocate_mix_work(&prepared, count, levels, memory_limit - budget.used);
     dither_yiluoma_with_progress_indexed(
         layout.source,
         &prepared,
@@ -82,7 +76,7 @@ pub fn dither_yiluoma(
         size,
         placement,
         &mut [],
-        &mut [],
+        &mut mixes,
         index.as_ref(),
         |_| Ok(()),
     )
@@ -90,6 +84,32 @@ pub fn dither_yiluoma(
     let indices = ImageBuf::<PaletteIndex8>::from_vec_packed(indices, layout.output)
         .expect("validated dimensions and reserved index length");
     Ok(prepared.into_indexed(indices))
+}
+
+/// Gives exact mixture lookup first claim on optional memory, then uses any remainder for RGB
+/// memoization. Both allocations are optional and preserve the literal scan as their fallback.
+fn allocate_mix_work(
+    prepared: &PreparedQuantizer,
+    count: usize,
+    levels: u32,
+    available: u64,
+) -> (Option<MixIndex>, Vec<u64>) {
+    let index = (count >= super::index::MIN_INDEX_PIXELS && prepared.can_match_rgb())
+        .then(|| MixIndex::try_new(prepared.matcher(), levels, available))
+        .flatten();
+    let remaining = available.saturating_sub(index.as_ref().map_or(0, MixIndex::capacity_bytes));
+    let cache_entries = prepared
+        .can_match_rgb()
+        .then(|| crate::prod::quantize::cache::recommended_entries(count, remaining))
+        .unwrap_or_default();
+    let mut mixes = Vec::new();
+    let mut budget = Budget::new(remaining, 0).expect("zero fixed bytes fit available memory");
+    if cache_entries > 0 && budget.reserve(&mut mixes, cache_entries).is_ok() {
+        mixes.resize(cache_entries, 0);
+    } else {
+        mixes = Vec::new();
+    }
+    (index, mixes)
 }
 
 /// Writes the literal scalar recipe into validated caller-owned index storage without allocation.
@@ -202,9 +222,16 @@ pub(super) fn dither_yiluoma_band_with_progress(
         ),
         _ => None,
     };
-    let mut mixes = match placement {
-        Placement::Everywhere {} if !mixes.is_empty() => Some(MixCache::new(mixes, levels)),
-        _ => None,
+    let (mut source_mixes, mut nearest_mixes) = match placement {
+        Placement::Everywhere {} if !mixes.is_empty() => (Some(MixCache::new(mixes, levels)), None),
+        Placement::Adaptive { .. } if mixes.len() >= 2 => {
+            let (source, nearest) = mixes.split_at_mut(mixes.len() / 2);
+            (
+                Some(MixCache::new(source, levels)),
+                Some(MixCache::new(nearest, levels)),
+            )
+        }
+        _ => (None, None),
     };
     for (y, indices) in
         (band.y_start()..band.y_end()).zip(indices.chunks_exact_mut(dimensions.width_usize()))
@@ -224,7 +251,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
                     };
                     // Everywhere has mask 1, so the target is the source and nearest is unused.
                     let mix = match placement {
-                        Placement::Everywhere {} => match &mut mixes {
+                        Placement::Everywhere {} => match &mut source_mixes {
                             Some(mixes) => mixes.mix(rgb, search),
                             None => search(),
                         },
@@ -241,11 +268,31 @@ pub(super) fn dither_yiluoma_band_with_progress(
                                     source, x, y, space, placement, &converter,
                                 ),
                             };
-                            let target = adaptive_target(coordinates, nearest.coordinates, mask);
-                            mix_index.map_or_else(
-                                || best_matched_mix(target, matcher, levels),
-                                |index| index.best(target, matcher),
-                            )
+                            let indexed_search = |target| {
+                                mix_index.map_or_else(
+                                    || best_matched_mix(target, matcher, levels),
+                                    |index| index.best(target, matcher),
+                                )
+                            };
+                            if mask == 1.0 {
+                                match &mut source_mixes {
+                                    Some(mixes) => mixes.mix(rgb, || indexed_search(coordinates)),
+                                    None => indexed_search(coordinates),
+                                }
+                            } else if mask == 0.0 {
+                                match &mut nearest_mixes {
+                                    Some(mixes) => {
+                                        mixes.mix(rgb, || indexed_search(nearest.coordinates))
+                                    }
+                                    None => indexed_search(nearest.coordinates),
+                                }
+                            } else {
+                                indexed_search(adaptive_target(
+                                    coordinates,
+                                    nearest.coordinates,
+                                    mask,
+                                ))
+                            }
                         }
                     };
                     ordered_mix_index(mix, x, y, size)
@@ -317,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn memoized_everywhere_mixtures_match_direct_search() {
+    fn memoized_everywhere_and_adaptive_endpoint_mixtures_match_direct_search() {
         let dimensions = ImageDimensions::new(40, 31).unwrap();
         // Few distinct colors repeat across the image; alpha varies so preparation matters.
         let bytes = (0..40 * 31)
@@ -353,28 +400,120 @@ mod tests {
                 let prepared =
                     PreparedQuantizer::try_new(&palette, alpha, matching, 1 << 20).unwrap();
                 for size in [BayerSize::Two, BayerSize::Eight, BayerSize::Sixteen] {
-                    let run = |mixes: &mut [u64]| {
-                        let mut indices = vec![0; 40 * 31];
-                        dither_yiluoma_with_progress(
-                            source,
-                            &prepared,
-                            &mut indices,
-                            size,
-                            Placement::Everywhere {},
-                            &mut [],
-                            mixes,
-                            |_| Ok(()),
-                        )
-                        .unwrap();
-                        indices
-                    };
-                    let direct = run(&mut []);
-                    // A tiny table forces collisions; stale scratch must not leak into results.
-                    assert_eq!(run(&mut [u64::MAX; 4]), direct, "{matching:?} {alpha:?}");
-                    assert_eq!(run(&mut vec![0; 1024]), direct, "{matching:?} {alpha:?}");
+                    for placement in [
+                        Placement::Everywhere {},
+                        Placement::Adaptive {
+                            radius: 1,
+                            threshold: 0.0,
+                            softness: 0.0,
+                        },
+                        Placement::Adaptive {
+                            radius: 1,
+                            threshold: 100.0,
+                            softness: 0.0,
+                        },
+                    ] {
+                        let run = |mixes: &mut [u64]| {
+                            let mut indices = vec![0; 40 * 31];
+                            dither_yiluoma_with_progress(
+                                source,
+                                &prepared,
+                                &mut indices,
+                                size,
+                                placement,
+                                &mut [],
+                                mixes,
+                                |_| Ok(()),
+                            )
+                            .unwrap();
+                            indices
+                        };
+                        let direct = run(&mut []);
+                        // A tiny table forces collisions; stale scratch must not leak into results.
+                        assert_eq!(
+                            run(&mut [u64::MAX; 4]),
+                            direct,
+                            "{matching:?} {alpha:?} {placement:?}"
+                        );
+                        assert_eq!(
+                            run(&mut vec![0; 1024]),
+                            direct,
+                            "{matching:?} {alpha:?} {placement:?}"
+                        );
+                    }
                 }
             }
         }
+    }
+
+    #[test]
+    fn tight_optional_budget_admits_index_before_rgb_cache() {
+        let dimensions = ImageDimensions::new(32, 32).unwrap();
+        let bytes = (0..32 * 32)
+            .flat_map(|i| {
+                [
+                    (i * 71) as u8,
+                    (i * 37 + 8) as u8,
+                    (i * 113 + 12) as u8,
+                    255,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let source = ImageView::packed(&bytes, dimensions).unwrap();
+        let palette = [
+            [0, 0, 0],
+            [255, 255, 255],
+            [220, 40, 80],
+            [20, 190, 230],
+            [80, 130, 20],
+        ]
+        .map(|rgb| PaletteEntry::Color { rgb });
+        let prepared = PreparedQuantizer::try_new(
+            &palette,
+            AlphaPolicy::Premultiplied {},
+            MatchPolicy::OklabEuclidean,
+            1 << 20,
+        )
+        .unwrap();
+        let levels = 4;
+        let index_capacity = MixIndex::try_new(prepared.matcher(), levels, u64::MAX)
+            .unwrap()
+            .capacity_bytes();
+        let (index, mut mixes) = allocate_mix_work(
+            &prepared,
+            dimensions.pixel_count().unwrap(),
+            levels,
+            index_capacity + 8191,
+        );
+        assert!(index.is_some());
+        assert!(mixes.is_empty());
+
+        let mut expected = vec![0; dimensions.pixel_count().unwrap()];
+        let mut actual = expected.clone();
+        dither_yiluoma_with_progress(
+            source,
+            &prepared,
+            &mut expected,
+            BayerSize::Two,
+            Placement::Everywhere {},
+            &mut [],
+            &mut [],
+            |_| Ok(()),
+        )
+        .unwrap();
+        dither_yiluoma_with_progress_indexed(
+            source,
+            &prepared,
+            &mut actual,
+            BayerSize::Two,
+            Placement::Everywhere {},
+            &mut [],
+            &mut mixes,
+            index.as_ref(),
+            |_| Ok(()),
+        )
+        .unwrap();
+        assert_eq!(actual, expected);
     }
 
     #[test]
