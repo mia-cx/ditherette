@@ -119,6 +119,73 @@ fn oklab_index_uses_spare_budget_and_low_budget_keeps_literal_output() {
     assert_eq!(low.warnings, high.warnings);
 }
 
+#[test]
+fn indexed_requests_match_frozen_output_for_every_policy_size_and_edge_palette() {
+    use ditherette_wasm::image::contracts::PaletteEntry;
+    use prod::contract::request::{AlphaPolicy, BayerSize, DitherPolicy, Placement};
+
+    let palette = (0..31)
+        .map(|index| {
+            let rgb = if index >= 27 {
+                let grey = 118 + index as u8 - 27;
+                [grey, grey, grey.wrapping_add((index & 1) as u8)]
+            } else {
+                [
+                    (index * 8) as u8,
+                    ((index * 57) % 256) as u8,
+                    ((index * 91) % 256) as u8,
+                ]
+            };
+            PaletteEntry::Color { rgb }
+        })
+        .chain([
+            PaletteEntry::Color { rgb: [20, 30, 40] },
+            PaletteEntry::Color { rgb: [20, 30, 40] },
+            PaletteEntry::Transparent {},
+        ])
+        .collect::<Vec<_>>();
+    let mut state = 0x9183_26a5u32;
+    for matching in POLICIES {
+        for size in [
+            BayerSize::Two,
+            BayerSize::Four,
+            BayerSize::Eight,
+            BayerSize::Sixteen,
+        ] {
+            let samples = if matches!(size, BayerSize::Two | BayerSize::Four) {
+                300
+            } else {
+                20
+            };
+            let mut data = vec![0; 32 * 32 * 4];
+            for (sample, pixel) in data.chunks_exact_mut(4).take(samples).enumerate() {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                let rgb = if sample % 11 == 0 {
+                    let grey = state as u8;
+                    [grey, grey, grey.wrapping_add((sample & 1) as u8)]
+                } else {
+                    [state as u8, (state >> 8) as u8, (state >> 16) as u8]
+                };
+                pixel.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+            }
+            let mut input = request(&data, 32, 32, &palette);
+            input.quantize.alpha = AlphaPolicy::Preserve { threshold: 127.0 };
+            input.quantize.matching = matching;
+            input.dither = DitherPolicy::Yliluoma {
+                size,
+                placement: Placement::Everywhere {},
+            };
+            assert_eq!(
+                yiluoma::dither_yiluoma(input, 1 << 29).unwrap(),
+                oracle(input),
+                "{matching:?}/{size:?}"
+            );
+        }
+    }
+}
+
 fn oracle(
     request: prod::contract::request::DitherQuantizeRequest<'_>,
 ) -> ditherette_wasm::image::contracts::IndexedImage {
@@ -142,6 +209,116 @@ fn oracle(
         dither: serde_json::from_value(serde_json::to_value(request.dither).unwrap()).unwrap(),
     })
     .unwrap()
+}
+
+struct PipelineBoundary<'a>(&'a [u8]);
+
+impl prod::pipeline::quantize::InputBoundary for PipelineBoundary<'_> {
+    fn input_len(&mut self) -> Result<usize, prod::contract::failure::Failure> {
+        Ok(self.0.len())
+    }
+
+    fn copy_input(
+        &mut self,
+        destination: &mut [u8],
+    ) -> Result<(), prod::contract::failure::Failure> {
+        destination.copy_from_slice(self.0);
+        Ok(())
+    }
+}
+
+impl prod::pipeline::quantize::QuantizeBoundary for PipelineBoundary<'_> {
+    type Output = Vec<u8>;
+
+    fn complete(
+        &mut self,
+        indices: &[u8],
+        _dimensions: ditherette_wasm::image::ImageDimensions,
+        _palette: prod::pipeline::quantize::IndexedMetadataRef<'_>,
+    ) -> Result<Self::Output, prod::contract::failure::Failure> {
+        Ok(indices.to_vec())
+    }
+}
+
+#[test]
+fn processor_tight_budget_keeps_index_and_skips_rgb_cache() {
+    use ditherette_wasm::image::contracts::PaletteEntry;
+    use prod::{
+        contract::request::{AlphaPolicy, BayerSize, DitherPolicy, Placement},
+        pipeline::{processor::Processor, quantize::QuantizeRequest},
+    };
+
+    let source = (0..32 * 32)
+        .flat_map(|i| {
+            [
+                (i * 71) as u8,
+                (i * 37 + 8) as u8,
+                (i * 113 + 12) as u8,
+                255,
+            ]
+        })
+        .collect::<Vec<_>>();
+    let palette = [[0, 0, 0], [255, 255, 255], [220, 40, 80], [20, 190, 230]]
+        .map(|rgb| PaletteEntry::Color { rgb });
+    let quantize = QuantizeRequest {
+        source_width: 32,
+        source_height: 32,
+        palette: &palette,
+        alpha: AlphaPolicy::Premultiplied {},
+        matching: MatchPolicy::SrgbEuclidean,
+    };
+    let dither = DitherPolicy::Yliluoma {
+        size: BayerSize::Two,
+        placement: Placement::Everywhere {},
+    };
+    let run = |limit| {
+        let mut processor = Processor::new(limit, 0)?;
+        let output =
+            processor.dither_and_quantize(quantize, dither, &mut PipelineBoundary(&source))?;
+        Ok::<_, prod::contract::failure::Failure>((output, processor.peak_capacity_bytes()))
+    };
+    let first_optional = |minimum: u64, upper: u64, baseline: u64| {
+        let (mut low, mut high) = (minimum, upper);
+        while low < high {
+            let middle = low + (high - low) / 2;
+            if run(middle).unwrap().1 > baseline {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        low
+    };
+
+    let (_, roomy_yiluoma_peak) = run(1 << 20).unwrap();
+    let yiluoma_minimum = budget_support::minimum(roomy_yiluoma_peak, |limit| run(limit).is_ok());
+    let yiluoma_baseline = run(yiluoma_minimum).unwrap().1;
+    assert_eq!(yiluoma_baseline, yiluoma_minimum);
+    let mut transitions = Vec::new();
+    let mut cursor = yiluoma_minimum;
+    let mut peak = yiluoma_baseline;
+    while transitions.len() < 3 {
+        let limit = first_optional(cursor, roomy_yiluoma_peak, peak);
+        let next_peak = run(limit).unwrap().1;
+        assert!(next_peak > peak);
+        transitions.push((limit, next_peak));
+        cursor = limit;
+        peak = next_peak;
+    }
+    // Palette retention is the first transition. The index is second and the RGB cache third.
+    let index_capacity = transitions[1].1 - transitions[0].1;
+    let cache_capacity = transitions[2].1 - transitions[1].1;
+    assert!(index_capacity < cache_capacity);
+
+    let tight_limit = yiluoma_minimum + index_capacity + cache_capacity - 1;
+    let (actual, tight_peak) = run(tight_limit).unwrap();
+    assert_eq!(tight_peak, transitions[1].1);
+
+    let mut reference = request(&source, 32, 32, &palette);
+    reference.quantize.alpha = AlphaPolicy::Premultiplied {};
+    reference.quantize.matching = MatchPolicy::SrgbEuclidean;
+    reference.dither = dither;
+    assert_eq!(actual, oracle(reference).indices.data());
 }
 
 #[test]
@@ -418,3 +595,6 @@ fn zero_mask_retains_earlier_exact_mixture_and_first_ratio_ties() {
         }
     );
 }
+
+#[path = "support/budget.rs"]
+mod budget_support;

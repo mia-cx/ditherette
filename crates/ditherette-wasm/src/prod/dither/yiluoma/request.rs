@@ -66,27 +66,9 @@ pub fn dither_yiluoma(
         .reserve(&mut indices, count)
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
-    let mut mixes = Vec::new();
-    let cache_entries = prepared
-        .can_match_rgb()
-        .then(|| {
-            crate::prod::quantize::cache::recommended_entries(count, memory_limit - budget.used)
-        })
-        .unwrap_or_default();
-    if cache_entries > 0 && budget.reserve(&mut mixes, cache_entries).is_ok() {
-        mixes.resize(cache_entries, 0);
-    } else {
-        mixes = Vec::new();
-    }
-    let index = (count >= super::index::MIN_INDEX_PIXELS && prepared.can_match_rgb())
-        .then(|| {
-            MixIndex::try_new(
-                prepared.matcher(),
-                (size.width() * size.width()) as u32,
-                memory_limit - budget.used,
-            )
-        })
-        .flatten();
+    let levels = (size.width() * size.width()) as u32;
+    let (index, mut mixes) =
+        allocate_mix_work(&prepared, count, levels, memory_limit - budget.used);
     dither_yiluoma_with_progress_indexed(
         layout.source,
         &prepared,
@@ -102,6 +84,32 @@ pub fn dither_yiluoma(
     let indices = ImageBuf::<PaletteIndex8>::from_vec_packed(indices, layout.output)
         .expect("validated dimensions and reserved index length");
     Ok(prepared.into_indexed(indices))
+}
+
+/// Gives exact mixture lookup first claim on optional memory, then uses any remainder for RGB
+/// memoization. Both allocations are optional and preserve the literal scan as their fallback.
+fn allocate_mix_work(
+    prepared: &PreparedQuantizer,
+    count: usize,
+    levels: u32,
+    available: u64,
+) -> (Option<MixIndex>, Vec<u64>) {
+    let index = (count >= super::index::MIN_INDEX_PIXELS && prepared.can_match_rgb())
+        .then(|| MixIndex::try_new(prepared.matcher(), levels, available))
+        .flatten();
+    let remaining = available.saturating_sub(index.as_ref().map_or(0, MixIndex::capacity_bytes));
+    let cache_entries = prepared
+        .can_match_rgb()
+        .then(|| crate::prod::quantize::cache::recommended_entries(count, remaining))
+        .unwrap_or_default();
+    let mut mixes = Vec::new();
+    let mut budget = Budget::new(remaining, 0).expect("zero fixed bytes fit available memory");
+    if cache_entries > 0 && budget.reserve(&mut mixes, cache_entries).is_ok() {
+        mixes.resize(cache_entries, 0);
+    } else {
+        mixes = Vec::new();
+    }
+    (index, mixes)
 }
 
 /// Writes the literal scalar recipe into validated caller-owned index storage without allocation.
@@ -436,6 +444,76 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn tight_optional_budget_admits_index_before_rgb_cache() {
+        let dimensions = ImageDimensions::new(32, 32).unwrap();
+        let bytes = (0..32 * 32)
+            .flat_map(|i| {
+                [
+                    (i * 71) as u8,
+                    (i * 37 + 8) as u8,
+                    (i * 113 + 12) as u8,
+                    255,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let source = ImageView::packed(&bytes, dimensions).unwrap();
+        let palette = [
+            [0, 0, 0],
+            [255, 255, 255],
+            [220, 40, 80],
+            [20, 190, 230],
+            [80, 130, 20],
+        ]
+        .map(|rgb| PaletteEntry::Color { rgb });
+        let prepared = PreparedQuantizer::try_new(
+            &palette,
+            AlphaPolicy::Premultiplied {},
+            MatchPolicy::OklabEuclidean,
+            1 << 20,
+        )
+        .unwrap();
+        let levels = 4;
+        let index_capacity = MixIndex::try_new(prepared.matcher(), levels, u64::MAX)
+            .unwrap()
+            .capacity_bytes();
+        let (index, mut mixes) = allocate_mix_work(
+            &prepared,
+            dimensions.pixel_count().unwrap(),
+            levels,
+            index_capacity + 8191,
+        );
+        assert!(index.is_some());
+        assert!(mixes.is_empty());
+
+        let mut expected = vec![0; dimensions.pixel_count().unwrap()];
+        let mut actual = expected.clone();
+        dither_yiluoma_with_progress(
+            source,
+            &prepared,
+            &mut expected,
+            BayerSize::Two,
+            Placement::Everywhere {},
+            &mut [],
+            &mut [],
+            |_| Ok(()),
+        )
+        .unwrap();
+        dither_yiluoma_with_progress_indexed(
+            source,
+            &prepared,
+            &mut actual,
+            BayerSize::Two,
+            Placement::Everywhere {},
+            &mut [],
+            &mut mixes,
+            index.as_ref(),
+            |_| Ok(()),
+        )
+        .unwrap();
+        assert_eq!(actual, expected);
     }
 
     #[test]
