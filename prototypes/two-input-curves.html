@@ -1,7 +1,8 @@
 <!doctype html>
 <!--
   PROTOTYPE, throwaway. Ticket: "Choose the two-input curve representation and interpolation" (#293).
-  Open by double-clicking. The <script id="model"> block is pure and liftable; the rest is page.
+  Serve this folder (it loads celeste.png next to it) and open in a browser.
+  The <script id="model"> block is pure and liftable; the rest is page.
 -->
 <html lang="en">
 	<head>
@@ -10,266 +11,287 @@
 		<title>Prototype: two-input curves</title>
 		<style>
 			:root {
-				--bg: #111214;
-				--panel: #1a1b1e;
-				--line: #2a2c30;
-				--text: #e8e8ea;
-				--muted: #9a9ca3;
-				--accent: #f5b50a;
-				font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+				--bg: #0e0e10;
+				--panel: #18181b;
+				--panel-2: #1f1f23;
+				--line: #2c2c31;
+				--text: #ececef;
+				--muted: #8f8f99;
+				--primary: #facc15;
+				--mono: ui-monospace, 'SF Mono', Menlo, monospace;
+				font: 13px/1.4 'Geist', ui-sans-serif, system-ui, sans-serif;
 				color: var(--text);
 				background: var(--bg);
 			}
+			* {
+				box-sizing: border-box;
+			}
 			body {
 				margin: 0;
-				padding: 28px 32px 64px;
-				max-width: 1280px;
-			}
-			h1 {
-				font-size: 20px;
-				margin: 0 0 6px;
-			}
-			h2 {
-				font-size: 13px;
-				text-transform: uppercase;
-				letter-spacing: 0.06em;
-				color: var(--muted);
-				margin: 0 0 10px;
-				font-weight: 600;
-			}
-			p {
-				margin: 0 0 10px;
-				color: var(--muted);
-				max-width: 78ch;
-			}
-			.intro {
-				margin-bottom: 22px;
-			}
-			.tabs {
-				display: flex;
-				gap: 6px;
-				margin-bottom: 14px;
-				flex-wrap: wrap;
-			}
-			button {
-				font: inherit;
-				color: var(--text);
-				background: var(--panel);
-				border: 1px solid var(--line);
-				border-radius: 6px;
-				padding: 6px 12px;
-				cursor: pointer;
-			}
-			button:hover {
-				border-color: #44474d;
-			}
-			button[aria-pressed='true'] {
-				border-color: var(--accent);
-				color: var(--accent);
-			}
-			button.step[disabled] {
-				opacity: 0.4;
-				cursor: default;
-			}
-			button.step.done {
-				border-color: #3a6b45;
-				color: #8fd19e;
-			}
-			.layout {
+				min-width: 1280px;
+				height: 100vh;
 				display: grid;
-				grid-template-columns: minmax(0, 1fr) 300px;
-				gap: 20px;
+				grid-template-rows: auto minmax(0, 1fr);
 			}
-			.card {
+			main {
+				display: grid;
+				grid-template-columns: 440px minmax(0, 1fr) minmax(0, 1fr) 250px;
+				grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+				min-height: 0;
+			}
+			#viewer-section {
+				grid-column: 1;
+				grid-row: 1 / 3;
+			}
+			#surface-section {
+				grid-column: 2;
+				grid-row: 1;
+			}
+			#scope-section {
+				grid-column: 3;
+				grid-row: 1;
+			}
+			#curve-section {
+				grid-column: 2 / 4;
+				grid-row: 2;
+				border-top: 1px solid var(--line);
+			}
+			#inspector-section {
+				grid-column: 4;
+				grid-row: 1 / 3;
+				border-left: 1px solid var(--line);
+			}
+			header {
+				display: flex;
+				align-items: baseline;
+				gap: 16px;
+				padding: 10px 16px;
+				border-bottom: 1px solid var(--line);
 				background: var(--panel);
-				border: 1px solid var(--line);
-				border-radius: 10px;
-				padding: 16px;
-				margin-bottom: 16px;
+			}
+			header strong {
+				font-size: 14px;
+			}
+			header span {
+				color: var(--muted);
+			}
+			section {
+				position: relative;
+				border-right: 1px solid var(--line);
+				min-width: 0;
+				display: flex;
+				flex-direction: column;
+			}
+			section:last-child {
+				border-right: 0;
+			}
+			.bar {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				height: 34px;
+				padding: 0 10px;
+				border-bottom: 1px solid var(--line);
+				background: var(--panel);
+				flex: none;
+			}
+			.bar h2 {
+				font-size: 12px;
+				font-weight: 600;
+				margin: 0 8px 0 0;
+				letter-spacing: 0.02em;
+			}
+			.bar .spacer {
+				flex: 1;
+			}
+			.bar small {
+				color: var(--muted);
+			}
+			.fill {
+				position: relative;
+				flex: 1;
+				min-height: 0;
 			}
 			canvas {
 				display: block;
-				border-radius: 6px;
-				touch-action: none;
 			}
-			.editor canvas {
-				cursor: crosshair;
+			.fill > canvas {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
 			}
-			.row {
-				display: flex;
-				gap: 16px;
-				flex-wrap: wrap;
-				align-items: flex-start;
-			}
-			.caption {
+			button,
+			select {
+				font: inherit;
 				font-size: 12px;
+				color: var(--text);
+				background: var(--panel-2);
+				border: 1px solid var(--line);
+				border-radius: 0;
+				height: 24px;
+				padding: 0 9px;
+				cursor: pointer;
+			}
+			button:hover,
+			select:hover {
+				border-color: #45454d;
+			}
+			button[aria-pressed='true'] {
+				border-color: var(--primary);
+				color: var(--primary);
+			}
+			.seg {
+				display: flex;
+			}
+			.seg button + button {
+				border-left: 0;
+			}
+			.overlay-label {
+				position: absolute;
+				top: 8px;
+				font-size: 11px;
+				font-weight: 600;
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
+				padding: 3px 6px;
+				background: rgba(0, 0, 0, 0.55);
+				pointer-events: none;
+			}
+			.inspector {
+				padding: 12px 14px;
+				overflow: auto;
+			}
+			.inspector h3 {
+				font-size: 11px;
+				font-weight: 600;
+				letter-spacing: 0.06em;
+				text-transform: uppercase;
 				color: var(--muted);
-				margin-top: 6px;
+				margin: 0 0 8px;
 			}
 			dl {
 				display: grid;
 				grid-template-columns: auto 1fr;
-				gap: 6px 12px;
-				margin: 0;
+				gap: 5px 12px;
+				margin: 0 0 16px;
 			}
 			dt {
 				color: var(--muted);
 			}
 			dd {
 				margin: 0;
+				font-family: var(--mono);
 				font-variant-numeric: tabular-nums;
+				text-align: right;
 			}
-			.changed {
-				color: var(--accent);
-			}
-			label.slider {
-				display: grid;
-				grid-template-columns: 70px 1fr 42px;
-				gap: 8px;
-				align-items: center;
-				margin-top: 8px;
-				color: var(--muted);
-			}
-			input[type='range'] {
-				accent-color: var(--accent);
-			}
-			.steps {
-				display: flex;
-				flex-direction: column;
-				gap: 6px;
-				align-items: flex-start;
-				margin-top: 10px;
+			.big {
+				font-family: var(--mono);
+				font-size: 26px;
+				font-variant-numeric: tabular-nums;
+				margin: 2px 0 12px;
 			}
 			.hint {
-				font-size: 12px;
 				color: var(--muted);
+				font-size: 12px;
+				margin: 0 0 8px;
 			}
-			.hidden {
-				display: none !important;
+			.swatch {
+				display: inline-block;
+				width: 10px;
+				height: 10px;
+				vertical-align: -1px;
+				margin-right: 6px;
+				border: 1px solid rgba(255, 255, 255, 0.25);
 			}
 		</style>
 	</head>
 	<body>
-		<div class="intro">
-			<h1>Two-input curves: which shape should we store?</h1>
-			<p>
-				A two-input curve reads two things from each pixel and decides one change. Here it reads
-				<strong>hue</strong> (left to right) and <strong>lightness</strong> (bottom to top) and
-				decides how much to boost or cut <strong>saturation</strong>. Grey in the map means no change,
-				orange means more saturation, and blue means less.
-			</p>
-			<p>
-				Three ways to store that map are on the table. Try each one, run the walkthroughs, and see
-				which one lets you say what you mean. The test chart on the right shows the result on real
-				colours.
-			</p>
-		</div>
+		<header>
+			<strong>Two-input curves</strong>
+			<span>Hue × lightness drives one change. Prototype for choosing how that curve is stored.</span>
+		</header>
 
-		<div class="tabs" id="tabs">
-			<button data-tab="separable">Separable stack</button>
-			<button data-tab="grid">Control grid</button>
-			<button data-tab="points">Scattered points</button>
-		</div>
-
-		<div class="layout">
-			<div>
-				<div class="card editor">
-					<h2 id="editor-title"></h2>
-					<p id="editor-help"></p>
-					<canvas id="map" width="720" height="300"></canvas>
-					<div class="caption">
-						Hue runs left to right and wraps: the right edge meets the left. Lightness runs bottom
-						(dark) to top (light).
-					</div>
-					<div id="separable-editors" class="row" style="margin-top: 14px">
-						<div>
-							<canvas id="hue-curve" width="470" height="150"></canvas>
-							<div class="caption">Hue curve: drag points, click to add, double-click to remove</div>
-						</div>
-						<div>
-							<canvas id="lum-curve" width="230" height="150"></canvas>
-							<div class="caption">Lightness curve</div>
-						</div>
+		<main>
+			<section id="viewer-section">
+				<div class="bar">
+					<h2>Viewer</h2>
+					<small>Click a colour to grab its point, then drag up or down. Drag the yellow line to wipe.</small>
+				</div>
+				<div class="fill" id="viewer-wrap">
+					<canvas id="viewer"></canvas>
+					<div class="overlay-label" style="left: 8px">Before</div>
+					<div class="overlay-label" style="right: 8px">After</div>
+				</div>
+			</section>
+			<section id="surface-section">
+				<div class="bar">
+					<h2>Surface</h2>
+					<small>Drag a point up or down. Drag elsewhere to orbit.</small>
+				</div>
+				<div class="fill"><canvas id="surface"></canvas></div>
+			</section>
+			<section id="scope-section">
+				<div class="bar">
+					<h2>Colour scope</h2>
+					<small>Oklab</small>
+					<span class="spacer"></span>
+					<div class="seg">
+						<button id="scope-before" aria-pressed="false">Before</button>
+						<button id="scope-motion" aria-pressed="true">Motion</button>
 					</div>
 				</div>
-
-				<div class="card">
-					<h2>Result on a test chart</h2>
-					<div class="row">
-						<div>
-							<canvas id="before" width="352" height="220"></canvas>
-							<div class="caption">Before</div>
-						</div>
-						<div>
-							<canvas id="after" width="352" height="220"></canvas>
-							<div class="caption">After</div>
-						</div>
+				<div class="fill"><canvas id="scope"></canvas></div>
+			</section>
+			<section id="curve-section">
+				<div class="bar">
+					<h2>Curve</h2>
+					<small>Hue × lightness changes</small>
+					<div class="seg" id="outputs">
+						<button data-output="saturation">Saturation</button>
+						<button data-output="hue">Hue</button>
+						<button data-output="lightness">Lightness</button>
 					</div>
-					<p class="hint" style="margin-top: 10px">
-						The chart is every hue across and every lightness down, with a grey strip at the bottom.
-						Greys have no hue, so the change fades out on them.
-						<label style="margin-left: 8px"
-							><input type="file" id="load" accept="image/*" /> or try your own image</label
-						>
-					</p>
+					<span class="spacer"></span>
+					<select id="density" aria-label="Grid density">
+						<option value="6x3">6 × 3 grid</option>
+						<option value="12x5" selected>12 × 5 grid</option>
+						<option value="24x5">24 × 5 grid</option>
+						<option value="36x9">36 × 9 grid</option>
+					</select>
+					<button id="reset">Reset</button>
 				</div>
-
-				<div class="card">
-					<h2>Walkthroughs</h2>
-					<div class="tabs" id="scenario-tabs"></div>
-					<p id="scenario-text"></p>
-					<div class="steps" id="scenario-steps"></div>
-				</div>
-			</div>
-
-			<div>
-				<div class="card">
-					<h2>What is stored</h2>
-					<dl id="state"></dl>
-				</div>
-				<div class="card" id="selected-card">
-					<h2>Selected</h2>
-					<div id="selected"></div>
-				</div>
-				<div class="card">
-					<h2>Free play</h2>
-					<div class="steps">
-						<button data-action="reset">Reset all three to no change</button>
-						<button data-action="preset-red-shadows">Load "shadows of the reds"</button>
-					</div>
-				</div>
-			</div>
-		</div>
+				<div class="fill"><canvas id="flat"></canvas></div>
+			</section>
+			<section id="inspector-section">
+				<div class="bar"><h2>Inspector</h2></div>
+				<div class="inspector" id="inspector"></div>
+			</section>
+		</main>
 
 		<script id="model">
 			/*
-			 * Pure model: no DOM. Curves use the package's monotone Fritsch-Butland spline, a cyclic
-			 * variant for hue, and three candidate two-input representations.
-			 * Values are normalised: 0.5 is no change, 1 doubles saturation, 0 removes it.
+			 * Pure model: no DOM. A two-input curve stored as a control grid: values at hue columns ×
+			 * lightness rows, with movable, insertable column and row positions. Between points it
+			 * follows the package's monotone Fritsch-Butland spline, cyclic along hue, so the surface
+			 * never overshoots its points. Values are normalised: 0.5 is no change.
 			 */
-			const Model = (() => {
+			const Curve2D = (() => {
 				const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 				const wrap = (v) => v - Math.floor(v);
 
-				/** Fritsch-Butland tangent for secants d0, d1 over widths h0, h1 (the spec's rule). */
 				function tangent(d0, d1, h0, h1) {
 					if (d0 === 0 || d1 === 0 || Math.sign(d0) !== Math.sign(d1)) return 0;
 					const w1 = 2 * h1 + h0;
 					const w2 = h1 + 2 * h0;
 					return (w1 + w2) / (w1 / d0 + w2 / d1);
 				}
-
 				function hermite(y0, y1, m0, m1, h, s) {
 					const d = (y1 - y0) / h;
-					const c2 = (3 * d - 2 * m0 - m1) / h;
-					const c3 = (m0 + m1 - 2 * d) / (h * h);
-					return y0 + s * (m0 + s * (c2 + s * c3));
+					return y0 + s * (m0 + s * ((3 * d - 2 * m0 - m1) / h + (s * (m0 + m1 - 2 * d)) / (h * h)));
 				}
-
-				/** Open monotone spline over sorted [x, y] points; clamps outside the ends. */
-				function spline(points) {
-					const xs = points.map((p) => p[0]);
-					const ys = points.map((p) => p[1]);
+				/** Open monotone spline; clamps outside its ends. */
+				function spline(xs, ys) {
 					const n = xs.length;
 					const h = [];
 					const d = [];
@@ -277,25 +299,18 @@
 						h[k] = xs[k + 1] - xs[k];
 						d[k] = (ys[k + 1] - ys[k]) / h[k];
 					}
-					const m = xs.map((_, k) =>
-						k === 0 ? d[0] : k === n - 1 ? d[n - 2] : tangent(d[k - 1], d[k], h[k - 1], h[k])
-					);
+					const m = xs.map((_, k) => (k === 0 ? d[0] : k === n - 1 ? d[n - 2] : tangent(d[k - 1], d[k], h[k - 1], h[k])));
 					return (v) => {
-						if (n === 1) return ys[0];
-						v = clamp(v, xs[0], xs[n - 1]);
+						if (v <= xs[0]) return ys[0];
 						if (v >= xs[n - 1]) return ys[n - 1];
 						let k = 0;
 						while (xs[k + 1] <= v) k++;
 						return hermite(ys[k], ys[k + 1], m[k], m[k + 1], h[k], v - xs[k]);
 					};
 				}
-
-				/** Cyclic monotone spline over points with x in [0, 1): the last point joins the first. */
-				function cyclicSpline(points) {
-					const n = points.length;
-					if (n === 1) return () => points[0][1];
-					const xs = points.map((p) => p[0]);
-					const ys = points.map((p) => p[1]);
+				/** Cyclic monotone spline over x in [0, 1). */
+				function cyclic(xs, ys) {
+					const n = xs.length;
 					const h = xs.map((x, k) => (k === n - 1 ? xs[0] + 1 - x : xs[k + 1] - x));
 					const d = ys.map((y, k) => (ys[(k + 1) % n] - y) / h[k]);
 					const m = xs.map((_, k) => tangent(d[(k - 1 + n) % n], d[k], h[(k - 1 + n) % n], h[k]));
@@ -309,630 +324,928 @@
 					};
 				}
 
-				// Grid resolution: 12 hue columns (every 30°) by 5 lightness rows.
-				const GRID_HUES = 12;
-				const GRID_LIGHTS = 5;
-				const gridHue = (i) => i / GRID_HUES;
-				const gridLight = (j) => j / (GRID_LIGHTS - 1);
-
-				const neutral = () => ({
-					separable: {
-						hue: [
-							[0, 0.5],
-							[0.5, 0.5]
-						],
-						light: [
-							[0, 0.5],
-							[1, 0.5]
-						]
-					},
-					grid: Array.from({ length: GRID_LIGHTS }, () => Array(GRID_HUES).fill(0.5)),
-					points: []
-				});
-
-				/**
-				 * Compile a representation into an evaluator (hue, light) -> value in [0, 1].
-				 * Separable: two 1D curves whose saturation gains multiply.
-				 * Grid: monotone spline along hue (cyclic) in every row, then along lightness.
-				 * Points: Gaussian bumps around each point, summed on top of no change.
-				 */
-				function compile(kind, model) {
-					if (kind === 'separable') {
-						const fh = cyclicSpline(model.separable.hue);
-						const fl = spline(model.separable.light);
-						return (hue, light) => clamp((2 * fh(hue) * 2 * fl(light)) / 2, 0, 1);
-					}
-					if (kind === 'grid') {
-						const rows = model.grid.map((row) => cyclicSpline(row.map((v, i) => [gridHue(i), v])));
-						return (hue, light) => {
-							const column = rows.map((row, j) => [gridLight(j), row(hue)]);
-							return clamp(spline(column)(light), 0, 1);
-						};
-					}
-					const pts = model.points;
-					return (hue, light) => {
-						let v = 0.5;
-						for (const p of pts) {
-							let dh = Math.abs(hue - p.hue);
-							dh = Math.min(dh, 1 - dh);
-							const dl = light - p.light;
-							v += (p.value - 0.5) * Math.exp(-(dh * dh + dl * dl) / (2 * p.radius * p.radius));
-						}
-						return clamp(v, 0, 1);
+				/** A neutral grid with evenly spaced columns and rows. */
+				function grid(columns, rows) {
+					return {
+						hues: Array.from({ length: columns }, (_, i) => i / columns),
+						lights: Array.from({ length: rows }, (_, j) => j / (rows - 1)),
+						values: Array.from({ length: rows }, () => Array(columns).fill(0.5))
 					};
 				}
 
-				/** Numbers each representation stores, the honest measure of its size. */
-				function storedNumbers(kind, model) {
-					if (kind === 'separable') return 2 * (model.separable.hue.length + model.separable.light.length);
-					if (kind === 'grid') return GRID_HUES * GRID_LIGHTS;
-					return model.points.length * 4;
-				}
-
-				// Colour: sRGB bytes <-> OKLCH (L, C, h in turns), Björn Ottosson's Oklab.
-				const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-				const toGamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
-				function rgbToOklch(r, g, b) {
-					[r, g, b] = [r / 255, g / 255, b / 255].map(toLinear);
-					const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-					const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-					const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-					const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
-					const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
-					const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
-					return [L, Math.hypot(A, B), wrap(Math.atan2(B, A) / (2 * Math.PI))];
-				}
-				function oklchToRgb(L, C, h) {
-					const A = C * Math.cos(2 * Math.PI * h);
-					const B = C * Math.sin(2 * Math.PI * h);
-					const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
-					const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
-					const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
-					const r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-					const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-					const b = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
-					return [r, g, b].map((c) => Math.round(255 * clamp(toGamma(clamp(c, 0, 1)), 0, 1)));
-				}
-
-				// Hue confidence: full at chroma 0.02 and above, fading to nothing on exact greys.
-				const HUE_CONFIDENCE_CHROMA = 0.02;
-
-				/** Apply a compiled curve to RGBA bytes: saturation gain from the curve, faded on greys. */
-				function apply(evaluate, rgba) {
-					const out = new Uint8ClampedArray(rgba.length);
-					for (let i = 0; i < rgba.length; i += 4) {
-						const [L, C, h] = rgbToOklch(rgba[i], rgba[i + 1], rgba[i + 2]);
-						const confidence = clamp(C / HUE_CONFIDENCE_CHROMA, 0, 1);
-						const gain = 1 + confidence * (2 * evaluate(h, L) - 1);
-						const [r, g, b] = oklchToRgb(L, C * gain, h);
-						out.set([r, g, b, rgba[i + 3]], i);
+				/** Sample the surface into a hue × lightness table for fast lookup. */
+				const TABLE_HUES = 360;
+				const TABLE_LIGHTS = 101;
+				function table(g) {
+					const rows = g.values.map((row) => cyclic(g.hues, row));
+					const out = new Float32Array(TABLE_HUES * TABLE_LIGHTS);
+					const column = new Array(g.lights.length);
+					for (let i = 0; i < TABLE_HUES; i++) {
+						for (let j = 0; j < rows.length; j++) column[j] = rows[j](i / TABLE_HUES);
+						const f = spline(g.lights, column);
+						for (let l = 0; l < TABLE_LIGHTS; l++) out[l * TABLE_HUES + i] = clamp(f(l / (TABLE_LIGHTS - 1)), 0, 1);
 					}
 					return out;
 				}
-
-				/** The test chart: every hue across, lightness down, a grey strip at the bottom. */
-				function chart(width, height) {
-					const rgba = new Uint8ClampedArray(width * height * 4);
-					const greyRows = Math.round(height * 0.12);
-					for (let y = 0; y < height; y++) {
-						for (let x = 0; x < width; x++) {
-							const grey = y >= height - greyRows;
-							const L = grey ? x / (width - 1) : 0.92 - (0.75 * y) / (height - greyRows - 1);
-							const [r, g, b] = oklchToRgb(L, grey ? 0 : 0.07, x / width);
-							rgba.set([r, g, b, 255], (y * width + x) * 4);
-						}
-					}
-					return rgba;
+				/** Bilinear lookup; hue wraps. */
+				function lookup(t, hue, light) {
+					const x = wrap(hue) * TABLE_HUES;
+					const y = clamp(light, 0, 1) * (TABLE_LIGHTS - 1);
+					const x0 = Math.floor(x) % TABLE_HUES;
+					const x1 = (x0 + 1) % TABLE_HUES;
+					const y0 = Math.min(TABLE_LIGHTS - 2, Math.floor(y));
+					const fx = x - Math.floor(x);
+					const fy = y - y0;
+					const a = t[y0 * TABLE_HUES + x0] * (1 - fx) + t[y0 * TABLE_HUES + x1] * fx;
+					const b = t[(y0 + 1) * TABLE_HUES + x0] * (1 - fx) + t[(y0 + 1) * TABLE_HUES + x1] * fx;
+					return a + (b - a) * fy;
 				}
 
-				// Presets used by the walkthroughs, one per representation.
-				const red = 0.08; // OKLCH hue of a clear red, in turns (about 29°)
-				const presets = {
-					separableRedShadows: {
-						hue: [
-							[0, 0.5],
-							[red, 0.85],
-							[0.2, 0.5],
-							[0.9, 0.5]
-						],
-						light: [
-							[0, 0.85],
-							[0.45, 0.85],
-							[0.65, 0.5],
-							[1, 0.5]
-						]
-					},
-					gridRedShadows: (() => {
-						const grid = neutral().grid;
-						grid[0][1] = 0.9;
-						grid[1][1] = 0.9;
-						grid[1][0] = 0.75;
-						grid[1][2] = 0.75;
-						return grid;
-					})(),
-					pointsRedShadows: [{ hue: red, light: 0.35, value: 0.95, radius: 0.08 }]
-				};
+				/** Insert a column at a hue without changing the surface: its values come from the surface. */
+				function insertColumn(g, hue) {
+					const t = table(g);
+					const at = g.hues.findIndex((h) => h > hue);
+					const index = at < 0 ? g.hues.length : at;
+					const hues = [...g.hues];
+					hues.splice(index, 0, hue);
+					const values = g.values.map((row, j) => {
+						const next = [...row];
+						next.splice(index, 0, lookup(t, hue, g.lights[j]));
+						return next;
+					});
+					return { g: { ...g, hues, values }, index };
+				}
 
-				return {
-					compile,
-					storedNumbers,
-					neutral,
-					apply,
-					chart,
-					presets,
-					rgbToOklch,
-					oklchToRgb,
-					GRID_HUES,
-					GRID_LIGHTS,
-					gridHue,
-					gridLight,
-					red
-				};
+				// Colour: OKLCH (L, C, hue in turns) <-> sRGB.
+				const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+				const toGamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+				function rgbToOklab(r, g, b) {
+					r = toLinear(r / 255);
+					g = toLinear(g / 255);
+					b = toLinear(b / 255);
+					const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+					const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+					const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+					return [
+						0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+						1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+						0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+					];
+				}
+				function oklabToRgb(L, A, B, out, o) {
+					const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+					const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+					const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+					out[o] = 255 * toGamma(clamp(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, 0, 1));
+					out[o + 1] = 255 * toGamma(clamp(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, 0, 1));
+					out[o + 2] = 255 * toGamma(clamp(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s, 0, 1));
+				}
+
+				// Hue confidence: full from chroma 0.02, fading to nothing on exact greys.
+				const CONFIDENT_CHROMA = 0.02;
+
+				/**
+				 * The change a curve value makes to one OKLCH colour, per output:
+				 * saturation gains up to double, hue turns up to a quarter turn, lightness offsets up to 0.25.
+				 */
+				function change(output, v, L, C, h) {
+					const w = clamp(C / CONFIDENT_CHROMA, 0, 1) * (2 * v - 1);
+					if (output === 'saturation') return [L, C * (1 + w), h];
+					if (output === 'hue') return [L, C, h + w * 0.25];
+					return [clamp(L + w * 0.25, 0, 1), C, h];
+				}
+
+				return { grid, table, lookup, insertColumn, rgbToOklab, oklabToRgb, change, clamp, wrap };
 			})();
 		</script>
 
 		<script>
-			// Page shell. Everything below only reads and replaces state, then re-renders.
+			// ---------------- Page shell ----------------
 			const $ = (id) => document.getElementById(id);
-			const TITLES = {
-				separable: [
-					'Separable stack',
-					'Two ordinary curves: one over hue, one over lightness. Their boosts multiply. This is what DaVinci Resolve, Nuke, and Lumetri ship.'
-				],
-				grid: [
-					'Control grid',
-					'A value at every 30° of hue and every quarter of lightness. Drag a dot up or down to set it. Between dots the surface follows the same smooth, no-overshoot spline as our curves.'
-				],
-				points: [
-					'Scattered points',
-					'Click anywhere to drop a point. Drag to move it. Each point pushes a soft round area; set its strength and size on the right. Double-click removes it.'
-				]
+			const { grid, table, lookup, insertColumn, rgbToOklab, oklabToRgb, change, clamp, wrap } = Curve2D;
+
+			const HUE_NAMES = [
+				['Red', 29],
+				['Orange', 60],
+				['Yellow', 105],
+				['Green', 142],
+				['Cyan', 195],
+				['Blue', 264],
+				['Purple', 305],
+				['Magenta', 340]
+			];
+			const hueName = (turns) => {
+				const deg = wrap(turns) * 360;
+				let best = HUE_NAMES[0];
+				for (const n of HUE_NAMES) {
+					const d = Math.min(Math.abs(n[1] - deg), 360 - Math.abs(n[1] - deg));
+					const b = Math.min(Math.abs(best[1] - deg), 360 - Math.abs(best[1] - deg));
+					if (d < b) best = n;
+				}
+				return best[0];
+			};
+			const fmtChange = (output, v) => {
+				const w = 2 * v - 1;
+				if (output === 'saturation') return `${w >= 0 ? '+' : ''}${Math.round(w * 100)}%`;
+				if (output === 'hue') return `${w >= 0 ? '+' : ''}${Math.round(w * 90)}°`;
+				return `${w >= 0 ? '+' : ''}${Math.round(w * 25)} L`;
+			};
+			const OUTPUT_NAMES = { saturation: 'saturation', hue: 'hue', lightness: 'lightness' };
+
+			const state = {
+				g: grid(12, 5),
+				output: 'saturation',
+				selected: null, // { i, j }
+				wipe: 0.5,
+				pick: null, // { hue, light } of the last picked colour
+				scopeBefore: false,
+				scopeMotion: true
+			};
+			let t = table(state.g);
+
+			// ---------------- Image ----------------
+			const WORK_HEIGHT = 820;
+			let image = null; // { w, h, src: Uint8ClampedArray, L, C, H: Float32Array, out }
+			const img = new Image();
+			img.src = 'celeste.png';
+			img.onload = () => {
+				const scale = WORK_HEIGHT / img.height;
+				const w = Math.round(img.width * scale);
+				const h = WORK_HEIGHT;
+				const c = new OffscreenCanvas(w, h);
+				const ctx = c.getContext('2d');
+				ctx.drawImage(img, 0, 0, w, h);
+				const src = ctx.getImageData(0, 0, w, h).data;
+				const n = w * h;
+				const L = new Float32Array(n);
+				const C = new Float32Array(n);
+				const H = new Float32Array(n);
+				for (let p = 0; p < n; p++) {
+					const [l, a, b] = rgbToOklab(src[p * 4], src[p * 4 + 1], src[p * 4 + 2]);
+					L[p] = l;
+					C[p] = Math.hypot(a, b);
+					H[p] = wrap(Math.atan2(b, a) / (2 * Math.PI));
+				}
+				image = { w, h, src, L, C, H, out: new ImageData(w, h) };
+				Scope.setSamples(image);
+				update();
 			};
 
-			let state = { tab: 'grid', model: Model.neutral(), selected: null, changed: null };
-			let source = { rgba: Model.chart(352, 220), width: 352, height: 220 };
-
-			function set(next, changed) {
-				state = { ...state, ...next, changed };
-				render();
-			}
-
-			// Map canvas geometry: hue across, lightness up.
-			const map = $('map');
-			const toMap = (hue, light) => [hue * map.width, (1 - light) * map.height];
-			const fromMap = (x, y) => [Math.min(0.9999, Math.max(0, x / map.width)), Math.min(1, Math.max(0, 1 - y / map.height))];
-
-			function heat(v) {
-				// 0.5 neutral grey, up to orange, down to blue.
-				const t = (v - 0.5) * 2;
-				const grey = [58, 60, 66];
-				const hot = [245, 150, 30];
-				const cold = [60, 130, 245];
-				const target = t >= 0 ? hot : cold;
-				const k = Math.min(1, Math.abs(t));
-				return grey.map((g, i) => Math.round(g + (target[i] - g) * k));
-			}
-
-			function drawMap(evaluate) {
-				const ctx = map.getContext('2d');
-				const img = ctx.createImageData(map.width, map.height);
-				for (let y = 0; y < map.height; y++) {
-					for (let x = 0; x < map.width; x++) {
-						const [hue, light] = fromMap(x + 0.5, y + 0.5);
-						img.data.set([...heat(evaluate(hue, light)), 255], (y * map.width + x) * 4);
+			function applyImage() {
+				if (!image) return;
+				const { L, C, H, out, src } = image;
+				const d = out.data;
+				for (let p = 0, n = L.length; p < n; p++) {
+					const v = lookup(t, H[p], L[p]);
+					const o = p * 4;
+					if (v === 0.5 || C[p] === 0) {
+						d[o] = src[o];
+						d[o + 1] = src[o + 1];
+						d[o + 2] = src[o + 2];
+					} else {
+						const [l, c, h] = change(state.output, v, L[p], C[p], H[p]);
+						oklabToRgb(l, c * Math.cos(2 * Math.PI * h), c * Math.sin(2 * Math.PI * h), d, o);
 					}
-				}
-				ctx.putImageData(img, 0, 0);
-				// Hue strip along the bottom.
-				for (let x = 0; x < map.width; x++) {
-					ctx.fillStyle = `rgb(${Model.oklchToRgb(0.7, 0.12, x / map.width)})`;
-					ctx.fillRect(x, map.height - 6, 1, 6);
-				}
-				if (state.tab === 'grid') {
-					state.model.grid.forEach((row, j) =>
-						row.forEach((v, i) => {
-							const [x, y] = toMap(Model.gridHue(i), Model.gridLight(j));
-							dot(ctx, x, Math.min(map.height - 10, Math.max(10, y)), v, isSelected('grid', i, j));
-						})
-					);
-				}
-				if (state.tab === 'points') {
-					state.model.points.forEach((p, k) => {
-						const [x, y] = toMap(p.hue, p.light);
-						ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-						ctx.beginPath();
-						ctx.arc(x, y, p.radius * map.height, 0, 2 * Math.PI);
-						ctx.stroke();
-						dot(ctx, x, y, p.value, isSelected('point', k));
-					});
+					d[o + 3] = 255;
 				}
 			}
 
-			function dot(ctx, x, y, v, selected) {
+			// ---------------- Viewer ----------------
+			const viewer = $('viewer');
+			const beforeCanvas = new OffscreenCanvas(1, 1);
+			const afterCanvas = new OffscreenCanvas(1, 1);
+			function fitCanvas(canvas) {
+				const r = canvas.getBoundingClientRect();
+				const dpr = window.devicePixelRatio || 1;
+				const w = Math.round(r.width * dpr);
+				const h = Math.round(r.height * dpr);
+				if (canvas.width !== w || canvas.height !== h) {
+					canvas.width = w;
+					canvas.height = h;
+				}
+				return dpr;
+			}
+			function viewerRect() {
+				const scale = Math.min(viewer.width / image.w, viewer.height / image.h);
+				const w = image.w * scale;
+				const h = image.h * scale;
+				return { x: (viewer.width - w) / 2, y: (viewer.height - h) / 2, w, h, scale };
+			}
+			function drawViewer() {
+				if (!image) return;
+				const dpr = fitCanvas(viewer);
+				if (beforeCanvas.width !== image.w) {
+					beforeCanvas.width = afterCanvas.width = image.w;
+					beforeCanvas.height = afterCanvas.height = image.h;
+					beforeCanvas.getContext('2d').putImageData(new ImageData(image.src, image.w, image.h), 0, 0);
+				}
+				afterCanvas.getContext('2d').putImageData(image.out, 0, 0);
+				const ctx = viewer.getContext('2d');
+				ctx.fillStyle = '#0b0b0d';
+				ctx.fillRect(0, 0, viewer.width, viewer.height);
+				const r = viewerRect();
+				const split = r.x + r.w * state.wipe;
+				ctx.save();
 				ctx.beginPath();
-				ctx.arc(x, y, selected ? 7 : 5, 0, 2 * Math.PI);
-				ctx.fillStyle = `rgb(${heat(v)})`;
+				ctx.rect(r.x, r.y, split - r.x, r.h);
+				ctx.clip();
+				ctx.drawImage(beforeCanvas, r.x, r.y, r.w, r.h);
+				ctx.restore();
+				ctx.save();
+				ctx.beginPath();
+				ctx.rect(split, r.y, r.x + r.w - split, r.h);
+				ctx.clip();
+				ctx.drawImage(afterCanvas, r.x, r.y, r.w, r.h);
+				ctx.restore();
+				ctx.fillStyle = '#facc15';
+				ctx.fillRect(split - dpr, r.y, 2 * dpr, r.h);
+				ctx.beginPath();
+				ctx.arc(split, r.y + r.h / 2, 7 * dpr, 0, 2 * Math.PI);
 				ctx.fill();
-				ctx.lineWidth = selected ? 2.5 : 1.5;
-				ctx.strokeStyle = selected ? '#f5b50a' : '#fff';
-				ctx.stroke();
 			}
-
-			const isSelected = (kind, a, b) =>
-				state.selected && state.selected.kind === kind && state.selected.a === a && (b === undefined || state.selected.b === b);
-
-			function drawCurve(canvas, points, cyclic) {
-				const ctx = canvas.getContext('2d');
-				const { width: w, height: h } = canvas;
-				ctx.fillStyle = '#141518';
-				ctx.fillRect(0, 0, w, h);
-				ctx.strokeStyle = '#2a2c30';
-				ctx.beginPath();
-				ctx.moveTo(0, h / 2);
-				ctx.lineTo(w, h / 2);
-				ctx.stroke();
-				if (cyclic) {
-					for (let x = 0; x < w; x++) {
-						ctx.fillStyle = `rgb(${Model.oklchToRgb(0.7, 0.12, x / w)})`;
-						ctx.fillRect(x, h - 5, 1, 5);
-					}
-				}
-				const f = Model.compile('separable', {
-					separable: cyclic ? { hue: points, light: [[0, 0.5], [1, 0.5]] } : { hue: [[0, 0.5]], light: points }
-				});
-				ctx.strokeStyle = '#f5b50a';
-				ctx.lineWidth = 2;
-				ctx.beginPath();
-				for (let x = 0; x <= w; x++) {
-					const v = cyclic ? f(x / w, 0.5) : f(0, x / w);
-					const y = (1 - v) * h;
-					x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-				}
-				ctx.stroke();
-				points.forEach(([px, py], k) => {
-					ctx.beginPath();
-					ctx.arc(px * w, (1 - py) * h, 5, 0, 2 * Math.PI);
-					ctx.fillStyle = '#111214';
-					ctx.fill();
-					ctx.strokeStyle = isSelected(cyclic ? 'hue' : 'light', k) ? '#f5b50a' : '#fff';
-					ctx.lineWidth = 2;
-					ctx.stroke();
-				});
-			}
-
-			function drawResult(evaluate) {
-				const put = (canvas, rgba) => {
-					canvas.width = source.width;
-					canvas.height = source.height;
-					canvas.getContext('2d').putImageData(new ImageData(rgba, source.width, source.height), 0, 0);
-				};
-				put($('before'), source.rgba);
-				put($('after'), Model.apply(evaluate, source.rgba));
-			}
-
-			function surfaceRange(evaluate) {
-				let lo = 1;
-				let hi = 0;
-				for (let j = 0; j <= 60; j++)
-					for (let i = 0; i < 180; i++) {
-						const v = evaluate(i / 180, j / 60);
-						lo = Math.min(lo, v);
-						hi = Math.max(hi, v);
-					}
-				return [lo, hi];
-			}
-
-			function controlRange() {
-				const m = state.model;
-				const values =
-					state.tab === 'grid'
-						? m.grid.flat()
-						: state.tab === 'points'
-							? [0.5, ...m.points.map((p) => p.value)]
-							: [...m.separable.hue, ...m.separable.light].map((p) => p[1]);
-				return [Math.min(...values), Math.max(...values)];
-			}
-
-			const pct = (v) => `${Math.round((2 * v - 1) * 100)}%`.replace(/^(\d)/, '+$1');
-
-			function renderState(evaluate) {
-				const [lo, hi] = surfaceRange(evaluate);
-				const [clo, chi] = controlRange();
-				const overshoot =
-					state.tab === 'points'
-						? 'overlapping points add up'
-						: state.tab === 'separable'
-							? 'the two boosts multiply'
-							: lo < clo - 1e-3 || hi > chi + 1e-3
-								? 'yes'
-								: 'none';
-				const rows = [
-					['Shape', TITLES[state.tab][0]],
-					['Numbers stored', Model.storedNumbers(state.tab, state.model)],
-					['Strongest boost', pct(hi)],
-					['Strongest cut', pct(lo)],
-					['Overshoot past the controls', overshoot],
-					['Last change', state.changed ?? 'nothing yet']
-				];
-				$('state').innerHTML = rows
-					.map(([k, v]) => `<dt>${k}</dt><dd class="${k === 'Last change' && state.changed ? 'changed' : ''}">${v}</dd>`)
-					.join('');
-			}
-
-			function renderSelected() {
-				const s = state.selected;
-				const card = $('selected');
-				if (!s) {
-					card.innerHTML = '<p class="hint">Nothing selected. Pick a dot or point to adjust it here.</p>';
+			let viewerDrag = null;
+			viewer.addEventListener('pointerdown', (e) => {
+				if (!image) return;
+				const dpr = window.devicePixelRatio || 1;
+				const x = e.offsetX * dpr;
+				const y = e.offsetY * dpr;
+				const r = viewerRect();
+				const split = r.x + r.w * state.wipe;
+				viewer.setPointerCapture(e.pointerId);
+				if (Math.abs(x - split) < 10 * dpr) {
+					viewerDrag = { kind: 'wipe' };
 					return;
 				}
-				if (s.kind === 'grid') {
-					const v = state.model.grid[s.b][s.a];
-					card.innerHTML = `<p>Grid dot at hue ${Math.round(Model.gridHue(s.a) * 360)}°, lightness ${Math.round(
-						Model.gridLight(s.b) * 100
-					)}%</p>${slider('Saturation', v, 'grid-value')}`;
-				} else if (s.kind === 'point') {
-					const p = state.model.points[s.a];
-					card.innerHTML = `<p>Point at hue ${Math.round(p.hue * 360)}°, lightness ${Math.round(p.light * 100)}%</p>${slider(
-						'Saturation',
-						p.value,
-						'point-value'
-					)}${slider('Size', p.radius / 0.3, 'point-radius', `${Math.round(p.radius * 100)}`)}`;
-				} else {
-					card.innerHTML = '<p class="hint">Drag the point on the curve itself.</p>';
-				}
-			}
-
-			const slider = (label, v, action, text) =>
-				`<label class="slider">${label}<input type="range" min="0" max="1" step="0.01" value="${v}" data-slider="${action}"><span>${
-					text ?? pct(v)
-				}</span></label>`;
-
-			function render() {
-				document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.tab === state.tab));
-				$('editor-title').textContent = TITLES[state.tab][0];
-				$('editor-help').textContent = TITLES[state.tab][1];
-				$('separable-editors').classList.toggle('hidden', state.tab !== 'separable');
-				const evaluate = Model.compile(state.tab, state.model);
-				drawMap(evaluate);
-				if (state.tab === 'separable') {
-					drawCurve($('hue-curve'), state.model.separable.hue, true);
-					drawCurve($('lum-curve'), state.model.separable.light, false);
-				}
-				drawResult(evaluate);
-				renderState(evaluate);
-				renderSelected();
-				renderScenario();
-			}
-
-			// ---------- Editing ----------
-			const withModel = (fn) => {
-				const model = structuredClone(state.model);
-				fn(model);
-				return model;
-			};
-
-			let drag = null;
-			map.addEventListener('pointerdown', (e) => {
-				const { offsetX: x, offsetY: y } = e;
-				if (state.tab === 'grid') {
-					let best = null;
-					state.model.grid.forEach((row, j) =>
-						row.forEach((_, i) => {
-							const [gx, gy] = toMap(Model.gridHue(i), Model.gridLight(j));
-							const d = Math.hypot(gx - x, Math.min(map.height - 10, Math.max(10, gy)) - y);
-							if (d < 14 && (!best || d < best.d)) best = { d, i, j };
-						})
-					);
-					if (!best) return;
-					drag = { kind: 'grid', i: best.i, j: best.j, y0: y, v0: state.model.grid[best.j][best.i] };
-					set({ selected: { kind: 'grid', a: best.i, b: best.j } }, state.changed);
-				}
-				if (state.tab === 'points') {
-					const k = state.model.points.findIndex((p) => {
-						const [px, py] = toMap(p.hue, p.light);
-						return Math.hypot(px - x, py - y) < 10;
+				const px = Math.floor((x - r.x) / r.scale);
+				const py = Math.floor((y - r.y) / r.scale);
+				if (px < 0 || py < 0 || px >= image.w || py >= image.h) return;
+				const p = py * image.w + px;
+				const hue = image.H[p];
+				const light = image.L[p];
+				const g = state.g;
+				// Nearest point in hue (wrapping) and lightness.
+				let best = null;
+				g.hues.forEach((hh, i) => {
+					let dh = Math.abs(hh - hue);
+					dh = Math.min(dh, 1 - dh);
+					g.lights.forEach((ll, j) => {
+						const d = Math.hypot(dh * 2, ll - light);
+						if (!best || d < best.d) best = { d, i, j };
 					});
-					if (k >= 0) {
-						drag = { kind: 'point', k };
-						set({ selected: { kind: 'point', a: k } }, state.changed);
-					} else {
-						const [hue, light] = fromMap(x, y);
-						const model = withModel((m) => m.points.push({ hue, light, value: 0.85, radius: 0.08 }));
-						set(
-							{ model, selected: { kind: 'point', a: model.points.length - 1 } },
-							`added a point at ${Math.round(hue * 360)}°`
-						);
+				});
+				state.selected = { i: best.i, j: best.j };
+				state.pick = { hue, light, chroma: image.C[p] };
+				viewerDrag = { kind: 'push', y0: e.offsetY, v0: g.values[best.j][best.i] };
+				update();
+			});
+			viewer.addEventListener('pointermove', (e) => {
+				if (!viewerDrag) return;
+				if (viewerDrag.kind === 'wipe') {
+					const dpr = window.devicePixelRatio || 1;
+					const r = viewerRect();
+					state.wipe = clamp((e.offsetX * dpr - r.x) / r.w, 0, 1);
+					drawViewer();
+					return;
+				}
+				setSelected(viewerDrag.v0 + (viewerDrag.y0 - e.offsetY) / 250);
+			});
+			viewer.addEventListener('pointerup', () => (viewerDrag = null));
+
+			function setSelected(v) {
+				const s = state.selected;
+				if (!s) return;
+				state.g.values[s.j][s.i] = clamp(v, 0, 1);
+				update();
+			}
+
+			// ---------------- Flat grid editor ----------------
+			const flat = $('flat');
+			const PAD = { l: 40, r: 12, t: 12, b: 34 };
+			function flatGeom() {
+				const w = flat.width;
+				const h = flat.height;
+				const dpr = window.devicePixelRatio || 1;
+				const pad = { l: PAD.l * dpr, r: PAD.r * dpr, t: PAD.t * dpr, b: PAD.b * dpr };
+				return { x: pad.l, y: pad.t, w: w - pad.l - pad.r, h: h - pad.t - pad.b, dpr };
+			}
+			const flatX = (G, hue) => G.x + hue * G.w;
+			const flatY = (G, light) => G.y + (1 - light) * G.h;
+			const REFERENCE_CHROMA = 0.1;
+			function drawFlat() {
+				const dpr = fitCanvas(flat);
+				const G = flatGeom();
+				const ctx = flat.getContext('2d');
+				ctx.fillStyle = '#131316';
+				ctx.fillRect(0, 0, flat.width, flat.height);
+				// Background: the colour every hue × lightness becomes, at a fixed chroma.
+				const W = Math.max(1, Math.round(G.w / 2));
+				const H = Math.max(1, Math.round(G.h / 2));
+				const bg = new ImageData(W, H);
+				for (let y = 0; y < H; y++) {
+					const light = 1 - y / (H - 1);
+					for (let x = 0; x < W; x++) {
+						const hue = x / W;
+						const v = lookup(t, hue, light);
+						const [l, c, h] = change(state.output, v, light, REFERENCE_CHROMA, hue);
+						oklabToRgb(l, c * Math.cos(2 * Math.PI * h), c * Math.sin(2 * Math.PI * h), bg.data, (y * W + x) * 4);
+						bg.data[(y * W + x) * 4 + 3] = 255;
 					}
 				}
-				map.setPointerCapture(e.pointerId);
-			});
-			map.addEventListener('pointermove', (e) => {
-				if (!drag) return;
-				if (drag.kind === 'grid') {
-					const v = Math.min(1, Math.max(0, drag.v0 + (drag.y0 - e.offsetY) / 150));
-					set({ model: withModel((m) => (m.grid[drag.j][drag.i] = v)) }, `grid dot set to ${pct(v)}`);
-				} else {
-					const [hue, light] = fromMap(e.offsetX, e.offsetY);
-					set({ model: withModel((m) => Object.assign(m.points[drag.k], { hue, light })) }, 'moved a point');
+				const tmp = new OffscreenCanvas(W, H);
+				tmp.getContext('2d').putImageData(bg, 0, 0);
+				ctx.imageSmoothingEnabled = true;
+				ctx.drawImage(tmp, G.x, G.y, G.w, G.h);
+
+				const g = state.g;
+				// Grid lines through the points.
+				ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+				ctx.lineWidth = dpr;
+				for (const hue of g.hues) {
+					ctx.beginPath();
+					ctx.moveTo(flatX(G, hue), G.y);
+					ctx.lineTo(flatX(G, hue), G.y + G.h);
+					ctx.stroke();
 				}
-			});
-			map.addEventListener('pointerup', () => (drag = null));
-			map.addEventListener('dblclick', (e) => {
-				if (state.tab !== 'points') return;
-				const k = state.model.points.findIndex((p) => {
-					const [px, py] = toMap(p.hue, p.light);
-					return Math.hypot(px - e.offsetX, py - e.offsetY) < 10;
-				});
-				if (k < 0) return;
-				set({ model: withModel((m) => m.points.splice(k, 1)), selected: null }, 'removed a point');
-			});
-
-			function curveEditor(canvas, key, cyclic) {
-				let dragging = null;
-				canvas.addEventListener('pointerdown', (e) => {
-					const w = canvas.width;
-					const h = canvas.height;
-					const pts = state.model.separable[key];
-					let k = pts.findIndex(([px, py]) => Math.hypot(px * w - e.offsetX, (1 - py) * h - e.offsetY) < 10);
-					if (k < 0) {
-						const x = Math.min(cyclic ? 0.999 : 1, Math.max(0, e.offsetX / w));
-						const model = withModel((m) => {
-							m.separable[key].push([x, 1 - e.offsetY / h]);
-							m.separable[key].sort((a, b) => a[0] - b[0]);
-						});
-						k = model.separable[key].findIndex((p) => p[0] === x);
-						set({ model, selected: { kind: key, a: k } }, `added a ${key === 'hue' ? 'hue' : 'lightness'} point`);
-					} else set({ selected: { kind: key, a: k } }, state.changed);
-					dragging = k;
-					canvas.setPointerCapture(e.pointerId);
-				});
-				canvas.addEventListener('pointermove', (e) => {
-					if (dragging === null) return;
-					const pts = state.model.separable[key];
-					const lo = dragging === 0 ? 0 : pts[dragging - 1][0] + 0.01;
-					const hi = dragging === pts.length - 1 ? (cyclic ? 0.999 : 1) : pts[dragging + 1][0] - 0.01;
-					const x = Math.min(hi, Math.max(lo, e.offsetX / canvas.width));
-					const y = Math.min(1, Math.max(0, 1 - e.offsetY / canvas.height));
-					set({ model: withModel((m) => (m.separable[key][dragging] = [x, y])) }, `moved a ${key === 'hue' ? 'hue' : 'lightness'} point`);
-				});
-				canvas.addEventListener('pointerup', () => (dragging = null));
-				canvas.addEventListener('dblclick', (e) => {
-					const pts = state.model.separable[key];
-					const k = pts.findIndex(
-						([px, py]) => Math.hypot(px * canvas.width - e.offsetX, (1 - py) * canvas.height - e.offsetY) < 10
-					);
-					if (k < 0 || pts.length <= 2) return;
-					set({ model: withModel((m) => m.separable[key].splice(k, 1)), selected: null }, 'removed a curve point');
-				});
+				for (const light of g.lights) {
+					ctx.beginPath();
+					ctx.moveTo(G.x, flatY(G, light));
+					ctx.lineTo(G.x + G.w, flatY(G, light));
+					ctx.stroke();
+				}
+				// Picked colour.
+				if (state.pick) {
+					const px = flatX(G, state.pick.hue);
+					const py = flatY(G, state.pick.light);
+					ctx.strokeStyle = '#fff';
+					ctx.lineWidth = 1.5 * dpr;
+					ctx.beginPath();
+					ctx.moveTo(px - 9 * dpr, py);
+					ctx.lineTo(px + 9 * dpr, py);
+					ctx.moveTo(px, py - 9 * dpr);
+					ctx.lineTo(px, py + 9 * dpr);
+					ctx.stroke();
+				}
+				// Points: filled by their change, ringed white, selected in yellow with a value tag.
+				g.values.forEach((row, j) =>
+					row.forEach((v, i) => {
+						const x = flatX(G, g.hues[i]);
+						const y = flatY(G, g.lights[j]);
+						const selected = state.selected && state.selected.i === i && state.selected.j === j;
+						const moved = Math.abs(v - 0.5) > 0.004;
+						ctx.beginPath();
+						ctx.arc(x, y, (selected ? 6 : moved ? 5 : 3.5) * dpr, 0, 2 * Math.PI);
+						ctx.fillStyle = moved ? (v > 0.5 ? '#fff' : '#111') : 'rgba(255,255,255,0.55)';
+						ctx.fill();
+						ctx.lineWidth = (selected ? 2.5 : 1.2) * dpr;
+						ctx.strokeStyle = selected ? '#facc15' : moved ? '#000' : 'rgba(0,0,0,0.5)';
+						ctx.stroke();
+						if (selected) tag(ctx, x, y - 18 * dpr, fmtChange(state.output, v), dpr);
+					})
+				);
+				// Axes.
+				ctx.fillStyle = '#8f8f99';
+				ctx.font = `${11 * dpr}px ui-sans-serif, system-ui`;
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'top';
+				for (const [name, deg] of HUE_NAMES) {
+					const x = flatX(G, deg / 360);
+					ctx.fillRect(x - 0.5 * dpr, G.y + G.h, dpr, 4 * dpr);
+					ctx.fillText(name, x, G.y + G.h + 7 * dpr);
+				}
+				ctx.textAlign = 'right';
+				ctx.textBaseline = 'middle';
+				for (const p of [0, 25, 50, 75, 100]) ctx.fillText(`${p}%`, G.x - 6 * dpr, flatY(G, p / 100));
 			}
-			curveEditor($('hue-curve'), 'hue', true);
-			curveEditor($('lum-curve'), 'light', false);
-
-			document.addEventListener('input', (e) => {
-				const action = e.target.dataset.slider;
-				if (!action) return;
-				const v = Number(e.target.value);
-				const s = state.selected;
-				if (action === 'grid-value') set({ model: withModel((m) => (m.grid[s.b][s.a] = v)) }, `grid dot set to ${pct(v)}`);
-				if (action === 'point-value') set({ model: withModel((m) => (m.points[s.a].value = v)) }, `point set to ${pct(v)}`);
-				if (action === 'point-radius')
-					set({ model: withModel((m) => (m.points[s.a].radius = Math.max(0.01, v * 0.3))) }, 'resized a point');
+			function tag(ctx, x, y, text, dpr) {
+				ctx.font = `600 ${11 * dpr}px ui-monospace, Menlo, monospace`;
+				const w = ctx.measureText(text).width + 10 * dpr;
+				ctx.fillStyle = '#facc15';
+				ctx.fillRect(x - w / 2, y - 9 * dpr, w, 16 * dpr);
+				ctx.fillStyle = '#111';
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.fillText(text, x, y - 1 * dpr);
+			}
+			let flatDrag = null;
+			flat.addEventListener('pointerdown', (e) => {
+				const G = flatGeom();
+				const x = e.offsetX * G.dpr;
+				const y = e.offsetY * G.dpr;
+				const g = state.g;
+				let best = null;
+				g.hues.forEach((hh, i) =>
+					g.lights.forEach((ll, j) => {
+						const d = Math.hypot(flatX(G, hh) - x, flatY(G, ll) - y);
+						if (d < 12 * G.dpr && (!best || d < best.d)) best = { d, i, j };
+					})
+				);
+				if (!best) return;
+				state.selected = { i: best.i, j: best.j };
+				flatDrag = { y0: e.offsetY, v0: g.values[best.j][best.i] };
+				flat.setPointerCapture(e.pointerId);
+				update();
+			});
+			flat.addEventListener('pointermove', (e) => {
+				if (flatDrag) setSelected(flatDrag.v0 + (flatDrag.y0 - e.offsetY) / 200);
+			});
+			flat.addEventListener('pointerup', () => (flatDrag = null));
+			flat.addEventListener('dblclick', (e) => {
+				const G = flatGeom();
+				const hue = clamp((e.offsetX * G.dpr - G.x) / G.w, 0, 0.9999);
+				if (state.g.hues.some((h) => Math.abs(h - hue) < 0.004)) return;
+				const { g, index } = insertColumn(state.g, hue);
+				state.g = g;
+				state.selected = { i: index, j: state.selected ? state.selected.j : 2 };
+				update();
 			});
 
-			$('tabs').addEventListener('click', (e) => {
-				const tab = e.target.dataset.tab;
-				if (tab) set({ tab, selected: null }, `switched to ${TITLES[tab][0].toLowerCase()}`);
-			});
-
-			const ACTIONS = {
-				reset: () => set({ model: Model.neutral(), selected: null }, 'reset to no change'),
-				'preset-red-shadows': () =>
-					set(
-						{
-							model: {
-								separable: structuredClone(Model.presets.separableRedShadows),
-								grid: structuredClone(Model.presets.gridRedShadows),
-								points: structuredClone(Model.presets.pointsRedShadows)
-							},
-							selected: null
-						},
-						'loaded "shadows of the reds" in all three'
-					)
+			// ---------------- WebGL helpers ----------------
+			const M = {
+				perspective(fovy, aspect, near, far) {
+					const f = 1 / Math.tan(fovy / 2);
+					const nf = 1 / (near - far);
+					return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+				},
+				lookAt(e, c, u) {
+					let z = [e[0] - c[0], e[1] - c[1], e[2] - c[2]];
+					let l = Math.hypot(...z);
+					z = z.map((v) => v / l);
+					let x = [u[1] * z[2] - u[2] * z[1], u[2] * z[0] - u[0] * z[2], u[0] * z[1] - u[1] * z[0]];
+					l = Math.hypot(...x);
+					x = x.map((v) => v / l);
+					const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+					return [
+						x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0,
+						-(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]),
+						-(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]),
+						-(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]),
+						1
+					];
+				},
+				mul(a, b) {
+					const o = new Array(16);
+					for (let c = 0; c < 4; c++)
+						for (let r = 0; r < 4; r++) {
+							let s = 0;
+							for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+							o[c * 4 + r] = s;
+						}
+					return o;
+				},
+				project(m, p, w, h) {
+					const x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
+					const y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
+					const ww = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+					return [((x / ww) * 0.5 + 0.5) * w, (1 - ((y / ww) * 0.5 + 0.5)) * h];
+				}
 			};
-			document.querySelectorAll('[data-action]').forEach((b) => b.addEventListener('click', () => ACTIONS[b.dataset.action]()));
 
-			$('load').addEventListener('change', async (e) => {
-				const file = e.target.files[0];
-				if (!file) return;
-				const bitmap = await createImageBitmap(file);
-				const scale = Math.min(1, 352 / bitmap.width, 360 / bitmap.height);
-				const width = Math.round(bitmap.width * scale);
-				const height = Math.round(bitmap.height * scale);
-				const canvas = new OffscreenCanvas(width, height);
-				const ctx = canvas.getContext('2d');
-				ctx.drawImage(bitmap, 0, 0, width, height);
-				source = { rgba: ctx.getImageData(0, 0, width, height).data, width, height };
-				set({}, `loaded ${file.name}`);
-			});
-
-			// ---------- Walkthroughs ----------
-			const g = (fn) => () => set({ tab: 'grid', model: withModel((m) => fn(m.grid)), selected: null }, 'grid changed');
-			const SCENARIOS = [
-				{
-					name: 'Only the shadows of the reds',
-					text: 'Goal: more saturation in dark reds, and nothing else. Watch the After chart: dark greens and blues must not change.',
-					steps: [
-						['Start from no change', () => set({ tab: 'separable', model: Model.neutral(), selected: null }, 'reset')],
-						['Separable: boost the reds', () => set({ model: withModel((m) => (m.separable.hue = structuredClone(Model.presets.separableRedShadows.hue))) }, 'hue curve boosts reds')],
-						['Separable: then limit it to the shadows', () => set({ model: withModel((m) => (m.separable.light = structuredClone(Model.presets.separableRedShadows.light))) }, 'lightness curve boosts shadows')],
-						['Look: every dark colour got the shadow boost, not just reds', () => set({}, 'the two boosts multiply, so shadows of every hue change')],
-						['Grid: raise the dark red dots instead', () => set({ tab: 'grid', model: withModel((m) => (m.grid = structuredClone(Model.presets.gridRedShadows))) }, 'grid dots raised at dark red')],
-						['Points: one point on dark red', () => set({ tab: 'points', model: withModel((m) => (m.points = structuredClone(Model.presets.pointsRedShadows))) }, 'one point on dark red')]
-					]
-				},
-				{
-					name: 'Across the seam',
-					text: 'Hue wraps: 350° and 10° are neighbours. A change at red must continue past the right edge onto the left.',
-					steps: [
-						['Grid: raise the red column at 0°', g((grid) => grid.forEach((row) => (row[0] = 0.9)))],
-						['Points: drop a point at 355°', () => set({ tab: 'points', model: withModel((m) => (m.points = [{ hue: 355 / 360, light: 0.6, value: 0.9, radius: 0.08 }])), selected: { kind: 'point', a: 0 } }, 'point at 355°')],
-						['Separable: bump the hue curve at 0°', () => set({ tab: 'separable', model: withModel((m) => (m.separable.hue = [[0, 0.9], [0.15, 0.5], [0.85, 0.5]])) }, 'hue curve bump at 0°')]
-					]
-				},
-				{
-					name: 'A narrow target',
-					text: 'Goal: boost oranges (about 55°) and leave reds (about 30°) alone. Grid dots sit 30° apart, so watch how far the grid bleeds.',
-					steps: [
-						['Grid: raise the dots nearest orange', g((grid) => grid.forEach((row) => (row[2] = 0.9)))],
-						['Points: a small point on orange', () => set({ tab: 'points', model: withModel((m) => (m.points = [{ hue: 55 / 360, light: 0.6, value: 0.95, radius: 0.03 }])), selected: { kind: 'point', a: 0 } }, 'small point on orange')],
-						['Separable: tight hue bump on orange', () => set({ tab: 'separable', model: withModel((m) => (m.separable.hue = [[0, 0.5], [45 / 360, 0.5], [55 / 360, 0.95], [65 / 360, 0.5]])) }, 'tight hue bump on orange')]
-					]
-				},
-				{
-					name: 'Neighbours pulling apart',
-					text: 'Two grid dots next to each other, one at full boost and one at full cut. A spline that overshoots would ring past them. Check "Overshoot past the controls".',
-					steps: [
-						['Grid: full boost next to full cut', g((grid) => grid.forEach((row) => ((row[4] = 1), (row[5] = 0))))],
-						['Points: two overlapping boosts', () => set({ tab: 'points', model: withModel((m) => (m.points = [{ hue: 0.3, light: 0.5, value: 1, radius: 0.1 }, { hue: 0.34, light: 0.5, value: 1, radius: 0.1 }])) }, 'two overlapping boosts')]
-					]
-				}
-			];
-			let scenario = 0;
-			let step = 0;
-			function renderScenario() {
-				const tabs = $('scenario-tabs');
-				if (!tabs.childElementCount) {
-					SCENARIOS.forEach((s, k) => {
-						const b = document.createElement('button');
-						b.textContent = s.name;
-						b.addEventListener('click', () => {
-							scenario = k;
-							step = 0;
-							state = { ...state, model: Model.neutral(), selected: null };
-							set({}, `started "${s.name}"`);
+			function glView(canvas, { yaw, pitch, dist, target }) {
+				const gl = canvas.getContext('webgl2', { antialias: true, premultipliedAlpha: false });
+				const vs = `#version 300 es
+					in vec3 pos; in vec4 col; uniform mat4 mvp; uniform float size; out vec4 vcol;
+					void main(){ gl_Position = mvp * vec4(pos,1.0); gl_PointSize = size; vcol = col; }`;
+				const fs = `#version 300 es
+					precision mediump float; in vec4 vcol; uniform bool round; out vec4 o;
+					void main(){ if(round){ vec2 d = gl_PointCoord - 0.5; if(dot(d,d) > 0.25) discard; } o = vcol; }`;
+				const sh = (type, src) => {
+					const s = gl.createShader(type);
+					gl.shaderSource(s, src);
+					gl.compileShader(s);
+					if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+					return s;
+				};
+				const prog = gl.createProgram();
+				gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
+				gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+				gl.linkProgram(prog);
+				const loc = {
+					pos: gl.getAttribLocation(prog, 'pos'),
+					col: gl.getAttribLocation(prog, 'col'),
+					mvp: gl.getUniformLocation(prog, 'mvp'),
+					size: gl.getUniformLocation(prog, 'size'),
+					round: gl.getUniformLocation(prog, 'round')
+				};
+				const cam = { yaw, pitch, dist, target };
+				let dragging = null;
+				let lastInteraction = 0;
+				const view = {
+					gl,
+					cam,
+					mvp() {
+						const aspect = canvas.width / canvas.height;
+						const e = [
+							cam.target[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw),
+							cam.target[1] + cam.dist * Math.sin(cam.pitch),
+							cam.target[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw)
+						];
+						return M.mul(M.perspective(0.75, aspect, 0.05, 20), M.lookAt(e, cam.target, [0, 1, 0]));
+					},
+					begin() {
+						fitCanvas(canvas);
+						gl.viewport(0, 0, canvas.width, canvas.height);
+						gl.clearColor(0.075, 0.075, 0.086, 1);
+						gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+						gl.enable(gl.DEPTH_TEST);
+						gl.enable(gl.BLEND);
+						gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+						gl.useProgram(prog);
+						gl.uniformMatrix4fv(loc.mvp, false, this.mvp());
+					},
+					/** Draw positions (xyz) and colours (rgba 0-1). */
+					draw(mode, positions, colours, { size = 1, round = false, indices = null, depth = true } = {}) {
+						depth ? gl.enable(gl.DEPTH_TEST) : gl.disable(gl.DEPTH_TEST);
+						const vao = gl.createVertexArray();
+						gl.bindVertexArray(vao);
+						const pb = gl.createBuffer();
+						gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+						gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STREAM_DRAW);
+						gl.enableVertexAttribArray(loc.pos);
+						gl.vertexAttribPointer(loc.pos, 3, gl.FLOAT, false, 0, 0);
+						const cb = gl.createBuffer();
+						gl.bindBuffer(gl.ARRAY_BUFFER, cb);
+						gl.bufferData(gl.ARRAY_BUFFER, colours, gl.STREAM_DRAW);
+						gl.enableVertexAttribArray(loc.col);
+						gl.vertexAttribPointer(loc.col, 4, gl.FLOAT, false, 0, 0);
+						gl.uniform1f(loc.size, size * (window.devicePixelRatio || 1));
+						gl.uniform1i(loc.round, round ? 1 : 0);
+						if (indices) {
+							const ib = gl.createBuffer();
+							gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+							gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STREAM_DRAW);
+							gl.drawElements(mode, indices.length, gl.UNSIGNED_INT, 0);
+							gl.deleteBuffer(ib);
+						} else gl.drawArrays(mode, 0, positions.length / 3);
+						gl.deleteBuffer(pb);
+						gl.deleteBuffer(cb);
+						gl.deleteVertexArray(vao);
+					},
+					/** Orbit on drag unless `grab` claims the pointer. */
+					orbit(grab, onChange) {
+						canvas.addEventListener('pointerdown', (e) => {
+							lastInteraction = performance.now();
+							if (grab && grab(e)) return;
+							dragging = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch };
+							canvas.setPointerCapture(e.pointerId);
 						});
-						tabs.append(b);
-					});
-				}
-				[...tabs.children].forEach((b, k) => b.setAttribute('aria-pressed', k === scenario));
-				$('scenario-text').textContent = SCENARIOS[scenario].text;
-				const box = $('scenario-steps');
-				box.innerHTML = '';
-				SCENARIOS[scenario].steps.forEach(([label, run], k) => {
-					const b = document.createElement('button');
-					b.className = `step${k < step ? ' done' : ''}`;
-					b.textContent = `${k + 1}. ${label}`;
-					b.disabled = k > step;
-					b.addEventListener('click', () => {
-						step = Math.max(step, k + 1);
-						run();
-					});
-					box.append(b);
-				});
+						canvas.addEventListener('pointermove', (e) => {
+							if (!dragging) return;
+							lastInteraction = performance.now();
+							cam.yaw = dragging.yaw - (e.clientX - dragging.x) * 0.008;
+							cam.pitch = clamp(dragging.pitch + (e.clientY - dragging.y) * 0.006, -0.2, 1.45);
+							onChange();
+						});
+						canvas.addEventListener('pointerup', () => (dragging = null));
+						canvas.addEventListener('wheel', (e) => {
+							e.preventDefault();
+							cam.dist = clamp(cam.dist * (1 + e.deltaY * 0.001), 0.8, 6);
+							onChange();
+						});
+					},
+					idle: () => performance.now() - lastInteraction > 2500 && !dragging
+				};
+				return view;
 			}
 
-			render();
+			// ---------------- 3D surface ----------------
+			const surfaceCanvas = $('surface');
+			const Surface = glView(surfaceCanvas, { yaw: -0.38, pitch: 0.5, dist: 2.05, target: [0.03, 0, 0] });
+			const SURF_H = 120;
+			const SURF_L = 40;
+			const HEIGHT = 0.5; // world units for the full change range
+			const surfPos = (hue, light, v) => [hue - 0.5, (v - 0.5) * HEIGHT, 0.5 - light];
+			let surfaceNodes = [];
+			function drawSurface() {
+				const view = Surface;
+				view.begin();
+				const pos = new Float32Array((SURF_H + 1) * SURF_L * 3);
+				const col = new Float32Array((SURF_H + 1) * SURF_L * 4);
+				const rgb = [0, 0, 0];
+				for (let j = 0; j < SURF_L; j++) {
+					const light = j / (SURF_L - 1);
+					for (let i = 0; i <= SURF_H; i++) {
+						const hue = i / SURF_H;
+						const v = lookup(t, hue, light);
+						const k = j * (SURF_H + 1) + i;
+						pos.set(surfPos(hue, light, v), k * 3);
+						const [l, c, h] = change(state.output, v, 0.35 + light * 0.55, REFERENCE_CHROMA, hue);
+						oklabToRgb(l, c * Math.cos(2 * Math.PI * h), c * Math.sin(2 * Math.PI * h), rgb, 0);
+						// Fake light from the upper left, from the surface slope.
+						const e = 0.01;
+						const dx = ((lookup(t, hue + e, light) - lookup(t, hue - e, light)) * HEIGHT) / (2 * e);
+						const dz = ((lookup(t, hue, Math.min(1, light + e)) - lookup(t, hue, Math.max(0, light - e))) * HEIGHT) / (2 * e);
+						const nl = Math.hypot(dx, 1, dz);
+						const shade = 0.72 + 0.28 * ((-dx * -0.5 + 1 * 0.8 + dz * 0.3) / nl);
+						col.set([(rgb[0] / 255) * shade, (rgb[1] / 255) * shade, (rgb[2] / 255) * shade, 1], k * 4);
+					}
+				}
+				const idx = [];
+				for (let j = 0; j < SURF_L - 1; j++)
+					for (let i = 0; i < SURF_H; i++) {
+						const a = j * (SURF_H + 1) + i;
+						const b = a + SURF_H + 1;
+						idx.push(a, b, a + 1, a + 1, b, b + 1);
+					}
+				view.draw(view.gl.TRIANGLES, pos, col, { indices: new Uint32Array(idx) });
+				// Neutral plane outline and floor grid.
+				const lines = [];
+				const lineCol = [];
+				const push = (a, b, c) => {
+					lines.push(...a, ...b);
+					lineCol.push(...c, ...c);
+				};
+				const floor = -HEIGHT / 2 - 0.02;
+				for (let k = 0; k <= 8; k++) {
+					push([-0.5 + k / 8, floor, -0.5], [-0.5 + k / 8, floor, 0.5], [1, 1, 1, 0.08]);
+					push([-0.5, floor, -0.5 + k / 8], [0.5, floor, -0.5 + k / 8], [1, 1, 1, 0.08]);
+				}
+				push([-0.5, 0, -0.5], [0.5, 0, -0.5], [1, 1, 1, 0.3]);
+				push([-0.5, 0, 0.5], [0.5, 0, 0.5], [1, 1, 1, 0.3]);
+				push([-0.5, 0, -0.5], [-0.5, 0, 0.5], [1, 1, 1, 0.3]);
+				push([0.5, 0, -0.5], [0.5, 0, 0.5], [1, 1, 1, 0.3]);
+				// Control grid lines on the surface.
+				const g = state.g;
+				for (const hue of g.hues)
+					for (let j = 0; j < 24; j++) {
+						const l0 = j / 24;
+						const l1 = (j + 1) / 24;
+						push(surfPos(hue, l0, lookup(t, hue, l0) + 0.004), surfPos(hue, l1, lookup(t, hue, l1) + 0.004), [0, 0, 0, 0.35]);
+					}
+				for (const light of g.lights)
+					for (let i = 0; i < 90; i++) {
+						const h0 = i / 90;
+						const h1 = (i + 1) / 90;
+						push(surfPos(h0, light, lookup(t, h0, light) + 0.004), surfPos(h1, light, lookup(t, h1, light) + 0.004), [0, 0, 0, 0.35]);
+					}
+				g.values.forEach((row, j) =>
+					row.forEach((v, i) => {
+						if (Math.abs(v - 0.5) < 0.004) return;
+						const top = surfPos(g.hues[i], g.lights[j], v);
+						push(top, [top[0], 0, top[2]], [1, 1, 1, 0.55]);
+					})
+				);
+				view.draw(view.gl.LINES, new Float32Array(lines), new Float32Array(lineCol));
+				// Points.
+				const np = [];
+				const nc = [];
+				surfaceNodes = [];
+				g.values.forEach((row, j) =>
+					row.forEach((v, i) => {
+						const p = surfPos(g.hues[i], g.lights[j], v);
+						surfaceNodes.push({ i, j, p });
+						const sel = state.selected && state.selected.i === i && state.selected.j === j;
+						np.push(...p);
+						nc.push(...(sel ? [0.98, 0.8, 0.08, 1] : [1, 1, 1, 0.95]));
+					})
+				);
+				view.draw(view.gl.POINTS, new Float32Array(np), new Float32Array(nc), { size: 7, round: true, depth: false });
+				drawSurfaceLabels();
+			}
+			// Axis labels drawn on a 2D overlay canvas.
+			const surfaceLabels = document.createElement('canvas');
+			surfaceLabels.style.pointerEvents = 'none';
+			surfaceCanvas.parentElement.append(surfaceLabels);
+			function drawSurfaceLabels() {
+				const dpr = fitCanvas(surfaceLabels);
+				const ctx = surfaceLabels.getContext('2d');
+				ctx.clearRect(0, 0, surfaceLabels.width, surfaceLabels.height);
+				const m = Surface.mvp();
+				ctx.font = `${10.5 * dpr}px ui-sans-serif, system-ui`;
+				ctx.textAlign = 'center';
+				ctx.fillStyle = '#b7b7c0';
+				const floor = -HEIGHT / 2 - 0.02;
+				for (const [name, deg] of HUE_NAMES) {
+					const [x, y] = M.project(m, [deg / 360 - 0.5, floor, 0.58], surfaceLabels.width, surfaceLabels.height);
+					ctx.fillText(name, x, y);
+				}
+				const [x0, y0] = M.project(m, [-0.62, floor, 0.5], surfaceLabels.width, surfaceLabels.height);
+				const [x1, y1] = M.project(m, [-0.62, floor, -0.5], surfaceLabels.width, surfaceLabels.height);
+				ctx.fillText('Dark', x0, y0);
+				ctx.fillText('Light', x1, y1);
+				if (state.selected) {
+					const node = surfaceNodes.find((n) => n.i === state.selected.i && n.j === state.selected.j);
+					if (node) {
+						const [x, y] = M.project(m, node.p, surfaceLabels.width, surfaceLabels.height);
+						tag(ctx, x, y - 16 * dpr, fmtChange(state.output, state.g.values[node.j][node.i]), dpr);
+					}
+				}
+			}
+			let surfaceDrag = null;
+			Surface.orbit(
+				(e) => {
+					const dpr = window.devicePixelRatio || 1;
+					const m = Surface.mvp();
+					let best = null;
+					for (const n of surfaceNodes) {
+						const [x, y] = M.project(m, n.p, surfaceCanvas.width, surfaceCanvas.height);
+						const d = Math.hypot(x - e.offsetX * dpr, y - e.offsetY * dpr);
+						if (d < 12 * dpr && (!best || d < best.d)) best = { d, n };
+					}
+					if (!best) return false;
+					state.selected = { i: best.n.i, j: best.n.j };
+					surfaceDrag = { y0: e.offsetY, v0: state.g.values[best.n.j][best.n.i] };
+					surfaceCanvas.setPointerCapture(e.pointerId);
+					update();
+					return true;
+				},
+				() => requestAnimationFrame(drawSurface)
+			);
+			surfaceCanvas.addEventListener('pointermove', (e) => {
+				if (surfaceDrag) setSelected(surfaceDrag.v0 + (surfaceDrag.y0 - e.offsetY) / 220);
+			});
+			surfaceCanvas.addEventListener('pointerup', () => (surfaceDrag = null));
+
+			// ---------------- 3D colour scope ----------------
+			const scopeCanvas = $('scope');
+			const Scope = (() => {
+				const view = glView(scopeCanvas, { yaw: 0.6, pitch: 0.32, dist: 1.75, target: [0, -0.05, 0] });
+				const AB = 3.4; // world units per Oklab a/b unit
+								let samples = null;
+				view.orbit(null, () => requestAnimationFrame(draw));
+				function setSamples(image) {
+					const n = image.L.length;
+					samples = new Uint32Array(Math.floor(n / 2));
+					for (let k = 0; k < samples.length; k++) samples[k] = k * 2;
+				}
+				const at = (L, C, h) => [C * Math.cos(2 * Math.PI * h) * AB, L - 0.5, C * Math.sin(2 * Math.PI * h) * AB];
+				function draw() {
+					view.begin();
+					const lines = [];
+					const lineCol = [];
+					const push = (a, b, c) => {
+						lines.push(...a, ...b);
+						lineCol.push(...c, ...c);
+					};
+					push([0, -0.5, 0], [0, 0.5, 0], [1, 1, 1, 0.35]);
+					for (const r of [0.1, 0.2]) {
+						for (let k = 0; k < 64; k++) {
+							const a0 = (k / 64) * 2 * Math.PI;
+							const a1 = ((k + 1) / 64) * 2 * Math.PI;
+							push([Math.cos(a0) * r * AB, -0.5, Math.sin(a0) * r * AB], [Math.cos(a1) * r * AB, -0.5, Math.sin(a1) * r * AB], [1, 1, 1, 0.12]);
+						}
+					}
+					for (const [, deg] of HUE_NAMES) {
+						const a = (deg / 360) * 2 * Math.PI;
+						const [r, g, b] = (() => {
+							const o = [0, 0, 0];
+							oklabToRgb(0.7, 0.14 * Math.cos(a), 0.14 * Math.sin(a), o, 0);
+							return o;
+						})();
+						push([0, -0.5, 0], [Math.cos(a) * 0.2 * AB, -0.5, Math.sin(a) * 0.2 * AB], [r / 255, g / 255, b / 255, 0.6]);
+					}
+					if (image && samples) {
+						const pos = new Float32Array(samples.length * 3);
+						const col = new Float32Array(samples.length * 4);
+						const ghost = [];
+						const ghostCol = [];
+						const out = image.out.data;
+						samples.forEach((p, k) => {
+							const L = image.L[p];
+							const C = image.C[p];
+							const H = image.H[p];
+							const v = lookup(t, H, L);
+							const [l, c, h] = change(state.output, v, L, C, H);
+							const after = at(l, c, h);
+							pos.set(after, k * 3);
+							col.set([out[p * 4] / 255, out[p * 4 + 1] / 255, out[p * 4 + 2] / 255, 0.55], k * 4);
+							const before = at(L, C, H);
+							if (state.scopeBefore && k % 4 === 0) {
+								ghost.push(...before);
+								ghostCol.push(1, 1, 1, 0.12);
+							}
+							if (state.scopeMotion && k % 60 === 0 && Math.hypot(after[0] - before[0], after[1] - before[1], after[2] - before[2]) > 0.01)
+								push(before, after, [1, 1, 1, 0.18]);
+						});
+						if (ghost.length) view.draw(view.gl.POINTS, new Float32Array(ghost), new Float32Array(ghostCol), { size: 2, depth: false });
+						view.draw(view.gl.POINTS, pos, col, { size: 1.6 });
+					}
+					view.draw(view.gl.LINES, new Float32Array(lines), new Float32Array(lineCol), { depth: false });
+				}
+				function tick() {
+					if (view.idle()) {
+						view.cam.yaw += 0.0025;
+						draw();
+					}
+					requestAnimationFrame(tick);
+				}
+				requestAnimationFrame(tick);
+				return { setSamples, draw };
+			})();
+			$('scope-before').addEventListener('click', (e) => {
+				state.scopeBefore = !state.scopeBefore;
+				e.target.setAttribute('aria-pressed', state.scopeBefore);
+				Scope.draw();
+			});
+			$('scope-motion').addEventListener('click', (e) => {
+				state.scopeMotion = !state.scopeMotion;
+				e.target.setAttribute('aria-pressed', state.scopeMotion);
+				Scope.draw();
+			});
+
+			// ---------------- Inspector ----------------
+			function drawInspector() {
+				const g = state.g;
+				const s = state.selected;
+				const moved = g.values.flat().filter((v) => Math.abs(v - 0.5) > 0.004).length;
+				let html = '<h3>Selected point</h3>';
+				if (s) {
+					const v = g.values[s.j][s.i];
+					const deg = Math.round(g.hues[s.i] * 360);
+					const rgb = [0, 0, 0];
+					const a = g.hues[s.i] * 2 * Math.PI;
+					oklabToRgb(0.35 + g.lights[s.j] * 0.55, 0.1 * Math.cos(a), 0.1 * Math.sin(a), rgb, 0);
+					html += `<div class="big">${fmtChange(state.output, v)}</div>
+						<dl>
+							<dt>Hue</dt><dd><span class="swatch" style="background:rgb(${rgb.map(Math.round)})"></span>${hueName(g.hues[s.i])} ${deg}°</dd>
+							<dt>Lightness</dt><dd>${Math.round(g.lights[s.j] * 100)}%</dd>
+							<dt>Changes</dt><dd>${OUTPUT_NAMES[state.output]}</dd>
+						</dl>`;
+				} else html += '<p class="hint">Click a colour in the viewer, or a point in the curve or surface.</p>';
+				html += `<h3>Stored</h3>
+					<dl>
+						<dt>Grid</dt><dd>${g.hues.length} × ${g.lights.length}</dd>
+						<dt>Values</dt><dd>${g.hues.length * g.lights.length}</dd>
+						<dt>Moved</dt><dd>${moved}</dd>
+					</dl>
+					<h3>Try</h3>
+					<p class="hint">Double-click the curve to add a column at that hue. It doesn't change the surface; it gives you a point there.</p>
+					<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+						<button data-preset="red-shadows">Deepen the shadows of the reds</button>
+						<button data-preset="orange">Boost oranges, spare reds</button>
+						<button data-preset="letters">Lift the pale blues</button>
+					</div>`;
+				$('inspector').innerHTML = html;
+			}
+			$('inspector').addEventListener('click', (e) => {
+				const p = e.target.dataset.preset;
+				if (!p) return;
+				state.output = 'saturation';
+				if (p === 'red-shadows') {
+					state.g = grid(12, 5);
+					state.g.values[0][1] = 0.95;
+					state.g.values[1][1] = 0.95;
+					state.g.values[1][0] = 0.75;
+					state.g.values[1][2] = 0.7;
+					state.selected = { i: 1, j: 1 };
+				}
+				if (p === 'orange') {
+					state.g = grid(12, 5);
+					for (const deg of [45, 60, 75]) state.g = insertColumn(state.g, deg / 360).g;
+					const i = state.g.hues.findIndex((h) => Math.abs(h - 60 / 360) < 1e-6);
+					state.g.values.forEach((row) => (row[i] = 0.95));
+					state.selected = { i, j: 3 };
+				}
+				if (p === 'letters') {
+					state.output = 'lightness';
+					state.g = grid(12, 5);
+					state.g.values[3][7] = 0.9;
+					state.g.values[4][7] = 0.8;
+					state.g.values[3][6] = 0.7;
+					state.selected = { i: 7, j: 3 };
+				}
+				update();
+			});
+
+			// ---------------- Output, density, reset ----------------
+			$('outputs').addEventListener('click', (e) => {
+				const o = e.target.dataset.output;
+				if (!o) return;
+				state.output = o;
+				update();
+			});
+			$('density').addEventListener('change', (e) => {
+				const [c, r] = e.target.value.split('x').map(Number);
+				state.g = grid(c, r);
+				state.selected = null;
+				update();
+			});
+			$('reset').addEventListener('click', () => {
+				const [c, r] = $('density').value.split('x').map(Number);
+				state.g = grid(c, r);
+				state.selected = null;
+				state.pick = null;
+				update();
+			});
+
+			// ---------------- Update loop ----------------
+			let pending = false;
+			function update() {
+				if (pending) return;
+				pending = true;
+				requestAnimationFrame(() => {
+					pending = false;
+					t = table(state.g);
+					document.querySelectorAll('#outputs button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.output === state.output));
+					applyImage();
+					drawViewer();
+					drawFlat();
+					drawSurface();
+					Scope.draw();
+					drawInspector();
+				});
+			}
+			window.addEventListener('resize', update);
+			update();
 		</script>
 	</body>
 </html>
