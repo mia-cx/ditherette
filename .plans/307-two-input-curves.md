@@ -36,7 +36,7 @@ One-input curves keep their current JSON and behavior. The reference defines cyc
 
 - [x] Cut over the package contract. Add `CurveGrid`, `OneInputCurve`, and `TwoInputCurve`, then export `Curve` as their union. Extend normalization with strict key sets, f32 bounds, dimensions, matrix shape, axis endpoints, cyclic seam gaps, and indexed error paths. Add positive type tests and negative tests for mixed shapes, remap grids, equal inputs, sparse arrays, ragged values, extra keys, invalid seams, and limits. Update the package README and add a minor `ditherette` changeset. Run package type and interface tests without editing root `src/**`.
 
-- [ ] Finish validation and freeze approval. Update production documentation where it describes curves fast paths. Run formatting, focused and full Rust tests, package checks, freeze tests, the local guard, and the trusted-base guard. Report the exact approval digest printed by the trusted guard and confirm the extension contains only the two intended spec replacements.
+- [x] Finish validation and freeze approval. Update production documentation where it describes curves fast paths. Run formatting, focused and full Rust tests, package checks, freeze tests, the local guard, and the trusted-base guard. Report the exact approval digest printed by the trusted guard and confirm the extension contains only the two intended spec replacements.
 
 ## Notes
 
@@ -68,6 +68,29 @@ One-input curves keep their current JSON and behavior. The reference defines cyc
 - `node scripts/check-version.mjs && node_modules/.bin/tsc --noEmit && node_modules/.bin/tsc && node_modules/.bin/tsc -p tests/tsconfig.json`: passed package version, source types, emitted declarations, and positive and negative interface type tests.
 - `node --test tests/validation.test.mjs tests/public.test.mjs tests/quantize.test.mjs tests/fields.test.mjs tests/diffusion.test.mjs tests/yiluoma.test.mjs tests/process.test.mjs tests/effects.test.mjs tests/worker-pool.test.mjs tests/source-comparison.test.mjs`: passed, 10 test files.
 - `git diff --check -- packages/ditherette .changeset/two-input-curves.md crates/ditherette-wasm/tests/prod_effects.rs .plans/307-two-input-curves.md`: passed.
+
+### TODO 5 validation
+
+- Updated `crates/ditherette-wasm/src/prod/effects/README.md` with the two-input pointwise route, neutral-grid removal, axis order, borrowed grid storage, fixed row scratch, and cyclic-axis rules.
+- `nice cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check`: passed.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_effects`: passed, 27 tests.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_grading`: passed, 6 tests.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_effects`: passed, 23 tests.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_effects_allocation`: passed, 1 test.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml`: passed every unit, integration, and documentation target.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --features threads`: passed every unit, integration, and documentation target.
+- `nice env CARGO_BUILD_JOBS=2 WASM_PACK_CACHE=/tmp/ditherette-wasm-pack-cache-307 PATH="$PWD/crates/ditherette-wasm/node_modules/.bin:$PWD/node_modules/.bin:$PATH" pnpm --config.verify-deps-before-run=false --filter ditherette check`: passed both Wasm builds, version checks, and source type checks. The first run without `verify-deps-before-run=false` stopped before project checks because pnpm could not open its read-only cache database.
+- `node scripts/check-version.mjs && node_modules/.bin/tsc --noEmit && node_modules/.bin/tsc && node_modules/.bin/tsc -p tests/tsconfig.json`: passed package version, source types, emitted declarations, and interface type tests.
+- `node --test tests/validation.test.mjs tests/public.test.mjs tests/quantize.test.mjs tests/fields.test.mjs tests/diffusion.test.mjs tests/yiluoma.test.mjs tests/process.test.mjs tests/effects.test.mjs tests/worker-pool.test.mjs tests/source-comparison.test.mjs`: passed all 10 package test files.
+- `npx svelte-check --tsconfig ./tsconfig.json`: passed with 0 errors and the existing missing `worker-configuration.d.ts` warning.
+- `npx vitest run --project server`: passed 162 tests in 20 files.
+- `npx vitest run --project client src/routes/components/effects/CurvesEditor.svelte.spec.ts`: could not start the browser project because the sandbox rejects its `::1:63315` listener with `EPERM`. `--browser.api.host 127.0.0.1` had the same result. No tests ran and root `src/**` stayed untouched.
+- `nice env PATH="$PWD/crates/ditherette-wasm/node_modules/.bin:$PATH" NODE_OPTIONS="--require=/tmp/ditherette-freeze-sandbox.cjs" node --test tools/spec-freeze/guard.test.mjs`: passed. The temporary shim preserves intended nonzero diagnostics, handles this VM's false `EPERM` after synchronous children, limits Cargo to two jobs, and uses the cached registry offline. It changes no repository file.
+- `nice env PATH="$PWD/crates/ditherette-wasm/node_modules/.bin:$PATH" NODE_OPTIONS="--require=/tmp/ditherette-freeze-sandbox.cjs" node tools/spec-freeze/guard.mjs`: passed with frozen artifact `sha256:a5f90b9b3b864c4826748646818bbe1c903de958811f4c5af3345082cf5ad47d`.
+- The trusted parent-policy guard printed `/approve-freeze sha256:7db1314f4d68ecb011740794449e2c4abd14fbe27a448fc231d60d8533b093e8`.
+- A checkpoint assertion confirmed `effects-two-input-curves` contains exactly two replacements: `crates/ditherette-wasm/src/spec/effects/curves.md` and `crates/ditherette-wasm/src/spec/effects/curves.rs`.
+- A focused Prettier check flagged both changed Markdown files. Its rewrite would reflow 188 lines, so that formatting-only churn was reverted and the focused 26-line documentation change was retained.
+- `git diff --check`: passed. Only this plan and the production effects README changed during TODO 5.
 
 ### Exact JSON shape
 
