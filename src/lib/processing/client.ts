@@ -64,6 +64,9 @@ class ProcessingCanceled extends Error {
 export function cancelProcessing() {
 	if (timer) clearTimeout(timer);
 	timer = undefined;
+	// A new source cancels processing first; an old result saved after that would outlive it.
+	if (persistTimer) clearTimeout(persistTimer);
+	persistTimer = undefined;
 	activeRequestId = ++requestId;
 	activeReject?.(new ProcessingCanceled());
 	activeReject = undefined;
