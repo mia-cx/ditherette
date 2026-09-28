@@ -2,6 +2,7 @@
 //!
 //! Each case checks that both implementations return identical bytes before timing.
 //! Run through the lease helper during a quiet phase (see EXECUTION.md).
+//! `crit_effects_browser.mjs` adds the paired scalar-Chromium recipe-v2 measurement.
 
 use std::{hint::black_box, path::Path, time::Duration};
 

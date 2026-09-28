@@ -1,5 +1,6 @@
 //! Production effects must equal the frozen reference byte-for-byte.
 
+use ditherette_wasm::prod::effects::Effect as _;
 use ditherette_wasm::{
     image::contracts::PaletteEntry,
     prod::{contract::request::Source as ProdSource, effects as prod},
@@ -170,6 +171,158 @@ fn random_chains_match_the_reference() {
             assert_same(&Value::Array(effects), width, height, &data);
         }
     }
+}
+
+#[test]
+fn large_repeated_colour_effects_match_the_reference() {
+    let effects = json!([
+        { "effect": "hue-saturation", "enabled": true,
+          "hue": 25, "saturation": 0.3, "lightness": 0.05 }
+    ]);
+    let data: Vec<u8> = (0..512 * 384)
+        .flat_map(|index| {
+            let rgb = [[17, 31, 47], [190, 80, 23], [240, 240, 240]][index % 3];
+            [rgb[0], rgb[1], rgb[2], index as u8]
+        })
+        .collect();
+    assert_same(&effects, 512, 384, &data);
+}
+
+#[test]
+fn high_cardinality_effects_match_the_reference() {
+    let effects = json!([
+        { "effect": "curves", "enabled": true, "channel": "rgb",
+          "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+        { "effect": "hue-saturation", "enabled": true,
+          "hue": -137, "saturation": 0.65, "lightness": -0.2 }
+    ]);
+    let data: Vec<u8> = (0..512 * 512u32)
+        .flat_map(|index| {
+            let bytes = index.to_le_bytes();
+            [bytes[0], bytes[1], bytes[2], (index * 37) as u8]
+        })
+        .collect();
+    assert_same(&effects, 512, 512, &data);
+}
+
+#[test]
+fn prepared_hue_matches_frozen_map_for_byte_inputs() {
+    use ditherette_wasm::prod::effects::{
+        chain::PreparedPointwiseState, hue_saturation::HueSaturation, table::ChannelTables,
+    };
+
+    let context = prod::EffectContext::default();
+    for effect in hue_effects() {
+        let reference = reference_hue(effect);
+        let tables = ChannelTables::new(std::iter::empty::<&HueSaturation>());
+        let effects = [&effect];
+        let prepared = PreparedPointwiseState::new(&effects, &tables);
+        for red in (0..=u8::MAX).step_by(17) {
+            for green in (0..=u8::MAX).step_by(29) {
+                for blue in (0..=u8::MAX).step_by(43) {
+                    let bytes = [red, green, blue];
+                    let input = bytes.map(|channel| channel as f32 / 255.0);
+                    assert_float_bits(prepared.map(bytes, &context), reference.map(input));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn prepared_hue_matches_frozen_map_for_carrier_values() {
+    let context = prod::EffectContext::default();
+    let inputs = [
+        [-64.0, -0.5, 1.25],
+        [-0.125, 0.0, 1.0],
+        [0.003_130_8, 0.04045, 1.5],
+        [2.0, 8.0, 64.0],
+    ];
+    for effect in hue_effects() {
+        let reference = reference_hue(effect);
+        let prepared = effect.prepare_pointwise();
+        for input in inputs {
+            assert_float_bits(
+                effect.map_prepared(prepared, input, &context),
+                reference.map(input),
+            );
+        }
+    }
+}
+
+#[test]
+fn prepared_neutral_hue_is_an_exact_identity() {
+    let effect = prod::hue_saturation::HueSaturation {
+        hue: 0.0,
+        saturation: 0.0,
+        lightness: 0.0,
+    };
+    let prepared = effect.prepare_pointwise();
+    let context = prod::EffectContext::default();
+    for input in [[0.0, 0.5, 1.0], [-64.0, -0.25, 64.0]] {
+        assert_float_bits(effect.map_prepared(prepared, input, &context), input);
+    }
+}
+
+fn hue_effects() -> [prod::hue_saturation::HueSaturation; 8] {
+    use prod::hue_saturation::HueSaturation;
+
+    [
+        HueSaturation {
+            hue: -180.0,
+            saturation: -1.0,
+            lightness: -1.0,
+        },
+        HueSaturation {
+            hue: 180.0,
+            saturation: 1.0,
+            lightness: 1.0,
+        },
+        HueSaturation {
+            hue: -25.0,
+            saturation: 0.3,
+            lightness: -0.55,
+        },
+        HueSaturation {
+            hue: 25.0,
+            saturation: 0.3,
+            lightness: 0.55,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: -1.0,
+            lightness: 0.0,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: 1.0,
+            lightness: 0.0,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: 0.0,
+            lightness: -1.0,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: 0.0,
+            lightness: 1.0,
+        },
+    ]
+}
+
+fn reference_hue(
+    effect: prod::hue_saturation::HueSaturation,
+) -> spec::hue_saturation::HueSaturation {
+    spec::hue_saturation::HueSaturation {
+        hue: effect.hue,
+        saturation: effect.saturation,
+        lightness: effect.lightness,
+    }
+}
+
+fn assert_float_bits(actual: [f32; 3], expected: [f32; 3]) {
+    assert_eq!(actual.map(f32::to_bits), expected.map(f32::to_bits));
 }
 
 #[test]

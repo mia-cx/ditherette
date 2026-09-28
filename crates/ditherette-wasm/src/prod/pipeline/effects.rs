@@ -22,9 +22,9 @@ use crate::{
             lifecycle::Stage,
         },
         effects::{
-            apply_in_place, carrier_after, carrier_bytes, chain::validate_chain,
-            operation::BOOKKEEPING_BYTES, recolour::RecolourRecipe, recolour_analysis,
-            resolve_recolour, EffectContext, EffectImage, EffectStep,
+            apply_in_place, carrier_after, carrier_after_bytes, carrier_bytes,
+            chain::validate_chain, operation::BOOKKEEPING_BYTES, recolour::RecolourRecipe,
+            recolour_analysis, resolve_recolour, EffectContext, EffectImage, EffectStep,
         },
     },
 };
@@ -150,7 +150,7 @@ pub(super) fn analyze<B: InputBoundary, A: Allocator>(
     })?;
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
     // The carrier always exists here; earlier steps may add scratch; analysis adds its samples.
-    let carrier = carrier_bytes(request.effects, dimensions)
+    let carrier = carrier_after_bytes(request.effects, dimensions)
         .max(EffectImage::carrier_bytes(pixels) + BOOKKEEPING_BYTES)
         + recolour_analysis::ANALYSIS_BYTES;
     call.charge_working_capacity(carrier, peak)?;

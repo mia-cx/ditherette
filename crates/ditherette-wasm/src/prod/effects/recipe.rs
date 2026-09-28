@@ -10,7 +10,7 @@ use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
     brightness_contrast::BrightnessContrast,
-    chain::{Effect, EffectContext, Needs, Step},
+    chain::{Effect, EffectContext, Needs, PreparedPointwise, Step},
     curves::Curves,
     exposure::Exposure,
     hue_saturation::HueSaturation,
@@ -146,6 +146,54 @@ impl Effect for BuiltinEffect {
             Self::WhiteBalance(effect) => effect.map_pixel(rgb, context),
             Self::HueSaturation(effect) => effect.map_pixel(rgb, context),
             Self::Recolour(effect) => effect.map_pixel(rgb, context),
+        }
+    }
+
+    fn prepare_pointwise(&self) -> PreparedPointwise {
+        match self {
+            Self::Levels(effect) => effect.prepare_pointwise(),
+            Self::Curves(effect) => effect.prepare_pointwise(),
+            Self::BrightnessContrast(effect) => effect.prepare_pointwise(),
+            Self::Exposure(effect) => effect.prepare_pointwise(),
+            Self::WhiteBalance(effect) => effect.prepare_pointwise(),
+            Self::HueSaturation(effect) => effect.prepare_pointwise(),
+            Self::Recolour(effect) => effect.prepare_pointwise(),
+        }
+    }
+
+    fn map_prepared(
+        &self,
+        prepared: PreparedPointwise,
+        rgb: [f32; 3],
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        match self {
+            Self::Levels(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::Curves(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::BrightnessContrast(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::Exposure(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::WhiteBalance(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::HueSaturation(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::Recolour(effect) => effect.map_prepared(prepared, rgb, context),
+        }
+    }
+
+    fn map_prepared_linear(
+        &self,
+        prepared: PreparedPointwise,
+        linear: [f32; 3],
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        match self {
+            Self::Levels(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::Curves(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::BrightnessContrast(effect) => {
+                effect.map_prepared_linear(prepared, linear, context)
+            }
+            Self::Exposure(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::WhiteBalance(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::HueSaturation(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::Recolour(effect) => effect.map_prepared_linear(prepared, linear, context),
         }
     }
 }

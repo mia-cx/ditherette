@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::prod::contract::error::DitheretteError;
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext},
+    chain::{check_bounded, Effect, EffectContext, PreparedPointwise},
     image::EffectImage,
     space::{from_linear, linear_to_oklab, oklab_to_linear, to_linear},
 };
@@ -95,5 +95,43 @@ impl Effect for HueSaturation {
             return rgb;
         }
         self.map_linear(self.turn(), to_linear(rgb))
+    }
+
+    fn prepare_pointwise(&self) -> PreparedPointwise {
+        if self.neutral() {
+            return PreparedPointwise::Direct;
+        }
+        let turn = self.turn();
+        PreparedPointwise::HueSaturation {
+            sin: turn.sin,
+            cos: turn.cos,
+            scale: turn.scale,
+        }
+    }
+
+    fn map_prepared(
+        &self,
+        prepared: PreparedPointwise,
+        rgb: [f32; 3],
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        match prepared {
+            PreparedPointwise::HueSaturation { sin, cos, scale } => {
+                self.map_linear(Turn { sin, cos, scale }, to_linear(rgb))
+            }
+            PreparedPointwise::Direct => self.map_pixel(rgb, context),
+        }
+    }
+
+    fn map_prepared_linear(
+        &self,
+        prepared: PreparedPointwise,
+        linear: [f32; 3],
+        _context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        let PreparedPointwise::HueSaturation { sin, cos, scale } = prepared else {
+            unreachable!("only prepared hue-saturation maps request linear input")
+        };
+        self.map_linear(Turn { sin, cos, scale }, linear)
     }
 }
