@@ -1,3 +1,4 @@
+import { atom } from 'nanostores';
 import { sourceImageData } from '$lib/stores/app';
 import { LUT_SIZE, sourceEffectsLut } from './source-effects';
 
@@ -44,17 +45,16 @@ function texture(gl: WebGL2RenderingContext, target: number, filter: number) {
 	return created;
 }
 
-/**
- * Svelte attachment: draw the source through the effects lookup table at full source resolution.
- * The source uploads once per image and each edit uploads only the table, so redraws take
- * milliseconds at any image size. Display only: nothing is read back from this canvas.
- */
-export function lutView(canvas: HTMLCanvasElement) {
-	const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, antialias: false });
-	if (!gl) {
-		console.error('WebGL2 is unavailable, so effects cannot be drawn on the source.');
-		return;
-	}
+/** Whether this browser can draw effects on the source at all. Checked once. */
+export const supportsWebGL2 = (() => {
+	let supported: boolean | undefined;
+	return () => (supported ??= document.createElement('canvas').getContext('webgl2') !== null);
+})();
+
+/** Whether the Source pane currently shows the source through the table. */
+export const lutDrawn = atom(false);
+
+function setUp(gl: WebGL2RenderingContext) {
 	const program = gl.createProgram();
 	gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX));
 	gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, FRAGMENT));
@@ -68,42 +68,88 @@ export function lutView(canvas: HTMLCanvasElement) {
 	gl.uniform1i(gl.getUniformLocation(program, 'source'), 0);
 	gl.uniform1i(gl.getUniformLocation(program, 'lut'), 1);
 	gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-
 	gl.activeTexture(gl.TEXTURE0);
 	const sourceTexture = texture(gl, gl.TEXTURE_2D, gl.NEAREST);
 	gl.activeTexture(gl.TEXTURE1);
 	const lutTexture = texture(gl, gl.TEXTURE_3D, gl.LINEAR);
+	return { sourceTexture, lutTexture };
+}
+
+/** The largest image side this context can both hold as a texture and draw in one viewport. */
+function drawableSide(gl: WebGL2RenderingContext) {
+	const [viewportWidth, viewportHeight] = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
+	return Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE) as number, viewportWidth!, viewportHeight!);
+}
+
+/**
+ * Svelte attachment: draw the source through the effects lookup table at full source resolution.
+ * The source uploads once per image and each edit uploads only the table, so redraws take
+ * milliseconds at any image size. `lutDrawn` says whether the drawing is showing; after a GPU
+ * reset, resources are rebuilt and the drawing returns. Nothing is read back from this canvas.
+ */
+export function lutView(canvas: HTMLCanvasElement) {
+	const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, antialias: false });
+	if (!gl) {
+		console.error('WebGL2 is unavailable, so effects cannot be drawn on the source.');
+		return;
+	}
+	let resources = setUp(gl);
 	let uploaded: ImageData | undefined;
+	let lost = false;
+
+	function fail(message: string) {
+		console.error(message);
+		lutDrawn.set(false);
+	}
 
 	function draw() {
 		const source = sourceImageData.get();
 		const lut = sourceEffectsLut.get();
-		if (!gl || !source || !lut) return;
+		if (!gl || lost || !source || !lut) return;
 		if (source !== uploaded) {
-			const limit: number = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-			if (Math.max(source.width, source.height) > limit) {
-				console.error(`This GPU draws effects on images up to ${limit} pixels wide.`);
-				return;
-			}
+			const limit = drawableSide(gl);
+			if (Math.max(source.width, source.height) > limit)
+				return fail(`This GPU draws effects on images up to ${limit} pixels on a side.`);
 			canvas.width = source.width;
 			canvas.height = source.height;
+			// Browsers may shrink a drawing buffer they can't allocate instead of failing.
+			if (gl.drawingBufferWidth !== source.width || gl.drawingBufferHeight !== source.height)
+				return fail('The GPU could not make room to draw effects on this image.');
 			gl.activeTexture(gl.TEXTURE0);
-			gl.bindTexture(gl.TEXTURE_2D, sourceTexture);
+			gl.bindTexture(gl.TEXTURE_2D, resources.sourceTexture);
 			gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
 			uploaded = source;
 		}
 		gl.activeTexture(gl.TEXTURE1);
-		gl.bindTexture(gl.TEXTURE_3D, lutTexture);
+		gl.bindTexture(gl.TEXTURE_3D, resources.lutTexture);
 		const size = LUT_SIZE;
 		gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, size, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut);
 		gl.viewport(0, 0, canvas.width, canvas.height);
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+		lutDrawn.set(true);
 	}
 
+	const onLost = (event: Event) => {
+		// Asking to be restored; the old program and textures are gone either way.
+		event.preventDefault();
+		lost = true;
+		lutDrawn.set(false);
+	};
+	const onRestored = () => {
+		lost = false;
+		resources = setUp(gl);
+		uploaded = undefined;
+		draw();
+	};
+	canvas.addEventListener('webglcontextlost', onLost);
+	canvas.addEventListener('webglcontextrestored', onRestored);
 	const unsubscribers = [sourceImageData.listen(draw), sourceEffectsLut.listen(draw)];
 	draw();
 	return () => {
 		for (const unsubscribe of unsubscribers) unsubscribe();
+		canvas.removeEventListener('webglcontextlost', onLost);
+		canvas.removeEventListener('webglcontextrestored', onRestored);
+		lutDrawn.set(false);
 		gl.getExtension('WEBGL_lose_context')?.loseContext();
 	};
 }

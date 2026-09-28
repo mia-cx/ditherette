@@ -29,6 +29,8 @@
 		type PreviewMode
 	} from '$lib/stores/app';
 	import { addEffect, effectStepsLeft } from '$lib/stores/effects';
+	import { browser } from '$app/environment';
+	import { supportsWebGL2 } from '$lib/processing/lut-view';
 	import { setThemeChoice, startTheme, themeChoice, type ThemeChoice } from '$lib/theme';
 	import { COLOR_SPACES } from './color-space-options';
 	import { DITHER_ALGORITHMS } from './dither-options';
@@ -107,6 +109,7 @@
 		const layer = addEffect(kind);
 		if (studio) openEffectWindow(layer.id);
 	}
+	const canShowEffects = browser && supportsWebGL2();
 </script>
 
 <svelte:window onkeydown={shortcut} />
@@ -235,6 +238,7 @@
 					{/each}
 				</MenubarRadioGroup>
 				<MenubarCheckboxItem
+					disabled={!canShowEffects}
 					checked={Boolean($previewSettings.sourceEffects)}
 					onCheckedChange={(sourceEffects) => updatePreviewSettings({ sourceEffects })}
 					>Show effects on source</MenubarCheckboxItem

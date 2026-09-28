@@ -14,7 +14,8 @@
 		EmptyTitle
 	} from '$lib/components/ui/empty';
 	import { processedToImageData } from '$lib/processing/render';
-	import { lutView } from '$lib/processing/lut-view';
+	import { browser } from '$app/environment';
+	import { lutDrawn, lutView, supportsWebGL2 } from '$lib/processing/lut-view';
 	import { sourceEffectsLut } from '$lib/processing/source-effects';
 	import type { CropRect } from '$lib/processing/types';
 	import {
@@ -133,7 +134,8 @@
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
-	const sourceLabel = $derived($sourceEffectsLut ? 'Source with effects' : 'Source');
+	const sourceLabel = $derived($sourceEffectsLut && $lutDrawn ? 'Source with effects' : 'Source');
+	const canShowEffects = browser && supportsWebGL2();
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
 	const cropToContentHint = $derived(
@@ -1148,8 +1150,10 @@
 				size="icon-sm"
 				variant={$previewSettings.sourceEffects ? 'secondary' : 'ghost'}
 				aria-label="Show effects on source"
-				title="Show effects on source"
-				disabled={!hasImage}
+				title={canShowEffects
+					? 'Show effects on source'
+					: 'Showing effects on the source needs WebGL2'}
+				disabled={!hasImage || !canShowEffects}
 				onclick={() => updatePreviewSettings({ sourceEffects: !$previewSettings.sourceEffects })}
 				aria-pressed={Boolean($previewSettings.sourceEffects)}
 			>
