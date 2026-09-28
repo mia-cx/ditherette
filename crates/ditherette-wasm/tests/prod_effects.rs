@@ -35,6 +35,35 @@ const MODEL_CURVE_MODELS: [&str; 8] = [
     "cielch",
     "ycbcr",
 ];
+const COLOUR_CHANNELS: [(&str, &str); 27] = [
+    ("srgb", "red"),
+    ("srgb", "green"),
+    ("srgb", "blue"),
+    ("linear-rgb", "red"),
+    ("linear-rgb", "green"),
+    ("linear-rgb", "blue"),
+    ("hsl", "hue"),
+    ("hsl", "saturation"),
+    ("hsl", "lightness"),
+    ("hsv", "hue"),
+    ("hsv", "saturation"),
+    ("hsv", "value"),
+    ("oklab", "lightness"),
+    ("oklab", "a"),
+    ("oklab", "b"),
+    ("oklch", "lightness"),
+    ("oklch", "chroma"),
+    ("oklch", "hue"),
+    ("cielab", "lightness"),
+    ("cielab", "a"),
+    ("cielab", "b"),
+    ("cielch", "lightness"),
+    ("cielch", "chroma"),
+    ("cielch", "hue"),
+    ("ycbcr", "luma"),
+    ("ycbcr", "cb"),
+    ("ycbcr", "cr"),
+];
 
 /// Deterministic xorshift so failures reproduce.
 struct Rng(u64);
@@ -97,7 +126,7 @@ fn random_effect(rng: &mut Rng) -> Value {
     let enabled = rng.next() % 5 != 0;
     let neutral = rng.next() % 4 == 0;
     let signed = |rng: &mut Rng| if neutral { 0.0 } else { rng.unit() * 2.0 - 1.0 };
-    match rng.next() % 8 {
+    match rng.next() % 9 {
         0 => random_levels(rng),
         1 => {
             let count = 2 + rng.next() % 5;
@@ -116,13 +145,32 @@ fn random_effect(rng: &mut Rng) -> Value {
             "hue": signed(rng) * 180.0, "saturation": signed(rng), "lightness": signed(rng) }),
         6 => json!({ "effect": "recolour", "enabled": enabled,
             "strength": if neutral { 0.0 } else { rng.unit() }, "recipe": null }),
-        _ => {
+        7 => {
             let identity = [[0.0, 0.0], [1.0, 1.0]];
             let bent = [[0.0, 0.0], [0.5, rng.unit()], [1.0, 1.0]];
             json!({ "effect": "model-curves", "enabled": enabled,
                 "model": rng.pick(&MODEL_CURVE_MODELS),
                 "curves": if neutral { [identity.as_slice(), identity.as_slice(), identity.as_slice()] }
-                    else { [bent.as_slice(), identity.as_slice(), identity.as_slice()] } })
+                else { [bent.as_slice(), identity.as_slice(), identity.as_slice()] } })
+        }
+        _ => {
+            let x = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+            let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+            let seam = if neutral { 0.5 } else { rng.unit() };
+            let points = if x.1 == "hue" {
+                vec![
+                    [0.0, seam],
+                    [0.5, if neutral { 0.5 } else { rng.unit() }],
+                    [1.0, seam],
+                ]
+            } else if neutral {
+                vec![[0.0, 0.5], [1.0, 0.5]]
+            } else {
+                vec![[0.0, rng.unit()], [0.5, rng.unit()], [1.0, rng.unit()]]
+            };
+            json!({ "effect": "channel-curve", "enabled": enabled,
+                "x": { "model": x.0, "channel": x.1 },
+                "y": { "model": y.0, "channel": y.1 }, "points": points })
         }
     }
 }
@@ -219,12 +267,51 @@ fn randomized_model_curves_match_the_reference_for_every_model() {
 }
 
 #[test]
+fn randomized_cross_model_channel_curves_match_the_reference() {
+    let mut rng = Rng(0xc01a_268);
+    let data = image(&mut rng, 37, 19);
+    for x in COLOUR_CHANNELS {
+        for _ in 0..12 {
+            let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+            let seam = rng.unit();
+            let points = if x.1 == "hue" {
+                vec![
+                    [0.0, seam],
+                    [0.3, rng.unit()],
+                    [0.7, rng.unit()],
+                    [1.0, seam],
+                ]
+            } else {
+                vec![
+                    [0.0, rng.unit()],
+                    [0.3, rng.unit()],
+                    [0.7, rng.unit()],
+                    [1.0, rng.unit()],
+                ]
+            };
+            let effects = json!([
+                random_levels(&mut rng),
+                { "effect": "channel-curve", "enabled": true,
+                  "x": { "model": x.0, "channel": x.1 },
+                  "y": { "model": y.0, "channel": y.1 }, "points": points },
+                { "effect": "exposure", "enabled": true, "stops": rng.unit() - 0.5 }
+            ]);
+            assert_same(&effects, 37, 19, &data);
+        }
+    }
+}
+
+#[test]
 fn large_repeated_colour_effects_match_the_reference() {
     let effects = json!([
         { "effect": "hue-saturation", "enabled": true,
           "hue": 25, "saturation": 0.3, "lightness": 0.05 },
         { "effect": "model-curves", "enabled": true, "model": "oklch",
-          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.5, 0.65], [1, 1]], [[0, 0], [1, 1]]] }
+          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.5, 0.65], [1, 1]], [[0, 0], [1, 1]]] },
+        { "effect": "channel-curve", "enabled": true,
+          "x": { "model": "hsv", "channel": "value" },
+          "y": { "model": "cielch", "channel": "chroma" },
+          "points": [[0, 0.2], [0.5, 0.8], [1, 0.5]] }
     ]);
     let data: Vec<u8> = (0..512 * 384)
         .flat_map(|index| {
@@ -243,7 +330,11 @@ fn high_cardinality_effects_match_the_reference() {
         { "effect": "hue-saturation", "enabled": true,
           "hue": -137, "saturation": 0.65, "lightness": -0.2 },
         { "effect": "model-curves", "enabled": true, "model": "cielch",
-          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.4, 0.7], [1, 1]], [[0, 0.1], [1, 0.9]]] }
+          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.4, 0.7], [1, 1]], [[0, 0.1], [1, 0.9]]] },
+        { "effect": "channel-curve", "enabled": true,
+          "x": { "model": "oklch", "channel": "hue" },
+          "y": { "model": "hsl", "channel": "lightness" },
+          "points": [[0, 0.3], [0.25, 0.9], [0.75, 0.1], [1, 0.3]] }
     ]);
     let data: Vec<u8> = (0..512 * 512u32)
         .flat_map(|index| {
@@ -286,6 +377,55 @@ fn linear_rgb_table_matches_direct_reference_for_every_channel_byte() {
                 image.rgb[0][channel].to_bits(),
                 "channel {channel}, byte {value}"
             );
+        }
+    }
+}
+
+#[test]
+fn eligible_channel_curve_tables_match_direct_reference_for_every_byte() {
+    let models = ["srgb", "linear-rgb"];
+    let channels = ["red", "green", "blue"];
+    for x_model in models {
+        for y_model in models {
+            for (channel, name) in channels.iter().enumerate() {
+                let json = json!([{
+                    "effect": "channel-curve", "enabled": true,
+                    "x": { "model": x_model, "channel": name },
+                    "y": { "model": y_model, "channel": name },
+                    "points": [[0, 0.1], [0.4, 0.8], [1, 0.6]]
+                }]);
+                let production = prod::decode_effects(&json.to_string())
+                    .unwrap()
+                    .remove(0)
+                    .effect;
+                let reference = spec::decode_effects(&json.to_string())
+                    .unwrap()
+                    .remove(0)
+                    .effect;
+                // A linear-light output round-trips the untouched channels too, so only an sRGB
+                // output folds into per-channel tables.
+                assert_eq!(production.per_channel(), y_model == "srgb");
+                if !production.per_channel() {
+                    continue;
+                }
+                let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
+                for value in 0..=u8::MAX {
+                    let unit = value as f32 / 255.0;
+                    let mut image = spec::EffectImage {
+                        dimensions,
+                        rgb: vec![[unit; 3]],
+                        alpha: vec![255],
+                    };
+                    spec::Effect::apply(&reference, &mut image, &spec::EffectContext::default());
+                    for output in 0..3 {
+                        assert_eq!(
+                            production.map_channel(output, unit).to_bits(),
+                            image.rgb[0][output].to_bits(),
+                            "{x_model} to {y_model} {name}, output {output}, byte {value}"
+                        );
+                    }
+                }
+            }
         }
     }
 }

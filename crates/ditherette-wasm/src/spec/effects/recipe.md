@@ -28,6 +28,7 @@ Registered effects:
 | `levels` | [levels.md](levels.md) |
 | `curves` | [curves.md](curves.md) |
 | `model-curves` | [model_curves.md](model_curves.md) |
+| `channel-curve` | [channel_curve.md](channel_curve.md) |
 | `brightness-contrast` | [brightness_contrast.md](brightness_contrast.md) |
 | `exposure` | [exposure.md](exposure.md) |
 | `white-balance` | [white_balance.md](white_balance.md) |

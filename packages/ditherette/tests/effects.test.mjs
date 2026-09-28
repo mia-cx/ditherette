@@ -261,6 +261,13 @@ const grading = {
 			[[0, 0], [1, 1]]
 		]
 	},
+	'channel-curve': {
+		effect: 'channel-curve',
+		enabled: true,
+		x: { model: 'srgb', channel: 'green' },
+		y: { model: 'srgb', channel: 'red' },
+		points: [[0, 0], [1, 1]]
+	},
 	'brightness-contrast': {
 		effect: 'brightness-contrast',
 		enabled: true,
@@ -288,6 +295,10 @@ const neutral = {
 	'model-curves': {
 		...grading['model-curves'],
 		curves: Array.from({ length: 3 }, () => [[0, 0], [1, 1]])
+	},
+	'channel-curve': {
+		...grading['channel-curve'],
+		points: [[0, 0.5], [1, 0.5]]
 	},
 	'brightness-contrast': { ...grading['brightness-contrast'], brightness: 0, contrast: 0 },
 	exposure: { ...grading.exposure, stops: 0 },
@@ -375,6 +386,31 @@ test('grading arguments are validated with indexed paths', () =>
 			'effects.1.curves.1.1.0'
 		);
 		fails({ ...grading['model-curves'], interpolation: 'linear' }, 'effects.1.interpolation');
+		fails(
+			{ ...grading['channel-curve'], x: { model: 'hsv', channel: 'lightness' } },
+			'effects.1.x.channel'
+		);
+		fails(
+			{ ...grading['channel-curve'], y: { model: 'unknown', channel: 'red' } },
+			'effects.1.y.model'
+		);
+		fails(
+			{
+				...grading['channel-curve'],
+				x: { model: 'hsl', channel: 'hue' },
+				points: [[0.1, 0.5], [1, 0.5]]
+			},
+			'effects.1.points.0.0'
+		);
+		fails(
+			{
+				...grading['channel-curve'],
+				x: { model: 'hsl', channel: 'hue' },
+				points: [[0, 0.5], [0.5, 0.8], [1, 0.6]]
+			},
+			'effects.1.points.2.1'
+		);
+		fails({ ...grading['channel-curve'], mode: 'absolute' }, 'effects.1.mode');
 		const inherited = Object.setPrototypeOf(
 			new Array(2),
 			Object.assign(Object.create(Array.prototype), { 0: 0, 1: 0 })
@@ -398,6 +434,44 @@ test('every model-curves model is accepted and preserves alpha', () =>
 				assert.equal(result.data[index], source.data[index], model);
 		}
 	}));
+
+test('every colour model accepts only its own channel names', () => {
+	const byModel = {
+		srgb: ['red', 'green', 'blue'],
+		'linear-rgb': ['red', 'green', 'blue'],
+		hsl: ['hue', 'saturation', 'lightness'],
+		hsv: ['hue', 'saturation', 'value'],
+		oklab: ['lightness', 'a', 'b'],
+		oklch: ['lightness', 'chroma', 'hue'],
+		cielab: ['lightness', 'a', 'b'],
+		cielch: ['lightness', 'chroma', 'hue'],
+		ycbcr: ['luma', 'cb', 'cr']
+	};
+	for (const [model, channels] of Object.entries(byModel)) {
+		for (const channel of channels) {
+			const periodic = channel === 'hue';
+			assert.equal(
+				isEffect({
+					effect: 'channel-curve',
+					enabled: true,
+					x: { model, channel },
+					y: { model: 'srgb', channel: 'red' },
+					points: periodic ? [[0, 0.5], [0.5, 0.8], [1, 0.5]] : [[0, 0.25], [1, 0.75]]
+				}),
+				true,
+				`${model}.${channel}`
+			);
+		}
+	}
+	assert.equal(
+		isEffect({
+			effect: 'channel-curve', enabled: true,
+			x: { model: 'hsv', channel: 'lightness' },
+			y: { model: 'srgb', channel: 'red' }, points: [[0, 0.5], [1, 0.5]]
+		}),
+		false
+	);
+});
 
 const warm = [
 	{ kind: 'color', rgb: [96, 0, 24] },

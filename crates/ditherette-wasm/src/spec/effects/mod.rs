@@ -5,6 +5,7 @@
 pub mod brightness_contrast;
 pub mod chain;
 pub mod channel;
+pub mod channel_curve;
 pub mod curves;
 pub mod exposure;
 pub mod hue_saturation;
