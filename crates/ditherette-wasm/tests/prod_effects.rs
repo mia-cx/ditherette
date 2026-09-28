@@ -402,7 +402,12 @@ fn eligible_channel_curve_tables_match_direct_reference_for_every_byte() {
                     .unwrap()
                     .remove(0)
                     .effect;
-                assert!(production.per_channel());
+                // A linear-light output round-trips the untouched channels too, so only an sRGB
+                // output folds into per-channel tables.
+                assert_eq!(production.per_channel(), y_model == "srgb");
+                if !production.per_channel() {
+                    continue;
+                }
                 let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
                 for value in 0..=u8::MAX {
                     let unit = value as f32 / 255.0;
@@ -412,11 +417,13 @@ fn eligible_channel_curve_tables_match_direct_reference_for_every_byte() {
                         alpha: vec![255],
                     };
                     spec::Effect::apply(&reference, &mut image, &spec::EffectContext::default());
-                    assert_eq!(
-                        production.map_channel(channel, unit).to_bits(),
-                        image.rgb[0][channel].to_bits(),
-                        "{x_model} to {y_model} {name}, byte {value}"
-                    );
+                    for output in 0..3 {
+                        assert_eq!(
+                            production.map_channel(output, unit).to_bits(),
+                            image.rgb[0][output].to_bits(),
+                            "{x_model} to {y_model} {name}, output {output}, byte {value}"
+                        );
+                    }
                 }
             }
         }

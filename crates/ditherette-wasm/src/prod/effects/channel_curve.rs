@@ -207,6 +207,10 @@ impl ChannelCurve {
         if y.kind == ChannelKind::Hue {
             weight = weight.min(y.model.hue_weight(rgb, y_coordinates));
         }
+        // No adjustment at all, so skip the Y round-trip, which isn't exact in every model.
+        if weight == 0.0 {
+            return rgb;
+        }
         match y.kind {
             ChannelKind::Hue => {
                 y_coordinates[y.index] =
@@ -269,8 +273,9 @@ impl ChannelCurve {
 
     fn per_channel_pair(&self) -> Option<(ResolvedChannel, ResolvedChannel)> {
         let (x, y) = self.resolved();
-        let rgb = |model| matches!(model, ColourModel::Srgb | ColourModel::LinearRgb);
-        (rgb(x.model) && rgb(y.model) && x.index == y.index).then_some((x, y))
+        // A linear-light output would round-trip the untouched channels too, so it isn't per-channel.
+        let rgb_input = matches!(x.model, ColourModel::Srgb | ColourModel::LinearRgb);
+        (rgb_input && matches!(y.model, ColourModel::Srgb) && x.index == y.index).then_some((x, y))
     }
 }
 

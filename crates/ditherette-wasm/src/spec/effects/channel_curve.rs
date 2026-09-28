@@ -210,6 +210,10 @@ impl ChannelCurve {
         if y.kind == ChannelKind::Hue {
             weight = weight.min(y.model.hue_weight(rgb, y_coordinates));
         }
+        // No adjustment at all, so skip the Y round-trip, which isn't exact in every model.
+        if weight == 0.0 {
+            return rgb;
+        }
         match y.kind {
             ChannelKind::Hue => {
                 y_coordinates[y.index] =
