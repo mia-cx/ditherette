@@ -75,7 +75,7 @@ impl PreparedQuantizer {
             matching,
             MatchPolicy::OklchHueArc | MatchPolicy::CielchHueArc
         ) && matcher
-            .colors
+            .colors()
             .iter()
             .all(|color| hue_coordinates_bounded(color.coordinates));
         Ok(Self {
@@ -90,7 +90,7 @@ impl PreparedQuantizer {
     pub fn capacity_bytes(&self) -> u64 {
         size_of::<Self>() as u64 + self.palette.capacity_bytes()
             - size_of::<PreparedPalette>() as u64
-            + (self.matcher.colors.capacity() * size_of::<PaletteColor>()) as u64
+            + (self.matcher.colors_capacity() * size_of::<PaletteColor>()) as u64
     }
 
     pub fn palette(&self) -> &PreparedPalette {
@@ -133,9 +133,9 @@ impl PreparedQuantizer {
         coordinates: [f32; 3],
         distance: impl Fn([f32; 3], [f32; 3]) -> f32,
     ) -> PaletteColor {
-        let mut best = self.matcher.colors[0];
+        let mut best = self.matcher.colors()[0];
         let mut best_score = f32::INFINITY;
-        for &candidate in &self.matcher.colors {
+        for &candidate in self.matcher.colors() {
             let dl = coordinates[0] - candidate.coordinates[0];
             let dc = coordinates[1] - candidate.coordinates[1];
             if dl * dl + dc * dc >= best_score {
@@ -476,7 +476,7 @@ mod tests {
             }
             assert_eq!(
                 prepared
-                    .nearest_finite(prepared.matcher.colors[0].coordinates)
+                    .nearest_finite(prepared.matcher.colors()[0].coordinates)
                     .unwrap()
                     .index,
                 0

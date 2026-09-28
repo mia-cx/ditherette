@@ -382,7 +382,7 @@ fn zero_mask_retains_earlier_exact_mixture_and_first_ratio_ties() {
             .collect(),
         MatchPolicy::SrgbEuclidean,
     );
-    let target = yiluoma::adaptive_target([0.8; 3], matcher.colors[2].coordinates, 0.0);
+    let target = yiluoma::adaptive_target([0.8; 3], matcher.colors()[2].coordinates, 0.0);
     let mix = yiluoma::best_matched_mix(target, &matcher, 4);
     assert_eq!(
         mix,

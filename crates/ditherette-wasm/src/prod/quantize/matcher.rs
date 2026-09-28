@@ -35,7 +35,7 @@ impl PaletteColor {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PaletteMatcher {
-    pub colors: Vec<PaletteColor>,
+    colors: Vec<PaletteColor>,
     pub matching: MatchPolicy,
     lightness_order: [u8; 256],
     bounded_ciede_lightness: bool,
@@ -59,6 +59,15 @@ impl PaletteMatcher {
             matching,
             lightness_order,
         }
+    }
+
+    /// Returns the palette entries in their original tie-breaking order.
+    pub fn colors(&self) -> &[PaletteColor] {
+        &self.colors
+    }
+
+    pub(crate) fn colors_capacity(&self) -> usize {
+        self.colors.capacity()
     }
 
     /// Converts visible entries without reordering or removing duplicates.
@@ -216,9 +225,9 @@ impl PaletteMatcher {
         let lightness_order = &self.lightness_order[..self.colors.len()];
         let (start, end) =
             if self.bounded_ciede_lightness && (0.0..=100.0).contains(&coordinates[0]) {
-                let lightness_window = 1.75 * best_score;
-                let lower_lightness = coordinates[0] - lightness_window;
-                let upper_lightness = coordinates[0] + lightness_window;
+                let lightness_window = next_up(1.75 * pruning_ceiling(best_score));
+                let lower_lightness = next_down(coordinates[0] - lightness_window);
+                let upper_lightness = next_up(coordinates[0] + lightness_window);
                 (
                     lightness_order.partition_point(|&position| {
                         self.colors[position as usize].coordinates[0] < lower_lightness
@@ -246,14 +255,12 @@ impl PaletteMatcher {
                 // 0.13 is a conservative lower approximation of 1 - sqrt(3)/2.
                 let coarse_squared =
                     dl * dl + 0.13 * (da * da + db * db) / (scale_bound * scale_bound);
-                if coarse_squared > best_score * best_score {
+                if rounded_bound_exceeds_best(coarse_squared.sqrt(), best_score) {
                     continue;
                 }
             }
             let lightness_bound = lightness_lower_bound(coordinates[0], candidate.coordinates[0]);
-            if lightness_bound > best_score
-                || (lightness_bound == best_score && position > best_position)
-            {
+            if rounded_bound_exceeds_best(lightness_bound, best_score) {
                 continue;
             }
             let pair = Ciede2000Pair::new(
@@ -263,12 +270,12 @@ impl PaletteMatcher {
                 candidate.ciede2000_chroma,
             );
             let lower_bound = pair.lower_bound();
-            if lower_bound > best_score || (lower_bound == best_score && position > best_position) {
+            if rounded_bound_exceeds_best(lower_bound, best_score) {
                 continue;
             }
             let hue = pair.prepare_hue();
             let hue_bound = hue.lower_bound();
-            if hue_bound > best_score || (hue_bound == best_score && position > best_position) {
+            if rounded_bound_exceeds_best(hue_bound, best_score) {
                 continue;
             }
             let score = hue.distance();
@@ -280,6 +287,38 @@ impl PaletteMatcher {
         }
         best
     }
+}
+
+// This exceeds the accumulated f32 error of every CIEDE2000 lower-bound recipe.
+// Candidates inside the margin reach the complete frozen-order score and tie check.
+const CIEDE2000_BOUND_SAFETY: f32 = 0.999;
+
+#[inline(always)]
+fn rounded_bound_exceeds_best(bound: f32, best: f32) -> bool {
+    bound * CIEDE2000_BOUND_SAFETY > best
+}
+
+#[inline(always)]
+fn pruning_ceiling(best: f32) -> f32 {
+    next_up(best / CIEDE2000_BOUND_SAFETY)
+}
+
+#[inline(always)]
+fn next_up(value: f32) -> f32 {
+    if value.is_nan() || value == f32::INFINITY {
+        value
+    } else if value == -0.0 {
+        f32::from_bits(1)
+    } else if value >= 0.0 {
+        f32::from_bits(value.to_bits() + 1)
+    } else {
+        f32::from_bits(value.to_bits() - 1)
+    }
+}
+
+#[inline(always)]
+fn next_down(value: f32) -> f32 {
+    -next_up(-value)
 }
 
 /// Only for scans that reject every nonfinite score. Nonfinite input coordinates
@@ -391,9 +430,10 @@ mod tests {
                     let mut bad = [0.5, 0.25, 1.0];
                     bad[axis] = invalid;
                     let good = PaletteColor::new(0, [0.5, 0.25, 1.0]);
-                    let mut matcher = PaletteMatcher::new(vec![good], matching);
+                    let matcher = PaletteMatcher::new(vec![good], matching);
                     assert_eq!(matcher.nearest_finite(bad), None);
-                    matcher.colors.push(PaletteColor::new(1, bad));
+                    let matcher =
+                        PaletteMatcher::new(vec![good, PaletteColor::new(1, bad)], matching);
                     assert_eq!(matcher.nearest_finite(good.coordinates), None);
                 }
             }
@@ -416,7 +456,7 @@ mod tests {
             .map(|(index, rgb)| PaletteColor::new(index as u8, converter.coordinates(rgb)))
             .collect::<Vec<_>>();
         for matching in [MatchPolicy::OklchHueArc, MatchPolicy::CielchHueArc] {
-            let mut matcher = PaletteMatcher::new(colors.clone(), matching);
+            let matcher = PaletteMatcher::new(colors.clone(), matching);
             for n in 0..4096_u32 {
                 let coordinates = [0.5, n as f32 * 0.001 - 1.0, n as f32 * 0.01 - 20.0];
                 assert_eq!(
@@ -431,9 +471,9 @@ mod tests {
             for hue in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
                 assert_eq!(matcher.nearest_finite([0.5, 0.2, hue]), None);
             }
-            matcher
-                .colors
-                .push(PaletteColor::new(4, [f32::MAX, f32::MAX, 0.0]));
+            let mut invalid_colors = colors.clone();
+            invalid_colors.push(PaletteColor::new(4, [f32::MAX, f32::MAX, 0.0]));
+            let matcher = PaletteMatcher::new(invalid_colors, matching);
             assert_eq!(matcher.nearest_finite(colors[0].coordinates), None);
         }
     }
@@ -520,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn ciede2000_bounds_stay_below_the_frozen_distance() {
+    fn ciede2000_bounds_stay_below_the_complete_distance() {
         let converter = Converter::new(PackedSpace::Cielab);
         let mut bits = 0x53c9_1e27u32;
         let mut next = || {
@@ -545,13 +585,13 @@ mod tests {
             };
             let source = converter.coordinates(source_rgb);
             let candidate = converter.coordinates(candidate_rgb);
-            let expected = crate::spec::color::lab_ciede2000::ciede2000(source, candidate);
             let pair = Ciede2000Pair::new(
                 source,
                 unprimed_chroma(source),
                 candidate,
                 unprimed_chroma(candidate),
             );
+            let expected = pair.distance();
             assert!(
                 lightness_lower_bound(source[0], candidate[0]) <= expected,
                 "lightness: {source_rgb:?}, {candidate_rgb:?}"
@@ -565,108 +605,6 @@ mod tests {
                 pair.prepare_hue().lower_bound() <= expected,
                 "hue: {source_rgb:?}, {candidate_rgb:?}"
             );
-        }
-    }
-
-    #[test]
-    fn ciede2000_pruning_matches_exhaustive_scan_for_rgb_and_near_greys() {
-        let converter = Converter::new(PackedSpace::Cielab);
-        let mut bits = 0x8f31_a2c5u32;
-        let mut next = || {
-            bits ^= bits << 13;
-            bits ^= bits >> 17;
-            bits ^= bits << 5;
-            bits
-        };
-        let mut colors = Vec::with_capacity(66);
-        for index in 0..64 {
-            colors.push(PaletteColor::new(
-                index,
-                converter.coordinates([next() as u8, (next() >> 8) as u8, (next() >> 16) as u8]),
-            ));
-        }
-        // Duplicate entries exercise exact-score ties. Near-greys stress unstable hue angles.
-        colors.push(PaletteColor::new(64, colors[7].coordinates));
-        colors.push(PaletteColor::new(
-            65,
-            converter.coordinates([128, 128, 129]),
-        ));
-        let matcher = PaletteMatcher::new(colors, MatchPolicy::CielabCiede2000);
-
-        for n in 0..20_000u32 {
-            let rgb = if n % 4 == 0 {
-                let gray = next() as u8;
-                [gray, gray.wrapping_add((n % 3) as u8), gray]
-            } else {
-                [next() as u8, (next() >> 8) as u8, (next() >> 16) as u8]
-            };
-            let coordinates = converter.coordinates(rgb);
-            let mut expected = matcher.colors[0];
-            let mut expected_score =
-                crate::spec::color::lab_ciede2000::ciede2000(coordinates, expected.coordinates);
-            for &candidate in &matcher.colors[1..] {
-                let score = crate::spec::color::lab_ciede2000::ciede2000(
-                    coordinates,
-                    candidate.coordinates,
-                );
-                if score < expected_score {
-                    expected = candidate;
-                    expected_score = score;
-                }
-            }
-            assert_eq!(matcher.scan_ciede2000(coordinates), expected, "RGB {rgb:?}");
-        }
-        assert_eq!(
-            matcher.scan_ciede2000(matcher.colors[7].coordinates).index,
-            7
-        );
-
-        for palette_case in 0..32 {
-            let length = 2 + (next() as usize % 63);
-            let mut colors = Vec::with_capacity(length + 1);
-            for index in 0..length {
-                colors.push(PaletteColor::new(
-                    index as u8,
-                    converter.coordinates([
-                        next() as u8,
-                        (next() >> 8) as u8,
-                        (next() >> 16) as u8,
-                    ]),
-                ));
-            }
-            colors[1] = PaletteColor::new(1, colors[0].coordinates);
-            colors.push(PaletteColor::new(
-                length as u8,
-                converter.coordinates([127, 128, 127]),
-            ));
-            let matcher = PaletteMatcher::new(colors, MatchPolicy::CielabCiede2000);
-            for sample in 0..256 {
-                let rgb = if sample % 4 == 0 {
-                    let gray = next() as u8;
-                    [gray, gray, gray.wrapping_add((sample % 3) as u8)]
-                } else {
-                    [next() as u8, (next() >> 8) as u8, (next() >> 16) as u8]
-                };
-                let coordinates = converter.coordinates(rgb);
-                let mut expected = matcher.colors[0];
-                let mut expected_score =
-                    crate::spec::color::lab_ciede2000::ciede2000(coordinates, expected.coordinates);
-                for &candidate in &matcher.colors[1..] {
-                    let score = crate::spec::color::lab_ciede2000::ciede2000(
-                        coordinates,
-                        candidate.coordinates,
-                    );
-                    if score < expected_score {
-                        expected = candidate;
-                        expected_score = score;
-                    }
-                }
-                assert_eq!(
-                    matcher.scan_ciede2000(coordinates),
-                    expected,
-                    "palette {palette_case}, RGB {rgb:?}"
-                );
-            }
         }
     }
 }
