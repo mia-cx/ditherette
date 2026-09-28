@@ -505,6 +505,21 @@ fn ciede2000_near_tie_uses_the_complete_frozen_score() {
 }
 
 #[test]
+fn ciede2000_zero_score_tie_keeps_the_first_entry() {
+    use prod::quantize::matcher::{PaletteColor, PaletteMatcher};
+    let source = [0.0, 0.0, 0.0];
+    // The first entry's complete score underflows to zero, but the Euclidean seed prefers the second.
+    let first = [3e-23, 0.0, 0.0];
+    let second = [0.0, 0.0, 0.0];
+    assert_eq!(spec::color::lab_ciede2000::ciede2000(source, first), 0.0);
+    let matcher = PaletteMatcher::new(
+        vec![PaletteColor::new(0, first), PaletteColor::new(1, second)],
+        MatchPolicy::CielabCiede2000,
+    );
+    assert_eq!(matcher.nearest(source).index, 0);
+}
+
+#[test]
 fn ciede2000_distance_matches_frozen_for_rgb_and_near_greys() {
     use prod::quantize::metric::distance_score;
     let converter = Converter::new(OrdinarySpace::Cielab);
