@@ -26,12 +26,21 @@ let worker: Worker | undefined;
 let loadedSourceId: string | undefined;
 let activeReject: ((error: Error) => void) | undefined;
 let activeRequestId = 0;
+let activeStartedAt = 0;
 let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
 let workerNeedsReplacement = false;
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 const SLIDER_DEBOUNCE_MS = 180;
+/**
+ * A superseded job younger than this finishes on its worker, so the next job keeps the loaded
+ * source and the package's stage cache. Older jobs may run long, so their worker is replaced.
+ */
+const REPLACE_BUSY_WORKER_AFTER_MS = 500;
+/** Saving clones every index into IndexedDB, so only the result edits settle on is saved. */
+const PERSIST_DELAY_MS = 1000;
 const OUTPUT_SLIDER_FIELDS = new Set<keyof OutputSettings>([
 	'width',
 	'height',
@@ -46,7 +55,7 @@ const DITHER_SLIDER_FIELDS = new Set<keyof DitherSettings>([
 ]);
 
 class ProcessingCanceled extends Error {
-	constructor(message = 'Processing was canceled.') {
+	constructor(message = 'Processing was cancelled.') {
 		super(message);
 		this.name = 'ProcessingCanceled';
 	}
@@ -84,8 +93,13 @@ function resetProcessingWorker(activeWorker: Worker) {
 }
 
 function supersedeActiveRequest() {
+	const superseded = activeRequestId;
 	activeRequestId = ++requestId;
-	if (activeReject) workerNeedsReplacement = true;
+	if (activeReject) {
+		if (performance.now() - activeStartedAt > REPLACE_BUSY_WORKER_AFTER_MS)
+			workerNeedsReplacement = true;
+		else worker?.postMessage({ id: superseded, type: 'cancel' } satisfies WorkerRequest);
+	}
 	activeReject?.(new ProcessingCanceled('Processing was superseded by newer settings.'));
 	activeReject = undefined;
 }
@@ -128,6 +142,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 	if (workerNeedsReplacement) terminateProcessingWorker();
 	const id = ++requestId;
 	activeRequestId = id;
+	activeStartedAt = performance.now();
 	const activeWorker = getProcessingWorker();
 	const sourceId = currentSourceId(source);
 	const hash = currentSettingsHash();
@@ -282,26 +297,28 @@ export async function processCurrentImage(schedule?: ProcessingSchedule) {
 			return;
 		processedImage.set(result.image);
 		processingProgress.set(undefined);
-		const persistStart = performance.now();
-		await saveProcessedImage(result.image);
-		if (result.metrics) {
-			const completedAt = performance.now();
-			recordProcessingMetrics({
-				...result.metrics,
-				completedAt,
-				totalMs: completedAt - result.metrics.startedAt,
-				timings: [
-					...result.metrics.timings,
-					{ name: 'main persist processed image', ms: completedAt - persistStart }
-				]
-			});
-		}
+		persistWhenSettled();
+		if (result.metrics) recordProcessingMetrics(result.metrics);
 	} catch (error) {
 		if (error instanceof ProcessingCanceled) return;
 		if (hash !== currentSettingsHash()) return;
 		const message = error instanceof Error ? error.message : 'Processing failed';
 		processingError.set(message);
 	}
+}
+
+/** Save the processed image once no newer result replaces it for a moment. */
+function persistWhenSettled() {
+	if (persistTimer) clearTimeout(persistTimer);
+	persistTimer = setTimeout(() => {
+		persistTimer = undefined;
+		const image = processedImage.get();
+		if (!image) return;
+		saveProcessedImage(image).catch((error: unknown) => {
+			if (processedImage.get() !== image) return;
+			processingError.set(error instanceof Error ? error.message : 'Saving the output failed.');
+		});
+	}, PERSIST_DELAY_MS);
 }
 
 export function scheduleProcessing(delay = 0) {

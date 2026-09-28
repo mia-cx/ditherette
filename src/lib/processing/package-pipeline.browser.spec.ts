@@ -156,7 +156,14 @@ describe('installed package website integration', () => {
 			'oklch',
 			'weighted-rgb',
 			'weighted-rgb-601',
-			'weighted-rgb-709'
+			'weighted-rgb-709',
+			'cielab-ciede2000',
+			'oklch-euclidean',
+			'oklch-circular-hue',
+			'cielch',
+			'cielch-euclidean',
+			'cielch-circular-hue',
+			'ycbcr'
 		];
 		const algorithms: DitherId[] = [
 			'none',
@@ -167,7 +174,13 @@ describe('installed package website integration', () => {
 			'random',
 			'floyd-steinberg',
 			'sierra',
-			'sierra-lite'
+			'sierra-lite',
+			'atkinson',
+			'blue-noise',
+			'yliluoma-2',
+			'yliluoma-4',
+			'yliluoma-8',
+			'yliluoma-16'
 		];
 		for (const colorSpace of colors) {
 			for (const algorithm of algorithms) {

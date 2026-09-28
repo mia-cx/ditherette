@@ -48,6 +48,14 @@
 	</label>
 	<label class={labelClass}>
 		<Checkbox
+			checked={methodFilters.includes('mixing')}
+			onCheckedChange={() => onToggleMethod('mixing')}
+			aria-label="Toggle pattern mixing method filter"
+		/>
+		Pattern mixing
+	</label>
+	<label class={labelClass}>
+		<Checkbox
 			checked={methodFilters.includes('none')}
 			onCheckedChange={() => onToggleMethod('none')}
 			aria-label="Toggle none method filter"

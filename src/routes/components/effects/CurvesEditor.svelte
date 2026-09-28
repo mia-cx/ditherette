@@ -1,11 +1,19 @@
 <script lang="ts">
-	import type { CurvesEffect } from 'ditherette';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
+	import {
+		CURVE_CHANNELS,
+		samePoints,
+		type ChannelCurves,
+		type CurveChannel,
+		type CurvePoints
+	} from '$lib/effects/catalog';
 	import { MAX_CURVE_POINTS, evaluateCurve, type CurvePoint } from '$lib/effects/spline';
-	import ChannelToggle from './ChannelToggle.svelte';
+	import { tonePath } from '$lib/effects/tone';
+	import ToneGrid from './ToneGrid.svelte';
 
-	type Props = { id: string; step: CurvesEffect; onchange: (step: CurvesEffect) => void };
+	type Props = { id: string; step: ChannelCurves; onchange: (step: ChannelCurves) => void };
 	let { id, step, onchange }: Props = $props();
 
 	/** Points sit on the byte grid, so neighbours stay well above the package's 0.001 x gap. */
@@ -14,25 +22,50 @@
 	const SIZE = 256;
 	const SAMPLES = 128;
 	const HIT_RADIUS_PX = 10;
-	const STROKE = {
-		rgb: 'text-foreground',
-		red: 'text-red-500',
-		green: 'text-green-500',
-		blue: 'text-blue-500'
-	} as const;
+	const CHANNEL = {
+		red: {
+			label: 'Red',
+			stroke: 'text-red-500',
+			check: 'data-checked:border-red-500 data-checked:bg-red-500'
+		},
+		green: {
+			label: 'Green',
+			stroke: 'text-green-500',
+			check: 'data-checked:border-green-500 data-checked:bg-green-500'
+		},
+		blue: {
+			label: 'Blue',
+			stroke: 'text-blue-500',
+			check: 'data-checked:border-blue-500 data-checked:bg-blue-500'
+		}
+	} as const satisfies Record<CurveChannel, { label: string; stroke: string; check: string }>;
 
 	let svg = $state<SVGSVGElement>();
 	let selected = $state(0);
 	let dragging = $state<number>();
+	/** Checked channels. Edits start from the first one's curve and write to all of them. */
+	let editing = $state<CurveChannel[]>([...CURVE_CHANNELS]);
 
-	const points = $derived(step.points);
+	const points = $derived(step.curves[editing[0]!]);
 	const current = $derived(points[Math.min(selected, points.length - 1)]!);
-	const path = $derived(
-		Array.from({ length: SAMPLES + 1 }, (_, index) => {
-			const x = index / SAMPLES;
-			return `${index ? 'L' : 'M'}${x * SIZE} ${(1 - evaluateCurve(points, x)) * SIZE}`;
-		}).join('')
+	const stroke = $derived(editing.length === 1 ? CHANNEL[editing[0]!].stroke : 'text-foreground');
+	/** Channels whose curve differs from the edited one, drawn thin behind it. */
+	const others = $derived(
+		CURVE_CHANNELS.filter((channel) => !samePoints(step.curves[channel], points))
 	);
+	const curvePath = (curve: CurvePoints) => tonePath((x) => evaluateCurve(curve, x), SIZE, SAMPLES);
+
+	function setEditing(channel: CurveChannel, checked: boolean) {
+		editing = CURVE_CHANNELS.filter((other) =>
+			other === channel ? checked : editing.includes(other)
+		);
+	}
+
+	function write(next: CurvePoints) {
+		const curves: Record<CurveChannel, CurvePoints> = { ...step.curves };
+		for (const channel of editing) curves[channel] = next;
+		onchange({ ...step, curves });
+	}
 
 	const toByte = (value: number) => Math.round(value * BYTE);
 	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -47,12 +80,12 @@
 			clamp(Math.round(xByte), min, max) / BYTE,
 			clamp(Math.round(yByte), 0, BYTE) / BYTE
 		];
-		onchange({ ...step, points: next });
+		write(next);
 	}
 
 	function remove(index: number) {
 		if (points.length <= 2) return;
-		onchange({ ...step, points: points.filter((_, other) => other !== index) });
+		write(points.filter((_, other) => other !== index));
 		selected = Math.max(0, index - 1);
 	}
 
@@ -80,7 +113,7 @@
 			if (index < 0) index = points.length;
 			const next: CurvePoint[] = points.slice();
 			next.splice(index, 0, [xByte / BYTE, Math.round(y) / BYTE]);
-			onchange({ ...step, points: next });
+			write(next);
 		}
 		selected = index;
 		dragging = index;
@@ -113,38 +146,42 @@
 </script>
 
 <div class="grid grid-cols-1 gap-3">
-	<ChannelToggle value={step.channel} onchange={(channel) => onchange({ ...step, channel })} />
+	<div class="flex items-center gap-4" role="group" aria-label="Channels to edit">
+		{#each CURVE_CHANNELS as channel (channel)}
+			<div class="flex items-center gap-2">
+				<Checkbox
+					id="{id}-{channel}"
+					class={CHANNEL[channel].check}
+					bind:checked={() => editing.includes(channel), (checked) => setEditing(channel, checked)}
+					disabled={editing.length === 1 && editing[0] === channel}
+				/>
+				<Label for="{id}-{channel}" class="text-xs">{CHANNEL[channel].label}</Label>
+			</div>
+		{/each}
+	</div>
 
 	<svg
 		bind:this={svg}
 		viewBox="0 0 {SIZE} {SIZE}"
 		class="aspect-square w-full touch-none border border-border bg-muted/30 select-none"
 		role="group"
-		aria-label="Curve. Click to add a point; drag points to reshape."
+		aria-label="Curve. Click to add a point, and drag points to reshape it."
 		onpointerdown={press}
 		onpointermove={drag}
 		onpointerup={() => (dragging = undefined)}
 		onpointercancel={() => (dragging = undefined)}
 	>
-		{#each [0.25, 0.5, 0.75] as line (line)}
-			<line x1={line * SIZE} x2={line * SIZE} y1="0" y2={SIZE} class="stroke-border" />
-			<line y1={line * SIZE} y2={line * SIZE} x1="0" x2={SIZE} class="stroke-border" />
+		<ToneGrid size={SIZE} />
+		{#each others as channel (channel)}
+			<path
+				d={curvePath(step.curves[channel])}
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				class="{CHANNEL[channel].stroke} opacity-70"
+			/>
 		{/each}
-		<line
-			x1="0"
-			y1={SIZE}
-			x2={SIZE}
-			y2="0"
-			class="stroke-muted-foreground/40"
-			stroke-dasharray="4 4"
-		/>
-		<path
-			d={path}
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			class={STROKE[step.channel]}
-		/>
+		<path d={curvePath(points)} fill="none" stroke="currentColor" stroke-width="2" class={stroke} />
 		{#each points as [x, y], index (index)}
 			<rect
 				data-point={index}

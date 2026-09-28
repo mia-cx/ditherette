@@ -127,7 +127,7 @@
 									stageTimingLabel('resize compute', 'resize cache lookup')
 								)}
 								{@render Metric(
-									'Quantize',
+									'Quantise',
 									stageTimingLabel('quantize compute', 'quantize cache lookup')
 								)}
 							{:else}
@@ -214,7 +214,7 @@
 								{@render Stat('Source RGBA', formatBytes(latest.memory.sourceBytes))}
 								{@render Stat('Resized RGBA', formatBytes(latest.memory.resizedBytes))}
 								{@render Stat('Indices', formatBytes(latest.memory.indexBytes))}
-								{@render Stat('Color vectors', formatBytes(latest.memory.vectorBytes))}
+								{@render Stat('Colour vectors', formatBytes(latest.memory.vectorBytes))}
 								{@render Stat('Dither work', formatBytes(latest.memory.ditherWorkBytes))}
 								{@render Stat('Branch cache', formatBytes(latest.memory.branchCacheBytes))}
 							</div>

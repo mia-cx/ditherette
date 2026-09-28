@@ -44,7 +44,12 @@ const artifactDescriptions = Object.fromEntries(
 	)
 );
 
-const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--js-flags=--expose-gc'] });
+// DITHERETTE_BENCH_CHROMIUM picks a system browser; otherwise Playwright uses its managed one.
+const browser = await chromium.launch({
+	executablePath: process.env.DITHERETTE_BENCH_CHROMIUM,
+	headless: true,
+	args: ['--js-flags=--expose-gc']
+});
 try {
 	const page = await browser.newPage();
 	await page.route('https://ditherette.test/**', async (route) => {

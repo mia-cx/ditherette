@@ -3,74 +3,99 @@ import type { ColorSpaceId } from '$lib/processing/types';
 export type ColorSpaceOption = {
 	id: ColorSpaceId;
 	label: string;
-	short: string;
-	math: string;
-	latex: string;
+	/** What the mode does to the image. Measured against OKLab on a hue and chroma sweep. */
+	description: string;
 };
 
 export const COLOR_SPACES = [
 	{
 		id: 'oklab',
 		label: 'OKLab',
-		short:
-			'Modern perceptual space tuned so equal numeric steps are closer to equal visible color changes. Usually the safest default for nearest-palette matching.',
-		math: 'd² = (L₁−L₂)² + (a₁−a₂)² + (b₁−b₂)²',
-		latex: String.raw`d^2 = \Delta L^2 + \Delta a^2 + \Delta b^2`
+		description:
+			'Picks the palette colour that looks closest, balancing brightness, colourfulness, and hue. The best place to start.'
 	},
 	{
 		id: 'srgb',
 		label: 'sRGB',
-		short:
-			'Raw browser RGB channel distance. It is simple and predictable, but dark colors and saturated colors can be weighted unlike human vision.',
-		math: 'd² = (R₁−R₂)² + (G₁−G₂)² + (B₁−B₂)²',
-		latex: String.raw`d^2 = \Delta R^2 + \Delta G^2 + \Delta B^2`
+		description:
+			'Compares raw screen values. Results tend to be duller than with OKLab, and shadows drift in brightness.'
 	},
 	{
 		id: 'linear-rgb',
 		label: 'Linear RGB',
-		short:
-			'Converts RGB into linear-light values before measuring distance. Better matches physical light mixing, but can pick surprising palette colors for pixel-art-style matching.',
-		math: 'd² over linearized channels',
-		latex: String.raw`d^2 = \Delta R_{lin}^2 + \Delta G_{lin}^2 + \Delta B_{lin}^2`
+		description:
+			'Compares amounts of light. Dark colours measure as nearly the same, so shadows lose the most detail of any mode.'
 	},
 	{
 		id: 'weighted-rgb',
 		label: 'Weighted RGB',
-		short:
-			'A fast RGB heuristic that changes red/blue weighting based on average red. Useful when OKLab feels too perceptual but plain RGB feels too naive.',
-		math: '(2+r̄/256)·ΔR² + 4·ΔG² + (2+(255−r̄)/256)·ΔB²',
-		latex: String.raw`d^2 = (2 + \bar r / 256)\Delta R^2 + 4\Delta G^2 + (2 + (255 - \bar r)/256)\Delta B^2`
+		description:
+			'A quick fix for sRGB that weighs green most, and red or blue more depending on how red the colour is. A little closer to what you see than sRGB.'
 	},
 	{
 		id: 'weighted-rgb-601',
 		label: 'Weighted RGB · Rec.601',
-		short:
-			'Classic television luma weighting. Strongly favors green-channel accuracy, which can preserve brightness better than raw RGB for older image assumptions.',
-		math: '0.299·ΔR² + 0.587·ΔG² + 0.114·ΔB²',
-		latex: String.raw`d^2 = 0.299\Delta R^2 + 0.587\Delta G^2 + 0.114\Delta B^2`
+		description:
+			'Weighs green most and blue least, as TV brightness does. Shading holds up better than in sRGB, but blues can fade to grey.'
 	},
 	{
 		id: 'weighted-rgb-709',
 		label: 'Weighted RGB · Rec.709',
-		short:
-			'Modern HDTV luma weighting. Even more green-heavy than Rec.601, often useful when perceived brightness should dominate hue fidelity.',
-		math: '0.2126·ΔR² + 0.7152·ΔG² + 0.0722·ΔB²',
-		latex: String.raw`d^2 = 0.2126\Delta R^2 + 0.7152\Delta G^2 + 0.0722\Delta B^2`
-	},
-	{
-		id: 'cielab',
-		label: 'CIELAB ΔE76',
-		short:
-			'Older perceptual color space using the ΔE76 distance formula. More human-oriented than RGB, though less uniform than OKLab in saturated regions.',
-		math: 'ΔE*ab = √((ΔL)² + (Δa)² + (Δb)²)',
-		latex: String.raw`\Delta E_{ab}^{*} = \sqrt{\Delta L^{*2} + \Delta a^{*2} + \Delta b^{*2}}`
+		description:
+			'Like Rec.601, with even more weight on green. The best shading of the RGB modes, and the most blues fading to grey.'
 	},
 	{
 		id: 'oklch',
 		label: 'OKLCH',
-		short:
-			'OKLab expressed as lightness, chroma, and hue. Useful for reasoning about hue/chroma directly, with circular hue distance instead of flat a/b axes.',
-		math: 'd uses ΔL, ΔC, and circular Δh',
-		latex: String.raw`d^2 = \Delta L^2 + \Delta C^2 + w_h\,\Delta h_{circ}^2`
+		description:
+			'OKLab described by lightness, chroma, and hue angle instead of two colour axes. Hue counts only as much as the duller of two colours is colourful, so vivid areas keep their hue and stay more colourful than with OKLab.'
+	},
+	{
+		id: 'oklch-circular-hue',
+		label: 'OKLCH · circular hue',
+		description:
+			'Measures the same distance as OKLab, so it picks exactly the same colours. It only differs with Dither in selected space: error then spreads as lightness, chroma, and hue, which leaves dithered areas duller.'
+	},
+	{
+		id: 'oklch-euclidean',
+		label: 'OKLCH · Euclidean',
+		description:
+			'Compares hue angle as a plain number, which outweighs lightness and chroma. Hue stays closest of any mode, but greys pick up colour, brightness drifts, and reds either side of 0° count as opposites.'
+	},
+	{
+		id: 'cielab',
+		label: 'CIELAB ΔE76',
+		description:
+			'The classic perceptual space, older than OKLab. It holds hue more closely than OKLab, but brightness drifts more.'
+	},
+	{
+		id: 'cielab-ciede2000',
+		label: 'CIELAB ΔE2000',
+		description:
+			"CIE's 2000 correction to CIELAB for blues, greys, and vivid colours. It keeps more colour than OKLab at some cost in brightness, and it's the slowest mode."
+	},
+	{
+		id: 'cielch',
+		label: 'CIELCh',
+		description:
+			'CIELAB described by lightness, chroma, and hue angle. As in OKLCH, hue counts only as much as the duller of two colours is colourful.'
+	},
+	{
+		id: 'cielch-circular-hue',
+		label: 'CIELCh · circular hue',
+		description:
+			'Measures the same distance as CIELAB ΔE76, so it picks exactly the same colours. It only differs with Dither in selected space, where error spreads as lightness, chroma, and hue.'
+	},
+	{
+		id: 'cielch-euclidean',
+		label: 'CIELCh · Euclidean',
+		description:
+			"Compares hue angle as a plain number, but CIELCh's angle is tiny next to its lightness and chroma, so hue barely counts. It matches brightness and colourfulness and lets hue change freely."
+	},
+	{
+		id: 'ycbcr',
+		label: 'YCbCr',
+		description:
+			'Splits brightness from colour, as video does, and weighs them equally. Results land close to the weighted RGB modes.'
 	}
 ] as const satisfies readonly ColorSpaceOption[];

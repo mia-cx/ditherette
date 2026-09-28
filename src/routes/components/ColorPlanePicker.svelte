@@ -110,7 +110,7 @@
 	<button
 		type="button"
 		class="relative aspect-square min-h-52 touch-none overflow-hidden border border-border bg-transparent p-0"
-		aria-label="Color field. Arrow keys move the color stop."
+		aria-label="Colour field. Arrow keys move the colour stop."
 		onpointerdown={pickPlane}
 		onkeydown={handlePlaneKeydown}
 	>

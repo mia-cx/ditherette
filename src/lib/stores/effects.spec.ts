@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EFFECTS } from '$lib/effects/catalog';
+import { EFFECTS, type CurvePoints } from '$lib/effects/catalog';
 import {
 	activeEffectSteps,
 	addEffect,
@@ -42,6 +42,38 @@ describe('effect layers', () => {
 
 		removeEffect(exposure.id);
 		expect(effectLayers.get().map((layer) => layer.id)).toEqual([curves.id, levels.id]);
+	});
+
+	it('makes ids without secure-context APIs', () => {
+		const randomUUID = crypto.randomUUID;
+		// Pages served over plain HTTP from another host have no randomUUID.
+		Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true });
+		try {
+			const [first, second] = [addEffect('levels'), addEffect('levels')];
+			expect(first.id).toMatch(/^[0-9a-f]{32}$/);
+			expect(first.id).not.toBe(second.id);
+		} finally {
+			Object.defineProperty(crypto, 'randomUUID', { value: randomUUID, configurable: true });
+		}
+	});
+
+	it('runs matching channel curves as one rgb step and differing ones per channel', () => {
+		const curves = addEffect('curves');
+		if (curves.step.effect !== 'curves') throw new Error('Expected curves.');
+		const lift: CurvePoints = [
+			[0, 0.1],
+			[1, 1]
+		];
+		const step = curves.step;
+		updateEffect(curves.id, { ...step, curves: { red: lift, green: lift, blue: lift } });
+		expect(activeEffectSteps.get()).toEqual([
+			{ effect: 'curves', enabled: true, channel: 'rgb', points: lift }
+		]);
+
+		updateEffect(curves.id, { ...step, curves: { ...step.curves, red: lift } });
+		expect(activeEffectSteps.get()).toEqual([
+			{ effect: 'curves', enabled: true, channel: 'red', points: lift }
+		]);
 	});
 
 	it('never changes a layer into another effect', () => {

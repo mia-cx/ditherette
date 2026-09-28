@@ -1,21 +1,43 @@
 import { persistentAtom } from '@nanostores/persistent';
 import { computed } from 'nanostores';
-import { isEffect, type Effect } from 'ditherette';
-import { EFFECTS, MAX_EFFECT_LAYERS, type EffectKind } from '$lib/effects/catalog';
+import { isEffect } from 'ditherette';
+import {
+	CURVE_CHANNELS,
+	EFFECTS,
+	MAX_EFFECT_LAYERS,
+	packageSteps,
+	type ChannelCurves,
+	type EffectKind,
+	type LayerStep
+} from '$lib/effects/catalog';
 
 /** One named instance in the effect pipeline. The name only labels it; `step` is what runs. */
 export type EffectLayer = {
 	readonly id: string;
 	readonly name: string;
-	readonly step: Effect;
+	readonly step: LayerStep;
 };
 
 export const MAX_EFFECT_NAME_LENGTH = 64;
 
+/** A saved step the package accepts. Curves check each channel's points as a package step. */
+function isLayerStep(value: unknown): value is LayerStep {
+	if (!value || typeof value !== 'object') return false;
+	const { effect, enabled, curves } = value as Partial<ChannelCurves>;
+	if (effect !== 'curves') return isEffect(value);
+	return (
+		typeof enabled === 'boolean' &&
+		curves !== undefined &&
+		CURVE_CHANNELS.every((channel) =>
+			isEffect({ effect, enabled, channel, points: curves[channel] })
+		)
+	);
+}
+
 function isLayer(value: unknown): value is EffectLayer {
 	if (!value || typeof value !== 'object') return false;
 	const { id, name, step } = value as Record<string, unknown>;
-	return typeof id === 'string' && typeof name === 'string' && isEffect(step);
+	return typeof id === 'string' && typeof name === 'string' && isLayerStep(step);
 }
 
 /** Keep saved layers the package would accept, so a damaged entry cannot block processing. */
@@ -35,7 +57,7 @@ export const effectLayers = persistentAtom<EffectLayer[]>('ditherette:effects', 
 
 /** The steps processing runs: enabled layers, in pipeline order. */
 export const activeEffectSteps = computed(effectLayers, (layers) =>
-	layers.filter((layer) => layer.step.enabled).map((layer) => layer.step)
+	layers.filter((layer) => layer.step.enabled).flatMap((layer) => packageSteps(layer.step))
 );
 
 function uniqueName(base: string, layers: readonly EffectLayer[], except?: string) {
@@ -50,13 +72,23 @@ function replaceLayer(id: string, change: (layer: EffectLayer) => EffectLayer) {
 	effectLayers.set(effectLayers.get().map((layer) => (layer.id === id ? change(layer) : layer)));
 }
 
+/**
+ * A random 128-bit layer id. `crypto.randomUUID` exists only in secure contexts, so a dev server
+ * opened over plain HTTP from another machine could not add effects with it.
+ */
+function newLayerId() {
+	return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+		byte.toString(16).padStart(2, '0')
+	).join('');
+}
+
 /** Append a neutral instance of `kind`, named after the effect, and return it. */
 export function addEffect(kind: EffectKind): EffectLayer {
 	const layers = effectLayers.get();
 	if (layers.length >= MAX_EFFECT_LAYERS)
 		throw new Error(`The pipeline holds at most ${MAX_EFFECT_LAYERS} effects.`);
 	const layer: EffectLayer = {
-		id: crypto.randomUUID(),
+		id: newLayerId(),
 		name: uniqueName(EFFECTS[kind].label, layers),
 		step: EFFECTS[kind].create()
 	};
@@ -92,7 +124,7 @@ export function renameEffect(id: string, name: string) {
 }
 
 /** Replace a layer's step arguments. The effect kind never changes. */
-export function updateEffect(id: string, step: Effect) {
+export function updateEffect(id: string, step: LayerStep) {
 	replaceLayer(id, (layer) => (layer.step.effect === step.effect ? { ...layer, step } : layer));
 }
 

@@ -4,10 +4,12 @@ Ditherette turns an image into palette-limited pixel art in the browser. The int
 
 ## Layout
 
-- **Studio, 1024px and wider.** Windows dock into splits and tabs, float, and dock back. The default layout puts Effects on the left, Preview in the middle, and the processing stages on the right: Dimensions, Dither, and Color space as tabs above Palette. The side columns take 20% and 28% of the width, within 240–300px and 300–400px, so the preview keeps the rest.
-- **Effect windows.** Each effect instance opens its own window, titled with the instance name. New effect windows join the other effect windows as tabs, or dock below the Effects list when none is open.
+- **Menu bar.** The top bar is the "ditherette" wordmark and a desktop-style menu bar: File (open, export, clear), Edit (crop), Image (adjustments, image size, resample, dither, color space), View (compare mode, zoom, theme), and Window (studio windows, reset layout). Every command already exists elsewhere in the UI; the menus gather them where editor users look. Command shortcuts use ⌘ on Apple devices and Ctrl elsewhere; canvas zoom uses bare `+`, `−`, `0`, and `1`, so browser zoom keeps working.
+- **Studio, 1024px and wider.** Windows dock into splits and tabs, float, and dock back. The default layout puts the processing stages on the left (Dimensions and Dither as tabs above Palette and Color space), Preview in the middle, and Effects on the right. The side columns take 28% and 20% of the width, within 300–400px and 240–300px, so the preview keeps the rest.
+- **Effect windows.** Each effect instance opens its own window, titled with the instance name. New effect windows join an open effect window as tabs, or open floating in the middle of the dock when none is open.
 - **Floating.** The button in each tab bar floats the active window at 360×520 or docks a floating group back on the right edge. The tab context menu offers the same action plus maximize and close.
-- **Persistence.** The layout saves to `localStorage` on every change and restores on load. Windows > Reset layout rebuilds the default. Closing every window shows a Reset layout button.
+- **Collapsing.** Every docked column except the preview's is a sidebar, and the window at its top carries a sidebar button: it folds the whole column into a strip of vertical tabs, split evenly, and opens it again. A window that shares its column rolls up to its tab bar with its caret; a floating window rolls up to its title. Windows rolled up before a sidebar folds stay rolled up when it opens. Other side columns keep their widths while a sidebar folds or opens, so the preview takes up the difference. Collapse state persists with the layout, and Reset layout expands everything.
+- **Persistence.** The layout saves to `localStorage` on every change and restores on load. Window > Reset layout rebuilds the default. Closing every window shows a Reset layout button.
 - **Below 1024px.** The same controls stack: preview first, then an accordion of Effects, Dimensions, Dither, and Color space, then Palette. Effect rows expand in place instead of opening windows.
 - **Export** stays in a bar under the workspace at every width.
 
@@ -22,9 +24,13 @@ The Effects list reads top to bottom in run order: effects run on the source, th
 - **Color.** Zinc neutrals with the yellow primary (`--primary`). The primary marks the active window's tab, sash hover, drop targets, and enabled toggles.
 - **Dock theme.** `src/lib/components/dock/dock.css` maps every Dockview variable to an app token, so light and dark themes follow the app's `.dark` class. Floating windows sit at z-index 20, under menus and popovers (z-50).
 - **Editors.** Sliders pair with a number field; the field shows the stored value after clamping. Levels reads in 0–255 byte units. Percent fields show -100–100% for arguments stored as -1–1. The curve editor snaps points to the 0–255 grid and draws the same monotone spline the Wasm effect applies.
+- **Effects on the source.** The preview toolbar's sliders button, or View > Show effects on source, draws the Source half with the enabled effects applied, before resize and palette. Every effect maps colours independently, so a worker compiles the chain into a 52³ lookup table by running the real effects over a colour lattice, and WebGL2 draws the full-resolution source through it. Interpolation keeps the mean error near 0.15 bytes; exports always use the exact pipeline.
+- **Visuals.** Levels, Brightness and contrast, and Exposure plot their tone response over the dashed identity line. Hue and saturation shows the hue circle before and after the step. Hue, saturation, lightness, temperature, and tint sliders draw what they do as their track.
+- **Curves.** Each Curves instance keeps a curve per channel. The Red, Green, and Blue checkboxes, all checked by default, pick which channels an edit writes to; the edit starts from the first checked channel's curve. Channels whose curve differs are drawn thin in their colour behind it. Matching curves run as one RGB step.
 
 ## Accessibility
 
 - Every effect control has a visible label and a matching accessible name.
 - Curve points are focusable: arrow keys move one step, Shift moves 16, Delete removes. The Input and Output fields edit the selected point.
-- Menus open with Enter or Space. The Windows menu opens and closes every fixed window, so no window depends on a pointer-only close button.
+- Menus open with Enter or Space and move with the arrow keys. The Window menu opens and closes every fixed window, so no window depends on a pointer-only close button.
+- Bare view keys never fire while focus is in a text field.

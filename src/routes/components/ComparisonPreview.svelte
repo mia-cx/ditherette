@@ -14,6 +14,8 @@
 		EmptyTitle
 	} from '$lib/components/ui/empty';
 	import { processedToImageData } from '$lib/processing/render';
+	import { lutView } from '$lib/processing/lut-view';
+	import { sourceEffectsLut } from '$lib/processing/source-effects';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputSettings,
@@ -29,11 +31,13 @@
 		type PreviewMode
 	} from '$lib/stores/app';
 	import CropIcon from 'phosphor-svelte/lib/Crop';
+	import SlidersHorizontalIcon from 'phosphor-svelte/lib/SlidersHorizontal';
 	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOut';
 	import ImageIcon from 'phosphor-svelte/lib/ImageSquare';
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
 	import RevealIcon from './RevealIcon.svelte';
 	import SideBySideIcon from './SideBySideIcon.svelte';
+	import { cropping, previewCommands, type PreviewCommands } from './preview-commands';
 
 	type Point = { x: number; y: number };
 	type ViewAnchor = { sourceX: number; sourceY: number };
@@ -124,11 +128,12 @@
 				: '—'
 	);
 	const colorLabel = $derived(
-		$processedImage ? `${$processedImage.palette.length} colors` : 'Palette'
+		$processedImage ? `${$processedImage.palette.length} colours` : 'Palette'
 	);
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
+	const sourceLabel = $derived($sourceEffectsLut ? 'Source with effects' : 'Source');
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
 	const cropToContentHint = $derived(
@@ -221,6 +226,26 @@
 	function pixelRatio() {
 		return typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
 	}
+
+	// Menus and shortcuts drive this preview while it is mounted.
+	$effect(() => {
+		const commands: PreviewCommands = {
+			zoomIn,
+			zoomOut,
+			fit: resetView,
+			actualSize: zoomActualSize,
+			toggleCrop: () => void toggleCropMode(),
+			clearCrop
+		};
+		previewCommands.set(commands);
+		return () => {
+			if (previewCommands.get() !== commands) return;
+			previewCommands.set(undefined);
+			cropping.set(false);
+		};
+	});
+
+	$effect(() => cropping.set(cropMode));
 
 	function clampZoom(value: number) {
 		return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value || 1));
@@ -411,20 +436,25 @@
 		return frameStyle(outputFrame(pane, width, height), width);
 	}
 
+	/**
+	 * Halve the output down to one pixel. At half size, bilinear sampling averages each 2×2 block in
+	 * premultiplied alpha, so the GPU does the box filter.
+	 */
 	function buildPreviewPyramid(imageData: ImageData): PreviewLevel[] {
 		const levels: PreviewLevel[] = [imageDataToCanvas(imageData)];
-		let current = imageData;
+		let current = levels[0]!;
 		while (current.width > 1 || current.height > 1) {
 			const width = Math.max(1, Math.floor(current.width / 2));
 			const height = Math.max(1, Math.floor(current.height / 2));
 			const canvas = document.createElement('canvas');
 			canvas.width = width;
 			canvas.height = height;
-			drawBoxDownsample(canvas, current, width, height);
-			levels.push({ canvas, width, height });
 			const context = canvas.getContext('2d');
 			if (!context) break;
-			current = context.getImageData(0, 0, width, height);
+			context.imageSmoothingQuality = 'low';
+			context.drawImage(current.canvas, 0, 0, width, height);
+			current = { canvas, width, height };
+			levels.push(current);
 		}
 		return levels;
 	}
@@ -503,57 +533,6 @@
 		context.clearRect(0, 0, width, height);
 		context.drawImage(level.canvas, 0, 0, width, height);
 		canvas.dataset.previewKey = cacheKey;
-	}
-
-	function drawBoxDownsample(
-		canvas: HTMLCanvasElement,
-		image: ImageData,
-		width: number,
-		height: number
-	) {
-		const context = canvas.getContext('2d');
-		if (!context) return;
-		const output = context.createImageData(width, height);
-		const source = image.data;
-		const target = output.data;
-		const xRatio = image.width / width;
-		const yRatio = image.height / height;
-
-		for (let y = 0; y < height; y++) {
-			const startY = Math.floor(y * yRatio);
-			const endY = Math.max(startY + 1, Math.ceil((y + 1) * yRatio));
-			for (let x = 0; x < width; x++) {
-				const startX = Math.floor(x * xRatio);
-				const endX = Math.max(startX + 1, Math.ceil((x + 1) * xRatio));
-				let red = 0;
-				let green = 0;
-				let blue = 0;
-				let alpha = 0;
-				let samples = 0;
-
-				for (let sourceY = startY; sourceY < endY && sourceY < image.height; sourceY++) {
-					let offset = (sourceY * image.width + startX) * 4;
-					for (let sourceX = startX; sourceX < endX && sourceX < image.width; sourceX++) {
-						const sampleAlpha = source[offset + 3]! / 255;
-						red += source[offset]! * sampleAlpha;
-						green += source[offset + 1]! * sampleAlpha;
-						blue += source[offset + 2]! * sampleAlpha;
-						alpha += sampleAlpha;
-						samples++;
-						offset += 4;
-					}
-				}
-
-				const offset = (y * width + x) * 4;
-				const divisor = alpha || samples || 1;
-				target[offset] = red / divisor;
-				target[offset + 1] = green / divisor;
-				target[offset + 2] = blue / divisor;
-				target[offset + 3] = (alpha / Math.max(1, samples)) * 255;
-			}
-		}
-
-		context.putImageData(output, 0, 0);
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {
@@ -1041,7 +1020,7 @@
 				onpointercancel={onPointerUp}
 				onwheel={(event) => onWheel(event, cropPane)}
 			>
-				{@render sourceLayer('Source', cropPane)}
+				{@render sourceLayer(sourceLabel, cropPane)}
 			</div>
 		{:else if mode === 'side-by-side'}
 			<div class="grid flex-1 grid-cols-2 divide-x divide-border">
@@ -1058,7 +1037,7 @@
 					onpointercancel={onPointerUp}
 					onwheel={(event) => onWheel(event, sideSourcePane)}
 				>
-					{@render sourceLayer('Source', sideSourcePane)}
+					{@render sourceLayer(sourceLabel, sideSourcePane)}
 				</div>
 				<div
 					bind:this={sideOutputPane}
@@ -1090,7 +1069,7 @@
 			>
 				{@render outputLayer('Output', revealPane, 'reveal')}
 				<div class="absolute inset-y-0 left-0 overflow-hidden" style="width: {revealValue}%">
-					{@render sourceLayer('Source', revealPane)}
+					{@render sourceLayer(sourceLabel, revealPane)}
 				</div>
 				<div
 					role="slider"
@@ -1132,6 +1111,17 @@
 				aria-pressed={cropMode}
 			>
 				<CropIcon weight="bold" />
+			</Button>
+			<Button
+				size="icon-sm"
+				variant={$previewSettings.sourceEffects ? 'secondary' : 'ghost'}
+				aria-label="Show effects on source"
+				title="Show effects on source"
+				disabled={!hasImage}
+				onclick={() => updatePreviewSettings({ sourceEffects: !$previewSettings.sourceEffects })}
+				aria-pressed={Boolean($previewSettings.sourceEffects)}
+			>
+				<SlidersHorizontalIcon weight="bold" />
 			</Button>
 			{#if $processingProgress}
 				<Badge variant="secondary" class="tabular-nums">
@@ -1302,6 +1292,14 @@
 			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 			draggable="false"
 		/>
+		{#if $sourceEffectsLut}
+			<canvas
+				{@attach lutView}
+				class="pointer-events-none absolute max-w-none select-none"
+				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
+				aria-hidden="true"
+			></canvas>
+		{/if}
 		{#if activeCrop}
 			<div
 				class="pointer-events-none absolute {cropMode
