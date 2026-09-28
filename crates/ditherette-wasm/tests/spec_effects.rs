@@ -689,7 +689,7 @@ fn curves_validate_limits_channels_points_and_hue_seams() {
 }
 
 #[test]
-fn empty_curves_and_neutral_adjustments_preserve_the_carrier() {
+fn empty_curves_and_neutral_curves_preserve_the_carrier() {
     use ditherette_wasm::image::ImageDimensions;
     use ditherette_wasm::spec::effects::curves::Curves;
 
@@ -701,6 +701,12 @@ fn empty_curves_and_neutral_adjustments_preserve_the_carrier() {
             ("hsl", "hue"),
             ("oklch", "chroma"),
             json!([[0, 0.5], [0.5, 0.5], [1, 0.5]]),
+        )]),
+        curves(vec![curve(
+            "remap",
+            ("hsl", "hue"),
+            ("hsl", "hue"),
+            json!([[0, 0], [1, 1]]),
         )]),
     ];
     for effect in effects {
@@ -800,6 +806,16 @@ fn remaps_preserve_model_curve_hue_confidence_and_carrier_rules() {
     let input = ColourModel::Hsl.from_normalized([0.01, 1.0, 0.5]);
     let wrapped = ColourModel::Hsl.to_normalized(apply_curves(&hue, input).0);
     assert!((wrapped[0] - 0.99).abs() < 0.000_01, "{}", wrapped[0]);
+
+    let interior_curve = curves(vec![curve(
+        "remap",
+        ("hsl", "hue"),
+        ("hsl", "hue"),
+        json!([[0, 0], [0.5, 0.25], [1, 1]]),
+    )]);
+    let input = ColourModel::Hsl.from_normalized([0.5, 1.0, 0.5]);
+    let interior = ColourModel::Hsl.to_normalized(apply_curves(&interior_curve, input).0);
+    assert!((interior[0] - 0.25).abs() < 0.000_01, "{}", interior[0]);
 
     let grey = [0.4; 3];
     assert_eq!(

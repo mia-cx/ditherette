@@ -1461,7 +1461,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
 						"mode": "100644",
-						"sha256": "e23a126c207ba070ed9a74cf955f2b37f318bde50259edbcc4fe22e5e122feea"
+						"sha256": "38d69add74006a1e5fc32e1950e7c48cfd2652b779b138406a18a3522af6d615"
 					}
 				},
 				{
@@ -1474,7 +1474,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
 						"mode": "100644",
-						"sha256": "4f2e235bd80a5a9cf5fd892e86db33818f704028dc43b248077534b67578c267"
+						"sha256": "06ea3a6db12ac44e917ee2d4e3da2e1589e7a46dc2f775bf1f6f19b17a587c23"
 					}
 				},
 				{
@@ -1548,7 +1548,7 @@
 					}
 				}
 			],
-			"contentSha256": "eb83a6947464a22e88ef3fcfe6a80961579b7b3724bda3305d726e4ea7e7af36"
+			"contentSha256": "7900cdfe7b725d9b6ca31877b57ed7030ac30585c2c0a13c1ce3b2a97a49dd01"
 		}
 	]
 }

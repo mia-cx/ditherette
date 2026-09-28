@@ -121,10 +121,10 @@ function colourChannel(value: unknown, path: string): { model: string; channel: 
 	return { model, channel: selected };
 }
 
-/** Apply the extra closed-seam rules for a periodic hue input. */
-function pointsWithHueSeam(value: unknown, hueInput: boolean, path: string): [number, number][] {
+/** Apply the extra closed-seam rules for a periodic hue-input adjustment. */
+function pointsWithHueSeam(value: unknown, periodic: boolean, path: string): [number, number][] {
 	const normalized = curvePoints(value, path);
-	if (!hueInput) return normalized;
+	if (!periodic) return normalized;
 	const last = normalized.length - 1;
 	if (normalized[0][0] !== 0)
 		throw new DitheretteError(
@@ -175,7 +175,11 @@ function curves(value: unknown, path: string) {
 			kind,
 			x,
 			y,
-			points: pointsWithHueSeam(field(curve, 'points'), x.channel === 'hue', `${curvePath}.points`)
+			points: pointsWithHueSeam(
+				field(curve, 'points'),
+				kind === 'adjust' && x.channel === 'hue',
+				`${curvePath}.points`
+			)
 		});
 	}
 	return normalized;

@@ -152,7 +152,7 @@ impl Spline {
     }
 }
 
-/// Cyclic Fritsch–Butland spline for a hue input axis.
+/// Cyclic Fritsch–Butland spline for a hue-input adjustment axis.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PeriodicSpline {
     points: [[f32; 2]; MAX_POINTS],
@@ -255,10 +255,19 @@ struct PreparedCurve {
     x: ResolvedChannel,
     y: ResolvedChannel,
     spline: CurveSpline,
+    identity_remap: bool,
 }
 
 impl PreparedCurve {
     fn map(&self, source: [f32; 3], current: [f32; 3]) -> [f32; 3] {
+        if self.identity_remap
+            && source
+                .iter()
+                .zip(current)
+                .all(|(source, current)| source.to_bits() == current.to_bits())
+        {
+            return current;
+        }
         let x_coordinates = self.x.model.to_normalized(source);
         let curve = self.spline.eval(x_coordinates[self.x.index]);
         let mut weight: f32 = 1.0;
@@ -327,7 +336,11 @@ impl PreparedCurves {
                 kind: curve.kind,
                 x,
                 y,
-                spline: CurveSpline::new(&curve.points, x.kind == ChannelKind::Hue),
+                spline: CurveSpline::new(
+                    &curve.points,
+                    curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue,
+                ),
+                identity_remap: curve.is_identity_remap(),
             });
             prepared.len += 1;
         }
@@ -360,6 +373,10 @@ impl CurveSpline {
 }
 
 impl Curve {
+    fn is_identity_remap(&self) -> bool {
+        self.kind == CurveKind::Remap && self.points.as_slice() == [[0.0, 0.0], [1.0, 1.0]]
+    }
+
     fn is_neutral_adjustment(&self) -> bool {
         self.kind == CurveKind::Adjust && self.points.iter().all(|point| point[1] == 0.5)
     }
@@ -464,7 +481,7 @@ impl Effect for Curves {
             }
             let points_path = StackPath::new(format_args!("{}.points", curve_path.as_str()));
             Self::validate_points(&curve.points, points_path.as_str())?;
-            if x.kind == ChannelKind::Hue {
+            if curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue {
                 curve.validate_periodic_points(points_path.as_str())?;
             }
         }

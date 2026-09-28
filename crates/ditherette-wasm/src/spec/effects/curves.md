@@ -60,7 +60,9 @@ For an adjustment with curve result `c` and confidence `w`:
 
 If X is hue, its confidence comes from `source`. If Y is hue, its confidence comes from `current`. When both are hue, use the smaller confidence. Zero confidence leaves `current` unchanged. Hue output wraps modulo one. Other outputs are not clamped before conversion. A curve whose every y is exactly `0.5` is a neutral adjustment and skips all conversion.
 
-A hue X axis uses a cyclic Fritsch–Butland spline. Its first point must have `x = 0`, its last point must have `x = 1`, and those two y values must match exactly. The duplicate last point closes the seam. The seam tangent uses the final and first secants, and evaluation wraps X modulo one.
+Every remap uses the ordinary open Fritsch–Butland spline, including a hue remap. The exact identity remap `[[0, 0], [1, 1]]` leaves an unchanged carrier untouched. This preserves the old model-curve behavior.
+
+Only an adjustment with a hue X axis uses the cyclic spline. Its first point must have `x = 0`, its last point must have `x = 1`, and those two y values must match exactly. The duplicate last point closes the seam. The seam tangent uses the final and first secants, and evaluation wraps X modulo one.
 
 ## Why this works this way
 
@@ -84,7 +86,7 @@ Fritsch–Butland tangents avoid the ringing of natural cubic splines. The cycli
 - A remap with unequal sides fails at `effects.i.curves.j.y`.
 - An invalid point count fails at `effects.i.curves.j.points`.
 - Point bounds and gaps fail at `effects.i.curves.j.points.k.0` or `.1`.
-- A broken hue seam fails at the first or last point coordinate that violates the seam.
+- A broken hue-input adjustment seam fails at the first or last point coordinate that violates the seam.
 - HSL and HSV consume carrier overshoot when a curve converts through them.
 
 ## Production obligations

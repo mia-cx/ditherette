@@ -285,7 +285,17 @@ const grading = {
 const neutral = {
 	curves: {
 		...grading.curves,
-		curves: []
+		curves: [
+			{
+				kind: 'remap',
+				x: { model: 'hsl', channel: 'hue' },
+				y: { model: 'hsl', channel: 'hue' },
+				points: [
+					[0, 0],
+					[1, 1]
+				]
+			}
+		]
 	},
 	'brightness-contrast': { ...grading['brightness-contrast'], brightness: 0, contrast: 0 },
 	exposure: { ...grading.exposure, stops: 0 },
@@ -381,6 +391,7 @@ test('grading arguments are validated with indexed paths', () =>
 		fails(
 			withCurve({
 				...curve,
+				kind: 'adjust',
 				x: { model: 'hsl', channel: 'hue' },
 				y: { model: 'hsl', channel: 'hue' },
 				points: [
@@ -393,6 +404,7 @@ test('grading arguments are validated with indexed paths', () =>
 		fails(
 			withCurve({
 				...curve,
+				kind: 'adjust',
 				x: { model: 'hsl', channel: 'hue' },
 				y: { model: 'hsl', channel: 'hue' },
 				points: [
@@ -666,6 +678,7 @@ test('isEffect vets one step without Wasm', () => {
 		points: Array.from({ length: 16 }, (_, index) => [index / 15, index / 15])
 	};
 	assert.equal(isEffect({ ...grading.curves, curves: Array(16).fill(boundaryCurve) }), true);
+	assert.equal(isEffect(neutral.curves), true);
 	for (const step of [
 		{ effect: 'exposure', enabled: true, stops: 100 },
 		{ ...halve, channel: 'gray' },

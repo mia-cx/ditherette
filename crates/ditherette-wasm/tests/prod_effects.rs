@@ -119,7 +119,7 @@ fn random_curve_points(rng: &mut Rng, x: (&str, &str), adjustment: bool) -> Vec<
             let position = index as f32 / (count - 1) as f32;
             let value = if adjustment && neutral {
                 0.5
-            } else if !adjustment && neutral && x.1 != "hue" {
+            } else if !adjustment && neutral {
                 position
             } else {
                 rng.unit()
@@ -127,7 +127,7 @@ fn random_curve_points(rng: &mut Rng, x: (&str, &str), adjustment: bool) -> Vec<
             [position, value]
         })
         .collect();
-    if x.1 == "hue" {
+    if adjustment && x.1 == "hue" {
         points[count - 1][1] = points[0][1];
     }
     points
@@ -562,6 +562,16 @@ fn curves_hue_confidence_and_carrier_overshoot_match_the_reference() {
         let (actual, expected) = direct_curves(&hue, input);
         assert_float_bits(actual, expected);
     }
+    let interior_hue = json!({ "effect": "curves", "enabled": true, "curves": [{
+        "kind": "remap", "x": { "model": "hsl", "channel": "hue" },
+        "y": { "model": "hsl", "channel": "hue" },
+        "points": [[0, 0], [0.5, 0.25], [1, 1]]
+    }] });
+    let input = ColourModel::Hsl.from_normalized([0.5, 1.0, 0.5]);
+    let (actual, expected) = direct_curves(&interior_hue, input);
+    assert_float_bits(actual, expected);
+    let interior = ColourModel::Hsl.to_normalized(actual);
+    assert!((interior[0] - 0.25).abs() < 0.000_01);
     let adjusted = ColourModel::Hsl.to_normalized(direct_curves(&hue, [0.51, 0.5, 0.5]).0);
     let expected = (0.0f32 + 0.5 * -0.01).rem_euclid(1.0);
     assert!((adjusted[0] - expected).abs() < 0.000_01);
@@ -592,7 +602,7 @@ fn curves_closed_hue_seam_matches_the_reference() {
 }
 
 #[test]
-fn empty_curves_and_neutral_adjustments_are_exact_no_ops() {
+fn empty_curves_and_neutral_curves_are_exact_no_ops() {
     let carrier = [-64.0, 1.25, 64.0];
     for effect in [
         json!({ "effect": "curves", "enabled": true, "curves": [] }),
@@ -600,6 +610,10 @@ fn empty_curves_and_neutral_adjustments_are_exact_no_ops() {
             "kind": "adjust", "x": { "model": "hsl", "channel": "hue" },
             "y": { "model": "oklch", "channel": "chroma" },
             "points": [[0, 0.5], [0.5, 0.5], [1, 0.5]]
+        }] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "remap", "x": { "model": "hsl", "channel": "hue" },
+            "y": { "model": "hsl", "channel": "hue" }, "points": [[0, 0], [1, 1]]
         }] }),
     ] {
         let (actual, expected) = direct_curves(&effect, carrier);

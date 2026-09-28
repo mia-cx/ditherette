@@ -163,7 +163,7 @@ impl Spline {
     }
 }
 
-/// Cyclic Fritsch–Butland spline for a hue input axis.
+/// Cyclic Fritsch–Butland spline for a hue-input adjustment axis.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PeriodicSpline {
     points: Vec<[f32; 2]>,
@@ -263,6 +263,10 @@ struct PreparedCurve<'a> {
 }
 
 impl Curve {
+    fn is_identity_remap(&self) -> bool {
+        self.kind == CurveKind::Remap && self.points.as_slice() == [[0.0, 0.0], [1.0, 1.0]]
+    }
+
     fn is_neutral_adjustment(&self) -> bool {
         self.kind == CurveKind::Adjust && self.points.iter().all(|point| point[1] == 0.5)
     }
@@ -314,6 +318,14 @@ impl Curve {
         source: [f32; 3],
         current: [f32; 3],
     ) -> [f32; 3] {
+        if self.is_identity_remap()
+            && source
+                .iter()
+                .zip(current)
+                .all(|(source, current)| source.to_bits() == current.to_bits())
+        {
+            return current;
+        }
         if self.is_neutral_adjustment() {
             return current;
         }
@@ -409,7 +421,7 @@ impl Effect for Curves {
             }
             let points_path = format!("{curve_path}.points");
             Self::validate_points(&curve.points, &points_path)?;
-            if x.kind == ChannelKind::Hue {
+            if curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue {
                 curve.validate_periodic_points(&points_path)?;
             }
         }
@@ -430,7 +442,10 @@ impl Effect for Curves {
                     curve,
                     x,
                     y,
-                    spline: CurveSpline::new(&curve.points, x.kind == ChannelKind::Hue),
+                    spline: CurveSpline::new(
+                        &curve.points,
+                        curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue,
+                    ),
                 }
             })
             .collect();
