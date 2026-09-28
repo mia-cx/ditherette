@@ -106,6 +106,21 @@ const curves = {
 				[0.5, 0.8],
 				[1, 0.5]
 			]
+		},
+		{
+			kind: 'adjust',
+			x: { model: 'hsl', channel: 'hue' },
+			x2: { model: 'oklch', channel: 'lightness' },
+			y: { model: 'oklch', channel: 'chroma' },
+			grid: {
+				columns: [0, 0.25, 0.5, 0.75],
+				rows: [0, 0.5, 1],
+				values: [
+					[0.5, 0.7, 0.5, 0.3],
+					[0.5, 0.9, 0.5, 0.2],
+					[0.5, 0.6, 0.5, 0.4]
+				]
+			}
 		}
 	]
 } as const;
@@ -132,18 +147,19 @@ Colour effects cannot run after quantization; no recipe field places them there.
 
 Built-in effects:
 
-| `effect`              | Arguments                                                                                                                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `levels`              | `channel` (`rgb`, `red`, `green`, `blue`), `input` and `output` black/white points from 0 to 1, `gamma` from 0.1 to 10 (above 1 brightens)                                 |
-| `curves`              | `curves`: 0 to 16 ordered `{ kind, x, y, points }` entries. `kind` is `remap` or `adjust`; `x` and `y` name colour-model channels; `points` holds 2 to 16 normalized pairs |
-| `brightness-contrast` | `brightness` and `contrast` from -1 to 1; contrast scales around mid-grey by `4^contrast`                                                                                  |
-| `exposure`            | `stops` from -4 to 4, in linear light                                                                                                                                      |
-| `white-balance`       | `temperature` (warmer is positive) and `tint` (more magenta is positive), from -1 to 1                                                                                     |
-| `hue-saturation`      | `hue` in degrees from -180 to 180, `saturation` and `lightness` from -1 to 1, in Oklab                                                                                     |
-| `recolour`            | `strength` from 0 to 1, `recipe`: an analysed recipe or `null` to analyse automatically                                                                                    |
+| `effect`              | Arguments                                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `levels`              | `channel` (`rgb`, `red`, `green`, `blue`), `input` and `output` black/white points from 0 to 1, `gamma` from 0.1 to 10 (above 1 brightens) |
+| `curves`              | `curves`: 0 to 16 ordered one-input or two-input entries. See the control shapes below                                                     |
+| `brightness-contrast` | `brightness` and `contrast` from -1 to 1; contrast scales around mid-grey by `4^contrast`                                                  |
+| `exposure`            | `stops` from -4 to 4, in linear light                                                                                                      |
+| `white-balance`       | `temperature` (warmer is positive) and `tint` (more magenta is positive), from -1 to 1                                                     |
+| `hue-saturation`      | `hue` in degrees from -180 to 180, `saturation` and `lightness` from -1 to 1, in Oklab                                                     |
+| `recolour`            | `strength` from 0 to 1, `recipe`: an analysed recipe or `null` to analyse automatically                                                    |
 
 Curve x values rise by at least 0.001. A hue-input adjustment starts at 0, ends at 1, and repeats its first y value at the end so its spline wraps. Remaps use an open spline, including hue remaps. A remap uses the same channel for `x` and `y`; an adjustment may use any valid pair.
-All values are in encoded sRGB units unless noted. Curve coordinates are normalized in their selected colour models. Neutral arguments leave pixels untouched.
+One-input curves use `{ kind, x, y, points }`, where `points` holds 2 to 16 normalised pairs. Two-input curves use `{ kind: 'adjust', x, x2, y, grid }`. A grid has 2 to 48 `columns`, 2 to 16 `rows`, and `values[row][column]`. Columns select `x`; rows select `x2`. Open axes start at 0 and end at 1. Hue axes use unique positions from 0 up to, but not including, 1 and wrap across the seam. Every neighbouring gap, including the wrapped seam, is at least 0.001. Grid values range from 0 to 1; 0.5 is neutral.
+All values are in encoded sRGB units unless noted. Curve coordinates are normalised in their selected colour models. Neutral arguments leave pixels untouched.
 A preset is a stored `effects` array: this package owns what each effect does, and the caller owns labels, editor state, and where presets live.
 
 ### Recolouring for a palette

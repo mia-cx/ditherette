@@ -32,9 +32,9 @@ One-input curves keep their current JSON and behavior. The reference defines cyc
 
 - [x] Implement the direct production equivalent. Keep prepared metadata compact: retain inline one-input splines, store grid curve indices and resolved channels, and use fixed `[f32; 16]` row-result scratch rather than copying maximum grids into `PreparedPointwise`. Preserve the existing all-remap table path. Route every two-input curve through the pointwise path and colour memo. Skip neutral grids during preparation. Extend allocation coverage and deterministic production tests.
 
-- [ ] Prove production equivalence. Add seeded randomized grids covering open and hue axes, `x` and `x2` in either position, mixed colour models, hue outputs, neutral grids, minimum and maximum dimensions, and mixed ordered one-input/two-input lists. Compare reference and production bytes, validation errors, direct `f32` carrier results, and alpha. Full native tests pass with `CARGO_BUILD_JOBS=2` and one heavy job at a time.
+- [x] Prove production equivalence. Add seeded randomized grids covering open and hue axes, `x` and `x2` in either position, mixed colour models, hue outputs, neutral grids, minimum and maximum dimensions, and mixed ordered one-input/two-input lists. Compare reference and production bytes, validation errors, direct `f32` carrier results, and alpha. Full native tests pass with `CARGO_BUILD_JOBS=2` and one heavy job at a time.
 
-- [ ] Cut over the package contract. Add `CurveGrid`, `OneInputCurve`, and `TwoInputCurve`, then export `Curve` as their union. Extend normalization with strict key sets, f32 bounds, dimensions, matrix shape, axis endpoints, cyclic seam gaps, and indexed error paths. Add positive type tests and negative tests for mixed shapes, remap grids, equal inputs, sparse arrays, ragged values, extra keys, invalid seams, and limits. Update the package README and add a minor `ditherette` changeset. Run package type and interface tests without editing root `src/**`.
+- [x] Cut over the package contract. Add `CurveGrid`, `OneInputCurve`, and `TwoInputCurve`, then export `Curve` as their union. Extend normalization with strict key sets, f32 bounds, dimensions, matrix shape, axis endpoints, cyclic seam gaps, and indexed error paths. Add positive type tests and negative tests for mixed shapes, remap grids, equal inputs, sparse arrays, ragged values, extra keys, invalid seams, and limits. Update the package README and add a minor `ditherette` changeset. Run package type and interface tests without editing root `src/**`.
 
 - [ ] Finish validation and freeze approval. Update production documentation where it describes curves fast paths. Run formatting, focused and full Rust tests, package checks, freeze tests, the local guard, and the trusted-base guard. Report the exact approval digest printed by the trusted guard and confirm the extension contains only the two intended spec replacements.
 
@@ -54,6 +54,20 @@ One-input curves keep their current JSON and behavior. The reference defines cyc
 - `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_effects`: passed, 21 tests.
 - `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_effects_allocation`: passed, 1 test.
 - `git diff --check -- crates/ditherette-wasm/src/prod/effects/curves.rs crates/ditherette-wasm/tests/prod_effects.rs crates/ditherette-wasm/tests/prod_effects_allocation.rs .plans/307-two-input-curves.md`: passed.
+
+### TODO 3 validation
+
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml`: passed.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_effects`: passed, 23 tests.
+- `nice env CARGO_BUILD_JOBS=2 cargo test --manifest-path crates/ditherette-wasm/Cargo.toml`: passed, including 117 library tests, 23 production-effects tests, and every native integration and documentation test.
+
+### TODO 4 validation
+
+- `nice env CARGO_BUILD_JOBS=2 WASM_PACK_CACHE=/tmp/ditherette-wasm-pack-cache-307 PATH="$PWD/node_modules/.bin:$PATH" node scripts/build.mjs scalar`: passed.
+- `nice env CARGO_BUILD_JOBS=2 WASM_PACK_CACHE=/tmp/ditherette-wasm-pack-cache-307 PATH="$PWD/node_modules/.bin:$PATH" node scripts/build.mjs threads`: passed.
+- `node scripts/check-version.mjs && node_modules/.bin/tsc --noEmit && node_modules/.bin/tsc && node_modules/.bin/tsc -p tests/tsconfig.json`: passed package version, source types, emitted declarations, and positive and negative interface type tests.
+- `node --test tests/validation.test.mjs tests/public.test.mjs tests/quantize.test.mjs tests/fields.test.mjs tests/diffusion.test.mjs tests/yiluoma.test.mjs tests/process.test.mjs tests/effects.test.mjs tests/worker-pool.test.mjs tests/source-comparison.test.mjs`: passed, 10 test files.
+- `git diff --check -- packages/ditherette .changeset/two-input-curves.md crates/ditherette-wasm/tests/prod_effects.rs .plans/307-two-input-curves.md`: passed.
 
 ### Exact JSON shape
 
