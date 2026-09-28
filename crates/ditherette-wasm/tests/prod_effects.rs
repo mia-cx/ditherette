@@ -54,6 +54,23 @@ const COLOUR_CHANNELS: [(&str, &str); 27] = [
     ("ycbcr", "cb"),
     ("ycbcr", "cr"),
 ];
+const HUE_CHANNELS: [(&str, &str); 4] = [
+    ("hsl", "hue"),
+    ("hsv", "hue"),
+    ("oklch", "hue"),
+    ("cielch", "hue"),
+];
+const OPEN_CHANNELS: [(&str, &str); 9] = [
+    ("srgb", "red"),
+    ("linear-rgb", "green"),
+    ("hsl", "saturation"),
+    ("hsv", "value"),
+    ("oklab", "a"),
+    ("oklch", "lightness"),
+    ("cielab", "b"),
+    ("cielch", "chroma"),
+    ("ycbcr", "cb"),
+];
 
 /// Deterministic xorshift so failures reproduce.
 struct Rng(u64);
@@ -156,6 +173,48 @@ fn random_adjustment(rng: &mut Rng, x: Option<(&str, &str)>) -> Value {
     })
 }
 
+fn random_axis(rng: &mut Rng, channel: (&str, &str), count: usize) -> Vec<f32> {
+    if channel.1 == "hue" {
+        let offset = rng.unit() * 0.5;
+        (0..count)
+            .map(|index| (index as f32 + offset) / count as f32)
+            .collect()
+    } else {
+        (0..count)
+            .map(|index| index as f32 / (count - 1) as f32)
+            .collect()
+    }
+}
+
+fn random_grid_curve(
+    rng: &mut Rng,
+    x: (&str, &str),
+    x2: (&str, &str),
+    y: (&str, &str),
+    dimensions: (usize, usize),
+    neutral: bool,
+) -> Value {
+    let (column_count, row_count) = dimensions;
+    let values: Vec<Vec<f32>> = (0..row_count)
+        .map(|_| {
+            (0..column_count)
+                .map(|_| if neutral { 0.5 } else { rng.unit() })
+                .collect()
+        })
+        .collect();
+    json!({
+        "kind": "adjust",
+        "x": { "model": x.0, "channel": x.1 },
+        "x2": { "model": x2.0, "channel": x2.1 },
+        "y": { "model": y.0, "channel": y.1 },
+        "grid": {
+            "columns": random_axis(rng, x, column_count),
+            "rows": random_axis(rng, x2, row_count),
+            "values": values,
+        }
+    })
+}
+
 /// Any built-in with random in-range arguments; about one in four is neutral.
 fn random_effect(rng: &mut Rng) -> Value {
     let enabled = rng.next() % 5 != 0;
@@ -227,6 +286,9 @@ fn assert_same(effects: &Value, width: u32, height: u32, data: &[u8]) {
         (Ok(expected), Ok(actual)) => {
             assert_eq!(actual.data(), expected.data(), "{json}");
             assert_eq!(actual.dimensions(), expected.dimensions());
+            for (output, input) in actual.data().chunks_exact(4).zip(data.chunks_exact(4)) {
+                assert_eq!(output[3], input[3], "{json}");
+            }
         }
         (Err(expected), Err(actual)) => {
             assert_eq!(
@@ -410,6 +472,7 @@ fn direct_curves(effect: &Value, rgb: [f32; 3]) -> ([f32; 3], [f32; 3]) {
         &spec::EffectContext::default(),
     );
     assert_eq!(production_image.alpha, reference_image.alpha);
+    assert_eq!(production_image.alpha, [37]);
     (production_image.rgb[0], reference_image.rgb[0])
 }
 
@@ -654,6 +717,86 @@ fn two_input_curves_match_the_reference_for_open_cyclic_and_ordered_cases() {
             let (actual, expected) = direct_curves(&effect, input);
             assert_float_bits(actual, expected);
         }
+    }
+}
+
+#[test]
+fn seeded_random_grids_match_reference_bytes_carriers_and_alpha() {
+    let mut rng = Rng(0x2c0a_3075_eed);
+    let data = image(&mut rng, 11, 5);
+
+    for case in 0..48 {
+        let x = if case % 4 < 2 {
+            OPEN_CHANNELS[(rng.next() % OPEN_CHANNELS.len() as u64) as usize]
+        } else {
+            HUE_CHANNELS[(rng.next() % HUE_CHANNELS.len() as u64) as usize]
+        };
+        let mut x2 = if case % 4 == 0 || case % 4 == 2 {
+            OPEN_CHANNELS[(rng.next() % OPEN_CHANNELS.len() as u64) as usize]
+        } else {
+            HUE_CHANNELS[(rng.next() % HUE_CHANNELS.len() as u64) as usize]
+        };
+        while x2 == x || x2.0 == x.0 {
+            let choices: &[(&str, &str)] = if x2.1 == "hue" {
+                &HUE_CHANNELS
+            } else {
+                &OPEN_CHANNELS
+            };
+            x2 = choices[(rng.next() % choices.len() as u64) as usize];
+        }
+        let y = if case % 3 == 0 {
+            HUE_CHANNELS[(rng.next() % HUE_CHANNELS.len() as u64) as usize]
+        } else {
+            COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize]
+        };
+        let dimensions = match case {
+            0 => (2, 2),
+            1 => (48, 16),
+            _ => (
+                2 + (rng.next() % 47) as usize,
+                2 + (rng.next() % 15) as usize,
+            ),
+        };
+        let grid = random_grid_curve(&mut rng, x, x2, y, dimensions, case % 7 == 0);
+        let mut curves = vec![
+            random_adjustment(&mut rng, None),
+            grid,
+            random_remap(&mut rng, None),
+        ];
+        if case % 2 == 0 {
+            curves.reverse();
+        }
+        let effect = json!({ "effect": "curves", "enabled": true, "curves": curves });
+
+        assert_same(&json!([effect.clone()]), 11, 5, &data);
+        let carrier = [
+            rng.unit() * 3.0 - 1.0,
+            rng.unit() * 3.0 - 1.0,
+            rng.unit() * 3.0 - 1.0,
+        ];
+        let (actual, expected) = direct_curves(&effect, carrier);
+        assert_float_bits(actual, expected);
+    }
+}
+
+#[test]
+fn seeded_random_grid_validation_matches_the_reference() {
+    let mut rng = Rng(0x2c0a_307b_ad);
+    for _ in 0..48 {
+        let row_count = 2 + (rng.next() % 15) as usize;
+        let column_count = 2 + (rng.next() % 47) as usize;
+        let x = HUE_CHANNELS[(rng.next() % HUE_CHANNELS.len() as u64) as usize];
+        let x2 = OPEN_CHANNELS[(rng.next() % OPEN_CHANNELS.len() as u64) as usize];
+        let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+        let mut curve = random_grid_curve(&mut rng, x, x2, y, (column_count, row_count), false);
+        let row = (rng.next() % row_count as u64) as usize;
+        let column = (rng.next() % column_count as u64) as usize;
+        curve["grid"]["values"][row][column] = json!(1.000_1);
+        let path = format!("effects.0.curves.0.grid.values.{row}.{column}");
+        assert_validation_matches(
+            json!({ "effect": "curves", "enabled": true, "curves": [curve] }),
+            &path,
+        );
     }
 }
 
