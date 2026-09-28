@@ -62,7 +62,7 @@ fn find(parent: &mut [u32], mut i: u32) -> u32 {
 }
 
 /// Region label per pixel, and whether each region is a fill. Never reads the palette.
-fn find_fills(labs: &[Lab], width: usize) -> (Vec<u32>, Vec<bool>) {
+fn find_fills(labs: &[Lab], width: usize) -> (Vec<u32>, Vec<bool>, Vec<Lab>) {
     let n = labs.len();
     let mut parent: Vec<u32> = (0..n as u32).collect();
     for i in 0..n {
@@ -127,7 +127,7 @@ fn find_fills(labs: &[Lab], width: usize) -> (Vec<u32>, Vec<bool>) {
             }
         );
     }
-    (labels, fills)
+    (labels, fills, mean)
 }
 
 /// Mia's dither settings, and the same kernel placed everywhere.
@@ -150,7 +150,7 @@ fn run(
     let recipe: RecipeV2 = serde_json::from_value(json!({
         "version": 2, "effects": [],
         "output": { "width": w, "height": h, "resize": { "algorithm": "area" } },
-        "alpha": { "mode": "preserve", "threshold": 127.5 }, "match": "oklab-euclidean", "dither": dither,
+        "alpha": { "mode": "preserve", "threshold": 127.5 }, "match": "cielab-euclidean", "dither": dither,
     }))
     .unwrap();
     let indexed = process(ProcessRequestV2 {
@@ -234,7 +234,7 @@ fn main() {
     );
     let context = EffectContext {
         palette: &palette,
-        space: Some(WorkingSpace::Oklab),
+        space: Some(WorkingSpace::Cielab),
     };
     analyze(&image, &context).apply(&mut image, 1.0);
     let fitted = image.to_rgba8().into_vec();
@@ -243,7 +243,7 @@ fn main() {
         .chunks(4)
         .map(|p| rgb8_to_oklab([p[0], p[1], p[2]]))
         .collect();
-    let (labels, fills) = find_fills(&labs, WIDTH as usize);
+    let (labels, fills, means) = find_fills(&labs, WIDTH as usize);
     let is_fill: Vec<bool> = labels.iter().map(|&l| fills[l as usize]).collect();
     let mask: Vec<u8> = fitted
         .chunks(4)
@@ -269,11 +269,33 @@ fn main() {
         .zip(&is_fill)
         .flat_map(|((d, n), &f)| if f { n.to_vec() } else { d.to_vec() })
         .collect();
+    // Snap: each fill collapses to its average first, so the whole fill picks one entry.
+    let flattened: Vec<u8> = fitted
+        .chunks(4)
+        .zip(&labels)
+        .flat_map(|(p, &l)| {
+            if !fills[l as usize] {
+                return [p[0], p[1], p[2], p[3]];
+            }
+            let c = oklab_to_rgb8(means[l as usize]);
+            [c[0], c[1], c[2], p[3]]
+        })
+        .collect();
+    let flattened = crop(&flattened, 4);
+    let snapped_flat = run(&flattened, w, h, &palette, json!({ "family": "none" }));
+    let snapped_spread = run(&flattened, w, h, &palette, everywhere());
+    let snapped: Vec<u8> = snapped_spread
+        .chunks(4)
+        .zip(snapped_flat.chunks(4))
+        .zip(&is_fill)
+        .flat_map(|((d, n), &f)| if f { n.to_vec() } else { d.to_vec() })
+        .collect();
+    save(dir, "fill-mask.png", &crop(&mask, 4), w, h);
     let panels: [(&str, Vec<u8>); 4] = [
         ("1-yours", run(&source, w, h, &palette, yours())),
         ("2-everywhere", spread),
         ("3-fills-undithered", fills_off),
-        ("4-fill-mask", crop(&mask, 4)),
+        ("4-fills-snapped", snapped),
     ];
     // Zoom: sky, mountain foot, and "CEL", 3× nearest, 2×2.
     let (zx, zy, zw, zh, scale) = (20u32, 300u32, 480u32, 340u32, 3u32);
