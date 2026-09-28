@@ -1,7 +1,6 @@
 import type { Ditherette } from 'ditherette';
 import { packageProcessRequest } from './package-adapter';
 import type { ColorSpaceId, DitherSettings, EnabledPaletteColor, OutputSettings } from './types';
-import { initializePackageProcessor } from './worker-pipeline';
 
 export type DitherPreviewParams = {
 	dither: DitherSettings;
@@ -21,29 +20,54 @@ const GRADIENT_STOPS = [
 	{ position: 1, gray: 255 }
 ];
 
-let processor: Promise<Ditherette> | undefined;
+export type DitherPreviewRequest = { id: number; params: DitherPreviewParams; size: number };
+export type DitherPreviewResponse = { id: number } & (
+	| { pixels: Uint8ClampedArray }
+	| { error: string }
+);
+
+/**
+ * Previews render in their own worker: a large pattern mix can take the package hundreds of
+ * milliseconds even at preview size, which would stall the page if it ran here.
+ */
+let worker: Worker | undefined;
+let nextId = 0;
+const answers = new Map<number, (pixels: Uint8ClampedArray | undefined) => void>();
+
+function render(params: DitherPreviewParams, size: number) {
+	if (!worker) {
+		worker = new Worker(new URL('../workers/dither-preview.worker.ts', import.meta.url), {
+			type: 'module'
+		});
+		worker.onmessage = ({ data }: MessageEvent<DitherPreviewResponse>) => {
+			if ('error' in data) console.error('Could not draw the dither preview.', data.error);
+			answers.get(data.id)?.('pixels' in data ? data.pixels : undefined);
+			answers.delete(data.id);
+		};
+	}
+	const id = ++nextId;
+	return new Promise<Uint8ClampedArray | undefined>((resolve) => {
+		answers.set(id, resolve);
+		worker!.postMessage({ id, params, size } satisfies DitherPreviewRequest);
+	});
+}
 
 /**
  * Svelte action: draw the preview gradient on `canvas`, dithered by the package with exactly the
- * request processing would send for these settings. Previews are tiny, so they run on the main thread.
+ * request processing would send for these settings.
  */
 export function ditherPreview(canvas: HTMLCanvasElement, params: DitherPreviewParams) {
 	let current = params;
 	let latest = 0;
+	let destroyed = false;
 	async function draw() {
 		const run = ++latest;
 		// A canvas in a hidden window has no size yet; the observer draws it once it does.
 		if (!canvas.clientWidth) return;
-		processor ??= initializePackageProcessor().catch((error: unknown) => {
-			processor = undefined;
-			throw error;
-		});
-		try {
-			const ditherette = await processor;
-			if (run === latest) paint(canvas, ditherette, current);
-		} catch (error) {
-			console.error('Could not draw the dither preview.', error);
-		}
+		const size = Math.max(1, Math.round(canvas.clientWidth / PIXEL_SCALE));
+		const pixels = await render(current, size);
+		// Newer settings or a removed card make this result stale.
+		if (run === latest && !destroyed) paint(canvas, pixels, size);
 	}
 	const observer = new ResizeObserver(() => void draw());
 	observer.observe(canvas);
@@ -52,21 +76,41 @@ export function ditherPreview(canvas: HTMLCanvasElement, params: DitherPreviewPa
 			current = next;
 			void draw();
 		},
-		destroy: () => observer.disconnect()
+		destroy() {
+			destroyed = true;
+			observer.disconnect();
+		}
 	};
 }
 
-function paint(canvas: HTMLCanvasElement, ditherette: Ditherette, params: DitherPreviewParams) {
-	const scale = window.devicePixelRatio || 1;
-	const displaySize = Math.max(1, Math.round(canvas.clientWidth * scale));
-	const size = Math.max(1, Math.round(canvas.clientWidth / PIXEL_SCALE));
+function paint(canvas: HTMLCanvasElement, pixels: Uint8ClampedArray | undefined, size: number) {
+	const displaySize = Math.max(1, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1)));
 	canvas.width = displaySize;
 	canvas.height = displaySize;
 	const context = canvas.getContext('2d');
 	if (!context) return;
 	context.clearRect(0, 0, displaySize, displaySize);
-	if (!params.palette.some((color) => color.rgb && color.kind !== 'transparent')) return;
+	if (!pixels) return;
+	const image = new ImageData(new Uint8ClampedArray(pixels), size, size);
+	const scratch = document.createElement('canvas');
+	scratch.width = size;
+	scratch.height = size;
+	scratch.getContext('2d')?.putImageData(image, 0, 0);
+	context.imageSmoothingEnabled = false;
+	context.drawImage(scratch, 0, 0, displaySize, displaySize);
+}
 
+/**
+ * The preview gradient dithered by the package, as RGBA pixels. An empty palette gives a blank
+ * preview.
+ */
+export function renderDitherPreview(
+	ditherette: Ditherette,
+	params: DitherPreviewParams,
+	size: number
+): Uint8ClampedArray {
+	const pixels = new Uint8ClampedArray(size * size * 4);
+	if (!params.palette.some((color) => color.rgb && color.kind !== 'transparent')) return pixels;
 	const { request } = packageProcessRequest(
 		gradient(size),
 		[...params.palette],
@@ -79,16 +123,10 @@ function paint(canvas: HTMLCanvasElement, ditherette: Ditherette, params: Dither
 		{ width: size, height: size }
 	);
 	const { indices, palette } = ditherette.process(request);
-	const image = new ImageData(size, size);
 	for (let pixel = 0; pixel < indices.length; pixel++) {
-		image.data.set(palette.rgba.subarray(indices[pixel]! * 4, indices[pixel]! * 4 + 4), pixel * 4);
+		pixels.set(palette.rgba.subarray(indices[pixel]! * 4, indices[pixel]! * 4 + 4), pixel * 4);
 	}
-	const pixels = document.createElement('canvas');
-	pixels.width = size;
-	pixels.height = size;
-	pixels.getContext('2d')?.putImageData(image, 0, 0);
-	context.imageSmoothingEnabled = false;
-	context.drawImage(pixels, 0, 0, displaySize, displaySize);
+	return pixels;
 }
 
 /** The preview image: the gray ramp running diagonally from black at bottom left to white at top right. */
