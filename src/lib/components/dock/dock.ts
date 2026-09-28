@@ -115,26 +115,31 @@ function forget(group: IDockviewGroupPanel) {
 
 /** The groups stacked above and below `group`, itself included, top to bottom. */
 function column(api: DockviewApi, group: IDockviewGroupPanel) {
-	const edges = (candidate: IDockviewGroupPanel) => {
-		const box = groupElement(api, candidate)?.getBoundingClientRect();
-		return box ? [box.left, box.right] : [NaN, NaN];
-	};
-	const [left, right] = edges(group);
-	// A neighbour belongs to the column only when it spans the same width, so a window docked
-	// across the whole bottom edge never joins the columns above it.
-	const aligned = (candidate: IDockviewGroupPanel) => {
-		const [otherLeft, otherRight] = edges(candidate);
-		return Math.abs(otherLeft! - left!) < 1 && Math.abs(otherRight! - right!) < 1;
-	};
-	const walk = (direction: 'up' | 'down') => {
-		const found: IDockviewGroupPanel[] = [];
-		for (let next = api.adjacentGroupInDirection(group, direction); next && aligned(next); ) {
-			found.push(next);
-			next = api.adjacentGroupInDirection(next, direction);
-		}
-		return found;
-	};
-	return [...walk('up').reverse(), group, ...walk('down')];
+	const box = (candidate: IDockviewGroupPanel) =>
+		groupElement(api, candidate)?.getBoundingClientRect();
+	const own = box(group);
+	if (!own) return [group];
+	// Docked groups spanning exactly this group's width, top to bottom. Built from geometry rather
+	// than nearest-neighbour hops, which can land in another column first in an uneven layout.
+	const aligned = api.groups
+		.filter((candidate) => !isFloating(candidate))
+		.map((candidate) => ({ candidate, rect: box(candidate) }))
+		.filter(
+			({ rect }) =>
+				rect && Math.abs(rect.left - own.left) < 1 && Math.abs(rect.right - own.right) < 1
+		)
+		.sort((first, second) => first.rect!.top - second.rect!.top);
+	// Keep the run that touches this group, so a same-width window elsewhere doesn't join it.
+	let start = aligned.findIndex(({ candidate }) => candidate === group);
+	let end = start;
+	while (start > 0 && Math.abs(aligned[start - 1]!.rect!.bottom - aligned[start]!.rect!.top) < 2)
+		start--;
+	while (
+		end < aligned.length - 1 &&
+		Math.abs(aligned[end]!.rect!.bottom - aligned[end + 1]!.rect!.top) < 2
+	)
+		end++;
+	return aligned.slice(start, end + 1).map(({ candidate }) => candidate);
 }
 
 /**

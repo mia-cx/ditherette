@@ -126,6 +126,12 @@ export function lutView(canvas: HTMLCanvasElement) {
 		gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, size, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, lut);
 		gl.viewport(0, 0, canvas.width, canvas.height);
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+		// WebGL skips a command it can't honour, such as an upload that runs out of memory, and only
+		// records the error.
+		if (gl.getError() !== gl.NO_ERROR) {
+			uploaded = undefined;
+			return fail('The GPU could not draw effects on this image.');
+		}
 		lutDrawn.set(true);
 	}
 

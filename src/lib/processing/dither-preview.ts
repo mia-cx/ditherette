@@ -44,6 +44,15 @@ function render(params: DitherPreviewParams, size: number) {
 			answers.get(data.id)?.('pixels' in data ? data.pixels : undefined);
 			answers.delete(data.id);
 		};
+		// A worker that fails to load or crashes answers nothing: settle what waits on it, and let
+		// the next preview start a fresh one.
+		worker.onerror = (event) => {
+			console.error('The dither preview worker failed.', event.message);
+			for (const answer of answers.values()) answer(undefined);
+			answers.clear();
+			worker?.terminate();
+			worker = undefined;
+		};
 	}
 	const id = ++nextId;
 	return new Promise<Uint8ClampedArray | undefined>((resolve) => {
@@ -58,16 +67,25 @@ function render(params: DitherPreviewParams, size: number) {
  */
 export function ditherPreview(canvas: HTMLCanvasElement, params: DitherPreviewParams) {
 	let current = params;
-	let latest = 0;
 	let destroyed = false;
+	let rendering = false;
+	let stale = false;
+	/** One job per card at a time; changes while it renders fold into a single follow-up. */
 	async function draw() {
-		const run = ++latest;
 		// A canvas in a hidden window has no size yet; the observer draws it once it does.
-		if (!canvas.clientWidth) return;
-		const size = Math.max(1, Math.round(canvas.clientWidth / PIXEL_SCALE));
-		const pixels = await render(current, size);
-		// Newer settings or a removed card make this result stale.
-		if (run === latest && !destroyed) paint(canvas, pixels, size);
+		if (!canvas.clientWidth || destroyed) return;
+		if (rendering) {
+			stale = true;
+			return;
+		}
+		rendering = true;
+		do {
+			stale = false;
+			const size = Math.max(1, Math.round(canvas.clientWidth / PIXEL_SCALE));
+			const pixels = await render(current, size);
+			if (!stale && !destroyed) paint(canvas, pixels, size);
+		} while (stale && !destroyed);
+		rendering = false;
 	}
 	const observer = new ResizeObserver(() => void draw());
 	observer.observe(canvas);
