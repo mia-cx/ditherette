@@ -4,8 +4,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 	import { Sheet, SheetContent, SheetHeader, SheetTitle } from '$lib/components/ui/sheet';
-	import type { ColorSpaceId, DitherId, EnabledPaletteColor } from '$lib/processing/types';
-	import { colorSpace, selectedPalette, uiSettings } from '$lib/stores/app';
+	import { ditherPreview, type DitherPreviewParams } from '$lib/processing/dither-preview';
+	import type { DitherId } from '$lib/processing/types';
+	import {
+		colorSpace,
+		ditherSettings,
+		outputSettings,
+		selectedPalette,
+		uiSettings
+	} from '$lib/stores/app';
 	import {
 		DITHER_ALGORITHMS,
 		type DitherField,
@@ -15,38 +22,8 @@
 	import InlineMath from './InlineMath.svelte';
 	import DitherFilterGroups from './DitherFilterGroups.svelte';
 
-	type DitherPreviewParams = {
-		mode: DitherId;
-		randomSeed: number;
-		previewStrength: number;
-		serpentineScan: boolean;
-		palette: readonly EnabledPaletteColor[];
-		colorSpaceMode: ColorSpaceId;
-		useColorSpace: boolean;
-	};
-
-	type DitherPreviewAction = (
-		target: HTMLCanvasElement,
-		params: DitherPreviewParams
-	) => { update(next: DitherPreviewParams): void } | void;
-
-	type Props = {
-		algorithm: DitherId;
-		seed: number;
-		strength: number;
-		serpentine: boolean;
-		useColorSpace: boolean;
-		ditherPreview: DitherPreviewAction;
-	};
-
-	let {
-		algorithm = $bindable(),
-		seed,
-		strength,
-		serpentine,
-		useColorSpace,
-		ditherPreview
-	}: Props = $props();
+	type Props = { algorithm: DitherId };
+	let { algorithm = $bindable() }: Props = $props();
 
 	let algorithmSearch = $state('');
 	let methodFilters = $state<DitherMethod[]>(['none', 'threshold', 'error-diffusion', 'mixing']);
@@ -80,15 +57,13 @@
 		});
 	});
 
+	/** The current settings with this option's algorithm, so each preview shows what choosing it does. */
 	function previewParams(option: DitherOption): DitherPreviewParams {
 		return {
-			mode: option.id,
-			randomSeed: seed,
-			previewStrength: strength,
-			serpentineScan: serpentine,
+			dither: { ...$ditherSettings, algorithm: option.id },
+			output: $outputSettings,
 			palette: $selectedPalette,
-			colorSpaceMode: $colorSpace,
-			useColorSpace
+			colorSpace: $colorSpace
 		};
 	}
 
@@ -136,8 +111,12 @@
 					<span class="grid min-w-0 flex-1 content-start gap-1">
 						<span class="flex min-w-0 flex-wrap items-start gap-1.5">
 							<span class="truncate text-sm font-medium text-foreground">{current.label}</span>
-							<Badge variant="secondary">{methodLabel(current.method)}</Badge>
-							<Badge variant="outline">{fieldLabel(current.field)}</Badge>
+							{#if current.method !== 'none'}
+								<Badge variant="secondary">{methodLabel(current.method)}</Badge>
+							{/if}
+							{#if current.field !== 'none'}
+								<Badge variant="outline">{fieldLabel(current.field)}</Badge>
+							{/if}
 						</span>
 						<span class="text-xs text-muted-foreground">{current.short}</span>
 					</span>
@@ -197,8 +176,12 @@
 								<span class="grid min-w-0 flex-1 content-start gap-1">
 									<span class="flex min-w-0 flex-wrap items-start gap-1.5">
 										<span class="truncate text-sm font-medium text-foreground">{option.label}</span>
-										<Badge variant="secondary">{methodLabel(option.method)}</Badge>
-										<Badge variant="outline">{fieldLabel(option.field)}</Badge>
+										{#if option.method !== 'none'}
+											<Badge variant="secondary">{methodLabel(option.method)}</Badge>
+										{/if}
+										{#if option.field !== 'none'}
+											<Badge variant="outline">{fieldLabel(option.field)}</Badge>
+										{/if}
 									</span>
 									<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
 										>{option.short}</span
