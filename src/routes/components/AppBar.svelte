@@ -16,7 +16,7 @@
 		MenubarSubTrigger,
 		MenubarTrigger
 	} from '$lib/components/ui/menubar';
-	import { EFFECTS, EFFECT_KINDS, stepCost, type EffectKind } from '$lib/effects/catalog';
+	import { EFFECTS, EFFECT_KINDS, type EffectKind } from '$lib/effects/catalog';
 	import { exportable, exportPng } from '$lib/processing/export';
 	import {
 		colorSpace,
@@ -162,7 +162,7 @@
 					<MenubarSubContent class="min-w-52">
 						{#each EFFECT_KINDS as kind (kind)}
 							<MenubarItem
-								disabled={stepCost(kind) > $effectStepsLeft}
+								disabled={$effectStepsLeft < 1}
 								onSelect={() => adjust(kind)}>{EFFECTS[kind].label}</MenubarItem
 							>
 						{/each}

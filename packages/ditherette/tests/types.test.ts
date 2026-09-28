@@ -217,40 +217,37 @@ const effectsInV1: ProcessRequest['recipe'] = { ...complete.recipe, effects };
 // @ts-expect-error Every step states whether it is enabled.
 const missingToggle: import('../src/index.js').Effect = { ...effects[0], enabled: undefined };
 void [effectsInV1, missingToggle];
+const identityCurve: import('../src/index.js').CurvePoints = [
+	[0, 0],
+	[1, 1]
+];
+const remap: import('../src/index.js').Curve = {
+	kind: 'remap',
+	x: { model: 'oklch', channel: 'lightness' },
+	y: { model: 'oklch', channel: 'lightness' },
+	points: identityCurve
+};
+const adjustment: import('../src/index.js').Curve = {
+	kind: 'adjust',
+	x: { model: 'hsl', channel: 'hue' },
+	y: { model: 'cielch', channel: 'chroma' },
+	points: [
+		[0, 0.5],
+		[0.5, 0.8],
+		[1, 0.5]
+	]
+};
 const grade: import('../src/index.js').Effect[] = [
-	{ effect: 'curves', enabled: true, channel: 'rgb', points: [[0, 0], [0.5, 0.6], [1, 1]] },
+	{ effect: 'curves', enabled: true, curves: [remap, adjustment] },
 	{ effect: 'brightness-contrast', enabled: true, brightness: 0, contrast: 0.2 },
 	{ effect: 'exposure', enabled: false, stops: -1 },
 	{ effect: 'white-balance', enabled: true, temperature: 0.3, tint: 0 },
 	{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: -0.2, lightness: 0 }
 ];
 // @ts-expect-error Curve points are [x, y] pairs.
-const flatCurve: import('../src/index.js').CurvesEffect['points'] = [0, 1];
+const flatCurve: import('../src/index.js').Curve['points'] = [0, 1];
 void [grade, flatCurve];
-const identityCurve: import('../src/index.js').CurvePoints = [[0, 0], [1, 1]];
-const modelCurves = [
-	{ effect: 'model-curves', enabled: true, model: 'linear-rgb', curves: [identityCurve, identityCurve, identityCurve] },
-	{ effect: 'model-curves', enabled: true, model: 'hsl', curves: [identityCurve, identityCurve, identityCurve] },
-	{ effect: 'model-curves', enabled: true, model: 'hsv', curves: [identityCurve, identityCurve, identityCurve] },
-	{ effect: 'model-curves', enabled: true, model: 'oklab', curves: [identityCurve, identityCurve, identityCurve] },
-	{ effect: 'model-curves', enabled: true, model: 'oklch', curves: [identityCurve, identityCurve, identityCurve] },
-	{ effect: 'model-curves', enabled: true, model: 'cielab', curves: [identityCurve, identityCurve, identityCurve] },
-	{ effect: 'model-curves', enabled: true, model: 'cielch', curves: [identityCurve, identityCurve, identityCurve] },
-	{ effect: 'model-curves', enabled: true, model: 'ycbcr', curves: [identityCurve, identityCurve, identityCurve] }
-] satisfies import('../src/index.js').ModelCurvesEffect[];
 const colourModel: import('../src/index.js').ColourModel = 'srgb';
-const curveModel: import('../src/index.js').ModelCurvesModel = 'oklch';
-const srgbModelCurves: import('../src/index.js').ModelCurvesEffect = {
-	effect: 'model-curves', enabled: true,
-	// @ts-expect-error Encoded sRGB remains the existing curves effect.
-	model: 'srgb', curves: [identityCurve, identityCurve, identityCurve]
-};
-const shortModelCurves: import('../src/index.js').ModelCurvesEffect = {
-	effect: 'model-curves', enabled: true, model: 'hsl',
-	// @ts-expect-error Model curves require exactly three channel curves.
-	curves: [identityCurve, identityCurve]
-};
-void [modelCurves, colourModel, curveModel, srgbModelCurves, shortModelCurves];
 const colourChannels = [
 	{ model: 'srgb', channel: 'red' },
 	{ model: 'linear-rgb', channel: 'blue' },
@@ -262,20 +259,47 @@ const colourChannels = [
 	{ model: 'cielch', channel: 'hue' },
 	{ model: 'ycbcr', channel: 'cb' }
 ] satisfies import('../src/index.js').ColourChannel[];
-const channelCurve: import('../src/index.js').ChannelCurveEffect = {
-	effect: 'channel-curve',
-	enabled: true,
-	x: { model: 'hsl', channel: 'hue' },
-	y: { model: 'oklch', channel: 'chroma' },
-	points: [[0, 0.5], [0.5, 0.8], [1, 0.5]]
-};
 // @ts-expect-error HSV has value, not lightness.
 const invalidHsvChannel: import('../src/index.js').ColourChannel = { model: 'hsv', channel: 'lightness' };
 // @ts-expect-error Cartesian Oklab has a and b, not hue.
 const invalidOklabChannel: import('../src/index.js').ColourChannel = { model: 'oklab', channel: 'hue' };
 // @ts-expect-error RGB models have primary channels, not luma.
 const invalidRgbChannel: import('../src/index.js').ColourChannel = { model: 'srgb', channel: 'luma' };
-void [colourChannels, channelCurve, invalidHsvChannel, invalidOklabChannel, invalidRgbChannel];
+const oldCurvesShape = {
+	effect: 'curves',
+	enabled: true,
+	channel: 'rgb',
+	points: identityCurve
+} as const;
+const oldModelCurvesShape = {
+	effect: 'model-curves',
+	enabled: true,
+	model: 'hsl',
+	curves: [identityCurve, identityCurve, identityCurve]
+} as const;
+const oldChannelCurveShape = {
+	effect: 'channel-curve',
+	enabled: true,
+	x: { model: 'srgb', channel: 'red' },
+	y: { model: 'srgb', channel: 'blue' },
+	points: identityCurve
+} as const;
+// @ts-expect-error The old encoded channel/points curves shape was removed.
+const oldCurves: import('../src/index.js').Effect = oldCurvesShape;
+// @ts-expect-error The model-curves effect was removed.
+const oldModelCurves: import('../src/index.js').Effect = oldModelCurvesShape;
+// @ts-expect-error The channel-curve effect was removed.
+const oldChannelCurve: import('../src/index.js').Effect = oldChannelCurveShape;
+void [
+	colourModel,
+	colourChannels,
+	invalidHsvChannel,
+	invalidOklabChannel,
+	invalidRgbChannel,
+	oldCurves,
+	oldModelCurves,
+	oldChannelCurve
+];
 processor.then((instance) => {
 	const recipe: import('../src/index.js').RecolourRecipe = instance.analyzeRecolour({
 		version: 1,

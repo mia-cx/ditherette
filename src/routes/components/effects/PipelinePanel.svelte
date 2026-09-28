@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { EFFECTS, EFFECT_KINDS, stepCost, type EffectKind } from '$lib/effects/catalog';
+	import { EFFECTS, EFFECT_KINDS, type EffectKind } from '$lib/effects/catalog';
 	import {
 		addEffect,
 		effectLayers,
@@ -97,7 +97,7 @@
 		</DropdownMenuTrigger>
 		<DropdownMenuContent align="start" class="w-(--bits-dropdown-menu-anchor-width)">
 			{#each EFFECT_KINDS as kind (kind)}
-				<DropdownMenuItem disabled={stepCost(kind) > $effectStepsLeft} onSelect={() => add(kind)}
+				<DropdownMenuItem disabled={$effectStepsLeft < 1} onSelect={() => add(kind)}
 					>{EFFECTS[kind].label}</DropdownMenuItem
 				>
 			{/each}

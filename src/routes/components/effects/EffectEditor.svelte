@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { LayerStep } from '$lib/effects/catalog';
+	import type { Effect } from 'ditherette';
 	import { brightnessContrastTone, exposureTone, hueSpectrum, levelsTone } from '$lib/effects/tone';
 	import CurvesEditor from './CurvesEditor.svelte';
 	import LevelsEditor from './LevelsEditor.svelte';
@@ -7,7 +7,7 @@
 	import ToneGraph from './ToneGraph.svelte';
 	import { NUMBER_FIELDS } from './fields';
 
-	type Props = { id: string; step: LayerStep; onchange: (step: LayerStep) => void };
+	type Props = { id: string; step: Effect; onchange: (step: Effect) => void };
 	let { id, step, onchange }: Props = $props();
 
 	const LEVELS_STROKE = {

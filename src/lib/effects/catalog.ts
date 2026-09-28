@@ -1,43 +1,9 @@
-import type {
-	ChannelCurveEffect,
-	ColourChannel,
-	CurvesEffect,
-	Effect,
-	ModelCurvesEffect,
-	ModelCurvesModel
-} from 'ditherette';
+import type { ColourChannel, Curve, CurvePoints, Effect } from 'ditherette';
 
-export type CurvePoints = CurvesEffect['points'];
-/** A model whose three channels each get a curve: encoded RGB, or any `model-curves` model. */
-export type CurveModel = 'srgb' | ModelCurvesModel;
+export type EffectKind = Effect['effect'];
+export type EffectOf<K extends EffectKind> = Extract<Effect, { effect: K }>;
 export type ChannelName = ColourChannel['channel'];
-
-/**
- * A curves layer: three curves in a model's channel order, or one arbitrary XY curve where an
- * input channel adjusts an output channel. Processing turns it into package steps.
- */
-export type CurvesLayer =
-	| {
-			readonly effect: 'curves';
-			readonly enabled: boolean;
-			readonly model: CurveModel;
-			readonly curves: readonly [CurvePoints, CurvePoints, CurvePoints];
-	  }
-	| {
-			readonly effect: 'curves';
-			readonly enabled: boolean;
-			readonly model: 'xy';
-			readonly x: ColourChannel;
-			readonly y: ColourChannel;
-			readonly points: CurvePoints;
-	  };
-
-/** What a layer stores: a package step, except that curves keep a curve per channel. */
-export type LayerStep =
-	| Exclude<Effect, CurvesEffect | ModelCurvesEffect | ChannelCurveEffect>
-	| CurvesLayer;
-export type EffectKind = LayerStep['effect'];
-export type EffectOf<K extends EffectKind> = Extract<LayerStep, { effect: K }>;
+type ColourModel = ColourChannel['model'];
 
 type ChannelInfo = { readonly name: ChannelName; readonly label: string };
 type ModelChannels = readonly [ChannelInfo, ChannelInfo, ChannelInfo];
@@ -58,9 +24,9 @@ const LCH: ModelChannels = [
 	channel('hue', 'Hue')
 ];
 
-/** Every colour model a curves layer can use, with its channels in canonical order. */
+/** Every colour model a curve can read or change, with its channels in canonical order. */
 export const CURVE_MODELS: readonly {
-	readonly id: CurveModel;
+	readonly id: ColourModel;
 	readonly label: string;
 	readonly channels: ModelChannels;
 }[] = [
@@ -95,57 +61,49 @@ export const CURVE_MODELS: readonly {
 	}
 ];
 
-/** Every channel an arbitrary XY curve can read or adjust, grouped by model. */
-export const XY_CHANNELS: readonly { readonly label: string; readonly channel: ColourChannel }[] =
-	CURVE_MODELS.flatMap((model) =>
-		model.channels.map(({ name, label }) => ({
-			label: `${model.label} · ${label}`,
-			// Each model lists only its own channels, so every pair is a valid ColourChannel.
-			channel: { model: model.id, channel: name } as ColourChannel
-		}))
-	);
+/** Every channel a curve can read or change, grouped by model. */
+export const CURVE_CHANNELS: readonly {
+	readonly label: string;
+	readonly channel: ColourChannel;
+}[] = CURVE_MODELS.flatMap((model) =>
+	model.channels.map(({ name, label }) => ({
+		label: `${model.label} · ${label}`,
+		// Each model lists only its own channels, so every pair is a valid ColourChannel.
+		channel: { model: model.id, channel: name } as ColourChannel
+	}))
+);
+
+export const channelKey = ({ model, channel }: ColourChannel) => `${model}:${channel}`;
+export const channelLabel = (channel: ColourChannel) =>
+	CURVE_CHANNELS.find((option) => channelKey(option.channel) === channelKey(channel))!.label;
+export const sameChannel = (left: ColourChannel, right: ColourChannel) =>
+	channelKey(left) === channelKey(right);
+
+/** The most curves one curves step holds. */
+export const MAX_CURVES = 16;
 
 export const STRAIGHT: CurvePoints = [
 	[0, 0],
 	[1, 1]
 ];
-/** The neutral arbitrary XY curve: no adjustment anywhere. */
+/** A neutral adjustment: no change anywhere. */
 export const FLAT: CurvePoints = [
 	[0, 0.5],
 	[1, 0.5]
 ];
 
-export const samePoints = (left: CurvePoints, right: CurvePoints) =>
-	left.length === right.length &&
-	left.every(([x, y], index) => x === right[index]![0] && y === right[index]![1]);
-
 /**
- * The package steps a layer runs. RGB runs one `rgb` curve when all three match, otherwise one per
- * changed channel; other models run one `model-curves` step; arbitrary XY one `channel-curve`.
+ * A neutral curve from `x` to `y`: a remap on the diagonal when it reads and writes one channel,
+ * otherwise a flat adjustment.
  */
-export function packageSteps(step: LayerStep): Effect[] {
-	if (step.effect !== 'curves') return [step];
-	const { enabled } = step;
-	if (step.model === 'xy')
-		return [{ effect: 'channel-curve', enabled, x: step.x, y: step.y, points: step.points }];
-	if (step.model !== 'srgb')
-		// Each model's tuple follows that model's channel order, which the package names per model.
-		return [
-			{
-				effect: 'model-curves',
-				enabled,
-				model: step.model,
-				curves: step.curves
-			} as ModelCurvesEffect
-		];
-	const [red, green, blue] = step.curves;
-	if (samePoints(red, green) && samePoints(red, blue))
-		return [{ effect: 'curves', enabled, channel: 'rgb', points: red }];
-	return (['red', 'green', 'blue'] as const)
-		.map((channel, index) => ({ channel, points: step.curves[index]! }))
-		.filter(({ points }) => !samePoints(points, STRAIGHT))
-		.map(({ channel, points }) => ({ effect: 'curves', enabled, channel, points }));
+export function neutralCurve(x: ColourChannel, y: ColourChannel): Curve {
+	return sameChannel(x, y)
+		? { kind: 'remap', x, y, points: STRAIGHT }
+		: { kind: 'adjust', x, y, points: FLAT };
 }
+
+/** New curves steps start with a lightness curve that bends tone without shifting hue. */
+const OKLCH_LIGHTNESS: ColourChannel = { model: 'oklch', channel: 'lightness' };
 
 type CatalogEntry<K extends EffectKind> = {
 	/** Name shown in menus and given to new instances. */
@@ -172,8 +130,7 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 		create: () => ({
 			effect: 'curves',
 			enabled: true,
-			model: 'srgb',
-			curves: [STRAIGHT, STRAIGHT, STRAIGHT]
+			curves: [neutralCurve(OKLCH_LIGHTNESS, OKLCH_LIGHTNESS)]
 		})
 	},
 	'brightness-contrast': {
@@ -206,12 +163,5 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 
 /** The package accepts at most 64 steps. */
 export const MAX_EFFECT_LAYERS = 64;
-
-/**
- * The most package steps a layer can turn into: three for curves, whose RGB channels can each run
- * as a step, and one for anything else. Counting curves at three in every model means switching
- * models never overflows the package's limit.
- */
-export const stepCost = (kind: EffectKind) => (kind === 'curves' ? 3 : 1);
 
 export const EFFECT_KINDS = Object.keys(EFFECTS) as EffectKind[];
