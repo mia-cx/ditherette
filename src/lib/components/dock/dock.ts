@@ -63,11 +63,15 @@ export function isFloating(group: IDockviewGroupPanel) {
 }
 
 /** Float a docked window, or dock a floating one back on the right edge. */
-export function toggleFloating(api: DockviewApi, group: IDockviewGroupPanel) {
+export function toggleFloating(
+	api: DockviewApi,
+	group: IDockviewGroupPanel,
+	main: string | undefined
+) {
 	const panel = group.activePanel;
 	// Moving a tab out would strand the rest of a collapsed group at its tab-bar size.
 	const collapsed = collapsedGroups.get()[group.id];
-	if (collapsed?.axis === 'width') toggleSidebar(api, group);
+	if (collapsed?.axis === 'width') toggleSidebar(api, group, main);
 	else if (collapsed) expand(api, group, collapsed);
 	if (isFloating(group)) group.api.moveTo({ position: 'right' });
 	else if (panel) api.addFloatingGroup(panel, FLOATING_SIZE);
@@ -111,9 +115,20 @@ function forget(group: IDockviewGroupPanel) {
 
 /** The groups stacked above and below `group`, itself included, top to bottom. */
 function column(api: DockviewApi, group: IDockviewGroupPanel) {
+	const edges = (candidate: IDockviewGroupPanel) => {
+		const box = groupElement(api, candidate)?.getBoundingClientRect();
+		return box ? [box.left, box.right] : [NaN, NaN];
+	};
+	const [left, right] = edges(group);
+	// A neighbour belongs to the column only when it spans the same width, so a window docked
+	// across the whole bottom edge never joins the columns above it.
+	const aligned = (candidate: IDockviewGroupPanel) => {
+		const [otherLeft, otherRight] = edges(candidate);
+		return Math.abs(otherLeft! - left!) < 1 && Math.abs(otherRight! - right!) < 1;
+	};
 	const walk = (direction: 'up' | 'down') => {
 		const found: IDockviewGroupPanel[] = [];
-		for (let next = api.adjacentGroupInDirection(group, direction); next; ) {
+		for (let next = api.adjacentGroupInDirection(group, direction); next && aligned(next); ) {
 			found.push(next);
 			next = api.adjacentGroupInDirection(next, direction);
 		}
@@ -122,28 +137,38 @@ function column(api: DockviewApi, group: IDockviewGroupPanel) {
 	return [...walk('up').reverse(), group, ...walk('down')];
 }
 
+/**
+ * The group holding `main`, the one area that never folds, or the widest docked group when
+ * `main` is closed or floating.
+ */
+function mainGroup(api: DockviewApi, main: string | undefined) {
+	const docked = main ? api.getPanel(main)?.group : undefined;
+	if (docked && !isFloating(docked)) return docked;
+	return api.groups
+		.filter((candidate) => !isFloating(candidate))
+		.reduce<
+			IDockviewGroupPanel | undefined
+		>((widest, candidate) => (!widest || candidate.api.width > widest.api.width ? candidate : widest), undefined);
+}
+
 function remember(group: IDockviewGroupPanel, collapse: Collapse) {
 	collapsedGroups.set({ ...collapsedGroups.get(), [group.id]: collapse });
 }
 
 /**
- * Run a width change on `changing` while other docked groups keep their widths, so the widest one,
- * the preview in the studio, absorbs the difference. Dockview would share it out proportionally.
+ * Run a width change on `changing` while other docked groups keep their widths, so the main
+ * area's column absorbs the difference. Dockview would share it out proportionally.
  */
 function keepOtherWidths(
 	api: DockviewApi,
 	changing: readonly IDockviewGroupPanel[],
+	main: string | undefined,
 	change: () => void
 ) {
-	const others = api.groups.filter(
-		(other) => !changing.includes(other) && other.api.location.type === 'grid'
-	);
-	const widest = others.reduce<IDockviewGroupPanel | undefined>(
-		(best, other) => (!best || other.api.width > best.api.width ? other : best),
-		undefined
-	);
-	const held = others
-		.filter((other) => other !== widest)
+	const absorbing = mainGroup(api, main);
+	const flexible = absorbing ? column(api, absorbing) : [];
+	const held = api.groups
+		.filter((other) => !changing.includes(other) && !flexible.includes(other) && !isFloating(other))
 		.map((other) => [other, other.api.width] as const);
 	change();
 	for (const [other, width] of held) other.api.setSize({ width });
@@ -153,9 +178,13 @@ function keepOtherWidths(
  * Roll a window up to its tab bar, or a floating window up to its title, or restore the size it
  * had. The whole column folds into a strip only through `toggleSidebar`.
  */
-export function toggleCollapsed(api: DockviewApi, group: IDockviewGroupPanel) {
+export function toggleCollapsed(
+	api: DockviewApi,
+	group: IDockviewGroupPanel,
+	main: string | undefined
+) {
 	const collapsed = collapsedGroups.get()[group.id];
-	if (collapsed?.axis === 'width') return toggleSidebar(api, group);
+	if (collapsed?.axis === 'width') return toggleSidebar(api, group, main);
 	if (collapsed) return expand(api, group, collapsed);
 	const axis = isFloating(group) ? 'float' : 'height';
 	const size =
@@ -193,26 +222,31 @@ export function sidebarSide(
 	group: IDockviewGroupPanel,
 	main: string | undefined
 ): 'left' | 'right' | undefined {
-	if (isFloating(group) || api.adjacentGroupInDirection(group, 'up')) return undefined;
-	const mainGroup = main ? api.getPanel(main)?.group : undefined;
-	if (!mainGroup || column(api, group).some((member) => member.id === mainGroup.id))
-		return undefined;
+	if (isFloating(group)) return undefined;
+	const members = column(api, group);
+	if (members[0] !== group) return undefined;
+	const area = mainGroup(api, main);
+	if (!area || members.some((member) => member.id === area.id)) return undefined;
 	const left = (candidate: IDockviewGroupPanel) =>
 		groupElement(api, candidate)?.getBoundingClientRect().left ?? 0;
-	return left(group) < left(mainGroup) ? 'left' : 'right';
+	return left(group) < left(area) ? 'left' : 'right';
 }
 
 /**
  * Fold `group`'s whole column into a strip of vertical tabs, or open it again. Windows rolled up
  * to their tab bars before the column folded stay rolled up when it opens.
  */
-export function toggleSidebar(api: DockviewApi, group: IDockviewGroupPanel) {
+export function toggleSidebar(
+	api: DockviewApi,
+	group: IDockviewGroupPanel,
+	main: string | undefined
+) {
 	const groups = column(api, group);
 	const saved = collapsedGroups.get();
 	const top = groups[0]!;
 	const folded = saved[top.id];
 	if (folded?.axis === 'width') {
-		keepOtherWidths(api, groups, () => {
+		keepOtherWidths(api, groups, main, () => {
 			for (const member of groups) {
 				const record = saved[member.id];
 				member.api.setHeaderPosition('top');
@@ -231,7 +265,7 @@ export function toggleSidebar(api: DockviewApi, group: IDockviewGroupPanel) {
 		const share = Math.floor(
 			groups.reduce((total, member) => total + member.api.height, 0) / groups.length
 		);
-		keepOtherWidths(api, groups, () => {
+		keepOtherWidths(api, groups, main, () => {
 			for (const member of groups) {
 				const record = saved[member.id];
 				const rolled = record?.axis === 'height';

@@ -95,7 +95,7 @@
 									collapsedGroups.get()[group.id]?.axis === 'width'
 										? 'Expand sidebar'
 										: 'Collapse sidebar',
-								action: () => toggleSidebar(api, group)
+								action: () => toggleSidebar(api, group, main)
 							}
 						]
 					: []),
@@ -103,13 +103,13 @@
 					? [
 							{
 								label: collapsedGroups.get()[group.id] ? 'Expand window' : 'Collapse window',
-								action: () => toggleCollapsed(api, group)
+								action: () => toggleCollapsed(api, group, main)
 							}
 						]
 					: []),
 				{
 					label: isFloating(group) ? 'Dock window' : 'Float window',
-					action: () => toggleFloating(api, group)
+					action: () => toggleFloating(api, group, main)
 				},
 				'maximize',
 				'separator',
