@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { Curve, CurvePoints, CurvesEffect } from 'ditherette';
+	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeft';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
+	import EyedropperIcon from 'phosphor-svelte/lib/Eyedropper';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
+	import { onDestroy } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -15,7 +19,9 @@
 		neutralCurve,
 		sameChannel
 	} from '$lib/effects/catalog';
+	import { channelValue, pickPoint, setPointOutput } from '$lib/effects/pick';
 	import { hueAxis } from '$lib/effects/tone';
+	import { curvePicker, type CurvePicker } from '$lib/stores/curve-pick';
 	import CurveGraph from './CurveGraph.svelte';
 
 	type Props = { id: string; step: CurvesEffect; onchange: (step: CurvesEffect) => void };
@@ -70,6 +76,43 @@
 		selected = Math.max(0, active - 1);
 	}
 
+	/** Curves apply in list order, so moving one changes the result. */
+	function move(from: number, to: number) {
+		if (from === to || to < 0 || to >= step.curves.length) return;
+		const curves = step.curves.slice();
+		const [moved] = curves.splice(from, 1);
+		curves.splice(to, 0, moved!);
+		onchange({ ...step, curves });
+		selected = to;
+	}
+	let dragFrom = $state<number>();
+
+	/** Pixels of vertical drag that move a picked point across the whole output range. */
+	const PUSH_PIXELS = 200;
+	let grabbed: { index: number; y: number } | undefined;
+	const picker: CurvePicker = {
+		pick(rgb) {
+			if (!curve) return;
+			const { points, index } = pickPoint(curve, periodic(curve), channelValue(curve.x, rgb));
+			grabbed = { index, y: points[index]![1] };
+			replace({ ...curve, points });
+		},
+		push(up) {
+			if (!curve || !grabbed) return;
+			const points = setPointOutput(
+				curve.points,
+				grabbed.index,
+				grabbed.y + up / PUSH_PIXELS,
+				periodic(curve)
+			);
+			replace({ ...curve, points });
+		}
+	};
+	const picking = $derived($curvePicker === picker);
+	onDestroy(() => {
+		if (curvePicker.get() === picker) curvePicker.set(undefined);
+	});
+
 	const channelFor = (key: string) =>
 		CURVE_CHANNELS.find(({ channel }) => channelKey(channel) === key)?.channel;
 
@@ -103,6 +146,13 @@
 				variant={index === active ? 'secondary' : 'outline'}
 				size="xs"
 				aria-pressed={index === active}
+				draggable="true"
+				ondragstart={() => (dragFrom = index)}
+				ondragover={(event: DragEvent) => event.preventDefault()}
+				ondrop={() => {
+					if (dragFrom !== undefined) move(dragFrom, index);
+					dragFrom = undefined;
+				}}
 				onclick={() => (selected = index)}
 			>
 				<span class="size-2 {tone(index).swatch}" aria-hidden="true"></span>
@@ -112,6 +162,17 @@
 		<Button variant="ghost" size="xs" disabled={step.curves.length >= MAX_CURVES} onclick={add}>
 			<PlusIcon weight="bold" />
 			Curve
+		</Button>
+		<Button
+			variant={picking ? 'secondary' : 'ghost'}
+			size="icon-xs"
+			class="ml-auto"
+			aria-label="Pick from preview"
+			aria-pressed={picking}
+			disabled={!curve}
+			onclick={() => curvePicker.set(picking ? undefined : picker)}
+		>
+			<EyedropperIcon weight="bold" />
 		</Button>
 	</div>
 
@@ -170,8 +231,22 @@
 			</ToggleGroup>
 		</div>
 
-		<Button variant="outline" size="sm" class="justify-self-start" onclick={remove}
-			>Remove curve</Button
-		>
+		<div class="flex gap-1">
+			<Button
+				variant="outline"
+				size="icon-sm"
+				aria-label="Move curve earlier"
+				disabled={active === 0}
+				onclick={() => move(active, active - 1)}><CaretLeftIcon weight="bold" /></Button
+			>
+			<Button
+				variant="outline"
+				size="icon-sm"
+				aria-label="Move curve later"
+				disabled={active === step.curves.length - 1}
+				onclick={() => move(active, active + 1)}><CaretRightIcon weight="bold" /></Button
+			>
+			<Button variant="outline" size="sm" onclick={remove}>Remove curve</Button>
+		</div>
 	{/if}
 </div>
