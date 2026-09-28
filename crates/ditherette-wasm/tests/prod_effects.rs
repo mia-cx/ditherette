@@ -25,6 +25,16 @@ const PROD_SPACES: [ditherette_wasm::prod::contract::request::WorkingSpace; 7] =
     use ditherette_wasm::prod::contract::request::WorkingSpace::*;
     [Srgb, LinearRgb, Oklab, Oklch, Cielab, Cielch, Ycbcr]
 };
+const MODEL_CURVE_MODELS: [&str; 8] = [
+    "linear-rgb",
+    "hsl",
+    "hsv",
+    "oklab",
+    "oklch",
+    "cielab",
+    "cielch",
+    "ycbcr",
+];
 
 /// Deterministic xorshift so failures reproduce.
 struct Rng(u64);
@@ -87,7 +97,7 @@ fn random_effect(rng: &mut Rng) -> Value {
     let enabled = rng.next() % 5 != 0;
     let neutral = rng.next() % 4 == 0;
     let signed = |rng: &mut Rng| if neutral { 0.0 } else { rng.unit() * 2.0 - 1.0 };
-    match rng.next() % 7 {
+    match rng.next() % 8 {
         0 => random_levels(rng),
         1 => {
             let count = 2 + rng.next() % 5;
@@ -104,8 +114,16 @@ fn random_effect(rng: &mut Rng) -> Value {
             "temperature": signed(rng), "tint": signed(rng) }),
         5 => json!({ "effect": "hue-saturation", "enabled": enabled,
             "hue": signed(rng) * 180.0, "saturation": signed(rng), "lightness": signed(rng) }),
-        _ => json!({ "effect": "recolour", "enabled": enabled,
+        6 => json!({ "effect": "recolour", "enabled": enabled,
             "strength": if neutral { 0.0 } else { rng.unit() }, "recipe": null }),
+        _ => {
+            let identity = [[0.0, 0.0], [1.0, 1.0]];
+            let bent = [[0.0, 0.0], [0.5, rng.unit()], [1.0, 1.0]];
+            json!({ "effect": "model-curves", "enabled": enabled,
+                "model": rng.pick(&MODEL_CURVE_MODELS),
+                "curves": if neutral { [identity.as_slice(), identity.as_slice(), identity.as_slice()] }
+                    else { [bent.as_slice(), identity.as_slice(), identity.as_slice()] } })
+        }
     }
 }
 
@@ -174,10 +192,39 @@ fn random_chains_match_the_reference() {
 }
 
 #[test]
+fn randomized_model_curves_match_the_reference_for_every_model() {
+    let mut rng = Rng(0xc01a_267);
+    let data = image(&mut rng, 37, 19);
+    for model in MODEL_CURVE_MODELS {
+        for _ in 0..24 {
+            let curves: Vec<Vec<[f32; 2]>> = (0..3)
+                .map(|_| {
+                    vec![
+                        [0.0, rng.unit()],
+                        [0.3, rng.unit()],
+                        [0.7, rng.unit()],
+                        [1.0, rng.unit()],
+                    ]
+                })
+                .collect();
+            let effects = json!([
+                random_levels(&mut rng),
+                { "effect": "model-curves", "enabled": true, "model": model, "curves": curves },
+                { "effect": "brightness-contrast", "enabled": true,
+                  "brightness": rng.unit() * 0.4 - 0.2, "contrast": rng.unit() * 0.4 - 0.2 }
+            ]);
+            assert_same(&effects, 37, 19, &data);
+        }
+    }
+}
+
+#[test]
 fn large_repeated_colour_effects_match_the_reference() {
     let effects = json!([
         { "effect": "hue-saturation", "enabled": true,
-          "hue": 25, "saturation": 0.3, "lightness": 0.05 }
+          "hue": 25, "saturation": 0.3, "lightness": 0.05 },
+        { "effect": "model-curves", "enabled": true, "model": "oklch",
+          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.5, 0.65], [1, 1]], [[0, 0], [1, 1]]] }
     ]);
     let data: Vec<u8> = (0..512 * 384)
         .flat_map(|index| {
@@ -194,7 +241,9 @@ fn high_cardinality_effects_match_the_reference() {
         { "effect": "curves", "enabled": true, "channel": "rgb",
           "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
         { "effect": "hue-saturation", "enabled": true,
-          "hue": -137, "saturation": 0.65, "lightness": -0.2 }
+          "hue": -137, "saturation": 0.65, "lightness": -0.2 },
+        { "effect": "model-curves", "enabled": true, "model": "cielch",
+          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.4, 0.7], [1, 1]], [[0, 0.1], [1, 0.9]]] }
     ]);
     let data: Vec<u8> = (0..512 * 512u32)
         .flat_map(|index| {
@@ -203,6 +252,42 @@ fn high_cardinality_effects_match_the_reference() {
         })
         .collect();
     assert_same(&effects, 512, 512, &data);
+}
+
+#[test]
+fn linear_rgb_table_matches_direct_reference_for_every_channel_byte() {
+    use ditherette_wasm::prod::effects::model_curves::{ModelCurves, ModelCurvesModel};
+
+    let curves = [
+        vec![[0.0, 0.1], [0.4, 0.7], [1.0, 0.9]],
+        vec![[0.0, 0.0], [0.6, 0.3], [1.0, 1.0]],
+        vec![[0.0, 0.2], [1.0, 0.8]],
+    ];
+    let production = ModelCurves {
+        model: ModelCurvesModel::LinearRgb,
+        curves: curves.clone(),
+    };
+    let reference = spec::model_curves::ModelCurves {
+        model: spec::model_curves::ModelCurvesModel::LinearRgb,
+        curves,
+    };
+    let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
+    for channel in 0..3 {
+        for value in 0..=u8::MAX {
+            let unit = value as f32 / 255.0;
+            let mut image = spec::EffectImage {
+                dimensions,
+                rgb: vec![[unit; 3]],
+                alpha: vec![255],
+            };
+            spec::Effect::apply(&reference, &mut image, &spec::EffectContext::default());
+            assert_eq!(
+                production.map_channel(channel, unit).to_bits(),
+                image.rgb[0][channel].to_bits(),
+                "channel {channel}, byte {value}"
+            );
+        }
+    }
 }
 
 #[test]

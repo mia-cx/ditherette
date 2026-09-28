@@ -18,7 +18,9 @@ use crate::{
 
 use super::{
     analysis_cache::AnalysisCache,
+    curves::Spline,
     image::{EffectImage, CARRIER_LIMIT},
+    model::ColourModel,
     table::ChannelTables,
 };
 
@@ -35,11 +37,22 @@ pub enum PreparedPointwise {
         cos: f32,
         scale: f32,
     },
+    ModelCurves {
+        model: ColourModel,
+        splines: [Spline; 3],
+    },
 }
 
 impl PreparedPointwise {
     fn reads_linear_input(self) -> bool {
-        matches!(self, Self::HueSaturation { .. })
+        matches!(
+            self,
+            Self::HueSaturation { .. }
+                | Self::ModelCurves {
+                    model: ColourModel::LinearRgb,
+                    ..
+                }
+        )
     }
 }
 

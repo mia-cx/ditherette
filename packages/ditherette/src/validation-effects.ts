@@ -12,6 +12,16 @@ import {
 import type { Effect, Rgba8Image } from './types.js';
 
 const channels = ['rgb', 'red', 'green', 'blue'];
+const modelCurvesModels = [
+	'linear-rgb',
+	'hsl',
+	'hsv',
+	'oklab',
+	'oklch',
+	'cielab',
+	'cielch',
+	'ycbcr'
+];
 /** Mirrors the Rust `MAX_EFFECTS`. */
 const maxEffects = 64;
 
@@ -92,6 +102,19 @@ function curvePoints(value: unknown, path: string): [number, number][] {
 		points.push([x, y]);
 	}
 	return points;
+}
+
+/** Exact three-curve tuple, normalized with indexed paths. */
+function modelCurveTuple(value: unknown, path: string): [number, number][][] {
+	if (
+		!Array.isArray(value) ||
+		value.length !== 3 ||
+		Reflect.ownKeys(value).some((key) => !['0', '1', '2', 'length'].includes(String(key)))
+	)
+		throw new DitheretteError('invalid-settings', path, 'Expected exactly three channel curves.');
+	return [0, 1, 2].map((index) =>
+		curvePoints(Object.hasOwn(value, index) ? value[index] : undefined, `${path}.${index}`)
+	);
 }
 
 /** Named arguments that are each a bounded f32, in validation order. */
@@ -187,6 +210,23 @@ const builtins: Record<string, Builtin> = {
 			channel: channel(field(effect, 'channel'), `${path}.channel`),
 			points: curvePoints(field(effect, 'points'), `${path}.points`)
 		})
+	},
+	'model-curves': {
+		keys: ['model', 'curves'],
+		needs: none,
+		normalize: (effect, path) => {
+			const model = field(effect, 'model');
+			if (typeof model !== 'string' || !modelCurvesModels.includes(model))
+				throw new DitheretteError(
+					'invalid-settings',
+					`${path}.model`,
+					'Unknown model-curves colour model.'
+				);
+			return {
+				model,
+				curves: modelCurveTuple(field(effect, 'curves'), `${path}.curves`)
+			};
+		}
 	},
 	'brightness-contrast': {
 		keys: ['brightness', 'contrast'],

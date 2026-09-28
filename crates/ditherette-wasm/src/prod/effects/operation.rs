@@ -66,11 +66,13 @@ pub fn apply_effects(request: EffectsRequest<'_>) -> Result<Rgba8Image, Ditheret
 /// tables, sectors, groups, and recipes. Every count is capped by validation.
 pub const BOOKKEEPING_BYTES: u64 = {
     let step = size_of::<EffectStep>()
-        + MAX_POINTS * size_of::<[f32; 2]>()
+        + 3 * MAX_POINTS * size_of::<[f32; 2]>()
         + MAX_GROUPS * size_of::<Group>();
     let palette =
         MAX_PALETTE_ENTRIES * (size_of::<[u8; 3]>() + size_of::<[f32; 3]>() + size_of::<f32>());
-    (MAX_EFFECTS * (step + size_of::<&EffectStep>()) + palette + 4 * step) as u64
+    (MAX_EFFECTS * (step + size_of::<&EffectStep>() + size_of::<PreparedPointwise>())
+        + palette
+        + 4 * step) as u64
 };
 
 /// Bytes terminal application allocates beyond `data`. Pointwise tails use the adaptive byte
