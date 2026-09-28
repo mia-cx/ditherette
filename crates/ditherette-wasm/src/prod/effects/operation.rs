@@ -112,12 +112,9 @@ pub fn carrier_after_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimens
         .clone()
         .take_while(|step| step.effect.per_channel())
         .count();
-    let memo = if enabled
-        .clone()
-        .skip(tabulated)
-        .all(|step| step.effect.pointwise())
-        && enabled.clone().count() > tabulated
-    {
+    // Resolving a recipe-less recolour builds the carrier for the pointwise steps before it, which
+    // memoizes even when the whole chain is not pointwise, so any step past the tables may need it.
+    let memo = if enabled.clone().count() > tabulated {
         FLOAT_MEMO_BYTES
     } else {
         0
