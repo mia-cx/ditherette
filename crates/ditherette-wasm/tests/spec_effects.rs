@@ -703,3 +703,149 @@ fn model_curves_clamp_spline_inputs_but_not_denormalized_output() {
         .iter()
         .any(|value| !(0.0..=1.0).contains(value)));
 }
+
+fn channel(model: &str, channel: &str) -> serde_json::Value {
+    json!({ "model": model, "channel": channel })
+}
+
+fn channel_curve(x: (&str, &str), y: (&str, &str), points: serde_json::Value) -> serde_json::Value {
+    json!({
+        "effect": "channel-curve", "enabled": true,
+        "x": channel(x.0, x.1), "y": channel(y.0, y.1), "points": points,
+    })
+}
+
+#[test]
+fn periodic_channel_curve_spline_wraps_and_hits_knots_without_overshoot() {
+    use ditherette_wasm::spec::effects::channel_curve::PeriodicSpline;
+
+    let spline =
+        PeriodicSpline::new(&[[0.0, 0.5], [0.25, 0.9], [0.5, 0.2], [0.75, 0.7], [1.0, 0.5]]);
+    for [x, y] in [[0.0, 0.5], [0.25, 0.9], [0.5, 0.2], [0.75, 0.7], [1.0, 0.5]] {
+        assert_eq!(spline.eval(x).to_bits(), y.to_bits(), "knot {x}");
+    }
+    assert_eq!(spline.eval(-0.25).to_bits(), spline.eval(0.75).to_bits());
+    assert_eq!(spline.eval(1.25).to_bits(), spline.eval(0.25).to_bits());
+    assert!((spline.eval(0.000_01) - spline.eval(0.999_99)).abs() < 0.000_1);
+    for index in 0..1000 {
+        let value = spline.eval(index as f32 / 1000.0);
+        assert!((0.2..=0.9).contains(&value), "{index}: {value}");
+    }
+
+    let flat = PeriodicSpline::new(&[[0.0, 0.5], [0.5, 0.5], [1.0, 0.5]]);
+    assert_eq!(flat.eval(0.5).to_bits(), 0.5f32.to_bits());
+}
+
+#[test]
+fn channel_curve_validation_names_pairs_and_periodic_seam_coordinates() {
+    let data = ramp();
+    let invalid_pair = channel_curve(
+        ("hsv", "lightness"),
+        ("oklch", "chroma"),
+        json!([[0, 0.5], [1, 0.5]]),
+    );
+    assert_eq!(
+        run(&data, &steps(json!([invalid_pair]))).unwrap_err().path,
+        "effects.0.x.channel"
+    );
+
+    let cases = [
+        (json!([[0.1, 0.5], [1, 0.5]]), "effects.0.points.0.0"),
+        (json!([[0, 0.5], [0.9, 0.5]]), "effects.0.points.1.0"),
+        (json!([[0, 0.5], [1, 0.6]]), "effects.0.points.1.1"),
+    ];
+    for (points, path) in cases {
+        let effect = channel_curve(("hsl", "hue"), ("srgb", "red"), points);
+        assert_eq!(run(&data, &steps(json!([effect]))).unwrap_err().path, path);
+    }
+}
+
+#[test]
+fn channel_curve_neutral_and_adjustment_formulas_are_literal() {
+    use ditherette_wasm::{image::ImageDimensions, spec::effects::model::ColourModel};
+
+    let dimensions = ImageDimensions::new(1, 1).unwrap();
+    let apply = |effect: &serde_json::Value, rgb: [f32; 3]| {
+        let step = steps(json!([effect])).pop().unwrap();
+        let BuiltinEffect::ChannelCurve(effect) = step.effect else {
+            unreachable!()
+        };
+        let mut image = EffectImage {
+            dimensions,
+            rgb: vec![rgb],
+            alpha: vec![37],
+        };
+        effect.apply(&mut image, &EffectContext::default());
+        (image.rgb[0], image.alpha[0])
+    };
+
+    let neutral = channel_curve(
+        ("hsl", "hue"),
+        ("oklch", "chroma"),
+        json!([[0, 0.5], [0.5, 0.5], [1, 0.5]]),
+    );
+    let overshoot = [-64.0, 1.25, 64.0];
+    assert_eq!(
+        apply(&neutral, overshoot).0.map(f32::to_bits),
+        overshoot.map(f32::to_bits)
+    );
+
+    let ramp_curve = json!([[0, 0], [1, 1]]);
+    let hue = channel_curve(("srgb", "red"), ("hsl", "hue"), ramp_curve.clone());
+    let input = ColourModel::Hsl.from_normalized([0.0, 1.0, 0.5]);
+    let (output, alpha) = apply(&hue, input);
+    let adjusted = ColourModel::Hsl.to_normalized(output);
+    assert_eq!(adjusted[0].to_bits(), 0.5f32.to_bits());
+    assert_eq!(alpha, 37);
+
+    let gain = channel_curve(("srgb", "red"), ("hsl", "saturation"), ramp_curve.clone());
+    let input = ColourModel::Hsl.from_normalized([0.5, 1.0, 0.5]);
+    let adjusted = ColourModel::Hsl.to_normalized(apply(&gain, input).0);
+    assert_eq!(adjusted[1].to_bits(), 0.0f32.to_bits());
+
+    let offset = channel_curve(("srgb", "blue"), ("hsl", "lightness"), ramp_curve);
+    let input = ColourModel::Hsl.from_normalized([0.0, 1.0, 0.5]);
+    let adjusted = ColourModel::Hsl.to_normalized(apply(&offset, input).0);
+    assert_eq!(adjusted[2].to_bits(), 0.0f32.to_bits());
+}
+
+#[test]
+fn hue_triggered_channel_curves_fade_to_zero_at_grey_and_half_at_threshold() {
+    use ditherette_wasm::image::ImageDimensions;
+
+    let effect = channel_curve(
+        ("hsl", "hue"),
+        ("srgb", "blue"),
+        json!([[0, 1], [0.5, 0.5], [1, 1]]),
+    );
+    let run_one = |effect: &serde_json::Value, rgb: [f32; 3]| {
+        let step = steps(json!([effect])).pop().unwrap();
+        let BuiltinEffect::ChannelCurve(effect) = step.effect else {
+            unreachable!()
+        };
+        let mut image = EffectImage {
+            dimensions: ImageDimensions::new(1, 1).unwrap(),
+            rgb: vec![rgb],
+            alpha: vec![255],
+        };
+        effect.apply(&mut image, &EffectContext::default());
+        image.rgb[0]
+    };
+    let grey = [0.5, 0.5, 0.5];
+    assert_eq!(
+        run_one(&effect, grey).map(f32::to_bits),
+        grey.map(f32::to_bits)
+    );
+
+    let half = run_one(&effect, [0.51, 0.5, 0.5]);
+    assert!((half[2] - 0.75).abs() < 0.000_01, "{}", half[2]);
+
+    let hue_output = channel_curve(("srgb", "red"), ("hsl", "hue"), json!([[0, 1], [1, 1]]));
+    assert_eq!(
+        run_one(&hue_output, grey).map(f32::to_bits),
+        grey.map(f32::to_bits)
+    );
+    let adjusted = ditherette_wasm::spec::effects::model::ColourModel::Hsl
+        .to_normalized(run_one(&hue_output, [0.51, 0.5, 0.5]));
+    assert!((adjusted[0] - 0.25).abs() < 0.000_01, "{}", adjusted[0]);
+}

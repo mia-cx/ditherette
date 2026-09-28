@@ -11,6 +11,8 @@ export type {
 	AnalyzeRecolourRequest,
 	ApplyEffectsRequest,
 	BrightnessContrastEffect,
+	ChannelCurveEffect,
+	ColourChannel,
 	ColourModel,
 	CurvePoints,
 	CurvesEffect,

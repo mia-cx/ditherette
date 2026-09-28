@@ -18,6 +18,7 @@ use crate::{
 
 use super::{
     analysis_cache::AnalysisCache,
+    channel_curve::{ChannelSpline, ResolvedChannel},
     curves::Spline,
     image::{EffectImage, CARRIER_LIMIT},
     model::ColourModel,
@@ -40,6 +41,11 @@ pub enum PreparedPointwise {
     ModelCurves {
         model: ColourModel,
         splines: [Spline; 3],
+    },
+    ChannelCurve {
+        x: ResolvedChannel,
+        y: ResolvedChannel,
+        spline: ChannelSpline,
     },
 }
 

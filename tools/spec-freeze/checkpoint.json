@@ -1351,6 +1351,83 @@
 				}
 			],
 			"contentSha256": "71fe5587150d0c485cd0857f4182d5ff90fe7a813c284b13564adc9f34f550c4"
+		},
+		{
+			"name": "effects-channel-curve",
+			"summary": "Arbitrary colour-channel X-versus-Y adjustment curves (#268).",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.md",
+						"mode": "100644",
+						"sha256": "e0649db0ada38b283bb29b58deb88cafdb5c79febaade18e5ae46497d333733a"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.rs",
+						"mode": "100644",
+						"sha256": "732c30da2cdd3e6503d0fd0834ded6eb7a79825311fcbd1ce519e96e12a28865"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "80c6f29b0a1ccab9c5caa32c7d8640a472b5db55fc7b4937980cfa7b0bd6a6a5"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "c9b317258d62b444816aebe4bf65ee4da38d9ab37432b5470006cf0126dee7f6"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "2cdd8900f04f61d913407a97f3ffaf9f435c0632f4d6d5b103173b60537b31b3"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "bdaac246a13b84e3126ece06a33e549095f2ac9d0e786684f2a86d3b4e202642"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "a6aa03d4a00467eef187f2bb9ba112999eccdcbd15e17cfb215fc61b68004a78"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "d5041ab64c4b3f2e452726f3efe4f43ed918c92adea2667af7bb317d2faacd71"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "2d65a8e0a53abe0311a4bdbaca96488ec89a1983ed08de3410fac6aa804d8734"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "d5798b35bc87a4f564c9561d00f85633a5d3397c6ab1c32025521009267bb670"
+					}
+				}
+			],
+			"contentSha256": "73a1942ca1a618b53f608ae3bff5f5c9cb0bb8724a6cb0ba47f694e90b6fc7c0"
 		}
 	]
 }

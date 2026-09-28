@@ -205,6 +205,15 @@ export type ColourModel =
 /** Colour models supported by model curves. Encoded sRGB uses `curves`. */
 export type ModelCurvesModel = Exclude<ColourModel, 'srgb'>;
 
+/** A model-specific channel. The model discriminant rejects invalid channel pairs. */
+export type ColourChannel =
+	| { readonly model: 'srgb' | 'linear-rgb'; readonly channel: 'red' | 'green' | 'blue' }
+	| { readonly model: 'hsl'; readonly channel: 'hue' | 'saturation' | 'lightness' }
+	| { readonly model: 'hsv'; readonly channel: 'hue' | 'saturation' | 'value' }
+	| { readonly model: 'oklab' | 'cielab'; readonly channel: 'lightness' | 'a' | 'b' }
+	| { readonly model: 'oklch' | 'cielch'; readonly channel: 'lightness' | 'chroma' | 'hue' }
+	| { readonly model: 'ycbcr'; readonly channel: 'luma' | 'cb' | 'cr' };
+
 /** A black/white pair in encoded sRGB units, each from 0 through 1. */
 export interface LevelsPoints {
 	readonly black: number;
@@ -270,6 +279,16 @@ export type ModelCurvesEffect = ModelCurvesBase &
 				readonly curves: readonly [luma: CurvePoints, cb: CurvePoints, cr: CurvePoints];
 		  }
 	);
+
+/** Use one colour channel as a curve input that adjusts another colour channel. */
+export interface ChannelCurveEffect {
+	readonly effect: 'channel-curve';
+	readonly enabled: boolean;
+	readonly x: ColourChannel;
+	readonly y: ColourChannel;
+	/** A y value of 0.5 is neutral. Hue X curves repeat the seam at x 0 and 1. */
+	readonly points: CurvePoints;
+}
 
 /** Contrast from -1 through 1 scales around mid-grey by `4^contrast`; brightness from -1 through 1 adds. */
 export interface BrightnessContrastEffect {
@@ -365,6 +384,7 @@ export type Effect =
 	| LevelsEffect
 	| CurvesEffect
 	| ModelCurvesEffect
+	| ChannelCurveEffect
 	| BrightnessContrastEffect
 	| ExposureEffect
 	| WhiteBalanceEffect

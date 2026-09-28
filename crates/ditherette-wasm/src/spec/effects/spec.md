@@ -36,6 +36,7 @@ Ordinary effects need neither. `process` derives both from its own palette and `
 | [levels.rs](levels.md) | Levels |
 | [curves.rs](curves.md) | Monotone tone curves |
 | [model_curves.rs](model_curves.md) | Three curves in one colour model |
+| [channel_curve.rs](channel_curve.md) | One colour channel used to adjust another |
 | [brightness_contrast.rs](brightness_contrast.md) | Brightness and contrast |
 | [exposure.rs](exposure.md) | Exposure in stops |
 | [white_balance.rs](white_balance.md) | Temperature and tint |
