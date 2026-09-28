@@ -207,4 +207,11 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 /** The package accepts at most 64 steps. */
 export const MAX_EFFECT_LAYERS = 64;
 
+/**
+ * The most package steps a layer can turn into: three for curves, whose RGB channels can each run
+ * as a step, and one for anything else. Counting curves at three in every model means switching
+ * models never overflows the package's limit.
+ */
+export const stepCost = (kind: EffectKind) => (kind === 'curves' ? 3 : 1);
+
 export const EFFECT_KINDS = Object.keys(EFFECTS) as EffectKind[];

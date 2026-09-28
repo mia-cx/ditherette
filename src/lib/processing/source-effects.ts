@@ -1,12 +1,6 @@
 import { atom } from 'nanostores';
 import type { Effect, EffectContext } from 'ditherette';
-import {
-	colorSpace,
-	previewSettings,
-	processingError,
-	selectedPalette,
-	sourceImageData
-} from '$lib/stores/app';
+import { colorSpace, previewSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
 import { activeEffectSteps } from '$lib/stores/effects';
 import { packageEffectContext } from './package-adapter';
 
@@ -81,7 +75,12 @@ export function startSourceEffects() {
 	function receive({ data }: MessageEvent<SourceEffectsResponse>) {
 		busy = false;
 		if (data.id !== requestId) return;
-		if ('error' in data) processingError.set(`Could not show effects on the source: ${data.error}`);
+		if ('error' in data) {
+			// The preview is optional and separate from the output, so its failure stays out of the
+			// output's error; the pane just goes back to the plain source.
+			console.error('Could not show effects on the source.', data.error);
+			show(undefined);
+		}
 		// A newer source may have arrived while this one ran; it gets its own request below.
 		else if (loaded === sourceImageData.get()) show(data.lut);
 		update();

@@ -90,7 +90,7 @@ export const COLOR_SPACES = [
 		id: 'cielch-euclidean',
 		label: 'CIELCh · Euclidean',
 		description:
-			"Compares hue angle as a plain number, but CIELCh's angle is tiny next to its lightness and chroma, so hue barely counts. It matches brightness and colourfulness and lets hue change freely."
+			"Compares hue angle as a plain number, but CIELCh's angle is tiny next to its lightness and chroma, so hue barely counts, except across 0°, where reds either side count as far apart. Otherwise it matches brightness and colourfulness and lets hue change freely."
 	},
 	{
 		id: 'ycbcr',

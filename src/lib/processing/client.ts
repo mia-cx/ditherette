@@ -31,12 +31,15 @@ let requestId = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopAuto: (() => void) | undefined;
 let workerNeedsReplacement = false;
+/** A superseded job may still be running on the kept worker, so the next request may wait. */
+let workerMayBeBusy = false;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 
 const SLIDER_DEBOUNCE_MS = 180;
 /**
  * A superseded job younger than this finishes on its worker, so the next job keeps the loaded
- * source and the package's stage cache. Older jobs may run long, so their worker is replaced.
+ * source and the package's stage cache. Older jobs may run long, so their worker is replaced, and
+ * a kept worker that still hasn't reached the next job after this long is replaced too.
  */
 const REPLACE_BUSY_WORKER_AFTER_MS = 500;
 /** Saving clones every index into IndexedDB, so only the result edits settle on is saved. */
@@ -64,6 +67,9 @@ class ProcessingCanceled extends Error {
 export function cancelProcessing() {
 	if (timer) clearTimeout(timer);
 	timer = undefined;
+	// A new source cancels processing first; an old result saved after that would outlive it.
+	if (persistTimer) clearTimeout(persistTimer);
+	persistTimer = undefined;
 	activeRequestId = ++requestId;
 	activeReject?.(new ProcessingCanceled());
 	activeReject = undefined;
@@ -72,6 +78,7 @@ export function cancelProcessing() {
 }
 
 function terminateProcessingWorker() {
+	workerMayBeBusy = false;
 	worker?.terminate();
 	worker = undefined;
 	loadedSourceId = undefined;
@@ -98,7 +105,10 @@ function supersedeActiveRequest() {
 	if (activeReject) {
 		if (performance.now() - activeStartedAt > REPLACE_BUSY_WORKER_AFTER_MS)
 			workerNeedsReplacement = true;
-		else worker?.postMessage({ id: superseded, type: 'cancel' } satisfies WorkerRequest);
+		else {
+			worker?.postMessage({ id: superseded, type: 'cancel' } satisfies WorkerRequest);
+			workerMayBeBusy = true;
+		}
 	}
 	activeReject?.(new ProcessingCanceled('Processing was superseded by newer settings.'));
 	activeReject = undefined;
@@ -158,6 +168,16 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 
 	return new Promise((resolve, reject) => {
 		activeReject = reject;
+		// `process` runs synchronously, so a kept worker still on superseded work cannot even read
+		// this request. If it stays silent, replace it and start over on a fresh worker.
+		const watchdog = workerMayBeBusy
+			? setTimeout(() => {
+					if (activeReject !== reject) return;
+					activeReject = undefined;
+					terminateProcessingWorker();
+					processInWorker(schedule).then(resolve, reject);
+				}, REPLACE_BUSY_WORKER_AFTER_MS)
+			: undefined;
 		const isCurrent = () =>
 			worker === activeWorker && activeRequestId === id && activeReject === reject;
 		const settle = <T>(callback: (value: T) => void, value: T) => {
@@ -208,6 +228,8 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				return;
 			}
 			if (message.id !== id || activeRequestId !== id) return;
+			clearTimeout(watchdog);
+			workerMayBeBusy = false;
 			if (message.type === 'progress') {
 				processingProgress.set({
 					stage: message.stage,

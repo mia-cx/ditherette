@@ -51,7 +51,7 @@
 			aria-label={folded ? 'Expand sidebar' : 'Collapse sidebar'}
 			aria-expanded={!folded}
 			title={folded ? 'Expand sidebar' : 'Collapse sidebar'}
-			onclick={() => toggleSidebar(api, group)}
+			onclick={() => toggleSidebar(api, group, main)}
 		>
 			<SidebarSimpleIcon weight="bold" class={side === 'right' ? '-scale-x-100' : ''} />
 		</Button>
@@ -63,7 +63,7 @@
 			aria-label={collapse ? 'Expand window' : 'Collapse window'}
 			aria-expanded={!collapse}
 			title={collapse ? 'Expand window' : 'Collapse window'}
-			onclick={() => toggleCollapsed(api, group)}
+			onclick={() => toggleCollapsed(api, group, main)}
 		>
 			{#if collapse}
 				<CaretRightIcon weight="bold" />
@@ -77,7 +77,7 @@
 		size="icon-xs"
 		aria-label={floating ? 'Dock window' : 'Float window'}
 		title={floating ? 'Dock window' : 'Float window'}
-		onclick={() => toggleFloating(api, group)}
+		onclick={() => toggleFloating(api, group, main)}
 	>
 		{#if floating}
 			<ArrowSquareInIcon weight="bold" />

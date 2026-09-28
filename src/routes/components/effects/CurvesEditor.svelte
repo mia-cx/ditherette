@@ -90,15 +90,6 @@
 	const channelLabel = (channel: ColourChannel) =>
 		XY_CHANNELS.find((option) => channelKey(option.channel) === channelKey(channel))!.label;
 
-	/**
-	 * A hue x axis wraps, so its curve starts at 0 and ends at 1 with the same y. Points in between
-	 * keep their places.
-	 */
-	function wrapAtSeam(points: CurvePoints): CurvePoints {
-		const seam = points[0]![1];
-		return [[0, seam], ...points.filter(([x]) => x > 0 && x < 1), [1, seam]];
-	}
-
 	/** Switching models starts over: a curve drawn for one model's channels means something else in another. */
 	function setModel(model: string) {
 		if (model === step.model) return;
@@ -121,9 +112,9 @@
 		if (step.model !== XY) return;
 		const option = XY_CHANNELS.find(({ channel }) => channelKey(channel) === key);
 		if (!option) return;
-		const points =
-			axis === 'x' && option.channel.channel === 'hue' ? wrapAtSeam(step.points) : step.points;
-		onchange({ ...step, [axis]: option.channel, points });
+		// A curve drawn over one input means nothing over another, so a new x starts flat, like a new
+		// model. A new y keeps the curve: it still adjusts wherever x puts it.
+		onchange({ ...step, [axis]: option.channel, points: axis === 'x' ? FLAT : step.points });
 	}
 
 	function setEditing(channel: Channel, checked: boolean) {

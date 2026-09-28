@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { EFFECTS, EFFECT_KINDS, MAX_EFFECT_LAYERS, type EffectKind } from '$lib/effects/catalog';
+	import { EFFECTS, EFFECT_KINDS, stepCost, type EffectKind } from '$lib/effects/catalog';
 	import {
 		addEffect,
 		effectLayers,
+		effectStepsLeft,
 		moveEffect,
 		removeEffect,
 		renameEffect,
@@ -87,7 +88,7 @@
 					variant="outline"
 					size="sm"
 					class="w-full justify-start"
-					disabled={$effectLayers.length >= MAX_EFFECT_LAYERS}
+					disabled={$effectStepsLeft < 1}
 				>
 					<PlusIcon weight="bold" />
 					Add effect
@@ -96,7 +97,9 @@
 		</DropdownMenuTrigger>
 		<DropdownMenuContent align="start" class="w-(--bits-dropdown-menu-anchor-width)">
 			{#each EFFECT_KINDS as kind (kind)}
-				<DropdownMenuItem onSelect={() => add(kind)}>{EFFECTS[kind].label}</DropdownMenuItem>
+				<DropdownMenuItem disabled={stepCost(kind) > $effectStepsLeft} onSelect={() => add(kind)}
+					>{EFFECTS[kind].label}</DropdownMenuItem
+				>
 			{/each}
 		</DropdownMenuContent>
 	</DropdownMenu>

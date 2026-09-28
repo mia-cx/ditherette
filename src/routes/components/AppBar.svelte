@@ -16,7 +16,7 @@
 		MenubarSubTrigger,
 		MenubarTrigger
 	} from '$lib/components/ui/menubar';
-	import { EFFECTS, EFFECT_KINDS, MAX_EFFECT_LAYERS, type EffectKind } from '$lib/effects/catalog';
+	import { EFFECTS, EFFECT_KINDS, stepCost, type EffectKind } from '$lib/effects/catalog';
 	import { exportable, exportPng } from '$lib/processing/export';
 	import {
 		colorSpace,
@@ -28,7 +28,9 @@
 		updatePreviewSettings,
 		type PreviewMode
 	} from '$lib/stores/app';
-	import { addEffect, effectLayers } from '$lib/stores/effects';
+	import { addEffect, effectStepsLeft } from '$lib/stores/effects';
+	import { browser } from '$app/environment';
+	import { supportsWebGL2 } from '$lib/processing/lut-view';
 	import { setThemeChoice, startTheme, themeChoice, type ThemeChoice } from '$lib/theme';
 	import { COLOR_SPACES } from './color-space-options';
 	import { DITHER_ALGORITHMS } from './dither-options';
@@ -107,6 +109,7 @@
 		const layer = addEffect(kind);
 		if (studio) openEffectWindow(layer.id);
 	}
+	const canShowEffects = browser && supportsWebGL2();
 </script>
 
 <svelte:window onkeydown={shortcut} />
@@ -159,7 +162,7 @@
 					<MenubarSubContent class="min-w-52">
 						{#each EFFECT_KINDS as kind (kind)}
 							<MenubarItem
-								disabled={$effectLayers.length >= MAX_EFFECT_LAYERS}
+								disabled={stepCost(kind) > $effectStepsLeft}
 								onSelect={() => adjust(kind)}>{EFFECTS[kind].label}</MenubarItem
 							>
 						{/each}
@@ -235,6 +238,7 @@
 					{/each}
 				</MenubarRadioGroup>
 				<MenubarCheckboxItem
+					disabled={!canShowEffects}
 					checked={Boolean($previewSettings.sourceEffects)}
 					onCheckedChange={(sourceEffects) => updatePreviewSettings({ sourceEffects })}
 					>Show effects on source</MenubarCheckboxItem

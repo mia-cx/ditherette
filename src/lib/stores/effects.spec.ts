@@ -5,6 +5,7 @@ import {
 	activeEffectSteps,
 	addEffect,
 	effectLayers,
+	effectStepsLeft,
 	moveEffect,
 	removeEffect,
 	renameEffect,
@@ -105,6 +106,16 @@ describe('effect layers', () => {
 				})
 			].every(isEffect)
 		).toBe(true);
+	});
+
+	it('counts curves at three steps so the chain never exceeds the package limit', () => {
+		for (let count = 0; count < 62; count++) addEffect('exposure');
+		expect(effectStepsLeft.get()).toBe(2);
+		expect(() => addEffect('curves')).toThrow();
+		addEffect('exposure');
+		addEffect('exposure');
+		expect(effectStepsLeft.get()).toBe(0);
+		expect(() => addEffect('exposure')).toThrow();
 	});
 
 	it('never changes a layer into another effect', () => {

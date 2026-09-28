@@ -14,7 +14,8 @@
 		EmptyTitle
 	} from '$lib/components/ui/empty';
 	import { processedToImageData } from '$lib/processing/render';
-	import { lutView } from '$lib/processing/lut-view';
+	import { browser } from '$app/environment';
+	import { lutDrawn, lutView, supportsWebGL2 } from '$lib/processing/lut-view';
 	import { sourceEffectsLut } from '$lib/processing/source-effects';
 	import type { CropRect } from '$lib/processing/types';
 	import {
@@ -133,7 +134,8 @@
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
-	const sourceLabel = $derived($sourceEffectsLut ? 'Source with effects' : 'Source');
+	const sourceLabel = $derived($sourceEffectsLut && $lutDrawn ? 'Source with effects' : 'Source');
+	const canShowEffects = browser && supportsWebGL2();
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
 	const cropToContentHint = $derived(
@@ -444,19 +446,51 @@
 		const levels: PreviewLevel[] = [imageDataToCanvas(imageData)];
 		let current = levels[0]!;
 		while (current.width > 1 || current.height > 1) {
-			const width = Math.max(1, Math.floor(current.width / 2));
-			const height = Math.max(1, Math.floor(current.height / 2));
+			const source = evenSized(current);
+			const width = source.width / 2;
+			const height = source.height / 2;
 			const canvas = document.createElement('canvas');
 			canvas.width = width;
 			canvas.height = height;
 			const context = canvas.getContext('2d');
 			if (!context) break;
 			context.imageSmoothingQuality = 'low';
-			context.drawImage(current.canvas, 0, 0, width, height);
+			context.drawImage(source.canvas, 0, 0, width, height);
 			current = { canvas, width, height };
 			levels.push(current);
 		}
 		return levels;
+	}
+
+	/**
+	 * Pad an odd side by repeating its last row or column. Bilinear sampling at exactly half size
+	 * then averages whole 2×2 blocks; at any other scale it can skip thin lines.
+	 */
+	function evenSized(level: PreviewLevel): PreviewLevel {
+		const width = level.width + (level.width % 2);
+		const height = level.height + (level.height % 2);
+		if (width === level.width && height === level.height) return level;
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		const context = canvas.getContext('2d');
+		if (!context) return level;
+		context.drawImage(level.canvas, 0, 0);
+		if (width > level.width)
+			context.drawImage(
+				level.canvas,
+				level.width - 1,
+				0,
+				1,
+				level.height,
+				level.width,
+				0,
+				1,
+				level.height
+			);
+		if (height > level.height)
+			context.drawImage(canvas, 0, level.height - 1, width, 1, 0, level.height, width, 1);
+		return { canvas, width, height };
 	}
 
 	function imageDataToCanvas(imageData: ImageData): PreviewLevel {
@@ -1116,8 +1150,10 @@
 				size="icon-sm"
 				variant={$previewSettings.sourceEffects ? 'secondary' : 'ghost'}
 				aria-label="Show effects on source"
-				title="Show effects on source"
-				disabled={!hasImage}
+				title={canShowEffects
+					? 'Show effects on source'
+					: 'Showing effects on the source needs WebGL2'}
+				disabled={!hasImage || !canShowEffects}
 				onclick={() => updatePreviewSettings({ sourceEffects: !$previewSettings.sourceEffects })}
 				aria-pressed={Boolean($previewSettings.sourceEffects)}
 			>
