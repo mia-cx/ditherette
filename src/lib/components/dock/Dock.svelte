@@ -8,7 +8,14 @@
 	} from 'dockview-core';
 	import DockGroupActions from './DockGroupActions.svelte';
 	import SnippetHost from './SnippetHost.svelte';
-	import { isFloating, toggleFloating, type DockParams } from './dock';
+	import {
+		collapsedGroups,
+		isFloating,
+		toggleCollapsed,
+		toggleFloating,
+		trackCollapse,
+		type DockParams
+	} from './dock';
 	import './dock.css';
 
 	type Props = {
@@ -77,6 +84,10 @@
 			},
 			getTabContextMenuItems: ({ group, api }): ContextMenuItem[] => [
 				{
+					label: collapsedGroups.get()[group.id] ? 'Expand window' : 'Collapse window',
+					action: () => toggleCollapsed(api, group)
+				},
+				{
 					label: isFloating(group) ? 'Dock window' : 'Float window',
 					action: () => toggleFloating(api, group)
 				},
@@ -90,7 +101,9 @@
 		const { width, height } = container!.getBoundingClientRect();
 		dock.layout(width, height);
 		const cleanup = onready(dock.api);
+		const stopCollapse = trackCollapse(dock.api);
 		return () => {
+			stopCollapse();
 			cleanup?.();
 			dock.dispose();
 		};
