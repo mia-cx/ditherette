@@ -1,6 +1,7 @@
 import { computed, atom } from 'nanostores';
 import { persistentJSON } from '@nanostores/persistent';
-import type { HistogramModel } from '$lib/histogram';
+import type { ScopeModel } from '$lib/scopes/colour';
+import type { ScopeKind } from '$lib/scopes/scopes';
 import {
 	TRANSPARENT_KEY,
 	WPLACE,
@@ -70,8 +71,14 @@ export const previewSettings = persistentJSON<PreviewSettings>('ditherette:previ
 export const uiSettings = persistentJSON<{
 	desktopDitherFiltersOpen?: boolean;
 	controlAccordionSections?: string[];
-	/** The Histogram window's colour model, and which images it plots. */
-	histogram?: { model: HistogramModel; source: boolean; output: boolean };
+	/** The Scopes window's scope, its colour model, and which images it plots. */
+	scopes?: {
+		scope: ScopeKind;
+		model: ScopeModel;
+		source: boolean;
+		output: boolean;
+		vectorZoom: number;
+	};
 }>('ditherette:ui', {});
 export const activePaletteName = persistentJSON<string>(
 	'ditherette:active-palette',

@@ -58,41 +58,6 @@ const LCH: ModelChannels = [
 	channel('hue', 'Hue')
 ];
 
-/** Each channel's colour, as a stroke and as a checkbox fill, for curves and histograms. */
-export const CHANNEL_TONE: Record<ChannelName, { stroke: string; check: string }> = {
-	red: { stroke: 'text-red-500', check: 'data-checked:border-red-500 data-checked:bg-red-500' },
-	green: {
-		stroke: 'text-green-500',
-		check: 'data-checked:border-green-500 data-checked:bg-green-500'
-	},
-	blue: {
-		stroke: 'text-blue-500',
-		check: 'data-checked:border-blue-500 data-checked:bg-blue-500'
-	},
-	hue: {
-		stroke: 'text-amber-500',
-		check: 'data-checked:border-amber-500 data-checked:bg-amber-500'
-	},
-	saturation: {
-		stroke: 'text-fuchsia-500',
-		check: 'data-checked:border-fuchsia-500 data-checked:bg-fuchsia-500'
-	},
-	chroma: {
-		stroke: 'text-fuchsia-500',
-		check: 'data-checked:border-fuchsia-500 data-checked:bg-fuchsia-500'
-	},
-	lightness: { stroke: 'text-foreground', check: '' },
-	value: { stroke: 'text-foreground', check: '' },
-	luma: { stroke: 'text-foreground', check: '' },
-	a: {
-		stroke: 'text-emerald-500',
-		check: 'data-checked:border-emerald-500 data-checked:bg-emerald-500'
-	},
-	b: { stroke: 'text-sky-500', check: 'data-checked:border-sky-500 data-checked:bg-sky-500' },
-	cb: { stroke: 'text-sky-500', check: 'data-checked:border-sky-500 data-checked:bg-sky-500' },
-	cr: { stroke: 'text-rose-500', check: 'data-checked:border-rose-500 data-checked:bg-rose-500' }
-};
-
 /** Every colour model a curves layer can use, with its channels in canonical order. */
 export const CURVE_MODELS: readonly {
 	readonly id: CurveModel;
