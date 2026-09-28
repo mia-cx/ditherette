@@ -12,6 +12,27 @@ import {
 import type { Effect, Rgba8Image } from './types.js';
 
 const channels = ['rgb', 'red', 'green', 'blue'];
+const modelCurvesModels = [
+	'linear-rgb',
+	'hsl',
+	'hsv',
+	'oklab',
+	'oklch',
+	'cielab',
+	'cielch',
+	'ycbcr'
+];
+const colourChannels: Record<string, readonly string[]> = {
+	srgb: ['red', 'green', 'blue'],
+	'linear-rgb': ['red', 'green', 'blue'],
+	hsl: ['hue', 'saturation', 'lightness'],
+	hsv: ['hue', 'saturation', 'value'],
+	oklab: ['lightness', 'a', 'b'],
+	oklch: ['lightness', 'chroma', 'hue'],
+	cielab: ['lightness', 'a', 'b'],
+	cielch: ['lightness', 'chroma', 'hue'],
+	ycbcr: ['luma', 'cb', 'cr']
+};
 /** Mirrors the Rust `MAX_EFFECTS`. */
 const maxEffects = 64;
 
@@ -92,6 +113,61 @@ function curvePoints(value: unknown, path: string): [number, number][] {
 		points.push([x, y]);
 	}
 	return points;
+}
+
+/** Exact three-curve tuple, normalized with indexed paths. */
+function modelCurveTuple(value: unknown, path: string): [number, number][][] {
+	if (
+		!Array.isArray(value) ||
+		value.length !== 3 ||
+		Reflect.ownKeys(value).some((key) => !['0', '1', '2', 'length'].includes(String(key)))
+	)
+		throw new DitheretteError('invalid-settings', path, 'Expected exactly three channel curves.');
+	return [0, 1, 2].map((index) =>
+		curvePoints(Object.hasOwn(value, index) ? value[index] : undefined, `${path}.${index}`)
+	);
+}
+
+/** A strict model-channel pair with the model checked before its channel. */
+function colourChannel(value: unknown, path: string): { model: string; channel: string } {
+	const input = object(value, ['model', 'channel'], 'invalid-settings', path);
+	const model = field(input, 'model');
+	if (typeof model !== 'string' || !Object.hasOwn(colourChannels, model))
+		throw new DitheretteError('invalid-settings', `${path}.model`, 'Unknown colour model.');
+	const selected = field(input, 'channel');
+	if (typeof selected !== 'string' || !colourChannels[model].includes(selected))
+		throw new DitheretteError(
+			'invalid-settings',
+			`${path}.channel`,
+			'Channel does not belong to the selected colour model.'
+		);
+	return { model, channel: selected };
+}
+
+/** Apply the extra closed-seam rules for a periodic hue input. */
+function channelCurvePoints(value: unknown, hueInput: boolean, path: string): [number, number][] {
+	const normalized = curvePoints(value, path);
+	if (!hueInput) return normalized;
+	const last = normalized.length - 1;
+	if (normalized[0][0] !== 0)
+		throw new DitheretteError(
+			'invalid-settings',
+			`${path}.0.0`,
+			'A hue-input curve must start at x = 0.'
+		);
+	if (normalized[last][0] !== 1)
+		throw new DitheretteError(
+			'invalid-settings',
+			`${path}.${last}.0`,
+			'A hue-input curve must end at x = 1.'
+		);
+	if (normalized[last][1] !== normalized[0][1])
+		throw new DitheretteError(
+			'invalid-settings',
+			`${path}.${last}.1`,
+			'A hue-input curve must repeat its first y value at x = 1.'
+		);
+	return normalized;
 }
 
 /** Named arguments that are each a bounded f32, in validation order. */
@@ -187,6 +263,40 @@ const builtins: Record<string, Builtin> = {
 			channel: channel(field(effect, 'channel'), `${path}.channel`),
 			points: curvePoints(field(effect, 'points'), `${path}.points`)
 		})
+	},
+	'model-curves': {
+		keys: ['model', 'curves'],
+		needs: none,
+		normalize: (effect, path) => {
+			const model = field(effect, 'model');
+			if (typeof model !== 'string' || !modelCurvesModels.includes(model))
+				throw new DitheretteError(
+					'invalid-settings',
+					`${path}.model`,
+					'Unknown model-curves colour model.'
+				);
+			return {
+				model,
+				curves: modelCurveTuple(field(effect, 'curves'), `${path}.curves`)
+			};
+		}
+	},
+	'channel-curve': {
+		keys: ['x', 'y', 'points'],
+		needs: none,
+		normalize: (effect, path) => {
+			const x = colourChannel(field(effect, 'x'), `${path}.x`);
+			const y = colourChannel(field(effect, 'y'), `${path}.y`);
+			return {
+				x,
+				y,
+				points: channelCurvePoints(
+					field(effect, 'points'),
+					x.channel === 'hue',
+					`${path}.points`
+				)
+			};
+		}
 	},
 	'brightness-contrast': {
 		keys: ['brightness', 'contrast'],

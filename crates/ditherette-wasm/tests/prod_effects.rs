@@ -1,5 +1,6 @@
 //! Production effects must equal the frozen reference byte-for-byte.
 
+use ditherette_wasm::prod::effects::Effect as _;
 use ditherette_wasm::{
     image::contracts::PaletteEntry,
     prod::{contract::request::Source as ProdSource, effects as prod},
@@ -24,6 +25,45 @@ const PROD_SPACES: [ditherette_wasm::prod::contract::request::WorkingSpace; 7] =
     use ditherette_wasm::prod::contract::request::WorkingSpace::*;
     [Srgb, LinearRgb, Oklab, Oklch, Cielab, Cielch, Ycbcr]
 };
+const MODEL_CURVE_MODELS: [&str; 8] = [
+    "linear-rgb",
+    "hsl",
+    "hsv",
+    "oklab",
+    "oklch",
+    "cielab",
+    "cielch",
+    "ycbcr",
+];
+const COLOUR_CHANNELS: [(&str, &str); 27] = [
+    ("srgb", "red"),
+    ("srgb", "green"),
+    ("srgb", "blue"),
+    ("linear-rgb", "red"),
+    ("linear-rgb", "green"),
+    ("linear-rgb", "blue"),
+    ("hsl", "hue"),
+    ("hsl", "saturation"),
+    ("hsl", "lightness"),
+    ("hsv", "hue"),
+    ("hsv", "saturation"),
+    ("hsv", "value"),
+    ("oklab", "lightness"),
+    ("oklab", "a"),
+    ("oklab", "b"),
+    ("oklch", "lightness"),
+    ("oklch", "chroma"),
+    ("oklch", "hue"),
+    ("cielab", "lightness"),
+    ("cielab", "a"),
+    ("cielab", "b"),
+    ("cielch", "lightness"),
+    ("cielch", "chroma"),
+    ("cielch", "hue"),
+    ("ycbcr", "luma"),
+    ("ycbcr", "cb"),
+    ("ycbcr", "cr"),
+];
 
 /// Deterministic xorshift so failures reproduce.
 struct Rng(u64);
@@ -86,7 +126,7 @@ fn random_effect(rng: &mut Rng) -> Value {
     let enabled = rng.next() % 5 != 0;
     let neutral = rng.next() % 4 == 0;
     let signed = |rng: &mut Rng| if neutral { 0.0 } else { rng.unit() * 2.0 - 1.0 };
-    match rng.next() % 7 {
+    match rng.next() % 9 {
         0 => random_levels(rng),
         1 => {
             let count = 2 + rng.next() % 5;
@@ -103,8 +143,35 @@ fn random_effect(rng: &mut Rng) -> Value {
             "temperature": signed(rng), "tint": signed(rng) }),
         5 => json!({ "effect": "hue-saturation", "enabled": enabled,
             "hue": signed(rng) * 180.0, "saturation": signed(rng), "lightness": signed(rng) }),
-        _ => json!({ "effect": "recolour", "enabled": enabled,
+        6 => json!({ "effect": "recolour", "enabled": enabled,
             "strength": if neutral { 0.0 } else { rng.unit() }, "recipe": null }),
+        7 => {
+            let identity = [[0.0, 0.0], [1.0, 1.0]];
+            let bent = [[0.0, 0.0], [0.5, rng.unit()], [1.0, 1.0]];
+            json!({ "effect": "model-curves", "enabled": enabled,
+                "model": rng.pick(&MODEL_CURVE_MODELS),
+                "curves": if neutral { [identity.as_slice(), identity.as_slice(), identity.as_slice()] }
+                else { [bent.as_slice(), identity.as_slice(), identity.as_slice()] } })
+        }
+        _ => {
+            let x = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+            let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+            let seam = if neutral { 0.5 } else { rng.unit() };
+            let points = if x.1 == "hue" {
+                vec![
+                    [0.0, seam],
+                    [0.5, if neutral { 0.5 } else { rng.unit() }],
+                    [1.0, seam],
+                ]
+            } else if neutral {
+                vec![[0.0, 0.5], [1.0, 0.5]]
+            } else {
+                vec![[0.0, rng.unit()], [0.5, rng.unit()], [1.0, rng.unit()]]
+            };
+            json!({ "effect": "channel-curve", "enabled": enabled,
+                "x": { "model": x.0, "channel": x.1 },
+                "y": { "model": y.0, "channel": y.1 }, "points": points })
+        }
     }
 }
 
@@ -170,6 +237,310 @@ fn random_chains_match_the_reference() {
             assert_same(&Value::Array(effects), width, height, &data);
         }
     }
+}
+
+#[test]
+fn randomized_model_curves_match_the_reference_for_every_model() {
+    let mut rng = Rng(0xc01a_267);
+    let data = image(&mut rng, 37, 19);
+    for model in MODEL_CURVE_MODELS {
+        for _ in 0..24 {
+            let curves: Vec<Vec<[f32; 2]>> = (0..3)
+                .map(|_| {
+                    vec![
+                        [0.0, rng.unit()],
+                        [0.3, rng.unit()],
+                        [0.7, rng.unit()],
+                        [1.0, rng.unit()],
+                    ]
+                })
+                .collect();
+            let effects = json!([
+                random_levels(&mut rng),
+                { "effect": "model-curves", "enabled": true, "model": model, "curves": curves },
+                { "effect": "brightness-contrast", "enabled": true,
+                  "brightness": rng.unit() * 0.4 - 0.2, "contrast": rng.unit() * 0.4 - 0.2 }
+            ]);
+            assert_same(&effects, 37, 19, &data);
+        }
+    }
+}
+
+#[test]
+fn randomized_cross_model_channel_curves_match_the_reference() {
+    let mut rng = Rng(0xc01a_268);
+    let data = image(&mut rng, 37, 19);
+    for x in COLOUR_CHANNELS {
+        for _ in 0..12 {
+            let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+            let seam = rng.unit();
+            let points = if x.1 == "hue" {
+                vec![
+                    [0.0, seam],
+                    [0.3, rng.unit()],
+                    [0.7, rng.unit()],
+                    [1.0, seam],
+                ]
+            } else {
+                vec![
+                    [0.0, rng.unit()],
+                    [0.3, rng.unit()],
+                    [0.7, rng.unit()],
+                    [1.0, rng.unit()],
+                ]
+            };
+            let effects = json!([
+                random_levels(&mut rng),
+                { "effect": "channel-curve", "enabled": true,
+                  "x": { "model": x.0, "channel": x.1 },
+                  "y": { "model": y.0, "channel": y.1 }, "points": points },
+                { "effect": "exposure", "enabled": true, "stops": rng.unit() - 0.5 }
+            ]);
+            assert_same(&effects, 37, 19, &data);
+        }
+    }
+}
+
+#[test]
+fn large_repeated_colour_effects_match_the_reference() {
+    let effects = json!([
+        { "effect": "hue-saturation", "enabled": true,
+          "hue": 25, "saturation": 0.3, "lightness": 0.05 },
+        { "effect": "model-curves", "enabled": true, "model": "oklch",
+          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.5, 0.65], [1, 1]], [[0, 0], [1, 1]]] },
+        { "effect": "channel-curve", "enabled": true,
+          "x": { "model": "hsv", "channel": "value" },
+          "y": { "model": "cielch", "channel": "chroma" },
+          "points": [[0, 0.2], [0.5, 0.8], [1, 0.5]] }
+    ]);
+    let data: Vec<u8> = (0..512 * 384)
+        .flat_map(|index| {
+            let rgb = [[17, 31, 47], [190, 80, 23], [240, 240, 240]][index % 3];
+            [rgb[0], rgb[1], rgb[2], index as u8]
+        })
+        .collect();
+    assert_same(&effects, 512, 384, &data);
+}
+
+#[test]
+fn high_cardinality_effects_match_the_reference() {
+    let effects = json!([
+        { "effect": "curves", "enabled": true, "channel": "rgb",
+          "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+        { "effect": "hue-saturation", "enabled": true,
+          "hue": -137, "saturation": 0.65, "lightness": -0.2 },
+        { "effect": "model-curves", "enabled": true, "model": "cielch",
+          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.4, 0.7], [1, 1]], [[0, 0.1], [1, 0.9]]] },
+        { "effect": "channel-curve", "enabled": true,
+          "x": { "model": "oklch", "channel": "hue" },
+          "y": { "model": "hsl", "channel": "lightness" },
+          "points": [[0, 0.3], [0.25, 0.9], [0.75, 0.1], [1, 0.3]] }
+    ]);
+    let data: Vec<u8> = (0..512 * 512u32)
+        .flat_map(|index| {
+            let bytes = index.to_le_bytes();
+            [bytes[0], bytes[1], bytes[2], (index * 37) as u8]
+        })
+        .collect();
+    assert_same(&effects, 512, 512, &data);
+}
+
+#[test]
+fn linear_rgb_table_matches_direct_reference_for_every_channel_byte() {
+    use ditherette_wasm::prod::effects::model_curves::{ModelCurves, ModelCurvesModel};
+
+    let curves = [
+        vec![[0.0, 0.1], [0.4, 0.7], [1.0, 0.9]],
+        vec![[0.0, 0.0], [0.6, 0.3], [1.0, 1.0]],
+        vec![[0.0, 0.2], [1.0, 0.8]],
+    ];
+    let production = ModelCurves {
+        model: ModelCurvesModel::LinearRgb,
+        curves: curves.clone(),
+    };
+    let reference = spec::model_curves::ModelCurves {
+        model: spec::model_curves::ModelCurvesModel::LinearRgb,
+        curves,
+    };
+    let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
+    for channel in 0..3 {
+        for value in 0..=u8::MAX {
+            let unit = value as f32 / 255.0;
+            let mut image = spec::EffectImage {
+                dimensions,
+                rgb: vec![[unit; 3]],
+                alpha: vec![255],
+            };
+            spec::Effect::apply(&reference, &mut image, &spec::EffectContext::default());
+            assert_eq!(
+                production.map_channel(channel, unit).to_bits(),
+                image.rgb[0][channel].to_bits(),
+                "channel {channel}, byte {value}"
+            );
+        }
+    }
+}
+
+#[test]
+fn eligible_channel_curve_tables_match_direct_reference_for_every_byte() {
+    let models = ["srgb", "linear-rgb"];
+    let channels = ["red", "green", "blue"];
+    for x_model in models {
+        for y_model in models {
+            for (channel, name) in channels.iter().enumerate() {
+                let json = json!([{
+                    "effect": "channel-curve", "enabled": true,
+                    "x": { "model": x_model, "channel": name },
+                    "y": { "model": y_model, "channel": name },
+                    "points": [[0, 0.1], [0.4, 0.8], [1, 0.6]]
+                }]);
+                let production = prod::decode_effects(&json.to_string())
+                    .unwrap()
+                    .remove(0)
+                    .effect;
+                let reference = spec::decode_effects(&json.to_string())
+                    .unwrap()
+                    .remove(0)
+                    .effect;
+                assert!(production.per_channel());
+                let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
+                for value in 0..=u8::MAX {
+                    let unit = value as f32 / 255.0;
+                    let mut image = spec::EffectImage {
+                        dimensions,
+                        rgb: vec![[unit; 3]],
+                        alpha: vec![255],
+                    };
+                    spec::Effect::apply(&reference, &mut image, &spec::EffectContext::default());
+                    assert_eq!(
+                        production.map_channel(channel, unit).to_bits(),
+                        image.rgb[0][channel].to_bits(),
+                        "{x_model} to {y_model} {name}, byte {value}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn prepared_hue_matches_frozen_map_for_byte_inputs() {
+    use ditherette_wasm::prod::effects::{
+        chain::PreparedPointwiseState, hue_saturation::HueSaturation, table::ChannelTables,
+    };
+
+    let context = prod::EffectContext::default();
+    for effect in hue_effects() {
+        let reference = reference_hue(effect);
+        let tables = ChannelTables::new(std::iter::empty::<&HueSaturation>());
+        let effects = [&effect];
+        let prepared = PreparedPointwiseState::new(&effects, &tables);
+        for red in (0..=u8::MAX).step_by(17) {
+            for green in (0..=u8::MAX).step_by(29) {
+                for blue in (0..=u8::MAX).step_by(43) {
+                    let bytes = [red, green, blue];
+                    let input = bytes.map(|channel| channel as f32 / 255.0);
+                    assert_float_bits(prepared.map(bytes, &context), reference.map(input));
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn prepared_hue_matches_frozen_map_for_carrier_values() {
+    let context = prod::EffectContext::default();
+    let inputs = [
+        [-64.0, -0.5, 1.25],
+        [-0.125, 0.0, 1.0],
+        [0.003_130_8, 0.04045, 1.5],
+        [2.0, 8.0, 64.0],
+    ];
+    for effect in hue_effects() {
+        let reference = reference_hue(effect);
+        let prepared = effect.prepare_pointwise();
+        for input in inputs {
+            assert_float_bits(
+                effect.map_prepared(prepared, input, &context),
+                reference.map(input),
+            );
+        }
+    }
+}
+
+#[test]
+fn prepared_neutral_hue_is_an_exact_identity() {
+    let effect = prod::hue_saturation::HueSaturation {
+        hue: 0.0,
+        saturation: 0.0,
+        lightness: 0.0,
+    };
+    let prepared = effect.prepare_pointwise();
+    let context = prod::EffectContext::default();
+    for input in [[0.0, 0.5, 1.0], [-64.0, -0.25, 64.0]] {
+        assert_float_bits(effect.map_prepared(prepared, input, &context), input);
+    }
+}
+
+fn hue_effects() -> [prod::hue_saturation::HueSaturation; 8] {
+    use prod::hue_saturation::HueSaturation;
+
+    [
+        HueSaturation {
+            hue: -180.0,
+            saturation: -1.0,
+            lightness: -1.0,
+        },
+        HueSaturation {
+            hue: 180.0,
+            saturation: 1.0,
+            lightness: 1.0,
+        },
+        HueSaturation {
+            hue: -25.0,
+            saturation: 0.3,
+            lightness: -0.55,
+        },
+        HueSaturation {
+            hue: 25.0,
+            saturation: 0.3,
+            lightness: 0.55,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: -1.0,
+            lightness: 0.0,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: 1.0,
+            lightness: 0.0,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: 0.0,
+            lightness: -1.0,
+        },
+        HueSaturation {
+            hue: 0.0,
+            saturation: 0.0,
+            lightness: 1.0,
+        },
+    ]
+}
+
+fn reference_hue(
+    effect: prod::hue_saturation::HueSaturation,
+) -> spec::hue_saturation::HueSaturation {
+    spec::hue_saturation::HueSaturation {
+        hue: effect.hue,
+        saturation: effect.saturation,
+        lightness: effect.lightness,
+    }
+}
+
+fn assert_float_bits(actual: [f32; 3], expected: [f32; 3]) {
+    assert_eq!(actual.map(f32::to_bits), expected.map(f32::to_bits));
 }
 
 #[test]

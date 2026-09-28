@@ -187,6 +187,33 @@ export interface RecipeV1 {
 /** Encoded sRGB channels a per-channel effect changes. */
 export type EffectChannel = 'rgb' | 'red' | 'green' | 'blue';
 
+/** Curve control points shared by encoded and colour-model curves. */
+export type CurvePoints = readonly (readonly [number, number])[];
+
+/** Colour models available to channel-based effects. */
+export type ColourModel =
+	| 'srgb'
+	| 'linear-rgb'
+	| 'hsl'
+	| 'hsv'
+	| 'oklab'
+	| 'oklch'
+	| 'cielab'
+	| 'cielch'
+	| 'ycbcr';
+
+/** Colour models supported by model curves. Encoded sRGB uses `curves`. */
+export type ModelCurvesModel = Exclude<ColourModel, 'srgb'>;
+
+/** A model-specific channel. The model discriminant rejects invalid channel pairs. */
+export type ColourChannel =
+	| { readonly model: 'srgb' | 'linear-rgb'; readonly channel: 'red' | 'green' | 'blue' }
+	| { readonly model: 'hsl'; readonly channel: 'hue' | 'saturation' | 'lightness' }
+	| { readonly model: 'hsv'; readonly channel: 'hue' | 'saturation' | 'value' }
+	| { readonly model: 'oklab' | 'cielab'; readonly channel: 'lightness' | 'a' | 'b' }
+	| { readonly model: 'oklch' | 'cielch'; readonly channel: 'lightness' | 'chroma' | 'hue' }
+	| { readonly model: 'ycbcr'; readonly channel: 'luma' | 'cb' | 'cr' };
+
 /** A black/white pair in encoded sRGB units, each from 0 through 1. */
 export interface LevelsPoints {
 	readonly black: number;
@@ -216,7 +243,51 @@ export interface CurvesEffect {
 	readonly effect: 'curves';
 	readonly enabled: boolean;
 	readonly channel: EffectChannel;
-	readonly points: readonly (readonly [number, number])[];
+	readonly points: CurvePoints;
+}
+
+interface ModelCurvesBase {
+	readonly effect: 'model-curves';
+	readonly enabled: boolean;
+}
+
+/** Three curves in the selected model's canonical channel order. */
+export type ModelCurvesEffect = ModelCurvesBase &
+	(
+		| {
+				readonly model: 'linear-rgb';
+				readonly curves: readonly [red: CurvePoints, green: CurvePoints, blue: CurvePoints];
+		  }
+		| {
+				readonly model: 'hsl';
+				readonly curves: readonly [hue: CurvePoints, saturation: CurvePoints, lightness: CurvePoints];
+		  }
+		| {
+				readonly model: 'hsv';
+				readonly curves: readonly [hue: CurvePoints, saturation: CurvePoints, value: CurvePoints];
+		  }
+		| {
+				readonly model: 'oklab' | 'cielab';
+				readonly curves: readonly [lightness: CurvePoints, a: CurvePoints, b: CurvePoints];
+		  }
+		| {
+				readonly model: 'oklch' | 'cielch';
+				readonly curves: readonly [lightness: CurvePoints, chroma: CurvePoints, hue: CurvePoints];
+		  }
+		| {
+				readonly model: 'ycbcr';
+				readonly curves: readonly [luma: CurvePoints, cb: CurvePoints, cr: CurvePoints];
+		  }
+	);
+
+/** Use one colour channel as a curve input that adjusts another colour channel. */
+export interface ChannelCurveEffect {
+	readonly effect: 'channel-curve';
+	readonly enabled: boolean;
+	readonly x: ColourChannel;
+	readonly y: ColourChannel;
+	/** A y value of 0.5 is neutral. Hue X curves repeat the seam at x 0 and 1. */
+	readonly points: CurvePoints;
 }
 
 /** Contrast from -1 through 1 scales around mid-grey by `4^contrast`; brightness from -1 through 1 adds. */
@@ -312,6 +383,8 @@ export interface AnalyzeRecolourRequest {
 export type Effect =
 	| LevelsEffect
 	| CurvesEffect
+	| ModelCurvesEffect
+	| ChannelCurveEffect
 	| BrightnessContrastEffect
 	| ExposureEffect
 	| WhiteBalanceEffect

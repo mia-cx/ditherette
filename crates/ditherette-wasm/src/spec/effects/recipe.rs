@@ -11,11 +11,13 @@ use crate::spec::contract::error::{DitheretteError, ErrorCode};
 use super::{
     brightness_contrast::BrightnessContrast,
     chain::{Effect, EffectContext, Needs, Step},
+    channel_curve::ChannelCurve,
     curves::Curves,
     exposure::Exposure,
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    model_curves::ModelCurves,
     recolour::Recolour,
     white_balance::WhiteBalance,
 };
@@ -26,6 +28,8 @@ use super::{
 pub enum BuiltinEffect {
     Levels(Levels),
     Curves(Curves),
+    ModelCurves(ModelCurves),
+    ChannelCurve(ChannelCurve),
     BrightnessContrast(BrightnessContrast),
     Exposure(Exposure),
     WhiteBalance(WhiteBalance),
@@ -41,6 +45,8 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.validate(path),
             Self::Curves(effect) => effect.validate(path),
+            Self::ModelCurves(effect) => effect.validate(path),
+            Self::ChannelCurve(effect) => effect.validate(path),
             Self::BrightnessContrast(effect) => effect.validate(path),
             Self::Exposure(effect) => effect.validate(path),
             Self::WhiteBalance(effect) => effect.validate(path),
@@ -57,6 +63,8 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.check_context(context, path),
             Self::Curves(effect) => effect.check_context(context, path),
+            Self::ModelCurves(effect) => effect.check_context(context, path),
+            Self::ChannelCurve(effect) => effect.check_context(context, path),
             Self::BrightnessContrast(effect) => effect.check_context(context, path),
             Self::Exposure(effect) => effect.check_context(context, path),
             Self::WhiteBalance(effect) => effect.check_context(context, path),
@@ -69,6 +77,8 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.needs(),
             Self::Curves(effect) => effect.needs(),
+            Self::ModelCurves(effect) => effect.needs(),
+            Self::ChannelCurve(effect) => effect.needs(),
             Self::BrightnessContrast(effect) => effect.needs(),
             Self::Exposure(effect) => effect.needs(),
             Self::WhiteBalance(effect) => effect.needs(),
@@ -81,6 +91,8 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.apply(image, context),
             Self::Curves(effect) => effect.apply(image, context),
+            Self::ModelCurves(effect) => effect.apply(image, context),
+            Self::ChannelCurve(effect) => effect.apply(image, context),
             Self::BrightnessContrast(effect) => effect.apply(image, context),
             Self::Exposure(effect) => effect.apply(image, context),
             Self::WhiteBalance(effect) => effect.apply(image, context),

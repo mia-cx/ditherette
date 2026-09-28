@@ -15,10 +15,13 @@ use crate::{
 };
 
 use super::{
-    chain::{validate_chain, Effect, EffectContext, Needs, Step, MAX_EFFECTS},
+    chain::{
+        validate_chain, Effect, EffectContext, Needs, PreparedPointwise, PreparedPointwiseState,
+        Step, MAX_EFFECTS,
+    },
     curves::MAX_POINTS,
-    image::{EffectImage, CARRIER_LIMIT},
-    memo::{try_memoized, MEMO_BYTES},
+    image::{byte, EffectImage},
+    memo::{byte_memo_bytes, try_memoized, try_memoized_bytes, FLOAT_MEMO_BYTES},
     recipe::{BuiltinEffect, EffectStep},
     recolour::{Group, Recolour, RecolourRecipe, MAX_GROUPS},
     recolour_analysis::analyze,
@@ -63,33 +66,70 @@ pub fn apply_effects(request: EffectsRequest<'_>) -> Result<Rgba8Image, Ditheret
 /// tables, sectors, groups, and recipes. Every count is capped by validation.
 pub const BOOKKEEPING_BYTES: u64 = {
     let step = size_of::<EffectStep>()
-        + MAX_POINTS * size_of::<[f32; 2]>()
+        + 3 * MAX_POINTS * size_of::<[f32; 2]>()
         + MAX_GROUPS * size_of::<Group>();
     let palette =
         MAX_PALETTE_ENTRIES * (size_of::<[u8; 3]>() + size_of::<[f32; 3]>() + size_of::<f32>());
-    (MAX_EFFECTS * (step + size_of::<&EffectStep>()) + palette + 4 * step) as u64
+    (MAX_EFFECTS * (step + size_of::<&EffectStep>() + size_of::<PreparedPointwise>())
+        + palette
+        + 4 * step) as u64
 };
 
-/// Bytes an effects call allocates beyond `data`. A chain that fully tabulates needs only the
-/// bookkeeping; otherwise add the carrier, the colour memo, and the largest step scratch.
+/// Bytes terminal application allocates beyond `data`. Pointwise tails use the adaptive byte
+/// memo; only chains that need a continuous image pay for a full carrier.
 pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) -> u64 {
-    let tabulates = steps
-        .iter()
-        .filter(|step| step.enabled)
-        .all(|step| step.effect.per_channel());
-    if tabulates {
+    let mut enabled = steps.iter().filter(|step| step.enabled);
+    let enabled_count = enabled.clone().count();
+    let tabulated = enabled
+        .clone()
+        .take_while(|step| step.effect.per_channel())
+        .count();
+    if tabulated == enabled_count {
         return BOOKKEEPING_BYTES;
     }
-    let scratch = steps
-        .iter()
-        .filter(|step| step.enabled)
+    let scratch = enabled
+        .clone()
         .map(|step| step.effect.working_bytes())
         .max()
         .unwrap_or(0);
-    EffectImage::carrier_bytes(u64::from(dimensions.width()) * u64::from(dimensions.height()))
-        + MEMO_BYTES
+    let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
+    if enabled
+        .by_ref()
+        .skip(tabulated)
+        .all(|step| step.effect.pointwise())
+    {
+        return byte_memo_bytes(pixels) + scratch + BOOKKEEPING_BYTES;
+    }
+    EffectImage::carrier_bytes(pixels)
+        + if scratch > 0 { FLOAT_MEMO_BYTES } else { 0 }
         + scratch
         + BOOKKEEPING_BYTES
+}
+
+/// Bytes `carrier_after` allocates beyond `data`: the continuous image, optional float memo,
+/// and the largest effect scratch allocation.
+pub fn carrier_after_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) -> u64 {
+    let enabled = steps.iter().filter(|step| step.enabled);
+    let tabulated = enabled
+        .clone()
+        .take_while(|step| step.effect.per_channel())
+        .count();
+    let memo = if enabled
+        .clone()
+        .skip(tabulated)
+        .all(|step| step.effect.pointwise())
+        && enabled.clone().count() > tabulated
+    {
+        FLOAT_MEMO_BYTES
+    } else {
+        0
+    };
+    let scratch = enabled
+        .map(|step| step.effect.working_bytes())
+        .max()
+        .unwrap_or(0);
+    let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
+    EffectImage::carrier_bytes(pixels) + memo + scratch + BOOKKEEPING_BYTES
 }
 
 /// A step as it runs: the caller's own effect, or a recolour step with the recipe it derived.
@@ -164,6 +204,37 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.map_pixel(rgb, context),
             Self::Recolour(effect) => effect.map_pixel(rgb, context),
+        }
+    }
+
+    fn prepare_pointwise(&self) -> PreparedPointwise {
+        match self {
+            Self::Given(effect) => effect.prepare_pointwise(),
+            Self::Recolour(effect) => effect.prepare_pointwise(),
+        }
+    }
+
+    fn map_prepared(
+        &self,
+        prepared: PreparedPointwise,
+        rgb: [f32; 3],
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        match self {
+            Self::Given(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::Recolour(effect) => effect.map_prepared(prepared, rgb, context),
+        }
+    }
+
+    fn map_prepared_linear(
+        &self,
+        prepared: PreparedPointwise,
+        linear: [f32; 3],
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        match self {
+            Self::Given(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::Recolour(effect) => effect.map_prepared_linear(prepared, linear, context),
         }
     }
 }
@@ -269,6 +340,12 @@ pub fn apply_in_place<E: Effect>(
         }
         return Ok(());
     }
+    let rest = &enabled[tabulated..];
+    if rest.iter().all(|effect| effect.pointwise()) {
+        let prepared = PreparedPointwiseState::new(rest, &tables);
+        try_memoized_bytes(data, |bytes| prepared.map(bytes, context).map(byte))?;
+        return Ok(());
+    }
     carrier(data, dimensions, &enabled, tabulated, &tables, context)?.write_rgb(data);
     Ok(())
 }
@@ -317,15 +394,8 @@ fn carrier<E: Effect>(
         return EffectImage::try_from_packed(data, dimensions, tables);
     }
     if rest.iter().all(|effect| effect.pointwise()) {
-        return try_memoized(data, dimensions, |bytes| {
-            let mut rgb = std::array::from_fn(|channel| tables.unit(channel, bytes[channel]));
-            for effect in rest {
-                rgb = effect
-                    .map_pixel(rgb, context)
-                    .map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
-            }
-            rgb
-        });
+        let prepared = PreparedPointwiseState::new(rest, tables);
+        return try_memoized(data, dimensions, |bytes| prepared.map(bytes, context));
     }
     let mut image = EffectImage::try_from_packed(data, dimensions, tables)?;
     for effect in rest {
