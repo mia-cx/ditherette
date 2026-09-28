@@ -34,10 +34,29 @@ function isLayerStep(value: unknown): value is LayerStep {
 	}
 }
 
+/**
+ * Curves layers saved before colour models kept `curves: { red, green, blue }`; read them as RGB
+ * curves. Anything else passes through for validation.
+ */
+function migrateStep(step: unknown): unknown {
+	if (!step || typeof step !== 'object') return step;
+	const { effect, model, curves } = step as { effect?: unknown; model?: unknown; curves?: unknown };
+	if (effect !== 'curves' || model !== undefined || !curves || typeof curves !== 'object')
+		return step;
+	const { red, green, blue } = curves as Record<string, unknown>;
+	return { ...step, model: 'srgb', curves: [red, green, blue] };
+}
+
 function isLayer(value: unknown): value is EffectLayer {
 	if (!value || typeof value !== 'object') return false;
 	const { id, name, step } = value as Record<string, unknown>;
 	return typeof id === 'string' && typeof name === 'string' && isLayerStep(step);
+}
+
+/** Saved layers with their steps brought up to date, before validation. */
+function migrateLayer(value: unknown): unknown {
+	if (!value || typeof value !== 'object') return value;
+	return { ...value, step: migrateStep((value as { step?: unknown }).step) };
 }
 
 /** Keep saved layers the package would accept, so a damaged entry cannot block processing. */
@@ -50,7 +69,7 @@ function withinStepLimit(layers: EffectLayer[]) {
 function decodeLayers(encoded: string): EffectLayer[] {
 	try {
 		const value: unknown = JSON.parse(encoded);
-		return Array.isArray(value) ? withinStepLimit(value.filter(isLayer)) : [];
+		return Array.isArray(value) ? withinStepLimit(value.map(migrateLayer).filter(isLayer)) : [];
 	} catch {
 		return [];
 	}
