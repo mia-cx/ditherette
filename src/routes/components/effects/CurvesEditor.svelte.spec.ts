@@ -106,3 +106,20 @@ it('adds a second input as a grid, edits it by keyboard, and picks on both axes'
 	// Dark red lands on the same 30°, 25% point, and the drag pushes it to the top.
 	expect(picked.grid.values[1]![1]).toBe(1);
 });
+
+it('expands into the analysis view and comes back with the same curve selected', async () => {
+	await editor();
+	await page.getByRole('button', { name: 'Curve', exact: true }).click();
+	await page.getByRole('button', { name: 'Expand' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Curves' });
+	await expect.element(dialog).toBeVisible();
+	await expect
+		.element(dialog.getByRole('button', { name: 'Hue vs Chroma (OKLCH)' }))
+		.toHaveAttribute('aria-pressed', 'true');
+	await dialog.getByRole('button', { name: 'Lightness (OKLCH)' }).click();
+	await dialog.getByRole('button', { name: 'Back' }).click();
+	await expect.element(dialog).not.toBeInTheDocument();
+	await expect
+		.element(page.getByRole('button', { name: 'Lightness (OKLCH)' }))
+		.toHaveAttribute('aria-pressed', 'true');
+});

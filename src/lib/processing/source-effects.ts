@@ -21,9 +21,12 @@ export const LUT_SIZE = 52;
  */
 export const sourceEffectsLut = atom<Uint8Array | undefined>();
 
+/** The curve analysis view needs the table too, whether or not the Source pane shows effects. */
+export const curveAnalysisOpen = atom(false);
+
 /**
  * Keep `sourceEffectsLut` in step with the source, effects, and palette while the preview's
- * `sourceEffects` toggle is on. One request runs at a time; edits during it coalesce into the next.
+ * `sourceEffects` toggle is on or the curve analysis view is open. One request runs at a time; edits during it coalesce into the next.
  * The worker exists only while there is something to show. Returns a stop function.
  */
 export function startSourceEffects() {
@@ -47,7 +50,12 @@ export function startSourceEffects() {
 	function update() {
 		const source = sourceImageData.get();
 		const effects = activeEffectSteps.get();
-		if (!previewSettings.get().sourceEffects || !source || !effects.length) return stop();
+		if (
+			!(previewSettings.get().sourceEffects || curveAnalysisOpen.get()) ||
+			!source ||
+			!effects.length
+		)
+			return stop();
 		const context = packageEffectContext(selectedPalette.get(), colorSpace.get());
 		const key = JSON.stringify([effects, context]);
 		if (busy || (source === loaded && key === sentKey)) return;
@@ -88,6 +96,7 @@ export function startSourceEffects() {
 
 	const unsubscribers = [
 		previewSettings.listen(update),
+		curveAnalysisOpen.listen(update),
 		sourceImageData.listen(update),
 		activeEffectSteps.listen(update),
 		selectedPalette.listen(update),
