@@ -293,14 +293,19 @@ impl PaletteMatcher {
 // Candidates inside the margin reach the complete frozen-order score and tie check.
 const CIEDE2000_BOUND_SAFETY: f32 = 0.999;
 
+// A relative margin is empty at a zero best score, yet a nonzero bound can belong to a pair whose
+// complete score underflows to zero: squares below the smallest normal f32 lose their value, so
+// scores under about 1e-22 round away. This absolute floor keeps those ties in the scan.
+const CIEDE2000_BOUND_FLOOR: f32 = 1e-18;
+
 #[inline(always)]
 fn rounded_bound_exceeds_best(bound: f32, best: f32) -> bool {
-    bound * CIEDE2000_BOUND_SAFETY > best
+    bound * CIEDE2000_BOUND_SAFETY > best + CIEDE2000_BOUND_FLOOR
 }
 
 #[inline(always)]
 fn pruning_ceiling(best: f32) -> f32 {
-    next_up(best / CIEDE2000_BOUND_SAFETY)
+    next_up((best + CIEDE2000_BOUND_FLOOR) / CIEDE2000_BOUND_SAFETY)
 }
 
 #[inline(always)]
