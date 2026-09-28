@@ -1,5 +1,6 @@
 import { computed, atom } from 'nanostores';
 import { persistentJSON } from '@nanostores/persistent';
+import type { HistogramModel } from '$lib/histogram';
 import {
 	TRANSPARENT_KEY,
 	WPLACE,
@@ -69,6 +70,8 @@ export const previewSettings = persistentJSON<PreviewSettings>('ditherette:previ
 export const uiSettings = persistentJSON<{
 	desktopDitherFiltersOpen?: boolean;
 	controlAccordionSections?: string[];
+	/** The Histogram window's colour model, and which images it plots. */
+	histogram?: { model: HistogramModel; source: boolean; output: boolean };
 }>('ditherette:ui', {});
 export const activePaletteName = persistentJSON<string>(
 	'ditherette:active-palette',
@@ -519,7 +522,8 @@ function parseImportedPalette(value: unknown): Palette {
 }
 
 function parseImportedColor(value: unknown, index: number): PaletteColor {
-	if (!value || typeof value !== 'object') throw new Error(`Colour ${index + 1} must be an object.`);
+	if (!value || typeof value !== 'object')
+		throw new Error(`Colour ${index + 1} must be an object.`);
 	const record = value as {
 		name?: unknown;
 		key?: unknown;

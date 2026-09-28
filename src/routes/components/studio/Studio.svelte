@@ -7,6 +7,7 @@
 	import ColorSpacePanel from '../ColorSpacePanel.svelte';
 	import ComparisonPreview from '../ComparisonPreview.svelte';
 	import DitherPanel from '../DitherPanel.svelte';
+	import HistogramPanel from '../HistogramPanel.svelte';
 	import OutputPanel from '../OutputPanel.svelte';
 	import PalettePanel from '../PalettePanel.svelte';
 	import EffectControls from '../effects/EffectControls.svelte';
@@ -41,6 +42,7 @@
 		dither,
 		'color-space': colorSpace,
 		palette,
+		histogram,
 		[EFFECT_COMPONENT]: effect
 	}}
 	{empty}
@@ -69,6 +71,10 @@
 
 {#snippet palette()}
 	<div class="flex h-full min-h-0 flex-col p-3"><PalettePanel fillHeight hideHeading /></div>
+{/snippet}
+
+{#snippet histogram()}
+	<div class="p-3"><HistogramPanel /></div>
 {/snippet}
 
 {#snippet effect(params: Readonly<Record<string, string>>)}

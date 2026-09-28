@@ -11,7 +11,8 @@ export const WINDOWS = [
 	{ id: 'dimensions', title: 'Dimensions' },
 	{ id: 'dither', title: 'Dither' },
 	{ id: 'color-space', title: 'Colour space' },
-	{ id: 'palette', title: 'Palette' }
+	{ id: 'palette', title: 'Palette' },
+	{ id: 'histogram', title: 'Histogram' }
 ] as const;
 export type WindowId = (typeof WINDOWS)[number]['id'];
 
