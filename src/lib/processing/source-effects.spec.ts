@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { previewSettings, sourceImageData } from '$lib/stores/app';
 import { addEffect, effectLayers, updateEffect } from '$lib/stores/effects';
 import {
-	adjustedSource,
+	sourceEffectsLut,
 	startSourceEffects,
 	type SourceEffectsRequest,
 	type SourceEffectsResponse
@@ -29,7 +29,7 @@ class ControlledWorker {
 
 const image = (): ImageData =>
 	({ width: 1, height: 1, data: new Uint8ClampedArray(4) }) as ImageData;
-const bitmap = () => ({ close: vi.fn() }) as unknown as ImageBitmap;
+const lut = () => new Uint8Array(4);
 
 let stop: () => void;
 
@@ -57,7 +57,7 @@ describe('source effects', () => {
 		updateEffect(layer.id, { effect: 'exposure', enabled: true, stops: 2 });
 		expect(worker.applied).toHaveLength(1);
 
-		worker.reply({ id: worker.applied[0]!.id, bitmap: bitmap() });
+		worker.reply({ id: worker.applied[0]!.id, lut: lut() });
 		expect(worker.applied).toHaveLength(2);
 		expect(worker.applied[1]).toMatchObject({ effects: [{ stops: 2 }] });
 	});
@@ -65,11 +65,9 @@ describe('source effects', () => {
 	it('drops a result computed for a source that was since replaced', () => {
 		addEffect('exposure');
 		const worker = ControlledWorker.instances[0]!;
-		const stale = bitmap();
 		sourceImageData.set(image());
-		worker.reply({ id: worker.applied[0]!.id, bitmap: stale });
-		expect(adjustedSource.get()).toBeUndefined();
-		expect(stale.close).toHaveBeenCalled();
+		worker.reply({ id: worker.applied[0]!.id, lut: lut() });
+		expect(sourceEffectsLut.get()).toBeUndefined();
 	});
 
 	it('stops the worker when turned off', () => {
