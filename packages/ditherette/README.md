@@ -142,7 +142,7 @@ Built-in effects:
 | `hue-saturation`      | `hue` in degrees from -180 to 180, `saturation` and `lightness` from -1 to 1, in Oklab                                                                                     |
 | `recolour`            | `strength` from 0 to 1, `recipe`: an analysed recipe or `null` to analyse automatically                                                                                    |
 
-Curve x values rise by at least 0.001. A hue input starts at 0, ends at 1, and repeats its first y value at the end. A remap uses the same channel for `x` and `y`; an adjustment may use any valid pair.
+Curve x values rise by at least 0.001. A hue-input adjustment starts at 0, ends at 1, and repeats its first y value at the end so its spline wraps. Remaps use an open spline, including hue remaps. A remap uses the same channel for `x` and `y`; an adjustment may use any valid pair.
 All values are in encoded sRGB units unless noted. Curve coordinates are normalized in their selected colour models. Neutral arguments leave pixels untouched.
 A preset is a stored `effects` array: this package owns what each effect does, and the caller owns labels, editor state, and where presets live.
 
