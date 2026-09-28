@@ -17,12 +17,12 @@
 
 <section
 	class={compact ? 'flex flex-col gap-3' : 'flex flex-col gap-4'}
-	aria-label="Color space controls"
+	aria-label="Colour space controls"
 >
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
-			<h2 class="text-sm font-semibold tracking-tight">Color space</h2>
-			<p class="text-xs text-muted-foreground">How each pixel picks its palette color.</p>
+			<h2 class="text-sm font-semibold tracking-tight">Colour space</h2>
+			<p class="text-xs text-muted-foreground">How each pixel picks its palette colour.</p>
 		</div>
 	{/if}
 

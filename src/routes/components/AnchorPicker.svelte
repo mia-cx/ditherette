@@ -15,7 +15,7 @@
 		{ id: 'top', label: 'Top' },
 		{ id: 'top-right', label: 'Top right' },
 		{ id: 'left', label: 'Left' },
-		{ id: 'center', label: 'Center' },
+		{ id: 'center', label: 'Centre' },
 		{ id: 'right', label: 'Right' },
 		{ id: 'bottom-left', label: 'Bottom left' },
 		{ id: 'bottom', label: 'Bottom' },

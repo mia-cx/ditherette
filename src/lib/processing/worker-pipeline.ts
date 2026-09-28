@@ -49,7 +49,7 @@ export class ProcessorWorkerPipeline {
 		});
 		const processor = await this.#package;
 		if (this.#canceledIds.has(id)) return undefined;
-		mark('package initialization wait', initializeStart);
+		mark('package initialisation wait', initializeStart);
 		const processStart = performance.now();
 		const output = processor.process({
 			...mapped.request,
@@ -103,7 +103,7 @@ export class PackageInitializationError extends Error {}
 
 /** Load the package and create a scalar processor, marking failures a fresh worker may clear. */
 export async function initializePackageProcessor() {
-	const message = 'Wasm could not initialize. Try processing again.';
+	const message = 'Wasm could not initialise. Try processing again.';
 	let module;
 	try {
 		module = await import('ditherette');

@@ -211,7 +211,7 @@
 			<AccordionItem value="color">
 				<AccordionTrigger class="px-4">
 					<span class="flex items-center gap-2 text-sm">
-						Color space
+						Colour space
 						<Badge variant="outline">{colorBadge}</Badge>
 					</span>
 				</AccordionTrigger>

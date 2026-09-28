@@ -106,7 +106,7 @@ describe('website processing scheduling', () => {
 		expect(metrics?.timings.map(({ name }) => name)).toEqual(
 			expect.arrayContaining([
 				'package request adapter',
-				'package initialization wait',
+				'package initialisation wait',
 				'package process',
 				'package output adapter'
 			])
@@ -126,11 +126,11 @@ describe('website processing scheduling', () => {
 		worker.receive({
 			id: load.id,
 			type: 'error',
-			message: 'Wasm could not initialize. Try processing again.',
+			message: 'Wasm could not initialise. Try processing again.',
 			restartWorker: true
 		});
 		await first;
-		expect(processingError.get()).toBe('Wasm could not initialize. Try processing again.');
+		expect(processingError.get()).toBe('Wasm could not initialise. Try processing again.');
 		expect(processedImage.get()).toBe(retained);
 		const second = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);

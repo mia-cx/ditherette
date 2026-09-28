@@ -92,7 +92,7 @@
 	const alphaLabel = $derived(ALPHA_MODES.find((mode) => mode.id === alpha)?.label ?? 'Alpha');
 	const visiblePaletteColors = $derived($selectedPalette.filter((color) => color.rgb));
 	const matteLabel = $derived(
-		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte color'
+		visiblePaletteColors.find((color) => color.key === matteKey)?.name ?? 'Select matte colour'
 	);
 
 	type TagSelectionSource = 'kind' | 'tag';
@@ -334,7 +334,7 @@
 
 	function openColorDialog(mode: 'add' | 'edit' | 'duplicate', color?: PaletteColor) {
 		if (isBuiltIn || color?.kind === 'transparent') {
-			setPaletteMessage('Built-in and transparent colors cannot be edited.', 'error');
+			setPaletteMessage('Built-in and transparent colours cannot be edited.', 'error');
 			return;
 		}
 		colorDialogMode = mode;
@@ -367,7 +367,7 @@
 	function addColor() {
 		if (isBuiltIn) {
 			setPaletteMessage(
-				'Built-in palettes are immutable. Duplicate Wplace before adding colors.',
+				'Built-in palettes are immutable. Duplicate Wplace before adding colours.',
 				'error'
 			);
 			return;
@@ -390,7 +390,7 @@
 	function duplicateSelectedColors() {
 		if (isBuiltIn) {
 			setPaletteMessage(
-				'Built-in palettes are immutable. Duplicate Wplace before duplicating colors.',
+				'Built-in palettes are immutable. Duplicate Wplace before duplicating colours.',
 				'error'
 			);
 			return;
@@ -400,7 +400,7 @@
 		);
 		if (colors.length !== 1) {
 			setPaletteMessage(
-				'Select one custom color to duplicate. Bulk duplicate needs the edit flow.'
+				'Select one custom colour to duplicate. Bulk duplicate needs the edit flow.'
 			);
 			return;
 		}
@@ -410,21 +410,21 @@
 	function deleteSelectedColors() {
 		if (isBuiltIn) {
 			setPaletteMessage(
-				'Built-in palettes are immutable. Duplicate Wplace before deleting colors.',
+				'Built-in palettes are immutable. Duplicate Wplace before deleting colours.',
 				'error'
 			);
 			return;
 		}
 		const keys = selectedKeys();
 		if (!keys.length) return;
-		if (!confirm(`Delete ${keys.length} selected color(s) from ${currentPalette.name}?`)) return;
+		if (!confirm(`Delete ${keys.length} selected colour(s) from ${currentPalette.name}?`)) return;
 		withPaletteError(() => deleteActivePaletteColors(keys));
 		deselectRows();
 	}
 
 	function deleteColor(color: PaletteColor) {
 		if (isBuiltIn || color.kind === 'transparent') {
-			setPaletteMessage('Built-in and transparent colors cannot be deleted.', 'error');
+			setPaletteMessage('Built-in and transparent colours cannot be deleted.', 'error');
 			return;
 		}
 		deleteColorKey = color.key;
@@ -623,7 +623,7 @@
 <Dialog bind:open={deleteDialogOpen}>
 	<DialogContent>
 		<DialogHeader>
-			<DialogTitle>Delete color?</DialogTitle>
+			<DialogTitle>Delete colour?</DialogTitle>
 			<DialogDescription>
 				This removes the custom color from {currentPalette.name}. Built-in Wplace colors remain
 				immutable.
@@ -696,7 +696,7 @@
 						<Checkbox
 							checked={allRowsSelected}
 							indeterminate={someRowsSelected}
-							aria-label="Select all palette colors"
+							aria-label="Select all palette colours"
 							onCheckedChange={(next) => setAllRowsSelected(next)}
 						/>
 						{#if selectedCount > 0}
@@ -717,7 +717,7 @@
 							variant="ghost"
 							onclick={duplicateSelectedColors}
 							disabled={selectedCount === 0 || isBuiltIn}
-							aria-label="Duplicate selected colors"
+							aria-label="Duplicate selected colours"
 						>
 							<CopyIcon weight="bold" />
 						</Button>
@@ -727,7 +727,7 @@
 							class="hover:text-destructive"
 							onclick={deleteSelectedColors}
 							disabled={selectedCount === 0 || isBuiltIn}
-							aria-label="Delete selected colors"
+							aria-label="Delete selected colours"
 						>
 							<TrashIcon weight="bold" />
 						</Button>
@@ -794,7 +794,7 @@
 		type="button"
 		class={tagButtonClass(selected, variant)}
 		aria-pressed={selected}
-		aria-label="{selected ? 'Deselect' : 'Select'} all {label} colors"
+		aria-label="{selected ? 'Deselect' : 'Select'} all {label} colours"
 		onclick={() => toggleTagSelection(source, tag)}
 	>
 		{label}

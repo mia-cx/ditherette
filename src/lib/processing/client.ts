@@ -55,7 +55,7 @@ const DITHER_SLIDER_FIELDS = new Set<keyof DitherSettings>([
 ]);
 
 class ProcessingCanceled extends Error {
-	constructor(message = 'Processing was canceled.') {
+	constructor(message = 'Processing was cancelled.') {
 		super(message);
 		this.name = 'ProcessingCanceled';
 	}

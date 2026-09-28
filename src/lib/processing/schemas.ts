@@ -210,7 +210,7 @@ function validateDitherSettings(value: unknown): DitherSettings {
 		),
 		serpentine: assertBoolean(value.serpentine, 'Worker dither serpentine flag'),
 		seed: assertFiniteNumber(value.seed, 'Worker dither seed'),
-		useColorSpace: assertBoolean(value.useColorSpace, 'Worker dither color-space flag'),
+		useColorSpace: assertBoolean(value.useColorSpace, 'Worker dither colour-space flag'),
 		coverage:
 			coverage === undefined
 				? undefined
@@ -230,25 +230,25 @@ function validateProcessingSettings(value: unknown): ProcessingSettings {
 	return {
 		output: validateOutputSettings(value.output),
 		dither: validateDitherSettings(value.dither),
-		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker color space'),
+		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker colour space'),
 		effects: validateEffectSteps(value.effects)
 	};
 }
 
 export function assertPaletteForIndexedOutput(palette: unknown): EnabledPaletteColor[] {
 	if (!Array.isArray(palette) || palette.length < 1 || palette.length > 256) {
-		throw new Error('Indexed PNG palette must contain 1–256 colors.');
+		throw new Error('Indexed PNG palette must contain 1–256 colours.');
 	}
 	for (const [index, color] of palette.entries()) {
-		if (!isObject(color)) throw new Error(`Palette color ${index + 1} is invalid.`);
-		assertString(color.name, `Palette color ${index + 1} name`);
-		assertString(color.key, `Palette color ${index + 1} key`);
+		if (!isObject(color)) throw new Error(`Palette colour ${index + 1} is invalid.`);
+		assertString(color.name, `Palette colour ${index + 1} name`);
+		assertString(color.key, `Palette colour ${index + 1} key`);
 		if (color.kind !== 'transparent') {
-			if (!isObject(color.rgb)) throw new Error(`Palette color ${index + 1} needs RGB.`);
+			if (!isObject(color.rgb)) throw new Error(`Palette colour ${index + 1} needs RGB.`);
 			for (const channel of ['r', 'g', 'b'] as const) {
 				const value = color.rgb[channel];
 				if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 255) {
-					throw new Error(`Palette color ${index + 1} has invalid RGB.`);
+					throw new Error(`Palette colour ${index + 1} has invalid RGB.`);
 				}
 			}
 		}
@@ -468,7 +468,7 @@ function validateProcessingMetrics(value: unknown): ProcessingMetricsSample | un
 			: undefined,
 		memory: value.memory === undefined ? undefined : validateMemoryShape(value.memory),
 		outputPixels: assertFiniteNonNegativeNumber(value.outputPixels, 'Worker metrics output pixels'),
-		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker metrics color space'),
+		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker metrics colour space'),
 		dither: assertOneOf(value.dither, DITHER_IDS, 'Worker metrics dither'),
 		resize: assertOneOf(value.resize, RESIZE_MODES, 'Worker metrics resize'),
 		warnings

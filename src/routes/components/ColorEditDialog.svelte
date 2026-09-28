@@ -455,9 +455,9 @@
 	}
 
 	function title() {
-		if (mode === 'edit') return 'Edit color';
-		if (mode === 'duplicate') return 'Duplicate color';
-		return 'Add color';
+		if (mode === 'edit') return 'Edit colour';
+		if (mode === 'duplicate') return 'Duplicate colour';
+		return 'Add colour';
 	}
 
 	function clamp(value: number, min: number, max: number) {
@@ -626,7 +626,7 @@
 			</div>
 
 			<Select bind:value={picker} type="single">
-				<SelectTrigger size="sm" class="w-full" aria-label="Color picker mode">
+				<SelectTrigger size="sm" class="w-full" aria-label="Colour picker mode">
 					{pickerOptions.find((option) => option.id === picker)?.label ?? 'Picker'}
 				</SelectTrigger>
 				<SelectContent>
@@ -834,7 +834,7 @@
 
 		<DialogFooter>
 			<Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
-			<Button onclick={onSave}>Save color</Button>
+			<Button onclick={onSave}>Save colour</Button>
 		</DialogFooter>
 	</DialogContent>
 </Dialog>

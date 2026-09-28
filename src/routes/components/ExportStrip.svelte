@@ -12,7 +12,7 @@
 	const sizeLabel = $derived(
 		$processedImage ? `${$processedImage.width} × ${$processedImage.height}` : 'No output'
 	);
-	const colorLabel = $derived($processedImage ? `${$processedImage.palette.length} colors` : '—');
+	const colorLabel = $derived($processedImage ? `${$processedImage.palette.length} colours` : '—');
 </script>
 
 <section

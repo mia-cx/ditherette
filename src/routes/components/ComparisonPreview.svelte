@@ -127,7 +127,7 @@
 				: '—'
 	);
 	const colorLabel = $derived(
-		$processedImage ? `${$processedImage.palette.length} colors` : 'Palette'
+		$processedImage ? `${$processedImage.palette.length} colours` : 'Palette'
 	);
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop

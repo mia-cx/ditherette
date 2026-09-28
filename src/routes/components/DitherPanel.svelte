@@ -148,7 +148,7 @@
 				</div>
 				<Button variant="outline" size="sm" onclick={randomizeSeed}>
 					<DiceIcon weight="bold" />
-					Randomize
+					Randomise
 				</Button>
 			</div>
 		{/if}
