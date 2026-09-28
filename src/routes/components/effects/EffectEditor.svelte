@@ -25,8 +25,10 @@
 			curves={[{ map: levelsTone(step), class: LEVELS_STROKE[step.channel] }]}
 		/>
 		<LevelsEditor {id} {step} {onchange} />
-	{:else if step.effect === 'curves'}
+	{:else if step.effect === 'curves' && step.model !== 'xy'}
 		<CurvesEditor {id} {step} {onchange} />
+	{:else if step.effect === 'curves'}
+		<!-- Arbitrary XY curves get their editor next. -->
 	{:else if step.effect === 'brightness-contrast'}
 		<ToneGraph
 			label="Brightness and contrast response"

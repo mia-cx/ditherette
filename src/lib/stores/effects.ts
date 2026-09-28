@@ -2,11 +2,9 @@ import { persistentAtom } from '@nanostores/persistent';
 import { computed } from 'nanostores';
 import { isEffect } from 'ditherette';
 import {
-	CURVE_CHANNELS,
 	EFFECTS,
 	MAX_EFFECT_LAYERS,
 	packageSteps,
-	type ChannelCurves,
 	type EffectKind,
 	type LayerStep
 } from '$lib/effects/catalog';
@@ -20,18 +18,19 @@ export type EffectLayer = {
 
 export const MAX_EFFECT_NAME_LENGTH = 64;
 
-/** A saved step the package accepts. Curves check each channel's points as a package step. */
+/**
+ * A saved step the package accepts. A curves layer counts when every package step it turns into
+ * does, so the website keeps exactly what processing would accept.
+ */
 function isLayerStep(value: unknown): value is LayerStep {
 	if (!value || typeof value !== 'object') return false;
-	const { effect, enabled, curves } = value as Partial<ChannelCurves>;
-	if (effect !== 'curves') return isEffect(value);
-	return (
-		typeof enabled === 'boolean' &&
-		curves !== undefined &&
-		CURVE_CHANNELS.every((channel) =>
-			isEffect({ effect, enabled, channel, points: curves[channel] })
-		)
-	);
+	if ((value as { effect?: unknown }).effect !== 'curves') return isEffect(value);
+	try {
+		return packageSteps(value as LayerStep).every(isEffect);
+	} catch {
+		// Storage holds untyped JSON; a damaged curves layer is dropped like any invalid step.
+		return false;
+	}
 }
 
 function isLayer(value: unknown): value is EffectLayer {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EFFECTS, type CurvePoints } from '$lib/effects/catalog';
+import { isEffect } from 'ditherette';
+import { EFFECTS, FLAT, STRAIGHT, packageSteps, type CurvePoints } from '$lib/effects/catalog';
 import {
 	activeEffectSteps,
 	addEffect,
@@ -10,6 +11,11 @@ import {
 	setEffectEnabled,
 	updateEffect
 } from './effects';
+
+const LIFT: CurvePoints = [
+	[0, 0.1],
+	[1, 1]
+];
 
 beforeEach(() => effectLayers.set([]));
 
@@ -57,23 +63,48 @@ describe('effect layers', () => {
 		}
 	});
 
-	it('runs matching channel curves as one rgb step and differing ones per channel', () => {
+	it('runs matching RGB curves as one rgb step and differing ones per channel', () => {
 		const curves = addEffect('curves');
-		if (curves.step.effect !== 'curves') throw new Error('Expected curves.');
-		const lift: CurvePoints = [
-			[0, 0.1],
-			[1, 1]
-		];
+		if (curves.step.effect !== 'curves' || curves.step.model !== 'srgb')
+			throw new Error('Expected RGB curves.');
 		const step = curves.step;
-		updateEffect(curves.id, { ...step, curves: { red: lift, green: lift, blue: lift } });
+		updateEffect(curves.id, { ...step, curves: [LIFT, LIFT, LIFT] });
 		expect(activeEffectSteps.get()).toEqual([
-			{ effect: 'curves', enabled: true, channel: 'rgb', points: lift }
+			{ effect: 'curves', enabled: true, channel: 'rgb', points: LIFT }
 		]);
 
-		updateEffect(curves.id, { ...step, curves: { ...step.curves, red: lift } });
+		updateEffect(curves.id, { ...step, curves: [LIFT, STRAIGHT, STRAIGHT] });
 		expect(activeEffectSteps.get()).toEqual([
-			{ effect: 'curves', enabled: true, channel: 'red', points: lift }
+			{ effect: 'curves', enabled: true, channel: 'red', points: LIFT }
 		]);
+	});
+
+	it('runs other colour models as one model-curves step and arbitrary XY as one channel-curve', () => {
+		expect(
+			packageSteps({
+				effect: 'curves',
+				enabled: true,
+				model: 'oklch',
+				curves: [LIFT, STRAIGHT, STRAIGHT]
+			})
+		).toEqual([
+			{ effect: 'model-curves', enabled: true, model: 'oklch', curves: [LIFT, STRAIGHT, STRAIGHT] }
+		]);
+		const x = { model: 'hsl', channel: 'hue' } as const;
+		const y = { model: 'hsl', channel: 'saturation' } as const;
+		expect(
+			packageSteps({ effect: 'curves', enabled: true, model: 'xy', x, y, points: FLAT })
+		).toEqual([{ effect: 'channel-curve', enabled: true, x, y, points: FLAT }]);
+		expect(
+			[
+				...packageSteps({
+					effect: 'curves',
+					enabled: true,
+					model: 'hsv',
+					curves: [LIFT, LIFT, LIFT]
+				})
+			].every(isEffect)
+		).toBe(true);
 	});
 
 	it('never changes a layer into another effect', () => {

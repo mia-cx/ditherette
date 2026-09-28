@@ -2,18 +2,13 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
-	import {
-		CURVE_CHANNELS,
-		samePoints,
-		type ChannelCurves,
-		type CurveChannel,
-		type CurvePoints
-	} from '$lib/effects/catalog';
+	import { samePoints, type CurvePoints, type CurvesLayer } from '$lib/effects/catalog';
 	import { MAX_CURVE_POINTS, evaluateCurve, type CurvePoint } from '$lib/effects/spline';
 	import { tonePath } from '$lib/effects/tone';
 	import ToneGrid from './ToneGrid.svelte';
 
-	type Props = { id: string; step: ChannelCurves; onchange: (step: ChannelCurves) => void };
+	type ModelStep = Exclude<CurvesLayer, { model: 'xy' }>;
+	type Props = { id: string; step: ModelStep; onchange: (step: ModelStep) => void };
 	let { id, step, onchange }: Props = $props();
 
 	/** Points sit on the byte grid, so neighbours stay well above the package's 0.001 x gap. */
@@ -22,49 +17,46 @@
 	const SIZE = 256;
 	const SAMPLES = 128;
 	const HIT_RADIUS_PX = 10;
-	const CHANNEL = {
-		red: {
+	type Channel = 0 | 1 | 2;
+	const CHANNELS: readonly Channel[] = [0, 1, 2];
+	const CHANNEL = [
+		{
 			label: 'Red',
 			stroke: 'text-red-500',
 			check: 'data-checked:border-red-500 data-checked:bg-red-500'
 		},
-		green: {
+		{
 			label: 'Green',
 			stroke: 'text-green-500',
 			check: 'data-checked:border-green-500 data-checked:bg-green-500'
 		},
-		blue: {
+		{
 			label: 'Blue',
 			stroke: 'text-blue-500',
 			check: 'data-checked:border-blue-500 data-checked:bg-blue-500'
 		}
-	} as const satisfies Record<CurveChannel, { label: string; stroke: string; check: string }>;
+	] as const;
 
 	let svg = $state<SVGSVGElement>();
 	let selected = $state(0);
 	let dragging = $state<number>();
 	/** Checked channels. Edits start from the first one's curve and write to all of them. */
-	let editing = $state<CurveChannel[]>([...CURVE_CHANNELS]);
+	let editing = $state<Channel[]>([...CHANNELS]);
 
 	const points = $derived(step.curves[editing[0]!]);
 	const current = $derived(points[Math.min(selected, points.length - 1)]!);
 	const stroke = $derived(editing.length === 1 ? CHANNEL[editing[0]!].stroke : 'text-foreground');
 	/** Channels whose curve differs from the edited one, drawn thin behind it. */
-	const others = $derived(
-		CURVE_CHANNELS.filter((channel) => !samePoints(step.curves[channel], points))
-	);
+	const others = $derived(CHANNELS.filter((channel) => !samePoints(step.curves[channel], points)));
 	const curvePath = (curve: CurvePoints) => tonePath((x) => evaluateCurve(curve, x), SIZE, SAMPLES);
 
-	function setEditing(channel: CurveChannel, checked: boolean) {
-		editing = CURVE_CHANNELS.filter((other) =>
-			other === channel ? checked : editing.includes(other)
-		);
+	function setEditing(channel: Channel, checked: boolean) {
+		editing = CHANNELS.filter((other) => (other === channel ? checked : editing.includes(other)));
 	}
 
 	function write(next: CurvePoints) {
-		const curves: Record<CurveChannel, CurvePoints> = { ...step.curves };
-		for (const channel of editing) curves[channel] = next;
-		onchange({ ...step, curves });
+		const pick = (channel: Channel) => (editing.includes(channel) ? next : step.curves[channel]);
+		onchange({ ...step, curves: [pick(0), pick(1), pick(2)] });
 	}
 
 	const toByte = (value: number) => Math.round(value * BYTE);
@@ -147,7 +139,7 @@
 
 <div class="grid grid-cols-1 gap-3">
 	<div class="flex items-center gap-4" role="group" aria-label="Channels to edit">
-		{#each CURVE_CHANNELS as channel (channel)}
+		{#each CHANNELS as channel (channel)}
 			<div class="flex items-center gap-2">
 				<Checkbox
 					id="{id}-{channel}"
