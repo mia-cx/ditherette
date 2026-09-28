@@ -2,7 +2,13 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import type { CurvePoints } from '$lib/effects/catalog';
-	import { MAX_CURVE_POINTS, evaluateCurve, type CurvePoint } from '$lib/effects/spline';
+	import { tick } from 'svelte';
+	import {
+		MAX_CURVE_POINTS,
+		evaluateCurve,
+		evaluatePeriodicCurve,
+		type CurvePoint
+	} from '$lib/effects/spline';
 	import { tonePath } from '$lib/effects/tone';
 	import ToneGrid from './ToneGrid.svelte';
 
@@ -16,6 +22,15 @@
 		behind?: readonly { points: CurvePoints; stroke: string }[];
 		/** Names for the point fields: what x reads and what y sets. */
 		axes?: { x: string; y: string };
+		/** The dashed line where the curve changes nothing. */
+		neutral?: 'diagonal' | 'flat';
+		/**
+		 * A hue x axis: the curve wraps, its end points stay at 0 and 1 with one shared y, and other
+		 * points dragged past one edge continue at the other.
+		 */
+		periodic?: boolean;
+		/** A CSS gradient drawn under the x axis. */
+		spectrum?: string;
 	};
 	let {
 		id,
@@ -23,7 +38,10 @@
 		onchange,
 		stroke,
 		behind = [],
-		axes = { x: 'Input', y: 'Output' }
+		axes = { x: 'Input', y: 'Output' },
+		neutral = 'diagonal',
+		periodic = false,
+		spectrum
 	}: Props = $props();
 
 	/** Points sit on the byte grid, so neighbours stay well above the package's 0.001 x gap. */
@@ -38,34 +56,60 @@
 	let dragging = $state<number>();
 
 	const current = $derived(points[Math.min(selected, points.length - 1)]!);
-	const curvePath = (curve: CurvePoints) => tonePath((x) => evaluateCurve(curve, x), SIZE, SAMPLES);
+	const curvePath = (curve: CurvePoints) =>
+		tonePath(
+			(x) => (periodic ? evaluatePeriodicCurve(curve, x) : evaluateCurve(curve, x)),
+			SIZE,
+			SAMPLES
+		);
+	const isEnd = (index: number) => periodic && (index === 0 || index === points.length - 1);
 
 	const toByte = (value: number) => Math.round(value * BYTE);
 	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-	/** Move one point on the byte grid, keeping it strictly between its neighbours. */
+	/**
+	 * Move one point on the byte grid and return its new index. Points stay strictly between their
+	 * neighbours, except on a periodic axis, where they wrap around the seam and may pass them.
+	 */
 	function place(index: number, xByte: number, yByte: number) {
-		if (!Number.isFinite(xByte) || !Number.isFinite(yByte)) return;
+		if (!Number.isFinite(xByte) || !Number.isFinite(yByte)) return index;
+		const y = clamp(Math.round(yByte), 0, BYTE) / BYTE;
+		if (isEnd(index)) {
+			const next = points.slice();
+			next[0] = [0, y];
+			next[next.length - 1] = [1, y];
+			onchange(next);
+			return index;
+		}
+		if (periodic) {
+			const wrapped = clamp(((Math.round(xByte) % BYTE) + BYTE) % BYTE, 1, BYTE - 1);
+			const taken = points.some(([px], other) => other !== index && toByte(px) === wrapped);
+			const x = taken ? points[index]![0] : wrapped / BYTE;
+			const rest = points.filter((_, other) => other !== index);
+			const at = rest.findIndex(([px]) => px > x);
+			onchange([...rest.slice(0, at), [x, y], ...rest.slice(at)]);
+			return at;
+		}
 		const min = index > 0 ? toByte(points[index - 1]![0]) + 1 : 0;
 		const max = index < points.length - 1 ? toByte(points[index + 1]![0]) - 1 : BYTE;
 		const next = points.slice();
-		next[index] = [
-			clamp(Math.round(xByte), min, max) / BYTE,
-			clamp(Math.round(yByte), 0, BYTE) / BYTE
-		];
+		next[index] = [clamp(Math.round(xByte), min, max) / BYTE, y];
 		onchange(next);
+		return index;
 	}
 
 	function remove(index: number) {
-		if (points.length <= 2) return;
+		if (points.length <= 2 || isEnd(index)) return;
 		onchange(points.filter((_, other) => other !== index));
 		selected = Math.max(0, index - 1);
 	}
 
 	function pointerBytes(event: PointerEvent) {
 		const box = svg!.getBoundingClientRect();
+		const x = (event.clientX - box.left) / box.width;
 		return {
-			x: clamp((event.clientX - box.left) / box.width, 0, 1) * BYTE,
+			// Pointer capture keeps reporting past the edges, which a periodic axis wraps.
+			x: (periodic ? x : clamp(x, 0, 1)) * BYTE,
 			y: clamp(1 - (event.clientY - box.top) / box.height, 0, 1) * BYTE,
 			pixelsPerByte: box.width / BYTE
 		};
@@ -97,7 +141,7 @@
 	function drag(event: PointerEvent) {
 		if (dragging === undefined) return;
 		const { x, y } = pointerBytes(event);
-		place(dragging, x, y);
+		dragging = selected = place(dragging, x, y);
 	}
 
 	function keydown(event: KeyboardEvent, index: number) {
@@ -111,7 +155,12 @@
 		};
 		if (event.key in moves) {
 			const [dx, dy] = moves[event.key]!;
-			place(index, x + dx, y + dy);
+			selected = place(index, x + dx, y + dy);
+			// A wrapped point changes places, so keep focus on it.
+			if (selected !== index)
+				void tick().then(() =>
+					svg?.querySelector<SVGElement>(`[data-point="${selected}"]`)?.focus()
+				);
 		} else if (event.key === 'Delete' || event.key === 'Backspace') remove(index);
 		else return;
 		event.preventDefault();
@@ -129,7 +178,7 @@
 	onpointerup={() => (dragging = undefined)}
 	onpointercancel={() => (dragging = undefined)}
 >
-	<ToneGrid size={SIZE} />
+	<ToneGrid size={SIZE} {neutral} />
 	{#each behind as curve, index (index)}
 		<path
 			d={curvePath(curve.points)}
@@ -164,6 +213,9 @@
 		/>
 	{/each}
 </svg>
+{#if spectrum}
+	<div class="-mt-2 h-2 border-x border-b border-border" style:background-image={spectrum}></div>
+{/if}
 
 <div class="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
 	<div class="grid gap-1">
@@ -176,7 +228,9 @@
 			max={BYTE}
 			step="1"
 			value={toByte(current[0])}
-			onchange={(event) => place(selected, Number(event.currentTarget.value), toByte(current[1]))}
+			disabled={isEnd(selected)}
+			onchange={(event) =>
+				(selected = place(selected, Number(event.currentTarget.value), toByte(current[1])))}
 		/>
 	</div>
 	<div class="grid gap-1">
@@ -192,7 +246,10 @@
 			onchange={(event) => place(selected, toByte(current[0]), Number(event.currentTarget.value))}
 		/>
 	</div>
-	<Button variant="outline" size="sm" disabled={points.length <= 2} onclick={() => remove(selected)}
-		>Remove point</Button
+	<Button
+		variant="outline"
+		size="sm"
+		disabled={points.length <= 2 || isEnd(selected)}
+		onclick={() => remove(selected)}>Remove point</Button
 	>
 </div>

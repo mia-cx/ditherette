@@ -95,6 +95,16 @@ export const CURVE_MODELS: readonly {
 	}
 ];
 
+/** Every channel an arbitrary XY curve can read or adjust, grouped by model. */
+export const XY_CHANNELS: readonly { readonly label: string; readonly channel: ColourChannel }[] =
+	CURVE_MODELS.flatMap((model) =>
+		model.channels.map(({ name, label }) => ({
+			label: `${model.label} · ${label}`,
+			// Each model lists only its own channels, so every pair is a valid ColourChannel.
+			channel: { model: model.id, channel: name } as ColourChannel
+		}))
+	);
+
 export const STRAIGHT: CurvePoints = [
 	[0, 0],
 	[1, 1]

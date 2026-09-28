@@ -6,14 +6,18 @@ import type { DockviewApi, IDockviewGroupPanel } from 'dockview-core';
 export type DockParams = Readonly<Record<string, string>>;
 
 /** Room for an effect editor without covering the preview. */
-const FLOATING_SIZE = { width: 360, height: 520 };
+const FLOATING_SIZE = { width: 360, height: 640 };
+/** Space kept clear above and below a new floating window. */
+const FLOATING_MARGIN = 24;
 
 /** A new floating window's box, centred in the dock. */
 export function centredFloating(api: DockviewApi) {
+	const height = Math.min(FLOATING_SIZE.height, api.height - 2 * FLOATING_MARGIN);
 	return {
-		...FLOATING_SIZE,
+		width: FLOATING_SIZE.width,
+		height,
 		x: Math.max(0, Math.round((api.width - FLOATING_SIZE.width) / 2)),
-		y: Math.max(0, Math.round((api.height - FLOATING_SIZE.height) / 2))
+		y: Math.max(0, Math.round((api.height - height) / 2))
 	};
 }
 /** Matches `--dv-tabs-and-actions-container-height` in dock.css. */

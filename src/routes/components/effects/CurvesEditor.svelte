@@ -8,15 +8,19 @@
 		SelectSeparator,
 		SelectTrigger
 	} from '$lib/components/ui/select';
+	import type { ColourChannel } from 'ditherette';
 	import {
 		CURVE_MODELS,
+		FLAT,
 		STRAIGHT,
+		XY_CHANNELS,
 		samePoints,
 		type ChannelName,
 		type CurveModel,
 		type CurvePoints,
 		type CurvesLayer
 	} from '$lib/effects/catalog';
+	import { hueAxis } from '$lib/effects/tone';
 	import CurveGraph from './CurveGraph.svelte';
 
 	type Props = { id: string; step: CurvesLayer; onchange: (step: CurvesLayer) => void };
@@ -77,9 +81,31 @@
 
 	const modelLabel = $derived(step.model === XY ? 'Arbitrary XY' : modelOf(step.model).label);
 
+	/** Hue versus saturation, the classic targeted adjustment, until someone picks other channels. */
+	const DEFAULT_XY = {
+		x: { model: 'hsl', channel: 'hue' },
+		y: { model: 'hsl', channel: 'saturation' }
+	} as const satisfies Record<'x' | 'y', ColourChannel>;
+	const channelKey = ({ model, channel }: ColourChannel) => `${model}:${channel}`;
+	const channelLabel = (channel: ColourChannel) =>
+		XY_CHANNELS.find((option) => channelKey(option.channel) === channelKey(channel))!.label;
+
+	/**
+	 * A hue x axis wraps, so its curve starts at 0 and ends at 1 with the same y. Points in between
+	 * keep their places.
+	 */
+	function wrapAtSeam(points: CurvePoints): CurvePoints {
+		const seam = points[0]![1];
+		return [[0, seam], ...points.filter(([x]) => x > 0 && x < 1), [1, seam]];
+	}
+
 	/** Switching models starts over: a curve drawn for one model's channels means something else in another. */
 	function setModel(model: string) {
 		if (model === step.model) return;
+		if (model === XY) {
+			onchange({ effect: 'curves', enabled: step.enabled, model: XY, ...DEFAULT_XY, points: FLAT });
+			return;
+		}
 		const next = CURVE_MODELS.find((candidate) => candidate.id === model);
 		if (!next) return;
 		editing = defaultEditing(next.id);
@@ -89,6 +115,15 @@
 			model: next.id,
 			curves: [STRAIGHT, STRAIGHT, STRAIGHT]
 		});
+	}
+
+	function setAxis(axis: 'x' | 'y', key: string) {
+		if (step.model !== XY) return;
+		const option = XY_CHANNELS.find(({ channel }) => channelKey(channel) === key);
+		if (!option) return;
+		const points =
+			axis === 'x' && option.channel.channel === 'hue' ? wrapAtSeam(step.points) : step.points;
+		onchange({ ...step, [axis]: option.channel, points });
 	}
 
 	function setEditing(channel: Channel, checked: boolean) {
@@ -106,12 +141,41 @@
 					<SelectItem value={model.id}>{model.label}</SelectItem>
 				{/each}
 				<SelectSeparator />
-				<SelectItem value={XY} disabled>Arbitrary XY</SelectItem>
+				<SelectItem value={XY}>Arbitrary XY</SelectItem>
 			</SelectContent>
 		</Select>
 	</div>
 
-	{#if step.model !== XY}
+	{#if step.model === XY}
+		{@const hue = step.x.channel === 'hue' ? step.x.model : undefined}
+		{#each [{ axis: 'x', label: 'X reads', channel: step.x }, { axis: 'y', label: 'Y adjusts', channel: step.y }] as const as { axis, label, channel } (axis)}
+			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="{id}-{axis}" class="text-xs text-muted-foreground">{label}</Label>
+				<Select
+					type="single"
+					value={channelKey(channel)}
+					onValueChange={(key) => setAxis(axis, key)}
+				>
+					<SelectTrigger id="{id}-{axis}" class="w-full">{channelLabel(channel)}</SelectTrigger>
+					<SelectContent class="max-h-80">
+						{#each XY_CHANNELS as option (channelKey(option.channel))}
+							<SelectItem value={channelKey(option.channel)}>{option.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
+			</div>
+		{/each}
+		<CurveGraph
+			{id}
+			points={step.points}
+			stroke={TONE[step.y.channel].stroke}
+			neutral="flat"
+			periodic={hue !== undefined}
+			spectrum={hue ? hueAxis(hue) : undefined}
+			axes={{ x: channelLabel(step.x), y: 'Adjustment' }}
+			onchange={(points: CurvePoints) => onchange({ ...step, points })}
+		/>
+	{:else}
 		{@const channels = modelOf(step.model).channels}
 		{@const curves = step.curves}
 		{@const points = curves[editing[0]!]}
