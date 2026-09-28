@@ -12,14 +12,23 @@ import { packageEffectContext } from './package-adapter';
 
 export type SourceEffectsRequest =
 	| { type: 'source'; source: ImageData }
-	| { type: 'apply'; id: number; effects: Effect[]; context: EffectContext };
-export type SourceEffectsResponse = { id: number } & ({ bitmap: ImageBitmap } | { error: string });
-
-/** The full-resolution source after the enabled effects, while the Source pane shows them. */
-export const adjustedSource = atom<ImageBitmap | undefined>();
+	| { type: 'apply'; id: number; effects: Effect[]; context: Required<EffectContext> };
+export type SourceEffectsResponse = { id: number } & ({ lut: Uint8Array } | { error: string });
 
 /**
- * Keep `adjustedSource` in step with the source, effects, and palette while the preview's
+ * Lattice points per axis. 255 / 51 = 5, so every lattice colour is a whole byte and the table's
+ * texture coordinates land exactly on the colours it was computed from.
+ */
+export const LUT_SIZE = 52;
+
+/**
+ * The enabled effects as a 3D lookup table: `LUT_SIZE`³ RGBA entries, red fastest. The Source pane
+ * draws the source through it on the GPU while the preview's `sourceEffects` toggle is on.
+ */
+export const sourceEffectsLut = atom<Uint8Array | undefined>();
+
+/**
+ * Keep `sourceEffectsLut` in step with the source, effects, and palette while the preview's
  * `sourceEffects` toggle is on. One request runs at a time; edits during it coalesce into the next.
  * The worker exists only while there is something to show. Returns a stop function.
  */
@@ -30,10 +39,7 @@ export function startSourceEffects() {
 	let busy = false;
 	let requestId = 0;
 
-	function show(bitmap: ImageBitmap | undefined) {
-		adjustedSource.get()?.close();
-		adjustedSource.set(bitmap);
-	}
+	const show = (lut: Uint8Array | undefined) => sourceEffectsLut.set(lut);
 
 	function stop() {
 		worker?.terminate();
@@ -77,8 +83,7 @@ export function startSourceEffects() {
 		if (data.id !== requestId) return;
 		if ('error' in data) processingError.set(`Could not show effects on the source: ${data.error}`);
 		// A newer source may have arrived while this one ran; it gets its own request below.
-		else if (loaded === sourceImageData.get()) show(data.bitmap);
-		else data.bitmap.close();
+		else if (loaded === sourceImageData.get()) show(data.lut);
 		update();
 	}
 

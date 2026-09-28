@@ -217,7 +217,7 @@ function packagePalette(palette: EnabledPaletteColor[]): PaletteEntry[] {
 export function packageEffectContext(
 	palette: EnabledPaletteColor[],
 	colorSpace: ColorSpaceId
-): EffectContext {
+): Required<EffectContext> {
 	return { palette: packagePalette(palette), space: WORKING_SPACE[colorSpace] };
 }
 

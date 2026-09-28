@@ -14,7 +14,8 @@
 		EmptyTitle
 	} from '$lib/components/ui/empty';
 	import { processedToImageData } from '$lib/processing/render';
-	import { adjustedSource } from '$lib/processing/source-effects';
+	import { lutView } from '$lib/processing/lut-view';
+	import { sourceEffectsLut } from '$lib/processing/source-effects';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputSettings,
@@ -132,7 +133,7 @@
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
-	const sourceLabel = $derived($adjustedSource ? 'Source with effects' : 'Source');
+	const sourceLabel = $derived($sourceEffectsLut ? 'Source with effects' : 'Source');
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
 	const cropToContentHint = $derived(
@@ -532,15 +533,6 @@
 		context.clearRect(0, 0, width, height);
 		context.drawImage(level.canvas, 0, 0, width, height);
 		canvas.dataset.previewKey = cacheKey;
-	}
-
-	/** Draw the adjusted source into its canvas at full resolution. */
-	function drawBitmap(bitmap: ImageBitmap) {
-		return (canvas: HTMLCanvasElement) => {
-			canvas.width = bitmap.width;
-			canvas.height = bitmap.height;
-			canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
-		};
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {
@@ -1300,9 +1292,9 @@
 			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 			draggable="false"
 		/>
-		{#if $adjustedSource}
+		{#if $sourceEffectsLut}
 			<canvas
-				{@attach drawBitmap($adjustedSource)}
+				{@attach lutView}
 				class="pointer-events-none absolute max-w-none select-none"
 				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 				aria-hidden="true"
