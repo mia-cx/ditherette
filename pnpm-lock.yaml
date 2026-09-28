@@ -72,6 +72,9 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.12.2
+      '@vitejs/plugin-basic-ssl':
+        specifier: ^2.3.0
+        version: 2.3.0(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.7.0)(yaml@2.8.4))
       '@vitest/browser-playwright':
         specifier: ^4.1.3
         version: 4.1.5(playwright@1.59.1)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.7.0)(yaml@2.8.4))(vitest@4.1.5)
@@ -1256,6 +1259,12 @@ packages:
   '@vinejs/vine@3.0.1':
     resolution: {integrity: sha512-ZtvYkYpZOYdvbws3uaOAvTFuvFXoQGAtmzeiXu+XSMGxi5GVsODpoI9Xu9TplEMuD/5fmAtBbKb9cQHkWkLXDQ==}
     engines: {node: '>=18.16.0'}
+
+  '@vitejs/plugin-basic-ssl@2.3.0':
+    resolution: {integrity: sha512-bdyo8rB3NnQbikdMpHaML9Z1OZPBu6fFOBo+OtxsBlvMJtysWskmBcnbIDhUqgC8tcxNv/a+BcV5U+2nQMm1OQ==}
+    engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
+    peerDependencies:
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
 
   '@vitest/browser-playwright@4.1.5':
     resolution: {integrity: sha512-CWy0lBQJq97nionyJJdnaU4961IXTl43a7UCu5nHy51IoKxAt6PVIJLo+76rVl7KOOgcWHNkG4kbJu/pW7knvA==}
@@ -3688,6 +3697,10 @@ snapshots:
       normalize-url: 8.1.1
       validator: 13.15.35
     optional: true
+
+  '@vitejs/plugin-basic-ssl@2.3.0(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.7.0)(yaml@2.8.4))':
+    dependencies:
+      vite: 8.0.10(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.7.0)(yaml@2.8.4)
 
   '@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.7.0)(yaml@2.8.4))(vitest@4.1.5)':
     dependencies:

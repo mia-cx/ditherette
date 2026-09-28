@@ -643,6 +643,10 @@ fn model_conversion_formulas_and_hue_rules_are_literal() {
     };
     effect.apply(&mut image, &EffectContext::default());
     assert_eq!(image.rgb[0].map(f32::to_bits), grey.map(f32::to_bits));
+    for model in [ColourModel::Oklch, ColourModel::Cielch] {
+        let grey = [0.5; 3];
+        assert_eq!(model.hue_weight(grey, model.to_normalized(grey)), 0.0);
+    }
 
     let half = [0.51, 0.5, 0.5];
     let mut image = EffectImage {

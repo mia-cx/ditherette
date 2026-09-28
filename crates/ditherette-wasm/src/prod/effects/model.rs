@@ -103,6 +103,10 @@ impl ColourModel {
     }
 
     pub fn hue_weight(self, rgb: [f32; 3], normalized: [f32; 3]) -> f32 {
+        // Float conversions leave exact greys a residual chroma, but they have no hue.
+        if rgb[0] == rgb[1] && rgb[1] == rgb[2] {
+            return 0.0;
+        }
         match self {
             Self::Hsl | Self::Hsv => {
                 let rgb = rgb.map(|value| value.clamp(0.0, 1.0));

@@ -1,6 +1,7 @@
 import { atom } from 'nanostores';
 import { persistentAtom } from '@nanostores/persistent';
 import type { DockviewApi, SerializedDockview } from 'dockview-core';
+import { centredFloating, clearCollapsed, collapseRevision } from '$lib/components/dock/dock';
 import { effectLayers, type EffectLayer } from '$lib/stores/effects';
 
 /** The studio's fixed windows, in Windows-menu order. Their ids double as component names. */
@@ -9,7 +10,7 @@ export const WINDOWS = [
 	{ id: 'effects', title: 'Effects' },
 	{ id: 'dimensions', title: 'Dimensions' },
 	{ id: 'dither', title: 'Dither' },
-	{ id: 'color-space', title: 'Color space' },
+	{ id: 'color-space', title: 'Colour space' },
 	{ id: 'palette', title: 'Palette' }
 ] as const;
 export type WindowId = (typeof WINDOWS)[number]['id'];
@@ -49,33 +50,38 @@ function windowOptions(id: WindowId) {
 	return { id, component: id, title };
 }
 
-/** Preview in the middle, effects on the left, processing stages tabbed on the right. */
+/** Preview in the middle, processing stages tabbed on the left, effects on the right. */
 function defaultLayout(api: DockviewApi) {
+	clearCollapsed();
 	api.clear();
 	api.addPanel(windowOptions('preview'));
 	api.addPanel({
-		...windowOptions('effects'),
-		position: { referencePanel: 'preview', direction: 'left' },
-		initialWidth: columnWidth(api, EFFECTS_WIDTH)
-	});
-	api.addPanel({
 		...windowOptions('dimensions'),
-		position: { referencePanel: 'preview', direction: 'right' },
+		position: { referencePanel: 'preview', direction: 'left' },
 		initialWidth: columnWidth(api, STAGES_WIDTH)
 	});
-	for (const id of ['dither', 'color-space'] as const)
-		api.addPanel({
-			...windowOptions(id),
-			position: { referencePanel: 'dimensions', direction: 'within' },
-			inactive: true
-		});
+	api.addPanel({
+		...windowOptions('dither'),
+		position: { referencePanel: 'dimensions', direction: 'within' },
+		inactive: true
+	});
 	api.addPanel({
 		...windowOptions('palette'),
 		position: { referencePanel: 'dimensions', direction: 'below' }
 	});
+	api.addPanel({
+		...windowOptions('color-space'),
+		position: { referencePanel: 'palette', direction: 'within' },
+		inactive: true
+	});
+	api.addPanel({
+		...windowOptions('effects'),
+		position: { referencePanel: 'preview', direction: 'right' },
+		initialWidth: columnWidth(api, EFFECTS_WIDTH)
+	});
 	// Initial widths are ignored while the dock is still empty, so size the side columns last.
-	api.getPanel('effects')?.group.api.setSize({ width: columnWidth(api, EFFECTS_WIDTH) });
 	api.getPanel('dimensions')?.group.api.setSize({ width: columnWidth(api, STAGES_WIDTH) });
+	api.getPanel('effects')?.group.api.setSize({ width: columnWidth(api, EFFECTS_WIDTH) });
 }
 
 /** Restore the saved layout, or dock the default one when there is none or it no longer loads. */
@@ -84,6 +90,8 @@ export function startStudio(api: DockviewApi) {
 	try {
 		if (!saved) throw new Error('No saved layout.');
 		api.fromJSON(saved);
+		// Saved layouts keep the titles they were saved with; take the current ones.
+		for (const { id, title } of WINDOWS) api.getPanel(id)?.api.setTitle(title);
 	} catch {
 		defaultLayout(api);
 		// Replace a missing or unloadable layout now, so the next mount does not retry it.
@@ -98,14 +106,16 @@ export function startStudio(api: DockviewApi) {
 		if (pending) studioLayout.set(pending);
 		pending = undefined;
 	};
+	const snapshot = () => {
+		pending = api.toJSON();
+		clearTimeout(timer);
+		timer = setTimeout(save, PERSIST_DELAY_MS);
+	};
 	const listeners = [
 		api.onDidAddPanel(syncOpen),
 		api.onDidRemovePanel(syncOpen),
-		api.onDidLayoutChange(() => {
-			pending = api.toJSON();
-			clearTimeout(timer);
-			timer = setTimeout(save, PERSIST_DELAY_MS);
-		})
+		api.onDidLayoutChange(snapshot),
+		{ dispose: collapseRevision.listen(snapshot) }
 	];
 	syncOpen();
 	studioApi.set(api);
@@ -121,6 +131,13 @@ export function resetLayout() {
 	if (api) defaultLayout(api);
 }
 
+/** Bring a window forward, opening it where the default layout puts it if it is closed. */
+export function showWindow(id: WindowId) {
+	const open = studioApi.get()?.getPanel(id);
+	if (open) open.api.setActive();
+	else toggleWindow(id);
+}
+
 /** Open a closed window where the default layout puts it, or close an open one. */
 export function toggleWindow(id: WindowId) {
 	const api = studioApi.get();
@@ -134,7 +151,7 @@ export function toggleWindow(id: WindowId) {
 	});
 }
 
-/** Show a layer's window, opening it beside the other effect windows, or below the effects list. */
+/** Show a layer's window, as a tab of an open effect window, or floating in the middle of the dock. */
 export function openEffectWindow(layerId: string) {
 	const api = studioApi.get();
 	const layer = effectLayers.get().find((candidate) => candidate.id === layerId);
@@ -143,7 +160,6 @@ export function openEffectWindow(layerId: string) {
 	const existing = api.getPanel(id);
 	if (existing) return existing.api.setActive();
 	const sibling = api.panels.find((panel) => panel.id.startsWith(EFFECT_PREFIX));
-	const effects = api.getPanel('effects');
 	api.addPanel({
 		id,
 		component: EFFECT_COMPONENT,
@@ -151,9 +167,7 @@ export function openEffectWindow(layerId: string) {
 		params: { layerId: layer.id },
 		...(sibling
 			? { position: { referencePanel: sibling, direction: 'within' } }
-			: effects
-				? { position: { referencePanel: effects, direction: 'below' } }
-				: { floating: true })
+			: { floating: centredFloating(api) })
 	});
 }
 

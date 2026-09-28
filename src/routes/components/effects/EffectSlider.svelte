@@ -13,9 +13,11 @@
 		unit?: string;
 		/** Place the slider on a log scale, for ratios like gamma. */
 		log?: boolean;
+		/** A CSS gradient to draw as the track instead of the filled range. */
+		track?: string;
 		onchange: (value: number) => void;
 	};
-	let { id, label, value, min, max, step, unit, log = false, onchange }: Props = $props();
+	let { id, label, value, min, max, step, unit, log = false, track, onchange }: Props = $props();
 
 	const LOG_SLIDER_STEP = 0.005;
 	const decimals = $derived(Math.max(0, -Math.floor(Math.log10(step))));
@@ -50,6 +52,10 @@
 		max={log ? Math.log10(max) : max}
 		step={log ? LOG_SLIDER_STEP : step}
 		aria-label={label}
+		class={track
+			? '[&_[data-slot=slider-range]]:hidden [&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-track]]:bg-(image:--track)'
+			: ''}
+		style={track ? `--track: ${track}` : undefined}
 	/>
 	<div class="relative">
 		<input

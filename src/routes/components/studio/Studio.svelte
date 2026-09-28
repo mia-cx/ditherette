@@ -33,6 +33,7 @@
 </script>
 
 <Dock
+	main="preview"
 	panels={{
 		preview,
 		effects,

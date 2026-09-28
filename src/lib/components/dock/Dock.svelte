@@ -8,7 +8,17 @@
 	} from 'dockview-core';
 	import DockGroupActions from './DockGroupActions.svelte';
 	import SnippetHost from './SnippetHost.svelte';
-	import { isFloating, toggleFloating, type DockParams } from './dock';
+	import {
+		canCollapse,
+		collapsedGroups,
+		isFloating,
+		sidebarSide,
+		toggleCollapsed,
+		toggleSidebar,
+		toggleFloating,
+		trackCollapse,
+		type DockParams
+	} from './dock';
 	import './dock.css';
 
 	type Props = {
@@ -18,9 +28,11 @@
 		empty?: Snippet<[DockParams]>;
 		/** Set up against the API; the returned cleanup runs before the dock is disposed. */
 		onready: (api: DockviewApi) => (() => void) | void;
+		/** The window whose column is the main area; every other docked column is a sidebar. */
+		main?: string;
 		class?: string;
 	};
-	let { panels, empty, onready, class: className = '' }: Props = $props();
+	let { panels, empty, onready, main, class: className = '' }: Props = $props();
 
 	let container = $state<HTMLDivElement>();
 
@@ -61,7 +73,7 @@
 				return {
 					element,
 					init: ({ containerApi, group }) => {
-						actions = hosted(DockGroupActions, { api: containerApi, group });
+						actions = hosted(DockGroupActions, { api: containerApi, group, main });
 						element.appendChild(actions.element);
 					},
 					dispose: () => actions?.dispose()
@@ -76,6 +88,25 @@
 				};
 			},
 			getTabContextMenuItems: ({ group, api }): ContextMenuItem[] => [
+				...(sidebarSide(api, group, main)
+					? [
+							{
+								label:
+									collapsedGroups.get()[group.id]?.axis === 'width'
+										? 'Expand sidebar'
+										: 'Collapse sidebar',
+								action: () => toggleSidebar(api, group)
+							}
+						]
+					: []),
+				...(canCollapse(api, group) && collapsedGroups.get()[group.id]?.axis !== 'width'
+					? [
+							{
+								label: collapsedGroups.get()[group.id] ? 'Expand window' : 'Collapse window',
+								action: () => toggleCollapsed(api, group)
+							}
+						]
+					: []),
 				{
 					label: isFloating(group) ? 'Dock window' : 'Float window',
 					action: () => toggleFloating(api, group)
@@ -90,7 +121,9 @@
 		const { width, height } = container!.getBoundingClientRect();
 		dock.layout(width, height);
 		const cleanup = onready(dock.api);
+		const stopCollapse = trackCollapse(dock.api);
 		return () => {
+			stopCollapse();
 			cleanup?.();
 			dock.dispose();
 		};

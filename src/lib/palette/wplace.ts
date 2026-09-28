@@ -155,5 +155,5 @@ export function darkestVisible(colors: EnabledPaletteColor[]): EnabledPaletteCol
 
 export function paletteSummary(enabled: Record<string, boolean>): string {
 	const active = enabledWplacePalette(enabled).length;
-	return `${active} / ${WPLACE_PALETTE.length} colors active`;
+	return `${active} / ${WPLACE_PALETTE.length} colours active`;
 }

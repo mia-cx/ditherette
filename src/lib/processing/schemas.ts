@@ -18,7 +18,7 @@ import {
 	type WorkerResponse
 } from './types';
 import type { ProcessingMetricsSample } from './metrics';
-import { isEffect, type Effect } from 'ditherette';
+import { isEffect, type Effect, type ResizeAnchor } from 'ditherette';
 import { MAX_EFFECT_LAYERS } from '$lib/effects/catalog';
 
 const RESIZE_MODES = [
@@ -28,8 +28,22 @@ const RESIZE_MODES = [
 	'lanczos2-scale-aware',
 	'lanczos3',
 	'lanczos3-scale-aware',
+	'bicubic',
+	'bicubic-scale-aware',
+	'trilinear',
 	'area'
 ] as const satisfies readonly ResizeId[];
+const RESIZE_ANCHORS = [
+	'top-left',
+	'top',
+	'top-right',
+	'left',
+	'center',
+	'right',
+	'bottom-left',
+	'bottom',
+	'bottom-right'
+] as const satisfies readonly ResizeAnchor[];
 const ALPHA_MODES = ['preserve', 'premultiplied', 'matte'] as const satisfies readonly AlphaMode[];
 const DITHER_IDS = [
 	'none',
@@ -40,7 +54,13 @@ const DITHER_IDS = [
 	'floyd-steinberg',
 	'sierra',
 	'sierra-lite',
-	'random'
+	'atkinson',
+	'random',
+	'blue-noise',
+	'yliluoma-2',
+	'yliluoma-4',
+	'yliluoma-8',
+	'yliluoma-16'
 ] as const satisfies readonly DitherId[];
 const PLACEMENT_MODES = ['everywhere', 'adaptive'] as const satisfies readonly DitherPlacement[];
 const COLOR_SPACES = [
@@ -51,7 +71,14 @@ const COLOR_SPACES = [
 	'weighted-rgb-601',
 	'weighted-rgb-709',
 	'cielab',
-	'oklch'
+	'cielab-ciede2000',
+	'oklch',
+	'oklch-euclidean',
+	'oklch-circular-hue',
+	'cielch',
+	'cielch-euclidean',
+	'cielch-circular-hue',
+	'ycbcr'
 ] as const satisfies readonly ColorSpaceId[];
 const COVERAGE_MODES = ['full', 'transitions', 'edges'] as const;
 
@@ -154,6 +181,10 @@ function validateOutputSettings(value: unknown): OutputSettings {
 		matteKey: assertString(value.matteKey, 'Worker output matte key'),
 		autoSizeOnUpload: assertBoolean(value.autoSizeOnUpload, 'Worker output auto size flag'),
 		scaleFactor: assertFiniteNonNegativeNumber(value.scaleFactor, 'Worker output scale factor'),
+		anchor:
+			value.anchor === undefined
+				? undefined
+				: assertOneOf(value.anchor, RESIZE_ANCHORS, 'Worker output resize anchor'),
 		crop: assertCropRect(value.crop)
 	};
 }
@@ -179,7 +210,7 @@ function validateDitherSettings(value: unknown): DitherSettings {
 		),
 		serpentine: assertBoolean(value.serpentine, 'Worker dither serpentine flag'),
 		seed: assertFiniteNumber(value.seed, 'Worker dither seed'),
-		useColorSpace: assertBoolean(value.useColorSpace, 'Worker dither color-space flag'),
+		useColorSpace: assertBoolean(value.useColorSpace, 'Worker dither colour-space flag'),
 		coverage:
 			coverage === undefined
 				? undefined
@@ -199,25 +230,25 @@ function validateProcessingSettings(value: unknown): ProcessingSettings {
 	return {
 		output: validateOutputSettings(value.output),
 		dither: validateDitherSettings(value.dither),
-		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker color space'),
+		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker colour space'),
 		effects: validateEffectSteps(value.effects)
 	};
 }
 
 export function assertPaletteForIndexedOutput(palette: unknown): EnabledPaletteColor[] {
 	if (!Array.isArray(palette) || palette.length < 1 || palette.length > 256) {
-		throw new Error('Indexed PNG palette must contain 1–256 colors.');
+		throw new Error('Indexed PNG palette must contain 1–256 colours.');
 	}
 	for (const [index, color] of palette.entries()) {
-		if (!isObject(color)) throw new Error(`Palette color ${index + 1} is invalid.`);
-		assertString(color.name, `Palette color ${index + 1} name`);
-		assertString(color.key, `Palette color ${index + 1} key`);
+		if (!isObject(color)) throw new Error(`Palette colour ${index + 1} is invalid.`);
+		assertString(color.name, `Palette colour ${index + 1} name`);
+		assertString(color.key, `Palette colour ${index + 1} key`);
 		if (color.kind !== 'transparent') {
-			if (!isObject(color.rgb)) throw new Error(`Palette color ${index + 1} needs RGB.`);
+			if (!isObject(color.rgb)) throw new Error(`Palette colour ${index + 1} needs RGB.`);
 			for (const channel of ['r', 'g', 'b'] as const) {
 				const value = color.rgb[channel];
 				if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 255) {
-					throw new Error(`Palette color ${index + 1} has invalid RGB.`);
+					throw new Error(`Palette colour ${index + 1} has invalid RGB.`);
 				}
 			}
 		}
@@ -236,8 +267,9 @@ export function assertIndexBuffer(
 	if (indices.length !== expectedLength) {
 		throw new Error('Processed image index buffer does not match dimensions.');
 	}
-	for (const index of indices) {
-		if (index >= paletteLength)
+	// An indexed loop; the iterator protocol costs tens of milliseconds on large outputs.
+	for (let pixel = 0; pixel < indices.length; pixel++) {
+		if (indices[pixel]! >= paletteLength)
 			throw new Error('Processed image references a missing palette entry.');
 	}
 	return indices;
@@ -436,7 +468,7 @@ function validateProcessingMetrics(value: unknown): ProcessingMetricsSample | un
 			: undefined,
 		memory: value.memory === undefined ? undefined : validateMemoryShape(value.memory),
 		outputPixels: assertFiniteNonNegativeNumber(value.outputPixels, 'Worker metrics output pixels'),
-		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker metrics color space'),
+		colorSpace: assertOneOf(value.colorSpace, COLOR_SPACES, 'Worker metrics colour space'),
 		dither: assertOneOf(value.dither, DITHER_IDS, 'Worker metrics dither'),
 		resize: assertOneOf(value.resize, RESIZE_MODES, 'Worker metrics resize'),
 		warnings

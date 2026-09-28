@@ -28,8 +28,8 @@
 	import { effectLayers } from '$lib/stores/effects';
 	import PipelinePanel from './components/effects/PipelinePanel.svelte';
 	import Studio from './components/studio/Studio.svelte';
-	import WindowsMenu from './components/studio/WindowsMenu.svelte';
 	import { startAutoProcessing } from '$lib/processing/client';
+	import { startSourceEffects } from '$lib/processing/source-effects';
 	import {
 		clearAllImageData,
 		isSourceSuperseded,
@@ -64,12 +64,16 @@
 	});
 
 	onMount(() => {
-		const stop = startAutoProcessing();
+		const stopProcessing = startAutoProcessing();
+		const stopSourceEffects = startSourceEffects();
 		void restorePersistedImages().catch((error) => {
 			if (isSourceSuperseded(error)) return;
 			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
 		});
-		return stop;
+		return () => {
+			stopProcessing();
+			stopSourceEffects();
+		};
 	});
 
 	function chooseImage() {
@@ -121,6 +125,7 @@
 <div class="flex min-h-svh flex-col bg-background lg:h-svh">
 	<AppBar
 		hasImage={$hasImage}
+		studio={studio.current}
 		onChooseImage={chooseImage}
 		onClear={clearImageData}
 		extras={appBarExtras}
@@ -155,9 +160,6 @@
 </div>
 
 {#snippet appBarExtras()}
-	{#if studio.current}
-		<WindowsMenu />
-	{/if}
 	<PerformanceDebugPopover />
 {/snippet}
 
@@ -209,7 +211,7 @@
 			<AccordionItem value="color">
 				<AccordionTrigger class="px-4">
 					<span class="flex items-center gap-2 text-sm">
-						Color space
+						Colour space
 						<Badge variant="outline">{colorBadge}</Badge>
 					</span>
 				</AccordionTrigger>

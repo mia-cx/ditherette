@@ -53,6 +53,8 @@ export const colorSpace = persistentJSON<ColorSpaceId>('ditherette:color-space',
 export type PreviewMode = 'side-by-side' | 'ab-reveal';
 export type PreviewSettings = {
 	mode?: PreviewMode;
+	/** Show the Source half with the enabled effects applied. */
+	sourceEffects?: boolean;
 	revealValue?: number;
 	zoom?: number;
 	panX?: number;
@@ -347,7 +349,7 @@ export function createCustomPalette(name: string) {
 
 export function addColorToActivePalette(name: string, hex: string, tags: readonly string[] = []) {
 	const palette = activeCustomPalette();
-	if (palette.colors.length >= 256) throw new Error('Palettes can contain at most 256 colors.');
+	if (palette.colors.length >= 256) throw new Error('Palettes can contain at most 256 colours.');
 	const color = visibleCustomColor(name, hex, tags);
 	if (palette.colors.some((existing) => existing.key === color.key))
 		throw new Error(`${color.key} already exists in this palette.`);
@@ -372,7 +374,7 @@ export function duplicateActivePaletteColor(
 	const palette = activeCustomPalette();
 	const current = palette.colors.find((color) => color.key === key);
 	if (!current || current.kind === 'transparent')
-		throw new Error('Only custom visible colors can be duplicated.');
+		throw new Error('Only custom visible colours can be duplicated.');
 	return addColorToActivePalette(name, hex, tags);
 }
 
@@ -385,7 +387,7 @@ export function editActivePaletteColor(
 	const palette = activeCustomPalette();
 	const current = palette.colors.find((color) => color.key === key);
 	if (!current || current.kind === 'transparent')
-		throw new Error('Only custom visible colors can be edited.');
+		throw new Error('Only custom visible colours can be edited.');
 	const nextColor = visibleCustomColor(name, hex, tags);
 	if (nextColor.key !== key && palette.colors.some((color) => color.key === nextColor.key))
 		throw new Error(`${nextColor.key} already exists in this palette.`);
@@ -507,17 +509,17 @@ function parseImportedPalette(value: unknown): Palette {
 		source: 'custom',
 		colors: importedColors
 	}).colors;
-	if (colors.length > 256) throw new Error('Imported palettes can contain at most 256 colors.');
+	if (colors.length > 256) throw new Error('Imported palettes can contain at most 256 colours.');
 	const visibleKeys = colors
 		.filter((color) => color.key !== TRANSPARENT_KEY)
 		.map((color) => color.key);
 	if (new Set(visibleKeys).size !== visibleKeys.length)
-		throw new Error('Imported palette has duplicate colors.');
+		throw new Error('Imported palette has duplicate colours.');
 	return { name, source: 'custom', colors };
 }
 
 function parseImportedColor(value: unknown, index: number): PaletteColor {
-	if (!value || typeof value !== 'object') throw new Error(`Color ${index + 1} must be an object.`);
+	if (!value || typeof value !== 'object') throw new Error(`Colour ${index + 1} must be an object.`);
 	const record = value as {
 		name?: unknown;
 		key?: unknown;
@@ -529,7 +531,7 @@ function parseImportedColor(value: unknown, index: number): PaletteColor {
 		return { name: 'Transparent', key: TRANSPARENT_KEY, kind: 'transparent' };
 	}
 	const hex = typeof record.key === 'string' ? record.key : record.hex;
-	if (typeof hex !== 'string') throw new Error(`Color ${index + 1} needs a hex key.`);
+	if (typeof hex !== 'string') throw new Error(`Colour ${index + 1} needs a hex key.`);
 	const tags = Array.isArray(record.tags)
 		? record.tags
 				.slice(0, MAX_TAGS_PER_COLOR)

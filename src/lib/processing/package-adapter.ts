@@ -1,10 +1,13 @@
 import type {
+	EffectContext,
 	IndexedImage,
 	Matching,
+	PaletteEntry,
 	Placement,
 	ProcessRequest,
 	RecipeV1,
 	RecipeV2,
+	ResizeAnchor,
 	Rgba8Image,
 	WorkingSpace
 } from 'ditherette';
@@ -24,7 +27,14 @@ const MATCHING = {
 	'linear-rgb': 'linear-rgb-euclidean',
 	oklab: 'oklab-euclidean',
 	cielab: 'cielab-euclidean',
+	'cielab-ciede2000': 'cielab-ciede2000',
 	oklch: 'oklch-hue-arc',
+	'oklch-euclidean': 'oklch-euclidean',
+	'oklch-circular-hue': 'oklch-circular-hue',
+	cielch: 'cielch-hue-arc',
+	'cielch-euclidean': 'cielch-euclidean',
+	'cielch-circular-hue': 'cielch-circular-hue',
+	ycbcr: 'ycbcr-euclidean',
 	'weighted-rgb': 'srgb-compuphase',
 	'weighted-rgb-601': 'srgb-rec601',
 	'weighted-rgb-709': 'srgb-rec709'
@@ -35,21 +45,49 @@ const WORKING_SPACE = {
 	'linear-rgb': 'linear-rgb',
 	oklab: 'oklab',
 	cielab: 'cielab',
+	'cielab-ciede2000': 'cielab',
 	oklch: 'oklch',
+	'oklch-euclidean': 'oklch',
+	'oklch-circular-hue': 'oklch',
+	cielch: 'cielch',
+	'cielch-euclidean': 'cielch',
+	'cielch-circular-hue': 'cielch',
+	ycbcr: 'ycbcr',
 	'weighted-rgb': 'srgb',
 	'weighted-rgb-601': 'srgb',
 	'weighted-rgb-709': 'srgb'
 } as const satisfies Record<ColorSpaceId, WorkingSpace>;
 
-const RESIZE = {
-	nearest: { algorithm: 'nearest', anchor: 'center' },
-	bilinear: { algorithm: 'bilinear', anchor: 'center' },
-	lanczos2: { algorithm: 'lanczos2', anchor: 'center', support: 'fixed' },
-	'lanczos2-scale-aware': { algorithm: 'lanczos2', anchor: 'center', support: 'scale-aware' },
-	lanczos3: { algorithm: 'lanczos3', anchor: 'center', support: 'fixed' },
-	'lanczos3-scale-aware': { algorithm: 'lanczos3', anchor: 'center', support: 'scale-aware' },
-	area: { algorithm: 'area' }
-} as const satisfies Record<ResizeId, RecipeV1['output']['resize']>;
+type ResizePolicy = RecipeV1['output']['resize'];
+
+/** The package policy for a website resize mode, pinned at `anchor`. Area has no anchor. */
+function packageResize(resize: ResizeId, anchor: ResizeAnchor): ResizePolicy {
+	switch (resize) {
+		case 'nearest':
+		case 'bilinear':
+		case 'trilinear':
+			return { algorithm: resize, anchor };
+		case 'bicubic':
+		case 'lanczos2':
+		case 'lanczos3':
+			return { algorithm: resize, anchor, support: 'fixed' };
+		case 'bicubic-scale-aware':
+			return { algorithm: 'bicubic', anchor, support: 'scale-aware' };
+		case 'lanczos2-scale-aware':
+			return { algorithm: 'lanczos2', anchor, support: 'scale-aware' };
+		case 'lanczos3-scale-aware':
+			return { algorithm: 'lanczos3', anchor, support: 'scale-aware' };
+		case 'area':
+			return { algorithm: 'area' };
+	}
+}
+
+const YLILUOMA_SIZE = {
+	'yliluoma-2': '2',
+	'yliluoma-4': '4',
+	'yliluoma-8': '8',
+	'yliluoma-16': '16'
+} as const;
 
 // Match the current website byte scale to the public normalized field's 255 / 4.
 const RGB_DITHER_NOISE_SCALE = 96;
@@ -108,8 +146,6 @@ function clampCrop(sourceWidth: number, sourceHeight: number, crop?: CropRect): 
 
 function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 	const { dither } = settings;
-	const strength = dither.strength / 100;
-	if (strength === 0) return { family: 'none' };
 	const placement: Placement =
 		dither.placement === 'everywhere'
 			? { mode: 'everywhere' }
@@ -119,6 +155,16 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 					threshold: dither.placementThreshold,
 					softness: dither.placementSoftness
 				};
+	// Yliluoma places whole palette colors, so it has no strength to turn down.
+	switch (dither.algorithm) {
+		case 'yliluoma-2':
+		case 'yliluoma-4':
+		case 'yliluoma-8':
+		case 'yliluoma-16':
+			return { family: 'yliluoma', size: YLILUOMA_SIZE[dither.algorithm], placement };
+	}
+	const strength = dither.strength / 100;
+	if (strength === 0) return { family: 'none' };
 	const vector = dither.useColorSpace && settings.colorSpace !== 'weighted-rgb';
 	switch (dither.algorithm) {
 		case 'none':
@@ -126,6 +172,7 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 		case 'floyd-steinberg':
 		case 'sierra':
 		case 'sierra-lite':
+		case 'atkinson':
 			return {
 				family: 'diffusion',
 				kernel: dither.algorithm,
@@ -138,14 +185,17 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 		case 'bayer-4':
 		case 'bayer-8':
 		case 'bayer-16':
-		case 'random': {
+		case 'random':
+		case 'blue-noise': {
 			const size = bayerSizeForAlgorithm(dither.algorithm);
 			return {
 				family: 'separable',
 				perturb: {
 					field: size
 						? { algorithm: 'bayer', size: `${size}` }
-						: { algorithm: 'random', seed: dither.seed >>> 0 },
+						: dither.algorithm === 'blue-noise'
+							? { algorithm: 'blue-noise' }
+							: { algorithm: 'random', seed: dither.seed >>> 0 },
 					space: vector ? WORKING_SPACE[settings.colorSpace] : 'srgb',
 					strength: strength * (vector ? 1 : BYTE_FIELD_STRENGTH_RATIO),
 					placement
@@ -153,6 +203,22 @@ function packageDither(settings: ProcessingSettings): RecipeV1['dither'] {
 			};
 		}
 	}
+}
+
+function packagePalette(palette: EnabledPaletteColor[]): PaletteEntry[] {
+	return palette.map((color) => {
+		if (color.kind === 'transparent') return { kind: 'transparent' };
+		if (!color.rgb) throw new Error(`Palette colour ${color.name} needs RGB.`);
+		return { kind: 'color', rgb: [color.rgb.r, color.rgb.g, color.rgb.b] };
+	});
+}
+
+/** The palette and working space a recolour step fits, matching what `process` gives it. */
+export function packageEffectContext(
+	palette: EnabledPaletteColor[],
+	colorSpace: ColorSpaceId
+): Required<EffectContext> {
+	return { palette: packagePalette(palette), space: WORKING_SPACE[colorSpace] };
 }
 
 /** Always recipe v2: besides effects, it resizes colour weighted by coverage, so transparency never bleeds. */
@@ -182,13 +248,13 @@ export function packageProcessRequest(
 	return {
 		request: {
 			source: croppedSource(source, settings.output.crop),
-			palette: palette.map((color) => {
-				if (color.kind === 'transparent') return { kind: 'transparent' };
-				if (!color.rgb) throw new Error(`Palette color ${color.name} needs RGB.`);
-				return { kind: 'color', rgb: [color.rgb.r, color.rgb.g, color.rgb.b] };
-			}),
+			palette: packagePalette(palette),
 			recipe: packageRecipe(settings, {
-				output: { width: size.width, height: size.height, resize: RESIZE[settings.output.resize] },
+				output: {
+					width: size.width,
+					height: size.height,
+					resize: packageResize(settings.output.resize, settings.output.anchor ?? 'center')
+				},
 				alpha,
 				match: MATCHING[settings.colorSpace],
 				dither: packageDither(settings)
@@ -238,12 +304,12 @@ function resolveMatteRgb(
 	if (matteRgb) {
 		return {
 			matte: nearestVisibleColor(matteRgb, visible).rgb!,
-			warning: 'Matte color is disabled; using the nearest enabled visible color for alpha matte.'
+			warning: 'Matte colour is disabled; using the nearest enabled visible colour for alpha matte.'
 		};
 	}
 	return {
 		matte: visible[0]!.rgb!,
-		warning: 'Matte color is unavailable; using the first enabled visible color for alpha matte.'
+		warning: 'Matte colour is unavailable; using the first enabled visible colour for alpha matte.'
 	};
 }
 

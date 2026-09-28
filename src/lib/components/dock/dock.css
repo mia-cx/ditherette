@@ -64,3 +64,8 @@
 .dockview-theme-ditherette .dv-groupview.dv-active-group .dv-tab.dv-active-tab {
 	box-shadow: inset 0 2px 0 var(--primary);
 }
+
+/* A side column collapses to a vertical strip; keep its expand button at the top, where collapse was. */
+.dockview-theme-ditherette .dv-groupview-header-vertical > .dv-right-actions-container {
+	order: -1;
+}

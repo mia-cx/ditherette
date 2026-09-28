@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { effectLayers } from '$lib/stores/effects';
 import Studio from './Studio.svelte';
 import { studioLayout } from './workspace';
+import { collapsedGroups } from '$lib/components/dock/dock';
 
 const props = { onChooseImage: () => {}, onSelectFile: () => {} };
 /** Dockview hides windows in a zero-size container, so give the studio a desktop-sized box. */
@@ -20,6 +21,7 @@ beforeEach(async () => {
 	await page.viewport(1440, 900);
 	effectLayers.set([]);
 	studioLayout.set(null);
+	collapsedGroups.set({});
 });
 
 /** Add through the keyboard, which the menu supports alongside the pointer. */
@@ -62,4 +64,43 @@ it('replaces a saved layout that no longer loads with the default', async () => 
 	await renderStudio();
 	await expect.poll(tabTitles).toEqual(expect.arrayContaining(['Preview', 'Effects', 'Palette']));
 	expect(JSON.stringify(studioLayout.get())).toContain('"preview"');
+});
+
+it('collapses a window to its tab bar and expands it to its previous size', async () => {
+	await renderStudio();
+	const group = () =>
+		[...document.querySelectorAll<HTMLElement>('.dv-groupview')].find((element) =>
+			element.querySelector('.dv-tab')?.textContent?.includes('Dimensions')
+		)!;
+	const height = group().offsetHeight;
+	const press = async (name: string) => {
+		group().querySelector<HTMLElement>(`[aria-label="${name}"]`)!.focus();
+		await userEvent.keyboard('{Enter}');
+	};
+	await press('Collapse window');
+	await expect.poll(() => group().offsetHeight).toBeLessThan(40);
+	expect(Object.keys(collapsedGroups.get())).toHaveLength(1);
+	await press('Expand window');
+	await expect.poll(() => group().offsetHeight).toBe(height);
+	expect(collapsedGroups.get()).toEqual({});
+});
+
+it('folds a whole sidebar into a strip and opens it at its previous width', async () => {
+	await renderStudio();
+	const group = () =>
+		[...document.querySelectorAll<HTMLElement>('.dv-groupview')].find((element) =>
+			element.querySelector('.dv-tab')?.textContent?.includes('Dimensions')
+		)!;
+	const width = group().offsetWidth;
+	const press = async (name: string) => {
+		group().querySelector<HTMLElement>(`[aria-label="${name}"]`)!.focus();
+		await userEvent.keyboard('{Enter}');
+	};
+	await press('Collapse sidebar');
+	await expect.poll(() => group().offsetWidth).toBeLessThan(40);
+	// Dimensions and Palette share the left column, so both fold.
+	expect(Object.keys(collapsedGroups.get())).toHaveLength(2);
+	await press('Expand sidebar');
+	await expect.poll(() => group().offsetWidth).toBe(width);
+	expect(collapsedGroups.get()).toEqual({});
 });

@@ -1,7 +1,48 @@
-import type { Effect } from 'ditherette';
+import type { CurvesEffect, Effect, ModelCurvesEffect } from 'ditherette';
 
-export type EffectKind = Effect['effect'];
-export type EffectOf<K extends EffectKind> = Extract<Effect, { effect: K }>;
+export type CurveChannel = 'red' | 'green' | 'blue';
+export type CurvePoints = CurvesEffect['points'];
+
+/** A curves layer keeps one curve per channel. Processing splits it into package curves steps. */
+export type ChannelCurves = {
+	readonly effect: 'curves';
+	readonly enabled: boolean;
+	readonly curves: { readonly [C in CurveChannel]: CurvePoints };
+};
+
+/**
+ * What a layer stores: a package step, except that curves keep a curve per channel. Colour-model
+ * curves have no editor yet, so layers don't hold them.
+ */
+export type LayerStep = Exclude<Effect, CurvesEffect | ModelCurvesEffect> | ChannelCurves;
+export type EffectKind = LayerStep['effect'];
+export type EffectOf<K extends EffectKind> = Extract<LayerStep, { effect: K }>;
+
+export const CURVE_CHANNELS = ['red', 'green', 'blue'] as const satisfies readonly CurveChannel[];
+const STRAIGHT: CurvePoints = [
+	[0, 0],
+	[1, 1]
+];
+
+export const samePoints = (left: CurvePoints, right: CurvePoints) =>
+	left.length === right.length &&
+	left.every(([x, y], index) => x === right[index]![0] && y === right[index]![1]);
+
+/** The package steps a layer runs: one `rgb` curve when all three match, otherwise one per channel. */
+export function packageSteps(step: LayerStep): Effect[] {
+	if (step.effect !== 'curves') return [step];
+	const { red, green, blue } = step.curves;
+	if (samePoints(red, green) && samePoints(red, blue))
+		return [{ effect: 'curves', enabled: step.enabled, channel: 'rgb', points: red }];
+	return CURVE_CHANNELS.filter((channel) => !samePoints(step.curves[channel], STRAIGHT)).map(
+		(channel) => ({
+			effect: 'curves',
+			enabled: step.enabled,
+			channel,
+			points: step.curves[channel]
+		})
+	);
+}
 
 type CatalogEntry<K extends EffectKind> = {
 	/** Name shown in menus and given to new instances. */
@@ -28,11 +69,7 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 		create: () => ({
 			effect: 'curves',
 			enabled: true,
-			channel: 'rgb',
-			points: [
-				[0, 0],
-				[1, 1]
-			]
+			curves: { red: STRAIGHT, green: STRAIGHT, blue: STRAIGHT }
 		})
 	},
 	'brightness-contrast': {
