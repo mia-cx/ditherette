@@ -27,6 +27,7 @@
 	} from '$lib/stores/app';
 	import { effectLayers } from '$lib/stores/effects';
 	import PipelinePanel from './components/effects/PipelinePanel.svelte';
+	import ScopesPanel from './components/scopes/ScopesPanel.svelte';
 	import Studio from './components/studio/Studio.svelte';
 	import { startAutoProcessing } from '$lib/processing/client';
 	import { startSourceEffects } from '$lib/processing/source-effects';
@@ -218,6 +219,17 @@
 				<AccordionContent>
 					<div class="p-4">
 						<ColorSpacePanel hideHeading />
+					</div>
+				</AccordionContent>
+			</AccordionItem>
+
+			<AccordionItem value="scopes">
+				<AccordionTrigger class="px-4">
+					<span class="text-sm">Scopes</span>
+				</AccordionTrigger>
+				<AccordionContent>
+					<div class="h-[28rem]">
+						<ScopesPanel />
 					</div>
 				</AccordionContent>
 			</AccordionItem>

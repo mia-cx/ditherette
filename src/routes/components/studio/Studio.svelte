@@ -11,6 +11,7 @@
 	import PalettePanel from '../PalettePanel.svelte';
 	import EffectControls from '../effects/EffectControls.svelte';
 	import PipelinePanel from '../effects/PipelinePanel.svelte';
+	import ScopesPanel from '../scopes/ScopesPanel.svelte';
 	import {
 		EFFECT_COMPONENT,
 		openEffectWindow,
@@ -41,6 +42,7 @@
 		dither,
 		'color-space': colorSpace,
 		palette,
+		scopes,
 		[EFFECT_COMPONENT]: effect
 	}}
 	{empty}
@@ -69,6 +71,10 @@
 
 {#snippet palette()}
 	<div class="flex h-full min-h-0 flex-col p-3"><PalettePanel fillHeight hideHeading /></div>
+{/snippet}
+
+{#snippet scopes()}
+	<ScopesPanel />
 {/snippet}
 
 {#snippet effect(params: Readonly<Record<string, string>>)}
