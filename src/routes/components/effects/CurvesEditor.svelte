@@ -1,242 +1,215 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import { Label } from '$lib/components/ui/label';
 	import {
-		CURVE_CHANNELS,
+		Select,
+		SelectContent,
+		SelectItem,
+		SelectSeparator,
+		SelectTrigger
+	} from '$lib/components/ui/select';
+	import type { ColourChannel } from 'ditherette';
+	import {
+		CURVE_MODELS,
+		FLAT,
+		STRAIGHT,
+		XY_CHANNELS,
 		samePoints,
-		type ChannelCurves,
-		type CurveChannel,
-		type CurvePoints
+		type ChannelName,
+		type CurveModel,
+		type CurvePoints,
+		type CurvesLayer
 	} from '$lib/effects/catalog';
-	import { MAX_CURVE_POINTS, evaluateCurve, type CurvePoint } from '$lib/effects/spline';
-	import { tonePath } from '$lib/effects/tone';
-	import ToneGrid from './ToneGrid.svelte';
+	import { hueAxis } from '$lib/effects/tone';
+	import CurveGraph from './CurveGraph.svelte';
 
-	type Props = { id: string; step: ChannelCurves; onchange: (step: ChannelCurves) => void };
+	type Props = { id: string; step: CurvesLayer; onchange: (step: CurvesLayer) => void };
 	let { id, step, onchange }: Props = $props();
 
-	/** Points sit on the byte grid, so neighbours stay well above the package's 0.001 x gap. */
-	const BYTE = 255;
-	const LARGE_STEP = 16;
-	const SIZE = 256;
-	const SAMPLES = 128;
-	const HIT_RADIUS_PX = 10;
-	const CHANNEL = {
-		red: {
-			label: 'Red',
-			stroke: 'text-red-500',
-			check: 'data-checked:border-red-500 data-checked:bg-red-500'
-		},
+	type Channel = 0 | 1 | 2;
+	const CHANNELS: readonly Channel[] = [0, 1, 2];
+	const XY = 'xy';
+
+	/** Each channel's colour, as a stroke and as its checkbox fill. */
+	const TONE: Record<ChannelName, { stroke: string; check: string }> = {
+		red: { stroke: 'text-red-500', check: 'data-checked:border-red-500 data-checked:bg-red-500' },
 		green: {
-			label: 'Green',
 			stroke: 'text-green-500',
 			check: 'data-checked:border-green-500 data-checked:bg-green-500'
 		},
 		blue: {
-			label: 'Blue',
 			stroke: 'text-blue-500',
 			check: 'data-checked:border-blue-500 data-checked:bg-blue-500'
-		}
-	} as const satisfies Record<CurveChannel, { label: string; stroke: string; check: string }>;
+		},
+		hue: {
+			stroke: 'text-amber-500',
+			check: 'data-checked:border-amber-500 data-checked:bg-amber-500'
+		},
+		saturation: {
+			stroke: 'text-fuchsia-500',
+			check: 'data-checked:border-fuchsia-500 data-checked:bg-fuchsia-500'
+		},
+		chroma: {
+			stroke: 'text-fuchsia-500',
+			check: 'data-checked:border-fuchsia-500 data-checked:bg-fuchsia-500'
+		},
+		lightness: { stroke: 'text-foreground', check: '' },
+		value: { stroke: 'text-foreground', check: '' },
+		luma: { stroke: 'text-foreground', check: '' },
+		a: {
+			stroke: 'text-emerald-500',
+			check: 'data-checked:border-emerald-500 data-checked:bg-emerald-500'
+		},
+		b: { stroke: 'text-sky-500', check: 'data-checked:border-sky-500 data-checked:bg-sky-500' },
+		cb: { stroke: 'text-sky-500', check: 'data-checked:border-sky-500 data-checked:bg-sky-500' },
+		cr: { stroke: 'text-rose-500', check: 'data-checked:border-rose-500 data-checked:bg-rose-500' }
+	};
 
-	let svg = $state<SVGSVGElement>();
-	let selected = $state(0);
-	let dragging = $state<number>();
-	/** Checked channels. Edits start from the first one's curve and write to all of them. */
-	let editing = $state<CurveChannel[]>([...CURVE_CHANNELS]);
-
-	const points = $derived(step.curves[editing[0]!]);
-	const current = $derived(points[Math.min(selected, points.length - 1)]!);
-	const stroke = $derived(editing.length === 1 ? CHANNEL[editing[0]!].stroke : 'text-foreground');
-	/** Channels whose curve differs from the edited one, drawn thin behind it. */
-	const others = $derived(
-		CURVE_CHANNELS.filter((channel) => !samePoints(step.curves[channel], points))
-	);
-	const curvePath = (curve: CurvePoints) => tonePath((x) => evaluateCurve(curve, x), SIZE, SAMPLES);
-
-	function setEditing(channel: CurveChannel, checked: boolean) {
-		editing = CURVE_CHANNELS.filter((other) =>
-			other === channel ? checked : editing.includes(other)
+	const modelOf = (model: CurveModel) => CURVE_MODELS.find((candidate) => candidate.id === model)!;
+	/** RGB edits all three channels together at first; other models start on their lightness. */
+	function defaultEditing(model: CurveModel): Channel[] {
+		if (model === 'srgb' || model === 'linear-rgb') return [...CHANNELS];
+		const { channels } = modelOf(model);
+		return CHANNELS.filter((channel) =>
+			['lightness', 'value', 'luma'].includes(channels[channel].name)
 		);
 	}
 
-	function write(next: CurvePoints) {
-		const curves: Record<CurveChannel, CurvePoints> = { ...step.curves };
-		for (const channel of editing) curves[channel] = next;
-		onchange({ ...step, curves });
+	/** Checked channels. Edits start from the first one's curve and write to all of them. */
+	// svelte-ignore state_referenced_locally
+	let editing = $state<Channel[]>(defaultEditing(step.model === XY ? 'srgb' : step.model));
+
+	const modelLabel = $derived(step.model === XY ? 'Arbitrary XY' : modelOf(step.model).label);
+
+	/** Hue versus saturation, the classic targeted adjustment, until someone picks other channels. */
+	const DEFAULT_XY = {
+		x: { model: 'hsl', channel: 'hue' },
+		y: { model: 'hsl', channel: 'saturation' }
+	} as const satisfies Record<'x' | 'y', ColourChannel>;
+	const channelKey = ({ model, channel }: ColourChannel) => `${model}:${channel}`;
+	const channelLabel = (channel: ColourChannel) =>
+		XY_CHANNELS.find((option) => channelKey(option.channel) === channelKey(channel))!.label;
+
+	/**
+	 * A hue x axis wraps, so its curve starts at 0 and ends at 1 with the same y. Points in between
+	 * keep their places.
+	 */
+	function wrapAtSeam(points: CurvePoints): CurvePoints {
+		const seam = points[0]![1];
+		return [[0, seam], ...points.filter(([x]) => x > 0 && x < 1), [1, seam]];
 	}
 
-	const toByte = (value: number) => Math.round(value * BYTE);
-	const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-	/** Move one point on the byte grid, keeping it strictly between its neighbours. */
-	function place(index: number, xByte: number, yByte: number) {
-		if (!Number.isFinite(xByte) || !Number.isFinite(yByte)) return;
-		const min = index > 0 ? toByte(points[index - 1]![0]) + 1 : 0;
-		const max = index < points.length - 1 ? toByte(points[index + 1]![0]) - 1 : BYTE;
-		const next = points.slice();
-		next[index] = [
-			clamp(Math.round(xByte), min, max) / BYTE,
-			clamp(Math.round(yByte), 0, BYTE) / BYTE
-		];
-		write(next);
-	}
-
-	function remove(index: number) {
-		if (points.length <= 2) return;
-		write(points.filter((_, other) => other !== index));
-		selected = Math.max(0, index - 1);
-	}
-
-	function pointerBytes(event: PointerEvent) {
-		const box = svg!.getBoundingClientRect();
-		return {
-			x: clamp((event.clientX - box.left) / box.width, 0, 1) * BYTE,
-			y: clamp(1 - (event.clientY - box.top) / box.height, 0, 1) * BYTE,
-			pixelsPerByte: box.width / BYTE
-		};
-	}
-
-	/** Grab the nearest point, or add one on the curve's grid and drag it. */
-	function press(event: PointerEvent) {
-		if (event.button !== 0) return;
-		const { x, y, pixelsPerByte } = pointerBytes(event);
-		const distances = points.map(([px, py]) => Math.hypot(px * BYTE - x, py * BYTE - y));
-		const nearest = distances.indexOf(Math.min(...distances));
-		let index = nearest;
-		if (distances[nearest]! * pixelsPerByte > HIT_RADIUS_PX) {
-			const xByte = Math.round(x);
-			const taken = points.some(([px]) => Math.abs(toByte(px) - xByte) < 1);
-			if (points.length >= MAX_CURVE_POINTS || taken) return;
-			index = points.findIndex(([px]) => toByte(px) > xByte);
-			if (index < 0) index = points.length;
-			const next: CurvePoint[] = points.slice();
-			next.splice(index, 0, [xByte / BYTE, Math.round(y) / BYTE]);
-			write(next);
+	/** Switching models starts over: a curve drawn for one model's channels means something else in another. */
+	function setModel(model: string) {
+		if (model === step.model) return;
+		if (model === XY) {
+			onchange({ effect: 'curves', enabled: step.enabled, model: XY, ...DEFAULT_XY, points: FLAT });
+			return;
 		}
-		selected = index;
-		dragging = index;
-		svg!.setPointerCapture(event.pointerId);
-		svg!.querySelector<SVGElement>(`[data-point="${index}"]`)?.focus();
+		const next = CURVE_MODELS.find((candidate) => candidate.id === model);
+		if (!next) return;
+		editing = defaultEditing(next.id);
+		onchange({
+			effect: 'curves',
+			enabled: step.enabled,
+			model: next.id,
+			curves: [STRAIGHT, STRAIGHT, STRAIGHT]
+		});
 	}
 
-	function drag(event: PointerEvent) {
-		if (dragging === undefined) return;
-		const { x, y } = pointerBytes(event);
-		place(dragging, x, y);
+	function setAxis(axis: 'x' | 'y', key: string) {
+		if (step.model !== XY) return;
+		const option = XY_CHANNELS.find(({ channel }) => channelKey(channel) === key);
+		if (!option) return;
+		const points =
+			axis === 'x' && option.channel.channel === 'hue' ? wrapAtSeam(step.points) : step.points;
+		onchange({ ...step, [axis]: option.channel, points });
 	}
 
-	function keydown(event: KeyboardEvent, index: number) {
-		const distance = event.shiftKey ? LARGE_STEP : 1;
-		const [x, y] = [toByte(points[index]![0]), toByte(points[index]![1])];
-		const moves: Record<string, [number, number]> = {
-			ArrowLeft: [-distance, 0],
-			ArrowRight: [distance, 0],
-			ArrowUp: [0, distance],
-			ArrowDown: [0, -distance]
-		};
-		if (event.key in moves) {
-			const [dx, dy] = moves[event.key]!;
-			place(index, x + dx, y + dy);
-		} else if (event.key === 'Delete' || event.key === 'Backspace') remove(index);
-		else return;
-		event.preventDefault();
+	function setEditing(channel: Channel, checked: boolean) {
+		editing = CHANNELS.filter((other) => (other === channel ? checked : editing.includes(other)));
 	}
 </script>
 
 <div class="grid grid-cols-1 gap-3">
-	<div class="flex items-center gap-4" role="group" aria-label="Channels to edit">
-		{#each CURVE_CHANNELS as channel (channel)}
-			<div class="flex items-center gap-2">
-				<Checkbox
-					id="{id}-{channel}"
-					class={CHANNEL[channel].check}
-					bind:checked={() => editing.includes(channel), (checked) => setEditing(channel, checked)}
-					disabled={editing.length === 1 && editing[0] === channel}
-				/>
-				<Label for="{id}-{channel}" class="text-xs">{CHANNEL[channel].label}</Label>
+	<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+		<Label for="{id}-model" class="text-xs text-muted-foreground">Model</Label>
+		<Select type="single" value={step.model} onValueChange={setModel}>
+			<SelectTrigger id="{id}-model" class="w-full">{modelLabel}</SelectTrigger>
+			<SelectContent>
+				{#each CURVE_MODELS as model (model.id)}
+					<SelectItem value={model.id}>{model.label}</SelectItem>
+				{/each}
+				<SelectSeparator />
+				<SelectItem value={XY}>Arbitrary XY</SelectItem>
+			</SelectContent>
+		</Select>
+	</div>
+
+	{#if step.model === XY}
+		{@const hue = step.x.channel === 'hue' ? step.x.model : undefined}
+		{#each [{ axis: 'x', label: 'X reads', channel: step.x }, { axis: 'y', label: 'Y adjusts', channel: step.y }] as const as { axis, label, channel } (axis)}
+			<div class="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-2">
+				<Label for="{id}-{axis}" class="text-xs text-muted-foreground">{label}</Label>
+				<Select
+					type="single"
+					value={channelKey(channel)}
+					onValueChange={(key) => setAxis(axis, key)}
+				>
+					<SelectTrigger id="{id}-{axis}" class="w-full">{channelLabel(channel)}</SelectTrigger>
+					<SelectContent class="max-h-80">
+						{#each XY_CHANNELS as option (channelKey(option.channel))}
+							<SelectItem value={channelKey(option.channel)}>{option.label}</SelectItem>
+						{/each}
+					</SelectContent>
+				</Select>
 			</div>
 		{/each}
-	</div>
-
-	<svg
-		bind:this={svg}
-		viewBox="0 0 {SIZE} {SIZE}"
-		class="aspect-square w-full touch-none border border-border bg-muted/30 select-none"
-		role="group"
-		aria-label="Curve. Click to add a point, and drag points to reshape it."
-		onpointerdown={press}
-		onpointermove={drag}
-		onpointerup={() => (dragging = undefined)}
-		onpointercancel={() => (dragging = undefined)}
-	>
-		<ToneGrid size={SIZE} />
-		{#each others as channel (channel)}
-			<path
-				d={curvePath(step.curves[channel])}
-				fill="none"
-				stroke="currentColor"
-				stroke-width="1.5"
-				class="{CHANNEL[channel].stroke} opacity-70"
-			/>
-		{/each}
-		<path d={curvePath(points)} fill="none" stroke="currentColor" stroke-width="2" class={stroke} />
-		{#each points as [x, y], index (index)}
-			<rect
-				data-point={index}
-				x={x * SIZE - 5}
-				y={(1 - y) * SIZE - 5}
-				width="10"
-				height="10"
-				tabindex="0"
-				role="button"
-				aria-label="Point {index + 1}: input {toByte(x)}, output {toByte(y)}"
-				aria-pressed={index === selected}
-				class="cursor-grab stroke-foreground outline-none focus-visible:stroke-primary {index ===
-				selected
-					? 'fill-primary'
-					: 'fill-background'}"
-				stroke-width="1.5"
-				onfocus={() => (selected = index)}
-				onkeydown={(event) => keydown(event, index)}
-				ondblclick={() => remove(index)}
-			/>
-		{/each}
-	</svg>
-
-	<div class="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
-		<div class="grid gap-1">
-			<Label for="{id}-point-input" class="text-xs text-muted-foreground">Input</Label>
-			<input
-				id="{id}-point-input"
-				class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-				type="number"
-				min="0"
-				max={BYTE}
-				step="1"
-				value={toByte(current[0])}
-				onchange={(event) => place(selected, Number(event.currentTarget.value), toByte(current[1]))}
-			/>
-		</div>
-		<div class="grid gap-1">
-			<Label for="{id}-point-output" class="text-xs text-muted-foreground">Output</Label>
-			<input
-				id="{id}-point-output"
-				class="h-8 w-full border border-input bg-background px-2 text-right font-mono text-xs tabular-nums"
-				type="number"
-				min="0"
-				max={BYTE}
-				step="1"
-				value={toByte(current[1])}
-				onchange={(event) => place(selected, toByte(current[0]), Number(event.currentTarget.value))}
-			/>
-		</div>
-		<Button
-			variant="outline"
-			size="sm"
-			disabled={points.length <= 2}
-			onclick={() => remove(selected)}>Remove point</Button
+		<CurveGraph
+			{id}
+			points={step.points}
+			stroke={TONE[step.y.channel].stroke}
+			neutral="flat"
+			periodic={hue !== undefined}
+			spectrum={hue ? hueAxis(hue) : undefined}
+			axes={{ x: channelLabel(step.x), y: 'Adjustment' }}
+			onchange={(points: CurvePoints) => onchange({ ...step, points })}
+		/>
+	{:else}
+		{@const channels = modelOf(step.model).channels}
+		{@const curves = step.curves}
+		{@const points = curves[editing[0]!]}
+		<div
+			class="flex flex-wrap items-center gap-x-4 gap-y-2"
+			role="group"
+			aria-label="Channels to edit"
 		>
-	</div>
+			{#each CHANNELS as channel (channel)}
+				<div class="flex items-center gap-2">
+					<Checkbox
+						id="{id}-{channel}"
+						class={TONE[channels[channel].name].check}
+						bind:checked={
+							() => editing.includes(channel), (checked) => setEditing(channel, checked)
+						}
+						disabled={editing.length === 1 && editing[0] === channel}
+					/>
+					<Label for="{id}-{channel}" class="text-xs">{channels[channel].label}</Label>
+				</div>
+			{/each}
+		</div>
+		<CurveGraph
+			{id}
+			{points}
+			stroke={editing.length === 1 ? TONE[channels[editing[0]!].name].stroke : 'text-foreground'}
+			behind={CHANNELS.filter((channel) => !samePoints(curves[channel], points)).map((channel) => ({
+				points: curves[channel],
+				stroke: TONE[channels[channel].name].stroke
+			}))}
+			onchange={(next: CurvePoints) => {
+				const pick = (channel: Channel) => (editing.includes(channel) ? next : curves[channel]);
+				onchange({ ...step, curves: [pick(0), pick(1), pick(2)] });
+			}}
+		/>
+	{/if}
 </div>

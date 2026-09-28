@@ -1,49 +1,150 @@
-import type { ChannelCurveEffect, CurvesEffect, Effect, ModelCurvesEffect } from 'ditherette';
+import type {
+	ChannelCurveEffect,
+	ColourChannel,
+	CurvesEffect,
+	Effect,
+	ModelCurvesEffect,
+	ModelCurvesModel
+} from 'ditherette';
 
-export type CurveChannel = 'red' | 'green' | 'blue';
 export type CurvePoints = CurvesEffect['points'];
-
-/** A curves layer keeps one curve per channel. Processing splits it into package curves steps. */
-export type ChannelCurves = {
-	readonly effect: 'curves';
-	readonly enabled: boolean;
-	readonly curves: { readonly [C in CurveChannel]: CurvePoints };
-};
+/** A model whose three channels each get a curve: encoded RGB, or any `model-curves` model. */
+export type CurveModel = 'srgb' | ModelCurvesModel;
+export type ChannelName = ColourChannel['channel'];
 
 /**
- * What a layer stores: a package step, except that curves keep a curve per channel. Colour-model
- * and channel-to-channel curves have no editor yet, so layers don't hold them.
+ * A curves layer: three curves in a model's channel order, or one arbitrary XY curve where an
+ * input channel adjusts an output channel. Processing turns it into package steps.
  */
+export type CurvesLayer =
+	| {
+			readonly effect: 'curves';
+			readonly enabled: boolean;
+			readonly model: CurveModel;
+			readonly curves: readonly [CurvePoints, CurvePoints, CurvePoints];
+	  }
+	| {
+			readonly effect: 'curves';
+			readonly enabled: boolean;
+			readonly model: 'xy';
+			readonly x: ColourChannel;
+			readonly y: ColourChannel;
+			readonly points: CurvePoints;
+	  };
+
+/** What a layer stores: a package step, except that curves keep a curve per channel. */
 export type LayerStep =
 	| Exclude<Effect, CurvesEffect | ModelCurvesEffect | ChannelCurveEffect>
-	| ChannelCurves;
+	| CurvesLayer;
 export type EffectKind = LayerStep['effect'];
 export type EffectOf<K extends EffectKind> = Extract<LayerStep, { effect: K }>;
 
-export const CURVE_CHANNELS = ['red', 'green', 'blue'] as const satisfies readonly CurveChannel[];
-const STRAIGHT: CurvePoints = [
+type ChannelInfo = { readonly name: ChannelName; readonly label: string };
+type ModelChannels = readonly [ChannelInfo, ChannelInfo, ChannelInfo];
+const channel = (name: ChannelName, label: string): ChannelInfo => ({ name, label });
+const RGB: ModelChannels = [
+	channel('red', 'Red'),
+	channel('green', 'Green'),
+	channel('blue', 'Blue')
+];
+const LAB: ModelChannels = [
+	channel('lightness', 'Lightness'),
+	channel('a', 'a'),
+	channel('b', 'b')
+];
+const LCH: ModelChannels = [
+	channel('lightness', 'Lightness'),
+	channel('chroma', 'Chroma'),
+	channel('hue', 'Hue')
+];
+
+/** Every colour model a curves layer can use, with its channels in canonical order. */
+export const CURVE_MODELS: readonly {
+	readonly id: CurveModel;
+	readonly label: string;
+	readonly channels: ModelChannels;
+}[] = [
+	{ id: 'srgb', label: 'RGB', channels: RGB },
+	{ id: 'linear-rgb', label: 'Linear RGB', channels: RGB },
+	{
+		id: 'hsl',
+		label: 'HSL',
+		channels: [
+			channel('hue', 'Hue'),
+			channel('saturation', 'Saturation'),
+			channel('lightness', 'Lightness')
+		]
+	},
+	{
+		id: 'hsv',
+		label: 'HSV',
+		channels: [
+			channel('hue', 'Hue'),
+			channel('saturation', 'Saturation'),
+			channel('value', 'Value')
+		]
+	},
+	{ id: 'oklab', label: 'OKLab', channels: LAB },
+	{ id: 'oklch', label: 'OKLCH', channels: LCH },
+	{ id: 'cielab', label: 'CIELAB', channels: LAB },
+	{ id: 'cielch', label: 'CIELCh', channels: LCH },
+	{
+		id: 'ycbcr',
+		label: 'YCbCr',
+		channels: [channel('luma', 'Luma'), channel('cb', 'Cb'), channel('cr', 'Cr')]
+	}
+];
+
+/** Every channel an arbitrary XY curve can read or adjust, grouped by model. */
+export const XY_CHANNELS: readonly { readonly label: string; readonly channel: ColourChannel }[] =
+	CURVE_MODELS.flatMap((model) =>
+		model.channels.map(({ name, label }) => ({
+			label: `${model.label} · ${label}`,
+			// Each model lists only its own channels, so every pair is a valid ColourChannel.
+			channel: { model: model.id, channel: name } as ColourChannel
+		}))
+	);
+
+export const STRAIGHT: CurvePoints = [
 	[0, 0],
 	[1, 1]
+];
+/** The neutral arbitrary XY curve: no adjustment anywhere. */
+export const FLAT: CurvePoints = [
+	[0, 0.5],
+	[1, 0.5]
 ];
 
 export const samePoints = (left: CurvePoints, right: CurvePoints) =>
 	left.length === right.length &&
 	left.every(([x, y], index) => x === right[index]![0] && y === right[index]![1]);
 
-/** The package steps a layer runs: one `rgb` curve when all three match, otherwise one per channel. */
+/**
+ * The package steps a layer runs. RGB runs one `rgb` curve when all three match, otherwise one per
+ * changed channel; other models run one `model-curves` step; arbitrary XY one `channel-curve`.
+ */
 export function packageSteps(step: LayerStep): Effect[] {
 	if (step.effect !== 'curves') return [step];
-	const { red, green, blue } = step.curves;
+	const { enabled } = step;
+	if (step.model === 'xy')
+		return [{ effect: 'channel-curve', enabled, x: step.x, y: step.y, points: step.points }];
+	if (step.model !== 'srgb')
+		// Each model's tuple follows that model's channel order, which the package names per model.
+		return [
+			{
+				effect: 'model-curves',
+				enabled,
+				model: step.model,
+				curves: step.curves
+			} as ModelCurvesEffect
+		];
+	const [red, green, blue] = step.curves;
 	if (samePoints(red, green) && samePoints(red, blue))
-		return [{ effect: 'curves', enabled: step.enabled, channel: 'rgb', points: red }];
-	return CURVE_CHANNELS.filter((channel) => !samePoints(step.curves[channel], STRAIGHT)).map(
-		(channel) => ({
-			effect: 'curves',
-			enabled: step.enabled,
-			channel,
-			points: step.curves[channel]
-		})
-	);
+		return [{ effect: 'curves', enabled, channel: 'rgb', points: red }];
+	return (['red', 'green', 'blue'] as const)
+		.map((channel, index) => ({ channel, points: step.curves[index]! }))
+		.filter(({ points }) => !samePoints(points, STRAIGHT))
+		.map(({ channel, points }) => ({ effect: 'curves', enabled, channel, points }));
 }
 
 type CatalogEntry<K extends EffectKind> = {
@@ -71,7 +172,8 @@ export const EFFECTS: { readonly [K in EffectKind]: CatalogEntry<K> } = {
 		create: () => ({
 			effect: 'curves',
 			enabled: true,
-			curves: { red: STRAIGHT, green: STRAIGHT, blue: STRAIGHT }
+			model: 'srgb',
+			curves: [STRAIGHT, STRAIGHT, STRAIGHT]
 		})
 	},
 	'brightness-contrast': {

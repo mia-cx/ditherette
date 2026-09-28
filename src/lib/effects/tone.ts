@@ -64,3 +64,18 @@ export function hueSpectrum({ from = 0, step }: { from?: number; step?: HueSatur
 	}
 	return `linear-gradient(to right, ${stops.join(', ')})`;
 }
+
+const HUE_AXIS_STEP_DEGREES = 30;
+
+/** A CSS gradient of a model's own hue circle, left to right from 0° to 360°, for a hue x axis. */
+export function hueAxis(model: 'hsl' | 'hsv' | 'oklch' | 'cielch') {
+	const colour = (hue: number) =>
+		model === 'oklch'
+			? `oklch(${SPECTRUM_LIGHTNESS} ${SPECTRUM_CHROMA} ${hue})`
+			: model === 'cielch'
+				? `lch(65% 60 ${hue})`
+				: `hsl(${hue} 90% 55%)`;
+	const stops = [];
+	for (let hue = 0; hue <= 360; hue += HUE_AXIS_STEP_DEGREES) stops.push(colour(hue));
+	return `linear-gradient(to right, ${stops.join(', ')})`;
+}

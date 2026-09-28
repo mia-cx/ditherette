@@ -69,3 +69,11 @@
 .dockview-theme-ditherette .dv-groupview-header-vertical > .dv-right-actions-container {
 	order: -1;
 }
+
+/*
+ * Dockview's floating frame redeclares its overlay variable in terms of itself, which leaves it empty,
+ * so the inline z-index fell back to 999 and covered menus opened from inside the window.
+ */
+.dockview-theme-ditherette .dv-resize-container {
+	--dv-overlay-z-index: 20;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateCurve, type CurvePoint } from './spline';
+import { evaluateCurve, evaluatePeriodicCurve, type CurvePoint } from './spline';
 
 describe('evaluateCurve', () => {
 	it('is the identity for the neutral curve', () => {
@@ -30,5 +30,42 @@ describe('evaluateCurve', () => {
 		}
 		expect(evaluateCurve(points, 0)).toBe(0.05);
 		expect(evaluateCurve(points, 1)).toBe(0.95);
+	});
+});
+
+describe('evaluatePeriodicCurve', () => {
+	const bump: CurvePoint[] = [
+		[0, 0.5],
+		[0.3, 0.9],
+		[0.7, 0.2],
+		[1, 0.5]
+	];
+
+	it('passes through every point and wraps x', () => {
+		for (const [x, y] of bump) expect(evaluatePeriodicCurve(bump, x)).toBeCloseTo(y, 12);
+		expect(evaluatePeriodicCurve(bump, 1.3)).toBeCloseTo(0.9, 12);
+		expect(evaluatePeriodicCurve(bump, -0.3)).toBeCloseTo(0.2, 12);
+	});
+
+	it('meets itself smoothly at the seam', () => {
+		const step = 1e-6;
+		const slopeBefore =
+			(evaluatePeriodicCurve(bump, 1 - step) - evaluatePeriodicCurve(bump, 1 - 2 * step)) / step;
+		const slopeAfter =
+			(evaluatePeriodicCurve(bump, 2 * step) - evaluatePeriodicCurve(bump, step)) / step;
+		expect(slopeAfter).toBeCloseTo(slopeBefore, 3);
+	});
+
+	it('stays flat for the neutral curve', () => {
+		for (const x of [0, 0.25, 0.5, 0.99])
+			expect(
+				evaluatePeriodicCurve(
+					[
+						[0, 0.5],
+						[1, 0.5]
+					],
+					x
+				)
+			).toBe(0.5);
 	});
 });
