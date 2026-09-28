@@ -19,7 +19,6 @@
 		type DitherMethod,
 		type DitherOption
 	} from './dither-options';
-	import InlineMath from './InlineMath.svelte';
 	import DitherFilterGroups from './DitherFilterGroups.svelte';
 
 	type Props = { algorithm: DitherId };
@@ -186,9 +185,6 @@
 									<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
 										>{option.short}</span
 									>
-									<span class="rounded-sm border border-border bg-muted/40 px-2 py-1">
-										<InlineMath expression={option.latex} />
-									</span>
 								</span>
 							</span>
 						</span>
