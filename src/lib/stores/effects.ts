@@ -5,6 +5,7 @@ import {
 	EFFECTS,
 	MAX_EFFECT_LAYERS,
 	packageSteps,
+	stepCost,
 	type EffectKind,
 	type LayerStep
 } from '$lib/effects/catalog';
@@ -40,10 +41,16 @@ function isLayer(value: unknown): value is EffectLayer {
 }
 
 /** Keep saved layers the package would accept, so a damaged entry cannot block processing. */
+/** Keep the leading layers that fit the package's step limit. */
+function withinStepLimit(layers: EffectLayer[]) {
+	let left = MAX_EFFECT_LAYERS;
+	return layers.filter((layer) => (left -= stepCost(layer.step.effect)) >= 0);
+}
+
 function decodeLayers(encoded: string): EffectLayer[] {
 	try {
 		const value: unknown = JSON.parse(encoded);
-		return Array.isArray(value) ? value.filter(isLayer).slice(0, MAX_EFFECT_LAYERS) : [];
+		return Array.isArray(value) ? withinStepLimit(value.filter(isLayer)) : [];
 	} catch {
 		return [];
 	}
@@ -53,6 +60,13 @@ export const effectLayers = persistentAtom<EffectLayer[]>('ditherette:effects', 
 	encode: JSON.stringify,
 	decode: decodeLayers
 });
+
+/** Package steps still free under the limit, counting each layer at its most. */
+export const effectStepsLeft = computed(
+	effectLayers,
+	(layers) =>
+		MAX_EFFECT_LAYERS - layers.reduce((total, layer) => total + stepCost(layer.step.effect), 0)
+);
 
 /** The steps processing runs: enabled layers, in pipeline order. */
 export const activeEffectSteps = computed(effectLayers, (layers) =>
@@ -84,8 +98,8 @@ function newLayerId() {
 /** Append a neutral instance of `kind`, named after the effect, and return it. */
 export function addEffect(kind: EffectKind): EffectLayer {
 	const layers = effectLayers.get();
-	if (layers.length >= MAX_EFFECT_LAYERS)
-		throw new Error(`The pipeline holds at most ${MAX_EFFECT_LAYERS} effects.`);
+	if (stepCost(kind) > effectStepsLeft.get())
+		throw new Error(`The pipeline holds at most ${MAX_EFFECT_LAYERS} effect steps.`);
 	const layer: EffectLayer = {
 		id: newLayerId(),
 		name: uniqueName(EFFECTS[kind].label, layers),
