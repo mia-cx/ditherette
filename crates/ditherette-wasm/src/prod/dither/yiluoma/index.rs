@@ -24,7 +24,7 @@ pub(crate) struct MixIndex {
 
 impl MixIndex {
     pub(crate) fn required_bytes(matcher: &PaletteMatcher, levels: u32) -> Option<u64> {
-        let count = matcher.colors.len() as u64;
+        let count = matcher.colors().len() as u64;
         let pairs = count.checked_mul(count.checked_add(1)?)?.checked_div(2)?;
         pairs
             .checked_mul(u64::from(levels).checked_add(1)?)?
@@ -37,7 +37,7 @@ impl MixIndex {
         levels: u32,
         available_bytes: u64,
     ) -> Option<Self> {
-        if matcher.matching != MatchPolicy::OklabEuclidean || matcher.colors.is_empty() {
+        if matcher.matching != MatchPolicy::OklabEuclidean || matcher.colors().is_empty() {
             return None;
         }
         let bytes = Self::required_bytes(matcher, levels)?;
@@ -50,7 +50,7 @@ impl MixIndex {
         if (candidates.capacity() * size_of::<Candidate>()) as u64 > available_bytes {
             return None;
         }
-        if matcher.colors.iter().any(|color| {
+        if matcher.colors().iter().any(|color| {
             color
                 .coordinates
                 .iter()
@@ -58,10 +58,10 @@ impl MixIndex {
         }) {
             return None;
         }
-        for low in 0..matcher.colors.len() {
-            for high in low..matcher.colors.len() {
-                let low_color = matcher.colors[low];
-                let high_color = matcher.colors[high];
+        for low in 0..matcher.colors().len() {
+            for high in low..matcher.colors().len() {
+                let low_color = matcher.colors()[low];
+                let high_color = matcher.colors()[high];
                 for high_count in 0..=levels {
                     let high_ratio = high_count as f32 / levels as f32;
                     let low_ratio = 1.0 - high_ratio;
@@ -94,7 +94,7 @@ impl MixIndex {
         if !color.iter().all(|coordinate| coordinate.is_finite()) {
             return best_matched_mix(color, matcher, self.levels);
         }
-        let first = matcher.colors[0];
+        let first = matcher.colors()[0];
         let mut best = Candidate {
             coordinates: first.coordinates,
             mix: PaletteMix {
