@@ -24,6 +24,8 @@ The Effects list reads top to bottom in run order: effects run on the source, th
 - **Color.** Zinc neutrals with the yellow primary (`--primary`). The primary marks the active window's tab, sash hover, drop targets, and enabled toggles.
 - **Dock theme.** `src/lib/components/dock/dock.css` maps every Dockview variable to an app token, so light and dark themes follow the app's `.dark` class. Floating windows sit at z-index 20, under menus and popovers (z-50).
 - **Editors.** Sliders pair with a number field; the field shows the stored value after clamping. Levels reads in 0–255 byte units. Percent fields show -100–100% for arguments stored as -1–1. The curve editor snaps points to the 0–255 grid and draws the same monotone spline the Wasm effect applies.
+- **Visuals.** Levels, Brightness and contrast, and Exposure plot their tone response over the dashed identity line. Hue and saturation shows the hue circle before and after the step. Hue, saturation, lightness, temperature, and tint sliders draw what they do as their track.
+- **Curves.** Each Curves instance keeps a curve per channel. The Red, Green, and Blue checkboxes, all checked by default, pick which channels an edit writes to; the edit starts from the first checked channel's curve. Channels whose curve differs are drawn thin in their colour behind it. Matching curves run as one RGB step.
 
 ## Accessibility
 

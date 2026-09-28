@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EFFECTS } from '$lib/effects/catalog';
+import { EFFECTS, type CurvePoints } from '$lib/effects/catalog';
 import {
 	activeEffectSteps,
 	addEffect,
@@ -55,6 +55,25 @@ describe('effect layers', () => {
 		} finally {
 			Object.defineProperty(crypto, 'randomUUID', { value: randomUUID, configurable: true });
 		}
+	});
+
+	it('runs matching channel curves as one rgb step and differing ones per channel', () => {
+		const curves = addEffect('curves');
+		if (curves.step.effect !== 'curves') throw new Error('Expected curves.');
+		const lift: CurvePoints = [
+			[0, 0.1],
+			[1, 1]
+		];
+		const step = curves.step;
+		updateEffect(curves.id, { ...step, curves: { red: lift, green: lift, blue: lift } });
+		expect(activeEffectSteps.get()).toEqual([
+			{ effect: 'curves', enabled: true, channel: 'rgb', points: lift }
+		]);
+
+		updateEffect(curves.id, { ...step, curves: { ...step.curves, red: lift } });
+		expect(activeEffectSteps.get()).toEqual([
+			{ effect: 'curves', enabled: true, channel: 'red', points: lift }
+		]);
 	});
 
 	it('never changes a layer into another effect', () => {
