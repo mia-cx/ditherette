@@ -625,7 +625,7 @@
 		<DialogHeader>
 			<DialogTitle>Delete colour?</DialogTitle>
 			<DialogDescription>
-				This removes the custom color from {currentPalette.name}. Built-in Wplace colors remain
+				This removes the custom colour from {currentPalette.name}. Built-in Wplace colours remain
 				immutable.
 			</DialogDescription>
 		</DialogHeader>
@@ -642,7 +642,7 @@
 			<DialogTitle>Replace custom palettes?</DialogTitle>
 			<DialogDescription>
 				Importing this file will replace existing custom palettes with matching names. Enabled state
-				is preserved by matching colors where possible.
+				is preserved by matching colours where possible.
 			</DialogDescription>
 		</DialogHeader>
 		<ul class="grid gap-2 py-2 text-sm">
@@ -650,7 +650,7 @@
 				<li class="rounded border border-border bg-muted/40 px-3 py-2">
 					<span class="font-medium">{item.name}</span>
 					<span class="text-muted-foreground">
-						— {item.existingCount} existing colors → {item.importedCount} imported colors
+						— {item.existingCount} existing colours → {item.importedCount} imported colours
 					</span>
 				</li>
 			{/each}
