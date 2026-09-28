@@ -1,0 +1,938 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Ticket: "Choose the two-input curve representation and interpolation" (#293).
+  Open by double-clicking. The <script id="model"> block is pure and liftable; the rest is page.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Prototype: two-input curves</title>
+		<style>
+			:root {
+				--bg: #111214;
+				--panel: #1a1b1e;
+				--line: #2a2c30;
+				--text: #e8e8ea;
+				--muted: #9a9ca3;
+				--accent: #f5b50a;
+				font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+				color: var(--text);
+				background: var(--bg);
+			}
+			body {
+				margin: 0;
+				padding: 28px 32px 64px;
+				max-width: 1280px;
+			}
+			h1 {
+				font-size: 20px;
+				margin: 0 0 6px;
+			}
+			h2 {
+				font-size: 13px;
+				text-transform: uppercase;
+				letter-spacing: 0.06em;
+				color: var(--muted);
+				margin: 0 0 10px;
+				font-weight: 600;
+			}
+			p {
+				margin: 0 0 10px;
+				color: var(--muted);
+				max-width: 78ch;
+			}
+			.intro {
+				margin-bottom: 22px;
+			}
+			.tabs {
+				display: flex;
+				gap: 6px;
+				margin-bottom: 14px;
+				flex-wrap: wrap;
+			}
+			button {
+				font: inherit;
+				color: var(--text);
+				background: var(--panel);
+				border: 1px solid var(--line);
+				border-radius: 6px;
+				padding: 6px 12px;
+				cursor: pointer;
+			}
+			button:hover {
+				border-color: #44474d;
+			}
+			button[aria-pressed='true'] {
+				border-color: var(--accent);
+				color: var(--accent);
+			}
+			button.step[disabled] {
+				opacity: 0.4;
+				cursor: default;
+			}
+			button.step.done {
+				border-color: #3a6b45;
+				color: #8fd19e;
+			}
+			.layout {
+				display: grid;
+				grid-template-columns: minmax(0, 1fr) 300px;
+				gap: 20px;
+			}
+			.card {
+				background: var(--panel);
+				border: 1px solid var(--line);
+				border-radius: 10px;
+				padding: 16px;
+				margin-bottom: 16px;
+			}
+			canvas {
+				display: block;
+				border-radius: 6px;
+				touch-action: none;
+			}
+			.editor canvas {
+				cursor: crosshair;
+			}
+			.row {
+				display: flex;
+				gap: 16px;
+				flex-wrap: wrap;
+				align-items: flex-start;
+			}
+			.caption {
+				font-size: 12px;
+				color: var(--muted);
+				margin-top: 6px;
+			}
+			dl {
+				display: grid;
+				grid-template-columns: auto 1fr;
+				gap: 6px 12px;
+				margin: 0;
+			}
+			dt {
+				color: var(--muted);
+			}
+			dd {
+				margin: 0;
+				font-variant-numeric: tabular-nums;
+			}
+			.changed {
+				color: var(--accent);
+			}
+			label.slider {
+				display: grid;
+				grid-template-columns: 70px 1fr 42px;
+				gap: 8px;
+				align-items: center;
+				margin-top: 8px;
+				color: var(--muted);
+			}
+			input[type='range'] {
+				accent-color: var(--accent);
+			}
+			.steps {
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+				align-items: flex-start;
+				margin-top: 10px;
+			}
+			.hint {
+				font-size: 12px;
+				color: var(--muted);
+			}
+			.hidden {
+				display: none !important;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="intro">
+			<h1>Two-input curves: which shape should we store?</h1>
+			<p>
+				A two-input curve reads two things from each pixel and decides one change. Here it reads
+				<strong>hue</strong> (left to right) and <strong>lightness</strong> (bottom to top) and
+				decides how much to boost or cut <strong>saturation</strong>. Grey in the map means no change,
+				orange means more saturation, and blue means less.
+			</p>
+			<p>
+				Three ways to store that map are on the table. Try each one, run the walkthroughs, and see
+				which one lets you say what you mean. The test chart on the right shows the result on real
+				colours.
+			</p>
+		</div>
+
+		<div class="tabs" id="tabs">
+			<button data-tab="separable">Separable stack</button>
+			<button data-tab="grid">Control grid</button>
+			<button data-tab="points">Scattered points</button>
+		</div>
+
+		<div class="layout">
+			<div>
+				<div class="card editor">
+					<h2 id="editor-title"></h2>
+					<p id="editor-help"></p>
+					<canvas id="map" width="720" height="300"></canvas>
+					<div class="caption">
+						Hue runs left to right and wraps: the right edge meets the left. Lightness runs bottom
+						(dark) to top (light).
+					</div>
+					<div id="separable-editors" class="row" style="margin-top: 14px">
+						<div>
+							<canvas id="hue-curve" width="470" height="150"></canvas>
+							<div class="caption">Hue curve: drag points, click to add, double-click to remove</div>
+						</div>
+						<div>
+							<canvas id="lum-curve" width="230" height="150"></canvas>
+							<div class="caption">Lightness curve</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="card">
+					<h2>Result on a test chart</h2>
+					<div class="row">
+						<div>
+							<canvas id="before" width="352" height="220"></canvas>
+							<div class="caption">Before</div>
+						</div>
+						<div>
+							<canvas id="after" width="352" height="220"></canvas>
+							<div class="caption">After</div>
+						</div>
+					</div>
+					<p class="hint" style="margin-top: 10px">
+						The chart is every hue across and every lightness down, with a grey strip at the bottom.
+						Greys have no hue, so the change fades out on them.
+						<label style="margin-left: 8px"
+							><input type="file" id="load" accept="image/*" /> or try your own image</label
+						>
+					</p>
+				</div>
+
+				<div class="card">
+					<h2>Walkthroughs</h2>
+					<div class="tabs" id="scenario-tabs"></div>
+					<p id="scenario-text"></p>
+					<div class="steps" id="scenario-steps"></div>
+				</div>
+			</div>
+
+			<div>
+				<div class="card">
+					<h2>What is stored</h2>
+					<dl id="state"></dl>
+				</div>
+				<div class="card" id="selected-card">
+					<h2>Selected</h2>
+					<div id="selected"></div>
+				</div>
+				<div class="card">
+					<h2>Free play</h2>
+					<div class="steps">
+						<button data-action="reset">Reset all three to no change</button>
+						<button data-action="preset-red-shadows">Load "shadows of the reds"</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script id="model">
+			/*
+			 * Pure model: no DOM. Curves use the package's monotone Fritsch-Butland spline, a cyclic
+			 * variant for hue, and three candidate two-input representations.
+			 * Values are normalised: 0.5 is no change, 1 doubles saturation, 0 removes it.
+			 */
+			const Model = (() => {
+				const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+				const wrap = (v) => v - Math.floor(v);
+
+				/** Fritsch-Butland tangent for secants d0, d1 over widths h0, h1 (the spec's rule). */
+				function tangent(d0, d1, h0, h1) {
+					if (d0 === 0 || d1 === 0 || Math.sign(d0) !== Math.sign(d1)) return 0;
+					const w1 = 2 * h1 + h0;
+					const w2 = h1 + 2 * h0;
+					return (w1 + w2) / (w1 / d0 + w2 / d1);
+				}
+
+				function hermite(y0, y1, m0, m1, h, s) {
+					const d = (y1 - y0) / h;
+					const c2 = (3 * d - 2 * m0 - m1) / h;
+					const c3 = (m0 + m1 - 2 * d) / (h * h);
+					return y0 + s * (m0 + s * (c2 + s * c3));
+				}
+
+				/** Open monotone spline over sorted [x, y] points; clamps outside the ends. */
+				function spline(points) {
+					const xs = points.map((p) => p[0]);
+					const ys = points.map((p) => p[1]);
+					const n = xs.length;
+					const h = [];
+					const d = [];
+					for (let k = 0; k < n - 1; k++) {
+						h[k] = xs[k + 1] - xs[k];
+						d[k] = (ys[k + 1] - ys[k]) / h[k];
+					}
+					const m = xs.map((_, k) =>
+						k === 0 ? d[0] : k === n - 1 ? d[n - 2] : tangent(d[k - 1], d[k], h[k - 1], h[k])
+					);
+					return (v) => {
+						if (n === 1) return ys[0];
+						v = clamp(v, xs[0], xs[n - 1]);
+						if (v >= xs[n - 1]) return ys[n - 1];
+						let k = 0;
+						while (xs[k + 1] <= v) k++;
+						return hermite(ys[k], ys[k + 1], m[k], m[k + 1], h[k], v - xs[k]);
+					};
+				}
+
+				/** Cyclic monotone spline over points with x in [0, 1): the last point joins the first. */
+				function cyclicSpline(points) {
+					const n = points.length;
+					if (n === 1) return () => points[0][1];
+					const xs = points.map((p) => p[0]);
+					const ys = points.map((p) => p[1]);
+					const h = xs.map((x, k) => (k === n - 1 ? xs[0] + 1 - x : xs[k + 1] - x));
+					const d = ys.map((y, k) => (ys[(k + 1) % n] - y) / h[k]);
+					const m = xs.map((_, k) => tangent(d[(k - 1 + n) % n], d[k], h[(k - 1 + n) % n], h[k]));
+					return (v) => {
+						v = wrap(v);
+						let k = n - 1;
+						for (let i = 0; i < n - 1; i++) if (xs[i] <= v && v < xs[i + 1]) k = i;
+						let s = v - xs[k];
+						if (s < 0) s += 1;
+						return hermite(ys[k], ys[(k + 1) % n], m[k], m[(k + 1) % n], h[k], s);
+					};
+				}
+
+				// Grid resolution: 12 hue columns (every 30°) by 5 lightness rows.
+				const GRID_HUES = 12;
+				const GRID_LIGHTS = 5;
+				const gridHue = (i) => i / GRID_HUES;
+				const gridLight = (j) => j / (GRID_LIGHTS - 1);
+
+				const neutral = () => ({
+					separable: {
+						hue: [
+							[0, 0.5],
+							[0.5, 0.5]
+						],
+						light: [
+							[0, 0.5],
+							[1, 0.5]
+						]
+					},
+					grid: Array.from({ length: GRID_LIGHTS }, () => Array(GRID_HUES).fill(0.5)),
+					points: []
+				});
+
+				/**
+				 * Compile a representation into an evaluator (hue, light) -> value in [0, 1].
+				 * Separable: two 1D curves whose saturation gains multiply.
+				 * Grid: monotone spline along hue (cyclic) in every row, then along lightness.
+				 * Points: Gaussian bumps around each point, summed on top of no change.
+				 */
+				function compile(kind, model) {
+					if (kind === 'separable') {
+						const fh = cyclicSpline(model.separable.hue);
+						const fl = spline(model.separable.light);
+						return (hue, light) => clamp((2 * fh(hue) * 2 * fl(light)) / 2, 0, 1);
+					}
+					if (kind === 'grid') {
+						const rows = model.grid.map((row) => cyclicSpline(row.map((v, i) => [gridHue(i), v])));
+						return (hue, light) => {
+							const column = rows.map((row, j) => [gridLight(j), row(hue)]);
+							return clamp(spline(column)(light), 0, 1);
+						};
+					}
+					const pts = model.points;
+					return (hue, light) => {
+						let v = 0.5;
+						for (const p of pts) {
+							let dh = Math.abs(hue - p.hue);
+							dh = Math.min(dh, 1 - dh);
+							const dl = light - p.light;
+							v += (p.value - 0.5) * Math.exp(-(dh * dh + dl * dl) / (2 * p.radius * p.radius));
+						}
+						return clamp(v, 0, 1);
+					};
+				}
+
+				/** Numbers each representation stores, the honest measure of its size. */
+				function storedNumbers(kind, model) {
+					if (kind === 'separable') return 2 * (model.separable.hue.length + model.separable.light.length);
+					if (kind === 'grid') return GRID_HUES * GRID_LIGHTS;
+					return model.points.length * 4;
+				}
+
+				// Colour: sRGB bytes <-> OKLCH (L, C, h in turns), Björn Ottosson's Oklab.
+				const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+				const toGamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+				function rgbToOklch(r, g, b) {
+					[r, g, b] = [r / 255, g / 255, b / 255].map(toLinear);
+					const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+					const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+					const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+					const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+					const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+					const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+					return [L, Math.hypot(A, B), wrap(Math.atan2(B, A) / (2 * Math.PI))];
+				}
+				function oklchToRgb(L, C, h) {
+					const A = C * Math.cos(2 * Math.PI * h);
+					const B = C * Math.sin(2 * Math.PI * h);
+					const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+					const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+					const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+					const r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+					const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+					const b = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+					return [r, g, b].map((c) => Math.round(255 * clamp(toGamma(clamp(c, 0, 1)), 0, 1)));
+				}
+
+				// Hue confidence: full at chroma 0.02 and above, fading to nothing on exact greys.
+				const HUE_CONFIDENCE_CHROMA = 0.02;
+
+				/** Apply a compiled curve to RGBA bytes: saturation gain from the curve, faded on greys. */
+				function apply(evaluate, rgba) {
+					const out = new Uint8ClampedArray(rgba.length);
+					for (let i = 0; i < rgba.length; i += 4) {
+						const [L, C, h] = rgbToOklch(rgba[i], rgba[i + 1], rgba[i + 2]);
+						const confidence = clamp(C / HUE_CONFIDENCE_CHROMA, 0, 1);
+						const gain = 1 + confidence * (2 * evaluate(h, L) - 1);
+						const [r, g, b] = oklchToRgb(L, C * gain, h);
+						out.set([r, g, b, rgba[i + 3]], i);
+					}
+					return out;
+				}
+
+				/** The test chart: every hue across, lightness down, a grey strip at the bottom. */
+				function chart(width, height) {
+					const rgba = new Uint8ClampedArray(width * height * 4);
+					const greyRows = Math.round(height * 0.12);
+					for (let y = 0; y < height; y++) {
+						for (let x = 0; x < width; x++) {
+							const grey = y >= height - greyRows;
+							const L = grey ? x / (width - 1) : 0.92 - (0.75 * y) / (height - greyRows - 1);
+							const [r, g, b] = oklchToRgb(L, grey ? 0 : 0.07, x / width);
+							rgba.set([r, g, b, 255], (y * width + x) * 4);
+						}
+					}
+					return rgba;
+				}
+
+				// Presets used by the walkthroughs, one per representation.
+				const red = 0.08; // OKLCH hue of a clear red, in turns (about 29°)
+				const presets = {
+					separableRedShadows: {
+						hue: [
+							[0, 0.5],
+							[red, 0.85],
+							[0.2, 0.5],
+							[0.9, 0.5]
+						],
+						light: [
+							[0, 0.85],
+							[0.45, 0.85],
+							[0.65, 0.5],
+							[1, 0.5]
+						]
+					},
+					gridRedShadows: (() => {
+						const grid = neutral().grid;
+						grid[0][1] = 0.9;
+						grid[1][1] = 0.9;
+						grid[1][0] = 0.75;
+						grid[1][2] = 0.75;
+						return grid;
+					})(),
+					pointsRedShadows: [{ hue: red, light: 0.35, value: 0.95, radius: 0.08 }]
+				};
+
+				return {
+					compile,
+					storedNumbers,
+					neutral,
+					apply,
+					chart,
+					presets,
+					rgbToOklch,
+					oklchToRgb,
+					GRID_HUES,
+					GRID_LIGHTS,
+					gridHue,
+					gridLight,
+					red
+				};
+			})();
+		</script>
+
+		<script>
+			// Page shell. Everything below only reads and replaces state, then re-renders.
+			const $ = (id) => document.getElementById(id);
+			const TITLES = {
+				separable: [
+					'Separable stack',
+					'Two ordinary curves: one over hue, one over lightness. Their boosts multiply. This is what DaVinci Resolve, Nuke, and Lumetri ship.'
+				],
+				grid: [
+					'Control grid',
+					'A value at every 30° of hue and every quarter of lightness. Drag a dot up or down to set it. Between dots the surface follows the same smooth, no-overshoot spline as our curves.'
+				],
+				points: [
+					'Scattered points',
+					'Click anywhere to drop a point. Drag to move it. Each point pushes a soft round area; set its strength and size on the right. Double-click removes it.'
+				]
+			};
+
+			let state = { tab: 'grid', model: Model.neutral(), selected: null, changed: null };
+			let source = { rgba: Model.chart(352, 220), width: 352, height: 220 };
+
+			function set(next, changed) {
+				state = { ...state, ...next, changed };
+				render();
+			}
+
+			// Map canvas geometry: hue across, lightness up.
+			const map = $('map');
+			const toMap = (hue, light) => [hue * map.width, (1 - light) * map.height];
+			const fromMap = (x, y) => [Math.min(0.9999, Math.max(0, x / map.width)), Math.min(1, Math.max(0, 1 - y / map.height))];
+
+			function heat(v) {
+				// 0.5 neutral grey, up to orange, down to blue.
+				const t = (v - 0.5) * 2;
+				const grey = [58, 60, 66];
+				const hot = [245, 150, 30];
+				const cold = [60, 130, 245];
+				const target = t >= 0 ? hot : cold;
+				const k = Math.min(1, Math.abs(t));
+				return grey.map((g, i) => Math.round(g + (target[i] - g) * k));
+			}
+
+			function drawMap(evaluate) {
+				const ctx = map.getContext('2d');
+				const img = ctx.createImageData(map.width, map.height);
+				for (let y = 0; y < map.height; y++) {
+					for (let x = 0; x < map.width; x++) {
+						const [hue, light] = fromMap(x + 0.5, y + 0.5);
+						img.data.set([...heat(evaluate(hue, light)), 255], (y * map.width + x) * 4);
+					}
+				}
+				ctx.putImageData(img, 0, 0);
+				// Hue strip along the bottom.
+				for (let x = 0; x < map.width; x++) {
+					ctx.fillStyle = `rgb(${Model.oklchToRgb(0.7, 0.12, x / map.width)})`;
+					ctx.fillRect(x, map.height - 6, 1, 6);
+				}
+				if (state.tab === 'grid') {
+					state.model.grid.forEach((row, j) =>
+						row.forEach((v, i) => {
+							const [x, y] = toMap(Model.gridHue(i), Model.gridLight(j));
+							dot(ctx, x, Math.min(map.height - 10, Math.max(10, y)), v, isSelected('grid', i, j));
+						})
+					);
+				}
+				if (state.tab === 'points') {
+					state.model.points.forEach((p, k) => {
+						const [x, y] = toMap(p.hue, p.light);
+						ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+						ctx.beginPath();
+						ctx.arc(x, y, p.radius * map.height, 0, 2 * Math.PI);
+						ctx.stroke();
+						dot(ctx, x, y, p.value, isSelected('point', k));
+					});
+				}
+			}
+
+			function dot(ctx, x, y, v, selected) {
+				ctx.beginPath();
+				ctx.arc(x, y, selected ? 7 : 5, 0, 2 * Math.PI);
+				ctx.fillStyle = `rgb(${heat(v)})`;
+				ctx.fill();
+				ctx.lineWidth = selected ? 2.5 : 1.5;
+				ctx.strokeStyle = selected ? '#f5b50a' : '#fff';
+				ctx.stroke();
+			}
+
+			const isSelected = (kind, a, b) =>
+				state.selected && state.selected.kind === kind && state.selected.a === a && (b === undefined || state.selected.b === b);
+
+			function drawCurve(canvas, points, cyclic) {
+				const ctx = canvas.getContext('2d');
+				const { width: w, height: h } = canvas;
+				ctx.fillStyle = '#141518';
+				ctx.fillRect(0, 0, w, h);
+				ctx.strokeStyle = '#2a2c30';
+				ctx.beginPath();
+				ctx.moveTo(0, h / 2);
+				ctx.lineTo(w, h / 2);
+				ctx.stroke();
+				if (cyclic) {
+					for (let x = 0; x < w; x++) {
+						ctx.fillStyle = `rgb(${Model.oklchToRgb(0.7, 0.12, x / w)})`;
+						ctx.fillRect(x, h - 5, 1, 5);
+					}
+				}
+				const f = Model.compile('separable', {
+					separable: cyclic ? { hue: points, light: [[0, 0.5], [1, 0.5]] } : { hue: [[0, 0.5]], light: points }
+				});
+				ctx.strokeStyle = '#f5b50a';
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				for (let x = 0; x <= w; x++) {
+					const v = cyclic ? f(x / w, 0.5) : f(0, x / w);
+					const y = (1 - v) * h;
+					x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+				}
+				ctx.stroke();
+				points.forEach(([px, py], k) => {
+					ctx.beginPath();
+					ctx.arc(px * w, (1 - py) * h, 5, 0, 2 * Math.PI);
+					ctx.fillStyle = '#111214';
+					ctx.fill();
+					ctx.strokeStyle = isSelected(cyclic ? 'hue' : 'light', k) ? '#f5b50a' : '#fff';
+					ctx.lineWidth = 2;
+					ctx.stroke();
+				});
+			}
+
+			function drawResult(evaluate) {
+				const put = (canvas, rgba) => {
+					canvas.width = source.width;
+					canvas.height = source.height;
+					canvas.getContext('2d').putImageData(new ImageData(rgba, source.width, source.height), 0, 0);
+				};
+				put($('before'), source.rgba);
+				put($('after'), Model.apply(evaluate, source.rgba));
+			}
+
+			function surfaceRange(evaluate) {
+				let lo = 1;
+				let hi = 0;
+				for (let j = 0; j <= 60; j++)
+					for (let i = 0; i < 180; i++) {
+						const v = evaluate(i / 180, j / 60);
+						lo = Math.min(lo, v);
+						hi = Math.max(hi, v);
+					}
+				return [lo, hi];
+			}
+
+			function controlRange() {
+				const m = state.model;
+				const values =
+					state.tab === 'grid'
+						? m.grid.flat()
+						: state.tab === 'points'
+							? [0.5, ...m.points.map((p) => p.value)]
+							: [...m.separable.hue, ...m.separable.light].map((p) => p[1]);
+				return [Math.min(...values), Math.max(...values)];
+			}
+
+			const pct = (v) => `${Math.round((2 * v - 1) * 100)}%`.replace(/^(\d)/, '+$1');
+
+			function renderState(evaluate) {
+				const [lo, hi] = surfaceRange(evaluate);
+				const [clo, chi] = controlRange();
+				const overshoot =
+					state.tab === 'points'
+						? 'overlapping points add up'
+						: state.tab === 'separable'
+							? 'the two boosts multiply'
+							: lo < clo - 1e-3 || hi > chi + 1e-3
+								? 'yes'
+								: 'none';
+				const rows = [
+					['Shape', TITLES[state.tab][0]],
+					['Numbers stored', Model.storedNumbers(state.tab, state.model)],
+					['Strongest boost', pct(hi)],
+					['Strongest cut', pct(lo)],
+					['Overshoot past the controls', overshoot],
+					['Last change', state.changed ?? 'nothing yet']
+				];
+				$('state').innerHTML = rows
+					.map(([k, v]) => `<dt>${k}</dt><dd class="${k === 'Last change' && state.changed ? 'changed' : ''}">${v}</dd>`)
+					.join('');
+			}
+
+			function renderSelected() {
+				const s = state.selected;
+				const card = $('selected');
+				if (!s) {
+					card.innerHTML = '<p class="hint">Nothing selected. Pick a dot or point to adjust it here.</p>';
+					return;
+				}
+				if (s.kind === 'grid') {
+					const v = state.model.grid[s.b][s.a];
+					card.innerHTML = `<p>Grid dot at hue ${Math.round(Model.gridHue(s.a) * 360)}°, lightness ${Math.round(
+						Model.gridLight(s.b) * 100
+					)}%</p>${slider('Saturation', v, 'grid-value')}`;
+				} else if (s.kind === 'point') {
+					const p = state.model.points[s.a];
+					card.innerHTML = `<p>Point at hue ${Math.round(p.hue * 360)}°, lightness ${Math.round(p.light * 100)}%</p>${slider(
+						'Saturation',
+						p.value,
+						'point-value'
+					)}${slider('Size', p.radius / 0.3, 'point-radius', `${Math.round(p.radius * 100)}`)}`;
+				} else {
+					card.innerHTML = '<p class="hint">Drag the point on the curve itself.</p>';
+				}
+			}
+
+			const slider = (label, v, action, text) =>
+				`<label class="slider">${label}<input type="range" min="0" max="1" step="0.01" value="${v}" data-slider="${action}"><span>${
+					text ?? pct(v)
+				}</span></label>`;
+
+			function render() {
+				document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.tab === state.tab));
+				$('editor-title').textContent = TITLES[state.tab][0];
+				$('editor-help').textContent = TITLES[state.tab][1];
+				$('separable-editors').classList.toggle('hidden', state.tab !== 'separable');
+				const evaluate = Model.compile(state.tab, state.model);
+				drawMap(evaluate);
+				if (state.tab === 'separable') {
+					drawCurve($('hue-curve'), state.model.separable.hue, true);
+					drawCurve($('lum-curve'), state.model.separable.light, false);
+				}
+				drawResult(evaluate);
+				renderState(evaluate);
+				renderSelected();
+				renderScenario();
+			}
+
+			// ---------- Editing ----------
+			const withModel = (fn) => {
+				const model = structuredClone(state.model);
+				fn(model);
+				return model;
+			};
+
+			let drag = null;
+			map.addEventListener('pointerdown', (e) => {
+				const { offsetX: x, offsetY: y } = e;
+				if (state.tab === 'grid') {
+					let best = null;
+					state.model.grid.forEach((row, j) =>
+						row.forEach((_, i) => {
+							const [gx, gy] = toMap(Model.gridHue(i), Model.gridLight(j));
+							const d = Math.hypot(gx - x, Math.min(map.height - 10, Math.max(10, gy)) - y);
+							if (d < 14 && (!best || d < best.d)) best = { d, i, j };
+						})
+					);
+					if (!best) return;
+					drag = { kind: 'grid', i: best.i, j: best.j, y0: y, v0: state.model.grid[best.j][best.i] };
+					set({ selected: { kind: 'grid', a: best.i, b: best.j } }, state.changed);
+				}
+				if (state.tab === 'points') {
+					const k = state.model.points.findIndex((p) => {
+						const [px, py] = toMap(p.hue, p.light);
+						return Math.hypot(px - x, py - y) < 10;
+					});
+					if (k >= 0) {
+						drag = { kind: 'point', k };
+						set({ selected: { kind: 'point', a: k } }, state.changed);
+					} else {
+						const [hue, light] = fromMap(x, y);
+						const model = withModel((m) => m.points.push({ hue, light, value: 0.85, radius: 0.08 }));
+						set(
+							{ model, selected: { kind: 'point', a: model.points.length - 1 } },
+							`added a point at ${Math.round(hue * 360)}°`
+						);
+					}
+				}
+				map.setPointerCapture(e.pointerId);
+			});
+			map.addEventListener('pointermove', (e) => {
+				if (!drag) return;
+				if (drag.kind === 'grid') {
+					const v = Math.min(1, Math.max(0, drag.v0 + (drag.y0 - e.offsetY) / 150));
+					set({ model: withModel((m) => (m.grid[drag.j][drag.i] = v)) }, `grid dot set to ${pct(v)}`);
+				} else {
+					const [hue, light] = fromMap(e.offsetX, e.offsetY);
+					set({ model: withModel((m) => Object.assign(m.points[drag.k], { hue, light })) }, 'moved a point');
+				}
+			});
+			map.addEventListener('pointerup', () => (drag = null));
+			map.addEventListener('dblclick', (e) => {
+				if (state.tab !== 'points') return;
+				const k = state.model.points.findIndex((p) => {
+					const [px, py] = toMap(p.hue, p.light);
+					return Math.hypot(px - e.offsetX, py - e.offsetY) < 10;
+				});
+				if (k < 0) return;
+				set({ model: withModel((m) => m.points.splice(k, 1)), selected: null }, 'removed a point');
+			});
+
+			function curveEditor(canvas, key, cyclic) {
+				let dragging = null;
+				canvas.addEventListener('pointerdown', (e) => {
+					const w = canvas.width;
+					const h = canvas.height;
+					const pts = state.model.separable[key];
+					let k = pts.findIndex(([px, py]) => Math.hypot(px * w - e.offsetX, (1 - py) * h - e.offsetY) < 10);
+					if (k < 0) {
+						const x = Math.min(cyclic ? 0.999 : 1, Math.max(0, e.offsetX / w));
+						const model = withModel((m) => {
+							m.separable[key].push([x, 1 - e.offsetY / h]);
+							m.separable[key].sort((a, b) => a[0] - b[0]);
+						});
+						k = model.separable[key].findIndex((p) => p[0] === x);
+						set({ model, selected: { kind: key, a: k } }, `added a ${key === 'hue' ? 'hue' : 'lightness'} point`);
+					} else set({ selected: { kind: key, a: k } }, state.changed);
+					dragging = k;
+					canvas.setPointerCapture(e.pointerId);
+				});
+				canvas.addEventListener('pointermove', (e) => {
+					if (dragging === null) return;
+					const pts = state.model.separable[key];
+					const lo = dragging === 0 ? 0 : pts[dragging - 1][0] + 0.01;
+					const hi = dragging === pts.length - 1 ? (cyclic ? 0.999 : 1) : pts[dragging + 1][0] - 0.01;
+					const x = Math.min(hi, Math.max(lo, e.offsetX / canvas.width));
+					const y = Math.min(1, Math.max(0, 1 - e.offsetY / canvas.height));
+					set({ model: withModel((m) => (m.separable[key][dragging] = [x, y])) }, `moved a ${key === 'hue' ? 'hue' : 'lightness'} point`);
+				});
+				canvas.addEventListener('pointerup', () => (dragging = null));
+				canvas.addEventListener('dblclick', (e) => {
+					const pts = state.model.separable[key];
+					const k = pts.findIndex(
+						([px, py]) => Math.hypot(px * canvas.width - e.offsetX, (1 - py) * canvas.height - e.offsetY) < 10
+					);
+					if (k < 0 || pts.length <= 2) return;
+					set({ model: withModel((m) => m.separable[key].splice(k, 1)), selected: null }, 'removed a curve point');
+				});
+			}
+			curveEditor($('hue-curve'), 'hue', true);
+			curveEditor($('lum-curve'), 'light', false);
+
+			document.addEventListener('input', (e) => {
+				const action = e.target.dataset.slider;
+				if (!action) return;
+				const v = Number(e.target.value);
+				const s = state.selected;
+				if (action === 'grid-value') set({ model: withModel((m) => (m.grid[s.b][s.a] = v)) }, `grid dot set to ${pct(v)}`);
+				if (action === 'point-value') set({ model: withModel((m) => (m.points[s.a].value = v)) }, `point set to ${pct(v)}`);
+				if (action === 'point-radius')
+					set({ model: withModel((m) => (m.points[s.a].radius = Math.max(0.01, v * 0.3))) }, 'resized a point');
+			});
+
+			$('tabs').addEventListener('click', (e) => {
+				const tab = e.target.dataset.tab;
+				if (tab) set({ tab, selected: null }, `switched to ${TITLES[tab][0].toLowerCase()}`);
+			});
+
+			const ACTIONS = {
+				reset: () => set({ model: Model.neutral(), selected: null }, 'reset to no change'),
+				'preset-red-shadows': () =>
+					set(
+						{
+							model: {
+								separable: structuredClone(Model.presets.separableRedShadows),
+								grid: structuredClone(Model.presets.gridRedShadows),
+								points: structuredClone(Model.presets.pointsRedShadows)
+							},
+							selected: null
+						},
+						'loaded "shadows of the reds" in all three'
+					)
+			};
+			document.querySelectorAll('[data-action]').forEach((b) => b.addEventListener('click', () => ACTIONS[b.dataset.action]()));
+
+			$('load').addEventListener('change', async (e) => {
+				const file = e.target.files[0];
+				if (!file) return;
+				const bitmap = await createImageBitmap(file);
+				const scale = Math.min(1, 352 / bitmap.width, 360 / bitmap.height);
+				const width = Math.round(bitmap.width * scale);
+				const height = Math.round(bitmap.height * scale);
+				const canvas = new OffscreenCanvas(width, height);
+				const ctx = canvas.getContext('2d');
+				ctx.drawImage(bitmap, 0, 0, width, height);
+				source = { rgba: ctx.getImageData(0, 0, width, height).data, width, height };
+				set({}, `loaded ${file.name}`);
+			});
+
+			// ---------- Walkthroughs ----------
+			const g = (fn) => () => set({ tab: 'grid', model: withModel((m) => fn(m.grid)), selected: null }, 'grid changed');
+			const SCENARIOS = [
+				{
+					name: 'Only the shadows of the reds',
+					text: 'Goal: more saturation in dark reds, and nothing else. Watch the After chart: dark greens and blues must not change.',
+					steps: [
+						['Start from no change', () => set({ tab: 'separable', model: Model.neutral(), selected: null }, 'reset')],
+						['Separable: boost the reds', () => set({ model: withModel((m) => (m.separable.hue = structuredClone(Model.presets.separableRedShadows.hue))) }, 'hue curve boosts reds')],
+						['Separable: then limit it to the shadows', () => set({ model: withModel((m) => (m.separable.light = structuredClone(Model.presets.separableRedShadows.light))) }, 'lightness curve boosts shadows')],
+						['Look: every dark colour got the shadow boost, not just reds', () => set({}, 'the two boosts multiply, so shadows of every hue change')],
+						['Grid: raise the dark red dots instead', () => set({ tab: 'grid', model: withModel((m) => (m.grid = structuredClone(Model.presets.gridRedShadows))) }, 'grid dots raised at dark red')],
+						['Points: one point on dark red', () => set({ tab: 'points', model: withModel((m) => (m.points = structuredClone(Model.presets.pointsRedShadows))) }, 'one point on dark red')]
+					]
+				},
+				{
+					name: 'Across the seam',
+					text: 'Hue wraps: 350° and 10° are neighbours. A change at red must continue past the right edge onto the left.',
+					steps: [
+						['Grid: raise the red column at 0°', g((grid) => grid.forEach((row) => (row[0] = 0.9)))],
+						['Points: drop a point at 355°', () => set({ tab: 'points', model: withModel((m) => (m.points = [{ hue: 355 / 360, light: 0.6, value: 0.9, radius: 0.08 }])), selected: { kind: 'point', a: 0 } }, 'point at 355°')],
+						['Separable: bump the hue curve at 0°', () => set({ tab: 'separable', model: withModel((m) => (m.separable.hue = [[0, 0.9], [0.15, 0.5], [0.85, 0.5]])) }, 'hue curve bump at 0°')]
+					]
+				},
+				{
+					name: 'A narrow target',
+					text: 'Goal: boost oranges (about 55°) and leave reds (about 30°) alone. Grid dots sit 30° apart, so watch how far the grid bleeds.',
+					steps: [
+						['Grid: raise the dots nearest orange', g((grid) => grid.forEach((row) => (row[2] = 0.9)))],
+						['Points: a small point on orange', () => set({ tab: 'points', model: withModel((m) => (m.points = [{ hue: 55 / 360, light: 0.6, value: 0.95, radius: 0.03 }])), selected: { kind: 'point', a: 0 } }, 'small point on orange')],
+						['Separable: tight hue bump on orange', () => set({ tab: 'separable', model: withModel((m) => (m.separable.hue = [[0, 0.5], [45 / 360, 0.5], [55 / 360, 0.95], [65 / 360, 0.5]])) }, 'tight hue bump on orange')]
+					]
+				},
+				{
+					name: 'Neighbours pulling apart',
+					text: 'Two grid dots next to each other, one at full boost and one at full cut. A spline that overshoots would ring past them. Check "Overshoot past the controls".',
+					steps: [
+						['Grid: full boost next to full cut', g((grid) => grid.forEach((row) => ((row[4] = 1), (row[5] = 0))))],
+						['Points: two overlapping boosts', () => set({ tab: 'points', model: withModel((m) => (m.points = [{ hue: 0.3, light: 0.5, value: 1, radius: 0.1 }, { hue: 0.34, light: 0.5, value: 1, radius: 0.1 }])) }, 'two overlapping boosts')]
+					]
+				}
+			];
+			let scenario = 0;
+			let step = 0;
+			function renderScenario() {
+				const tabs = $('scenario-tabs');
+				if (!tabs.childElementCount) {
+					SCENARIOS.forEach((s, k) => {
+						const b = document.createElement('button');
+						b.textContent = s.name;
+						b.addEventListener('click', () => {
+							scenario = k;
+							step = 0;
+							state = { ...state, model: Model.neutral(), selected: null };
+							set({}, `started "${s.name}"`);
+						});
+						tabs.append(b);
+					});
+				}
+				[...tabs.children].forEach((b, k) => b.setAttribute('aria-pressed', k === scenario));
+				$('scenario-text').textContent = SCENARIOS[scenario].text;
+				const box = $('scenario-steps');
+				box.innerHTML = '';
+				SCENARIOS[scenario].steps.forEach(([label, run], k) => {
+					const b = document.createElement('button');
+					b.className = `step${k < step ? ' done' : ''}`;
+					b.textContent = `${k + 1}. ${label}`;
+					b.disabled = k > step;
+					b.addEventListener('click', () => {
+						step = Math.max(step, k + 1);
+						run();
+					});
+					box.append(b);
+				});
+			}
+
+			render();
+		</script>
+	</body>
+</html>
