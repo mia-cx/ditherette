@@ -55,7 +55,9 @@
 	let selected = $state(0);
 	let dragging = $state<number>();
 
-	const current = $derived(points[Math.min(selected, points.length - 1)]!);
+	/** `selected` can outlive a shorter curve after a model or channel switch, so fields use this. */
+	const active = $derived(Math.min(selected, points.length - 1));
+	const current = $derived(points[active]!);
 	const curvePath = (curve: CurvePoints) =>
 		tonePath(
 			(x) => (periodic ? evaluatePeriodicCurve(curve, x) : evaluateCurve(curve, x)),
@@ -82,7 +84,10 @@
 			return index;
 		}
 		if (periodic) {
-			const wrapped = clamp(((Math.round(xByte) % BYTE) + BYTE) % BYTE, 1, BYTE - 1);
+			const target = Math.round(xByte);
+			const cycled = ((target % BYTE) + BYTE) % BYTE;
+			// Bytes 0 and 255 are the seam: step over it in the direction of travel.
+			const wrapped = cycled === 0 ? (target <= 0 ? BYTE - 1 : 1) : cycled;
 			const taken = points.some(([px], other) => other !== index && toByte(px) === wrapped);
 			const x = taken ? points[index]![0] : wrapped / BYTE;
 			const rest = points.filter((_, other) => other !== index);
@@ -228,9 +233,9 @@
 			max={BYTE}
 			step="1"
 			value={toByte(current[0])}
-			disabled={isEnd(selected)}
+			disabled={isEnd(active)}
 			onchange={(event) =>
-				(selected = place(selected, Number(event.currentTarget.value), toByte(current[1])))}
+				(selected = place(active, Number(event.currentTarget.value), toByte(current[1])))}
 		/>
 	</div>
 	<div class="grid gap-1">
@@ -243,13 +248,13 @@
 			max={BYTE}
 			step="1"
 			value={toByte(current[1])}
-			onchange={(event) => place(selected, toByte(current[0]), Number(event.currentTarget.value))}
+			onchange={(event) => place(active, toByte(current[0]), Number(event.currentTarget.value))}
 		/>
 	</div>
 	<Button
 		variant="outline"
 		size="sm"
-		disabled={points.length <= 2 || isEnd(selected)}
-		onclick={() => remove(selected)}>Remove point</Button
+		disabled={points.length <= 2 || isEnd(active)}
+		onclick={() => remove(active)}>Remove point</Button
 	>
 </div>
