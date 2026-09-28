@@ -16,6 +16,7 @@ use super::{
     hue_saturation::HueSaturation,
     image::EffectImage,
     levels::Levels,
+    model_curves::ModelCurves,
     recolour::Recolour,
     white_balance::WhiteBalance,
 };
@@ -26,6 +27,7 @@ use super::{
 pub enum BuiltinEffect {
     Levels(Levels),
     Curves(Curves),
+    ModelCurves(ModelCurves),
     BrightnessContrast(BrightnessContrast),
     Exposure(Exposure),
     WhiteBalance(WhiteBalance),
@@ -41,6 +43,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.validate(path),
             Self::Curves(effect) => effect.validate(path),
+            Self::ModelCurves(effect) => effect.validate(path),
             Self::BrightnessContrast(effect) => effect.validate(path),
             Self::Exposure(effect) => effect.validate(path),
             Self::WhiteBalance(effect) => effect.validate(path),
@@ -57,6 +60,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.check_context(context, path),
             Self::Curves(effect) => effect.check_context(context, path),
+            Self::ModelCurves(effect) => effect.check_context(context, path),
             Self::BrightnessContrast(effect) => effect.check_context(context, path),
             Self::Exposure(effect) => effect.check_context(context, path),
             Self::WhiteBalance(effect) => effect.check_context(context, path),
@@ -69,6 +73,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.needs(),
             Self::Curves(effect) => effect.needs(),
+            Self::ModelCurves(effect) => effect.needs(),
             Self::BrightnessContrast(effect) => effect.needs(),
             Self::Exposure(effect) => effect.needs(),
             Self::WhiteBalance(effect) => effect.needs(),
@@ -81,6 +86,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.apply(image, context),
             Self::Curves(effect) => effect.apply(image, context),
+            Self::ModelCurves(effect) => effect.apply(image, context),
             Self::BrightnessContrast(effect) => effect.apply(image, context),
             Self::Exposure(effect) => effect.apply(image, context),
             Self::WhiteBalance(effect) => effect.apply(image, context),
@@ -93,6 +99,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.per_channel(),
             Self::Curves(effect) => effect.per_channel(),
+            Self::ModelCurves(effect) => effect.per_channel(),
             Self::BrightnessContrast(effect) => effect.per_channel(),
             Self::Exposure(effect) => effect.per_channel(),
             Self::WhiteBalance(effect) => effect.per_channel(),
@@ -105,6 +112,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.map_channel(channel, value),
             Self::Curves(effect) => effect.map_channel(channel, value),
+            Self::ModelCurves(effect) => effect.map_channel(channel, value),
             Self::BrightnessContrast(effect) => effect.map_channel(channel, value),
             Self::Exposure(effect) => effect.map_channel(channel, value),
             Self::WhiteBalance(effect) => effect.map_channel(channel, value),
@@ -117,6 +125,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.working_bytes(),
             Self::Curves(effect) => effect.working_bytes(),
+            Self::ModelCurves(effect) => effect.working_bytes(),
             Self::BrightnessContrast(effect) => effect.working_bytes(),
             Self::Exposure(effect) => effect.working_bytes(),
             Self::WhiteBalance(effect) => effect.working_bytes(),
@@ -129,6 +138,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.pointwise(),
             Self::Curves(effect) => effect.pointwise(),
+            Self::ModelCurves(effect) => effect.pointwise(),
             Self::BrightnessContrast(effect) => effect.pointwise(),
             Self::Exposure(effect) => effect.pointwise(),
             Self::WhiteBalance(effect) => effect.pointwise(),
@@ -141,6 +151,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.map_pixel(rgb, context),
             Self::Curves(effect) => effect.map_pixel(rgb, context),
+            Self::ModelCurves(effect) => effect.map_pixel(rgb, context),
             Self::BrightnessContrast(effect) => effect.map_pixel(rgb, context),
             Self::Exposure(effect) => effect.map_pixel(rgb, context),
             Self::WhiteBalance(effect) => effect.map_pixel(rgb, context),
@@ -153,6 +164,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.prepare_pointwise(),
             Self::Curves(effect) => effect.prepare_pointwise(),
+            Self::ModelCurves(effect) => effect.prepare_pointwise(),
             Self::BrightnessContrast(effect) => effect.prepare_pointwise(),
             Self::Exposure(effect) => effect.prepare_pointwise(),
             Self::WhiteBalance(effect) => effect.prepare_pointwise(),
@@ -170,6 +182,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.map_prepared(prepared, rgb, context),
             Self::Curves(effect) => effect.map_prepared(prepared, rgb, context),
+            Self::ModelCurves(effect) => effect.map_prepared(prepared, rgb, context),
             Self::BrightnessContrast(effect) => effect.map_prepared(prepared, rgb, context),
             Self::Exposure(effect) => effect.map_prepared(prepared, rgb, context),
             Self::WhiteBalance(effect) => effect.map_prepared(prepared, rgb, context),
@@ -187,6 +200,7 @@ impl Effect for BuiltinEffect {
         match self {
             Self::Levels(effect) => effect.map_prepared_linear(prepared, linear, context),
             Self::Curves(effect) => effect.map_prepared_linear(prepared, linear, context),
+            Self::ModelCurves(effect) => effect.map_prepared_linear(prepared, linear, context),
             Self::BrightnessContrast(effect) => {
                 effect.map_prepared_linear(prepared, linear, context)
             }

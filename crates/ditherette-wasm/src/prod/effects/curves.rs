@@ -26,7 +26,7 @@ pub struct Curves {
 
 /// Monotone cubic Hermite spline (Fritsch–Butland tangents) through validated points.
 /// Monotone data stays monotone, and no segment overshoots its endpoints.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 /// Production keeps points and tangents inline, so building a spline never allocates.
 pub struct Spline {
     points: [[f32; 2]; MAX_POINTS],

@@ -23,6 +23,8 @@ export const MAX_EFFECT_NAME_LENGTH = 64;
 /** A saved step the package accepts. Curves check each channel's points as a package step. */
 function isLayerStep(value: unknown): value is LayerStep {
 	if (!value || typeof value !== 'object') return false;
+	// Colour-model curves have no editor yet, so a saved one is not a layer.
+	if ('effect' in value && value.effect === 'model-curves') return false;
 	const { effect, enabled, curves } = value as Partial<ChannelCurves>;
 	if (effect !== 'curves') return isEffect(value);
 	return (

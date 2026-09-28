@@ -518,3 +518,192 @@ fn chains_are_capped_and_see_only_the_retained_palette() {
         "context.palette"
     );
 }
+
+fn identity_model_curves(model: &str) -> serde_json::Value {
+    json!({
+        "effect": "model-curves",
+        "enabled": true,
+        "model": model,
+        "curves": [
+            [[0.0, 0.0], [1.0, 1.0]],
+            [[0.0, 0.0], [1.0, 1.0]],
+            [[0.0, 0.0], [1.0, 1.0]],
+        ],
+    })
+}
+
+#[test]
+fn model_curves_validate_each_index_and_reject_srgb() {
+    let data = ramp();
+    let mut invalid = identity_model_curves("oklch");
+    invalid["curves"][1] = json!([[0.0, 0.0], [0.0005, 1.0], [1.0, 1.0]]);
+    assert_eq!(
+        run(&data, &steps(json!([invalid]))).unwrap_err().path,
+        "effects.0.curves.1.1.0"
+    );
+    assert_eq!(
+        decode_effects(&json!([identity_model_curves("srgb")]).to_string())
+            .unwrap_err()
+            .path,
+        "effects.0"
+    );
+    let mut short = identity_model_curves("oklab");
+    short["curves"].as_array_mut().unwrap().pop();
+    assert_eq!(
+        decode_effects(&json!([short]).to_string())
+            .unwrap_err()
+            .path,
+        "effects.0"
+    );
+}
+
+#[test]
+fn identity_model_curves_preserve_bytes_and_out_of_range_carrier() {
+    use ditherette_wasm::image::ImageDimensions;
+    use ditherette_wasm::spec::effects::model_curves::{ModelCurves, ModelCurvesModel};
+
+    let data = ramp();
+    for model in [
+        "linear-rgb",
+        "hsl",
+        "hsv",
+        "oklab",
+        "oklch",
+        "cielab",
+        "cielch",
+        "ycbcr",
+    ] {
+        assert_eq!(
+            run(&data, &steps(json!([identity_model_curves(model)])))
+                .unwrap()
+                .data(),
+            data,
+            "{model}"
+        );
+    }
+    let effect = ModelCurves {
+        model: ModelCurvesModel::Hsl,
+        curves: std::array::from_fn(|_| vec![[0.0, 0.0], [1.0, 1.0]]),
+    };
+    let mut image = EffectImage {
+        dimensions: ImageDimensions::new(1, 1).unwrap(),
+        rgb: vec![[-64.0, 1.25, 64.0]],
+        alpha: vec![17],
+    };
+    effect.apply(&mut image, &EffectContext::default());
+    assert_eq!(
+        image.rgb[0].map(f32::to_bits),
+        [-64.0, 1.25, 64.0].map(f32::to_bits)
+    );
+    assert_eq!(image.alpha, [17]);
+}
+
+#[test]
+fn model_conversion_formulas_and_hue_rules_are_literal() {
+    use ditherette_wasm::spec::effects::{
+        model::ColourModel,
+        model_curves::{ModelCurves, ModelCurvesModel},
+    };
+
+    assert_eq!(
+        ColourModel::Hsl.to_normalized([1.0, 0.0, 0.0]),
+        [0.0, 1.0, 0.5]
+    );
+    assert_eq!(
+        ColourModel::Hsv.to_normalized([1.0, 0.0, 0.0]),
+        [0.0, 1.0, 1.0]
+    );
+    let ycbcr = ColourModel::Ycbcr.to_normalized([1.0, 0.0, 0.0]);
+    assert_eq!(ycbcr[0].to_bits(), 0.299f32.to_bits());
+    assert_eq!(ycbcr[1].to_bits(), (0.5 - 0.299f32 / 1.772).to_bits());
+    assert_eq!(ycbcr[2].to_bits(), (0.5 + 0.701f32 / 1.402).to_bits());
+
+    let hue_target = vec![[0.0, 0.99], [1.0, 0.99]];
+    let identity = vec![[0.0, 0.0], [1.0, 1.0]];
+    let effect = ModelCurves {
+        model: ModelCurvesModel::Hsl,
+        curves: [hue_target, identity.clone(), identity],
+    };
+    let input = ColourModel::Hsl.from_normalized([0.01, 1.0, 0.5]);
+    let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
+    let mut image = EffectImage {
+        dimensions,
+        rgb: vec![input],
+        alpha: vec![255],
+    };
+    effect.apply(&mut image, &EffectContext::default());
+    let wrapped = ColourModel::Hsl.to_normalized(image.rgb[0]);
+    assert!((wrapped[0] - 0.99).abs() < 0.000_01, "{}", wrapped[0]);
+
+    let grey = [0.4, 0.4, 0.4];
+    let mut image = EffectImage {
+        dimensions,
+        rgb: vec![grey],
+        alpha: vec![255],
+    };
+    effect.apply(&mut image, &EffectContext::default());
+    assert_eq!(image.rgb[0].map(f32::to_bits), grey.map(f32::to_bits));
+    for model in [ColourModel::Oklch, ColourModel::Cielch] {
+        let grey = [0.5; 3];
+        assert_eq!(model.hue_weight(grey, model.to_normalized(grey)), 0.0);
+    }
+
+    let half = [0.51, 0.5, 0.5];
+    let mut image = EffectImage {
+        dimensions,
+        rgb: vec![half],
+        alpha: vec![255],
+    };
+    effect.apply(&mut image, &EffectContext::default());
+    let adjusted = ColourModel::Hsl.to_normalized(image.rgb[0]);
+    let weight = (0.51f32 - 0.5) / 0.02;
+    let expected = (0.0 + weight * -0.01).rem_euclid(1.0);
+    assert!(
+        (adjusted[0] - expected).abs() < 0.000_01,
+        "{} != {expected}",
+        adjusted[0]
+    );
+}
+
+#[test]
+fn model_curves_clamp_spline_inputs_but_not_denormalized_output() {
+    use ditherette_wasm::spec::effects::model_curves::{ModelCurves, ModelCurvesModel};
+
+    let effect = ModelCurves {
+        model: ModelCurvesModel::LinearRgb,
+        curves: [
+            vec![[0.25, 0.2], [0.75, 0.8]],
+            vec![[0.0, 0.0], [1.0, 1.0]],
+            vec![[0.0, 0.0], [1.0, 1.0]],
+        ],
+    };
+    let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
+    let mut image = EffectImage {
+        dimensions,
+        rgb: vec![[-0.5, 0.5, 1.5]],
+        alpha: vec![255],
+    };
+    effect.apply(&mut image, &EffectContext::default());
+    let linear =
+        ditherette_wasm::spec::effects::model::ColourModel::LinearRgb.to_normalized(image.rgb[0]);
+    assert!((linear[0] - 0.2).abs() < f32::EPSILON);
+    assert!((image.rgb[0][2] - 1.0).abs() < f32::EPSILON);
+
+    let out_of_gamut = ModelCurves {
+        model: ModelCurvesModel::Oklab,
+        curves: [
+            vec![[0.0, 1.0], [1.0, 1.0]],
+            vec![[0.0, 1.0], [1.0, 1.0]],
+            vec![[0.0, 0.5], [1.0, 0.5]],
+        ],
+    };
+    let mut image = EffectImage {
+        dimensions,
+        rgb: vec![[0.5, 0.5, 0.5]],
+        alpha: vec![255],
+    };
+    out_of_gamut.apply(&mut image, &EffectContext::default());
+    assert!(image.rgb[0]
+        .iter()
+        .any(|value| !(0.0..=1.0).contains(value)));
+}

@@ -251,6 +251,16 @@ const grading = {
 			[1, 1]
 		]
 	},
+	'model-curves': {
+		effect: 'model-curves',
+		enabled: true,
+		model: 'oklch',
+		curves: [
+			[[0, 0], [1, 1]],
+			[[0, 0], [0.5, 0.7], [1, 1]],
+			[[0, 0], [1, 1]]
+		]
+	},
 	'brightness-contrast': {
 		effect: 'brightness-contrast',
 		enabled: true,
@@ -274,6 +284,10 @@ const neutral = {
 			[0, 0],
 			[1, 1]
 		]
+	},
+	'model-curves': {
+		...grading['model-curves'],
+		curves: Array.from({ length: 3 }, () => [[0, 0], [1, 1]])
 	},
 	'brightness-contrast': { ...grading['brightness-contrast'], brightness: 0, contrast: 0 },
 	exposure: { ...grading.exposure, stops: 0 },
@@ -347,6 +361,20 @@ test('grading arguments are validated with indexed paths', () =>
 			'effects.1.points.1.0'
 		);
 		fails({ ...grading.curves, points: [[0, 0], [1]] }, 'effects.1.points.1');
+		fails({ ...grading['model-curves'], model: 'srgb' }, 'effects.1.model');
+		fails({ ...grading['model-curves'], curves: grading['model-curves'].curves.slice(0, 2) }, 'effects.1.curves');
+		fails(
+			{
+				...grading['model-curves'],
+				curves: [
+					[[0, 0], [1, 1]],
+					[[0, 0], [0.0005, 0.5], [1, 1]],
+					[[0, 0], [1, 1]]
+				]
+			},
+			'effects.1.curves.1.1.0'
+		);
+		fails({ ...grading['model-curves'], interpolation: 'linear' }, 'effects.1.interpolation');
 		const inherited = Object.setPrototypeOf(
 			new Array(2),
 			Object.assign(Object.create(Array.prototype), { 0: 0, 1: 0 })
@@ -357,6 +385,18 @@ test('grading arguments are validated with indexed paths', () =>
 		fails({ ...grading['white-balance'], temperature: Number.NaN }, 'effects.1.temperature');
 		fails({ ...grading['hue-saturation'], hue: 200 }, 'effects.1.hue');
 		fails({ ...grading['hue-saturation'], lightness: undefined }, 'effects.1.lightness');
+	}));
+
+test('every model-curves model is accepted and preserves alpha', () =>
+	withProcessor((processor) => {
+		const source = ramp();
+		for (const model of ['linear-rgb', 'hsl', 'hsv', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr']) {
+			const effect = { ...grading['model-curves'], model };
+			const result = apply(processor, [effect]);
+			assert.notDeepEqual(result.data, source.data, model);
+			for (let index = 3; index < source.data.length; index += 4)
+				assert.equal(result.data[index], source.data[index], model);
+		}
 	}));
 
 const warm = [

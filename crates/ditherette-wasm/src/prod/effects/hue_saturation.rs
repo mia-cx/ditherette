@@ -120,6 +120,7 @@ impl Effect for HueSaturation {
                 self.map_linear(Turn { sin, cos, scale }, to_linear(rgb))
             }
             PreparedPointwise::Direct => self.map_pixel(rgb, context),
+            _ => unreachable!("hue-saturation received another effect's prepared state"),
         }
     }
 

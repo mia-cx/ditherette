@@ -1,4 +1,4 @@
-import type { CurvesEffect, Effect } from 'ditherette';
+import type { CurvesEffect, Effect, ModelCurvesEffect } from 'ditherette';
 
 export type CurveChannel = 'red' | 'green' | 'blue';
 export type CurvePoints = CurvesEffect['points'];
@@ -10,8 +10,11 @@ export type ChannelCurves = {
 	readonly curves: { readonly [C in CurveChannel]: CurvePoints };
 };
 
-/** What a layer stores: a package step, except that curves keep a curve per channel. */
-export type LayerStep = Exclude<Effect, CurvesEffect> | ChannelCurves;
+/**
+ * What a layer stores: a package step, except that curves keep a curve per channel. Colour-model
+ * curves have no editor yet, so layers don't hold them.
+ */
+export type LayerStep = Exclude<Effect, CurvesEffect | ModelCurvesEffect> | ChannelCurves;
 export type EffectKind = LayerStep['effect'];
 export type EffectOf<K extends EffectKind> = Extract<LayerStep, { effect: K }>;
 
