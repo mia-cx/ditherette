@@ -10,12 +10,12 @@
 	} from '$lib/components/ui/select';
 	import type { ColourChannel } from 'ditherette';
 	import {
+		CHANNEL_TONE,
 		CURVE_MODELS,
 		FLAT,
 		STRAIGHT,
 		XY_CHANNELS,
 		samePoints,
-		type ChannelName,
 		type CurveModel,
 		type CurvePoints,
 		type CurvesLayer
@@ -29,41 +29,6 @@
 	type Channel = 0 | 1 | 2;
 	const CHANNELS: readonly Channel[] = [0, 1, 2];
 	const XY = 'xy';
-
-	/** Each channel's colour, as a stroke and as its checkbox fill. */
-	const TONE: Record<ChannelName, { stroke: string; check: string }> = {
-		red: { stroke: 'text-red-500', check: 'data-checked:border-red-500 data-checked:bg-red-500' },
-		green: {
-			stroke: 'text-green-500',
-			check: 'data-checked:border-green-500 data-checked:bg-green-500'
-		},
-		blue: {
-			stroke: 'text-blue-500',
-			check: 'data-checked:border-blue-500 data-checked:bg-blue-500'
-		},
-		hue: {
-			stroke: 'text-amber-500',
-			check: 'data-checked:border-amber-500 data-checked:bg-amber-500'
-		},
-		saturation: {
-			stroke: 'text-fuchsia-500',
-			check: 'data-checked:border-fuchsia-500 data-checked:bg-fuchsia-500'
-		},
-		chroma: {
-			stroke: 'text-fuchsia-500',
-			check: 'data-checked:border-fuchsia-500 data-checked:bg-fuchsia-500'
-		},
-		lightness: { stroke: 'text-foreground', check: '' },
-		value: { stroke: 'text-foreground', check: '' },
-		luma: { stroke: 'text-foreground', check: '' },
-		a: {
-			stroke: 'text-emerald-500',
-			check: 'data-checked:border-emerald-500 data-checked:bg-emerald-500'
-		},
-		b: { stroke: 'text-sky-500', check: 'data-checked:border-sky-500 data-checked:bg-sky-500' },
-		cb: { stroke: 'text-sky-500', check: 'data-checked:border-sky-500 data-checked:bg-sky-500' },
-		cr: { stroke: 'text-rose-500', check: 'data-checked:border-rose-500 data-checked:bg-rose-500' }
-	};
 
 	const modelOf = (model: CurveModel) => CURVE_MODELS.find((candidate) => candidate.id === model)!;
 	/** RGB edits all three channels together at first; other models start on their lightness. */
@@ -159,7 +124,7 @@
 		<CurveGraph
 			{id}
 			points={step.points}
-			stroke={TONE[step.y.channel].stroke}
+			stroke={CHANNEL_TONE[step.y.channel].stroke}
 			neutral="flat"
 			periodic={hue !== undefined}
 			spectrum={hue ? hueAxis(hue) : undefined}
@@ -179,7 +144,7 @@
 				<div class="flex items-center gap-2">
 					<Checkbox
 						id="{id}-{channel}"
-						class={TONE[channels[channel].name].check}
+						class={CHANNEL_TONE[channels[channel].name].check}
 						bind:checked={
 							() => editing.includes(channel), (checked) => setEditing(channel, checked)
 						}
@@ -192,10 +157,12 @@
 		<CurveGraph
 			{id}
 			{points}
-			stroke={editing.length === 1 ? TONE[channels[editing[0]!].name].stroke : 'text-foreground'}
+			stroke={editing.length === 1
+				? CHANNEL_TONE[channels[editing[0]!].name].stroke
+				: 'text-foreground'}
 			behind={CHANNELS.filter((channel) => !samePoints(curves[channel], points)).map((channel) => ({
 				points: curves[channel],
-				stroke: TONE[channels[channel].name].stroke
+				stroke: CHANNEL_TONE[channels[channel].name].stroke
 			}))}
 			onchange={(next: CurvePoints) => {
 				const pick = (channel: Channel) => (editing.includes(channel) ? next : curves[channel]);
