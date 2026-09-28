@@ -14,7 +14,8 @@ import {
 	WAVE_COLUMNS
 } from './scopes';
 
-const row = (...pixels: [number, number, number, number][]) => ({
+type Pixel = [number, number, number, number];
+const row = (...pixels: Pixel[]) => ({
 	data: new Uint8ClampedArray(pixels.flat()),
 	width: pixels.length,
 	height: 1
@@ -32,6 +33,30 @@ describe('scopes', () => {
 		expect(samples.count).toBe(2);
 		expect([...samples.rgb.subarray(0, 6)]).toEqual([255, 0, 0, 0, 0, 255]);
 		expect([...samples.column.subarray(0, 2)]).toEqual([0.5 / 3, 2.5 / 3].map(Math.fround));
+	});
+
+	it('keeps every pixel of a wide image within the sample budget', () => {
+		const pixels = Array.from(
+			{ length: 2000 },
+			(_, x): Pixel => (x === 1999 ? [0, 0, 255, 255] : [255, 0, 0, 255])
+		);
+		const samples = sampleSource(row(...pixels));
+		expect(samples.count).toBe(2000);
+		expect(total(histogram(samples, 'srgb')[2])).toBe(2000);
+		expect(histogram(samples, 'srgb')[2]![LEVELS - 1]).toBe(1);
+	});
+
+	it('samples both colours of a pattern finer than the sampling grid', () => {
+		// Columns alternate red and blue, two pixels to every grid cell.
+		const [width, height] = [2048, 512];
+		const data = new Uint8ClampedArray(width * height * 4);
+		for (let pixel = 0; pixel < width * height; pixel++)
+			data.set(pixel % 2 ? [0, 0, 255, 255] : [255, 0, 0, 255], pixel * 4);
+		const samples = sampleSource({ data, width, height });
+		const [red] = histogram(samples, 'srgb');
+		const share = red[LEVELS - 1]! / samples.count;
+		expect(share).toBeGreaterThan(0.45);
+		expect(share).toBeLessThan(0.55);
 	});
 
 	it('bins levels on the normalised axes the curves use', () => {

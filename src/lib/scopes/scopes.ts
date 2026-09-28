@@ -59,8 +59,10 @@ function sample(
 	height: number,
 	read: (index: number, rgb: Uint8Array, at: number) => boolean
 ): Samples {
-	const columns = Math.min(width, MAX_COLUMNS);
-	const rows = Math.min(height, Math.max(1, Math.floor(MAX_SAMPLES / columns)));
+	// An image within the budget keeps every pixel, however wide it is.
+	const whole = width * height <= MAX_SAMPLES;
+	const columns = whole ? width : Math.min(width, MAX_COLUMNS);
+	const rows = whole ? height : Math.min(height, Math.max(1, Math.floor(MAX_SAMPLES / columns)));
 	const column = new Float32Array(columns * rows);
 	const rgb = new Uint8Array(columns * rows * 3);
 	const next = random(1);
