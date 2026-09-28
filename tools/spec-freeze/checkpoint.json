@@ -1289,7 +1289,7 @@
 					"after": {
 						"path": "crates/ditherette-wasm/src/spec/effects/model.rs",
 						"mode": "100644",
-						"sha256": "517c101d7380dff94eb06551234e8d16ca5a85f4d2e6db78dbc86da7256d1c73"
+						"sha256": "42f419bdd3f5685e3a8852fa85daeac19397a94732523dfefddeb81ab9897afb"
 					}
 				},
 				{
@@ -1350,7 +1350,7 @@
 					}
 				}
 			],
-			"contentSha256": "71fe5587150d0c485cd0857f4182d5ff90fe7a813c284b13564adc9f34f550c4"
+			"contentSha256": "046afb20d2707d319e803b22a019c1d15256a860574026aa486f692d8de36238"
 		}
 	]
 }
