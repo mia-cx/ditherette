@@ -46,6 +46,14 @@
 			[1, 0, 2 / 4],
 			[-1, 1, 1 / 4],
 			[0, 1, 1 / 4]
+		],
+		atkinson: [
+			[1, 0, 1 / 8],
+			[2, 0, 1 / 8],
+			[-1, 1, 1 / 8],
+			[0, 1, 1 / 8],
+			[1, 1, 1 / 8],
+			[0, 2, 1 / 8]
 		]
 	} satisfies Record<string, [number, number, number][]>;
 
@@ -65,9 +73,10 @@
 	const isErrorDiffusion = $derived(current?.family === 'error-diffusion');
 	const isNone = $derived(algorithm === 'none');
 	const isRandom = $derived(algorithm === 'random');
+	const isMixing = $derived(current?.method === 'mixing');
 	const isThresholdDither = $derived(current?.family === 'ordered' || current?.family === 'noise');
 	const supportsPlacement = $derived(!isNone && (isThresholdDither || isErrorDiffusion));
-	const supportsColorSpaceDither = $derived(!isNone);
+	const supportsColorSpaceDither = $derived(!isNone && !isMixing);
 
 	// Menus change settings too; follow the store so the controls show what will run.
 	$effect(() =>
@@ -180,7 +189,10 @@
 		thresholdInColorSpace: boolean
 	) {
 		const matcher = createPaletteMatcher([...palette], colorSpaceMode);
-		const amount = Math.min(1, Math.max(0, previewStrength / 100));
+		// Yliluoma has no strength; its preview always shows the full pattern.
+		const amount = mode.startsWith('yliluoma')
+			? 1
+			: Math.min(1, Math.max(0, previewStrength / 100));
 		if (mode === 'none') return drawGradientPreview(size, matcher.nearestRgb);
 		const kernel = errorKernelFor(mode);
 		if (kernel)
@@ -219,7 +231,9 @@
 	) {
 		const image = new ImageData(size, size);
 		const random = mulberry32(randomSeed);
-		const bayerSize = bayerSizeForAlgorithm(mode);
+		// Yliluoma previews with its Bayer size; blue noise previews with white noise.
+		const bayerSize =
+			bayerSizeForAlgorithm(mode) ?? bayerSizeForAlgorithm(mode.replace('yliluoma', 'bayer'));
 		const matrix = bayerSize ? normalizedBayerThresholdMatrix(bayerSize) : undefined;
 		const matrixSize = bayerSize ?? 1;
 		for (let y = 0; y < size; y++) {
@@ -450,7 +464,7 @@
 				min={0}
 				max={100}
 				step={1}
-				disabled={isNone}
+				disabled={isNone || isMixing}
 				aria-label="Dither strength"
 			/>
 			<div class="relative">
@@ -462,7 +476,7 @@
 					max="100"
 					step="1"
 					bind:value={strength}
-					disabled={isNone}
+					disabled={isNone || isMixing}
 				/>
 				<span
 					class="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground"

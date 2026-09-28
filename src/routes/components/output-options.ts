@@ -4,11 +4,14 @@ import type { LabeledOption } from './option-types';
 export const RESIZE_MODES = [
 	{ id: 'nearest', label: 'Nearest' },
 	{ id: 'bilinear', label: 'Bilinear' },
+	{ id: 'trilinear', label: 'Trilinear' },
+	{ id: 'bicubic', label: 'Bicubic' },
+	{ id: 'bicubic-scale-aware', label: 'Bicubic AA (slow)' },
 	{ id: 'lanczos2', label: 'Lanczos2' },
-	{ id: 'lanczos3', label: 'Lanczos3' },
 	{ id: 'lanczos2-scale-aware', label: 'Lanczos2 AA (slow)' },
-	{ id: 'area', label: 'Area / Box' },
-	{ id: 'lanczos3-scale-aware', label: 'Lanczos3 AA (slow)' }
+	{ id: 'lanczos3', label: 'Lanczos3' },
+	{ id: 'lanczos3-scale-aware', label: 'Lanczos3 AA (slow)' },
+	{ id: 'area', label: 'Area / Box' }
 ] as const satisfies readonly LabeledOption<ResizeId>[];
 
 export const ALPHA_MODES = [

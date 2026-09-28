@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AnchorPicker from './AnchorPicker.svelte';
 	import { Label } from '$lib/components/ui/label';
 	import { Input } from '$lib/components/ui/input';
 	import { Slider } from '$lib/components/ui/slider';
@@ -226,6 +227,15 @@
 						{/each}
 					</SelectContent>
 				</Select>
+			</div>
+			<div class="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2">
+				<span id="resize-anchor-label" class="text-xs text-muted-foreground">Anchor</span>
+				<AnchorPicker
+					labelledby="resize-anchor-label"
+					value={$outputSettings.anchor ?? 'center'}
+					disabled={resize === 'area'}
+					onchange={(anchor) => updateOutputSettings({ anchor })}
+				/>
 			</div>
 		</div>
 	</div>

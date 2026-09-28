@@ -1,4 +1,4 @@
-import type { Effect } from 'ditherette';
+import type { Effect, ResizeAnchor } from 'ditherette';
 import type { ProcessingMetricsSample } from './metrics';
 
 export const MAX_OUTPUT_PIXELS = 67_108_864;
@@ -23,7 +23,14 @@ export type ColorSpaceId =
 	| 'weighted-rgb-601'
 	| 'weighted-rgb-709'
 	| 'cielab'
-	| 'oklch';
+	| 'cielab-ciede2000'
+	| 'oklch'
+	| 'oklch-euclidean'
+	| 'oklch-circular-hue'
+	| 'cielch'
+	| 'cielch-euclidean'
+	| 'cielch-circular-hue'
+	| 'ycbcr';
 
 export type DitherId =
 	| 'none'
@@ -34,7 +41,13 @@ export type DitherId =
 	| 'floyd-steinberg'
 	| 'sierra'
 	| 'sierra-lite'
-	| 'random';
+	| 'atkinson'
+	| 'random'
+	| 'blue-noise'
+	| 'yliluoma-2'
+	| 'yliluoma-4'
+	| 'yliluoma-8'
+	| 'yliluoma-16';
 
 export type ResizeId =
 	| 'nearest'
@@ -43,6 +56,9 @@ export type ResizeId =
 	| 'lanczos2-scale-aware'
 	| 'lanczos3'
 	| 'lanczos3-scale-aware'
+	| 'bicubic'
+	| 'bicubic-scale-aware'
+	| 'trilinear'
 	| 'area';
 export type AlphaMode = 'preserve' | 'premultiplied' | 'matte';
 
@@ -75,6 +91,9 @@ export type OutputSettings = {
 	matteKey: string;
 	autoSizeOnUpload: boolean;
 	scaleFactor: number;
+	/** Which part of the source stays pinned when the aspect ratio changes; area ignores it.
+	 * Absent in settings saved before anchors existed, which means centre. */
+	anchor?: ResizeAnchor;
 	crop?: CropRect;
 };
 

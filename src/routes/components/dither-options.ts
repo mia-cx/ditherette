@@ -1,6 +1,6 @@
 import type { DitherId } from '$lib/processing/types';
 
-export type DitherMethod = 'none' | 'threshold' | 'error-diffusion';
+export type DitherMethod = 'none' | 'threshold' | 'error-diffusion' | 'mixing';
 export type DitherField = 'none' | 'ordered' | 'noise' | 'kernel';
 
 export type DitherOption = {
@@ -14,6 +14,24 @@ export type DitherOption = {
 	math: string;
 	latex: string;
 };
+
+/**
+ * Yliluoma ordered mixing: each pixel picks the two-color palette mixture that best matches it,
+ * and the Bayer threshold decides which of the two colors it shows.
+ */
+function yliluoma(size: 2 | 4 | 8 | 16, short: string) {
+	return {
+		id: `yliluoma-${size}`,
+		label: `Yliluoma ${size}×${size}`,
+		family: 'ordered',
+		method: 'mixing',
+		field: 'ordered',
+		sku: `mixing.ordered.yliluoma-${size}`,
+		short,
+		math: `choose colors c₁, c₂ and ratio t for the best mix; show c₂ where Bayer${size} < t`,
+		latex: String.raw`q = \begin{cases} c_2 & B_{${size}}[x, y] < t \\ c_1 & \text{otherwise} \end{cases}`
+	} as const satisfies DitherOption;
+}
 
 export const DITHER_ALGORITHMS = [
 	{
@@ -113,6 +131,18 @@ export const DITHER_ALGORITHMS = [
 		latex: String.raw`e = p - q(p),\quad W = \frac{1}{4}\{\rightarrow 2,\swarrow 1,\downarrow 1\}`
 	},
 	{
+		id: 'atkinson',
+		label: 'Atkinson',
+		family: 'error-diffusion',
+		method: 'error-diffusion',
+		field: 'kernel',
+		sku: 'error-diffusion.kernel.atkinson',
+		short:
+			'The classic Macintosh kernel. It passes on only three quarters of the error, so highlights and shadows settle into flat color while midtones keep a crisp, high-contrast texture.',
+		math: 'error = pixel − quantized; diffuse 1/8 to {→, →→, ↙, ↓, ↘, ↓↓}',
+		latex: String.raw`e = p - q(p),\quad W = \frac{1}{8}\begin{bmatrix}0&0&0&1&1\\0&1&1&1&0\\0&0&1&0&0\end{bmatrix}`
+	},
+	{
 		id: 'random',
 		label: 'Random',
 		family: 'noise',
@@ -123,5 +153,33 @@ export const DITHER_ALGORITHMS = [
 			'Adds deterministic white-noise thresholding before palette matching. It avoids visible tiles, but the result is grainier and less structured than ordered matrices.',
 		math: 'pixel += (mulberry32(seed,x,y) − 0.5) · strength',
 		latex: String.raw`p' = p + s\,(n(seed,x,y) - 0.5)`
-	}
+	},
+	{
+		id: 'blue-noise',
+		label: 'Blue noise',
+		family: 'noise',
+		method: 'threshold',
+		field: 'noise',
+		sku: 'threshold.noise.blue',
+		short:
+			'Thresholds against a 32×32 void-and-cluster tile. The grain is fine and evenly spread, so gradients read smoother than white noise without the crosshatch of a Bayer matrix.',
+		math: 'pixel += (blueNoise[x mod 32, y mod 32] − 0.5) · strength',
+		latex: String.raw`p' = p + s\,(N_{blue}[x \bmod 32, y \bmod 32] - 0.5)`
+	},
+	yliluoma(
+		2,
+		'Coarse two-color mixing with a visible 2×2 pattern. Flat areas become exact palette blends at a few mixing ratios.'
+	),
+	yliluoma(
+		4,
+		'Two-color mixing over a 4×4 pattern. A good balance between smooth blends and a readable, retro texture.'
+	),
+	yliluoma(
+		8,
+		'Two-color mixing over an 8×8 pattern. More mixing ratios make gradients smoother, at a slower search.'
+	),
+	yliluoma(
+		16,
+		'Two-color mixing over a 16×16 pattern. The finest blends and the slowest search; best for small outputs.'
+	)
 ] as const satisfies readonly DitherOption[];

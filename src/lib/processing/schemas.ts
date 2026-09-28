@@ -18,7 +18,7 @@ import {
 	type WorkerResponse
 } from './types';
 import type { ProcessingMetricsSample } from './metrics';
-import { isEffect, type Effect } from 'ditherette';
+import { isEffect, type Effect, type ResizeAnchor } from 'ditherette';
 import { MAX_EFFECT_LAYERS } from '$lib/effects/catalog';
 
 const RESIZE_MODES = [
@@ -28,8 +28,22 @@ const RESIZE_MODES = [
 	'lanczos2-scale-aware',
 	'lanczos3',
 	'lanczos3-scale-aware',
+	'bicubic',
+	'bicubic-scale-aware',
+	'trilinear',
 	'area'
 ] as const satisfies readonly ResizeId[];
+const RESIZE_ANCHORS = [
+	'top-left',
+	'top',
+	'top-right',
+	'left',
+	'center',
+	'right',
+	'bottom-left',
+	'bottom',
+	'bottom-right'
+] as const satisfies readonly ResizeAnchor[];
 const ALPHA_MODES = ['preserve', 'premultiplied', 'matte'] as const satisfies readonly AlphaMode[];
 const DITHER_IDS = [
 	'none',
@@ -40,7 +54,13 @@ const DITHER_IDS = [
 	'floyd-steinberg',
 	'sierra',
 	'sierra-lite',
-	'random'
+	'atkinson',
+	'random',
+	'blue-noise',
+	'yliluoma-2',
+	'yliluoma-4',
+	'yliluoma-8',
+	'yliluoma-16'
 ] as const satisfies readonly DitherId[];
 const PLACEMENT_MODES = ['everywhere', 'adaptive'] as const satisfies readonly DitherPlacement[];
 const COLOR_SPACES = [
@@ -51,7 +71,14 @@ const COLOR_SPACES = [
 	'weighted-rgb-601',
 	'weighted-rgb-709',
 	'cielab',
-	'oklch'
+	'cielab-ciede2000',
+	'oklch',
+	'oklch-euclidean',
+	'oklch-circular-hue',
+	'cielch',
+	'cielch-euclidean',
+	'cielch-circular-hue',
+	'ycbcr'
 ] as const satisfies readonly ColorSpaceId[];
 const COVERAGE_MODES = ['full', 'transitions', 'edges'] as const;
 
@@ -154,6 +181,10 @@ function validateOutputSettings(value: unknown): OutputSettings {
 		matteKey: assertString(value.matteKey, 'Worker output matte key'),
 		autoSizeOnUpload: assertBoolean(value.autoSizeOnUpload, 'Worker output auto size flag'),
 		scaleFactor: assertFiniteNonNegativeNumber(value.scaleFactor, 'Worker output scale factor'),
+		anchor:
+			value.anchor === undefined
+				? undefined
+				: assertOneOf(value.anchor, RESIZE_ANCHORS, 'Worker output resize anchor'),
 		crop: assertCropRect(value.crop)
 	};
 }
