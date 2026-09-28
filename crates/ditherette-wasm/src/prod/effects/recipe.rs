@@ -113,6 +113,25 @@ impl Effect for BuiltinEffect {
         }
     }
 
+    fn map_prepared_channel(
+        &self,
+        prepared: &PreparedPointwise,
+        channel: usize,
+        value: f32,
+    ) -> f32 {
+        match self {
+            Self::Levels(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::Curves(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::BrightnessContrast(effect) => {
+                effect.map_prepared_channel(prepared, channel, value)
+            }
+            Self::Exposure(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::WhiteBalance(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::HueSaturation(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::Recolour(effect) => effect.map_prepared_channel(prepared, channel, value),
+        }
+    }
+
     fn working_bytes(&self) -> u64 {
         match self {
             Self::Levels(effect) => effect.working_bytes(),
@@ -163,7 +182,7 @@ impl Effect for BuiltinEffect {
 
     fn map_prepared(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         rgb: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {
@@ -180,7 +199,7 @@ impl Effect for BuiltinEffect {
 
     fn map_prepared_linear(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         linear: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::prod::contract::error::{DitheretteError, ErrorCode};
 
 use super::{
-    chain::{check_bounded, Effect, EffectContext, StackPath},
+    chain::{check_bounded, Effect, EffectContext, PreparedPointwise, StackPath},
     image::EffectImage,
     model::ColourModel,
 };
@@ -248,6 +248,100 @@ enum CurveSpline {
     Periodic(PeriodicSpline),
 }
 
+/// One validated curve with its channels and spline resolved for repeated pixel work.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PreparedCurve {
+    kind: CurveKind,
+    x: ResolvedChannel,
+    y: ResolvedChannel,
+    spline: CurveSpline,
+}
+
+impl PreparedCurve {
+    fn map(&self, source: [f32; 3], current: [f32; 3]) -> [f32; 3] {
+        let x_coordinates = self.x.model.to_normalized(source);
+        let curve = self.spline.eval(x_coordinates[self.x.index]);
+        let mut weight: f32 = 1.0;
+        if self.x.kind == ChannelKind::Hue {
+            weight = self.x.model.hue_weight(source, x_coordinates);
+            if weight == 0.0 {
+                return current;
+            }
+        }
+        let mut y_coordinates = self.y.model.to_normalized(current);
+        match self.kind {
+            CurveKind::Remap => {
+                if self.y.kind == ChannelKind::Hue {
+                    let original = x_coordinates[self.x.index];
+                    let delta = (curve - original + 0.5).rem_euclid(1.0) - 0.5;
+                    y_coordinates[self.y.index] = (original + weight * delta).rem_euclid(1.0);
+                } else {
+                    y_coordinates[self.y.index] = curve;
+                }
+            }
+            CurveKind::Adjust => {
+                if self.y.kind == ChannelKind::Hue {
+                    weight = weight.min(self.y.model.hue_weight(current, y_coordinates));
+                    if weight == 0.0 {
+                        return current;
+                    }
+                }
+                match self.y.kind {
+                    ChannelKind::Hue => {
+                        y_coordinates[self.y.index] =
+                            (y_coordinates[self.y.index] + weight * (curve - 0.5)).rem_euclid(1.0);
+                    }
+                    ChannelKind::Chroma => {
+                        y_coordinates[self.y.index] *= 1.0 + weight * (2.0 * curve - 1.0);
+                    }
+                    ChannelKind::Other => {
+                        y_coordinates[self.y.index] += weight * (curve - 0.5);
+                    }
+                }
+            }
+        }
+        self.y.model.from_normalized(y_coordinates)
+    }
+}
+
+/// Up to 16 resolved curves and inline splines, prepared once for one effects call.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreparedCurves {
+    curves: [Option<PreparedCurve>; MAX_CURVES],
+    len: usize,
+}
+
+impl PreparedCurves {
+    fn new(effect: &Curves) -> Self {
+        let mut prepared = Self {
+            curves: [None; MAX_CURVES],
+            len: 0,
+        };
+        for curve in &effect.curves {
+            if curve.is_neutral_adjustment() {
+                continue;
+            }
+            let x = curve.x.resolve().expect("validated curves x channel");
+            let y = curve.y.resolve().expect("validated curves y channel");
+            prepared.curves[prepared.len] = Some(PreparedCurve {
+                kind: curve.kind,
+                x,
+                y,
+                spline: CurveSpline::new(&curve.points, x.kind == ChannelKind::Hue),
+            });
+            prepared.len += 1;
+        }
+        prepared
+    }
+
+    fn map(&self, source: [f32; 3]) -> [f32; 3] {
+        self.curves[..self.len]
+            .iter()
+            .flatten()
+            .fold(source, |current, curve| curve.map(source, current))
+    }
+}
+
 impl CurveSpline {
     fn new(points: &[[f32; 2]], periodic: bool) -> Self {
         if periodic {
@@ -257,7 +351,7 @@ impl CurveSpline {
         }
     }
 
-    fn eval(self, x: f32) -> f32 {
+    fn eval(&self, x: f32) -> f32 {
         match self {
             Self::Linear(spline) => spline.eval(x),
             Self::Periodic(spline) => spline.eval(x),
@@ -307,61 +401,6 @@ impl Curve {
         }
         Ok(())
     }
-
-    fn map(
-        &self,
-        x: ResolvedChannel,
-        y: ResolvedChannel,
-        spline: CurveSpline,
-        source: [f32; 3],
-        current: [f32; 3],
-    ) -> [f32; 3] {
-        if self.is_neutral_adjustment() {
-            return current;
-        }
-        let x_coordinates = x.model.to_normalized(source);
-        let curve = spline.eval(x_coordinates[x.index]);
-        let mut weight: f32 = 1.0;
-        if x.kind == ChannelKind::Hue {
-            weight = x.model.hue_weight(source, x_coordinates);
-            if weight == 0.0 {
-                return current;
-            }
-        }
-        let mut y_coordinates = y.model.to_normalized(current);
-        match self.kind {
-            CurveKind::Remap => {
-                if y.kind == ChannelKind::Hue {
-                    let original = x_coordinates[x.index];
-                    let delta = (curve - original + 0.5).rem_euclid(1.0) - 0.5;
-                    y_coordinates[y.index] = (original + weight * delta).rem_euclid(1.0);
-                } else {
-                    y_coordinates[y.index] = curve;
-                }
-            }
-            CurveKind::Adjust => {
-                if y.kind == ChannelKind::Hue {
-                    weight = weight.min(y.model.hue_weight(current, y_coordinates));
-                    if weight == 0.0 {
-                        return current;
-                    }
-                }
-                match y.kind {
-                    ChannelKind::Hue => {
-                        y_coordinates[y.index] =
-                            (y_coordinates[y.index] + weight * (curve - 0.5)).rem_euclid(1.0);
-                    }
-                    ChannelKind::Chroma => {
-                        y_coordinates[y.index] *= 1.0 + weight * (2.0 * curve - 1.0);
-                    }
-                    ChannelKind::Other => {
-                        y_coordinates[y.index] += weight * (curve - 0.5);
-                    }
-                }
-            }
-        }
-        y.model.from_normalized(y_coordinates)
-    }
 }
 
 impl Curves {
@@ -388,15 +427,16 @@ impl Curves {
         Ok(())
     }
 
-    fn map(&self, source: [f32; 3]) -> [f32; 3] {
-        let mut current = source;
-        for curve in &self.curves {
-            let x = curve.x.resolve().expect("validated curves x channel");
-            let y = curve.y.resolve().expect("validated curves y channel");
-            let spline = CurveSpline::new(&curve.points, x.kind == ChannelKind::Hue);
-            current = curve.map(x, y, spline, source, current);
-        }
-        current
+    fn prepared(&self) -> PreparedCurves {
+        PreparedCurves::new(self)
+    }
+
+    fn table_foldable(&self) -> bool {
+        self.curves.iter().all(|curve| {
+            curve.kind == CurveKind::Remap
+                && curve.x == curve.y
+                && matches!(curve.x.model, ColourModel::Srgb | ColourModel::LinearRgb)
+        })
     }
 }
 
@@ -435,9 +475,18 @@ impl Effect for Curves {
         if self.curves.is_empty() {
             return;
         }
+        let prepared = self.prepared();
         for rgb in &mut image.rgb {
-            *rgb = self.map(*rgb);
+            *rgb = prepared.map(*rgb);
         }
+    }
+
+    fn per_channel(&self) -> bool {
+        self.table_foldable()
+    }
+
+    fn map_channel(&self, channel: usize, value: f32) -> f32 {
+        self.prepared().map([value; 3])[channel]
     }
 
     fn pointwise(&self) -> bool {
@@ -445,6 +494,34 @@ impl Effect for Curves {
     }
 
     fn map_pixel(&self, rgb: [f32; 3], _context: &EffectContext<'_>) -> [f32; 3] {
-        self.map(rgb)
+        self.prepared().map(rgb)
+    }
+
+    fn prepare_pointwise(&self) -> PreparedPointwise {
+        PreparedPointwise::Curves(self.prepared())
+    }
+
+    fn map_prepared_channel(
+        &self,
+        prepared: &PreparedPointwise,
+        channel: usize,
+        value: f32,
+    ) -> f32 {
+        let PreparedPointwise::Curves(prepared) = prepared else {
+            unreachable!("curves received another effect's prepared state")
+        };
+        prepared.map([value; 3])[channel]
+    }
+
+    fn map_prepared(
+        &self,
+        prepared: &PreparedPointwise,
+        rgb: [f32; 3],
+        _context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        let PreparedPointwise::Curves(prepared) = prepared else {
+            unreachable!("curves received another effect's prepared state")
+        };
+        prepared.map(rgb)
     }
 }

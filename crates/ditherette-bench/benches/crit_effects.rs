@@ -53,6 +53,21 @@ fn chains() -> Vec<(&'static str, serde_json::Value)> {
             "output": { "black": output.0, "white": output.1 },
         })
     };
+    let curves = || {
+        json!({
+            "effect": "curves", "enabled": true, "curves": [
+                { "kind": "remap", "x": { "model": "srgb", "channel": "red" },
+                  "y": { "model": "srgb", "channel": "red" },
+                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+                { "kind": "remap", "x": { "model": "srgb", "channel": "green" },
+                  "y": { "model": "srgb", "channel": "green" },
+                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+                { "kind": "remap", "x": { "model": "srgb", "channel": "blue" },
+                  "y": { "model": "srgb", "channel": "blue" },
+                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] }
+            ]
+        })
+    };
     vec![
         (
             "levels",
@@ -71,8 +86,7 @@ fn chains() -> Vec<(&'static str, serde_json::Value)> {
             json!([
                 { "effect": "exposure", "enabled": true, "stops": 0.4 },
                 { "effect": "white-balance", "enabled": true, "temperature": 0.2, "tint": -0.1 },
-                { "effect": "curves", "enabled": true, "channel": "rgb",
-                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+                curves(),
                 { "effect": "brightness-contrast", "enabled": true, "brightness": 0.02, "contrast": 0.2 },
             ]),
         ),
@@ -85,15 +99,13 @@ fn chains() -> Vec<(&'static str, serde_json::Value)> {
             json!([
                 { "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null },
                 { "effect": "exposure", "enabled": true, "stops": 0.3 },
-                { "effect": "curves", "enabled": true, "channel": "rgb",
-                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+                curves(),
             ]),
         ),
         (
             "grade+hue",
             json!([
-                { "effect": "curves", "enabled": true, "channel": "rgb",
-                  "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+                curves(),
                 { "effect": "hue-saturation", "enabled": true, "hue": 25, "saturation": 0.3, "lightness": 0.05 },
                 { "effect": "levels", "enabled": true, "channel": "rgb",
                   "input": { "black": 0.02, "white": 0.98 }, "gamma": 1.1,

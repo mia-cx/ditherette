@@ -18,6 +18,7 @@ use crate::{
 
 use super::{
     analysis_cache::AnalysisCache,
+    curves::PreparedCurves,
     image::{EffectImage, CARRIER_LIMIT},
     table::ChannelTables,
 };
@@ -25,7 +26,7 @@ use super::{
 /// Most steps one chain may hold, enabled or not.
 pub const MAX_EFFECTS: usize = 64;
 
-/// Per-call state for one pointwise effect. Fixed-size variants avoid fallible preparation.
+/// Per-call state for one pointwise effect. Each variant keeps its pixel work allocation-free.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum PreparedPointwise {
     #[default]
@@ -35,10 +36,11 @@ pub enum PreparedPointwise {
         cos: f32,
         scale: f32,
     },
+    Curves(PreparedCurves),
 }
 
 impl PreparedPointwise {
-    fn reads_linear_input(self) -> bool {
+    fn reads_linear_input(&self) -> bool {
         matches!(self, Self::HueSaturation { .. })
     }
 }
@@ -46,30 +48,33 @@ impl PreparedPointwise {
 /// Prepared maps for one pointwise run, plus an exact linear table when its first map can use it.
 pub struct PreparedPointwiseState<'effects, 'tables, E> {
     effects: &'effects [&'effects E],
-    maps: [PreparedPointwise; MAX_EFFECTS],
+    maps: Vec<PreparedPointwise>,
     tables: &'tables ChannelTables,
     linear: Option<[[f32; 256]; 3]>,
 }
 
 impl<'effects, 'tables, E: Effect> PreparedPointwiseState<'effects, 'tables, E> {
-    pub fn new(effects: &'effects [&'effects E], tables: &'tables ChannelTables) -> Self {
+    pub fn try_new(
+        effects: &'effects [&'effects E],
+        tables: &'tables ChannelTables,
+    ) -> Result<Self, std::collections::TryReserveError> {
         debug_assert!(effects.len() <= MAX_EFFECTS);
         debug_assert!(effects.iter().all(|effect| effect.pointwise()));
-        let mut maps = [PreparedPointwise::Direct; MAX_EFFECTS];
-        for (prepared, effect) in maps.iter_mut().zip(effects) {
-            *prepared = effect.prepare_pointwise();
+        let mut maps = Vec::new();
+        maps.try_reserve_exact(effects.len())?;
+        for effect in effects {
+            maps.push(effect.prepare_pointwise());
         }
         let linear = maps
             .first()
-            .copied()
             .filter(|prepared| prepared.reads_linear_input())
             .map(|_| tables.linear());
-        Self {
+        Ok(Self {
             effects,
             maps,
             tables,
             linear,
-        }
+        })
     }
 
     /// Maps one original byte colour and preserves the chain's clamp after every effect.
@@ -80,7 +85,7 @@ impl<'effects, 'tables, E: Effect> PreparedPointwiseState<'effects, 'tables, E> 
                 start = 1;
                 let input = std::array::from_fn(|channel| linear[channel][bytes[channel] as usize]);
                 self.effects[0]
-                    .map_prepared_linear(self.maps[0], input, context)
+                    .map_prepared_linear(&self.maps[0], input, context)
                     .map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT))
             }
             None => std::array::from_fn(|channel| self.tables.unit(channel, bytes[channel])),
@@ -90,7 +95,7 @@ impl<'effects, 'tables, E: Effect> PreparedPointwiseState<'effects, 'tables, E> 
             .zip(&self.maps[start..self.effects.len()])
         {
             rgb = effect
-                .map_prepared(*prepared, rgb, context)
+                .map_prepared(prepared, rgb, context)
                 .map(|value| value.clamp(-CARRIER_LIMIT, CARRIER_LIMIT));
         }
         rgb
@@ -197,6 +202,16 @@ pub trait Effect {
         value
     }
 
+    /// Maps one channel with state from `prepare_pointwise` while tables are built.
+    fn map_prepared_channel(
+        &self,
+        _prepared: &PreparedPointwise,
+        channel: usize,
+        value: f32,
+    ) -> f32 {
+        self.map_channel(channel, value)
+    }
+
     /// Scratch bytes `apply` allocates beyond the carrier and memo, for memory accounting.
     fn working_bytes(&self) -> u64 {
         0
@@ -221,7 +236,7 @@ pub trait Effect {
     /// Maps a pixel with state from `prepare_pointwise`.
     fn map_prepared(
         &self,
-        _prepared: PreparedPointwise,
+        _prepared: &PreparedPointwise,
         rgb: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {
@@ -231,7 +246,7 @@ pub trait Effect {
     /// Maps a pre-decoded linear input. Only prepared variants that request it call this method.
     fn map_prepared_linear(
         &self,
-        _prepared: PreparedPointwise,
+        _prepared: &PreparedPointwise,
         _linear: [f32; 3],
         _context: &EffectContext<'_>,
     ) -> [f32; 3] {
@@ -268,6 +283,15 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
         (**self).map_channel(channel, value)
     }
 
+    fn map_prepared_channel(
+        &self,
+        prepared: &PreparedPointwise,
+        channel: usize,
+        value: f32,
+    ) -> f32 {
+        (**self).map_prepared_channel(prepared, channel, value)
+    }
+
     fn working_bytes(&self) -> u64 {
         (**self).working_bytes()
     }
@@ -286,7 +310,7 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
 
     fn map_prepared(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         rgb: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {
@@ -295,7 +319,7 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
 
     fn map_prepared_linear(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         linear: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {
