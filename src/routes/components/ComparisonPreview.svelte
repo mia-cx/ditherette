@@ -432,20 +432,25 @@
 		return frameStyle(outputFrame(pane, width, height), width);
 	}
 
+	/**
+	 * Halve the output down to one pixel. At half size, bilinear sampling averages each 2×2 block in
+	 * premultiplied alpha, so the GPU does the box filter.
+	 */
 	function buildPreviewPyramid(imageData: ImageData): PreviewLevel[] {
 		const levels: PreviewLevel[] = [imageDataToCanvas(imageData)];
-		let current = imageData;
+		let current = levels[0]!;
 		while (current.width > 1 || current.height > 1) {
 			const width = Math.max(1, Math.floor(current.width / 2));
 			const height = Math.max(1, Math.floor(current.height / 2));
 			const canvas = document.createElement('canvas');
 			canvas.width = width;
 			canvas.height = height;
-			drawBoxDownsample(canvas, current, width, height);
-			levels.push({ canvas, width, height });
 			const context = canvas.getContext('2d');
 			if (!context) break;
-			current = context.getImageData(0, 0, width, height);
+			context.imageSmoothingQuality = 'low';
+			context.drawImage(current.canvas, 0, 0, width, height);
+			current = { canvas, width, height };
+			levels.push(current);
 		}
 		return levels;
 	}
@@ -524,57 +529,6 @@
 		context.clearRect(0, 0, width, height);
 		context.drawImage(level.canvas, 0, 0, width, height);
 		canvas.dataset.previewKey = cacheKey;
-	}
-
-	function drawBoxDownsample(
-		canvas: HTMLCanvasElement,
-		image: ImageData,
-		width: number,
-		height: number
-	) {
-		const context = canvas.getContext('2d');
-		if (!context) return;
-		const output = context.createImageData(width, height);
-		const source = image.data;
-		const target = output.data;
-		const xRatio = image.width / width;
-		const yRatio = image.height / height;
-
-		for (let y = 0; y < height; y++) {
-			const startY = Math.floor(y * yRatio);
-			const endY = Math.max(startY + 1, Math.ceil((y + 1) * yRatio));
-			for (let x = 0; x < width; x++) {
-				const startX = Math.floor(x * xRatio);
-				const endX = Math.max(startX + 1, Math.ceil((x + 1) * xRatio));
-				let red = 0;
-				let green = 0;
-				let blue = 0;
-				let alpha = 0;
-				let samples = 0;
-
-				for (let sourceY = startY; sourceY < endY && sourceY < image.height; sourceY++) {
-					let offset = (sourceY * image.width + startX) * 4;
-					for (let sourceX = startX; sourceX < endX && sourceX < image.width; sourceX++) {
-						const sampleAlpha = source[offset + 3]! / 255;
-						red += source[offset]! * sampleAlpha;
-						green += source[offset + 1]! * sampleAlpha;
-						blue += source[offset + 2]! * sampleAlpha;
-						alpha += sampleAlpha;
-						samples++;
-						offset += 4;
-					}
-				}
-
-				const offset = (y * width + x) * 4;
-				const divisor = alpha || samples || 1;
-				target[offset] = red / divisor;
-				target[offset + 1] = green / divisor;
-				target[offset + 2] = blue / divisor;
-				target[offset + 3] = (alpha / Math.max(1, samples)) * 255;
-			}
-		}
-
-		context.putImageData(output, 0, 0);
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {

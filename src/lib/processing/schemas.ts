@@ -267,8 +267,9 @@ export function assertIndexBuffer(
 	if (indices.length !== expectedLength) {
 		throw new Error('Processed image index buffer does not match dimensions.');
 	}
-	for (const index of indices) {
-		if (index >= paletteLength)
+	// An indexed loop; the iterator protocol costs tens of milliseconds on large outputs.
+	for (let pixel = 0; pixel < indices.length; pixel++) {
+		if (indices[pixel]! >= paletteLength)
 			throw new Error('Processed image references a missing palette entry.');
 	}
 	return indices;
