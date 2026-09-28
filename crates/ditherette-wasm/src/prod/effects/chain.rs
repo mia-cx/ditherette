@@ -18,10 +18,7 @@ use crate::{
 
 use super::{
     analysis_cache::AnalysisCache,
-    channel_curve::{ChannelSpline, ResolvedChannel},
-    curves::Spline,
     image::{EffectImage, CARRIER_LIMIT},
-    model::ColourModel,
     table::ChannelTables,
 };
 
@@ -38,27 +35,11 @@ pub enum PreparedPointwise {
         cos: f32,
         scale: f32,
     },
-    ModelCurves {
-        model: ColourModel,
-        splines: [Spline; 3],
-    },
-    ChannelCurve {
-        x: ResolvedChannel,
-        y: ResolvedChannel,
-        spline: ChannelSpline,
-    },
 }
 
 impl PreparedPointwise {
     fn reads_linear_input(self) -> bool {
-        matches!(
-            self,
-            Self::HueSaturation { .. }
-                | Self::ModelCurves {
-                    model: ColourModel::LinearRgb,
-                    ..
-                }
-        )
+        matches!(self, Self::HueSaturation { .. })
     }
 }
 

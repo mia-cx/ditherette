@@ -26,7 +26,7 @@ The frozen reference defines the new behaviour. Production preserves exact outpu
 
 - [x] Replace the frozen reference effects. Expand `spec/effects/curves.rs` and `curves.md` with the ordered curve list, shared channel types, both curve kinds, validation, spline selection, hue rules, and original-input selection. Remove `model_curves` and `channel_curve`, update the reference modules and registry, and rewrite `spec_effects.rs` around the unified contract. Record all changes as one `effects-curves` extension. The reference tests and local freeze guard pass.
 
-- [ ] Implement the direct production equivalent. Consolidate the old production modules into `prod/effects/curves.rs`, remove their registry variants, and implement each curve as an independent output-model round trip. Keep exact neutral and empty-step no-ops. Port deterministic coverage for validation paths, list ordering, cross-model selection, hue confidence, carrier overshoot, and closed hue seams. Native production tests pass before adding specialised paths.
+- [x] Implement the direct production equivalent. Consolidate the old production modules into `prod/effects/curves.rs`, remove their registry variants, and implement each curve as an independent output-model round trip. Keep exact neutral and empty-step no-ops. Port deterministic coverage for validation paths, list ordering, cross-model selection, hue confidence, carrier overshoot, and closed hue seams. Native production tests pass before adding specialised paths.
 
 - [ ] Restore and prove production fast paths. Prepare at most 16 resolved curves and inline splines once per call. Keep per-channel tables for all-remap steps whose matching input/output channels use sRGB or linear RGB. Keep the pointwise colour memo for every other curves step. Rewrite the model-curves and channel-curve randomised comparisons as unified mixed-list comparisons, update allocation-failure coverage and benchmark recipes, and prove every optimised path byte-matches the reference.
 
@@ -122,3 +122,11 @@ None for #302. Overlay editing, masks, two-input curves, and compiled LUTs remai
 - `node tools/spec-freeze/extend.mjs effects-curves "Replace three curve effects with one ordered curves effect"` recorded one extension with 10 changes.
 - `NODE_OPTIONS=--require=/tmp/spawnsync-status-zero.cjs nice node tools/spec-freeze/guard.mjs` passed. The temporary shim works around this VM reporting `EPERM` after successful synchronous child processes; the guard and repository files were unchanged.
 - Plain `cargo test` reaches one expected TODO 2 compile failure in `tests/prod_effects.rs:361-362`, where the production comparison still imports removed `spec::model_curves` items. Production library code compiles and its unit tests pass.
+
+### TODO 2 validation
+
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml -- --check` passed.
+- `CARGO_BUILD_JOBS=2 nice cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_effects` passed: 16 tests.
+- `CARGO_BUILD_JOBS=2 nice cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test prod_effects_allocation` passed: 1 test.
+- `CARGO_BUILD_JOBS=2 nice cargo test --manifest-path crates/ditherette-wasm/Cargo.toml` passed all unit, integration, and doc-test targets.
+- The old randomised fixtures and allocation fixture were ported minimally to the unified JSON shape so the crate compiles. TODO 3 still owns prepared curves, table folding, and the unified mixed-list randomised proof.
