@@ -34,8 +34,16 @@ The grading effects from #106 join the same fold. `grade` is exposure, white bal
 
 Every built-in is pointwise once its arguments are known: each output pixel depends only on the same input pixel.
 After the tabulated run, a pixel's carrier value is a pure function of its three input bytes, so the rest of the chain is too.
-`memo::try_memoized` keeps a direct-mapped table of 16,384 colours (256 KiB, charged as scratch), checks the full key on every hit, and runs the remaining chain once per miss.
-Each miss calls `Effect::map_pixel` for every remaining step. Nothing is boxed or heap-allocated per call: splines are inline, so every allocation an effects call makes is reserved fallibly (`tests/prod_effects_allocation.rs` fails each one in turn). Preparing maps once per call in boxed closures was 4–12% faster on misses, but those boxes could not fail gracefully.
+Terminal application now keeps final RGB bytes in a direct-mapped table and writes them into the existing RGBA buffer.
+Its size is the next power of two at `pixels / 32`, clamped from 16,384 through 262,144 entries.
+Each eight-byte entry checks the full 24-bit key. The large photo therefore uses a 2 MiB table instead of a 99.35 MiB carrier and float memo, reducing peak scratch by 97.35 MiB.
+The table is allocated before any pixel changes, so allocation failure leaves the input clean.
+
+Each miss runs the unchanged `f32` chain, including the clamp after every effect, then converts the final channels to bytes once.
+Fixed-size prepared state computes hue sine, cosine, and chroma scale once per call.
+When hue-saturation leads the remaining chain, three 256-entry tables decode its exact linear inputs once.
+The continuous `carrier_after` analysis path keeps its 16,384-entry float memo because recolour analysis needs the unrounded values.
+Nothing is boxed or allocated per miss; `tests/prod_effects_allocation.rs` still fails every allocation in turn.
 Photos repeat colours locally; illustrations repeat them everywhere. Effects without a pixel map, such as future spatial effects, keep the carrier path.
 
 A recipe-less `recolour` step is global, since it analyses the whole image reaching it. `resolve_recolour` first replaces each one with the recipe it would derive: it builds the carrier up to that step (memoized too), analyses it through the cache, and substitutes the result. The resolved chain is pointwise end to end.
@@ -54,7 +62,38 @@ Criterion `crit_effects`, same host and fixtures, 8-colour palette, Oklab:
 | `recolour+grade` | Picking_at_thread 3462×2309 | 1453 ms | 359.3 ms | 4.0× |
 
 `recolour-apply` applies the fixture's own analysed recipe. `recolour+grade` is an automatic recolour step followed by exposure and curves, analysis included and uncached.
-The memo supersedes an earlier per-effect table of linear decodes for hue-saturation (−31% on its own), which is removed.
+
+The adaptive cache sizing evidence for `Picking_at_thread` is:
+
+| Cache | Hit rate | Misses |
+| --- | ---: | ---: |
+| Direct 16K | 78.48% | 1,720,149 |
+| Direct 64K | 86.68% | 1,064,671 |
+| Direct 262K | 95.37% | 369,976 |
+| 2-way 262K | 95.98% | 321,028 |
+
+The extra associativity saves only 0.61 percentage points, so the selected table stays direct-mapped.
+
+Criterion `crit_effects`, native x86-64 release, quiet host. Values are medians and IQRs from 20 flat samples:
+
+| Fixture | Baseline median (IQR) | Candidate median (IQR) | Speedup |
+| --- | ---: | ---: | ---: |
+| Celeste_Insta_selfie 800×800 | 6.652 ms (0.066) | 2.400 ms (0.031) | 2.77× |
+| Picking_at_thread 3462×2309 | 140.811 ms (1.477) | 20.023 ms (0.593) | 7.03× |
+
+The baseline samples are the 2026-09-25 direct-16K implementation. The candidate samples are from 2026-09-27.
+Both runs compare production bytes with the frozen reference before timing.
+
+`crit_effects_browser.mjs` supplies the corresponding scalar-Chromium recipe-v2 comparison.
+It decodes both photos before timing, uses a fresh processor per sample, alternates artifact order, checks indexed-output hashes, and reports medians plus IQRs for no effects, curves, large hue-saturation, and 800×800 hue-saturation.
+`DITHERETTE_BENCH_PHOTO` swaps the large fixture for a local photo. Scalar Chromium, 2026-09-28, with a 6000×4000 camera JPEG (not committed) as the large fixture; indexed output matched in every case:
+
+| Case | Baseline median (IQR) | Candidate median (IQR) | Speedup |
+| --- | ---: | ---: | ---: |
+| 6000×4000 no effects | 136.6 ms (2.7) | 136.7 ms (4.0) | 1.00× |
+| 6000×4000 curves | 167.3 ms (4.3) | 166.3 ms (3.8) | 1.01× |
+| 6000×4000 hue-saturation | 2100.6 ms (29.5) | 393.4 ms (9.0) | 5.34× |
+| Celeste_Insta_selfie 800×800 hue-saturation | 32.4 ms (1.2) | 19.6 ms (0.7) | 1.65× |
 
 ### Recolour analysis (selected)
 
@@ -90,5 +129,5 @@ Any other call drops that raw snapshot at its start, so it is charged only by th
 
 Memory: `applyEffects` holds the source snapshot and one output buffer, like `perturb`.
 Recipe-v2 `process` adds the retained raw snapshot to the v1 budget.
-A chain that does not fully tabulate adds the carrier (13 bytes per pixel) and the 256 KiB colour memo; automatic recolouring adds its bounded analysis samples.
+A terminal pointwise chain adds its adaptive byte memo. Analysis adds the 13-byte-per-pixel carrier and 256 KiB float memo; automatic recolouring also adds its bounded analysis samples.
 The analysis cache has a fixed bound in the processor bookkeeping.

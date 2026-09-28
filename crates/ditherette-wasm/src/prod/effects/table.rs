@@ -6,6 +6,7 @@
 use super::{
     chain::Effect,
     image::{byte, CARRIER_LIMIT},
+    space::srgb_unit_to_linear,
 };
 
 /// Continuous channel values after the run, indexed by channel then input byte.
@@ -31,8 +32,56 @@ impl ChannelTables {
         self.0[channel][input as usize]
     }
 
+    /// Linear-light inputs for a first hue-saturation step.
+    pub fn linear(&self) -> [[f32; 256]; 3] {
+        self.0.map(|table| table.map(srgb_unit_to_linear))
+    }
+
     /// Final bytes when the run is the whole chain: one clip and round per entry.
     pub fn bytes(&self) -> [[u8; 256]; 3] {
         self.0.map(|table| table.map(byte))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prod::effects::{EffectContext, EffectImage};
+
+    struct Offset;
+
+    impl Effect for Offset {
+        fn validate(
+            &self,
+            _path: &str,
+        ) -> Result<(), crate::prod::contract::error::DitheretteError> {
+            Ok(())
+        }
+
+        fn apply(&self, _image: &mut EffectImage, _context: &EffectContext<'_>) {}
+
+        fn per_channel(&self) -> bool {
+            true
+        }
+
+        fn map_channel(&self, channel: usize, value: f32) -> f32 {
+            value * (channel as f32 + 0.75) - 0.125
+        }
+    }
+
+    #[test]
+    fn linear_tables_equal_direct_decoding_bit_for_bit() {
+        let effect = Offset;
+        let tables = ChannelTables::new([&effect]);
+        let linear = tables.linear();
+        for channel in 0..3 {
+            for input in 0..=u8::MAX {
+                assert_eq!(
+                    linear[channel][input as usize].to_bits(),
+                    srgb_unit_to_linear(tables.unit(channel, input)).to_bits(),
+                    "channel {channel}, input {input}"
+                );
+            }
+        }
     }
 }
