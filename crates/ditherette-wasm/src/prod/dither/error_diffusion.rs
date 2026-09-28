@@ -304,9 +304,9 @@ fn nearest_finite(
     matcher: &PaletteMatcher,
     coordinates: [f32; 3],
 ) -> Result<PaletteColor, DitheretteError> {
-    let mut best = matcher.colors[0];
+    let mut best = matcher.colors()[0];
     let mut best_score = f32::INFINITY;
-    for &candidate in &matcher.colors {
+    for &candidate in matcher.colors() {
         let score = distance_score(coordinates, candidate.coordinates, matcher.matching);
         if !score.is_finite() {
             return Err(arithmetic_error(

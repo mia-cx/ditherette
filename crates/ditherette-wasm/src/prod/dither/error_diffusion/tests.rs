@@ -48,7 +48,7 @@ fn baseline_constructor_adapters_use_landed_converter_without_reordering() {
                 assert_eq!(matcher.matching, matching);
                 assert_eq!(
                     matcher
-                        .colors
+                        .colors()
                         .iter()
                         .map(|color| (color.index, color.coordinates.map(f32::to_bits)))
                         .collect::<Vec<_>>(),
@@ -74,14 +74,21 @@ fn finite_matching_checks_candidates_after_an_exact_match() {
     let first = PaletteColor {
         index: 7,
         coordinates: [0.0; 3],
+        ciede2000_chroma: 0.0,
     };
-    let mut matcher = PaletteMatcher {
-        colors: vec![first, PaletteColor { index: 9, ..first }],
-        matching: MatchPolicy::SrgbEuclidean,
-    };
+    let matcher = PaletteMatcher::new(
+        vec![first, PaletteColor { index: 9, ..first }],
+        MatchPolicy::SrgbEuclidean,
+    );
     assert_eq!(matcher.nearest_finite([0.0; 3]), Some(first));
 
-    matcher.colors[1].coordinates[0] = f32::MAX;
+    let matcher = PaletteMatcher::new(
+        vec![
+            first,
+            PaletteColor::new(9, [f32::MAX, first.coordinates[1], first.coordinates[2]]),
+        ],
+        MatchPolicy::SrgbEuclidean,
+    );
     assert!(super::nearest_finite(&matcher, [0.0; 3]).is_err());
     assert_eq!(matcher.nearest_finite([0.0; 3]), None);
 }

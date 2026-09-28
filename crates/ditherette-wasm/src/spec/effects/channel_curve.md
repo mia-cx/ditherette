@@ -38,7 +38,7 @@ For curve result `c` and hue confidence `w`:
 - saturation or chroma Y multiplies by `1 + w * (2c - 1)`;
 - every other Y adds `w * (c - 0.5)` normalized units.
 
-If X or Y is hue, `w` is the minimum confidence of every hue-valued side. Otherwise `w` is one. Hue output wraps modulo one. Other Y outputs are not clamped before conversion.
+If X or Y is hue, `w` is the minimum confidence of every hue-valued side. Otherwise `w` is one. When `w` is zero the input pixel passes through unchanged, without converting to Y and back. Hue output wraps modulo one. Other Y outputs are not clamped before conversion.
 
 A hue X axis uses a cyclic Fritsch-Butland spline. Its first point must have `x = 0`, its last point must have `x = 1`, and the two y values must match exactly. The duplicate last point closes the seam. The shared seam tangent uses the final and first secants, and evaluation wraps X modulo one.
 
@@ -60,7 +60,7 @@ HSL and HSV consume carrier overshoot when a non-neutral curve converts through 
 
 ## Production obligations
 
-Every valid instance is pointwise. An instance is per-channel only when X and Y select the same primary component and both models are `srgb` or `linear-rgb`. Production builds one inline spline per call and must preserve the reference operation order.
+Every valid instance is pointwise. An instance is per-channel only when X and Y select the same primary component, X uses `srgb` or `linear-rgb`, and Y uses `srgb`. A `linear-rgb` Y round-trips every component through linear light, so it is not per-channel. Production builds one inline spline per call and must preserve the reference operation order.
 
 ## Non-goals
 

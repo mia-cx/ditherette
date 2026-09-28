@@ -401,36 +401,6 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         }
     }
     let can_match_rgb = call.parts().0.expect("requested palette").can_match_rgb();
-    // Scalar Yliluoma Everywhere memoizes whole mixtures in the same exact-RGB table shape.
-    let mixes_by_rgb = mixing.is_none()
-        && matches!(
-            dither,
-            DitherPolicy::Yliluoma {
-                placement: Placement::Everywhere {},
-                ..
-            }
-        );
-    let mut rgb_cache = if can_match_rgb
-        && (mixes_by_rgb
-            || matches!(
-                dither,
-                DitherPolicy::None {}
-                    | DitherPolicy::Separable { .. }
-                    | DitherPolicy::Diffusion {
-                        feedback: DiffusionFeedback::SrgbBytes,
-                        ..
-                    }
-            )) {
-        cache::Work::try_new(
-            output_dimensions,
-            row_policy.filter(|_| bands.is_some()),
-            call.available_working_capacity(),
-        )
-    } else {
-        None
-    };
-    let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
-    call.charge_optional_capacity(rgb_cache_capacity, peak)?;
     let mix_index = if let DitherPolicy::Yliluoma { size, .. } = dither {
         if !can_match_rgb
             || output_dimensions.pixel_count().expect("validated output")
@@ -456,6 +426,29 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
     };
     let mix_index_capacity = mix_index.as_ref().map_or(0, |index| index.capacity_bytes());
     call.charge_optional_capacity(mix_index_capacity, peak)?;
+    // Scalar Yliluoma also memoizes the position-independent endpoints of adaptive placement.
+    let mixes_by_rgb = mixing.is_none() && matches!(dither, DitherPolicy::Yliluoma { .. });
+    let mut rgb_cache = if can_match_rgb
+        && (mixes_by_rgb
+            || matches!(
+                dither,
+                DitherPolicy::None {}
+                    | DitherPolicy::Separable { .. }
+                    | DitherPolicy::Diffusion {
+                        feedback: DiffusionFeedback::SrgbBytes,
+                        ..
+                    }
+            )) {
+        cache::Work::try_new(
+            output_dimensions,
+            row_policy.filter(|_| bands.is_some()),
+            call.available_working_capacity(),
+        )
+    } else {
+        None
+    };
+    let rgb_cache_capacity = rgb_cache.as_ref().map_or(0, cache::Work::capacity_bytes);
+    call.charge_optional_capacity(rgb_cache_capacity, peak)?;
     let (prepared, _, images, scratch) = call.image_parts();
     let prepared = prepared.expect("requested palette");
     let [source, resized, perturbed, indices] = &mut scratch.buffers;

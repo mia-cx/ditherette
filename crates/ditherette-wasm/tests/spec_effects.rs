@@ -643,6 +643,10 @@ fn model_conversion_formulas_and_hue_rules_are_literal() {
     };
     effect.apply(&mut image, &EffectContext::default());
     assert_eq!(image.rgb[0].map(f32::to_bits), grey.map(f32::to_bits));
+    for model in [ColourModel::Oklch, ColourModel::Cielch] {
+        let grey = [0.5; 3];
+        assert_eq!(model.hue_weight(grey, model.to_normalized(grey)), 0.0);
+    }
 
     let half = [0.51, 0.5, 0.5];
     let mut image = EffectImage {
@@ -845,6 +849,22 @@ fn hue_triggered_channel_curves_fade_to_zero_at_grey_and_half_at_threshold() {
         run_one(&hue_output, grey).map(f32::to_bits),
         grey.map(f32::to_bits)
     );
+    // Float conversions leave greys a residual Oklch or CIELCh chroma; it must not count as hue.
+    for model in ["oklch", "cielch"] {
+        let hue_input = channel_curve(
+            (model, "hue"),
+            ("srgb", "blue"),
+            json!([[0, 1], [0.5, 1], [1, 1]]),
+        );
+        let hue_output = channel_curve(("srgb", "red"), (model, "hue"), json!([[0, 1], [1, 1]]));
+        for effect in [hue_input, hue_output] {
+            assert_eq!(
+                run_one(&effect, grey).map(f32::to_bits),
+                grey.map(f32::to_bits),
+                "{model}"
+            );
+        }
+    }
     let adjusted = ditherette_wasm::spec::effects::model::ColourModel::Hsl
         .to_normalized(run_one(&hue_output, [0.51, 0.5, 0.5]));
     assert!((adjusted[0] - 0.25).abs() < 0.000_01, "{}", adjusted[0]);

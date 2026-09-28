@@ -92,9 +92,9 @@ fn search(
 ) -> PaletteMix {
     find_ordered_mix(
         color,
-        matcher.colors.len(),
+        matcher.colors().len(),
         |index| {
-            let entry = matcher.colors[index];
+            let entry = matcher.colors()[index];
             (entry.index, entry.coordinates)
         },
         levels,
