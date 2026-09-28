@@ -24,7 +24,7 @@ The frozen reference defines the new behaviour. Production preserves exact outpu
 
 ## TODOs
 
-- [ ] Replace the frozen reference effects. Expand `spec/effects/curves.rs` and `curves.md` with the ordered curve list, shared channel types, both curve kinds, validation, spline selection, hue rules, and original-input selection. Remove `model_curves` and `channel_curve`, update the reference modules and registry, and rewrite `spec_effects.rs` around the unified contract. Record all changes as one `effects-curves` extension. The reference tests and local freeze guard pass.
+- [x] Replace the frozen reference effects. Expand `spec/effects/curves.rs` and `curves.md` with the ordered curve list, shared channel types, both curve kinds, validation, spline selection, hue rules, and original-input selection. Remove `model_curves` and `channel_curve`, update the reference modules and registry, and rewrite `spec_effects.rs` around the unified contract. Record all changes as one `effects-curves` extension. The reference tests and local freeze guard pass.
 
 - [ ] Implement the direct production equivalent. Consolidate the old production modules into `prod/effects/curves.rs`, remove their registry variants, and implement each curve as an independent output-model round trip. Keep exact neutral and empty-step no-ops. Port deterministic coverage for validation paths, list ordering, cross-model selection, hue confidence, carrier overshoot, and closed hue seams. Native production tests pass before adding specialised paths.
 
@@ -111,3 +111,14 @@ All curves remain pointwise, so the existing colour memo survives. Prepared stat
 ### Open questions
 
 None for #302. Overlay editing, masks, two-input curves, and compiled LUTs remain in their later slices.
+
+### TODO 1 validation
+
+- `cargo fmt --manifest-path crates/ditherette-wasm/Cargo.toml` passed.
+- `CARGO_BUILD_JOBS=2 nice cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_effects` passed: 21 tests.
+- `CARGO_BUILD_JOBS=2 nice cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --test spec_grading` passed: 6 tests.
+- `CARGO_BUILD_JOBS=2 nice cargo test --manifest-path crates/ditherette-wasm/Cargo.toml` with all 29 `spec_*` integration targets passed.
+- `CARGO_BUILD_JOBS=2 nice cargo test --manifest-path crates/ditherette-wasm/Cargo.toml --lib` passed: 117 tests.
+- `node tools/spec-freeze/extend.mjs effects-curves "Replace three curve effects with one ordered curves effect"` recorded one extension with 10 changes.
+- `NODE_OPTIONS=--require=/tmp/spawnsync-status-zero.cjs nice node tools/spec-freeze/guard.mjs` passed. The temporary shim works around this VM reporting `EPERM` after successful synchronous child processes; the guard and repository files were unchanged.
+- Plain `cargo test` reaches one expected TODO 2 compile failure in `tests/prod_effects.rs:361-362`, where the production comparison still imports removed `spec::model_curves` items. Production library code compiles and its unit tests pass.
