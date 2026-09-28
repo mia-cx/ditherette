@@ -3,7 +3,8 @@ import type { ColourChannel, Curve, CurvePoints, Effect } from 'ditherette';
 export type EffectKind = Effect['effect'];
 export type EffectOf<K extends EffectKind> = Extract<Effect, { effect: K }>;
 export type ChannelName = ColourChannel['channel'];
-type ColourModel = ColourChannel['model'];
+/** Every colour model available to curves and scopes. */
+export type CurveModel = ColourChannel['model'];
 
 type ChannelInfo = { readonly name: ChannelName; readonly label: string };
 type ModelChannels = readonly [ChannelInfo, ChannelInfo, ChannelInfo];
@@ -26,7 +27,7 @@ const LCH: ModelChannels = [
 
 /** Every colour model a curve can read or change, with its channels in canonical order. */
 export const CURVE_MODELS: readonly {
-	readonly id: ColourModel;
+	readonly id: CurveModel;
 	readonly label: string;
 	readonly channels: ModelChannels;
 }[] = [
