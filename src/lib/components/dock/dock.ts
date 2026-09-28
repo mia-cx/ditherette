@@ -7,6 +7,15 @@ export type DockParams = Readonly<Record<string, string>>;
 
 /** Room for an effect editor without covering the preview. */
 const FLOATING_SIZE = { width: 360, height: 520 };
+
+/** A new floating window's box, centred in the dock. */
+export function centredFloating(api: DockviewApi) {
+	return {
+		...FLOATING_SIZE,
+		x: Math.max(0, Math.round((api.width - FLOATING_SIZE.width) / 2)),
+		y: Math.max(0, Math.round((api.height - FLOATING_SIZE.height) / 2))
+	};
+}
 /** Matches `--dv-tabs-and-actions-container-height` in dock.css. */
 const TAB_BAR = 32;
 /** Dockview's default group constraints, restored on expand. */
@@ -14,11 +23,14 @@ const MINIMUM_SIZE = 100;
 const MAXIMUM_SIZE = Number.MAX_SAFE_INTEGER;
 
 /**
- * How a group collapsed: to its tab bar (`height`), to a vertical tab strip when it has no
- * neighbour above or below (`width`), or a floating window rolled up to its title (`float`).
- * `size` is the size to restore.
+ * How a group collapsed: rolled up to its tab bar (`height`), a floating window rolled up to its
+ * title (`float`), or part of a column folded into a strip (`width`). `size` is the height, or
+ * for a strip the column width, to restore. A strip also keeps each group's own `height` and
+ * whether it was `rolled` up before the column folded.
  */
-type Collapse = { axis: 'height' | 'width' | 'float'; size: number };
+type Collapse =
+	| { axis: 'height' | 'float'; size: number }
+	| { axis: 'width'; size: number; height?: number; rolled?: boolean };
 
 /**
  * Bumped on every collapse or expand. A floating window's height lives on its frame, which Dockview
@@ -51,7 +63,8 @@ export function toggleFloating(api: DockviewApi, group: IDockviewGroupPanel) {
 	const panel = group.activePanel;
 	// Moving a tab out would strand the rest of a collapsed group at its tab-bar size.
 	const collapsed = collapsedGroups.get()[group.id];
-	if (collapsed) expand(api, group, collapsed);
+	if (collapsed?.axis === 'width') toggleSidebar(api, group);
+	else if (collapsed) expand(api, group, collapsed);
 	if (isFloating(group)) group.api.moveTo({ position: 'right' });
 	else if (panel) api.addFloatingGroup(panel, FLOATING_SIZE);
 }
@@ -74,6 +87,8 @@ function constraints(axis: 'height' | 'width', minimum: number, maximum: number)
 
 /** Hold a group at its collapsed size. Also re-applies a saved collapse after a layout loads. */
 function applyCollapse(api: DockviewApi, group: IDockviewGroupPanel, axis: Collapse['axis']) {
+	// A strip in a column shares the column's height, so drop any tab-bar height it held.
+	if (axis === 'width') group.api.setConstraints(constraints('height', MINIMUM_SIZE, MAXIMUM_SIZE));
 	if (axis === 'float') {
 		const frame = floatingFrame(api, group);
 		const content = frame?.querySelector<HTMLElement>('.dv-content-container');
@@ -90,34 +105,139 @@ function forget(group: IDockviewGroupPanel) {
 	if (_removed) collapsedGroups.set(rest);
 }
 
-/** Collapse a group to its tab bar or title, or restore the size it had. */
+/** The groups stacked above and below `group`, itself included, top to bottom. */
+function column(api: DockviewApi, group: IDockviewGroupPanel) {
+	const walk = (direction: 'up' | 'down') => {
+		const found: IDockviewGroupPanel[] = [];
+		for (let next = api.adjacentGroupInDirection(group, direction); next; ) {
+			found.push(next);
+			next = api.adjacentGroupInDirection(next, direction);
+		}
+		return found;
+	};
+	return [...walk('up').reverse(), group, ...walk('down')];
+}
+
+function remember(group: IDockviewGroupPanel, collapse: Collapse) {
+	collapsedGroups.set({ ...collapsedGroups.get(), [group.id]: collapse });
+}
+
+/**
+ * Run a width change on `changing` while other docked groups keep their widths, so the widest one,
+ * the preview in the studio, absorbs the difference. Dockview would share it out proportionally.
+ */
+function keepOtherWidths(
+	api: DockviewApi,
+	changing: readonly IDockviewGroupPanel[],
+	change: () => void
+) {
+	const others = api.groups.filter(
+		(other) => !changing.includes(other) && other.api.location.type === 'grid'
+	);
+	const widest = others.reduce<IDockviewGroupPanel | undefined>(
+		(best, other) => (!best || other.api.width > best.api.width ? other : best),
+		undefined
+	);
+	const held = others
+		.filter((other) => other !== widest)
+		.map((other) => [other, other.api.width] as const);
+	change();
+	for (const [other, width] of held) other.api.setSize({ width });
+}
+
+/**
+ * Roll a window up to its tab bar, or a floating window up to its title, or restore the size it
+ * had. The whole column folds into a strip only through `toggleSidebar`.
+ */
 export function toggleCollapsed(api: DockviewApi, group: IDockviewGroupPanel) {
 	const collapsed = collapsedGroups.get()[group.id];
+	if (collapsed?.axis === 'width') return toggleSidebar(api, group);
 	if (collapsed) return expand(api, group, collapsed);
-	const stacked = (['up', 'down'] as const).some((direction) =>
-		api.adjacentGroupInDirection(group, direction)
-	);
-	const axis: Collapse['axis'] = isFloating(group) ? 'float' : stacked ? 'height' : 'width';
+	const axis = isFloating(group) ? 'float' : 'height';
 	const size =
 		axis === 'float'
 			? (floatingFrame(api, group)?.offsetHeight ?? FLOATING_SIZE.height)
-			: axis === 'height'
-				? group.api.height
-				: group.api.width;
-	collapsedGroups.set({ ...collapsedGroups.get(), [group.id]: { axis, size } });
+			: group.api.height;
+	remember(group, { axis, size });
 	applyCollapse(api, group, axis);
 	collapseRevision.set(collapseRevision.get() + 1);
 }
 
-function expand(api: DockviewApi, group: IDockviewGroupPanel, { axis, size }: Collapse) {
+function expand(api: DockviewApi, group: IDockviewGroupPanel, collapse: Collapse) {
 	forget(group);
-	if (axis === 'float') {
+	if (collapse.axis === 'float') {
 		const frame = floatingFrame(api, group);
-		if (frame) frame.style.height = `${size}px`;
+		if (frame) frame.style.height = `${collapse.size}px`;
 	} else {
-		if (axis === 'width') group.api.setHeaderPosition('top');
-		group.api.setConstraints(constraints(axis, MINIMUM_SIZE, MAXIMUM_SIZE));
-		group.api.setSize({ [axis]: size });
+		group.api.setConstraints(constraints('height', MINIMUM_SIZE, MAXIMUM_SIZE));
+		group.api.setSize({ height: collapse.size });
+	}
+	collapseRevision.set(collapseRevision.get() + 1);
+}
+
+/** Whether a window can roll up: it floats, or shares its column with another window. */
+export function canCollapse(api: DockviewApi, group: IDockviewGroupPanel) {
+	return isFloating(group) || column(api, group).length > 1;
+}
+
+/**
+ * The side a docked column sits on, if `group` is the top window of a column other than the one
+ * holding `main`. That window carries the sidebar button.
+ */
+export function sidebarSide(
+	api: DockviewApi,
+	group: IDockviewGroupPanel,
+	main: string | undefined
+): 'left' | 'right' | undefined {
+	if (isFloating(group) || api.adjacentGroupInDirection(group, 'up')) return undefined;
+	const mainGroup = main ? api.getPanel(main)?.group : undefined;
+	if (!mainGroup || column(api, group).some((member) => member.id === mainGroup.id))
+		return undefined;
+	const left = (candidate: IDockviewGroupPanel) =>
+		groupElement(api, candidate)?.getBoundingClientRect().left ?? 0;
+	return left(group) < left(mainGroup) ? 'left' : 'right';
+}
+
+/**
+ * Fold `group`'s whole column into a strip of vertical tabs, or open it again. Windows rolled up
+ * to their tab bars before the column folded stay rolled up when it opens.
+ */
+export function toggleSidebar(api: DockviewApi, group: IDockviewGroupPanel) {
+	const groups = column(api, group);
+	const saved = collapsedGroups.get();
+	const top = groups[0]!;
+	const folded = saved[top.id];
+	if (folded?.axis === 'width') {
+		keepOtherWidths(api, groups, () => {
+			for (const member of groups) {
+				const record = saved[member.id];
+				member.api.setHeaderPosition('top');
+				member.api.setConstraints(constraints('width', MINIMUM_SIZE, MAXIMUM_SIZE));
+				forget(member);
+				if (record?.axis !== 'width' || record.height === undefined) continue;
+				if (record.rolled) {
+					remember(member, { axis: 'height', size: record.height });
+					applyCollapse(api, member, 'height');
+				} else member.api.setSize({ height: record.height });
+			}
+			top.api.setSize({ width: folded.size });
+		});
+	} else {
+		const width = top.api.width;
+		const share = Math.floor(
+			groups.reduce((total, member) => total + member.api.height, 0) / groups.length
+		);
+		keepOtherWidths(api, groups, () => {
+			for (const member of groups) {
+				const record = saved[member.id];
+				const rolled = record?.axis === 'height';
+				const height = rolled ? record.size : member.api.height;
+				remember(member, { axis: 'width', size: width, height, rolled });
+				applyCollapse(api, member, 'width');
+			}
+		});
+		// Split the strip evenly, so every window's vertical tabs have room.
+		for (const member of groups.slice(0, -1)) member.api.setSize({ height: share });
 	}
 	collapseRevision.set(collapseRevision.get() + 1);
 }

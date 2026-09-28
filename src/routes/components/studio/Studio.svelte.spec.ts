@@ -84,3 +84,23 @@ it('collapses a window to its tab bar and expands it to its previous size', asyn
 	await expect.poll(() => group().offsetHeight).toBe(height);
 	expect(collapsedGroups.get()).toEqual({});
 });
+
+it('folds a whole sidebar into a strip and opens it at its previous width', async () => {
+	await renderStudio();
+	const group = () =>
+		[...document.querySelectorAll<HTMLElement>('.dv-groupview')].find((element) =>
+			element.querySelector('.dv-tab')?.textContent?.includes('Dimensions')
+		)!;
+	const width = group().offsetWidth;
+	const press = async (name: string) => {
+		group().querySelector<HTMLElement>(`[aria-label="${name}"]`)!.focus();
+		await userEvent.keyboard('{Enter}');
+	};
+	await press('Collapse sidebar');
+	await expect.poll(() => group().offsetWidth).toBeLessThan(40);
+	// Dimensions and Palette share the left column, so both fold.
+	expect(Object.keys(collapsedGroups.get())).toHaveLength(2);
+	await press('Expand sidebar');
+	await expect.poll(() => group().offsetWidth).toBe(width);
+	expect(collapsedGroups.get()).toEqual({});
+});

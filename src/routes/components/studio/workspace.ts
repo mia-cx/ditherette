@@ -1,7 +1,7 @@
 import { atom } from 'nanostores';
 import { persistentAtom } from '@nanostores/persistent';
 import type { DockviewApi, SerializedDockview } from 'dockview-core';
-import { clearCollapsed, collapseRevision } from '$lib/components/dock/dock';
+import { centredFloating, clearCollapsed, collapseRevision } from '$lib/components/dock/dock';
 import { effectLayers, type EffectLayer } from '$lib/stores/effects';
 
 /** The studio's fixed windows, in Windows-menu order. Their ids double as component names. */
@@ -90,6 +90,8 @@ export function startStudio(api: DockviewApi) {
 	try {
 		if (!saved) throw new Error('No saved layout.');
 		api.fromJSON(saved);
+		// Saved layouts keep the titles they were saved with; take the current ones.
+		for (const { id, title } of WINDOWS) api.getPanel(id)?.api.setTitle(title);
 	} catch {
 		defaultLayout(api);
 		// Replace a missing or unloadable layout now, so the next mount does not retry it.
@@ -149,7 +151,7 @@ export function toggleWindow(id: WindowId) {
 	});
 }
 
-/** Show a layer's window, opening it beside the other effect windows, or below the effects list. */
+/** Show a layer's window, as a tab of an open effect window, or floating in the middle of the dock. */
 export function openEffectWindow(layerId: string) {
 	const api = studioApi.get();
 	const layer = effectLayers.get().find((candidate) => candidate.id === layerId);
@@ -158,7 +160,6 @@ export function openEffectWindow(layerId: string) {
 	const existing = api.getPanel(id);
 	if (existing) return existing.api.setActive();
 	const sibling = api.panels.find((panel) => panel.id.startsWith(EFFECT_PREFIX));
-	const effects = api.getPanel('effects');
 	api.addPanel({
 		id,
 		component: EFFECT_COMPONENT,
@@ -166,9 +167,7 @@ export function openEffectWindow(layerId: string) {
 		params: { layerId: layer.id },
 		...(sibling
 			? { position: { referencePanel: sibling, direction: 'within' } }
-			: effects
-				? { position: { referencePanel: effects, direction: 'below' } }
-				: { floating: true })
+			: { floating: centredFloating(api) })
 	});
 }
 
