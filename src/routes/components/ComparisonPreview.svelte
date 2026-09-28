@@ -14,6 +14,7 @@
 		EmptyTitle
 	} from '$lib/components/ui/empty';
 	import { processedToImageData } from '$lib/processing/render';
+	import { adjustedSource } from '$lib/processing/source-effects';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputSettings,
@@ -29,6 +30,7 @@
 		type PreviewMode
 	} from '$lib/stores/app';
 	import CropIcon from 'phosphor-svelte/lib/Crop';
+	import SlidersHorizontalIcon from 'phosphor-svelte/lib/SlidersHorizontal';
 	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOut';
 	import ImageIcon from 'phosphor-svelte/lib/ImageSquare';
 	import UploadIcon from 'phosphor-svelte/lib/UploadSimple';
@@ -130,6 +132,7 @@
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
+	const sourceLabel = $derived($adjustedSource ? 'Source with effects' : 'Source');
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
 	const cropToContentHint = $derived(
@@ -529,6 +532,15 @@
 		context.clearRect(0, 0, width, height);
 		context.drawImage(level.canvas, 0, 0, width, height);
 		canvas.dataset.previewKey = cacheKey;
+	}
+
+	/** Draw the adjusted source into its canvas at full resolution. */
+	function drawBitmap(bitmap: ImageBitmap) {
+		return (canvas: HTMLCanvasElement) => {
+			canvas.width = bitmap.width;
+			canvas.height = bitmap.height;
+			canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+		};
 	}
 
 	function cropStyle(pane: HTMLElement | undefined, crop: CropRect | undefined) {
@@ -1016,7 +1028,7 @@
 				onpointercancel={onPointerUp}
 				onwheel={(event) => onWheel(event, cropPane)}
 			>
-				{@render sourceLayer('Source', cropPane)}
+				{@render sourceLayer(sourceLabel, cropPane)}
 			</div>
 		{:else if mode === 'side-by-side'}
 			<div class="grid flex-1 grid-cols-2 divide-x divide-border">
@@ -1033,7 +1045,7 @@
 					onpointercancel={onPointerUp}
 					onwheel={(event) => onWheel(event, sideSourcePane)}
 				>
-					{@render sourceLayer('Source', sideSourcePane)}
+					{@render sourceLayer(sourceLabel, sideSourcePane)}
 				</div>
 				<div
 					bind:this={sideOutputPane}
@@ -1065,7 +1077,7 @@
 			>
 				{@render outputLayer('Output', revealPane, 'reveal')}
 				<div class="absolute inset-y-0 left-0 overflow-hidden" style="width: {revealValue}%">
-					{@render sourceLayer('Source', revealPane)}
+					{@render sourceLayer(sourceLabel, revealPane)}
 				</div>
 				<div
 					role="slider"
@@ -1107,6 +1119,17 @@
 				aria-pressed={cropMode}
 			>
 				<CropIcon weight="bold" />
+			</Button>
+			<Button
+				size="icon-sm"
+				variant={$previewSettings.sourceEffects ? 'secondary' : 'ghost'}
+				aria-label="Show effects on source"
+				title="Show effects on source"
+				disabled={!hasImage}
+				onclick={() => updatePreviewSettings({ sourceEffects: !$previewSettings.sourceEffects })}
+				aria-pressed={Boolean($previewSettings.sourceEffects)}
+			>
+				<SlidersHorizontalIcon weight="bold" />
 			</Button>
 			{#if $processingProgress}
 				<Badge variant="secondary" class="tabular-nums">
@@ -1277,6 +1300,14 @@
 			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 			draggable="false"
 		/>
+		{#if $adjustedSource}
+			<canvas
+				{@attach drawBitmap($adjustedSource)}
+				class="pointer-events-none absolute max-w-none select-none"
+				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
+				aria-hidden="true"
+			></canvas>
+		{/if}
 		{#if activeCrop}
 			<div
 				class="pointer-events-none absolute {cropMode

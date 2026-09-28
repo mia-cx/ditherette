@@ -234,6 +234,11 @@
 						<MenubarRadioItem value={mode.id}>{mode.label}</MenubarRadioItem>
 					{/each}
 				</MenubarRadioGroup>
+				<MenubarCheckboxItem
+					checked={Boolean($previewSettings.sourceEffects)}
+					onCheckedChange={(sourceEffects) => updatePreviewSettings({ sourceEffects })}
+					>Show effects on source</MenubarCheckboxItem
+				>
 				<MenubarSeparator />
 				<MenubarItem
 					disabled={!hasImage || !$previewCommands}

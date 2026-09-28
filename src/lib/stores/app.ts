@@ -53,6 +53,8 @@ export const colorSpace = persistentJSON<ColorSpaceId>('ditherette:color-space',
 export type PreviewMode = 'side-by-side' | 'ab-reveal';
 export type PreviewSettings = {
 	mode?: PreviewMode;
+	/** Show the Source half with the enabled effects applied. */
+	sourceEffects?: boolean;
 	revealValue?: number;
 	zoom?: number;
 	panX?: number;
