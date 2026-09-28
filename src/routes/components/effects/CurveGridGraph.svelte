@@ -4,7 +4,13 @@
 	import { Label } from '$lib/components/ui/label';
 	import { channelLabel } from '$lib/effects/catalog';
 	import { gridBackdrop } from '$lib/effects/grid-backdrop';
-	import { insertColumn, removeColumn, setGridValue, wraps } from '$lib/effects/grid';
+	import {
+		canRemoveColumn,
+		insertColumn,
+		removeColumn,
+		setGridValue,
+		wraps
+	} from '$lib/effects/grid';
 	import { hueAxis } from '$lib/effects/tone';
 
 	type Props = {
@@ -94,12 +100,13 @@
 		set(dragging.value + (dragging.startY - event.clientY) / DRAG_PIXELS);
 	}
 
-	/** Double-clicking between columns adds one there, without changing the surface. */
+	/** Double-clicking between columns adds one there, sampled from the current surface. */
 	function addColumn(event: MouseEvent) {
 		const { x } = point(event as PointerEvent);
 		const a = wraps(curve.x) ? Math.min(x, 0.999) : x;
 		if (grid.columns.some((c) => Math.abs(c - a) * BYTE < 2)) return;
 		const inserted = insertColumn(curve, onGrid(a * BYTE));
+		if (!inserted) return;
 		onchange(inserted.curve);
 		selected = { row, column: inserted.index };
 	}
@@ -236,7 +243,7 @@
 	<Button
 		variant="outline"
 		size="sm"
-		disabled={grid.columns.length <= 2}
+		disabled={!canRemoveColumn(curve, column)}
 		onclick={() => onchange(removeColumn(curve, column))}>Remove column</Button
 	>
 </div>

@@ -1,6 +1,13 @@
 import type { TwoInputCurve } from 'ditherette';
 import { describe, expect, it } from 'vitest';
-import { evaluateGrid, insertColumn, neutralGrid, removeColumn, setGridValue } from './grid';
+import {
+	canRemoveColumn,
+	evaluateGrid,
+	insertColumn,
+	neutralGrid,
+	removeColumn,
+	setGridValue
+} from './grid';
 
 const hue = { model: 'oklch', channel: 'hue' } as const;
 const lightness = { model: 'oklch', channel: 'lightness' } as const;
@@ -35,17 +42,51 @@ describe('two-input curve grids', () => {
 		expect(evaluateGrid(curve, 0.999999, 0.3)).toBeCloseTo(evaluateGrid(curve, 0, 0.3), 4);
 	});
 
-	it('inserts a column without changing the surface', () => {
+	it('samples the existing surface at an inserted column', () => {
 		const curve = redShadows();
-		const { curve: inserted, index } = insertColumn(curve, 0.11);
+		const { curve: inserted, index } = insertColumn(curve, 0.11)!;
 		expect(inserted.grid.columns[index]).toBe(0.11);
-		for (const [a, b] of [
-			[0.05, 0.1],
-			[0.11, 0.3],
-			[0.2, 0.45],
-			[0.93, 0.8]
-		] as const)
-			expect(evaluateGrid(inserted, a, b)).toBeCloseTo(evaluateGrid(curve, a, b), 2);
+		for (const b of [0, 0.1, 0.3, 0.8, 1])
+			expect(evaluateGrid(inserted, 0.11, b)).toBeCloseTo(evaluateGrid(curve, 0.11, b), 6);
 		expect(removeColumn(inserted, index).grid.columns).toEqual(curve.grid.columns);
+	});
+
+	it('rejects insertions outside the grid contract', () => {
+		const curve = redShadows();
+		expect(insertColumn(curve, 1)).toBeUndefined();
+
+		const columns = Array.from({ length: 48 }, (_, index) => index / 48);
+		const full = {
+			...curve,
+			grid: { ...curve.grid, columns, values: curve.grid.values.map(() => columns.map(() => 0.5)) }
+		};
+		expect(insertColumn(full, 0.99)).toBeUndefined();
+
+		const seam = {
+			...curve,
+			grid: {
+				...curve.grid,
+				columns: [0.1, 0.999],
+				values: curve.grid.values.map(() => [0.5, 0.5])
+			}
+		};
+		expect(insertColumn(seam, 0)).toBeUndefined();
+	});
+
+	it('keeps open-axis endpoints when removing columns', () => {
+		const open: TwoInputCurve = {
+			kind: 'adjust',
+			x: lightness,
+			x2: hue,
+			y: chroma,
+			grid: neutralGrid(lightness, hue)
+		};
+		const last = open.grid.columns.length - 1;
+		expect(canRemoveColumn(open, 0)).toBe(false);
+		expect(canRemoveColumn(open, last)).toBe(false);
+		expect(removeColumn(open, 0)).toBe(open);
+		expect(removeColumn(open, last)).toBe(open);
+		expect(removeColumn(open, 1).grid.columns).toHaveLength(open.grid.columns.length - 1);
+		expect(canRemoveColumn(redShadows(), 0)).toBe(true);
 	});
 });

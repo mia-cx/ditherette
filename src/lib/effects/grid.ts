@@ -9,6 +9,8 @@ const HUE_COLUMNS = 12;
 const OPEN_COLUMNS = 9;
 const ROWS = 5;
 const NEUTRAL = 0.5;
+const MAX_COLUMNS = 48;
+const MIN_GAP = 0.001;
 
 const positions = (count: number, closed: boolean) =>
 	Array.from({ length: count }, (_, index) => (closed ? index / count : index / (count - 1)));
@@ -37,12 +39,20 @@ export function evaluateGrid({ x, x2, grid }: TwoInputCurve, a: number, b: numbe
 	return Math.min(1, Math.max(0, along(grid.rows, rows, wraps(x2), b)));
 }
 
-/** Insert a column at `a` without changing the surface: its values come from the grid there. */
+/** Insert a column at `a`, with values sampled from the existing surface there. */
 export function insertColumn(
 	curve: TwoInputCurve,
 	a: number
-): { curve: TwoInputCurve; index: number } {
+): { curve: TwoInputCurve; index: number } | undefined {
 	const { grid } = curve;
+	const closed = wraps(curve.x);
+	if (
+		grid.columns.length >= MAX_COLUMNS ||
+		!Number.isFinite(a) ||
+		a < 0 ||
+		(closed ? a >= 1 : a > 1)
+	)
+		return;
 	const after = grid.columns.findIndex((position) => position > a);
 	const index = after < 0 ? grid.columns.length : after;
 	const splice = <T>(list: readonly T[], item: T) => [
@@ -50,17 +60,38 @@ export function insertColumn(
 		item,
 		...list.slice(index)
 	];
+	const columns = splice(grid.columns, a);
+	const checked = closed ? columns.map(Math.fround) : columns;
+	if (
+		checked.some(
+			(position, column) => column > 0 && Math.fround(position - checked[column - 1]!) < MIN_GAP
+		) ||
+		(closed && Math.fround(Math.fround(1 - checked.at(-1)!) + checked[0]!) < MIN_GAP)
+	)
+		return;
 	const values = grid.values.map((row, r) => splice(row, evaluateGrid(curve, a, grid.rows[r]!)));
 	return {
-		curve: { ...curve, grid: { ...grid, columns: splice(grid.columns, a), values } },
+		curve: { ...curve, grid: { ...grid, columns, values } },
 		index
 	};
 }
 
-/** Remove a column, keeping at least two. */
+/** Whether a column can be removed without breaking the grid axis. */
+export function canRemoveColumn(curve: TwoInputCurve, index: number): boolean {
+	const { columns } = curve.grid;
+	return (
+		Number.isInteger(index) &&
+		index >= 0 &&
+		index < columns.length &&
+		columns.length > 2 &&
+		(wraps(curve.x) || (index > 0 && index < columns.length - 1))
+	);
+}
+
+/** Remove a column while keeping a valid axis. */
 export function removeColumn(curve: TwoInputCurve, index: number): TwoInputCurve {
 	const { grid } = curve;
-	if (grid.columns.length <= 2) return curve;
+	if (!canRemoveColumn(curve, index)) return curve;
 	const drop = <T>(list: readonly T[]) => list.filter((_, other) => other !== index);
 	return {
 		...curve,
