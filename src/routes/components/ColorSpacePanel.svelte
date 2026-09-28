@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import InlineMath from './InlineMath.svelte';
 	import { COLOR_SPACES } from './color-space-options';
 	import { colorSpace } from '$lib/stores/app';
 
@@ -23,7 +22,7 @@
 	{#if !hideHeading}
 		<div class="flex items-baseline justify-between gap-2">
 			<h2 class="text-sm font-semibold tracking-tight">Color space</h2>
-			<p class="text-xs text-muted-foreground">How nearest-color is computed.</p>
+			<p class="text-xs text-muted-foreground">How each pixel picks its palette color.</p>
 		</div>
 	{/if}
 
@@ -42,9 +41,8 @@
 						<span class="grid min-w-0 flex-1 content-start gap-1 overflow-hidden">
 							<span class="truncate text-sm font-medium text-foreground">{current.label}</span>
 							<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
-								>{current.short}</span
+								>{current.description}</span
 							>
-							<InlineMath expression={current.latex} />
 						</span>
 					</span>
 				{:else}
@@ -62,11 +60,8 @@
 								<span class="grid min-w-0 flex-1 content-start gap-1 overflow-hidden">
 									<span class="truncate text-sm font-medium text-foreground">{s.label}</span>
 									<span class="text-xs leading-relaxed whitespace-normal text-muted-foreground"
-										>{s.short}</span
+										>{s.description}</span
 									>
-									<span class="rounded-sm border border-border bg-muted/40 px-2 py-1">
-										<InlineMath expression={s.latex} />
-									</span>
 								</span>
 							</span>
 						</SelectItem>
