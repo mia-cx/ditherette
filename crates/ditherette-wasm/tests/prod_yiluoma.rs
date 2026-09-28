@@ -284,17 +284,14 @@ fn literal_search_matches_every_metric_and_matrix_with_original_indices_and_dupl
                 })
                 .collect(),
         };
-        let actual = PaletteMatcher {
-            matching,
-            colors: reference
+        let actual = PaletteMatcher::new(
+            reference
                 .colors
                 .iter()
-                .map(|entry| PaletteColor {
-                    index: entry.index,
-                    coordinates: entry.coordinates,
-                })
+                .map(|entry| PaletteColor::new(entry.index, entry.coordinates))
                 .collect(),
-        };
+            matching,
+        );
         for rgb in [
             [0; 3],
             [64; 3],
@@ -377,17 +374,14 @@ fn every_global_threshold_and_ratio_matches_frozen_strict_selection() {
 
 #[test]
 fn zero_mask_retains_earlier_exact_mixture_and_first_ratio_ties() {
-    let matcher = PaletteMatcher {
-        matching: MatchPolicy::SrgbEuclidean,
-        colors: [0.0, 128.0 / 255.0, 64.0 / 255.0]
+    let matcher = PaletteMatcher::new(
+        [0.0, 128.0 / 255.0, 64.0 / 255.0]
             .into_iter()
             .enumerate()
-            .map(|(index, value)| PaletteColor {
-                index: index as u8,
-                coordinates: [value; 3],
-            })
+            .map(|(index, value)| PaletteColor::new(index as u8, [value; 3]))
             .collect(),
-    };
+        MatchPolicy::SrgbEuclidean,
+    );
     let target = yiluoma::adaptive_target([0.8; 3], matcher.colors[2].coordinates, 0.0);
     let mix = yiluoma::best_matched_mix(target, &matcher, 4);
     assert_eq!(
@@ -407,23 +401,14 @@ fn zero_mask_retains_earlier_exact_mixture_and_first_ratio_ties() {
         )),
         [1, 0, 0, 1]
     );
-    let matcher = PaletteMatcher {
-        matching: MatchPolicy::SrgbEuclidean,
-        colors: vec![
-            PaletteColor {
-                index: 0,
-                coordinates: [0.0; 3],
-            },
-            PaletteColor {
-                index: 1,
-                coordinates: [1.0; 3],
-            },
-            PaletteColor {
-                index: 2,
-                coordinates: [1.0; 3],
-            },
+    let matcher = PaletteMatcher::new(
+        vec![
+            PaletteColor::new(0, [0.0; 3]),
+            PaletteColor::new(1, [1.0; 3]),
+            PaletteColor::new(2, [1.0; 3]),
         ],
-    };
+        MatchPolicy::SrgbEuclidean,
+    );
     assert_eq!(
         yiluoma::best_matched_mix([0.375; 3], &matcher, 4),
         yiluoma::PaletteMix {

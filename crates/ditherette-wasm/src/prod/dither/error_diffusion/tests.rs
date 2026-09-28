@@ -74,11 +74,12 @@ fn finite_matching_checks_candidates_after_an_exact_match() {
     let first = PaletteColor {
         index: 7,
         coordinates: [0.0; 3],
+        ciede2000_chroma: 0.0,
     };
-    let mut matcher = PaletteMatcher {
-        colors: vec![first, PaletteColor { index: 9, ..first }],
-        matching: MatchPolicy::SrgbEuclidean,
-    };
+    let mut matcher = PaletteMatcher::new(
+        vec![first, PaletteColor { index: 9, ..first }],
+        MatchPolicy::SrgbEuclidean,
+    );
     assert_eq!(matcher.nearest_finite([0.0; 3]), Some(first));
 
     matcher.colors[1].coordinates[0] = f32::MAX;

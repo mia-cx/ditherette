@@ -441,16 +441,14 @@ fn specialized_scans_match_oracle_for_fractional_diffusion_coordinates() {
         let reference = serde_json::from_value(serde_json::to_value(matching).unwrap()).unwrap();
         let converter = Converter::new(OrdinarySpace::from_matching(matching).unwrap());
         let colors: Vec<_> = (0..64u32)
-            .map(|n| PaletteColor {
-                index: n as u8,
-                coordinates: converter.coordinates([
-                    (n * 73) as u8,
-                    (n * 31) as u8,
-                    (n * 17) as u8,
-                ]),
+            .map(|n| {
+                PaletteColor::new(
+                    n as u8,
+                    converter.coordinates([(n * 73) as u8, (n * 31) as u8, (n * 17) as u8]),
+                )
             })
             .collect();
-        let matcher = PaletteMatcher { colors, matching };
+        let matcher = PaletteMatcher::new(colors, matching);
         for n in 0..256u32 {
             let mut coordinates = converter.coordinates([n as u8, (n * 73) as u8, (n * 17) as u8]);
             coordinates[0] += 0.000123;
