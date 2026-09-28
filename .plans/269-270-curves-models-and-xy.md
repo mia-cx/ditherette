@@ -20,7 +20,7 @@ wraps when x is a hue.
 - [x] Periodic spline: `evaluatePeriodicCurve` matching the reference's cyclic Fritsch–Butland spline, with tests.
 - [x] Model switcher and per-model channel checkboxes in the curves editor.
 - [x] Arbitrary XY editor: channel pickers, flat neutral line, hue spectrum, wrapping hue x axis.
-- [ ] Docs and changeset.
+- [x] Docs and changeset.
 - [ ] Validation: `pnpm check`, `vitest run`, ESLint, and a rendered check in Chromium.
 
 ## Notes
