@@ -159,6 +159,23 @@ describe('website processing scheduling', () => {
 		await pending;
 	});
 
+	it('replaces a kept worker that stays busy with superseded work', async () => {
+		const pending = processCurrentImage();
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = ControlledWorker.instances[0];
+		outputSettings.set({ ...outputSettings.get(), width: 2 });
+		scheduleProcessing(180);
+		await vi.advanceTimersByTimeAsync(180);
+		expect(ControlledWorker.instances).toHaveLength(1);
+		// The superseded job never yields, so the new request goes unanswered.
+		await vi.advanceTimersByTimeAsync(500);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(ControlledWorker.instances).toHaveLength(2);
+		expect(ControlledWorker.instances[1].messages[0]).toMatchObject({ type: 'load-source' });
+		cancelProcessing();
+		await pending;
+	});
+
 	it('invalidates stale events immediately and replaces long-running work after the slider debounce', async () => {
 		const pending = processCurrentImage();
 		await vi.advanceTimersByTimeAsync(0);
