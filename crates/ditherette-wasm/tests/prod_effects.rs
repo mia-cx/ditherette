@@ -602,6 +602,108 @@ fn curves_closed_hue_seam_matches_the_reference() {
 }
 
 #[test]
+fn two_input_curves_match_the_reference_for_open_cyclic_and_ordered_cases() {
+    let effects = [
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "adjust",
+            "x": { "model": "srgb", "channel": "red" },
+            "x2": { "model": "srgb", "channel": "green" },
+            "y": { "model": "srgb", "channel": "blue" },
+            "grid": {
+                "columns": [0, 0.4, 1], "rows": [0, 0.6, 1],
+                "values": [[0.1, 0.8, 0.2], [0.9, 0.3, 0.7], [0.4, 1, 0]]
+            }
+        }] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "adjust",
+            "x": { "model": "hsl", "channel": "hue" },
+            "x2": { "model": "oklch", "channel": "lightness" },
+            "y": { "model": "cielch", "channel": "hue" },
+            "grid": {
+                "columns": [0.1, 0.55], "rows": [0, 0.5, 1],
+                "values": [[0.2, 0.8], [1, 0], [0.35, 0.65]]
+            }
+        }] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [
+            { "kind": "adjust",
+              "x": { "model": "srgb", "channel": "red" },
+              "y": { "model": "srgb", "channel": "green" },
+              "points": [[0, 0.1], [1, 0.9]] },
+            { "kind": "adjust",
+              "x": { "model": "srgb", "channel": "green" },
+              "x2": { "model": "hsv", "channel": "hue" },
+              "y": { "model": "oklch", "channel": "chroma" },
+              "grid": {
+                  "columns": [0, 0.5, 1], "rows": [0.2, 0.7],
+                  "values": [[0, 0.5, 1], [1, 0.5, 0]]
+              } },
+            { "kind": "adjust",
+              "x": { "model": "srgb", "channel": "blue" },
+              "y": { "model": "cielab", "channel": "a" },
+              "points": [[0, 0.7], [1, 0.3]] }
+        ] }),
+    ];
+    for effect in effects {
+        for input in [
+            [0.0, 0.0, 0.0],
+            [0.2, 0.7, 0.4],
+            [0.4, 0.6, 1.0],
+            [0.9, 0.1, 0.3],
+            [-0.25, 0.5, 1.25],
+        ] {
+            let (actual, expected) = direct_curves(&effect, input);
+            assert_float_bits(actual, expected);
+        }
+    }
+}
+
+#[test]
+fn two_input_curve_validation_matches_the_reference() {
+    let valid = json!({
+        "kind": "adjust",
+        "x": { "model": "srgb", "channel": "red" },
+        "x2": { "model": "hsl", "channel": "hue" },
+        "y": { "model": "oklch", "channel": "chroma" },
+        "grid": {
+            "columns": [0, 1], "rows": [0.1, 0.6],
+            "values": [[0.2, 0.8], [0.7, 0.3]]
+        }
+    });
+    let mut cases = Vec::new();
+    let mut curve = valid.clone();
+    curve["kind"] = json!("remap");
+    cases.push((curve, "effects.0.curves.0.kind"));
+    let mut curve = valid.clone();
+    curve["x2"] = curve["x"].clone();
+    cases.push((curve, "effects.0.curves.0.x2"));
+    let mut curve = valid.clone();
+    curve["grid"]["columns"] = json!([0]);
+    cases.push((curve, "effects.0.curves.0.grid.columns"));
+    let mut curve = valid.clone();
+    curve["grid"]["rows"] = json!([0.9995, 0.0]);
+    cases.push((curve, "effects.0.curves.0.grid.rows.1"));
+    let mut curve = valid.clone();
+    curve["grid"]["values"][1] = json!([0.5]);
+    cases.push((curve, "effects.0.curves.0.grid.values.1"));
+
+    for (curve, path) in cases {
+        assert_validation_matches(
+            json!({ "effect": "curves", "enabled": true, "curves": [curve] }),
+            path,
+        );
+    }
+}
+
+#[test]
+fn prepared_curves_keep_grid_values_out_of_fixed_state() {
+    use std::mem::size_of;
+
+    use ditherette_wasm::prod::effects::chain::PreparedPointwise;
+
+    assert!(size_of::<PreparedPointwise>() < 8 * 1024);
+}
+
+#[test]
 fn empty_curves_and_neutral_curves_are_exact_no_ops() {
     let carrier = [-64.0, 1.25, 64.0];
     for effect in [
@@ -610,6 +712,16 @@ fn empty_curves_and_neutral_curves_are_exact_no_ops() {
             "kind": "adjust", "x": { "model": "hsl", "channel": "hue" },
             "y": { "model": "oklch", "channel": "chroma" },
             "points": [[0, 0.5], [0.5, 0.5], [1, 0.5]]
+        }] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "adjust",
+            "x": { "model": "srgb", "channel": "red" },
+            "x2": { "model": "srgb", "channel": "green" },
+            "y": { "model": "oklch", "channel": "chroma" },
+            "grid": {
+                "columns": [0, 1], "rows": [0, 1],
+                "values": [[0.5, 0.5], [0.5, 0.5]]
+            }
         }] }),
         json!({ "effect": "curves", "enabled": true, "curves": [{
             "kind": "remap", "x": { "model": "hsl", "channel": "hue" },
@@ -650,6 +762,16 @@ fn curves_select_tables_only_for_rgb_remap_lists_and_memoize_every_other_list() 
             "kind": "adjust", "x": { "model": "srgb", "channel": "red" },
             "y": { "model": "srgb", "channel": "red" },
             "points": [[0, 0.25], [1, 0.75]]
+        }] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "adjust",
+            "x": { "model": "srgb", "channel": "red" },
+            "x2": { "model": "srgb", "channel": "green" },
+            "y": { "model": "srgb", "channel": "blue" },
+            "grid": {
+                "columns": [0, 1], "rows": [0, 1],
+                "values": [[0, 1], [1, 0]]
+            }
         }] }),
     ];
     let dimensions = ImageDimensions::new(8, 8).unwrap();

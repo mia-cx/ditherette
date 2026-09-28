@@ -127,7 +127,15 @@ fn effect_calls_report_every_failed_allocation() {
                 "points": [[0, 0], [0.5, 0.7], [1, 1]] },
               { "kind": "adjust", "x": { "model": "hsl", "channel": "hue" },
                 "y": { "model": "cielch", "channel": "chroma" },
-                "points": [[0, 0.5], [0.5, 0.8], [1, 0.5]] }
+                "points": [[0, 0.5], [0.5, 0.8], [1, 0.5]] },
+              { "kind": "adjust",
+                "x": { "model": "srgb", "channel": "red" },
+                "x2": { "model": "hsv", "channel": "hue" },
+                "y": { "model": "oklch", "channel": "lightness" },
+                "grid": {
+                  "columns": [0, 0.4, 1], "rows": [0.1, 0.6],
+                  "values": [[0.2, 0.8, 0.4], [0.9, 0.1, 0.7]]
+                } }
             ] },
             { "effect": "levels", "enabled": true, "channel": "blue", "input": { "black": 0, "white": 1 },
               "gamma": 1.3, "output": { "black": 0, "white": 1 } },
