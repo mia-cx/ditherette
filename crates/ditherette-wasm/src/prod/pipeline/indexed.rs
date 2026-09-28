@@ -401,15 +401,8 @@ pub(super) fn run<B: QuantizeBoundary, A: Allocator>(
         }
     }
     let can_match_rgb = call.parts().0.expect("requested palette").can_match_rgb();
-    // Scalar Yliluoma Everywhere memoizes whole mixtures in the same exact-RGB table shape.
-    let mixes_by_rgb = mixing.is_none()
-        && matches!(
-            dither,
-            DitherPolicy::Yliluoma {
-                placement: Placement::Everywhere {},
-                ..
-            }
-        );
+    // Scalar Yliluoma also memoizes the position-independent endpoints of adaptive placement.
+    let mixes_by_rgb = mixing.is_none() && matches!(dither, DitherPolicy::Yliluoma { .. });
     let mut rgb_cache = if can_match_rgb
         && (mixes_by_rgb
             || matches!(

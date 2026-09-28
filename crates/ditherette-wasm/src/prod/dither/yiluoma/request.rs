@@ -66,6 +66,18 @@ pub fn dither_yiluoma(
         .reserve(&mut indices, count)
         .map_err(QuantizeError::Preparation)?;
     indices.resize(count, 0);
+    let mut mixes = Vec::new();
+    let cache_entries = prepared
+        .can_match_rgb()
+        .then(|| {
+            crate::prod::quantize::cache::recommended_entries(count, memory_limit - budget.used)
+        })
+        .unwrap_or_default();
+    if cache_entries > 0 && budget.reserve(&mut mixes, cache_entries).is_ok() {
+        mixes.resize(cache_entries, 0);
+    } else {
+        mixes = Vec::new();
+    }
     let index = (count >= super::index::MIN_INDEX_PIXELS && prepared.can_match_rgb())
         .then(|| {
             MixIndex::try_new(
@@ -82,7 +94,7 @@ pub fn dither_yiluoma(
         size,
         placement,
         &mut [],
-        &mut [],
+        &mut mixes,
         index.as_ref(),
         |_| Ok(()),
     )
@@ -202,9 +214,16 @@ pub(super) fn dither_yiluoma_band_with_progress(
         ),
         _ => None,
     };
-    let mut mixes = match placement {
-        Placement::Everywhere {} if !mixes.is_empty() => Some(MixCache::new(mixes, levels)),
-        _ => None,
+    let (mut source_mixes, mut nearest_mixes) = match placement {
+        Placement::Everywhere {} if !mixes.is_empty() => (Some(MixCache::new(mixes, levels)), None),
+        Placement::Adaptive { .. } if mixes.len() >= 2 => {
+            let (source, nearest) = mixes.split_at_mut(mixes.len() / 2);
+            (
+                Some(MixCache::new(source, levels)),
+                Some(MixCache::new(nearest, levels)),
+            )
+        }
+        _ => (None, None),
     };
     for (y, indices) in
         (band.y_start()..band.y_end()).zip(indices.chunks_exact_mut(dimensions.width_usize()))
@@ -224,7 +243,7 @@ pub(super) fn dither_yiluoma_band_with_progress(
                     };
                     // Everywhere has mask 1, so the target is the source and nearest is unused.
                     let mix = match placement {
-                        Placement::Everywhere {} => match &mut mixes {
+                        Placement::Everywhere {} => match &mut source_mixes {
                             Some(mixes) => mixes.mix(rgb, search),
                             None => search(),
                         },
@@ -241,11 +260,31 @@ pub(super) fn dither_yiluoma_band_with_progress(
                                     source, x, y, space, placement, &converter,
                                 ),
                             };
-                            let target = adaptive_target(coordinates, nearest.coordinates, mask);
-                            mix_index.map_or_else(
-                                || best_matched_mix(target, matcher, levels),
-                                |index| index.best(target, matcher),
-                            )
+                            let indexed_search = |target| {
+                                mix_index.map_or_else(
+                                    || best_matched_mix(target, matcher, levels),
+                                    |index| index.best(target, matcher),
+                                )
+                            };
+                            if mask == 1.0 {
+                                match &mut source_mixes {
+                                    Some(mixes) => mixes.mix(rgb, || indexed_search(coordinates)),
+                                    None => indexed_search(coordinates),
+                                }
+                            } else if mask == 0.0 {
+                                match &mut nearest_mixes {
+                                    Some(mixes) => {
+                                        mixes.mix(rgb, || indexed_search(nearest.coordinates))
+                                    }
+                                    None => indexed_search(nearest.coordinates),
+                                }
+                            } else {
+                                indexed_search(adaptive_target(
+                                    coordinates,
+                                    nearest.coordinates,
+                                    mask,
+                                ))
+                            }
                         }
                     };
                     ordered_mix_index(mix, x, y, size)
@@ -317,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn memoized_everywhere_mixtures_match_direct_search() {
+    fn memoized_everywhere_and_adaptive_endpoint_mixtures_match_direct_search() {
         let dimensions = ImageDimensions::new(40, 31).unwrap();
         // Few distinct colors repeat across the image; alpha varies so preparation matters.
         let bytes = (0..40 * 31)
@@ -353,25 +392,47 @@ mod tests {
                 let prepared =
                     PreparedQuantizer::try_new(&palette, alpha, matching, 1 << 20).unwrap();
                 for size in [BayerSize::Two, BayerSize::Eight, BayerSize::Sixteen] {
-                    let run = |mixes: &mut [u64]| {
-                        let mut indices = vec![0; 40 * 31];
-                        dither_yiluoma_with_progress(
-                            source,
-                            &prepared,
-                            &mut indices,
-                            size,
-                            Placement::Everywhere {},
-                            &mut [],
-                            mixes,
-                            |_| Ok(()),
-                        )
-                        .unwrap();
-                        indices
-                    };
-                    let direct = run(&mut []);
-                    // A tiny table forces collisions; stale scratch must not leak into results.
-                    assert_eq!(run(&mut [u64::MAX; 4]), direct, "{matching:?} {alpha:?}");
-                    assert_eq!(run(&mut vec![0; 1024]), direct, "{matching:?} {alpha:?}");
+                    for placement in [
+                        Placement::Everywhere {},
+                        Placement::Adaptive {
+                            radius: 1,
+                            threshold: 0.0,
+                            softness: 0.0,
+                        },
+                        Placement::Adaptive {
+                            radius: 1,
+                            threshold: 100.0,
+                            softness: 0.0,
+                        },
+                    ] {
+                        let run = |mixes: &mut [u64]| {
+                            let mut indices = vec![0; 40 * 31];
+                            dither_yiluoma_with_progress(
+                                source,
+                                &prepared,
+                                &mut indices,
+                                size,
+                                placement,
+                                &mut [],
+                                mixes,
+                                |_| Ok(()),
+                            )
+                            .unwrap();
+                            indices
+                        };
+                        let direct = run(&mut []);
+                        // A tiny table forces collisions; stale scratch must not leak into results.
+                        assert_eq!(
+                            run(&mut [u64::MAX; 4]),
+                            direct,
+                            "{matching:?} {alpha:?} {placement:?}"
+                        );
+                        assert_eq!(
+                            run(&mut vec![0; 1024]),
+                            direct,
+                            "{matching:?} {alpha:?} {placement:?}"
+                        );
+                    }
                 }
             }
         }
