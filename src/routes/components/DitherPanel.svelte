@@ -69,6 +69,21 @@
 	const supportsPlacement = $derived(!isNone && (isThresholdDither || isErrorDiffusion));
 	const supportsColorSpaceDither = $derived(!isNone);
 
+	// Menus change settings too; follow the store so the controls show what will run.
+	$effect(() =>
+		ditherSettings.subscribe((settings) => {
+			algorithm = settings.algorithm;
+			strength = settings.strength;
+			placement = settings.placement ?? (settings.coverage === 'full' ? 'everywhere' : 'adaptive');
+			placementRadius = settings.placementRadius ?? 3;
+			placementThreshold = settings.placementThreshold ?? 12;
+			placementSoftness = settings.placementSoftness ?? 8;
+			serpentine = settings.serpentine;
+			seed = settings.seed;
+			useColorSpace = settings.useColorSpace ?? false;
+		})
+	);
+
 	$effect(() => {
 		updateDitherSettings({
 			algorithm,

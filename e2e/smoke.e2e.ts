@@ -4,6 +4,8 @@ test('home page loads with workbench skeleton', async ({ page }) => {
 	await page.goto('/');
 	// AppBar wordmark
 	await expect(page.getByText('ditherette', { exact: true })).toBeVisible();
-	// Initial state: no image loaded → upload primary button is visible
-	await expect(page.getByRole('button', { name: 'Upload Image' })).toBeVisible();
+	// Initial state: no image loaded, so the preview offers a file picker.
+	await expect(
+		page.getByRole('button', { name: 'Choose file' }).filter({ visible: true }).first()
+	).toBeVisible();
 });

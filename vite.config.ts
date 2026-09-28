@@ -2,9 +2,11 @@ import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
-	plugins: [tailwindcss(), sveltekit()],
+	// Self-signed HTTPS makes LAN dev servers secure contexts; vitest's browser runner stays on HTTP.
+	plugins: [tailwindcss(), sveltekit(), ...(process.env.VITEST ? [] : [basicSsl()])],
 	// The website imports the workspace package, whose real path sits outside SvelteKit's allow list.
 	server: { fs: { allow: ['packages'] } },
 	test: {
