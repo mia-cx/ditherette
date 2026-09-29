@@ -31,6 +31,7 @@
 		updatePreviewSettings,
 		type PreviewMode
 	} from '$lib/stores/app';
+	import { curvePicker, type CurvePicker } from '$lib/stores/curve-pick';
 	import CropIcon from 'phosphor-svelte/lib/Crop';
 	import SlidersHorizontalIcon from 'phosphor-svelte/lib/SlidersHorizontal';
 	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOut';
@@ -262,8 +263,10 @@
 		else clearLockedFrame();
 	}
 
-	function cancelPointerInteraction() {
+	function cancelPointerInteraction(event?: Event) {
+		if (pick && event instanceof PointerEvent && event.pointerId !== pick.pointerId) return;
 		if ((cropResize || cropMove) && cropDraft) cropDraft = normalizeCrop(cropDraft);
+		pick = undefined;
 		pointers = {};
 		pinch = undefined;
 		cropResize = undefined;
@@ -668,8 +671,43 @@
 		});
 	}
 
+	/** A curve pick in progress: which pointer and picker own it, and where it went down. */
+	let pick = $state<{ pointerId: number; startY: number; picker: CurvePicker }>();
+
+	/**
+	 * The source colour under a pointer, through the applied crop, zoom, and pan. Every pane frames
+	 * the same source rectangle, so one mapping serves them all.
+	 */
+	function sourceColourAt(pane: HTMLElement, clientX: number, clientY: number) {
+		const image = $sourceImageData;
+		if (!image) return undefined;
+		const focus = appliedCrop() ?? { x: 0, y: 0, width: image.width, height: image.height };
+		const bounds = pane.getBoundingClientRect();
+		const frame = fitFrame(pane, focus.width, focus.height);
+		const frameX = clientX - bounds.left - frame.left;
+		const frameY = clientY - bounds.top - frame.top;
+		if (frameX < 0 || frameY < 0 || frameX >= frame.width || frameY >= frame.height)
+			return undefined;
+		const x = Math.floor(focus.x + (frameX / frame.width) * focus.width);
+		const y = Math.floor(focus.y + (frameY / frame.height) * focus.height);
+		if (x < 0 || y < 0 || x >= image.width || y >= image.height) return undefined;
+		const at = (y * image.width + x) * 4;
+		return [image.data[at]!, image.data[at + 1]!, image.data[at + 2]!] as const;
+	}
+
 	function onPointerDown(event: PointerEvent, pane: HTMLElement | undefined) {
 		if (!hasImage || !pane || event.button !== 0) return;
+		const picker = $curvePicker;
+		if (picker && !cropMode) {
+			event.preventDefault();
+			if (pick) return;
+			const colour = sourceColourAt(pane, event.clientX, event.clientY);
+			if (!colour) return;
+			pane.setPointerCapture(event.pointerId);
+			picker.pick(colour);
+			pick = { pointerId: event.pointerId, startY: event.clientY, picker };
+			return;
+		}
 		event.preventDefault();
 		pane.setPointerCapture(event.pointerId);
 		pointers = { ...pointers, [event.pointerId]: { x: event.clientX, y: event.clientY } };
@@ -688,6 +726,10 @@
 	function onPointerMove(event: PointerEvent, pane: HTMLElement | undefined) {
 		if (event.pointerType === 'mouse' && event.buttons === 0) {
 			cancelPointerInteraction();
+			return;
+		}
+		if (pick?.pointerId === event.pointerId) {
+			pick.picker.push(pick.startY - event.clientY);
 			return;
 		}
 		if (pointers[event.pointerId]) {
@@ -723,7 +765,7 @@
 	}
 
 	function onPointerUp(event: PointerEvent) {
-		cancelPointerInteraction();
+		cancelPointerInteraction(event);
 		if (
 			event.currentTarget instanceof HTMLElement &&
 			event.currentTarget.hasPointerCapture(event.pointerId)
@@ -1062,7 +1104,8 @@
 					bind:this={sideSourcePane}
 					role="application"
 					aria-label="Source preview. Drag to pan, scroll to zoom, or enable crop and drag to select a crop."
-					class="relative touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] {cropMode
+					class="relative touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] {cropMode ||
+					$curvePicker
 						? 'cursor-crosshair'
 						: 'cursor-grab active:cursor-grabbing'}"
 					onpointerdown={(event) => onPointerDown(event, sideSourcePane)}
@@ -1077,7 +1120,9 @@
 					bind:this={sideOutputPane}
 					role="application"
 					aria-label="Output preview. Drag to pan or scroll to zoom."
-					class="relative cursor-grab touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] active:cursor-grabbing"
+					class="relative touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] {$curvePicker
+						? 'cursor-crosshair'
+						: 'cursor-grab active:cursor-grabbing'}"
 					onpointerdown={(event) => onPointerDown(event, sideOutputPane)}
 					onpointermove={(event) => onPointerMove(event, sideOutputPane)}
 					onpointerup={onPointerUp}
@@ -1092,7 +1137,8 @@
 				bind:this={revealPane}
 				role="application"
 				aria-label="A/B preview. Left side is source, right side is output. Drag the divider to compare, drag the image to pan, scroll to zoom, or enable crop and drag to select a crop."
-				class="relative flex-1 touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] {cropMode
+				class="relative flex-1 touch-none overflow-hidden bg-[repeating-conic-gradient(theme(colors.muted)_0%_25%,transparent_0%_50%)_50%_/_16px_16px] {cropMode ||
+				$curvePicker
 					? 'cursor-crosshair'
 					: 'cursor-grab active:cursor-grabbing'}"
 				onpointerdown={(event) => onPointerDown(event, revealPane)}

@@ -1,6 +1,10 @@
 <script lang="ts">
 	import type { Curve, CurvePoints, CurvesEffect } from 'ditherette';
+	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeft';
+	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
+	import EyedropperIcon from 'phosphor-svelte/lib/Eyedropper';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
+	import { onDestroy } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
@@ -15,7 +19,9 @@
 		neutralCurve,
 		sameChannel
 	} from '$lib/effects/catalog';
+	import { channelValue, pickPoint, setPointOutput } from '$lib/effects/pick';
 	import { hueAxis } from '$lib/effects/tone';
+	import { curvePicker, type CurvePicker } from '$lib/stores/curve-pick';
 	import CurveGraph from './CurveGraph.svelte';
 
 	type Props = { id: string; step: CurvesEffect; onchange: (step: CurvesEffect) => void };
@@ -39,6 +45,7 @@
 	);
 
 	let selected = $state(0);
+	let selectedPoint = $state(0);
 	/** `selected` can outlive a removed curve, so everything reads this. */
 	const active = $derived(Math.min(selected, step.curves.length - 1));
 	const curve = $derived(step.curves[active]);
@@ -56,19 +63,71 @@
 	/** A hue input wraps for adjustments; hue remaps read their input straight across. */
 	const periodic = (c: Curve) => c.kind === 'adjust' && c.x.channel === 'hue';
 
+	function replaceAt(index: number, next: Curve) {
+		onchange({ ...step, curves: step.curves.map((curve, at) => (at === index ? next : curve)) });
+	}
+
 	function replace(next: Curve) {
-		onchange({ ...step, curves: step.curves.map((c, index) => (index === active ? next : c)) });
+		grabbed = undefined;
+		replaceAt(active, next);
 	}
 
 	function add() {
+		grabbed = undefined;
 		onchange({ ...step, curves: [...step.curves, NEW_CURVE] });
 		selected = step.curves.length;
+		selectedPoint = 0;
 	}
 
 	function remove() {
+		grabbed = undefined;
 		onchange({ ...step, curves: step.curves.filter((_, index) => index !== active) });
 		selected = Math.max(0, active - 1);
+		selectedPoint = 0;
 	}
+
+	/** Curves apply in list order, so moving one changes the result. */
+	function move(from: number, to: number) {
+		if (from === to || to < 0 || to >= step.curves.length) return;
+		grabbed = undefined;
+		const curves = step.curves.slice();
+		const [moved] = curves.splice(from, 1);
+		curves.splice(to, 0, moved!);
+		onchange({ ...step, curves });
+		selected = to;
+		selectedPoint = 0;
+	}
+	let dragFrom = $state<number>();
+
+	/** Pixels of vertical drag that move a picked point across the whole output range. */
+	const PUSH_PIXELS = 200;
+	let grabbed: { curve: number; point: number; y: number } | undefined;
+	const picker: CurvePicker = {
+		pick(rgb) {
+			if (!curve) return;
+			const { points, index } = pickPoint(curve, periodic(curve), channelValue(curve.x, rgb));
+			grabbed = { curve: active, point: index, y: points[index]![1] };
+			selectedPoint = index;
+			replaceAt(active, { ...curve, points });
+		},
+		push(up) {
+			if (!grabbed || active !== grabbed.curve) return;
+			const pickedCurve = step.curves[grabbed.curve];
+			if (!pickedCurve) return;
+			const points = setPointOutput(
+				pickedCurve.points,
+				grabbed.point,
+				grabbed.y + up / PUSH_PIXELS,
+				periodic(pickedCurve)
+			);
+			replaceAt(grabbed.curve, { ...pickedCurve, points });
+		}
+	};
+	const picking = $derived($curvePicker === picker);
+	onDestroy(() => {
+		grabbed = undefined;
+		if (curvePicker.get() === picker) curvePicker.set(undefined);
+	});
 
 	const channelFor = (key: string) =>
 		CURVE_CHANNELS.find(({ channel }) => channelKey(channel) === key)?.channel;
@@ -103,7 +162,18 @@
 				variant={index === active ? 'secondary' : 'outline'}
 				size="xs"
 				aria-pressed={index === active}
-				onclick={() => (selected = index)}
+				draggable="true"
+				ondragstart={() => (dragFrom = index)}
+				ondragover={(event: DragEvent) => event.preventDefault()}
+				ondrop={() => {
+					if (dragFrom !== undefined) move(dragFrom, index);
+					dragFrom = undefined;
+				}}
+				onclick={() => {
+					grabbed = undefined;
+					selected = index;
+					selectedPoint = 0;
+				}}
 			>
 				<span class="size-2 {tone(index).swatch}" aria-hidden="true"></span>
 				{curveName(item)}
@@ -113,6 +183,17 @@
 			<PlusIcon weight="bold" />
 			Curve
 		</Button>
+		<Button
+			variant={picking ? 'secondary' : 'ghost'}
+			size="icon-xs"
+			class="ml-auto"
+			aria-label="Pick from preview"
+			aria-pressed={picking}
+			disabled={!curve}
+			onclick={() => curvePicker.set(picking ? undefined : picker)}
+		>
+			<EyedropperIcon weight="bold" />
+		</Button>
 	</div>
 
 	{#if curve}
@@ -120,6 +201,7 @@
 			<CurveGraph
 				{id}
 				points={curve.points}
+				bind:selected={selectedPoint}
 				stroke={tone(active).stroke}
 				neutral={curve.kind === 'remap' ? 'diagonal' : 'flat'}
 				periodic={periodic(curve)}
@@ -170,8 +252,22 @@
 			</ToggleGroup>
 		</div>
 
-		<Button variant="outline" size="sm" class="justify-self-start" onclick={remove}
-			>Remove curve</Button
-		>
+		<div class="flex gap-1">
+			<Button
+				variant="outline"
+				size="icon-sm"
+				aria-label="Move curve earlier"
+				disabled={active === 0}
+				onclick={() => move(active, active - 1)}><CaretLeftIcon weight="bold" /></Button
+			>
+			<Button
+				variant="outline"
+				size="icon-sm"
+				aria-label="Move curve later"
+				disabled={active === step.curves.length - 1}
+				onclick={() => move(active, active + 1)}><CaretRightIcon weight="bold" /></Button
+			>
+			<Button variant="outline" size="sm" onclick={remove}>Remove curve</Button>
+		</div>
 	{/if}
 </div>
