@@ -14,11 +14,11 @@ import {
 	type ProcessingSettings,
 	type ResizeId,
 	type SourceImageRecord,
+	type WorkerProcessRequest,
 	type WorkerRequest,
 	type WorkerResponse
 } from './types';
 import type { ProcessingMetricsSample } from './metrics';
-import { TABLE_ENTRIES } from './effects-table';
 import { isEffect, type Effect, type ResizeAnchor } from 'ditherette';
 import { MAX_EFFECT_LAYERS } from '$lib/effects/catalog';
 
@@ -341,10 +341,18 @@ export function validateWorkerRequest(value: unknown): WorkerRequest {
 			sourceId: assertString(value.sourceId, 'Worker source id'),
 			settings: validateProcessingSettings(value.settings),
 			palette,
-			settingsHash: assertString(value.settingsHash, 'Worker settings hash')
+			settingsHash: assertString(value.settingsHash, 'Worker settings hash'),
+			compiledEffects: validateCompiledEffects(value.compiledEffects)
 		};
 	}
 	throw new Error('Worker request type is invalid.');
+}
+
+function validateCompiledEffects(value: unknown): WorkerProcessRequest['compiledEffects'] {
+	if (value === undefined) return undefined;
+	if (!isObject(value) || !(value.results instanceof Uint32Array))
+		throw new Error('Worker compiled effects are invalid.');
+	return { key: assertString(value.key, 'Worker compiled effects key'), results: value.results };
 }
 
 function validateTiming(value: unknown) {
@@ -534,11 +542,6 @@ export function validateWorkerResponse(value: unknown): WorkerResponse {
 			preview,
 			metrics: safeProcessingMetrics(value.metrics)
 		};
-	}
-	if (value.type === 'effects-table') {
-		if (!(value.table instanceof Uint32Array) || value.table.length !== TABLE_ENTRIES)
-			throw new Error('Worker effects table is invalid.');
-		return { id, type: 'effects-table', table: value.table };
 	}
 	throw new Error('Worker response type is invalid.');
 }

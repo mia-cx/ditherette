@@ -229,7 +229,7 @@ function packageRecipe(settings: ProcessingSettings, stages: Omit<RecipeV1, 'ver
 
 /** Translate controls for a synchronous public call. Contiguous crops borrow bytes; Rust owns the snapshot. */
 export function packageProcessRequest(
-	source: Pick<ImageData, 'width' | 'height' | 'data'>,
+	source: { width: number; height: number; data: Uint8Array | Uint8ClampedArray },
 	palette: EnabledPaletteColor[],
 	settings: ProcessingSettings,
 	size: { width: number; height: number }

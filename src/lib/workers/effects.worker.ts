@@ -2,14 +2,11 @@ import {
 	compileEffects,
 	indexColours,
 	type Ditherette,
-	type Effect,
-	type EffectContext,
 	type RecolourRecipe,
 	type Rgba8Image
 } from 'ditherette';
 import type { LiveEffectsRequest, LiveEffectsResponse } from '$lib/processing/live-effects';
-import { croppedSource } from '$lib/processing/package-adapter';
-import type { CropRect } from '$lib/processing/types';
+import { resolveRecipes } from '$lib/processing/recipes';
 import { initializePackageProcessor } from '$lib/processing/worker-pipeline';
 
 /**
@@ -23,28 +20,6 @@ const recipes = new Map<string, RecolourRecipe>();
 
 const post = (response: LiveEffectsResponse, transfer: Transferable[] = []) =>
 	self.postMessage(response, { transfer });
-
-/** Resolve each recipe-less palette fit, analysing the cropped source only once per input. */
-function withRecipes(
-	ditherette: Ditherette,
-	image: Rgba8Image,
-	effects: Effect[],
-	context: Required<EffectContext>,
-	crop: CropRect | undefined
-): Effect[] {
-	return effects.map((step, index) => {
-		if (step.effect !== 'recolour' || step.recipe !== null) return step;
-		const preceding = effects.slice(0, index);
-		const key = JSON.stringify([preceding, context, crop ?? null]);
-		let recipe = recipes.get(key);
-		if (!recipe) {
-			const source = croppedSource(image, crop);
-			recipe = ditherette.analyzeRecolour({ version: 1, source, effects: preceding, context });
-			recipes.set(key, recipe);
-		}
-		return { ...step, recipe };
-	});
-}
 
 function index(sourceId: number, source: ImageData) {
 	const image = {
@@ -74,7 +49,7 @@ self.onmessage = async ({ data }: MessageEvent<LiveEffectsRequest>) => {
 		const results = compileEffects(ditherette, {
 			version: 1,
 			colours: loaded.colours,
-			effects: withRecipes(ditherette, loaded.image, effects, context, crop),
+			effects: resolveRecipes(ditherette, loaded.image, effects, context, crop, recipes),
 			context
 		});
 		post({ type: 'compiled', id, sourceId, key, results }, [results.buffer]);

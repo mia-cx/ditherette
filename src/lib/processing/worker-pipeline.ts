@@ -1,16 +1,12 @@
-import type { Ditherette, Progress } from 'ditherette';
 import {
-	applyEffectsTable,
-	compileEffectsTable,
-	distinctColours,
-	resolveRecolour
-} from './effects-table';
+	applyCompiledEffects,
+	indexColours,
+	type Ditherette,
+	type IndexedColours,
+	type Progress
+} from 'ditherette';
 import type { ProcessingStageTiming } from './metrics';
-import {
-	packageEffectContext,
-	packageProcessRequest,
-	packageQuantizeResult
-} from './package-adapter';
+import { packageProcessRequest, packageQuantizeResult } from './package-adapter';
 import {
 	clampOutputSize,
 	type WorkerProcessRequest,
@@ -23,14 +19,14 @@ type ProgressSink = (
 	progress: number,
 	counts?: Pick<Progress, 'completed' | 'total'>
 ) => void;
-type TableSink = (table: Uint32Array) => void;
-type Pixels = Pick<ImageData, 'width' | 'height' | 'data'>;
+/** Pixels as either byte array: an `ImageData` or the package's `Rgba8Image`. */
+type Pixels = { width: number; height: number; data: Uint8Array | Uint8ClampedArray };
 
-/** A loaded source, its distinct colours once needed, and its latest effects result. */
+/** A loaded source, its colour index once needed, and its latest effects result. */
 type SourceCache = {
 	sourceId: string;
 	source: ImageData;
-	colours?: Uint32Array;
+	colours?: IndexedColours;
 	effects?: { key: string; mapped: Pixels };
 };
 
@@ -50,13 +46,12 @@ export class ProcessorWorkerPipeline {
 	}
 
 	/**
-	 * Process one request. Effects run once, through an exact table of the source's colours, and
-	 * the mapped source is reused until they change; each new table also goes to `publishTable`.
+	 * Process one request. Effects arrive compiled from the effects worker; the source maps through
+	 * them once and the mapped source is reused until they change.
 	 */
 	async handleAsync(
 		request: WorkerRequest,
-		progress: ProgressSink,
-		publishTable: TableSink = () => undefined
+		progress: ProgressSink
 	): Promise<WorkerResponse | undefined> {
 		if (request.type !== 'process') return this.handle(request);
 		if (this.#canceledIds.has(request.id)) return undefined;
@@ -78,7 +73,7 @@ export class ProcessorWorkerPipeline {
 		const processor = await this.#package;
 		if (this.#canceledIds.has(id)) return undefined;
 		mark('package initialisation wait', initializeStart);
-		const source = applyEffects(processor, cache, request, size, publishTable, mark);
+		const source = applyEffects(cache, request, mark);
 		const requestStart = performance.now();
 		// The mapped source already carries the effects, so the package only resizes and dithers.
 		const mapped = packageProcessRequest(source, palette, { ...settings, effects: [] }, size);
@@ -132,49 +127,42 @@ export class ProcessorWorkerPipeline {
 }
 
 /**
- * The source with the request's effects applied through an exact table of its colours. The result
- * stays cached until the chain changes, or, with a palette fit, the palette or colour space, or,
- * with a palette fit that analyses the image, the crop. Each new table goes to `publishTable`.
+ * The source with the request's compiled effects applied, byte-exact: each pixel takes its
+ * colour's result. Cached by the effects key until the next edit.
  */
 function applyEffects(
-	processor: Ditherette,
 	cache: SourceCache,
-	{ settings, palette }: WorkerProcessRequest,
-	size: { width: number; height: number },
-	publishTable: TableSink,
+	{ settings, compiledEffects }: WorkerProcessRequest,
 	mark: (name: string, start: number) => void
 ): Pixels {
 	if (!settings.effects.length) return cache.source;
-	const context = packageEffectContext(palette, settings.colorSpace);
-	// Only palette fit reads the palette and working space, and only one without a recipe
-	// analyses the (cropped) image, so other edits keep the table.
-	const fits = settings.effects.filter((step) => step.effect === 'recolour');
-	const analysed = fits.some((step) => step.recipe === null);
-	const key = JSON.stringify([
-		settings.effects,
-		fits.length > 0 && context,
-		analysed && settings.output.crop
-	]);
+	if (!compiledEffects) throw new Error('Effects arrived without their compiled results.');
+	const { key, results } = compiledEffects;
 	if (cache.effects?.key === key) return cache.effects.mapped;
 	let start = performance.now();
-	// Palette fit analyses the cropped source `process` would receive.
-	const cropped = packageProcessRequest(cache.source, palette, settings, size).request.source;
-	const effects = resolveRecolour(processor, cropped, settings.effects, context);
-	mark('palette fit analysis', start);
-	start = performance.now();
-	cache.colours ??= distinctColours(cache.source);
+	cache.colours ??= indexColours(bytes(cache.source));
 	mark('effects colours', start);
-	start = performance.now();
-	const table = compileEffectsTable(processor, cache.colours, effects, context);
-	mark('effects compile', start);
+	if (results.length !== cache.colours.colours.length)
+		throw new Error('The compiled effects are for another image.');
 	start = performance.now();
 	// The previous result is stale now, so its buffer takes the new one.
-	const mapped = applyEffectsTable(cache.source, table, cache.effects?.mapped.data);
+	const mapped = applyCompiledEffects(
+		bytes(cache.source),
+		cache.colours.indices,
+		results,
+		cache.effects && bytes(cache.effects.mapped).data
+	);
 	mark('effects map', start);
 	cache.effects = { key, mapped };
-	publishTable(table);
 	return mapped;
 }
+
+/** An image's pixels as the package's byte view, sharing memory. */
+const bytes = ({ width, height, data }: Pixels) => ({
+	width,
+	height,
+	data: new Uint8Array(data.buffer, data.byteOffset, data.length)
+});
 
 /** Signals that a fresh worker must clear cached module or Wasm initialization failures. */
 export class PackageInitializationError extends Error {}
@@ -201,12 +189,11 @@ export async function initializePackageProcessor() {
 }
 
 /**
- * Transfer completed indexed output with its preview bitmaps, and effects tables; control
- * responses keep their owned data.
+ * Transfer completed indexed output with its preview bitmaps; control responses keep their
+ * owned data.
  */
 export function transferablesForWorkerResponse(response: WorkerResponse): Transferable[] {
 	const owned = (buffer: ArrayBufferLike) => (buffer instanceof ArrayBuffer ? [buffer] : []);
-	if (response.type === 'effects-table') return owned(response.table.buffer);
 	if (response.type !== 'complete') return [];
 	return [...owned(response.image.indices.buffer), ...(response.preview ?? [])];
 }
