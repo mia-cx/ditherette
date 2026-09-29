@@ -189,6 +189,21 @@ A recipe applies only in the space it was analysed in. Analyses are cached by ex
 Errors name the step, such as `effects.2.gamma`, or `recipe.effects.2.gamma` inside `process`.
 Progress reports an `effects` stage between `prepare` and `resize`.
 
+### Compiled effects for live previews
+
+Every effect maps each colour on its own and rounds to RGBA8 once, so a chain is a function of the input colour. Index an image once, then compile each edit over its distinct colours instead of its pixels:
+
+```ts
+import { applyCompiledEffects, compileEffects, indexColours } from 'ditherette';
+
+const { colours, indices } = indexColours(source); // once per image
+const results = compileEffects(processor, { version: 1, colours, effects, context });
+const graded = applyCompiledEffects(source, indices, results); // equals applyEffects, byte for byte
+```
+
+Colours and results are packed `r | g << 8 | b << 16`. A palette fit needs its `recipe` here; derive a missing one with `analyzeRecolour`.
+The package leaves display to you: upload `indices` and `results` as textures to draw only the visible region on the GPU, or map pixels on the CPU with `applyCompiledEffects`, passing the previous output as `into` to reuse its memory.
+
 ## Direct quantization
 
 ```ts
