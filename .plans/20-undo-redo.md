@@ -18,9 +18,10 @@ Keyboard undo and redo for processing settings, so users can flip between recent
 ## TODOs
 
 - [x] Add `src/lib/stores/history.ts`: snapshots of the tracked stores, a settle rule that commits one entry once no pointer is held and settings stay still, bounded undo/redo stacks, and source/crop boundaries. Browser spec covers coalescing, undo/redo, redo clearing, boundaries, and the bound.
-- [ ] Start history with the page, add Undo and Redo to the Edit menu, and bind the shortcuts in the app bar's key handler. AppBar spec covers the shortcuts and the text-field exemption.
+- [x] Start history with the page, add Undo and Redo to the Edit menu, and bind the shortcuts in the app bar's key handler. AppBar spec covers the shortcuts and the text-field exemption.
 - [ ] Document the feature in `DESIGN.md`, add a changeset, run checks, and verify in Chromium.
 
 ## Notes
 
 - TODO 1: `pnpm vitest --run --project client src/lib/stores/history.browser.spec.ts` passes (5 tests); `pnpm check` 0 errors. Needed `pnpm package:build` first so `ditherette` resolves.
+- TODO 2: AppBar + history specs pass together (10 tests); `pnpm check` 0 errors. Prettier also reflowed one Adjustments menu item that was unformatted on main.
