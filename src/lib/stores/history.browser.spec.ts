@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { scheduleProcessing } from '$lib/processing/client';
-import { colorSpace, ditherSettings, outputSettings, updateDitherSettings } from './app';
+import {
+	colorSpace,
+	ditherSettings,
+	outputSettings,
+	updateDitherSettings,
+	updateOutputSettings
+} from './app';
 import { addEffect, effectLayers, updateEffect } from './effects';
 import {
 	MAX_HISTORY,
@@ -102,6 +108,21 @@ describe('settings history', () => {
 		expect(ditherSettings.get().strength).toBe(80);
 		undo();
 		expect(ditherSettings.get().strength).toBe(100);
+	});
+
+	it('merges repeats whose derived fields change only on some ticks', async () => {
+		const initial = outputSettings.get();
+		// Scale slider arrow keys: rounded sizes cross a pixel on the second tick only.
+		updateOutputSettings({ scaleFactor: 0.5 });
+		await wait(50);
+		updateOutputSettings({ scaleFactor: 0.5001, width: 257, height: 257 });
+		await wait(50);
+		updateOutputSettings({ scaleFactor: 0.5002 });
+		await settle();
+
+		undo();
+		expect(outputSettings.get()).toEqual(initial);
+		expect(canUndo.get()).toBe(false);
 	});
 
 	it('steps back through settled edits, and a new edit drops the redo branch', async () => {
