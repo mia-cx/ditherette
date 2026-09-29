@@ -6,6 +6,7 @@ import {
 	customPalettes,
 	ditherSettings,
 	effectsTable,
+	outputPreview,
 	outputSettings,
 	paletteEnabled,
 	processedImage,
@@ -137,6 +138,7 @@ export function currentSettingsHash() {
 
 type ProcessInWorkerResult = {
 	image: ProcessedImage;
+	preview?: ImageBitmap[];
 	metrics?: ProcessingMetricsSample;
 };
 
@@ -278,6 +280,7 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 			processingProgress.set({ stage: 'Done', progress: 1 });
 			settle(resolve, {
 				image: message.image,
+				preview: message.preview,
 				metrics: message.metrics
 					? {
 							...message.metrics,
@@ -322,8 +325,13 @@ export async function processCurrentImage(schedule?: ProcessingSchedule) {
 
 	try {
 		const result = await Effect.runPromise(program);
-		if (result.image.settingsHash !== hash || result.image.settingsHash !== currentSettingsHash())
+		if (result.image.settingsHash !== hash || result.image.settingsHash !== currentSettingsHash()) {
+			result.preview?.forEach((level) => level.close());
 			return;
+		}
+		// Bitmaps hold their pixels until closed, so free the levels this output replaces.
+		outputPreview.get()?.levels.forEach((level) => level.close());
+		outputPreview.set(result.preview && { image: result.image, levels: result.preview });
 		processedImage.set(result.image);
 		processingProgress.set(undefined);
 		persistWhenSettled();

@@ -13,11 +13,12 @@
 		EmptyMedia,
 		EmptyTitle
 	} from '$lib/components/ui/empty';
-	import { processedToImageData } from '$lib/processing/render';
+	import { buildOutputPyramid } from '$lib/processing/output-preview';
 	import { browser } from '$app/environment';
 	import { lutDrawn, lutView, shownEffectsTable, supportsWebGL2 } from '$lib/processing/lut-view';
 	import type { CropRect } from '$lib/processing/types';
 	import {
+		outputPreview,
 		outputSettings,
 		previewSettings,
 		processedImage,
@@ -44,7 +45,8 @@
 	type ViewAnchor = { sourceX: number; sourceY: number };
 	type CropEdge = 'n' | 'e' | 's' | 'w';
 	type CropHandle = CropEdge | 'nw' | 'ne' | 'se' | 'sw';
-	type PreviewLevel = { canvas: HTMLCanvasElement; width: number; height: number };
+	/** One zoom level of the output, from `buildOutputPyramid`. */
+	type PreviewLevel = ImageBitmap;
 
 	type Props = {
 		defaultMode?: PreviewMode;
@@ -152,7 +154,11 @@
 			outputPreviewLevels = [];
 			return;
 		}
-		outputPreviewLevels = buildPreviewPyramid(processedToImageData($processedImage));
+		// The worker builds the levels with each result; a restored output builds them here.
+		outputPreviewLevels =
+			$outputPreview?.image === $processedImage
+				? $outputPreview.levels
+				: buildOutputPyramid($processedImage);
 	});
 
 	$effect(() => {
@@ -444,70 +450,6 @@
 		return frameStyle(outputFrame(pane, width, height), width);
 	}
 
-	/**
-	 * Halve the output down to one pixel. At half size, bilinear sampling averages each 2×2 block in
-	 * premultiplied alpha, so the GPU does the box filter.
-	 */
-	function buildPreviewPyramid(imageData: ImageData): PreviewLevel[] {
-		const levels: PreviewLevel[] = [imageDataToCanvas(imageData)];
-		let current = levels[0]!;
-		while (current.width > 1 || current.height > 1) {
-			const source = evenSized(current);
-			const width = source.width / 2;
-			const height = source.height / 2;
-			const canvas = document.createElement('canvas');
-			canvas.width = width;
-			canvas.height = height;
-			const context = canvas.getContext('2d');
-			if (!context) break;
-			context.imageSmoothingQuality = 'low';
-			context.drawImage(source.canvas, 0, 0, width, height);
-			current = { canvas, width, height };
-			levels.push(current);
-		}
-		return levels;
-	}
-
-	/**
-	 * Pad an odd side by repeating its last row or column. Bilinear sampling at exactly half size
-	 * then averages whole 2×2 blocks; at any other scale it can skip thin lines.
-	 */
-	function evenSized(level: PreviewLevel): PreviewLevel {
-		const width = level.width + (level.width % 2);
-		const height = level.height + (level.height % 2);
-		if (width === level.width && height === level.height) return level;
-		const canvas = document.createElement('canvas');
-		canvas.width = width;
-		canvas.height = height;
-		const context = canvas.getContext('2d');
-		if (!context) return level;
-		context.drawImage(level.canvas, 0, 0);
-		if (width > level.width)
-			context.drawImage(
-				level.canvas,
-				level.width - 1,
-				0,
-				1,
-				level.height,
-				level.width,
-				0,
-				1,
-				level.height
-			);
-		if (height > level.height)
-			context.drawImage(canvas, 0, level.height - 1, width, 1, 0, level.height, width, 1);
-		return { canvas, width, height };
-	}
-
-	function imageDataToCanvas(imageData: ImageData): PreviewLevel {
-		const canvas = document.createElement('canvas');
-		canvas.width = imageData.width;
-		canvas.height = imageData.height;
-		const context = canvas.getContext('2d');
-		context?.putImageData(imageData, 0, 0);
-		return { canvas, width: imageData.width, height: imageData.height };
-	}
-
 	function renderPreviewCanvas(
 		canvas: HTMLCanvasElement,
 		pane: HTMLElement,
@@ -571,7 +513,7 @@
 		context.imageSmoothingEnabled = smoothing;
 		context.imageSmoothingQuality = 'high';
 		context.clearRect(0, 0, width, height);
-		context.drawImage(level.canvas, 0, 0, width, height);
+		context.drawImage(level, 0, 0, width, height);
 		canvas.dataset.previewKey = cacheKey;
 	}
 

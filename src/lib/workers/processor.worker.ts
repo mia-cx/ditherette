@@ -1,3 +1,4 @@
+import { buildOutputPyramid } from '$lib/processing/output-preview';
 import { validateWorkerRequest } from '$lib/processing/schemas';
 import type { WorkerResponse } from '$lib/processing/types';
 import {
@@ -23,7 +24,15 @@ function requestIdFromMessage(value: unknown) {
 
 function postResponse(response: WorkerResponse | undefined) {
 	if (!response) return;
+	if (response.type === 'complete') withPreview(response);
 	workerSelf.postMessage(response, transferablesForWorkerResponse(response));
+}
+
+/** Build the output's zoom levels here, so the main thread only draws them. */
+function withPreview(response: Extract<WorkerResponse, { type: 'complete' }>) {
+	const start = performance.now();
+	response.preview = buildOutputPyramid(response.image);
+	response.metrics?.timings.push({ name: 'output preview', ms: performance.now() - start });
 }
 
 self.onmessage = (event: MessageEvent<unknown>) => {

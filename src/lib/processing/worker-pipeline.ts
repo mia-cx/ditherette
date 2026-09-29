@@ -200,10 +200,13 @@ export async function initializePackageProcessor() {
 	}
 }
 
-/** Transfer completed indexed output and effects tables; control responses keep their owned data. */
+/**
+ * Transfer completed indexed output with its preview bitmaps, and effects tables; control
+ * responses keep their owned data.
+ */
 export function transferablesForWorkerResponse(response: WorkerResponse): Transferable[] {
-	if (response.type !== 'complete' && response.type !== 'effects-table') return [];
-	const buffer =
-		response.type === 'complete' ? response.image.indices.buffer : response.table.buffer;
-	return buffer instanceof ArrayBuffer ? [buffer] : [];
+	const owned = (buffer: ArrayBufferLike) => (buffer instanceof ArrayBuffer ? [buffer] : []);
+	if (response.type === 'effects-table') return owned(response.table.buffer);
+	if (response.type !== 'complete') return [];
+	return [...owned(response.image.indices.buffer), ...(response.preview ?? [])];
 }
