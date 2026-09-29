@@ -161,9 +161,8 @@
 					<MenubarSubTrigger>Adjustments</MenubarSubTrigger>
 					<MenubarSubContent class="min-w-52">
 						{#each EFFECT_KINDS as kind (kind)}
-							<MenubarItem
-								disabled={$effectStepsLeft < 1}
-								onSelect={() => adjust(kind)}>{EFFECTS[kind].label}</MenubarItem
+							<MenubarItem disabled={$effectStepsLeft < 1} onSelect={() => adjust(kind)}
+								>{EFFECTS[kind].label}</MenubarItem
 							>
 						{/each}
 					</MenubarSubContent>
