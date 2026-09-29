@@ -111,15 +111,24 @@ fn effect_calls_report_every_failed_allocation() {
         .collect();
     let chain = decode_effects(
         &json!([
-            { "effect": "curves", "enabled": true, "channel": "rgb", "points": [[0, 0], [0.4, 0.5], [1, 1]] },
+            { "effect": "curves", "enabled": true, "curves": [
+              { "kind": "remap", "x": { "model": "srgb", "channel": "red" },
+                "y": { "model": "srgb", "channel": "red" }, "points": [[0, 0], [0.4, 0.5], [1, 1]] },
+              { "kind": "remap", "x": { "model": "srgb", "channel": "green" },
+                "y": { "model": "srgb", "channel": "green" }, "points": [[0, 0], [0.4, 0.5], [1, 1]] },
+              { "kind": "remap", "x": { "model": "srgb", "channel": "blue" },
+                "y": { "model": "srgb", "channel": "blue" }, "points": [[0, 0], [0.4, 0.5], [1, 1]] }
+            ] },
             { "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null },
             { "effect": "hue-saturation", "enabled": true, "hue": 20, "saturation": 0.1, "lightness": 0 },
-            { "effect": "model-curves", "enabled": true, "model": "oklch",
-              "curves": [[[0, 0], [1, 1]], [[0, 0], [0.5, 0.7], [1, 1]], [[0, 0], [1, 1]]] },
-            { "effect": "channel-curve", "enabled": true,
-              "x": { "model": "hsl", "channel": "hue" },
-              "y": { "model": "cielch", "channel": "chroma" },
-              "points": [[0, 0.5], [0.5, 0.8], [1, 0.5]] },
+            { "effect": "curves", "enabled": true, "curves": [
+              { "kind": "remap", "x": { "model": "oklch", "channel": "chroma" },
+                "y": { "model": "oklch", "channel": "chroma" },
+                "points": [[0, 0], [0.5, 0.7], [1, 1]] },
+              { "kind": "adjust", "x": { "model": "hsl", "channel": "hue" },
+                "y": { "model": "cielch", "channel": "chroma" },
+                "points": [[0, 0.5], [0.5, 0.8], [1, 0.5]] }
+            ] },
             { "effect": "levels", "enabled": true, "channel": "blue", "input": { "black": 0, "white": 1 },
               "gamma": 1.3, "output": { "black": 0, "white": 1 } },
         ])

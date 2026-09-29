@@ -12,6 +12,8 @@ Every pixel with channel byte `k` starts at `k / 255` and passes through the sam
 When the run is the whole chain, the tables are rounded to bytes and the image is rewritten in place with three lookups per pixel. No continuous carrier is allocated.
 Otherwise the tables seed the carrier and the remaining effects run normally.
 
+`curves` joins this fold only when every entry remaps one encoded or linear RGB channel to itself. Production prepares all other curve lists once per call and runs them through the pointwise colour memo. Hue remaps use the ordinary open spline. Only hue-input adjustments use the cyclic closed-seam spline.
+
 Criterion, `crit_effects`, native x86-64 release, quiet host, 2026-09-25:
 
 | Chain | Fixture | Reference | Production | Speedup |

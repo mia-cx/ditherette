@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
-	import type { CurvePoints } from '$lib/effects/catalog';
+	import type { CurvePoints } from 'ditherette';
 	import { tick } from 'svelte';
 	import {
 		MAX_CURVE_POINTS,

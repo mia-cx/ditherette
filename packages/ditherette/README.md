@@ -93,11 +93,28 @@ const levels = {
 	output: { black: 0, white: 1 }
 } as const;
 
-const graded = processor.applyEffects({ version: 1, source, effects: [levels] });
+const curves = {
+	effect: 'curves',
+	enabled: true,
+	curves: [
+		{
+			kind: 'adjust',
+			x: { model: 'hsl', channel: 'hue' },
+			y: { model: 'oklch', channel: 'chroma' },
+			points: [
+				[0, 0.5],
+				[0.5, 0.8],
+				[1, 0.5]
+			]
+		}
+	]
+} as const;
+
+const graded = processor.applyEffects({ version: 1, source, effects: [levels, curves] });
 const indexed = processor.process({
 	source,
 	palette,
-	recipe: { version: 2, effects: [levels], output, alpha, match: 'oklab-euclidean', dither }
+	recipe: { version: 2, effects: [levels, curves], output, alpha, match: 'oklab-euclidean', dither }
 });
 ```
 
@@ -115,17 +132,18 @@ Colour effects cannot run after quantization; no recipe field places them there.
 
 Built-in effects:
 
-| `effect` | Arguments |
-| --- | --- |
-| `levels` | `channel` (`rgb`, `red`, `green`, `blue`), `input` and `output` black/white points from 0 to 1, `gamma` from 0.1 to 10 (above 1 brightens) |
-| `curves` | `channel`, `points`: 2 to 16 `[x, y]` pairs from 0 to 1, x rising by at least 0.001, joined by a smooth curve that never overshoots |
-| `brightness-contrast` | `brightness` and `contrast` from -1 to 1; contrast scales around mid-grey by `4^contrast` |
-| `exposure` | `stops` from -4 to 4, in linear light |
-| `white-balance` | `temperature` (warmer is positive) and `tint` (more magenta is positive), from -1 to 1 |
-| `hue-saturation` | `hue` in degrees from -180 to 180, `saturation` and `lightness` from -1 to 1, in Oklab |
-| `recolour` | `strength` from 0 to 1, `recipe`: an analysed recipe or `null` to analyse automatically |
+| `effect`              | Arguments                                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `levels`              | `channel` (`rgb`, `red`, `green`, `blue`), `input` and `output` black/white points from 0 to 1, `gamma` from 0.1 to 10 (above 1 brightens)                                 |
+| `curves`              | `curves`: 0 to 16 ordered `{ kind, x, y, points }` entries. `kind` is `remap` or `adjust`; `x` and `y` name colour-model channels; `points` holds 2 to 16 normalized pairs |
+| `brightness-contrast` | `brightness` and `contrast` from -1 to 1; contrast scales around mid-grey by `4^contrast`                                                                                  |
+| `exposure`            | `stops` from -4 to 4, in linear light                                                                                                                                      |
+| `white-balance`       | `temperature` (warmer is positive) and `tint` (more magenta is positive), from -1 to 1                                                                                     |
+| `hue-saturation`      | `hue` in degrees from -180 to 180, `saturation` and `lightness` from -1 to 1, in Oklab                                                                                     |
+| `recolour`            | `strength` from 0 to 1, `recipe`: an analysed recipe or `null` to analyse automatically                                                                                    |
 
-All values are in encoded sRGB units unless noted. Neutral arguments leave pixels untouched.
+Curve x values rise by at least 0.001. A hue-input adjustment starts at 0, ends at 1, and repeats its first y value at the end so its spline wraps. Remaps use an open spline, including hue remaps. A remap uses the same channel for `x` and `y`; an adjustment may use any valid pair.
+All values are in encoded sRGB units unless noted. Curve coordinates are normalized in their selected colour models. Neutral arguments leave pixels untouched.
 A preset is a stored `effects` array: this package owns what each effect does, and the caller owns labels, editor state, and where presets live.
 
 ### Recolouring for a palette

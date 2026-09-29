@@ -25,16 +25,6 @@ const PROD_SPACES: [ditherette_wasm::prod::contract::request::WorkingSpace; 7] =
     use ditherette_wasm::prod::contract::request::WorkingSpace::*;
     [Srgb, LinearRgb, Oklab, Oklch, Cielab, Cielch, Ycbcr]
 };
-const MODEL_CURVE_MODELS: [&str; 8] = [
-    "linear-rgb",
-    "hsl",
-    "hsv",
-    "oklab",
-    "oklch",
-    "cielab",
-    "cielch",
-    "ycbcr",
-];
 const COLOUR_CHANNELS: [(&str, &str); 27] = [
     ("srgb", "red"),
     ("srgb", "green"),
@@ -121,20 +111,71 @@ fn random_levels(rng: &mut Rng) -> Value {
     })
 }
 
+fn random_curve_points(rng: &mut Rng, x: (&str, &str), adjustment: bool) -> Vec<[f32; 2]> {
+    let count = 2 + (rng.next() % 5) as usize;
+    let neutral = rng.next() % 4 == 0;
+    let mut points: Vec<_> = (0..count)
+        .map(|index| {
+            let position = index as f32 / (count - 1) as f32;
+            let value = if adjustment && neutral {
+                0.5
+            } else if !adjustment && neutral {
+                position
+            } else {
+                rng.unit()
+            };
+            [position, value]
+        })
+        .collect();
+    if adjustment && x.1 == "hue" {
+        points[count - 1][1] = points[0][1];
+    }
+    points
+}
+
+fn random_remap(rng: &mut Rng, channel: Option<(&str, &str)>) -> Value {
+    let channel = channel
+        .unwrap_or_else(|| COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize]);
+    json!({
+        "kind": "remap",
+        "x": { "model": channel.0, "channel": channel.1 },
+        "y": { "model": channel.0, "channel": channel.1 },
+        "points": random_curve_points(rng, channel, false),
+    })
+}
+
+fn random_adjustment(rng: &mut Rng, x: Option<(&str, &str)>) -> Value {
+    let x =
+        x.unwrap_or_else(|| COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize]);
+    let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+    json!({
+        "kind": "adjust",
+        "x": { "model": x.0, "channel": x.1 },
+        "y": { "model": y.0, "channel": y.1 },
+        "points": random_curve_points(rng, x, true),
+    })
+}
+
 /// Any built-in with random in-range arguments; about one in four is neutral.
 fn random_effect(rng: &mut Rng) -> Value {
     let enabled = rng.next() % 5 != 0;
     let neutral = rng.next() % 4 == 0;
     let signed = |rng: &mut Rng| if neutral { 0.0 } else { rng.unit() * 2.0 - 1.0 };
-    match rng.next() % 9 {
+    match rng.next() % 8 {
         0 => random_levels(rng),
         1 => {
             let count = 2 + rng.next() % 5;
             let points: Vec<[f32; 2]> = (0..count)
-                .map(|i| [i as f32 / (count - 1) as f32, rng.unit()])
+                .map(|i| {
+                    let x = i as f32 / (count - 1) as f32;
+                    [x, if neutral { x } else { rng.unit() }]
+                })
                 .collect();
+            let channel = rng.pick(&["red", "green", "blue"]);
             json!({ "effect": "curves", "enabled": enabled,
-                "channel": rng.pick(&["rgb", "red", "green", "blue"]), "points": points })
+                "curves": [{ "kind": "remap",
+                    "x": { "model": "srgb", "channel": channel },
+                    "y": { "model": "srgb", "channel": channel }, "points": points }] })
         }
         2 => json!({ "effect": "brightness-contrast", "enabled": enabled,
             "brightness": signed(rng), "contrast": signed(rng) }),
@@ -145,33 +186,9 @@ fn random_effect(rng: &mut Rng) -> Value {
             "hue": signed(rng) * 180.0, "saturation": signed(rng), "lightness": signed(rng) }),
         6 => json!({ "effect": "recolour", "enabled": enabled,
             "strength": if neutral { 0.0 } else { rng.unit() }, "recipe": null }),
-        7 => {
-            let identity = [[0.0, 0.0], [1.0, 1.0]];
-            let bent = [[0.0, 0.0], [0.5, rng.unit()], [1.0, 1.0]];
-            json!({ "effect": "model-curves", "enabled": enabled,
-                "model": rng.pick(&MODEL_CURVE_MODELS),
-                "curves": if neutral { [identity.as_slice(), identity.as_slice(), identity.as_slice()] }
-                else { [bent.as_slice(), identity.as_slice(), identity.as_slice()] } })
-        }
-        _ => {
-            let x = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
-            let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
-            let seam = if neutral { 0.5 } else { rng.unit() };
-            let points = if x.1 == "hue" {
-                vec![
-                    [0.0, seam],
-                    [0.5, if neutral { 0.5 } else { rng.unit() }],
-                    [1.0, seam],
-                ]
-            } else if neutral {
-                vec![[0.0, 0.5], [1.0, 0.5]]
-            } else {
-                vec![[0.0, rng.unit()], [0.5, rng.unit()], [1.0, rng.unit()]]
-            };
-            json!({ "effect": "channel-curve", "enabled": enabled,
-                "x": { "model": x.0, "channel": x.1 },
-                "y": { "model": y.0, "channel": y.1 }, "points": points })
-        }
+        7 => json!({ "effect": "curves", "enabled": enabled,
+            "curves": [random_remap(rng, None), random_adjustment(rng, None)] }),
+        _ => unreachable!(),
     }
 }
 
@@ -240,24 +257,17 @@ fn random_chains_match_the_reference() {
 }
 
 #[test]
-fn randomized_model_curves_match_the_reference_for_every_model() {
+fn randomised_remap_only_lists_match_the_reference() {
     let mut rng = Rng(0xc01a_267);
     let data = image(&mut rng, 37, 19);
-    for model in MODEL_CURVE_MODELS {
-        for _ in 0..24 {
-            let curves: Vec<Vec<[f32; 2]>> = (0..3)
-                .map(|_| {
-                    vec![
-                        [0.0, rng.unit()],
-                        [0.3, rng.unit()],
-                        [0.7, rng.unit()],
-                        [1.0, rng.unit()],
-                    ]
-                })
-                .collect();
+    for channel in COLOUR_CHANNELS {
+        for _ in 0..12 {
+            let count = 1 + (rng.next() % 16) as usize;
+            let mut curves = vec![random_remap(&mut rng, Some(channel))];
+            curves.extend((1..count).map(|_| random_remap(&mut rng, None)));
             let effects = json!([
                 random_levels(&mut rng),
-                { "effect": "model-curves", "enabled": true, "model": model, "curves": curves },
+                { "effect": "curves", "enabled": true, "curves": curves },
                 { "effect": "brightness-contrast", "enabled": true,
                   "brightness": rng.unit() * 0.4 - 0.2, "contrast": rng.unit() * 0.4 - 0.2 }
             ]);
@@ -267,33 +277,17 @@ fn randomized_model_curves_match_the_reference_for_every_model() {
 }
 
 #[test]
-fn randomized_cross_model_channel_curves_match_the_reference() {
+fn randomised_adjustment_only_lists_match_the_reference() {
     let mut rng = Rng(0xc01a_268);
     let data = image(&mut rng, 37, 19);
     for x in COLOUR_CHANNELS {
         for _ in 0..12 {
-            let y = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
-            let seam = rng.unit();
-            let points = if x.1 == "hue" {
-                vec![
-                    [0.0, seam],
-                    [0.3, rng.unit()],
-                    [0.7, rng.unit()],
-                    [1.0, seam],
-                ]
-            } else {
-                vec![
-                    [0.0, rng.unit()],
-                    [0.3, rng.unit()],
-                    [0.7, rng.unit()],
-                    [1.0, rng.unit()],
-                ]
-            };
+            let count = 1 + (rng.next() % 16) as usize;
+            let mut curves = vec![random_adjustment(&mut rng, Some(x))];
+            curves.extend((1..count).map(|_| random_adjustment(&mut rng, None)));
             let effects = json!([
                 random_levels(&mut rng),
-                { "effect": "channel-curve", "enabled": true,
-                  "x": { "model": x.0, "channel": x.1 },
-                  "y": { "model": y.0, "channel": y.1 }, "points": points },
+                { "effect": "curves", "enabled": true, "curves": curves },
                 { "effect": "exposure", "enabled": true, "stops": rng.unit() - 0.5 }
             ]);
             assert_same(&effects, 37, 19, &data);
@@ -302,16 +296,51 @@ fn randomized_cross_model_channel_curves_match_the_reference() {
 }
 
 #[test]
+fn randomised_mixed_ordered_lists_match_the_reference() {
+    let mut rng = Rng(0xc01a_269);
+    let data = image(&mut rng, 37, 19);
+    for _ in 0..300 {
+        let count = 2 + (rng.next() % 15) as usize;
+        let mut curves = vec![
+            random_remap(&mut rng, None),
+            random_adjustment(&mut rng, None),
+        ];
+        curves.extend((2..count).map(|_| {
+            if rng.next() % 2 == 0 {
+                random_remap(&mut rng, None)
+            } else {
+                random_adjustment(&mut rng, None)
+            }
+        }));
+        if rng.next() % 2 == 0 {
+            curves.reverse();
+        }
+        let effects = json!([
+            random_levels(&mut rng),
+            { "effect": "curves", "enabled": true, "curves": curves },
+            { "effect": "hue-saturation", "enabled": true,
+              "hue": rng.unit() * 360.0 - 180.0,
+              "saturation": rng.unit() * 2.0 - 1.0,
+              "lightness": rng.unit() * 2.0 - 1.0 }
+        ]);
+        assert_same(&effects, 37, 19, &data);
+    }
+}
+
+#[test]
 fn large_repeated_colour_effects_match_the_reference() {
     let effects = json!([
         { "effect": "hue-saturation", "enabled": true,
           "hue": 25, "saturation": 0.3, "lightness": 0.05 },
-        { "effect": "model-curves", "enabled": true, "model": "oklch",
-          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.5, 0.65], [1, 1]], [[0, 0], [1, 1]]] },
-        { "effect": "channel-curve", "enabled": true,
-          "x": { "model": "hsv", "channel": "value" },
-          "y": { "model": "cielch", "channel": "chroma" },
-          "points": [[0, 0.2], [0.5, 0.8], [1, 0.5]] }
+        { "effect": "curves", "enabled": true, "curves": [
+          { "kind": "remap", "x": { "model": "oklch", "channel": "lightness" },
+            "y": { "model": "oklch", "channel": "lightness" }, "points": [[0, 0], [1, 1]] },
+          { "kind": "remap", "x": { "model": "oklch", "channel": "chroma" },
+            "y": { "model": "oklch", "channel": "chroma" }, "points": [[0, 0], [0.5, 0.65], [1, 1]] },
+          { "kind": "adjust", "x": { "model": "hsv", "channel": "value" },
+            "y": { "model": "cielch", "channel": "chroma" },
+            "points": [[0, 0.2], [0.5, 0.8], [1, 0.5]] }
+        ] }
     ]);
     let data: Vec<u8> = (0..512 * 384)
         .flat_map(|index| {
@@ -325,16 +354,30 @@ fn large_repeated_colour_effects_match_the_reference() {
 #[test]
 fn high_cardinality_effects_match_the_reference() {
     let effects = json!([
-        { "effect": "curves", "enabled": true, "channel": "rgb",
-          "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+        { "effect": "curves", "enabled": true, "curves": [
+          { "kind": "remap", "x": { "model": "srgb", "channel": "red" },
+            "y": { "model": "srgb", "channel": "red" },
+            "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+          { "kind": "remap", "x": { "model": "srgb", "channel": "green" },
+            "y": { "model": "srgb", "channel": "green" },
+            "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] },
+          { "kind": "remap", "x": { "model": "srgb", "channel": "blue" },
+            "y": { "model": "srgb", "channel": "blue" },
+            "points": [[0, 0], [0.25, 0.2], [0.75, 0.85], [1, 1]] }
+        ] },
         { "effect": "hue-saturation", "enabled": true,
           "hue": -137, "saturation": 0.65, "lightness": -0.2 },
-        { "effect": "model-curves", "enabled": true, "model": "cielch",
-          "curves": [[[0, 0], [1, 1]], [[0, 0], [0.4, 0.7], [1, 1]], [[0, 0.1], [1, 0.9]]] },
-        { "effect": "channel-curve", "enabled": true,
-          "x": { "model": "oklch", "channel": "hue" },
-          "y": { "model": "hsl", "channel": "lightness" },
-          "points": [[0, 0.3], [0.25, 0.9], [0.75, 0.1], [1, 0.3]] }
+        { "effect": "curves", "enabled": true, "curves": [
+          { "kind": "remap", "x": { "model": "cielch", "channel": "lightness" },
+            "y": { "model": "cielch", "channel": "lightness" }, "points": [[0, 0], [1, 1]] },
+          { "kind": "remap", "x": { "model": "cielch", "channel": "chroma" },
+            "y": { "model": "cielch", "channel": "chroma" }, "points": [[0, 0], [0.4, 0.7], [1, 1]] },
+          { "kind": "remap", "x": { "model": "cielch", "channel": "hue" },
+            "y": { "model": "cielch", "channel": "hue" }, "points": [[0, 0.1], [1, 0.1]] },
+          { "kind": "adjust", "x": { "model": "oklch", "channel": "hue" },
+            "y": { "model": "hsl", "channel": "lightness" },
+            "points": [[0, 0.3], [0.25, 0.9], [0.75, 0.1], [1, 0.3]] }
+        ] }
     ]);
     let data: Vec<u8> = (0..512 * 512u32)
         .flat_map(|index| {
@@ -345,89 +388,296 @@ fn high_cardinality_effects_match_the_reference() {
     assert_same(&effects, 512, 512, &data);
 }
 
-#[test]
-fn linear_rgb_table_matches_direct_reference_for_every_channel_byte() {
-    use ditherette_wasm::prod::effects::model_curves::{ModelCurves, ModelCurvesModel};
-
-    let curves = [
-        vec![[0.0, 0.1], [0.4, 0.7], [1.0, 0.9]],
-        vec![[0.0, 0.0], [0.6, 0.3], [1.0, 1.0]],
-        vec![[0.0, 0.2], [1.0, 0.8]],
-    ];
-    let production = ModelCurves {
-        model: ModelCurvesModel::LinearRgb,
-        curves: curves.clone(),
-    };
-    let reference = spec::model_curves::ModelCurves {
-        model: spec::model_curves::ModelCurvesModel::LinearRgb,
-        curves,
-    };
+fn direct_curves(effect: &Value, rgb: [f32; 3]) -> ([f32; 3], [f32; 3]) {
     let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
-    for channel in 0..3 {
-        for value in 0..=u8::MAX {
-            let unit = value as f32 / 255.0;
-            let mut image = spec::EffectImage {
-                dimensions,
-                rgb: vec![[unit; 3]],
-                alpha: vec![255],
-            };
-            spec::Effect::apply(&reference, &mut image, &spec::EffectContext::default());
-            assert_eq!(
-                production.map_channel(channel, unit).to_bits(),
-                image.rgb[0][channel].to_bits(),
-                "channel {channel}, byte {value}"
-            );
-        }
+    let encoded = json!([effect]).to_string();
+    let production = prod::decode_effects(&encoded).unwrap().remove(0).effect;
+    let reference = spec::decode_effects(&encoded).unwrap().remove(0).effect;
+    let mut production_image = prod::EffectImage {
+        dimensions,
+        rgb: vec![rgb],
+        alpha: vec![37],
+    };
+    let mut reference_image = spec::EffectImage {
+        dimensions,
+        rgb: vec![rgb],
+        alpha: vec![37],
+    };
+    production.apply(&mut production_image, &prod::EffectContext::default());
+    spec::Effect::apply(
+        &reference,
+        &mut reference_image,
+        &spec::EffectContext::default(),
+    );
+    assert_eq!(production_image.alpha, reference_image.alpha);
+    (production_image.rgb[0], reference_image.rgb[0])
+}
+
+fn assert_validation_matches(effect: Value, expected_path: &str) {
+    let encoded = json!([effect]).to_string();
+    let production = prod::decode_effects(&encoded).unwrap().remove(0).effect;
+    let reference = spec::decode_effects(&encoded).unwrap().remove(0).effect;
+    let production_error = production.validate("effects.0").unwrap_err();
+    let reference_error = spec::Effect::validate(&reference, "effects.0").unwrap_err();
+    assert_eq!(production_error.path, expected_path);
+    assert_eq!(
+        (
+            format!("{:?}", production_error.code),
+            production_error.path,
+            production_error.message
+        ),
+        (
+            format!("{:?}", reference_error.code),
+            reference_error.path,
+            reference_error.message
+        )
+    );
+}
+
+#[test]
+fn curves_validation_paths_and_registry_match_the_reference() {
+    let valid = json!({ "kind": "adjust",
+        "x": { "model": "srgb", "channel": "red" },
+        "y": { "model": "oklch", "channel": "chroma" },
+        "points": [[0, 0.5], [1, 0.5]] });
+    assert_validation_matches(
+        json!({ "effect": "curves", "enabled": true, "curves": vec![valid; 17] }),
+        "effects.0.curves",
+    );
+    for (curve, path) in [
+        (
+            json!({ "kind": "adjust",
+                "x": { "model": "hsv", "channel": "lightness" },
+                "y": { "model": "srgb", "channel": "red" },
+                "points": [[0, 0.5], [1, 0.5]] }),
+            "effects.0.curves.0.x.channel",
+        ),
+        (
+            json!({ "kind": "adjust",
+                "x": { "model": "srgb", "channel": "red" },
+                "y": { "model": "oklab", "channel": "chroma" },
+                "points": [[0, 0.5], [1, 0.5]] }),
+            "effects.0.curves.0.y.channel",
+        ),
+        (
+            json!({ "kind": "remap",
+                "x": { "model": "srgb", "channel": "red" },
+                "y": { "model": "linear-rgb", "channel": "red" },
+                "points": [[0, 0], [1, 1]] }),
+            "effects.0.curves.0.y",
+        ),
+        (
+            json!({ "kind": "remap",
+                "x": { "model": "srgb", "channel": "red" },
+                "y": { "model": "srgb", "channel": "red" }, "points": [[0, 0]] }),
+            "effects.0.curves.0.points",
+        ),
+        (
+            json!({ "kind": "remap",
+                "x": { "model": "srgb", "channel": "red" },
+                "y": { "model": "srgb", "channel": "red" },
+                "points": [[0, 0], [0.0005, 1], [1, 1]] }),
+            "effects.0.curves.0.points.1.0",
+        ),
+        (
+            json!({ "kind": "adjust",
+                "x": { "model": "hsl", "channel": "hue" },
+                "y": { "model": "srgb", "channel": "red" },
+                "points": [[0.1, 0.5], [1, 0.5]] }),
+            "effects.0.curves.0.points.0.0",
+        ),
+        (
+            json!({ "kind": "adjust",
+                "x": { "model": "hsl", "channel": "hue" },
+                "y": { "model": "srgb", "channel": "red" },
+                "points": [[0, 0.5], [1, 0.6]] }),
+            "effects.0.curves.0.points.1.1",
+        ),
+    ] {
+        assert_validation_matches(
+            json!({ "effect": "curves", "enabled": true, "curves": [curve] }),
+            path,
+        );
+    }
+
+    for old in [
+        json!({ "effect": "curves", "enabled": true, "channel": "rgb",
+            "points": [[0, 0], [1, 1]] }),
+        json!({ "effect": "model-curves", "enabled": true, "model": "oklch",
+            "curves": [[[0, 0], [1, 1]], [[0, 0], [1, 1]], [[0, 0], [1, 1]]] }),
+        json!({ "effect": "channel-curve", "enabled": true,
+            "x": { "model": "hsl", "channel": "hue" },
+            "y": { "model": "oklch", "channel": "chroma" },
+            "points": [[0, 0.5], [1, 0.5]] }),
+    ] {
+        let encoded = json!([old]).to_string();
+        assert_eq!(
+            prod::decode_effects(&encoded).unwrap_err().path,
+            "effects.0"
+        );
+        assert_eq!(
+            spec::decode_effects(&encoded).unwrap_err().path,
+            "effects.0"
+        );
     }
 }
 
 #[test]
-fn eligible_channel_curve_tables_match_direct_reference_for_every_byte() {
-    let models = ["srgb", "linear-rgb"];
-    let channels = ["red", "green", "blue"];
-    for x_model in models {
-        for y_model in models {
-            for (channel, name) in channels.iter().enumerate() {
-                let json = json!([{
-                    "effect": "channel-curve", "enabled": true,
-                    "x": { "model": x_model, "channel": name },
-                    "y": { "model": y_model, "channel": name },
-                    "points": [[0, 0.1], [0.4, 0.8], [1, 0.6]]
-                }]);
-                let production = prod::decode_effects(&json.to_string())
-                    .unwrap()
-                    .remove(0)
-                    .effect;
-                let reference = spec::decode_effects(&json.to_string())
-                    .unwrap()
-                    .remove(0)
-                    .effect;
-                // A linear-light output round-trips the untouched channels too, so only an sRGB
-                // output folds into per-channel tables.
-                assert_eq!(production.per_channel(), y_model == "srgb");
-                if !production.per_channel() {
-                    continue;
-                }
-                let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
-                for value in 0..=u8::MAX {
-                    let unit = value as f32 / 255.0;
-                    let mut image = spec::EffectImage {
-                        dimensions,
-                        rgb: vec![[unit; 3]],
-                        alpha: vec![255],
-                    };
-                    spec::Effect::apply(&reference, &mut image, &spec::EffectContext::default());
-                    for output in 0..3 {
-                        assert_eq!(
-                            production.map_channel(output, unit).to_bits(),
-                            image.rgb[0][output].to_bits(),
-                            "{x_model} to {y_model} {name}, output {output}, byte {value}"
-                        );
-                    }
-                }
-            }
-        }
+fn curves_list_order_and_cross_model_selection_match_the_reference() {
+    let selection = json!({ "effect": "curves", "enabled": true, "curves": [
+        { "kind": "adjust", "x": { "model": "srgb", "channel": "red" },
+          "y": { "model": "oklch", "channel": "chroma" }, "points": [[0, 1], [1, 1]] },
+        { "kind": "adjust", "x": { "model": "srgb", "channel": "green" },
+          "y": { "model": "cielab", "channel": "a" }, "points": [[0, 0], [1, 1]] }
+    ] });
+    let (actual, expected) = direct_curves(&selection, [0.25, 0.5, 0.25]);
+    assert_float_bits(actual, expected);
+
+    let low = json!({ "kind": "remap",
+        "x": { "model": "srgb", "channel": "red" },
+        "y": { "model": "srgb", "channel": "red" }, "points": [[0, 0.2], [1, 0.2]] });
+    let high = json!({ "kind": "remap",
+        "x": { "model": "srgb", "channel": "red" },
+        "y": { "model": "srgb", "channel": "red" }, "points": [[0, 0.8], [1, 0.8]] });
+    let forward = json!({ "effect": "curves", "enabled": true,
+        "curves": [low.clone(), high.clone()] });
+    let reverse = json!({ "effect": "curves", "enabled": true, "curves": [high, low] });
+    let (forward, reference) = direct_curves(&forward, [0.5; 3]);
+    assert_float_bits(forward, reference);
+    let (reverse, reference) = direct_curves(&reverse, [0.5; 3]);
+    assert_float_bits(reverse, reference);
+    assert_eq!(forward[0].to_bits(), 0.8f32.to_bits());
+    assert_eq!(reverse[0].to_bits(), 0.2f32.to_bits());
+}
+
+#[test]
+fn curves_hue_confidence_and_carrier_overshoot_match_the_reference() {
+    use ditherette_wasm::prod::effects::model::ColourModel;
+
+    let hue = json!({ "effect": "curves", "enabled": true, "curves": [{
+        "kind": "remap", "x": { "model": "hsl", "channel": "hue" },
+        "y": { "model": "hsl", "channel": "hue" }, "points": [[0, 0.99], [1, 0.99]]
+    }] });
+    for input in [[0.4; 3], [0.51, 0.5, 0.5]] {
+        let (actual, expected) = direct_curves(&hue, input);
+        assert_float_bits(actual, expected);
     }
+    let interior_hue = json!({ "effect": "curves", "enabled": true, "curves": [{
+        "kind": "remap", "x": { "model": "hsl", "channel": "hue" },
+        "y": { "model": "hsl", "channel": "hue" },
+        "points": [[0, 0], [0.5, 0.25], [1, 1]]
+    }] });
+    let input = ColourModel::Hsl.from_normalized([0.5, 1.0, 0.5]);
+    let (actual, expected) = direct_curves(&interior_hue, input);
+    assert_float_bits(actual, expected);
+    let interior = ColourModel::Hsl.to_normalized(actual);
+    assert!((interior[0] - 0.25).abs() < 0.000_01);
+    let adjusted = ColourModel::Hsl.to_normalized(direct_curves(&hue, [0.51, 0.5, 0.5]).0);
+    let expected = (0.0f32 + 0.5 * -0.01).rem_euclid(1.0);
+    assert!((adjusted[0] - expected).abs() < 0.000_01);
+
+    let linear = json!({ "effect": "curves", "enabled": true, "curves": [{
+        "kind": "remap", "x": { "model": "linear-rgb", "channel": "red" },
+        "y": { "model": "linear-rgb", "channel": "red" },
+        "points": [[0.25, 0.2], [0.75, 0.8]]
+    }] });
+    let (actual, expected) = direct_curves(&linear, [-0.5, 0.5, 1.5]);
+    assert_float_bits(actual, expected);
+    assert!((actual[2] - 1.5).abs() < 0.000_01);
+}
+
+#[test]
+fn curves_closed_hue_seam_matches_the_reference() {
+    let points = [[0.0, 0.5], [0.25, 0.9], [0.5, 0.2], [0.75, 0.7], [1.0, 0.5]];
+    let production = prod::curves::PeriodicSpline::new(&points);
+    let reference = spec::curves::PeriodicSpline::new(&points);
+    for x in [-0.25, 0.0, 0.000_01, 0.25, 0.75, 0.999_99, 1.0, 1.25] {
+        assert_eq!(
+            production.eval(x).to_bits(),
+            reference.eval(x).to_bits(),
+            "{x}"
+        );
+    }
+    assert!((production.eval(0.000_01) - production.eval(0.999_99)).abs() < 0.000_1);
+}
+
+#[test]
+fn empty_curves_and_neutral_curves_are_exact_no_ops() {
+    let carrier = [-64.0, 1.25, 64.0];
+    for effect in [
+        json!({ "effect": "curves", "enabled": true, "curves": [] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "adjust", "x": { "model": "hsl", "channel": "hue" },
+            "y": { "model": "oklch", "channel": "chroma" },
+            "points": [[0, 0.5], [0.5, 0.5], [1, 0.5]]
+        }] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "remap", "x": { "model": "hsl", "channel": "hue" },
+            "y": { "model": "hsl", "channel": "hue" }, "points": [[0, 0], [1, 1]]
+        }] }),
+    ] {
+        let (actual, expected) = direct_curves(&effect, carrier);
+        assert_float_bits(actual, expected);
+        assert_float_bits(actual, carrier);
+    }
+}
+
+#[test]
+fn curves_select_tables_only_for_rgb_remap_lists_and_memoize_every_other_list() {
+    use ditherette_wasm::{
+        image::ImageDimensions,
+        prod::effects::{memo::byte_memo_bytes, operation::BOOKKEEPING_BYTES},
+    };
+
+    let table_json = json!({ "effect": "curves", "enabled": true, "curves": [
+        { "kind": "remap", "x": { "model": "linear-rgb", "channel": "red" },
+          "y": { "model": "linear-rgb", "channel": "red" },
+          "points": [[0, 0.1], [0.4, 0.7], [1, 0.9]] },
+        { "kind": "remap", "x": { "model": "srgb", "channel": "green" },
+          "y": { "model": "srgb", "channel": "green" },
+          "points": [[0, 0.2], [0.6, 0.4], [1, 1]] },
+        { "kind": "remap", "x": { "model": "linear-rgb", "channel": "red" },
+          "y": { "model": "linear-rgb", "channel": "red" },
+          "points": [[0, 0], [0.7, 0.3], [1, 1]] }
+    ] });
+    let memo_jsons = [
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "remap", "x": { "model": "oklch", "channel": "chroma" },
+            "y": { "model": "oklch", "channel": "chroma" },
+            "points": [[0, 0], [0.5, 0.7], [1, 1]]
+        }] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [{
+            "kind": "adjust", "x": { "model": "srgb", "channel": "red" },
+            "y": { "model": "srgb", "channel": "red" },
+            "points": [[0, 0.25], [1, 0.75]]
+        }] }),
+    ];
+    let dimensions = ImageDimensions::new(8, 8).unwrap();
+    let table_step = prod::decode_effects(&json!([table_json.clone()]).to_string())
+        .unwrap()
+        .remove(0);
+    assert!(table_step.effect.per_channel());
+    assert!(table_step.effect.pointwise());
+    assert_eq!(
+        prod::carrier_bytes(&[table_step], dimensions),
+        BOOKKEEPING_BYTES
+    );
+
+    for effect in memo_jsons {
+        let step = prod::decode_effects(&json!([effect]).to_string())
+            .unwrap()
+            .remove(0);
+        assert!(!step.effect.per_channel());
+        assert!(step.effect.pointwise());
+        assert_eq!(
+            prod::carrier_bytes(&[step], dimensions),
+            BOOKKEEPING_BYTES + byte_memo_bytes(64)
+        );
+    }
+
+    let mut rng = Rng(0x7ab1_e5);
+    let data = image(&mut rng, 8, 8);
+    assert_same(&json!([table_json]), 8, 8, &data);
 }
 
 #[test]
@@ -441,7 +691,7 @@ fn prepared_hue_matches_frozen_map_for_byte_inputs() {
         let reference = reference_hue(effect);
         let tables = ChannelTables::new(std::iter::empty::<&HueSaturation>());
         let effects = [&effect];
-        let prepared = PreparedPointwiseState::new(&effects, &tables);
+        let prepared = PreparedPointwiseState::try_new(&effects, &tables).unwrap();
         for red in (0..=u8::MAX).step_by(17) {
             for green in (0..=u8::MAX).step_by(29) {
                 for blue in (0..=u8::MAX).step_by(43) {
@@ -468,7 +718,7 @@ fn prepared_hue_matches_frozen_map_for_carrier_values() {
         let prepared = effect.prepare_pointwise();
         for input in inputs {
             assert_float_bits(
-                effect.map_prepared(prepared, input, &context),
+                effect.map_prepared(&prepared, input, &context),
                 reference.map(input),
             );
         }
@@ -485,7 +735,7 @@ fn prepared_neutral_hue_is_an_exact_identity() {
     let prepared = effect.prepare_pointwise();
     let context = prod::EffectContext::default();
     for input in [[0.0, 0.5, 1.0], [-64.0, -0.25, 64.0]] {
-        assert_float_bits(effect.map_prepared(prepared, input, &context), input);
+        assert_float_bits(effect.map_prepared(&prepared, input, &context), input);
     }
 }
 

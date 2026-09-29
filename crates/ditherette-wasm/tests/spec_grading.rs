@@ -49,7 +49,7 @@ fn byte(value: f32) -> u8 {
 
 fn neutral() -> [Value; 5] {
     [
-        json!({ "effect": "curves", "enabled": true, "channel": "rgb", "points": [[0, 0], [1, 1]] }),
+        json!({ "effect": "curves", "enabled": true, "curves": [] }),
         json!({ "effect": "brightness-contrast", "enabled": true, "brightness": 0, "contrast": 0 }),
         json!({ "effect": "exposure", "enabled": true, "stops": 0 }),
         json!({ "effect": "white-balance", "enabled": true, "temperature": 0, "tint": 0 }),
@@ -67,13 +67,13 @@ fn neutral_arguments_are_exact_no_ops() {
             "{effect}"
         );
     }
-    // Unclipped carrier values survive too, except curves, which clamps to its end points.
+    // Every exact-neutral shortcut preserves unclipped carrier values too.
     let carrier = EffectImage {
         dimensions: ImageDimensions::new(3, 1).unwrap(),
         rgb: vec![[1.3, -0.2, 0.5], [0.0, 1.0, 2.0], [-1.0, 0.25, 0.75]],
         alpha: vec![255, 0, 7],
     };
-    for effect in &neutral()[1..] {
+    for effect in &neutral() {
         let step = decode_effects(&json!([effect]).to_string())
             .unwrap()
             .remove(0);
@@ -203,16 +203,28 @@ fn hue_saturation_turns_hue_and_keeps_lightness_in_oklab() {
 fn invalid_grading_arguments_name_their_field() {
     let data = ramp();
     let path = |effect: Value| run(&data, json!([effect])).unwrap_err().path;
-    let curve = |points: Value| json!({ "effect": "curves", "enabled": true, "channel": "red", "points": points });
-    assert_eq!(path(curve(json!([[0, 0]]))), "effects.0.points");
-    assert_eq!(path(curve(json!(vec![[0, 0]; 17]))), "effects.0.points");
+    let curve = |points: Value| {
+        json!({
+            "effect": "curves", "enabled": true, "curves": [{
+                "kind": "remap",
+                "x": { "model": "srgb", "channel": "red" },
+                "y": { "model": "srgb", "channel": "red" },
+                "points": points,
+            }]
+        })
+    };
+    assert_eq!(path(curve(json!([[0, 0]]))), "effects.0.curves.0.points");
+    assert_eq!(
+        path(curve(json!(vec![[0, 0]; 17]))),
+        "effects.0.curves.0.points"
+    );
     assert_eq!(
         path(curve(json!([[0, 0], [0.5, 0.5], [0.5, 1]]))),
-        "effects.0.points.2.0"
+        "effects.0.curves.0.points.2.0"
     );
     assert_eq!(
         path(curve(json!([[0, 0], [1, 1.5]]))),
-        "effects.0.points.1.1"
+        "effects.0.curves.0.points.1.1"
     );
     assert_eq!(
         path(
@@ -239,11 +251,15 @@ fn invalid_grading_arguments_name_their_field() {
 #[test]
 fn close_knots_are_rejected_and_long_chains_stay_finite() {
     let data = ramp();
-    let curve = json!({ "effect": "curves", "enabled": true, "channel": "red",
-        "points": [[0, 0], [1e-25, 0.5], [1, 1]] });
+    let curve = json!({ "effect": "curves", "enabled": true, "curves": [{
+        "kind": "remap",
+        "x": { "model": "srgb", "channel": "red" },
+        "y": { "model": "srgb", "channel": "red" },
+        "points": [[0, 0], [1e-25, 0.5], [1, 1]]
+    }] });
     assert_eq!(
         run(&data, json!([curve])).unwrap_err().path,
-        "effects.0.points.1.0"
+        "effects.0.curves.0.points.1.0"
     );
 
     // 33 boosts overflowed to infinity before the carrier bound; greys must stay light, not black.

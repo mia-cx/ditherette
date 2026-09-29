@@ -17,10 +17,11 @@ impl ChannelTables {
     pub fn new<'a, E: Effect + 'a>(effects: impl IntoIterator<Item = &'a E>) -> Self {
         let mut tables = [std::array::from_fn(|k| k as f32 / 255.0); 3];
         for effect in effects {
+            let prepared = effect.prepare_pointwise();
             for (channel, table) in tables.iter_mut().enumerate() {
                 for value in table.iter_mut() {
                     *value = effect
-                        .map_channel(channel, *value)
+                        .map_prepared_channel(&prepared, channel, *value)
                         .clamp(-CARRIER_LIMIT, CARRIER_LIMIT);
                 }
             }

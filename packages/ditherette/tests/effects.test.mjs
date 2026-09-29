@@ -243,30 +243,28 @@ const grading = {
 	curves: {
 		effect: 'curves',
 		enabled: true,
-		channel: 'rgb',
-		points: [
-			[0, 0],
-			[0.3, 0.2],
-			[0.7, 0.85],
-			[1, 1]
-		]
-	},
-	'model-curves': {
-		effect: 'model-curves',
-		enabled: true,
-		model: 'oklch',
 		curves: [
-			[[0, 0], [1, 1]],
-			[[0, 0], [0.5, 0.7], [1, 1]],
-			[[0, 0], [1, 1]]
+			{
+				kind: 'remap',
+				x: { model: 'srgb', channel: 'green' },
+				y: { model: 'srgb', channel: 'green' },
+				points: [
+					[0, 0],
+					[0.3, 0.2],
+					[0.7, 0.85],
+					[1, 1]
+				]
+			},
+			{
+				kind: 'adjust',
+				x: { model: 'srgb', channel: 'green' },
+				y: { model: 'srgb', channel: 'red' },
+				points: [
+					[0, 0.25],
+					[1, 0.75]
+				]
+			}
 		]
-	},
-	'channel-curve': {
-		effect: 'channel-curve',
-		enabled: true,
-		x: { model: 'srgb', channel: 'green' },
-		y: { model: 'srgb', channel: 'red' },
-		points: [[0, 0], [1, 1]]
 	},
 	'brightness-contrast': {
 		effect: 'brightness-contrast',
@@ -287,18 +285,17 @@ const grading = {
 const neutral = {
 	curves: {
 		...grading.curves,
-		points: [
-			[0, 0],
-			[1, 1]
+		curves: [
+			{
+				kind: 'remap',
+				x: { model: 'hsl', channel: 'hue' },
+				y: { model: 'hsl', channel: 'hue' },
+				points: [
+					[0, 0],
+					[1, 1]
+				]
+			}
 		]
-	},
-	'model-curves': {
-		...grading['model-curves'],
-		curves: Array.from({ length: 3 }, () => [[0, 0], [1, 1]])
-	},
-	'channel-curve': {
-		...grading['channel-curve'],
-		points: [[0, 0.5], [1, 0.5]]
 	},
 	'brightness-contrast': { ...grading['brightness-contrast'], brightness: 0, contrast: 0 },
 	exposure: { ...grading.exposure, stops: 0 },
@@ -338,101 +335,136 @@ test('grading arguments are validated with indexed paths', () =>
 				(error) => error.code === 'invalid-settings' && error.path === path,
 				path
 			);
-		fails({ ...grading.curves, points: [[0, 0]] }, 'effects.1.points');
+		const curve = grading.curves.curves[0];
+		const withCurve = (changed) => ({ ...grading.curves, curves: [changed] });
+		fails({ ...grading.curves, curves: Array(17).fill(curve) }, 'effects.1.curves');
+		fails(withCurve({ ...curve, kind: 'blend' }), 'effects.1.curves.0.kind');
 		fails(
-			{
-				...grading.curves,
-				points: [
-					[0, 0],
-					[0.5, 1],
-					[0.5, 1]
-				]
-			},
-			'effects.1.points.2.0'
+			withCurve({ ...curve, x: { model: 'hsv', channel: 'lightness' } }),
+			'effects.1.curves.0.x.channel'
 		);
 		fails(
+			withCurve({ ...curve, y: { model: 'unknown', channel: 'red' } }),
+			'effects.1.curves.0.y.model'
+		);
+		fails(withCurve({ ...curve, y: { model: 'srgb', channel: 'red' } }), 'effects.1.curves.0.y');
+		fails(withCurve({ ...curve, points: [[0, 0]] }), 'effects.1.curves.0.points');
+		fails(
 			{
 				...grading.curves,
+				curves: [
+					curve,
+					{
+						...curve,
+						points: [
+							[0, 0],
+							[0.5, 1],
+							[0.5, 1]
+						]
+					}
+				]
+			},
+			'effects.1.curves.1.points.2.0'
+		);
+		fails(
+			withCurve({
+				...curve,
 				points: [
 					[0, 0],
 					[1, 2]
 				]
-			},
-			'effects.1.points.1.1'
+			}),
+			'effects.1.curves.0.points.1.1'
 		);
 		fails(
-			{
-				...grading.curves,
+			withCurve({
+				...curve,
 				points: [
 					[0, 0],
 					[1e-25, 0.5],
 					[1, 1]
 				]
-			},
-			'effects.1.points.1.0'
+			}),
+			'effects.1.curves.0.points.1.0'
 		);
-		fails({ ...grading.curves, points: [[0, 0], [1]] }, 'effects.1.points.1');
-		fails({ ...grading['model-curves'], model: 'srgb' }, 'effects.1.model');
-		fails({ ...grading['model-curves'], curves: grading['model-curves'].curves.slice(0, 2) }, 'effects.1.curves');
+		fails(withCurve({ ...curve, points: [[0, 0], [1]] }), 'effects.1.curves.0.points.1');
+		fails(
+			withCurve({
+				...curve,
+				kind: 'adjust',
+				x: { model: 'hsl', channel: 'hue' },
+				y: { model: 'hsl', channel: 'hue' },
+				points: [
+					[0.1, 0.5],
+					[1, 0.5]
+				]
+			}),
+			'effects.1.curves.0.points.0.0'
+		);
+		fails(
+			withCurve({
+				...curve,
+				kind: 'adjust',
+				x: { model: 'hsl', channel: 'hue' },
+				y: { model: 'hsl', channel: 'hue' },
+				points: [
+					[0, 0.5],
+					[0.5, 0.8],
+					[0.9, 0.5]
+				]
+			}),
+			'effects.1.curves.0.points.2.0'
+		);
+		fails(
+			withCurve({
+				...curve,
+				kind: 'adjust',
+				x: { model: 'hsl', channel: 'hue' },
+				points: [
+					[0, 0.5],
+					[0.5, 0.8],
+					[1, 0.6]
+				]
+			}),
+			'effects.1.curves.0.points.2.1'
+		);
+		fails(withCurve({ ...curve, mode: 'absolute' }), 'effects.1.curves.0.mode');
 		fails(
 			{
-				...grading['model-curves'],
-				curves: [
-					[[0, 0], [1, 1]],
-					[[0, 0], [0.0005, 0.5], [1, 1]],
-					[[0, 0], [1, 1]]
+				effect: 'curves',
+				enabled: true,
+				channel: 'rgb',
+				points: [
+					[0, 0],
+					[1, 1]
 				]
 			},
-			'effects.1.curves.1.1.0'
+			'effects.1.channel'
 		);
-		fails({ ...grading['model-curves'], interpolation: 'linear' }, 'effects.1.interpolation');
-		fails(
-			{ ...grading['channel-curve'], x: { model: 'hsv', channel: 'lightness' } },
-			'effects.1.x.channel'
-		);
-		fails(
-			{ ...grading['channel-curve'], y: { model: 'unknown', channel: 'red' } },
-			'effects.1.y.model'
-		);
+		fails({ effect: 'model-curves', enabled: true, model: 'hsl', curves: [] }, 'effects.1.effect');
 		fails(
 			{
-				...grading['channel-curve'],
-				x: { model: 'hsl', channel: 'hue' },
-				points: [[0.1, 0.5], [1, 0.5]]
+				effect: 'channel-curve',
+				enabled: true,
+				x: { model: 'srgb', channel: 'red' },
+				y: { model: 'srgb', channel: 'blue' },
+				points: [
+					[0, 0.5],
+					[1, 0.5]
+				]
 			},
-			'effects.1.points.0.0'
+			'effects.1.effect'
 		);
-		fails(
-			{
-				...grading['channel-curve'],
-				x: { model: 'hsl', channel: 'hue' },
-				points: [[0, 0.5], [0.5, 0.8], [1, 0.6]]
-			},
-			'effects.1.points.2.1'
-		);
-		fails({ ...grading['channel-curve'], mode: 'absolute' }, 'effects.1.mode');
 		const inherited = Object.setPrototypeOf(
 			new Array(2),
 			Object.assign(Object.create(Array.prototype), { 0: 0, 1: 0 })
 		);
-		fails({ ...grading.curves, points: [inherited, [1, 1]] }, 'effects.1.points.0.0');
+		fails(withCurve({ ...curve, points: [inherited, [1, 1]] }), 'effects.1.curves.0.points.0.0');
 		fails({ ...grading['brightness-contrast'], contrast: 1.5 }, 'effects.1.contrast');
 		fails({ ...grading.exposure, stops: -5 }, 'effects.1.stops');
 		fails({ ...grading['white-balance'], temperature: Number.NaN }, 'effects.1.temperature');
 		fails({ ...grading['hue-saturation'], hue: 200 }, 'effects.1.hue');
 		fails({ ...grading['hue-saturation'], lightness: undefined }, 'effects.1.lightness');
-	}));
-
-test('every model-curves model is accepted and preserves alpha', () =>
-	withProcessor((processor) => {
-		const source = ramp();
-		for (const model of ['linear-rgb', 'hsl', 'hsv', 'oklab', 'oklch', 'cielab', 'cielch', 'ycbcr']) {
-			const effect = { ...grading['model-curves'], model };
-			const result = apply(processor, [effect]);
-			assert.notDeepEqual(result.data, source.data, model);
-			for (let index = 3; index < source.data.length; index += 4)
-				assert.equal(result.data[index], source.data[index], model);
-		}
 	}));
 
 test('every colour model accepts only its own channel names', () => {
@@ -452,11 +484,25 @@ test('every colour model accepts only its own channel names', () => {
 			const periodic = channel === 'hue';
 			assert.equal(
 				isEffect({
-					effect: 'channel-curve',
+					effect: 'curves',
 					enabled: true,
-					x: { model, channel },
-					y: { model: 'srgb', channel: 'red' },
-					points: periodic ? [[0, 0.5], [0.5, 0.8], [1, 0.5]] : [[0, 0.25], [1, 0.75]]
+					curves: [
+						{
+							kind: 'adjust',
+							x: { model, channel },
+							y: { model: 'srgb', channel: 'red' },
+							points: periodic
+								? [
+										[0, 0.5],
+										[0.5, 0.8],
+										[1, 0.5]
+									]
+								: [
+										[0, 0.25],
+										[1, 0.75]
+									]
+						}
+					]
 				}),
 				true,
 				`${model}.${channel}`
@@ -465,9 +511,19 @@ test('every colour model accepts only its own channel names', () => {
 	}
 	assert.equal(
 		isEffect({
-			effect: 'channel-curve', enabled: true,
-			x: { model: 'hsv', channel: 'lightness' },
-			y: { model: 'srgb', channel: 'red' }, points: [[0, 0.5], [1, 0.5]]
+			effect: 'curves',
+			enabled: true,
+			curves: [
+				{
+					kind: 'adjust',
+					x: { model: 'hsv', channel: 'lightness' },
+					y: { model: 'srgb', channel: 'red' },
+					points: [
+						[0, 0.5],
+						[1, 0.5]
+					]
+				}
+			]
 		}),
 		false
 	);
@@ -617,6 +673,12 @@ test('recolour context and recipe errors name their fields', () =>
 test('isEffect vets one step without Wasm', () => {
 	assert.equal(isEffect(halve), true);
 	assert.equal(isEffect({ ...halve, enabled: false }), true);
+	const boundaryCurve = {
+		...grading.curves.curves[0],
+		points: Array.from({ length: 16 }, (_, index) => [index / 15, index / 15])
+	};
+	assert.equal(isEffect({ ...grading.curves, curves: Array(16).fill(boundaryCurve) }), true);
+	assert.equal(isEffect(neutral.curves), true);
 	for (const step of [
 		{ effect: 'exposure', enabled: true, stops: 100 },
 		{ ...halve, channel: 'gray' },
@@ -624,10 +686,36 @@ test('isEffect vets one step without Wasm', () => {
 		{
 			effect: 'curves',
 			enabled: true,
+			curves: [
+				{
+					kind: 'remap',
+					x: { model: 'srgb', channel: 'red' },
+					y: { model: 'srgb', channel: 'red' },
+					points: [
+						[0.5, 0],
+						[0.5, 1]
+					]
+				}
+			]
+		},
+		{
+			effect: 'curves',
+			enabled: true,
 			channel: 'rgb',
 			points: [
-				[0.5, 0],
-				[0.5, 1]
+				[0, 0],
+				[1, 1]
+			]
+		},
+		{ effect: 'model-curves', enabled: true, model: 'hsl', curves: [] },
+		{
+			effect: 'channel-curve',
+			enabled: true,
+			x: { model: 'srgb', channel: 'red' },
+			y: { model: 'srgb', channel: 'blue' },
+			points: [
+				[0, 0.5],
+				[1, 0.5]
 			]
 		},
 		{ ...halve, extra: true },

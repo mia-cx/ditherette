@@ -519,209 +519,221 @@ fn chains_are_capped_and_see_only_the_retained_palette() {
     );
 }
 
-fn identity_model_curves(model: &str) -> serde_json::Value {
-    json!({
-        "effect": "model-curves",
-        "enabled": true,
-        "model": model,
-        "curves": [
-            [[0.0, 0.0], [1.0, 1.0]],
-            [[0.0, 0.0], [1.0, 1.0]],
-            [[0.0, 0.0], [1.0, 1.0]],
-        ],
-    })
-}
-
-#[test]
-fn model_curves_validate_each_index_and_reject_srgb() {
-    let data = ramp();
-    let mut invalid = identity_model_curves("oklch");
-    invalid["curves"][1] = json!([[0.0, 0.0], [0.0005, 1.0], [1.0, 1.0]]);
-    assert_eq!(
-        run(&data, &steps(json!([invalid]))).unwrap_err().path,
-        "effects.0.curves.1.1.0"
-    );
-    assert_eq!(
-        decode_effects(&json!([identity_model_curves("srgb")]).to_string())
-            .unwrap_err()
-            .path,
-        "effects.0"
-    );
-    let mut short = identity_model_curves("oklab");
-    short["curves"].as_array_mut().unwrap().pop();
-    assert_eq!(
-        decode_effects(&json!([short]).to_string())
-            .unwrap_err()
-            .path,
-        "effects.0"
-    );
-}
-
-#[test]
-fn identity_model_curves_preserve_bytes_and_out_of_range_carrier() {
-    use ditherette_wasm::image::ImageDimensions;
-    use ditherette_wasm::spec::effects::model_curves::{ModelCurves, ModelCurvesModel};
-
-    let data = ramp();
-    for model in [
-        "linear-rgb",
-        "hsl",
-        "hsv",
-        "oklab",
-        "oklch",
-        "cielab",
-        "cielch",
-        "ycbcr",
-    ] {
-        assert_eq!(
-            run(&data, &steps(json!([identity_model_curves(model)])))
-                .unwrap()
-                .data(),
-            data,
-            "{model}"
-        );
-    }
-    let effect = ModelCurves {
-        model: ModelCurvesModel::Hsl,
-        curves: std::array::from_fn(|_| vec![[0.0, 0.0], [1.0, 1.0]]),
-    };
-    let mut image = EffectImage {
-        dimensions: ImageDimensions::new(1, 1).unwrap(),
-        rgb: vec![[-64.0, 1.25, 64.0]],
-        alpha: vec![17],
-    };
-    effect.apply(&mut image, &EffectContext::default());
-    assert_eq!(
-        image.rgb[0].map(f32::to_bits),
-        [-64.0, 1.25, 64.0].map(f32::to_bits)
-    );
-    assert_eq!(image.alpha, [17]);
-}
-
-#[test]
-fn model_conversion_formulas_and_hue_rules_are_literal() {
-    use ditherette_wasm::spec::effects::{
-        model::ColourModel,
-        model_curves::{ModelCurves, ModelCurvesModel},
-    };
-
-    assert_eq!(
-        ColourModel::Hsl.to_normalized([1.0, 0.0, 0.0]),
-        [0.0, 1.0, 0.5]
-    );
-    assert_eq!(
-        ColourModel::Hsv.to_normalized([1.0, 0.0, 0.0]),
-        [0.0, 1.0, 1.0]
-    );
-    let ycbcr = ColourModel::Ycbcr.to_normalized([1.0, 0.0, 0.0]);
-    assert_eq!(ycbcr[0].to_bits(), 0.299f32.to_bits());
-    assert_eq!(ycbcr[1].to_bits(), (0.5 - 0.299f32 / 1.772).to_bits());
-    assert_eq!(ycbcr[2].to_bits(), (0.5 + 0.701f32 / 1.402).to_bits());
-
-    let hue_target = vec![[0.0, 0.99], [1.0, 0.99]];
-    let identity = vec![[0.0, 0.0], [1.0, 1.0]];
-    let effect = ModelCurves {
-        model: ModelCurvesModel::Hsl,
-        curves: [hue_target, identity.clone(), identity],
-    };
-    let input = ColourModel::Hsl.from_normalized([0.01, 1.0, 0.5]);
-    let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
-    let mut image = EffectImage {
-        dimensions,
-        rgb: vec![input],
-        alpha: vec![255],
-    };
-    effect.apply(&mut image, &EffectContext::default());
-    let wrapped = ColourModel::Hsl.to_normalized(image.rgb[0]);
-    assert!((wrapped[0] - 0.99).abs() < 0.000_01, "{}", wrapped[0]);
-
-    let grey = [0.4, 0.4, 0.4];
-    let mut image = EffectImage {
-        dimensions,
-        rgb: vec![grey],
-        alpha: vec![255],
-    };
-    effect.apply(&mut image, &EffectContext::default());
-    assert_eq!(image.rgb[0].map(f32::to_bits), grey.map(f32::to_bits));
-    for model in [ColourModel::Oklch, ColourModel::Cielch] {
-        let grey = [0.5; 3];
-        assert_eq!(model.hue_weight(grey, model.to_normalized(grey)), 0.0);
-    }
-
-    let half = [0.51, 0.5, 0.5];
-    let mut image = EffectImage {
-        dimensions,
-        rgb: vec![half],
-        alpha: vec![255],
-    };
-    effect.apply(&mut image, &EffectContext::default());
-    let adjusted = ColourModel::Hsl.to_normalized(image.rgb[0]);
-    let weight = (0.51f32 - 0.5) / 0.02;
-    let expected = (0.0 + weight * -0.01).rem_euclid(1.0);
-    assert!(
-        (adjusted[0] - expected).abs() < 0.000_01,
-        "{} != {expected}",
-        adjusted[0]
-    );
-}
-
-#[test]
-fn model_curves_clamp_spline_inputs_but_not_denormalized_output() {
-    use ditherette_wasm::spec::effects::model_curves::{ModelCurves, ModelCurvesModel};
-
-    let effect = ModelCurves {
-        model: ModelCurvesModel::LinearRgb,
-        curves: [
-            vec![[0.25, 0.2], [0.75, 0.8]],
-            vec![[0.0, 0.0], [1.0, 1.0]],
-            vec![[0.0, 0.0], [1.0, 1.0]],
-        ],
-    };
-    let dimensions = ditherette_wasm::image::ImageDimensions::new(1, 1).unwrap();
-    let mut image = EffectImage {
-        dimensions,
-        rgb: vec![[-0.5, 0.5, 1.5]],
-        alpha: vec![255],
-    };
-    effect.apply(&mut image, &EffectContext::default());
-    let linear =
-        ditherette_wasm::spec::effects::model::ColourModel::LinearRgb.to_normalized(image.rgb[0]);
-    assert!((linear[0] - 0.2).abs() < f32::EPSILON);
-    assert!((image.rgb[0][2] - 1.0).abs() < f32::EPSILON);
-
-    let out_of_gamut = ModelCurves {
-        model: ModelCurvesModel::Oklab,
-        curves: [
-            vec![[0.0, 1.0], [1.0, 1.0]],
-            vec![[0.0, 1.0], [1.0, 1.0]],
-            vec![[0.0, 0.5], [1.0, 0.5]],
-        ],
-    };
-    let mut image = EffectImage {
-        dimensions,
-        rgb: vec![[0.5, 0.5, 0.5]],
-        alpha: vec![255],
-    };
-    out_of_gamut.apply(&mut image, &EffectContext::default());
-    assert!(image.rgb[0]
-        .iter()
-        .any(|value| !(0.0..=1.0).contains(value)));
-}
-
 fn channel(model: &str, channel: &str) -> serde_json::Value {
     json!({ "model": model, "channel": channel })
 }
 
-fn channel_curve(x: (&str, &str), y: (&str, &str), points: serde_json::Value) -> serde_json::Value {
+fn curve(
+    kind: &str,
+    x: (&str, &str),
+    y: (&str, &str),
+    points: serde_json::Value,
+) -> serde_json::Value {
     json!({
-        "effect": "channel-curve", "enabled": true,
-        "x": channel(x.0, x.1), "y": channel(y.0, y.1), "points": points,
+        "kind": kind,
+        "x": channel(x.0, x.1),
+        "y": channel(y.0, y.1),
+        "points": points,
     })
 }
 
+fn curves(curves: Vec<serde_json::Value>) -> serde_json::Value {
+    json!({ "effect": "curves", "enabled": true, "curves": curves })
+}
+
+fn apply_curves(effect: &serde_json::Value, rgb: [f32; 3]) -> ([f32; 3], u8) {
+    use ditherette_wasm::image::ImageDimensions;
+
+    let step = steps(json!([effect])).pop().unwrap();
+    let BuiltinEffect::Curves(effect) = step.effect else {
+        unreachable!()
+    };
+    let mut image = EffectImage {
+        dimensions: ImageDimensions::new(1, 1).unwrap(),
+        rgb: vec![rgb],
+        alpha: vec![37],
+    };
+    effect.apply(&mut image, &EffectContext::default());
+    (image.rgb[0], image.alpha[0])
+}
+
 #[test]
-fn periodic_channel_curve_spline_wraps_and_hits_knots_without_overshoot() {
-    use ditherette_wasm::spec::effects::channel_curve::PeriodicSpline;
+fn curves_reject_every_old_json_shape() {
+    let old = [
+        json!({
+            "effect": "curves", "enabled": true, "channel": "rgb",
+            "points": [[0, 0], [1, 1]],
+        }),
+        json!({
+            "effect": "model-curves", "enabled": true, "model": "oklch",
+            "curves": [
+                [[0, 0], [1, 1]],
+                [[0, 0], [1, 1]],
+                [[0, 0], [1, 1]],
+            ],
+        }),
+        json!({
+            "effect": "channel-curve", "enabled": true,
+            "x": channel("hsl", "hue"),
+            "y": channel("oklch", "chroma"),
+            "points": [[0, 0.5], [1, 0.5]],
+        }),
+    ];
+    for effect in old {
+        assert_eq!(
+            decode_effects(&json!([effect]).to_string())
+                .unwrap_err()
+                .path,
+            "effects.0"
+        );
+    }
+}
+
+#[test]
+fn curves_validate_limits_channels_points_and_hue_seams() {
+    let data = ramp();
+    let valid = curve(
+        "adjust",
+        ("srgb", "red"),
+        ("oklch", "chroma"),
+        json!([[0, 0.5], [1, 0.5]]),
+    );
+    let too_many = curves(vec![valid; 17]);
+    assert_eq!(
+        run(&data, &steps(json!([too_many]))).unwrap_err().path,
+        "effects.0.curves"
+    );
+
+    let cases = [
+        (
+            curve(
+                "adjust",
+                ("hsv", "lightness"),
+                ("srgb", "red"),
+                json!([[0, 0.5], [1, 0.5]]),
+            ),
+            "effects.0.curves.0.x.channel",
+        ),
+        (
+            curve(
+                "adjust",
+                ("srgb", "red"),
+                ("oklab", "chroma"),
+                json!([[0, 0.5], [1, 0.5]]),
+            ),
+            "effects.0.curves.0.y.channel",
+        ),
+        (
+            curve(
+                "remap",
+                ("srgb", "red"),
+                ("linear-rgb", "red"),
+                json!([[0, 0], [1, 1]]),
+            ),
+            "effects.0.curves.0.y",
+        ),
+        (
+            curve("remap", ("srgb", "red"), ("srgb", "red"), json!([[0, 0]])),
+            "effects.0.curves.0.points",
+        ),
+        (
+            curve(
+                "remap",
+                ("srgb", "red"),
+                ("srgb", "red"),
+                json!([[0, 0], [0.0005, 1], [1, 1]]),
+            ),
+            "effects.0.curves.0.points.1.0",
+        ),
+        (
+            curve(
+                "adjust",
+                ("srgb", "red"),
+                ("hsl", "lightness"),
+                json!([[0, 0.5], [1, 1.5]]),
+            ),
+            "effects.0.curves.0.points.1.1",
+        ),
+        (
+            curve(
+                "adjust",
+                ("hsl", "hue"),
+                ("srgb", "red"),
+                json!([[0.1, 0.5], [1, 0.5]]),
+            ),
+            "effects.0.curves.0.points.0.0",
+        ),
+        (
+            curve(
+                "adjust",
+                ("hsl", "hue"),
+                ("srgb", "red"),
+                json!([[0, 0.5], [0.9, 0.5]]),
+            ),
+            "effects.0.curves.0.points.1.0",
+        ),
+        (
+            curve(
+                "adjust",
+                ("hsl", "hue"),
+                ("srgb", "red"),
+                json!([[0, 0.5], [1, 0.6]]),
+            ),
+            "effects.0.curves.0.points.1.1",
+        ),
+    ];
+    for (entry, path) in cases {
+        let error = run(&data, &steps(json!([curves(vec![entry])]))).unwrap_err();
+        assert_eq!(error.path, path);
+    }
+}
+
+#[test]
+fn empty_curves_and_neutral_curves_preserve_the_carrier() {
+    use ditherette_wasm::image::ImageDimensions;
+    use ditherette_wasm::spec::effects::curves::Curves;
+
+    let carrier = [-64.0, 1.25, 64.0];
+    let effects = [
+        curves(vec![]),
+        curves(vec![curve(
+            "adjust",
+            ("hsl", "hue"),
+            ("oklch", "chroma"),
+            json!([[0, 0.5], [0.5, 0.5], [1, 0.5]]),
+        )]),
+        curves(vec![curve(
+            "remap",
+            ("hsl", "hue"),
+            ("hsl", "hue"),
+            json!([[0, 0], [1, 1]]),
+        )]),
+    ];
+    for effect in effects {
+        let step = steps(json!([effect])).pop().unwrap();
+        let BuiltinEffect::Curves(effect) = step.effect else {
+            unreachable!()
+        };
+        let mut image = EffectImage {
+            dimensions: ImageDimensions::new(1, 1).unwrap(),
+            rgb: vec![carrier],
+            alpha: vec![17],
+        };
+        effect.apply(&mut image, &EffectContext::default());
+        assert_eq!(image.rgb[0].map(f32::to_bits), carrier.map(f32::to_bits));
+        assert_eq!(image.alpha, [17]);
+    }
+
+    let decoded = steps(json!([curves(vec![])]));
+    let BuiltinEffect::Curves(Curves { curves }) = &decoded[0].effect else {
+        unreachable!()
+    };
+    assert!(curves.is_empty());
+}
+
+#[test]
+fn periodic_spline_wraps_and_hits_knots_without_overshoot() {
+    use ditherette_wasm::spec::effects::curves::PeriodicSpline;
 
     let spline =
         PeriodicSpline::new(&[[0.0, 0.5], [0.25, 0.9], [0.5, 0.2], [0.75, 0.7], [1.0, 0.5]]);
@@ -735,137 +747,214 @@ fn periodic_channel_curve_spline_wraps_and_hits_knots_without_overshoot() {
         let value = spline.eval(index as f32 / 1000.0);
         assert!((0.2..=0.9).contains(&value), "{index}: {value}");
     }
-
-    let flat = PeriodicSpline::new(&[[0.0, 0.5], [0.5, 0.5], [1.0, 0.5]]);
-    assert_eq!(flat.eval(0.5).to_bits(), 0.5f32.to_bits());
 }
 
 #[test]
-fn channel_curve_validation_names_pairs_and_periodic_seam_coordinates() {
-    let data = ramp();
-    let invalid_pair = channel_curve(
-        ("hsv", "lightness"),
-        ("oklch", "chroma"),
-        json!([[0, 0.5], [1, 0.5]]),
+fn ordered_curves_select_from_source_and_edit_the_accumulated_result() {
+    let selection = curves(vec![
+        curve(
+            "adjust",
+            ("srgb", "red"),
+            ("srgb", "green"),
+            json!([[0, 1], [1, 1]]),
+        ),
+        curve(
+            "adjust",
+            ("srgb", "green"),
+            ("srgb", "blue"),
+            json!([[0, 0], [1, 1]]),
+        ),
+    ]);
+    let output = apply_curves(&selection, [0.25, 0.5, 0.25]).0;
+    assert_eq!(
+        output.map(f32::to_bits),
+        [0.25, 1.0, 0.25].map(f32::to_bits)
+    );
+
+    let low = curve(
+        "remap",
+        ("srgb", "red"),
+        ("srgb", "red"),
+        json!([[0, 0.2], [1, 0.2]]),
+    );
+    let high = curve(
+        "remap",
+        ("srgb", "red"),
+        ("srgb", "red"),
+        json!([[0, 0.8], [1, 0.8]]),
     );
     assert_eq!(
-        run(&data, &steps(json!([invalid_pair]))).unwrap_err().path,
-        "effects.0.x.channel"
+        apply_curves(&curves(vec![low.clone(), high.clone()]), [0.5; 3]).0[0].to_bits(),
+        0.8f32.to_bits()
     );
-
-    let cases = [
-        (json!([[0.1, 0.5], [1, 0.5]]), "effects.0.points.0.0"),
-        (json!([[0, 0.5], [0.9, 0.5]]), "effects.0.points.1.0"),
-        (json!([[0, 0.5], [1, 0.6]]), "effects.0.points.1.1"),
-    ];
-    for (points, path) in cases {
-        let effect = channel_curve(("hsl", "hue"), ("srgb", "red"), points);
-        assert_eq!(run(&data, &steps(json!([effect]))).unwrap_err().path, path);
-    }
+    assert_eq!(
+        apply_curves(&curves(vec![high, low]), [0.5; 3]).0[0].to_bits(),
+        0.2f32.to_bits()
+    );
 }
 
 #[test]
-fn channel_curve_neutral_and_adjustment_formulas_are_literal() {
-    use ditherette_wasm::{image::ImageDimensions, spec::effects::model::ColourModel};
+fn remaps_preserve_model_curve_hue_confidence_and_carrier_rules() {
+    use ditherette_wasm::spec::effects::model::ColourModel;
 
-    let dimensions = ImageDimensions::new(1, 1).unwrap();
-    let apply = |effect: &serde_json::Value, rgb: [f32; 3]| {
-        let step = steps(json!([effect])).pop().unwrap();
-        let BuiltinEffect::ChannelCurve(effect) = step.effect else {
-            unreachable!()
-        };
-        let mut image = EffectImage {
-            dimensions,
-            rgb: vec![rgb],
-            alpha: vec![37],
-        };
-        effect.apply(&mut image, &EffectContext::default());
-        (image.rgb[0], image.alpha[0])
-    };
-
-    let neutral = channel_curve(
+    let hue = curves(vec![curve(
+        "remap",
         ("hsl", "hue"),
-        ("oklch", "chroma"),
-        json!([[0, 0.5], [0.5, 0.5], [1, 0.5]]),
-    );
-    let overshoot = [-64.0, 1.25, 64.0];
-    assert_eq!(
-        apply(&neutral, overshoot).0.map(f32::to_bits),
-        overshoot.map(f32::to_bits)
-    );
+        ("hsl", "hue"),
+        json!([[0, 0.99], [1, 0.99]]),
+    )]);
+    let input = ColourModel::Hsl.from_normalized([0.01, 1.0, 0.5]);
+    let wrapped = ColourModel::Hsl.to_normalized(apply_curves(&hue, input).0);
+    assert!((wrapped[0] - 0.99).abs() < 0.000_01, "{}", wrapped[0]);
 
-    let ramp_curve = json!([[0, 0], [1, 1]]);
-    let hue = channel_curve(("srgb", "red"), ("hsl", "hue"), ramp_curve.clone());
+    let interior_curve = curves(vec![curve(
+        "remap",
+        ("hsl", "hue"),
+        ("hsl", "hue"),
+        json!([[0, 0], [0.5, 0.25], [1, 1]]),
+    )]);
+    let input = ColourModel::Hsl.from_normalized([0.5, 1.0, 0.5]);
+    let interior = ColourModel::Hsl.to_normalized(apply_curves(&interior_curve, input).0);
+    assert!((interior[0] - 0.25).abs() < 0.000_01, "{}", interior[0]);
+
+    let grey = [0.4; 3];
+    assert_eq!(
+        apply_curves(&hue, grey).0.map(f32::to_bits),
+        grey.map(f32::to_bits)
+    );
+    let half = [0.51, 0.5, 0.5];
+    let adjusted = ColourModel::Hsl.to_normalized(apply_curves(&hue, half).0);
+    let expected = (0.0f32 + 0.5 * -0.01).rem_euclid(1.0);
+    assert!((adjusted[0] - expected).abs() < 0.000_01, "{}", adjusted[0]);
+
+    let linear = curves(vec![curve(
+        "remap",
+        ("linear-rgb", "red"),
+        ("linear-rgb", "red"),
+        json!([[0.25, 0.2], [0.75, 0.8]]),
+    )]);
+    let output = apply_curves(&linear, [-0.5, 0.5, 1.5]).0;
+    let normalized = ColourModel::LinearRgb.to_normalized(output);
+    assert!((normalized[0] - 0.2).abs() < f32::EPSILON);
+    assert!((output[2] - 1.5).abs() < 0.000_01);
+}
+
+#[test]
+fn adjustments_use_literal_turn_gain_and_offset_formulas() {
+    use ditherette_wasm::spec::effects::model::ColourModel;
+
+    let ramp = json!([[0, 0], [1, 1]]);
+    let hue = curves(vec![curve(
+        "adjust",
+        ("srgb", "red"),
+        ("hsl", "hue"),
+        ramp.clone(),
+    )]);
     let input = ColourModel::Hsl.from_normalized([0.0, 1.0, 0.5]);
-    let (output, alpha) = apply(&hue, input);
-    let adjusted = ColourModel::Hsl.to_normalized(output);
-    assert_eq!(adjusted[0].to_bits(), 0.5f32.to_bits());
+    let (output, alpha) = apply_curves(&hue, input);
+    assert_eq!(
+        ColourModel::Hsl.to_normalized(output)[0].to_bits(),
+        0.5f32.to_bits()
+    );
     assert_eq!(alpha, 37);
 
-    let gain = channel_curve(("srgb", "red"), ("hsl", "saturation"), ramp_curve.clone());
+    let gain = curves(vec![curve(
+        "adjust",
+        ("srgb", "red"),
+        ("hsl", "saturation"),
+        ramp.clone(),
+    )]);
     let input = ColourModel::Hsl.from_normalized([0.5, 1.0, 0.5]);
-    let adjusted = ColourModel::Hsl.to_normalized(apply(&gain, input).0);
-    assert_eq!(adjusted[1].to_bits(), 0.0f32.to_bits());
+    assert_eq!(
+        ColourModel::Hsl.to_normalized(apply_curves(&gain, input).0)[1].to_bits(),
+        0.0f32.to_bits()
+    );
 
-    let offset = channel_curve(("srgb", "blue"), ("hsl", "lightness"), ramp_curve);
+    let offset = curves(vec![curve(
+        "adjust",
+        ("srgb", "blue"),
+        ("hsl", "lightness"),
+        ramp,
+    )]);
     let input = ColourModel::Hsl.from_normalized([0.0, 1.0, 0.5]);
-    let adjusted = ColourModel::Hsl.to_normalized(apply(&offset, input).0);
-    assert_eq!(adjusted[2].to_bits(), 0.0f32.to_bits());
+    assert_eq!(
+        ColourModel::Hsl.to_normalized(apply_curves(&offset, input).0)[2].to_bits(),
+        0.0f32.to_bits()
+    );
 }
 
 #[test]
-fn hue_triggered_channel_curves_fade_to_zero_at_grey_and_half_at_threshold() {
-    use ditherette_wasm::image::ImageDimensions;
+fn hue_dependent_adjustments_use_source_and_current_confidence() {
+    use ditherette_wasm::spec::effects::model::ColourModel;
 
-    let effect = channel_curve(
+    let hue_input = curves(vec![curve(
+        "adjust",
         ("hsl", "hue"),
         ("srgb", "blue"),
         json!([[0, 1], [0.5, 0.5], [1, 1]]),
-    );
-    let run_one = |effect: &serde_json::Value, rgb: [f32; 3]| {
-        let step = steps(json!([effect])).pop().unwrap();
-        let BuiltinEffect::ChannelCurve(effect) = step.effect else {
-            unreachable!()
-        };
-        let mut image = EffectImage {
-            dimensions: ImageDimensions::new(1, 1).unwrap(),
-            rgb: vec![rgb],
-            alpha: vec![255],
-        };
-        effect.apply(&mut image, &EffectContext::default());
-        image.rgb[0]
-    };
-    let grey = [0.5, 0.5, 0.5];
+    )]);
+    let grey = [0.5; 3];
     assert_eq!(
-        run_one(&effect, grey).map(f32::to_bits),
+        apply_curves(&hue_input, grey).0.map(f32::to_bits),
         grey.map(f32::to_bits)
     );
-
-    let half = run_one(&effect, [0.51, 0.5, 0.5]);
+    let half = apply_curves(&hue_input, [0.51, 0.5, 0.5]).0;
     assert!((half[2] - 0.75).abs() < 0.000_01, "{}", half[2]);
 
-    let hue_output = channel_curve(("srgb", "red"), ("hsl", "hue"), json!([[0, 1], [1, 1]]));
+    let hue_output = curves(vec![curve(
+        "adjust",
+        ("srgb", "red"),
+        ("hsl", "hue"),
+        json!([[0, 1], [1, 1]]),
+    )]);
     assert_eq!(
-        run_one(&hue_output, grey).map(f32::to_bits),
+        apply_curves(&hue_output, grey).0.map(f32::to_bits),
         grey.map(f32::to_bits)
     );
-    // Float conversions leave greys a residual Oklch or CIELCh chroma; it must not count as hue.
+    let adjusted = ColourModel::Hsl.to_normalized(apply_curves(&hue_output, [0.51, 0.5, 0.5]).0);
+    assert!((adjusted[0] - 0.25).abs() < 0.000_01, "{}", adjusted[0]);
+
     for model in ["oklch", "cielch"] {
-        let hue_input = channel_curve(
+        let x = curves(vec![curve(
+            "adjust",
             (model, "hue"),
             ("srgb", "blue"),
             json!([[0, 1], [0.5, 1], [1, 1]]),
-        );
-        let hue_output = channel_curve(("srgb", "red"), (model, "hue"), json!([[0, 1], [1, 1]]));
-        for effect in [hue_input, hue_output] {
+        )]);
+        let y = curves(vec![curve(
+            "adjust",
+            ("srgb", "red"),
+            (model, "hue"),
+            json!([[0, 1], [1, 1]]),
+        )]);
+        for effect in [x, y] {
             assert_eq!(
-                run_one(&effect, grey).map(f32::to_bits),
+                apply_curves(&effect, grey).0.map(f32::to_bits),
                 grey.map(f32::to_bits),
                 "{model}"
             );
         }
     }
-    let adjusted = ditherette_wasm::spec::effects::model::ColourModel::Hsl
-        .to_normalized(run_one(&hue_output, [0.51, 0.5, 0.5]));
-    assert!((adjusted[0] - 0.25).abs() < 0.000_01, "{}", adjusted[0]);
+}
+
+#[test]
+fn model_conversion_formulas_remain_literal() {
+    use ditherette_wasm::spec::effects::model::ColourModel;
+
+    assert_eq!(
+        ColourModel::Hsl.to_normalized([1.0, 0.0, 0.0]),
+        [0.0, 1.0, 0.5]
+    );
+    assert_eq!(
+        ColourModel::Hsv.to_normalized([1.0, 0.0, 0.0]),
+        [0.0, 1.0, 1.0]
+    );
+    let ycbcr = ColourModel::Ycbcr.to_normalized([1.0, 0.0, 0.0]);
+    assert_eq!(ycbcr[0].to_bits(), 0.299f32.to_bits());
+    assert_eq!(ycbcr[1].to_bits(), (0.5 - 0.299f32 / 1.772).to_bits());
+    assert_eq!(ycbcr[2].to_bits(), (0.5 + 0.701f32 / 1.402).to_bits());
+    for model in [ColourModel::Oklch, ColourModel::Cielch] {
+        let grey = [0.5; 3];
+        assert_eq!(model.hue_weight(grey, model.to_normalized(grey)), 0.0);
+    }
 }

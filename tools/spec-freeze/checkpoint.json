@@ -1428,6 +1428,127 @@
 				}
 			],
 			"contentSha256": "83cac5b63a8365c02ccc00db1145dda1aa21dc76d9fda76e04229f0849f5b59c"
+		},
+		{
+			"name": "effects-curves",
+			"summary": "Replace three curve effects with one ordered curves effect",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.md",
+						"mode": "100644",
+						"sha256": "b98d2b5a3fc378fc018e20d1ac871fcc7c85abb09783c23b04f6c5c343991ac9"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/channel_curve.rs",
+						"mode": "100644",
+						"sha256": "adc9c398286473e3bd52c28bc8d1ec2d4afa9786b9391ee9e1f4ec9aff9e1343"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "e304ce76637a35ab61fda0ced9d4917de85405642ed17e6f462441eb36b95674"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "38d69add74006a1e5fc32e1950e7c48cfd2652b779b138406a18a3522af6d615"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "670107013a5486d13fd191c38bac0b573ea011b0fbccd1f2910d9937bdd09296"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "06ea3a6db12ac44e917ee2d4e3da2e1589e7a46dc2f775bf1f6f19b17a587c23"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "c9b317258d62b444816aebe4bf65ee4da38d9ab37432b5470006cf0126dee7f6"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "0a0ef471ac26a546ab6e8f99b7d0cbe763838803239b1f19258d28710991aba7"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/model_curves.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/model_curves.md",
+						"mode": "100644",
+						"sha256": "ecb7a9d8739e41662131ff683fc99c4a57105c9dc48fb5f11ff47957a421dca6"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/model_curves.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/model_curves.rs",
+						"mode": "100644",
+						"sha256": "239eae2177257fd5c751db11dd1afb94e5ea2b28a7140c5ab4fd0c20191fda38"
+					},
+					"after": null
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "bdaac246a13b84e3126ece06a33e549095f2ac9d0e786684f2a86d3b4e202642"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "ea4c52c84676eb0228e5d77bae6e899f94ed3babfbc2c7e1679b7fa944a5ecca"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "d5041ab64c4b3f2e452726f3efe4f43ed918c92adea2667af7bb317d2faacd71"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "45ebb8c3bdb002fd88ce2fd7091ca6519c5f2388263a0129838a1fc672d0ff94"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "d5798b35bc87a4f564c9561d00f85633a5d3397c6ab1c32025521009267bb670"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "0df922677c88c94f6d3907b1d412a9ed26abbaacad1888c0a68195396ea6bcab"
+					}
+				}
+			],
+			"contentSha256": "7900cdfe7b725d9b6ca31877b57ed7030ac30585c2c0a13c1ce3b2a97a49dd01"
 		}
 	]
 }

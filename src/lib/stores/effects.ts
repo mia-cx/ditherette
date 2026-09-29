@@ -1,78 +1,28 @@
 import { persistentAtom } from '@nanostores/persistent';
 import { computed } from 'nanostores';
-import { isEffect } from 'ditherette';
-import {
-	EFFECTS,
-	MAX_EFFECT_LAYERS,
-	packageSteps,
-	stepCost,
-	type EffectKind,
-	type LayerStep
-} from '$lib/effects/catalog';
+import { isEffect, type Effect } from 'ditherette';
+import { EFFECTS, MAX_EFFECT_LAYERS, type EffectKind } from '$lib/effects/catalog';
 
 /** One named instance in the effect pipeline. The name only labels it; `step` is what runs. */
 export type EffectLayer = {
 	readonly id: string;
 	readonly name: string;
-	readonly step: LayerStep;
+	readonly step: Effect;
 };
 
 export const MAX_EFFECT_NAME_LENGTH = 64;
 
-/**
- * A saved step the package accepts. A curves layer counts when every package step it turns into
- * does, so the website keeps exactly what processing would accept.
- */
-function isLayerStep(value: unknown): value is LayerStep {
-	if (!value || typeof value !== 'object') return false;
-	const { effect } = value as { effect?: unknown };
-	// Colour-model and channel-to-channel curves only live inside a curves layer.
-	if (effect === 'model-curves' || effect === 'channel-curve') return false;
-	if (effect !== 'curves') return isEffect(value);
-	try {
-		return packageSteps(value as LayerStep).every(isEffect);
-	} catch {
-		// Storage holds untyped JSON; a damaged curves layer is dropped like any invalid step.
-		return false;
-	}
-}
-
-/**
- * Curves layers saved before colour models kept `curves: { red, green, blue }`; read them as RGB
- * curves. Anything else passes through for validation.
- */
-function migrateStep(step: unknown): unknown {
-	if (!step || typeof step !== 'object') return step;
-	const { effect, model, curves } = step as { effect?: unknown; model?: unknown; curves?: unknown };
-	if (effect !== 'curves' || model !== undefined || !curves || typeof curves !== 'object')
-		return step;
-	const { red, green, blue } = curves as Record<string, unknown>;
-	return { ...step, model: 'srgb', curves: [red, green, blue] };
-}
-
 function isLayer(value: unknown): value is EffectLayer {
 	if (!value || typeof value !== 'object') return false;
 	const { id, name, step } = value as Record<string, unknown>;
-	return typeof id === 'string' && typeof name === 'string' && isLayerStep(step);
+	return typeof id === 'string' && typeof name === 'string' && isEffect(step);
 }
 
-/** Saved layers with their steps brought up to date, before validation. */
-function migrateLayer(value: unknown): unknown {
-	if (!value || typeof value !== 'object') return value;
-	return { ...value, step: migrateStep((value as { step?: unknown }).step) };
-}
-
-/** Keep saved layers the package would accept, so a damaged entry cannot block processing. */
-/** Keep the leading layers that fit the package's step limit. */
-function withinStepLimit(layers: EffectLayer[]) {
-	let left = MAX_EFFECT_LAYERS;
-	return layers.filter((layer) => (left -= stepCost(layer.step.effect)) >= 0);
-}
-
+/** Keep saved layers the package would accept, up to its step limit, so a damaged entry cannot block processing. */
 function decodeLayers(encoded: string): EffectLayer[] {
 	try {
 		const value: unknown = JSON.parse(encoded);
-		return Array.isArray(value) ? withinStepLimit(value.map(migrateLayer).filter(isLayer)) : [];
+		return Array.isArray(value) ? value.filter(isLayer).slice(0, MAX_EFFECT_LAYERS) : [];
 	} catch {
 		return [];
 	}
@@ -83,16 +33,15 @@ export const effectLayers = persistentAtom<EffectLayer[]>('ditherette:effects', 
 	decode: decodeLayers
 });
 
-/** Package steps still free under the limit, counting each layer at its most. */
+/** Package steps still free under the limit: each layer runs as one step. */
 export const effectStepsLeft = computed(
 	effectLayers,
-	(layers) =>
-		MAX_EFFECT_LAYERS - layers.reduce((total, layer) => total + stepCost(layer.step.effect), 0)
+	(layers) => MAX_EFFECT_LAYERS - layers.length
 );
 
 /** The steps processing runs: enabled layers, in pipeline order. */
 export const activeEffectSteps = computed(effectLayers, (layers) =>
-	layers.filter((layer) => layer.step.enabled).flatMap((layer) => packageSteps(layer.step))
+	layers.filter((layer) => layer.step.enabled).map((layer) => layer.step)
 );
 
 function uniqueName(base: string, layers: readonly EffectLayer[], except?: string) {
@@ -120,7 +69,7 @@ function newLayerId() {
 /** Append a neutral instance of `kind`, named after the effect, and return it. */
 export function addEffect(kind: EffectKind): EffectLayer {
 	const layers = effectLayers.get();
-	if (stepCost(kind) > effectStepsLeft.get())
+	if (effectStepsLeft.get() < 1)
 		throw new Error(`The pipeline holds at most ${MAX_EFFECT_LAYERS} effect steps.`);
 	const layer: EffectLayer = {
 		id: newLayerId(),
@@ -159,7 +108,7 @@ export function renameEffect(id: string, name: string) {
 }
 
 /** Replace a layer's step arguments. The effect kind never changes. */
-export function updateEffect(id: string, step: LayerStep) {
+export function updateEffect(id: string, step: Effect) {
 	replaceLayer(id, (layer) => (layer.step.effect === step.effect ? { ...layer, step } : layer));
 }
 

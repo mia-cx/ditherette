@@ -111,14 +111,19 @@ impl Effect for HueSaturation {
 
     fn map_prepared(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         rgb: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {
         match prepared {
-            PreparedPointwise::HueSaturation { sin, cos, scale } => {
-                self.map_linear(Turn { sin, cos, scale }, to_linear(rgb))
-            }
+            PreparedPointwise::HueSaturation { sin, cos, scale } => self.map_linear(
+                Turn {
+                    sin: *sin,
+                    cos: *cos,
+                    scale: *scale,
+                },
+                to_linear(rgb),
+            ),
             PreparedPointwise::Direct => self.map_pixel(rgb, context),
             _ => unreachable!("hue-saturation received another effect's prepared state"),
         }
@@ -126,13 +131,20 @@ impl Effect for HueSaturation {
 
     fn map_prepared_linear(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         linear: [f32; 3],
         _context: &EffectContext<'_>,
     ) -> [f32; 3] {
         let PreparedPointwise::HueSaturation { sin, cos, scale } = prepared else {
             unreachable!("only prepared hue-saturation maps request linear input")
         };
-        self.map_linear(Turn { sin, cos, scale }, linear)
+        self.map_linear(
+            Turn {
+                sin: *sin,
+                cos: *cos,
+                scale: *scale,
+            },
+            linear,
+        )
     }
 }

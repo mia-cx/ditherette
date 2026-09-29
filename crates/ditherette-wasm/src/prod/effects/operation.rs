@@ -183,6 +183,18 @@ impl Effect for Resolved<'_> {
         }
     }
 
+    fn map_prepared_channel(
+        &self,
+        prepared: &PreparedPointwise,
+        channel: usize,
+        value: f32,
+    ) -> f32 {
+        match self {
+            Self::Given(effect) => effect.map_prepared_channel(prepared, channel, value),
+            Self::Recolour(effect) => effect.map_prepared_channel(prepared, channel, value),
+        }
+    }
+
     fn working_bytes(&self) -> u64 {
         match self {
             Self::Given(effect) => effect.working_bytes(),
@@ -213,7 +225,7 @@ impl Effect for Resolved<'_> {
 
     fn map_prepared(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         rgb: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {
@@ -225,7 +237,7 @@ impl Effect for Resolved<'_> {
 
     fn map_prepared_linear(
         &self,
-        prepared: PreparedPointwise,
+        prepared: &PreparedPointwise,
         linear: [f32; 3],
         context: &EffectContext<'_>,
     ) -> [f32; 3] {
@@ -339,7 +351,7 @@ pub fn apply_in_place<E: Effect>(
     }
     let rest = &enabled[tabulated..];
     if rest.iter().all(|effect| effect.pointwise()) {
-        let prepared = PreparedPointwiseState::new(rest, &tables);
+        let prepared = PreparedPointwiseState::try_new(rest, &tables)?;
         try_memoized_bytes(data, |bytes| prepared.map(bytes, context).map(byte))?;
         return Ok(());
     }
@@ -391,7 +403,7 @@ fn carrier<E: Effect>(
         return EffectImage::try_from_packed(data, dimensions, tables);
     }
     if rest.iter().all(|effect| effect.pointwise()) {
-        let prepared = PreparedPointwiseState::new(rest, tables);
+        let prepared = PreparedPointwiseState::try_new(rest, tables)?;
         return try_memoized(data, dimensions, |bytes| prepared.map(bytes, context));
     }
     let mut image = EffectImage::try_from_packed(data, dimensions, tables)?;

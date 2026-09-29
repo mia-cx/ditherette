@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { isEffect } from 'ditherette';
-import { EFFECTS, FLAT, STRAIGHT, packageSteps, type CurvePoints } from '$lib/effects/catalog';
+import { setTestStorageKey, useTestStorageEngine } from '@nanostores/persistent';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CurvePoints } from 'ditherette';
+import { EFFECTS, neutralCurve } from '$lib/effects/catalog';
 import {
 	activeEffectSteps,
 	addEffect,
@@ -64,56 +65,53 @@ describe('effect layers', () => {
 		}
 	});
 
-	it('runs matching RGB curves as one rgb step and differing ones per channel', () => {
-		const curves = addEffect('curves');
-		if (curves.step.effect !== 'curves' || curves.step.model !== 'srgb')
-			throw new Error('Expected RGB curves.');
-		const step = curves.step;
-		updateEffect(curves.id, { ...step, curves: [LIFT, LIFT, LIFT] });
+	it('runs a curves layer as one package step with every curve in order', () => {
+		const layer = addEffect('curves');
+		if (layer.step.effect !== 'curves') throw new Error('Expected curves.');
+		const lightness = { ...layer.step.curves[0]!, points: LIFT };
+		const hue = neutralCurve(
+			{ model: 'hsl', channel: 'hue' },
+			{ model: 'hsl', channel: 'saturation' }
+		);
+		updateEffect(layer.id, { ...layer.step, curves: [lightness, hue] });
 		expect(activeEffectSteps.get()).toEqual([
-			{ effect: 'curves', enabled: true, channel: 'rgb', points: LIFT }
-		]);
-
-		updateEffect(curves.id, { ...step, curves: [LIFT, STRAIGHT, STRAIGHT] });
-		expect(activeEffectSteps.get()).toEqual([
-			{ effect: 'curves', enabled: true, channel: 'red', points: LIFT }
+			{ effect: 'curves', enabled: true, curves: [lightness, hue] }
 		]);
 	});
 
-	it('runs other colour models as one model-curves step and arbitrary XY as one channel-curve', () => {
-		expect(
-			packageSteps({
-				effect: 'curves',
-				enabled: true,
-				model: 'oklch',
-				curves: [LIFT, STRAIGHT, STRAIGHT]
-			})
-		).toEqual([
-			{ effect: 'model-curves', enabled: true, model: 'oklch', curves: [LIFT, STRAIGHT, STRAIGHT] }
-		]);
-		const x = { model: 'hsl', channel: 'hue' } as const;
-		const y = { model: 'hsl', channel: 'saturation' } as const;
-		expect(
-			packageSteps({ effect: 'curves', enabled: true, model: 'xy', x, y, points: FLAT })
-		).toEqual([{ effect: 'channel-curve', enabled: true, x, y, points: FLAT }]);
-		expect(
-			[
-				...packageSteps({
-					effect: 'curves',
-					enabled: true,
-					model: 'hsv',
-					curves: [LIFT, LIFT, LIFT]
-				})
-			].every(isEffect)
-		).toBe(true);
+	it('drops saved steps in the old curve shapes', async () => {
+		const keep = { id: 'b', name: 'Exposure', step: EFFECTS.exposure.create() };
+		useTestStorageEngine();
+		setTestStorageKey(
+			'ditherette:effects',
+			JSON.stringify([
+				{
+					id: 'a',
+					name: 'Curves',
+					step: { effect: 'curves', enabled: true, channel: 'rgb', points: LIFT }
+				},
+				keep,
+				{
+					id: 'c',
+					name: 'Model',
+					step: {
+						effect: 'model-curves',
+						enabled: true,
+						model: 'oklch',
+						curves: [LIFT, LIFT, LIFT]
+					}
+				}
+			])
+		);
+		vi.resetModules();
+		const saved = await import('./effects');
+		expect(saved.effectLayers.get()).toEqual([keep]);
 	});
 
-	it('counts curves at three steps so the chain never exceeds the package limit', () => {
-		for (let count = 0; count < 62; count++) addEffect('exposure');
-		expect(effectStepsLeft.get()).toBe(2);
-		expect(() => addEffect('curves')).toThrow();
-		addEffect('exposure');
-		addEffect('exposure');
+	it('counts every layer as one step so the chain never exceeds the package limit', () => {
+		for (let count = 0; count < 63; count++) addEffect('exposure');
+		expect(effectStepsLeft.get()).toBe(1);
+		addEffect('curves');
 		expect(effectStepsLeft.get()).toBe(0);
 		expect(() => addEffect('exposure')).toThrow();
 	});
