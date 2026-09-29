@@ -94,8 +94,9 @@ const RGB_DITHER_NOISE_SCALE = 96;
 const BYTE_FIELD_STRENGTH_RATIO = RGB_DITHER_NOISE_SCALE / 63.75;
 const MAX_ADAPTIVE_RADIUS = 32768;
 
-function croppedSource(
-	source: Pick<ImageData, 'width' | 'height' | 'data'>,
+/** The part of `source` that processing reads: the whole image, or the crop, borrowing bytes when contiguous. */
+export function croppedSource(
+	source: { width: number; height: number; data: Uint8Array | Uint8ClampedArray },
 	crop?: CropRect
 ): Rgba8Image {
 	const rect = clampCrop(source.width, source.height, crop);
