@@ -2,6 +2,7 @@
 	import type { Curve, CurvePoints, CurvesEffect, TwoInputCurve } from 'ditherette';
 	import CaretLeftIcon from 'phosphor-svelte/lib/CaretLeft';
 	import CaretRightIcon from 'phosphor-svelte/lib/CaretRight';
+	import ArrowsOutIcon from 'phosphor-svelte/lib/ArrowsOut';
 	import EyedropperIcon from 'phosphor-svelte/lib/Eyedropper';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
 	import { onDestroy } from 'svelte';
@@ -24,10 +25,20 @@
 	import { hueAxis } from '$lib/effects/tone';
 	import { curvePicker, type CurvePicker } from '$lib/stores/curve-pick';
 	import CurveGraph from './CurveGraph.svelte';
+	import CurveAnalysis from './CurveAnalysis.svelte';
 	import CurveGridGraph from './CurveGridGraph.svelte';
 
-	type Props = { id: string; step: CurvesEffect; onchange: (step: CurvesEffect) => void };
-	let { id, step, onchange }: Props = $props();
+	type Props = {
+		id: string;
+		step: CurvesEffect;
+		onchange: (step: CurvesEffect) => void;
+		/** The selected curve, shared with the analysis view. */
+		selected?: number;
+		/** Inside the analysis view, which has no Expand button of its own. */
+		expanded?: boolean;
+	};
+	let { id, step, onchange, selected = $bindable(0), expanded = false }: Props = $props();
+	let analysing = $state(false);
 
 	/** Each curve's colour, by position: its line and its chip swatch. */
 	const TONES = [
@@ -46,7 +57,6 @@
 		{ model: 'oklch', channel: 'chroma' }
 	);
 
-	let selected = $state(0);
 	let selectedPoint = $state(0);
 	/** `selected` can outlive a removed curve, so everything reads this. */
 	const active = $derived(Math.min(selected, step.curves.length - 1));
@@ -235,6 +245,17 @@
 		>
 			<EyedropperIcon weight="bold" />
 		</Button>
+		{#if !expanded}
+			<Button
+				variant="ghost"
+				size="icon-xs"
+				aria-label="Expand"
+				disabled={!curve}
+				onclick={() => (analysing = true)}
+			>
+				<ArrowsOutIcon weight="bold" />
+			</Button>
+		{/if}
 	</div>
 
 	{#if curve}
@@ -343,3 +364,7 @@
 		</div>
 	{/if}
 </div>
+
+{#if !expanded}
+	<CurveAnalysis id="{id}-analysis" {step} {onchange} bind:open={analysing} bind:selected />
+{/if}

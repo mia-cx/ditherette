@@ -9,7 +9,8 @@ import CurvesEditor from './CurvesEditor.svelte';
 let step: CurvesEffect;
 const onchange = (next: CurvesEffect) => (step = next);
 
-beforeEach(() => {
+beforeEach(async () => {
+	await page.viewport(1440, 900);
 	step = EFFECTS.curves.create();
 	curvePicker.set(undefined);
 });
@@ -105,4 +106,38 @@ it('adds a second input as a grid, edits it by keyboard, and picks on both axes'
 	if (!picked.x2) throw new Error('Expected a two-input curve.');
 	// Dark red lands on the same 30°, 25% point, and the drag pushes it to the top.
 	expect(picked.grid.values[1]![1]).toBe(1);
+});
+
+it('expands into the analysis view and comes back with the same curve selected', async () => {
+	await editor();
+	await page.getByRole('button', { name: 'Curve', exact: true }).click();
+	await page.getByRole('button', { name: 'Expand' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Curves' });
+	await expect.element(dialog).toBeVisible();
+	await expect
+		.element(dialog.getByRole('button', { name: 'Hue vs Chroma (OKLCH)' }))
+		.toHaveAttribute('aria-pressed', 'true');
+	await dialog.getByRole('button', { name: 'Lightness (OKLCH)' }).click();
+	await dialog.getByRole('button', { name: 'Back' }).click();
+	await expect.element(dialog).not.toBeInTheDocument();
+	await expect
+		.element(page.getByRole('button', { name: 'Lightness (OKLCH)' }))
+		.toHaveAttribute('aria-pressed', 'true');
+});
+
+it('stacks every analysis panel without horizontal overflow on a narrow screen', async () => {
+	await page.viewport(375, 667);
+	await editor();
+	await page.getByRole('button', { name: 'Expand' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Curves' }).element() as HTMLElement;
+
+	expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+	for (const name of [
+		'Before and after',
+		'3D surface of the curve: how far it moves each input',
+		'3D colour scope in Oklab: every sampled pixel after the effects'
+	]) {
+		const panel = page.getByLabelText(name).element() as HTMLElement;
+		expect(panel.getBoundingClientRect().width).toBeGreaterThanOrEqual(300);
+	}
 });
