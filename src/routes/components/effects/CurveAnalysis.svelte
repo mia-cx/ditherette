@@ -3,7 +3,7 @@
 	import ArrowLeftIcon from 'phosphor-svelte/lib/ArrowLeft';
 	import { Button } from '$lib/components/ui/button';
 	import { Dialog, DialogContent, DialogTitle } from '$lib/components/ui/dialog';
-	import { lutView, shownEffectsTable } from '$lib/processing/lut-view';
+	import { containPlacement, effectsView, shownEffects } from '$lib/processing/effects-view.svelte';
 	import { sourceImageData, sourceObjectUrl } from '$lib/stores/app';
 	import ColourScope3d from './ColourScope3d.svelte';
 	import CurveSurface from './CurveSurface.svelte';
@@ -68,10 +68,13 @@
 				{#if $sourceObjectUrl}
 					<img src={$sourceObjectUrl} alt="" class="absolute inset-0 size-full object-contain" />
 				{/if}
-				{#if $sourceImageData && $shownEffectsTable}
+				{#if $sourceImageData && $shownEffects}
 					<canvas
-						{@attach lutView}
-						class="absolute inset-0 size-full object-contain"
+						{@attach effectsView(
+							(width, height) =>
+								$sourceImageData && containPlacement($sourceImageData, width, height)
+						)}
+						class="absolute inset-0 size-full"
 						style:clip-path="inset(0 0 0 {wipe * 100}%)"
 					></canvas>
 				{/if}
@@ -90,7 +93,13 @@
 			<section
 				class="min-h-0 min-w-0 border-b border-border lg:col-start-2 lg:row-start-2 lg:border-r lg:border-b-0"
 			>
-				<ColourScope3d source={$sourceImageData} table={$shownEffectsTable} />
+				<ColourScope3d
+					source={$sourceImageData}
+					effects={$shownEffects && {
+						pixels: $shownEffects.index.pixels,
+						results: $shownEffects.results
+					}}
+				/>
 			</section>
 			<section
 				class="min-h-0 min-w-0 p-3 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:overflow-y-auto"

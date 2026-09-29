@@ -54,7 +54,7 @@ function random(seed: number) {
  * large ones the jitter stops a regular dither pattern from lining up with the grid.
  * `read` copies pixel `index` into `rgb` at `at`, or returns false for a transparent pixel.
  */
-function sample(
+export function samplePixels(
 	width: number,
 	height: number,
 	maxSamples: number,
@@ -83,7 +83,7 @@ export function sampleSource(
 	{ data, width, height }: Pick<ImageData, 'data' | 'width' | 'height'>,
 	maxSamples = MAX_SAMPLES
 ) {
-	return sample(width, height, maxSamples, (index, rgb, at) => {
+	return samplePixels(width, height, maxSamples, (index, rgb, at) => {
 		const offset = index * 4;
 		if (!data[offset + 3]) return false;
 		rgb[at] = data[offset]!;
@@ -95,7 +95,7 @@ export function sampleSource(
 
 /** Samples the processed indices through their palette, so the colours are exactly the output's. */
 export function sampleOutput({ indices, palette, width, height }: ProcessedImage) {
-	return sample(width, height, MAX_SAMPLES, (index, rgb, at) => {
+	return samplePixels(width, height, MAX_SAMPLES, (index, rgb, at) => {
 		const colour = palette[indices[index]!];
 		if (!colour?.rgb || colour.kind === 'transparent') return false;
 		rgb[at] = colour.rgb.r;
