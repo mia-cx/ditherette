@@ -68,11 +68,31 @@ describe('source effects', () => {
 		sourceImageData.set(image());
 		worker.reply({ id: worker.applied[0]!.id, lut: lut() });
 		expect(sourceEffectsLut.get()).toBeUndefined();
+		// The stale reply frees the worker for the new source's table.
+		expect(worker.applied).toHaveLength(2);
 	});
 
-	it('stops the worker when turned off', () => {
+	it('keeps the table while turned off, and shows it again without recomputing', () => {
 		addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		const table = lut();
+		worker.reply({ id: worker.applied[0]!.id, lut: table });
 		previewSettings.set({ sourceEffects: false });
-		expect(ControlledWorker.instances[0]!.terminate).toHaveBeenCalled();
+		previewSettings.set({ sourceEffects: true });
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.applied).toHaveLength(1);
+		expect(sourceEffectsLut.get()).toBe(table);
+	});
+
+	it('reuses the table when an effect is hidden and shown again', () => {
+		const layer = addEffect('exposure');
+		const worker = ControlledWorker.instances[0]!;
+		const table = lut();
+		worker.reply({ id: worker.applied[0]!.id, lut: table });
+		updateEffect(layer.id, { ...layer.step, enabled: false });
+		expect(sourceEffectsLut.get()).toBeUndefined();
+		updateEffect(layer.id, { ...layer.step, enabled: true });
+		expect(worker.applied).toHaveLength(1);
+		expect(sourceEffectsLut.get()).toBe(table);
 	});
 });

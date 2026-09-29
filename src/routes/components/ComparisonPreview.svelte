@@ -134,7 +134,11 @@
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
-	const sourceLabel = $derived($sourceEffectsLut && $lutDrawn ? 'Source with effects' : 'Source');
+	const sourceLabel = $derived(
+		$previewSettings.sourceEffects && $sourceEffectsLut && $lutDrawn
+			? 'Source with effects'
+			: 'Source'
+	);
 	const canShowEffects = browser && supportsWebGL2();
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
 	const canCropToContent = $derived(Boolean(cropToContentBounds));
@@ -1332,6 +1336,7 @@
 			<canvas
 				{@attach lutView}
 				class="pointer-events-none absolute max-w-none select-none"
+				hidden={!$previewSettings.sourceEffects}
 				style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 				aria-hidden="true"
 			></canvas>
