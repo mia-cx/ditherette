@@ -78,9 +78,7 @@ export class ProcessorWorkerPipeline {
 		const processor = await this.#package;
 		if (this.#canceledIds.has(id)) return undefined;
 		mark('package initialisation wait', initializeStart);
-		const effectsStart = performance.now();
-		const source = applyEffects(processor, cache, request, size, publishTable);
-		mark('effects table', effectsStart);
+		const source = applyEffects(processor, cache, request, size, publishTable, mark);
 		const requestStart = performance.now();
 		// The mapped source already carries the effects, so the package only resizes and dithers.
 		const mapped = packageProcessRequest(source, palette, { ...settings, effects: [] }, size);
@@ -143,7 +141,8 @@ function applyEffects(
 	cache: SourceCache,
 	{ settings, palette }: WorkerProcessRequest,
 	size: { width: number; height: number },
-	publishTable: TableSink
+	publishTable: TableSink,
+	mark: (name: string, start: number) => void
 ): Pixels {
 	if (!settings.effects.length) return cache.source;
 	const context = packageEffectContext(palette, settings.colorSpace);
@@ -157,12 +156,21 @@ function applyEffects(
 		analysed && settings.output.crop
 	]);
 	if (cache.effects?.key === key) return cache.effects.mapped;
+	let start = performance.now();
 	// Palette fit analyses the cropped source `process` would receive.
 	const cropped = packageProcessRequest(cache.source, palette, settings, size).request.source;
 	const effects = resolveRecolour(processor, cropped, settings.effects, context);
+	mark('palette fit analysis', start);
+	start = performance.now();
 	cache.colours ??= distinctColours(cache.source);
+	mark('effects colours', start);
+	start = performance.now();
 	const table = compileEffectsTable(processor, cache.colours, effects, context);
-	const mapped = applyEffectsTable(cache.source, table);
+	mark('effects compile', start);
+	start = performance.now();
+	// The previous result is stale now, so its buffer takes the new one.
+	const mapped = applyEffectsTable(cache.source, table, cache.effects?.mapped.data);
+	mark('effects map', start);
 	cache.effects = { key, mapped };
 	publishTable(table);
 	return mapped;

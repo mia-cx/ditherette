@@ -95,12 +95,19 @@ export function compileEffectsTable(
 	return table;
 }
 
-/** `source` with every pixel's RGB looked up in `table`, keeping its alpha. */
+/**
+ * `source` with every pixel's RGB looked up in `table`, keeping its alpha. Writes into `into` when
+ * it fits, since allocating a fresh output for a large photo costs more than the lookups.
+ */
 export function applyEffectsTable(
 	source: Pick<ImageData, 'width' | 'height' | 'data'>,
-	table: Uint32Array
+	table: Uint32Array,
+	into?: Uint8ClampedArray<ArrayBuffer>
 ): Pick<ImageData, 'width' | 'height' | 'data'> {
-	const data = new Uint8ClampedArray(source.data.length);
+	const data =
+		into?.length === source.data.length && !into.byteOffset
+			? into
+			: new Uint8ClampedArray(source.data.length);
 	const pixels = words(source.data);
 	const mapped = new Uint32Array(data.buffer);
 	for (let index = 0; index < pixels.length; index++) {
