@@ -29,6 +29,7 @@
 		type PreviewMode
 	} from '$lib/stores/app';
 	import { addEffect, effectStepsLeft } from '$lib/stores/effects';
+	import { canRedo, canUndo, editsText, historyCommand, redo, undo } from '$lib/stores/history';
 	import { browser } from '$app/environment';
 	import { supportsWebGL2 } from '$lib/processing/lut-view';
 	import { setThemeChoice, startTheme, themeChoice, type ThemeChoice } from '$lib/theme';
@@ -89,6 +90,15 @@
 	};
 
 	function shortcut(event: KeyboardEvent) {
+		const history = historyCommand(event, mac);
+		if (history) {
+			// Text fields keep the browser's own undo.
+			if (editsText(event.target) || event.defaultPrevented) return;
+			event.preventDefault();
+			if (history === 'undo') undo();
+			else redo();
+			return;
+		}
 		const target = event.target as HTMLElement | null;
 		if (event.altKey || target?.closest('input, textarea, select, [contenteditable="true"]'))
 			return;
@@ -139,6 +149,13 @@
 		<MenubarMenu>
 			<MenubarTrigger class="px-2 text-sm font-normal">Edit</MenubarTrigger>
 			<MenubarContent align="start" class="min-w-52">
+				<MenubarItem disabled={!$canUndo} onSelect={undo}>
+					Undo<MenubarShortcut>{command('Z')}</MenubarShortcut>
+				</MenubarItem>
+				<MenubarItem disabled={!$canRedo} onSelect={redo}>
+					Redo<MenubarShortcut>{mac ? '⇧⌘Z' : 'Ctrl+Shift+Z'}</MenubarShortcut>
+				</MenubarItem>
+				<MenubarSeparator />
 				<MenubarCheckboxItem
 					checked={$cropping}
 					disabled={!hasImage || !$previewCommands}
@@ -161,9 +178,8 @@
 					<MenubarSubTrigger>Adjustments</MenubarSubTrigger>
 					<MenubarSubContent class="min-w-52">
 						{#each EFFECT_KINDS as kind (kind)}
-							<MenubarItem
-								disabled={$effectStepsLeft < 1}
-								onSelect={() => adjust(kind)}>{EFFECTS[kind].label}</MenubarItem
+							<MenubarItem disabled={$effectStepsLeft < 1} onSelect={() => adjust(kind)}
+								>{EFFECTS[kind].label}</MenubarItem
 							>
 						{/each}
 					</MenubarSubContent>

@@ -18,7 +18,7 @@ Keyboard undo and redo for processing settings, so recent adjustments can be A/B
 ## TODOs
 
 - [x] History store: snapshot, coalesce and undo/redo the tracked settings, with unit tests.
-- [ ] Key handling and Edit menu items, with a browser test.
+- [x] Key handling and Edit menu items, with a browser test.
 - [ ] Start history from the page; run checks.
 
 ## Notes
