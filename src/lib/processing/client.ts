@@ -5,6 +5,7 @@ import {
 	colorSpace,
 	customPalettes,
 	ditherSettings,
+	effectsTable,
 	outputSettings,
 	paletteEnabled,
 	processedImage,
@@ -239,6 +240,10 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 				});
 				return;
 			}
+			if (message.type === 'effects-table') {
+				effectsTable.set(message.table);
+				return;
+			}
 			if (message.type === 'source-loaded') {
 				if (sourceLoadPostedAt) {
 					mainTimings.push({
@@ -296,6 +301,8 @@ function processInWorker(schedule?: ProcessingSchedule): Promise<ProcessInWorker
 			return;
 		}
 
+		// The worker builds a new table for a new source; the old one maps other colours.
+		effectsTable.set(undefined);
 		processingProgress.set({ stage: 'Loading source', progress: 0.02 });
 		sourceLoadPostedAt = performance.now();
 		activeWorker.postMessage({ id, type: 'load-source', sourceId, source } satisfies WorkerRequest);

@@ -197,7 +197,19 @@ export type WorkerFailure = {
 	restartWorker?: boolean;
 };
 
-export type WorkerResponse = WorkerProgress | WorkerSourceLoaded | WorkerComplete | WorkerFailure;
+/** The exact effects table a request's pipeline built, posted before dithering finishes. */
+export type WorkerEffectsTable = {
+	id: number;
+	type: 'effects-table';
+	table: Uint32Array;
+};
+
+export type WorkerResponse =
+	| WorkerProgress
+	| WorkerSourceLoaded
+	| WorkerEffectsTable
+	| WorkerComplete
+	| WorkerFailure;
 
 export function clampOutputDimension(value: number): number {
 	if (!Number.isFinite(value)) return 1;

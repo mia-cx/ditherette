@@ -96,10 +96,10 @@ export function compileEffectsTable(
 }
 
 /** `source` with every pixel's RGB looked up in `table`, keeping its alpha. */
-export function applyEffectsTable<T extends Pick<ImageData, 'width' | 'height' | 'data'>>(
-	source: T,
+export function applyEffectsTable(
+	source: Pick<ImageData, 'width' | 'height' | 'data'>,
 	table: Uint32Array
-): { width: number; height: number; data: Uint8ClampedArray } {
+): Pick<ImageData, 'width' | 'height' | 'data'> {
 	const data = new Uint8ClampedArray(source.data.length);
 	const pixels = words(source.data);
 	const mapped = new Uint32Array(data.buffer);
