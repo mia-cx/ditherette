@@ -1,4 +1,5 @@
 import { atom, computed, type WritableAtom } from 'nanostores';
+import { scheduleProcessing } from '$lib/processing/client';
 import type { ColorSpaceId, DitherSettings, OutputSettings, Palette } from '$lib/processing/types';
 import {
 	activePaletteName,
@@ -37,6 +38,8 @@ const KEYS = Object.keys(STORES) as (keyof Settings)[];
 export const SETTLE_MS = 300;
 /** Undo steps kept. Entries share the stores' immutable values, so each costs a few references. */
 export const MAX_HISTORY = 100;
+/** What a pointer gesture touched: always one entry, however many controls it moved. */
+const GESTURE = 'pointer';
 
 const stacks = atom<{ past: readonly Settings[]; future: readonly Settings[] }>({
 	past: [],
@@ -45,11 +48,16 @@ const stacks = atom<{ past: readonly Settings[]; future: readonly Settings[] }>(
 export const canUndo = computed(stacks, ({ past }) => past.length > 0);
 export const canRedo = computed(stacks, ({ future }) => future.length > 0);
 
+/** The settings of the latest entry. */
 let present = snapshot();
+/** The live settings as of the last burst of changes. */
+let seen = present;
 let source = sourceMeta.get();
-let pending = false;
-let pressed = false;
+/** The controls the uncommitted edit touched, or undefined when nothing is pending. */
+let pending: string | undefined;
+let queued = false;
 let applying = false;
+const pointers = new Set<number>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 function snapshot(): Settings {
@@ -59,39 +67,92 @@ function snapshot(): Settings {
 const same = (left: unknown, right: unknown) =>
 	left === right || JSON.stringify(left) === JSON.stringify(right);
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** The paths that differ between two values, descending into plain objects. */
+function paths(path: string, before: unknown, after: unknown): string[] {
+	if (same(before, after)) return [];
+	if (!isRecord(before) || !isRecord(after)) return [path];
+	return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) =>
+		paths(`${path}.${key}`, before[key], after[key])
+	);
+}
+
+const byId = (layers: readonly EffectLayer[]) =>
+	Object.fromEntries(layers.map((layer) => [layer.id, layer]));
+
+/**
+ * Names the controls an edit touched. Effect layers compare by id, so edits to two layers name two
+ * controls, while adding, removing, or reordering layers names the list itself.
+ */
+function touched(before: Settings, after: Settings) {
+	return KEYS.flatMap((key) => {
+		if (key !== 'effects') return paths(key, before[key], after[key]);
+		const order = same(
+			before.effects.map(({ id }) => id),
+			after.effects.map(({ id }) => id)
+		);
+		return [...(order ? [] : [key]), ...paths(key, byId(before.effects), byId(after.effects))];
+	}).join('|');
+}
+
 function settleLater() {
 	clearTimeout(timer);
-	timer = pressed ? undefined : setTimeout(commit, SETTLE_MS);
+	timer = pointers.size ? undefined : setTimeout(commit, SETTLE_MS);
 }
 
 function changed() {
-	if (applying) return;
-	pending = true;
-	settleLater();
+	if (applying || queued) return;
+	queued = true;
+	queueMicrotask(settle);
 }
 
 /**
- * Record the settings reached since the last entry. A new source or crop resets history instead:
- * restoring a size or effect made for another frame would show a misleading result.
+ * Take in one burst of store changes, so an action that sets several stores is one edit. Repeats to
+ * the same control extend the pending edit; another control commits it first. A new source or
+ * crop resets history instead: restoring a size or effect made for another frame would mislead.
  */
-function commit() {
-	clearTimeout(timer);
-	timer = undefined;
-	pending = false;
+function settle() {
+	if (!queued) return;
+	queued = false;
 	const next = snapshot();
-	if (sourceMeta.get() !== source || !same(next.output.crop, present.output.crop)) {
+	if (sourceMeta.get() !== source || !same(next.output.crop, seen.output.crop)) {
 		reset(next);
 		return;
 	}
-	if (KEYS.every((key) => same(present[key], next[key]))) return;
+	const controls = touched(seen, next);
+	if (!controls) return;
+	const edit = pointers.size ? GESTURE : controls;
+	if (pending !== undefined && pending !== edit) commit();
+	pending = edit;
+	seen = next;
+	settleLater();
+}
+
+/** Record the pending edit, unless it ended where the latest entry already is. */
+function commit() {
+	clearTimeout(timer);
+	timer = undefined;
+	if (pending === undefined) return;
+	pending = undefined;
+	if (KEYS.every((key) => same(present[key], seen[key]))) return;
 	const { past } = stacks.get();
 	stacks.set({ past: [...past, present].slice(-MAX_HISTORY), future: [] });
-	present = next;
+	present = seen;
+}
+
+function flush() {
+	settle();
+	commit();
 }
 
 function reset(next = snapshot()) {
-	present = next;
+	clearTimeout(timer);
+	timer = undefined;
+	present = seen = next;
 	source = sourceMeta.get();
+	pending = undefined;
 	stacks.set({ past: [], future: [] });
 }
 
@@ -99,6 +160,7 @@ function restore<K extends keyof Settings>(key: K, value: Settings[K]) {
 	if (STORES[key].get() !== value) STORES[key].set(value);
 }
 
+/** Set every store at once, then reprocess without the slider debounce: undo is a deliberate jump. */
 function apply(target: Settings) {
 	applying = true;
 	try {
@@ -106,12 +168,13 @@ function apply(target: Settings) {
 	} finally {
 		applying = false;
 	}
-	present = target;
+	present = seen = target;
+	scheduleProcessing(0);
 }
 
-/** Restore the settings before the last edit. The stores' subscribers reprocess as usual. */
+/** Restore the settings before the last edit. */
 export function undo() {
-	if (pending) commit();
+	flush();
 	const { past, future } = stacks.get();
 	const previous = past.at(-1);
 	if (!previous) return;
@@ -121,7 +184,7 @@ export function undo() {
 
 /** Restore the settings the last undo left. */
 export function redo() {
-	if (pending) commit();
+	flush();
 	const { past, future } = stacks.get();
 	const [next, ...rest] = future;
 	if (!next) return;
@@ -130,34 +193,44 @@ export function redo() {
 }
 
 /**
- * Record settings edits until the returned stop runs. A pointer press holds the entry open, so a
- * whole slider drag or curve drag becomes one undo step; a press also commits any earlier edit.
+ * Record settings edits until the returned stop runs. Pressed pointers hold the entry open until
+ * the last one lifts, so a whole slider or curve drag becomes one undo step; the first press of a
+ * gesture commits any earlier edit. Losing focus releases every pointer, since their ups go unseen.
  */
 export function startSettingsHistory() {
-	reset();
-	const press = () => {
-		if (pending) commit();
-		pressed = true;
+	const press = (event: PointerEvent) => {
+		if (!pointers.size) flush();
+		pointers.add(event.pointerId);
 	};
-	const release = () => {
-		pressed = false;
-		if (pending) settleLater();
+	// Changes still queued at a release happened during the gesture, so they settle into it first.
+	const release = (event: PointerEvent) => {
+		settle();
+		pointers.delete(event.pointerId);
+		if (!pointers.size && pending !== undefined) settleLater();
+	};
+	const releaseAll = () => {
+		settle();
+		pointers.clear();
+		if (pending !== undefined) settleLater();
 	};
 	const unsubscribers = [...KEYS.map((key) => STORES[key]), sourceMeta].map((store) =>
 		store.listen(changed)
 	);
+	// Listening mounts persistent stores, which can load saved values, so the baseline comes after.
+	reset();
 	window.addEventListener('pointerdown', press, true);
 	window.addEventListener('pointerup', release, true);
 	window.addEventListener('pointercancel', release, true);
-	window.addEventListener('blur', release);
+	window.addEventListener('blur', releaseAll);
 	return () => {
 		for (const unsubscribe of unsubscribers) unsubscribe();
 		window.removeEventListener('pointerdown', press, true);
 		window.removeEventListener('pointerup', release, true);
 		window.removeEventListener('pointercancel', release, true);
-		window.removeEventListener('blur', release);
+		window.removeEventListener('blur', releaseAll);
 		clearTimeout(timer);
-		pending = false;
-		pressed = false;
+		queued = false;
+		pending = undefined;
+		pointers.clear();
 	};
 }
