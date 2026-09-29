@@ -30,7 +30,6 @@
 	import ScopesPanel from './components/scopes/ScopesPanel.svelte';
 	import Studio from './components/studio/Studio.svelte';
 	import { startAutoProcessing } from '$lib/processing/client';
-	import { startSourceEffects } from '$lib/processing/source-effects';
 	import {
 		clearAllImageData,
 		isSourceSuperseded,
@@ -66,15 +65,11 @@
 
 	onMount(() => {
 		const stopProcessing = startAutoProcessing();
-		const stopSourceEffects = startSourceEffects();
 		void restorePersistedImages().catch((error) => {
 			if (isSourceSuperseded(error)) return;
 			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
 		});
-		return () => {
-			stopProcessing();
-			stopSourceEffects();
-		};
+		return stopProcessing;
 	});
 
 	function chooseImage() {
