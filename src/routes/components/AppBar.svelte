@@ -29,6 +29,7 @@
 		type PreviewMode
 	} from '$lib/stores/app';
 	import { addEffect, effectStepsLeft } from '$lib/stores/effects';
+	import { canRedo, canUndo, redo, undo } from '$lib/stores/history';
 	import { browser } from '$app/environment';
 	import { supportsWebGL2 } from '$lib/processing/lut-view';
 	import { setThemeChoice, startTheme, themeChoice, type ThemeChoice } from '$lib/theme';
@@ -77,9 +78,25 @@
 	}
 
 	const command = (letter: string) => (mac ? `⌘${letter}` : `Ctrl+${letter}`);
+	const redoShortcut = $derived(mac ? '⇧⌘Z' : 'Ctrl+Shift+Z');
 
-	/** Commands with the modifier, and bare view keys that leave browser zoom alone. */
-	const MODIFIED: Record<string, () => void> = { o: () => onChooseImage(), e: exportPng };
+	/** Commands with the modifier. Ctrl+Y also redoes off macOS, where ⌘Y opens browser history. */
+	function modifiedCommand(event: KeyboardEvent) {
+		switch (event.key.toLowerCase()) {
+			case 'o':
+				return onChooseImage;
+			case 'e':
+				return exportPng;
+			case 'z':
+				return event.shiftKey ? redo : undo;
+			case 'y':
+				return mac || event.shiftKey ? undefined : redo;
+		}
+	}
+	/** Fields with their own undo. Checkboxes, sliders, and buttons have none, so undo passes them. */
+	const TEXT_INPUT =
+		'textarea, input:not([type]), input:is([type=text], [type=search], [type=number], [type=email], [type=url], [type=tel], [type=password])';
+	/** Bare view keys that leave browser zoom alone. */
 	const BARE: Record<string, () => void> = {
 		'+': () => $previewCommands?.zoomIn(),
 		'=': () => $previewCommands?.zoomIn(),
@@ -89,18 +106,22 @@
 	};
 
 	function shortcut(event: KeyboardEvent) {
-		const target = event.target as HTMLElement | null;
-		if (event.altKey || target?.closest('input, textarea, select, [contenteditable="true"]'))
-			return;
 		const modified = mac ? event.metaKey : event.ctrlKey;
 		const other = mac ? event.ctrlKey : event.metaKey;
-		if (other) return;
+		if (event.defaultPrevented || event.altKey || other) return;
 		const run = modified
-			? MODIFIED[event.key.toLowerCase()]
+			? modifiedCommand(event)
 			: hasImage && !event.shiftKey
 				? BARE[event.key]
 				: undefined;
 		if (!run) return;
+		const target = event.target instanceof HTMLElement ? event.target : undefined;
+		// Text editors keep their own undo; other commands leave every form field alone.
+		const field =
+			run === undo || run === redo
+				? target?.isContentEditable || target?.closest(TEXT_INPUT)
+				: target?.closest('input, textarea, select, [contenteditable="true"]');
+		if (field) return;
 		event.preventDefault();
 		run();
 	}
@@ -139,6 +160,13 @@
 		<MenubarMenu>
 			<MenubarTrigger class="px-2 text-sm font-normal">Edit</MenubarTrigger>
 			<MenubarContent align="start" class="min-w-52">
+				<MenubarItem disabled={!$canUndo} onSelect={undo}>
+					Undo<MenubarShortcut>{command('Z')}</MenubarShortcut>
+				</MenubarItem>
+				<MenubarItem disabled={!$canRedo} onSelect={redo}>
+					Redo<MenubarShortcut>{redoShortcut}</MenubarShortcut>
+				</MenubarItem>
+				<MenubarSeparator />
 				<MenubarCheckboxItem
 					checked={$cropping}
 					disabled={!hasImage || !$previewCommands}
@@ -161,9 +189,8 @@
 					<MenubarSubTrigger>Adjustments</MenubarSubTrigger>
 					<MenubarSubContent class="min-w-52">
 						{#each EFFECT_KINDS as kind (kind)}
-							<MenubarItem
-								disabled={$effectStepsLeft < 1}
-								onSelect={() => adjust(kind)}>{EFFECTS[kind].label}</MenubarItem
+							<MenubarItem disabled={$effectStepsLeft < 1} onSelect={() => adjust(kind)}
+								>{EFFECTS[kind].label}</MenubarItem
 							>
 						{/each}
 					</MenubarSubContent>

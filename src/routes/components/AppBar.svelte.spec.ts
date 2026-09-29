@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { ditherSettings } from '$lib/stores/app';
+import { ditherSettings, updateDitherSettings } from '$lib/stores/app';
+import { startSettingsHistory } from '$lib/stores/history';
 import AppBar from './AppBar.svelte';
 import { previewCommands } from './preview-commands';
 
@@ -59,4 +60,60 @@ it('sets the dither algorithm from Image > Dither', async () => {
 	focus(page.getByRole('menuitemradio', { name: 'Sierra Lite' }).element());
 	await userEvent.keyboard('{Enter}');
 	await expect.poll(() => ditherSettings.get().algorithm).toBe('sierra-lite');
+});
+
+it('undoes and redoes settings with Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y', async () => {
+	const stop = startSettingsHistory();
+	try {
+		await render(AppBar, {
+			hasImage: true,
+			studio: false,
+			onChooseImage: () => {},
+			onClear: () => {}
+		});
+		updateDitherSettings({ algorithm: 'atkinson' });
+		await userEvent.keyboard('{Control>}z{/Control}');
+		expect(ditherSettings.get().algorithm).toBe('none');
+		await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+		expect(ditherSettings.get().algorithm).toBe('atkinson');
+		await userEvent.keyboard('{Control>}z{/Control}');
+		await userEvent.keyboard('{Control>}y{/Control}');
+		expect(ditherSettings.get().algorithm).toBe('atkinson');
+	} finally {
+		stop();
+	}
+});
+
+it('leaves Ctrl+Z to text editors and handled keys, and undoes from other controls', async () => {
+	const stop = startSettingsHistory();
+	const fields = document.body.appendChild(document.createElement('div'));
+	fields.innerHTML =
+		'<input type="number"><div contenteditable><span tabindex="-1">text</span></div><input type="checkbox">';
+	const handled = (event: KeyboardEvent) => event.preventDefault();
+	const undoKey = () => userEvent.keyboard('{Control>}z{/Control}');
+	try {
+		await render(AppBar, {
+			hasImage: true,
+			studio: false,
+			onChooseImage: () => {},
+			onClear: () => {}
+		});
+		updateDitherSettings({ algorithm: 'atkinson' });
+		for (const selector of ['input[type=number]', 'span']) {
+			focus(fields.querySelector(selector)!);
+			await undoKey();
+			expect(ditherSettings.get().algorithm).toBe('atkinson');
+		}
+		focus(fields.querySelector('input[type=checkbox]')!);
+		window.addEventListener('keydown', handled, true);
+		await undoKey();
+		expect(ditherSettings.get().algorithm).toBe('atkinson');
+		window.removeEventListener('keydown', handled, true);
+		await undoKey();
+		expect(ditherSettings.get().algorithm).toBe('none');
+	} finally {
+		window.removeEventListener('keydown', handled, true);
+		fields.remove();
+		stop();
+	}
 });
