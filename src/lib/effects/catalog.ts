@@ -1,4 +1,4 @@
-import type { ColourChannel, Curve, CurvePoints, Effect } from 'ditherette';
+import type { ColourChannel, CurvePoints, Effect, OneInputCurve } from 'ditherette';
 
 export type EffectKind = Effect['effect'];
 export type EffectOf<K extends EffectKind> = Extract<Effect, { effect: K }>;
@@ -97,7 +97,7 @@ export const FLAT: CurvePoints = [
  * A neutral curve from `x` to `y`: a remap on the diagonal when it reads and writes one channel,
  * otherwise a flat adjustment.
  */
-export function neutralCurve(x: ColourChannel, y: ColourChannel): Curve {
+export function neutralCurve(x: ColourChannel, y: ColourChannel): OneInputCurve {
 	return sameChannel(x, y)
 		? { kind: 'remap', x, y, points: STRAIGHT }
 		: { kind: 'adjust', x, y, points: FLAT };

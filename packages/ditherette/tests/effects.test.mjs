@@ -239,6 +239,22 @@ test('invalid effects fail with indexed paths before any work', () =>
 		assert.deepEqual(apply(processor, [halve, double]).data, ramp().data, 'instance stays usable');
 	}));
 
+const twoInputCurve = {
+	kind: 'adjust',
+	x: { model: 'hsl', channel: 'hue' },
+	x2: { model: 'oklch', channel: 'lightness' },
+	y: { model: 'cielch', channel: 'hue' },
+	grid: {
+		columns: [0.1, 0.55],
+		rows: [0, 0.5, 1],
+		values: [
+			[0.5, 0.8],
+			[0.2, 0.5],
+			[0.7, 0.3]
+		]
+	}
+};
+
 const grading = {
 	curves: {
 		effect: 'curves',
@@ -327,6 +343,15 @@ test('every grading effect runs, keeps alpha, and is exact when neutral', () =>
 		assert.deepEqual(composed, staged);
 	}));
 
+test('two-input curves run and preserve alpha', () =>
+	withProcessor((processor) => {
+		const source = ramp();
+		const graded = apply(processor, [{ effect: 'curves', enabled: true, curves: [twoInputCurve] }]);
+		assert.notDeepEqual(graded.data, source.data);
+		for (let index = 3; index < source.data.length; index += 4)
+			assert.equal(graded.data[index], source.data[index]);
+	}));
+
 test('grading arguments are validated with indexed paths', () =>
 	withProcessor((processor) => {
 		const fails = (effect, path) =>
@@ -336,6 +361,7 @@ test('grading arguments are validated with indexed paths', () =>
 				path
 			);
 		const curve = grading.curves.curves[0];
+		const gridCurve = twoInputCurve;
 		const withCurve = (changed) => ({ ...grading.curves, curves: [changed] });
 		fails({ ...grading.curves, curves: Array(17).fill(curve) }, 'effects.1.curves');
 		fails(withCurve({ ...curve, kind: 'blend' }), 'effects.1.curves.0.kind');
@@ -429,6 +455,101 @@ test('grading arguments are validated with indexed paths', () =>
 			'effects.1.curves.0.points.2.1'
 		);
 		fails(withCurve({ ...curve, mode: 'absolute' }), 'effects.1.curves.0.mode');
+		fails(withCurve({ ...gridCurve, points: curve.points }), 'effects.1.curves.0.points');
+		fails(
+			withCurve({
+				...gridCurve,
+				kind: 'remap',
+				x: { model: 'hsv', channel: 'lightness' }
+			}),
+			'effects.1.curves.0.kind'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				x2: { model: 'hsv', channel: 'lightness' },
+				y: { model: 'unknown', channel: 'red' }
+			}),
+			'effects.1.curves.0.x2.channel'
+		);
+		fails(withCurve({ ...gridCurve, x2: gridCurve.x }), 'effects.1.curves.0.x2');
+		fails(
+			withCurve({ ...gridCurve, y: { model: 'unknown', channel: 'red' }, grid: null }),
+			'effects.1.curves.0.y.model'
+		);
+		fails(
+			withCurve({ ...gridCurve, grid: { ...gridCurve.grid, rows: [0, , 1] } }),
+			'effects.1.curves.0.grid.rows.1'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				grid: { ...gridCurve.grid, values: [[0.5], ...gridCurve.grid.values.slice(1)] }
+			}),
+			'effects.1.curves.0.grid.values.0'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				grid: { ...gridCurve.grid, values: gridCurve.grid.values.slice(1) }
+			}),
+			'effects.1.curves.0.grid.values'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				grid: {
+					...gridCurve.grid,
+					values: [[1.0001, 0.5], ...gridCurve.grid.values.slice(1)]
+				}
+			}),
+			'effects.1.curves.0.grid.values.0.0'
+		);
+		fails(
+			withCurve({ ...gridCurve, grid: { ...gridCurve.grid, extra: true } }),
+			'effects.1.curves.0.grid.extra'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				grid: {
+					...gridCurve.grid,
+					columns: [0, 0.9995],
+					values: gridCurve.grid.values.map(() => [0.5, 0.5])
+				}
+			}),
+			'effects.1.curves.0.grid.columns.0'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				grid: {
+					...gridCurve.grid,
+					columns: Array.from({ length: 49 }, (_, index) => index / 50),
+					values: gridCurve.grid.values.map(() => Array(49).fill(0.5))
+				}
+			}),
+			'effects.1.curves.0.grid.columns'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				grid: { ...gridCurve.grid, columns: [0.1], values: gridCurve.grid.values.map(() => [0.5]) }
+			}),
+			'effects.1.curves.0.grid.columns'
+		);
+		fails(
+			withCurve({
+				...gridCurve,
+				x2: { model: 'srgb', channel: 'green' },
+				grid: {
+					...gridCurve.grid,
+					rows: Array.from({ length: 17 }, (_, index) => index / 16),
+					values: Array.from({ length: 17 }, () => [0.5, 0.5])
+				}
+			}),
+			'effects.1.curves.0.grid.rows'
+		);
 		fails(
 			{
 				effect: 'curves',
@@ -678,6 +799,23 @@ test('isEffect vets one step without Wasm', () => {
 		points: Array.from({ length: 16 }, (_, index) => [index / 15, index / 15])
 	};
 	assert.equal(isEffect({ ...grading.curves, curves: Array(16).fill(boundaryCurve) }), true);
+	const columns = Array.from({ length: 48 }, (_, index) => index / 48);
+	const rows = Array.from({ length: 16 }, (_, index) => index / 15);
+	assert.equal(
+		isEffect({
+			...grading.curves,
+			curves: [
+				{
+					kind: 'adjust',
+					x: { model: 'hsl', channel: 'hue' },
+					x2: { model: 'srgb', channel: 'green' },
+					y: { model: 'oklch', channel: 'chroma' },
+					grid: { columns, rows, values: rows.map(() => columns.map(() => 0.5)) }
+				}
+			]
+		}),
+		true
+	);
 	assert.equal(isEffect(neutral.curves), true);
 	for (const step of [
 		{ effect: 'exposure', enabled: true, stops: 100 },

@@ -147,23 +147,187 @@ function pointsWithHueSeam(value: unknown, periodic: boolean, path: string): [nu
 	return normalized;
 }
 
-/** Zero to 16 ordered remaps or adjustments, normalized in Rust validation order. */
+function strictArray(
+	value: unknown,
+	minimum: number,
+	maximum: number,
+	path: string,
+	message: string
+): unknown[] {
+	if (!Array.isArray(value) || value.length < minimum || value.length > maximum)
+		throw new DitheretteError('invalid-settings', path, message);
+	strictArrayKeys(value, path);
+	return value;
+}
+
+function strictArrayKeys(value: unknown[], path: string): void {
+	for (const key of Reflect.ownKeys(value)) {
+		if (
+			key !== 'length' &&
+			(typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= value.length)
+		)
+			throw new DitheretteError(
+				'invalid-settings',
+				typeof key === 'string' ? `${path}.${key}` : path,
+				'Unknown field.'
+			);
+	}
+}
+
+function gridAxis(value: unknown[], cyclic: boolean, path: string): number[] {
+	const positions: number[] = [];
+	for (let index = 0; index < value.length; index++) {
+		const at = `${path}.${index}`;
+		const raw = Object.hasOwn(value, index) ? value[index] : undefined;
+		const position = cyclic
+			? typeof raw === 'number'
+				? Math.fround(raw)
+				: Number.NaN
+			: bounded(raw, 0, 1, at);
+		if (cyclic && (!Number.isFinite(position) || position < 0 || position >= 1))
+			throw new DitheretteError(
+				'invalid-settings',
+				at,
+				'Value must be finite and at least 0 but less than 1.'
+			);
+		if (index > 0 && Math.fround(position - positions[index - 1]) < minGap)
+			throw new DitheretteError(
+				'invalid-settings',
+				at,
+				'Positions must increase by at least 0.001.'
+			);
+		positions.push(position);
+	}
+
+	if (cyclic) {
+		const seamGap = Math.fround(Math.fround(1 - positions.at(-1)!) + positions[0]);
+		if (seamGap < minGap)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.0`,
+				'The wrapped seam must span at least 0.001.'
+			);
+	} else {
+		if (positions[0] !== 0)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.0`,
+				'An open grid axis must start at 0.'
+			);
+		const last = positions.length - 1;
+		if (positions[last] !== 1)
+			throw new DitheretteError(
+				'invalid-settings',
+				`${path}.${last}`,
+				'An open grid axis must end at 1.'
+			);
+	}
+	return positions;
+}
+
+function curveGrid(value: unknown, xHue: boolean, x2Hue: boolean, path: string) {
+	const input = object(value, ['columns', 'rows', 'values'], 'invalid-settings', path);
+	const rawColumns = strictArray(
+		field(input, 'columns'),
+		2,
+		48,
+		`${path}.columns`,
+		'Expected 2 to 48 columns.'
+	);
+	const rawRows = strictArray(
+		field(input, 'rows'),
+		2,
+		16,
+		`${path}.rows`,
+		'Expected 2 to 16 rows.'
+	);
+	const columns = gridAxis(rawColumns, xHue, `${path}.columns`);
+	const rows = gridAxis(rawRows, x2Hue, `${path}.rows`);
+	const rawValues = field(input, 'values');
+	if (!Array.isArray(rawValues) || rawValues.length !== rows.length)
+		throw new DitheretteError(
+			'invalid-settings',
+			`${path}.values`,
+			'Grid values must contain one entry per row.'
+		);
+	strictArrayKeys(rawValues, `${path}.values`);
+	const values: number[][] = [];
+	for (let row = 0; row < rows.length; row++) {
+		const rowPath = `${path}.values.${row}`;
+		const rawRow = Object.hasOwn(rawValues, row) ? rawValues[row] : undefined;
+		if (!Array.isArray(rawRow) || rawRow.length !== columns.length)
+			throw new DitheretteError(
+				'invalid-settings',
+				rowPath,
+				'Each grid row must contain one value per column.'
+			);
+		strictArrayKeys(rawRow, rowPath);
+		values.push(
+			columns.map((_, column) =>
+				bounded(
+					Object.hasOwn(rawRow, column) ? rawRow[column] : undefined,
+					0,
+					1,
+					`${rowPath}.${column}`
+				)
+			)
+		);
+	}
+	return { columns, rows, values };
+}
+
+/** Zero to 16 ordered one-input or two-input curves, normalized in Rust validation order. */
 function curves(value: unknown, path: string) {
 	if (!Array.isArray(value) || value.length > 16)
 		throw new DitheretteError('invalid-settings', path, 'Expected 0 to 16 curves.');
 	const normalized = [];
 	for (let index = 0; index < value.length; index++) {
 		const curvePath = `${path}.${index}`;
+		const rawCurve: unknown = Object.hasOwn(value, index) ? value[index] : undefined;
+		const twoInput =
+			typeof rawCurve === 'object' &&
+			rawCurve !== null &&
+			!Array.isArray(rawCurve) &&
+			Object.hasOwn(rawCurve, 'x2');
 		const curve = object(
-			Object.hasOwn(value, index) ? value[index] : undefined,
-			['kind', 'x', 'y', 'points'],
+			rawCurve,
+			twoInput ? ['kind', 'x', 'x2', 'y', 'grid'] : ['kind', 'x', 'y', 'points'],
 			'invalid-settings',
 			curvePath
 		);
 		const kind = field(curve, 'kind');
 		if (kind !== 'remap' && kind !== 'adjust')
 			throw new DitheretteError('invalid-settings', `${curvePath}.kind`, 'Unknown curve kind.');
+		if (twoInput && kind !== 'adjust')
+			throw new DitheretteError(
+				'invalid-settings',
+				`${curvePath}.kind`,
+				'A two-input curve must be an adjustment.'
+			);
 		const x = colourChannel(field(curve, 'x'), `${curvePath}.x`);
+		if (twoInput) {
+			const x2 = colourChannel(field(curve, 'x2'), `${curvePath}.x2`);
+			if (x2.model === x.model && x2.channel === x.channel)
+				throw new DitheretteError(
+					'invalid-settings',
+					`${curvePath}.x2`,
+					'A two-input curve must use two different input channels.'
+				);
+			const y = colourChannel(field(curve, 'y'), `${curvePath}.y`);
+			normalized.push({
+				kind,
+				x,
+				x2,
+				y,
+				grid: curveGrid(
+					field(curve, 'grid'),
+					x.channel === 'hue',
+					x2.channel === 'hue',
+					`${curvePath}.grid`
+				)
+			});
+			continue;
+		}
 		const y = colourChannel(field(curve, 'y'), `${curvePath}.y`);
 		if (kind === 'remap' && (x.model !== y.model || x.channel !== y.channel))
 			throw new DitheretteError(

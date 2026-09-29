@@ -231,15 +231,37 @@ export interface LevelsEffect {
 	readonly output: LevelsPoints;
 }
 
+/** A rectangular two-input adjustment grid. Values are indexed as `[row][column]`. */
+export interface CurveGrid {
+	readonly columns: readonly number[];
+	readonly rows: readonly number[];
+	readonly values: readonly (readonly number[])[];
+}
+
 /** One remap or midpoint-relative adjustment from an original input channel to an output channel. */
-export interface Curve {
+export interface OneInputCurve {
 	readonly kind: 'remap' | 'adjust';
 	readonly x: ColourChannel;
 	readonly y: ColourChannel;
 	readonly points: CurvePoints;
+	readonly x2?: never;
+	readonly grid?: never;
 }
 
-/** Up to 16 ordered curves. Each curve reads its input from the effect's original pixel. */
+/** A midpoint-relative adjustment selected by two original input channels. */
+export interface TwoInputCurve {
+	readonly kind: 'adjust';
+	readonly x: ColourChannel;
+	readonly x2: ColourChannel;
+	readonly y: ColourChannel;
+	readonly grid: CurveGrid;
+	readonly points?: never;
+}
+
+/** A strict one-input or two-input curve. */
+export type Curve = OneInputCurve | TwoInputCurve;
+
+/** Up to 16 ordered curves. Every input reads from the effect's original pixel. */
 export interface CurvesEffect {
 	readonly effect: 'curves';
 	readonly enabled: boolean;

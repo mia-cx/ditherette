@@ -1549,6 +1549,39 @@
 				}
 			],
 			"contentSha256": "7900cdfe7b725d9b6ca31877b57ed7030ac30585c2c0a13c1ce3b2a97a49dd01"
+		},
+		{
+			"name": "effects-two-input-curves",
+			"summary": "Add two-input control-grid curves",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "38d69add74006a1e5fc32e1950e7c48cfd2652b779b138406a18a3522af6d615"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "e42e085a589d775c1a3f710457b4ebe2c0bd994ebc9b21843f5752f5f03f8a04"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "06ea3a6db12ac44e917ee2d4e3da2e1589e7a46dc2f775bf1f6f19b17a587c23"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "ab89b7914e4f6f7698461024ddd0fb12ca0f2be94cb8cc16f728120a269e6ee0"
+					}
+				}
+			],
+			"contentSha256": "3aaca1bd1b7ea892eb9b21449117e497c1514beee39455f049b48c17dee124c1"
 		}
 	]
 }

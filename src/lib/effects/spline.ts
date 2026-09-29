@@ -31,7 +31,7 @@ export function evaluateCurve(points: readonly CurvePoint[], value: number): num
 }
 
 /** The Fritsch–Butland tangent between two secants, zero at a turning point. */
-function tangent(before: number, after: number, widthBefore: number, widthAfter: number) {
+export function tangent(before: number, after: number, widthBefore: number, widthAfter: number) {
 	if (before * after <= 0) return 0;
 	const w1 = 2 * widthAfter + widthBefore;
 	const w2 = widthAfter + 2 * widthBefore;
@@ -59,4 +59,31 @@ export function evaluatePeriodicCurve(points: readonly CurvePoint[], value: numb
 	const c2 = (3 * slope - 2 * m0 - m1) / h;
 	const c3 = (m0 + m1 - 2 * slope) / (h * h);
 	return points[k]![1] + s * (m0 + s * (c2 + s * c3));
+}
+
+/**
+ * Evaluate a closed sequence on a wrapping axis, as a two-input curve's hue axis does:
+ * `positions` rise within [0, 1) with no duplicate seam, and the last knot joins the first one turn
+ * later. Every tangent uses its wrapped neighbours' secants.
+ */
+export function evaluateClosedCurve(
+	positions: readonly number[],
+	values: readonly number[],
+	value: number
+): number {
+	const n = positions.length;
+	const at = (k: number) => positions[k % n]! + Math.floor(k / n);
+	const secant = (k: number) => (values[(k + 1) % n]! - values[k % n]!) / (at(k + 1) - at(k));
+	const width = (k: number) => at(k + 1) - at(k);
+	const tangentAt = (k: number) =>
+		tangent(secant((k + n - 1) % n), secant(k % n), width((k + n - 1) % n), width(k % n));
+	let x = ((value % 1) + 1) % 1;
+	if (x < positions[0]!) x += 1;
+	let k = n - 1;
+	for (let index = 0; index < n - 1; index++) if (x >= at(index) && x < at(index + 1)) k = index;
+	const [m0, m1, h, slope] = [tangentAt(k), tangentAt(k + 1), width(k), secant(k)];
+	const s = x - at(k);
+	const c2 = (3 * slope - 2 * m0 - m1) / h;
+	const c3 = (m0 + m1 - 2 * slope) / (h * h);
+	return values[k]! + s * (m0 + s * (c2 + s * c3));
 }

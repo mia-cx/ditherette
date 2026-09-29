@@ -68,7 +68,9 @@ describe('effect layers', () => {
 	it('runs a curves layer as one package step with every curve in order', () => {
 		const layer = addEffect('curves');
 		if (layer.step.effect !== 'curves') throw new Error('Expected curves.');
-		const lightness = { ...layer.step.curves[0]!, points: LIFT };
+		const [first] = layer.step.curves;
+		if (!first || first.x2) throw new Error('Expected a one-input curve.');
+		const lightness = { ...first, points: LIFT };
 		const hue = neutralCurve(
 			{ model: 'hsl', channel: 'hue' },
 			{ model: 'hsl', channel: 'saturation' }

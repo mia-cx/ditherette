@@ -14,6 +14,7 @@ export type {
 	ColourChannel,
 	ColourModel,
 	Curve,
+	CurveGrid,
 	CurvePoints,
 	CurvesEffect,
 	Effect,
@@ -23,6 +24,7 @@ export type {
 	HueSaturationEffect,
 	LevelsEffect,
 	LevelsPoints,
+	OneInputCurve,
 	RecolourEffect,
 	RecolourGroup,
 	RecolourRecipe,
@@ -46,7 +48,8 @@ export type {
 	Progress,
 	ResizeAnchor,
 	ResizeRequest,
-	Rgba8Image
+	Rgba8Image,
+	TwoInputCurve
 } from './types.js';
 
 /** Initialize one isolated browser processor. Importing the package itself loads no Wasm or workers. */

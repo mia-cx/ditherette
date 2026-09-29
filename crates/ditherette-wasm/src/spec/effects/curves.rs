@@ -1,4 +1,4 @@
-//! Ordered colour-model channel remaps and adjustments.
+//! Ordered one-input and two-input colour-model channel adjustments.
 
 use serde::{Deserialize, Serialize};
 
@@ -13,9 +13,15 @@ use super::{
 /// Fewest and most control points one curve accepts.
 pub const MIN_POINTS: usize = 2;
 pub const MAX_POINTS: usize = 16;
+/// Fewest and most columns a two-input grid accepts.
+pub const MIN_COLUMNS: usize = 2;
+pub const MAX_COLUMNS: usize = 48;
+/// Fewest and most rows a two-input grid accepts.
+pub const MIN_ROWS: usize = 2;
+pub const MAX_ROWS: usize = 16;
 /// Most curves one effect accepts.
 pub const MAX_CURVES: usize = 16;
-/// Smallest gap between neighbouring x values. Closer knots make the cubic's `1 / h²` overflow.
+/// Smallest gap between neighbouring positions. Closer knots make the cubic's `1 / h²` overflow.
 pub const MIN_GAP: f32 = 0.001;
 
 /// Every channel name used by the supported colour models.
@@ -99,14 +105,42 @@ pub enum CurveKind {
     Adjust,
 }
 
-/// One curve. The input always comes from the effect's original pixel.
+/// A one-input curve. Its input always comes from the effect's original pixel.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Curve {
+pub struct OneInputCurve {
     pub kind: CurveKind,
     pub x: ColourChannel,
     pub y: ColourChannel,
     pub points: Vec<[f32; 2]>,
+}
+
+/// A rectangular two-input control grid in row-major order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CurveGrid {
+    pub columns: Vec<f32>,
+    pub rows: Vec<f32>,
+    pub values: Vec<Vec<f32>>,
+}
+
+/// A two-input adjustment. Both inputs come from the effect's original pixel.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TwoInputCurve {
+    pub kind: CurveKind,
+    pub x: ColourChannel,
+    pub x2: ColourChannel,
+    pub y: ColourChannel,
+    pub grid: CurveGrid,
+}
+
+/// A strict one-input or two-input curve.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Curve {
+    OneInput(OneInputCurve),
+    TwoInput(TwoInputCurve),
 }
 
 /// Up to 16 ordered channel curves.
@@ -163,7 +197,7 @@ impl Spline {
     }
 }
 
-/// Cyclic Fritsch–Butland spline for a hue-input adjustment axis.
+/// Cyclic Fritsch–Butland spline for a one-input hue adjustment.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PeriodicSpline {
     points: Vec<[f32; 2]>,
@@ -225,12 +259,81 @@ fn tangent(before: f32, after: f32, h_before: f32, h_after: f32) -> f32 {
 fn hermite(points: &[[f32; 2]], tangents: &[f32], k: usize, x: f32) -> f32 {
     let [x0, y0] = points[k];
     let [x1, y1] = points[k + 1];
+    hermite_segment(x0, y0, x1, y1, tangents[k], tangents[k + 1], x)
+}
+
+fn hermite_segment(x0: f32, y0: f32, x1: f32, y1: f32, m0: f32, m1: f32, x: f32) -> f32 {
     let (h, secant) = (x1 - x0, (y1 - y0) / (x1 - x0));
-    let (m0, m1) = (tangents[k], tangents[k + 1]);
     let c2 = (3.0 * secant - 2.0 * m0 - m1) / h;
     let c3 = (m0 + m1 - 2.0 * secant) / (h * h);
     let s = x - x0;
     y0 + s * (m0 + s * (c2 + s * c3))
+}
+
+/// Evaluates an ordinary open Fritsch–Butland sequence.
+pub fn eval_open_sequence(positions: &[f32], values: &[f32], x: f32) -> f32 {
+    let points: Vec<_> = positions
+        .iter()
+        .zip(values)
+        .map(|(&position, &value)| [position, value])
+        .collect();
+    Spline::new(&points).eval(x)
+}
+
+/// Evaluates a closed Fritsch–Butland sequence without a duplicate seam knot.
+pub fn eval_closed_sequence(positions: &[f32], values: &[f32], x: f32) -> f32 {
+    let count = positions.len();
+    let segment = |k: usize| {
+        let next = (k + 1) % count;
+        let x1 = if next == 0 {
+            positions[0] + 1.0
+        } else {
+            positions[next]
+        };
+        let h = x1 - positions[k];
+        (h, (values[next] - values[k]) / h)
+    };
+    let tangents: Vec<_> = (0..count)
+        .map(|k| {
+            let previous = (k + count - 1) % count;
+            let (h_before, before) = segment(previous);
+            let (h_after, after) = segment(k);
+            tangent(before, after, h_before, h_after)
+        })
+        .collect();
+
+    let mut x = x.rem_euclid(1.0);
+    let k = if x < positions[0] {
+        x += 1.0;
+        count - 1
+    } else {
+        (0..count - 1)
+            .find(|&k| x < positions[k + 1])
+            .unwrap_or(count - 1)
+    };
+    let next = (k + 1) % count;
+    let x1 = if next == 0 {
+        positions[0] + 1.0
+    } else {
+        positions[next]
+    };
+    hermite_segment(
+        positions[k],
+        values[k],
+        x1,
+        values[next],
+        tangents[k],
+        tangents[next],
+        x,
+    )
+}
+
+fn eval_sequence(positions: &[f32], values: &[f32], x: f32, cyclic: bool) -> f32 {
+    if cyclic {
+        eval_closed_sequence(positions, values, x)
+    } else {
+        eval_open_sequence(positions, values, x)
+    }
 }
 
 enum CurveSpline {
@@ -255,33 +358,32 @@ impl CurveSpline {
     }
 }
 
-struct PreparedCurve<'a> {
-    curve: &'a Curve,
+struct PreparedOneInput<'a> {
+    curve: &'a OneInputCurve,
     x: ResolvedChannel,
     y: ResolvedChannel,
     spline: CurveSpline,
 }
 
-impl Curve {
+struct PreparedTwoInput<'a> {
+    curve: &'a TwoInputCurve,
+    x: ResolvedChannel,
+    x2: ResolvedChannel,
+    y: ResolvedChannel,
+}
+
+enum PreparedCurve<'a> {
+    OneInput(PreparedOneInput<'a>),
+    TwoInput(PreparedTwoInput<'a>),
+}
+
+impl OneInputCurve {
     fn is_identity_remap(&self) -> bool {
         self.kind == CurveKind::Remap && self.points.as_slice() == [[0.0, 0.0], [1.0, 1.0]]
     }
 
     fn is_neutral_adjustment(&self) -> bool {
         self.kind == CurveKind::Adjust && self.points.iter().all(|point| point[1] == 0.5)
-    }
-
-    fn validate_channel(
-        channel: ColourChannel,
-        path: &str,
-    ) -> Result<ResolvedChannel, DitheretteError> {
-        channel.resolve().ok_or_else(|| {
-            DitheretteError::new(
-                ErrorCode::InvalidSettings,
-                format!("{path}.channel"),
-                "Channel does not belong to the selected colour model.",
-            )
-        })
     }
 
     fn validate_periodic_points(&self, path: &str) -> Result<(), DitheretteError> {
@@ -374,6 +476,245 @@ impl Curve {
     }
 }
 
+impl TwoInputCurve {
+    fn is_neutral_adjustment(&self) -> bool {
+        self.grid.values.iter().flatten().all(|&value| value == 0.5)
+    }
+
+    fn map(
+        &self,
+        x: ResolvedChannel,
+        x2: ResolvedChannel,
+        y: ResolvedChannel,
+        source: [f32; 3],
+        current: [f32; 3],
+    ) -> [f32; 3] {
+        if self.is_neutral_adjustment() {
+            return current;
+        }
+        let x_coordinates = x.model.to_normalized(source);
+        let x2_coordinates = if x2.model == x.model {
+            x_coordinates
+        } else {
+            x2.model.to_normalized(source)
+        };
+        let x_value = x_coordinates[x.index];
+        let x2_value = x2_coordinates[x2.index];
+        let row_results: Vec<_> = self
+            .grid
+            .values
+            .iter()
+            .map(|values| {
+                eval_sequence(
+                    &self.grid.columns,
+                    values,
+                    x_value,
+                    x.kind == ChannelKind::Hue,
+                )
+            })
+            .collect();
+        let curve = eval_sequence(
+            &self.grid.rows,
+            &row_results,
+            x2_value,
+            x2.kind == ChannelKind::Hue,
+        )
+        .clamp(0.0, 1.0);
+
+        let mut weight: f32 = 1.0;
+        if x.kind == ChannelKind::Hue {
+            weight = x.model.hue_weight(source, x_coordinates);
+        }
+        if x2.kind == ChannelKind::Hue {
+            weight = weight.min(x2.model.hue_weight(source, x2_coordinates));
+        }
+        if weight == 0.0 {
+            return current;
+        }
+
+        let mut y_coordinates = y.model.to_normalized(current);
+        if y.kind == ChannelKind::Hue {
+            weight = weight.min(y.model.hue_weight(current, y_coordinates));
+            if weight == 0.0 {
+                return current;
+            }
+        }
+        match y.kind {
+            ChannelKind::Hue => {
+                y_coordinates[y.index] =
+                    (y_coordinates[y.index] + weight * (curve - 0.5)).rem_euclid(1.0);
+            }
+            ChannelKind::Chroma => {
+                y_coordinates[y.index] *= 1.0 + weight * (2.0 * curve - 1.0);
+            }
+            ChannelKind::Other => {
+                y_coordinates[y.index] += weight * (curve - 0.5);
+            }
+        }
+        y.model.from_normalized(y_coordinates)
+    }
+
+    fn validate_axis(positions: &[f32], path: &str, cyclic: bool) -> Result<(), DitheretteError> {
+        for (index, &position) in positions.iter().enumerate() {
+            if cyclic {
+                if !position.is_finite() || !(0.0..1.0).contains(&position) {
+                    return Err(DitheretteError::new(
+                        ErrorCode::InvalidSettings,
+                        format!("{path}.{index}"),
+                        "Value must be finite and at least 0 but less than 1.",
+                    ));
+                }
+            } else {
+                check_bounded(position, 0.0, 1.0, format!("{path}.{index}"))?;
+            }
+            if index > 0 && position - positions[index - 1] < MIN_GAP {
+                return Err(DitheretteError::new(
+                    ErrorCode::InvalidSettings,
+                    format!("{path}.{index}"),
+                    format!("Positions must increase by at least {MIN_GAP}."),
+                ));
+            }
+        }
+
+        if cyclic {
+            let seam_gap = 1.0 - positions[positions.len() - 1] + positions[0];
+            if seam_gap < MIN_GAP {
+                return Err(DitheretteError::new(
+                    ErrorCode::InvalidSettings,
+                    format!("{path}.0"),
+                    format!("The wrapped seam must span at least {MIN_GAP}."),
+                ));
+            }
+        } else {
+            if positions[0] != 0.0 {
+                return Err(DitheretteError::new(
+                    ErrorCode::InvalidSettings,
+                    format!("{path}.0"),
+                    "An open grid axis must start at 0.",
+                ));
+            }
+            let last = positions.len() - 1;
+            if positions[last] != 1.0 {
+                return Err(DitheretteError::new(
+                    ErrorCode::InvalidSettings,
+                    format!("{path}.{last}"),
+                    "An open grid axis must end at 1.",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_grid(
+        &self,
+        path: &str,
+        x: ResolvedChannel,
+        x2: ResolvedChannel,
+    ) -> Result<(), DitheretteError> {
+        if !(MIN_COLUMNS..=MAX_COLUMNS).contains(&self.grid.columns.len()) {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.columns"),
+                format!("Expected {MIN_COLUMNS} to {MAX_COLUMNS} columns."),
+            ));
+        }
+        if !(MIN_ROWS..=MAX_ROWS).contains(&self.grid.rows.len()) {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.rows"),
+                format!("Expected {MIN_ROWS} to {MAX_ROWS} rows."),
+            ));
+        }
+        Self::validate_axis(
+            &self.grid.columns,
+            &format!("{path}.columns"),
+            x.kind == ChannelKind::Hue,
+        )?;
+        Self::validate_axis(
+            &self.grid.rows,
+            &format!("{path}.rows"),
+            x2.kind == ChannelKind::Hue,
+        )?;
+        if self.grid.values.len() != self.grid.rows.len() {
+            return Err(DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.values"),
+                "Grid values must contain one entry per row.",
+            ));
+        }
+        for (row, values) in self.grid.values.iter().enumerate() {
+            if values.len() != self.grid.columns.len() {
+                return Err(DitheretteError::new(
+                    ErrorCode::InvalidSettings,
+                    format!("{path}.values.{row}"),
+                    "Each grid row must contain one value per column.",
+                ));
+            }
+            for (column, &value) in values.iter().enumerate() {
+                check_bounded(value, 0.0, 1.0, format!("{path}.values.{row}.{column}"))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Curve {
+    fn validate_channel(
+        channel: ColourChannel,
+        path: &str,
+    ) -> Result<ResolvedChannel, DitheretteError> {
+        channel.resolve().ok_or_else(|| {
+            DitheretteError::new(
+                ErrorCode::InvalidSettings,
+                format!("{path}.channel"),
+                "Channel does not belong to the selected colour model.",
+            )
+        })
+    }
+
+    fn validate(&self, path: &str) -> Result<(), DitheretteError> {
+        match self {
+            Self::OneInput(curve) => {
+                let x = Self::validate_channel(curve.x, &format!("{path}.x"))?;
+                Self::validate_channel(curve.y, &format!("{path}.y"))?;
+                if curve.kind == CurveKind::Remap && curve.x != curve.y {
+                    return Err(DitheretteError::new(
+                        ErrorCode::InvalidSettings,
+                        format!("{path}.y"),
+                        "A remap must use the same input and output channel.",
+                    ));
+                }
+                let points_path = format!("{path}.points");
+                Curves::validate_points(&curve.points, &points_path)?;
+                if curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue {
+                    curve.validate_periodic_points(&points_path)?;
+                }
+                Ok(())
+            }
+            Self::TwoInput(curve) => {
+                if curve.kind != CurveKind::Adjust {
+                    return Err(DitheretteError::new(
+                        ErrorCode::InvalidSettings,
+                        format!("{path}.kind"),
+                        "A two-input curve must be an adjustment.",
+                    ));
+                }
+                let x = Self::validate_channel(curve.x, &format!("{path}.x"))?;
+                let x2 = Self::validate_channel(curve.x2, &format!("{path}.x2"))?;
+                if curve.x2 == curve.x {
+                    return Err(DitheretteError::new(
+                        ErrorCode::InvalidSettings,
+                        format!("{path}.x2"),
+                        "A two-input curve must use two different input channels.",
+                    ));
+                }
+                Self::validate_channel(curve.y, &format!("{path}.y"))?;
+                curve.validate_grid(&format!("{path}.grid"), x, x2)
+            }
+        }
+    }
+}
+
 impl Curves {
     /// Checks point count, bounds, and strictly increasing x, naming the failing point.
     pub fn validate_points(points: &[[f32; 2]], path: &str) -> Result<(), DitheretteError> {
@@ -409,21 +750,7 @@ impl Effect for Curves {
             ));
         }
         for (index, curve) in self.curves.iter().enumerate() {
-            let curve_path = format!("{path}.curves.{index}");
-            let x = Curve::validate_channel(curve.x, &format!("{curve_path}.x"))?;
-            Curve::validate_channel(curve.y, &format!("{curve_path}.y"))?;
-            if curve.kind == CurveKind::Remap && curve.x != curve.y {
-                return Err(DitheretteError::new(
-                    ErrorCode::InvalidSettings,
-                    format!("{curve_path}.y"),
-                    "A remap must use the same input and output channel.",
-                ));
-            }
-            let points_path = format!("{curve_path}.points");
-            Self::validate_points(&curve.points, &points_path)?;
-            if curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue {
-                curve.validate_periodic_points(&points_path)?;
-            }
+            curve.validate(&format!("{path}.curves.{index}"))?;
         }
         Ok(())
     }
@@ -435,28 +762,46 @@ impl Effect for Curves {
         let prepared: Vec<_> = self
             .curves
             .iter()
-            .map(|curve| {
-                let x = curve.x.resolve().expect("validated curves x channel");
-                let y = curve.y.resolve().expect("validated curves y channel");
-                PreparedCurve {
-                    curve,
-                    x,
-                    y,
-                    spline: CurveSpline::new(
-                        &curve.points,
-                        curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue,
-                    ),
+            .map(|curve| match curve {
+                Curve::OneInput(curve) => {
+                    let x = curve.x.resolve().expect("validated curves x channel");
+                    let y = curve.y.resolve().expect("validated curves y channel");
+                    PreparedCurve::OneInput(PreparedOneInput {
+                        curve,
+                        x,
+                        y,
+                        spline: CurveSpline::new(
+                            &curve.points,
+                            curve.kind == CurveKind::Adjust && x.kind == ChannelKind::Hue,
+                        ),
+                    })
                 }
+                Curve::TwoInput(curve) => PreparedCurve::TwoInput(PreparedTwoInput {
+                    curve,
+                    x: curve.x.resolve().expect("validated curves x channel"),
+                    x2: curve.x2.resolve().expect("validated curves x2 channel"),
+                    y: curve.y.resolve().expect("validated curves y channel"),
+                }),
             })
             .collect();
         for rgb in &mut image.rgb {
             let source = *rgb;
             let mut current = source;
             for prepared in &prepared {
-                current =
-                    prepared
-                        .curve
-                        .map(prepared.x, prepared.y, &prepared.spline, source, current);
+                current = match prepared {
+                    PreparedCurve::OneInput(prepared) => prepared.curve.map(
+                        prepared.x,
+                        prepared.y,
+                        &prepared.spline,
+                        source,
+                        current,
+                    ),
+                    PreparedCurve::TwoInput(prepared) => {
+                        prepared
+                            .curve
+                            .map(prepared.x, prepared.x2, prepared.y, source, current)
+                    }
+                };
             }
             *rgb = current;
         }

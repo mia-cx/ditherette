@@ -221,13 +221,13 @@ const identityCurve: import('../src/index.js').CurvePoints = [
 	[0, 0],
 	[1, 1]
 ];
-const remap: import('../src/index.js').Curve = {
+const remap: import('../src/index.js').OneInputCurve = {
 	kind: 'remap',
 	x: { model: 'oklch', channel: 'lightness' },
 	y: { model: 'oklch', channel: 'lightness' },
 	points: identityCurve
 };
-const adjustment: import('../src/index.js').Curve = {
+const adjustment: import('../src/index.js').OneInputCurve = {
 	kind: 'adjust',
 	x: { model: 'hsl', channel: 'hue' },
 	y: { model: 'cielch', channel: 'chroma' },
@@ -237,16 +237,49 @@ const adjustment: import('../src/index.js').Curve = {
 		[1, 0.5]
 	]
 };
+const controlGrid: import('../src/index.js').CurveGrid = {
+	columns: [0, 0.5, 1],
+	rows: [0.1, 0.6],
+	values: [
+		[0.5, 0.8, 0.2],
+		[0.1, 0.5, 0.9]
+	]
+};
+const gridAdjustment: import('../src/index.js').TwoInputCurve = {
+	kind: 'adjust',
+	x: { model: 'srgb', channel: 'red' },
+	x2: { model: 'hsl', channel: 'hue' },
+	y: { model: 'oklch', channel: 'chroma' },
+	grid: controlGrid
+};
+const oneInput: import('../src/index.js').OneInputCurve = remap;
 const grade: import('../src/index.js').Effect[] = [
-	{ effect: 'curves', enabled: true, curves: [remap, adjustment] },
+	{ effect: 'curves', enabled: true, curves: [remap, adjustment, gridAdjustment] },
 	{ effect: 'brightness-contrast', enabled: true, brightness: 0, contrast: 0.2 },
 	{ effect: 'exposure', enabled: false, stops: -1 },
 	{ effect: 'white-balance', enabled: true, temperature: 0.3, tint: 0 },
 	{ effect: 'hue-saturation', enabled: true, hue: 30, saturation: -0.2, lightness: 0 }
 ];
 // @ts-expect-error Curve points are [x, y] pairs.
-const flatCurve: import('../src/index.js').Curve['points'] = [0, 1];
-void [grade, flatCurve];
+const flatCurve: import('../src/index.js').OneInputCurve['points'] = [0, 1];
+// @ts-expect-error Two-input curves cannot also have points.
+const mixedCurve: import('../src/index.js').Curve = {
+	kind: 'adjust',
+	x: { model: 'srgb', channel: 'red' },
+	x2: { model: 'srgb', channel: 'green' },
+	y: { model: 'srgb', channel: 'blue' },
+	grid: controlGrid,
+	points: identityCurve
+};
+const remapGrid: import('../src/index.js').TwoInputCurve = {
+	// @ts-expect-error Two-input curves are adjustments only.
+	kind: 'remap',
+	x: { model: 'srgb', channel: 'red' },
+	x2: { model: 'srgb', channel: 'green' },
+	y: { model: 'srgb', channel: 'blue' },
+	grid: controlGrid
+};
+void [grade, flatCurve, mixedCurve, remapGrid, oneInput];
 const colourModel: import('../src/index.js').ColourModel = 'srgb';
 const colourChannels = [
 	{ model: 'srgb', channel: 'red' },
