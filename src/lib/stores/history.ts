@@ -39,7 +39,7 @@ export const SETTLE_MS = 300;
 /** Undo steps kept. Entries share the stores' immutable values, so each costs a few references. */
 export const MAX_HISTORY = 100;
 /** What a pointer gesture touched: always one entry, however many controls it moved. */
-const GESTURE = 'pointer';
+const GESTURE = ['pointer'];
 
 const stacks = atom<{ past: readonly Settings[]; future: readonly Settings[] }>({
 	past: [],
@@ -53,8 +53,8 @@ let present = snapshot();
 /** The live settings as of the last burst of changes. */
 let seen = present;
 let source = sourceMeta.get();
-/** The controls the uncommitted edit touched, or undefined when nothing is pending. */
-let pending: string | undefined;
+/** The setting paths the uncommitted edit last touched, or undefined when nothing is pending. */
+let pending: readonly string[] | undefined;
 let queued = false;
 let applying = false;
 const pointers = new Set<number>();
@@ -83,8 +83,8 @@ const byId = (layers: readonly EffectLayer[]) =>
 	Object.fromEntries(layers.map((layer) => [layer.id, layer]));
 
 /**
- * Names the controls an edit touched. Effect layers compare by id, so edits to two layers name two
- * controls, while adding, removing, or reordering layers names the list itself.
+ * Names the setting paths an edit touched. Effect layers compare by id, so edits to two layers
+ * touch separate paths, while adding, removing, or reordering layers touches the list itself.
  */
 function touched(before: Settings, after: Settings) {
 	return KEYS.flatMap((key) => {
@@ -94,7 +94,7 @@ function touched(before: Settings, after: Settings) {
 			after.effects.map(({ id }) => id)
 		);
 		return [...(order ? [] : [key]), ...paths(key, byId(before.effects), byId(after.effects))];
-	}).join('|');
+	});
 }
 
 function settleLater() {
@@ -109,9 +109,10 @@ function changed() {
 }
 
 /**
- * Take in one burst of store changes, so an action that sets several stores is one edit. Repeats to
- * the same control extend the pending edit; another control commits it first. A new source or
- * crop resets history instead: restoring a size or effect made for another frame would mislead.
+ * Take in one burst of store changes, so an action that sets several stores is one edit. A burst
+ * that shares a path with the pending edit repeats its control and extends it, even when derived
+ * fields such as rounded sizes change only on some ticks; any other burst commits it first. A new
+ * source or crop resets history instead: a size or effect made for another frame would mislead.
  */
 function settle() {
 	if (!queued) return;
@@ -122,9 +123,9 @@ function settle() {
 		return;
 	}
 	const controls = touched(seen, next);
-	if (!controls) return;
+	if (!controls.length) return;
 	const edit = pointers.size ? GESTURE : controls;
-	if (pending !== undefined && pending !== edit) commit();
+	if (pending && !pending.some((path) => edit.includes(path))) commit();
 	pending = edit;
 	seen = next;
 	settleLater();
