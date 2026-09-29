@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { page, userEvent } from 'vitest/browser';
+import { render } from 'vitest-browser-svelte';
 import { scheduleProcessing } from '$lib/processing/client';
+import AnchorPicker from '../../routes/components/AnchorPicker.svelte';
 import {
 	colorSpace,
 	ditherSettings,
@@ -140,6 +143,24 @@ describe('settings history', () => {
 			scale.remove();
 			width.remove();
 		}
+	});
+
+	it('keeps a run of arrow keys through a radio group in one step', async () => {
+		const before = outputSettings.get().anchor;
+		await render(AnchorPicker, {
+			value: 'center',
+			labelledby: 'anchor',
+			onchange: (anchor) => updateOutputSettings({ anchor })
+		});
+		(page.getByRole('radio', { name: 'Centre' }).element() as HTMLElement).focus();
+		await userEvent.keyboard('{ArrowUp}');
+		await userEvent.keyboard('{ArrowLeft}');
+		await settle();
+		expect(outputSettings.get().anchor).toBe('top-left');
+
+		undo();
+		expect(outputSettings.get().anchor).toBe(before);
+		expect(canUndo.get()).toBe(false);
 	});
 
 	it('steps back through settled edits, and a new edit drops the redo branch', async () => {

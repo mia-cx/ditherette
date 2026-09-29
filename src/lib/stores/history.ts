@@ -101,11 +101,16 @@ function touched(before: Settings, after: Settings) {
 	});
 }
 
-/** The focused control, or undefined while focus rests on the page. */
+/**
+ * The focused control, or undefined while focus rests on the page. A radio's control is its group:
+ * arrow keys move focus along with the choice, so a run of arrows through it is one edit.
+ */
 function focusedControl() {
 	if (typeof document === 'undefined') return undefined;
 	const focused = document.activeElement;
-	return focused && focused !== document.body ? focused : undefined;
+	if (!focused || focused === document.body) return undefined;
+	if (!focused.matches('[role="radio"]')) return focused;
+	return focused.closest('[role="radiogroup"], [role="group"]') ?? focused;
 }
 
 /**
