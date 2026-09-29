@@ -90,9 +90,12 @@
 			case 'z':
 				return event.shiftKey ? redo : undo;
 			case 'y':
-				return mac ? undefined : redo;
+				return mac || event.shiftKey ? undefined : redo;
 		}
 	}
+	/** Fields with their own undo. Checkboxes, sliders, and buttons have none, so undo passes them. */
+	const TEXT_INPUT =
+		'textarea, input:not([type]), input:is([type=text], [type=search], [type=number], [type=email], [type=url], [type=tel], [type=password])';
 	/** Bare view keys that leave browser zoom alone. */
 	const BARE: Record<string, () => void> = {
 		'+': () => $previewCommands?.zoomIn(),
@@ -103,18 +106,22 @@
 	};
 
 	function shortcut(event: KeyboardEvent) {
-		const target = event.target as HTMLElement | null;
-		if (event.altKey || target?.closest('input, textarea, select, [contenteditable="true"]'))
-			return;
 		const modified = mac ? event.metaKey : event.ctrlKey;
 		const other = mac ? event.ctrlKey : event.metaKey;
-		if (other) return;
+		if (event.defaultPrevented || event.altKey || other) return;
 		const run = modified
 			? modifiedCommand(event)
 			: hasImage && !event.shiftKey
 				? BARE[event.key]
 				: undefined;
 		if (!run) return;
+		const target = event.target instanceof HTMLElement ? event.target : undefined;
+		// Text editors keep their own undo; other commands leave every form field alone.
+		const field =
+			run === undo || run === redo
+				? target?.isContentEditable || target?.closest(TEXT_INPUT)
+				: target?.closest('input, textarea, select, [contenteditable="true"]');
+		if (field) return;
 		event.preventDefault();
 		run();
 	}

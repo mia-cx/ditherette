@@ -84,9 +84,13 @@ it('undoes and redoes settings with Ctrl+Z, Ctrl+Shift+Z, and Ctrl+Y', async () 
 	}
 });
 
-it('leaves Ctrl+Z to a focused text field', async () => {
+it('leaves Ctrl+Z to text editors and handled keys, and undoes from other controls', async () => {
 	const stop = startSettingsHistory();
-	const input = document.body.appendChild(document.createElement('input'));
+	const fields = document.body.appendChild(document.createElement('div'));
+	fields.innerHTML =
+		'<input type="number"><div contenteditable><span tabindex="-1">text</span></div><input type="checkbox">';
+	const handled = (event: KeyboardEvent) => event.preventDefault();
+	const undoKey = () => userEvent.keyboard('{Control>}z{/Control}');
 	try {
 		await render(AppBar, {
 			hasImage: true,
@@ -95,11 +99,21 @@ it('leaves Ctrl+Z to a focused text field', async () => {
 			onClear: () => {}
 		});
 		updateDitherSettings({ algorithm: 'atkinson' });
-		input.focus();
-		await userEvent.keyboard('{Control>}z{/Control}');
+		for (const selector of ['input[type=number]', 'span']) {
+			focus(fields.querySelector(selector)!);
+			await undoKey();
+			expect(ditherSettings.get().algorithm).toBe('atkinson');
+		}
+		focus(fields.querySelector('input[type=checkbox]')!);
+		window.addEventListener('keydown', handled, true);
+		await undoKey();
 		expect(ditherSettings.get().algorithm).toBe('atkinson');
+		window.removeEventListener('keydown', handled, true);
+		await undoKey();
+		expect(ditherSettings.get().algorithm).toBe('none');
 	} finally {
-		input.remove();
+		window.removeEventListener('keydown', handled, true);
+		fields.remove();
 		stop();
 	}
 });
