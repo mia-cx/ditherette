@@ -110,19 +110,36 @@ describe('settings history', () => {
 		expect(ditherSettings.get().strength).toBe(100);
 	});
 
-	it('merges repeats whose derived fields change only on some ticks', async () => {
+	it('groups keyboard edits by focused control, not by the settings they share', async () => {
 		const initial = outputSettings.get();
-		// Scale slider arrow keys: rounded sizes cross a pixel on the second tick only.
-		updateOutputSettings({ scaleFactor: 0.5 });
-		await wait(50);
-		updateOutputSettings({ scaleFactor: 0.5001, width: 257, height: 257 });
-		await wait(50);
-		updateOutputSettings({ scaleFactor: 0.5002 });
-		await settle();
+		const [scale, width] = ['Scale', 'Width'].map((label) => {
+			const input = document.body.appendChild(document.createElement('input'));
+			input.ariaLabel = label;
+			return input;
+		});
+		try {
+			// Scale arrow keys: rounded sizes cross a pixel on the second tick only.
+			scale.focus();
+			updateOutputSettings({ scaleFactor: 0.5 });
+			await wait(50);
+			updateOutputSettings({ scaleFactor: 0.5001, width: 257, height: 257 });
+			await wait(50);
+			updateOutputSettings({ scaleFactor: 0.5002 });
+			await wait(50);
+			// Width also moves the scale, but it is another control.
+			width.focus();
+			updateOutputSettings({ scaleFactor: 0.6, width: 300, height: 300 });
+			await settle();
 
-		undo();
-		expect(outputSettings.get()).toEqual(initial);
-		expect(canUndo.get()).toBe(false);
+			undo();
+			expect(outputSettings.get()).toMatchObject({ scaleFactor: 0.5002, width: 257 });
+			undo();
+			expect(outputSettings.get()).toEqual(initial);
+			expect(canUndo.get()).toBe(false);
+		} finally {
+			scale.remove();
+			width.remove();
+		}
 	});
 
 	it('steps back through settled edits, and a new edit drops the redo branch', async () => {

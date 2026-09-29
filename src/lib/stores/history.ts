@@ -38,8 +38,12 @@ const KEYS = Object.keys(STORES) as (keyof Settings)[];
 export const SETTLE_MS = 300;
 /** Undo steps kept. Entries share the stores' immutable values, so each costs a few references. */
 export const MAX_HISTORY = 100;
-/** What a pointer gesture touched: always one entry, however many controls it moved. */
-const GESTURE = ['pointer'];
+
+/**
+ * Who made an edit, and the setting paths it touched. A pointer gesture or a focused control names
+ * the edit; one made with nothing focused, such as a programmatic write, has only its paths.
+ */
+type Edit = { by: Element | 'pointer' | undefined; paths: readonly string[] };
 
 const stacks = atom<{ past: readonly Settings[]; future: readonly Settings[] }>({
 	past: [],
@@ -53,8 +57,8 @@ let present = snapshot();
 /** The live settings as of the last burst of changes. */
 let seen = present;
 let source = sourceMeta.get();
-/** The setting paths the uncommitted edit last touched, or undefined when nothing is pending. */
-let pending: readonly string[] | undefined;
+/** The uncommitted edit's latest burst, or undefined when nothing is pending. */
+let pending: Edit | undefined;
 let queued = false;
 let applying = false;
 const pointers = new Set<number>();
@@ -97,6 +101,24 @@ function touched(before: Settings, after: Settings) {
 	});
 }
 
+/** The focused control, or undefined while focus rests on the page. */
+function focusedControl() {
+	if (typeof document === 'undefined') return undefined;
+	const focused = document.activeElement;
+	return focused && focused !== document.body ? focused : undefined;
+}
+
+/**
+ * Whether a burst repeats the pending edit's control. Keyboard edits belong to the focused control,
+ * so moving focus from Scale to Width starts a new step even though both change the scale. With
+ * nothing focused, a shared path marks a repeat, such as a scale tick that moves rounded sizes only
+ * on some ticks.
+ */
+function repeats(edit: Edit) {
+	if (!pending || pending.by !== edit.by) return false;
+	return edit.by !== undefined || pending.paths.some((path) => edit.paths.includes(path));
+}
+
 function settleLater() {
 	clearTimeout(timer);
 	timer = pointers.size ? undefined : setTimeout(commit, SETTLE_MS);
@@ -110,8 +132,7 @@ function changed() {
 
 /**
  * Take in one burst of store changes, so an action that sets several stores is one edit. A burst
- * that shares a path with the pending edit repeats its control and extends it, even when derived
- * fields such as rounded sizes change only on some ticks; any other burst commits it first. A new
+ * that repeats the pending edit's control extends it; any other burst commits it first. A new
  * source or crop resets history instead: a size or effect made for another frame would mislead.
  */
 function settle() {
@@ -122,10 +143,10 @@ function settle() {
 		reset(next);
 		return;
 	}
-	const controls = touched(seen, next);
-	if (!controls.length) return;
-	const edit = pointers.size ? GESTURE : controls;
-	if (pending && !pending.some((path) => edit.includes(path))) commit();
+	const edited = touched(seen, next);
+	if (!edited.length) return;
+	const edit: Edit = { by: pointers.size ? 'pointer' : focusedControl(), paths: edited };
+	if (pending && !repeats(edit)) commit();
 	pending = edit;
 	seen = next;
 	settleLater();
