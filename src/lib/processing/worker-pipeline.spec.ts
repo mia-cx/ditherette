@@ -232,6 +232,18 @@ describe('ProcessorWorkerPipeline', () => {
 		expect(published).toHaveLength(1);
 		expect(processed()).toEqual([255, 255, 255, 255, 0, 0, 0, 255]);
 
+		// Without a palette fit, the palette and colour space don't reach the effects either.
+		await pipeline.handleAsync(
+			processRequest({
+				id: 5,
+				palette: palette.slice(0, 1),
+				settings: { output, dither, colorSpace: 'oklab', effects: brighter }
+			}),
+			() => undefined,
+			(table) => published.push(table)
+		);
+		expect(processor.applyEffects).toHaveBeenCalledTimes(1);
+
 		await run(4, [{ effect: 'exposure', enabled: true, stops: 2 }]);
 		expect(processor.applyEffects).toHaveBeenCalledTimes(2);
 		expect(published).toHaveLength(2);

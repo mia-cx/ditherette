@@ -4,8 +4,8 @@
 	import { OKLAB_SPREAD, colourCloud } from '$lib/scopes/colour-cloud';
 	import { orbitView, type OrbitView } from '$lib/scopes/orbit-view';
 
-	type Props = { source: ImageData | undefined; lut: Uint8Array | undefined };
-	let { source, lut }: Props = $props();
+	type Props = { source: ImageData | undefined; table: Uint32Array | undefined };
+	let { source, table }: Props = $props();
 
 	/** Hue spokes on the floor, at OKLCH hues, in roughly their own colours. */
 	const SPOKES = [
@@ -35,7 +35,7 @@
 	let lastInput = 0;
 	let dragging: { x: number; y: number } | undefined;
 
-	const cloud = $derived(source ? colourCloud(source, lut) : undefined);
+	const cloud = $derived(source ? colourCloud(source, table) : undefined);
 
 	function guides() {
 		const lines: number[] = [0, FLOOR, 0, 0, -FLOOR, 0];

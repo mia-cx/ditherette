@@ -135,8 +135,8 @@ export class ProcessorWorkerPipeline {
 
 /**
  * The source with the request's effects applied through an exact table of its colours. The result
- * stays cached until the chain, the palette, or the colour space changes, or the crop does while a
- * palette fit still analyses the image. Each new table goes to `publishTable`.
+ * stays cached until the chain changes, or, with a palette fit, the palette or colour space, or,
+ * with a palette fit that analyses the image, the crop. Each new table goes to `publishTable`.
  */
 function applyEffects(
 	processor: Ditherette,
@@ -147,10 +147,15 @@ function applyEffects(
 ): Pixels {
 	if (!settings.effects.length) return cache.source;
 	const context = packageEffectContext(palette, settings.colorSpace);
-	const analysed = settings.effects.some(
-		(step) => step.effect === 'recolour' && step.recipe === null
-	);
-	const key = JSON.stringify([settings.effects, context, analysed && settings.output.crop]);
+	// Only palette fit reads the palette and working space, and only one without a recipe
+	// analyses the (cropped) image, so other edits keep the table.
+	const fits = settings.effects.filter((step) => step.effect === 'recolour');
+	const analysed = fits.some((step) => step.recipe === null);
+	const key = JSON.stringify([
+		settings.effects,
+		fits.length > 0 && context,
+		analysed && settings.output.crop
+	]);
 	if (cache.effects?.key === key) return cache.effects.mapped;
 	// Palette fit analyses the cropped source `process` would receive.
 	const cropped = packageProcessRequest(cache.source, palette, settings, size).request.source;
