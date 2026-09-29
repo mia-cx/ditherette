@@ -26,6 +26,7 @@
 		uiSettings
 	} from '$lib/stores/app';
 	import { effectLayers } from '$lib/stores/effects';
+	import { startHistory } from '$lib/stores/history';
 	import PipelinePanel from './components/effects/PipelinePanel.svelte';
 	import ScopesPanel from './components/scopes/ScopesPanel.svelte';
 	import Studio from './components/studio/Studio.svelte';
@@ -65,6 +66,7 @@
 	});
 
 	onMount(() => {
+		const stopHistory = startHistory();
 		const stopProcessing = startAutoProcessing();
 		const stopSourceEffects = startSourceEffects();
 		void restorePersistedImages().catch((error) => {
@@ -72,6 +74,7 @@
 			uploadError = error instanceof Error ? error.message : 'Could not restore saved image.';
 		});
 		return () => {
+			stopHistory();
 			stopProcessing();
 			stopSourceEffects();
 		};
