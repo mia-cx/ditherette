@@ -28,6 +28,7 @@ Ordinary effects need neither. `process` derives both from its own palette and `
 | --- | --- |
 | [image.rs](image.md) | Continuous working image and its single RGBA8 boundary |
 | [chain.rs](chain.md) | `Effect` extension trait, context, and the ordered executor |
+| [mask.rs](mask.md) | Step masks: per-pixel strength from up to 4 curves |
 | [channel.rs](channel.md) | Channel selection shared by per-channel effects |
 | [recipe.rs](recipe.md) | Serializable built-in registry, decoding, and validation |
 | [operation.rs](operation.md) | Standalone `apply_effects` and recipe-v2 `process` |
@@ -55,6 +56,7 @@ The boundary copies each source alpha byte unchanged.
 ## Ordering and repetition
 
 The executor applies enabled steps in array order. It never sorts, groups, merges, or skips duplicates.
+Any step may carry a [mask](mask.md) that sets its strength per pixel from the colour entering it.
 Two instances of one effect keep independent arguments.
 A disabled step keeps its arguments in the recipe and is validated, but it does no pixel work and needs no context.
 An empty chain, or one with every step disabled, returns the source bytes.

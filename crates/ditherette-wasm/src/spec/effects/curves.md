@@ -94,6 +94,17 @@ Do not clamp the edited Y coordinate before conversion. A two-input grid whose v
 
 One-input evaluation remains unchanged. It reads X from `source`, evaluates `points`, converts `current` to Y, and applies its remap or adjustment. A non-hue remap replaces Y. A hue remap follows the shortest circular delta from the original hue and scales that delta by source hue confidence. The exact identity remap `[[0, 0], [1, 1]]` preserves an unchanged carrier without conversion. A one-input adjustment whose values are all exactly `0.5` also skips every conversion.
 
+## Mask strength
+
+A [mask](mask.md) gives each pixel a strength `m` from the step's input. Every curve in the step uses the same `m`, which scales how far the curve bends from its neutral:
+
+- `m = 0` leaves the pixel unchanged, without any conversion.
+- `m = 1` runs every curve exactly as above.
+- Otherwise, with source input value `x` and spline value `f`, a non-hue remap writes `x + m * (f - x)`. A hue remap scales its shortest circular delta: `delta = m * ((f - x + 0.5).rem_euclid(1) - 0.5)`, before the confidence weighting above.
+- An adjustment's value `c`, one-input or clamped grid, becomes `0.5 + m * (c - 0.5)` before the hue, gain, or offset formula.
+
+A step without mask curves always uses `m = 1`.
+
 ## Validation order and paths
 
 Two-input validation checks `kind`, `x`, `x2`, `y`, then `grid`.
@@ -131,4 +142,4 @@ Prepared grid metadata stores resolved channels and grid indices rather than cop
 
 ## Non-goals
 
-Point handles, automatic gamut mapping, masks, and compiled two-dimensional lookup tables.
+Point handles, automatic gamut mapping, and compiled two-dimensional lookup tables.

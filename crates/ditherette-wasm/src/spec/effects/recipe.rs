@@ -88,6 +88,18 @@ impl Effect for BuiltinEffect {
             Self::Recolour(effect) => effect.apply(image, context),
         }
     }
+
+    fn apply_masked(&self, image: &mut EffectImage, context: &EffectContext<'_>, mask: &[f32]) {
+        match self {
+            Self::Levels(effect) => effect.apply_masked(image, context, mask),
+            Self::Curves(effect) => effect.apply_masked(image, context, mask),
+            Self::BrightnessContrast(effect) => effect.apply_masked(image, context, mask),
+            Self::Exposure(effect) => effect.apply_masked(image, context, mask),
+            Self::WhiteBalance(effect) => effect.apply_masked(image, context, mask),
+            Self::HueSaturation(effect) => effect.apply_masked(image, context, mask),
+            Self::Recolour(effect) => effect.apply_masked(image, context, mask),
+        }
+    }
 }
 
 /// Decodes an ordered `effects` JSON array. Argument ranges are checked by validation.
