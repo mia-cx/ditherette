@@ -21,7 +21,7 @@ export function containPlacement(
 	};
 }
 
-/** Results are laid out in rows of this many texels. */
+/** Results are laid out in rows of this many texels, or fewer where the GPU's textures are narrower. */
 const RESULTS_ROW = 4096;
 
 /**
@@ -52,34 +52,37 @@ void main() {
 }`;
 
 /**
- * Each canvas pixel covers a footprint of source pixels. Zoomed out, it averages them in
- * premultiplied alpha, sampling at most 8 per axis; zoomed in, it shows the one under its centre.
- * Every source pixel takes its colour's result, so the colours are exact before averaging.
+ * Each canvas pixel covers a footprint of source pixels. Zoomed in, it shows the one under its
+ * centre. Zoomed out, it averages them in premultiplied alpha, each weighted by the area it covers.
+ * Every source pixel takes its colour's result, so the average is exact while a footprint spans up
+ * to 16 pixels per axis. Past that it splits the footprint into at most 17 runs per axis and samples
+ * one pixel per run, weighted by the run's area.
  */
 const FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
 uniform highp sampler2D indexTexture;
 uniform highp sampler2D results;
+uniform int resultsRow;
 uniform vec4 placement;
 uniform vec2 sourceSize;
 uniform float canvasHeight;
 out vec4 color;
-const int RESULTS_ROW = ${RESULTS_ROW};
-const int MAX_TAPS = 8;
+// A footprint 16 pixels wide touches up to 17.
+const int MAX_TAPS = 17;
 
 vec4 effected(ivec2 texel) {
 	vec4 entry = texelFetch(indexTexture, texel, 0);
 	ivec3 bytes = ivec3(round(entry.rgb * 255.0));
 	int index = bytes.r + bytes.g * 256 + bytes.b * 65536;
-	return vec4(texelFetch(results, ivec2(index % RESULTS_ROW, index / RESULTS_ROW), 0).rgb, entry.a);
+	return vec4(texelFetch(results, ivec2(index % resultsRow, index / resultsRow), 0).rgb, entry.a);
 }
 
 void main() {
 	vec2 device = vec2(gl_FragCoord.x, canvasHeight - gl_FragCoord.y);
 	vec2 scale = sourceSize / placement.zw;
 	vec2 low = (device - 0.5 - placement.xy) * scale;
-	vec2 high = (device + 0.5 - placement.xy) * scale;
+	vec2 high = low + scale;
 	if (high.x <= 0.0 || high.y <= 0.0 || low.x >= sourceSize.x || low.y >= sourceSize.y) discard;
 	if (scale.x <= 1.0 && scale.y <= 1.0) {
 		vec2 centre = (device - placement.xy) * scale;
@@ -87,19 +90,22 @@ void main() {
 		color = effected(ivec2(centre));
 		return;
 	}
-	ivec2 first = ivec2(max(floor(low), vec2(0.0)));
-	ivec2 last = ivec2(min(ceil(high), sourceSize)) - 1;
+	vec2 start = max(low, vec2(0.0));
+	vec2 end = min(high, sourceSize);
+	ivec2 first = ivec2(floor(start));
+	ivec2 last = ivec2(ceil(end)) - 1;
 	ivec2 stride = max(ivec2(1), (last - first + MAX_TAPS) / MAX_TAPS);
 	vec4 sum = vec4(0.0);
-	float taps = 0.0;
 	for (int y = first.y; y <= last.y; y += stride.y) {
+		float height = min(float(y + stride.y), end.y) - max(float(y), start.y);
 		for (int x = first.x; x <= last.x; x += stride.x) {
+			float width = min(float(x + stride.x), end.x) - max(float(x), start.x);
 			vec4 pixel = effected(ivec2(x, y));
-			sum += vec4(pixel.rgb * pixel.a, pixel.a);
-			taps += 1.0;
+			sum += vec4(pixel.rgb * pixel.a, pixel.a) * width * height;
 		}
 	}
-	color = sum.a > 0.0 ? vec4(sum.rgb / sum.a, sum.a / taps) : vec4(0.0);
+	// Over the whole footprint, so the image's edges blend out like any scaled image.
+	color = sum.a > 0.0 ? vec4(sum.rgb / sum.a, sum.a / (scale.x * scale.y)) : vec4(0.0);
 }`;
 
 function compile(gl: WebGL2RenderingContext, type: number, text: string) {
@@ -134,6 +140,9 @@ function setUp(gl: WebGL2RenderingContext) {
 	gl.vertexAttribPointer(corner, 2, gl.FLOAT, false, 0, 0);
 	gl.uniform1i(gl.getUniformLocation(program, 'indexTexture'), 0);
 	gl.uniform1i(gl.getUniformLocation(program, 'results'), 1);
+	const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+	const resultsRow = Math.min(RESULTS_ROW, maxTextureSize);
+	gl.uniform1i(gl.getUniformLocation(program, 'resultsRow'), resultsRow);
 	gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 	gl.activeTexture(gl.TEXTURE0);
 	const indexTexture = texture(gl);
@@ -141,6 +150,8 @@ function setUp(gl: WebGL2RenderingContext) {
 	const resultsTexture = texture(gl);
 	const uniform = (name: string) => gl.getUniformLocation(program, name);
 	return {
+		maxTextureSize,
+		resultsRow,
 		indexTexture,
 		resultsTexture,
 		placement: uniform('placement'),
@@ -177,7 +188,7 @@ export function effectsView(place: (width: number, height: number) => Placement 
 			const { index, results } = shown;
 			if (index.pixels !== uploadedIndex) {
 				const { width, height } = index.source;
-				if (Math.max(width, height) > (gl.getParameter(gl.MAX_TEXTURE_SIZE) as number))
+				if (Math.max(width, height) > resources.maxTextureSize)
 					return fail('This GPU cannot hold the image to draw effects on it.');
 				gl.activeTexture(gl.TEXTURE0);
 				gl.bindTexture(gl.TEXTURE_2D, resources.indexTexture);
@@ -200,8 +211,11 @@ export function effectsView(place: (width: number, height: number) => Placement 
 				uploadedIndex = index.pixels;
 			}
 			if (results !== uploadedResults) {
-				const rows = Math.max(1, Math.ceil(results.length / RESULTS_ROW));
-				const padded = new Uint32Array(rows * RESULTS_ROW);
+				const { resultsRow, maxTextureSize } = resources;
+				const rows = Math.max(1, Math.ceil(results.length / resultsRow));
+				if (rows > maxTextureSize)
+					return fail('This GPU cannot hold the colours to draw effects on them.');
+				const padded = new Uint32Array(rows * resultsRow);
 				padded.set(results);
 				gl.activeTexture(gl.TEXTURE1);
 				gl.bindTexture(gl.TEXTURE_2D, resources.resultsTexture);
@@ -210,7 +224,7 @@ export function effectsView(place: (width: number, height: number) => Placement 
 					gl.TEXTURE_2D,
 					0,
 					gl.RGBA8,
-					RESULTS_ROW,
+					resultsRow,
 					rows,
 					0,
 					gl.RGBA,
