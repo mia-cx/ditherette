@@ -234,13 +234,12 @@ impl Gpu {
             return Err(Fallback::Failed(error.to_string()));
         }
         let mapped = map_read(readback.slice(..));
-        self.device
-            .poll(wgpu::PollType::wait_indefinitely())
+        unwound(|| self.device.poll(wgpu::PollType::wait_indefinitely()))?
             .map_err(|error| Fallback::Failed(error.to_string()))?;
         mapped
             .await
             .map_err(|error| Fallback::Failed(error.to_string()))?;
-        let result = readback.slice(..).get_mapped_range().to_vec();
+        let result = unwound(|| readback.slice(..).get_mapped_range().to_vec())?;
         readback.unmap();
         // A device lost mid-call may still have mapped stale memory.
         self.check()?;
@@ -316,6 +315,24 @@ impl Gpu {
             })
             .clone()
     }
+}
+
+/// Natively, wgpu panics instead of returning an error when the device fails
+/// inside `Device::poll` or `BufferSlice::get_mapped_range`, such as a GPU reset
+/// mid-call. Catching that unwind turns it into a fallback; the device is then
+/// discarded. It needs `panic = "unwind"`, the native default. On the web
+/// neither call fails this way, and Wasm panics abort, so the call runs as is.
+pub(super) fn unwound<T>(call: impl FnOnce() -> T) -> Result<T, Fallback> {
+    #[cfg(target_arch = "wasm32")]
+    return Ok(call());
+    #[cfg(not(target_arch = "wasm32"))]
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).map_err(|payload| {
+        let message = payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|text| text.to_string()));
+        Fallback::Lost(message.unwrap_or_else(|| "wgpu panicked".into()))
+    })
 }
 
 /// Keeps the first failure; later ones usually follow from it.

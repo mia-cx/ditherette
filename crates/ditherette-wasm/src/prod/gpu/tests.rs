@@ -187,6 +187,16 @@ fn device_lost_in_flight_falls_back() {
     });
 }
 
+/// llvmpipe never reports a lost device from its fence wait, so this feeds the
+/// guard the panic wgpu raises from `Device::poll` when one does.
+#[test]
+fn a_wgpu_panic_becomes_a_lost_device() {
+    let message = "Error in Device::poll: Parent device is lost";
+    let caught = device::unwound(|| -> u8 { panic!("{message}") });
+    assert_eq!(caught, Err(Fallback::Lost(message.into())));
+    assert_eq!(device::unwound(|| 7), Ok(7));
+}
+
 #[test]
 fn oversized_image_runs_on_the_cpu_and_keeps_the_gpu() {
     let Some((_serial, Backend::Gpu(gpu))) = any_gpu() else {
