@@ -5,10 +5,12 @@ import { render } from 'vitest-browser-svelte';
 import MaskEditor from './MaskEditor.svelte';
 
 let mask: MaskCurve[];
+let shown: boolean;
 
 beforeEach(async () => {
 	await page.viewport(1440, 900);
 	mask = [];
+	shown = false;
 });
 
 /** Render, and re-render after each change like the effect window does. */
@@ -19,6 +21,11 @@ async function editor() {
 		onchange: (next: MaskCurve[]) => {
 			mask = next;
 			void screen.rerender({ mask });
+		},
+		shown,
+		onshow: (next: boolean) => {
+			shown = next;
+			void screen.rerender({ shown });
 		}
 	});
 	return screen;
@@ -46,6 +53,16 @@ it('sets a preset curve from its sliders and drops it back at 100%', async () =>
 	await reds.fill('100');
 	await userEvent.keyboard('{Tab}');
 	expect(mask).toHaveLength(1);
+});
+
+it('toggles showing the mask', async () => {
+	await editor();
+	const toggle = page.getByRole('button', { name: 'Show mask' });
+	await toggle.click();
+	expect(shown).toBe(true);
+	await expect.element(toggle).toHaveAttribute('aria-pressed', 'true');
+	await toggle.click();
+	expect(shown).toBe(false);
 });
 
 it('adds, edits, and removes mask curves, including a second input', async () => {

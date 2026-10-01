@@ -1,21 +1,23 @@
 import { atom } from 'nanostores';
-import type { Effect, EffectContext } from 'ditherette';
+import type { Effect, EffectContext, MaskCurve } from 'ditherette';
 import { colorSpace, outputSettings, selectedPalette, sourceImageData } from '$lib/stores/app';
-import { activeEffectSteps } from '$lib/stores/effects';
+import { activeEffectSteps, effectLayers, type EffectLayer } from '$lib/stores/effects';
 import { packageEffectContext } from './package-adapter';
 import type { CropRect } from './types';
 
+type Compile = {
+	id: number;
+	sourceId: number;
+	key: string;
+	effects: Effect[];
+	context: Required<EffectContext>;
+	crop?: CropRect;
+};
 export type LiveEffectsRequest =
 	| { type: 'source'; sourceId: number; source: ImageData }
-	| {
-			type: 'compile';
-			id: number;
-			sourceId: number;
-			key: string;
-			effects: Effect[];
-			context: Required<EffectContext>;
-			crop?: CropRect;
-	  };
+	| ({ type: 'compile' } & Compile)
+	/** `effects` are the steps before the masked one; each colour's result is its mask as grey. */
+	| ({ type: 'mask'; mask: MaskCurve[] } & Compile);
 export type LiveEffectsResponse =
 	| {
 			type: 'indexed';
@@ -24,8 +26,20 @@ export type LiveEffectsResponse =
 			pixels: Uint32Array;
 			count: number;
 	  }
-	| { type: 'compiled'; id: number; sourceId: number; key: string; results: Uint32Array }
-	| { type: 'failed'; id: number; sourceId: number; key: string; message: string };
+	| {
+			type: 'compiled' | 'masked';
+			id: number;
+			sourceId: number;
+			key: string;
+			results: Uint32Array;
+	  }
+	| {
+			type: 'failed' | 'mask-failed';
+			id: number;
+			sourceId: number;
+			key: string;
+			message: string;
+	  };
 
 /** The source's colour index for drawing: see `LiveEffectsResponse`. */
 export const effectsIndex = atom<
@@ -35,6 +49,26 @@ export const effectsIndex = atom<
 export const compiledEffects = atom<
 	{ source: ImageData; key: string; results: Uint32Array } | undefined
 >();
+/** The layer whose mask the Source preview shows as greys instead of the effects. */
+export const shownMask = atom<string | undefined>();
+/** The shown mask as each distinct colour's grey: white is full strength. */
+export const compiledMask = atom<
+	{ source: ImageData; key: string; results: Uint32Array } | undefined
+>();
+
+/**
+ * What showing a layer's mask needs: the enabled steps before the layer, which make the colours
+ * entering it, and its curves. Nothing when the layer is gone.
+ */
+export function maskInputs(layers: readonly EffectLayer[], layerId: string | undefined) {
+	const at = layers.findIndex((layer) => layer.id === layerId);
+	if (at < 0) return undefined;
+	const before = layers
+		.slice(0, at)
+		.filter((layer) => layer.step.enabled)
+		.map((layer) => layer.step);
+	return { before, mask: [...(layers[at]!.step.mask ?? [])] };
+}
 
 /**
  * What a compile depends on. Only palette fit reads the palette and working space, and only one
@@ -101,6 +135,7 @@ export function startLiveEffects() {
 	let nextSourceId = 0;
 	let loaded: ImageData | undefined;
 	let busy = false;
+	let maskBusy = false;
 	let requestId = 0;
 
 	/** Drop the worker and everything it was doing; the next compile starts a fresh one. */
@@ -108,9 +143,10 @@ export function startLiveEffects() {
 		worker?.terminate();
 		worker = undefined;
 		loaded = undefined;
-		busy = false;
+		busy = maskBusy = false;
 		effectsIndex.set(undefined);
 		compiledEffects.set(undefined);
+		compiledMask.set(undefined);
 		for (const waiter of waiters) waiter.reject(new Error(reason));
 		waiters.clear();
 	}
@@ -135,7 +171,9 @@ export function startLiveEffects() {
 		const source = sourceImageData.get();
 		if (!source) return stop();
 		const effects = activeEffectSteps.get();
-		if (!effects.length) return;
+		const masked = maskInputs(effectLayers.get(), shownMask.get());
+		if (!masked && shownMask.get()) return shownMask.set(undefined);
+		if (!effects.length && !masked) return;
 		if (!worker) {
 			worker = new Worker(new URL('../workers/effects.worker.ts', import.meta.url), {
 				type: 'module'
@@ -146,6 +184,7 @@ export function startLiveEffects() {
 		if (source !== loaded) {
 			effectsIndex.set(undefined);
 			compiledEffects.set(undefined);
+			compiledMask.set(undefined);
 			worker.postMessage({
 				type: 'source',
 				sourceId: sourceId(source),
@@ -157,14 +196,30 @@ export function startLiveEffects() {
 		const crop = outputSettings.get().crop;
 		const key = effectsKey(effects, context, crop);
 		const current = compiledEffects.get();
-		if (busy || (current?.source === source && current.key === key)) return;
-		busy = true;
+		if (effects.length && !busy && (current?.source !== source || current.key !== key)) {
+			busy = true;
+			worker.postMessage({
+				type: 'compile',
+				id: ++requestId,
+				sourceId: sourceId(source),
+				key,
+				effects,
+				context,
+				crop
+			} satisfies LiveEffectsRequest);
+		}
+		if (!masked) return;
+		const maskKey = JSON.stringify([effectsKey(masked.before, context, crop), masked.mask]);
+		const shown = compiledMask.get();
+		if (maskBusy || (shown?.source === source && shown.key === maskKey)) return;
+		maskBusy = true;
 		worker.postMessage({
-			type: 'compile',
+			type: 'mask',
 			id: ++requestId,
 			sourceId: sourceId(source),
-			key,
-			effects,
+			key: maskKey,
+			effects: masked.before,
+			mask: masked.mask,
 			context,
 			crop
 		} satisfies LiveEffectsRequest);
@@ -176,6 +231,14 @@ export function startLiveEffects() {
 		if (data.type === 'indexed') {
 			if (current) effectsIndex.set({ source: current, pixels: data.pixels, count: data.count });
 			return;
+		}
+		if (data.type === 'masked' || data.type === 'mask-failed') {
+			maskBusy = false;
+			if (current && data.type === 'masked')
+				compiledMask.set({ source: current, key: data.key, results: data.results });
+			else if (current && data.type === 'mask-failed')
+				console.error('Could not show the mask.', data.message);
+			return update();
 		}
 		busy = false;
 		if (current && data.type === 'failed') {
@@ -200,6 +263,9 @@ export function startLiveEffects() {
 	const unsubscribers = [
 		sourceImageData.listen(update),
 		activeEffectSteps.listen(update),
+		// A disabled layer's mask can be shown too, and its edits never reach the active steps.
+		effectLayers.listen(update),
+		shownMask.listen(update),
 		selectedPalette.listen(update),
 		colorSpace.listen(update),
 		outputSettings.listen(update)

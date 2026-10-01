@@ -1,6 +1,13 @@
 import { isEffect } from 'ditherette';
 import { describe, expect, it } from 'vitest';
-import { MASK_PRESETS, presetCurve, presetValues, setPreset, type MaskPreset } from './mask';
+import {
+	MASK_PRESETS,
+	maskStrength,
+	presetCurve,
+	presetValues,
+	setPreset,
+	type MaskPreset
+} from './mask';
 
 const [tones, colours, saturation] = MASK_PRESETS as [MaskPreset, MaskPreset, MaskPreset];
 
@@ -46,6 +53,29 @@ describe('mask presets', () => {
 		const redsOff = presetCurve(colours, [0, 1, 1, 1, 1, 1, 1, 1])!;
 		expect(redsOff.points[0]![1]).toBe(redsOff.points.at(-1)![1]);
 		expect(redsOff.points[0]![1]).toBeLessThan(1);
+	});
+
+	it('give the strength a colour entering the step gets', () => {
+		const hueOff = {
+			x: { model: 'oklch', channel: 'hue' } as const,
+			points: [
+				[0, 0],
+				[1, 0]
+			] as const
+		};
+		const half = {
+			x: { model: 'srgb', channel: 'red' } as const,
+			points: [
+				[0, 0.5],
+				[1, 0.5]
+			] as const
+		};
+		expect(maskStrength([hueOff], [128, 128, 128])).toBe(1);
+		expect(maskStrength([hueOff], [255, 0, 0])).toBe(0);
+		expect(maskStrength([half, half], [10, 20, 30])).toBe(0.25);
+		const shadowsOff = setPreset([], tones, [0, 1, 1]);
+		expect(maskStrength(shadowsOff, [0, 0, 0])).toBe(0);
+		expect(maskStrength(shadowsOff, [255, 255, 255])).toBeCloseTo(1, 12);
 	});
 
 	it('replace their own curve in place and keep other curves', () => {

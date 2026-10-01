@@ -18,9 +18,10 @@
 	import {
 		effectsDrawn,
 		effectsView,
-		shownEffects,
+		shownSource,
 		supportsWebGL2
 	} from '$lib/processing/effects-view.svelte';
+	import { shownMask } from '$lib/processing/live-effects';
 	import type { CropRect } from '$lib/processing/types';
 	import {
 		outputPreview,
@@ -141,10 +142,14 @@
 	const activeCrop = $derived(
 		cropMode ? (cropDraft ?? $outputSettings.crop ?? fullImageCrop()) : $outputSettings.crop
 	);
+	/** A shown mask takes over the Source preview, whether or not it shows effects. */
+	const sourceDrawn = $derived(Boolean($shownMask || $previewSettings.sourceEffects));
 	const sourceLabel = $derived(
-		$previewSettings.sourceEffects && $shownEffects && $effectsDrawn
-			? 'Source with effects'
-			: 'Source'
+		!$shownSource || !$effectsDrawn || !sourceDrawn
+			? 'Source'
+			: $shownMask
+				? 'Mask'
+				: 'Source with effects'
 	);
 	const canShowEffects = browser && supportsWebGL2();
 	const cropToContentBounds = $derived.by(() => findContentCrop($sourceImageData));
@@ -1336,15 +1341,16 @@
 			style={mediaStyle(pane, $sourceMeta.width, $sourceMeta.height)}
 			draggable="false"
 		/>
-		{#if $shownEffects}
+		{#if $shownSource}
 			<!-- Covers the pane and draws only the visible part of the source, at screen resolution.
 			Hidden rather than removed while off, so turning it on keeps the GPU's copies. -->
 			<canvas
 				{@attach effectsView(
-					() => $sourceMeta && mediaFrame(pane, $sourceMeta.width, $sourceMeta.height)
+					() => $sourceMeta && mediaFrame(pane, $sourceMeta.width, $sourceMeta.height),
+					shownSource
 				)}
 				class="pointer-events-none absolute inset-0 size-full select-none"
-				hidden={!$previewSettings.sourceEffects}
+				hidden={!sourceDrawn}
 				aria-hidden="true"
 			></canvas>
 		{/if}

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { EFFECTS } from '$lib/effects/catalog';
+	import { shownMask } from '$lib/processing/live-effects';
 	import {
 		effectLayers,
 		removeEffect,
@@ -33,6 +35,11 @@
 		if (!layer) return;
 		updateEffect(layerId, { ...EFFECTS[layer.step.effect].create(), enabled: layer.step.enabled });
 	}
+
+	// Closing the controls stops showing their mask.
+	onDestroy(() => {
+		if (shownMask.get() === layerId) shownMask.set(undefined);
+	});
 </script>
 
 {#if layer}
@@ -76,6 +83,8 @@
 				id="effect-{layerId}"
 				mask={layer.step.mask ?? []}
 				onchange={(mask) => setEffectMask(layerId, mask)}
+				shown={$shownMask === layerId}
+				onshow={(show) => shownMask.set(show ? layerId : undefined)}
 			/>
 		</div>
 	</section>

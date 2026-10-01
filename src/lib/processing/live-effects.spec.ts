@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sourceImageData } from '$lib/stores/app';
-import { addEffect, effectLayers, updateEffect } from '$lib/stores/effects';
+import {
+	addEffect,
+	effectLayers,
+	removeEffect,
+	setEffectEnabled,
+	setEffectMask,
+	updateEffect
+} from '$lib/stores/effects';
 import {
 	compiledEffects,
 	compiledEffectsFor,
 	currentEffectsKey,
+	maskInputs,
+	shownMask,
 	startLiveEffects,
 	type LiveEffectsRequest,
 	type LiveEffectsResponse
@@ -47,6 +56,7 @@ beforeEach(() => {
 	vi.stubGlobal('Worker', ControlledWorker);
 	ControlledWorker.instances = [];
 	effectLayers.set([]);
+	shownMask.set(undefined);
 	sourceImageData.set(image());
 	stop = startLiveEffects();
 });
@@ -54,6 +64,33 @@ beforeEach(() => {
 afterEach(() => {
 	stop();
 	vi.unstubAllGlobals();
+});
+
+describe('shown masks', () => {
+	const lights = {
+		x: { model: 'oklch', channel: 'lightness' } as const,
+		points: [
+			[0, 0],
+			[1, 1]
+		] as const
+	};
+
+	it('compile the steps before the masked layer, and stop when the layer goes', () => {
+		const first = addEffect('exposure');
+		const second = addEffect('levels');
+		setEffectMask(second.id, [lights]);
+		setEffectEnabled(first.id, false);
+		const third = addEffect('exposure');
+		shownMask.set(second.id);
+		const worker = ControlledWorker.instances[0]!;
+		const masks = worker.messages.filter((message) => message.type === 'mask');
+		expect(masks).toHaveLength(1);
+		expect(masks[0]).toMatchObject({ effects: [], mask: [lights] });
+		expect(maskInputs(effectLayers.get(), third.id)!.before).toEqual([effectLayers.get()[1]!.step]);
+
+		removeEffect(second.id);
+		expect(shownMask.get()).toBeUndefined();
+	});
 });
 
 describe('live effects', () => {

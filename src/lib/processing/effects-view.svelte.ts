@@ -1,6 +1,6 @@
-import { atom, computed } from 'nanostores';
+import { atom, computed, type ReadableAtom } from 'nanostores';
 import { activeEffectSteps } from '$lib/stores/effects';
-import { compiledEffects, effectsIndex } from './live-effects';
+import { compiledEffects, compiledMask, effectsIndex, shownMask } from './live-effects';
 
 /** Where the source image sits in the canvas, in CSS pixels. */
 export type Placement = { left: number; top: number; width: number; height: number };
@@ -34,6 +34,19 @@ export const shownEffects = computed(
 		steps.length && index && compiled?.source === index.source
 			? { index, results: compiled.results }
 			: undefined
+);
+type Shown = NonNullable<ReturnType<typeof shownEffects.get>>;
+
+/**
+ * What the Source preview draws: the shown mask's greys while a step's mask is shown, otherwise
+ * the effects.
+ */
+export const shownSource = computed(
+	[shownEffects, effectsIndex, compiledMask, shownMask],
+	(effects, index, mask, layer): Shown | undefined => {
+		if (!layer) return effects;
+		return index && mask?.source === index.source ? { index, results: mask.results } : undefined;
+	}
 );
 
 /** Whether a view is showing the source through the effects. */
@@ -164,9 +177,13 @@ function setUp(gl: WebGL2RenderingContext) {
  * Svelte attachment: draw the source through the live effects, exactly, at the canvas's own device
  * resolution and only where the source is visible. `place` says where the source sits in a canvas of
  * the given CSS size; the view redraws whenever it changes. The colour index uploads once per image,
- * and an edit uploads only each colour's result. Nothing is read back from this canvas.
+ * and an edit uploads only each colour's result. Nothing is read back from this canvas. `content`
+ * picks which results to draw, such as `shownSource` for the Source preview.
  */
-export function effectsView(place: (width: number, height: number) => Placement | undefined) {
+export function effectsView(
+	place: (width: number, height: number) => Placement | undefined,
+	content: ReadableAtom<Shown | undefined> = shownEffects
+) {
 	return (canvas: HTMLCanvasElement) => {
 		const gl = canvas.getContext('webgl2', { premultipliedAlpha: false, antialias: false });
 		if (!gl) {
@@ -183,9 +200,8 @@ export function effectsView(place: (width: number, height: number) => Placement 
 			effectsDrawn.set(false);
 		}
 
-		function upload(shown: NonNullable<ReturnType<typeof shownEffects.get>>) {
+		function upload({ index, results }: Shown) {
 			if (!gl) return;
-			const { index, results } = shown;
 			if (index.pixels !== uploadedIndex) {
 				const { width, height } = index.source;
 				if (Math.max(width, height) > resources.maxTextureSize)
@@ -237,7 +253,7 @@ export function effectsView(place: (width: number, height: number) => Placement 
 		}
 
 		function draw() {
-			const shown = shownEffects.get();
+			const shown = content.get();
 			// A canvas with no boxes is hidden; the resize observer draws it once it shows.
 			if (!gl || lost || !shown || !canvas.getClientRects().length) return;
 			const ratio = window.devicePixelRatio || 1;
@@ -287,7 +303,7 @@ export function effectsView(place: (width: number, height: number) => Placement 
 		canvas.addEventListener('webglcontextrestored', onRestored);
 		const resized = new ResizeObserver(draw);
 		resized.observe(canvas);
-		const unsubscribe = shownEffects.listen(draw);
+		const unsubscribe = content.listen(draw);
 		// Pan, zoom, and layout reach `place`; reading it here redraws on every change.
 		$effect(() => {
 			place(canvas.clientWidth, canvas.clientHeight);

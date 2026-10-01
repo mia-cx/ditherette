@@ -1,4 +1,5 @@
 import type { ColourChannel, CurvePoints, MaskCurve, OneInputMaskCurve } from 'ditherette';
+import { coordinates } from '$lib/scopes/colour';
 import { sameChannel } from './catalog';
 import { evaluateGrid, type GridCurve } from './grid';
 import { channelValue } from './pick';
@@ -177,4 +178,29 @@ export function setPreset(
 	return curve
 		? mask.map((other, at) => (at === index ? curve : other))
 		: mask.filter((_, at) => at !== index);
+}
+
+const scratch = new Float64Array(3);
+
+/** How much a hue input counts for this colour: 0 for greys, rising to 1 with chroma. */
+function hueWeight(channel: ColourChannel, [r, g, b]: readonly [number, number, number]) {
+	return channel.channel === 'hue' ? coordinates(channel.model, r, g, b, scratch) : 1;
+}
+
+/**
+ * A mask's strength for an sRGB byte colour entering its step, from 0 through 1, following
+ * `spec/effects/mask.md`. The package computes it in `f32` on the unrounded colour, so this is for
+ * showing a mask, not for producing output.
+ */
+export function maskStrength(mask: readonly MaskCurve[], rgb: readonly [number, number, number]) {
+	let strength = 1;
+	for (const curve of mask) {
+		const x = channelValue(curve.x, rgb);
+		const value = curve.x2
+			? evaluateGrid(curve, x, channelValue(curve.x2, rgb))
+			: Math.min(1, Math.max(0, evaluate(curve, x)));
+		const weight = Math.min(hueWeight(curve.x, rgb), curve.x2 ? hueWeight(curve.x2, rgb) : 1);
+		strength *= weight < 1 ? 1 - weight * (1 - value) : value;
+	}
+	return strength;
 }
