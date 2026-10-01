@@ -17,7 +17,10 @@ use crate::{
 /// Most steps one chain may hold, enabled or not.
 pub const MAX_EFFECTS: usize = 64;
 
-use super::image::EffectImage;
+use super::{
+    image::EffectImage,
+    mask::{self, blend, MaskCurve},
+};
 
 /// Shared inputs an effect may read. Ordinary effects read neither field.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -68,6 +71,16 @@ pub trait Effect {
 
     /// Transforms RGB in place. Arguments and context are already validated.
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>);
+
+    /// Applies with a per-pixel strength in `[0,1]`, read from the image entering the step.
+    /// By default the output moves back toward the input in RGB: `in + m·(out − in)`.
+    fn apply_masked(&self, image: &mut EffectImage, context: &EffectContext<'_>, mask: &[f32]) {
+        let input = image.rgb.clone();
+        self.apply(image, context);
+        for ((rgb, input), &strength) in image.rgb.iter_mut().zip(input).zip(mask) {
+            *rgb = blend(input, *rgb, strength);
+        }
+    }
 }
 
 impl<E: Effect + ?Sized> Effect for Box<E> {
@@ -90,12 +103,19 @@ impl<E: Effect + ?Sized> Effect for Box<E> {
     fn apply(&self, image: &mut EffectImage, context: &EffectContext<'_>) {
         (**self).apply(image, context)
     }
+
+    fn apply_masked(&self, image: &mut EffectImage, context: &EffectContext<'_>, mask: &[f32]) {
+        (**self).apply_masked(image, context, mask)
+    }
 }
 
 /// One ordered chain entry. A disabled step keeps its arguments but does no work.
+/// An empty mask means full strength everywhere, and is left out of the JSON.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Step<E> {
     pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mask: Vec<MaskCurve>,
     #[serde(flatten)]
     pub effect: E,
 }
@@ -113,7 +133,9 @@ pub fn validate_chain<E: Effect>(
         ));
     }
     for (index, step) in steps.iter().enumerate() {
-        step.effect.validate(&format!("effects.{index}"))?;
+        let path = format!("effects.{index}");
+        step.effect.validate(&path)?;
+        mask::validate(&step.mask, &path)?;
     }
     for (index, step) in steps.iter().enumerate().filter(|(_, step)| step.enabled) {
         let needs = step.effect.needs();
@@ -141,7 +163,12 @@ pub fn apply_chain<E: Effect>(
 ) -> Result<(), DitheretteError> {
     validate_chain(steps, context)?;
     for step in steps.iter().filter(|step| step.enabled) {
-        step.effect.apply(image, context);
+        if step.mask.is_empty() {
+            step.effect.apply(image, context);
+        } else {
+            let strengths = mask::strengths(&step.mask, image);
+            step.effect.apply_masked(image, context, &strengths);
+        }
         image.bound();
     }
     Ok(())

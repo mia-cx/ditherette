@@ -1582,6 +1582,161 @@
 				}
 			],
 			"contentSha256": "3aaca1bd1b7ea892eb9b21449117e497c1514beee39455f049b48c17dee124c1"
+		},
+		{
+			"name": "effects-step-masks",
+			"summary": "Masks on every effect step: up to four curves set each step's strength per pixel (#304).",
+			"changes": [
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/chain.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/chain.md",
+						"mode": "100644",
+						"sha256": "f95c83ea5af3eb09d86f36da5f27bf5272b37e776e050d8c0d0a2b550381f880"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/chain.md",
+						"mode": "100644",
+						"sha256": "187d1b99460322125f7fb652a4a3dffd718edf4c5b37cfe623c0268543816ad7"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/chain.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/chain.rs",
+						"mode": "100644",
+						"sha256": "0d021a814e6213a673b4828bcc152c11d6254b819e796246501db514a73541d9"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/chain.rs",
+						"mode": "100644",
+						"sha256": "0059a48604d776e369badfb84d63ebfad75607576abc4a9788fb2e1dcbec89b2"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "e42e085a589d775c1a3f710457b4ebe2c0bd994ebc9b21843f5752f5f03f8a04"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.md",
+						"mode": "100644",
+						"sha256": "1c37fcb0bf33cb4a47033c8d77a352f5478299ba9b58e9e463f4c9ad83b72e17"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "ab89b7914e4f6f7698461024ddd0fb12ca0f2be94cb8cc16f728120a269e6ee0"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/curves.rs",
+						"mode": "100644",
+						"sha256": "ed755b14ea640abed5137767ed4c477a7bb32425b6659c21038f36f5eacbc61d"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mask.md",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mask.md",
+						"mode": "100644",
+						"sha256": "7da3a2a5c4fc1e109eaf2b6b903a84e05268ef931e9c7c94add64cd53050f470"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mask.rs",
+					"before": null,
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mask.rs",
+						"mode": "100644",
+						"sha256": "d506d0ceb7b434cda33a6dccf7a90c07e3ba3217a97b4bf974366e4e0bd3fcaa"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "0a0ef471ac26a546ab6e8f99b7d0cbe763838803239b1f19258d28710991aba7"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/mod.rs",
+						"mode": "100644",
+						"sha256": "832ea728e858656d6e8407c52a3bfe2846ac2dbb6300f9c8f433c9609fa495e1"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "ea4c52c84676eb0228e5d77bae6e899f94ed3babfbc2c7e1679b7fa944a5ecca"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.md",
+						"mode": "100644",
+						"sha256": "92a349b45b327b0277eac8ac92204d1af8265cf49113942aaba4fddaf4acd618"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "45ebb8c3bdb002fd88ce2fd7091ca6519c5f2388263a0129838a1fc672d0ff94"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recipe.rs",
+						"mode": "100644",
+						"sha256": "94ecfacb3885bb65b14971e66d03ef9262d5e59aeea20d28ed96d2f6f08e638d"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recolour.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recolour.md",
+						"mode": "100644",
+						"sha256": "ff711af026c794fff859b24d1578f71fb682b804e39b3e69f6974901e17aa038"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recolour.md",
+						"mode": "100644",
+						"sha256": "637caffa57bc493f2615cb54b2a9b525d3d77201ba5f7074a6e2e6cd0e32984b"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/recolour.rs",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recolour.rs",
+						"mode": "100644",
+						"sha256": "661d7652b6b132bb00633e5165276376caabfbfbb84020e4b2d06b28406a7759"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/recolour.rs",
+						"mode": "100644",
+						"sha256": "1e3d0323e6d038cba5e6c98008bab4c1a2fb92b1602549a513f10daf838ceea4"
+					}
+				},
+				{
+					"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+					"before": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "0df922677c88c94f6d3907b1d412a9ed26abbaacad1888c0a68195396ea6bcab"
+					},
+					"after": {
+						"path": "crates/ditherette-wasm/src/spec/effects/spec.md",
+						"mode": "100644",
+						"sha256": "b44ecfea74523fb5efa04e5af03d6e47d1bf2fefb6d525f7d14145661f14ff8a"
+					}
+				}
+			],
+			"contentSha256": "453222d457839a9cd2ca09deabe9fc0f595dcabc21208c0151e14c166cdf6e14"
 		}
 	]
 }

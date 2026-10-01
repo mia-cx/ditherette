@@ -47,6 +47,8 @@ For each pixel, in `f32`, with the lightness–opponent coordinates of [space.md
 The identity recipe (tone `[[0,0],[1,1]]`, chroma 1, no shift, no groups) returns the input exactly, without the round trip.
 With no recipe, the step first derives one from the image it receives ([recolour_analysis.md](recolour_analysis.md)).
 
+With a [mask](mask.md), step 5 uses `strength * m` for each pixel, where `m` is that pixel's mask value. Analysis still reads the whole image the step receives, unmasked.
+
 ## Why this works this way
 
 Analysis and application share one plain recipe, so a caller can inspect it, edit one number, and reapply without analysing again.
@@ -72,4 +74,4 @@ Production may cache analyses and tabulate per-channel work, but must reproduce 
 
 ## Non-goals
 
-Spatial masks and semantic regions. Groups target hue only.
+Spatial masks and semantic regions. Groups target hue only; colour masks belong to the step.

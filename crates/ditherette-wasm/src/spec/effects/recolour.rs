@@ -17,6 +17,7 @@ use super::{
     chain::{check_bounded, Effect, EffectContext, Needs},
     curves::{Curves, Spline},
     image::EffectImage,
+    mask::blend,
     recolour_analysis::analyze,
     space::{from_opponent, to_opponent},
 };
@@ -111,14 +112,21 @@ impl RecolourRecipe {
         }
         let tone = Spline::new(&self.tone);
         for rgb in &mut image.rgb {
-            let adjusted = self.map(&tone, *rgb);
-            *rgb = if strength == 1.0 {
-                adjusted
-            } else {
-                std::array::from_fn(|channel| {
-                    rgb[channel] + strength * (adjusted[channel] - rgb[channel])
-                })
-            };
+            *rgb = blend(*rgb, self.map(&tone, *rgb), strength);
+        }
+    }
+
+    /// Like `apply`, with each pixel's strength multiplied by its mask value.
+    pub fn apply_masked(&self, image: &mut EffectImage, strength: f32, mask: &[f32]) {
+        if strength == 0.0 || self.is_identity() {
+            return;
+        }
+        let tone = Spline::new(&self.tone);
+        for (rgb, &masked) in image.rgb.iter_mut().zip(mask) {
+            let strength = strength * masked;
+            if strength != 0.0 {
+                *rgb = blend(*rgb, self.map(&tone, *rgb), strength);
+            }
         }
     }
 
@@ -210,6 +218,17 @@ impl Effect for Recolour {
         match &self.recipe {
             Some(recipe) => recipe.apply(image, self.strength),
             None => analyze(image, context).apply(image, self.strength),
+        }
+    }
+
+    /// The mask multiplies `strength` per pixel. Analysis still reads the whole unmasked input.
+    fn apply_masked(&self, image: &mut EffectImage, context: &EffectContext<'_>, mask: &[f32]) {
+        if self.strength == 0.0 {
+            return;
+        }
+        match &self.recipe {
+            Some(recipe) => recipe.apply_masked(image, self.strength, mask),
+            None => analyze(image, context).apply_masked(image, self.strength, mask),
         }
     }
 }

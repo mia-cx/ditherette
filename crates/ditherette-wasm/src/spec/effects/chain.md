@@ -11,9 +11,9 @@ It returns `Ok(())` or the first validation error.
 
 ## Algorithm / semantic rule
 
-1. Reject more than 64 steps at `effects`. Then validate every step's arguments in array order, enabled or not. The error path is `effects.i` or deeper.
+1. Reject more than 64 steps at `effects`. Then validate every step's arguments, then its [mask](mask.md), in array order, enabled or not. The error path is `effects.i` or deeper.
 2. For each enabled step, check the context it `needs`, then let the step check its arguments against that context (`check_context`). A palette need requires at least one visible colour among the first 256 entries, the palette quantization keeps; a space need requires a working space.
-3. Apply enabled steps in array order. Each step reads the image the previous step wrote, bounded to `±64` per channel.
+3. Apply enabled steps in array order. Each step reads the image the previous step wrote, bounded to `±64` per channel. A step with mask curves first computes each pixel's strength from that image, then runs `apply_masked` with it.
 
 Disabled steps do no pixel work and need no context. Duplicate steps run once per occurrence with their own arguments.
 
@@ -23,16 +23,19 @@ The executor only calls trait methods, so adding an effect never touches sequenc
 Validating everything before any work means a bad step late in the chain cannot leave half-applied output.
 Whole-image `apply` lets an effect analyse the image it receives, which palette-aware recolouring needs.
 
-`Step<E>` serializes as the effect's own tagged object plus `enabled`:
+`Step<E>` serializes as the effect's own tagged object plus `enabled` and an optional `mask`:
 
 ```json
 { "effect": "levels", "enabled": true, "channel": "rgb", "input": { "black": 0, "white": 1 }, "gamma": 1, "output": { "black": 0, "white": 1 } }
 ```
 
+`apply_masked` has a default: run `apply`, then move each pixel back toward its input in RGB by its strength. An effect overrides it when strength means something closer to its own arguments, as curves and recolour do.
+
 ## Correctness invariants
 
 - Order is caller order. The executor never sorts, groups, or merges steps.
 - A chain with no enabled step leaves the image unchanged.
+- A step without mask curves runs `apply`, never `apply_masked`.
 - Context is read only by effects that declare a need for it.
 
 ## Edge cases

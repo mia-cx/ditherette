@@ -232,14 +232,17 @@ fn caller_defined_effects_compose_with_builtins_through_the_same_executor() {
     let chain: Vec<Step<Box<dyn Effect>>> = vec![
         Step {
             enabled: true,
+            mask: Vec::new(),
             effect: Box::new(builtin.effect),
         },
         Step {
             enabled: true,
+            mask: Vec::new(),
             effect: Box::new(Invert),
         },
         Step {
             enabled: false,
+            mask: Vec::new(),
             effect: Box::new(PaletteProbe),
         },
     ];
@@ -255,6 +258,7 @@ fn caller_defined_effects_compose_with_builtins_through_the_same_executor() {
 
     let probe = vec![Step {
         enabled: true,
+        mask: Vec::new(),
         effect: PaletteProbe,
     }];
     let mut image = EffectImage::from_rgba8(view);
@@ -317,6 +321,7 @@ fn decoding_and_validation_name_the_failing_step() {
     }
     let nan = vec![Step {
         enabled: true,
+        mask: Vec::new(),
         effect: BuiltinEffect::Levels(Levels {
             gamma: f32::NAN,
             ..as_levels(&steps(json!([levels((0.0, 1.0), 1.0, (0.0, 1.0))]))[0])
@@ -508,6 +513,7 @@ fn chains_are_capped_and_see_only_the_retained_palette() {
     assert_eq!(context.colors().count(), 0);
     let probe = vec![Step {
         enabled: true,
+        mask: Vec::new(),
         effect: PaletteProbe,
     }];
     let dimensions = run(&data, &[]).unwrap().dimensions();
