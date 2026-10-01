@@ -204,9 +204,10 @@ function sampleReader(rows: Uint8Array, bitDepth: number) {
 /**
  * Decodes a PNG to straight RGBA without a canvas, so the bytes match the file exactly.
  *
- * Returns undefined for interlaced PNGs and for PNGs a browser would colour-manage (an ICC
- * profile, or gamma or chromaticities without an sRGB chunk). The caller then lets the
- * browser decode them, so their colours still match the `<img>` preview.
+ * Returns undefined for interlaced PNGs, PNGs a browser would colour-manage (cICP, an ICC
+ * profile, or gamma or chromaticities without an sRGB chunk), PNGs with an eXIf orientation, and
+ * browsers without `DecompressionStream`. The caller then lets the browser decode them, so their
+ * colours and orientation still match the `<img>` preview.
  */
 export async function decodePng(
 	bytes: Uint8Array<ArrayBuffer>
@@ -236,9 +237,15 @@ export async function decodePng(
 	if (!format?.depths.includes(bitDepth)) throw new Error('PNG colour type is invalid.');
 	validateSourceImageSize(width, height);
 	const interlaced = header[12] !== 0;
+	// cICP outranks iCCP and sRGB, so an sRGB chunk beside it doesn't make the file plain sRGB.
 	const colorManaged =
-		chunks.has('iCCP') || (!chunks.has('sRGB') && (chunks.has('gAMA') || chunks.has('cHRM')));
-	if (interlaced || colorManaged) return undefined;
+		chunks.has('cICP') ||
+		chunks.has('iCCP') ||
+		(!chunks.has('sRGB') && (chunks.has('gAMA') || chunks.has('cHRM')));
+	// Browsers rotate an eXIf orientation; this decoder doesn't.
+	const oriented = chunks.has('eXIf');
+	if (interlaced || colorManaged || oriented || typeof DecompressionStream === 'undefined')
+		return undefined;
 
 	const palette = chunks.get('PLTE');
 	if (colorType === 3 && !palette) throw new Error('PNG palette is missing.');

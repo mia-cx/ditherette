@@ -39,6 +39,19 @@ function pngBytes(base64: string) {
 	return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 }
 
+/** Inserts an ancillary chunk right after IHDR. The decoder doesn't check CRCs, so it's zero. */
+function withChunk(bytes: Uint8Array, type: string, data: number[]) {
+	const ihdrEnd = 33;
+	const header = [0, 0, 0, data.length, ...Array.from(type, (char) => char.charCodeAt(0))];
+	return new Uint8Array([
+		...bytes.subarray(0, ihdrEnd),
+		...header,
+		...data,
+		...[0, 0, 0, 0],
+		...bytes.subarray(ihdrEnd)
+	]);
+}
+
 function spyOnCanvasReadback() {
 	return [
 		vi.spyOn(CanvasRenderingContext2D.prototype, 'getImageData'),
@@ -102,23 +115,31 @@ describe('decodeBlob', () => {
 		}
 	);
 
-	it('leaves interlaced and colour-managed PNGs to the browser', async () => {
+	it('leaves interlaced, colour-managed, and oriented PNGs to the browser', async () => {
 		const bytes = pngBytes(
 			PNG_FIXTURES['RGBA with every filter type and colour under zero alpha'].png
 		);
 		const interlaced = bytes.slice();
 		interlaced[28] = 1;
-		const ihdrEnd = 33;
-		const gamma = new Uint8Array([0, 0, 0, 4, ...'gAMA'.split('').map((c) => c.charCodeAt(0))]);
-		const withGamma = new Uint8Array([
-			...bytes.subarray(0, ihdrEnd),
-			...gamma,
-			...[0, 0, 0xb1, 0x8f, 0, 0, 0, 0],
-			...bytes.subarray(ihdrEnd)
-		]);
+		// Display P3 with the sRGB transfer, and an EXIF orientation of 6; CRCs are left zero.
+		const cicp = [12, 13, 0, 1];
+		const exif = [0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6];
 
 		expect(await decodePng(interlaced)).toBeUndefined();
-		expect(await decodePng(withGamma)).toBeUndefined();
+		expect(await decodePng(withChunk(bytes, 'gAMA', [0, 0, 0xb1, 0x8f]))).toBeUndefined();
+		expect(await decodePng(withChunk(bytes, 'cICP', cicp))).toBeUndefined();
+		expect(await decodePng(withChunk(withChunk(bytes, 'sRGB', [0]), 'cICP', cicp))).toBeUndefined();
+		expect(await decodePng(withChunk(bytes, 'eXIf', exif))).toBeUndefined();
+	});
+
+	it('falls back to the canvas without DecompressionStream', async () => {
+		const fixture = PNG_FIXTURES['RGB with a tRNS colour key'];
+		vi.stubGlobal('ImageDecoder', undefined);
+		vi.stubGlobal('DecompressionStream', undefined);
+
+		const decoded = await decodeBlob(new Blob([pngBytes(fixture.png)], { type: 'image/png' }));
+
+		expect([decoded.width, decoded.height]).toEqual([3, 1]);
 	});
 
 	it.each([1, 2, 3, 4, 5, 6, 7, 8])(
