@@ -241,9 +241,8 @@ export interface LevelsPoints {
  * then scale to the output range. Output black above output white inverts the channel.
  * Neutral is input 0..1, gamma 1, output 0..1.
  */
-export interface LevelsEffect {
+export interface LevelsEffect extends StepEnvelope {
 	readonly effect: 'levels';
-	readonly enabled: boolean;
 	readonly channel: EffectChannel;
 	readonly input: LevelsPoints;
 	readonly gamma: number;
@@ -280,32 +279,60 @@ export interface TwoInputCurve {
 /** A strict one-input or two-input curve. */
 export type Curve = OneInputCurve | TwoInputCurve;
 
-/** Up to 16 ordered curves. Every input reads from the effect's original pixel. */
-export interface CurvesEffect {
-	readonly effect: 'curves';
+/**
+ * A mask curve reading one channel. `points` are `[input, strength]` with the same rules as
+ * curve points; a hue input wraps, so its points run from 0 to 1 with one shared strength.
+ */
+export interface OneInputMaskCurve {
+	readonly x: ColourChannel;
+	readonly points: CurvePoints;
+	readonly x2?: never;
+	readonly grid?: never;
+}
+
+/** A mask curve reading two channels through a grid of strengths. */
+export interface TwoInputMaskCurve {
+	readonly x: ColourChannel;
+	readonly x2: ColourChannel;
+	readonly grid: CurveGrid;
+	readonly points?: never;
+}
+
+/** One curve of a step's mask. Its output is the step's strength, from 0 through 1. */
+export type MaskCurve = OneInputMaskCurve | TwoInputMaskCurve;
+
+/**
+ * What every step carries besides its effect's arguments. A disabled step is validated but
+ * skipped. `mask` holds up to 4 curves that read the colour entering the step; their values
+ * multiply into the step's strength there. Hue-keyed curves fade toward 1 on near-grey colours.
+ */
+export interface StepEnvelope {
 	readonly enabled: boolean;
+	readonly mask?: readonly MaskCurve[];
+}
+
+/** Up to 16 ordered curves. Every input reads from the effect's original pixel. */
+export interface CurvesEffect extends StepEnvelope {
+	readonly effect: 'curves';
 	readonly curves: readonly Curve[];
 }
 
 /** Contrast from -1 through 1 scales around mid-grey by `4^contrast`; brightness from -1 through 1 adds. */
-export interface BrightnessContrastEffect {
+export interface BrightnessContrastEffect extends StepEnvelope {
 	readonly effect: 'brightness-contrast';
-	readonly enabled: boolean;
 	readonly brightness: number;
 	readonly contrast: number;
 }
 
 /** Exposure in stops from -4 through 4, applied in linear light. */
-export interface ExposureEffect {
+export interface ExposureEffect extends StepEnvelope {
 	readonly effect: 'exposure';
-	readonly enabled: boolean;
 	readonly stops: number;
 }
 
 /** Temperature (warm is positive) and tint (magenta is positive), each from -1 through 1. */
-export interface WhiteBalanceEffect {
+export interface WhiteBalanceEffect extends StepEnvelope {
 	readonly effect: 'white-balance';
-	readonly enabled: boolean;
 	readonly temperature: number;
 	readonly tint: number;
 }
@@ -314,9 +341,8 @@ export interface WhiteBalanceEffect {
  * Hue turn in degrees from -180 through 180, with saturation and lightness from -1 through 1,
  * computed in Oklab. Saturation -1 is greyscale; lightness 1 is white and -1 is black.
  */
-export interface HueSaturationEffect {
+export interface HueSaturationEffect extends StepEnvelope {
 	readonly effect: 'hue-saturation';
-	readonly enabled: boolean;
 	readonly hue: number;
 	readonly saturation: number;
 	readonly lightness: number;
@@ -355,9 +381,8 @@ export interface RecolourRecipe {
  * quantization. With `recipe: null` it analyses the image reaching it against the context
  * palette and space. `strength` blends from the input (0) to the full treatment (1).
  */
-export interface RecolourEffect {
+export interface RecolourEffect extends StepEnvelope {
 	readonly effect: 'recolour';
-	readonly enabled: boolean;
 	readonly strength: number;
 	readonly recipe: RecolourRecipe | null;
 }
