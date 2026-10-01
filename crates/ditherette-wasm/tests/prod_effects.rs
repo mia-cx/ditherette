@@ -251,6 +251,72 @@ fn random_effect(rng: &mut Rng) -> Value {
     }
 }
 
+/// Zero to four mask curves on any channels: open and cyclic one-input curves and grids,
+/// sometimes all 1 (a no-op) or all 0 (no change).
+fn random_mask(rng: &mut Rng) -> Vec<Value> {
+    let count = rng.next() % 5;
+    (0..count)
+        .map(|_| {
+            let level = match rng.next() % 6 {
+                0 => Some(1.0),
+                1 => Some(0.0),
+                _ => None,
+            };
+            let x = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+            if rng.next() % 3 == 0 {
+                let mut x2 = COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+                if x2 == x {
+                    x2 = if x == ("oklab", "a") {
+                        ("oklch", "hue")
+                    } else {
+                        ("oklab", "a")
+                    };
+                }
+                let columns = 2 + (rng.next() % 5) as usize;
+                let rows = 2 + (rng.next() % 4) as usize;
+                let values: Vec<Vec<f32>> = (0..rows)
+                    .map(|_| {
+                        (0..columns)
+                            .map(|_| level.unwrap_or_else(|| rng.unit()))
+                            .collect()
+                    })
+                    .collect();
+                return json!({
+                    "x": { "model": x.0, "channel": x.1 },
+                    "x2": { "model": x2.0, "channel": x2.1 },
+                    "grid": {
+                        "columns": random_axis(rng, x, columns),
+                        "rows": random_axis(rng, x2, rows),
+                        "values": values,
+                    },
+                });
+            }
+            let count = 2 + (rng.next() % 6) as usize;
+            let mut points: Vec<[f32; 2]> = (0..count)
+                .map(|index| {
+                    [
+                        index as f32 / (count - 1) as f32,
+                        level.unwrap_or_else(|| rng.unit()),
+                    ]
+                })
+                .collect();
+            if x.1 == "hue" {
+                points[count - 1][1] = points[0][1];
+            }
+            json!({ "x": { "model": x.0, "channel": x.1 }, "points": points })
+        })
+        .collect()
+}
+
+/// `random_effect` with a random mask on about half of the steps.
+fn random_masked_effect(rng: &mut Rng) -> Value {
+    let mut effect = random_effect(rng);
+    if rng.next() % 2 == 0 {
+        effect["mask"] = Value::Array(random_mask(rng));
+    }
+    effect
+}
+
 fn assert_same(effects: &Value, width: u32, height: u32, data: &[u8]) {
     let json = effects.to_string();
     let spec_steps = spec::decode_effects(&json).unwrap();
@@ -315,6 +381,94 @@ fn random_chains_match_the_reference() {
             let effects: Vec<Value> = (0..count).map(|_| random_effect(&mut rng)).collect();
             assert_same(&Value::Array(effects), width, height, &data);
         }
+    }
+}
+
+#[test]
+fn random_masked_chains_match_the_reference() {
+    let mut rng = Rng(0x3a5c_0304);
+    for (width, height, data) in fixtures(&mut rng) {
+        for _ in 0..150 {
+            let count = 1 + rng.next() % 5;
+            let effects: Vec<Value> = (0..count).map(|_| random_masked_effect(&mut rng)).collect();
+            assert_same(&Value::Array(effects), width, height, &data);
+        }
+    }
+}
+
+#[test]
+fn masked_curves_steps_match_the_reference() {
+    let mut rng = Rng(0x3a5c_0305);
+    for (width, height, data) in fixtures(&mut rng) {
+        for _ in 0..80 {
+            let curves: Vec<Value> = (0..1 + rng.next() % 3)
+                .map(|_| match rng.next() % 3 {
+                    0 => random_remap(&mut rng, None),
+                    1 => random_adjustment(&mut rng, None),
+                    _ => {
+                        let x = OPEN_CHANNELS[(rng.next() % OPEN_CHANNELS.len() as u64) as usize];
+                        let x2 = HUE_CHANNELS[(rng.next() % HUE_CHANNELS.len() as u64) as usize];
+                        let y =
+                            COLOUR_CHANNELS[(rng.next() % COLOUR_CHANNELS.len() as u64) as usize];
+                        random_grid_curve(&mut rng, x, x2, y, (3, 4), false)
+                    }
+                })
+                .collect();
+            let effects = json!([
+                { "effect": "curves", "enabled": true, "curves": curves, "mask": random_mask(&mut rng) },
+                { "effect": "recolour", "enabled": true, "strength": rng.unit(), "recipe": null,
+                  "mask": random_mask(&mut rng) },
+            ]);
+            assert_same(&effects, width, height, &data);
+        }
+    }
+}
+
+#[test]
+fn masks_join_the_effects_identity_and_empty_masks_do_not() {
+    use ditherette_wasm::prod::{contract::cache::Identity, pipeline::identity};
+
+    let key = |effects: Value| {
+        let steps = prod::decode_effects(&effects.to_string()).unwrap();
+        identity::effects(Identity([7; 32]), &steps, &prod::EffectContext::default())
+            .unwrap()
+            .0
+    };
+    let exposure = json!({ "effect": "exposure", "enabled": true, "stops": 1 });
+    let mut empty = exposure.clone();
+    empty["mask"] = json!([]);
+    let mut masked = exposure.clone();
+    masked["mask"] =
+        json!([{ "x": { "model": "oklch", "channel": "lightness" }, "points": [[0, 1], [1, 0]] }]);
+    let mut other = masked.clone();
+    other["mask"][0]["points"][1][1] = json!(0.5);
+    let plain = key(json!([exposure]));
+    assert_eq!(key(json!([empty])), plain);
+    assert_ne!(key(json!([masked.clone()])), plain);
+    assert_ne!(key(json!([masked])), key(json!([other])));
+}
+
+#[test]
+fn masked_validation_matches_the_reference() {
+    let mut rng = Rng(11);
+    let (width, height, data) = fixtures(&mut rng).remove(2);
+    let exposure =
+        |mask: Value| json!([{ "effect": "exposure", "enabled": false, "stops": 1, "mask": mask }]);
+    let one =
+        json!({ "x": { "model": "oklch", "channel": "lightness" }, "points": [[0, 1], [1, 0]] });
+    for mask in [
+        json!([one, one, one, one, one]),
+        json!([{ "x": { "model": "hsl", "channel": "chroma" }, "points": [[0, 1], [1, 0]] }]),
+        json!([{ "x": { "model": "hsl", "channel": "hue" }, "points": [[0, 1], [1, 0]] }]),
+        json!([{ "x": { "model": "srgb", "channel": "red" }, "points": [[0, 1], [0.0001, 0]] }]),
+        json!([{ "x": { "model": "oklab", "channel": "a" }, "x2": { "model": "oklab", "channel": "a" },
+            "grid": { "columns": [0, 1], "rows": [0, 1], "values": [[1, 1], [1, 1]] } }]),
+        json!([{ "x": { "model": "oklch", "channel": "hue" }, "x2": { "model": "oklab", "channel": "a" },
+            "grid": { "columns": [0, 0.9995], "rows": [0, 1], "values": [[1, 1], [1, 1]] } }]),
+        json!([{ "x": { "model": "oklch", "channel": "hue" }, "x2": { "model": "oklab", "channel": "a" },
+            "grid": { "columns": [0, 0.5], "rows": [0, 1], "values": [[1, 1], [1, 2]] } }]),
+    ] {
+        assert_same(&exposure(mask), width, height, &data);
     }
 }
 
@@ -948,14 +1102,19 @@ fn curves_select_tables_only_for_rgb_remap_lists_and_memoize_every_other_list() 
 #[test]
 fn prepared_hue_matches_frozen_map_for_byte_inputs() {
     use ditherette_wasm::prod::effects::{
-        chain::PreparedPointwiseState, hue_saturation::HueSaturation, table::ChannelTables,
+        chain::{Planned, PreparedPointwiseState},
+        hue_saturation::HueSaturation,
+        table::ChannelTables,
     };
 
     let context = prod::EffectContext::default();
     for effect in hue_effects() {
         let reference = reference_hue(effect);
         let tables = ChannelTables::new(std::iter::empty::<&HueSaturation>());
-        let effects = [&effect];
+        let effects = [Planned {
+            effect: &effect,
+            mask: &[],
+        }];
         let prepared = PreparedPointwiseState::try_new(&effects, &tables).unwrap();
         for red in (0..=u8::MAX).step_by(17) {
             for green in (0..=u8::MAX).step_by(29) {
@@ -1114,8 +1273,14 @@ fn tabulated_prefixes_feed_the_carrier_exactly() {
                         .remove(0);
                     Box::new(step.effect)
                 };
+                let mask = if rng.next() % 2 == 0 {
+                    serde_json::from_value(Value::Array(random_mask(&mut rng))).unwrap()
+                } else {
+                    Vec::new()
+                };
                 chain.push(prod::Step {
                     enabled: rng.next() % 5 != 0,
+                    mask,
                     effect,
                 });
             }

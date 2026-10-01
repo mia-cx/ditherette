@@ -16,11 +16,12 @@ use crate::{
 
 use super::{
     chain::{
-        validate_chain, Effect, EffectContext, Needs, PreparedPointwise, PreparedPointwiseState,
-        Step, MAX_EFFECTS,
+        validate_chain, Effect, EffectContext, Needs, Planned, PreparedPointwise,
+        PreparedPointwiseState, Step, MAX_EFFECTS, PREPARED_STEP_BYTES,
     },
     curves::MAX_POINTS,
     image::{byte, EffectImage},
+    mask::{MaskCurve, PreparedMask},
     memo::{byte_memo_bytes, try_memoized, try_memoized_bytes, FLOAT_MEMO_BYTES},
     recipe::{BuiltinEffect, EffectStep},
     recolour::{Group, Recolour, RecolourRecipe, MAX_GROUPS},
@@ -70,20 +71,51 @@ pub const BOOKKEEPING_BYTES: u64 = {
         + MAX_GROUPS * size_of::<Group>();
     let palette =
         MAX_PALETTE_ENTRIES * (size_of::<[u8; 3]>() + size_of::<[f32; 3]>() + size_of::<f32>());
-    (MAX_EFFECTS * (step + size_of::<&EffectStep>() + size_of::<PreparedPointwise>())
+    (MAX_EFFECTS * (step + size_of::<Planned<'static, BuiltinEffect>>() + PREPARED_STEP_BYTES)
         + palette
         + 4 * step) as u64
 };
 
+/// Per-pixel bytes a masked step that is not pointwise needs on the carrier path: a copy of its
+/// input and one strength.
+const MASKED_CARRIER_BYTES_PER_PIXEL: u64 = (size_of::<[f32; 3]>() + size_of::<f32>()) as u64;
+
+/// True when a step joins the leading per-channel tables. A mask reads all three channels.
+fn tabulates<E: Effect>(step: &Planned<'_, E>) -> bool {
+    step.mask.is_empty() && step.effect.per_channel()
+}
+
+/// The input copy and strengths the carrier path allocates for masked steps that are not pointwise.
+fn masked_carrier_bytes<'a, E: Effect + 'a>(
+    mut enabled: impl Iterator<Item = Planned<'a, E>>,
+    pixels: u64,
+) -> u64 {
+    if enabled.any(|step| !step.mask.is_empty() && !step.effect.pointwise()) {
+        pixels * MASKED_CARRIER_BYTES_PER_PIXEL
+    } else {
+        0
+    }
+}
+
+/// Enabled steps without allocating, for memory estimates.
+fn enabled_steps<E, M: AsRef<[MaskCurve]>>(
+    steps: &[Step<E, M>],
+) -> impl Iterator<Item = Planned<'_, E>> + Clone {
+    steps
+        .iter()
+        .filter(|step| step.enabled)
+        .map(|step| step.planned())
+}
+
 /// Bytes terminal application allocates beyond `data`. Pointwise tails use the adaptive byte
 /// memo; only chains that need a continuous image pay for a full carrier.
-pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) -> u64 {
-    let mut enabled = steps.iter().filter(|step| step.enabled);
+pub fn carrier_bytes<E: Effect, M: AsRef<[MaskCurve]>>(
+    steps: &[Step<E, M>],
+    dimensions: ImageDimensions,
+) -> u64 {
+    let enabled = enabled_steps(steps);
     let enabled_count = enabled.clone().count();
-    let tabulated = enabled
-        .clone()
-        .take_while(|step| step.effect.per_channel())
-        .count();
+    let tabulated = enabled.clone().take_while(tabulates).count();
     if tabulated == enabled_count {
         return BOOKKEEPING_BYTES;
     }
@@ -94,7 +126,7 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
         .unwrap_or(0);
     let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
     if enabled
-        .by_ref()
+        .clone()
         .skip(tabulated)
         .all(|step| step.effect.pointwise())
     {
@@ -102,18 +134,19 @@ pub fn carrier_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) 
     }
     EffectImage::carrier_bytes(pixels)
         + if scratch > 0 { FLOAT_MEMO_BYTES } else { 0 }
+        + masked_carrier_bytes(enabled, pixels)
         + scratch
         + BOOKKEEPING_BYTES
 }
 
 /// Bytes `carrier_after` allocates beyond `data`: the continuous image, optional float memo,
-/// and the largest effect scratch allocation.
-pub fn carrier_after_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimensions) -> u64 {
-    let enabled = steps.iter().filter(|step| step.enabled);
-    let tabulated = enabled
-        .clone()
-        .take_while(|step| step.effect.per_channel())
-        .count();
+/// masked-step scratch, and the largest effect scratch allocation.
+pub fn carrier_after_bytes<E: Effect, M: AsRef<[MaskCurve]>>(
+    steps: &[Step<E, M>],
+    dimensions: ImageDimensions,
+) -> u64 {
+    let enabled = enabled_steps(steps);
+    let tabulated = enabled.clone().take_while(tabulates).count();
     // Resolving a recipe-less recolour builds the carrier for the pointwise steps before it, which
     // memoizes even when the whole chain is not pointwise, so any step past the tables may need it.
     let memo = if enabled.clone().count() > tabulated {
@@ -121,12 +154,13 @@ pub fn carrier_after_bytes<E: Effect>(steps: &[Step<E>], dimensions: ImageDimens
     } else {
         0
     };
+    let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
+    let masked = masked_carrier_bytes(enabled.clone(), pixels);
     let scratch = enabled
         .map(|step| step.effect.working_bytes())
         .max()
         .unwrap_or(0);
-    let pixels = u64::from(dimensions.width()) * u64::from(dimensions.height());
-    EffectImage::carrier_bytes(pixels) + memo + scratch + BOOKKEEPING_BYTES
+    EffectImage::carrier_bytes(pixels) + memo + masked + scratch + BOOKKEEPING_BYTES
 }
 
 /// A step as it runs: the caller's own effect, or a recolour step with the recipe it derived.
@@ -166,6 +200,32 @@ impl Effect for Resolved<'_> {
         match self {
             Self::Given(effect) => effect.apply(image, context),
             Self::Recolour(effect) => effect.apply(image, context),
+        }
+    }
+
+    fn apply_masked(
+        &self,
+        image: &mut EffectImage,
+        input: &[[f32; 3]],
+        strengths: &[f32],
+        context: &EffectContext<'_>,
+    ) {
+        match self {
+            Self::Given(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::Recolour(effect) => effect.apply_masked(image, input, strengths, context),
+        }
+    }
+
+    fn map_prepared_masked(
+        &self,
+        prepared: &PreparedPointwise,
+        rgb: [f32; 3],
+        strength: f32,
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        match self {
+            Self::Given(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
+            Self::Recolour(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
         }
     }
 
@@ -248,18 +308,23 @@ impl Effect for Resolved<'_> {
     }
 }
 
+/// A step as it runs, borrowing the caller's mask.
+pub type ResolvedStep<'a> = Step<Resolved<'a>, &'a [MaskCurve]>;
+
 /// Replaces each enabled recipe-less `recolour` step with the recipe it would derive from the
 /// carrier reaching it, in order. The result is pointwise everywhere, so it memoizes.
+/// Analysis reads the unmasked carrier; the step's mask still applies to its result.
 pub fn resolve_recolour<'a>(
     data: &[u8],
     dimensions: ImageDimensions,
     steps: &'a [EffectStep],
     context: &EffectContext<'_>,
-) -> Result<Vec<Step<Resolved<'a>>>, TryReserveError> {
+) -> Result<Vec<ResolvedStep<'a>>, TryReserveError> {
     let mut resolved = Vec::new();
     resolved.try_reserve_exact(steps.len())?;
     resolved.extend(steps.iter().map(|step| Step {
         enabled: step.enabled,
+        mask: step.mask.as_slice(),
         effect: Resolved::Given(&step.effect),
     }));
     for index in 0..resolved.len() {
@@ -330,14 +395,14 @@ pub fn analyze_recolour(request: AnalyzeRequest<'_>) -> Result<RecolourRecipe, D
 }
 
 /// Applies an already validated chain to packed RGBA8. Alpha bytes are never written.
-pub fn apply_in_place<E: Effect>(
+pub fn apply_in_place<E: Effect, M: AsRef<[MaskCurve]>>(
     data: &mut [u8],
     dimensions: ImageDimensions,
-    steps: &[Step<E>],
+    steps: &[Step<E, M>],
     context: &EffectContext<'_>,
 ) -> Result<(), TryReserveError> {
     let (enabled, tabulated) = plan(steps)?;
-    let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
+    let tables = ChannelTables::new(enabled[..tabulated].iter().map(|step| step.effect));
     if tabulated == enabled.len() {
         if tabulated > 0 {
             let [red, green, blue] = tables.bytes();
@@ -350,7 +415,7 @@ pub fn apply_in_place<E: Effect>(
         return Ok(());
     }
     let rest = &enabled[tabulated..];
-    if rest.iter().all(|effect| effect.pointwise()) {
+    if rest.iter().all(|step| step.effect.pointwise()) {
         let prepared = PreparedPointwiseState::try_new(rest, &tables)?;
         try_memoized_bytes(data, |bytes| prepared.map(bytes, context).map(byte))?;
         return Ok(());
@@ -360,31 +425,25 @@ pub fn apply_in_place<E: Effect>(
 }
 
 /// The continuous carrier after an already validated chain: what a step appended to it receives.
-pub fn carrier_after<E: Effect>(
+pub fn carrier_after<E: Effect, M: AsRef<[MaskCurve]>>(
     data: &[u8],
     dimensions: ImageDimensions,
-    steps: &[Step<E>],
+    steps: &[Step<E, M>],
     context: &EffectContext<'_>,
 ) -> Result<EffectImage, TryReserveError> {
     let (enabled, tabulated) = plan(steps)?;
-    let tables = ChannelTables::new(enabled[..tabulated].iter().copied());
+    let tables = ChannelTables::new(enabled[..tabulated].iter().map(|step| step.effect));
     carrier(data, dimensions, &enabled, tabulated, &tables, context)
 }
 
-/// Enabled effects in order, and how many lead as a tabulated per-channel run.
-fn plan<E: Effect>(steps: &[Step<E>]) -> Result<(Vec<&E>, usize), TryReserveError> {
+/// Enabled steps in order, and how many lead as a tabulated per-channel run.
+fn plan<E: Effect, M: AsRef<[MaskCurve]>>(
+    steps: &[Step<E, M>],
+) -> Result<(Vec<Planned<'_, E>>, usize), TryReserveError> {
     let mut enabled = Vec::new();
     enabled.try_reserve_exact(steps.len())?;
-    enabled.extend(
-        steps
-            .iter()
-            .filter(|step| step.enabled)
-            .map(|step| &step.effect),
-    );
-    let tabulated = enabled
-        .iter()
-        .take_while(|effect| effect.per_channel())
-        .count();
+    enabled.extend(enabled_steps(steps));
+    let tabulated = enabled.iter().take_while(|step| tabulates(step)).count();
     Ok((enabled, tabulated))
 }
 
@@ -393,7 +452,7 @@ fn plan<E: Effect>(steps: &[Step<E>]) -> Result<(Vec<&E>, usize), TryReserveErro
 fn carrier<E: Effect>(
     data: &[u8],
     dimensions: ImageDimensions,
-    enabled: &[&E],
+    enabled: &[Planned<'_, E>],
     tabulated: usize,
     tables: &ChannelTables,
     context: &EffectContext<'_>,
@@ -402,16 +461,48 @@ fn carrier<E: Effect>(
     if rest.is_empty() {
         return EffectImage::try_from_packed(data, dimensions, tables);
     }
-    if rest.iter().all(|effect| effect.pointwise()) {
+    if rest.iter().all(|step| step.effect.pointwise()) {
         let prepared = PreparedPointwiseState::try_new(rest, tables)?;
         return try_memoized(data, dimensions, |bytes| prepared.map(bytes, context));
     }
     let mut image = EffectImage::try_from_packed(data, dimensions, tables)?;
-    for effect in rest {
-        effect.apply(&mut image, context);
+    for step in rest {
+        apply_step(&mut image, step, context)?;
         image.bound();
     }
     Ok(image)
+}
+
+/// One step on the continuous carrier. A masked pointwise step maps pixel by pixel; any other
+/// masked step needs a copy of its input and its strengths, reserved fallibly.
+fn apply_step<E: Effect>(
+    image: &mut EffectImage,
+    step: &Planned<'_, E>,
+    context: &EffectContext<'_>,
+) -> Result<(), TryReserveError> {
+    if step.mask.is_empty() {
+        step.effect.apply(image, context);
+        return Ok(());
+    }
+    let mask = PreparedMask::new(step.mask);
+    if step.effect.pointwise() {
+        let map = step.effect.prepare_pointwise();
+        for rgb in &mut image.rgb {
+            let strength = mask.strength(step.mask, *rgb);
+            *rgb = step
+                .effect
+                .map_prepared_masked(&map, *rgb, strength, context);
+        }
+        return Ok(());
+    }
+    let mut input = Vec::new();
+    input.try_reserve_exact(image.rgb.len())?;
+    input.extend_from_slice(&image.rgb);
+    let mut strengths = Vec::new();
+    strengths.try_reserve_exact(input.len())?;
+    strengths.extend(input.iter().map(|&rgb| mask.strength(step.mask, rgb)));
+    step.effect.apply_masked(image, &input, &strengths, context);
+    Ok(())
 }
 
 fn source_view(source: Source<'_>) -> Result<ImageView<'_, Rgba8>, DitheretteError> {

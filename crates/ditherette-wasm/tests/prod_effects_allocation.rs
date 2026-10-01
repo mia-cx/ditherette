@@ -119,8 +119,16 @@ fn effect_calls_report_every_failed_allocation() {
               { "kind": "remap", "x": { "model": "srgb", "channel": "blue" },
                 "y": { "model": "srgb", "channel": "blue" }, "points": [[0, 0], [0.4, 0.5], [1, 1]] }
             ] },
-            { "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null },
-            { "effect": "hue-saturation", "enabled": true, "hue": 20, "saturation": 0.1, "lightness": 0 },
+            { "effect": "recolour", "enabled": true, "strength": 0.8, "recipe": null,
+              "mask": [{ "x": { "model": "oklch", "channel": "lightness" },
+                         "points": [[0, 1], [0.5, 0.3], [1, 0]] }] },
+            { "effect": "hue-saturation", "enabled": true, "hue": 20, "saturation": 0.1, "lightness": 0,
+              "mask": [
+                { "x": { "model": "oklch", "channel": "hue" }, "points": [[0, 1], [0.4, 0.2], [1, 1]] },
+                { "x": { "model": "oklab", "channel": "a" }, "x2": { "model": "hsv", "channel": "hue" },
+                  "grid": { "columns": [0, 0.5, 1], "rows": [0.2, 0.7],
+                            "values": [[1, 0.5, 0.2], [0.1, 0.9, 1]] } }
+              ] },
             { "effect": "curves", "enabled": true, "curves": [
               { "kind": "remap", "x": { "model": "oklch", "channel": "chroma" },
                 "y": { "model": "oklch", "channel": "chroma" },
