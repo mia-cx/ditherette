@@ -6,6 +6,7 @@ import {
 	sourceImageData,
 	sourceMeta,
 	sourceObjectUrl,
+	sourceWarning,
 	updateOutputSettings
 } from '$lib/stores/app';
 import {
@@ -17,7 +18,7 @@ import {
 	saveSourceImageAndClearProcessed,
 	sourceMetaFromRecord
 } from './db';
-import { decodeBlob } from './image-decode';
+import { decodeBlob, type DecodedImage } from './image-decode';
 import { cancelProcessing, currentSettingsHash, scheduleProcessing } from './client';
 import { clampOutputScale, fitOutputSizeToBounds } from './types';
 import { validateSourceBlob } from './image-metadata';
@@ -85,7 +86,7 @@ export async function setSourceFile(file: File) {
 		crop: undefined
 	});
 	processedImage.set(undefined);
-	publishSourceImageData(decoded.imageData);
+	publishSourceImageData(decoded);
 	scheduleProcessing(0);
 }
 
@@ -96,8 +97,9 @@ function setSourceMetadata(record: SourceImageRecord) {
 	sourceObjectUrl.set(URL.createObjectURL(record.blob));
 }
 
-function publishSourceImageData(imageData: ImageData) {
+function publishSourceImageData({ imageData, warning }: DecodedImage) {
 	sourceImageData.set(imageData);
+	sourceWarning.set(warning);
 }
 
 export async function restorePersistedImages() {
@@ -121,7 +123,7 @@ export async function restorePersistedImages() {
 	}
 	if (!source) return;
 
-	let decoded: Awaited<ReturnType<typeof decodeBlob>>;
+	let decoded: DecodedImage;
 	try {
 		decoded = await decodeBlob(source.blob);
 	} catch (error) {
@@ -147,7 +149,7 @@ export async function restorePersistedImages() {
 		if (generation !== sourceGeneration) throw new SourceSuperseded();
 		if (processed?.settingsHash === currentSettingsHash()) {
 			processedImage.set(processed);
-			publishSourceImageData(decoded.imageData);
+			publishSourceImageData(decoded);
 			return;
 		} else if (processed) await clearPersistedProcessedImage();
 	} catch (error) {
@@ -162,7 +164,7 @@ export async function restorePersistedImages() {
 		);
 	}
 
-	publishSourceImageData(decoded.imageData);
+	publishSourceImageData(decoded);
 	scheduleProcessing(0);
 }
 

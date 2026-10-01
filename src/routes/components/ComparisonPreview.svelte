@@ -33,6 +33,7 @@
 		sourceImageData,
 		sourceMeta,
 		sourceObjectUrl,
+		sourceWarning,
 		updateOutputSettings,
 		updatePreviewSettings,
 		type PreviewMode
@@ -1307,6 +1308,12 @@
 			class="border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
 		>
 			{$processingError}
+		</figcaption>
+	{:else if $sourceWarning}
+		<figcaption
+			class="border-t border-border bg-background/90 px-3 py-2 text-xs text-muted-foreground"
+		>
+			{$sourceWarning}
 		</figcaption>
 	{:else if $processedImage?.warnings.length}
 		<figcaption
