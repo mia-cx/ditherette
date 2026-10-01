@@ -5,7 +5,14 @@
 //! preparation, scratch, owned results, and destruction. Application caches do not apply.
 //! A spec/prod ratio describes the current gap; only prod/prod tests an optimization regression.
 
-use super::{diffusion::DiffusionSettings, native::*, quantize::*, yliluoma::YliluomaSettings, *};
+use super::{
+    diffusion::{DiffusionPolicy, DiffusionSettings, Kernel, ModeDiffusionSettings},
+    fields::{Tile, TilePerturbPolicy},
+    native::*,
+    quantize::*,
+    yliluoma::YliluomaSettings,
+    *,
+};
 use ditherette_wasm::{
     bench_subjects::{diffusion, fields::Component, quantize, scalar, yiluoma},
     spec::contract::request as spec,
@@ -78,6 +85,8 @@ fn production(operation: &NativeOperation) -> &str {
         NativeOperation::PerturbComponent { .. } => scalar::PERTURB_SUBJECT,
         NativeOperation::Quantize { .. } => quantize::QUANTIZE_SUBJECT,
         NativeOperation::Diffusion { .. } => diffusion::CANDIDATE_SUBJECT,
+        NativeOperation::ModeDiffusion { .. } => diffusion::MODES_SUBJECT,
+        NativeOperation::TilePerturbComponent { .. } => scalar::ORDERED_PERTURB_SUBJECT,
         NativeOperation::Yliluoma { .. } => yiluoma::YLILUOMA_SUBJECT,
         _ => unreachable!("bounded scalar operations"),
     }
@@ -403,6 +412,94 @@ pub fn experiment(comparison: Comparison, host_load_notes: String) -> io::Result
     };
     coordinator::validate_experiment(&experiment)?;
     Ok(experiment)
+}
+
+/// The `dither_modes` kernels and tiles beside their existing comparators, on the same fixtures.
+/// Diffusion cases keep the scalar plan's settings; each tile shares one Bayer case's space and placement.
+/// A separate plan keeps the established scalar plan valid for revisions without these subjects.
+pub fn dither_modes_experiment(
+    comparison: Comparison,
+    host_load_notes: String,
+) -> io::Result<Experiment> {
+    let common = Dimensions {
+        width: 128,
+        height: 96,
+    };
+    let mut plan = experiment(comparison, host_load_notes)?;
+    plan.cases.retain(|case| {
+        case.name.starts_with("diffusion-") || case.name.starts_with("perturb-bayer")
+    });
+    for kernel in [
+        Kernel::JarvisJudiceNinke,
+        Kernel::Stucki,
+        Kernel::Burkes,
+        Kernel::TwoRowSierra,
+        Kernel::Fan,
+        Kernel::ShiauFan,
+        Kernel::ShiauFan2,
+        Kernel::Simple2d,
+    ] {
+        for feedback in [
+            spec::DiffusionFeedback::SrgbBytes,
+            spec::DiffusionFeedback::Matching,
+        ] {
+            plan.cases.push(typed_case(
+                format!("diffusion-{}-{}", tag(kernel), tag(feedback)),
+                NativeOperation::ModeDiffusion {
+                    settings: ModeDiffusionSettings {
+                        quantize: quantize(MatchPolicy::OklabEuclidean, 32),
+                        policy: DiffusionPolicy {
+                            kernel,
+                            feedback,
+                            strength: 0.7,
+                            serpentine: true,
+                            placement: spec::Placement::Everywhere {},
+                        },
+                    },
+                },
+                common,
+            )?);
+        }
+    }
+    for (tile, space, placement) in [
+        (
+            Tile::ThreeByOne,
+            WorkingSpace::Srgb,
+            spec::Placement::Everywhere {},
+        ),
+        (
+            Tile::FourByOne,
+            WorkingSpace::LinearRgb,
+            spec::Placement::Everywhere {},
+        ),
+        (Tile::FourByTwo, WorkingSpace::Oklab, adaptive()),
+        (
+            Tile::FiveByThree,
+            WorkingSpace::Cielab,
+            spec::Placement::Everywhere {},
+        ),
+    ] {
+        plan.cases.push(typed_case(
+            format!("perturb-ordered-{}-{}", tag(tile), tag(space)),
+            NativeOperation::TilePerturbComponent {
+                settings: TilePerturbPolicy {
+                    tile,
+                    space,
+                    strength: 0.7,
+                    placement,
+                },
+            },
+            common,
+        )?);
+    }
+    if comparison == Comparison::ProdProd {
+        for case in &mut plan.cases {
+            case.accepted_subject = case.candidate_subject.clone();
+        }
+    }
+    plan.label = format!("dither modes {comparison:?}; new kernels and tiles beside existing diffusion and Bayer cases");
+    coordinator::validate_experiment(&plan)?;
+    Ok(plan)
 }
 
 fn adaptive() -> spec::Placement {

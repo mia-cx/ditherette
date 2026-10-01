@@ -1,11 +1,31 @@
 //! Complete field settings shared by native and actual public adapters.
 
 use super::{quantize::QuantizeSettings, *};
+pub use ditherette_wasm::spec::dither_modes::ordered::{Tile, TilePerturbPolicy};
 use ditherette_wasm::{
-    bench_subjects::reference::ReferenceRequest, spec::contract::request as spec,
+    bench_subjects::reference::{DitherModesRequest, ReferenceRequest},
+    spec::contract::request as spec,
 };
 pub use spec::{BayerSize, Field, PerturbPolicy, Placement, WorkingSpace};
 use std::io;
+
+/// A rectangular `dither_modes` tile perturbing the borrowed fixture.
+pub fn tile_perturb_request(
+    settings: TilePerturbPolicy,
+    source: Dimensions,
+    rgba: &[u8],
+) -> io::Result<ReferenceRequest<'_>> {
+    let request = ReferenceRequest::DitherModes(DitherModesRequest::Perturb {
+        source: spec::Source {
+            width: source.width,
+            height: source.height,
+            data: rgba,
+        },
+        policy: settings,
+    });
+    request.dimensions().map_err(io::Error::other)?;
+    Ok(request)
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -7,33 +7,66 @@ use crate::{
 use ditherette_bench_api::BenchSubjectError;
 
 pub const PERTURB_SUBJECT: &str = "prod:perturb:request:into-v1";
+pub const ORDERED_PERTURB_SUBJECT: &str = "prod:dither-modes:ordered-perturb:into-v1";
+
+/// The field half of a perturb batch: a v1 field, or a rectangular tile from `dither_modes`.
+#[derive(Clone, Copy)]
+enum BatchField {
+    V1(request::PerturbPolicy),
+    Tile(
+        spec::dither_modes::ordered::TilePerturbPolicy,
+        crate::prod::contract::request::OrderedTile,
+    ),
+}
 
 /// Full field composition into preallocated RGBA8. Validation and policy mapping precede timing.
 pub struct PerturbBatch<'a> {
     source: ImageView<'a, Rgba8>,
-    policy: request::PerturbPolicy,
+    field: BatchField,
     prod_policy: crate::prod::contract::request::PerturbPolicy,
     rgba: Vec<u8>,
 }
 
 impl<'a> PerturbBatch<'a> {
     pub fn new(input: &super::reference::ReferenceRequest<'a>) -> Result<Self, BenchSubjectError> {
+        use super::reference::{DitherModesRequest, ReferenceRequest};
+        use crate::prod::contract::request as prod;
         input.dimensions()?;
-        let super::reference::ReferenceRequest::Processing(request::Request::Perturb(input)) =
-            *input
-        else {
-            return Err(BenchSubjectError::new(
-                "perturb batch requires a perturb request",
-            ));
+        let (source, field, prod_policy) = match *input {
+            ReferenceRequest::Processing(request::Request::Perturb(input)) => (
+                input.source,
+                BatchField::V1(input.perturb),
+                super::fields::prod_policy(input.perturb),
+            ),
+            ReferenceRequest::DitherModes(DitherModesRequest::Perturb { source, policy }) => {
+                let retag = |value: serde_json::Value| {
+                    serde_json::from_value::<prod::PerturbPolicy>(value)
+                        .map_err(|error| BenchSubjectError::new(error.to_string()))
+                };
+                let prod_policy = retag(serde_json::json!({
+                    "field": { "algorithm": "ordered", "tile": policy.tile },
+                    "space": policy.space,
+                    "strength": policy.strength,
+                    "placement": policy.placement,
+                }))?;
+                let prod::Field::Ordered { tile } = prod_policy.field else {
+                    unreachable!("ordered tag maps to the ordered field")
+                };
+                (source, BatchField::Tile(policy, tile), prod_policy)
+            }
+            _ => {
+                return Err(BenchSubjectError::new(
+                    "perturb batch requires a perturb request",
+                ))
+            }
         };
-        let dimensions =
-            crate::image::ImageDimensions::new(input.source.width, input.source.height)
-                .expect("validated dimensions");
+        let dimensions = crate::image::ImageDimensions::new(source.width, source.height)
+            .expect("validated dimensions");
         Ok(Self {
-            source: ImageView::packed(input.source.data, dimensions).expect("validated source"),
-            policy: input.perturb,
-            prod_policy: super::fields::prod_policy(input.perturb),
-            rgba: vec![0; input.source.data.len()],
+            source: ImageView::packed(source.data, dimensions).expect("validated source"),
+            field,
+            prod_policy,
+            rgba: vec![0; source.data.len()],
         })
     }
 
@@ -41,18 +74,48 @@ impl<'a> PerturbBatch<'a> {
     pub fn run(&mut self, production: bool) {
         let dimensions = self.source.dimensions();
         let output = ImageViewMut::packed(&mut self.rgba, dimensions).expect("prepared output");
-        if production {
-            crate::prod::dither::perturb::perturb_by_field_rows_into(
-                self.source,
-                output,
-                self.prod_policy.space,
-                self.prod_policy.strength,
-                self.prod_policy.placement,
-                crate::prod::tiling::RowBand::new(0, dimensions.height()).expect("nonempty rows"),
-                |x, y, index| super::fields::threshold(self.policy.field, x, y, index, true),
-            );
-        } else {
-            spec::dither::perturb::perturb_into(self.source, output, self.policy);
+        let rows =
+            || crate::prod::tiling::RowBand::new(0, dimensions.height()).expect("nonempty rows");
+        let policy = self.prod_policy;
+        match (self.field, production) {
+            (BatchField::V1(field), true) => {
+                crate::prod::dither::perturb::perturb_by_field_rows_into(
+                    self.source,
+                    output,
+                    policy.space,
+                    policy.strength,
+                    policy.placement,
+                    rows(),
+                    |x, y, index| super::fields::threshold(field.field, x, y, index, true),
+                )
+            }
+            (BatchField::V1(policy), false) => {
+                spec::dither::perturb::perturb_into(self.source, output, policy)
+            }
+            (BatchField::Tile(_, tile), true) => {
+                crate::prod::dither::perturb::perturb_by_field_rows_into(
+                    self.source,
+                    output,
+                    policy.space,
+                    policy.strength,
+                    policy.placement,
+                    rows(),
+                    |x, y, _| crate::prod::dither::ordered::tile_noise_at(x, y, tile),
+                )
+            }
+            (BatchField::Tile(policy, _), false) => {
+                // The reference's own perturb minus validation, matching v1 `perturb_into`.
+                spec::dither::perturb::perturb_by_field_rows_into(
+                    self.source,
+                    output,
+                    policy.space,
+                    policy.strength,
+                    policy.placement,
+                    spec::tiling::contract::RowBand::new(0, dimensions.height())
+                        .expect("nonempty rows"),
+                    |x, y, _| spec::dither_modes::ordered::tile_noise_at(x, y, policy.tile),
+                )
+            }
         }
         std::hint::black_box(self.rgba.as_slice());
     }
@@ -75,25 +138,34 @@ impl<'a> PerturbBatch<'a> {
 
 pub(super) fn subjects() -> Vec<super::BenchSubject> {
     use ditherette_bench_api::*;
-    vec![super::BenchSubject::Conformance(ConformanceBenchSubject {
-        descriptor: SubjectDescriptor {
-            id: SubjectId::parse(PERTURB_SUBJECT).expect("literal ID"),
-            display_name: "complete scalar perturb into caller-owned RGBA8".into(),
-            source_file: "crates/ditherette-wasm/src/prod/dither/perturb.rs".into(),
-            source_line: 1,
-            default_oracle: Some(
-                SubjectId::parse("spec:perturb:request:v1").expect("literal oracle"),
-            ),
-            capabilities: SubjectCapabilities::rgba8_packed(),
-            params_schema: ParamSchema::default(),
-        },
-        operation: verification::Operation::Perturb,
-        run: |input| {
-            let mut batch = PerturbBatch::new(input)?;
-            batch.run(true);
-            Ok(batch.output())
-        },
-    })]
+    [
+        (PERTURB_SUBJECT, "spec:perturb:request:v1"),
+        (
+            ORDERED_PERTURB_SUBJECT,
+            super::reference::MODES_PERTURB_SUBJECT,
+        ),
+    ]
+    .into_iter()
+    .map(|(id, oracle)| {
+        super::BenchSubject::Conformance(ConformanceBenchSubject {
+            descriptor: SubjectDescriptor {
+                id: SubjectId::parse(id).expect("literal ID"),
+                display_name: "complete scalar perturb into caller-owned RGBA8".into(),
+                source_file: "crates/ditherette-wasm/src/prod/dither/perturb.rs".into(),
+                source_line: 1,
+                default_oracle: Some(SubjectId::parse(oracle).expect("literal oracle")),
+                capabilities: SubjectCapabilities::rgba8_packed(),
+                params_schema: ParamSchema::default(),
+            },
+            operation: verification::Operation::Perturb,
+            run: |input| {
+                let mut batch = PerturbBatch::new(input)?;
+                batch.run(true);
+                Ok(batch.output())
+            },
+        })
+    })
+    .collect()
 }
 
 /// Borrowed-source complete operation, including validation, preparation and result allocation.

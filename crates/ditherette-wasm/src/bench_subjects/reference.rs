@@ -31,6 +31,55 @@ pub enum ReferenceRequest<'a> {
         source: Source<'a>,
         component: super::fields::Component,
     },
+    DitherModes(DitherModesRequest<'a>),
+}
+
+pub const MODES_DIFFUSION_SUBJECT: &str = "spec:dither-modes:diffusion:v1";
+pub const MODES_PERTURB_SUBJECT: &str = "spec:dither-modes:ordered-perturb:v1";
+
+/// Requests for the `dither_modes` reference. Each is a v1 recipe widened by one input.
+#[derive(Debug, Clone, Copy)]
+pub enum DitherModesRequest<'a> {
+    Diffusion {
+        quantize: QuantizeRequest<'a>,
+        policy: spec::dither_modes::diffusion::DiffusionPolicy,
+    },
+    Perturb {
+        source: Source<'a>,
+        policy: spec::dither_modes::ordered::TilePerturbPolicy,
+    },
+}
+
+impl<'a> DitherModesRequest<'a> {
+    /// The v1 request with identical controls. v1 validation never reads the kernel or field tag.
+    fn v1(self) -> Request<'a> {
+        match self {
+            Self::Diffusion { quantize, policy } => {
+                Request::DitherAndQuantize(DitherQuantizeRequest {
+                    quantize,
+                    dither: DitherPolicy::Diffusion {
+                        kernel: Diffusion::FloydSteinberg,
+                        feedback: policy.feedback,
+                        strength: policy.strength,
+                        serpentine: policy.serpentine,
+                        placement: policy.placement,
+                    },
+                })
+            }
+            Self::Perturb { source, policy } => Request::Perturb(PerturbRequest {
+                version: RECIPE_VERSION,
+                source,
+                perturb: PerturbPolicy {
+                    field: Field::Bayer {
+                        size: BayerSize::Two,
+                    },
+                    space: policy.space,
+                    strength: policy.strength,
+                    placement: policy.placement,
+                },
+            }),
+        }
+    }
 }
 
 /// Callable registry adapter compatible with S05's generic VerificationSubject.
@@ -49,6 +98,8 @@ impl ReferenceRequest<'_> {
             Self::Color { source, .. }
             | Self::MetricScores { source, .. }
             | Self::FieldComponent { source, .. } => source,
+            Self::DitherModes(DitherModesRequest::Diffusion { quantize, .. }) => quantize.source,
+            Self::DitherModes(DitherModesRequest::Perturb { source, .. }) => source,
         }
     }
 
@@ -56,6 +107,7 @@ impl ReferenceRequest<'_> {
     pub fn dimensions(&self) -> Result<Dimensions, BenchSubjectError> {
         let output = match *self {
             Self::Processing(request) => request.validate().map(|layout| layout.output),
+            Self::DitherModes(request) => request.v1().validate().map(|layout| layout.output),
             Self::FieldComponent { source, component } => {
                 component.validate(source)?;
                 return Ok(Dimensions {
@@ -124,6 +176,18 @@ impl ReferenceRequest<'_> {
                 Some(metric.space()),
             ),
             Self::FieldComponent { component, .. } => return component.semantics(),
+            Self::DitherModes(DitherModesRequest::Diffusion { quantize, .. }) => (
+                Operation::DitherAndQuantize,
+                "dither-modes-diffusion",
+                quantize.version,
+                Some(quantize.matching.space()),
+            ),
+            Self::DitherModes(DitherModesRequest::Perturb { policy, .. }) => (
+                Operation::Perturb,
+                "dither-modes-ordered-perturb",
+                RECIPE_VERSION,
+                Some(policy.space),
+            ),
         };
         SemanticIdentity {
             operation,
@@ -168,6 +232,18 @@ impl Serialize for ReferenceRequest<'_> {
                 request.dither,
             )
                 .serialize(serializer),
+            Self::DitherModes(DitherModesRequest::Diffusion { quantize, policy }) => (
+                "dither-modes-diffusion",
+                quantize.version,
+                palette_settings(quantize.palette),
+                quantize.alpha,
+                quantize.matching,
+                policy,
+            )
+                .serialize(serializer),
+            Self::DitherModes(DitherModesRequest::Perturb { policy, .. }) => {
+                ("dither-modes-ordered-perturb", RECIPE_VERSION, policy).serialize(serializer)
+            }
             Self::Color { space, .. } => ("color-f32-roundtrip", 1u32, space).serialize(serializer),
             Self::MetricScores { metric, .. } => (
                 "metric-cyclic-successor-frozen-forward",
@@ -255,7 +331,56 @@ pub(super) fn subjects() -> Vec<BenchSubject> {
         }
         subjects.push(entry);
     }
+    let modes: [(&str, Operation, PixelFormat, &str, ReferenceFn); 2] = [
+        (
+            MODES_DIFFUSION_SUBJECT,
+            Operation::DitherAndQuantize,
+            PixelFormat::Indexed8,
+            "diffusion.rs",
+            |request| dither_modes(request, Operation::DitherAndQuantize),
+        ),
+        (
+            MODES_PERTURB_SUBJECT,
+            Operation::Perturb,
+            PixelFormat::Rgba8,
+            "ordered.rs",
+            |request| dither_modes(request, Operation::Perturb),
+        ),
+    ];
+    for (id, operation, format, file, run) in modes {
+        let mut entry = subject(
+            "dither-modes",
+            operation,
+            format,
+            &format!("dither_modes/{file}"),
+            run,
+        );
+        if let BenchSubject::Conformance(subject) = &mut entry {
+            subject.descriptor.id = SubjectId::parse(id).expect("literal subject ID");
+            subject.descriptor.display_name = format!("reference {id}");
+        }
+        subjects.push(entry);
+    }
     subjects
+}
+
+fn dither_modes(
+    request: &ReferenceRequest<'_>,
+    expected: Operation,
+) -> Result<VerificationOutput, BenchSubjectError> {
+    use spec::dither_modes::{diffusion, ordered};
+    match (*request, expected) {
+        (
+            ReferenceRequest::DitherModes(DitherModesRequest::Diffusion { quantize, policy }),
+            Operation::DitherAndQuantize,
+        ) => diffusion::diffuse(quantize, policy).map(|image| indexed_output(&image)),
+        (
+            ReferenceRequest::DitherModes(DitherModesRequest::Perturb { source, policy }),
+            Operation::Perturb,
+        ) => ordered::perturb(source, policy).map(|image| rgba_output(&image)),
+        _ => return Err(wrong_request("dither modes")),
+    }
+    .map_err(|error| BenchSubjectError::new(error.to_string()))
 }
 
 fn subject(

@@ -117,6 +117,16 @@ sampling. Existing landed resize differences retain timings and metrics with an 
 those timings are diagnostic only. A slower production/spec ratio is a baseline gap, while a
 production/production ratio tests a new optimization. These are separate comparisons.
 
+### Dither modes
+
+`dither_modes_plan spec-prod|prod-prod NEW_PLAN_JSON 'Actual host load notes'` declares 32 cases.
+It keeps the scalar plan's eight diffusion and four Bayer perturb cases as comparators.
+It adds 16 complete diffusion calls for the eight `dither_modes` kernels, with the same settings and fixture.
+It also adds four tile perturb loops. Each tile uses the space and placement of one Bayer case.
+The references are `spec:dither-modes:diffusion:v1` and `spec:dither-modes:ordered-perturb:v1`.
+Production diffusion runs the same three-row call as the existing kernels.
+The established scalar plan stays at 101 cases, so older revisions remain comparable.
+
 Preparation reuse cases use `preparation_integration_plan native|public DESTINATION HOST_LOAD_NOTES`.
 The helper declares four workloads in both cold and warm states, with two alternating role pairs.
 Each worker takes 20 single-call samples, 50 ms warmup, and a 10-second measurement cap.

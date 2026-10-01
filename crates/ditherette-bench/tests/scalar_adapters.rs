@@ -2,7 +2,7 @@
 
 use ditherette_bench::paired::{
     native::NativeOperation,
-    scalar::{experiment, Comparison},
+    scalar::{dither_modes_experiment, experiment, Comparison},
 };
 use ditherette_bench_api::verification::*;
 use ditherette_wasm::{
@@ -154,5 +154,66 @@ fn frozen_timing_adapters_match_registered_oracles_without_running_timers() {
             _ => panic!("unmatched scalar operation"),
         };
         assert_eq!(actual, expected, "frozen {}", case.name);
+    }
+}
+
+#[test]
+fn dither_modes_plan_runs_both_roles_against_its_reference() {
+    let spec_plan =
+        dither_modes_experiment(Comparison::SpecProd, "untimed fixture".into()).unwrap();
+    let prod_plan =
+        dither_modes_experiment(Comparison::ProdProd, "untimed fixture".into()).unwrap();
+    // Existing diffusion and Bayer comparators, then 16 new diffusion and 4 tile cases.
+    assert_eq!(spec_plan.cases.len(), 8 + 4 + 16 + 4);
+    let registry = bench_subjects::bench_subjects();
+    let source = Dimensions {
+        width: 7,
+        height: 5,
+    };
+    let rgba: Vec<u8> = (0..35u32)
+        .flat_map(|i| {
+            [
+                (i * 73) as u8,
+                (i * 31 + 99) as u8,
+                (i * 117) as u8,
+                [0, 128, 255][i as usize % 3],
+            ]
+        })
+        .collect();
+    let run = |id: &str, request: &ReferenceRequest<'_>| {
+        let BenchSubject::Conformance(subject) = registry
+            .iter()
+            .find(|s| s.descriptor().id.as_str() == id)
+            .unwrap()
+        else {
+            panic!("typed subject")
+        };
+        (subject.run)(request).unwrap()
+    };
+    for (case, prod_case) in spec_plan.cases.iter().zip(&prod_plan.cases) {
+        assert_eq!(case.identity, prod_case.identity);
+        assert_eq!(prod_case.accepted_subject, prod_case.candidate_subject);
+        let operation = case.native.as_ref().unwrap();
+        if !matches!(
+            operation,
+            NativeOperation::ModeDiffusion { .. } | NativeOperation::TilePerturbComponent { .. }
+        ) {
+            continue;
+        }
+        let request = operation.reference_request(source, &rgba).unwrap();
+        let expected = run(&case.reference_subject, &request);
+        assert_eq!(
+            run(&case.candidate_subject, &request),
+            expected,
+            "production {}",
+            case.name
+        );
+        if let NativeOperation::TilePerturbComponent { .. } = operation {
+            let mut batch = scalar::PerturbBatch::new(&request).unwrap();
+            for production in [false, true] {
+                batch.run(production);
+                assert_eq!(batch.output(), expected, "batch {} {production}", case.name);
+            }
+        }
     }
 }
