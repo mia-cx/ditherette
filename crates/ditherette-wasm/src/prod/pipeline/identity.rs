@@ -78,6 +78,17 @@ pub fn palette(
     )
 }
 
+/// Hashes one Yliluoma mixture index under its palette preparation identity.
+/// The index depends only on the prepared matcher and the Bayer level count.
+pub(crate) fn mix_index(palette: Identity, levels: u32) -> Result<Identity, Failure> {
+    #[derive(Serialize)]
+    struct Options {
+        levels: u32,
+        palette: Identity,
+    }
+    hash(b"ditherette-mix-index-v1\0", &Options { levels, palette })
+}
+
 /// Hashes enabled effects in caller order under their parent image identity.
 /// Disabled steps cannot change pixels, so they do not change the key. Context
 /// joins the key only when an enabled effect reads it.

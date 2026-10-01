@@ -678,3 +678,90 @@ fn indexed_hits_own_complete_metadata_after_matcher_eviction_and_output_mutation
     assert_eq!(expected.1.rgba[..4], [1, 2, 3, 255]);
     assert!(!expected.2[0].message.is_empty());
 }
+
+#[test]
+fn yliluoma_mix_indices_survive_changed_frames_and_follow_palette_metric_and_size() {
+    let palette = [[0, 0, 0], [255, 255, 255], [220, 40, 80], [20, 190, 230]]
+        .map(|rgb| PaletteEntry::Color { rgb });
+    let reordered = [palette[1], palette[0], palette[2], palette[3]];
+    let frame = |seed: u8| {
+        (0..32 * 32_u32)
+            .flat_map(|i| {
+                [
+                    (i * 71) as u8 ^ seed,
+                    (i * 37 + 8) as u8,
+                    (i * 113) as u8,
+                    255,
+                ]
+            })
+            .collect::<Vec<_>>()
+    };
+    let request = |palette, matching| QuantizeRequest {
+        source_width: 32,
+        source_height: 32,
+        palette,
+        alpha: AlphaPolicy::Premultiplied {},
+        matching,
+    };
+    let dither = |size| DitherPolicy::Yliluoma {
+        size,
+        placement: Placement::Everywhere {},
+    };
+    let mut processor = Processor::new(64 << 20, 0).unwrap();
+    let mut io = Io::new(0);
+    let (oklab, srgb) = (MatchPolicy::OklabEuclidean, MatchPolicy::SrgbEuclidean);
+    let (four, eight) = (BayerSize::Four, BayerSize::Eight);
+    // Palette, metric, size, then palette and index hits and the retained index count.
+    let steps: [(&[PaletteEntry], _, _, [u64; 2], usize); 6] = [
+        (&palette, oklab, four, [0, 0], 1),
+        (&palette, oklab, four, [1, 1], 1),
+        (&palette, oklab, eight, [1, 0], 2),
+        (&palette, srgb, four, [0, 0], 3),
+        (&reordered, oklab, four, [0, 0], 4),
+        (&palette, oklab, four, [1, 1], 4),
+    ];
+    for (seed, (palette, matching, size, [palette_hit, index_hit], retained)) in
+        steps.into_iter().enumerate()
+    {
+        io.pixels = frame(seed as u8);
+        let (_, hits, misses, _, _) = processor.preparation.stats();
+        let actual = processor
+            .dither_and_quantize(request(palette, matching), dither(size), &mut io)
+            .unwrap();
+        // Every changed frame also misses its final image.
+        let (_, after_hits, after_misses, _, _) = processor.preparation.stats();
+        assert_eq!(
+            (after_hits - hits, after_misses - misses),
+            (palette_hit + index_hit, 3 - palette_hit - index_hit),
+            "step {seed}"
+        );
+        assert_eq!(processor.preparation.mix_entries(), retained, "step {seed}");
+        let expected = Processor::new(64 << 20, 0)
+            .unwrap()
+            .dither_and_quantize(request(palette, matching), dither(size), &mut io)
+            .unwrap();
+        assert_eq!(actual, expected, "step {seed}");
+    }
+
+    // Failed calls restore a pinned hit but never publish a new index.
+    io.fail = true;
+    for size in [BayerSize::Four, BayerSize::Sixteen] {
+        io.pixels = frame(9);
+        let request = request(&palette, MatchPolicy::OklabEuclidean);
+        assert!(processor
+            .dither_and_quantize(request, dither(size), &mut io)
+            .is_err());
+        assert_eq!(processor.preparation.mix_entries(), 4);
+    }
+    io.fail = false;
+    let (_, hits, misses, _, _) = processor.preparation.stats();
+    let request = request(&palette, MatchPolicy::OklabEuclidean);
+    processor
+        .dither_and_quantize(request, dither(BayerSize::Sixteen), &mut io)
+        .unwrap();
+    let (_, after_hits, after_misses, _, _) = processor.preparation.stats();
+    assert_eq!((after_hits - hits, after_misses - misses), (1, 2));
+    assert_eq!(processor.preparation.mix_entries(), 5);
+    processor.dispose().unwrap();
+    assert_eq!(processor.preparation.stats(), (0, 0, 0, 0, 0));
+}

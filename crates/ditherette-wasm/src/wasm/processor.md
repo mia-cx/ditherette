@@ -111,7 +111,8 @@ A trap specifically during privateInitialize maps to wasm-memory-unavailable and
 The generated Wasm initializer remains a separate package loading phase.
 
 Dispose drops all processor-owned images/cache/scratch. Between calls the processor retains its
-preparation store: source metadata, prepared palettes and resize plans, and cached stage images.
+preparation store: source metadata, prepared palettes and resize plans, Yliluoma mixture indices,
+and cached stage images.
 The fixed wasm-bindgen slab is module runtime bookkeeping and has no shrink API.
 The wrapper drops factory references on disposal; neither Rust nor the wrapper claims Wasm pages shrink immediately.
 

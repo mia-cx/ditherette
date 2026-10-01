@@ -24,6 +24,18 @@ The optional RGB mixture cache scales with the image through the shared cache si
 Adaptive placement splits it into source and nearest-colour endpoint caches. Intermediate masks
 remain position-dependent and use the index directly.
 
+## Reuse across frames
+
+The index depends only on the prepared palette and the Bayer level count. A processor keeps it in
+its preparation store under the palette preparation identity plus the level count, so a new frame
+with the same palette, alpha, metric, and matrix skips the rebuild. Placement and source bytes are
+not part of the key. The index counts toward the store's byte cap and LRU eviction like any other
+preparation, and only a successful call publishes a new one. Without spare capacity, the call keeps
+the literal search. One-shot calls outside a processor still build a call-local index.
+
+Building the 63-colour Wplace Oklab index takes about 1, 4, 17, and 73 ms natively for 2×2, 4×4,
+8×8, and 16×16, and retains 0.3, 1.0, 3.7, and 14.5 MB.
+
 ## Benchmarks
 
 Scalar Wasm in Node, 2026-09-28: medians of three `process` calls on a fresh processor, each on a
