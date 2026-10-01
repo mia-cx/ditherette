@@ -140,7 +140,14 @@ Any step can take a `mask`: up to 4 curves that read the colour entering the ste
 Curves scale how far each curve bends, `recolour` multiplies its `strength`, and every other effect moves its result back toward the step's input:
 
 ```ts
-const darkOnly = { x: { model: 'oklch', channel: 'lightness' }, points: [[0, 1], [0.5, 0], [1, 0]] };
+const darkOnly = {
+	x: { model: 'oklch', channel: 'lightness' },
+	points: [
+		[0, 1],
+		[0.5, 0],
+		[1, 0]
+	]
+};
 const brighten = { effect: 'exposure', enabled: true, stops: 1, mask: [darkOnly] } as const;
 ```
 
