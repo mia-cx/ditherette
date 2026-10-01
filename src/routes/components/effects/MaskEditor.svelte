@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ColourChannel, CurvePoints, MaskCurve, TwoInputMaskCurve } from 'ditherette';
+	import EyeIcon from 'phosphor-svelte/lib/Eye';
 	import PlusIcon from 'phosphor-svelte/lib/Plus';
 	import { Button } from '$lib/components/ui/button';
 	import { Label } from '$lib/components/ui/label';
@@ -26,8 +27,11 @@
 		mask: readonly MaskCurve[];
 		/** Receives the new mask; an empty one means full strength everywhere. */
 		onchange: (mask: MaskCurve[]) => void;
+		/** Whether the Source preview shows this mask. */
+		shown: boolean;
+		onshow: (shown: boolean) => void;
 	};
-	let { id, mask, onchange }: Props = $props();
+	let { id, mask, onchange, shown, onshow }: Props = $props();
 
 	/** Which part of the mask the section shows: one preset family, or every curve. */
 	let view = $state('Tones');
@@ -110,7 +114,18 @@
 </script>
 
 <section class="grid grid-cols-1 gap-3" aria-labelledby="{id}-mask">
-	<h3 id="{id}-mask" class="text-xs font-medium">Mask</h3>
+	<div class="flex items-center justify-between gap-2">
+		<h3 id="{id}-mask" class="text-xs font-medium">Mask</h3>
+		<Button
+			variant={shown ? 'secondary' : 'ghost'}
+			size="xs"
+			aria-pressed={shown}
+			onclick={() => onshow(!shown)}
+		>
+			<EyeIcon weight="bold" />
+			Show mask
+		</Button>
+	</div>
 	<ToggleGroup
 		type="single"
 		variant="outline"
