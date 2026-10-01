@@ -35,6 +35,14 @@ const PNG_FIXTURES = {
 	}
 };
 
+// Independent zlib fixtures: a 2x1 RGB PNG, with metadata chunks and valid CRCs.
+const ORIENTED_PNG =
+	'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAGmVYSWZNTQAqAAAACAABARIAAwAAAAEABgAAAAAAANZnS2kAAAAPSURBVHicYziRYiRiNA0ACKkCO2nZTsMAAAAASUVORK5CYII=';
+const CICP_PNGS = [
+	'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAABGNJQ1AMDQABbgPj7wAAAA9JREFUeJxjOJFiJGI0DQAIqQI7adlOwwAAAABJRU5ErkJggg==',
+	'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAABGNJQ1AMDQABbgPj7wAAAAFzUkdCAK7OHOkAAAAPSURBVHicYziRYiRiNA0ACKkCO2nZTsMAAAAASUVORK5CYII='
+];
+
 function pngBytes(base64: string) {
 	return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 }
@@ -87,9 +95,13 @@ async function blockJpeg(orientation?: number) {
 
 async function canvasDecode(blob: Blob) {
 	const bitmap = await createImageBitmap(blob);
-	const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d')!;
-	context.drawImage(bitmap, 0, 0);
-	return context.getImageData(0, 0, bitmap.width, bitmap.height);
+	try {
+		const context = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d')!;
+		context.drawImage(bitmap, 0, 0);
+		return context.getImageData(0, 0, bitmap.width, bitmap.height);
+	} finally {
+		bitmap.close();
+	}
 }
 
 afterEach(() => {
@@ -140,6 +152,36 @@ describe('decodeBlob', () => {
 		const decoded = await decodeBlob(new Blob([pngBytes(fixture.png)], { type: 'image/png' }));
 
 		expect([decoded.width, decoded.height]).toEqual([3, 1]);
+	});
+
+	it.each(CICP_PNGS)(
+		'defers Display-P3 cICP PNGs to browser colour conversion (%#)',
+		async (png) => {
+			vi.stubGlobal('ImageDecoder', undefined);
+			const bytes = pngBytes(png);
+			const blob = new Blob([bytes], { type: 'image/png' });
+			const expected = await canvasDecode(blob);
+
+			expect(await decodePng(bytes)).toBeUndefined();
+			const decoded = await decodeBlob(blob);
+
+			expect(decoded.imageData.data).toEqual(expected.data);
+			expect(Array.from(decoded.imageData.data.subarray(0, 3))).not.toEqual([200, 100, 50]);
+		}
+	);
+
+	it('preserves PNG EXIF orientation without ImageDecoder', async () => {
+		vi.stubGlobal('ImageDecoder', undefined);
+		const bytes = pngBytes(ORIENTED_PNG);
+		const blob = new Blob([bytes], { type: 'image/png' });
+		const expected = await canvasDecode(blob);
+
+		expect(await decodePng(bytes)).toBeUndefined();
+		const decoded = await decodeBlob(blob);
+
+		expect([decoded.width, decoded.height]).toEqual([1, 2]);
+		expect([decoded.width, decoded.height]).toEqual([expected.width, expected.height]);
+		expect(decoded.imageData.data).toEqual(expected.data);
 	});
 
 	it.each([1, 2, 3, 4, 5, 6, 7, 8])(
