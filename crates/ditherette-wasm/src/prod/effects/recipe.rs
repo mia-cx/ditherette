@@ -89,6 +89,50 @@ impl Effect for BuiltinEffect {
         }
     }
 
+    fn apply_masked(
+        &self,
+        image: &mut EffectImage,
+        input: &[[f32; 3]],
+        strengths: &[f32],
+        context: &EffectContext<'_>,
+    ) {
+        match self {
+            Self::Levels(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::Curves(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::BrightnessContrast(effect) => {
+                effect.apply_masked(image, input, strengths, context)
+            }
+            Self::Exposure(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::WhiteBalance(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::HueSaturation(effect) => effect.apply_masked(image, input, strengths, context),
+            Self::Recolour(effect) => effect.apply_masked(image, input, strengths, context),
+        }
+    }
+
+    fn map_prepared_masked(
+        &self,
+        prepared: &PreparedPointwise,
+        rgb: [f32; 3],
+        strength: f32,
+        context: &EffectContext<'_>,
+    ) -> [f32; 3] {
+        match self {
+            Self::Levels(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
+            Self::Curves(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
+            Self::BrightnessContrast(effect) => {
+                effect.map_prepared_masked(prepared, rgb, strength, context)
+            }
+            Self::Exposure(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
+            Self::WhiteBalance(effect) => {
+                effect.map_prepared_masked(prepared, rgb, strength, context)
+            }
+            Self::HueSaturation(effect) => {
+                effect.map_prepared_masked(prepared, rgb, strength, context)
+            }
+            Self::Recolour(effect) => effect.map_prepared_masked(prepared, rgb, strength, context),
+        }
+    }
+
     fn per_channel(&self) -> bool {
         match self {
             Self::Levels(effect) => effect.per_channel(),

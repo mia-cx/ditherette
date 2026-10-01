@@ -16,7 +16,7 @@ use crate::{
             WorkingSpace, MAX_PALETTE_ENTRIES, RECIPE_VERSION,
         },
     },
-    prod::effects::{Effect, EffectContext, EffectStep, Needs},
+    prod::effects::{mask::MaskCurve, BuiltinEffect, Effect, EffectContext, EffectStep, Needs},
 };
 
 struct HashWriter(Sha256);
@@ -87,14 +87,31 @@ pub fn effects(
     context: &EffectContext<'_>,
 ) -> Result<Identity, Failure> {
     struct Enabled<'a>(&'a [EffectStep]);
+    /// A masked step hashes as `{ effect: {...}, mask: [...] }`, which no unmasked effect
+    /// object can equal, so unmasked keys keep their earlier bytes.
+    #[derive(Serialize)]
+    struct Masked<'a> {
+        effect: &'a BuiltinEffect,
+        mask: &'a [MaskCurve],
+    }
+    #[derive(Serialize)]
+    #[serde(untagged)]
+    enum Keyed<'a> {
+        Plain(&'a BuiltinEffect),
+        Masked(Masked<'a>),
+    }
     impl Serialize for Enabled<'_> {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-            serializer.collect_seq(
-                self.0
-                    .iter()
-                    .filter(|step| step.enabled)
-                    .map(|step| &step.effect),
-            )
+            serializer.collect_seq(self.0.iter().filter(|step| step.enabled).map(|step| {
+                if step.mask.is_empty() {
+                    Keyed::Plain(&step.effect)
+                } else {
+                    Keyed::Masked(Masked {
+                        effect: &step.effect,
+                        mask: &step.mask,
+                    })
+                }
+            }))
         }
     }
     #[derive(Serialize)]
