@@ -128,6 +128,65 @@ fn lost_device_falls_back_and_stays_on_the_cpu() {
     assert!(matches!(backend, Backend::Cpu(_)));
 }
 
+/// The known-answer lookup, with a hook that fires when `run` reads its parameters.
+struct Sabotaged<F> {
+    lookup: ChannelLookup,
+    hook: F,
+}
+
+impl<F: Fn() + 'static> Stage for Sabotaged<F> {
+    const WGSL: &'static str = ChannelLookup::WGSL;
+
+    fn params(&self) -> Vec<u8> {
+        (self.hook)();
+        self.lookup.params()
+    }
+
+    fn cpu(&self, rgba: &mut [u8]) {
+        self.lookup.cpu(rgba);
+    }
+}
+
+/// Runs the sabotaged lookup through `Backend::run`: the CPU must redo it and take over.
+fn assert_falls_back(make_hook: impl FnOnce(&Gpu) -> Box<dyn Fn()>) {
+    let Some((_serial, Backend::Gpu(gpu))) = any_gpu() else {
+        return;
+    };
+    let (lookup, dimensions, mut rgba) = ChannelLookup::known_answer();
+    let stage = Sabotaged {
+        hook: make_hook(&gpu),
+        lookup,
+    };
+    let expected = cpu_result(&stage.lookup, &rgba);
+    let mut backend = Backend::Gpu(gpu);
+    let ran = block_on(backend.run(&stage, dimensions, &mut rgba));
+    assert!(
+        matches!(ran, Some(Fallback::Lost(_) | Fallback::Failed(_))),
+        "{ran:?}"
+    );
+    assert_eq!(rgba, expected);
+    assert!(matches!(backend, Backend::Cpu(_)));
+}
+
+#[test]
+fn device_lost_during_setup_falls_back() {
+    assert_falls_back(|gpu| {
+        let device = gpu.device.clone();
+        Box::new(move || device.destroy())
+    });
+}
+
+#[test]
+fn device_lost_in_flight_falls_back() {
+    assert_falls_back(|gpu| {
+        let (device, queue) = (gpu.device.clone(), gpu.queue.clone());
+        Box::new(move || {
+            let device = device.clone();
+            queue.on_submitted_work_done(move || device.destroy());
+        })
+    });
+}
+
 #[test]
 fn oversized_image_runs_on_the_cpu_and_keeps_the_gpu() {
     let Some((_serial, Backend::Gpu(gpu))) = any_gpu() else {

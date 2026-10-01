@@ -8,8 +8,6 @@ use std::{
     task::{Poll, Waker},
 };
 
-use wgpu::util::DeviceExt;
-
 use crate::image::ImageDimensions;
 
 use super::{
@@ -29,7 +27,7 @@ pub enum Adapters {
 /// An open device that passed or awaits the known-answer check.
 pub struct Gpu {
     pub(super) device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub(super) queue: wgpu::Queue,
     info: wgpu::AdapterInfo,
     /// Set by the device-lost callback and the uncaptured-error handler.
     failure: Arc<Mutex<Option<String>>>,
@@ -181,13 +179,14 @@ impl Gpu {
         let validation = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
 
         let pipeline = self.pipeline::<S>();
-        let params = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("ditherette params"),
-                contents: &stage.params(),
-                usage: wgpu::BufferUsages::STORAGE,
-            });
+        // Not `create_buffer_init`: writing a buffer mapped at creation panics
+        // natively if the buffer is invalid. `write_buffer` reports to the scopes.
+        let contents = stage.params();
+        let params = self.buffer(
+            contents.len() as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        );
+        self.queue.write_buffer(&params, 0, &contents);
         let output = self.buffer(
             bytes,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
